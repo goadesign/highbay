@@ -102,7 +102,8 @@ export function BuildSectionView({
   const removedFocus = useRef(false);
   const returnFocus = useRef(false);
   // A whole taking panel can disappear when a stale Drop names another build.
-  const takingFocusRemoved = useCallback(() => { removedFocus.current = true; }, []);
+  const removedTakingFocus = useRef(false);
+  const takingFocusRemoved = useCallback(() => { removedTakingFocus.current = true; }, []);
   // sent prevents a second click before the page's pending state is rendered.
   const sent = useRef(false);
 
@@ -129,6 +130,15 @@ export function BuildSectionView({
       triggerRef.current?.querySelector("button")?.focus();
     } else if (removedFocus.current) {
       removedFocus.current = false;
+      headingRef.current?.focus();
+    }
+  }, [confirming, identity]);
+
+  // Only whole-panel removal needs an unconditional fallback. An unchanged
+  // rebuild question never takes focus during an unrelated background render.
+  useLayoutEffect(() => {
+    if (removedTakingFocus.current) {
+      removedTakingFocus.current = false;
       headingRef.current?.focus();
     }
   });

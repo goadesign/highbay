@@ -265,3 +265,41 @@ expect(page.sent("POST", drop).length === 1, "focus recovery retried Drop");
 page.close();
 `)
 }
+
+// TestViewsPageOpenRebuildQuestionKeepsFocusDuringBackgroundRefresh preserves
+// the user's editor and confirmation-button focus across unrelated Team reads.
+func TestViewsPageOpenRebuildQuestionKeepsFocusDuringBackgroundRefresh(t *testing.T) {
+	f := &teamServiceFixture{snapshot: pageTeamSnapshot("working")}
+	cp := newBuildControlPlane(t, Options{Team: &TeamBinding{Owner: pageOwner, Service: f}})
+	cp.changesWait, cp.changesPoll = 400*time.Millisecond, 20*time.Millisecond
+	card := buildableChange(t, cp, "chg-question-focus")
+	_, err := cp.StartBuild(asCaller(pageOwner, CallerUser), &gensurla.StartBuildPayload{
+		ChangeID: card.ChangeID, RequestRevision: card.RequestRevision,
+	})
+	require.NoError(t, err)
+	ps := startPageServer(t, cp)
+	for name, state := range map[string]string{"needs-attention": "needs_you", "working-again": "working"} {
+		ps.act(name, func() {
+			f.mu.Lock()
+			f.snapshot = pageTeamSnapshot(state)
+			f.mu.Unlock()
+		})
+	}
+	runPageScript(t, ps, nil, `
+const page = await openPage(origin, { link: input.link });
+await until(() => page.$("#surla-build-again") && !page.$("#surla-build-again").disabled, "rebuild was not ready");
+page.$("#surla-build-again").click();
+await until(() => page.$("#surla-build-confirm") && !page.$("#surla-build-confirm").disabled, "rebuild did not ask");
+const field = page.$('textarea[data-example-id="check_01"][data-field="scenario"]');
+page.type(field, "focus stays in my unsaved text"); field.focus();
+await control(origin, "act", { key: "needs-attention" });
+await until(() => page.$("#surla-team-attention-builder") && page.$("#surla-build-confirm") && !page.$("#surla-build-confirm").disabled, "background Team update did not settle with the question open");
+expect(page.doc.activeElement === field && field.value === "focus stays in my unsaved text", "background refresh pulled focus out of the editor into an unchanged question");
+const confirm = page.$("#surla-build-confirm"); confirm.focus();
+await control(origin, "act", { key: "working-again" });
+await until(() => !page.$("#surla-team-attention-builder") && page.$("#surla-build-confirm") && !page.$("#surla-build-confirm").disabled, "second Team update did not settle");
+expect(page.doc.activeElement === confirm && confirm === page.$("#surla-build-confirm"), "background refresh pulled focus from the confirmation control into its group");
+expect(page.sent("POST", "/changes/chg-question-focus/build").length === 0, "focus preservation submitted a rebuild");
+page.close();
+`)
+}
