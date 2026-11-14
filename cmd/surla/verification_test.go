@@ -117,9 +117,9 @@ func TestConfigureServeWorkspaceBindsTheNamedProject(t *testing.T) {
 }
 
 // TestStoredVerificationSupportsIndependentEvaluatorRepositories verifies project
-// workspace binding and externally stored evaluator input compose on older Git.
-// The non-short subtest saves the bound project's evaluated draft through the
-// public refresh/proposal flow rather than relying on a live-folder read.
+// workspace binding and externally stored evaluator settings compose on older
+// Git. The non-short subtest uses supported Git to save the bound project's
+// evaluated draft through the public refresh/proposal flow.
 func TestStoredVerificationSupportsIndependentEvaluatorRepositories(t *testing.T) {
 	isolateServeWorkspace(t)
 
@@ -132,14 +132,15 @@ func TestStoredVerificationSupportsIndependentEvaluatorRepositories(t *testing.T
 	runTestGit(t, filepath.Join(root, "work"), "init", "-q")
 
 	// Simulate Git <= 2.44 (rejecting --no-lazy-fetch) to verify that explicit
-	// stored verification settings and CP1 flows succeed without requiring Git 2.45.
+	// stored verification settings and startup binding need no draft Git reads.
 	realGit, err := exec.LookPath("git")
 	require.NoError(t, err)
 	fakeBin := filepath.Join(root, "fake-git-244")
 	require.NoError(t, os.MkdirAll(fakeBin, 0o700))
 	script := "#!/bin/sh\nfor arg in \"$@\"; do\n  if [ \"$arg\" = \"--no-lazy-fetch\" ]; then\n    printf 'unknown option: --no-lazy-fetch\\nusage: git [-v | --version] [-h | --help]\\n' >&2\n    exit 129\n  fi\ndone\nexec \"" + realGit + "\" \"$@\"\n"
 	require.NoError(t, os.WriteFile(filepath.Join(fakeBin, "git"), []byte(script), 0o700))
-	t.Setenv("PATH", fakeBin+string(os.PathListSeparator)+os.Getenv("PATH"))
+	originalPath := os.Getenv("PATH")
+	t.Setenv("PATH", fakeBin+string(os.PathListSeparator)+originalPath)
 
 	verPath := filepath.Join(root, "ops", "shop-eval.json")
 	verContent := `{"candidate_repo":"` + shopDir + `","candidate_module":".","binaries":{"shop":"./cmd/shop"},` +
@@ -168,6 +169,9 @@ func TestStoredVerificationSupportsIndependentEvaluatorRepositories(t *testing.T
 		if testing.Short() {
 			t.Skip("evaluates the real bound project draft; the full suite covers refresh adoption")
 		}
+		// Draft reads require Git's no-lazy-fetch support. The older-Git shim
+		// above covers settings/startup only, not this evaluated design flow.
+		t.Setenv("PATH", originalPath)
 		files := testmodule.Snapshot(t, "", `package design
 
 import . "goa.design/goa/v3/dsl"
