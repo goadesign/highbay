@@ -253,6 +253,76 @@ func TestRevisionMetadataSurvivesMechanicalTransitions(t *testing.T) {
 	}
 }
 
+// TestReviseWithoutRefreshKeepsTheCompleteSavedSnapshot drives the real
+// revision operation after the workspace changes. Omitting a refresh must
+// preserve the saved design and every snapshot field, even with zero Stories,
+// and must not reread a workspace design that is no longer safe to read.
+func TestReviseWithoutRefreshKeepsTheCompleteSavedSnapshot(t *testing.T) {
+	for _, hasStories := range []bool{false, true} {
+		t.Run(map[bool]string{false: "zero Stories", true: "with Stories"}[hasStories], func(t *testing.T) {
+			for _, unreadable := range []bool{false, true} {
+				t.Run(map[bool]string{false: "changed workspace", true: "unsafe workspace design"}[unreadable], func(t *testing.T) {
+					workspace := t.TempDir()
+					designFile := filepath.Join(workspace, "design", "design.go")
+					require.NoError(t, os.Mkdir(filepath.Dir(designFile), 0o700))
+					require.NoError(t, os.WriteFile(designFile, []byte("package design\n\nconst Saved = true\n"), 0o600))
+					require.NoError(t, os.WriteFile(filepath.Join(workspace, "go.mod"),
+						[]byte("module example.com/a\n\ngo 1.27.3\n"), 0o600))
+					cp := newControlPlane(t, Options{WorkspaceDir: workspace})
+					guide := asCaller("alice@example.com", CallerGuide)
+					mustPropose(t, cp, guide, "chg", "Keep refunds bounded", refundAnalysis("Keep refunds bounded"))
+					record := loadMetadataRecord(t, cp, "chg")
+					record.architecture, record.goMod, record.madeFrom = metadataFixture("a")
+					if hasStories {
+						record.stories = sampleAdoptedStories()
+						record.card.Stories = storySummaryItemsOrNil(record.stories)
+						var err error
+						record.card.RequestRevision, err = computeCanonicalRevision(record.card, record.owner, record.designSource)
+						require.NoError(t, err)
+					}
+					saveMetadataRecord(t, cp, record)
+					original := loadMetadataRecord(t, cp, "chg")
+
+					if unreadable {
+						outside := filepath.Join(t.TempDir(), "outside.go")
+						require.NoError(t, os.WriteFile(outside, []byte("package outside\n"), 0o600))
+						require.NoError(t, os.Remove(designFile))
+						require.NoError(t, os.Symlink(outside, designFile))
+					} else {
+						require.NoError(t, os.WriteFile(designFile, []byte("package design\n\nconst Changed = true\n"), 0o600))
+					}
+					require.NoError(t, os.WriteFile(filepath.Join(workspace, "go.mod"),
+						[]byte("module example.com/changed\n\ngo 1.27.3\n"), 0o600))
+					prior := original.card.Examples[0]
+					revised, err := cp.ReviseChange(guide, &gensurla.ReviseChangePayload{
+						ChangeID: "chg", RequestRevision: original.card.RequestRevision,
+						Prompt: "Keep refunds bounded and preserve the agreed snapshot",
+						Analysis: &gensurla.CP1RevisionAnalysis{
+							Summary: "Keep refunds bounded and preserve the agreed snapshot",
+							Examples: []*gensurla.CP1RevisionAnalysisExample{{
+								PriorID: &prior.ID, Scenario: prior.Scenario, InputSummary: prior.InputSummary,
+								ExpectedOutcome: prior.ExpectedOutcome, VerificationKind: prior.VerificationKind,
+							}},
+							Ambiguities: []*gensurla.CP1AnalysisAmbiguity{}, RemovedExampleIds: []string{},
+							PreservedBehaviors: original.card.PreservedBehaviors,
+						},
+					})
+					require.NoError(t, err, "a revision without a refresh must not read the changed workspace")
+					loaded := loadMetadataRecord(t, cp, "chg")
+					assert.Equal(t, original.designSource, loaded.designSource)
+					assert.Equal(t, original.stories, loaded.stories)
+					assert.Equal(t, original.architecture, loaded.architecture)
+					assert.Equal(t, original.goMod, loaded.goMod)
+					assert.Equal(t, original.madeFrom, loaded.madeFrom)
+					expected, err := computeCanonicalRevision(revised, original.owner, original.designSource)
+					require.NoError(t, err)
+					assert.Equal(t, expected, revised.RequestRevision, "the revision still hashes its saved design source")
+				})
+			}
+		})
+	}
+}
+
 // metadataFixture supplies a complete, structurally valid Story-only snapshot.
 func metadataFixture(mark string) (*savedArchitecture, string, *madeFromSnapshot) {
 	return &savedArchitecture{DesignDigest: strings.Repeat(mark, 64)},
