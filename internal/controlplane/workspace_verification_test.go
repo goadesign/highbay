@@ -82,6 +82,7 @@ func TestVerificationAndLiveTargetsUseTheAcceptedTests(t *testing.T) {
 	runsDir := filepath.Join(root, "ops", "runs")
 	options := func() Options {
 		return Options{
+			Team:         &TeamBinding{Owner: "alice@example.com", Service: &teamServiceFixture{}},
 			CardsDir:     filepath.Join(root, "ops", "cards"),
 			WorkspaceDir: repo.workspace,
 			RunsDir:      runsDir,
@@ -176,6 +177,16 @@ func TestVerificationAndLiveTargetsUseTheAcceptedTests(t *testing.T) {
 			require.NoError(t, err)
 			require.NotEmpty(t, listed.Runs)
 			assert.Equal(t, writtenTests, listed.Runs[0].TestSource, "list_verifications")
+			if server.name == "server reopened from the same card store" {
+				build, err := cp.GetBuild(user, &gensurla.GetBuildPayload{ChangeID: card.ChangeID})
+				require.NoError(t, err)
+				open, ok := build.Build.AsStarted()
+				require.True(t, ok)
+				_, err = cp.DropBuild(user, &gensurla.DropBuildPayload{ChangeID: card.ChangeID, StartedAt: open.StartedAt})
+				require.NoError(t, err)
+				_, err = cp.StartLiveTarget(builder, livePayload)
+				assertRefusalSays(t, err, "no_build", "change \"chg\" has no build with a test writer")
+			}
 		})
 	}
 }
@@ -688,6 +699,21 @@ func TestVerifyChangeTestModuleGuardAcrossRegenerationMergeAndNextChange(t *test
 	// 3. Change 2 starts from M1; .surla-tests is fast-forwarded to M1,
 	// and the test writer commits T2 on surla/tests.
 	card2 := saveBuildStoryCard(t, cp, "chg-2", StatusConfirmed, refundStory("Refund over the limit waits for a director"))
+	// The first build has no passed run in this fixture. Drop it before the
+	// second change and explicitly supply the refreshed revision's start.
+	current, err := cp.GetBuild(user, &gensurla.GetBuildPayload{ChangeID: "chg-1"})
+	require.NoError(t, err)
+	open, ok := current.Build.AsStarted()
+	require.True(t, ok)
+	_, err = cp.DropBuild(user, &gensurla.DropBuildPayload{ChangeID: "chg-1", StartedAt: open.StartedAt})
+	require.NoError(t, err)
+	provenance, found, err := cp.cards.loadMadeFrom()
+	require.NoError(t, err)
+	require.True(t, found)
+	record := loadMetadataRecord(t, cp, "chg-2")
+	record.madeFrom.Start = provenance.Start
+	record.madeFrom.Entries = nil
+	saveMetadataRecord(t, cp, record)
 	_, err = cp.StartBuild(user, &gensurla.StartBuildPayload{ChangeID: "chg-2", RequestRevision: card2.RequestRevision})
 	require.NoError(t, err)
 	gitForLayoutTest(t, testsWorktree, "merge", "-q", "--ff-only", m1)
