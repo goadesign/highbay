@@ -142,12 +142,64 @@ func readDesignHistory(
 				}
 			}
 			if !descends {
+				// The holding commit can precede S. Ask only this path's
+				// relevant change history at the would-be gained commit,
+				// rather than enumerating the excluded repository ancestry.
+				descends, err = ancestorHeldDesignVersion(ctx, repo, commit, prefix+file, take.Version)
+				if err != nil {
+					return h, err
+				}
+			}
+			if !descends {
 				h.gained[file] = true
 				break
 			}
 		}
 	}
 	return h, nil
+}
+
+// ancestorHeldDesignVersion answers C5's remaining per-file witness question.
+// Change commits and their immediate parents cover every version that path
+// held, including absence before an addition and after a deletion. Git's fixed
+// format never includes commit messages, signatures or repository programs.
+func ancestorHeldDesignVersion(ctx context.Context, repo, commit, file, version string) (bool, error) {
+	out, err := runGitRead(ctx, repo, "log", "--no-show-signature", "--format=%H %P", "--full-history", commit, "--", file)
+	if err != nil {
+		return false, err
+	}
+	seen := map[string]bool{}
+	for _, candidate := range strings.Fields(string(out)) {
+		if seen[candidate] {
+			continue
+		}
+		seen[candidate] = true
+		if !commitIDPattern.MatchString(candidate) {
+			return false, errors.New("Git returned an invalid file-history commit")
+		}
+		kind, err := gitEntry(ctx, repo, candidate, file)
+		if err != nil {
+			return false, err
+		}
+		if kind == gitMissing {
+			if version == absentDesignVersion {
+				return true, nil
+			}
+			continue
+		}
+		if kind != gitRegularFile {
+			continue
+		}
+		text, err := runGitRead(ctx, repo, "cat-file", "blob", candidate+":"+file)
+		if err != nil {
+			return false, err
+		}
+		canonical, parseErr := designversion.Canonical(file, string(text))
+		if parseErr == nil && designversion.Digest(canonical) == version {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 // committedHistoryDesign leaves malformed historical Go as a nonmatching raw

@@ -137,3 +137,34 @@ func TestRepairedHistoryDoesNotKeepBrokenGoAsAPermanentBlocker(t *testing.T) {
 	require.Error(t, err)
 	assert.False(t, errors.Is(err, os.ErrNotExist))
 }
+
+// TestDraftTakeRecognizesAHolderBeforeTheStart preserves guide edits when a
+// newly gained linear commit descends from an older holder of the taken text.
+// C5 must not confuse that history with an incomparable candidate branch.
+func TestDraftTakeRecognizesAHolderBeforeTheStart(t *testing.T) {
+	base, guide, user := updateGoTexts(t)
+	dir := t.TempDir()
+	writeWorkspaceFiles(t, dir, validWorkspaceStub(user))
+	gitForLayoutTest(t, dir, "init", "-q")
+	gitForLayoutTest(t, dir, "add", "go.mod", "go.sum", updateDesignFile)
+	gitForLayoutTest(t, dir, "-c", "user.name=Test", "-c", "user.email=test@example.com", "commit", "-qm", "U holds the future taken version")
+	writeWorkspaceFiles(t, dir, map[string]string{updateDesignFile: base})
+	commitProjectDesign(t, dir, updateDesignFile)
+	cp := newControlPlane(t, Options{WorkspaceDir: dir})
+	readDraftForTest(t, cp)
+	f := &draftUpdateFixture{t: t, cp: cp, dir: dir}
+	f.guide(guide)
+	f.project(user)
+	f.update()
+	// H holds V0 but descends from U, which held the version taken from
+	// the uncommitted folder at S. Nothing incomparable was gained.
+	gitForLayoutTest(t, dir, "-c", "user.name=Test", "-c", "user.email=test@example.com", "commit", "--allow-empty", "-qm", "H still holds the start version")
+	f.project(strings.Replace(user, `Error("invalid")`, `Error("rejected")`, 1))
+	r := f.update()
+	assert.Empty(t, r.ToCorrect)
+	assert.Equal(t, []string{updateDesignFile}, r.Merged)
+	assert.Equal(t, 1, strings.Count(f.draft(), `Method("m92"`))
+	assert.NotContains(t, f.draft(), "<<<<<<<")
+	assert.Contains(t, f.draft(), `Error("rejected")`)
+	assert.NotContains(t, f.draft(), "Result(Order)\n\t\tMeta(\"swagger:summary\", \"x\")\n\t})", "the guide's m44 edit survives")
+}
