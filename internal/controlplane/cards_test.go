@@ -26,10 +26,11 @@ func TestCardsSurviveANewControlPlane(t *testing.T) {
 		Question: "Does the limit include tax?", Options: []string{"with_tax", "without_tax"},
 	})
 
-	first, err := New(Options{CardsDir: dir, Verification: cfg})
+	opts := buildFixtureOptions(t, Options{CardsDir: dir, Verification: cfg})
+	first, err := New(opts)
 	require.NoError(t, err)
-	proposed, err := first.ProposeChange(alice, &gensurla.ProposeChangePayload{ChangeID: "chg", Prompt: "Refunds up to $50 are instant.", Analysis: analysis})
-	require.NoError(t, err)
+	proposed := saveProposedCardFixture(t, first, "alice@example.com", "chg", "Refunds up to $50 are instant.", analysis)
+	proposed = attachBuildSnapshot(t, first, "chg")
 	require.Equal(t, StatusNeedsConfirmation, proposed.Status)
 	confirmed, err := first.ConfirmIntent(alice, &gensurla.ConfirmIntentPayload{
 		ChangeID: "chg", RequestRevision: proposed.RequestRevision,
@@ -38,9 +39,10 @@ func TestCardsSurviveANewControlPlane(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.Equal(t, StatusConfirmed, confirmed.Status)
+	saveStoredBuildFixture(t, first, confirmed)
 	require.NoError(t, first.Close())
 
-	restarted := newControlPlane(t, Options{CardsDir: dir, Verification: cfg})
+	restarted := newControlPlane(t, opts)
 	got, err := restarted.GetChange(alice, &gensurla.GetChangePayload{ChangeID: "chg"})
 	require.NoError(t, err)
 	assert.Equal(t, confirmed, got, "the saved card comes back unchanged")
@@ -149,9 +151,9 @@ func TestRequestsFinishingAfterCloseDoNotWrite(t *testing.T) {
 		Artifacts: map[string]string{"orders": "d1"},
 	}
 	target := &promotionTargetStub{artifacts: spec.Artifacts, loading: make(chan struct{}), release: make(chan struct{})}
-	cp, err := New(Options{CardsDir: dir, Verification: verificationConfig(t), PromotionTarget: target})
+	cp, err := New(buildFixtureOptions(t, Options{CardsDir: dir, Verification: verificationConfig(t), PromotionTarget: target}))
 	require.NoError(t, err)
-	card := saveCard(t, cp, nil)
+	card := saveStoredCardBuildFixture(t, cp, nil)
 	const commit = "0123456789abcdef0123456789abcdef01234567"
 	target.report = passingReport(t, card.RequestRevision, commit, spec)
 	alice := WithPrincipal(context.Background(), Principal{ID: "alice@example.com", CallerID: "alice@example.com", Kind: CallerUser})
@@ -289,8 +291,8 @@ func TestASavedApprovalNeedsAPromotionTarget(t *testing.T) {
 
 	// Without promotion settings, the saved approval is valid as long as the
 	// chosen tests' commit matches.
-	cpNoTarget := newControlPlane(t, Options{Verification: verificationConfig(t)})
-	saveCard(t, cpNoTarget, recorded)
+	cpNoTarget := newControlPlane(t, buildFixtureOptions(t, Options{Verification: verificationConfig(t)}))
+	saveStoredCardBuildFixture(t, cpNoTarget, recorded)
 	gotNoTarget, err := cpNoTarget.GetChange(alice, &gensurla.GetChangePayload{ChangeID: "chg"})
 	require.NoError(t, err)
 	assert.Equal(t, &expectedApproval, gotNoTarget.Approval)
@@ -300,8 +302,8 @@ func TestASavedApprovalNeedsAPromotionTarget(t *testing.T) {
 	// is served with unverified_approval while the saved record on disk is
 	// untouched.
 	target := &promotionTargetStub{artifactsErr: errors.New("missing release directory")}
-	cp := newControlPlane(t, Options{Verification: verificationConfig(t), PromotionTarget: target})
-	approved := saveCard(t, cp, recorded)
+	cp := newControlPlane(t, buildFixtureOptions(t, Options{Verification: verificationConfig(t), PromotionTarget: target}))
+	approved := saveStoredCardBuildFixture(t, cp, recorded)
 	got, err := cp.GetChange(alice, &gensurla.GetChangePayload{ChangeID: "chg"})
 	require.NoError(t, err)
 	assert.Nil(t, got.Approval)
@@ -352,9 +354,22 @@ func TestSavedCardInTodaysUntaggedFormWithApprovalDecodes(t *testing.T) {
 	cfg := verificationConfig(t)
 	cfg.Plan.SuiteCommit = suiteCommit
 	target := &promotionTargetStub{artifacts: map[string]string{"orders": artifactDigest}}
-	cp := newControlPlane(t, Options{Verification: cfg, PromotionTarget: target})
+	cp := newControlPlane(t, buildFixtureOptions(t, Options{Verification: cfg, PromotionTarget: target}))
 	require.NoError(t, os.WriteFile(cp.cards.path("chg"), []byte(rawFile), 0o600))
 
+	decoded, found, err := cp.cards.load("chg")
+	require.NoError(t, err)
+	require.True(t, found)
+	require.NotNil(t, decoded.card.Approval, "the legacy untagged approval decodes")
+	assert.Equal(t, suiteCommit, decoded.card.Approval.SuiteCommit)
+	legacy, err := cp.GetChange(alice, &gensurla.GetChangePayload{ChangeID: "chg"})
+	require.NoError(t, err)
+	assert.Nil(t, legacy.Approval, "legacy evidence alone cannot supply a current numbered build")
+
+	// The consumer's positive case explicitly supplies a current saved
+	// snapshot and build; it does not claim the legacy card can start one.
+	card := attachBuildSnapshot(t, cp, "chg")
+	saveStoredBuildFixture(t, cp, card)
 	got, err := cp.GetChange(alice, &gensurla.GetChangePayload{ChangeID: "chg"})
 	require.NoError(t, err)
 	require.NotNil(t, got.Approval, "returned while the chooser gives its SuiteCommit")

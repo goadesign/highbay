@@ -30,7 +30,7 @@ func pageGenerationFindings(t *testing.T) (*pageServer, *gensurla.ChangeCardResu
 		}}
 	}}
 	cp.buildCopyFactory = func(context.Context, string, scaffold.Layout) (buildCopy, error) { return copy, nil }
-	card := confirmedChange(t, cp, "chg")
+	card := buildableChange(t, cp, "chg")
 	return startPageServer(t, cp), card
 }
 

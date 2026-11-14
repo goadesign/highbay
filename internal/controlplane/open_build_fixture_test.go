@@ -110,6 +110,18 @@ func fixtureOpenBuild(
 	}
 }
 
+// saveStoredCardBuildFixture supplies authored card and build records for
+// persistence/approval consumer tests, without claiming a runtime refresh.
+func saveStoredCardBuildFixture(
+	t *testing.T, cp *ControlPlane, approval *gensurla.ApprovalItem,
+) *gensurla.ChangeCardResult {
+	t.Helper()
+	saveCard(t, cp, approval)
+	card := attachBuildSnapshot(t, cp, "chg")
+	saveStoredBuildFixture(t, cp, card)
+	return card
+}
+
 // saveStoredBuildFixture supplies an explicit builder-only numbered record for
 // stored-evaluator unit tests. It exercises consumers, not build production.
 func saveStoredBuildFixture(t *testing.T, cp *ControlPlane, card *gensurla.ChangeCardResult) {

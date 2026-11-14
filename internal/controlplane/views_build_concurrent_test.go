@@ -33,7 +33,7 @@ func TestViewsPageBuildIgnoresAReadCapturedDuringPendingReplacement(t *testing.T
 	cp := newBuildControlPlane(t, Options{Team: &TeamBinding{Owner: pageOwner, Service: team}})
 	cp.changesWait = 400 * time.Millisecond
 	cp.changesPoll = 20 * time.Millisecond
-	confirmedChange(t, cp, "chg")
+	buildableChange(t, cp, "chg")
 	service := &pagePendingBuildRead{ControlPlane: cp, captured: make(chan *gensurla.ChangeBuild, 1)}
 	ps := startPageServer(t, service)
 	ps.act("hold-old-build-answer", func() {

@@ -170,8 +170,8 @@ func TestAProposalIsReplacedByTheNextRevisionAndAStaleOneIsRefused(t *testing.T)
 // revision in force under a new request_revision, the slot is empty, and no
 // approval carries over. A missing answer refuses the adoption.
 func TestAdoptingMakesTheProposalTheRevisionInForce(t *testing.T) {
-	cp := newControlPlane(t, Options{Verification: verificationConfig(t)})
-	saveCard(t, cp, &gensurla.ApprovalItem{
+	cp := newControlPlane(t, buildFixtureOptions(t, Options{Verification: verificationConfig(t)}))
+	saveStoredCardBuildFixture(t, cp, &gensurla.ApprovalItem{
 		ApprovedBy: agreedOwner, ReportDigest: strings.Repeat("d", 64), CandidateCommit: strings.Repeat("c", 40),
 		SuiteID: "orders", SuiteCommit: strings.Repeat("b", 40), Environment: "sim",
 		Artifacts: map[string]string{"orders": strings.Repeat("e", 64)}, ScenarioCount: 1,
@@ -209,8 +209,8 @@ func TestAdoptingMakesTheProposalTheRevisionInForce(t *testing.T) {
 // file equals the one before the revision except for its saved time, and a
 // second decline or one naming the agreed revision is refused.
 func TestDecliningRestoresTheAgreedChangeExactly(t *testing.T) {
-	cp := newControlPlane(t, Options{Verification: verificationConfig(t)})
-	saveCard(t, cp, &gensurla.ApprovalItem{
+	cp := newControlPlane(t, buildFixtureOptions(t, Options{Verification: verificationConfig(t)}))
+	saveStoredCardBuildFixture(t, cp, &gensurla.ApprovalItem{
 		ApprovedBy: agreedOwner, ReportDigest: strings.Repeat("d", 64), CandidateCommit: strings.Repeat("c", 40),
 		SuiteID: "orders", SuiteCommit: strings.Repeat("b", 40), Environment: "sim",
 		Artifacts: map[string]string{"orders": strings.Repeat("e", 64)}, ScenarioCount: 1,

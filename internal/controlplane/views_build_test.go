@@ -19,7 +19,7 @@ func TestViewsPageBuildRequiresASeparateRebuildConfirmation(t *testing.T) {
 	cp := newBuildControlPlane(t, Options{Team: &TeamBinding{Owner: pageOwner, Service: f}})
 	cp.changesWait = 400 * time.Millisecond
 	cp.changesPoll = 20 * time.Millisecond
-	card := confirmedChange(t, cp, "chg")
+	card := buildableChange(t, cp, "chg")
 	ps := startPageServer(t, cp)
 	ps.act("builder-read", func() {
 		_, err := cp.GetBuilderAssignment(asCaller(pageOwner, CallerBuilder), &gensurla.GetBuilderAssignmentPayload{ChangeID: "chg"})
@@ -78,7 +78,7 @@ func TestViewsPageBuildRetainsARefusalBesideItsSavedFacts(t *testing.T) {
 	cp := newBuildControlPlane(t, Options{Team: &TeamBinding{Owner: pageOwner, Service: f}})
 	cp.changesWait = 400 * time.Millisecond
 	cp.changesPoll = 20 * time.Millisecond
-	confirmedChange(t, cp, "chg")
+	buildableChange(t, cp, "chg")
 	ps := startPageServer(t, cp)
 	ps.act("new-attention", func() {
 		f.mu.Lock()
