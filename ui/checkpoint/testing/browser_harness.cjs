@@ -572,7 +572,7 @@ async function takingScenario(input, facts, views) {
     }, views.sessionId);
     await evaluate(views, "new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))");
     await evaluate(views, "document.getElementById('surla-build-drop').focus(), true");
-    await views.dt.send("Input.dispatchKeyEvent", { type: "keyDown", key: "Enter", code: "Enter", windowsVirtualKeyCode: 13 }, views.sessionId);
+    await views.dt.send("Input.dispatchKeyEvent", { type: "keyDown", key: "Enter", code: "Enter", windowsVirtualKeyCode: 13, text: "\r", unmodifiedText: "\r" }, views.sessionId);
     await views.dt.send("Input.dispatchKeyEvent", { type: "keyUp", key: "Enter", code: "Enter", windowsVirtualKeyCode: 13 }, views.sessionId);
     const opened = await until(views, "document.getElementById('surla-build-drop-question')?.contains(document.activeElement)");
     const measured = await evaluate(views, "(" + function measure() {
