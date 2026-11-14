@@ -128,19 +128,18 @@ func TestVerificationCurrentInputsFollowWrittenSelection(t *testing.T) {
 }
 
 // TestVerificationCurrentInputsUseFullStoredTuple verifies evaluator identity
-// with its builder-only build. Each reopened server has one immutable selection.
+// even without a build. Each reopened server has one immutable selection.
 func TestVerificationCurrentInputsUseFullStoredTuple(t *testing.T) {
 	cardsDir, runsDir := t.TempDir(), t.TempDir()
 	plan := verify.Plan{SuiteCommit: strings.Repeat("2", 40)}
 	opts := func(selected verify.Plan) Options {
 		return Options{CardsDir: cardsDir, Verification: &VerificationConfig{RunsDir: runsDir, Plan: selected}}
 	}
-	cp := newControlPlane(t, buildFixtureOptions(t, opts(plan)))
-	card := buildableChange(t, cp, "chg")
-	saveStoredBuildFixture(t, cp, card)
+	cp := newControlPlane(t, opts(plan))
+	card := confirmedChange(t, cp, "chg")
 	runID := strings.Repeat("1", 32)
 	writeListedRun(t, runsDir, "alice@example.com", card, runID, time.Date(2026, 10, 1, 9, 0, 0, 0, time.UTC), true)
-	assert.Equal(t, gensurla.TestsKindNotUsed, mustStartedBuild(t, cp, asCaller("alice@example.com", CallerUser), card.ChangeID).TestWriter.Tests.Kind())
+	assertNoBuildSaved(t, cp, card.ChangeID)
 	require.NoError(t, cp.Close())
 	for _, tc := range []struct {
 		name   string
@@ -165,7 +164,7 @@ func TestVerificationCurrentInputsUseFullStoredTuple(t *testing.T) {
 			require.NoError(t, err)
 			require.Len(t, list.Runs, 1)
 			assert.Equal(t, got, list.Runs[0])
-			assert.Equal(t, gensurla.TestsKindNotUsed, mustStartedBuild(t, reopened, asCaller("alice@example.com", CallerUser), card.ChangeID).TestWriter.Tests.Kind())
+			assertNoBuildSaved(t, reopened, card.ChangeID)
 			require.NoError(t, reopened.Close())
 		})
 	}
