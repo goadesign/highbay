@@ -2,7 +2,7 @@
 // passed verification result for the exact Change Card revision shown.
 
 import React from "react";
-import { ChangeCardResult, VerificationStatusResult } from "../types";
+import { ChangeCardResult, StartedBuild, VerificationStatusResult } from "../types";
 import { Alert, Button, Card } from "./shadcn";
 
 // ApproveResultControlProps supplies the displayed run, the card revision the
@@ -10,6 +10,8 @@ import { Alert, Button, Card } from "./shadcn";
 export interface ApproveResultControlProps {
   // run is the displayed verification run; only a passed report is offered.
   run: VerificationStatusResult;
+  // build supplies the selected change's saved lifecycle, independently of a run.
+  build: StartedBuild | null;
   // inputsKnown is false while the owner observation is stale or unreadable.
   inputsKnown: boolean;
   // card is the Change Card the page shows for run's change, or null when it
@@ -33,6 +35,7 @@ export interface ApproveResultControlProps {
 // explains, rather than hides, why approval cannot be sent for this run.
 export function ApproveResultControl({
   run,
+  build,
   inputsKnown,
   card,
   busy,
@@ -44,6 +47,7 @@ export function ApproveResultControl({
   if (run.state.type !== "completed" || !run.state.value.report.passed) {
     return null;
   }
+  if (build?.taking.state === "dropped") return null;
   const digest = run.state.value.report.report_digest;
   const recorded = card !== null && card.approval?.report_digest === digest;
   let blocked: string | null = null;
@@ -70,7 +74,7 @@ export function ApproveResultControl({
       <h3 id="surla-cp5-approve-title" tabIndex={-1}>Approve this result</h3>
       <p>
         Approval records that this passed result may be promoted for the Change Card revision
-        shown. It does not merge or deploy anything.
+        shown. Approve, then merge the commits it names into your branch. Surla does not merge or deploy anything.
       </p>
       {!available ? (
         <Alert id="surla-cp5-unavailable" variant="warning" role="alert" tabIndex={-1}>
