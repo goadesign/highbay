@@ -60,9 +60,14 @@ jobs:
           go-version-file: ${{ matrix.module }}/go.mod
           # setup-go names its cache after the runner, the Go version and a
           # hash of these files, and never replaces a saved cache. Hashing this
-          # module's go.sum alone keeps the generated-code job and the other
-          # modules' jobs from saving the cache this job needs.
-          cache-dependency-path: ${{ matrix.module }}/go.sum
+          # module's go.sum and go.mod keeps the generated-code job and the
+          # other modules' jobs from saving the cache this job needs. go.mod
+          # is hashed too because a change to it alone (a requirement that
+          # becomes direct) can change what the tests compile while go.sum
+          # stays the same, and the old cache would then never be replaced.
+          cache-dependency-path: |
+            ${{ matrix.module }}/go.sum
+            ${{ matrix.module }}/go.mod
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         if: matrix.module == '.'
         with:
@@ -108,8 +113,11 @@ jobs:
         with:
           go-version-file: go.mod
           # This job builds and vets the same packages and test binaries as
-          # "Go (.)", so the two share one cache and either may save it.
-          cache-dependency-path: go.sum
+          # "Go (.)", so the two share one cache and either may save it: both
+          # hash the same files in the same order.
+          cache-dependency-path: |
+            go.sum
+            go.mod
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 26.0.0
@@ -150,7 +158,9 @@ jobs:
       - uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
         with:
           go-version-file: go.mod
-          cache-dependency-path: go.sum
+          cache-dependency-path: |
+            go.sum
+            go.mod
       - name: Build and vet
         env:
           BUILD_TAG: ${{ matrix.tag }}
@@ -168,7 +178,9 @@ jobs:
       - uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
         with:
           go-version-file: go.mod
-          cache-dependency-path: go.sum
+          cache-dependency-path: |
+            go.sum
+            go.mod
       - name: Vet and short race tests (including Linux candidate sandbox)
         # Only packages with tests are listed. The others, the generated
         # packages among them, have nothing to run, and compiling them and
@@ -212,6 +224,7 @@ jobs:
           # give this job a cache name different from the root test job's.
           cache-dependency-path: |
             go.sum
+            go.mod
             ui/checkpoint/package-lock.json
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
@@ -307,7 +320,9 @@ jobs:
       - uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
         with:
           go-version-file: ${{ matrix.module }}/go.mod
-          cache-dependency-path: ${{ matrix.module }}/go.sum
+          cache-dependency-path: |
+            ${{ matrix.module }}/go.sum
+            ${{ matrix.module }}/go.mod
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         if: matrix.suite == 'unit-root'
         with:
