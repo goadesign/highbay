@@ -168,3 +168,19 @@ func TestDraftTakeRecognizesAHolderBeforeTheStart(t *testing.T) {
 	assert.Contains(t, f.draft(), `Error("rejected")`)
 	assert.NotContains(t, f.draft(), "Result(Order)\n\t\tMeta(\"swagger:summary\", \"x\")\n\t})", "the guide's m44 edit survives")
 }
+
+// TestDesignHistoryRecognizesAbsenceBeforeAnAddition covers the implicit
+// absence at a change commit's parent, which path-only log omits as a change.
+func TestDesignHistoryRecognizesAbsenceBeforeAnAddition(t *testing.T) {
+	dir := t.TempDir()
+	writeWorkspaceFiles(t, dir, map[string]string{"go.mod": "module example.com/project\n\ngo 1.27.3\n"})
+	gitForLayoutTest(t, dir, "init", "-q")
+	gitForLayoutTest(t, dir, "add", "go.mod")
+	gitForLayoutTest(t, dir, "-c", "user.name=Test", "-c", "user.email=test@example.com", "commit", "-qm", "Before the design file existed")
+	writeWorkspaceFiles(t, dir, map[string]string{updateDesignFile: "package design\nvar A=0\n"})
+	commitProjectDesign(t, dir, updateDesignFile)
+	head := strings.TrimSpace(gitForLayoutTest(t, dir, "rev-parse", "HEAD"))
+	found, err := ancestorHeldDesignVersion(t.Context(), dir, head, updateDesignFile, absentDesignVersion)
+	require.NoError(t, err)
+	assert.True(t, found)
+}
