@@ -34,9 +34,8 @@ import (
 // revision with unread assignments.
 func TestStartBuildOnlyAtTheConfirmedRevisionInForce(t *testing.T) {
 	cp := newBuildControlPlane(t, Options{})
-	guide := asCaller("alice@example.com", CallerGuide)
 	user := asCaller("alice@example.com", CallerUser)
-	proposed := mustPropose(t, cp, guide, "chg", "Refunds up to $50 are instant.", refundAnalysis("Refunds up to $50 are instant."))
+	proposed := saveProposedCardFixture(t, cp, "alice@example.com", "chg", "Refunds up to $50 are instant.", refundAnalysis("Refunds up to $50 are instant."))
 	cases := []struct {
 		name     string
 		ctx      context.Context
@@ -624,9 +623,12 @@ func asCaller(owner string, kind CallerKind) context.Context {
 
 // confirmedChange proposes changeID as alice's guide, confirms it as alice's
 // user session, and returns the confirmed card.
+// confirmedChange constructs an explicit legacy saved-card fixture without
+// evaluation metadata, then confirms it through the real owner. It does not
+// exercise the public proposal producer; workspace/API tests refresh explicitly.
 func confirmedChange(t *testing.T, cp *ControlPlane, changeID string) *gensurla.ChangeCardResult {
 	t.Helper()
-	proposed := mustPropose(t, cp, asCaller("alice@example.com", CallerGuide), changeID, "Refunds up to $50 are instant.", refundAnalysis("Refunds up to $50 are instant."))
+	proposed := saveProposedCardFixture(t, cp, "alice@example.com", changeID, "Refunds up to $50 are instant.", refundAnalysis("Refunds up to $50 are instant."))
 	confirmed, err := cp.ConfirmIntent(asCaller("alice@example.com", CallerUser), &gensurla.ConfirmIntentPayload{
 		ChangeID: changeID, RequestRevision: proposed.RequestRevision, Answers: map[string]string{}, Examples: proposed.Examples,
 	})

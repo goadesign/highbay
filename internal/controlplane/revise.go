@@ -11,7 +11,6 @@ import (
 	"strings"
 
 	gensurla "github.com/goadesign/surla/gen/surla"
-	"github.com/goadesign/surla/internal/designeval"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
@@ -44,7 +43,7 @@ import (
 // is saved only if its latest revision is still the caller's
 // request_revision; a payload that breaks a rule, a blank change_id,
 // request_revision or prompt, an invalid or stale story_refresh_op_id, or an
-// unreadable workspace design is unprocessable and leaves the change as it
+// unknown or unsuccessful refresh is unprocessable and leaves the change as it
 // was. The result is the change as GetChange returns it.
 func (c *ControlPlane) ReviseChange(
 	ctx context.Context,
@@ -63,9 +62,8 @@ func (c *ControlPlane) ReviseChange(
 		return nil, gensurla.MakeUnprocessable(errors.New("change_id, request_revision, and prompt are required"))
 	}
 
-	// Phase 1: read the current change without holding the write lock,
-	// because recording a workspace design reads the bound workspace, which
-	// must not happen under c.mu.
+	// Phase 1: read the latest saved revision. A supplied operation replaces
+	// its entire snapshot; omission preserves it without reading any design.
 	c.mu.RLock()
 	record, exists, err := c.cards.load(p.ChangeID)
 	c.mu.RUnlock()
@@ -83,24 +81,18 @@ func (c *ControlPlane) ReviseChange(
 		return nil, err
 	}
 
-	designSrc := latest.designSource
-	var nextStories []designeval.StorySummary
-	switch {
-	case p.StoryRefreshOpID != nil:
-		designSrc, nextStories, err = c.adoptStoryRefresh(principal, *p.StoryRefreshOpID)
+	snapshot := refreshedSnapshot{
+		designSource: latest.designSource, stories: cloneStorySummaries(latest.stories),
+		architecture: latest.architecture, goMod: latest.goMod, madeFrom: latest.madeFrom,
+	}
+	if p.StoryRefreshOpID != nil {
+		snapshot, err = c.adoptStoryRefresh(principal, *p.StoryRefreshOpID)
 		if err != nil {
 			return nil, err
 		}
-	case latest.architecture != nil || len(latest.stories) > 0:
-		// A stored metadata group is complete by the card decoder. Its design
-		// stays with it even when the evaluation declared no Stories.
-		nextStories = cloneStorySummaries(latest.stories)
-	default:
-		if wsDir, wsDev, wsIno := c.currentWorkspaceTarget(); wsDir != "" {
-			designSrc, err = readWorkspaceDesignSource(wsDir, wsDev, wsIno)
-			if err != nil {
-				return nil, err
-			}
+	} else if snapshot.designSource == "" {
+		if err := c.requireRefreshForModule(); err != nil {
+			return nil, err
 		}
 	}
 
@@ -130,9 +122,9 @@ func (c *ControlPlane) ReviseChange(
 		Ambiguities:        ambiguities,
 		Examples:           examples,
 		PreservedBehaviors: preserved,
-		Stories:            storySummaryItemsOrNil(nextStories),
+		Stories:            storySummaryItemsOrNil(snapshot.stories),
 	}
-	rev, err := computeCanonicalRevision(revised, principal.ID, designSrc)
+	rev, err := computeCanonicalRevision(revised, principal.ID, snapshot.designSource)
 	if err != nil {
 		span.SetAttributes(attribute.String("surla.public_summary", cp1SafeFaultSummary(true, cp1FaultRevision)))
 		span.RecordError(err)
@@ -149,9 +141,9 @@ func (c *ControlPlane) ReviseChange(
 
 	// Phase 3: save under the write lock only if no other request changed the
 	// change since Phase 1.
-	next := storedRevision{card: revised, designSource: designSrc, stories: nextStories}
-	if p.StoryRefreshOpID == nil {
-		next.architecture, next.goMod, next.madeFrom = latest.architecture, latest.goMod, latest.madeFrom
+	next := storedRevision{
+		card: revised, designSource: snapshot.designSource, stories: snapshot.stories,
+		architecture: snapshot.architecture, goMod: snapshot.goMod, madeFrom: snapshot.madeFrom,
 	}
 	saved, err := c.saveRevision(span, principal, p, next)
 	if err != nil {
@@ -245,6 +237,10 @@ func (c *ControlPlane) saveRevision(
 	p *gensurla.ReviseChangePayload,
 	next storedRevision,
 ) (storedChangeCard, error) {
+	if p.StoryRefreshOpID != nil {
+		c.draftMu.Lock()
+		defer c.draftMu.Unlock()
+	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	current, exists, err := c.cards.load(p.ChangeID)
@@ -266,6 +262,23 @@ func (c *ControlPlane) saveRevision(
 		span.SetAttributes(attribute.String("surla.public_summary", "Change Card request_revision changed concurrently (this request did not modify the Change Card); call get_change and retry revise_change."))
 		return storedChangeCard{}, err
 	}
+	if p.StoryRefreshOpID == nil {
+		// Metadata stays outside request_revision. Another refresh may have
+		// saved a newer module/history with the same hash after Phase 1, so
+		// omission preserves the complete latest group read under this lock.
+		latest := current.latest()
+		next.designSource, next.stories = latest.designSource, latest.stories
+		next.architecture, next.goMod, next.madeFrom = latest.architecture, latest.goMod, latest.madeFrom
+		next.card.Stories = storySummaryItemsOrNil(next.stories)
+	}
+	if p.StoryRefreshOpID != nil {
+		if err := c.recordRefreshedSnapshot(span, refreshedSnapshot{
+			designSource: next.designSource, stories: next.stories, architecture: next.architecture,
+			goMod: next.goMod, madeFrom: next.madeFrom,
+		}); err != nil {
+			return storedChangeCard{}, err
+		}
+	}
 	saved := storedChangeCard{
 		card: next.card, owner: principal.ID, designSource: next.designSource, stories: next.stories,
 		architecture: next.architecture, goMod: next.goMod, madeFrom: next.madeFrom,
@@ -282,6 +295,7 @@ func (c *ControlPlane) saveRevision(
 		span.SetStatus(codes.Error, "save revised cp1 change card")
 		return storedChangeCard{}, err
 	}
+	c.suppressDraftDropNote(next.madeFrom)
 	span.SetAttributes(attribute.String("surla.public_summary", summary))
 	return saved, nil
 }

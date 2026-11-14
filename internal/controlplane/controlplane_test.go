@@ -150,9 +150,8 @@ func TestCP1AmbiguityResolutionStrictValidationOwnershipAndRevisionLock(t *testi
 }
 
 // TestProposeChangeWaitsForUserWithoutQuestions verifies that an
-// analysis with no open questions is saved confirmed by its owner, and that a
-// proposal on a server bound to a workspace records that workspace's
-// design/*.go as the card's design source.
+// analysis with no open questions still waits for confirmation. Before a
+// module is initialized, a proposal keeps intent without reading design files.
 func TestProposeChangeWaitsForUserWithoutQuestions(t *testing.T) {
 	alice := WithPrincipal(context.Background(), Principal{ID: "alice@example.com", CallerID: "alice@example.com", Kind: CallerUser})
 	ws := t.TempDir()
@@ -174,14 +173,12 @@ func TestProposeChangeWaitsForUserWithoutQuestions(t *testing.T) {
 	stored, ok, err := cp.cards.load("chg-instant")
 	require.NoError(t, err)
 	require.True(t, ok)
-	assert.Equal(t, `{"design/design.go":"package design // refunds\n"}`, stored.designSource)
+	assert.Empty(t, stored.designSource)
 }
 
 // TestProposeChangeRecordsTheDesignSourceItWasMadeAgainst verifies the design
-// source a card records and hashes into request_revision: none when
-// no workspace is bound, none for a bound workspace without
-// design/*.go (so the card does not block init_project), and the bound
-// workspace's design/*.go as a JSON object with HTML characters unescaped.
+// source is absent before initialization, including when uninitialized
+// design files exist. Only an explicit refresh can supply evaluated source.
 func TestProposeChangeRecordsTheDesignSourceItWasMadeAgainst(t *testing.T) {
 	alice := WithPrincipal(context.Background(), Principal{ID: "alice@example.com", CallerID: "alice@example.com", Kind: CallerUser})
 	emptyWorkspace := t.TempDir()
@@ -195,7 +192,7 @@ func TestProposeChangeRecordsTheDesignSourceItWasMadeAgainst(t *testing.T) {
 	}{
 		{"no design and no workspace", "", ""},
 		{"workspace without design files", emptyWorkspace, ""},
-		{"workspace design files", designWorkspace, `{"design/design.go":"package design // a < b && c > d\n"}`},
+		{"workspace design before a module exists is not read", designWorkspace, ""},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			cp := newControlPlane(t, Options{CardsDir: t.TempDir(), WorkspaceDir: tc.workspace})
@@ -213,17 +210,7 @@ func TestProposeChangeRecordsTheDesignSourceItWasMadeAgainst(t *testing.T) {
 			assert.Equal(t, rev, card.RequestRevision, "request_revision covers the recorded design source")
 			blocked, err := cp.cards.hasWorkspaceCardsWithFiles()
 			require.NoError(t, err)
-			assert.Equal(t, tc.workspace == designWorkspace, blocked, "only a card that recorded workspace design files blocks init_project")
-			if tc.wantSource != "" {
-				// Changing only private source bytes must invalidate the saved revision.
-				raw, err := os.ReadFile(cp.cards.path(card.ChangeID))
-				require.NoError(t, err)
-				tampered := strings.Replace(string(raw), "package design", "package altered", 1)
-				require.NotEqual(t, string(raw), tampered)
-				require.NoError(t, os.WriteFile(cp.cards.path(card.ChangeID), []byte(tampered), 0o600))
-				_, err = cp.GetChange(alice, &gensurla.GetChangePayload{ChangeID: card.ChangeID})
-				assert.ErrorContains(t, err, "does not match its request_revision")
-			}
+			assert.False(t, blocked, "intent before initialization has no saved evaluated design")
 
 		})
 	}
@@ -496,17 +483,10 @@ var _ = Service("orders", func() {
 })
 `
 	writeWorkspaceFiles(t, workspace, testmodule.Snapshot(t, "", candidateDesign))
-	card, err := cp.ProposeChange(ctx, &gensurla.ProposeChangePayload{
-		ChangeID: "chg-clear",
-		Prompt:   "Auto-approve when item_subtotal_cents < 5000; require manager when item_subtotal_cents >= 5000.",
-
-		Analysis: clearAnalysis,
-	})
-	if err != nil {
-		t.Fatalf("ProposeChange failed: %v", err)
-	}
+	card := mustProposeFromRefresh(t, cp, ctx, "chg-clear",
+		"Auto-approve when item_subtotal_cents < 5000; require manager when item_subtotal_cents >= 5000.", clearAnalysis)
 	require.Equal(t, StatusNeedsConfirmation, card.Status)
-	card, err = cp.ConfirmIntent(ctx, &gensurla.ConfirmIntentPayload{ChangeID: card.ChangeID, RequestRevision: card.RequestRevision, Answers: map[string]string{}, Examples: card.Examples})
+	card, err := cp.ConfirmIntent(ctx, &gensurla.ConfirmIntentPayload{ChangeID: card.ChangeID, RequestRevision: card.RequestRevision, Answers: map[string]string{}, Examples: card.Examples})
 	require.NoError(t, err)
 	require.Equal(t, StatusConfirmed, card.Status)
 

@@ -81,7 +81,7 @@ func TestARevisionOfAnAgreedChangeWaitsAndTheAgreedRevisionStaysInForce(t *testi
 
 	_, err = cp.PreviewArchitecture(agreedGuide, &gensurla.PreviewArchitecturePayload{ChangeID: "chg", RequestRevision: agreed.RequestRevision})
 	assertServiceError(t, err, "unprocessable")
-	assert.ErrorContains(t, err, "workspace directory is not bound", "preview accepted the agreed revision and went on to read the design")
+	assert.ErrorContains(t, err, "no architecture to show", "preview accepted the agreed revision but this legacy card has no saved architecture")
 
 	run, err := cp.VerifyChange(agreedBuilder, &gensurla.VerifyChangePayload{ChangeID: "chg", RequestRevision: agreed.RequestRevision, CandidateCommit: commit})
 	require.NoError(t, err, "verification of the agreed revision is accepted")
@@ -127,7 +127,12 @@ var _ = Service("orders", func() {
 })
 `))
 	cp := newControlPlane(t, Options{WorkspaceDir: workspace})
-	agreed := agreeChange(t, cp, "chg")
+	proposed := mustProposeFromRefresh(t, cp, agreedGuide, "chg", "Refunds up to $50 are instant.", refundAnalysis("Refunds up to $50 are instant.", refundTaxQuestion()))
+	agreed, err := cp.ConfirmIntent(agreedUser, &gensurla.ConfirmIntentPayload{
+		ChangeID: "chg", RequestRevision: proposed.RequestRevision,
+		Answers: map[string]string{"chg-ambiguity-01": "with_tax"}, Examples: proposed.Examples,
+	})
+	require.NoError(t, err)
 	proposeRevision(t, cp, "chg", agreed.RequestRevision, "Refunds up to $60 are instant.")
 	preview, err := cp.PreviewArchitecture(agreedGuide, &gensurla.PreviewArchitecturePayload{ChangeID: "chg", RequestRevision: agreed.RequestRevision})
 	require.NoError(t, err)
@@ -584,21 +589,28 @@ func TestAProposalThatIsNotAwaitingConfirmationIsRefusedOnLoad(t *testing.T) {
 // proposes a revision that records them: init_project's check then counts
 // the proposal's files although the revision in force has none.
 func TestAWaitingProposalsDesignFilesBlockInitialization(t *testing.T) {
-	ws := t.TempDir()
-	writeWorkspaceFiles(t, ws, map[string]string{"go.mod": "module example.com/orders\n\ngo 1.24\n"})
-	cp := newControlPlane(t, Options{WorkspaceDir: ws})
-	agreed := agreeChange(t, cp, "chg")
+	cp := newControlPlane(t, Options{})
+	agreeChange(t, cp, "chg")
 	blocked, err := cp.cards.hasWorkspaceCardsWithFiles()
 	require.NoError(t, err)
 	require.False(t, blocked, "a change made before any design file does not block initialization")
-	writeWorkspaceFiles(t, ws, map[string]string{"design/design.go": "package design\n"})
-	proposeRevision(t, cp, "chg", agreed.RequestRevision, "Refunds up to $60 are instant.")
+	// Retain the storage compatibility contract for a proposal produced before
+	// refresh adoption became required, without reproducing its obsolete scan.
 	stored := loadChange(t, cp, "chg")
+	proposed := *stored.card
+	proposed.Status, proposed.ConfirmedBy, proposed.Approval = StatusNeedsConfirmation, nil, nil
+	proposed.Answers = map[string]string{}
+	proposed.Prompt, proposed.Summary = "Refunds up to $60 are instant.", "Refunds up to $60 are instant."
+	source := `{"design/design.go":"package design\n"}`
+	proposed.RequestRevision, err = computeCanonicalRevision(&proposed, stored.owner, source)
+	require.NoError(t, err)
+	stored.proposed = &storedRevision{card: &proposed, designSource: source}
+	saveMetadataRecord(t, cp, stored)
 	require.Empty(t, stored.designSource)
 	require.NotEmpty(t, stored.proposed.designSource)
 	blocked, err = cp.cards.hasWorkspaceCardsWithFiles()
 	require.NoError(t, err)
-	assert.True(t, blocked, "a waiting proposal's design files block initialization")
+	assert.True(t, blocked, "a waiting legacy proposal's design files block initialization")
 }
 
 // TestBuildsFollowTheAgreedRevision builds an agreed change while the guide's
@@ -698,9 +710,11 @@ func TestRevisionDescriptionsSayTheAgreedChangeStaysInForce(t *testing.T) {
 
 // agreeChange proposes changeID with one question and confirms it as the
 // user, returning the confirmed card.
+// agreeChange confirms a legacy stored-card consumer fixture, without claiming
+// the public proposal producer read or evaluated a workspace.
 func agreeChange(t *testing.T, cp *ControlPlane, changeID string) *gensurla.ChangeCardResult {
 	t.Helper()
-	proposed := mustPropose(t, cp, agreedGuide, changeID, "Refunds up to $50 are instant.", refundAnalysis("Refunds up to $50 are instant.", refundTaxQuestion()))
+	proposed := saveProposedCardFixture(t, cp, agreedOwner, changeID, "Refunds up to $50 are instant.", refundAnalysis("Refunds up to $50 are instant.", refundTaxQuestion()))
 	confirmed, err := cp.ConfirmIntent(agreedUser, &gensurla.ConfirmIntentPayload{
 		ChangeID: changeID, RequestRevision: proposed.RequestRevision,
 		Answers: map[string]string{changeID + "-ambiguity-01": "with_tax"}, Examples: proposed.Examples,
