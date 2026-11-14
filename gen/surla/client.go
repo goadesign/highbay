@@ -42,12 +42,14 @@ type Client struct {
 	ListTracesEndpoint                goa.Endpoint
 	RefreshStoryEndpoint              goa.Endpoint
 	GetStoryRefreshEndpoint           goa.Endpoint
+	UpdateDraftEndpoint               goa.Endpoint
 	GetTeamEndpoint                   goa.Endpoint
 	ShowTeamPaneEndpoint              goa.Endpoint
 	StartTeamAgentsEndpoint           goa.Endpoint
 	ListChangesEndpoint               goa.Endpoint
 	WaitForChangesEndpoint            goa.Endpoint
 	StartBuildEndpoint                goa.Endpoint
+	DropBuildEndpoint                 goa.Endpoint
 	GetBuildEndpoint                  goa.Endpoint
 	GetTestFindingsEndpoint           goa.Endpoint
 	ListBuilderAssignmentsEndpoint    goa.Endpoint
@@ -58,7 +60,7 @@ type Client struct {
 }
 
 // NewClient initializes a "surla" service client given the endpoints.
-func NewClient(goldenPath, proposeChange, reviseChange, confirmIntent, getChange, declineRevision, previewArchitecture, draftOverride, startLiveTarget, stopLiveTarget, getLiveTarget, verifyChange, getVerification, listVerifications, approveMerge, diff, configureModel, getModelConnection, handOverModelSettings, initProject, generateCode, checkProject, updateDependencies, readCheckOutput, listTraces, refreshStory, getStoryRefresh, getTeam, showTeamPane, startTeamAgents, listChanges, waitForChanges, startBuild, getBuild, getTestFindings, listBuilderAssignments, getBuilderAssignment, listTestWriterAssignments, getTestWriterAssignment, reportTestsFinished goa.Endpoint) *Client {
+func NewClient(goldenPath, proposeChange, reviseChange, confirmIntent, getChange, declineRevision, previewArchitecture, draftOverride, startLiveTarget, stopLiveTarget, getLiveTarget, verifyChange, getVerification, listVerifications, approveMerge, diff, configureModel, getModelConnection, handOverModelSettings, initProject, generateCode, checkProject, updateDependencies, readCheckOutput, listTraces, refreshStory, getStoryRefresh, updateDraft, getTeam, showTeamPane, startTeamAgents, listChanges, waitForChanges, startBuild, dropBuild, getBuild, getTestFindings, listBuilderAssignments, getBuilderAssignment, listTestWriterAssignments, getTestWriterAssignment, reportTestsFinished goa.Endpoint) *Client {
 	return &Client{
 		GoldenPathEndpoint:                goldenPath,
 		ProposeChangeEndpoint:             proposeChange,
@@ -87,12 +89,14 @@ func NewClient(goldenPath, proposeChange, reviseChange, confirmIntent, getChange
 		ListTracesEndpoint:                listTraces,
 		RefreshStoryEndpoint:              refreshStory,
 		GetStoryRefreshEndpoint:           getStoryRefresh,
+		UpdateDraftEndpoint:               updateDraft,
 		GetTeamEndpoint:                   getTeam,
 		ShowTeamPaneEndpoint:              showTeamPane,
 		StartTeamAgentsEndpoint:           startTeamAgents,
 		ListChangesEndpoint:               listChanges,
 		WaitForChangesEndpoint:            waitForChanges,
 		StartBuildEndpoint:                startBuild,
+		DropBuildEndpoint:                 dropBuild,
 		GetBuildEndpoint:                  getBuild,
 		GetTestFindingsEndpoint:           getTestFindings,
 		ListBuilderAssignmentsEndpoint:    listBuilderAssignments,
@@ -119,7 +123,8 @@ func (c *Client) GoldenPath(ctx context.Context) (res string, err error) {
 // ProposeChange calls the "propose_change" endpoint of the "surla" service.
 // ProposeChange may return the following errors:
 //   - "conflict" (type *goa.ServiceError): A Change Card with this change_id already exists; use revise_change or a new change_id.
-//   - "unprocessable" (type *goa.ServiceError): The request could not be accepted: change_id or prompt is blank, an ambiguity repeats an option, story_refresh_op_id does not name a current succeeded refresh_story operation matching the bound workspace snapshot, or the bound workspace's design/*.go could not be read. The message says which; nothing was saved.
+//   - "unprocessable" (type *goa.ServiceError): The request could not be accepted: change_id or prompt is blank, an ambiguity repeats an option, story_refresh_op_id does not name the owner's current succeeded refresh_story operation, or the project folder holds a go.mod and story_refresh_op_id is missing. The message says which; nothing was saved.
+//   - "drafted_before_drop" (type *goa.ServiceError): A build was dropped after this refresh. Call refresh_story to remake and evaluate the draft.
 //   - "forbidden" (type *goa.ServiceError): The authenticated caller may not perform this operation or does not own the resource.
 //   - error: internal error
 func (c *Client) ProposeChange(ctx context.Context, p *ProposeChangePayload) (res *ChangeCardResult, err error) {
@@ -135,7 +140,8 @@ func (c *Client) ProposeChange(ctx context.Context, p *ProposeChangePayload) (re
 // ReviseChange may return the following errors:
 //   - "not_found" (type *goa.ServiceError): No Change Card exists with this change_id.
 //   - "conflict" (type *goa.ServiceError): request_revision does not name the latest revision (the waiting proposal's, when one waits); read the change with get_change.
-//   - "unprocessable" (type *goa.ServiceError): The request could not be accepted: change_id, request_revision or prompt is blank, an ambiguity repeats an option, the analysis does not account for every example of the revision it revises exactly once, story_refresh_op_id does not name a current succeeded refresh_story operation matching the bound workspace snapshot, or the bound workspace's design/*.go could not be read. The message says which; the card did not change.
+//   - "unprocessable" (type *goa.ServiceError): The request could not be accepted: change_id, request_revision or prompt is blank, an ambiguity repeats an option, the analysis does not account for every example of the revision it revises exactly once, story_refresh_op_id does not name the owner's current succeeded refresh_story operation, or the project folder holds a go.mod and story_refresh_op_id is missing when the revision being revised has no design. The message says which; the card did not change.
+//   - "drafted_before_drop" (type *goa.ServiceError): A build was dropped after this refresh. Call refresh_story to remake and evaluate the draft.
 //   - "forbidden" (type *goa.ServiceError): The authenticated caller may not perform this operation or does not own the resource.
 //   - error: internal error
 func (c *Client) ReviseChange(ctx context.Context, p *ReviseChangePayload) (res *ChangeCardResult, err error) {
@@ -196,7 +202,7 @@ func (c *Client) DeclineRevision(ctx context.Context, p *DeclineRevisionPayload)
 // service.
 // PreviewArchitecture may return the following errors:
 //   - "not_found" (type *goa.ServiceError): No Change Card exists with this change_id.
-//   - "conflict" (type *goa.ServiceError): The Change Card is not confirmed or its request_revision does not match; confirm the card or read the current revision with get_change.
+//   - "conflict" (type *goa.ServiceError): The Change Card is not confirmed, its request_revision does not match, or the agreed revision records no architecture to show; confirm the card or read the current revision with get_change.
 //   - "unprocessable" (type *goa.ServiceError): The request or evaluated design did not meet Checkpoint 2 requirements; the message states which check failed.
 //   - "forbidden" (type *goa.ServiceError): The authenticated caller may not perform this operation or does not own the resource.
 //   - error: internal error
@@ -279,11 +285,16 @@ func (c *Client) GetLiveTarget(ctx context.Context) (res *LiveTargetStatus, err 
 // VerifyChange calls the "verify_change" endpoint of the "surla" service.
 // VerifyChange may return the following errors:
 //   - "not_found" (type *goa.ServiceError): No Change Card exists with this change_id.
-//   - "conflict" (type *goa.ServiceError): The Change Card is not confirmed or its request_revision does not match, the candidate commit is not in the project's repository, the project folder was replaced after the server started, or (without stored verification settings) the candidate commit shares no history with the accepted tests' commit or changes hand-written files in the test module; the message names any changed test-module files and ends with the restore or user step.
-//   - "no_build" (type *goa.ServiceError): Without stored verification settings: the user has not built the change's revision in force with a test writer, so no tests are accepted for it. The message names the revision built, if any, and ends with the user's step.
+//   - "conflict" (type *goa.ServiceError): The Change Card is not confirmed or its request_revision does not match, the candidate commit is not in the project's repository, the project folder was replaced after the server started, the candidate's design/ files differ from the build's design source (the message names them; call generate_code, commit and verify again), or (without stored verification settings) the candidate changes hand-written files in the test module.
+//   - "no_build" (type *goa.ServiceError): No build of this change is open (the user built another change or none), the user dropped it, or (without stored verification settings) the open build is for another revision of the change. The message names what Surla found and the user's step.
 //   - "tests_not_accepted" (type *goa.ServiceError): Without stored verification settings: Surla has not accepted the tests of the change's build. The message names the test writer's state and who acts, and ends with the step.
 //   - "no_test_layout" (type *goa.ServiceError): Without stored verification settings: a commit lacks the test layout surla init makes, the accepted tests' commit is no longer in the project's repository, or the project folder is not in a git repository. The message names the commit or folder and what is missing, and ends with the step.
 //   - "not_implemented" (type *goa.ServiceError): This server has no verification configuration, so it cannot run Checkpoint 4 verifications.
+//   - "assignment_unread" (type *goa.ServiceError): A build started after your last read of your assignment: stop your current work, then call get_builder_assignment for its change.
+//   - "copy_off_branch" (type *CopyOffBranch): Your working copy is not on the build's branch: the message states its branch, the build's branch and what is uncommitted, and the goal. Put your work there with git, commit it, and verify again.
+//   - "working_folder_missing" (type *goa.ServiceError): Your working folder is missing; ask the user to build this change again on the views page.
+//   - "build_branch_mismatch" (type *goa.ServiceError): The candidate is not on your build's branch, does not descend from the build's base, is the base itself, or holds a commit of another build's branch that the base lacks. The message names the commit and, for another build's work, its branch and the files it changed, and states the goal: your branch and working copy hold none of that work.
+//   - "design_changed_outside" (type *goa.ServiceError): A design file at the candidate's merge base with the project's commit is not a version the revision was made from: it was changed outside Surla. The message names the file and the commit. When the change is uncommitted, the user commits the design change in the project folder, then asks the guide to call update_draft, refresh_story and revise_change.
 //   - "forbidden" (type *goa.ServiceError): The authenticated caller may not perform this operation or does not own the resource.
 //   - error: internal error
 func (c *Client) VerifyChange(ctx context.Context, p *VerifyChangePayload) (res *VerificationStatusResult, err error) {
@@ -334,6 +345,7 @@ func (c *Client) ListVerifications(ctx context.Context, p *ListVerificationsPayl
 //   - "tests_not_accepted" (type *goa.ServiceError): Without stored verification settings: Surla has not accepted the tests of the change's build. The message names the test writer's state and who acts, and ends with the step.
 //   - "unprocessable" (type *goa.ServiceError): The verification report did not pass or does not match the Change Card, the chosen tests' commit, or (when promotion settings are configured) the promotion target's staged binary digests.
 //   - "not_implemented" (type *goa.ServiceError): This control plane has no verification configuration bound to it.
+//   - "build_branch_mismatch" (type *goa.ServiceError): The run's candidate is no longer on the build's branch, or that branch now holds another build's work: the builder verifies again, then the user approves that run.
 //   - "forbidden" (type *goa.ServiceError): The authenticated caller may not perform this operation or does not own the resource.
 //   - error: internal error
 func (c *Client) ApproveMerge(ctx context.Context, p *ApproveMergePayload) (res *ChangeCardResult, err error) {
@@ -419,7 +431,13 @@ func (c *Client) InitProject(ctx context.Context, p *InitProjectPayload) (res *I
 
 // GenerateCode calls the "generate_code" endpoint of the "surla" service.
 // GenerateCode may return the following errors:
-//   - "unprocessable" (type *goa.ServiceError): The selected local module is absent, replaced, or invalid; correct its local files and call again.
+//   - "no_build" (type *goa.ServiceError): No build is open, or the user dropped it: stop work on it and make no more edits or commits for it. The user starts builds on the views page.
+//   - "assignment_unread" (type *goa.ServiceError): A build started after your last read of your assignment: stop your current work, then call get_builder_assignment for its change.
+//   - "copy_off_branch" (type *CopyOffBranch): Your working copy is not on the build's branch: the message states its branch, the build's branch and what is uncommitted, and the goal. Put your work there with git, commit it, and call again.
+//   - "working_folder_missing" (type *goa.ServiceError): Your working folder is missing; ask the user to build this change again on the views page.
+//   - "conflict" (type *goa.ServiceError): The open build is for a revision that is no longer the change's revision in force; the user builds again.
+//   - "missing_modules" (type *goa.ServiceError): The builder's go.mod lacks a module the agreed design imports, requires an older version than the revision was made with, or has a differing replace directive. design/ was written and gen/ was not; the message names each required go get, go mod tidy or replacement correction in the working folder.
+//   - "unprocessable" (type *goa.ServiceError): The selected module of the working folder is absent, replaced, or invalid; correct its files and call again.
 //   - "not_implemented" (type *goa.ServiceError): No workspace directory is bound to this control plane.
 //   - "forbidden" (type *goa.ServiceError): The authenticated caller may not perform this operation or does not own the resource.
 //   - error: internal error
@@ -434,7 +452,11 @@ func (c *Client) GenerateCode(ctx context.Context, p *GenerateCodePayload) (res 
 
 // CheckProject calls the "check_project" endpoint of the "surla" service.
 // CheckProject may return the following errors:
-//   - "unprocessable" (type *goa.ServiceError): The workspace contains no Go module.
+//   - "no_build" (type *goa.ServiceError): No build is open, or the user dropped it: stop work on it and make no more edits or commits for it. The user starts builds on the views page.
+//   - "assignment_unread" (type *goa.ServiceError): A build started after your last read of your assignment: stop your current work, then call get_builder_assignment for its change.
+//   - "copy_off_branch" (type *CopyOffBranch): Your working copy is not on the build's branch: the message states its branch, the build's branch and what is uncommitted, and the goal. Put your work there with git, commit it, and call again.
+//   - "working_folder_missing" (type *goa.ServiceError): Your working folder is missing; ask the user to build this change again on the views page.
+//   - "unprocessable" (type *goa.ServiceError): The working folder contains no Go module.
 //   - "not_implemented" (type *goa.ServiceError): No workspace directory is bound to this control plane.
 //   - "unavailable" (type *goa.ServiceError): No local Docker engine is usable: docker is missing, the engine does not answer or is not local, or the Go image cannot be pulled.
 //   - "forbidden" (type *goa.ServiceError): The authenticated caller may not perform this operation or does not own the resource.
@@ -451,7 +473,11 @@ func (c *Client) CheckProject(ctx context.Context) (res *CheckProjectResult, err
 // UpdateDependencies calls the "update_dependencies" endpoint of the "surla"
 // service.
 // UpdateDependencies may return the following errors:
-//   - "unprocessable" (type *goa.ServiceError): The workspace contains no Go module.
+//   - "no_build" (type *goa.ServiceError): No build is open, or the user dropped it: stop work on it and make no more edits or commits for it. The user starts builds on the views page.
+//   - "assignment_unread" (type *goa.ServiceError): A build started after your last read of your assignment: stop your current work, then call get_builder_assignment for its change.
+//   - "copy_off_branch" (type *CopyOffBranch): Your working copy is not on the build's branch: the message states its branch, the build's branch and what is uncommitted, and the goal. Put your work there with git, commit it, and call again.
+//   - "working_folder_missing" (type *goa.ServiceError): Your working folder is missing; ask the user to build this change again on the views page.
+//   - "unprocessable" (type *goa.ServiceError): The working folder contains no Go module.
 //   - "not_implemented" (type *goa.ServiceError): No workspace directory is bound to this control plane.
 //   - "unavailable" (type *goa.ServiceError): No local Docker engine is usable: docker is missing, the engine does not answer or is not local, or the Go image cannot be pulled.
 //   - "forbidden" (type *goa.ServiceError): The authenticated caller may not perform this operation or does not own the resource.
@@ -498,7 +524,7 @@ func (c *Client) ListTraces(ctx context.Context, p *ListTracesPayload) (res *Tra
 
 // RefreshStory calls the "refresh_story" endpoint of the "surla" service.
 // RefreshStory may return the following errors:
-//   - "unprocessable" (type *goa.ServiceError): The bound workspace is absent, was replaced, contains no go.mod file, or has invalid module files; run init_project or fix the local module files and call refresh_story again.
+//   - "unprocessable" (type *goa.ServiceError): The project folder holds no go.mod (run init_project or create go.mod), a draft file Go cannot parse or that imports the project outside design/ (the message names the file and line), or the draft is a link or a file rather than a folder.
 //   - "not_implemented" (type *goa.ServiceError): No workspace directory is bound to this control plane; start Surla from a project directory.
 //   - "unavailable" (type *goa.ServiceError): The control plane is shutting down and is no longer starting Story refresh operations.
 //   - "forbidden" (type *goa.ServiceError): The authenticated caller may not perform this operation or does not own the resource.
@@ -525,6 +551,22 @@ func (c *Client) GetStoryRefresh(ctx context.Context) (res *StoryRefreshResult, 
 		return
 	}
 	return ires.(*StoryRefreshResult), nil
+}
+
+// UpdateDraft calls the "update_draft" endpoint of the "surla" service.
+// UpdateDraft may return the following errors:
+//   - "unprocessable" (type *goa.ServiceError): The project folder holds no go.mod, so there is no draft (run init_project or create go.mod), or a file there could not be read; the message names it.
+//   - "not_implemented" (type *goa.ServiceError): No workspace directory is bound to this control plane; start Surla from a project directory.
+//   - "unavailable" (type *goa.ServiceError): The control plane is shutting down.
+//   - "forbidden" (type *goa.ServiceError): The authenticated caller may not perform this operation or does not own the resource.
+//   - error: internal error
+func (c *Client) UpdateDraft(ctx context.Context) (res *DraftUpdateResult, err error) {
+	var ires any
+	ires, err = c.UpdateDraftEndpoint(ctx, nil)
+	if err != nil {
+		return
+	}
+	return ires.(*DraftUpdateResult), nil
 }
 
 // GetTeam calls the "get_team" endpoint of the "surla" service.
@@ -597,18 +639,22 @@ func (c *Client) WaitForChanges(ctx context.Context, p *WaitForChangesPayload) (
 
 // StartBuild calls the "start_build" endpoint of the "surla" service.
 // StartBuild may return the following errors:
-//   - "not_repository" (type *goa.ServiceError): The project folder is not in a Git repository; nothing was saved. The message ends with the step to create or select a repository.
-//   - "no_commit" (type *goa.ServiceError): The project repository has no commit; nothing was saved. The message ends with the step to make its first commit.
+//   - "not_repository" (type *goa.ServiceError): The project folder is not in a Git repository, which every build's working copies need; nothing was saved. The message ends with the step to create or select a repository.
+//   - "no_commit" (type *goa.ServiceError): The project repository has no commit for the build's working copies to start from; nothing was saved. The message ends with the step to make its first commit.
 //   - "no_test_layout" (type *goa.ServiceError): This project has neither stored verification settings nor Surla's test layout; nothing was saved. Store verification settings, then build again.
-//   - "git_identity_missing" (type *goa.ServiceError): Git has no configured name and address; nothing was saved. Configure Git's name and address, then build again.
-//   - "copy_folder_in_use" (type *goa.ServiceError): The test-writer copy's named folder is occupied; nothing was saved. The message ends with the step to free that folder and build again.
-//   - "tests_branch_in_use" (type *goa.ServiceError): The named tests branch is held by another working copy; nothing was saved. The message ends with the library's step to free that branch and build again.
-//   - "working_copy_busy" (type *goa.ServiceError): Another build is starting or a test check holds the project's working-copy turn; nothing was saved. Start the build again when that has ended.
+//   - "git_identity_missing" (type *goa.ServiceError): Git has no configured name and address, which Surla uses to commit what a working copy left when it joins a new build and to record accepted tests; nothing was saved. Configure Git's name and address, then build again.
+//   - "copy_folder_in_use" (type *goa.ServiceError): A working copy's folder in the project folder, .surla-build or .surla-tests, is a file or a folder that is not a linked working copy of the project's repository; nothing was saved. The message names the folder and ends with the step to move it out of the project.
+//   - "tests_branch_in_use" (type *goa.ServiceError): The branch Surla checks out in a missing working copy, surla/build-<n> or surla/tests-<n>, is checked out in another folder; nothing was saved. The message names that folder, quoted, and ends with the step that frees the branch.
+//   - "working_copy_busy" (type *goa.ServiceError): Another build is starting, a worker is reading its assignment into its working copy, or a test check holds the test writer's working copy; nothing was saved. Start the build again when that has ended.
 //   - "sandbox_unavailable" (type *goa.ServiceError): This system has no candidate sandbox; nothing was saved. When the host reports a specific sandbox prerequisite failure, the message includes its cause and remedy before: Start this project on a system with Surla's candidate sandbox, then build again.
+//   - "previous_change_open" (type *OpenBuildRefusal): Another change's build is open, and the user has neither merged a passed run of it into the branch checked out in the project folder nor dropped it; nothing was saved. The body names that build, with the commits to merge once a run passed, so the page offers the merge commands and Drop.
+//   - "unfinished_build_open" (type *OpenBuildRefusal): Building this change again replaces its open build, which no verification has passed, and replaces does not name that build; nothing was saved. The page asks the user first, then sends replaces naming the build it showed.
+//   - "drafted_before_drop" (type *goa.ServiceError): The agreed revision was drafted before the user dropped another change, so its design can hold that change's design; nothing was saved. The guide revises the change from its draft; the user adopts the revision, then builds.
+//   - "design_changed_outside" (type *goa.ServiceError): A design file at the project's commit is not a version the agreed revision was made from: it was changed outside Surla; nothing was saved. The message names the file and the commit. When the change is uncommitted, commit the design change in the project folder first; then the guide calls update_draft, refresh_story and revise_change, and the user adopts the revision and builds.
 //   - "not_implemented" (type *goa.ServiceError): Start this project with surla to bind the team; nothing was saved.
 //   - "unavailable" (type *goa.ServiceError): The server is stopping or the start's time limit ended before saving; call again on a running server. Nothing was saved.
 //   - "not_found" (type *goa.ServiceError): No Change Card exists with this change_id.
-//   - "conflict" (type *goa.ServiceError): The Change Card is not confirmed or request_revision is not its agreed revision (a waiting proposal's revision cannot be built); nothing changed.
+//   - "conflict" (type *goa.ServiceError): The Change Card is not confirmed or request_revision is not its agreed revision (a waiting proposal's revision cannot be built), or the agreed revision records no design to build from; nothing changed.
 //   - "unprocessable" (type *goa.ServiceError): The agreed Story has a finished flow whose key gives its required test an empty name, or two finished flows whose required tests would have the same name; revise the Story. Nothing changed.
 //   - "forbidden" (type *goa.ServiceError): The authenticated caller may not perform this operation or does not own the resource.
 //   - error: internal error
@@ -619,6 +665,23 @@ func (c *Client) StartBuild(ctx context.Context, p *StartBuildPayload) (res *Sta
 		return
 	}
 	return ires.(*StartBuildResult), nil
+}
+
+// DropBuild calls the "drop_build" endpoint of the "surla" service.
+// DropBuild may return the following errors:
+//   - "not_found" (type *goa.ServiceError): No Change Card exists with this change_id, or the project has no open build.
+//   - "build_changed" (type *OpenBuildRefusal): The open build is not the one the page showed: a second tab built or dropped meanwhile. Nothing changed; the body names the open build.
+//   - "conflict" (type *goa.ServiceError): The build was already dropped; nothing changed.
+//   - "not_implemented" (type *goa.ServiceError): Start this project with surla to bind the team; nothing changed.
+//   - "forbidden" (type *goa.ServiceError): The authenticated caller may not perform this operation or does not own the resource.
+//   - error: internal error
+func (c *Client) DropBuild(ctx context.Context, p *DropBuildPayload) (res *ChangeBuild, err error) {
+	var ires any
+	ires, err = c.DropBuildEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*ChangeBuild), nil
 }
 
 // GetBuild calls the "get_build" endpoint of the "surla" service.
@@ -668,7 +731,11 @@ func (c *Client) ListBuilderAssignments(ctx context.Context) (res *BuilderAssign
 // GetBuilderAssignment calls the "get_builder_assignment" endpoint of the
 // "surla" service.
 // GetBuilderAssignment may return the following errors:
-//   - "not_found" (type *goa.ServiceError): You have no build assignment for this change_id.
+//   - "not_found" (type *goa.ServiceError): You have no build assignment for this change_id: it is not the change of the project's open build.
+//   - "no_build" (type *goa.ServiceError): The user dropped this change's build: stop work on it and make no more edits or commits for it. The user starts builds on the views page.
+//   - "copy_off_branch" (type *CopyOffBranch): Your working copy cannot join the build: it holds uncommitted work on a branch that is not an earlier build branch, or a Git operation is in progress. The message states the facts and the goal; put your work right with git, then read the assignment again.
+//   - "working_copy_busy" (type *goa.ServiceError): Surla is starting a build in your working folder, or files there changed while Surla moved it (nothing was lost); call get_builder_assignment again.
+//   - "working_folder_missing" (type *goa.ServiceError): Your working folder is missing; ask the user to build this change again on the views page.
 //   - "forbidden" (type *goa.ServiceError): The authenticated caller may not perform this operation or does not own the resource.
 //   - error: internal error
 func (c *Client) GetBuilderAssignment(ctx context.Context, p *GetBuilderAssignmentPayload) (res *BuilderAssignment, err error) {
@@ -698,6 +765,10 @@ func (c *Client) ListTestWriterAssignments(ctx context.Context) (res *TestWriter
 // the "surla" service.
 // GetTestWriterAssignment may return the following errors:
 //   - "not_found" (type *goa.ServiceError): You have no test assignment for this change_id.
+//   - "no_build" (type *goa.ServiceError): The user dropped this change's build: stop work on it and make no more edits or commits for it. The user starts builds on the views page.
+//   - "copy_off_branch" (type *CopyOffBranch): Your working copy cannot join or serve this build: the message states its branch, the build's branch, any Git operation and what is uncommitted, and the goal. Put your test files on the build's branch, uncommitted, because Surla commits what it accepts; then call again.
+//   - "working_folder_missing" (type *goa.ServiceError): Your working folder is missing; ask the user to build this change again on the views page.
+//   - "working_copy_busy" (type *goa.ServiceError): Surla is checking the tests in your working folder; call get_test_writer_assignment again when the check has ended.
 //   - "forbidden" (type *goa.ServiceError): The authenticated caller may not perform this operation or does not own the resource.
 //   - error: internal error
 func (c *Client) GetTestWriterAssignment(ctx context.Context, p *GetTestWriterAssignmentPayload) (res *TestWriterAssignment, err error) {
@@ -714,6 +785,10 @@ func (c *Client) GetTestWriterAssignment(ctx context.Context, p *GetTestWriterAs
 // ReportTestsFinished may return the following errors:
 //   - "not_found" (type *goa.ServiceError): You have no test assignment for this change_id.
 //   - "conflict" (type *goa.ServiceError): request_revision is not the revision of your test assignment (read it again with get_test_writer_assignment), or no test writer is used because the project has stored verification settings. Nothing changed.
+//   - "no_build" (type *goa.ServiceError): The user dropped this change's build: stop work on it and make no more edits or commits for it. The user starts builds on the views page.
+//   - "copy_off_branch" (type *CopyOffBranch): Your working copy cannot join or serve this build: the message states its branch, the build's branch, any Git operation and what is uncommitted, and the goal. Put your test files on the build's branch, uncommitted, because Surla commits what it accepts; then call again.
+//   - "working_folder_missing" (type *goa.ServiceError): Your working folder is missing; ask the user to build this change again on the views page.
+//   - "assignment_unread" (type *goa.ServiceError): A build started after your last read of your assignment: stop your current work, then call get_test_writer_assignment for its change.
 //   - "forbidden" (type *goa.ServiceError): The authenticated caller may not perform this operation or does not own the resource.
 //   - error: internal error
 func (c *Client) ReportTestsFinished(ctx context.Context, p *ReportTestsFinishedPayload) (res *TestWriterAssignmentItem, err error) {

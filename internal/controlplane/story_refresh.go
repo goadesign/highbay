@@ -133,7 +133,7 @@ func (c *ControlPlane) RefreshStory(ctx context.Context) (*gensurla.StoryRefresh
 	current := c.storyRefreshes[key]
 	if current != nil && current.snapshotDigest == digest &&
 		(current.state == storyRefreshStateRunning || current.state == storyRefreshStateSucceeded) {
-		res := storyRefreshResultFromOp(current)
+		res := storyRefreshResultFromOp(current, wsDir)
 		c.storyRefreshMu.Unlock()
 		c.workspaceMu.RUnlock()
 		return res, nil
@@ -160,7 +160,7 @@ func (c *ControlPlane) RefreshStory(ctx context.Context) (*gensurla.StoryRefresh
 	if current != nil {
 		prevCancel = current.cancel
 	}
-	res := storyRefreshResultFromOp(op)
+	res := storyRefreshResultFromOp(op, wsDir)
 	c.storyRefreshOps.Add(1)
 	c.storyRefreshMu.Unlock()
 	c.workspaceMu.RUnlock()
@@ -193,7 +193,7 @@ func (c *ControlPlane) GetStoryRefresh(ctx context.Context) (*gensurla.StoryRefr
 	}
 	c.storyRefreshMu.Lock()
 	op := c.storyRefreshes[key]
-	res := storyRefreshResultFromOp(op)
+	res := storyRefreshResultFromOp(op, wsDir)
 	c.storyRefreshMu.Unlock()
 	return res, nil
 }
@@ -385,18 +385,20 @@ func readWorkspaceSnapshotForStoryRefresh(wsDir string, wsDev, wsIno uint64) (ma
 
 // storyRefreshResultFromOp projects op (or nil when no refresh has run) into a
 // fresh gensurla.StoryRefreshResult. ControlPlane.storyRefreshMu must be held.
-func storyRefreshResultFromOp(op *storyRefreshOp) *gensurla.StoryRefreshResult {
+func storyRefreshResultFromOp(op *storyRefreshOp, folder string) *gensurla.StoryRefreshResult {
 	if op == nil {
 		return &gensurla.StoryRefreshResult{
-			State:   storyRefreshStateNone,
-			Stories: []*gensurla.StorySummaryItem{},
-			Message: "No Story refresh has run for this workspace yet; call refresh_story to evaluate the workspace design.",
+			State:       storyRefreshStateNone,
+			DraftFolder: folder,
+			Stories:     []*gensurla.StorySummaryItem{},
+			Message:     "No Story refresh has run for this workspace yet; call refresh_story to evaluate the workspace design.",
 		}
 	}
 	id := op.id
 	digest := op.snapshotDigest
 	res := &gensurla.StoryRefreshResult{
 		OpID:           &id,
+		DraftFolder:    folder,
 		State:          op.state,
 		SnapshotDigest: &digest,
 		Stories:        []*gensurla.StorySummaryItem{},

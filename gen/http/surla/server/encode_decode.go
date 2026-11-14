@@ -113,6 +113,19 @@ func EncodeProposeChangeError(encoder func(context.Context, http.ResponseWriter)
 			return encodeError(ctx, w, v)
 		}
 		switch en.GoaErrorName() {
+		case "drafted_before_drop":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewProposeChangeDraftedBeforeDropResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusConflict)
+			return enc.Encode(body)
 		case "conflict":
 			var res *goa.ServiceError
 			errors.As(v, &res)
@@ -210,7 +223,7 @@ func EncodeReviseChangeError(encoder func(context.Context, http.ResponseWriter) 
 			return encodeError(ctx, w, v)
 		}
 		switch en.GoaErrorName() {
-		case "not_found":
+		case "drafted_before_drop":
 			var res *goa.ServiceError
 			errors.As(v, &res)
 			enc := encoder(ctx, w)
@@ -218,10 +231,10 @@ func EncodeReviseChangeError(encoder func(context.Context, http.ResponseWriter) 
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewReviseChangeNotFoundResponseBody(res)
+				body = NewReviseChangeDraftedBeforeDropResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
-			w.WriteHeader(http.StatusNotFound)
+			w.WriteHeader(http.StatusConflict)
 			return enc.Encode(body)
 		case "conflict":
 			var res *goa.ServiceError
@@ -235,6 +248,19 @@ func EncodeReviseChangeError(encoder func(context.Context, http.ResponseWriter) 
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusConflict)
+			return enc.Encode(body)
+		case "not_found":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewReviseChangeNotFoundResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusNotFound)
 			return enc.Encode(body)
 		case "unprocessable":
 			var res *goa.ServiceError
@@ -1121,7 +1147,7 @@ func EncodeVerifyChangeError(encoder func(context.Context, http.ResponseWriter) 
 			return encodeError(ctx, w, v)
 		}
 		switch en.GoaErrorName() {
-		case "not_found":
+		case "assignment_unread":
 			var res *goa.ServiceError
 			errors.As(v, &res)
 			enc := encoder(ctx, w)
@@ -1129,10 +1155,49 @@ func EncodeVerifyChangeError(encoder func(context.Context, http.ResponseWriter) 
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewVerifyChangeNotFoundResponseBody(res)
+				body = NewVerifyChangeAssignmentUnreadResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
-			w.WriteHeader(http.StatusNotFound)
+			w.WriteHeader(http.StatusConflict)
+			return enc.Encode(body)
+		case "working_folder_missing":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewVerifyChangeWorkingFolderMissingResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusConflict)
+			return enc.Encode(body)
+		case "build_branch_mismatch":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewVerifyChangeBuildBranchMismatchResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusConflict)
+			return enc.Encode(body)
+		case "design_changed_outside":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewVerifyChangeDesignChangedOutsideResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusConflict)
 			return enc.Encode(body)
 		case "conflict":
 			var res *goa.ServiceError
@@ -1185,6 +1250,32 @@ func EncodeVerifyChangeError(encoder func(context.Context, http.ResponseWriter) 
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusConflict)
+			return enc.Encode(body)
+		case "copy_off_branch":
+			var res *surla.CopyOffBranch
+			errors.As(v, &res)
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewVerifyChangeCopyOffBranchResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusConflict)
+			return enc.Encode(body)
+		case "not_found":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewVerifyChangeNotFoundResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusNotFound)
 			return enc.Encode(body)
 		case "not_implemented":
 			var res *goa.ServiceError
@@ -1445,7 +1536,7 @@ func EncodeApproveMergeError(encoder func(context.Context, http.ResponseWriter) 
 			return encodeError(ctx, w, v)
 		}
 		switch en.GoaErrorName() {
-		case "not_found":
+		case "build_branch_mismatch":
 			var res *goa.ServiceError
 			errors.As(v, &res)
 			enc := encoder(ctx, w)
@@ -1453,10 +1544,10 @@ func EncodeApproveMergeError(encoder func(context.Context, http.ResponseWriter) 
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewApproveMergeNotFoundResponseBody(res)
+				body = NewApproveMergeBuildBranchMismatchResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
-			w.WriteHeader(http.StatusNotFound)
+			w.WriteHeader(http.StatusConflict)
 			return enc.Encode(body)
 		case "conflict":
 			var res *goa.ServiceError
@@ -1496,6 +1587,19 @@ func EncodeApproveMergeError(encoder func(context.Context, http.ResponseWriter) 
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusConflict)
+			return enc.Encode(body)
+		case "not_found":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewApproveMergeNotFoundResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusNotFound)
 			return enc.Encode(body)
 		case "unprocessable":
 			var res *goa.ServiceError
@@ -1984,6 +2088,84 @@ func EncodeGenerateCodeError(encoder func(context.Context, http.ResponseWriter) 
 			return encodeError(ctx, w, v)
 		}
 		switch en.GoaErrorName() {
+		case "no_build":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGenerateCodeNoBuildResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusConflict)
+			return enc.Encode(body)
+		case "assignment_unread":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGenerateCodeAssignmentUnreadResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusConflict)
+			return enc.Encode(body)
+		case "working_folder_missing":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGenerateCodeWorkingFolderMissingResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusConflict)
+			return enc.Encode(body)
+		case "conflict":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGenerateCodeConflictResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusConflict)
+			return enc.Encode(body)
+		case "copy_off_branch":
+			var res *surla.CopyOffBranch
+			errors.As(v, &res)
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGenerateCodeCopyOffBranchResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusConflict)
+			return enc.Encode(body)
+		case "missing_modules":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGenerateCodeMissingModulesResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnprocessableEntity)
+			return enc.Encode(body)
 		case "unprocessable":
 			var res *goa.ServiceError
 			errors.As(v, &res)
@@ -2051,6 +2233,58 @@ func EncodeCheckProjectError(encoder func(context.Context, http.ResponseWriter) 
 			return encodeError(ctx, w, v)
 		}
 		switch en.GoaErrorName() {
+		case "no_build":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewCheckProjectNoBuildResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusConflict)
+			return enc.Encode(body)
+		case "assignment_unread":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewCheckProjectAssignmentUnreadResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusConflict)
+			return enc.Encode(body)
+		case "working_folder_missing":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewCheckProjectWorkingFolderMissingResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusConflict)
+			return enc.Encode(body)
+		case "copy_off_branch":
+			var res *surla.CopyOffBranch
+			errors.As(v, &res)
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewCheckProjectCopyOffBranchResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusConflict)
+			return enc.Encode(body)
 		case "unprocessable":
 			var res *goa.ServiceError
 			errors.As(v, &res)
@@ -2131,6 +2365,58 @@ func EncodeUpdateDependenciesError(encoder func(context.Context, http.ResponseWr
 			return encodeError(ctx, w, v)
 		}
 		switch en.GoaErrorName() {
+		case "no_build":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewUpdateDependenciesNoBuildResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusConflict)
+			return enc.Encode(body)
+		case "assignment_unread":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewUpdateDependenciesAssignmentUnreadResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusConflict)
+			return enc.Encode(body)
+		case "working_folder_missing":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewUpdateDependenciesWorkingFolderMissingResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusConflict)
+			return enc.Encode(body)
+		case "copy_off_branch":
+			var res *surla.CopyOffBranch
+			errors.As(v, &res)
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewUpdateDependenciesCopyOffBranchResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusConflict)
+			return enc.Encode(body)
 		case "unprocessable":
 			var res *goa.ServiceError
 			errors.As(v, &res)
@@ -2529,6 +2815,86 @@ func EncodeGetStoryRefreshError(encoder func(context.Context, http.ResponseWrite
 				body = formatter(ctx, res)
 			} else {
 				body = NewGetStoryRefreshForbiddenResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusForbidden)
+			return enc.Encode(body)
+		default:
+			return encodeError(ctx, w, v)
+		}
+	}
+}
+
+// EncodeUpdateDraftResponse returns an encoder for responses returned by the
+// surla update_draft endpoint.
+func EncodeUpdateDraftResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
+	return func(ctx context.Context, w http.ResponseWriter, v any) error {
+		res, _ := v.(*surla.DraftUpdateResult)
+		enc := encoder(ctx, w)
+		body := NewUpdateDraftResponseBody(res)
+		w.WriteHeader(http.StatusOK)
+		return enc.Encode(body)
+	}
+}
+
+// EncodeUpdateDraftError returns an encoder for errors returned by the
+// update_draft surla endpoint.
+func EncodeUpdateDraftError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
+	encodeError := goahttp.ErrorEncoder(encoder, formatter)
+	return func(ctx context.Context, w http.ResponseWriter, v error) error {
+		var en goa.GoaErrorNamer
+		if !errors.As(v, &en) {
+			return encodeError(ctx, w, v)
+		}
+		switch en.GoaErrorName() {
+		case "unprocessable":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewUpdateDraftUnprocessableResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnprocessableEntity)
+			return enc.Encode(body)
+		case "not_implemented":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewUpdateDraftNotImplementedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusNotImplemented)
+			return enc.Encode(body)
+		case "unavailable":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewUpdateDraftUnavailableResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusServiceUnavailable)
+			return enc.Encode(body)
+		case "forbidden":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewUpdateDraftForbiddenResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusForbidden)
@@ -3059,6 +3425,58 @@ func EncodeStartBuildError(encoder func(context.Context, http.ResponseWriter) go
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusConflict)
 			return enc.Encode(body)
+		case "drafted_before_drop":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewStartBuildDraftedBeforeDropResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusConflict)
+			return enc.Encode(body)
+		case "design_changed_outside":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewStartBuildDesignChangedOutsideResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusConflict)
+			return enc.Encode(body)
+		case "previous_change_open":
+			var res *surla.OpenBuildRefusal
+			errors.As(v, &res)
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewStartBuildPreviousChangeOpenResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusConflict)
+			return enc.Encode(body)
+		case "unfinished_build_open":
+			var res *surla.OpenBuildRefusal
+			errors.As(v, &res)
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewStartBuildUnfinishedBuildOpenResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusConflict)
+			return enc.Encode(body)
 		case "unprocessable":
 			var res *goa.ServiceError
 			errors.As(v, &res)
@@ -3120,6 +3538,142 @@ func EncodeStartBuildError(encoder func(context.Context, http.ResponseWriter) go
 				body = formatter(ctx, res)
 			} else {
 				body = NewStartBuildForbiddenResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusForbidden)
+			return enc.Encode(body)
+		default:
+			return encodeError(ctx, w, v)
+		}
+	}
+}
+
+// EncodeDropBuildResponse returns an encoder for responses returned by the
+// surla drop_build endpoint.
+func EncodeDropBuildResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
+	return func(ctx context.Context, w http.ResponseWriter, v any) error {
+		res, _ := v.(*surla.ChangeBuild)
+		enc := encoder(ctx, w)
+		body := NewDropBuildResponseBody(res)
+		w.WriteHeader(http.StatusOK)
+		return enc.Encode(body)
+	}
+}
+
+// DecodeDropBuildRequest returns a decoder for requests sent to the surla
+// drop_build endpoint.
+func DecodeDropBuildRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*surla.DropBuildPayload, error) {
+	return func(r *http.Request) (*surla.DropBuildPayload, error) {
+		var payload *surla.DropBuildPayload
+		var (
+			body DropBuildRequestBody
+			err  error
+		)
+		err = decoder(r).Decode(&body)
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				return payload, goa.MissingPayloadError()
+			}
+			var gerr *goa.ServiceError
+			if errors.As(err, &gerr) {
+				return payload, gerr
+			}
+			return payload, goa.DecodePayloadError(err.Error())
+		}
+		err = ValidateDropBuildRequestBody(&body)
+		if err != nil {
+			return payload, err
+		}
+
+		var (
+			changeID string
+
+			params = mux.Vars(r)
+		)
+		changeID = params["change_id"]
+		if utf8.RuneCountInString(changeID) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("change_id", changeID, utf8.RuneCountInString(changeID), 1, true))
+		}
+		if err != nil {
+			return payload, err
+		}
+		payload = NewDropBuildPayload(&body, changeID)
+
+		return payload, nil
+	}
+}
+
+// EncodeDropBuildError returns an encoder for errors returned by the
+// drop_build surla endpoint.
+func EncodeDropBuildError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
+	encodeError := goahttp.ErrorEncoder(encoder, formatter)
+	return func(ctx context.Context, w http.ResponseWriter, v error) error {
+		var en goa.GoaErrorNamer
+		if !errors.As(v, &en) {
+			return encodeError(ctx, w, v)
+		}
+		switch en.GoaErrorName() {
+		case "not_found":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewDropBuildNotFoundResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusNotFound)
+			return enc.Encode(body)
+		case "conflict":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewDropBuildConflictResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusConflict)
+			return enc.Encode(body)
+		case "build_changed":
+			var res *surla.OpenBuildRefusal
+			errors.As(v, &res)
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewDropBuildBuildChangedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusConflict)
+			return enc.Encode(body)
+		case "not_implemented":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewDropBuildNotImplementedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusNotImplemented)
+			return enc.Encode(body)
+		case "forbidden":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewDropBuildForbiddenResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusForbidden)
@@ -3386,6 +3940,58 @@ func EncodeGetBuilderAssignmentError(encoder func(context.Context, http.Response
 			return encodeError(ctx, w, v)
 		}
 		switch en.GoaErrorName() {
+		case "no_build":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetBuilderAssignmentNoBuildResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusConflict)
+			return enc.Encode(body)
+		case "working_copy_busy":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetBuilderAssignmentWorkingCopyBusyResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusConflict)
+			return enc.Encode(body)
+		case "working_folder_missing":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetBuilderAssignmentWorkingFolderMissingResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusConflict)
+			return enc.Encode(body)
+		case "copy_off_branch":
+			var res *surla.CopyOffBranch
+			errors.As(v, &res)
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetBuilderAssignmentCopyOffBranchResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusConflict)
+			return enc.Encode(body)
 		case "not_found":
 			var res *goa.ServiceError
 			errors.As(v, &res)
@@ -3505,6 +4111,58 @@ func EncodeGetTestWriterAssignmentError(encoder func(context.Context, http.Respo
 			return encodeError(ctx, w, v)
 		}
 		switch en.GoaErrorName() {
+		case "no_build":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetTestWriterAssignmentNoBuildResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusConflict)
+			return enc.Encode(body)
+		case "working_copy_busy":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetTestWriterAssignmentWorkingCopyBusyResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusConflict)
+			return enc.Encode(body)
+		case "working_folder_missing":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetTestWriterAssignmentWorkingFolderMissingResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusConflict)
+			return enc.Encode(body)
+		case "copy_off_branch":
+			var res *surla.CopyOffBranch
+			errors.As(v, &res)
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetTestWriterAssignmentCopyOffBranchResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusConflict)
+			return enc.Encode(body)
 		case "not_found":
 			var res *goa.ServiceError
 			errors.As(v, &res)
@@ -3602,7 +4260,7 @@ func EncodeReportTestsFinishedError(encoder func(context.Context, http.ResponseW
 			return encodeError(ctx, w, v)
 		}
 		switch en.GoaErrorName() {
-		case "not_found":
+		case "no_build":
 			var res *goa.ServiceError
 			errors.As(v, &res)
 			enc := encoder(ctx, w)
@@ -3610,10 +4268,36 @@ func EncodeReportTestsFinishedError(encoder func(context.Context, http.ResponseW
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewReportTestsFinishedNotFoundResponseBody(res)
+				body = NewReportTestsFinishedNoBuildResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
-			w.WriteHeader(http.StatusNotFound)
+			w.WriteHeader(http.StatusConflict)
+			return enc.Encode(body)
+		case "working_folder_missing":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewReportTestsFinishedWorkingFolderMissingResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusConflict)
+			return enc.Encode(body)
+		case "assignment_unread":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewReportTestsFinishedAssignmentUnreadResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusConflict)
 			return enc.Encode(body)
 		case "conflict":
 			var res *goa.ServiceError
@@ -3627,6 +4311,32 @@ func EncodeReportTestsFinishedError(encoder func(context.Context, http.ResponseW
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusConflict)
+			return enc.Encode(body)
+		case "copy_off_branch":
+			var res *surla.CopyOffBranch
+			errors.As(v, &res)
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewReportTestsFinishedCopyOffBranchResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusConflict)
+			return enc.Encode(body)
+		case "not_found":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewReportTestsFinishedNotFoundResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusNotFound)
 			return enc.Encode(body)
 		case "forbidden":
 			var res *goa.ServiceError
@@ -4534,6 +5244,18 @@ func marshalSurlaTraceSpanToTraceSpanResponseBody(v *surla.TraceSpan) *TraceSpan
 	return res
 }
 
+// marshalSurlaDraftCorrectionToDraftCorrectionResponseBody builds a value of
+// type *DraftCorrectionResponseBody from a value of type
+// *surla.DraftCorrection.
+func marshalSurlaDraftCorrectionToDraftCorrectionResponseBody(v *surla.DraftCorrection) *DraftCorrectionResponseBody {
+	res := &DraftCorrectionResponseBody{
+		Path:    v.Path,
+		Problem: v.Problem,
+	}
+
+	return res
+}
+
 // marshalSurlaTeamRoleStateToTeamRoleStateResponseBody builds a value of type
 // *TeamRoleStateResponseBody from a value of type *surla.TeamRoleState.
 func marshalSurlaTeamRoleStateToTeamRoleStateResponseBody(v *surla.TeamRoleState) *TeamRoleStateResponseBody {
@@ -4588,6 +5310,17 @@ func marshalSurlaLatestVerificationItemToLatestVerificationItemResponseBody(v *s
 		RunID:         v.RunID,
 		State:         v.State,
 		InputsCurrent: v.InputsCurrent,
+	}
+
+	return res
+}
+
+// unmarshalReplacedBuildRequestBodyToSurlaReplacedBuild builds a value of type
+// *surla.ReplacedBuild from a value of type *ReplacedBuildRequestBody.
+func unmarshalReplacedBuildRequestBodyToSurlaReplacedBuild(v *ReplacedBuildRequestBody) *surla.ReplacedBuild {
+	res := &surla.ReplacedBuild{
+		ChangeID:  *v.ChangeID,
+		StartedAt: *v.StartedAt,
 	}
 
 	return res
@@ -4813,48 +5546,6 @@ func marshalSurlaBuildTeamUnavailableToBuildTeamUnavailableResponseBody(v *surla
 	return res
 }
 
-// marshalSurlaBuildCopyNotUsedToBuildCopyNotUsedResponseBody builds a value of
-// type *BuildCopyNotUsedResponseBody from a value of type
-// *surla.BuildCopyNotUsed.
-func marshalSurlaBuildCopyNotUsedToBuildCopyNotUsedResponseBody(v *surla.BuildCopyNotUsed) *BuildCopyNotUsedResponseBody {
-	res := &BuildCopyNotUsedResponseBody{}
-
-	return res
-}
-
-// marshalSurlaBuildCopyAtProjectCommitToBuildCopyAtProjectCommitResponseBody
-// builds a value of type *BuildCopyAtProjectCommitResponseBody from a value of
-// type *surla.BuildCopyAtProjectCommit.
-func marshalSurlaBuildCopyAtProjectCommitToBuildCopyAtProjectCommitResponseBody(v *surla.BuildCopyAtProjectCommit) *BuildCopyAtProjectCommitResponseBody {
-	res := &BuildCopyAtProjectCommitResponseBody{
-		Commit: v.Commit,
-	}
-
-	return res
-}
-
-// marshalSurlaBuildCopyNotContainedToBuildCopyNotContainedResponseBody builds
-// a value of type *BuildCopyNotContainedResponseBody from a value of type
-// *surla.BuildCopyNotContained.
-func marshalSurlaBuildCopyNotContainedToBuildCopyNotContainedResponseBody(v *surla.BuildCopyNotContained) *BuildCopyNotContainedResponseBody {
-	res := &BuildCopyNotContainedResponseBody{
-		Commit: v.Commit,
-		Step:   string(v.Step),
-	}
-
-	return res
-}
-
-// marshalSurlaBuildCopyDirtyToBuildCopyDirtyResponseBody builds a value of
-// type *BuildCopyDirtyResponseBody from a value of type *surla.BuildCopyDirty.
-func marshalSurlaBuildCopyDirtyToBuildCopyDirtyResponseBody(v *surla.BuildCopyDirty) *BuildCopyDirtyResponseBody {
-	res := &BuildCopyDirtyResponseBody{
-		Commit: v.Commit,
-	}
-
-	return res
-}
-
 // marshalSurlaBuildNotStartedToBuildNotStartedResponseBody builds a value of
 // type *BuildNotStartedResponseBody from a value of type
 // *surla.BuildNotStarted.
@@ -4873,6 +5564,8 @@ func marshalSurlaBuilderAssignmentToBuilderAssignmentResponseBody(v *surla.Build
 		RequestRevision: v.RequestRevision,
 		InForce:         v.InForce,
 		Read:            v.Read,
+		WorkingFolder:   v.WorkingFolder,
+		GoworkOff:       v.GoworkOff,
 	}
 	if v.WrittenTests.Kind() != "" {
 		switch string(v.WrittenTests.Kind()) {

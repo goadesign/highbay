@@ -229,8 +229,14 @@ func (c *ControlPlane) ListBuilderAssignments(ctx context.Context) (*gensurla.Bu
 		return nil, err
 	}
 	items := make([]*gensurla.BuilderAssignment, len(builds))
-	for i, held := range builds {
-		items[i] = builderAssignmentResult(held)
+	if len(builds) > 0 {
+		folder, goworkOff, err := c.builderWorkingFolder()
+		if err != nil {
+			return nil, err
+		}
+		for i, held := range builds {
+			items[i] = builderAssignmentResult(held, folder, goworkOff)
+		}
 	}
 	return &gensurla.BuilderAssignmentList{Assignments: items}, nil
 }
@@ -243,6 +249,10 @@ func (c *ControlPlane) GetBuilderAssignment(
 	ctx context.Context,
 	p *gensurla.GetBuilderAssignmentPayload,
 ) (*gensurla.BuilderAssignment, error) {
+	folder, goworkOff, err := c.builderWorkingFolder()
+	if err != nil {
+		return nil, err
+	}
 	held, err := c.readAssignment(ctx, "surla.controlplane.get_builder_assignment", p.ChangeID, func(saved *buildFile) (bool, error) {
 		changed := !saved.Builder.Read
 		saved.Builder.Read = true
@@ -251,7 +261,7 @@ func (c *ControlPlane) GetBuilderAssignment(
 	if err != nil {
 		return nil, err
 	}
-	return builderAssignmentResult(held), nil
+	return builderAssignmentResult(held, folder, goworkOff), nil
 }
 
 // ListTestWriterAssignments returns the test writer's assignment of every
@@ -441,13 +451,15 @@ func startedBuild(held heldBuild) *gensurla.StartedBuild {
 
 // builderAssignmentResult converts a held build into the builder's
 // assignment.
-func builderAssignmentResult(held heldBuild) *gensurla.BuilderAssignment {
+func builderAssignmentResult(held heldBuild, folder string, goworkOff bool) *gensurla.BuilderAssignment {
 	return &gensurla.BuilderAssignment{
 		ChangeID:        held.file.ChangeID,
 		RequestRevision: held.file.RequestRevision,
 		InForce:         held.inForce,
 		Read:            held.file.Builder.Read,
 		WrittenTests:    writtenTests(held),
+		WorkingFolder:   folder,
+		GoworkOff:       goworkOff,
 	}
 }
 

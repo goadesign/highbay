@@ -290,7 +290,7 @@ type (
 	// GenerateCodePayload defines the JSON payload for the surla.generate_code tool.
 	GenerateCodePayload = struct {
 		// Module to regenerate: candidate (the application, the default when omitted)
-		// or eval (the local eval/ module).
+		// or eval (the test module).
 		Target *string
 	}
 	// GenerateCodeResult defines the JSON result for the surla.generate_code tool.
@@ -341,6 +341,14 @@ type (
 		// otherwise accepted, with the commit and time, when the build records
 		// accepted tests, and not_yet_accepted when it records none.
 		WrittenTests WrittenTests
+		// Absolute path of the folder to build in: the project's folder inside your
+		// working copy .surla-build, on the build's branch surla/build-<n>. Run git
+		// and go there, never in the project folder.
+		WorkingFolder string
+		// True when no go.work lies in working_folder or in a folder between it and
+		// the working copy's root: run every go command there as GOWORK=off go …, so a
+		// go.work of the project folder around your copy does not take it over.
+		GoworkOff bool
 	}
 	// GetChangePayload defines the JSON payload for the surla.get_change tool.
 	GetChangePayload = struct {
@@ -418,15 +426,20 @@ type (
 	}
 	// GetStoryRefreshResult defines the JSON result for the surla.get_story_refresh tool.
 	GetStoryRefreshResult = struct {
-		// Identifier of the owner's current Story refresh operation for the bound
-		// workspace; present when state is running, succeeded, or failed. Pass it as
+		// Absolute path intended for the guide's draft, .surla-draft in the project
+		// folder, whose go.mod, go.sum and design/ refresh_story reads. When state is
+		// none, this path does not mean the folder exists; refresh_story makes it when
+		// needed.
+		DraftFolder string
+		// Identifier of the owner's current Story refresh operation for the guide's
+		// draft; present when state is running, succeeded, or failed. Pass it as
 		// story_refresh_op_id to propose_change or revise_change once state is
 		// succeeded to adopt the evaluated Story into a Change Card.
 		OpID *string
 		// Current operation state: none, running, succeeded, or failed.
 		State string
-		// Canonical SHA-256 digest of the workspace module snapshot read when this
-		// refresh started; present when state is running, succeeded, or failed.
+		// Canonical SHA-256 digest of the draft snapshot read when this refresh
+		// started; present when state is running, succeeded, or failed.
 		SnapshotDigest *string
 		// Evaluated domain Stories in declaration order when state is succeeded (empty
 		// when the design declares no Stories or when state is none, running, or
@@ -434,7 +447,9 @@ type (
 		Stories []*StorySummaryItem
 		// Safe failure or timeout diagnostic when state is failed; omitted otherwise.
 		Diagnostic *string
-		// Summary of the current Story refresh state and next action.
+		// Summary of the current Story refresh state and next action. After a dropped
+		// build remakes the draft and until a revision is saved from it, begins by
+		// naming the dropped change and saying that edits made before then are gone.
 		Message string
 	}
 	// GetTestWriterAssignmentPayload defines the JSON payload for the surla.get_test_writer_assignment tool.
@@ -460,7 +475,9 @@ type (
 		// progress gives in finding_count when its state is needs_changes, and none in
 		// any other state. Fix them in working_folder, then report again.
 		Findings []string
-		// Folder to write the tests in: your own working copy of the project.
+		// Folder to write the tests in: your own working copy of the project,
+		// .surla-tests, on the build's branch surla/tests-<n>. Do not commit there:
+		// Surla commits what it accepts.
 		WorkingFolder string
 		// The canonical design source as agreed at request_revision, copied when this
 		// build started; later revisions do not change it.
@@ -548,8 +565,7 @@ type (
 	}
 	// ListBuilderAssignmentsResult defines the JSON result for the surla.list_builder_assignments tool.
 	ListBuilderAssignmentsResult = struct {
-		// Assignments, most recently started first; empty when the user has built no
-		// change.
+		// The open build's assignment while it needs this role; empty otherwise.
 		Assignments []*BuilderAssignment
 	}
 	// ListChangesPayload defines the JSON payload for the surla.list_changes tool.
@@ -573,8 +589,7 @@ type (
 	}
 	// ListTestWriterAssignmentsResult defines the JSON result for the surla.list_test_writer_assignments tool.
 	ListTestWriterAssignmentsResult = struct {
-		// Assignments, most recently started first; empty when the user has built no
-		// change.
+		// The open build's assignment while it needs this role; empty otherwise.
 		Assignments []*TestWriterAssignmentItem
 	}
 	// ListTracesPayload defines the JSON payload for the surla.list_traces tool.
@@ -623,8 +638,8 @@ type (
 		ChangeID string
 		// Bound CP1 request_revision digest.
 		RequestRevision string
-		// SHA-256 digest of the evaluated design snapshot (sorted path and content
-		// pairs).
+		// SHA-256 digest of the design snapshot the revision's refresh evaluated
+		// (sorted path and content pairs).
 		DesignDigest string
 		// API or primary service name declared in the design.
 		SystemName string
@@ -645,11 +660,9 @@ type (
 		ChangeID string
 		// The user's feature request.
 		Prompt string
-		// Optional op_id of a succeeded refresh_story operation for the bound
-		// workspace whose evaluated Stories this card adopts. When set, Surla reads
-		// one workspace snapshot, requires its snapshot_digest to match the
-		// operation's, and records both the evaluated Stories and that snapshot's
-		// design/*.go on the card. Omit when the card has no Story.
+		// op_id of a succeeded refresh_story operation whose evaluated draft this card
+		// adopts: its design, Stories, architecture, go.mod and made-from list.
+		// Required when the project folder holds a go.mod; Surla reads no file.
 		StoryRefreshOpID *string
 		// Your analysis of prompt against the target's current design.
 		Analysis *CP1Analysis
@@ -732,15 +745,20 @@ type (
 	}
 	// RefreshStoryResult defines the JSON result for the surla.refresh_story tool.
 	RefreshStoryResult = struct {
-		// Identifier of the owner's current Story refresh operation for the bound
-		// workspace; present when state is running, succeeded, or failed. Pass it as
+		// Absolute path intended for the guide's draft, .surla-draft in the project
+		// folder, whose go.mod, go.sum and design/ refresh_story reads. When state is
+		// none, this path does not mean the folder exists; refresh_story makes it when
+		// needed.
+		DraftFolder string
+		// Identifier of the owner's current Story refresh operation for the guide's
+		// draft; present when state is running, succeeded, or failed. Pass it as
 		// story_refresh_op_id to propose_change or revise_change once state is
 		// succeeded to adopt the evaluated Story into a Change Card.
 		OpID *string
 		// Current operation state: none, running, succeeded, or failed.
 		State string
-		// Canonical SHA-256 digest of the workspace module snapshot read when this
-		// refresh started; present when state is running, succeeded, or failed.
+		// Canonical SHA-256 digest of the draft snapshot read when this refresh
+		// started; present when state is running, succeeded, or failed.
 		SnapshotDigest *string
 		// Evaluated domain Stories in declaration order when state is succeeded (empty
 		// when the design declares no Stories or when state is none, running, or
@@ -748,7 +766,9 @@ type (
 		Stories []*StorySummaryItem
 		// Safe failure or timeout diagnostic when state is failed; omitted otherwise.
 		Diagnostic *string
-		// Summary of the current Story refresh state and next action.
+		// Summary of the current Story refresh state and next action. After a dropped
+		// build remakes the draft and until a revision is saved from it, begins by
+		// naming the dropped change and saying that edits made before then are gone.
 		Message string
 	}
 	// ReportTestsFinishedPayload defines the JSON payload for the surla.report_tests_finished tool.
@@ -783,12 +803,11 @@ type (
 		RequestRevision string
 		// The user's revised feature request.
 		Prompt string
-		// Optional op_id of a succeeded refresh_story operation for the bound
-		// workspace whose evaluated Stories this revision adopts. When set, Surla
-		// reads one workspace snapshot, requires its snapshot_digest to match the
-		// operation's, and records both the evaluated Stories and that snapshot's
-		// design/*.go on the revised card. When omitted on a card that already has
-		// Stories, the card's saved Stories and their design source are kept together.
+		// op_id of a succeeded refresh_story operation whose evaluated draft this
+		// revision adopts. When omitted, the revision keeps every snapshot field of
+		// the revision it revises: design, Stories, architecture, go.mod and made-from
+		// list, even with zero Stories. A project with a go.mod refuses an omitted
+		// op_id when that revision has no design. Surla reads no file.
 		StoryRefreshOpID *string
 		// Your analysis of the revised prompt against the current card and the
 		// target's current design.
@@ -883,12 +902,29 @@ type (
 	UpdateDependenciesResult = struct {
 		// Operation identifier; pass it to read_check_output to read the full output.
 		OpID string
-		// Workspace-relative go.mod, go.sum and go.work.sum files whose bytes changed
-		// and were written.
+		// Working-folder-relative go.mod, go.sum and go.work.sum files whose bytes
+		// changed and were written.
 		FilesWritten []string
 		// At most 16 KiB: what was updated, and Go's message for any module that could
 		// not be.
 		Message string
+	}
+	// UpdateDraftPayload defines the JSON payload for the surla.update_draft tool.
+	UpdateDraftPayload = struct {
+	}
+	// UpdateDraftResult defines the JSON result for the surla.update_draft tool.
+	UpdateDraftResult = struct {
+		// Absolute path of the guide's draft folder.
+		DraftFolder string
+		// Design files the draft took from the project folder because it had not
+		// changed them, in path order.
+		Taken []string
+		// Design files where the project folder's change and the draft's edits merged
+		// without conflict, in path order.
+		Merged []string
+		// Files to correct in the draft before refreshing, in path order; empty when
+		// none.
+		ToCorrect []*DraftCorrection
 	}
 	// VerifyChangePayload defines the JSON payload for the surla.verify_change tool.
 	VerifyChangePayload = struct {
@@ -1015,6 +1051,14 @@ type (
 		// otherwise accepted, with the commit and time, when the build records
 		// accepted tests, and not_yet_accepted when it records none.
 		WrittenTests WrittenTests
+		// Absolute path of the folder to build in: the project's folder inside your
+		// working copy .surla-build, on the build's branch surla/build-<n>. Run git
+		// and go there, never in the project folder.
+		WorkingFolder string
+		// True when no go.work lies in working_folder or in a folder between it and
+		// the working copy's root: run every go command there as GOWORK=off go …, so a
+		// go.work of the project folder around your copy does not take it over.
+		GoworkOff bool
 	}
 	// BuilderProgress is a nested type used by the generated JSON contract.
 	BuilderProgress = struct {
@@ -1185,6 +1229,17 @@ type (
 		// File contents keyed by module-relative path, such as design/design.go or
 		// go.mod.
 		Files map[string]string
+	}
+	// DraftCorrection is a nested type used by the generated JSON contract.
+	DraftCorrection = struct {
+		// Path relative to the draft folder, such as design/types.go or go.mod.
+		Path string
+		// What to correct: conflict markers where the draft and the project folder
+		// changed the same lines; a file removed on one side and changed on the other;
+		// a draft file Go cannot parse, with its line; or a module the project's
+		// go.mod requires at another version than the draft's, or that the draft's
+		// lacks, including differing replace directives.
+		Problem string
 	}
 	// ExampleItem is a nested type used by the generated JSON contract.
 	ExampleItem = struct {

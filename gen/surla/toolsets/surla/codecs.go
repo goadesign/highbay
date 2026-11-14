@@ -502,6 +502,22 @@ func UpdateDependenciesResultCodec() tools.JSONCodec[*UpdateDependenciesResult] 
 	}
 }
 
+// UpdateDraftPayloadCodec returns a fresh codec for *UpdateDraftPayload.
+func UpdateDraftPayloadCodec() tools.JSONCodec[*UpdateDraftPayload] {
+	return tools.JSONCodec[*UpdateDraftPayload]{
+		ToJSON:   MarshalUpdateDraftPayload,
+		FromJSON: UnmarshalUpdateDraftPayload,
+	}
+}
+
+// UpdateDraftResultCodec returns a fresh codec for *UpdateDraftResult.
+func UpdateDraftResultCodec() tools.JSONCodec[*UpdateDraftResult] {
+	return tools.JSONCodec[*UpdateDraftResult]{
+		ToJSON:   MarshalUpdateDraftResult,
+		FromJSON: UnmarshalUpdateDraftResult,
+	}
+}
+
 // VerifyChangePayloadCodec returns a fresh codec for *VerifyChangePayload.
 func VerifyChangePayloadCodec() tools.JSONCodec[*VerifyChangePayload] {
 	return tools.JSONCodec[*VerifyChangePayload]{
@@ -1297,6 +1313,32 @@ var (
 		},
 		FromJSON: func(data []byte) (any, error) {
 			return UnmarshalUpdateDependenciesResult(data)
+		},
+	}
+	// updateDraftPayloadCodec provides an untyped codec for *UpdateDraftPayload.
+	updateDraftPayloadCodec = tools.JSONCodec[any]{
+		ToJSON: func(v any) ([]byte, error) {
+			// Prefer typed marshal when the value matches the expected type.
+			if typed, ok := v.(*UpdateDraftPayload); ok {
+				return MarshalUpdateDraftPayload(typed)
+			}
+			return nil, fmt.Errorf("invalid value type for *UpdateDraftPayload: %T", v)
+		},
+		FromJSON: func(data []byte) (any, error) {
+			return UnmarshalUpdateDraftPayload(data)
+		},
+	}
+	// updateDraftResultCodec provides an untyped codec for *UpdateDraftResult.
+	updateDraftResultCodec = tools.JSONCodec[any]{
+		ToJSON: func(v any) ([]byte, error) {
+			// Prefer typed marshal when the value matches the expected type.
+			if typed, ok := v.(*UpdateDraftResult); ok {
+				return MarshalUpdateDraftResult(typed)
+			}
+			return nil, fmt.Errorf("invalid value type for *UpdateDraftResult: %T", v)
+		},
+		FromJSON: func(data []byte) (any, error) {
+			return UnmarshalUpdateDraftResult(data)
 		},
 	}
 	// verifyChangePayloadCodec provides an untyped codec for *VerifyChangePayload.
@@ -2200,7 +2242,7 @@ var checkProjectPayloadFields = []tools.FieldMetadata{
 var checkProjectResultFields = []tools.FieldMetadata{
 	{
 		JSONType:    "object",
-		Description: "Outcome of running every Go module's tests in a protected copy of the workspace inside Linux containers.",
+		Description: "Outcome of running every Go module's tests in a protected copy of the working folder inside Linux containers.",
 	},
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("op_id")},
@@ -4159,12 +4201,12 @@ var draftOverrideResultFields = []tools.FieldMetadata{
 var generateCodePayloadFields = []tools.FieldMetadata{
 	{
 		JSONType:    "object",
-		Description: "Selects the application module or its public local eval/ module for code generation from the active workspace's files.",
+		Description: "Selects the module of the builder's working folder to regenerate: candidate, the application, whose design/ Surla first writes from the open build; or eval, the test module, regenerated from its own design.",
 	},
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("target")},
 		JSONType:    "string",
-		Description: "Module to regenerate: candidate (the application, the default when omitted) or eval (the local eval/ module).",
+		Description: "Module to regenerate: candidate (the application, the default when omitted) or eval (the test module).",
 	},
 }
 var generateCodeResultFields = []tools.FieldMetadata{
@@ -4234,7 +4276,7 @@ var getBuildResultFields = []tools.FieldMetadata{
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("build")},
 		JSONType:    "object",
-		Description: "This change has no usable build for the current test source: the user has not started one, or its builder-only build lost the stored verification settings that supplied its tests. Start a new build on the views page.",
+		Description: "This change has no usable build: the project's open build is another change's or there is none, or its builder-only build lost the stored verification settings that supplied its tests. Start a new build on the views page.",
 		Branches: []tools.UnionBranch{
 			tools.TaggedUnionBranch{
 				Discriminator: []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("state")},
@@ -4396,7 +4438,7 @@ var getBuildResultFields = []tools.FieldMetadata{
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("test_writer"), tools.FixedField("tests")},
 		JSONType:    "object",
-		Description: "Surla checked the reported tests and found problems the test writer must fix before reporting again. Their text is in the test writer's assignment (get_test_writer_assignment) and, for the user, in get_test_findings.",
+		Description: "Surla checked the reported tests and found problems the test writer must fix before reporting again, including a working copy that is off its build's branch or holds another build's work. Their text is in get_test_writer_assignment and, for the user, in get_test_findings.",
 		Branches: []tools.UnionBranch{
 			tools.TaggedUnionBranch{
 				Discriminator: []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("state")},
@@ -4605,7 +4647,7 @@ var getBuilderAssignmentPayloadFields = []tools.FieldMetadata{
 var getBuilderAssignmentResultFields = []tools.FieldMetadata{
 	{
 		JSONType:    "object",
-		Description: "The builder's assignment: build this change at this revision in the project folder, where generate_code, check_project and verify_change act.",
+		Description: "The builder's assignment for the project's open build: build this change at this revision in working_folder, your own working copy of the project on the build's own branch, where generate_code, check_project and update_dependencies act and where verify_change looks for the candidate.",
 	},
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("change_id")},
@@ -4706,6 +4748,16 @@ var getBuilderAssignmentResultFields = []tools.FieldMetadata{
 				Value:         "accepted",
 			},
 		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("working_folder")},
+		JSONType:    "string",
+		Description: "Absolute path of the folder to build in: the project's folder inside your working copy .surla-build, on the build's branch surla/build-<n>. Run git and go there, never in the project folder.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("gowork_off")},
+		JSONType:    "boolean",
+		Description: "True when no go.work lies in working_folder or in a folder between it and the working copy's root: run every go command there as GOWORK=off go …, so a go.work of the project folder around your copy does not take it over.",
 	},
 }
 var getChangePayloadFields = []tools.FieldMetadata{
@@ -5825,12 +5877,17 @@ var getStoryRefreshPayloadFields = []tools.FieldMetadata{
 var getStoryRefreshResultFields = []tools.FieldMetadata{
 	{
 		JSONType:    "object",
-		Description: "Current Story refresh operation of the project's owner for the bound workspace: the user, the guide and the builder all act for the owner, so they read the same one. state is none when no refresh has run yet in this server process for the bound workspace; running while sandboxed evaluation is in progress; succeeded with the evaluated stories (empty when the design does not load the Story module); or failed with a safe diagnostic.",
+		Description: "Current Story refresh operation of the project's owner for the guide's draft: the user, the guide and the builder all act for the owner, so they read the same one. state is none when no refresh has run yet in this server process for the guide's draft; running while sandboxed evaluation is in progress; succeeded with the evaluated stories (empty when the design does not load the Story module); or failed with a safe diagnostic.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("draft_folder")},
+		JSONType:    "string",
+		Description: "Absolute path intended for the guide's draft, .surla-draft in the project folder, whose go.mod, go.sum and design/ refresh_story reads. When state is none, this path does not mean the folder exists; refresh_story makes it when needed.",
 	},
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("op_id")},
 		JSONType:    "string",
-		Description: "Identifier of the owner's current Story refresh operation for the bound workspace; present when state is running, succeeded, or failed. Pass it as story_refresh_op_id to propose_change or revise_change once state is succeeded to adopt the evaluated Story into a Change Card.",
+		Description: "Identifier of the owner's current Story refresh operation for the guide's draft; present when state is running, succeeded, or failed. Pass it as story_refresh_op_id to propose_change or revise_change once state is succeeded to adopt the evaluated Story into a Change Card.",
 	},
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("state")},
@@ -5840,7 +5897,7 @@ var getStoryRefreshResultFields = []tools.FieldMetadata{
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("snapshot_digest")},
 		JSONType:    "string",
-		Description: "Canonical SHA-256 digest of the workspace module snapshot read when this refresh started; present when state is running, succeeded, or failed.",
+		Description: "Canonical SHA-256 digest of the draft snapshot read when this refresh started; present when state is running, succeeded, or failed.",
 	},
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("stories")},
@@ -6030,7 +6087,7 @@ var getStoryRefreshResultFields = []tools.FieldMetadata{
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("message")},
 		JSONType:    "string",
-		Description: "Summary of the current Story refresh state and next action.",
+		Description: "Summary of the current Story refresh state and next action. After a dropped build remakes the draft and until a revision is saved from it, begins by naming the dropped change and saying that edits made before then are gone.",
 	},
 }
 var getTestWriterAssignmentPayloadFields = []tools.FieldMetadata{
@@ -6046,7 +6103,7 @@ var getTestWriterAssignmentPayloadFields = []tools.FieldMetadata{
 var getTestWriterAssignmentResultFields = []tools.FieldMetadata{
 	{
 		JSONType:    "object",
-		Description: "The test writer's assignment for one build: write the required tests for the Story as agreed at the built revision, in the test module (eval/) of the working folder, and make them hold the service to the user's confirmed answers, confirmation examples and preserved behaviors of that revision, which the assignment carries exactly as confirmed. Surla writes eval/design/story_tests.go, which declares the required tests, from the agreed Story and generates the module when the build starts and again at each report; the test writer leaves that file as it is. After changing the module's design, the test writer reports to have it generated again or, from a shell that is not sandboxed, runs surla gen -dir eval in the working folder first; regenerating keeps the required tests. go build ./... in eval/ checks the work before a report, and Surla's check of each report is the judge.",
+		Description: "The test writer's assignment for one build: write the required tests for the Story as agreed at the built revision, in the test module (eval/) of the working folder, and make them hold the service to the user's confirmed answers, confirmation examples and preserved behaviors of that revision, which the assignment carries exactly as confirmed. Surla writes eval/design/story_tests.go, which declares the required tests, from the agreed Story and generates the module at each read that marks the assignment read and again at each report; the test writer leaves that file as it is. After changing the module's design, the test writer reports to have it generated again or, from a shell that is not sandboxed, runs surla gen -dir eval in the working folder first; regenerating keeps the required tests. go build ./... in eval/ checks the work before a report, and Surla's check of each report is the judge.",
 	},
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("change_id")},
@@ -6121,7 +6178,7 @@ var getTestWriterAssignmentResultFields = []tools.FieldMetadata{
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("progress"), tools.FixedField("tests")},
 		JSONType:    "object",
-		Description: "Surla checked the reported tests and found problems the test writer must fix before reporting again. Their text is in the test writer's assignment (get_test_writer_assignment) and, for the user, in get_test_findings.",
+		Description: "Surla checked the reported tests and found problems the test writer must fix before reporting again, including a working copy that is off its build's branch or holds another build's work. Their text is in get_test_writer_assignment and, for the user, in get_test_findings.",
 		Branches: []tools.UnionBranch{
 			tools.TaggedUnionBranch{
 				Discriminator: []tools.FieldPathSegment{tools.FixedField("progress"), tools.FixedField("tests"), tools.FixedField("state")},
@@ -6262,7 +6319,7 @@ var getTestWriterAssignmentResultFields = []tools.FieldMetadata{
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("working_folder")},
 		JSONType:    "string",
-		Description: "Folder to write the tests in: your own working copy of the project.",
+		Description: "Folder to write the tests in: your own working copy of the project, .surla-tests, on the build's branch surla/tests-<n>. Do not commit there: Surla commits what it accepts.",
 	},
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("design_source")},
@@ -7047,17 +7104,17 @@ var listBuilderAssignmentsPayloadFields = []tools.FieldMetadata{
 var listBuilderAssignmentsResultFields = []tools.FieldMetadata{
 	{
 		JSONType:    "object",
-		Description: "The builder's assignments, one per change the user built, most recently started first.",
+		Description: "The builder's assignment for the project's open build while that build needs the builder; empty otherwise.",
 	},
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("assignments")},
 		JSONType:    "array",
-		Description: "Assignments, most recently started first; empty when the user has built no change.",
+		Description: "The open build's assignment while it needs this role; empty otherwise.",
 	},
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("assignments"), tools.DynamicField{}},
 		JSONType:    "object",
-		Description: "Assignments, most recently started first; empty when the user has built no change.",
+		Description: "The open build's assignment while it needs this role; empty otherwise.",
 	},
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("assignments"), tools.DynamicField{}, tools.FixedField("change_id")},
@@ -7159,6 +7216,16 @@ var listBuilderAssignmentsResultFields = []tools.FieldMetadata{
 			},
 		},
 	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("assignments"), tools.DynamicField{}, tools.FixedField("working_folder")},
+		JSONType:    "string",
+		Description: "Absolute path of the folder to build in: the project's folder inside your working copy .surla-build, on the build's branch surla/build-<n>. Run git and go there, never in the project folder.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("assignments"), tools.DynamicField{}, tools.FixedField("gowork_off")},
+		JSONType:    "boolean",
+		Description: "True when no go.work lies in working_folder or in a folder between it and the working copy's root: run every go command there as GOWORK=off go …, so a go.work of the project folder around your copy does not take it over.",
+	},
 }
 var listChangesPayloadFields = []tools.FieldMetadata{
 	{
@@ -7249,17 +7316,17 @@ var listTestWriterAssignmentsPayloadFields = []tools.FieldMetadata{
 var listTestWriterAssignmentsResultFields = []tools.FieldMetadata{
 	{
 		JSONType:    "object",
-		Description: "The test writer's assignments, one per change the user built, most recently started first.",
+		Description: "The test writer's assignment for the project's open build while that build needs the test writer; empty otherwise.",
 	},
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("assignments")},
 		JSONType:    "array",
-		Description: "Assignments, most recently started first; empty when the user has built no change.",
+		Description: "The open build's assignment while it needs this role; empty otherwise.",
 	},
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("assignments"), tools.DynamicField{}},
 		JSONType:    "object",
-		Description: "Assignments, most recently started first; empty when the user has built no change.",
+		Description: "The open build's assignment while it needs this role; empty otherwise.",
 	},
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("assignments"), tools.DynamicField{}, tools.FixedField("change_id")},
@@ -7334,7 +7401,7 @@ var listTestWriterAssignmentsResultFields = []tools.FieldMetadata{
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("assignments"), tools.DynamicField{}, tools.FixedField("progress"), tools.FixedField("tests")},
 		JSONType:    "object",
-		Description: "Surla checked the reported tests and found problems the test writer must fix before reporting again. Their text is in the test writer's assignment (get_test_writer_assignment) and, for the user, in get_test_findings.",
+		Description: "Surla checked the reported tests and found problems the test writer must fix before reporting again, including a working copy that is off its build's branch or holds another build's work. Their text is in get_test_writer_assignment and, for the user, in get_test_findings.",
 		Branches: []tools.UnionBranch{
 			tools.TaggedUnionBranch{
 				Discriminator: []tools.FieldPathSegment{tools.FixedField("assignments"), tools.DynamicField{}, tools.FixedField("progress"), tools.FixedField("tests"), tools.FixedField("state")},
@@ -8035,7 +8102,7 @@ var listVerificationsResultFields = []tools.FieldMetadata{
 var previewArchitecturePayloadFields = []tools.FieldMetadata{
 	{
 		JSONType:    "object",
-		Description: "Request to derive Checkpoint 2 C4 topology and guardrails from the bound workspace's candidate Goa design for a confirmed Change Card.",
+		Description: "Request for the Checkpoint 2 C4 topology and guardrails of a confirmed Change Card's agreed revision, from the architecture saved with it.",
 	},
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("change_id")},
@@ -8066,7 +8133,7 @@ var previewArchitectureResultFields = []tools.FieldMetadata{
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("design_digest")},
 		JSONType:    "string",
-		Description: "SHA-256 digest of the evaluated design snapshot (sorted path and content pairs).",
+		Description: "SHA-256 digest of the design snapshot the revision's refresh evaluated (sorted path and content pairs).",
 	},
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("system_name")},
@@ -8307,7 +8374,7 @@ var proposeChangePayloadFields = []tools.FieldMetadata{
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("story_refresh_op_id")},
 		JSONType:    "string",
-		Description: "Optional op_id of a succeeded refresh_story operation for the bound workspace whose evaluated Stories this card adopts. When set, Surla reads one workspace snapshot, requires its snapshot_digest to match the operation's, and records both the evaluated Stories and that snapshot's design/*.go on the card. Omit when the card has no Story.",
+		Description: "op_id of a succeeded refresh_story operation whose evaluated draft this card adopts: its design, Stories, architecture, go.mod and made-from list. Required when the project folder holds a go.mod; Surla reads no file.",
 	},
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("analysis")},
@@ -9280,12 +9347,17 @@ var refreshStoryPayloadFields = []tools.FieldMetadata{
 var refreshStoryResultFields = []tools.FieldMetadata{
 	{
 		JSONType:    "object",
-		Description: "Current Story refresh operation of the project's owner for the bound workspace: the user, the guide and the builder all act for the owner, so they read the same one. state is none when no refresh has run yet in this server process for the bound workspace; running while sandboxed evaluation is in progress; succeeded with the evaluated stories (empty when the design does not load the Story module); or failed with a safe diagnostic.",
+		Description: "Current Story refresh operation of the project's owner for the guide's draft: the user, the guide and the builder all act for the owner, so they read the same one. state is none when no refresh has run yet in this server process for the guide's draft; running while sandboxed evaluation is in progress; succeeded with the evaluated stories (empty when the design does not load the Story module); or failed with a safe diagnostic.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("draft_folder")},
+		JSONType:    "string",
+		Description: "Absolute path intended for the guide's draft, .surla-draft in the project folder, whose go.mod, go.sum and design/ refresh_story reads. When state is none, this path does not mean the folder exists; refresh_story makes it when needed.",
 	},
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("op_id")},
 		JSONType:    "string",
-		Description: "Identifier of the owner's current Story refresh operation for the bound workspace; present when state is running, succeeded, or failed. Pass it as story_refresh_op_id to propose_change or revise_change once state is succeeded to adopt the evaluated Story into a Change Card.",
+		Description: "Identifier of the owner's current Story refresh operation for the guide's draft; present when state is running, succeeded, or failed. Pass it as story_refresh_op_id to propose_change or revise_change once state is succeeded to adopt the evaluated Story into a Change Card.",
 	},
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("state")},
@@ -9295,7 +9367,7 @@ var refreshStoryResultFields = []tools.FieldMetadata{
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("snapshot_digest")},
 		JSONType:    "string",
-		Description: "Canonical SHA-256 digest of the workspace module snapshot read when this refresh started; present when state is running, succeeded, or failed.",
+		Description: "Canonical SHA-256 digest of the draft snapshot read when this refresh started; present when state is running, succeeded, or failed.",
 	},
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("stories")},
@@ -9485,7 +9557,7 @@ var refreshStoryResultFields = []tools.FieldMetadata{
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("message")},
 		JSONType:    "string",
-		Description: "Summary of the current Story refresh state and next action.",
+		Description: "Summary of the current Story refresh state and next action. After a dropped build remakes the draft and until a revision is saved from it, begins by naming the dropped change and saying that edits made before then are gone.",
 	},
 }
 var reportTestsFinishedPayloadFields = []tools.FieldMetadata{
@@ -9581,7 +9653,7 @@ var reportTestsFinishedResultFields = []tools.FieldMetadata{
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("progress"), tools.FixedField("tests")},
 		JSONType:    "object",
-		Description: "Surla checked the reported tests and found problems the test writer must fix before reporting again. Their text is in the test writer's assignment (get_test_writer_assignment) and, for the user, in get_test_findings.",
+		Description: "Surla checked the reported tests and found problems the test writer must fix before reporting again, including a working copy that is off its build's branch or holds another build's work. Their text is in get_test_writer_assignment and, for the user, in get_test_findings.",
 		Branches: []tools.UnionBranch{
 			tools.TaggedUnionBranch{
 				Discriminator: []tools.FieldPathSegment{tools.FixedField("progress"), tools.FixedField("tests"), tools.FixedField("state")},
@@ -9733,7 +9805,7 @@ var reviseChangePayloadFields = []tools.FieldMetadata{
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("story_refresh_op_id")},
 		JSONType:    "string",
-		Description: "Optional op_id of a succeeded refresh_story operation for the bound workspace whose evaluated Stories this revision adopts. When set, Surla reads one workspace snapshot, requires its snapshot_digest to match the operation's, and records both the evaluated Stories and that snapshot's design/*.go on the revised card. When omitted on a card that already has Stories, the card's saved Stories and their design source are kept together.",
+		Description: "op_id of a succeeded refresh_story operation whose evaluated draft this revision adopts. When omitted, the revision keeps every snapshot field of the revision it revises: design, Stories, architecture, go.mod and made-from list, even with zero Stories. A project with a go.mod refuses an omitted op_id when that revision has no design. Surla reads no file.",
 	},
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("analysis")},
@@ -10737,7 +10809,7 @@ var updateDependenciesPayloadFields = []tools.FieldMetadata{
 var updateDependenciesResultFields = []tools.FieldMetadata{
 	{
 		JSONType:    "object",
-		Description: "Go module manifests rewritten in the workspace after go mod tidy ran in a protected copy.",
+		Description: "Go module manifests rewritten in the working folder after go mod tidy ran in a protected copy.",
 	},
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("op_id")},
@@ -10747,17 +10819,73 @@ var updateDependenciesResultFields = []tools.FieldMetadata{
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("files_written")},
 		JSONType:    "array",
-		Description: "Workspace-relative go.mod, go.sum and go.work.sum files whose bytes changed and were written.",
+		Description: "Working-folder-relative go.mod, go.sum and go.work.sum files whose bytes changed and were written.",
 	},
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("files_written"), tools.DynamicField{}},
 		JSONType:    "string",
-		Description: "Workspace-relative go.mod, go.sum and go.work.sum files whose bytes changed and were written.",
+		Description: "Working-folder-relative go.mod, go.sum and go.work.sum files whose bytes changed and were written.",
 	},
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("message")},
 		JSONType:    "string",
 		Description: "At most 16 KiB: what was updated, and Go's message for any module that could not be.",
+	},
+}
+var updateDraftPayloadFields = []tools.FieldMetadata{
+	{
+		JSONType: "object",
+	},
+}
+var updateDraftResultFields = []tools.FieldMetadata{
+	{
+		JSONType:    "object",
+		Description: "What update_draft brought from the project folder into the guide's draft: design files the draft took as they are there, design files merged with the draft's own edits, and files to correct. The lists describe what this call applied and what remains to correct; empty lists do not prove that every outside design change is present.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("draft_folder")},
+		JSONType:    "string",
+		Description: "Absolute path of the guide's draft folder.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("taken")},
+		JSONType:    "array",
+		Description: "Design files the draft took from the project folder because it had not changed them, in path order.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("taken"), tools.DynamicField{}},
+		JSONType:    "string",
+		Description: "Design files the draft took from the project folder because it had not changed them, in path order.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("merged")},
+		JSONType:    "array",
+		Description: "Design files where the project folder's change and the draft's edits merged without conflict, in path order.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("merged"), tools.DynamicField{}},
+		JSONType:    "string",
+		Description: "Design files where the project folder's change and the draft's edits merged without conflict, in path order.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("to_correct")},
+		JSONType:    "array",
+		Description: "Files to correct in the draft before refreshing, in path order; empty when none.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("to_correct"), tools.DynamicField{}},
+		JSONType:    "object",
+		Description: "Files to correct in the draft before refreshing, in path order; empty when none.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("to_correct"), tools.DynamicField{}, tools.FixedField("path")},
+		JSONType:    "string",
+		Description: "Path relative to the draft folder, such as design/types.go or go.mod.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("to_correct"), tools.DynamicField{}, tools.FixedField("problem")},
+		JSONType:    "string",
+		Description: "What to correct: conflict markers where the draft and the project folder changed the same lines; a file removed on one side and changed on the other; a draft file Go cannot parse, with its line; or a module the project's go.mod requires at another version than the draft's, or that the draft's lacks, including differing replace directives.",
 	},
 }
 var verifyChangePayloadFields = []tools.FieldMetadata{
@@ -12111,6 +12239,23 @@ func enrichUpdateDependenciesResultValidationError(err error) error {
 	m := make(map[string]string)
 	for _, is := range issues {
 		if field, ok := tools.LookupFieldMetadata(updateDependenciesResultFields, is.Field); ok && field.Description != "" {
+			m[is.Field] = field.Description
+		}
+	}
+	return tools.NewValidationError(ve.Error(), issues, m)
+}
+func enrichUpdateDraftResultValidationError(err error) error {
+	var ve *tools.ValidationError
+	if !errors.As(err, &ve) {
+		return err
+	}
+	issues := ve.Issues()
+	if len(issues) == 0 {
+		return err
+	}
+	m := make(map[string]string)
+	for _, is := range issues {
+		if field, ok := tools.LookupFieldMetadata(updateDraftResultFields, is.Field); ok && field.Description != "" {
 			m[is.Field] = field.Description
 		}
 	}
@@ -14010,6 +14155,68 @@ func invalidUpdateDependenciesResultFieldTypeError(err error) error {
 		nil,
 	)
 }
+func invalidUpdateDraftPayloadFieldTypeError(err error) error {
+	var typeErr *json.UnmarshalTypeError
+	if !errors.As(err, &typeErr) {
+		return err
+	}
+	field := typeErr.Field
+	field = strings.TrimPrefix(field, "UpdateDraftPayloadTransport.")
+	if field == "" {
+		field = "$payload"
+	}
+	metadata, ok := tools.LookupFieldMetadata(updateDraftPayloadFields, field)
+	if !ok || metadata.JSONType == "" {
+		return err
+	}
+	actual := generatedUnmarshalJSONType(typeErr.Value)
+	if actual == "" {
+		return err
+	}
+	return tools.NewValidationError(
+		err.Error(),
+		[]*tools.FieldIssue{
+			{
+				Field:            field,
+				Constraint:       "invalid_field_type",
+				ExpectedJSONType: metadata.JSONType,
+				ActualJSONType:   actual,
+			},
+		},
+		nil,
+	)
+}
+func invalidUpdateDraftResultFieldTypeError(err error) error {
+	var typeErr *json.UnmarshalTypeError
+	if !errors.As(err, &typeErr) {
+		return err
+	}
+	field := typeErr.Field
+	field = strings.TrimPrefix(field, "UpdateDraftResultTransport.")
+	if field == "" {
+		field = "$payload"
+	}
+	metadata, ok := tools.LookupFieldMetadata(updateDraftResultFields, field)
+	if !ok || metadata.JSONType == "" {
+		return err
+	}
+	actual := generatedUnmarshalJSONType(typeErr.Value)
+	if actual == "" {
+		return err
+	}
+	return tools.NewValidationError(
+		err.Error(),
+		[]*tools.FieldIssue{
+			{
+				Field:            field,
+				Constraint:       "invalid_field_type",
+				ExpectedJSONType: metadata.JSONType,
+				ActualJSONType:   actual,
+			},
+		},
+		nil,
+	)
+}
 func invalidVerifyChangePayloadFieldTypeError(err error) error {
 	var typeErr *json.UnmarshalTypeError
 	if !errors.As(err, &typeErr) {
@@ -15332,6 +15539,8 @@ func MarshalGetBuilderAssignmentResult(v *GetBuilderAssignmentResult) ([]byte, e
 		RequestRevision: &in.RequestRevision,
 		InForce:         &in.InForce,
 		Read:            &in.Read,
+		WorkingFolder:   &in.WorkingFolder,
+		GoworkOff:       &in.GoworkOff,
 	}
 	var writtenTestsValue toolhttp.WrittenTests
 	switch string(in.WrittenTests.Kind()) {
@@ -15392,6 +15601,8 @@ func UnmarshalGetBuilderAssignmentResult(data []byte) (*GetBuilderAssignmentResu
 		RequestRevision: *in.RequestRevision,
 		InForce:         *in.InForce,
 		Read:            *in.Read,
+		WorkingFolder:   *in.WorkingFolder,
+		GoworkOff:       *in.GoworkOff,
 	}
 	switch string(in.WrittenTests.Kind()) {
 	case "not_used":
@@ -15824,6 +16035,7 @@ func MarshalGetStoryRefreshResult(v *GetStoryRefreshResult) ([]byte, error) {
 	_ = in
 	var out *toolhttp.GetStoryRefreshResultTransport
 	out = &toolhttp.GetStoryRefreshResultTransport{
+		DraftFolder:    &in.DraftFolder,
 		OpID:           in.OpID,
 		State:          &in.State,
 		SnapshotDigest: in.SnapshotDigest,
@@ -15862,6 +16074,7 @@ func UnmarshalGetStoryRefreshResult(data []byte) (*GetStoryRefreshResult, error)
 	_ = in
 	var out *GetStoryRefreshResult
 	out = &GetStoryRefreshResult{
+		DraftFolder:    *in.DraftFolder,
 		OpID:           in.OpID,
 		State:          *in.State,
 		SnapshotDigest: in.SnapshotDigest,
@@ -17282,6 +17495,7 @@ func MarshalRefreshStoryResult(v *RefreshStoryResult) ([]byte, error) {
 	_ = in
 	var out *toolhttp.RefreshStoryResultTransport
 	out = &toolhttp.RefreshStoryResultTransport{
+		DraftFolder:    &in.DraftFolder,
 		OpID:           in.OpID,
 		State:          &in.State,
 		SnapshotDigest: in.SnapshotDigest,
@@ -17320,6 +17534,7 @@ func UnmarshalRefreshStoryResult(data []byte) (*RefreshStoryResult, error) {
 	_ = in
 	var out *RefreshStoryResult
 	out = &RefreshStoryResult{
+		DraftFolder:    *in.DraftFolder,
 		OpID:           in.OpID,
 		State:          *in.State,
 		SnapshotDigest: in.SnapshotDigest,
@@ -17865,6 +18080,110 @@ func UnmarshalUpdateDependenciesResult(data []byte) (*UpdateDependenciesResult, 
 	out.FilesWritten = make([]string, len(in.FilesWritten))
 	for i, val := range in.FilesWritten {
 		out.FilesWritten[i] = val
+	}
+	return out, nil
+}
+
+// MarshalUpdateDraftPayload serializes *UpdateDraftPayload into JSON.
+func MarshalUpdateDraftPayload(v *UpdateDraftPayload) ([]byte, error) {
+	if v == nil {
+		return nil, fmt.Errorf("updateDraftPayload is nil")
+	}
+	in := v
+	_ = in
+	var out *toolhttp.UpdateDraftPayloadTransport
+	out = &toolhttp.UpdateDraftPayloadTransport{}
+	return json.Marshal(out)
+}
+
+// UnmarshalUpdateDraftPayload deserializes JSON into *UpdateDraftPayload.
+func UnmarshalUpdateDraftPayload(data []byte) (*UpdateDraftPayload, error) {
+	if len(data) == 0 {
+		var v *UpdateDraftPayload
+		return v, nil
+	}
+	var tv toolhttp.UpdateDraftPayloadTransport
+	if err := validateStopLiveTargetPayloadJSON(data); err != nil {
+		return nil, invalidUpdateDraftPayloadFieldTypeError(err)
+	}
+	if err := json.Unmarshal(data, &tv); err != nil {
+		return nil, invalidUpdateDraftPayloadFieldTypeError(err)
+	}
+	in := &tv
+	_ = in
+	var out *UpdateDraftPayload
+	out = &UpdateDraftPayload{}
+	return out, nil
+}
+
+// MarshalUpdateDraftResult serializes *UpdateDraftResult into JSON.
+func MarshalUpdateDraftResult(v *UpdateDraftResult) ([]byte, error) {
+	if v == nil {
+		return nil, fmt.Errorf("updateDraftResult is nil")
+	}
+	in := v
+	_ = in
+	var out *toolhttp.UpdateDraftResultTransport
+	out = &toolhttp.UpdateDraftResultTransport{
+		DraftFolder: &in.DraftFolder,
+	}
+	out.Taken = make([]string, len(in.Taken))
+	for i, val := range in.Taken {
+		out.Taken[i] = val
+	}
+	out.Merged = make([]string, len(in.Merged))
+	for i, val := range in.Merged {
+		out.Merged[i] = val
+	}
+	out.ToCorrect = make([]*toolhttp.DraftCorrectionTransport, len(in.ToCorrect))
+	for i, val := range in.ToCorrect {
+		if val == nil {
+			out.ToCorrect[i] = nil
+			continue
+		}
+		out.ToCorrect[i] = encodeDraftCorrectionToDraftCorrectionTransport(val)
+	}
+	return json.Marshal(out)
+}
+
+// UnmarshalUpdateDraftResult deserializes JSON into *UpdateDraftResult.
+func UnmarshalUpdateDraftResult(data []byte) (*UpdateDraftResult, error) {
+	if len(data) == 0 {
+		return nil, fmt.Errorf("updateDraftResult JSON is empty")
+	}
+	var tv toolhttp.UpdateDraftResultTransport
+	if err := validateUpdateDraftResultJSON(data); err != nil {
+		return nil, invalidUpdateDraftResultFieldTypeError(err)
+	}
+	if err := json.Unmarshal(data, &tv); err != nil {
+		return nil, invalidUpdateDraftResultFieldTypeError(err)
+	}
+	if err := toolhttp.ValidateUpdateDraftResultTransport(&tv); err != nil {
+		err = newValidationError(err)
+		err = enrichUpdateDraftResultValidationError(err)
+		return nil, err
+	}
+	in := &tv
+	_ = in
+	var out *UpdateDraftResult
+	out = &UpdateDraftResult{
+		DraftFolder: *in.DraftFolder,
+	}
+	out.Taken = make([]string, len(in.Taken))
+	for i, val := range in.Taken {
+		out.Taken[i] = val
+	}
+	out.Merged = make([]string, len(in.Merged))
+	for i, val := range in.Merged {
+		out.Merged[i] = val
+	}
+	out.ToCorrect = make([]*DraftCorrection, len(in.ToCorrect))
+	for i, val := range in.ToCorrect {
+		if val == nil {
+			out.ToCorrect[i] = nil
+			continue
+		}
+		out.ToCorrect[i] = decodeDraftCorrectionTransportToDraftCorrection(val)
 	}
 	return out, nil
 }
@@ -18429,6 +18748,16 @@ func validateRefreshStoryResultJSON(data []byte) error {
 	return validateRefreshStoryResultJSONValue("", root, "")
 }
 
+// validateUpdateDraftResultJSON parses one JSON document and checks the exact value
+// shapes known from this generated Goa type.
+func validateUpdateDraftResultJSON(data []byte) error {
+	root, err := readStrictToolJSON(data)
+	if err != nil {
+		return err
+	}
+	return validateUpdateDraftResultJSONValue("", root, "")
+}
+
 // validateListChangesResultJSON parses one JSON document and checks the exact value
 // shapes known from this generated Goa type.
 func validateListChangesResultJSON(data []byte) error {
@@ -18695,7 +19024,7 @@ func validateProposeChangePayloadJSONValue(path string, value any, description s
 		case "story_refresh_op_id":
 			if err := validateStringJSONValue(
 				generatedJSONChildPath(path, key, false),
-				typed[key], "Optional op_id of a succeeded refresh_story operation for the bound workspace whose evaluated Stories this card adopts. When set, Surla reads one workspace snapshot, requires its snapshot_digest to match the operation's, and records both the evaluated Stories and that snapshot's design/*.go on the card. Omit when the card has no Story.",
+				typed[key], "op_id of a succeeded refresh_story operation whose evaluated draft this card adopts: its design, Stories, architecture, go.mod and made-from list. Required when the project folder holds a go.mod; Surla reads no file.",
 			); err != nil {
 				return err
 			}
@@ -20239,7 +20568,7 @@ func validateReviseChangePayloadJSONValue(path string, value any, description st
 		case "story_refresh_op_id":
 			if err := validateStringJSONValue(
 				generatedJSONChildPath(path, key, false),
-				typed[key], "Optional op_id of a succeeded refresh_story operation for the bound workspace whose evaluated Stories this revision adopts. When set, Surla reads one workspace snapshot, requires its snapshot_digest to match the operation's, and records both the evaluated Stories and that snapshot's design/*.go on the revised card. When omitted on a card that already has Stories, the card's saved Stories and their design source are kept together.",
+				typed[key], "op_id of a succeeded refresh_story operation whose evaluated draft this revision adopts. When omitted, the revision keeps every snapshot field of the revision it revises: design, Stories, architecture, go.mod and made-from list, even with zero Stories. A project with a go.mod refuses an omitted op_id when that revision has no design. Surla reads no file.",
 			); err != nil {
 				return err
 			}
@@ -20659,7 +20988,7 @@ func validatePreviewArchitectureResultJSONValue(path string, value any, descript
 		case "design_digest":
 			if err := validateStringJSONValue(
 				generatedJSONChildPath(path, key, false),
-				typed[key], "SHA-256 digest of the evaluated design snapshot (sorted path and content pairs).",
+				typed[key], "SHA-256 digest of the design snapshot the revision's refresh evaluated (sorted path and content pairs).",
 			); err != nil {
 				return err
 			}
@@ -23034,7 +23363,7 @@ func validateGenerateCodePayloadJSONValue(path string, value any, description st
 		case "target":
 			if err := validateStringJSONValue(
 				generatedJSONChildPath(path, key, false),
-				typed[key], "Module to regenerate: candidate (the application, the default when omitted) or eval (the local eval/ module).",
+				typed[key], "Module to regenerate: candidate (the application, the default when omitted) or eval (the test module).",
 			); err != nil {
 				return err
 			}
@@ -23174,7 +23503,7 @@ func validateUpdateDependenciesResultJSONValue(path string, value any, descripti
 		case "files_written":
 			if err := validateProposeChangePayloadCP1AnalysisAmbiguityTransportOptionsJSONValue(
 				generatedJSONChildPath(path, key, false),
-				typed[key], "Workspace-relative go.mod, go.sum and go.work.sum files whose bytes changed and were written.",
+				typed[key], "Working-folder-relative go.mod, go.sum and go.work.sum files whose bytes changed and were written.",
 			); err != nil {
 				return err
 			}
@@ -23597,24 +23926,31 @@ func validateRefreshStoryResultJSONValue(path string, value any, description str
 			); err != nil {
 				return err
 			}
+		case "draft_folder":
+			if err := validateStringJSONValue(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Absolute path intended for the guide's draft, .surla-draft in the project folder, whose go.mod, go.sum and design/ refresh_story reads. When state is none, this path does not mean the folder exists; refresh_story makes it when needed.",
+			); err != nil {
+				return err
+			}
 		case "message":
 			if err := validateStringJSONValue(
 				generatedJSONChildPath(path, key, false),
-				typed[key], "Summary of the current Story refresh state and next action.",
+				typed[key], "Summary of the current Story refresh state and next action. After a dropped build remakes the draft and until a revision is saved from it, begins by naming the dropped change and saying that edits made before then are gone.",
 			); err != nil {
 				return err
 			}
 		case "op_id":
 			if err := validateStringJSONValue(
 				generatedJSONChildPath(path, key, false),
-				typed[key], "Identifier of the owner's current Story refresh operation for the bound workspace; present when state is running, succeeded, or failed. Pass it as story_refresh_op_id to propose_change or revise_change once state is succeeded to adopt the evaluated Story into a Change Card.",
+				typed[key], "Identifier of the owner's current Story refresh operation for the guide's draft; present when state is running, succeeded, or failed. Pass it as story_refresh_op_id to propose_change or revise_change once state is succeeded to adopt the evaluated Story into a Change Card.",
 			); err != nil {
 				return err
 			}
 		case "snapshot_digest":
 			if err := validateStringJSONValue(
 				generatedJSONChildPath(path, key, false),
-				typed[key], "Canonical SHA-256 digest of the workspace module snapshot read when this refresh started; present when state is running, succeeded, or failed.",
+				typed[key], "Canonical SHA-256 digest of the draft snapshot read when this refresh started; present when state is running, succeeded, or failed.",
 			); err != nil {
 				return err
 			}
@@ -23635,11 +23971,140 @@ func validateRefreshStoryResultJSONValue(path string, value any, description str
 		default:
 			return unknownJSONFieldError(path, key, []string{
 				"diagnostic",
+				"draft_folder",
 				"message",
 				"op_id",
 				"snapshot_digest",
 				"state",
 				"stories",
+			})
+		}
+	}
+	return nil
+}
+
+// validateUpdateDraftResultJSONValue checks one value whose JSON shape is fixed by the generated Goa type.
+func validateUpdateDraftResultJSONValue(path string, value any, description string) error {
+	field := path
+	if field == "" {
+		field = "$payload"
+	}
+	if value == nil {
+		return invalidGeneratedFieldTypeError(field, "object", "null", description)
+	}
+	typed, ok := value.(map[string]any)
+	if !ok {
+		return invalidGeneratedFieldTypeError(field, "object", decodedJSONType(value), description)
+	}
+	keys := make([]string, 0, len(typed))
+	for key := range typed {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		switch key {
+		case "draft_folder":
+			if err := validateStringJSONValue(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Absolute path of the guide's draft folder.",
+			); err != nil {
+				return err
+			}
+		case "merged":
+			if err := validateProposeChangePayloadCP1AnalysisAmbiguityTransportOptionsJSONValue(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Design files where the project folder's change and the draft's edits merged without conflict, in path order.",
+			); err != nil {
+				return err
+			}
+		case "taken":
+			if err := validateProposeChangePayloadCP1AnalysisAmbiguityTransportOptionsJSONValue(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Design files the draft took from the project folder because it had not changed them, in path order.",
+			); err != nil {
+				return err
+			}
+		case "to_correct":
+			if err := validateUpdateDraftResultRootToCorrectJSONValue(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Files to correct in the draft before refreshing, in path order; empty when none.",
+			); err != nil {
+				return err
+			}
+		default:
+			return unknownJSONFieldError(path, key, []string{
+				"draft_folder",
+				"merged",
+				"taken",
+				"to_correct",
+			})
+		}
+	}
+	return nil
+}
+
+// validateUpdateDraftResultRootToCorrectJSONValue checks one value whose JSON shape is fixed by the generated Goa type.
+func validateUpdateDraftResultRootToCorrectJSONValue(path string, value any, description string) error {
+	field := path
+	if field == "" {
+		field = "$payload"
+	}
+	if value == nil {
+		return invalidGeneratedFieldTypeError(field, "array", "null", description)
+	}
+	typed, ok := value.([]any)
+	if !ok {
+		return invalidGeneratedFieldTypeError(field, "array", decodedJSONType(value), description)
+	}
+	for index, item := range typed {
+		if err := validateUpdateDraftResultDraftCorrectionTransportJSONValue(
+			generatedJSONChildPath(path, strconv.Itoa(index), true),
+			item, description,
+		); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// validateUpdateDraftResultDraftCorrectionTransportJSONValue checks one value whose JSON shape is fixed by the generated Goa type.
+func validateUpdateDraftResultDraftCorrectionTransportJSONValue(path string, value any, description string) error {
+	field := path
+	if field == "" {
+		field = "$payload"
+	}
+	if value == nil {
+		return invalidGeneratedFieldTypeError(field, "object", "null", description)
+	}
+	typed, ok := value.(map[string]any)
+	if !ok {
+		return invalidGeneratedFieldTypeError(field, "object", decodedJSONType(value), description)
+	}
+	keys := make([]string, 0, len(typed))
+	for key := range typed {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		switch key {
+		case "path":
+			if err := validateStringJSONValue(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Path relative to the draft folder, such as design/types.go or go.mod.",
+			); err != nil {
+				return err
+			}
+		case "problem":
+			if err := validateStringJSONValue(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "What to correct: conflict markers where the draft and the project folder changed the same lines; a file removed on one side and changed on the other; a draft file Go cannot parse, with its line; or a module the project's go.mod requires at another version than the draft's, or that the draft's lacks, including differing replace directives.",
+			); err != nil {
+				return err
+			}
+		default:
+			return unknownJSONFieldError(path, key, []string{
+				"path",
+				"problem",
 			})
 		}
 	}
@@ -24313,7 +24778,7 @@ func validateListBuilderAssignmentsResultJSONValue(path string, value any, descr
 		case "assignments":
 			if err := validateListBuilderAssignmentsResultRootAssignmentsJSONValue(
 				generatedJSONChildPath(path, key, false),
-				typed[key], "Assignments, most recently started first; empty when the user has built no change.",
+				typed[key], "The open build's assignment while it needs this role; empty otherwise.",
 			); err != nil {
 				return err
 			}
@@ -24377,6 +24842,13 @@ func validateListBuilderAssignmentsResultBuilderAssignmentTransportJSONValue(pat
 			); err != nil {
 				return err
 			}
+		case "gowork_off":
+			if err := validateBooleanJSONValue(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "True when no go.work lies in working_folder or in a folder between it and the working copy's root: run every go command there as GOWORK=off go …, so a go.work of the project folder around your copy does not take it over.",
+			); err != nil {
+				return err
+			}
 		case "in_force":
 			if err := validateBooleanJSONValue(
 				generatedJSONChildPath(path, key, false),
@@ -24398,6 +24870,13 @@ func validateListBuilderAssignmentsResultBuilderAssignmentTransportJSONValue(pat
 			); err != nil {
 				return err
 			}
+		case "working_folder":
+			if err := validateStringJSONValue(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Absolute path of the folder to build in: the project's folder inside your working copy .surla-build, on the build's branch surla/build-<n>. Run git and go there, never in the project folder.",
+			); err != nil {
+				return err
+			}
 		case "written_tests":
 			if err := validateListBuilderAssignmentsResultBuilderAssignmentTransportWrittenTestsJSONValue(
 				generatedJSONChildPath(path, key, false),
@@ -24408,9 +24887,11 @@ func validateListBuilderAssignmentsResultBuilderAssignmentTransportJSONValue(pat
 		default:
 			return unknownJSONFieldError(path, key, []string{
 				"change_id",
+				"gowork_off",
 				"in_force",
 				"read",
 				"request_revision",
+				"working_folder",
 				"written_tests",
 			})
 		}
@@ -24513,7 +24994,7 @@ func validateListTestWriterAssignmentsResultJSONValue(path string, value any, de
 		case "assignments":
 			if err := validateListTestWriterAssignmentsResultRootAssignmentsJSONValue(
 				generatedJSONChildPath(path, key, false),
-				typed[key], "Assignments, most recently started first; empty when the user has built no change.",
+				typed[key], "The open build's assignment while it needs this role; empty otherwise.",
 			); err != nil {
 				return err
 			}
@@ -24746,7 +25227,7 @@ func validateGetTestWriterAssignmentResultJSONValue(path string, value any, desc
 		case "working_folder":
 			if err := validateStringJSONValue(
 				generatedJSONChildPath(path, key, false),
-				typed[key], "Folder to write the tests in: your own working copy of the project.",
+				typed[key], "Folder to write the tests in: your own working copy of the project, .surla-tests, on the build's branch surla/tests-<n>. Do not commit there: Surla commits what it accepts.",
 			); err != nil {
 				return err
 			}
@@ -26183,6 +26664,8 @@ func decodeBuilderAssignmentTransportToBuilderAssignment(v *toolhttp.BuilderAssi
 		RequestRevision: *v.RequestRevision,
 		InForce:         *v.InForce,
 		Read:            *v.Read,
+		WorkingFolder:   *v.WorkingFolder,
+		GoworkOff:       *v.GoworkOff,
 	}
 	switch string(v.WrittenTests.Kind()) {
 	case "not_used":
@@ -26222,6 +26705,8 @@ func encodeBuilderAssignmentToBuilderAssignmentTransport(v *BuilderAssignment) *
 		RequestRevision: &v.RequestRevision,
 		InForce:         &v.InForce,
 		Read:            &v.Read,
+		WorkingFolder:   &v.WorkingFolder,
+		GoworkOff:       &v.GoworkOff,
 	}
 	var writtenTestsValue toolhttp.WrittenTests
 	switch string(v.WrittenTests.Kind()) {
@@ -26827,6 +27312,22 @@ func encodeCP1RevisionAnalysisExampleToCP1RevisionAnalysisExampleTransport(v *CP
 		InputSummary:     &v.InputSummary,
 		ExpectedOutcome:  &v.ExpectedOutcome,
 		VerificationKind: &v.VerificationKind,
+	}
+
+	return res
+}
+func decodeDraftCorrectionTransportToDraftCorrection(v *toolhttp.DraftCorrectionTransport) *DraftCorrection {
+	res := &DraftCorrection{
+		Path:    *v.Path,
+		Problem: *v.Problem,
+	}
+
+	return res
+}
+func encodeDraftCorrectionToDraftCorrectionTransport(v *DraftCorrection) *toolhttp.DraftCorrectionTransport {
+	res := &toolhttp.DraftCorrectionTransport{
+		Path:    &v.Path,
+		Problem: &v.Problem,
 	}
 
 	return res

@@ -2388,7 +2388,7 @@ func ValidateDraftOverrideResultTransport(value *DraftOverrideResultTransport) (
 // GenerateCodePayloadTransport stores JSON fields until they have been validated.
 type GenerateCodePayloadTransport struct {
 	// Module to regenerate: candidate (the application, the default when omitted)
-	// or eval (the local eval/ module).
+	// or eval (the test module).
 	Target *string `json:"target,omitempty"`
 }
 
@@ -2926,6 +2926,14 @@ type GetBuilderAssignmentResultTransport struct {
 	// otherwise accepted, with the commit and time, when the build records
 	// accepted tests, and not_yet_accepted when it records none.
 	WrittenTests *GetBuilderAssignmentResultwrittenTestsTransport `json:"written_tests"`
+	// Absolute path of the folder to build in: the project's folder inside your
+	// working copy .surla-build, on the build's branch surla/build-<n>. Run git
+	// and go there, never in the project folder.
+	WorkingFolder *string `json:"working_folder"`
+	// True when no go.work lies in working_folder or in a folder between it and
+	// the working copy's root: run every go command there as GOWORK=off go …, so a
+	// go.work of the project folder around your copy does not take it over.
+	GoworkOff *bool `json:"gowork_off"`
 }
 
 // ValidateGetBuilderAssignmentResultTransport checks decoded JSON before it becomes a service value.
@@ -2944,6 +2952,12 @@ func ValidateGetBuilderAssignmentResultTransport(value *GetBuilderAssignmentResu
 	}
 	if value.Read == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("read", "body"))
+	}
+	if value.WorkingFolder == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("working_folder", "body"))
+	}
+	if value.GoworkOff == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("gowork_off", "body"))
 	}
 	if value.WrittenTests == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("written_tests", "body"))
@@ -4072,15 +4086,20 @@ func ValidateGetStoryRefreshResultStorySummaryItemTransport(value *GetStoryRefre
 
 // GetStoryRefreshResultTransport stores JSON fields until they have been validated.
 type GetStoryRefreshResultTransport struct {
-	// Identifier of the owner's current Story refresh operation for the bound
-	// workspace; present when state is running, succeeded, or failed. Pass it as
+	// Absolute path intended for the guide's draft, .surla-draft in the project
+	// folder, whose go.mod, go.sum and design/ refresh_story reads. When state is
+	// none, this path does not mean the folder exists; refresh_story makes it when
+	// needed.
+	DraftFolder *string `json:"draft_folder"`
+	// Identifier of the owner's current Story refresh operation for the guide's
+	// draft; present when state is running, succeeded, or failed. Pass it as
 	// story_refresh_op_id to propose_change or revise_change once state is
 	// succeeded to adopt the evaluated Story into a Change Card.
 	OpID *string `json:"op_id,omitempty"`
 	// Current operation state: none, running, succeeded, or failed.
 	State *string `json:"state"`
-	// Canonical SHA-256 digest of the workspace module snapshot read when this
-	// refresh started; present when state is running, succeeded, or failed.
+	// Canonical SHA-256 digest of the draft snapshot read when this refresh
+	// started; present when state is running, succeeded, or failed.
 	SnapshotDigest *string `json:"snapshot_digest,omitempty"`
 	// Evaluated domain Stories in declaration order when state is succeeded (empty
 	// when the design declares no Stories or when state is none, running, or
@@ -4088,7 +4107,9 @@ type GetStoryRefreshResultTransport struct {
 	Stories []*GetStoryRefreshResultStorySummaryItemTransport `json:"stories"`
 	// Safe failure or timeout diagnostic when state is failed; omitted otherwise.
 	Diagnostic *string `json:"diagnostic,omitempty"`
-	// Summary of the current Story refresh state and next action.
+	// Summary of the current Story refresh state and next action. After a dropped
+	// build remakes the draft and until a revision is saved from it, begins by
+	// naming the dropped change and saying that edits made before then are gone.
 	Message *string `json:"message"`
 }
 
@@ -4105,6 +4126,9 @@ func ValidateGetStoryRefreshResultTransport(value *GetStoryRefreshResultTranspor
 	}
 	if value.Message == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if value.DraftFolder == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("draft_folder", "body"))
 	}
 	if value.State != nil {
 		if !(*value.State == "none" || *value.State == "running" || *value.State == "succeeded" || *value.State == "failed") {
@@ -4688,7 +4712,9 @@ type GetTestWriterAssignmentResultTransport struct {
 	// progress gives in finding_count when its state is needs_changes, and none in
 	// any other state. Fix them in working_folder, then report again.
 	Findings []string `json:"findings"`
-	// Folder to write the tests in: your own working copy of the project.
+	// Folder to write the tests in: your own working copy of the project,
+	// .surla-tests, on the build's branch surla/tests-<n>. Do not commit there:
+	// Surla commits what it accepts.
 	WorkingFolder *string `json:"working_folder"`
 	// The canonical design source as agreed at request_revision, copied when this
 	// build started; later revisions do not change it.
@@ -5289,6 +5315,14 @@ type ListBuilderAssignmentsResultBuilderAssignmentTransport struct {
 	// otherwise accepted, with the commit and time, when the build records
 	// accepted tests, and not_yet_accepted when it records none.
 	WrittenTests *ListBuilderAssignmentsResultwrittenTestsTransport `json:"written_tests"`
+	// Absolute path of the folder to build in: the project's folder inside your
+	// working copy .surla-build, on the build's branch surla/build-<n>. Run git
+	// and go there, never in the project folder.
+	WorkingFolder *string `json:"working_folder"`
+	// True when no go.work lies in working_folder or in a folder between it and
+	// the working copy's root: run every go command there as GOWORK=off go …, so a
+	// go.work of the project folder around your copy does not take it over.
+	GoworkOff *bool `json:"gowork_off"`
 }
 
 // ValidateListBuilderAssignmentsResultBuilderAssignmentTransport checks decoded JSON before it becomes a service value.
@@ -5307,6 +5341,12 @@ func ValidateListBuilderAssignmentsResultBuilderAssignmentTransport(value *ListB
 	}
 	if value.Read == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("read", "body"))
+	}
+	if value.WorkingFolder == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("working_folder", "body"))
+	}
+	if value.GoworkOff == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("gowork_off", "body"))
 	}
 	if value.WrittenTests == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("written_tests", "body"))
@@ -5398,8 +5438,7 @@ func ValidateListBuilderAssignmentsResultTestsNotYetAcceptedTransport(value *Lis
 
 // ListBuilderAssignmentsResultTransport stores JSON fields until they have been validated.
 type ListBuilderAssignmentsResultTransport struct {
-	// Assignments, most recently started first; empty when the user has built no
-	// change.
+	// The open build's assignment while it needs this role; empty otherwise.
 	Assignments []*ListBuilderAssignmentsResultBuilderAssignmentTransport `json:"assignments"`
 }
 
@@ -5819,8 +5858,7 @@ func ValidateListTestWriterAssignmentsResultTestsReportedTransport(value *ListTe
 
 // ListTestWriterAssignmentsResultTransport stores JSON fields until they have been validated.
 type ListTestWriterAssignmentsResultTransport struct {
-	// Assignments, most recently started first; empty when the user has built no
-	// change.
+	// The open build's assignment while it needs this role; empty otherwise.
 	Assignments []*ListTestWriterAssignmentsResultTestWriterAssignmentItemTransport `json:"assignments"`
 }
 
@@ -6706,8 +6744,8 @@ type PreviewArchitectureResultTransport struct {
 	ChangeID *string `json:"change_id"`
 	// Bound CP1 request_revision digest.
 	RequestRevision *string `json:"request_revision"`
-	// SHA-256 digest of the evaluated design snapshot (sorted path and content
-	// pairs).
+	// SHA-256 digest of the design snapshot the revision's refresh evaluated
+	// (sorted path and content pairs).
 	DesignDigest *string `json:"design_digest"`
 	// API or primary service name declared in the design.
 	SystemName *string `json:"system_name"`
@@ -6958,11 +6996,9 @@ type ProposeChangePayloadTransport struct {
 	ChangeID *string `json:"change_id"`
 	// The user's feature request.
 	Prompt *string `json:"prompt"`
-	// Optional op_id of a succeeded refresh_story operation for the bound
-	// workspace whose evaluated Stories this card adopts. When set, Surla reads
-	// one workspace snapshot, requires its snapshot_digest to match the
-	// operation's, and records both the evaluated Stories and that snapshot's
-	// design/*.go on the card. Omit when the card has no Story.
+	// op_id of a succeeded refresh_story operation whose evaluated draft this card
+	// adopts: its design, Stories, architecture, go.mod and made-from list.
+	// Required when the project folder holds a go.mod; Surla reads no file.
 	StoryRefreshOpID *string `json:"story_refresh_op_id,omitempty"`
 	// Your analysis of prompt against the target's current design.
 	Analysis *ProposeChangePayloadCP1AnalysisTransport `json:"analysis"`
@@ -7894,15 +7930,20 @@ func ValidateRefreshStoryResultStorySummaryItemTransport(value *RefreshStoryResu
 
 // RefreshStoryResultTransport stores JSON fields until they have been validated.
 type RefreshStoryResultTransport struct {
-	// Identifier of the owner's current Story refresh operation for the bound
-	// workspace; present when state is running, succeeded, or failed. Pass it as
+	// Absolute path intended for the guide's draft, .surla-draft in the project
+	// folder, whose go.mod, go.sum and design/ refresh_story reads. When state is
+	// none, this path does not mean the folder exists; refresh_story makes it when
+	// needed.
+	DraftFolder *string `json:"draft_folder"`
+	// Identifier of the owner's current Story refresh operation for the guide's
+	// draft; present when state is running, succeeded, or failed. Pass it as
 	// story_refresh_op_id to propose_change or revise_change once state is
 	// succeeded to adopt the evaluated Story into a Change Card.
 	OpID *string `json:"op_id,omitempty"`
 	// Current operation state: none, running, succeeded, or failed.
 	State *string `json:"state"`
-	// Canonical SHA-256 digest of the workspace module snapshot read when this
-	// refresh started; present when state is running, succeeded, or failed.
+	// Canonical SHA-256 digest of the draft snapshot read when this refresh
+	// started; present when state is running, succeeded, or failed.
 	SnapshotDigest *string `json:"snapshot_digest,omitempty"`
 	// Evaluated domain Stories in declaration order when state is succeeded (empty
 	// when the design declares no Stories or when state is none, running, or
@@ -7910,7 +7951,9 @@ type RefreshStoryResultTransport struct {
 	Stories []*RefreshStoryResultStorySummaryItemTransport `json:"stories"`
 	// Safe failure or timeout diagnostic when state is failed; omitted otherwise.
 	Diagnostic *string `json:"diagnostic,omitempty"`
-	// Summary of the current Story refresh state and next action.
+	// Summary of the current Story refresh state and next action. After a dropped
+	// build remakes the draft and until a revision is saved from it, begins by
+	// naming the dropped change and saying that edits made before then are gone.
 	Message *string `json:"message"`
 }
 
@@ -7927,6 +7970,9 @@ func ValidateRefreshStoryResultTransport(value *RefreshStoryResultTransport) (er
 	}
 	if value.Message == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if value.DraftFolder == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("draft_folder", "body"))
 	}
 	if value.State != nil {
 		if !(*value.State == "none" || *value.State == "running" || *value.State == "succeeded" || *value.State == "failed") {
@@ -8442,12 +8488,11 @@ type ReviseChangePayloadTransport struct {
 	RequestRevision *string `json:"request_revision"`
 	// The user's revised feature request.
 	Prompt *string `json:"prompt"`
-	// Optional op_id of a succeeded refresh_story operation for the bound
-	// workspace whose evaluated Stories this revision adopts. When set, Surla
-	// reads one workspace snapshot, requires its snapshot_digest to match the
-	// operation's, and records both the evaluated Stories and that snapshot's
-	// design/*.go on the revised card. When omitted on a card that already has
-	// Stories, the card's saved Stories and their design source are kept together.
+	// op_id of a succeeded refresh_story operation whose evaluated draft this
+	// revision adopts. When omitted, the revision keeps every snapshot field of
+	// the revision it revises: design, Stories, architecture, go.mod and made-from
+	// list, even with zero Stories. A project with a go.mod refuses an omitted
+	// op_id when that revision has no design. Surla reads no file.
 	StoryRefreshOpID *string `json:"story_refresh_op_id,omitempty"`
 	// Your analysis of the revised prompt against the current card and the
 	// target's current design.
@@ -9216,8 +9261,8 @@ func ValidateStopLiveTargetResultTransport(value *StopLiveTargetResultTransport)
 type UpdateDependenciesResultTransport struct {
 	// Operation identifier; pass it to read_check_output to read the full output.
 	OpID *string `json:"op_id"`
-	// Workspace-relative go.mod, go.sum and go.work.sum files whose bytes changed
-	// and were written.
+	// Working-folder-relative go.mod, go.sum and go.work.sum files whose bytes
+	// changed and were written.
 	FilesWritten []string `json:"files_written"`
 	// At most 16 KiB: what was updated, and Go's message for any module that could
 	// not be.
@@ -9237,6 +9282,74 @@ func ValidateUpdateDependenciesResultTransport(value *UpdateDependenciesResultTr
 	}
 	if value.Message == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	return err
+}
+
+// UpdateDraftResultDraftCorrectionTransport stores JSON fields until they have been validated.
+type UpdateDraftResultDraftCorrectionTransport struct {
+	// Path relative to the draft folder, such as design/types.go or go.mod.
+	Path *string `json:"path"`
+	// What to correct: conflict markers where the draft and the project folder
+	// changed the same lines; a file removed on one side and changed on the other;
+	// a draft file Go cannot parse, with its line; or a module the project's
+	// go.mod requires at another version than the draft's, or that the draft's
+	// lacks, including differing replace directives.
+	Problem *string `json:"problem"`
+}
+
+// ValidateUpdateDraftResultDraftCorrectionTransport checks decoded JSON before it becomes a service value.
+func ValidateUpdateDraftResultDraftCorrectionTransport(value *UpdateDraftResultDraftCorrectionTransport) (err error) {
+	if value == nil {
+		return goa.MissingFieldError("body", "JSON value")
+	}
+	if value.Path == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("path", "body"))
+	}
+	if value.Problem == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("problem", "body"))
+	}
+	return err
+}
+
+// UpdateDraftResultTransport stores JSON fields until they have been validated.
+type UpdateDraftResultTransport struct {
+	// Absolute path of the guide's draft folder.
+	DraftFolder *string `json:"draft_folder"`
+	// Design files the draft took from the project folder because it had not
+	// changed them, in path order.
+	Taken []string `json:"taken"`
+	// Design files where the project folder's change and the draft's edits merged
+	// without conflict, in path order.
+	Merged []string `json:"merged"`
+	// Files to correct in the draft before refreshing, in path order; empty when
+	// none.
+	ToCorrect []*UpdateDraftResultDraftCorrectionTransport `json:"to_correct"`
+}
+
+// ValidateUpdateDraftResultTransport checks decoded JSON before it becomes a service value.
+func ValidateUpdateDraftResultTransport(value *UpdateDraftResultTransport) (err error) {
+	if value == nil {
+		return goa.MissingFieldError("body", "JSON value")
+	}
+	if value.DraftFolder == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("draft_folder", "body"))
+	}
+	if value.Taken == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("taken", "body"))
+	}
+	if value.Merged == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("merged", "body"))
+	}
+	if value.ToCorrect == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("to_correct", "body"))
+	}
+	for _, e := range value.ToCorrect {
+		if e != nil {
+			if err2 := ValidateUpdateDraftResultDraftCorrectionTransport(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
 	}
 	return err
 }
@@ -13219,6 +13332,8 @@ func EncodeGetBuilderAssignmentResult(in *surla.BuilderAssignment) ([]byte, erro
 			RequestRevision: &in.RequestRevision,
 			InForce:         &in.InForce,
 			Read:            &in.Read,
+			WorkingFolder:   &in.WorkingFolder,
+			GoworkOff:       &in.GoworkOff,
 		}
 		var writtenTestsValue GetBuilderAssignmentResultwrittenTestsTransport
 		switch string(in.WrittenTests.Kind()) {
@@ -13432,6 +13547,7 @@ func EncodeGetStoryRefreshResult(in *surla.StoryRefreshResult) ([]byte, error) {
 	var body *GetStoryRefreshResultTransport
 	{
 		body = &GetStoryRefreshResultTransport{
+			DraftFolder:    &in.DraftFolder,
 			OpID:           in.OpID,
 			State:          &in.State,
 			SnapshotDigest: in.SnapshotDigest,
@@ -14120,6 +14236,7 @@ func EncodeRefreshStoryResult(in *surla.StoryRefreshResult) ([]byte, error) {
 	var body *RefreshStoryResultTransport
 	{
 		body = &RefreshStoryResultTransport{
+			DraftFolder:    &in.DraftFolder,
 			OpID:           in.OpID,
 			State:          &in.State,
 			SnapshotDigest: in.SnapshotDigest,
@@ -14380,6 +14497,40 @@ func EncodeUpdateDependenciesResult(in *surla.UpdateDependenciesResult) ([]byte,
 	data, err := json.Marshal(body)
 	if err != nil {
 		return nil, fmt.Errorf("encode UpdateDependenciesResult JSON: %w", err)
+	}
+	return data, nil
+}
+
+// EncodeUpdateDraftResult turns a service value into JSON using the field names in the Goa design.
+func EncodeUpdateDraftResult(in *surla.DraftUpdateResult) ([]byte, error) {
+	var body *UpdateDraftResultTransport
+	{
+		body = &UpdateDraftResultTransport{
+			DraftFolder: &in.DraftFolder,
+		}
+		body.Taken = make([]string, len(in.Taken))
+		for i, val := range in.Taken {
+			body.Taken[i] = val
+		}
+		body.Merged = make([]string, len(in.Merged))
+		for i, val := range in.Merged {
+			body.Merged[i] = val
+		}
+		body.ToCorrect = make([]*UpdateDraftResultDraftCorrectionTransport, len(in.ToCorrect))
+		for i, val := range in.ToCorrect {
+			if val == nil {
+				body.ToCorrect[i] = nil
+				continue
+			}
+			body.ToCorrect[i] = encodeDraftCorrectionToUpdateDraftResultDraftCorrectionTransport(val)
+		}
+	}
+	if err := ValidateUpdateDraftResultTransport(body); err != nil {
+		return nil, fmt.Errorf("validate UpdateDraftResult JSON: %w", err)
+	}
+	data, err := json.Marshal(body)
+	if err != nil {
+		return nil, fmt.Errorf("encode UpdateDraftResult JSON: %w", err)
 	}
 	return data, nil
 }
@@ -15456,6 +15607,8 @@ func encodeBuilderAssignmentToListBuilderAssignmentsResultBuilderAssignmentTrans
 		RequestRevision: &v.RequestRevision,
 		InForce:         &v.InForce,
 		Read:            &v.Read,
+		WorkingFolder:   &v.WorkingFolder,
+		GoworkOff:       &v.GoworkOff,
 	}
 	var writtenTestsValue ListBuilderAssignmentsResultwrittenTestsTransport
 	switch string(v.WrittenTests.Kind()) {
@@ -15599,6 +15752,15 @@ func encodeConfirmedAnswerToGetTestWriterAssignmentResultConfirmedAnswerTranspor
 		ID:       &v.ID,
 		Question: &v.Question,
 		Answer:   &v.Answer,
+	}
+
+	return res
+}
+
+func encodeDraftCorrectionToUpdateDraftResultDraftCorrectionTransport(v *surla.DraftCorrection) *UpdateDraftResultDraftCorrectionTransport {
+	res := &UpdateDraftResultDraftCorrectionTransport{
+		Path:    &v.Path,
+		Problem: &v.Problem,
 	}
 
 	return res

@@ -24,11 +24,9 @@ type ProposeChangeRequestBody struct {
 	ChangeID string `form:"change_id" json:"change_id" xml:"change_id"`
 	// The user's feature request.
 	Prompt string `form:"prompt" json:"prompt" xml:"prompt"`
-	// Optional op_id of a succeeded refresh_story operation for the bound
-	// workspace whose evaluated Stories this card adopts. When set, Surla reads
-	// one workspace snapshot, requires its snapshot_digest to match the
-	// operation's, and records both the evaluated Stories and that snapshot's
-	// design/*.go on the card. Omit when the card has no Story.
+	// op_id of a succeeded refresh_story operation whose evaluated draft this card
+	// adopts: its design, Stories, architecture, go.mod and made-from list.
+	// Required when the project folder holds a go.mod; Surla reads no file.
 	StoryRefreshOpID *string `form:"story_refresh_op_id,omitempty" json:"story_refresh_op_id,omitempty" xml:"story_refresh_op_id,omitempty"`
 	// Your analysis of prompt against the target's current design.
 	Analysis *CP1AnalysisRequestBody `form:"analysis" json:"analysis" xml:"analysis"`
@@ -45,12 +43,11 @@ type ReviseChangeRequestBody struct {
 	RequestRevision string `form:"request_revision" json:"request_revision" xml:"request_revision"`
 	// The user's revised feature request.
 	Prompt string `form:"prompt" json:"prompt" xml:"prompt"`
-	// Optional op_id of a succeeded refresh_story operation for the bound
-	// workspace whose evaluated Stories this revision adopts. When set, Surla
-	// reads one workspace snapshot, requires its snapshot_digest to match the
-	// operation's, and records both the evaluated Stories and that snapshot's
-	// design/*.go on the revised card. When omitted on a card that already has
-	// Stories, the card's saved Stories and their design source are kept together.
+	// op_id of a succeeded refresh_story operation whose evaluated draft this
+	// revision adopts. When omitted, the revision keeps every snapshot field of
+	// the revision it revises: design, Stories, architecture, go.mod and made-from
+	// list, even with zero Stories. A project with a go.mod refuses an omitted
+	// op_id when that revision has no design. Surla reads no file.
 	StoryRefreshOpID *string `form:"story_refresh_op_id,omitempty" json:"story_refresh_op_id,omitempty" xml:"story_refresh_op_id,omitempty"`
 	// Your analysis of the revised prompt against the current card and the
 	// target's current design.
@@ -191,7 +188,7 @@ type InitProjectRequestBody struct {
 // endpoint HTTP request body.
 type GenerateCodeRequestBody struct {
 	// Module to regenerate: candidate (the application, the default when omitted)
-	// or eval (the local eval/ module).
+	// or eval (the test module).
 	Target *string `form:"target,omitempty" json:"target,omitempty" xml:"target,omitempty"`
 }
 
@@ -217,6 +214,18 @@ type StartBuildRequestBody struct {
 	// The Change Card's agreed revision, the one in force (not a waiting
 	// proposal's).
 	RequestRevision string `form:"request_revision" json:"request_revision" xml:"request_revision"`
+	// The open build of this same change the page showed, sent when the user
+	// agreed to build it again before any verification of it passed. Omit it
+	// otherwise.
+	Replaces *ReplacedBuildRequestBody `form:"replaces,omitempty" json:"replaces,omitempty" xml:"replaces,omitempty"`
+}
+
+// DropBuildRequestBody is the type of the "surla" service "drop_build"
+// endpoint HTTP request body.
+type DropBuildRequestBody struct {
+	// started_at of the open build the page showed, exactly as get_build reported
+	// it.
+	StartedAt string `form:"started_at" json:"started_at" xml:"started_at"`
 }
 
 // ReportTestsFinishedRequestBody is the type of the "surla" service
@@ -513,8 +522,8 @@ type PreviewArchitectureResponseBody struct {
 	ChangeID *string `form:"change_id,omitempty" json:"change_id,omitempty" xml:"change_id,omitempty"`
 	// Bound CP1 request_revision digest.
 	RequestRevision *string `form:"request_revision,omitempty" json:"request_revision,omitempty" xml:"request_revision,omitempty"`
-	// SHA-256 digest of the evaluated design snapshot (sorted path and content
-	// pairs).
+	// SHA-256 digest of the design snapshot the revision's refresh evaluated
+	// (sorted path and content pairs).
 	DesignDigest *string `form:"design_digest,omitempty" json:"design_digest,omitempty" xml:"design_digest,omitempty"`
 	// API or primary service name declared in the design.
 	SystemName *string `form:"system_name,omitempty" json:"system_name,omitempty" xml:"system_name,omitempty"`
@@ -802,8 +811,8 @@ type CheckProjectResponseBody struct {
 type UpdateDependenciesResponseBody struct {
 	// Operation identifier; pass it to read_check_output to read the full output.
 	OpID *string `form:"op_id,omitempty" json:"op_id,omitempty" xml:"op_id,omitempty"`
-	// Workspace-relative go.mod, go.sum and go.work.sum files whose bytes changed
-	// and were written.
+	// Working-folder-relative go.mod, go.sum and go.work.sum files whose bytes
+	// changed and were written.
 	FilesWritten []string `form:"files_written,omitempty" json:"files_written,omitempty" xml:"files_written,omitempty"`
 	// At most 16 KiB: what was updated, and Go's message for any module that could
 	// not be.
@@ -838,15 +847,20 @@ type ListTracesResponseBody struct {
 // RefreshStoryResponseBody is the type of the "surla" service "refresh_story"
 // endpoint HTTP response body.
 type RefreshStoryResponseBody struct {
-	// Identifier of the owner's current Story refresh operation for the bound
-	// workspace; present when state is running, succeeded, or failed. Pass it as
+	// Absolute path intended for the guide's draft, .surla-draft in the project
+	// folder, whose go.mod, go.sum and design/ refresh_story reads. When state is
+	// none, this path does not mean the folder exists; refresh_story makes it when
+	// needed.
+	DraftFolder *string `form:"draft_folder,omitempty" json:"draft_folder,omitempty" xml:"draft_folder,omitempty"`
+	// Identifier of the owner's current Story refresh operation for the guide's
+	// draft; present when state is running, succeeded, or failed. Pass it as
 	// story_refresh_op_id to propose_change or revise_change once state is
 	// succeeded to adopt the evaluated Story into a Change Card.
 	OpID *string `form:"op_id,omitempty" json:"op_id,omitempty" xml:"op_id,omitempty"`
 	// Current operation state: none, running, succeeded, or failed.
 	State *string `form:"state,omitempty" json:"state,omitempty" xml:"state,omitempty"`
-	// Canonical SHA-256 digest of the workspace module snapshot read when this
-	// refresh started; present when state is running, succeeded, or failed.
+	// Canonical SHA-256 digest of the draft snapshot read when this refresh
+	// started; present when state is running, succeeded, or failed.
 	SnapshotDigest *string `form:"snapshot_digest,omitempty" json:"snapshot_digest,omitempty" xml:"snapshot_digest,omitempty"`
 	// Evaluated domain Stories in declaration order when state is succeeded (empty
 	// when the design declares no Stories or when state is none, running, or
@@ -854,22 +868,29 @@ type RefreshStoryResponseBody struct {
 	Stories []*StorySummaryItemResponseBody `form:"stories,omitempty" json:"stories,omitempty" xml:"stories,omitempty"`
 	// Safe failure or timeout diagnostic when state is failed; omitted otherwise.
 	Diagnostic *string `form:"diagnostic,omitempty" json:"diagnostic,omitempty" xml:"diagnostic,omitempty"`
-	// Summary of the current Story refresh state and next action.
+	// Summary of the current Story refresh state and next action. After a dropped
+	// build remakes the draft and until a revision is saved from it, begins by
+	// naming the dropped change and saying that edits made before then are gone.
 	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
 }
 
 // GetStoryRefreshResponseBody is the type of the "surla" service
 // "get_story_refresh" endpoint HTTP response body.
 type GetStoryRefreshResponseBody struct {
-	// Identifier of the owner's current Story refresh operation for the bound
-	// workspace; present when state is running, succeeded, or failed. Pass it as
+	// Absolute path intended for the guide's draft, .surla-draft in the project
+	// folder, whose go.mod, go.sum and design/ refresh_story reads. When state is
+	// none, this path does not mean the folder exists; refresh_story makes it when
+	// needed.
+	DraftFolder *string `form:"draft_folder,omitempty" json:"draft_folder,omitempty" xml:"draft_folder,omitempty"`
+	// Identifier of the owner's current Story refresh operation for the guide's
+	// draft; present when state is running, succeeded, or failed. Pass it as
 	// story_refresh_op_id to propose_change or revise_change once state is
 	// succeeded to adopt the evaluated Story into a Change Card.
 	OpID *string `form:"op_id,omitempty" json:"op_id,omitempty" xml:"op_id,omitempty"`
 	// Current operation state: none, running, succeeded, or failed.
 	State *string `form:"state,omitempty" json:"state,omitempty" xml:"state,omitempty"`
-	// Canonical SHA-256 digest of the workspace module snapshot read when this
-	// refresh started; present when state is running, succeeded, or failed.
+	// Canonical SHA-256 digest of the draft snapshot read when this refresh
+	// started; present when state is running, succeeded, or failed.
 	SnapshotDigest *string `form:"snapshot_digest,omitempty" json:"snapshot_digest,omitempty" xml:"snapshot_digest,omitempty"`
 	// Evaluated domain Stories in declaration order when state is succeeded (empty
 	// when the design declares no Stories or when state is none, running, or
@@ -877,8 +898,26 @@ type GetStoryRefreshResponseBody struct {
 	Stories []*StorySummaryItemResponseBody `form:"stories,omitempty" json:"stories,omitempty" xml:"stories,omitempty"`
 	// Safe failure or timeout diagnostic when state is failed; omitted otherwise.
 	Diagnostic *string `form:"diagnostic,omitempty" json:"diagnostic,omitempty" xml:"diagnostic,omitempty"`
-	// Summary of the current Story refresh state and next action.
+	// Summary of the current Story refresh state and next action. After a dropped
+	// build remakes the draft and until a revision is saved from it, begins by
+	// naming the dropped change and saying that edits made before then are gone.
 	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+}
+
+// UpdateDraftResponseBody is the type of the "surla" service "update_draft"
+// endpoint HTTP response body.
+type UpdateDraftResponseBody struct {
+	// Absolute path of the guide's draft folder.
+	DraftFolder *string `form:"draft_folder,omitempty" json:"draft_folder,omitempty" xml:"draft_folder,omitempty"`
+	// Design files the draft took from the project folder because it had not
+	// changed them, in path order.
+	Taken []string `form:"taken,omitempty" json:"taken,omitempty" xml:"taken,omitempty"`
+	// Design files where the project folder's change and the draft's edits merged
+	// without conflict, in path order.
+	Merged []string `form:"merged,omitempty" json:"merged,omitempty" xml:"merged,omitempty"`
+	// Files to correct in the draft before refreshing, in path order; empty when
+	// none.
+	ToCorrect []*DraftCorrectionResponseBody `form:"to_correct,omitempty" json:"to_correct,omitempty" xml:"to_correct,omitempty"`
 }
 
 // GetTeamResponseBody is the type of the "surla" service "get_team" endpoint
@@ -931,13 +970,21 @@ type WaitForChangesResponseBody struct {
 // StartBuildResponseBody is the type of the "surla" service "start_build"
 // endpoint HTTP response body.
 type StartBuildResponseBody struct {
-	// The build saved before generation or team admission.
+	// The build saved before Surla made any missing working copy and admitted the
+	// team.
 	Build *StartedBuildResponseBody `form:"build,omitempty" json:"build,omitempty" xml:"build,omitempty"`
 	// The team's immediate outcome after the build was saved.
 	Team *TeamResponseBody `form:"team,omitempty" json:"team,omitempty" xml:"team,omitempty"`
-	// The test-writer working copy after this start's refresh; not_used with
-	// stored verification settings.
-	WorkingCopy *WorkingCopyResponseBody `form:"working_copy,omitempty" json:"working_copy,omitempty" xml:"working_copy,omitempty"`
+}
+
+// DropBuildResponseBody is the type of the "surla" service "drop_build"
+// endpoint HTTP response body.
+type DropBuildResponseBody struct {
+	// Change Card identifier.
+	ChangeID *string `form:"change_id,omitempty" json:"change_id,omitempty" xml:"change_id,omitempty"`
+	// not_started when the change has no usable build for the current test source;
+	// start a new build on the views page. Otherwise started with the usable build.
+	Build *BuildResponseBody `form:"build,omitempty" json:"build,omitempty" xml:"build,omitempty"`
 }
 
 // GetBuildResponseBody is the type of the "surla" service "get_build" endpoint
@@ -972,8 +1019,7 @@ type GetTestFindingsResponseBody struct {
 // ListBuilderAssignmentsResponseBody is the type of the "surla" service
 // "list_builder_assignments" endpoint HTTP response body.
 type ListBuilderAssignmentsResponseBody struct {
-	// Assignments, most recently started first; empty when the user has built no
-	// change.
+	// The open build's assignment while it needs this role; empty otherwise.
 	Assignments []*BuilderAssignmentResponseBody `form:"assignments,omitempty" json:"assignments,omitempty" xml:"assignments,omitempty"`
 }
 
@@ -997,13 +1043,20 @@ type GetBuilderAssignmentResponseBody struct {
 	// otherwise accepted, with the commit and time, when the build records
 	// accepted tests, and not_yet_accepted when it records none.
 	WrittenTests *WrittenTestsResponseBody `form:"written_tests,omitempty" json:"written_tests,omitempty" xml:"written_tests,omitempty"`
+	// Absolute path of the folder to build in: the project's folder inside your
+	// working copy .surla-build, on the build's branch surla/build-<n>. Run git
+	// and go there, never in the project folder.
+	WorkingFolder *string `form:"working_folder,omitempty" json:"working_folder,omitempty" xml:"working_folder,omitempty"`
+	// True when no go.work lies in working_folder or in a folder between it and
+	// the working copy's root: run every go command there as GOWORK=off go …, so a
+	// go.work of the project folder around your copy does not take it over.
+	GoworkOff *bool `form:"gowork_off,omitempty" json:"gowork_off,omitempty" xml:"gowork_off,omitempty"`
 }
 
 // ListTestWriterAssignmentsResponseBody is the type of the "surla" service
 // "list_test_writer_assignments" endpoint HTTP response body.
 type ListTestWriterAssignmentsResponseBody struct {
-	// Assignments, most recently started first; empty when the user has built no
-	// change.
+	// The open build's assignment while it needs this role; empty otherwise.
 	Assignments []*TestWriterAssignmentItemResponseBody `form:"assignments,omitempty" json:"assignments,omitempty" xml:"assignments,omitempty"`
 }
 
@@ -1026,7 +1079,9 @@ type GetTestWriterAssignmentResponseBody struct {
 	// progress gives in finding_count when its state is needs_changes, and none in
 	// any other state. Fix them in working_folder, then report again.
 	Findings []string `form:"findings,omitempty" json:"findings,omitempty" xml:"findings,omitempty"`
-	// Folder to write the tests in: your own working copy of the project.
+	// Folder to write the tests in: your own working copy of the project,
+	// .surla-tests, on the build's branch surla/tests-<n>. Do not commit there:
+	// Surla commits what it accepts.
 	WorkingFolder *string `form:"working_folder,omitempty" json:"working_folder,omitempty" xml:"working_folder,omitempty"`
 	// The canonical design source as agreed at request_revision, copied when this
 	// build started; later revisions do not change it.
@@ -1072,6 +1127,25 @@ type ReportTestsFinishedResponseBody struct {
 // GoldenPathForbiddenResponseBody is the type of the "surla" service
 // "golden_path" endpoint HTTP response body for the "forbidden" error.
 type GoldenPathForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ProposeChangeDraftedBeforeDropResponseBody is the type of the "surla"
+// service "propose_change" endpoint HTTP response body for the
+// "drafted_before_drop" error.
+type ProposeChangeDraftedBeforeDropResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -1141,9 +1215,10 @@ type ProposeChangeForbiddenResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// ReviseChangeNotFoundResponseBody is the type of the "surla" service
-// "revise_change" endpoint HTTP response body for the "not_found" error.
-type ReviseChangeNotFoundResponseBody struct {
+// ReviseChangeDraftedBeforeDropResponseBody is the type of the "surla" service
+// "revise_change" endpoint HTTP response body for the "drafted_before_drop"
+// error.
+type ReviseChangeDraftedBeforeDropResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -1162,6 +1237,24 @@ type ReviseChangeNotFoundResponseBody struct {
 // ReviseChangeConflictResponseBody is the type of the "surla" service
 // "revise_change" endpoint HTTP response body for the "conflict" error.
 type ReviseChangeConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ReviseChangeNotFoundResponseBody is the type of the "surla" service
+// "revise_change" endpoint HTTP response body for the "not_found" error.
+type ReviseChangeNotFoundResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -1781,9 +1874,67 @@ type GetLiveTargetForbiddenResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// VerifyChangeNotFoundResponseBody is the type of the "surla" service
-// "verify_change" endpoint HTTP response body for the "not_found" error.
-type VerifyChangeNotFoundResponseBody struct {
+// VerifyChangeAssignmentUnreadResponseBody is the type of the "surla" service
+// "verify_change" endpoint HTTP response body for the "assignment_unread"
+// error.
+type VerifyChangeAssignmentUnreadResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// VerifyChangeWorkingFolderMissingResponseBody is the type of the "surla"
+// service "verify_change" endpoint HTTP response body for the
+// "working_folder_missing" error.
+type VerifyChangeWorkingFolderMissingResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// VerifyChangeBuildBranchMismatchResponseBody is the type of the "surla"
+// service "verify_change" endpoint HTTP response body for the
+// "build_branch_mismatch" error.
+type VerifyChangeBuildBranchMismatchResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// VerifyChangeDesignChangedOutsideResponseBody is the type of the "surla"
+// service "verify_change" endpoint HTTP response body for the
+// "design_changed_outside" error.
+type VerifyChangeDesignChangedOutsideResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -1857,6 +2008,49 @@ type VerifyChangeTestsNotAcceptedResponseBody struct {
 // VerifyChangeNoTestLayoutResponseBody is the type of the "surla" service
 // "verify_change" endpoint HTTP response body for the "no_test_layout" error.
 type VerifyChangeNoTestLayoutResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// VerifyChangeCopyOffBranchResponseBody is the type of the "surla" service
+// "verify_change" endpoint HTTP response body for the "copy_off_branch" error.
+type VerifyChangeCopyOffBranchResponseBody struct {
+	// Error name.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// The facts and the goal in words, ending with the call to make again. A name
+	// the agent chose is shown shell-quoted when it is printable, and as "a name
+	// that is not shown" otherwise.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// The branch checked out in the copy, as message shows it; absent when the
+	// copy is detached.
+	Branch *string `form:"branch,omitempty" json:"branch,omitempty" xml:"branch,omitempty"`
+	// The build's own branch, surla/build-<n> or surla/tests-<n>; absent before
+	// the copy joined the build.
+	BuildBranch *string `form:"build_branch,omitempty" json:"build_branch,omitempty" xml:"build_branch,omitempty"`
+	// The Git operation in progress in the copy, read from the folder the
+	// project's repository keeps for it. A bisect is none.
+	Operation *string `form:"operation,omitempty" json:"operation,omitempty" xml:"operation,omitempty"`
+	// The first five uncommitted paths of the copy (changes and untracked files,
+	// not ignored ones), as message shows them.
+	Uncommitted []string `form:"uncommitted,omitempty" json:"uncommitted,omitempty" xml:"uncommitted,omitempty"`
+	// How many paths of the copy are uncommitted in all.
+	UncommittedCount *int `form:"uncommitted_count,omitempty" json:"uncommitted_count,omitempty" xml:"uncommitted_count,omitempty"`
+}
+
+// VerifyChangeNotFoundResponseBody is the type of the "surla" service
+// "verify_change" endpoint HTTP response body for the "not_found" error.
+type VerifyChangeNotFoundResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -2018,9 +2212,10 @@ type ListVerificationsForbiddenResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// ApproveMergeNotFoundResponseBody is the type of the "surla" service
-// "approve_merge" endpoint HTTP response body for the "not_found" error.
-type ApproveMergeNotFoundResponseBody struct {
+// ApproveMergeBuildBranchMismatchResponseBody is the type of the "surla"
+// service "approve_merge" endpoint HTTP response body for the
+// "build_branch_mismatch" error.
+type ApproveMergeBuildBranchMismatchResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -2076,6 +2271,24 @@ type ApproveMergeNoBuildResponseBody struct {
 // "approve_merge" endpoint HTTP response body for the "tests_not_accepted"
 // error.
 type ApproveMergeTestsNotAcceptedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ApproveMergeNotFoundResponseBody is the type of the "surla" service
+// "approve_merge" endpoint HTTP response body for the "not_found" error.
+type ApproveMergeNotFoundResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -2327,6 +2540,123 @@ type InitProjectForbiddenResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
+// GenerateCodeNoBuildResponseBody is the type of the "surla" service
+// "generate_code" endpoint HTTP response body for the "no_build" error.
+type GenerateCodeNoBuildResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GenerateCodeAssignmentUnreadResponseBody is the type of the "surla" service
+// "generate_code" endpoint HTTP response body for the "assignment_unread"
+// error.
+type GenerateCodeAssignmentUnreadResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GenerateCodeWorkingFolderMissingResponseBody is the type of the "surla"
+// service "generate_code" endpoint HTTP response body for the
+// "working_folder_missing" error.
+type GenerateCodeWorkingFolderMissingResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GenerateCodeConflictResponseBody is the type of the "surla" service
+// "generate_code" endpoint HTTP response body for the "conflict" error.
+type GenerateCodeConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GenerateCodeCopyOffBranchResponseBody is the type of the "surla" service
+// "generate_code" endpoint HTTP response body for the "copy_off_branch" error.
+type GenerateCodeCopyOffBranchResponseBody struct {
+	// Error name.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// The facts and the goal in words, ending with the call to make again. A name
+	// the agent chose is shown shell-quoted when it is printable, and as "a name
+	// that is not shown" otherwise.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// The branch checked out in the copy, as message shows it; absent when the
+	// copy is detached.
+	Branch *string `form:"branch,omitempty" json:"branch,omitempty" xml:"branch,omitempty"`
+	// The build's own branch, surla/build-<n> or surla/tests-<n>; absent before
+	// the copy joined the build.
+	BuildBranch *string `form:"build_branch,omitempty" json:"build_branch,omitempty" xml:"build_branch,omitempty"`
+	// The Git operation in progress in the copy, read from the folder the
+	// project's repository keeps for it. A bisect is none.
+	Operation *string `form:"operation,omitempty" json:"operation,omitempty" xml:"operation,omitempty"`
+	// The first five uncommitted paths of the copy (changes and untracked files,
+	// not ignored ones), as message shows them.
+	Uncommitted []string `form:"uncommitted,omitempty" json:"uncommitted,omitempty" xml:"uncommitted,omitempty"`
+	// How many paths of the copy are uncommitted in all.
+	UncommittedCount *int `form:"uncommitted_count,omitempty" json:"uncommitted_count,omitempty" xml:"uncommitted_count,omitempty"`
+}
+
+// GenerateCodeMissingModulesResponseBody is the type of the "surla" service
+// "generate_code" endpoint HTTP response body for the "missing_modules" error.
+type GenerateCodeMissingModulesResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
 // GenerateCodeUnprocessableResponseBody is the type of the "surla" service
 // "generate_code" endpoint HTTP response body for the "unprocessable" error.
 type GenerateCodeUnprocessableResponseBody struct {
@@ -2379,6 +2709,87 @@ type GenerateCodeForbiddenResponseBody struct {
 	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
 	// Is the error a server-side fault?
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CheckProjectNoBuildResponseBody is the type of the "surla" service
+// "check_project" endpoint HTTP response body for the "no_build" error.
+type CheckProjectNoBuildResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CheckProjectAssignmentUnreadResponseBody is the type of the "surla" service
+// "check_project" endpoint HTTP response body for the "assignment_unread"
+// error.
+type CheckProjectAssignmentUnreadResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CheckProjectWorkingFolderMissingResponseBody is the type of the "surla"
+// service "check_project" endpoint HTTP response body for the
+// "working_folder_missing" error.
+type CheckProjectWorkingFolderMissingResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CheckProjectCopyOffBranchResponseBody is the type of the "surla" service
+// "check_project" endpoint HTTP response body for the "copy_off_branch" error.
+type CheckProjectCopyOffBranchResponseBody struct {
+	// Error name.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// The facts and the goal in words, ending with the call to make again. A name
+	// the agent chose is shown shell-quoted when it is printable, and as "a name
+	// that is not shown" otherwise.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// The branch checked out in the copy, as message shows it; absent when the
+	// copy is detached.
+	Branch *string `form:"branch,omitempty" json:"branch,omitempty" xml:"branch,omitempty"`
+	// The build's own branch, surla/build-<n> or surla/tests-<n>; absent before
+	// the copy joined the build.
+	BuildBranch *string `form:"build_branch,omitempty" json:"build_branch,omitempty" xml:"build_branch,omitempty"`
+	// The Git operation in progress in the copy, read from the folder the
+	// project's repository keeps for it. A bisect is none.
+	Operation *string `form:"operation,omitempty" json:"operation,omitempty" xml:"operation,omitempty"`
+	// The first five uncommitted paths of the copy (changes and untracked files,
+	// not ignored ones), as message shows them.
+	Uncommitted []string `form:"uncommitted,omitempty" json:"uncommitted,omitempty" xml:"uncommitted,omitempty"`
+	// How many paths of the copy are uncommitted in all.
+	UncommittedCount *int `form:"uncommitted_count,omitempty" json:"uncommitted_count,omitempty" xml:"uncommitted_count,omitempty"`
 }
 
 // CheckProjectUnprocessableResponseBody is the type of the "surla" service
@@ -2451,6 +2862,88 @@ type CheckProjectForbiddenResponseBody struct {
 	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
 	// Is the error a server-side fault?
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// UpdateDependenciesNoBuildResponseBody is the type of the "surla" service
+// "update_dependencies" endpoint HTTP response body for the "no_build" error.
+type UpdateDependenciesNoBuildResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// UpdateDependenciesAssignmentUnreadResponseBody is the type of the "surla"
+// service "update_dependencies" endpoint HTTP response body for the
+// "assignment_unread" error.
+type UpdateDependenciesAssignmentUnreadResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// UpdateDependenciesWorkingFolderMissingResponseBody is the type of the
+// "surla" service "update_dependencies" endpoint HTTP response body for the
+// "working_folder_missing" error.
+type UpdateDependenciesWorkingFolderMissingResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// UpdateDependenciesCopyOffBranchResponseBody is the type of the "surla"
+// service "update_dependencies" endpoint HTTP response body for the
+// "copy_off_branch" error.
+type UpdateDependenciesCopyOffBranchResponseBody struct {
+	// Error name.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// The facts and the goal in words, ending with the call to make again. A name
+	// the agent chose is shown shell-quoted when it is printable, and as "a name
+	// that is not shown" otherwise.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// The branch checked out in the copy, as message shows it; absent when the
+	// copy is detached.
+	Branch *string `form:"branch,omitempty" json:"branch,omitempty" xml:"branch,omitempty"`
+	// The build's own branch, surla/build-<n> or surla/tests-<n>; absent before
+	// the copy joined the build.
+	BuildBranch *string `form:"build_branch,omitempty" json:"build_branch,omitempty" xml:"build_branch,omitempty"`
+	// The Git operation in progress in the copy, read from the folder the
+	// project's repository keeps for it. A bisect is none.
+	Operation *string `form:"operation,omitempty" json:"operation,omitempty" xml:"operation,omitempty"`
+	// The first five uncommitted paths of the copy (changes and untracked files,
+	// not ignored ones), as message shows them.
+	Uncommitted []string `form:"uncommitted,omitempty" json:"uncommitted,omitempty" xml:"uncommitted,omitempty"`
+	// How many paths of the copy are uncommitted in all.
+	UncommittedCount *int `form:"uncommitted_count,omitempty" json:"uncommitted_count,omitempty" xml:"uncommitted_count,omitempty"`
 }
 
 // UpdateDependenciesUnprocessableResponseBody is the type of the "surla"
@@ -2731,6 +3224,78 @@ type GetStoryRefreshNotImplementedResponseBody struct {
 // GetStoryRefreshForbiddenResponseBody is the type of the "surla" service
 // "get_story_refresh" endpoint HTTP response body for the "forbidden" error.
 type GetStoryRefreshForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// UpdateDraftUnprocessableResponseBody is the type of the "surla" service
+// "update_draft" endpoint HTTP response body for the "unprocessable" error.
+type UpdateDraftUnprocessableResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// UpdateDraftNotImplementedResponseBody is the type of the "surla" service
+// "update_draft" endpoint HTTP response body for the "not_implemented" error.
+type UpdateDraftNotImplementedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// UpdateDraftUnavailableResponseBody is the type of the "surla" service
+// "update_draft" endpoint HTTP response body for the "unavailable" error.
+type UpdateDraftUnavailableResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// UpdateDraftForbiddenResponseBody is the type of the "surla" service
+// "update_draft" endpoint HTTP response body for the "forbidden" error.
+type UpdateDraftForbiddenResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -3112,6 +3677,74 @@ type StartBuildWorkingCopyBusyResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
+// StartBuildDraftedBeforeDropResponseBody is the type of the "surla" service
+// "start_build" endpoint HTTP response body for the "drafted_before_drop"
+// error.
+type StartBuildDraftedBeforeDropResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// StartBuildDesignChangedOutsideResponseBody is the type of the "surla"
+// service "start_build" endpoint HTTP response body for the
+// "design_changed_outside" error.
+type StartBuildDesignChangedOutsideResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// StartBuildPreviousChangeOpenResponseBody is the type of the "surla" service
+// "start_build" endpoint HTTP response body for the "previous_change_open"
+// error.
+type StartBuildPreviousChangeOpenResponseBody struct {
+	// Error name.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// What was refused, why, and the user's step, worded for the page.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Change the open build is for; drop_build takes it.
+	ChangeID *string `form:"change_id,omitempty" json:"change_id,omitempty" xml:"change_id,omitempty"`
+	// The open build as get_build reports it, with the commits to merge once a
+	// verification of it passed; drop_build takes its started_at.
+	Build *StartedBuildResponseBody `form:"build,omitempty" json:"build,omitempty" xml:"build,omitempty"`
+}
+
+// StartBuildUnfinishedBuildOpenResponseBody is the type of the "surla" service
+// "start_build" endpoint HTTP response body for the "unfinished_build_open"
+// error.
+type StartBuildUnfinishedBuildOpenResponseBody struct {
+	// Error name.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// What was refused, why, and the user's step, worded for the page.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Change the open build is for; drop_build takes it.
+	ChangeID *string `form:"change_id,omitempty" json:"change_id,omitempty" xml:"change_id,omitempty"`
+	// The open build as get_build reports it, with the commits to merge once a
+	// verification of it passed; drop_build takes its started_at.
+	Build *StartedBuildResponseBody `form:"build,omitempty" json:"build,omitempty" xml:"build,omitempty"`
+}
+
 // StartBuildUnprocessableResponseBody is the type of the "surla" service
 // "start_build" endpoint HTTP response body for the "unprocessable" error.
 type StartBuildUnprocessableResponseBody struct {
@@ -3188,6 +3821,92 @@ type StartBuildUnavailableResponseBody struct {
 // StartBuildForbiddenResponseBody is the type of the "surla" service
 // "start_build" endpoint HTTP response body for the "forbidden" error.
 type StartBuildForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// DropBuildNotFoundResponseBody is the type of the "surla" service
+// "drop_build" endpoint HTTP response body for the "not_found" error.
+type DropBuildNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// DropBuildConflictResponseBody is the type of the "surla" service
+// "drop_build" endpoint HTTP response body for the "conflict" error.
+type DropBuildConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// DropBuildBuildChangedResponseBody is the type of the "surla" service
+// "drop_build" endpoint HTTP response body for the "build_changed" error.
+type DropBuildBuildChangedResponseBody struct {
+	// Error name.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// What was refused, why, and the user's step, worded for the page.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Change the open build is for; drop_build takes it.
+	ChangeID *string `form:"change_id,omitempty" json:"change_id,omitempty" xml:"change_id,omitempty"`
+	// The open build as get_build reports it, with the commits to merge once a
+	// verification of it passed; drop_build takes its started_at.
+	Build *StartedBuildResponseBody `form:"build,omitempty" json:"build,omitempty" xml:"build,omitempty"`
+}
+
+// DropBuildNotImplementedResponseBody is the type of the "surla" service
+// "drop_build" endpoint HTTP response body for the "not_implemented" error.
+type DropBuildNotImplementedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// DropBuildForbiddenResponseBody is the type of the "surla" service
+// "drop_build" endpoint HTTP response body for the "forbidden" error.
+type DropBuildForbiddenResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -3312,6 +4031,89 @@ type ListBuilderAssignmentsForbiddenResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
+// GetBuilderAssignmentNoBuildResponseBody is the type of the "surla" service
+// "get_builder_assignment" endpoint HTTP response body for the "no_build"
+// error.
+type GetBuilderAssignmentNoBuildResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetBuilderAssignmentWorkingCopyBusyResponseBody is the type of the "surla"
+// service "get_builder_assignment" endpoint HTTP response body for the
+// "working_copy_busy" error.
+type GetBuilderAssignmentWorkingCopyBusyResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetBuilderAssignmentWorkingFolderMissingResponseBody is the type of the
+// "surla" service "get_builder_assignment" endpoint HTTP response body for the
+// "working_folder_missing" error.
+type GetBuilderAssignmentWorkingFolderMissingResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetBuilderAssignmentCopyOffBranchResponseBody is the type of the "surla"
+// service "get_builder_assignment" endpoint HTTP response body for the
+// "copy_off_branch" error.
+type GetBuilderAssignmentCopyOffBranchResponseBody struct {
+	// Error name.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// The facts and the goal in words, ending with the call to make again. A name
+	// the agent chose is shown shell-quoted when it is printable, and as "a name
+	// that is not shown" otherwise.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// The branch checked out in the copy, as message shows it; absent when the
+	// copy is detached.
+	Branch *string `form:"branch,omitempty" json:"branch,omitempty" xml:"branch,omitempty"`
+	// The build's own branch, surla/build-<n> or surla/tests-<n>; absent before
+	// the copy joined the build.
+	BuildBranch *string `form:"build_branch,omitempty" json:"build_branch,omitempty" xml:"build_branch,omitempty"`
+	// The Git operation in progress in the copy, read from the folder the
+	// project's repository keeps for it. A bisect is none.
+	Operation *string `form:"operation,omitempty" json:"operation,omitempty" xml:"operation,omitempty"`
+	// The first five uncommitted paths of the copy (changes and untracked files,
+	// not ignored ones), as message shows them.
+	Uncommitted []string `form:"uncommitted,omitempty" json:"uncommitted,omitempty" xml:"uncommitted,omitempty"`
+	// How many paths of the copy are uncommitted in all.
+	UncommittedCount *int `form:"uncommitted_count,omitempty" json:"uncommitted_count,omitempty" xml:"uncommitted_count,omitempty"`
+}
+
 // GetBuilderAssignmentNotFoundResponseBody is the type of the "surla" service
 // "get_builder_assignment" endpoint HTTP response body for the "not_found"
 // error.
@@ -3369,6 +4171,89 @@ type ListTestWriterAssignmentsForbiddenResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
+// GetTestWriterAssignmentNoBuildResponseBody is the type of the "surla"
+// service "get_test_writer_assignment" endpoint HTTP response body for the
+// "no_build" error.
+type GetTestWriterAssignmentNoBuildResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetTestWriterAssignmentWorkingCopyBusyResponseBody is the type of the
+// "surla" service "get_test_writer_assignment" endpoint HTTP response body for
+// the "working_copy_busy" error.
+type GetTestWriterAssignmentWorkingCopyBusyResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetTestWriterAssignmentWorkingFolderMissingResponseBody is the type of the
+// "surla" service "get_test_writer_assignment" endpoint HTTP response body for
+// the "working_folder_missing" error.
+type GetTestWriterAssignmentWorkingFolderMissingResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetTestWriterAssignmentCopyOffBranchResponseBody is the type of the "surla"
+// service "get_test_writer_assignment" endpoint HTTP response body for the
+// "copy_off_branch" error.
+type GetTestWriterAssignmentCopyOffBranchResponseBody struct {
+	// Error name.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// The facts and the goal in words, ending with the call to make again. A name
+	// the agent chose is shown shell-quoted when it is printable, and as "a name
+	// that is not shown" otherwise.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// The branch checked out in the copy, as message shows it; absent when the
+	// copy is detached.
+	Branch *string `form:"branch,omitempty" json:"branch,omitempty" xml:"branch,omitempty"`
+	// The build's own branch, surla/build-<n> or surla/tests-<n>; absent before
+	// the copy joined the build.
+	BuildBranch *string `form:"build_branch,omitempty" json:"build_branch,omitempty" xml:"build_branch,omitempty"`
+	// The Git operation in progress in the copy, read from the folder the
+	// project's repository keeps for it. A bisect is none.
+	Operation *string `form:"operation,omitempty" json:"operation,omitempty" xml:"operation,omitempty"`
+	// The first five uncommitted paths of the copy (changes and untracked files,
+	// not ignored ones), as message shows them.
+	Uncommitted []string `form:"uncommitted,omitempty" json:"uncommitted,omitempty" xml:"uncommitted,omitempty"`
+	// How many paths of the copy are uncommitted in all.
+	UncommittedCount *int `form:"uncommitted_count,omitempty" json:"uncommitted_count,omitempty" xml:"uncommitted_count,omitempty"`
+}
+
 // GetTestWriterAssignmentNotFoundResponseBody is the type of the "surla"
 // service "get_test_writer_assignment" endpoint HTTP response body for the
 // "not_found" error.
@@ -3407,10 +4292,47 @@ type GetTestWriterAssignmentForbiddenResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// ReportTestsFinishedNotFoundResponseBody is the type of the "surla" service
-// "report_tests_finished" endpoint HTTP response body for the "not_found"
-// error.
-type ReportTestsFinishedNotFoundResponseBody struct {
+// ReportTestsFinishedNoBuildResponseBody is the type of the "surla" service
+// "report_tests_finished" endpoint HTTP response body for the "no_build" error.
+type ReportTestsFinishedNoBuildResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ReportTestsFinishedWorkingFolderMissingResponseBody is the type of the
+// "surla" service "report_tests_finished" endpoint HTTP response body for the
+// "working_folder_missing" error.
+type ReportTestsFinishedWorkingFolderMissingResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ReportTestsFinishedAssignmentUnreadResponseBody is the type of the "surla"
+// service "report_tests_finished" endpoint HTTP response body for the
+// "assignment_unread" error.
+type ReportTestsFinishedAssignmentUnreadResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -3429,6 +4351,51 @@ type ReportTestsFinishedNotFoundResponseBody struct {
 // ReportTestsFinishedConflictResponseBody is the type of the "surla" service
 // "report_tests_finished" endpoint HTTP response body for the "conflict" error.
 type ReportTestsFinishedConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ReportTestsFinishedCopyOffBranchResponseBody is the type of the "surla"
+// service "report_tests_finished" endpoint HTTP response body for the
+// "copy_off_branch" error.
+type ReportTestsFinishedCopyOffBranchResponseBody struct {
+	// Error name.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// The facts and the goal in words, ending with the call to make again. A name
+	// the agent chose is shown shell-quoted when it is printable, and as "a name
+	// that is not shown" otherwise.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// The branch checked out in the copy, as message shows it; absent when the
+	// copy is detached.
+	Branch *string `form:"branch,omitempty" json:"branch,omitempty" xml:"branch,omitempty"`
+	// The build's own branch, surla/build-<n> or surla/tests-<n>; absent before
+	// the copy joined the build.
+	BuildBranch *string `form:"build_branch,omitempty" json:"build_branch,omitempty" xml:"build_branch,omitempty"`
+	// The Git operation in progress in the copy, read from the folder the
+	// project's repository keeps for it. A bisect is none.
+	Operation *string `form:"operation,omitempty" json:"operation,omitempty" xml:"operation,omitempty"`
+	// The first five uncommitted paths of the copy (changes and untracked files,
+	// not ignored ones), as message shows them.
+	Uncommitted []string `form:"uncommitted,omitempty" json:"uncommitted,omitempty" xml:"uncommitted,omitempty"`
+	// How many paths of the copy are uncommitted in all.
+	UncommittedCount *int `form:"uncommitted_count,omitempty" json:"uncommitted_count,omitempty" xml:"uncommitted_count,omitempty"`
+}
+
+// ReportTestsFinishedNotFoundResponseBody is the type of the "surla" service
+// "report_tests_finished" endpoint HTTP response body for the "not_found"
+// error.
+type ReportTestsFinishedNotFoundResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -3969,6 +4936,18 @@ type TraceSpanResponseBody struct {
 	Shortened *bool `form:"shortened,omitempty" json:"shortened,omitempty" xml:"shortened,omitempty"`
 }
 
+// DraftCorrectionResponseBody is used to define fields on response body types.
+type DraftCorrectionResponseBody struct {
+	// Path relative to the draft folder, such as design/types.go or go.mod.
+	Path *string `form:"path,omitempty" json:"path,omitempty" xml:"path,omitempty"`
+	// What to correct: conflict markers where the draft and the project folder
+	// changed the same lines; a file removed on one side and changed on the other;
+	// a draft file Go cannot parse, with its line; or a module the project's
+	// go.mod requires at another version than the draft's, or that the draft's
+	// lacks, including differing replace directives.
+	Problem *string `form:"problem,omitempty" json:"problem,omitempty" xml:"problem,omitempty"`
+}
+
 // TeamRoleStateResponseBody is used to define fields on response body types.
 type TeamRoleStateResponseBody struct {
 	// Registered role.
@@ -3984,9 +4963,11 @@ type TeamRoleStateResponseBody struct {
 	// held when Chorus reports a watcher, gone after its absence grace, unknown
 	// otherwise.
 	Watcher *string `form:"watcher,omitempty" json:"watcher,omitempty" xml:"watcher,omitempty"`
-	// unread when this role owes an assignment read, nothing_owed when the owner
-	// established none, unknown when the owner could not read assignments. The
-	// guide has no assignments.
+	// unread when this role owes an assignment read; nothing_owed when it has work
+	// and owes no read; no_work when the open build needs nothing from it (no
+	// build is open, the build was dropped, the test writer's tests are accepted,
+	// or a verification of the builder's build passed); unknown when the owner
+	// could not read assignments. The guide has no assignments.
 	Assignment *string `form:"assignment,omitempty" json:"assignment,omitempty" xml:"assignment,omitempty"`
 }
 
@@ -4160,32 +5141,6 @@ type BuildTeamUnavailableResponseBody struct {
 	Step *string `form:"step,omitempty" json:"step,omitempty" xml:"step,omitempty"`
 }
 
-// BuildCopyNotUsedResponseBody is used to define fields on response body types.
-type BuildCopyNotUsedResponseBody struct {
-}
-
-// BuildCopyAtProjectCommitResponseBody is used to define fields on response
-// body types.
-type BuildCopyAtProjectCommitResponseBody struct {
-	// The working copy's current commit.
-	Commit *string `form:"commit,omitempty" json:"commit,omitempty" xml:"commit,omitempty"`
-}
-
-// BuildCopyNotContainedResponseBody is used to define fields on response body
-// types.
-type BuildCopyNotContainedResponseBody struct {
-	// The retained working-copy commit.
-	Commit *string `form:"commit,omitempty" json:"commit,omitempty" xml:"commit,omitempty"`
-	// Merge the tests branch into the project's branch, then build again.
-	Step *string `form:"step,omitempty" json:"step,omitempty" xml:"step,omitempty"`
-}
-
-// BuildCopyDirtyResponseBody is used to define fields on response body types.
-type BuildCopyDirtyResponseBody struct {
-	// The retained working-copy commit.
-	Commit *string `form:"commit,omitempty" json:"commit,omitempty" xml:"commit,omitempty"`
-}
-
 // BuildNotStartedResponseBody is used to define fields on response body types.
 type BuildNotStartedResponseBody struct {
 }
@@ -4210,6 +5165,14 @@ type BuilderAssignmentResponseBody struct {
 	// otherwise accepted, with the commit and time, when the build records
 	// accepted tests, and not_yet_accepted when it records none.
 	WrittenTests *WrittenTestsResponseBody `form:"written_tests,omitempty" json:"written_tests,omitempty" xml:"written_tests,omitempty"`
+	// Absolute path of the folder to build in: the project's folder inside your
+	// working copy .surla-build, on the build's branch surla/build-<n>. Run git
+	// and go there, never in the project folder.
+	WorkingFolder *string `form:"working_folder,omitempty" json:"working_folder,omitempty" xml:"working_folder,omitempty"`
+	// True when no go.work lies in working_folder or in a folder between it and
+	// the working copy's root: run every go command there as GOWORK=off go …, so a
+	// go.work of the project folder around your copy does not take it over.
+	GoworkOff *bool `form:"gowork_off,omitempty" json:"gowork_off,omitempty" xml:"gowork_off,omitempty"`
 }
 
 // TestsNotYetAcceptedResponseBody is used to define fields on response body
@@ -4379,6 +5342,15 @@ type DesignSnapshotRequestBody struct {
 	// File contents keyed by module-relative path, such as design/design.go or
 	// go.mod.
 	Files map[string]string `form:"files" json:"files" xml:"files"`
+}
+
+// ReplacedBuildRequestBody is used to define fields on request body types.
+type ReplacedBuildRequestBody struct {
+	// change_id of the open build the page showed.
+	ChangeID string `form:"change_id" json:"change_id" xml:"change_id"`
+	// started_at of the open build the page showed, exactly as get_build reported
+	// it.
+	StartedAt string `form:"started_at" json:"started_at" xml:"started_at"`
 }
 
 // ApprovalTestSourceResponseBody holds exactly one of its branch values.
@@ -6264,270 +7236,6 @@ func (u *TestsResponseBody) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
-// WorkingCopyResponseBody holds exactly one of its branch values.
-type WorkingCopyResponseBody struct {
-	kind            WorkingCopyResponseBodyKind
-	notUsed         *BuildCopyNotUsedResponseBody
-	atProjectCommit *BuildCopyAtProjectCommitResponseBody
-	notContained    *BuildCopyNotContainedResponseBody
-	dirty           *BuildCopyDirtyResponseBody
-}
-
-// WorkingCopyResponseBodyKind records which WorkingCopyResponseBody branch is selected.
-type WorkingCopyResponseBodyKind string
-
-const (
-	// WorkingCopyResponseBodyKindNotUsed identifies the not_used branch.
-	WorkingCopyResponseBodyKindNotUsed WorkingCopyResponseBodyKind = "not_used"
-	// WorkingCopyResponseBodyKindAtProjectCommit identifies the at_project_commit branch.
-	WorkingCopyResponseBodyKindAtProjectCommit WorkingCopyResponseBodyKind = "at_project_commit"
-	// WorkingCopyResponseBodyKindNotContained identifies the not_contained branch.
-	WorkingCopyResponseBodyKindNotContained WorkingCopyResponseBodyKind = "not_contained"
-	// WorkingCopyResponseBodyKindDirty identifies the dirty branch.
-	WorkingCopyResponseBodyKindDirty WorkingCopyResponseBodyKind = "dirty"
-)
-
-// Kind returns the selected branch.
-func (u WorkingCopyResponseBody) Kind() WorkingCopyResponseBodyKind {
-	return u.kind
-}
-
-// NewWorkingCopyResponseBodyNotUsed constructs WorkingCopyResponseBody with the not_used branch set.
-func NewWorkingCopyResponseBodyNotUsed(v *BuildCopyNotUsedResponseBody) WorkingCopyResponseBody {
-	return WorkingCopyResponseBody{
-		kind:    WorkingCopyResponseBodyKindNotUsed,
-		notUsed: v,
-	}
-}
-
-// AsNotUsed returns the value when the not_used branch is selected.
-func (u WorkingCopyResponseBody) AsNotUsed() (_ *BuildCopyNotUsedResponseBody, ok bool) {
-	if u.kind != WorkingCopyResponseBodyKindNotUsed {
-		return
-	}
-	return u.notUsed, true
-}
-
-// SetNotUsed selects the not_used branch and stores v.
-func (u *WorkingCopyResponseBody) SetNotUsed(v *BuildCopyNotUsedResponseBody) {
-	*u = WorkingCopyResponseBody{
-		kind:    WorkingCopyResponseBodyKindNotUsed,
-		notUsed: v,
-	}
-}
-
-// NewWorkingCopyResponseBodyAtProjectCommit constructs WorkingCopyResponseBody with the at_project_commit branch set.
-func NewWorkingCopyResponseBodyAtProjectCommit(v *BuildCopyAtProjectCommitResponseBody) WorkingCopyResponseBody {
-	return WorkingCopyResponseBody{
-		kind:            WorkingCopyResponseBodyKindAtProjectCommit,
-		atProjectCommit: v,
-	}
-}
-
-// AsAtProjectCommit returns the value when the at_project_commit branch is selected.
-func (u WorkingCopyResponseBody) AsAtProjectCommit() (_ *BuildCopyAtProjectCommitResponseBody, ok bool) {
-	if u.kind != WorkingCopyResponseBodyKindAtProjectCommit {
-		return
-	}
-	return u.atProjectCommit, true
-}
-
-// SetAtProjectCommit selects the at_project_commit branch and stores v.
-func (u *WorkingCopyResponseBody) SetAtProjectCommit(v *BuildCopyAtProjectCommitResponseBody) {
-	*u = WorkingCopyResponseBody{
-		kind:            WorkingCopyResponseBodyKindAtProjectCommit,
-		atProjectCommit: v,
-	}
-}
-
-// NewWorkingCopyResponseBodyNotContained constructs WorkingCopyResponseBody with the not_contained branch set.
-func NewWorkingCopyResponseBodyNotContained(v *BuildCopyNotContainedResponseBody) WorkingCopyResponseBody {
-	return WorkingCopyResponseBody{
-		kind:         WorkingCopyResponseBodyKindNotContained,
-		notContained: v,
-	}
-}
-
-// AsNotContained returns the value when the not_contained branch is selected.
-func (u WorkingCopyResponseBody) AsNotContained() (_ *BuildCopyNotContainedResponseBody, ok bool) {
-	if u.kind != WorkingCopyResponseBodyKindNotContained {
-		return
-	}
-	return u.notContained, true
-}
-
-// SetNotContained selects the not_contained branch and stores v.
-func (u *WorkingCopyResponseBody) SetNotContained(v *BuildCopyNotContainedResponseBody) {
-	*u = WorkingCopyResponseBody{
-		kind:         WorkingCopyResponseBodyKindNotContained,
-		notContained: v,
-	}
-}
-
-// NewWorkingCopyResponseBodyDirty constructs WorkingCopyResponseBody with the dirty branch set.
-func NewWorkingCopyResponseBodyDirty(v *BuildCopyDirtyResponseBody) WorkingCopyResponseBody {
-	return WorkingCopyResponseBody{
-		kind:  WorkingCopyResponseBodyKindDirty,
-		dirty: v,
-	}
-}
-
-// AsDirty returns the value when the dirty branch is selected.
-func (u WorkingCopyResponseBody) AsDirty() (_ *BuildCopyDirtyResponseBody, ok bool) {
-	if u.kind != WorkingCopyResponseBodyKindDirty {
-		return
-	}
-	return u.dirty, true
-}
-
-// SetDirty selects the dirty branch and stores v.
-func (u *WorkingCopyResponseBody) SetDirty(v *BuildCopyDirtyResponseBody) {
-	*u = WorkingCopyResponseBody{
-		kind:  WorkingCopyResponseBodyKindDirty,
-		dirty: v,
-	}
-}
-
-// Validate ensures exactly one valid branch is selected.
-func (u WorkingCopyResponseBody) Validate() error {
-	_, err := u.Value()
-	return err
-}
-
-// Value returns the selected branch value, or the same selection error as Validate.
-// Go templates can read this method directly; an invalid selection stops execution.
-func (u WorkingCopyResponseBody) Value() (any, error) {
-	switch u.kind {
-	case "":
-		return nil, goa.InvalidEnumValueError("state", "", []any{
-			string(WorkingCopyResponseBodyKindNotUsed),
-			string(WorkingCopyResponseBodyKindAtProjectCommit),
-			string(WorkingCopyResponseBodyKindNotContained),
-			string(WorkingCopyResponseBodyKindDirty),
-		})
-	case WorkingCopyResponseBodyKindNotUsed:
-		if u.notUsed == nil {
-			return nil, goa.MissingFieldError("value", "WorkingCopyResponseBody")
-		}
-		return u.notUsed, nil
-	case WorkingCopyResponseBodyKindAtProjectCommit:
-		if u.atProjectCommit == nil {
-			return nil, goa.MissingFieldError("value", "WorkingCopyResponseBody")
-		}
-		return u.atProjectCommit, nil
-	case WorkingCopyResponseBodyKindNotContained:
-		if u.notContained == nil {
-			return nil, goa.MissingFieldError("value", "WorkingCopyResponseBody")
-		}
-		return u.notContained, nil
-	case WorkingCopyResponseBodyKindDirty:
-		if u.dirty == nil {
-			return nil, goa.MissingFieldError("value", "WorkingCopyResponseBody")
-		}
-		return u.dirty, nil
-	default:
-		return nil, goa.InvalidEnumValueError("state", u.kind, []any{
-			string(WorkingCopyResponseBodyKindNotUsed),
-			string(WorkingCopyResponseBodyKindAtProjectCommit),
-			string(WorkingCopyResponseBodyKindNotContained),
-			string(WorkingCopyResponseBodyKindDirty),
-		})
-	}
-}
-
-// MarshalJSON writes the selected object branch beside its discriminator.
-func (u WorkingCopyResponseBody) MarshalJSON() ([]byte, error) {
-	value, err := u.Value()
-	if err != nil {
-		return nil, err
-	}
-	data, err := json.Marshal(value)
-	if err != nil {
-		return nil, err
-	}
-	var fields map[string]json.RawMessage
-	if err := json.Unmarshal(data, &fields); err != nil {
-		return nil, err
-	}
-	if fields == nil {
-		return nil, goa.InvalidFieldTypeError("state", nil, "non-null JSON object")
-	}
-	if _, exists := fields["state"]; exists {
-		return nil, fmt.Errorf("WorkingCopyResponseBody branch already contains discriminator %q", "state")
-	}
-	tag, err := json.Marshal(string(u.kind))
-	if err != nil {
-		return nil, err
-	}
-	fields["state"] = tag
-	return json.Marshal(fields)
-}
-
-// UnmarshalJSON reads the discriminator and decodes its declared object branch.
-func (u *WorkingCopyResponseBody) UnmarshalJSON(data []byte) error {
-	var fields map[string]json.RawMessage
-	if err := json.Unmarshal(data, &fields); err != nil {
-		return err
-	}
-	tag, exists := fields["state"]
-	if !exists {
-		return goa.MissingFieldError("state", "WorkingCopyResponseBody")
-	}
-	if bytes.Equal(bytes.TrimSpace(tag), []byte("null")) {
-		return goa.InvalidFieldTypeError("state", nil, "JSON string")
-	}
-	var raw struct {
-		Type  string
-		Value json.RawMessage
-	}
-	if err := json.Unmarshal(tag, &raw.Type); err != nil {
-		return err
-	}
-	delete(fields, "state")
-	value, err := json.Marshal(fields)
-	if err != nil {
-		return err
-	}
-	raw.Value = value
-	switch raw.Type {
-	case string(WorkingCopyResponseBodyKindNotUsed):
-		var v *BuildCopyNotUsedResponseBody
-		if err := json.Unmarshal(raw.Value, &v); err != nil {
-			return err
-		}
-		u.SetNotUsed(v)
-	case string(WorkingCopyResponseBodyKindAtProjectCommit):
-		var v *BuildCopyAtProjectCommitResponseBody
-		if err := json.Unmarshal(raw.Value, &v); err != nil {
-			return err
-		}
-		u.SetAtProjectCommit(v)
-	case string(WorkingCopyResponseBodyKindNotContained):
-		var v *BuildCopyNotContainedResponseBody
-		if err := json.Unmarshal(raw.Value, &v); err != nil {
-			return err
-		}
-		u.SetNotContained(v)
-	case string(WorkingCopyResponseBodyKindDirty):
-		var v *BuildCopyDirtyResponseBody
-		if err := json.Unmarshal(raw.Value, &v); err != nil {
-			return err
-		}
-		u.SetDirty(v)
-	default:
-		if raw.Type == "" {
-			return goa.MissingFieldError("state", "WorkingCopyResponseBody")
-		}
-		return goa.InvalidEnumValueError("state", raw.Type, []any{
-			string(WorkingCopyResponseBodyKindNotUsed),
-			string(WorkingCopyResponseBodyKindAtProjectCommit),
-			string(WorkingCopyResponseBodyKindNotContained),
-			string(WorkingCopyResponseBodyKindDirty),
-		})
-	}
-	return nil
-}
-
 // WrittenTestsResponseBody holds exactly one of its branch values.
 type WrittenTestsResponseBody struct {
 	kind           WrittenTestsResponseBodyKind
@@ -6964,6 +7672,18 @@ func NewStartBuildRequestBody(p *surla.StartBuildPayload) *StartBuildRequestBody
 	body := &StartBuildRequestBody{
 		RequestRevision: p.RequestRevision,
 	}
+	if p.Replaces != nil {
+		body.Replaces = marshalSurlaReplacedBuildToReplacedBuildRequestBody(p.Replaces)
+	}
+	return body
+}
+
+// NewDropBuildRequestBody builds the HTTP request body from the payload of the
+// "drop_build" endpoint of the "surla" service.
+func NewDropBuildRequestBody(p *surla.DropBuildPayload) *DropBuildRequestBody {
+	body := &DropBuildRequestBody{
+		StartedAt: p.StartedAt,
+	}
 	return body
 }
 
@@ -7053,6 +7773,21 @@ func NewProposeChangeChangeCardResultOK(body *ProposeChangeResponseBody) *surla.
 	}
 	if body.ProposedRevision != nil {
 		v.ProposedRevision = unmarshalProposedRevisionItemResponseBodyToSurlaProposedRevisionItem(body.ProposedRevision)
+	}
+
+	return v
+}
+
+// NewProposeChangeDraftedBeforeDrop builds a surla service propose_change
+// endpoint drafted_before_drop error.
+func NewProposeChangeDraftedBeforeDrop(body *ProposeChangeDraftedBeforeDropResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
 	}
 
 	return v
@@ -7170,9 +7905,9 @@ func NewReviseChangeChangeCardResultOK(body *ReviseChangeResponseBody) *surla.Ch
 	return v
 }
 
-// NewReviseChangeNotFound builds a surla service revise_change endpoint
-// not_found error.
-func NewReviseChangeNotFound(body *ReviseChangeNotFoundResponseBody) *goa.ServiceError {
+// NewReviseChangeDraftedBeforeDrop builds a surla service revise_change
+// endpoint drafted_before_drop error.
+func NewReviseChangeDraftedBeforeDrop(body *ReviseChangeDraftedBeforeDropResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -7188,6 +7923,21 @@ func NewReviseChangeNotFound(body *ReviseChangeNotFoundResponseBody) *goa.Servic
 // NewReviseChangeConflict builds a surla service revise_change endpoint
 // conflict error.
 func NewReviseChangeConflict(body *ReviseChangeConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewReviseChangeNotFound builds a surla service revise_change endpoint
+// not_found error.
+func NewReviseChangeNotFound(body *ReviseChangeNotFoundResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -8099,9 +8849,54 @@ func NewVerifyChangeVerificationStatusResultOK(body *VerifyChangeResponseBody) *
 	return v
 }
 
-// NewVerifyChangeNotFound builds a surla service verify_change endpoint
-// not_found error.
-func NewVerifyChangeNotFound(body *VerifyChangeNotFoundResponseBody) *goa.ServiceError {
+// NewVerifyChangeAssignmentUnread builds a surla service verify_change
+// endpoint assignment_unread error.
+func NewVerifyChangeAssignmentUnread(body *VerifyChangeAssignmentUnreadResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewVerifyChangeWorkingFolderMissing builds a surla service verify_change
+// endpoint working_folder_missing error.
+func NewVerifyChangeWorkingFolderMissing(body *VerifyChangeWorkingFolderMissingResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewVerifyChangeBuildBranchMismatch builds a surla service verify_change
+// endpoint build_branch_mismatch error.
+func NewVerifyChangeBuildBranchMismatch(body *VerifyChangeBuildBranchMismatchResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewVerifyChangeDesignChangedOutside builds a surla service verify_change
+// endpoint design_changed_outside error.
+func NewVerifyChangeDesignChangedOutside(body *VerifyChangeDesignChangedOutsideResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -8162,6 +8957,40 @@ func NewVerifyChangeTestsNotAccepted(body *VerifyChangeTestsNotAcceptedResponseB
 // NewVerifyChangeNoTestLayout builds a surla service verify_change endpoint
 // no_test_layout error.
 func NewVerifyChangeNoTestLayout(body *VerifyChangeNoTestLayoutResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewVerifyChangeCopyOffBranch builds a surla service verify_change endpoint
+// copy_off_branch error.
+func NewVerifyChangeCopyOffBranch(body *VerifyChangeCopyOffBranchResponseBody) *surla.CopyOffBranch {
+	v := &surla.CopyOffBranch{
+		Name:             *body.Name,
+		Message:          *body.Message,
+		Branch:           body.Branch,
+		BuildBranch:      body.BuildBranch,
+		Operation:        *body.Operation,
+		UncommittedCount: *body.UncommittedCount,
+	}
+	v.Uncommitted = make([]string, len(body.Uncommitted))
+	for i, val := range body.Uncommitted {
+		v.Uncommitted[i] = val
+	}
+
+	return v
+}
+
+// NewVerifyChangeNotFound builds a surla service verify_change endpoint
+// not_found error.
+func NewVerifyChangeNotFound(body *VerifyChangeNotFoundResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -8445,9 +9274,9 @@ func NewApproveMergeChangeCardResultOK(body *ApproveMergeResponseBody) *surla.Ch
 	return v
 }
 
-// NewApproveMergeNotFound builds a surla service approve_merge endpoint
-// not_found error.
-func NewApproveMergeNotFound(body *ApproveMergeNotFoundResponseBody) *goa.ServiceError {
+// NewApproveMergeBuildBranchMismatch builds a surla service approve_merge
+// endpoint build_branch_mismatch error.
+func NewApproveMergeBuildBranchMismatch(body *ApproveMergeBuildBranchMismatchResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -8493,6 +9322,21 @@ func NewApproveMergeNoBuild(body *ApproveMergeNoBuildResponseBody) *goa.ServiceE
 // NewApproveMergeTestsNotAccepted builds a surla service approve_merge
 // endpoint tests_not_accepted error.
 func NewApproveMergeTestsNotAccepted(body *ApproveMergeTestsNotAcceptedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewApproveMergeNotFound builds a surla service approve_merge endpoint
+// not_found error.
+func NewApproveMergeNotFound(body *ApproveMergeNotFoundResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -8856,6 +9700,100 @@ func NewGenerateCodeResultOK(body *GenerateCodeResponseBody) *surla.GenerateCode
 	return v
 }
 
+// NewGenerateCodeNoBuild builds a surla service generate_code endpoint
+// no_build error.
+func NewGenerateCodeNoBuild(body *GenerateCodeNoBuildResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGenerateCodeAssignmentUnread builds a surla service generate_code
+// endpoint assignment_unread error.
+func NewGenerateCodeAssignmentUnread(body *GenerateCodeAssignmentUnreadResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGenerateCodeWorkingFolderMissing builds a surla service generate_code
+// endpoint working_folder_missing error.
+func NewGenerateCodeWorkingFolderMissing(body *GenerateCodeWorkingFolderMissingResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGenerateCodeConflict builds a surla service generate_code endpoint
+// conflict error.
+func NewGenerateCodeConflict(body *GenerateCodeConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGenerateCodeCopyOffBranch builds a surla service generate_code endpoint
+// copy_off_branch error.
+func NewGenerateCodeCopyOffBranch(body *GenerateCodeCopyOffBranchResponseBody) *surla.CopyOffBranch {
+	v := &surla.CopyOffBranch{
+		Name:             *body.Name,
+		Message:          *body.Message,
+		Branch:           body.Branch,
+		BuildBranch:      body.BuildBranch,
+		Operation:        *body.Operation,
+		UncommittedCount: *body.UncommittedCount,
+	}
+	v.Uncommitted = make([]string, len(body.Uncommitted))
+	for i, val := range body.Uncommitted {
+		v.Uncommitted[i] = val
+	}
+
+	return v
+}
+
+// NewGenerateCodeMissingModules builds a surla service generate_code endpoint
+// missing_modules error.
+func NewGenerateCodeMissingModules(body *GenerateCodeMissingModulesResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
 // NewGenerateCodeUnprocessable builds a surla service generate_code endpoint
 // unprocessable error.
 func NewGenerateCodeUnprocessable(body *GenerateCodeUnprocessableResponseBody) *goa.ServiceError {
@@ -8908,6 +9846,70 @@ func NewCheckProjectResultOK(body *CheckProjectResponseBody) *surla.CheckProject
 		OpID:    *body.OpID,
 		Passed:  *body.Passed,
 		Message: *body.Message,
+	}
+
+	return v
+}
+
+// NewCheckProjectNoBuild builds a surla service check_project endpoint
+// no_build error.
+func NewCheckProjectNoBuild(body *CheckProjectNoBuildResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewCheckProjectAssignmentUnread builds a surla service check_project
+// endpoint assignment_unread error.
+func NewCheckProjectAssignmentUnread(body *CheckProjectAssignmentUnreadResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewCheckProjectWorkingFolderMissing builds a surla service check_project
+// endpoint working_folder_missing error.
+func NewCheckProjectWorkingFolderMissing(body *CheckProjectWorkingFolderMissingResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewCheckProjectCopyOffBranch builds a surla service check_project endpoint
+// copy_off_branch error.
+func NewCheckProjectCopyOffBranch(body *CheckProjectCopyOffBranchResponseBody) *surla.CopyOffBranch {
+	v := &surla.CopyOffBranch{
+		Name:             *body.Name,
+		Message:          *body.Message,
+		Branch:           body.Branch,
+		BuildBranch:      body.BuildBranch,
+		Operation:        *body.Operation,
+		UncommittedCount: *body.UncommittedCount,
+	}
+	v.Uncommitted = make([]string, len(body.Uncommitted))
+	for i, val := range body.Uncommitted {
+		v.Uncommitted[i] = val
 	}
 
 	return v
@@ -8983,6 +9985,70 @@ func NewUpdateDependenciesResultOK(body *UpdateDependenciesResponseBody) *surla.
 	v.FilesWritten = make([]string, len(body.FilesWritten))
 	for i, val := range body.FilesWritten {
 		v.FilesWritten[i] = val
+	}
+
+	return v
+}
+
+// NewUpdateDependenciesNoBuild builds a surla service update_dependencies
+// endpoint no_build error.
+func NewUpdateDependenciesNoBuild(body *UpdateDependenciesNoBuildResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewUpdateDependenciesAssignmentUnread builds a surla service
+// update_dependencies endpoint assignment_unread error.
+func NewUpdateDependenciesAssignmentUnread(body *UpdateDependenciesAssignmentUnreadResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewUpdateDependenciesWorkingFolderMissing builds a surla service
+// update_dependencies endpoint working_folder_missing error.
+func NewUpdateDependenciesWorkingFolderMissing(body *UpdateDependenciesWorkingFolderMissingResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewUpdateDependenciesCopyOffBranch builds a surla service
+// update_dependencies endpoint copy_off_branch error.
+func NewUpdateDependenciesCopyOffBranch(body *UpdateDependenciesCopyOffBranchResponseBody) *surla.CopyOffBranch {
+	v := &surla.CopyOffBranch{
+		Name:             *body.Name,
+		Message:          *body.Message,
+		Branch:           body.Branch,
+		BuildBranch:      body.BuildBranch,
+		Operation:        *body.Operation,
+		UncommittedCount: *body.UncommittedCount,
+	}
+	v.Uncommitted = make([]string, len(body.Uncommitted))
+	for i, val := range body.Uncommitted {
+		v.Uncommitted[i] = val
 	}
 
 	return v
@@ -9174,6 +10240,7 @@ func NewListTracesForbidden(body *ListTracesForbiddenResponseBody) *goa.ServiceE
 // endpoint result from a HTTP "OK" response.
 func NewRefreshStoryStoryRefreshResultOK(body *RefreshStoryResponseBody) *surla.StoryRefreshResult {
 	v := &surla.StoryRefreshResult{
+		DraftFolder:    *body.DraftFolder,
 		OpID:           body.OpID,
 		State:          *body.State,
 		SnapshotDigest: body.SnapshotDigest,
@@ -9256,6 +10323,7 @@ func NewRefreshStoryForbidden(body *RefreshStoryForbiddenResponseBody) *goa.Serv
 // endpoint result from a HTTP "OK" response.
 func NewGetStoryRefreshResultOK(body *GetStoryRefreshResponseBody) *surla.StoryRefreshResult {
 	v := &surla.StoryRefreshResult{
+		DraftFolder:    *body.DraftFolder,
 		OpID:           body.OpID,
 		State:          *body.State,
 		SnapshotDigest: body.SnapshotDigest,
@@ -9292,6 +10360,92 @@ func NewGetStoryRefreshNotImplemented(body *GetStoryRefreshNotImplementedRespons
 // NewGetStoryRefreshForbidden builds a surla service get_story_refresh
 // endpoint forbidden error.
 func NewGetStoryRefreshForbidden(body *GetStoryRefreshForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewUpdateDraftDraftUpdateResultOK builds a "surla" service "update_draft"
+// endpoint result from a HTTP "OK" response.
+func NewUpdateDraftDraftUpdateResultOK(body *UpdateDraftResponseBody) *surla.DraftUpdateResult {
+	v := &surla.DraftUpdateResult{
+		DraftFolder: *body.DraftFolder,
+	}
+	v.Taken = make([]string, len(body.Taken))
+	for i, val := range body.Taken {
+		v.Taken[i] = val
+	}
+	v.Merged = make([]string, len(body.Merged))
+	for i, val := range body.Merged {
+		v.Merged[i] = val
+	}
+	v.ToCorrect = make([]*surla.DraftCorrection, len(body.ToCorrect))
+	for i, val := range body.ToCorrect {
+		if val == nil {
+			v.ToCorrect[i] = nil
+			continue
+		}
+		v.ToCorrect[i] = unmarshalDraftCorrectionResponseBodyToSurlaDraftCorrection(val)
+	}
+
+	return v
+}
+
+// NewUpdateDraftUnprocessable builds a surla service update_draft endpoint
+// unprocessable error.
+func NewUpdateDraftUnprocessable(body *UpdateDraftUnprocessableResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewUpdateDraftNotImplemented builds a surla service update_draft endpoint
+// not_implemented error.
+func NewUpdateDraftNotImplemented(body *UpdateDraftNotImplementedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewUpdateDraftUnavailable builds a surla service update_draft endpoint
+// unavailable error.
+func NewUpdateDraftUnavailable(body *UpdateDraftUnavailableResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewUpdateDraftForbidden builds a surla service update_draft endpoint
+// forbidden error.
+func NewUpdateDraftForbidden(body *UpdateDraftForbiddenResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -9579,44 +10733,6 @@ func NewStartBuildResultOK(body *StartBuildResponseBody) *surla.StartBuildResult
 		u.SetUnavailable((*surla.BuildTeamUnavailable)(obj))
 		v.Team = u
 	}
-	switch string(body.WorkingCopy.Kind()) {
-	case "not_used":
-		actual, _ := body.WorkingCopy.AsNotUsed()
-		var obj *surla.BuildCopyNotUsed
-		if actual != nil {
-			obj = unmarshalBuildCopyNotUsedResponseBodyToSurlaBuildCopyNotUsed(actual)
-		}
-		u := v.WorkingCopy
-		u.SetNotUsed((*surla.BuildCopyNotUsed)(obj))
-		v.WorkingCopy = u
-	case "at_project_commit":
-		actual, _ := body.WorkingCopy.AsAtProjectCommit()
-		var obj *surla.BuildCopyAtProjectCommit
-		if actual != nil {
-			obj = unmarshalBuildCopyAtProjectCommitResponseBodyToSurlaBuildCopyAtProjectCommit(actual)
-		}
-		u := v.WorkingCopy
-		u.SetAtProjectCommit((*surla.BuildCopyAtProjectCommit)(obj))
-		v.WorkingCopy = u
-	case "not_contained":
-		actual, _ := body.WorkingCopy.AsNotContained()
-		var obj *surla.BuildCopyNotContained
-		if actual != nil {
-			obj = unmarshalBuildCopyNotContainedResponseBodyToSurlaBuildCopyNotContained(actual)
-		}
-		u := v.WorkingCopy
-		u.SetNotContained((*surla.BuildCopyNotContained)(obj))
-		v.WorkingCopy = u
-	case "dirty":
-		actual, _ := body.WorkingCopy.AsDirty()
-		var obj *surla.BuildCopyDirty
-		if actual != nil {
-			obj = unmarshalBuildCopyDirtyResponseBodyToSurlaBuildCopyDirty(actual)
-		}
-		u := v.WorkingCopy
-		u.SetDirty((*surla.BuildCopyDirty)(obj))
-		v.WorkingCopy = u
-	}
 
 	return v
 }
@@ -9756,6 +10872,62 @@ func NewStartBuildWorkingCopyBusy(body *StartBuildWorkingCopyBusyResponseBody) *
 	return v
 }
 
+// NewStartBuildDraftedBeforeDrop builds a surla service start_build endpoint
+// drafted_before_drop error.
+func NewStartBuildDraftedBeforeDrop(body *StartBuildDraftedBeforeDropResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewStartBuildDesignChangedOutside builds a surla service start_build
+// endpoint design_changed_outside error.
+func NewStartBuildDesignChangedOutside(body *StartBuildDesignChangedOutsideResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewStartBuildPreviousChangeOpen builds a surla service start_build endpoint
+// previous_change_open error.
+func NewStartBuildPreviousChangeOpen(body *StartBuildPreviousChangeOpenResponseBody) *surla.OpenBuildRefusal {
+	v := &surla.OpenBuildRefusal{
+		Name:     *body.Name,
+		Message:  *body.Message,
+		ChangeID: *body.ChangeID,
+	}
+	v.Build = unmarshalStartedBuildResponseBodyToSurlaStartedBuild(body.Build)
+
+	return v
+}
+
+// NewStartBuildUnfinishedBuildOpen builds a surla service start_build endpoint
+// unfinished_build_open error.
+func NewStartBuildUnfinishedBuildOpen(body *StartBuildUnfinishedBuildOpenResponseBody) *surla.OpenBuildRefusal {
+	v := &surla.OpenBuildRefusal{
+		Name:     *body.Name,
+		Message:  *body.Message,
+		ChangeID: *body.ChangeID,
+	}
+	v.Build = unmarshalStartedBuildResponseBodyToSurlaStartedBuild(body.Build)
+
+	return v
+}
+
 // NewStartBuildUnprocessable builds a surla service start_build endpoint
 // unprocessable error.
 func NewStartBuildUnprocessable(body *StartBuildUnprocessableResponseBody) *goa.ServiceError {
@@ -9819,6 +10991,109 @@ func NewStartBuildUnavailable(body *StartBuildUnavailableResponseBody) *goa.Serv
 // NewStartBuildForbidden builds a surla service start_build endpoint forbidden
 // error.
 func NewStartBuildForbidden(body *StartBuildForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewDropBuildChangeBuildOK builds a "surla" service "drop_build" endpoint
+// result from a HTTP "OK" response.
+func NewDropBuildChangeBuildOK(body *DropBuildResponseBody) *surla.ChangeBuild {
+	v := &surla.ChangeBuild{
+		ChangeID: *body.ChangeID,
+	}
+	switch string(body.Build.Kind()) {
+	case "not_started":
+		actual, _ := body.Build.AsNotStarted()
+		var obj *surla.BuildNotStarted
+		if actual != nil {
+			obj = unmarshalBuildNotStartedResponseBodyToSurlaBuildNotStarted(actual)
+		}
+		u := v.Build
+		u.SetNotStarted((*surla.BuildNotStarted)(obj))
+		v.Build = u
+	case "started":
+		actual, _ := body.Build.AsStarted()
+		var obj *surla.StartedBuild
+		if actual != nil {
+			obj = unmarshalStartedBuildResponseBodyToSurlaStartedBuild(actual)
+		}
+		u := v.Build
+		u.SetStarted((*surla.StartedBuild)(obj))
+		v.Build = u
+	}
+
+	return v
+}
+
+// NewDropBuildNotFound builds a surla service drop_build endpoint not_found
+// error.
+func NewDropBuildNotFound(body *DropBuildNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewDropBuildConflict builds a surla service drop_build endpoint conflict
+// error.
+func NewDropBuildConflict(body *DropBuildConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewDropBuildBuildChanged builds a surla service drop_build endpoint
+// build_changed error.
+func NewDropBuildBuildChanged(body *DropBuildBuildChangedResponseBody) *surla.OpenBuildRefusal {
+	v := &surla.OpenBuildRefusal{
+		Name:     *body.Name,
+		Message:  *body.Message,
+		ChangeID: *body.ChangeID,
+	}
+	v.Build = unmarshalStartedBuildResponseBodyToSurlaStartedBuild(body.Build)
+
+	return v
+}
+
+// NewDropBuildNotImplemented builds a surla service drop_build endpoint
+// not_implemented error.
+func NewDropBuildNotImplemented(body *DropBuildNotImplementedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewDropBuildForbidden builds a surla service drop_build endpoint forbidden
+// error.
+func NewDropBuildForbidden(body *DropBuildForbiddenResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -9993,6 +11268,8 @@ func NewGetBuilderAssignmentBuilderAssignmentOK(body *GetBuilderAssignmentRespon
 		RequestRevision: *body.RequestRevision,
 		InForce:         *body.InForce,
 		Read:            *body.Read,
+		WorkingFolder:   *body.WorkingFolder,
+		GoworkOff:       *body.GoworkOff,
 	}
 	switch string(body.WrittenTests.Kind()) {
 	case "not_used":
@@ -10022,6 +11299,70 @@ func NewGetBuilderAssignmentBuilderAssignmentOK(body *GetBuilderAssignmentRespon
 		u := v.WrittenTests
 		u.SetAccepted((*surla.TestsAccepted)(obj))
 		v.WrittenTests = u
+	}
+
+	return v
+}
+
+// NewGetBuilderAssignmentNoBuild builds a surla service get_builder_assignment
+// endpoint no_build error.
+func NewGetBuilderAssignmentNoBuild(body *GetBuilderAssignmentNoBuildResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetBuilderAssignmentWorkingCopyBusy builds a surla service
+// get_builder_assignment endpoint working_copy_busy error.
+func NewGetBuilderAssignmentWorkingCopyBusy(body *GetBuilderAssignmentWorkingCopyBusyResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetBuilderAssignmentWorkingFolderMissing builds a surla service
+// get_builder_assignment endpoint working_folder_missing error.
+func NewGetBuilderAssignmentWorkingFolderMissing(body *GetBuilderAssignmentWorkingFolderMissingResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetBuilderAssignmentCopyOffBranch builds a surla service
+// get_builder_assignment endpoint copy_off_branch error.
+func NewGetBuilderAssignmentCopyOffBranch(body *GetBuilderAssignmentCopyOffBranchResponseBody) *surla.CopyOffBranch {
+	v := &surla.CopyOffBranch{
+		Name:             *body.Name,
+		Message:          *body.Message,
+		Branch:           body.Branch,
+		BuildBranch:      body.BuildBranch,
+		Operation:        *body.Operation,
+		UncommittedCount: *body.UncommittedCount,
+	}
+	v.Uncommitted = make([]string, len(body.Uncommitted))
+	for i, val := range body.Uncommitted {
+		v.Uncommitted[i] = val
 	}
 
 	return v
@@ -10144,6 +11485,70 @@ func NewGetTestWriterAssignmentTestWriterAssignmentOK(body *GetTestWriterAssignm
 	return v
 }
 
+// NewGetTestWriterAssignmentNoBuild builds a surla service
+// get_test_writer_assignment endpoint no_build error.
+func NewGetTestWriterAssignmentNoBuild(body *GetTestWriterAssignmentNoBuildResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetTestWriterAssignmentWorkingCopyBusy builds a surla service
+// get_test_writer_assignment endpoint working_copy_busy error.
+func NewGetTestWriterAssignmentWorkingCopyBusy(body *GetTestWriterAssignmentWorkingCopyBusyResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetTestWriterAssignmentWorkingFolderMissing builds a surla service
+// get_test_writer_assignment endpoint working_folder_missing error.
+func NewGetTestWriterAssignmentWorkingFolderMissing(body *GetTestWriterAssignmentWorkingFolderMissingResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetTestWriterAssignmentCopyOffBranch builds a surla service
+// get_test_writer_assignment endpoint copy_off_branch error.
+func NewGetTestWriterAssignmentCopyOffBranch(body *GetTestWriterAssignmentCopyOffBranchResponseBody) *surla.CopyOffBranch {
+	v := &surla.CopyOffBranch{
+		Name:             *body.Name,
+		Message:          *body.Message,
+		Branch:           body.Branch,
+		BuildBranch:      body.BuildBranch,
+		Operation:        *body.Operation,
+		UncommittedCount: *body.UncommittedCount,
+	}
+	v.Uncommitted = make([]string, len(body.Uncommitted))
+	for i, val := range body.Uncommitted {
+		v.Uncommitted[i] = val
+	}
+
+	return v
+}
+
 // NewGetTestWriterAssignmentNotFound builds a surla service
 // get_test_writer_assignment endpoint not_found error.
 func NewGetTestWriterAssignmentNotFound(body *GetTestWriterAssignmentNotFoundResponseBody) *goa.ServiceError {
@@ -10187,9 +11592,39 @@ func NewReportTestsFinishedTestWriterAssignmentItemOK(body *ReportTestsFinishedR
 	return v
 }
 
-// NewReportTestsFinishedNotFound builds a surla service report_tests_finished
-// endpoint not_found error.
-func NewReportTestsFinishedNotFound(body *ReportTestsFinishedNotFoundResponseBody) *goa.ServiceError {
+// NewReportTestsFinishedNoBuild builds a surla service report_tests_finished
+// endpoint no_build error.
+func NewReportTestsFinishedNoBuild(body *ReportTestsFinishedNoBuildResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewReportTestsFinishedWorkingFolderMissing builds a surla service
+// report_tests_finished endpoint working_folder_missing error.
+func NewReportTestsFinishedWorkingFolderMissing(body *ReportTestsFinishedWorkingFolderMissingResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewReportTestsFinishedAssignmentUnread builds a surla service
+// report_tests_finished endpoint assignment_unread error.
+func NewReportTestsFinishedAssignmentUnread(body *ReportTestsFinishedAssignmentUnreadResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -10205,6 +11640,40 @@ func NewReportTestsFinishedNotFound(body *ReportTestsFinishedNotFoundResponseBod
 // NewReportTestsFinishedConflict builds a surla service report_tests_finished
 // endpoint conflict error.
 func NewReportTestsFinishedConflict(body *ReportTestsFinishedConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewReportTestsFinishedCopyOffBranch builds a surla service
+// report_tests_finished endpoint copy_off_branch error.
+func NewReportTestsFinishedCopyOffBranch(body *ReportTestsFinishedCopyOffBranchResponseBody) *surla.CopyOffBranch {
+	v := &surla.CopyOffBranch{
+		Name:             *body.Name,
+		Message:          *body.Message,
+		Branch:           body.Branch,
+		BuildBranch:      body.BuildBranch,
+		Operation:        *body.Operation,
+		UncommittedCount: *body.UncommittedCount,
+	}
+	v.Uncommitted = make([]string, len(body.Uncommitted))
+	for i, val := range body.Uncommitted {
+		v.Uncommitted[i] = val
+	}
+
+	return v
+}
+
+// NewReportTestsFinishedNotFound builds a surla service report_tests_finished
+// endpoint not_found error.
+func NewReportTestsFinishedNotFound(body *ReportTestsFinishedNotFoundResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -11252,6 +12721,9 @@ func ValidateRefreshStoryResponseBody(body *RefreshStoryResponseBody) (err error
 	if body.Message == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
 	}
+	if body.DraftFolder == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("draft_folder", "body"))
+	}
 	if body.State != nil {
 		if !(*body.State == "none" || *body.State == "running" || *body.State == "succeeded" || *body.State == "failed") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.state", *body.State, []any{"none", "running", "succeeded", "failed"}))
@@ -11279,6 +12751,9 @@ func ValidateGetStoryRefreshResponseBody(body *GetStoryRefreshResponseBody) (err
 	if body.Message == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
 	}
+	if body.DraftFolder == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("draft_folder", "body"))
+	}
 	if body.State != nil {
 		if !(*body.State == "none" || *body.State == "running" || *body.State == "succeeded" || *body.State == "failed") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.state", *body.State, []any{"none", "running", "succeeded", "failed"}))
@@ -11287,6 +12762,31 @@ func ValidateGetStoryRefreshResponseBody(body *GetStoryRefreshResponseBody) (err
 	for _, e := range body.Stories {
 		if e != nil {
 			if err2 := validateStorySummaryItemResponseBody(e, "body.stories[*]"); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	return
+}
+
+// ValidateUpdateDraftResponseBody runs the validations defined on
+// UpdateDraftResponseBody
+func ValidateUpdateDraftResponseBody(body *UpdateDraftResponseBody) (err error) {
+	if body.DraftFolder == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("draft_folder", "body"))
+	}
+	if body.Taken == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("taken", "body"))
+	}
+	if body.Merged == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("merged", "body"))
+	}
+	if body.ToCorrect == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("to_correct", "body"))
+	}
+	for _, e := range body.ToCorrect {
+		if e != nil {
+			if err2 := validateDraftCorrectionResponseBody(e, "body.to_correct[*]"); err2 != nil {
 				err = goa.MergeErrors(err, err2)
 			}
 		}
@@ -11397,9 +12897,6 @@ func ValidateStartBuildResponseBody(body *StartBuildResponseBody) (err error) {
 	if body.Team == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("team", "body"))
 	}
-	if body.WorkingCopy == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("working_copy", "body"))
-	}
 	if body.Build != nil {
 		if err2 := validateStartedBuildResponseBody(body.Build, "body.build"); err2 != nil {
 			err = goa.MergeErrors(err, err2)
@@ -11443,30 +12940,28 @@ func ValidateStartBuildResponseBody(body *StartBuildResponseBody) (err error) {
 		}
 
 	}
-	if body.WorkingCopy != nil {
+	return
+}
 
-		if err2 := body.WorkingCopy.Validate(); err2 != nil {
+// ValidateDropBuildResponseBody runs the validations defined on
+// DropBuildResponseBody
+func ValidateDropBuildResponseBody(body *DropBuildResponseBody) (err error) {
+	if body.ChangeID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("change_id", "body"))
+	}
+	if body.Build == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("build", "body"))
+	}
+	if body.Build != nil {
+
+		if err2 := body.Build.Validate(); err2 != nil {
 			err = goa.MergeErrors(err, err2)
 		} else {
-			switch string(body.WorkingCopy.Kind()) {
-			case "at_project_commit":
-				actual, _ := body.WorkingCopy.AsAtProjectCommit()
+			switch string(body.Build.Kind()) {
+			case "started":
+				actual, _ := body.Build.AsStarted()
 				if actual != nil {
-					if err2 := validateBuildCopyAtProjectCommitResponseBody(actual, "body.working_copy.value"); err2 != nil {
-						err = goa.MergeErrors(err, err2)
-					}
-				}
-			case "not_contained":
-				actual, _ := body.WorkingCopy.AsNotContained()
-				if actual != nil {
-					if err2 := validateBuildCopyNotContainedResponseBody(actual, "body.working_copy.value"); err2 != nil {
-						err = goa.MergeErrors(err, err2)
-					}
-				}
-			case "dirty":
-				actual, _ := body.WorkingCopy.AsDirty()
-				if actual != nil {
-					if err2 := validateBuildCopyDirtyResponseBody(actual, "body.working_copy.value"); err2 != nil {
+					if err2 := validateStartedBuildResponseBody(actual, "body.build.value"); err2 != nil {
 						err = goa.MergeErrors(err, err2)
 					}
 				}
@@ -11574,6 +13069,12 @@ func ValidateGetBuilderAssignmentResponseBody(body *GetBuilderAssignmentResponse
 	}
 	if body.Read == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("read", "body"))
+	}
+	if body.WorkingFolder == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("working_folder", "body"))
+	}
+	if body.GoworkOff == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("gowork_off", "body"))
 	}
 	if body.WrittenTests == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("written_tests", "body"))
@@ -11736,6 +13237,30 @@ func ValidateGoldenPathForbiddenResponseBody(body *GoldenPathForbiddenResponseBo
 	return
 }
 
+// ValidateProposeChangeDraftedBeforeDropResponseBody runs the validations
+// defined on ProposeChangeDraftedBeforeDropResponseBody
+func ValidateProposeChangeDraftedBeforeDropResponseBody(body *ProposeChangeDraftedBeforeDropResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
 // ValidateProposeChangeConflictResponseBody runs the validations defined on
 // ProposeChangeConflictResponseBody
 func ValidateProposeChangeConflictResponseBody(body *ProposeChangeConflictResponseBody) (err error) {
@@ -11808,9 +13333,9 @@ func ValidateProposeChangeForbiddenResponseBody(body *ProposeChangeForbiddenResp
 	return
 }
 
-// ValidateReviseChangeNotFoundResponseBody runs the validations defined on
-// ReviseChangeNotFoundResponseBody
-func ValidateReviseChangeNotFoundResponseBody(body *ReviseChangeNotFoundResponseBody) (err error) {
+// ValidateReviseChangeDraftedBeforeDropResponseBody runs the validations
+// defined on ReviseChangeDraftedBeforeDropResponseBody
+func ValidateReviseChangeDraftedBeforeDropResponseBody(body *ReviseChangeDraftedBeforeDropResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -11835,6 +13360,30 @@ func ValidateReviseChangeNotFoundResponseBody(body *ReviseChangeNotFoundResponse
 // ValidateReviseChangeConflictResponseBody runs the validations defined on
 // ReviseChangeConflictResponseBody
 func ValidateReviseChangeConflictResponseBody(body *ReviseChangeConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateReviseChangeNotFoundResponseBody runs the validations defined on
+// ReviseChangeNotFoundResponseBody
+func ValidateReviseChangeNotFoundResponseBody(body *ReviseChangeNotFoundResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -12648,9 +14197,81 @@ func ValidateGetLiveTargetForbiddenResponseBody(body *GetLiveTargetForbiddenResp
 	return
 }
 
-// ValidateVerifyChangeNotFoundResponseBody runs the validations defined on
-// VerifyChangeNotFoundResponseBody
-func ValidateVerifyChangeNotFoundResponseBody(body *VerifyChangeNotFoundResponseBody) (err error) {
+// ValidateVerifyChangeAssignmentUnreadResponseBody runs the validations
+// defined on VerifyChangeAssignmentUnreadResponseBody
+func ValidateVerifyChangeAssignmentUnreadResponseBody(body *VerifyChangeAssignmentUnreadResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateVerifyChangeWorkingFolderMissingResponseBody runs the validations
+// defined on VerifyChangeWorkingFolderMissingResponseBody
+func ValidateVerifyChangeWorkingFolderMissingResponseBody(body *VerifyChangeWorkingFolderMissingResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateVerifyChangeBuildBranchMismatchResponseBody runs the validations
+// defined on VerifyChangeBuildBranchMismatchResponseBody
+func ValidateVerifyChangeBuildBranchMismatchResponseBody(body *VerifyChangeBuildBranchMismatchResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateVerifyChangeDesignChangedOutsideResponseBody runs the validations
+// defined on VerifyChangeDesignChangedOutsideResponseBody
+func ValidateVerifyChangeDesignChangedOutsideResponseBody(body *VerifyChangeDesignChangedOutsideResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -12747,6 +14368,64 @@ func ValidateVerifyChangeTestsNotAcceptedResponseBody(body *VerifyChangeTestsNot
 // ValidateVerifyChangeNoTestLayoutResponseBody runs the validations defined on
 // VerifyChangeNoTestLayoutResponseBody
 func ValidateVerifyChangeNoTestLayoutResponseBody(body *VerifyChangeNoTestLayoutResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateVerifyChangeCopyOffBranchResponseBody runs the validations defined
+// on VerifyChangeCopyOffBranchResponseBody
+func ValidateVerifyChangeCopyOffBranchResponseBody(body *VerifyChangeCopyOffBranchResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Operation == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("operation", "body"))
+	}
+	if body.Uncommitted == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("uncommitted", "body"))
+	}
+	if body.UncommittedCount == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("uncommitted_count", "body"))
+	}
+	if body.Operation != nil {
+		if !(*body.Operation == "none" || *body.Operation == "merge" || *body.Operation == "rebase" || *body.Operation == "am" || *body.Operation == "cherry_pick" || *body.Operation == "revert") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.operation", *body.Operation, []any{"none", "merge", "rebase", "am", "cherry_pick", "revert"}))
+		}
+	}
+	if len(body.Uncommitted) > 5 {
+		err = goa.MergeErrors(err, goa.InvalidLengthError("body.uncommitted", body.Uncommitted, len(body.Uncommitted), 5, false))
+	}
+	if body.UncommittedCount != nil {
+		if *body.UncommittedCount < 0 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.uncommitted_count", *body.UncommittedCount, 0, true))
+		}
+	}
+	return
+}
+
+// ValidateVerifyChangeNotFoundResponseBody runs the validations defined on
+// VerifyChangeNotFoundResponseBody
+func ValidateVerifyChangeNotFoundResponseBody(body *VerifyChangeNotFoundResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -12960,9 +14639,9 @@ func ValidateListVerificationsForbiddenResponseBody(body *ListVerificationsForbi
 	return
 }
 
-// ValidateApproveMergeNotFoundResponseBody runs the validations defined on
-// ApproveMergeNotFoundResponseBody
-func ValidateApproveMergeNotFoundResponseBody(body *ApproveMergeNotFoundResponseBody) (err error) {
+// ValidateApproveMergeBuildBranchMismatchResponseBody runs the validations
+// defined on ApproveMergeBuildBranchMismatchResponseBody
+func ValidateApproveMergeBuildBranchMismatchResponseBody(body *ApproveMergeBuildBranchMismatchResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -13035,6 +14714,30 @@ func ValidateApproveMergeNoBuildResponseBody(body *ApproveMergeNoBuildResponseBo
 // ValidateApproveMergeTestsNotAcceptedResponseBody runs the validations
 // defined on ApproveMergeTestsNotAcceptedResponseBody
 func ValidateApproveMergeTestsNotAcceptedResponseBody(body *ApproveMergeTestsNotAcceptedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateApproveMergeNotFoundResponseBody runs the validations defined on
+// ApproveMergeNotFoundResponseBody
+func ValidateApproveMergeNotFoundResponseBody(body *ApproveMergeNotFoundResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -13368,6 +15071,160 @@ func ValidateInitProjectForbiddenResponseBody(body *InitProjectForbiddenResponse
 	return
 }
 
+// ValidateGenerateCodeNoBuildResponseBody runs the validations defined on
+// GenerateCodeNoBuildResponseBody
+func ValidateGenerateCodeNoBuildResponseBody(body *GenerateCodeNoBuildResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGenerateCodeAssignmentUnreadResponseBody runs the validations
+// defined on GenerateCodeAssignmentUnreadResponseBody
+func ValidateGenerateCodeAssignmentUnreadResponseBody(body *GenerateCodeAssignmentUnreadResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGenerateCodeWorkingFolderMissingResponseBody runs the validations
+// defined on GenerateCodeWorkingFolderMissingResponseBody
+func ValidateGenerateCodeWorkingFolderMissingResponseBody(body *GenerateCodeWorkingFolderMissingResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGenerateCodeConflictResponseBody runs the validations defined on
+// GenerateCodeConflictResponseBody
+func ValidateGenerateCodeConflictResponseBody(body *GenerateCodeConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGenerateCodeCopyOffBranchResponseBody runs the validations defined
+// on GenerateCodeCopyOffBranchResponseBody
+func ValidateGenerateCodeCopyOffBranchResponseBody(body *GenerateCodeCopyOffBranchResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Operation == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("operation", "body"))
+	}
+	if body.Uncommitted == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("uncommitted", "body"))
+	}
+	if body.UncommittedCount == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("uncommitted_count", "body"))
+	}
+	if body.Operation != nil {
+		if !(*body.Operation == "none" || *body.Operation == "merge" || *body.Operation == "rebase" || *body.Operation == "am" || *body.Operation == "cherry_pick" || *body.Operation == "revert") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.operation", *body.Operation, []any{"none", "merge", "rebase", "am", "cherry_pick", "revert"}))
+		}
+	}
+	if len(body.Uncommitted) > 5 {
+		err = goa.MergeErrors(err, goa.InvalidLengthError("body.uncommitted", body.Uncommitted, len(body.Uncommitted), 5, false))
+	}
+	if body.UncommittedCount != nil {
+		if *body.UncommittedCount < 0 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.uncommitted_count", *body.UncommittedCount, 0, true))
+		}
+	}
+	return
+}
+
+// ValidateGenerateCodeMissingModulesResponseBody runs the validations defined
+// on GenerateCodeMissingModulesResponseBody
+func ValidateGenerateCodeMissingModulesResponseBody(body *GenerateCodeMissingModulesResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
 // ValidateGenerateCodeUnprocessableResponseBody runs the validations defined
 // on GenerateCodeUnprocessableResponseBody
 func ValidateGenerateCodeUnprocessableResponseBody(body *GenerateCodeUnprocessableResponseBody) (err error) {
@@ -13436,6 +15293,112 @@ func ValidateGenerateCodeForbiddenResponseBody(body *GenerateCodeForbiddenRespon
 	}
 	if body.Fault == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCheckProjectNoBuildResponseBody runs the validations defined on
+// CheckProjectNoBuildResponseBody
+func ValidateCheckProjectNoBuildResponseBody(body *CheckProjectNoBuildResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCheckProjectAssignmentUnreadResponseBody runs the validations
+// defined on CheckProjectAssignmentUnreadResponseBody
+func ValidateCheckProjectAssignmentUnreadResponseBody(body *CheckProjectAssignmentUnreadResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCheckProjectWorkingFolderMissingResponseBody runs the validations
+// defined on CheckProjectWorkingFolderMissingResponseBody
+func ValidateCheckProjectWorkingFolderMissingResponseBody(body *CheckProjectWorkingFolderMissingResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCheckProjectCopyOffBranchResponseBody runs the validations defined
+// on CheckProjectCopyOffBranchResponseBody
+func ValidateCheckProjectCopyOffBranchResponseBody(body *CheckProjectCopyOffBranchResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Operation == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("operation", "body"))
+	}
+	if body.Uncommitted == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("uncommitted", "body"))
+	}
+	if body.UncommittedCount == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("uncommitted_count", "body"))
+	}
+	if body.Operation != nil {
+		if !(*body.Operation == "none" || *body.Operation == "merge" || *body.Operation == "rebase" || *body.Operation == "am" || *body.Operation == "cherry_pick" || *body.Operation == "revert") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.operation", *body.Operation, []any{"none", "merge", "rebase", "am", "cherry_pick", "revert"}))
+		}
+	}
+	if len(body.Uncommitted) > 5 {
+		err = goa.MergeErrors(err, goa.InvalidLengthError("body.uncommitted", body.Uncommitted, len(body.Uncommitted), 5, false))
+	}
+	if body.UncommittedCount != nil {
+		if *body.UncommittedCount < 0 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.uncommitted_count", *body.UncommittedCount, 0, true))
+		}
 	}
 	return
 }
@@ -13532,6 +15495,112 @@ func ValidateCheckProjectForbiddenResponseBody(body *CheckProjectForbiddenRespon
 	}
 	if body.Fault == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateUpdateDependenciesNoBuildResponseBody runs the validations defined
+// on UpdateDependenciesNoBuildResponseBody
+func ValidateUpdateDependenciesNoBuildResponseBody(body *UpdateDependenciesNoBuildResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateUpdateDependenciesAssignmentUnreadResponseBody runs the validations
+// defined on UpdateDependenciesAssignmentUnreadResponseBody
+func ValidateUpdateDependenciesAssignmentUnreadResponseBody(body *UpdateDependenciesAssignmentUnreadResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateUpdateDependenciesWorkingFolderMissingResponseBody runs the
+// validations defined on UpdateDependenciesWorkingFolderMissingResponseBody
+func ValidateUpdateDependenciesWorkingFolderMissingResponseBody(body *UpdateDependenciesWorkingFolderMissingResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateUpdateDependenciesCopyOffBranchResponseBody runs the validations
+// defined on UpdateDependenciesCopyOffBranchResponseBody
+func ValidateUpdateDependenciesCopyOffBranchResponseBody(body *UpdateDependenciesCopyOffBranchResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Operation == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("operation", "body"))
+	}
+	if body.Uncommitted == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("uncommitted", "body"))
+	}
+	if body.UncommittedCount == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("uncommitted_count", "body"))
+	}
+	if body.Operation != nil {
+		if !(*body.Operation == "none" || *body.Operation == "merge" || *body.Operation == "rebase" || *body.Operation == "am" || *body.Operation == "cherry_pick" || *body.Operation == "revert") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.operation", *body.Operation, []any{"none", "merge", "rebase", "am", "cherry_pick", "revert"}))
+		}
+	}
+	if len(body.Uncommitted) > 5 {
+		err = goa.MergeErrors(err, goa.InvalidLengthError("body.uncommitted", body.Uncommitted, len(body.Uncommitted), 5, false))
+	}
+	if body.UncommittedCount != nil {
+		if *body.UncommittedCount < 0 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.uncommitted_count", *body.UncommittedCount, 0, true))
+		}
 	}
 	return
 }
@@ -13899,6 +15968,102 @@ func ValidateGetStoryRefreshNotImplementedResponseBody(body *GetStoryRefreshNotI
 // ValidateGetStoryRefreshForbiddenResponseBody runs the validations defined on
 // GetStoryRefreshForbiddenResponseBody
 func ValidateGetStoryRefreshForbiddenResponseBody(body *GetStoryRefreshForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateUpdateDraftUnprocessableResponseBody runs the validations defined on
+// UpdateDraftUnprocessableResponseBody
+func ValidateUpdateDraftUnprocessableResponseBody(body *UpdateDraftUnprocessableResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateUpdateDraftNotImplementedResponseBody runs the validations defined
+// on UpdateDraftNotImplementedResponseBody
+func ValidateUpdateDraftNotImplementedResponseBody(body *UpdateDraftNotImplementedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateUpdateDraftUnavailableResponseBody runs the validations defined on
+// UpdateDraftUnavailableResponseBody
+func ValidateUpdateDraftUnavailableResponseBody(body *UpdateDraftUnavailableResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateUpdateDraftForbiddenResponseBody runs the validations defined on
+// UpdateDraftForbiddenResponseBody
+func ValidateUpdateDraftForbiddenResponseBody(body *UpdateDraftForbiddenResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -14400,6 +16565,100 @@ func ValidateStartBuildWorkingCopyBusyResponseBody(body *StartBuildWorkingCopyBu
 	return
 }
 
+// ValidateStartBuildDraftedBeforeDropResponseBody runs the validations defined
+// on StartBuildDraftedBeforeDropResponseBody
+func ValidateStartBuildDraftedBeforeDropResponseBody(body *StartBuildDraftedBeforeDropResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateStartBuildDesignChangedOutsideResponseBody runs the validations
+// defined on StartBuildDesignChangedOutsideResponseBody
+func ValidateStartBuildDesignChangedOutsideResponseBody(body *StartBuildDesignChangedOutsideResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateStartBuildPreviousChangeOpenResponseBody runs the validations
+// defined on StartBuildPreviousChangeOpenResponseBody
+func ValidateStartBuildPreviousChangeOpenResponseBody(body *StartBuildPreviousChangeOpenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.ChangeID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("change_id", "body"))
+	}
+	if body.Build == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("build", "body"))
+	}
+	if body.Build != nil {
+		if err2 := validateStartedBuildResponseBody(body.Build, "body.build"); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	return
+}
+
+// ValidateStartBuildUnfinishedBuildOpenResponseBody runs the validations
+// defined on StartBuildUnfinishedBuildOpenResponseBody
+func ValidateStartBuildUnfinishedBuildOpenResponseBody(body *StartBuildUnfinishedBuildOpenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.ChangeID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("change_id", "body"))
+	}
+	if body.Build == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("build", "body"))
+	}
+	if body.Build != nil {
+		if err2 := validateStartedBuildResponseBody(body.Build, "body.build"); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	return
+}
+
 // ValidateStartBuildUnprocessableResponseBody runs the validations defined on
 // StartBuildUnprocessableResponseBody
 func ValidateStartBuildUnprocessableResponseBody(body *StartBuildUnprocessableResponseBody) (err error) {
@@ -14499,6 +16758,125 @@ func ValidateStartBuildUnavailableResponseBody(body *StartBuildUnavailableRespon
 // ValidateStartBuildForbiddenResponseBody runs the validations defined on
 // StartBuildForbiddenResponseBody
 func ValidateStartBuildForbiddenResponseBody(body *StartBuildForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateDropBuildNotFoundResponseBody runs the validations defined on
+// DropBuildNotFoundResponseBody
+func ValidateDropBuildNotFoundResponseBody(body *DropBuildNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateDropBuildConflictResponseBody runs the validations defined on
+// DropBuildConflictResponseBody
+func ValidateDropBuildConflictResponseBody(body *DropBuildConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateDropBuildBuildChangedResponseBody runs the validations defined on
+// DropBuildBuildChangedResponseBody
+func ValidateDropBuildBuildChangedResponseBody(body *DropBuildBuildChangedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.ChangeID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("change_id", "body"))
+	}
+	if body.Build == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("build", "body"))
+	}
+	if body.Build != nil {
+		if err2 := validateStartedBuildResponseBody(body.Build, "body.build"); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	return
+}
+
+// ValidateDropBuildNotImplementedResponseBody runs the validations defined on
+// DropBuildNotImplementedResponseBody
+func ValidateDropBuildNotImplementedResponseBody(body *DropBuildNotImplementedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateDropBuildForbiddenResponseBody runs the validations defined on
+// DropBuildForbiddenResponseBody
+func ValidateDropBuildForbiddenResponseBody(body *DropBuildForbiddenResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -14664,6 +17042,112 @@ func ValidateListBuilderAssignmentsForbiddenResponseBody(body *ListBuilderAssign
 	return
 }
 
+// ValidateGetBuilderAssignmentNoBuildResponseBody runs the validations defined
+// on GetBuilderAssignmentNoBuildResponseBody
+func ValidateGetBuilderAssignmentNoBuildResponseBody(body *GetBuilderAssignmentNoBuildResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetBuilderAssignmentWorkingCopyBusyResponseBody runs the validations
+// defined on GetBuilderAssignmentWorkingCopyBusyResponseBody
+func ValidateGetBuilderAssignmentWorkingCopyBusyResponseBody(body *GetBuilderAssignmentWorkingCopyBusyResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetBuilderAssignmentWorkingFolderMissingResponseBody runs the
+// validations defined on GetBuilderAssignmentWorkingFolderMissingResponseBody
+func ValidateGetBuilderAssignmentWorkingFolderMissingResponseBody(body *GetBuilderAssignmentWorkingFolderMissingResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetBuilderAssignmentCopyOffBranchResponseBody runs the validations
+// defined on GetBuilderAssignmentCopyOffBranchResponseBody
+func ValidateGetBuilderAssignmentCopyOffBranchResponseBody(body *GetBuilderAssignmentCopyOffBranchResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Operation == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("operation", "body"))
+	}
+	if body.Uncommitted == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("uncommitted", "body"))
+	}
+	if body.UncommittedCount == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("uncommitted_count", "body"))
+	}
+	if body.Operation != nil {
+		if !(*body.Operation == "none" || *body.Operation == "merge" || *body.Operation == "rebase" || *body.Operation == "am" || *body.Operation == "cherry_pick" || *body.Operation == "revert") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.operation", *body.Operation, []any{"none", "merge", "rebase", "am", "cherry_pick", "revert"}))
+		}
+	}
+	if len(body.Uncommitted) > 5 {
+		err = goa.MergeErrors(err, goa.InvalidLengthError("body.uncommitted", body.Uncommitted, len(body.Uncommitted), 5, false))
+	}
+	if body.UncommittedCount != nil {
+		if *body.UncommittedCount < 0 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.uncommitted_count", *body.UncommittedCount, 0, true))
+		}
+	}
+	return
+}
+
 // ValidateGetBuilderAssignmentNotFoundResponseBody runs the validations
 // defined on GetBuilderAssignmentNotFoundResponseBody
 func ValidateGetBuilderAssignmentNotFoundResponseBody(body *GetBuilderAssignmentNotFoundResponseBody) (err error) {
@@ -14736,6 +17220,113 @@ func ValidateListTestWriterAssignmentsForbiddenResponseBody(body *ListTestWriter
 	return
 }
 
+// ValidateGetTestWriterAssignmentNoBuildResponseBody runs the validations
+// defined on GetTestWriterAssignmentNoBuildResponseBody
+func ValidateGetTestWriterAssignmentNoBuildResponseBody(body *GetTestWriterAssignmentNoBuildResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetTestWriterAssignmentWorkingCopyBusyResponseBody runs the
+// validations defined on GetTestWriterAssignmentWorkingCopyBusyResponseBody
+func ValidateGetTestWriterAssignmentWorkingCopyBusyResponseBody(body *GetTestWriterAssignmentWorkingCopyBusyResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetTestWriterAssignmentWorkingFolderMissingResponseBody runs the
+// validations defined on
+// GetTestWriterAssignmentWorkingFolderMissingResponseBody
+func ValidateGetTestWriterAssignmentWorkingFolderMissingResponseBody(body *GetTestWriterAssignmentWorkingFolderMissingResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetTestWriterAssignmentCopyOffBranchResponseBody runs the
+// validations defined on GetTestWriterAssignmentCopyOffBranchResponseBody
+func ValidateGetTestWriterAssignmentCopyOffBranchResponseBody(body *GetTestWriterAssignmentCopyOffBranchResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Operation == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("operation", "body"))
+	}
+	if body.Uncommitted == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("uncommitted", "body"))
+	}
+	if body.UncommittedCount == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("uncommitted_count", "body"))
+	}
+	if body.Operation != nil {
+		if !(*body.Operation == "none" || *body.Operation == "merge" || *body.Operation == "rebase" || *body.Operation == "am" || *body.Operation == "cherry_pick" || *body.Operation == "revert") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.operation", *body.Operation, []any{"none", "merge", "rebase", "am", "cherry_pick", "revert"}))
+		}
+	}
+	if len(body.Uncommitted) > 5 {
+		err = goa.MergeErrors(err, goa.InvalidLengthError("body.uncommitted", body.Uncommitted, len(body.Uncommitted), 5, false))
+	}
+	if body.UncommittedCount != nil {
+		if *body.UncommittedCount < 0 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.uncommitted_count", *body.UncommittedCount, 0, true))
+		}
+	}
+	return
+}
+
 // ValidateGetTestWriterAssignmentNotFoundResponseBody runs the validations
 // defined on GetTestWriterAssignmentNotFoundResponseBody
 func ValidateGetTestWriterAssignmentNotFoundResponseBody(body *GetTestWriterAssignmentNotFoundResponseBody) (err error) {
@@ -14784,9 +17375,57 @@ func ValidateGetTestWriterAssignmentForbiddenResponseBody(body *GetTestWriterAss
 	return
 }
 
-// ValidateReportTestsFinishedNotFoundResponseBody runs the validations defined
-// on ReportTestsFinishedNotFoundResponseBody
-func ValidateReportTestsFinishedNotFoundResponseBody(body *ReportTestsFinishedNotFoundResponseBody) (err error) {
+// ValidateReportTestsFinishedNoBuildResponseBody runs the validations defined
+// on ReportTestsFinishedNoBuildResponseBody
+func ValidateReportTestsFinishedNoBuildResponseBody(body *ReportTestsFinishedNoBuildResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateReportTestsFinishedWorkingFolderMissingResponseBody runs the
+// validations defined on ReportTestsFinishedWorkingFolderMissingResponseBody
+func ValidateReportTestsFinishedWorkingFolderMissingResponseBody(body *ReportTestsFinishedWorkingFolderMissingResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateReportTestsFinishedAssignmentUnreadResponseBody runs the validations
+// defined on ReportTestsFinishedAssignmentUnreadResponseBody
+func ValidateReportTestsFinishedAssignmentUnreadResponseBody(body *ReportTestsFinishedAssignmentUnreadResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -14811,6 +17450,64 @@ func ValidateReportTestsFinishedNotFoundResponseBody(body *ReportTestsFinishedNo
 // ValidateReportTestsFinishedConflictResponseBody runs the validations defined
 // on ReportTestsFinishedConflictResponseBody
 func ValidateReportTestsFinishedConflictResponseBody(body *ReportTestsFinishedConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateReportTestsFinishedCopyOffBranchResponseBody runs the validations
+// defined on ReportTestsFinishedCopyOffBranchResponseBody
+func ValidateReportTestsFinishedCopyOffBranchResponseBody(body *ReportTestsFinishedCopyOffBranchResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Operation == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("operation", "body"))
+	}
+	if body.Uncommitted == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("uncommitted", "body"))
+	}
+	if body.UncommittedCount == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("uncommitted_count", "body"))
+	}
+	if body.Operation != nil {
+		if !(*body.Operation == "none" || *body.Operation == "merge" || *body.Operation == "rebase" || *body.Operation == "am" || *body.Operation == "cherry_pick" || *body.Operation == "revert") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.operation", *body.Operation, []any{"none", "merge", "rebase", "am", "cherry_pick", "revert"}))
+		}
+	}
+	if len(body.Uncommitted) > 5 {
+		err = goa.MergeErrors(err, goa.InvalidLengthError("body.uncommitted", body.Uncommitted, len(body.Uncommitted), 5, false))
+	}
+	if body.UncommittedCount != nil {
+		if *body.UncommittedCount < 0 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.uncommitted_count", *body.UncommittedCount, 0, true))
+		}
+	}
+	return
+}
+
+// ValidateReportTestsFinishedNotFoundResponseBody runs the validations defined
+// on ReportTestsFinishedNotFoundResponseBody
+func ValidateReportTestsFinishedNotFoundResponseBody(body *ReportTestsFinishedNotFoundResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -16544,6 +19241,30 @@ func validateTraceSpanResponseBody(body *TraceSpanResponseBody, path string) (er
 	return
 }
 
+// ValidateDraftCorrectionResponseBody runs the validations defined on
+// DraftCorrection
+func ValidateDraftCorrectionResponseBody(body *DraftCorrectionResponseBody) (err error) {
+	if body.Path == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("path", "body"))
+	}
+	if body.Problem == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("problem", "body"))
+	}
+	return
+}
+
+// validateDraftCorrectionResponseBody checks DraftCorrection and reports
+// errors using the path supplied by its caller
+func validateDraftCorrectionResponseBody(body *DraftCorrectionResponseBody, path string) (err error) {
+	if body.Path == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("path", path))
+	}
+	if body.Problem == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("problem", path))
+	}
+	return
+}
+
 // ValidateTeamRoleStateResponseBody runs the validations defined on
 // TeamRoleState
 func ValidateTeamRoleStateResponseBody(body *TeamRoleStateResponseBody) (err error) {
@@ -16586,8 +19307,8 @@ func ValidateTeamRoleStateResponseBody(body *TeamRoleStateResponseBody) (err err
 		}
 	}
 	if body.Assignment != nil {
-		if !(*body.Assignment == "unread" || *body.Assignment == "nothing_owed" || *body.Assignment == "unknown") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.assignment", *body.Assignment, []any{"unread", "nothing_owed", "unknown"}))
+		if !(*body.Assignment == "unread" || *body.Assignment == "nothing_owed" || *body.Assignment == "no_work" || *body.Assignment == "unknown") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.assignment", *body.Assignment, []any{"unread", "nothing_owed", "no_work", "unknown"}))
 		}
 	}
 	return
@@ -16635,8 +19356,8 @@ func validateTeamRoleStateResponseBody(body *TeamRoleStateResponseBody, path str
 		}
 	}
 	if body.Assignment != nil {
-		if !(*body.Assignment == "unread" || *body.Assignment == "nothing_owed" || *body.Assignment == "unknown") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError(path+".assignment", *body.Assignment, []any{"unread", "nothing_owed", "unknown"}))
+		if !(*body.Assignment == "unread" || *body.Assignment == "nothing_owed" || *body.Assignment == "no_work" || *body.Assignment == "unknown") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError(path+".assignment", *body.Assignment, []any{"unread", "nothing_owed", "no_work", "unknown"}))
 		}
 	}
 	return
@@ -17358,100 +20079,6 @@ func validateBuildTeamUnavailableResponseBody(body *BuildTeamUnavailableResponse
 	return
 }
 
-// ValidateBuildCopyAtProjectCommitResponseBody runs the validations defined on
-// BuildCopyAtProjectCommit
-func ValidateBuildCopyAtProjectCommitResponseBody(body *BuildCopyAtProjectCommitResponseBody) (err error) {
-	if body.Commit == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("commit", "body"))
-	}
-	if body.Commit != nil {
-		err = goa.MergeErrors(err, goa.ValidatePattern("body.commit", *body.Commit, "^([0-9a-f]{40}|[0-9a-f]{64})$"))
-	}
-	return
-}
-
-// validateBuildCopyAtProjectCommitResponseBody checks BuildCopyAtProjectCommit
-// and reports errors using the path supplied by its caller
-func validateBuildCopyAtProjectCommitResponseBody(body *BuildCopyAtProjectCommitResponseBody, path string) (err error) {
-	if body.Commit == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("commit", path))
-	}
-	if body.Commit != nil {
-		err = goa.MergeErrors(err, goa.ValidatePattern(path+".commit", *body.Commit, "^([0-9a-f]{40}|[0-9a-f]{64})$"))
-	}
-	return
-}
-
-// ValidateBuildCopyNotContainedResponseBody runs the validations defined on
-// BuildCopyNotContained
-func ValidateBuildCopyNotContainedResponseBody(body *BuildCopyNotContainedResponseBody) (err error) {
-	if body.Commit == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("commit", "body"))
-	}
-	if body.Step == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("step", "body"))
-	}
-	if body.Commit != nil {
-		err = goa.MergeErrors(err, goa.ValidatePattern("body.commit", *body.Commit, "^([0-9a-f]{40}|[0-9a-f]{64})$"))
-	}
-	if body.Step != nil {
-		if utf8.RuneCountInString(*body.Step) < 1 {
-			err = goa.MergeErrors(err, goa.InvalidLengthError("body.step", *body.Step, utf8.RuneCountInString(*body.Step), 1, true))
-		}
-		if utf8.RuneCountInString(*body.Step) > 512 {
-			err = goa.MergeErrors(err, goa.InvalidLengthError("body.step", *body.Step, utf8.RuneCountInString(*body.Step), 512, false))
-		}
-	}
-	return
-}
-
-// validateBuildCopyNotContainedResponseBody checks BuildCopyNotContained and
-// reports errors using the path supplied by its caller
-func validateBuildCopyNotContainedResponseBody(body *BuildCopyNotContainedResponseBody, path string) (err error) {
-	if body.Commit == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("commit", path))
-	}
-	if body.Step == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("step", path))
-	}
-	if body.Commit != nil {
-		err = goa.MergeErrors(err, goa.ValidatePattern(path+".commit", *body.Commit, "^([0-9a-f]{40}|[0-9a-f]{64})$"))
-	}
-	if body.Step != nil {
-		if utf8.RuneCountInString(*body.Step) < 1 {
-			err = goa.MergeErrors(err, goa.InvalidLengthError(path+".step", *body.Step, utf8.RuneCountInString(*body.Step), 1, true))
-		}
-		if utf8.RuneCountInString(*body.Step) > 512 {
-			err = goa.MergeErrors(err, goa.InvalidLengthError(path+".step", *body.Step, utf8.RuneCountInString(*body.Step), 512, false))
-		}
-	}
-	return
-}
-
-// ValidateBuildCopyDirtyResponseBody runs the validations defined on
-// BuildCopyDirty
-func ValidateBuildCopyDirtyResponseBody(body *BuildCopyDirtyResponseBody) (err error) {
-	if body.Commit == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("commit", "body"))
-	}
-	if body.Commit != nil {
-		err = goa.MergeErrors(err, goa.ValidatePattern("body.commit", *body.Commit, "^([0-9a-f]{40}|[0-9a-f]{64})$"))
-	}
-	return
-}
-
-// validateBuildCopyDirtyResponseBody checks BuildCopyDirty and reports errors
-// using the path supplied by its caller
-func validateBuildCopyDirtyResponseBody(body *BuildCopyDirtyResponseBody, path string) (err error) {
-	if body.Commit == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("commit", path))
-	}
-	if body.Commit != nil {
-		err = goa.MergeErrors(err, goa.ValidatePattern(path+".commit", *body.Commit, "^([0-9a-f]{40}|[0-9a-f]{64})$"))
-	}
-	return
-}
-
 // ValidateBuilderAssignmentResponseBody runs the validations defined on
 // BuilderAssignment
 func ValidateBuilderAssignmentResponseBody(body *BuilderAssignmentResponseBody) (err error) {
@@ -17466,6 +20093,12 @@ func ValidateBuilderAssignmentResponseBody(body *BuilderAssignmentResponseBody) 
 	}
 	if body.Read == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("read", "body"))
+	}
+	if body.WorkingFolder == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("working_folder", "body"))
+	}
+	if body.GoworkOff == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("gowork_off", "body"))
 	}
 	if body.WrittenTests == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("written_tests", "body"))
@@ -17504,6 +20137,12 @@ func validateBuilderAssignmentResponseBody(body *BuilderAssignmentResponseBody, 
 	}
 	if body.Read == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("read", path))
+	}
+	if body.WorkingFolder == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("working_folder", path))
+	}
+	if body.GoworkOff == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("gowork_off", path))
 	}
 	if body.WrittenTests == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("written_tests", path))
@@ -17945,5 +20584,25 @@ func validateDesignSnapshotRequestBody(body *DesignSnapshotRequestBody, path str
 	if body.Files == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("files", path))
 	}
+	return
+}
+
+// ValidateReplacedBuildRequestBody runs the validations defined on
+// ReplacedBuild
+func ValidateReplacedBuildRequestBody(body *ReplacedBuildRequestBody) (err error) {
+	if utf8.RuneCountInString(body.ChangeID) < 1 {
+		err = goa.MergeErrors(err, goa.InvalidLengthError("body.change_id", body.ChangeID, utf8.RuneCountInString(body.ChangeID), 1, true))
+	}
+	err = goa.MergeErrors(err, goa.ValidateFormat("body.started_at", body.StartedAt, goa.FormatDateTime))
+	return
+}
+
+// validateReplacedBuildRequestBody checks ReplacedBuild and reports errors
+// using the path supplied by its caller
+func validateReplacedBuildRequestBody(body *ReplacedBuildRequestBody, path string) (err error) {
+	if utf8.RuneCountInString(body.ChangeID) < 1 {
+		err = goa.MergeErrors(err, goa.InvalidLengthError(path+".change_id", body.ChangeID, utf8.RuneCountInString(body.ChangeID), 1, true))
+	}
+	err = goa.MergeErrors(err, goa.ValidateFormat(path+".started_at", body.StartedAt, goa.FormatDateTime))
 	return
 }

@@ -12,7 +12,7 @@ paths:
             tags:
                 - surla
             summary: list_builder_assignments surla
-            description: List the builder's assignments, one per change the user built, most recently started first, each with its change, revision and whether it was read. Reading the list records nothing.
+            description: List the builder's assignment for the project's open build while that role has work; empty otherwise. Reading the list records nothing and moves no working copy.
             operationId: surla#list_builder_assignments
             responses:
                 "200":
@@ -24,15 +24,19 @@ paths:
                             example:
                                 assignments:
                                     - change_id: Et quos quod.
+                                      gowork_off: false
                                       in_force: true
                                       read: false
                                       request_revision: Incidunt enim in.
+                                      working_folder: Nihil omnis.
                                       written_tests:
                                         state: not_used
                                     - change_id: Et quos quod.
+                                      gowork_off: false
                                       in_force: true
                                       read: false
                                       request_revision: Incidunt enim in.
+                                      working_folder: Nihil omnis.
                                       written_tests:
                                         state: not_used
                 "403":
@@ -53,7 +57,7 @@ paths:
             tags:
                 - surla
             summary: get_builder_assignment surla
-            description: Return the builder's assignment for a change in full and record that the builder read it at its revision. A new build of the change replaces the assignment, which then counts as unread.
+            description: 'Return the builder''s assignment for the open build''s change in full and record that the builder read it at its revision. The first read of a new build joins the builder''s working copy to the build''s own branch, surla/build-<n> at the build''s base: a copy with uncommitted work on an earlier build branch first gets that work committed there with the message "Left uncommitted when change <change_id> started"; a copy with nothing uncommitted joins from any branch. A copy with uncommitted work on any other branch, or a Git operation in progress, is refused with copy_off_branch, and a copy whose turn is held with working_copy_busy; nothing is marked read then. Building the change again makes the assignment unread.'
             operationId: surla#get_builder_assignment
             parameters:
                 - name: change_id
@@ -75,9 +79,11 @@ paths:
                                 $ref: '#/components/schemas/BuilderAssignment'
                             example:
                                 change_id: Aut impedit id.
+                                gowork_off: true
                                 in_force: true
                                 read: false
                                 request_revision: Excepturi corporis laborum quod unde adipisci.
+                                working_folder: Consectetur ut qui minima molestiae dolor quo.
                                 written_tests:
                                     checked_at: "1991-07-08T15:55:19Z"
                                     commit: c4e7e8317b51c71f0f9e4ed6ec6f50cba39197a8
@@ -97,7 +103,7 @@ paths:
                                 temporary: false
                                 timeout: false
                 "404":
-                    description: 'not_found: You have no build assignment for this change_id.'
+                    description: 'not_found: You have no build assignment for this change_id: it is not the change of the project''s open build.'
                     content:
                         application/vnd.goa.error:
                             schema:
@@ -109,12 +115,25 @@ paths:
                                 name: not_found
                                 temporary: false
                                 timeout: false
+                "409":
+                    description: 'working_folder_missing: Your working folder is missing; ask the user to build this change again on the views page.'
+                    content:
+                        application/vnd.goa.error:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                            example:
+                                fault: false
+                                id: 123abc
+                                message: parameter 'p' must be an integer
+                                name: working_folder_missing
+                                temporary: false
+                                timeout: false
     /assignments/test-writer:
         get:
             tags:
                 - surla
             summary: list_test_writer_assignments surla
-            description: List the test writer's assignments, one per change the user built, most recently started first, each with its change, revision, state and whether it was read. Reading the list records nothing.
+            description: List the test writer's assignment for the project's open build while that role has work; empty otherwise. Reading the list records nothing and moves no working copy.
             operationId: surla#list_test_writer_assignments
             responses:
                 "200":
@@ -173,7 +192,7 @@ paths:
             tags:
                 - surla
             summary: get_test_writer_assignment surla
-            description: Return the test writer's assignment for a change in full (the working folder, the design and Story as agreed at the built revision, the user's confirmed answers, confirmation examples and preserved behaviors of that revision, the tests it requires, and the state with the text of any findings) and record that the test writer read it at its revision. Later revisions do not change what the build saved. A new build of the change replaces the assignment, which then counts as unread, and so does each verdict of Surla's check.
+            description: Return the test writer's assignment for a change in full (the working folder, the design and Story as agreed at the built revision, the user's confirmed answers, confirmation examples and preserved behaviors of that revision, the tests it requires, and the state with the text of any findings) and record that the test writer read it at its revision. Later revisions do not change what the build saved. A new build of the change replaces the assignment, which then counts as unread, and so does each verdict of Surla's check. The first read of a new build joins your working copy to the build's branch, surla/tests-<n> at the build's base. A read that marks the assignment read also writes the required tests' generated folder into your copy. A copy with uncommitted work on an earlier tests build branch first gets that work committed there; a clean copy joins from any branch. Other uncommitted work or a Git operation is refused with copy_off_branch; nothing is marked read then.
             operationId: surla#get_test_writer_assignment
             parameters:
                 - name: change_id
@@ -1373,6 +1392,19 @@ paths:
                                 name: not_found
                                 temporary: false
                                 timeout: false
+                "409":
+                    description: 'working_folder_missing: Your working folder is missing; ask the user to build this change again on the views page.'
+                    content:
+                        application/vnd.goa.error:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                            example:
+                                fault: false
+                                id: 123abc
+                                message: parameter 'p' must be an integer
+                                name: working_folder_missing
+                                temporary: false
+                                timeout: false
     /assignments/test-writer/{change_id}/finished:
         post:
             tags:
@@ -1397,7 +1429,7 @@ paths:
                 content:
                     application/json:
                         schema:
-                            $ref: '#/components/schemas/StartBuildRequestBody'
+                            $ref: '#/components/schemas/ReportTestsFinishedRequestBody'
                         example:
                             request_revision: td
             responses:
@@ -3113,7 +3145,7 @@ paths:
             tags:
                 - surla
             summary: get_build surla
-            description: 'Return a change''s usable build for the current test source: not_started when none exists, including a builder-only build whose stored verification settings were removed; start a new build on the views page. Otherwise return the revision built, when, whether the builder read its assignment, the test writer''s state (with the number of Surla''s findings, never their text) and whether it read its assignment, and whether the build is for the change''s revision in force. Reading changes nothing.'
+            description: 'Return a change''s build when it is the project''s open build, with whether the user has taken it: building, passed with the commits to merge, merged, or dropped. not_started when it is not, including a builder-only build whose stored verification settings were removed; start a new build on the views page. Otherwise return the revision built, when, whether each role read its assignment, the test writer''s state with the number of Surla''s findings (never their text), and whether the build is for the change''s revision in force. Reading changes nothing; deciding merged reads the project''s repository.'
             operationId: surla#get_build
             parameters:
                 - name: change_id
@@ -3180,7 +3212,7 @@ paths:
             tags:
                 - surla
             summary: start_build surla
-            description: The user starts building a confirmed change at its agreed revision, the one in force, on the project owner's bound team; a revision the guide proposed beside it is built only after the user adopts it. Surla checks the change and prerequisites without effects, opens and refreshes the test-writer copy when used, checks the revision again, and saves the build with the agreed Story and design and the agreed revision's confirmed answers, examples and preserved behaviors. Surla immediately registers the build's exact roles and folders before generating required tests. Stored verification settings use only the builder and remove a former test writer. Building again replaces the build and both unread assignments. A refused start saves no build and registers no role; a refusal at the second revision check may leave a reusable working copy. Generation trouble and team warnings after saving leave the saved build intact. Accepted work belongs to the server and survives client disconnection. Copy work and generation have a five-minute limit under the project's turn; after that turn is released, bringing the team up has its own 45-second limit. A server stop after saving leaves the saved assignment or verdict; build again to complete it. get_build reads the saved build without this start's transient team or copy outcome.
+            description: 'The user starts building a confirmed change at its agreed revision, the one in force, on the project owner''s bound team. A project has one open build. Building another change is refused with previous_change_open until the user has merged a passed run of the open build into the branch checked out in the project folder or dropped it with drop_build. Building the open build''s own change again keeps its number and base and replaces its assignments; while no verification of it has passed, replaces must name the open build the page showed, else unfinished_build_open; once that build is merged or dropped, building its change again starts a new build. Surla first checks, without effects, merge or drop, a revision drafted before a drop, and the agreed design against the project''s commit; numbers a new build one more than any surla/build-<n> or surla/tests-<n> branch and the open build; and saves it with its base, the project''s commit, by one rename. Then it makes a missing working copy (.surla-build, and .surla-tests when a test writer is used) on the build''s own branch and registers the builder and the test writer in their copies. Build moves no existing copy: each joins the build''s branch when its worker first reads the assignment. A refused start saves nothing; after the save, a server stop leaves the build saved, and building again makes a missing copy and registers the roles. After the start''s turns are released, bringing the team up has its own 45-second limit. get_build reads the saved build without this start''s transient team outcome.'
             operationId: surla#start_build
             parameters:
                 - name: change_id
@@ -3201,6 +3233,9 @@ paths:
                         schema:
                             $ref: '#/components/schemas/StartBuildRequestBody'
                         example:
+                            replaces:
+                                change_id: "61"
+                                started_at: "2008-09-02T12:30:42Z"
                             request_revision: q9g
             responses:
                 "200":
@@ -3228,9 +3263,6 @@ paths:
                                     count: 6792670643739432319
                                     state: ambiguous_space
                                     step: "4"
-                                working_copy:
-                                    commit: ec29a5a9f72070759902c1221b387505217f3ffa
-                                    state: dirty
                 "403":
                     description: 'forbidden: The authenticated caller may not perform this operation or does not own the resource.'
                     content:
@@ -3258,7 +3290,7 @@ paths:
                                 temporary: false
                                 timeout: false
                 "409":
-                    description: 'working_copy_busy: Another build is starting or a test check holds the project''s working-copy turn; nothing was saved. Start the build again when that has ended.'
+                    description: 'design_changed_outside: A design file at the project''s commit is not a version the agreed revision was made from: it was changed outside Surla; nothing was saved. The message names the file and the commit. When the change is uncommitted, commit the design change in the project folder first; then the guide calls update_draft, refresh_story and revise_change, and the user adopts the revision and builds.'
                     content:
                         application/vnd.goa.error:
                             schema:
@@ -3267,7 +3299,7 @@ paths:
                                 fault: false
                                 id: 123abc
                                 message: parameter 'p' must be an integer
-                                name: working_copy_busy
+                                name: design_changed_outside
                                 temporary: false
                                 timeout: false
                 "422":
@@ -3307,6 +3339,109 @@ paths:
                                 id: 123abc
                                 message: parameter 'p' must be an integer
                                 name: unavailable
+                                temporary: false
+                                timeout: false
+    /changes/{change_id}/build/drop:
+        post:
+            tags:
+                - surla
+            summary: drop_build surla
+            description: 'The user drops the project''s open build on the views page because the change will not be taken: Surla builds nothing on it, and another change can be built. The request names the build the page showed; a different open build (a second tab built or dropped meanwhile) is refused with its facts, and a build already dropped is refused. Drop writes one record, the start of the guide''s made-from list naming the dropped build, by one rename: its only write. It changes no working copy, branch, draft or file of the user''s: the build''s commits stay on its branches, and the guide''s next refresh_story makes the draft again from the project folder. From then on no role has work for the build, and the builder''s and the test writer''s tools tell them it was dropped. A merged build may be dropped too. The result is the dropped build as get_build reports it.'
+            operationId: surla#drop_build
+            parameters:
+                - name: change_id
+                  in: path
+                  description: change_id of the open build the page showed.
+                  required: true
+                  schema:
+                    type: string
+                    description: change_id of the open build the page showed.
+                    example: v8
+                    minLength: 1
+                  example: v8
+            requestBody:
+                description: Request body for drop_build.
+                required: true
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/VerificationRunning'
+                        example:
+                            started_at: "2003-06-25T17:10:05Z"
+            responses:
+                "200":
+                    description: OK response.
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ChangeBuild'
+                            example:
+                                build:
+                                    builder:
+                                        read: false
+                                    in_force: true
+                                    request_revision: Facilis nam.
+                                    required_test_count: 3718558671237355663
+                                    started_at: "2011-11-02T08:04:42Z"
+                                    state: started
+                                    test_writer:
+                                        read: true
+                                        report: 7108203204833819401
+                                        tests:
+                                            checked_at: "1972-09-26T18:55:16Z"
+                                            finding_count: 5254885262627643994
+                                            state: needs_changes
+                                change_id: Dolor quidem expedita optio ea.
+                "403":
+                    description: 'forbidden: The authenticated caller may not perform this operation or does not own the resource.'
+                    content:
+                        application/vnd.goa.error:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                            example:
+                                fault: false
+                                id: 123abc
+                                message: parameter 'p' must be an integer
+                                name: forbidden
+                                temporary: false
+                                timeout: false
+                "404":
+                    description: 'not_found: No Change Card exists with this change_id, or the project has no open build.'
+                    content:
+                        application/vnd.goa.error:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                            example:
+                                fault: false
+                                id: 123abc
+                                message: parameter 'p' must be an integer
+                                name: not_found
+                                temporary: false
+                                timeout: false
+                "409":
+                    description: 'conflict: The build was already dropped; nothing changed.'
+                    content:
+                        application/vnd.goa.error:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                            example:
+                                fault: false
+                                id: 123abc
+                                message: parameter 'p' must be an integer
+                                name: conflict
+                                temporary: false
+                                timeout: false
+                "501":
+                    description: 'not_implemented: Start this project with surla to bind the team; nothing changed.'
+                    content:
+                        application/vnd.goa.error:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                            example:
+                                fault: false
+                                id: 123abc
+                                message: parameter 'p' must be an integer
+                                name: not_implemented
                                 temporary: false
                                 timeout: false
     /changes/{change_id}/build/findings:
@@ -3674,7 +3809,7 @@ paths:
             tags:
                 - surla
             summary: verify_change surla
-            description: 'Start Checkpoint 4 verification of a candidate commit for the owner''s confirmed Change Card revision and return its run_id at once. With verification settings stored with surla verification set, the run uses the operator''s evaluator and needs no build. Otherwise the user''s build of that revision must exist and Surla must have accepted its tests: the run builds the candidate''s programs from the candidate commit and runs the generated entry point of the tests at the accepted commit. The server builds the commit in Surla''s sandbox and runs the tests in a separate process that keeps running when the caller disconnects or the server restarts; get_verification reads its state. Only the builder view of the report is ever returned, with where its tests came from.'
+            description: 'Start Checkpoint 4 verification of a candidate commit for the owner''s confirmed Change Card revision and return its run_id at once. The change''s build must be the project''s open build, not dropped, and the builder''s working copy must have joined it. Before any run Surla checks, with git in the project''s repository: the candidate is on the build''s branch surla/build-<n>, descends from the build''s base and is not that base, and holds no commit of another build''s branch that the base lacks; its design/ files, read by the design walk in gofmt form, are the build''s design source version for version; and every design version at its merge base with the project''s commit is one the revision was made from. With verification settings stored with surla verification set, the run uses the operator''s evaluator. Otherwise Surla must have accepted the build''s tests: the run builds the candidate''s programs from the candidate commit and runs the generated entry point of the tests at the accepted commit. The server builds the commit in Surla''s sandbox and runs the tests in a separate process that keeps running when the caller disconnects or the server restarts; get_verification reads its state. Only the builder view of the report is ever returned, with where its tests came from. A candidate the user already merged still verifies.'
             operationId: surla#verify_change
             parameters:
                 - name: change_id
@@ -3775,7 +3910,7 @@ paths:
             tags:
                 - surla
             summary: approve_merge surla
-            description: Record Checkpoint 5 approval for the owner's confirmed Change Card revision. The control plane chooses the tests' commit the same way verify_change does (the suite commit in the project's stored verification settings, or the tests Surla accepted for the change's build at request_revision), loads the verification report by digest, re-derives the report from its evidence with verify.Approve, and records the approval on the card when the report passed for candidate_commit, request_revision, and that tests' commit. When promotion settings are configured with surla promotion set (or a PromotionTarget is bound), approve_merge also checks that the staged binaries in <release_dir>/<candidate_commit>/ match the report's binary digests and records those digests in artifacts; without promotion settings, no release folder or staged binaries are required and artifacts is empty. The report's suite_id and environment are what the tests at suite_commit declared and are recorded on the approval without a separate comparison. Nothing is merged or deployed.
+            description: Record Checkpoint 5 approval for the owner's confirmed Change Card revision. The control plane chooses the tests' commit the same way verify_change does (the suite commit in the project's stored verification settings, or the tests Surla accepted for the change's build at request_revision), loads the verification report by digest, re-derives the report from its evidence with verify.Approve, and records the approval on the card when the report passed for candidate_commit, request_revision, and that tests' commit. When promotion settings are configured with surla promotion set (or a PromotionTarget is bound), approve_merge also checks that the staged binaries in <release_dir>/<candidate_commit>/ match the report's binary digests and records those digests in artifacts; without promotion settings, no release folder or staged binaries are required and artifacts is empty. The report's suite_id and environment are what the tests at suite_commit declared and are recorded on the approval without a separate comparison. Nothing is merged or deployed. It checks again, with git, that the candidate is on the build's branch, descends from its base and holds no other build's work.
             operationId: surla#approve_merge
             requestBody:
                 description: Request body for approve_merge.
@@ -9594,7 +9729,7 @@ paths:
             tags:
                 - surla
             summary: preview_architecture surla
-            description: Extract and validate the Checkpoint 2 C4 container topology, tool contracts, and Goa-AI guardrails from a candidate Goa design bound to a confirmed Change Card. Surla reads the candidate module snapshot from the bound workspace. The result reports what the design declares; it does not compare the design with the Change Card's requirements.
+            description: Return the Checkpoint 2 C4 container topology, tool contracts, and Goa-AI guardrails of a confirmed Change Card's agreed revision, from the architecture its refresh evaluated and the revision saved; it reads and evaluates no file. It refuses a design with no Goa API or Service container and an agent without positive TimeBudget and DefaultCaps(MaxToolCalls). The result reports what the design declares; it does not compare the design with the Change Card's requirements. The guide sees the architecture of an unsaved draft with surla preview -dir <draft_folder>.
             operationId: surla#preview_architecture
             requestBody:
                 description: Request body for preview_architecture.
@@ -9749,7 +9884,7 @@ paths:
                                 temporary: false
                                 timeout: false
                 "409":
-                    description: 'conflict: The Change Card is not confirmed or its request_revision does not match; confirm the card or read the current revision with get_change.'
+                    description: 'conflict: The Change Card is not confirmed, its request_revision does not match, or the agreed revision records no architecture to show; confirm the card or read the current revision with get_change.'
                     content:
                         application/vnd.goa.error:
                             schema:
@@ -9779,7 +9914,7 @@ paths:
             tags:
                 - surla
             summary: propose_change surla
-            description: Save a new Checkpoint 1 Change Card from a feature request and the caller's analysis of it. Surla checks the analysis's structure and cross-field rules, gives ambiguities the IDs <change_id>-ambiguity-NN and examples the IDs check_01, check_02, ... in list order, binds the card to the authenticated owner, records the design source (or, when story_refresh_op_id is given, reads one workspace snapshot, verifies its digest against the owner's current succeeded refresh_story operation, and records both its evaluated Stories and its design/*.go files), and computes request_revision. Every card waits for user confirmation, including a card without ambiguities. Surla runs no model for this step and cannot judge whether the analysis is complete or correct.
+            description: 'Save a new Checkpoint 1 Change Card from a feature request and the caller''s analysis of it. Surla checks the analysis''s structure and cross-field rules, gives ambiguities the IDs <change_id>-ambiguity-NN and examples the IDs check_01, check_02, ... in list order, binds the card to the authenticated owner, and computes request_revision. With story_refresh_op_id, Surla saves what that succeeded refresh_story operation evaluated: the draft''s design, Stories, architecture, go.mod and made-from list; it reads no file. A project with a go.mod requires story_refresh_op_id for a new card; with neither a go.mod nor an op_id, the card records no design. An op_id whose refresh read the draft before the user dropped a build is refused with drafted_before_drop. Every card waits for user confirmation, including a card without ambiguities. Surla runs no model for this step and cannot judge whether the analysis is complete or correct.'
             operationId: surla#propose_change
             requestBody:
                 description: Request body for propose_change.
@@ -11349,7 +11484,7 @@ paths:
                                 temporary: false
                                 timeout: false
                 "422":
-                    description: 'unprocessable: The request could not be accepted: change_id or prompt is blank, an ambiguity repeats an option, story_refresh_op_id does not name a current succeeded refresh_story operation matching the bound workspace snapshot, or the bound workspace''s design/*.go could not be read. The message says which; nothing was saved.'
+                    description: 'unprocessable: The request could not be accepted: change_id or prompt is blank, an ambiguity repeats an option, story_refresh_op_id does not name the owner''s current succeeded refresh_story operation, or the project folder holds a go.mod and story_refresh_op_id is missing. The message says which; nothing was saved.'
                     content:
                         application/vnd.goa.error:
                             schema:
@@ -11366,7 +11501,7 @@ paths:
             tags:
                 - surla
             summary: revise_change surla
-            description: 'Save the next revision of an existing Checkpoint 1 Change Card from a revised feature request and the guide''s analysis of it. Only the guide revises a change; only the user confirms or adopts a revision, with confirm_intent on the views page. The request is bound to the latest revision: the proposed revision''s request_revision when one waits, otherwise the card''s. On a card that was never confirmed, the new revision replaces it. On a confirmed card, the new revision is saved as the proposed revision beside the confirmed one, replacing any earlier proposal, and the confirmed revision stays in force with its answers, confirmation, approval, Stories and design source until the user adopts the proposal with confirm_intent or declines it. The analysis accounts for every example of the revision it revises exactly once, keeping or editing it through prior_id or dropping it through removed_example_ids. Surla keeps the IDs of kept examples, gives new examples the lowest check_NN ID neither card uses, adopts the evaluated Stories and design/*.go from the single workspace snapshot verified against story_refresh_op_id when story_refresh_op_id is given (or keeps the saved Stories and their design source together when story_refresh_op_id is omitted on a card with Stories, or records design/*.go from the bound workspace again when omitted on a card without Stories), and saves the new revision in needs_confirmation status for the user''s review. The new revision has no answers, confirmed_by or approval: earlier decisions carry over only where the analysis restates them in its summary, examples or preserved behaviors. The result is the change as get_change returns it. Surla runs no model for this step and cannot judge whether the analysis is complete or correct.'
+            description: 'Save the next revision of an existing Checkpoint 1 Change Card from a revised feature request and the guide''s analysis of it. Only the guide revises a change; only the user confirms or adopts a revision, with confirm_intent on the views page. The request is bound to the latest revision: the proposed revision''s request_revision when one waits, otherwise the card''s. On a card that was never confirmed, the new revision replaces it. On a confirmed card, the new revision is saved as the proposed revision beside the confirmed one, replacing any earlier proposal, and the confirmed revision stays in force with its answers, confirmation, approval, Stories and design source until the user adopts the proposal with confirm_intent or declines it. The analysis accounts for every example of the revision it revises exactly once, keeping or editing it through prior_id or dropping it through removed_example_ids. Surla keeps the IDs of kept examples, gives new examples the lowest check_NN ID neither card uses, adopts the evaluated draft''s design, Stories, architecture, go.mod and made-from list when story_refresh_op_id is given, without reading any file, or keeps every snapshot field of the revision it revises when it is omitted, even with zero Stories, and saves the new revision in needs_confirmation status for the user''s review. The new revision has no answers, confirmed_by or approval: earlier decisions carry over only where the analysis restates them in its summary, examples or preserved behaviors. The result is the change as get_change returns it. Surla runs no model for this step and cannot judge whether the analysis is complete or correct. A project with a go.mod refuses an omitted op_id when the revision being revised has no design. A refresh from before the user dropped a build is refused with drafted_before_drop.'
             operationId: surla#revise_change
             requestBody:
                 description: Request body for revise_change.
@@ -12966,7 +13101,7 @@ paths:
                                 temporary: false
                                 timeout: false
                 "422":
-                    description: 'unprocessable: The request could not be accepted: change_id, request_revision or prompt is blank, an ambiguity repeats an option, the analysis does not account for every example of the revision it revises exactly once, story_refresh_op_id does not name a current succeeded refresh_story operation matching the bound workspace snapshot, or the bound workspace''s design/*.go could not be read. The message says which; the card did not change.'
+                    description: 'unprocessable: The request could not be accepted: change_id, request_revision or prompt is blank, an ambiguity repeats an option, the analysis does not account for every example of the revision it revises exactly once, story_refresh_op_id does not name the owner''s current succeeded refresh_story operation, or the project folder holds a go.mod and story_refresh_op_id is missing when the revision being revised has no design. The message says which; the card did not change.'
                     content:
                         application/vnd.goa.error:
                             schema:
@@ -13573,7 +13708,7 @@ paths:
             tags:
                 - project
             summary: ensure_team project
-            description: The CLI asks the project server to ensure its team, guide credential, Herdr space and atomic launcher roster, then open the launcher only when an agent is missing. Accepted work has a bounded server-owned lifetime independent of client disconnection. Only the server management credential may call this operation; it is never an MCP tool.
+            description: The CLI asks the project server to ensure its team, guide credential, Herdr space and atomic launcher roster, then open the launcher only when the guide, or a worker role the open build needs, has no running agent. A role without work stays in the roster, and its agent finds an empty list. A failed read of who has work counts every role. Accepted work has a bounded server-owned lifetime independent of client disconnection. Only the server management credential may call this operation; it is never an MCP tool.
             operationId: project#ensure_team
             responses:
                 "200":
@@ -14195,7 +14330,7 @@ paths:
             tags:
                 - surla
             summary: check_project surla
-            description: Copy the active workspace's live files (uncommitted edits included) into a protected per-operation copy and run go test ./... for every Go module in it (without stored verification settings, leaving out the starter test module whose tests the test writer writes, and saying so), each in a Linux container with no network. Nothing in the workspace changes. Returns passed and a bounded message; read the full output with read_check_output.
+            description: Copy the builder's working folder's live files (uncommitted edits included) into a protected per-operation copy and run go test ./... for every Go module in it (without stored verification settings, leaving out the starter test module whose tests the test writer writes, and saying so), each in a Linux container with no network. Nothing in the working folder changes. Returns passed and a bounded message; read the full output with read_check_output. It reads only the builder's working copy, never the project folder. It refuses as generate_code does when no build is open, the build was dropped, the assignment was not read since the build started, or the copy is off its branch.
             operationId: surla#check_project
             responses:
                 "200":
@@ -14221,8 +14356,21 @@ paths:
                                 name: forbidden
                                 temporary: false
                                 timeout: false
+                "409":
+                    description: 'working_folder_missing: Your working folder is missing; ask the user to build this change again on the views page.'
+                    content:
+                        application/vnd.goa.error:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                            example:
+                                fault: false
+                                id: 123abc
+                                message: parameter 'p' must be an integer
+                                name: working_folder_missing
+                                temporary: false
+                                timeout: false
                 "422":
-                    description: 'unprocessable: The workspace contains no Go module.'
+                    description: 'unprocessable: The working folder contains no Go module.'
                     content:
                         application/vnd.goa.error:
                             schema:
@@ -14333,7 +14481,7 @@ paths:
             tags:
                 - surla
             summary: update_dependencies surla
-            description: Run go mod tidy for every Go module of the active workspace (without stored verification settings, leaving out the starter test module whose tests the test writer writes, and saying so) in a protected copy inside Linux containers, then write only the changed go.mod, go.sum and go.work.sum files back to the workspace through verified handles. A symlinked manifest or one edited during the call is refused for that module.
+            description: Run go mod tidy for every Go module of the builder's working folder, its own working copy of the project (without stored verification settings, leaving out the starter test module whose tests the test writer writes, and saying so) in a protected copy inside Linux containers, then write only the changed go.mod, go.sum and go.work.sum files back to the working folder through verified handles. A symlinked manifest or one edited during the call is refused for that module. It reads only the builder's working copy, never the project folder. It refuses as generate_code does when no build is open, the build was dropped, the assignment was not read since the build started, or the copy is off its branch.
             operationId: surla#update_dependencies
             responses:
                 "200":
@@ -14361,8 +14509,21 @@ paths:
                                 name: forbidden
                                 temporary: false
                                 timeout: false
+                "409":
+                    description: 'working_folder_missing: Your working folder is missing; ask the user to build this change again on the views page.'
+                    content:
+                        application/vnd.goa.error:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                            example:
+                                fault: false
+                                id: 123abc
+                                message: parameter 'p' must be an integer
+                                name: working_folder_missing
+                                temporary: false
+                                timeout: false
                 "422":
-                    description: 'unprocessable: The workspace contains no Go module.'
+                    description: 'unprocessable: The working folder contains no Go module.'
                     content:
                         application/vnd.goa.error:
                             schema:
@@ -14400,12 +14561,94 @@ paths:
                                 name: unavailable
                                 temporary: false
                                 timeout: false
+    /workspace/draft/update:
+        post:
+            tags:
+                - surla
+            summary: update_draft surla
+            description: The guide brings design changes made outside Surla into its draft, before drafting a new change and when told a design file changed in the project folder. Under the draft's lock Surla compares each design file's draft and live versions over a recorded base. The history base is the latest recorded version present in the project's committed history since the draft's start, or the starting folder version when that history supplies none. The comparison base is whichever of that history base and the outside version the draft last took was recorded later; with no previous take, it is the history base. A live version equal to the comparison base brings nothing. If the project's committed history gained a recorded version since the last take, Surla takes and reports the live version without merging it. Otherwise an outside change is taken when the draft did not change that file, merged with git merge-file when both changed it, and listed to correct when both changed the same lines or one side removed what the other changed. A draft file Go cannot parse, and a module the project's go.mod requires at another version or with another replace directive than the draft's, are listed to correct; Surla does not merge go.mod. Surla records an interrupted update so a later call can finish it without merging its result again; if the guide changed the file in between, the file is listed to correct. An uncommitted revert to an older version may bring nothing; when a build reports design_changed_outside for an uncommitted design change, the user commits the change in the project folder, then asks the guide to call update_draft, refresh_story and revise_change. Otherwise call refresh_story after this update. Takes no input.
+            operationId: surla#update_draft
+            responses:
+                "200":
+                    description: OK response.
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/DraftUpdateResult'
+                            example:
+                                draft_folder: Consequatur voluptatum pariatur.
+                                merged:
+                                    - Fugit itaque sit.
+                                    - Ratione consequatur eum ut facere.
+                                    - Iure autem optio sit quisquam.
+                                taken:
+                                    - Eveniet est architecto consequatur optio blanditiis.
+                                    - Optio cumque et hic rem expedita ratione.
+                                    - Debitis neque.
+                                    - Deleniti rem qui voluptatibus est deleniti animi.
+                                to_correct:
+                                    - path: Molestiae sunt veniam non.
+                                      problem: Cumque est.
+                                    - path: Molestiae sunt veniam non.
+                                      problem: Cumque est.
+                "403":
+                    description: 'forbidden: The authenticated caller may not perform this operation or does not own the resource.'
+                    content:
+                        application/vnd.goa.error:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                            example:
+                                fault: false
+                                id: 123abc
+                                message: parameter 'p' must be an integer
+                                name: forbidden
+                                temporary: false
+                                timeout: false
+                "422":
+                    description: 'unprocessable: The project folder holds no go.mod, so there is no draft (run init_project or create go.mod), or a file there could not be read; the message names it.'
+                    content:
+                        application/vnd.goa.error:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                            example:
+                                fault: false
+                                id: 123abc
+                                message: parameter 'p' must be an integer
+                                name: unprocessable
+                                temporary: false
+                                timeout: false
+                "501":
+                    description: 'not_implemented: No workspace directory is bound to this control plane; start Surla from a project directory.'
+                    content:
+                        application/vnd.goa.error:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                            example:
+                                fault: false
+                                id: 123abc
+                                message: parameter 'p' must be an integer
+                                name: not_implemented
+                                temporary: false
+                                timeout: false
+                "503":
+                    description: 'unavailable: The control plane is shutting down.'
+                    content:
+                        application/vnd.goa.error:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                            example:
+                                fault: false
+                                id: 123abc
+                                message: parameter 'p' must be an integer
+                                name: unavailable
+                                temporary: false
+                                timeout: false
     /workspace/generate:
         post:
             tags:
                 - surla
             summary: generate_code surla
-            description: Read the active workspace's application module, or its public local eval/ module when target is eval, compile that module's edited Goa design in Surla's sandbox, and atomically replace its gen/ directory. Preserve top-level user files and their permissions and leave go.mod and go.sum unchanged. Return the written paths and warnings; a warning after gen/ publication still means generation succeeded. The tool compiles the design only; it does not build the application or run tests. Fix a rejected design and call again on the same running server.
+            description: 'Write the open build''s agreed design into the builder''s working folder and regenerate its code. Surla replaces, creates or removes the Go files under the builder''s design/ so that design/ holds exactly the build''s design source (never a test file or testdata; a linked design/ is refused), then compares each module the design imports with the go.mod the revision was made from: when the builder''s go.mod lacks a module or requires an older version, the call names go get <module>@<version> and go mod tidy, prefixed GOWORK=off when the assignment''s gowork_off is true, writes design/ and generates nothing until they are run. A differing replace directive for a module the design imports is also named, including the saved replacement line or the fact that none was saved, so the builder corrects go.mod before calling again. Otherwise it compiles the design in Surla''s sandbox and atomically replaces gen/, preserving top-level user files and leaving go.mod and go.sum unchanged. With target eval it regenerates the working folder''s eval/ module from its own design. Return the written paths and warnings; a warning after gen/ publication still means generation succeeded. It compiles the design only; it does not build the application or run tests.'
             operationId: surla#generate_code
             requestBody:
                 description: Request body for generate_code.
@@ -14447,8 +14690,21 @@ paths:
                                 name: forbidden
                                 temporary: false
                                 timeout: false
+                "409":
+                    description: 'conflict: The open build is for a revision that is no longer the change''s revision in force; the user builds again.'
+                    content:
+                        application/vnd.goa.error:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                            example:
+                                fault: false
+                                id: 123abc
+                                message: parameter 'p' must be an integer
+                                name: conflict
+                                temporary: false
+                                timeout: false
                 "422":
-                    description: 'unprocessable: The selected local module is absent, replaced, or invalid; correct its local files and call again.'
+                    description: 'unprocessable: The selected module of the working folder is absent, replaced, or invalid; correct its files and call again.'
                     content:
                         application/vnd.goa.error:
                             schema:
@@ -14559,7 +14815,7 @@ paths:
             tags:
                 - surla
             summary: get_story_refresh surla
-            description: 'Return the project owner''s current in-memory Story refresh operation for the bound workspace, the same one for every caller acting for the owner: op_id, state (none, running, succeeded, or failed), snapshot_digest, and the evaluated stories (empty when the design does not load the Story module) or a failure diagnostic. When no refresh has been run yet in this server process for the bound workspace, state is none with a message instructing the caller to run refresh_story.'
+            description: 'Return the project owner''s current in-memory Story refresh operation for the guide''s draft, the same one for every caller acting for the owner: op_id, state (none, running, succeeded, or failed), snapshot_digest, draft_folder, and the evaluated stories (empty when the design does not load the Story module) or a failure diagnostic. When no refresh has been run yet in this server process for the guide''s draft, state is none with the intended draft_folder and a message instructing the caller to run refresh_story; this read succeeds before a go.mod or draft folder exists.'
             operationId: surla#get_story_refresh
             responses:
                 "200":
@@ -14570,6 +14826,7 @@ paths:
                                 $ref: '#/components/schemas/StoryRefreshResult'
                             example:
                                 diagnostic: Amet reprehenderit.
+                                draft_folder: Ipsam asperiores blanditiis.
                                 message: Totam vero quis nobis voluptas laudantium earum.
                                 op_id: Nihil veritatis et perferendis aut quam ex.
                                 snapshot_digest: Vel placeat.
@@ -15693,7 +15950,7 @@ paths:
             tags:
                 - surla
             summary: refresh_story surla
-            description: Read the bound workspace's Go module snapshot, compute its canonical snapshot_digest, and start or reuse the project owner's in-memory Story refresh operation for that workspace, which every caller acting for the owner reads. Return promptly with the operation's op_id, state, and snapshot_digest while sandboxed evaluation continues on a server-owned context that survives client disconnects. Refreshing an unchanged snapshot whose current operation is running or succeeded returns that operation without starting another evaluation; refreshing a changed snapshot or a failed operation cancels and replaces the prior operation.
+            description: 'Read the guide''s draft, .surla-draft in the project folder: its go.mod, go.sum and the Go files under design/ in gofmt form, never the rest of the project. When the draft is missing, Surla makes it first, from the newest design a Change Card holds whose versions are all on the draft''s made-from list, with the project''s go.mod and go.sum, or else from the project folder; after the user dropped a build, it makes the draft again from the project folder and says so in message until a revision is saved. Compute the canonical snapshot_digest and start or reuse the project owner''s in-memory Story refresh operation, which every caller acting for the owner reads; it is reused only while the draft and its made-from list are unchanged. Return promptly with op_id, state, snapshot_digest and draft_folder while sandboxed evaluation continues on a server-owned context that survives client disconnects. A succeeded operation keeps the design, Stories, architecture, the draft''s go.mod and the made-from list it read; propose_change and revise_change save them with the revision. A design file Go cannot parse, or one that imports a package of the project outside design/, is refused with its file and line.'
             operationId: surla#refresh_story
             responses:
                 "200":
@@ -15704,6 +15961,7 @@ paths:
                                 $ref: '#/components/schemas/StoryRefreshResult'
                             example:
                                 diagnostic: Distinctio voluptas qui voluptatibus corporis et quia.
+                                draft_folder: Ullam veritatis optio possimus doloremque accusamus sed.
                                 message: Temporibus et qui dicta repellat molestiae.
                                 op_id: Non alias aliquid.
                                 snapshot_digest: Incidunt voluptatem aperiam qui explicabo non rerum.
@@ -16267,7 +16525,7 @@ paths:
                                 temporary: false
                                 timeout: false
                 "422":
-                    description: 'unprocessable: The bound workspace is absent, was replaced, contains no go.mod file, or has invalid module files; run init_project or fix the local module files and call refresh_story again.'
+                    description: 'unprocessable: The project folder holds no go.mod (run init_project or create go.mod), a draft file Go cannot parse or that imports the project outside design/ (the message names the file and line), or the draft is a link or a file rather than a folder.'
                     content:
                         application/vnd.goa.error:
                             schema:
@@ -16585,7 +16843,7 @@ components:
                           name: Reprehenderit assumenda officia assumenda et quo.
                 design_digest:
                     type: string
-                    description: SHA-256 digest of the evaluated design snapshot (sorted path and content pairs).
+                    description: SHA-256 digest of the design snapshot the revision's refresh evaluated (sorted path and content pairs).
                     example: Doloremque numquam porro debitis beatae.
                 edges:
                     type: array
@@ -16827,6 +17085,10 @@ components:
                     type: string
                     description: Change Card to build; get_change takes it.
                     example: Et quos quod.
+                gowork_off:
+                    type: boolean
+                    description: 'True when no go.work lies in working_folder or in a folder between it and the working copy''s root: run every go command there as GOWORK=off go …, so a go.work of the project folder around your copy does not take it over.'
+                    example: false
                 in_force:
                     type: boolean
                     description: 'True when request_revision is the change''s confirmed revision in force, as get_build reports it. It stays true while a revision the guide proposed waits beside the agreed one, and is false once the user has adopted a proposed revision or confirmed another revision: verify_change then refuses this revision, and the assignment stays as it is until the user builds again.'
@@ -16839,6 +17101,10 @@ components:
                     type: string
                     description: Change Card revision to build; verify_change takes it.
                     example: Incidunt enim in.
+                working_folder:
+                    type: string
+                    description: 'Absolute path of the folder to build in: the project''s folder inside your working copy .surla-build, on the build''s branch surla/build-<n>. Run git and go there, never in the project folder.'
+                    example: Nihil omnis.
                 written_tests:
                     type: object
                     description: 'Where the test writer''s tests for this build stand: not_used when no test writer is used because the project has stored verification settings; otherwise accepted, with the commit and time, when the build records accepted tests, and not_yet_accepted when it records none.'
@@ -16894,12 +17160,14 @@ components:
                             - checked_at
                             - not_judged
                             - state
-            description: 'The builder''s assignment: build this change at this revision in the project folder, where generate_code, check_project and verify_change act.'
+            description: 'The builder''s assignment for the project''s open build: build this change at this revision in working_folder, your own working copy of the project on the build''s own branch, where generate_code, check_project and update_dependencies act and where verify_change looks for the candidate.'
             example:
                 change_id: Et quos quod.
+                gowork_off: false
                 in_force: true
                 read: false
                 request_revision: Incidunt enim in.
+                working_folder: Nihil omnis.
                 written_tests:
                     state: not_used
             required:
@@ -16907,6 +17175,8 @@ components:
                 - request_revision
                 - in_force
                 - read
+                - working_folder
+                - gowork_off
                 - written_tests
         BuilderAssignmentList:
             type: object
@@ -16915,33 +17185,41 @@ components:
                     type: array
                     items:
                         $ref: '#/components/schemas/BuilderAssignment'
-                    description: Assignments, most recently started first; empty when the user has built no change.
+                    description: The open build's assignment while it needs this role; empty otherwise.
                     example:
                         - change_id: Et quos quod.
+                          gowork_off: false
                           in_force: true
                           read: false
                           request_revision: Incidunt enim in.
+                          working_folder: Nihil omnis.
                           written_tests:
                             state: not_used
                         - change_id: Et quos quod.
+                          gowork_off: false
                           in_force: true
                           read: false
                           request_revision: Incidunt enim in.
+                          working_folder: Nihil omnis.
                           written_tests:
                             state: not_used
-            description: The builder's assignments, one per change the user built, most recently started first.
+            description: The builder's assignment for the project's open build while that build needs the builder; empty otherwise.
             example:
                 assignments:
                     - change_id: Et quos quod.
+                      gowork_off: false
                       in_force: true
                       read: false
                       request_revision: Incidunt enim in.
+                      working_folder: Nihil omnis.
                       written_tests:
                         state: not_used
                     - change_id: Et quos quod.
+                      gowork_off: false
                       in_force: true
                       read: false
                       request_revision: Incidunt enim in.
+                      working_folder: Nihil omnis.
                       written_tests:
                         state: not_used
             required:
@@ -17523,17 +17801,17 @@ components:
                             request_revision:
                                 type: string
                                 description: Change Card revision the user built.
-                                example: Perspiciatis provident.
+                                example: Suscipit dolorem.
                             required_test_count:
                                 type: integer
                                 description: Number of finished flows in the agreed Story. Zero means no test of this change's Story was required.
-                                example: 3509312223754471907
+                                example: 1692722586442644519
                                 format: int64
                                 minimum: 0
                             started_at:
                                 type: string
                                 description: When the user started this build.
-                                example: "1974-07-17T07:04:05Z"
+                                example: "1987-04-24T23:55:35Z"
                                 format: date-time
                             state:
                                 type: string
@@ -17545,9 +17823,9 @@ components:
                             builder:
                                 read: false
                             in_force: false
-                            request_revision: Perspiciatis provident.
-                            required_test_count: 3509312223754471907
-                            started_at: "1974-07-17T07:04:05Z"
+                            request_revision: Suscipit dolorem.
+                            required_test_count: 1692722586442644519
+                            started_at: "1987-04-24T23:55:35Z"
                             test_writer:
                                 read: true
                                 report: 7108203204833819401
@@ -17566,7 +17844,7 @@ components:
                 change_id:
                     type: string
                     description: Change Card identifier.
-                    example: Assumenda quas molestiae incidunt debitis.
+                    example: Dolor quidem expedita optio ea.
             description: A change's build as get_build reports it.
             example:
                 build:
@@ -17584,7 +17862,7 @@ components:
                             checked_at: "1972-09-26T18:55:16Z"
                             finding_count: 5254885262627643994
                             state: needs_changes
-                change_id: Assumenda quas molestiae incidunt debitis.
+                change_id: Dolor quidem expedita optio ea.
             required:
                 - change_id
                 - build
@@ -19912,7 +20190,7 @@ components:
                     type: boolean
                     description: True only when go test ./... exited 0 in every module.
                     example: false
-            description: Outcome of running every Go module's tests in a protected copy of the workspace inside Linux containers.
+            description: Outcome of running every Go module's tests in a protected copy of the working folder inside Linux containers.
             example:
                 message: Quo qui voluptatem qui nisi ullam.
                 op_id: Voluptatem assumenda earum iste.
@@ -20029,6 +20307,71 @@ components:
                 - id
                 - question
                 - answer
+        CopyOffBranch:
+            type: object
+            properties:
+                branch:
+                    type: string
+                    description: The branch checked out in the copy, as message shows it; absent when the copy is detached.
+                    example: Ducimus laudantium distinctio non est quos.
+                build_branch:
+                    type: string
+                    description: The build's own branch, surla/build-<n> or surla/tests-<n>; absent before the copy joined the build.
+                    example: Harum et.
+                message:
+                    type: string
+                    description: The facts and the goal in words, ending with the call to make again. A name the agent chose is shown shell-quoted when it is printable, and as "a name that is not shown" otherwise.
+                    example: Omnis minima dignissimos et est animi vitae.
+                name:
+                    type: string
+                    description: Error name.
+                    example: Magnam ut illo aut aperiam est.
+                operation:
+                    type: string
+                    description: The Git operation in progress in the copy, read from the folder the project's repository keeps for it. A bisect is none.
+                    example: rebase
+                    enum:
+                        - none
+                        - merge
+                        - rebase
+                        - am
+                        - cherry_pick
+                        - revert
+                uncommitted:
+                    type: array
+                    items:
+                        type: string
+                        example: Nihil sequi.
+                    description: The first five uncommitted paths of the copy (changes and untracked files, not ignored ones), as message shows them.
+                    example:
+                        - Nihil sequi.
+                        - Autem ex dicta.
+                        - Dolorem vel ullam totam.
+                    maxItems: 5
+                uncommitted_count:
+                    type: integer
+                    description: How many paths of the copy are uncommitted in all.
+                    example: 7667967348871658633
+                    format: int64
+                    minimum: 0
+            description: 'A worker''s working copy is not on its build''s own branch, holds uncommitted work Surla does not move, or has a Git operation in progress. Surla moves no copy here: the facts and the goal say where the work belongs, and the worker puts it there with git, then calls again.'
+            example:
+                branch: Ducimus laudantium distinctio non est quos.
+                build_branch: Harum et.
+                message: Omnis minima dignissimos et est animi vitae.
+                name: Magnam ut illo aut aperiam est.
+                operation: rebase
+                uncommitted:
+                    - Nihil sequi.
+                    - Autem ex dicta.
+                    - Dolorem vel ullam totam.
+                uncommitted_count: 7667967348871658633
+            required:
+                - name
+                - message
+                - operation
+                - uncommitted
+                - uncommitted_count
         DeclineRevisionPayload:
             type: object
             properties:
@@ -20168,6 +20511,24 @@ components:
                 - modified_declarations
                 - version_deltas
                 - summary
+        DraftCorrection:
+            type: object
+            properties:
+                path:
+                    type: string
+                    description: Path relative to the draft folder, such as design/types.go or go.mod.
+                    example: Molestiae sunt veniam non.
+                problem:
+                    type: string
+                    description: 'What to correct: conflict markers where the draft and the project folder changed the same lines; a file removed on one side and changed on the other; a draft file Go cannot parse, with its line; or a module the project''s go.mod requires at another version than the draft''s, or that the draft''s lacks, including differing replace directives.'
+                    example: Cumque est.
+            description: 'A file of the draft that update_draft could not bring forward from the project folder: the guide corrects it in the draft and calls update_draft again until none is listed, then refresh_story.'
+            example:
+                path: Molestiae sunt veniam non.
+                problem: Cumque est.
+            required:
+                - path
+                - problem
         DraftOverridePayload:
             type: object
             properties:
@@ -20223,6 +20584,66 @@ components:
                 - applied_in_store
                 - requires_rebuild
                 - message
+        DraftUpdateResult:
+            type: object
+            properties:
+                draft_folder:
+                    type: string
+                    description: Absolute path of the guide's draft folder.
+                    example: Consequatur voluptatum pariatur.
+                merged:
+                    type: array
+                    items:
+                        type: string
+                        example: Fugit itaque sit.
+                    description: Design files where the project folder's change and the draft's edits merged without conflict, in path order.
+                    example:
+                        - Fugit itaque sit.
+                        - Ratione consequatur eum ut facere.
+                        - Iure autem optio sit quisquam.
+                taken:
+                    type: array
+                    items:
+                        type: string
+                        example: Eveniet est architecto consequatur optio blanditiis.
+                    description: Design files the draft took from the project folder because it had not changed them, in path order.
+                    example:
+                        - Eveniet est architecto consequatur optio blanditiis.
+                        - Optio cumque et hic rem expedita ratione.
+                        - Debitis neque.
+                        - Deleniti rem qui voluptatibus est deleniti animi.
+                to_correct:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/DraftCorrection'
+                    description: Files to correct in the draft before refreshing, in path order; empty when none.
+                    example:
+                        - path: Molestiae sunt veniam non.
+                          problem: Cumque est.
+                        - path: Molestiae sunt veniam non.
+                          problem: Cumque est.
+            description: 'What update_draft brought from the project folder into the guide''s draft: design files the draft took as they are there, design files merged with the draft''s own edits, and files to correct. The lists describe what this call applied and what remains to correct; empty lists do not prove that every outside design change is present.'
+            example:
+                draft_folder: Consequatur voluptatum pariatur.
+                merged:
+                    - Fugit itaque sit.
+                    - Ratione consequatur eum ut facere.
+                    - Iure autem optio sit quisquam.
+                taken:
+                    - Eveniet est architecto consequatur optio blanditiis.
+                    - Optio cumque et hic rem expedita ratione.
+                    - Debitis neque.
+                    - Deleniti rem qui voluptatibus est deleniti animi.
+                to_correct:
+                    - path: Molestiae sunt veniam non.
+                      problem: Cumque est.
+                    - path: Molestiae sunt veniam non.
+                      problem: Cumque est.
+            required:
+                - draft_folder
+                - taken
+                - merged
+                - to_correct
         Error:
             type: object
             properties:
@@ -20341,7 +20762,7 @@ components:
             properties:
                 target:
                     type: string
-                    description: 'Module to regenerate: candidate (the application, the default when omitted) or eval (the local eval/ module).'
+                    description: 'Module to regenerate: candidate (the application, the default when omitted) or eval (the test module).'
                     example: eval
                     enum:
                         - candidate
@@ -20908,6 +21329,47 @@ components:
             required:
                 - held
                 - connection
+        OpenBuildRefusal:
+            type: object
+            properties:
+                build:
+                    $ref: '#/components/schemas/StartedBuild'
+                change_id:
+                    type: string
+                    description: Change the open build is for; drop_build takes it.
+                    example: Non tempore.
+                message:
+                    type: string
+                    description: What was refused, why, and the user's step, worded for the page.
+                    example: Est omnis ullam.
+                name:
+                    type: string
+                    description: Error name.
+                    example: Quam doloribus natus maxime.
+            description: A refusal of start_build or drop_build that names the project's one open build, so the page shows what blocks the request and offers Drop for exactly that build. Nothing changed.
+            example:
+                build:
+                    builder:
+                        read: false
+                    in_force: true
+                    request_revision: Facilis nam.
+                    required_test_count: 3718558671237355663
+                    started_at: "2011-11-02T08:04:42Z"
+                    test_writer:
+                        read: true
+                        report: 7108203204833819401
+                        tests:
+                            checked_at: "1972-09-26T18:55:16Z"
+                            finding_count: 5254885262627643994
+                            state: needs_changes
+                change_id: Non tempore.
+                message: Est omnis ullam.
+                name: Quam doloribus natus maxime.
+            required:
+                - name
+                - message
+                - change_id
+                - build
         PreviewArchitecturePayload:
             type: object
             properties:
@@ -21058,7 +21520,7 @@ components:
                     example: Enim distinctio et sunt sunt et.
                 story_refresh_op_id:
                     type: string
-                    description: Optional op_id of a succeeded refresh_story operation for the bound workspace whose evaluated Stories this card adopts. When set, Surla reads one workspace snapshot, requires its snapshot_digest to match the operation's, and records both the evaluated Stories and that snapshot's design/*.go on the card. Omit when the card has no Story.
+                    description: 'op_id of a succeeded refresh_story operation whose evaluated draft this card adopts: its design, Stories, architecture, go.mod and made-from list. Required when the project folder holds a go.mod; Surla reads no file.'
                     example: In eaque eveniet facere.
             description: Request body for propose_change.
             example:
@@ -22894,6 +23356,39 @@ components:
                 op_id: Quo doloribus amet similique.
             required:
                 - op_id
+        ReplacedBuild:
+            type: object
+            properties:
+                change_id:
+                    type: string
+                    description: change_id of the open build the page showed.
+                    example: "61"
+                    minLength: 1
+                started_at:
+                    type: string
+                    description: started_at of the open build the page showed, exactly as get_build reported it.
+                    example: "2008-09-02T12:30:42Z"
+                    format: date-time
+            description: The open build of this same change that the page showed the user when the user agreed to build the change again before any verification of it passed. A start whose replaces does not name the open build exactly was decided on a stale page and is refused with the open build's facts.
+            example:
+                change_id: "61"
+                started_at: "2008-09-02T12:30:42Z"
+            required:
+                - change_id
+                - started_at
+        ReportTestsFinishedRequestBody:
+            type: object
+            properties:
+                request_revision:
+                    type: string
+                    description: request_revision of your test assignment.
+                    example: td
+                    minLength: 1
+            description: Request body for report_tests_finished.
+            example:
+                request_revision: td
+            required:
+                - request_revision
         RequiredTest:
             type: object
             properties:
@@ -22943,7 +23438,7 @@ components:
                     example: Neque dolore optio.
                 story_refresh_op_id:
                     type: string
-                    description: Optional op_id of a succeeded refresh_story operation for the bound workspace whose evaluated Stories this revision adopts. When set, Surla reads one workspace snapshot, requires its snapshot_digest to match the operation's, and records both the evaluated Stories and that snapshot's design/*.go on the revised card. When omitted on a card that already has Stories, the card's saved Stories and their design source are kept together.
+                    description: 'op_id of a succeeded refresh_story operation whose evaluated draft this revision adopts. When omitted, the revision keeps every snapshot field of the revision it revises: design, Stories, architecture, go.mod and made-from list, even with zero Stories. A project with a go.mod refuses an omitted op_id when that revision has no design. Surla reads no file.'
                     example: Assumenda tenetur minus et magnam consequatur.
             description: Request body for revise_change.
             example:
@@ -23013,6 +23508,8 @@ components:
         StartBuildRequestBody:
             type: object
             properties:
+                replaces:
+                    $ref: '#/components/schemas/ReplacedBuild'
                 request_revision:
                     type: string
                     description: The Change Card's agreed revision, the one in force (not a waiting proposal's).
@@ -23020,6 +23517,9 @@ components:
                     minLength: 1
             description: Request body for start_build.
             example:
+                replaces:
+                    change_id: "61"
+                    started_at: "2008-09-02T12:30:42Z"
                 request_revision: q9g
             required:
                 - request_revision
@@ -23154,79 +23654,7 @@ components:
                           required:
                             - step
                             - state
-                working_copy:
-                    type: object
-                    description: The test-writer working copy after this start's refresh; not_used with stored verification settings.
-                    example:
-                        commit: ec29a5a9f72070759902c1221b387505217f3ffa
-                        state: dirty
-                    anyOf:
-                        - type: object
-                          properties:
-                            state:
-                                type: string
-                                enum:
-                                    - not_used
-                          example: {}
-                          required:
-                            - state
-                        - type: object
-                          properties:
-                            commit:
-                                type: string
-                                description: The working copy's current commit.
-                                example: 571e050d5a667243b74cde69413e3e1a35ab374a
-                                pattern: ^([0-9a-f]{40}|[0-9a-f]{64})$
-                            state:
-                                type: string
-                                enum:
-                                    - at_project_commit
-                          example:
-                            commit: 571e050d5a667243b74cde69413e3e1a35ab374a
-                          required:
-                            - commit
-                            - state
-                        - type: object
-                          properties:
-                            commit:
-                                type: string
-                                description: The retained working-copy commit.
-                                example: b1cb4ae575d68493037f6385fb68eca7e60995b5fbddbeee56286e0ce3a729d7
-                                pattern: ^([0-9a-f]{40}|[0-9a-f]{64})$
-                            state:
-                                type: string
-                                enum:
-                                    - not_contained
-                            step:
-                                type: string
-                                description: Merge the tests branch into the project's branch, then build again.
-                                example: "4"
-                                minLength: 1
-                                maxLength: 512
-                          example:
-                            commit: b1cb4ae575d68493037f6385fb68eca7e60995b5fbddbeee56286e0ce3a729d7
-                            step: "4"
-                          required:
-                            - commit
-                            - step
-                            - state
-                        - type: object
-                          properties:
-                            commit:
-                                type: string
-                                description: The retained working-copy commit.
-                                example: 7c2c3052c31f8dd1beaf16051cd8c4a65a3d8aba1a725c29865ab65011ef2faa
-                                pattern: ^([0-9a-f]{40}|[0-9a-f]{64})$
-                            state:
-                                type: string
-                                enum:
-                                    - dirty
-                          example:
-                            commit: 7c2c3052c31f8dd1beaf16051cd8c4a65a3d8aba1a725c29865ab65011ef2faa
-                          required:
-                            - commit
-                            - state
-            description: The saved build and this start's working-copy and team outcomes. A team warning never means the build was refused; get_build returns the build without these transient outcomes.
+            description: 'The saved build and this start''s team outcome. A team warning never means the build was refused; get_build returns the build without it. A start moves no working copy: each copy joins the build''s own branch when its worker first reads the assignment.'
             example:
                 build:
                     builder:
@@ -23246,13 +23674,9 @@ components:
                     count: 6792670643739432319
                     state: ambiguous_space
                     step: "4"
-                working_copy:
-                    commit: ec29a5a9f72070759902c1221b387505217f3ffa
-                    state: dirty
             required:
                 - build
                 - team
-                - working_copy
         StartLiveTargetPayload:
             type: object
             properties:
@@ -23696,17 +24120,21 @@ components:
                     type: string
                     description: Safe failure or timeout diagnostic when state is failed; omitted otherwise.
                     example: Distinctio voluptas qui voluptatibus corporis et quia.
+                draft_folder:
+                    type: string
+                    description: Absolute path intended for the guide's draft, .surla-draft in the project folder, whose go.mod, go.sum and design/ refresh_story reads. When state is none, this path does not mean the folder exists; refresh_story makes it when needed.
+                    example: Ullam veritatis optio possimus doloremque accusamus sed.
                 message:
                     type: string
-                    description: Summary of the current Story refresh state and next action.
+                    description: Summary of the current Story refresh state and next action. After a dropped build remakes the draft and until a revision is saved from it, begins by naming the dropped change and saying that edits made before then are gone.
                     example: Temporibus et qui dicta repellat molestiae.
                 op_id:
                     type: string
-                    description: Identifier of the owner's current Story refresh operation for the bound workspace; present when state is running, succeeded, or failed. Pass it as story_refresh_op_id to propose_change or revise_change once state is succeeded to adopt the evaluated Story into a Change Card.
+                    description: Identifier of the owner's current Story refresh operation for the guide's draft; present when state is running, succeeded, or failed. Pass it as story_refresh_op_id to propose_change or revise_change once state is succeeded to adopt the evaluated Story into a Change Card.
                     example: Non alias aliquid.
                 snapshot_digest:
                     type: string
-                    description: Canonical SHA-256 digest of the workspace module snapshot read when this refresh started; present when state is running, succeeded, or failed.
+                    description: Canonical SHA-256 digest of the draft snapshot read when this refresh started; present when state is running, succeeded, or failed.
                     example: Incidunt voluptatem aperiam qui explicabo non rerum.
                 state:
                     type: string
@@ -24267,9 +24695,10 @@ components:
                                   summary: Nihil sunt ea molestiae voluptate aut.
                               title: Mollitia rerum nihil consectetur excepturi aspernatur.
                           name: Et minima.
-            description: 'Current Story refresh operation of the project''s owner for the bound workspace: the user, the guide and the builder all act for the owner, so they read the same one. state is none when no refresh has run yet in this server process for the bound workspace; running while sandboxed evaluation is in progress; succeeded with the evaluated stories (empty when the design does not load the Story module); or failed with a safe diagnostic.'
+            description: 'Current Story refresh operation of the project''s owner for the guide''s draft: the user, the guide and the builder all act for the owner, so they read the same one. state is none when no refresh has run yet in this server process for the guide''s draft; running while sandboxed evaluation is in progress; succeeded with the evaluated stories (empty when the design does not load the Story module); or failed with a safe diagnostic.'
             example:
                 diagnostic: Distinctio voluptas qui voluptatibus corporis et quia.
+                draft_folder: Ullam veritatis optio possimus doloremque accusamus sed.
                 message: Temporibus et qui dicta repellat molestiae.
                 op_id: Non alias aliquid.
                 snapshot_digest: Incidunt voluptatem aperiam qui explicabo non rerum.
@@ -24823,6 +25252,7 @@ components:
                 - state
                 - stories
                 - message
+                - draft_folder
         StoryStepItem:
             type: object
             properties:
@@ -25486,11 +25916,12 @@ components:
             properties:
                 assignment:
                     type: string
-                    description: unread when this role owes an assignment read, nothing_owed when the owner established none, unknown when the owner could not read assignments. The guide has no assignments.
+                    description: unread when this role owes an assignment read; nothing_owed when it has work and owes no read; no_work when the open build needs nothing from it (no build is open, the build was dropped, the test writer's tests are accepted, or a verification of the builder's build passed); unknown when the owner could not read assignments. The guide has no assignments.
                     example: unknown
                     enum:
                         - unread
                         - nothing_owed
+                        - no_work
                         - unknown
                 attention:
                     type: string
@@ -26896,9 +27327,9 @@ components:
                           name: Et minima.
                 working_folder:
                     type: string
-                    description: 'Folder to write the tests in: your own working copy of the project.'
+                    description: 'Folder to write the tests in: your own working copy of the project, .surla-tests, on the build''s branch surla/tests-<n>. Do not commit there: Surla commits what it accepts.'
                     example: Ut voluptatum vel totam.
-            description: 'The test writer''s assignment for one build: write the required tests for the Story as agreed at the built revision, in the test module (eval/) of the working folder, and make them hold the service to the user''s confirmed answers, confirmation examples and preserved behaviors of that revision, which the assignment carries exactly as confirmed. Surla writes eval/design/story_tests.go, which declares the required tests, from the agreed Story and generates the module when the build starts and again at each report; the test writer leaves that file as it is. After changing the module''s design, the test writer reports to have it generated again or, from a shell that is not sandboxed, runs surla gen -dir eval in the working folder first; regenerating keeps the required tests. go build ./... in eval/ checks the work before a report, and Surla''s check of each report is the judge.'
+            description: 'The test writer''s assignment for one build: write the required tests for the Story as agreed at the built revision, in the test module (eval/) of the working folder, and make them hold the service to the user''s confirmed answers, confirmation examples and preserved behaviors of that revision, which the assignment carries exactly as confirmed. Surla writes eval/design/story_tests.go, which declares the required tests, from the agreed Story and generates the module at each read that marks the assignment read and again at each report; the test writer leaves that file as it is. After changing the module''s design, the test writer reports to have it generated again or, from a shell that is not sandboxed, runs surla gen -dir eval in the working folder first; regenerating keeps the required tests. go build ./... in eval/ checks the work before a report, and Surla''s check of each report is the judge.'
             example:
                 answers:
                     - answer: Ipsum repellendus adipisci.
@@ -28107,7 +28538,7 @@ components:
                     type: array
                     items:
                         $ref: '#/components/schemas/TestWriterAssignmentItem'
-                    description: Assignments, most recently started first; empty when the user has built no change.
+                    description: The open build's assignment while it needs this role; empty otherwise.
                     example:
                         - change_id: Veniam ex reiciendis.
                           in_force: true
@@ -28139,7 +28570,7 @@ components:
                                 finding_count: 5254885262627643994
                                 state: needs_changes
                           request_revision: Quidem nulla minima at voluptatum delectus.
-            description: The test writer's assignments, one per change the user built, most recently started first.
+            description: The test writer's assignment for the project's open build while that build needs the test writer; empty otherwise.
             example:
                 assignments:
                     - change_id: Veniam ex reiciendis.
@@ -28697,7 +29128,7 @@ components:
                     items:
                         type: string
                         example: Corporis commodi ipsam autem quo esse.
-                    description: Workspace-relative go.mod, go.sum and go.work.sum files whose bytes changed and were written.
+                    description: Working-folder-relative go.mod, go.sum and go.work.sum files whose bytes changed and were written.
                     example:
                         - Corporis commodi ipsam autem quo esse.
                         - Aut qui.
@@ -28709,7 +29140,7 @@ components:
                     type: string
                     description: Operation identifier; pass it to read_check_output to read the full output.
                     example: Ipsam eveniet repellat quaerat ut.
-            description: Go module manifests rewritten in the workspace after go mod tidy ran in a protected copy.
+            description: Go module manifests rewritten in the working folder after go mod tidy ran in a protected copy.
             example:
                 files_written:
                     - Corporis commodi ipsam autem quo esse.

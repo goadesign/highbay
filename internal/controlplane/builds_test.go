@@ -119,7 +119,8 @@ func TestBuildingAgainReplacesTheBuildAndClearsReads(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, &gensurla.BuilderAssignment{
 		ChangeID: "chg", RequestRevision: first.RequestRevision, InForce: true, Read: true,
-		WrittenTests: gensurla.NewWrittenTestsNotYetAccepted(&gensurla.TestsNotYetAccepted{}),
+		WrittenTests:  gensurla.NewWrittenTestsNotYetAccepted(&gensurla.TestsNotYetAccepted{}),
+		WorkingFolder: cp.activeWorkspaceDir, GoworkOff: true,
 	}, full)
 	build := mustStartedBuild(t, cp, user, "chg")
 	assert.True(t, build.Builder.Read, "reading in full records the builder's read")

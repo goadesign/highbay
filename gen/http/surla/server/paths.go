@@ -144,6 +144,11 @@ func GetStoryRefreshSurlaPath() string {
 	return "/workspace/story/refresh"
 }
 
+// UpdateDraftSurlaPath returns the URL path to the surla service update_draft HTTP endpoint.
+func UpdateDraftSurlaPath() string {
+	return "/workspace/draft/update"
+}
+
 // GetTeamSurlaPath returns the URL path to the surla service get_team HTTP endpoint.
 func GetTeamSurlaPath() string {
 	return "/team"
@@ -172,6 +177,11 @@ func WaitForChangesSurlaPath() string {
 // StartBuildSurlaPath returns the URL path to the surla service start_build HTTP endpoint.
 func StartBuildSurlaPath(changeID string) string {
 	return fmt.Sprintf("/changes/%v/build", changeID)
+}
+
+// DropBuildSurlaPath returns the URL path to the surla service drop_build HTTP endpoint.
+func DropBuildSurlaPath(changeID string) string {
+	return fmt.Sprintf("/changes/%v/build/drop", changeID)
 }
 
 // GetBuildSurlaPath returns the URL path to the surla service get_build HTTP endpoint.
