@@ -19,6 +19,7 @@ import (
 
 	gensurla "github.com/goadesign/surla/gen/surla"
 	"github.com/goadesign/surla/internal/controlplane"
+	"github.com/goadesign/surla/internal/testmodule"
 )
 
 // TestVerificationSettingsReadsTheOperatorsPlanStrictly exercises named-file setup and startup reload.
@@ -117,6 +118,8 @@ func TestConfigureServeWorkspaceBindsTheNamedProject(t *testing.T) {
 
 // TestStoredVerificationSupportsIndependentEvaluatorRepositories verifies project
 // workspace binding and externally stored evaluator input compose on older Git.
+// The non-short subtest saves the bound project's evaluated draft through the
+// public refresh/proposal flow rather than relying on a live-folder read.
 func TestStoredVerificationSupportsIndependentEvaluatorRepositories(t *testing.T) {
 	isolateServeWorkspace(t)
 
@@ -149,42 +152,80 @@ func TestStoredVerificationSupportsIndependentEvaluatorRepositories(t *testing.T
 	opts, err := serveOptions(nil)
 	require.NoError(t, err)
 	require.NotNil(t, opts.Verification)
+	boundProject, err := filepath.EvalSymlinks(shopDir)
+	require.NoError(t, err)
+	assert.Equal(t, boundProject, opts.WorkspaceDir, "stored verification settings preserve the bound project")
 	assert.Nil(t, opts.WrittenTestRuns, "stored verification settings leave no runs of written tests")
 	expectedSuite, err := filepath.EvalSymlinks(filepath.Join(root, "ops"))
 	require.NoError(t, err)
 	assert.Equal(t, filepath.Join(expectedSuite, "eval-repo"), opts.Verification.Plan.SuiteRepo)
 	assert.Equal(t, 15*time.Minute, opts.Verification.Timeout)
-
 	cp, err := controlplane.New(opts)
 	require.NoError(t, err)
-	defer cp.Close()
+	t.Cleanup(func() { assert.NoError(t, cp.Close()) })
 
-	alice := controlplane.WithPrincipal(context.Background(), controlplane.Principal{ID: "alice@example.com", CallerID: "alice@example.com", Kind: controlplane.CallerUser})
-	_, err = cp.ProposeChange(alice, &gensurla.ProposeChangePayload{
-		ChangeID: "chg-shop-with-external-eval",
-		Prompt:   "Add coupon validation",
-		Analysis: &gensurla.CP1Analysis{
-			Summary:     "Add coupon validation.",
-			Ambiguities: []*gensurla.CP1AnalysisAmbiguity{},
-			Examples: []*gensurla.CP1AnalysisExample{{
-				Scenario:         "Apply valid coupon",
-				InputSummary:     "Valid coupon code SAVE10 on a $50.00 order",
-				ExpectedOutcome:  "Discounts the order total to $45.00",
-				VerificationKind: "deterministic",
-			}},
-			PreservedBehaviors: []string{"Checkout without a coupon is unchanged."},
-		},
+	t.Run("proposal adopts the evaluated project draft", func(t *testing.T) {
+		if testing.Short() {
+			t.Skip("evaluates the real bound project draft; the full suite covers refresh adoption")
+		}
+		files := testmodule.Snapshot(t, "", `package design
+
+import . "goa.design/goa/v3/dsl"
+
+// shop workspace design
+var _ = API("shop", func() {})
+var _ = Service("shop", func() {
+	Method("health", func() {
+		Result(String)
+		HTTP(func() { GET("/health") })
 	})
-	require.NoError(t, err)
-	// The saved card records the design source it was proposed against.
-	sum := sha256.Sum256([]byte("chg-shop-with-external-eval"))
-	raw, err := os.ReadFile(filepath.Join(opts.CardsDir, hex.EncodeToString(sum[:])+".json"))
-	require.NoError(t, err)
-	var saved struct {
-		DesignSource string `json:"design_source"`
-	}
-	require.NoError(t, json.Unmarshal(raw, &saved))
-	assert.Contains(t, saved.DesignSource, "shop workspace design", "project must bind shopDir for CP1 workspace design reads even when verification settings are stored")
+})
+`)
+		for name, content := range files {
+			file := filepath.Join(shopDir, filepath.FromSlash(name))
+			require.NoError(t, os.MkdirAll(filepath.Dir(file), 0o700))
+			require.NoError(t, os.WriteFile(file, []byte(content), 0o600))
+		}
+		alice := controlplane.WithPrincipal(context.Background(), controlplane.Principal{ID: "alice@example.com", CallerID: "alice@example.com", Kind: controlplane.CallerUser})
+		refresh, err := cp.RefreshStory(alice)
+		require.NoError(t, err)
+		require.Eventually(t, func() bool {
+			refresh, err = cp.GetStoryRefresh(alice)
+			return err != nil || refresh.State != "running"
+		}, 2*time.Minute, 25*time.Millisecond)
+		require.NoError(t, err)
+		require.Equal(t, "succeeded", refresh.State, "%v", refresh.Diagnostic)
+		// Adoption must retain the evaluated draft, even when the project folder
+		// changes after the selected refresh has completed.
+		require.NoError(t, os.WriteFile(filepath.Join(shopDir, "design", "design.go"), []byte("package design\n// later project edit\n"), 0o644))
+		_, err = cp.ProposeChange(alice, &gensurla.ProposeChangePayload{
+			ChangeID:         "chg-shop-with-external-eval",
+			Prompt:           "Add coupon validation",
+			StoryRefreshOpID: refresh.OpID,
+			Analysis: &gensurla.CP1Analysis{
+				Summary:     "Add coupon validation.",
+				Ambiguities: []*gensurla.CP1AnalysisAmbiguity{},
+				Examples: []*gensurla.CP1AnalysisExample{{
+					Scenario:         "Apply valid coupon",
+					InputSummary:     "Valid coupon code SAVE10 on a $50.00 order",
+					ExpectedOutcome:  "Discounts the order total to $45.00",
+					VerificationKind: "deterministic",
+				}},
+				PreservedBehaviors: []string{"Checkout without a coupon is unchanged."},
+			},
+		})
+		require.NoError(t, err)
+		// The saved card records the evaluated draft selected by op_id.
+		sum := sha256.Sum256([]byte("chg-shop-with-external-eval"))
+		raw, err := os.ReadFile(filepath.Join(opts.CardsDir, hex.EncodeToString(sum[:])+".json"))
+		require.NoError(t, err)
+		var saved struct {
+			DesignSource string `json:"design_source"`
+		}
+		require.NoError(t, json.Unmarshal(raw, &saved))
+		assert.Contains(t, saved.DesignSource, "shop workspace design", "stored verification settings preserve adoption of the bound project's evaluated draft")
+		assert.NotContains(t, saved.DesignSource, "later project edit")
+	})
 }
 
 // isolateGitConfig disables system/global Git configuration without changing HOME.
