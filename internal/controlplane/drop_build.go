@@ -112,7 +112,9 @@ func (c *ControlPlane) DropBuild(ctx context.Context, p *gensurla.DropBuildPaylo
 		c.draftMu.Unlock()
 		return nil, gensurla.MakeConflict(errors.New("This build was already dropped."))
 	}
-	provenance.Write++
+	// A legacy or freshly evaluated revision can precede the first saved list.
+	// Its generation still has to precede the new drop generation.
+	provenance.Write = max(provenance.Write, current.MadeFrom.Start.Write) + 1
 	provenance.Start = madeFromStart{Write: provenance.Write, ProjectCommit: strings.TrimSpace(string(head)), Dropped: &droppedBuild{ChangeID: current.ChangeID, StartedAt: current.StartedAt, Number: current.Number, BranchTips: tips}}
 	provenance.Entries = nil
 	provenance.Taken = nil

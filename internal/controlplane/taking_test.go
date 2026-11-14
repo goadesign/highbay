@@ -2,11 +2,14 @@
 package controlplane
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	gensurla "github.com/goadesign/surla/gen/surla"
+	"github.com/goadesign/surla/internal/scaffold"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -87,4 +90,49 @@ func TestDropRefusesStalePageKeepsTheOpenBuild(t *testing.T) {
 	start, ok := read.Build.AsStarted()
 	require.True(t, ok)
 	assert.Equal(t, gensurla.BuildTakingKindBuilding, start.Taking.Kind())
+}
+
+// TestDropDuringStartPreservesBuild proves Drop can interleave with the copy
+// preflight, and the second admission check refuses without saving a build.
+func TestDropDuringStartPreservesBuild(t *testing.T) {
+	cp := newBuildControlPlane(t, Options{})
+	card := buildableChange(t, cp, "x")
+	user := asCaller("alice@example.com", CallerUser)
+	first, err := cp.StartBuild(user, &gensurla.StartBuildPayload{ChangeID: "x", RequestRevision: card.RequestRevision})
+	require.NoError(t, err)
+	before := readBuildFile(t, cp, "x")
+	entered, release := make(chan struct{}), make(chan struct{})
+	factory := cp.buildCopyFactory
+	cp.buildCopyFactory = func(ctx context.Context, folder string, layout scaffold.Layout) (buildCopy, error) {
+		close(entered)
+		select {
+		case <-release:
+			return factory(ctx, folder, layout)
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		}
+	}
+	result := make(chan error, 1)
+	go func() {
+		_, err := cp.StartBuild(user, &gensurla.StartBuildPayload{ChangeID: "x", RequestRevision: card.RequestRevision, Replaces: &gensurla.ReplacedBuild{ChangeID: "x", StartedAt: first.Build.StartedAt}})
+		result <- err
+	}()
+	select {
+	case <-entered:
+	case <-time.After(10 * time.Second):
+		close(release)
+		t.Fatal("start did not reach copy preflight")
+	}
+	_, err = cp.DropBuild(user, &gensurla.DropBuildPayload{ChangeID: "x", StartedAt: first.Build.StartedAt})
+	close(release)
+	require.NoError(t, err)
+	select {
+	case err := <-result:
+		assert.Error(t, err)
+	case <-time.After(20 * time.Second):
+		t.Fatal("start did not finish")
+	}
+	assert.Equal(t, before, readBuildFile(t, cp, "x"))
+	_, err = cp.StartBuild(user, &gensurla.StartBuildPayload{ChangeID: "x", RequestRevision: card.RequestRevision})
+	assertRefused(t, err, "drafted_before_drop")
 }
