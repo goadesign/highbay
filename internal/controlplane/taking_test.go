@@ -431,3 +431,39 @@ func TestDropAcceptsMergedBuild(t *testing.T) {
 	require.True(t, ok)
 	assert.Equal(t, gensurla.BuildTakingKindDropped, started.Taking.Kind())
 }
+
+// TestRewriteRefusalExplainsWhenDropIsSafe checks the user's actual admission
+// refusal after the project branch is rewritten away from the build base.
+func TestRewriteRefusalExplainsWhenDropIsSafe(t *testing.T) {
+	cfg := verificationConfig(t)
+	cp := newBuildControlPlane(t, Options{Verification: cfg})
+	x := buildableChange(t, cp, "x")
+	y := buildableChange(t, cp, "y")
+	user := asCaller("alice@example.com", CallerUser)
+	_, err := cp.StartBuild(user, &gensurla.StartBuildPayload{ChangeID: "x", RequestRevision: x.RequestRevision})
+	require.NoError(t, err)
+	cp.mu.RLock()
+	saved, found, err := cp.cards.loadOpenBuild()
+	cp.mu.RUnlock()
+	require.NoError(t, err)
+	require.True(t, found)
+	workspace, _, _ := cp.currentWorkspaceTarget()
+	productionBuildGit(t, workspace, "switch", "--quiet", "-c", "surla/build-1")
+	require.NoError(t, os.WriteFile(filepath.Join(workspace, "candidate.txt"), []byte("candidate\n"), 0o600))
+	productionBuildGit(t, workspace, "add", "candidate.txt")
+	productionBuildGit(t, workspace, "commit", "--quiet", "-m", "Candidate")
+	candidate := productionBuildGit(t, workspace, "rev-parse", "HEAD")
+	productionBuildGit(t, workspace, "switch", "--quiet", "-")
+	tree := productionBuildGit(t, workspace, "rev-parse", "HEAD^{tree}")
+	rewritten := productionBuildGit(t, workspace, "commit-tree", tree, "-m", "Rewrite fixture")
+	productionBuildGit(t, workspace, "reset", "--hard", "--quiet", rewritten)
+	writeListedRunAt(t, cfg.RunsDir, "alice@example.com", x, strings.Repeat("a", 32), saved.StartedAt.Add(time.Second), true, candidate)
+	_, err = cp.StartBuild(user, &gensurla.StartBuildPayload{ChangeID: "y", RequestRevision: y.RequestRevision})
+	var refusal *gensurla.OpenBuildRefusal
+	require.ErrorAs(t, err, &refusal)
+	assert.Equal(t, "previous_change_open", refusal.Name)
+	assert.Contains(t, refusal.Message, "Drop is safe")
+	passed, ok := refusal.Build.Taking.AsPassed()
+	require.True(t, ok)
+	assert.False(t, passed.BaseInBranch)
+}
