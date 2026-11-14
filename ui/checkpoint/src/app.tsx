@@ -16,7 +16,7 @@ import { createRoot, Root } from "react-dom/client";
 import { ArchitecturePreviewView, IncomingChangeCardView } from "./components/c4-graph";
 import { ChangeListView } from "./components/change-list";
 import { CP1EditorView } from "./components/cp1-editor";
-import { BuildSectionView, BuildStartReceipt } from "./components/build";
+import { BuildSectionView, BuildStartReceipt, runBelongsToBuild } from "./components/build";
 import { VerificationView } from "./components/cp4-verification";
 import { ProposedRevisionView } from "./components/proposal";
 import { ApproveResultControl } from "./components/cp5-approve";
@@ -29,6 +29,7 @@ import { TraceDrawer, TraceFilter } from "./components/trace-drawer";
 import { isDraftDirty, PreservedDraft } from "./context/cp1-draft";
 import {
   ArchitecturePreviewResult,
+  ApprovalItem,
   ChangeCardResult,
   ChangeBuild,
   ChangeList,
@@ -43,6 +44,7 @@ import {
   Operations,
   ROUTES,
   ServerFailure,
+  StartedBuild,
   StoryRefreshResult,
   TraceList,
   TeamRoleState,
@@ -1060,6 +1062,10 @@ export function bootstrapViewsPage() {
         proposalAnswers: keepProposalAnswers(ed.proposalAnswers, before, after),
         proposalError: before?.request_revision === after?.request_revision ? ed.proposalError : null,
       };
+      if ((ed.card.approval ?? ed.card.unverified_approval?.approval)?.report_digest !==
+          (latest.approval ?? latest.unverified_approval?.approval)?.report_digest) {
+        refreshVerificationObservations(latest.change_id);
+      }
       if (after !== undefined && before?.request_revision !== after.request_revision) {
         statusEl.textContent =
           (before === undefined
@@ -1164,6 +1170,36 @@ export function bootstrapViewsPage() {
     if (latest !== undefined) readVerification(latest.run_id, changeId);
     if (selectedVerificationChangeId === changeId && selectedRunId !== null &&
         selectedRunId !== latest?.run_id) readVerification(selectedRunId, changeId);
+    const card = activeEditor?.card;
+    const approval = card?.approval ?? card?.unverified_approval?.approval;
+    if (card?.change_id === changeId && approval !== undefined && knownTakingBuild(changeId) !== null &&
+        !listRequestErrors.has(changeId) && approvalRunFor(card, approval) === null) {
+      refreshVerificationsInBackground(changeId);
+    }
+  }
+
+  // knownTakingBuild excludes retained facts while the owner observation is
+  // stale, failed or being replaced. Saved results remain readable throughout.
+  function knownTakingBuild(changeId: string): StartedBuild | null {
+    return sessionState === "active" && !waitTroubleShown && buildChangeId === changeId &&
+      buildSnapshot?.state === "started" && buildReadError === null &&
+      !hasPending("get_build", changeId) && !hasPending("start_build", changeId) &&
+      !Array.from(pendingCalls).some((call) => call.op === "drop_build")
+      ? buildSnapshot : null;
+  }
+
+  // approvalRunFor correlates every recorded input to an eligible owner run;
+  // neither recency nor equal commits alone establishes this build's identity.
+  function approvalRunFor(card: ChangeCardResult, approval: ApprovalItem): VerificationStatusResult | null {
+    const build = knownTakingBuild(card.change_id);
+    if (build === null) return null;
+    for (const run of runsById.values()) {
+      if (runInputsKnown(run) && runBelongsToBuild(card.change_id, build, run) &&
+          run.request_revision === card.request_revision && run.candidate_commit === approval.candidate_commit &&
+          run.suite_commit === approval.suite_commit && run.test_source.source === approval.test_source.source &&
+          run.state.type === "completed" && run.state.value.report.report_digest === approval.report_digest) return run;
+    }
+    return null;
   }
 
   // latestVerificationFor uses the run identity supplied by the change owner.
@@ -1467,6 +1503,7 @@ export function bootstrapViewsPage() {
               refreshVerificationObservations(changeId);
             }
             followBuildFindings();
+            if (result.build.state === "started" && openBuildRefusal?.change_id !== changeId) openBuildRefusal = null;
             const ready = buildConfirmationRead;
             buildConfirmationRead = null;
             ready?.(result.build);
@@ -1488,6 +1525,7 @@ export function bootstrapViewsPage() {
   // Assignment reads can change independently without invalidating that text.
   function currentFindingsBasis(): string | null {
     if (buildChangeId === null || buildSnapshot?.state !== "started" ||
+        (buildSnapshot.taking.state !== "building" && buildSnapshot.taking.state !== "passed") ||
         buildSnapshot.test_writer.tests.state !== "needs_changes" ||
         hasPending("start_build", buildChangeId)) return null;
     return JSON.stringify([
@@ -2249,7 +2287,11 @@ export function bootstrapViewsPage() {
         ) : null}
         <CP1EditorView
           card={ed.card}
-          build={buildChangeId === ed.card.change_id && buildSnapshot?.state === "started" ? buildSnapshot : null}
+          build={knownTakingBuild(ed.card.change_id)}
+          approvalRun={ed.card.approval !== undefined ? approvalRunFor(ed.card, ed.card.approval) : null}
+          unverifiedApprovalRun={ed.card.unverified_approval !== undefined ? approvalRunFor(ed.card, ed.card.unverified_approval.approval) : null}
+          approvalRunsLoading={hasPending("list_verifications", ed.card.change_id)}
+          approvalRunsError={listRequestErrors.get(ed.card.change_id) ?? null}
           buildRevisionNotice={buildRevisionNotice}
           buildSection={
             <BuildSectionView
@@ -2501,7 +2543,7 @@ export function bootstrapViewsPage() {
           <>
             <VerificationView
               changeId={effectiveChangeId}
-              build={buildChangeId === effectiveChangeId && buildSnapshot?.state === "started" ? buildSnapshot : null}
+              build={knownTakingBuild(effectiveChangeId)}
               run={displayedRun}
               inputsKnown={displayedRun !== null && runInputsKnown(displayedRun)}
               listedRuns={listedRuns}
@@ -3220,6 +3262,7 @@ export function bootstrapViewsPage() {
       return;
     }
     const changeId = activeEditor.card.change_id;
+    listRequestErrors.delete(changeId);
     statusEl.textContent = "Loading the latest saved Change Card...";
     callEditorServer(
       "get_change",
@@ -3251,6 +3294,7 @@ export function bootstrapViewsPage() {
             : latestCard.unverified_approval
             ? "Showing the saved approval record (current promotion inputs could not be verified)."
             : "Showing the latest card without a current approval.";
+          refreshVerificationObservations(changeId);
           return;
         }
         const preserved = activeEditor ? snapshotUnsavedDraft(activeEditor) : null;

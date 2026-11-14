@@ -416,9 +416,11 @@ export function VerificationView({
       <details className="surla-details" id="surla-cp4-details">
         <summary>Candidate and run details</summary>
         {state.type === "completed" && state.value.report.passed ? <SavedResultCommits
+          changeId={run.change_id}
           candidateCommit={run.candidate_commit}
           testsCommit={testSource.source === "written_tests" ? run.suite_commit : null}
-          build={build?.taking.state === "passed" && build.taking.run_id === run.run_id ? build : null}
+          build={inputsKnown ? build : null}
+          run={run}
         /> : null}
         <dl className="surla-verification-details">
           <dt>Candidate commit</dt><dd><code>{run.candidate_commit}</code></dd>

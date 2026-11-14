@@ -16,7 +16,7 @@ import {
   surlaDecisionLibrary,
   validateCompletedOpenUI,
 } from "../openui/library";
-import { ChangeCardResult, ExampleItem, StartedBuild } from "../types";
+import { ChangeCardResult, ExampleItem, StartedBuild, VerificationStatusResult } from "../types";
 import { SavedResultCommits } from "./build";
 import { Alert, Badge, Button, Card } from "./shadcn";
 import { countsPhrase, storyCounts } from "./story";
@@ -24,6 +24,10 @@ import { countsPhrase, storyCounts } from "./story";
 export interface CP1EditorProps {
   card: ChangeCardResult;
   build: StartedBuild | null;
+  approvalRun: VerificationStatusResult | null;
+  unverifiedApprovalRun: VerificationStatusResult | null;
+  approvalRunsLoading: boolean;
+  approvalRunsError: string | null;
   // buildSection leads a confirmed card so the current work appears first.
   buildSection: React.ReactNode;
   // buildRevisionNotice explains the effect of changing the agreed revision.
@@ -139,6 +143,10 @@ function FieldTextarea({
 export function CP1EditorView({
   card,
   build,
+  approvalRun,
+  unverifiedApprovalRun,
+  approvalRunsLoading,
+  approvalRunsError,
   buildSection,
   buildRevisionNotice,
   proposalWaiting,
@@ -344,9 +352,11 @@ export function CP1EditorView({
             <strong>Verified artifacts: </strong>
             <code>{String(artifactNames.length)}</code>
           </p>
-          <SavedResultCommits candidateCommit={card.approval.candidate_commit}
+          {approvalRunsLoading ? <p role="status">Reading saved verification runs to identify this approval’s build…</p> : null}
+          {approvalRunsError !== null ? <p role="status">Could not read this approval’s verification history. {approvalRunsError} Its current build membership is unknown.</p> : null}
+          <SavedResultCommits changeId={card.change_id} candidateCommit={card.approval.candidate_commit}
             testsCommit={card.approval.test_source.source === "written_tests" ? card.approval.suite_commit : null}
-            build={build} />
+            build={build} run={approvalRun} />
           <details className="surla-details" id="surla-cp5-approval-details">
             <summary>Verified inputs and digests</summary>
             <p>
@@ -417,9 +427,11 @@ export function CP1EditorView({
             <strong>Recorded artifacts: </strong>
             <code>{String(unverifiedArtifactNames.length)}</code>
           </p>
-          <SavedResultCommits candidateCommit={card.unverified_approval.approval.candidate_commit}
+          {approvalRunsLoading ? <p role="status">Reading saved verification runs to identify this approval’s build…</p> : null}
+          {approvalRunsError !== null ? <p role="status">Could not read this approval’s verification history. {approvalRunsError} Its current build membership is unknown.</p> : null}
+          <SavedResultCommits changeId={card.change_id} candidateCommit={card.unverified_approval.approval.candidate_commit}
             testsCommit={card.unverified_approval.approval.test_source.source === "written_tests" ? card.unverified_approval.approval.suite_commit : null}
-            build={null} />
+            build={build} run={unverifiedApprovalRun} />
           <details className="surla-details" id="surla-cp5-unverified-approval-details">
             <summary>Recorded inputs and digests</summary>
             <p>

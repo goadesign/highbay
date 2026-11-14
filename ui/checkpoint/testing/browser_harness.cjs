@@ -556,6 +556,46 @@ async function phoneScenario(input, facts, views) {
   facts.phone.build_has_finding_text = responseFindings.some((text) => buildBody.body.includes(text));
 }
 
+// takingScenario inspects both requested viewport classes in one browser run.
+// The Go fixture supplies typed presentation facts; this proves no worker ran.
+async function takingScenario(input, facts, views) {
+  await until(views, "document.querySelector('#surla-build-taking[data-state=passed]') !== null");
+  facts.taking = [];
+  for (const [name, width, height] of [["desktop", 1280, 900], ["mobile", 375, 800]]) {
+    await views.dt.send("Emulation.setDeviceMetricsOverride", {
+      width, height, deviceScaleFactor: 1, mobile: width < 600,
+    }, views.sessionId);
+    await evaluate(views, "new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))");
+    await evaluate(views, "document.getElementById('surla-build-drop').focus(), true");
+    await views.dt.send("Input.dispatchKeyEvent", { type: "keyDown", key: "Enter", code: "Enter", windowsVirtualKeyCode: 13 }, views.sessionId);
+    await views.dt.send("Input.dispatchKeyEvent", { type: "keyUp", key: "Enter", code: "Enter", windowsVirtualKeyCode: 13 }, views.sessionId);
+    const opened = await until(views, "document.getElementById('surla-build-drop-question')?.contains(document.activeElement)");
+    const measured = await evaluate(views, "(" + function measure() {
+      const region = document.getElementById("surla-build-taking");
+      return {
+        width: document.documentElement.clientWidth,
+        document_width: document.documentElement.scrollWidth,
+        commands: Array.from(region.querySelectorAll(".surla-build-merge li > code:first-child"), (node) => node.textContent),
+        rewrite_warning: region.textContent.includes("commit where this build started") && region.textContent.includes("these merges bring that history back"),
+        overflowing: [region, ...region.querySelectorAll("*")].filter((node) => {
+          if (!node.getClientRects().length) return false;
+          const box = node.getBoundingClientRect();
+          return box.left < -1 || box.right > document.documentElement.clientWidth + 1 || node.scrollWidth > node.clientWidth + 1;
+        }).map((node) => node.id || node.tagName),
+      };
+    }.toString() + ")()");
+    measured.drop_focused = !opened.timed_out;
+    const capture = await views.dt.send("Page.captureScreenshot", { format: "png", captureBeyondViewport: true }, views.sessionId);
+    measured.screenshot = require("node:path").join(input.capture_directory, name + ".png");
+    fs.writeFileSync(measured.screenshot, Buffer.from(capture.data, "base64"));
+    await views.dt.send("Input.dispatchKeyEvent", { type: "keyDown", key: "Escape", code: "Escape", windowsVirtualKeyCode: 27 }, views.sessionId);
+    await views.dt.send("Input.dispatchKeyEvent", { type: "keyUp", key: "Escape", code: "Escape", windowsVirtualKeyCode: 27 }, views.sessionId);
+    const canceled = await until(views, "document.getElementById('surla-build-drop-question') === null && document.activeElement?.id === 'surla-build-drop'");
+    measured.drop_cancelled = !canceled.timed_out;
+    facts.taking.push(measured);
+  }
+}
+
 // main runs the scenario. Each section names the Go subtest that judges it.
 async function main(input, facts) {
   const dt = await DevTools.connect(input.devtools);
@@ -585,6 +625,10 @@ async function main(input, facts) {
       target_url: targetInfo.url,
     };
 
+    if (input.taking) {
+      await takingScenario(input, facts, views);
+      return;
+    }
     if (input.phone) {
       await phoneScenario(input, facts, views);
       return;

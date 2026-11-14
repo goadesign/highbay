@@ -412,7 +412,9 @@ export function BuildTakingView({ changeId, build, disabled, dropping, onDrop }:
   return (
     <div id="surla-build-taking" data-state={taking.state} ref={heading} tabIndex={-1}>
       {taking.state === "building" ? <p>No verification of change {changeId} has passed, so there is nothing to merge yet. Let the builder finish, or drop it.</p> : null}
-      {taking.state === "passed" ? <BuildMergeInstructions taking={taking} /> : null}
+      {taking.state === "passed" ? <BuildMergeInstructions taking={taking}
+        candidateCommit={taking.candidate_commit}
+        testsCommit={taking.tests.source === "written_tests" ? taking.tests.commit : null} /> : null}
       {taking.state === "merged" ? <p>Merged into your branch. Another change can be built. No role has work on this build.</p> : null}
       {taking.state === "dropped" ? <>
         <p>{taking.kept_branches.length === 0 ? "Dropped. Nothing was committed for it." : "Dropped. Its work stays on:"}</p>
@@ -446,14 +448,16 @@ export function BuildTakingView({ changeId, build, disabled, dropping, onDrop }:
 
 // BuildMergeInstructions names the passed commits, never movable branch tips.
 // The branch labels describe where those commits were verified.
-export function BuildMergeInstructions({ taking }: {
+export function BuildMergeInstructions({ taking, candidateCommit, testsCommit }: {
   taking: Extract<StartedBuild["taking"], { state: "passed" }>;
+  candidateCommit: string;
+  testsCommit: string | null;
 }) {
   return <div className="surla-build-merge">
     <p>To take this change, run in the project folder:</p>
     <ol>
-      <li><code>git merge {taking.candidate_commit}</code> — the builder’s commit, verified on <code>{taking.candidate_branch}</code>.</li>
-      {taking.tests.source === "written_tests" ? <li><code>git merge {taking.tests.commit}</code> — then the tests’ commit, verified on <code>{taking.tests.branch}</code>.</li> : null}
+      <li><code>git merge {candidateCommit}</code> — the builder’s commit, verified on <code>{taking.candidate_branch}</code>.</li>
+      {testsCommit !== null && taking.tests.source === "written_tests" ? <li><code>git merge {testsCommit}</code> — then the tests’ commit, verified on <code>{taking.tests.branch}</code>.</li> : null}
     </ol>
     <p>Build another change once you have, or drop this one. Surla does not merge or deploy anything.</p>
     {!taking.base_in_branch ? <Alert variant="warning">
@@ -462,17 +466,28 @@ export function BuildMergeInstructions({ taking }: {
   </div>;
 }
 
+// runBelongsToBuild mirrors the owner's eligibleBuildRuns predicate. A newer
+// pass does not disqualify an older pass from this same saved start.
+export function runBelongsToBuild(changeId: string, build: StartedBuild, run: VerificationStatusResult): boolean {
+  return run.change_id === changeId && run.request_revision === build.request_revision &&
+    run.state.type === "completed" && run.state.value.report.passed &&
+    Date.parse(run.accepted_at) >= Date.parse(build.started_at);
+}
+
 // SavedResultCommits keeps historical verification and approval evidence bound
-// to its own inputs. Only a matching current passed build adds taking guidance.
-export function SavedResultCommits({ candidateCommit, testsCommit, build }: {
+// to its own inputs. Only an eligible run of the open build adds guidance.
+export function SavedResultCommits({ changeId, candidateCommit, testsCommit, build, run }: {
+  changeId: string;
   candidateCommit: string;
   testsCommit: string | null;
   build: StartedBuild | null;
+  run: VerificationStatusResult | null;
 }) {
   const taking = build?.taking;
-  const matched = taking?.state === "passed" && taking.candidate_commit === candidateCommit &&
-    (taking.tests.source === "written_tests" ? taking.tests.commit === testsCommit : testsCommit === null);
-  return matched ? <BuildMergeInstructions taking={taking} /> : <p>
+  const matched = taking?.state === "passed" && run !== null && build !== null &&
+    runBelongsToBuild(changeId, build, run) && run.candidate_commit === candidateCommit &&
+    (run.test_source.source === "written_tests" ? run.suite_commit === testsCommit : testsCommit === null);
+  return matched ? <BuildMergeInstructions taking={taking} candidateCommit={candidateCommit} testsCommit={testsCommit} /> : <p>
     This saved result names the builder’s commit <code>{candidateCommit}</code>
     {testsCommit !== null ? <> and the tests’ commit <code>{testsCommit}</code></> : null}.
     {" Review the current build’s taking state before merging."}

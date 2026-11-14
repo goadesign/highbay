@@ -114,7 +114,7 @@ expect(!page.$("#surla-build-drop") && !page.$("#surla-build-drop-question"), "c
 expect(field === page.$('textarea[data-example-id="check_01"][data-field="scenario"]') && field.value === "keep my unsaved scenario", "Drop lost unsaved editor state");
 expect(page.sent("POST", path).length === 1, "Drop submitted twice");
 page.close();
-const again = await openPage(origin, { link: input.link });
+const again = await openPage(origin, { link: input.link + "-2" });
 await until(() => again.$("#surla-build-taking")?.dataset.state === "dropped", "a new page did not read the saved drop");
 again.close();
 `)

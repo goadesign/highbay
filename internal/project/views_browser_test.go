@@ -54,6 +54,10 @@ type (
 		DevTools string `json:"devtools"`
 		// Phone selects the focused Team and Build layout scenario.
 		Phone bool `json:"phone,omitempty"`
+		// Taking selects the focused passed-build layout and consent scenario.
+		Taking bool `json:"taking,omitempty"`
+		// CaptureDirectory receives the requested private viewport screenshots.
+		CaptureDirectory string `json:"capture_directory,omitempty"`
 		// Origin is the project server's origin.
 		Origin string `json:"origin"`
 		// SameSiteOrigin is the test's other listener on the project's host.
@@ -95,8 +99,22 @@ type (
 		Live liveFacts `json:"live"`
 		// Phone records Team and Build at 375 by 800 CSS pixels.
 		Phone phoneFacts `json:"phone"`
+		// Taking records one batched desktop and phone inspection.
+		Taking []takingViewFacts `json:"taking"`
 		// Reload is the views page after a reload.
 		Reload reloadFacts `json:"reload"`
+	}
+
+	// takingViewFacts contains browser layout and keyboard evidence only.
+	takingViewFacts struct {
+		Width          int      `json:"width"`
+		DocumentWidth  int      `json:"document_width"`
+		Commands       []string `json:"commands"`
+		RewriteWarning bool     `json:"rewrite_warning"`
+		DropFocused    bool     `json:"drop_focused"`
+		DropCancelled  bool     `json:"drop_cancelled"`
+		Overflowing    []string `json:"overflowing"`
+		Screenshot     string   `json:"screenshot"`
 	}
 
 	// viewsFacts is what the views page showed, sent, stored and reported.
