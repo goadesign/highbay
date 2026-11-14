@@ -516,9 +516,11 @@ func TestAdoptStoryRefreshOnProposeAndRevise(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, wantDesignSrc, storedHTTP.designSource)
 
-	// MCP propose_change adopts the same succeeded opV1 on a second control
-	// plane with the same change_id and produces the exact same request_revision.
-	cpMCP := newControlPlane(t, Options{WorkspaceDir: wsDir})
+	// MCP adopts the same input on an independent project and control plane.
+	// The transport comparison shares neither draft files nor provenance owners.
+	mcpWorkspace := t.TempDir()
+	writeWorkspaceFiles(t, mcpWorkspace, snapshot)
+	cpMCP := newControlPlane(t, Options{WorkspaceDir: mcpWorkspace})
 	opMCPV1 := seedStoryRefreshForTest(t, cpMCP, "alice@example.com", storyRefreshStateSucceeded, storiesV1, "")
 	adapter := genmcpadapter.NewMCPAdapter(gensurla.NewEndpoints(cpMCP), nil)
 	res, err := adapter.ToolsCall(aliceCtx, &genmcpadapter.ToolsCallPayload{
