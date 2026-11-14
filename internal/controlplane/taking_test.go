@@ -47,8 +47,8 @@ func TestCommitTakenRecognizesSquashBeforeLaterEdit(t *testing.T) {
 	assert.True(t, got)
 }
 
-// TestDropBuildPersistsAndRejectsRepeatedDrop proves the list rename survives
-// a new control-plane read and removes worker assignments without deleting work.
+// TestDropBuildPersistsAndRejectsRepeatedDrop checks the Drop result and
+// subsequent reads, including worker assignments and a repeated request.
 func TestDropBuildPersistsAndRejectsRepeatedDrop(t *testing.T) {
 	cp := newBuildControlPlane(t, Options{Verification: verificationConfig(t)})
 	card := buildableChange(t, cp, "x")
@@ -255,6 +255,7 @@ func TestOlderPassedRunCanEstablishMerged(t *testing.T) {
 	cfg := verificationConfig(t)
 	cp := newBuildControlPlane(t, Options{Verification: cfg})
 	card := buildableChange(t, cp, "x")
+	y := buildableChange(t, cp, "y")
 	user := asCaller("alice@example.com", CallerUser)
 	_, err := cp.StartBuild(user, &gensurla.StartBuildPayload{ChangeID: "x", RequestRevision: card.RequestRevision})
 	require.NoError(t, err)
@@ -291,6 +292,16 @@ func TestOlderPassedRunCanEstablishMerged(t *testing.T) {
 	started, ok = read.Build.AsStarted()
 	require.True(t, ok)
 	assert.Equal(t, gensurla.BuildTakingKindMerged, started.Taking.Kind())
+	project := productionBuildGit(t, workspace, "rev-parse", "HEAD")
+	_, err = cp.StartBuild(user, &gensurla.StartBuildPayload{ChangeID: "y", RequestRevision: y.RequestRevision})
+	require.NoError(t, err)
+	cp.mu.RLock()
+	next, found, err := cp.cards.loadOpenBuild()
+	cp.mu.RUnlock()
+	require.NoError(t, err)
+	require.True(t, found)
+	assert.Equal(t, 2, next.Number)
+	assert.Equal(t, project, next.Base)
 }
 
 // TestDropGuidanceSeesMergeOnlyChanges checks history paths introduced by a
@@ -309,11 +320,14 @@ func TestDropGuidanceSeesMergeOnlyChanges(t *testing.T) {
 	candidate := productionBuildGit(t, workspace, "rev-parse", "HEAD")
 	productionBuildGit(t, workspace, "switch", "--quiet", "-")
 	productionBuildGit(t, workspace, "switch", "--quiet", "-c", "side-fixture")
-	require.NoError(t, os.WriteFile(filepath.Join(workspace, "shared.txt"), []byte("side\n"), 0o600))
-	productionBuildGit(t, workspace, "add", "shared.txt")
+	require.NoError(t, os.WriteFile(filepath.Join(workspace, "side.txt"), []byte("side\n"), 0o600))
+	productionBuildGit(t, workspace, "add", "side.txt")
 	productionBuildGit(t, workspace, "commit", "--quiet", "-m", "Side")
 	productionBuildGit(t, workspace, "switch", "--quiet", "-")
-	productionBuildGit(t, workspace, "merge", "--quiet", "--no-ff", "-m", "Merge side", "side-fixture")
+	productionBuildGit(t, workspace, "merge", "--quiet", "--no-ff", "--no-commit", "side-fixture")
+	require.NoError(t, os.WriteFile(filepath.Join(workspace, "shared.txt"), []byte("merge resolution\n"), 0o600))
+	productionBuildGit(t, workspace, "add", "shared.txt")
+	productionBuildGit(t, workspace, "commit", "--quiet", "-m", "Merge side with resolution")
 	project := productionBuildGit(t, workspace, "rev-parse", "HEAD")
 	safe, err := dropSafeGuidance(t.Context(), workspace, base, project, candidate)
 	require.NoError(t, err)
@@ -325,6 +339,7 @@ func TestDropGuidanceSeesMergeOnlyChanges(t *testing.T) {
 func TestDropBeforeAnyAssignmentAdvancesTheNextNumber(t *testing.T) {
 	cp := newBuildControlPlane(t, Options{Verification: verificationConfig(t)})
 	card := buildableChange(t, cp, "x")
+	y := buildableChange(t, cp, "y")
 	user := asCaller("alice@example.com", CallerUser)
 	first, err := cp.StartBuild(user, &gensurla.StartBuildPayload{ChangeID: "x", RequestRevision: card.RequestRevision})
 	require.NoError(t, err)
@@ -338,11 +353,11 @@ func TestDropBeforeAnyAssignmentAdvancesTheNextNumber(t *testing.T) {
 	provenance, found, err := cp.cards.loadMadeFrom()
 	require.NoError(t, err)
 	require.True(t, found)
-	record := loadMetadataRecord(t, cp, "x")
+	record := loadMetadataRecord(t, cp, "y")
 	record.madeFrom.Start = provenance.Start
 	record.madeFrom.Entries = nil
 	saveMetadataRecord(t, cp, record)
-	second, err := cp.StartBuild(user, &gensurla.StartBuildPayload{ChangeID: "x", RequestRevision: card.RequestRevision})
+	second, err := cp.StartBuild(user, &gensurla.StartBuildPayload{ChangeID: "y", RequestRevision: y.RequestRevision})
 	require.NoError(t, err)
 	assert.NotEqual(t, first.Build.StartedAt, second.Build.StartedAt)
 	cp.mu.RLock()
@@ -351,4 +366,68 @@ func TestDropBeforeAnyAssignmentAdvancesTheNextNumber(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, found)
 	assert.Equal(t, 2, saved.Number)
+}
+
+// TestDropSurvivesOwnerRestart reloads the Drop record without another save.
+func TestDropSurvivesOwnerRestart(t *testing.T) {
+	cfg := verificationConfig(t)
+	cp := newBuildControlPlane(t, Options{Verification: cfg})
+	card := buildableChange(t, cp, "x")
+	user := asCaller("alice@example.com", CallerUser)
+	first, err := cp.StartBuild(user, &gensurla.StartBuildPayload{ChangeID: "x", RequestRevision: card.RequestRevision})
+	require.NoError(t, err)
+	_, err = cp.DropBuild(user, &gensurla.DropBuildPayload{ChangeID: "x", StartedAt: first.Build.StartedAt})
+	require.NoError(t, err)
+	path := filepath.Join(cp.cards.dir, madeFromFileName)
+	before, err := os.ReadFile(path)
+	require.NoError(t, err)
+	cardsDir := cp.cards.dir
+	workspace, _, _ := cp.currentWorkspaceTarget()
+	require.NoError(t, cp.Close())
+	reopened := newBuildControlPlane(t, Options{CardsDir: cardsDir, WorkspaceDir: workspace, Verification: cfg})
+	read, err := reopened.GetBuild(user, &gensurla.GetBuildPayload{ChangeID: "x"})
+	require.NoError(t, err)
+	started, ok := read.Build.AsStarted()
+	require.True(t, ok)
+	assert.Equal(t, gensurla.BuildTakingKindDropped, started.Taking.Kind())
+	assignments, err := reopened.ListBuilderAssignments(user)
+	require.NoError(t, err)
+	assert.Empty(t, assignments.Assignments)
+	after, err := os.ReadFile(path)
+	require.NoError(t, err)
+	assert.Equal(t, before, after)
+}
+
+// TestDropAcceptsMergedBuild keeps Drop available even when the project took it.
+func TestDropAcceptsMergedBuild(t *testing.T) {
+	cfg := verificationConfig(t)
+	cp := newBuildControlPlane(t, Options{Verification: cfg})
+	card := buildableChange(t, cp, "x")
+	user := asCaller("alice@example.com", CallerUser)
+	first, err := cp.StartBuild(user, &gensurla.StartBuildPayload{ChangeID: "x", RequestRevision: card.RequestRevision})
+	require.NoError(t, err)
+	cp.mu.RLock()
+	saved, found, err := cp.cards.loadOpenBuild()
+	cp.mu.RUnlock()
+	require.NoError(t, err)
+	require.True(t, found)
+	workspace, _, _ := cp.currentWorkspaceTarget()
+	productionBuildGit(t, workspace, "switch", "--quiet", "-c", "surla/build-1")
+	require.NoError(t, os.WriteFile(filepath.Join(workspace, "merged.txt"), []byte("merged\n"), 0o600))
+	productionBuildGit(t, workspace, "add", "merged.txt")
+	productionBuildGit(t, workspace, "commit", "--quiet", "-m", "Candidate")
+	candidate := productionBuildGit(t, workspace, "rev-parse", "HEAD")
+	productionBuildGit(t, workspace, "switch", "--quiet", "-")
+	productionBuildGit(t, workspace, "merge", "--quiet", "--no-ff", "-m", "Take candidate", candidate)
+	writeListedRunAt(t, cfg.RunsDir, "alice@example.com", card, strings.Repeat("a", 32), saved.StartedAt.Add(time.Second), true, candidate)
+	read, err := cp.GetBuild(user, &gensurla.GetBuildPayload{ChangeID: "x"})
+	require.NoError(t, err)
+	started, ok := read.Build.AsStarted()
+	require.True(t, ok)
+	assert.Equal(t, gensurla.BuildTakingKindMerged, started.Taking.Kind())
+	dropped, err := cp.DropBuild(user, &gensurla.DropBuildPayload{ChangeID: "x", StartedAt: first.Build.StartedAt})
+	require.NoError(t, err)
+	started, ok = dropped.Build.AsStarted()
+	require.True(t, ok)
+	assert.Equal(t, gensurla.BuildTakingKindDropped, started.Taking.Kind())
 }
