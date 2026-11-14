@@ -57,6 +57,15 @@ func TestOrdersLiveCopyAppliesADraftThroughTheProjectServer(t *testing.T) {
 	headOut, err := exec.CommandContext(t.Context(), "git", "-C", repo, "rev-parse", "--verify", "HEAD^{commit}").Output()
 	require.NoError(t, err)
 	head := strings.TrimSpace(string(headOut))
+	// Refresh owns a draft beside the project. Keep that write and every
+	// candidate/suite read in a test-owned clone of the same committed HEAD.
+	cloned := filepath.Join(t.TempDir(), "candidate")
+	clone := exec.CommandContext(t.Context(), "git", "clone", "--no-hardlinks", "--no-checkout", repo, cloned)
+	clone.Env = testGitEnv()
+	clonedOutput, err := clone.CombinedOutput()
+	require.NoError(t, err, string(clonedOutput))
+	runTestGit(t, cloned, "checkout", "--detach", head)
+	repo = cloned
 	workspace := filepath.Join(repo, "examples", "orders")
 	settings, err := json.Marshal(map[string]any{
 		"candidate_repo":   repo,
@@ -96,8 +105,9 @@ func TestOrdersLiveCopyAppliesADraftThroughTheProjectServer(t *testing.T) {
 	refused := ordersDraftRefusal(t, ctx, client, ordersSystemPrompt, "Answer in one sentence.")
 	assert.Contains(t, refused, "start_live_target", "with no live copy, the refusal names the step that enables drafts")
 
+	refresh := trustedSuiteRefresh(t, ctx, client)
 	args, err := gensurla.EncodeProposeChangePayload(&gensurla.ProposeChangePayload{
-		ChangeID: "orders-refund-wording", Prompt: "Answer refund questions in one sentence.",
+		ChangeID: "orders-refund-wording", Prompt: "Answer refund questions in one sentence.", StoryRefreshOpID: refresh.OpID,
 		Analysis: &gensurla.CP1Analysis{
 			Summary:     "Keep the existing refund decisions and answer customers in one sentence.",
 			Ambiguities: []*gensurla.CP1AnalysisAmbiguity{},

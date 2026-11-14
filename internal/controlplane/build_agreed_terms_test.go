@@ -195,7 +195,7 @@ func TestBuildWithoutAgreedTermsAsksToBuildAgain(t *testing.T) {
 	assert.Equal(t, agreed.Examples, assignment.Examples)
 }
 
-// confirmAgreedTerms proposes changeID as the guide with two questions, one
+// confirmAgreedTerms authors a legacy saved card with two questions, one
 // example and two preserved behaviors, then confirms it as the user with an
 // answer to each question, the example edited and one example added. It
 // returns the confirmed card.
@@ -205,7 +205,16 @@ func confirmAgreedTerms(t *testing.T, cp *ControlPlane, changeID string) *gensur
 		Question: "Where does an instant refund go?", Options: []string{"original_payment", "store_credit"},
 	})
 	analysis.PreservedBehaviors = append(analysis.PreservedBehaviors, "Refunds of gift cards stay manual.")
-	proposed := mustPropose(t, cp, agreedGuide, changeID, "Refunds up to $50 are instant.", analysis)
+	proposed := saveProposedCardFixture(t, cp, agreedOwner, changeID, "Refunds up to $50 are instant.", analysis)
+	// The old producer could save source before evaluation metadata existed.
+	// Keep that explicit legacy input for downstream text revision tests.
+	record := loadMetadataRecord(t, cp, changeID)
+	record.designSource = `{"design/design.go":"package design\n"}`
+	var err error
+	record.card.RequestRevision, err = computeCanonicalRevision(record.card, record.owner, record.designSource)
+	require.NoError(t, err)
+	saveMetadataRecord(t, cp, record)
+	proposed = record.card
 	require.Len(t, proposed.Ambiguities, 2)
 	require.Len(t, proposed.Examples, 1)
 	edited := *proposed.Examples[0]

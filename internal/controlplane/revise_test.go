@@ -632,7 +632,9 @@ func TestAdoptStoryRefreshOnProposeAndRevise(t *testing.T) {
 	})
 	require.NoError(t, err)
 	assert.Nil(t, revisedToZero.Stories)
-	cpPlain := newControlPlane(t, Options{WorkspaceDir: wsDir})
+	plainWorkspace := t.TempDir()
+	writeWorkspaceFiles(t, plainWorkspace, snapshot)
+	cpPlain := newControlPlane(t, Options{WorkspaceDir: plainWorkspace})
 	plainOp := seedStoryRefreshForTest(t, cpPlain, "alice@example.com", storyRefreshStateSucceeded, nil, "")
 	plainHTTP, err := cpPlain.ProposeChange(aliceCtx, &gensurla.ProposeChangePayload{
 		ChangeID: "chg-http", Prompt: "Refunds up to $50 are instant.", StoryRefreshOpID: &plainOp,

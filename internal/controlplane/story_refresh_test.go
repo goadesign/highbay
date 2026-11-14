@@ -792,8 +792,8 @@ var _ = Service("orders", func() {
 	assert.Contains(t, nonStorySucceeded.Message, "the design declares no Stories")
 
 	// With the same canonical design input, adopting a refresh with zero
-	// Stories equals adopting no Story evaluation. The project still holds
-	// the earlier Story design; compare against the evaluated draft folder.
+	// Stories has the same canonical content as an empty Story list. Module
+	// proposals always select a refresh; no live-folder comparison is needed.
 	adoptedZero, err := cp.ProposeChange(alice, &gensurla.ProposeChangePayload{
 		ChangeID:         "chg-zero-stories",
 		Prompt:           "Refunds up to $50 are instant.",
@@ -802,8 +802,12 @@ var _ = Service("orders", func() {
 	})
 	require.NoError(t, err)
 	assert.Nil(t, adoptedZero.Stories)
-	plainZero := mustPropose(t, newControlPlane(t, Options{WorkspaceDir: filepath.Join(wsDir, draftFolderName)}), alice, "chg-zero-stories", "Refunds up to $50 are instant.", refundAnalysis("Refunds up to $50 are instant."))
-	assert.Equal(t, plainZero.RequestRevision, adoptedZero.RequestRevision)
+	emptyStories := *adoptedZero
+	emptyStories.Stories = []*gensurla.StorySummaryItem{}
+	savedZero := loadMetadataRecord(t, cp, adoptedZero.ChangeID)
+	emptyRevision, err := computeCanonicalRevision(&emptyStories, savedZero.owner, savedZero.designSource)
+	require.NoError(t, err)
+	assert.Equal(t, emptyRevision, adoptedZero.RequestRevision)
 }
 
 // writeWorkspaceFiles writes files into dir, creating parent directories.

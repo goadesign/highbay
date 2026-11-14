@@ -277,8 +277,7 @@ page.close();
 // a Story: the confirm view and the Story stage both say so.
 func TestViewsPageStoryStageSaysAChangeHasNoStory(t *testing.T) {
 	cp, ps := storyPageServer(t)
-	guide := WithPrincipal(context.Background(), Principal{ID: pageOwner, CallerID: "guide", Kind: CallerGuide})
-	mustPropose(t, cp, guide, "chg-plain", "Route refunds to a manager.", refundAnalysis("Route refunds to a manager."))
+	saveProposedCardFixture(t, cp, pageOwner, "chg-plain", "Route refunds to a manager.", refundAnalysis("Route refunds to a manager."))
 	runPageScript(t, ps, nil, viewsPageScriptHelpers+`
 const page = await openPage(origin, { link: input.link });
 await until(() => page.$("#surla-cp1-editor").dataset.changeId === "chg-plain", "the change did not open");

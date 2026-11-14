@@ -66,7 +66,7 @@ func TestViewsPageBuildWaitsForConfirmationAndARecoveredRead(t *testing.T) {
 	cp.changesWait = 400 * time.Millisecond
 	cp.changesPoll = 20 * time.Millisecond
 	confirmedChange(t, cp, "chg-confirmed")
-	mustPropose(t, cp, asCaller(pageOwner, CallerGuide), "chg-unconfirmed", "Route refunds to a manager.", refundAnalysis("Route refunds to a manager."))
+	saveProposedCardFixture(t, cp, pageOwner, "chg-unconfirmed", "Route refunds to a manager.", refundAnalysis("Route refunds to a manager."))
 	ps := startPageServer(t, cp)
 
 	runPageScript(t, ps, nil, `

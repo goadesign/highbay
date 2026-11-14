@@ -258,7 +258,7 @@ func TestVerificationCurrentInputsIgnoreForeignCard(t *testing.T) {
 	runID := strings.Repeat("1", 32)
 	writeListedRun(t, runsDir, "alice@example.com", card, runID, time.Date(2026, 10, 1, 9, 0, 0, 0, time.UTC), true)
 	require.NoError(t, os.Remove(cp.cards.path(card.ChangeID)))
-	mustPropose(t, cp, asCaller("bob@example.com", CallerGuide), card.ChangeID,
+	saveProposedCardFixture(t, cp, "bob@example.com", card.ChangeID,
 		"Bob's current change.", refundAnalysis("Bob's current change."))
 	require.NoError(t, os.WriteFile(filepath.Join(cp.cards.dir, buildFileName(card.ChangeID)), []byte("{"), 0o600))
 	got, err := cp.GetVerification(asCaller("alice@example.com", CallerUser), &gensurla.GetVerificationPayload{RunID: runID})

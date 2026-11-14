@@ -77,7 +77,7 @@ func TestCP1AmbiguityResolutionStrictValidationOwnershipAndRevisionLock(t *testi
 	require.NoError(t, os.MkdirAll(filepath.Join(workspace, "design"), 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(workspace, "design", "design.go"), []byte("package design // orders service"), 0o644))
 	cp := newControlPlane(t, Options{WorkspaceDir: workspace})
-	designSrc := `{"design/design.go":"package design // orders service"}`
+	designSrc := "" // Intent before initialization does not inspect project design files.
 	if _, err := cp.ProposeChange(context.Background(), &gensurla.ProposeChangePayload{
 		ChangeID: "chg-refund-50",
 		Prompt:   "Refunds under $50 should be automatic, otherwise ask a manager.",
