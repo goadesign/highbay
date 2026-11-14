@@ -228,8 +228,6 @@ jobs:
         run: |
           npm ci --prefix ui/checkpoint --no-audit --no-fund </dev/null
           npm --prefix ui/checkpoint run typecheck </dev/null
-      - name: Test generated page contract consumers
-        run: node --test ui/checkpoint/build_test.mjs </dev/null
           go run goa.design/goa/v3/cmd/goa gen github.com/goadesign/surla/design </dev/null
           go run goa.design/goa/v3/cmd/goa gen github.com/goadesign/surla/design/targetprompt -o internal/targetprompt </dev/null
           (cd examples/orders && go run goa.design/goa/v3/cmd/goa gen github.com/goadesign/surla/examples/orders/design) </dev/null
@@ -239,6 +237,9 @@ jobs:
             echo "Generated files differ from the committed ones:"
             git status --porcelain; git diff --stat; exit 1
           fi
+
+      - name: Test generated page contract consumers
+        run: node --test ui/checkpoint/build_test.mjs </dev/null
 
   full:
     name: Full / ${{ matrix.suite }}
