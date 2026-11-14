@@ -267,7 +267,8 @@ func (r *reportChecker) judge(ctx context.Context, changeID string) {
 	deadline := time.Now().Add(r.limit)
 	checkCtx, cancel := context.WithDeadline(ctx, deadline)
 	defer cancel()
-	copy, v, err := r.check(checkCtx, saved.Stories)
+	branch := testwriter.TestsRole.Branch(saved.Number)
+	copy, v, err := r.check(checkCtx, branch, saved.Base, saved.Stories)
 	if ctx.Err() != nil {
 		span.AddEvent("stopped before a verdict; the build stays reported")
 		return
@@ -289,7 +290,7 @@ func (r *reportChecker) judge(ctx context.Context, changeID string) {
 			return
 		}
 		message := fmt.Sprintf("Add the tests Surla accepted for change %s, report %d", id.changeID, id.report)
-		commit, err := copy.Record(checkCtx, v, message)
+		commit, err := copy.Record(checkCtx, v, branch, message)
 		switch {
 		case ctx.Err() != nil:
 			span.AddEvent("stopped before the tests were recorded; the build stays reported")
@@ -324,7 +325,7 @@ func (r *reportChecker) judge(ctx context.Context, changeID string) {
 // that the author caused an *testwriter.AuthorError; any other error says
 // nothing about the author's work.
 func (r *reportChecker) check(
-	ctx context.Context, stories []designeval.StorySummary,
+	ctx context.Context, branch, base string, stories []designeval.StorySummary,
 ) (buildCopy, testwriter.Verdict, error) {
 	copy, err := r.cp.openReportCopy(ctx)
 	if err != nil {
@@ -333,7 +334,7 @@ func (r *reportChecker) check(
 	if err := copy.Prepare(ctx, stories); err != nil {
 		return nil, testwriter.Verdict{}, err
 	}
-	v, err := copy.Check(ctx, stories)
+	v, err := copy.Check(ctx, branch, base, stories)
 	return copy, v, err
 }
 
@@ -492,8 +493,6 @@ func (r *reportChecker) couldNotRun(err error, deadline time.Time, failed string
 		reason, step = "Surla could not open the test writer's working copy: "+err.Error(), stepOpenCopy
 	case errors.Is(err, candidate.ErrIsolationUnavailable):
 		reason, step = "Surla's sandbox could not start: "+err.Error(), stepSandbox
-	case errors.Is(err, testwriter.ErrNoCommonBase):
-		reason, step = "Surla cannot tell which files the test writer changed: "+err.Error(), stepNoCommonBase
 	case errors.Is(err, testwriter.ErrWriteGenerated):
 		reason = "Surla could not write the required tests into the test writer's working copy or its snapshot: " + err.Error()
 		step = stepWriteCopy + ", then ask the test writer to report again."

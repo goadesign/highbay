@@ -61,8 +61,10 @@ func TestPrepareAndCheckRefuseALinkedFolder(t *testing.T) {
 			t.Run(name, func(t *testing.T) {
 				t.Parallel()
 				repo, _ := newProject(t, files)
+				base := runGit(t, repo, "rev-parse", "HEAD")
+				branch := TestsRole.Branch(1)
 				project := filepath.Join(repo, "services", "shop")
-				wc, err := OpenWorkingCopy(t.Context(), project)
+				wc, err := MakeCopy(t.Context(), project, TestsRole, branch, "HEAD")
 				require.NoError(t, err)
 				link := filepath.Join(project, filepath.FromSlash(tc.link))
 				target := filepath.Join(repo, filepath.FromSlash(tc.target))
@@ -81,7 +83,7 @@ func TestPrepareAndCheckRefuseALinkedFolder(t *testing.T) {
 					named = filepath.ToSlash(rel)
 				}
 				if tc.check {
-					v, err := testChecker.Check(t.Context(), wc, suite, refundStories)
+					v, err := testChecker.Check(t.Context(), wc, suite, branch, base, refundStories)
 					assert.Equal(t, before, projectFiles(t, repo), "the project is byte-identical")
 					require.NoError(t, err)
 					require.NotEmpty(t, v.Findings)
@@ -141,7 +143,7 @@ func TestPrepareSeparatesFailuresTheAuthorCannotFix(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			repo, _ := newProject(t, files)
-			wc, err := OpenWorkingCopy(t.Context(), repo)
+			wc, err := MakeCopy(t.Context(), repo, TestsRole, TestsRole.Branch(1), "HEAD")
 			require.NoError(t, err)
 			_, err = tc.checker.Prepare(tc.ctx, wc, Suite{Module: "eval", Command: "./cmd/shop-evals"}, nil)
 			require.Error(t, err)
@@ -168,7 +170,7 @@ func TestPrepareGivesAPlainErrorWhenTheCallerStopsDuringAModulePhase(t *testing.
 		"eval/go.sum":           "",
 		"eval/design/design.go": "package design\n",
 	})
-	wc, err := OpenWorkingCopy(t.Context(), repo)
+	wc, err := MakeCopy(t.Context(), repo, TestsRole, TestsRole.Branch(1), "HEAD")
 	require.NoError(t, err)
 
 	// The toolchain's go records that it started, then hangs, as a slow

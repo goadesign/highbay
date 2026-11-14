@@ -4,6 +4,7 @@ package controlplane
 import (
 	"context"
 	"fmt"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
@@ -54,12 +55,23 @@ func TestStartBuildUsesTheProductionCopy(t *testing.T) {
 			})
 			card := buildableChange(t, cp, "chg")
 			workspace, _, _ := cp.currentWorkspaceTarget()
+			builderFolder := filepath.Join(workspace, testwriter.BuilderRole.Folder, subdir)
 			folder := filepath.Join(workspace, testwriter.Folder, subdir)
-			for range 2 {
+			for i := range 2 {
+				if i == 1 {
+					// Remove the builder copy before Build again to prove a
+					// missing copy is recreated at the saved build's base.
+					runGitForTest(t, repo, "worktree", "remove", "--force", filepath.Join(workspace, testwriter.BuilderRole.Folder))
+				}
 				result, err := startBuildAgain(t, cp, asCaller("alice@example.com", CallerUser), "chg", card.RequestRevision)
 				require.NoError(t, err)
-				assert.Equal(t, productionBuildGit(t, repo, "rev-parse", "HEAD"),
-					productionBuildGit(t, folder, "rev-parse", "HEAD"))
+				head := productionBuildGit(t, repo, "rev-parse", "HEAD")
+				assert.Equal(t, head, productionBuildGit(t, builderFolder, "rev-parse", "HEAD"))
+				assert.Equal(t, testwriter.BuilderRole.Branch(1),
+					productionBuildGit(t, builderFolder, "symbolic-ref", "--short", "HEAD"))
+				assert.Equal(t, head, productionBuildGit(t, folder, "rev-parse", "HEAD"))
+				assert.Equal(t, testwriter.TestsRole.Branch(1),
+					productionBuildGit(t, folder, "symbolic-ref", "--short", "HEAD"))
 				finding, ok := result.Build.TestWriter.Tests.AsNeedsChanges()
 				require.True(t, ok, "the real module failure is saved after the build")
 				assert.Equal(t, 1, finding.FindingCount)
@@ -72,10 +84,104 @@ func TestStartBuildUsesTheProductionCopy(t *testing.T) {
 				assert.Empty(t, productionBuildGit(t, repo, "status", "--porcelain", "--untracked-files=all"))
 			}
 			assert.Equal(t, []BuildFolders{
-				BuilderAndTestWriter{BuilderFolder: workspace, TestWriterFolder: folder},
-				BuilderAndTestWriter{BuilderFolder: workspace, TestWriterFolder: folder},
+				BuilderAndTestWriter{BuilderFolder: builderFolder, TestWriterFolder: folder},
+				BuilderAndTestWriter{BuilderFolder: builderFolder, TestWriterFolder: folder},
 			}, registered)
-			assert.Equal(t, 2, strings.Count(productionBuildGit(t, repo, "worktree", "list", "--porcelain"), "worktree "))
+			assert.Equal(t, 3, strings.Count(productionBuildGit(t, repo, "worktree", "list", "--porcelain"), "worktree "))
+		})
+	}
+}
+
+// TestStartBuildPreSaveInspectRefusals verifies that InspectCopy refuses
+// folder-in-use and branch-in-use for both .surla-build and .surla-tests
+// before saving the build or registering any team roles.
+func TestStartBuildPreSaveInspectRefusals(t *testing.T) {
+	cases := []struct {
+		name           string
+		startFirst     bool
+		setup          func(t *testing.T, repo string)
+		wantError      string
+		wantWords      string
+		wantWorktrees  int
+		wantRegistered int
+	}{
+		{
+			name: "builder folder in use",
+			setup: func(t *testing.T, repo string) {
+				require.NoError(t, os.WriteFile(filepath.Join(repo, testwriter.BuilderRole.Folder), []byte("file"), 0o600))
+			},
+			wantError:     "copy_folder_in_use",
+			wantWords:     "the project's .surla-build entry is not Surla's working copy",
+			wantWorktrees: 1,
+		},
+		{
+			name: "tests folder in use",
+			setup: func(t *testing.T, repo string) {
+				require.NoError(t, os.WriteFile(filepath.Join(repo, testwriter.TestsRole.Folder), []byte("file"), 0o600))
+			},
+			wantError:     "copy_folder_in_use",
+			wantWords:     "the project's .surla-tests entry is not Surla's working copy",
+			wantWorktrees: 1,
+		},
+		{
+			name:       "builder branch in use on build again",
+			startFirst: true,
+			setup: func(t *testing.T, repo string) {
+				runGitForTest(t, repo, "worktree", "remove", "--force", filepath.Join(repo, testwriter.BuilderRole.Folder))
+				runGitForTest(t, repo, "switch", "--quiet", testwriter.BuilderRole.Branch(1))
+			},
+			wantError:      "tests_branch_in_use",
+			wantWords:      "branch surla/build-1, which Surla reserves for the builder's working copy, is held by another working copy",
+			wantWorktrees:  2,
+			wantRegistered: 2,
+		},
+		{
+			name:       "tests branch in use on build again",
+			startFirst: true,
+			setup: func(t *testing.T, repo string) {
+				runGitForTest(t, repo, "worktree", "remove", "--force", filepath.Join(repo, testwriter.TestsRole.Folder))
+				runGitForTest(t, repo, "switch", "--quiet", testwriter.TestsRole.Branch(1))
+			},
+			wantError:      "tests_branch_in_use",
+			wantWords:      "branch surla/tests-1, which Surla reserves for the test writer's working copy, is held by another working copy",
+			wantWorktrees:  2,
+			wantRegistered: 2,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			eval := map[string]string{
+				"go.mod":           "module example.com/shop/eval\n\ngo 1.27.3\n",
+				"design/design.go": "package design\n",
+			}
+			repo, project := productionBuildProject(t, ".", eval)
+			f := &teamServiceFixture{}
+			cp := newControlPlane(t, Options{
+				WorkspaceDir: project, Team: &TeamBinding{Owner: "alice@example.com", Service: f},
+			})
+			cp.buildSandboxCheck = func() error { return nil }
+			card := buildableChange(t, cp, "chg")
+			var firstStartedAt string
+			if tc.startFirst {
+				first, err := cp.StartBuild(asCaller("alice@example.com", CallerUser), &gensurla.StartBuildPayload{
+					ChangeID: "chg", RequestRevision: card.RequestRevision,
+				})
+				require.NoError(t, err)
+				firstStartedAt = first.Build.StartedAt
+			}
+			tc.setup(t, repo)
+
+			_, err := startBuildAgain(t, cp, asCaller("alice@example.com", CallerUser), "chg", card.RequestRevision)
+			assertRefused(t, err, tc.wantError)
+			assert.ErrorContains(t, err, tc.wantWords)
+			if tc.startFirst {
+				assert.Equal(t, firstStartedAt, mustStartedBuild(t, cp, asCaller("alice@example.com", CallerUser), "chg").StartedAt,
+					"the refused Build again left the earlier build untouched")
+			} else {
+				assertNoBuildSaved(t, cp, "chg")
+			}
+			assert.Len(t, f.calls, tc.wantRegistered)
+			assert.Equal(t, tc.wantWorktrees, strings.Count(productionBuildGit(t, repo, "worktree", "list", "--porcelain"), "worktree "))
 		})
 	}
 }

@@ -85,7 +85,7 @@ func TestPrepareWritesOneRequiredMethodPerFinishedFlow(t *testing.T) {
 	skipWithoutSandbox(t)
 	repo, markers := newProject(t, fixtureProject(t))
 	before := projectFiles(t, repo)
-	wc, err := OpenWorkingCopy(t.Context(), repo)
+	wc, err := MakeCopy(t.Context(), repo, TestsRole, TestsRole.Branch(1), "HEAD")
 	require.NoError(t, err)
 
 	required, err := testChecker.Prepare(t.Context(), wc, fixtureSuite, refundStories)
@@ -111,7 +111,7 @@ func TestPrepareWritesOneRequiredMethodPerFinishedFlow(t *testing.T) {
 func TestPrepareGivesTheAuthorItsGenerationFailure(t *testing.T) {
 	skipWithoutSandbox(t)
 	repo, _ := newProject(t, fixtureProject(t))
-	wc, err := OpenWorkingCopy(t.Context(), repo)
+	wc, err := MakeCopy(t.Context(), repo, TestsRole, TestsRole.Branch(1), "HEAD")
 	require.NoError(t, err)
 	design := filepath.Join(wc.Project(), "eval", "design", "design.go")
 	raw, err := os.ReadFile(design)
@@ -151,7 +151,8 @@ func TestCheckJudgesTheWorkingCopy(t *testing.T) {
 	skipWithoutSandbox(t)
 	repo, markers := newProject(t, fixtureProject(t))
 	start := runGit(t, repo, "rev-parse", "HEAD")
-	wc, err := OpenWorkingCopy(t.Context(), repo)
+	branch := TestsRole.Branch(1)
+	wc, err := MakeCopy(t.Context(), repo, TestsRole, branch, "HEAD")
 	require.NoError(t, err)
 	_, err = testChecker.Prepare(t.Context(), wc, fixtureSuite, refundStories)
 	require.NoError(t, err)
@@ -240,7 +241,7 @@ func TestCheckJudgesTheWorkingCopy(t *testing.T) {
 		}
 		var before, after runtime.MemStats
 		runtime.ReadMemStats(&before)
-		v, err := testChecker.Check(t.Context(), wc, fixtureSuite, refundStories)
+		v, err := testChecker.Check(t.Context(), wc, fixtureSuite, branch, start, refundStories)
 		runtime.ReadMemStats(&after)
 		require.NoError(t, err, step.name)
 		if step.maxAlloc > 0 {
@@ -269,7 +270,7 @@ func TestCheckJudgesTheWorkingCopy(t *testing.T) {
 	require.NoError(t, os.WriteFile(signer, []byte("#!/bin/sh\n: > "+shquote.Quote(signed)+"\nexit 1\n"), 0o700))
 	runGit(t, repo, "config", "commit.gpgsign", "true")
 	runGit(t, repo, "config", "gpg.program", signer)
-	commit, err := Record(t.Context(), accepted, "Add the accepted tests")
+	commit, err := Record(t.Context(), accepted, branch, "Add the accepted tests")
 	require.NoError(t, err)
 	assert.NoFileExists(t, signed, "the signing program never ran")
 	assert.NotContains(t, runGit(t, repo, "cat-file", "commit", commit), "gpgsig")
@@ -284,10 +285,10 @@ func TestCheckJudgesTheWorkingCopy(t *testing.T) {
 	}
 	assert.Empty(t, runGit(t, repo, "status", "--porcelain", "--untracked-files=all"))
 
-	again, err := testChecker.Check(t.Context(), wc, fixtureSuite, refundStories)
+	again, err := testChecker.Check(t.Context(), wc, fixtureSuite, branch, start, refundStories)
 	require.NoError(t, err)
 	require.True(t, again.Accepted(), "%+v", again.Findings)
-	same, err := Record(t.Context(), again, "Add the accepted tests")
+	same, err := Record(t.Context(), again, branch, "Add the accepted tests")
 	require.NoError(t, err)
 	assert.Equal(t, commit, same, "an unchanged copy returns the existing commit")
 	assert.Empty(t, ranHooks(t, markers))
@@ -301,7 +302,9 @@ func TestCheckJudgesTheWorkingCopy(t *testing.T) {
 func TestCheckIgnoresTheCopysOwnRepository(t *testing.T) {
 	skipWithoutSandbox(t)
 	repo, markers := newProject(t, fixtureProject(t))
-	wc, err := OpenWorkingCopy(t.Context(), repo)
+	start := runGit(t, repo, "rev-parse", "HEAD")
+	branch := TestsRole.Branch(1)
+	wc, err := MakeCopy(t.Context(), repo, TestsRole, branch, "HEAD")
 	require.NoError(t, err)
 	_, err = testChecker.Prepare(t.Context(), wc, fixtureSuite, refundStories)
 	require.NoError(t, err)
@@ -315,11 +318,11 @@ func TestCheckIgnoresTheCopysOwnRepository(t *testing.T) {
 	marker := filepath.Join(t.TempDir(), "filter-ran")
 	for _, rewrite := range []func(t *testing.T, dir, marker string){replaceCopysGit, pointCopysGitInside} {
 		rewrite(t, wc.Dir(), marker)
-		v, err := testChecker.Check(t.Context(), wc, fixtureSuite, refundStories)
+		v, err := testChecker.Check(t.Context(), wc, fixtureSuite, branch, start, refundStories)
 		require.NoError(t, err)
 		require.True(t, v.Accepted(), "%+v", v.Findings)
 		assert.NoFileExists(t, marker, "no program named inside the copy runs")
-		commit, err := Record(t.Context(), v, "Add the accepted tests")
+		commit, err := Record(t.Context(), v, branch, "Add the accepted tests")
 		require.NoError(t, err)
 		assert.Equal(t, strings.TrimSpace(string(prepared)), runGit(t, repo, "show", commit+":eval/"+generatedSuite))
 	}
@@ -337,7 +340,9 @@ func TestCheckIgnoresTheCopysOwnRepository(t *testing.T) {
 func TestCheckWantsExactlyOneEvaluationSuite(t *testing.T) {
 	skipWithoutSandbox(t)
 	repo, _ := newProject(t, fixtureProject(t))
-	wc, err := OpenWorkingCopy(t.Context(), repo)
+	start := runGit(t, repo, "rev-parse", "HEAD")
+	branch := TestsRole.Branch(1)
+	wc, err := MakeCopy(t.Context(), repo, TestsRole, branch, "HEAD")
 	require.NoError(t, err)
 	module := filepath.Join(wc.Project(), "eval")
 	design := fixtureProject(t)["eval/design/design.go"]
@@ -361,7 +366,7 @@ var _ = Suite("second", func() {
 		} {
 			t.Run(tc.name+", "+storyName, func(t *testing.T) {
 				writeFiles(t, module, map[string]string{"design/design.go": tc.design})
-				v, err := testChecker.Check(t.Context(), wc, fixtureSuite, stories)
+				v, err := testChecker.Check(t.Context(), wc, fixtureSuite, branch, start, stories)
 				require.NoError(t, err)
 				require.Len(t, v.Findings, 1, "%+v", v.Findings)
 				assert.Equal(t, FindingGeneration, v.Findings[0].Kind)
@@ -375,7 +380,7 @@ var _ = Suite("second", func() {
 	t.Run("a module without its acceptance package", func(t *testing.T) {
 		require.NoError(t, os.RemoveAll(filepath.Join(module, "acceptance")))
 		writeFiles(t, module, map[string]string{"design/design.go": design})
-		v, err := testChecker.Check(t.Context(), wc, fixtureSuite, refundStories)
+		v, err := testChecker.Check(t.Context(), wc, fixtureSuite, branch, start, refundStories)
 		require.NoError(t, err)
 		require.Len(t, v.Findings, 1, "%+v", v.Findings)
 		assert.Equal(t, FindingGeneration, v.Findings[0].Kind)
@@ -390,7 +395,7 @@ var _ = Suite("second", func() {
 			"acceptance/acceptance.go": fixtureProject(t)["eval/acceptance/acceptance.go"],
 			"go.mod":                   strings.Replace(goMod, "module example.com/shop/eval\n", "module example.com/shop/evaluation\n", 1),
 		})
-		v, err := testChecker.Check(t.Context(), wc, fixtureSuite, refundStories)
+		v, err := testChecker.Check(t.Context(), wc, fixtureSuite, branch, start, refundStories)
 		require.NoError(t, err)
 		require.Len(t, v.Findings, 1, "%+v", v.Findings)
 		assert.Equal(t, FindingGeneration, v.Findings[0].Kind)
@@ -408,7 +413,9 @@ var _ = Suite("second", func() {
 func TestCheckLimitsTheBuildAndTheListing(t *testing.T) {
 	skipWithoutSandbox(t)
 	repo, _ := newProject(t, fixtureProject(t))
-	wc, err := OpenWorkingCopy(t.Context(), repo)
+	start := runGit(t, repo, "rev-parse", "HEAD")
+	branch := TestsRole.Branch(1)
+	wc, err := MakeCopy(t.Context(), repo, TestsRole, branch, "HEAD")
 	require.NoError(t, err)
 	writeFiles(t, filepath.Join(wc.Project(), "eval"), map[string]string{
 		"acceptance/acceptance.go": fixtureAcceptance(quietInit(filepath.Join(t.TempDir(), "unused")), "RefundOverLimit", "StoreCreditWithinLimit"),
@@ -458,7 +465,7 @@ func TestCheckLimitsTheBuildAndTheListing(t *testing.T) {
 			c := *testChecker
 			c.buildLimit, c.listLimit = limit, limit
 			c.build, c.list = sleepThenBuild(tc.build), sleepThenList(tc.list, tc.listed)
-			v, err := c.Check(t.Context(), wc, fixtureSuite, refundStories)
+			v, err := c.Check(t.Context(), wc, fixtureSuite, branch, start, refundStories)
 			require.NoError(t, err)
 			if tc.wantKind == "" {
 				assert.True(t, v.Accepted(), "%+v", v.Findings)

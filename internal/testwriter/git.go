@@ -104,30 +104,6 @@ func stageCopy(ctx context.Context, wc WorkingCopy, index, dst string) error {
 	return nil
 }
 
-// copyBase returns the commit a copy's changes are measured from: the merge
-// base of Branch and the project's HEAD. The tests branch is read through the
-// administrative folder the project's repository keeps for the copy and the
-// HEAD through the project folder, never through the copy's own .git. Before
-// the user merges the tests branch it is the commit the branch started from;
-// after the merge it is the branch's latest commit, which the project
-// contains. When the two share no history, for example after the project's
-// history was rewritten from its first commit, it fails with
-// ErrNoCommonBase.
-func copyBase(ctx context.Context, wc WorkingCopy) (string, error) {
-	head, err := git(ctx, filepath.Dir(wc.dir), nil, "rev-parse", "--verify", "HEAD^{commit}")
-	if err != nil {
-		return "", fmt.Errorf("read the project's commit: %w", err)
-	}
-	base, err := wc.git(ctx, wc.dir, nil, "merge-base", "refs/heads/"+Branch, head)
-	if exitCode(err) == 1 {
-		return "", fmt.Errorf("%w: %s and the project's commit %s", ErrNoCommonBase, Branch, head)
-	}
-	if err != nil {
-		return "", fmt.Errorf("find the working copy's base: %w", err)
-	}
-	return base, nil
-}
-
 // changedSince returns the paths, relative to the copy's root and in git's
 // order, that the snapshot recorded in the private index file index adds,
 // changes or deletes compared with the commit base, each with whether the
@@ -175,20 +151,15 @@ func writeTree(ctx context.Context, wc WorkingCopy, index, src string) (string, 
 	return tree, nil
 }
 
-// commitTree makes tree the content of the working copy's branch (branchRef
-// when passed, or refs/heads/surla/tests otherwise). When the branch's commit
-// already holds tree it returns that commit. Otherwise it commits tree with
-// message on top of the branch with the user's own git identity, never signed
-// whatever the user's git settings say (signing could wait on a prompt no one
-// sees), points the copy's index at the commit when the copy has the branch
-// checked out, so the copy's status shows only edits made after the commit,
-// and then moves the branch, failing if it moved meanwhile.
-func commitTree(ctx context.Context, wc WorkingCopy, tree, message string,
-	branchRef ...string) (string, error) {
-	ref := "refs/heads/" + Branch
-	if len(branchRef) > 0 && branchRef[0] != "" {
-		ref = branchRef[0]
-	}
+// commitTree makes tree the content of ref (a full refs/heads/<branch> name)
+// in the working copy's repository. When the branch's commit already holds
+// tree it returns that commit. Otherwise it commits tree with message on top
+// of the branch with the user's own git identity, never signed whatever the
+// user's git settings say (signing could wait on a prompt no one sees), points
+// the copy's index at the commit when the copy has the branch checked out, so
+// the copy's status shows only edits made after the commit, and then moves the
+// branch, failing if it moved meanwhile.
+func commitTree(ctx context.Context, wc WorkingCopy, ref, tree, message string) (string, error) {
 	return commitTreeWithHook(ctx, wc, ref, tree, message, nil)
 }
 

@@ -266,11 +266,10 @@ func TestStartBuildChecksTheChangeAgainAfterPreparing(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			cp := newBuildControlPlane(t, Options{})
 			copy := &buildCopyFixture{folder: fixtureTestWriterFolder(t, cp)}
-			cp.buildCopyFactory = func(context.Context, string, scaffold.Layout) (buildCopy, error) { return copy, nil }
 			card := saveBuildStoryCard(t, cp, "chg", StatusConfirmed, refundStory("Refund over the limit"))
-			copy.refresh = func(context.Context) (testwriter.RefreshResult, error) {
+			cp.buildCopyFactory = func(context.Context, string, scaffold.Layout) (buildCopy, error) {
 				saveBuildStoryCard(t, cp, "chg", tc.status, refundStory("Refund over the new limit"))
-				return testwriter.RefreshResult{State: testwriter.RefreshAtProjectCommit, Commit: strings.Repeat("c", 40)}, nil
+				return copy, nil
 			}
 			_, err := cp.StartBuild(asCaller("alice@example.com", CallerUser), &gensurla.StartBuildPayload{ChangeID: "chg", RequestRevision: card.RequestRevision})
 			assertRefused(t, err, "conflict")
