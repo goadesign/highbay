@@ -794,7 +794,6 @@ interface JSONSchemaNode {
   enum?: string[];
   format?: "date-time";
   anyOf?: JSONSchemaNode[];
-  oneOf?: JSONSchemaNode[];
   required?: string[];
   additionalProperties?: boolean | JSONSchemaNode;
   items?: JSONSchemaNode;
@@ -3150,9 +3149,6 @@ function matchesSchema(value: unknown, schema: JSONSchemaNode): boolean {
   if (schema.anyOf && !schema.anyOf.some((branch) => matchesSchema(value, branch))) {
     return false;
   }
-  if (schema.oneOf && schema.oneOf.filter((branch) => matchesSchema(value, branch)).length !== 1) {
-    return false;
-  }
   if (typeof schema.$ref === "string") {
     const target = SCHEMA_DEFS[schema.$ref.replace(/^#\/\$defs\//, "")];
     return Boolean(target) && matchesSchema(value, target);
@@ -3210,7 +3206,7 @@ function matchesSchema(value: unknown, schema: JSONSchemaNode): boolean {
     }
     return true;
   }
-  return Boolean(schema.anyOf || schema.oneOf);
+  return Boolean(schema.anyOf);
 }
 
 // isNoContent validates the absence of a body declared by a 204 response.
