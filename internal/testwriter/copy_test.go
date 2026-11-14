@@ -113,6 +113,17 @@ func TestOpenWorkingCopyRefuses(t *testing.T) {
 			wantErr: ErrFolderInUse,
 		},
 		{
+			name: "a working copy switched off the reserved branch",
+			project: func(t *testing.T) (string, []string) {
+				repo, _ := newProject(t, map[string]string{"README.md": "shop\n"})
+				wc, err := OpenWorkingCopy(t.Context(), repo)
+				require.NoError(t, err)
+				runGit(t, wc.Dir(), "switch", "--quiet", "-c", "mine")
+				return repo, []string{"move it out of the project", "does not have branch " + Branch + " checked out"}
+			},
+			wantErr: ErrFolderInUse,
+		},
+		{
 			name: "the reserved branch checked out in the project folder",
 			project: func(t *testing.T) (string, []string) {
 				repo, _ := newProject(t, map[string]string{"README.md": "shop\n"})
@@ -334,6 +345,119 @@ func TestOpenWorkingCopyRecreatesADeletedCopy(t *testing.T) {
 	assert.FileExists(t, filepath.Join(again.Dir(), "tests.txt"))
 	assert.Empty(t, runGit(t, repo, "status", "--porcelain", "--untracked-files=all"))
 	assert.Empty(t, ranHooks(t, markers))
+}
+
+// TestOpenCopyAndMakeCopyForBothRoles verifies that OpenCopy returns false, nil
+// without effects when a role's folder is absent, MakeCopy creates both
+// BuilderRole (.surla-build on surla/build-1) and TestsRole (.surla-tests on
+// surla/tests-1) at the given base commit and excludes both folders once in
+// info/exclude, OpenCopy opens each copy even after it switches to another
+// branch or a detached commit, and an untracked go.work in the project folder
+// is left untouched.
+func TestOpenCopyAndMakeCopyForBothRoles(t *testing.T) {
+	t.Parallel()
+	for _, projectRel := range []string{".", "services/shop"} {
+		t.Run(projectRel, func(t *testing.T) {
+			t.Parallel()
+			repo, markers := newProject(t, map[string]string{
+				filepath.ToSlash(filepath.Join(projectRel, "README.md")): "shop\n",
+			})
+			project := filepath.Join(repo, projectRel)
+			base := runGit(t, repo, "rev-parse", "HEAD")
+			writeFiles(t, project, map[string]string{"go.work": "go 1.26\n\nuse .\n"})
+			before := folderState(t, repo)
+
+			for _, role := range []Role{BuilderRole, TestsRole} {
+				_, ok, err := OpenCopy(t.Context(), project, role)
+				require.NoError(t, err)
+				assert.False(t, ok, "absent %s returns false without error", role.Folder)
+			}
+			assert.Equal(t, before, folderState(t, repo), "OpenCopy on a missing copy changes nothing")
+
+			// Advance main past base so MakeCopy proves it starts at base, not HEAD.
+			writeFiles(t, project, map[string]string{"later.txt": "later\n"})
+			runGit(t, repo, "add", filepath.ToSlash(filepath.Join(projectRel, "later.txt")))
+			runGit(t, repo, "commit", "--quiet", "-m", "later on main")
+
+			for _, role := range []Role{BuilderRole, TestsRole} {
+				branch := role.Branch(1)
+				wc, err := MakeCopy(t.Context(), project, role, branch, base)
+				require.NoError(t, err)
+				assert.Equal(t, filepath.Join(project, role.Folder), wc.Dir())
+				assert.Equal(t, filepath.Join(wc.Dir(), projectRel), wc.Project())
+				assert.Equal(t, "refs/heads/"+branch, runGit(t, wc.Dir(), "symbolic-ref", "HEAD"))
+				assert.Equal(t, base, runGit(t, wc.Dir(), "rev-parse", "HEAD"), "the branch starts at base")
+				assert.NoFileExists(t, filepath.Join(wc.Project(), "later.txt"))
+
+				// Switch to a side branch and detach HEAD; OpenCopy and MakeCopy
+				// still open the registered copy without moving it.
+				runGit(t, wc.Dir(), "switch", "--quiet", "-c", "agent-side-"+role.Folder[1:])
+				opened, ok, err := OpenCopy(t.Context(), project, role)
+				require.NoError(t, err)
+				require.True(t, ok)
+				assert.Equal(t, wc, opened)
+				assert.Equal(t, "refs/heads/agent-side-"+role.Folder[1:], runGit(t, wc.Dir(), "symbolic-ref", "HEAD"))
+
+				runGit(t, wc.Dir(), "switch", "--quiet", "--detach", base)
+				opened, ok, err = OpenCopy(t.Context(), project, role)
+				require.NoError(t, err)
+				require.True(t, ok)
+				assert.Equal(t, wc, opened)
+
+				madeAgain, err := MakeCopy(t.Context(), project, role, role.Branch(2), base)
+				require.NoError(t, err)
+				assert.Equal(t, wc, madeAgain, "MakeCopy returns an existing copy without switching it")
+			}
+
+			exclude, err := os.ReadFile(runGit(t, repo, "rev-parse", "--path-format=absolute", "--git-path", "info/exclude"))
+			require.NoError(t, err)
+			assert.Equal(t, 1, strings.Count(string(exclude), "\n"+BuilderRole.Folder+"/\n"), "exclude:\n%s", exclude)
+			assert.Equal(t, 1, strings.Count(string(exclude), "\n"+TestsRole.Folder+"/\n"), "exclude:\n%s", exclude)
+
+			goWork, err := os.ReadFile(filepath.Join(project, "go.work"))
+			require.NoError(t, err)
+			assert.Equal(t, "go 1.26\n\nuse .\n", string(goWork), "untracked go.work in the project folder is untouched")
+			assert.Equal(t, "?? "+filepath.ToSlash(filepath.Join(projectRel, "go.work")),
+				runGit(t, repo, "status", "--porcelain", "--untracked-files=all"))
+			assert.Empty(t, ranHooks(t, markers))
+		})
+	}
+}
+
+// TestBuilderRoleFolderAndBranchRefusals verifies ErrFolderInUse and
+// ErrBranchInUse for BuilderRole (.surla-build and surla/build-<n>).
+func TestBuilderRoleFolderAndBranchRefusals(t *testing.T) {
+	t.Parallel()
+	t.Run("copy_folder_in_use for .surla-build", func(t *testing.T) {
+		t.Parallel()
+		repo, _ := newProject(t, map[string]string{"README.md": "shop\n"})
+		writeFiles(t, repo, map[string]string{BuilderRole.Folder + "/notes.txt": "mine\n"})
+		before := folderState(t, repo)
+
+		_, ok, err := OpenCopy(t.Context(), repo, BuilderRole)
+		require.ErrorIs(t, err, ErrFolderInUse)
+		assert.False(t, ok)
+		assert.ErrorContains(t, err, "the project's .surla-build entry is not Surla's working copy: move it out of the project, then try again")
+
+		_, err = MakeCopy(t.Context(), repo, BuilderRole, BuilderRole.Branch(1), "HEAD")
+		require.ErrorIs(t, err, ErrFolderInUse)
+		assert.ErrorContains(t, err, "the project's .surla-build entry is not Surla's working copy: move it out of the project, then try again")
+		assert.Equal(t, before, folderState(t, repo))
+	})
+
+	t.Run("branch-in-use for surla/build-1", func(t *testing.T) {
+		t.Parallel()
+		repo, _ := newProject(t, map[string]string{"README.md": "shop\n"})
+		branch := BuilderRole.Branch(1)
+		runGit(t, repo, "switch", "--quiet", "--create", branch)
+		before := folderState(t, repo)
+
+		_, err := MakeCopy(t.Context(), repo, BuilderRole, branch, "HEAD")
+		require.ErrorIs(t, err, ErrBranchInUse)
+		assert.ErrorContains(t, err, "branch surla/build-1, which Surla reserves for the builder's working copy, is held by another working copy")
+		assert.ErrorContains(t, err, shquote.Quote(repo)+" has it checked out; switch that folder to another branch")
+		assert.Equal(t, before, folderState(t, repo))
+	})
 }
 
 // folderState returns every path under dir with its content, or "dir" for a

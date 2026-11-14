@@ -575,18 +575,23 @@ func logFinding(kind FindingKind, head, path, src string) ([]Finding, error) {
 	return []Finding{{Kind: kind, Message: forAuthor(head+out, src)}}, nil
 }
 
-// withinLimit runs step under ctx with its own deadline limit from now and
+// withinLimit runs step under ctx with its own deadline limit from now() and
 // reports whether the limit was reached: the deadline had passed when step
-// returned, whatever step returned, while ctx itself had not ended. A step
-// that returns exactly at the deadline has reached it, so a test can place a
-// stand-in just below, at and just above the limit and get the same answer
-// each time. The caller's own deadline ending is never the limit.
-func withinLimit(ctx context.Context, limit time.Duration, step func(context.Context) error) (bool, error) {
-	deadline := time.Now().Add(limit)
+// returned, by now(), whatever step returned, while ctx itself had not ended.
+// A step that returns exactly at the deadline has reached it. Callers pass
+// time.Now; a test passes a clock that places the return just below, at or
+// just above the deadline. The caller's own deadline ending is never the limit.
+func withinLimit(
+	ctx context.Context,
+	now func() time.Time,
+	limit time.Duration,
+	step func(context.Context) error,
+) (bool, error) {
+	deadline := now().Add(limit)
 	stepCtx, cancel := context.WithDeadline(ctx, deadline)
 	defer cancel()
 	err := step(stepCtx)
-	return ctx.Err() == nil && !time.Now().Before(deadline), err
+	return ctx.Err() == nil && !now().Before(deadline), err
 }
 
 // limitText words a limit for a finding: two or more whole minutes as
@@ -948,7 +953,7 @@ func (c *Checker) listScenarios(
 		}
 	}
 	bin, buildLog := filepath.Join(binDir, "suite"), filepath.Join(tmp, "build.log")
-	reached, err := withinLimit(ctx, c.buildLimit, func(ctx context.Context) error {
+	reached, err := withinLimit(ctx, time.Now, c.buildLimit, func(ctx context.Context) error {
 		return c.build(ctx, candidate.BuildSpec{
 			SourceDir: src, ModuleDir: moduleDir, Package: command, Out: bin,
 			GOROOT: tc.goroot, ModCache: modCache, WorkDir: buildHome, LogFile: buildLog,
@@ -975,7 +980,7 @@ func (c *Checker) listScenarios(
 	}
 	stderrLog := filepath.Join(tmp, "describe.log")
 	var out []byte
-	reached, err = withinLimit(ctx, c.listLimit, func(ctx context.Context) error {
+	reached, err = withinLimit(ctx, time.Now, c.listLimit, func(ctx context.Context) error {
 		var err error
 		out, err = c.list(ctx, art, candidate.Spec{
 			Args: []string{"--describe"}, StateDir: filepath.Join(tmp, "state"), LogFile: stderrLog,
