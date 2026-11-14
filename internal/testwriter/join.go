@@ -183,12 +183,12 @@ func (w WorkingCopy) join(ctx context.Context, role Role, n int, base, changeID 
 	if n < 1 {
 		return 0, CopyFacts{}, fmt.Errorf("build number %d must be at least 1", n)
 	}
-	baseCommit, err := requireCommit(ctx, w.project, base)
+	baseCommit, err := w.requireCommit(ctx, base)
 	if err != nil {
 		return 0, CopyFacts{}, err
 	}
 	ownBranch := role.Branch(n)
-	_, exists, err := lookupCommit(ctx, w.project, "refs/heads/"+ownBranch)
+	_, exists, err := w.lookupCommit(ctx, "refs/heads/"+ownBranch)
 	if err != nil {
 		return 0, CopyFacts{}, err
 	}
@@ -245,7 +245,7 @@ func (w WorkingCopy) join(ctx context.Context, role Role, n int, base, changeID 
 	}
 	if _, err := w.git(writeCtx, w.dir, nil, "switch", "--quiet", "-c", ownBranch, baseCommit); err != nil {
 		if writeCtx.Err() == nil && exitCode(err) == 1 {
-			_, branchNowExists, lErr := lookupCommit(writeCtx, w.project, "refs/heads/"+ownBranch)
+			_, branchNowExists, lErr := w.lookupCommit(writeCtx, "refs/heads/"+ownBranch)
 			afterFacts, fErr := w.Facts(writeCtx)
 			if lErr == nil && !branchNowExists && fErr == nil && afterFacts.IndexLock == "" && afterFacts.UncommittedCount > 0 {
 				return ChangedDuringJoin, afterFacts, nil
@@ -672,4 +672,29 @@ func (w WorkingCopy) snapshotTree(ctx context.Context, afterPrivateIndex func() 
 		}
 	}
 	return tree, nil
+}
+
+// requireCommit returns the full object name of commit in w's repository,
+// reading through w.gitDir so the copy's own .git is never read.
+func (w WorkingCopy) requireCommit(ctx context.Context, commit string) (string, error) {
+	id, found, err := w.lookupCommit(ctx, commit)
+	if err == nil && !found {
+		err = fmt.Errorf("%s is not a commit git can read in the project's repository", commit)
+	}
+	return id, err
+}
+
+// lookupCommit returns the full object name of the commit name resolves to in
+// w's repository, reading through w.gitDir so the copy's own .git is never
+// read, and false when git finds no commit it can read there.
+func (w WorkingCopy) lookupCommit(ctx context.Context, name string) (string, bool, error) {
+	id, err := w.git(ctx, w.dir, nil, "rev-parse", "--verify", "--quiet", "--end-of-options", name+"^{commit}")
+	switch {
+	case err == nil:
+		return id, true, nil
+	case exitCode(err) == 1:
+		return "", false, nil
+	default:
+		return "", false, fmt.Errorf("resolve commit %s: %w", name, err)
+	}
 }

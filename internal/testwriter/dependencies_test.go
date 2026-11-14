@@ -99,7 +99,7 @@ func TestALoadFailureOutsideTheModuleIsNotTheAuthorsFinding(t *testing.T) {
 			}
 			repo, _ := newProject(t, files)
 			base := runGit(t, repo, "rev-parse", "HEAD")
-			wc, err := OpenWorkingCopy(t.Context(), repo)
+			wc, err := MakeCopy(t.Context(), repo, TestsRole, TestsRole.Branch(1), "HEAD")
 			require.NoError(t, err)
 			writeFiles(t, filepath.Join(wc.Project(), "eval"), tc.edits)
 			var downloads int
@@ -153,7 +153,8 @@ func TestADownloadFailureOutsideTheModuleIsNotTheAuthorsFinding(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			repo, _ := newProject(t, fixtureProject(t))
 			base := runGit(t, repo, "rev-parse", "HEAD")
-			wc, err := OpenWorkingCopy(t.Context(), repo)
+			branch := TestsRole.Branch(1)
+			wc, err := MakeCopy(t.Context(), repo, TestsRole, branch, "HEAD")
 			require.NoError(t, err)
 			if tc.edited {
 				goMod := filepath.Join(wc.Project(), "eval", "go.mod")
@@ -165,7 +166,7 @@ func TestADownloadFailureOutsideTheModuleIsNotTheAuthorsFinding(t *testing.T) {
 			c := *testChecker
 			c.download = failingDownload(tc.failsFor, &downloads)
 
-			v, err := c.Check(t.Context(), wc, fixtureSuite, refundStories)
+			v, err := c.Check(t.Context(), wc, fixtureSuite, branch, base, refundStories)
 			if tc.wantAuthor {
 				require.NoError(t, err)
 				require.Len(t, v.Findings, 1, "%+v", v.Findings)
@@ -259,14 +260,14 @@ func TestDependencyFailureComparesWithTheProjectsOwnLists(t *testing.T) {
 			t.Parallel()
 			repo, _ := newProject(t, tc.project)
 			base := runGit(t, repo, "rev-parse", "HEAD")
-			wc, err := OpenWorkingCopy(t.Context(), repo)
+			wc, err := MakeCopy(t.Context(), repo, TestsRole, TestsRole.Branch(1), "HEAD")
 			require.NoError(t, err)
 			var downloads int
 			c := *testChecker
 			c.workDir = t.TempDir()
 			c.download = failingDownload(tc.failsFor, &downloads)
 
-			compared, err := c.dependencyFailure(t.Context(), wc, "go", "eval", tc.current)
+			compared, err := c.dependencyFailure(t.Context(), wc, base, "go", "eval", tc.current)
 			assert.Equal(t, tc.wantDownloads, downloads)
 			left, readErr := os.ReadDir(c.workDir)
 			require.NoError(t, readErr)

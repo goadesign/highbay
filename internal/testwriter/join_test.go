@@ -693,9 +693,8 @@ func TestJoinRefusesAndHandlesConcurrentEdit(t *testing.T) {
 // TestGitIgnoresRepositoryGrafts verifies that both readGit and gitEnv set
 // GIT_GRAFT_FILE=/dev/null and GIT_TERMINAL_PROMPT=0 (dropping any inherited
 // values) so an agent-written info/grafts file or inherited environment
-// variable cannot rewrite commit ancestry in CheckBuildCommit, Refresh,
-// copyBase, or Join, and terminal prompts stay disabled in working-copy git
-// commands.
+// variable cannot rewrite commit ancestry in CheckBuildCommit, changedSince,
+// or Join, and terminal prompts stay disabled in working-copy git commands.
 func TestGitIgnoresRepositoryGrafts(t *testing.T) {
 	repo, _ := newProject(t, map[string]string{"svc/a.go": "package svc\n"})
 	b0 := runGit(t, repo, "rev-parse", "HEAD")
@@ -719,34 +718,15 @@ func TestGitIgnoresRepositoryGrafts(t *testing.T) {
 	runGit(t, wc1.Dir(), "merge", "--quiet", "--no-ff", "-m", "merge C1", c1)
 	x := runGit(t, wc1.Dir(), "rev-parse", "HEAD")
 
-	// Also open the legacy test writer working copy on surla/tests and commit
-	// unmerged T1 on it so Refresh and copyBase exercise gitEnv's merge-base
-	// without going through readGit.
-	tw, err := OpenWorkingCopy(t.Context(), repo)
-	require.NoError(t, err)
-	writeFiles(t, tw.Dir(), map[string]string{"eval/a_test.go": "package eval\n"})
-	runGit(t, tw.Dir(), "add", "-A")
-	runGit(t, tw.Dir(), "commit", "--quiet", "-m", "T1")
-	t1 := runGit(t, tw.Dir(), "rev-parse", "HEAD")
-
 	// Write info/grafts claiming X's only parent is C2 (dropping C1) and
-	// claiming C1 and T1 are ancestors of B0, and point GIT_GRAFT_FILE and
+	// claiming C1 is an ancestor of B0, and point GIT_GRAFT_FILE and
 	// GIT_TERMINAL_PROMPT in the process environment at non-default values.
 	graftsPath := runGit(t, repo, "rev-parse", "--path-format=absolute", "--git-path", "info/grafts")
-	require.NoError(t, os.WriteFile(graftsPath, []byte(x+" "+c2+"\n"+b0+" "+c1+" "+t1+"\n"), 0o644))
+	require.NoError(t, os.WriteFile(graftsPath, []byte(x+" "+c2+"\n"+b0+" "+c1+"\n"), 0o644))
 	t.Setenv("GIT_GRAFT_FILE", graftsPath)
 	t.Setenv("GIT_TERMINAL_PROMPT", "1")
 
-	// 1. Refresh uses gitEnv (not readGit): if gitEnv did not set
-	// GIT_GRAFT_FILE=/dev/null, merge-base --is-ancestor t1 b0 would succeed
-	// via the graft and Refresh would report RefreshAtProjectCommit instead of
-	// RefreshNotContained.
-	refreshed, err := tw.Refresh(t.Context())
-	require.NoError(t, err)
-	assert.Equal(t, RefreshResult{State: RefreshNotContained, Commit: t1}, refreshed,
-		"Refresh must ignore info/grafts and inherited GIT_GRAFT_FILE via gitEnv")
-
-	// 2. Configure a required git clean filter in the repository that succeeds
+	// 1. Configure a required git clean filter in the repository that succeeds
 	// only when git runs with GIT_TERMINAL_PROMPT=0 and
 	// GIT_GRAFT_FILE=/dev/null, then run Join (which stages leftovers via
 	// gitEnv, not readGit).
@@ -761,7 +741,7 @@ func TestGitIgnoresRepositoryGrafts(t *testing.T) {
 	require.NoError(t, err, "Join's gitEnv must pass GIT_TERMINAL_PROMPT=0 and GIT_GRAFT_FILE=/dev/null")
 	assert.Equal(t, Joined, outcome)
 
-	// 3. CheckBuildCommit (readGit) also ignores info/grafts and GIT_GRAFT_FILE.
+	// 2. CheckBuildCommit (readGit) also ignores info/grafts and GIT_GRAFT_FILE.
 	check, err := CheckBuildCommit(
 		t.Context(),
 		repo,
@@ -776,14 +756,12 @@ func TestGitIgnoresRepositoryGrafts(t *testing.T) {
 		OnBranch: true,
 		FromBase: true,
 		IsBase:   false,
-		Foreign: []ForeignWork{
-			{
-				MergeBase: c1,
-				Branch:    "surla/build-1",
-				Files:     []string{"svc/refund.go"},
-				FileCount: 1,
-			},
-		},
+		Foreign: []ForeignWork{{
+			MergeBase: c1,
+			Branch:    "surla/build-1",
+			Files:     []string{"svc/refund.go"},
+			FileCount: 1,
+		}},
 	}, check, "rule 13 must ignore info/grafts and inherited GIT_GRAFT_FILE")
 }
 

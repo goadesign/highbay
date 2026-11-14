@@ -18,13 +18,12 @@ import (
 )
 
 // buildCopyFixture performs no Git or candidate execution. Hooks model the
-// owner's refresh/preparation boundary, including concurrent request effects,
-// and the report checker's check and record. Without a check hook, a check
-// waits until its context ends, as one that never finishes would, so a
-// report stays reported in tests that do not judge it.
+// owner's preparation boundary, including concurrent request effects, and the
+// report checker's check and record. Without a check hook, a check waits until
+// its context ends, as one that never finishes would, so a report stays
+// reported in tests that do not judge it.
 type buildCopyFixture struct {
 	folder  string
-	refresh func(context.Context) (testwriter.RefreshResult, error)
 	prepare func(context.Context, []designeval.StorySummary) error
 	check   func(context.Context, []designeval.StorySummary) (testwriter.Verdict, error)
 	record  func(context.Context, testwriter.Verdict, string) (string, error)
@@ -32,14 +31,6 @@ type buildCopyFixture struct {
 
 // Project is the test writer's independently assigned project folder.
 func (f *buildCopyFixture) Project() string { return f.folder }
-
-// Refresh returns the declared postcondition or runs a race/refusal seam.
-func (f *buildCopyFixture) Refresh(ctx context.Context) (testwriter.RefreshResult, error) {
-	if f.refresh != nil {
-		return f.refresh(ctx)
-	}
-	return testwriter.RefreshResult{State: testwriter.RefreshAtProjectCommit, Commit: strings.Repeat("c", 40)}, nil
-}
 
 // Prepare applies a generation outcome to the Story actually saved by the start.
 func (f *buildCopyFixture) Prepare(ctx context.Context, stories []designeval.StorySummary) error {
@@ -50,7 +41,9 @@ func (f *buildCopyFixture) Prepare(ctx context.Context, stories []designeval.Sto
 }
 
 // Check runs the check hook, or waits until ctx ends.
-func (f *buildCopyFixture) Check(ctx context.Context, stories []designeval.StorySummary) (testwriter.Verdict, error) {
+func (f *buildCopyFixture) Check(
+	ctx context.Context, _, _ string, stories []designeval.StorySummary,
+) (testwriter.Verdict, error) {
 	if f.check != nil {
 		return f.check(ctx, stories)
 	}
@@ -59,7 +52,7 @@ func (f *buildCopyFixture) Check(ctx context.Context, stories []designeval.Story
 }
 
 // Record runs the record hook, or returns a fixed commit.
-func (f *buildCopyFixture) Record(ctx context.Context, v testwriter.Verdict, message string) (string, error) {
+func (f *buildCopyFixture) Record(ctx context.Context, v testwriter.Verdict, _, message string) (string, error) {
 	if f.record != nil {
 		return f.record(ctx, v, message)
 	}

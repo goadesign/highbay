@@ -423,9 +423,13 @@ func (j *wholeJourney) startBuild(t *testing.T) {
 		handles[role.Role] = role.Handle
 	}
 
+	buildCopyDir := filepath.Join(j.dir, testwriter.BuilderRole.Folder)
+	assert.Equal(t, j.projectCommit, strings.TrimSpace(runTestGit(t, buildCopyDir, "rev-parse", "HEAD")))
+	assert.Equal(t, testwriter.BuilderRole.Branch(1),
+		strings.TrimSpace(runTestGit(t, buildCopyDir, "symbolic-ref", "--short", "HEAD")))
 	copyDir := filepath.Join(j.dir, testwriter.Folder)
 	assert.Equal(t, j.projectCommit, strings.TrimSpace(runTestGit(t, copyDir, "rev-parse", "HEAD")))
-	assert.Equal(t, testwriter.Branch,
+	assert.Equal(t, testwriter.TestsRole.Branch(1),
 		strings.TrimSpace(runTestGit(t, copyDir, "symbolic-ref", "--short", "HEAD")))
 
 	roster := j.roster(t)
@@ -444,7 +448,7 @@ func (j *wholeJourney) startBuild(t *testing.T) {
 
 	var folder string
 	j.builder, folder = j.scriptedAgent(t, "builder")
-	assert.Equal(t, j.dir, folder, "the builder works in the project")
+	assert.Equal(t, buildCopyDir, folder, "the builder works in its own copy")
 	j.testWriter, j.testsFolder = j.scriptedAgent(t, "test_writer")
 	require.Equal(t, copyDir, j.testsFolder, "the test writer works in its own copy")
 

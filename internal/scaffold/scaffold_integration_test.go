@@ -110,7 +110,7 @@ func TestInitCreatesAProjectWhoseSuitePasses(t *testing.T) {
 				out, err := exec.CommandContext(t.Context(), "git", append([]string{"-C", dir}, args...)...).CombinedOutput()
 				require.NoError(t, err, "git %v: %s", args, out)
 			}
-			wc, err := testwriter.OpenWorkingCopy(t.Context(), dir)
+			wc, err := testwriter.MakeCopy(t.Context(), dir, testwriter.TestsRole, testwriter.TestsRole.Branch(1), "HEAD")
 			require.NoError(t, err)
 			prepared, err := testwriter.NewChecker(ev, t.TempDir()).Prepare(t.Context(), wc,
 				testwriter.Suite{Module: SuiteDir, Command: designeval.SuiteCommandPackage(name)}, evaluated.Stories)

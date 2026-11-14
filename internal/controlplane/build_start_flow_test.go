@@ -54,14 +54,13 @@ func TestStartBuildOrdersItsOwners(t *testing.T) {
 		events = append(events, "open")
 		return copy, nil
 	}
-	copy.refresh = func(context.Context) (testwriter.RefreshResult, error) {
-		events = append(events, "refresh")
-		return testwriter.RefreshResult{State: testwriter.RefreshAtProjectCommit, Commit: strings.Repeat("c", 40)}, nil
-	}
 	f.register = func(_ context.Context, folders BuildFolders) error {
 		events = append(events, "register")
 		workspace, _, _ := cp.currentWorkspaceTarget()
-		assert.Equal(t, BuilderAndTestWriter{BuilderFolder: workspace, TestWriterFolder: copy.folder}, folders)
+		assert.Equal(t, BuilderAndTestWriter{
+			BuilderFolder:    filepath.Join(workspace, testwriter.BuilderRole.Folder),
+			TestWriterFolder: copy.folder,
+		}, folders)
 		saved, found, err := cp.cards.loadOpenBuild()
 		require.NoError(t, err)
 		require.True(t, found, "registration follows the durable save")
@@ -91,7 +90,7 @@ func TestStartBuildOrdersItsOwners(t *testing.T) {
 	}
 	result, err := cp.StartBuild(asCaller("alice@example.com", CallerUser), &gensurla.StartBuildPayload{ChangeID: "chg", RequestRevision: card.RequestRevision})
 	require.NoError(t, err)
-	assert.Equal(t, []string{"open", "refresh", "register", "prepare", "start"}, events)
+	assert.Equal(t, []string{"open", "register", "prepare", "start"}, events)
 	assert.Equal(t, 1, result.Build.RequiredTestCount)
 	assert.Equal(t, gensurla.TeamKindReady, result.Team.Kind())
 	assignment, err := cp.GetTestWriterAssignment(asCaller("alice@example.com", CallerTestWriter), &gensurla.GetTestWriterAssignmentPayload{ChangeID: "chg"})
@@ -261,8 +260,9 @@ func TestStartBuildRefusalsReachTheHTTPConsumer(t *testing.T) {
 				cp.buildIdentityCheck = func(context.Context, string) error { return testwriter.ErrIdentityMissing }
 				step = "configure Git's name and address, then try again"
 			case "copy_folder_in_use":
-				openErr = fmt.Errorf("%w (%s is not a folder)", testwriter.ErrFolderInUse, filepath.Join(workspace, testwriter.Folder))
-				step = "Move it out of the project, then try again."
+				openErr = fmt.Errorf("the project's %s entry is not Surla's working copy (%s is not a folder): move it out of the project, then try again: %w",
+					testwriter.Folder, shquote.Quote(filepath.Join(workspace, testwriter.Folder)), testwriter.ErrFolderInUse)
+				step = "move it out of the project, then try again"
 			case "tests_branch_in_use":
 				openErr = fmt.Errorf("%w: %s has it checked out; switch that folder to another branch, then try again", testwriter.ErrBranchInUse, shquote.Quote(filepath.Join(workspace, "other working copy")))
 				branchMessage = openErr.Error()
@@ -339,7 +339,9 @@ func TestStartBuildOwnerPrecedesTheTurn(t *testing.T) {
 }
 
 // TestStartBuildStoredEvaluatorBypassesWriterPrerequisites starts with only the
-// builder even when every writer prerequisite would fail, and takes the same turn.
+// builder even when writer sandbox/copy prerequisites would fail, checks Git
+// identity (which every build needs for its builder copy), and takes both copy
+// turns.
 func TestStartBuildStoredEvaluatorBypassesWriterPrerequisites(t *testing.T) {
 	f := &teamServiceFixture{}
 	cp := newBuildControlPlane(t, Options{
@@ -347,10 +349,6 @@ func TestStartBuildStoredEvaluatorBypassesWriterPrerequisites(t *testing.T) {
 		Team:         &TeamBinding{Owner: "alice@example.com", Service: f},
 	})
 	card := buildableChange(t, cp, "chg")
-	cp.buildIdentityCheck = func(context.Context, string) error {
-		t.Error("stored evaluator checked writer identity")
-		return testwriter.ErrIdentityMissing
-	}
 	cp.buildSandboxCheck = func() error {
 		t.Error("stored evaluator checked writer sandbox")
 		return candidate.ErrIsolationUnavailable
@@ -361,11 +359,26 @@ func TestStartBuildStoredEvaluatorBypassesWriterPrerequisites(t *testing.T) {
 	}
 	f.register = func(_ context.Context, folders BuildFolders) error {
 		workspace, _, _ := cp.currentWorkspaceTarget()
-		assert.Equal(t, BuilderOnly{BuilderFolder: workspace}, folders)
+		assert.Equal(t, BuilderOnly{BuilderFolder: filepath.Join(workspace, testwriter.BuilderRole.Folder)}, folders)
 		return nil
 	}
-	cp.workingCopyTurn <- struct{}{}
+	cp.buildIdentityCheck = func(context.Context, string) error {
+		return testwriter.ErrIdentityMissing
+	}
 	_, err := cp.StartBuild(asCaller("alice@example.com", CallerUser), &gensurla.StartBuildPayload{ChangeID: "chg", RequestRevision: card.RequestRevision})
+	assertRefused(t, err, "git_identity_missing")
+	assertNoBuildSaved(t, cp, "chg")
+	cp.buildIdentityCheck = func(context.Context, string) error { return nil }
+
+	cp.builderCopyTurn <- struct{}{}
+	_, err = cp.StartBuild(asCaller("alice@example.com", CallerUser), &gensurla.StartBuildPayload{ChangeID: "chg", RequestRevision: card.RequestRevision})
+	assertRefused(t, err, "working_copy_busy")
+	assert.ErrorContains(t, err, "builder is reading its assignment")
+	assertNoBuildSaved(t, cp, "chg")
+	<-cp.builderCopyTurn
+
+	cp.workingCopyTurn <- struct{}{}
+	_, err = cp.StartBuild(asCaller("alice@example.com", CallerUser), &gensurla.StartBuildPayload{ChangeID: "chg", RequestRevision: card.RequestRevision})
 	assertRefused(t, err, "working_copy_busy")
 	assert.NotContains(t, err.Error(), "test check")
 	assertNoBuildSaved(t, cp, "chg")

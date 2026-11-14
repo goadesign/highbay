@@ -52,8 +52,9 @@ type standInCopy struct {
 	record func(ctx context.Context, call int) (string, error)
 	// checks and records count the calls so far.
 	checks, records int
-	// messages lists Record's commit messages in call order.
-	messages []string
+	// branches and messages list Record's target branches and commit messages
+	// in call order.
+	branches, messages []string
 }
 
 // standInCommit is the commit the stand-in Record returns by default.
@@ -62,18 +63,15 @@ var standInCommit = strings.Repeat("a", 40)
 // Project returns a folder no check reads.
 func (s *standInCopy) Project() string { return "/nonexistent/stand-in" }
 
-// Refresh reports the copy at the project's commit.
-func (s *standInCopy) Refresh(context.Context) (testwriter.RefreshResult, error) {
-	return testwriter.RefreshResult{State: testwriter.RefreshAtProjectCommit, Commit: strings.Repeat("c", 40)}, nil
-}
-
 // Prepare returns prepareErr.
 func (s *standInCopy) Prepare(context.Context, []designeval.StorySummary) error {
 	return s.prepareErr
 }
 
 // Check answers with check, or waits until ctx ends when check is nil.
-func (s *standInCopy) Check(ctx context.Context, _ []designeval.StorySummary) (testwriter.Verdict, error) {
+func (s *standInCopy) Check(
+	ctx context.Context, _, _ string, _ []designeval.StorySummary,
+) (testwriter.Verdict, error) {
 	s.mu.Lock()
 	s.checks++
 	call := s.checks
@@ -85,12 +83,15 @@ func (s *standInCopy) Check(ctx context.Context, _ []designeval.StorySummary) (t
 	return s.check(ctx, call)
 }
 
-// Record keeps message and answers with record, or standInCommit when record
-// is nil.
-func (s *standInCopy) Record(ctx context.Context, _ testwriter.Verdict, message string) (string, error) {
+// Record keeps branch and message and answers with record, or standInCommit
+// when record is nil.
+func (s *standInCopy) Record(
+	ctx context.Context, _ testwriter.Verdict, branch, message string,
+) (string, error) {
 	s.mu.Lock()
 	s.records++
 	call := s.records
+	s.branches = append(s.branches, branch)
 	s.messages = append(s.messages, message)
 	s.mu.Unlock()
 	if s.record == nil {
@@ -111,6 +112,13 @@ func (s *standInCopy) recorded() []string {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return slices.Clone(s.messages)
+}
+
+// recordedBranches returns Record's target branches so far.
+func (s *standInCopy) recordedBranches() []string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return slices.Clone(s.branches)
 }
 
 // accepting is a stand-in check that accepts the copy.
@@ -159,6 +167,7 @@ func TestAReportIsJudgedWithoutAnotherCall(t *testing.T) {
 	assert.False(t, build.TestWriter.Read)
 	assert.False(t, build.Builder.Read, "an acceptance marks the builder's assignment unread too")
 	assert.Equal(t, []string{"Add the tests Surla accepted for change chg, report 2"}, tests.recorded())
+	assert.Equal(t, []string{testwriter.TestsRole.Branch(1)}, tests.recordedBranches())
 }
 
 // TestASecondReportDuringACheckIsJudgedAfterIt reports again while the first
@@ -589,8 +598,6 @@ func TestACheckThatCannotRunNamesTheUsersStep(t *testing.T) {
 			wantKind: gensurla.TestsKindCouldNotRun, wantReason: []string{"sandbox could not start", "Operation not permitted"}, wantStep: stepSandbox},
 		{name: "the sandbox does not start on Linux", tests: &standInCopy{prepareErr: fmt.Errorf("%w: pidfd_getfd(child) failed (operation not permitted): if running inside a container, pass --cap-add SYS_PTRACE", candidate.ErrIsolationUnavailable)},
 			wantKind: gensurla.TestsKindCouldNotRun, wantReason: []string{"sandbox could not start", "--cap-add SYS_PTRACE"}, wantStep: stepSandbox},
-		{name: "the history was replaced", tests: &standInCopy{check: failing(fmt.Errorf("measure the copy's changes: %w", testwriter.ErrNoCommonBase))},
-			wantKind: gensurla.TestsKindCouldNotRun, wantReason: []string{"share no history"}, wantStep: stepNoCommonBase},
 		{name: "the required tests cannot be written", tests: &standInCopy{prepareErr: fmt.Errorf(
 			"%w: create staging directory: mkdirat /Users/someone/shop/.surla-tests/eval/.surla-gen-abc: permission denied", testwriter.ErrWriteGenerated)},
 			wantKind: gensurla.TestsKindCouldNotRun, wantReason: []string{"could not write the required tests", "permission denied"},
@@ -643,7 +650,7 @@ func TestACheckThatCannotRunNamesTheUsersStep(t *testing.T) {
 		})
 	}
 	for _, step := range []string{
-		stepOpenCopy, stepSandbox, stepNoCommonBase, stepLimit, stepFailure,
+		stepOpenCopy, stepSandbox, stepLimit, stepFailure,
 		stepWriteCopy + ", then ask the test writer to report again.",
 		stepDependencies + ", then ask the test writer to report again.",
 	} {
