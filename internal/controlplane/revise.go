@@ -184,7 +184,10 @@ func (r storedChangeCard) latest() storedRevision {
 	if r.proposed != nil {
 		return *r.proposed
 	}
-	return storedRevision{card: r.card, designSource: r.designSource, stories: r.stories}
+	return storedRevision{
+		card: r.card, designSource: r.designSource, stories: r.stories,
+		architecture: r.architecture, goMod: r.goMod, madeFrom: r.madeFrom,
+	}
 }
 
 // agreedRevision returns the revision the user agreed, which is the revision
@@ -256,7 +259,10 @@ func (c *ControlPlane) saveRevision(
 		span.SetAttributes(attribute.String("surla.public_summary", "Change Card request_revision changed concurrently (this request did not modify the Change Card); call get_change and retry revise_change."))
 		return storedChangeCard{}, err
 	}
-	saved := storedChangeCard{card: next.card, owner: principal.ID, designSource: next.designSource, stories: next.stories}
+	saved := storedChangeCard{
+		card: next.card, owner: principal.ID, designSource: next.designSource, stories: next.stories,
+		architecture: next.architecture, goMod: next.goMod, madeFrom: next.madeFrom,
+	}
 	summary := "Revised Change Card (needs_confirmation)."
 	if current.card.Status == StatusConfirmed {
 		saved = current
