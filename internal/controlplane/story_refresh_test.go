@@ -331,7 +331,7 @@ func TestStoryRefreshReplacementFailureRetryAndExpiry(t *testing.T) {
 
 	t.Run("changed snapshot replaces running operation and replaced evaluation publishes nothing", func(t *testing.T) {
 		wsDir := t.TempDir()
-		v1Files := validWorkspaceStub("package design\n// v1\n")
+		v1Files := validWorkspaceStub("package design\n\n// v1\n")
 		writeWorkspaceFiles(t, wsDir, v1Files)
 		v1Digest := designeval.SnapshotDigest(v1Files)
 
@@ -353,7 +353,7 @@ func TestStoryRefreshReplacementFailureRetryAndExpiry(t *testing.T) {
 		}, 5*time.Second, 10*time.Millisecond)
 
 		// Change the draft snapshot and refresh again.
-		v2Files := validWorkspaceStub("package design\n// v2\n")
+		v2Files := validWorkspaceStub("package design\n\n// v2\n")
 		writeWorkspaceFiles(t, filepath.Join(wsDir, draftFolderName), v2Files)
 		v2Digest := designeval.SnapshotDigest(v2Files)
 		require.NotEqual(t, v1Digest, v2Digest)
