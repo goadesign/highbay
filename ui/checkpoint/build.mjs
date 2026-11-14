@@ -73,7 +73,6 @@ const VALIDATED_KEYS = new Set([
   "items",
   "properties",
   "anyOf",
-  "oneOf",
   "format",
   "minimum",
   "maximum",
@@ -159,12 +158,11 @@ function compactSchema(node, at, refs) {
     }
     out.enum = node.enum;
   }
-  for (const union of ["anyOf", "oneOf"]) {
-    if (node[union] === undefined) continue;
-    if (!Array.isArray(node[union]) || node[union].length === 0) {
-      throw new Error(`Invalid ${union} at ${at}`);
+  if (node.anyOf !== undefined) {
+    if (!Array.isArray(node.anyOf) || node.anyOf.length === 0) {
+      throw new Error(`Invalid anyOf at ${at}`);
     }
-    out[union] = node[union].map((branch, i) => compactSchema(branch, `${at}.${union}[${i}]`, refs));
+    out.anyOf = node.anyOf.map((branch, i) => compactSchema(branch, `${at}.anyOf[${i}]`, refs));
   }
   if (node.required !== undefined) {
     out.required = node.required;
@@ -188,8 +186,8 @@ function compactSchema(node, at, refs) {
         ? node.additionalProperties
         : compactSchema(node.additionalProperties, `${at}.additionalProperties`, refs);
   }
-  if (out.$ref === undefined && out.type === undefined && out.anyOf === undefined && out.oneOf === undefined) {
-    throw new Error(`Schema without type, $ref, anyOf or oneOf at ${at}`);
+  if (out.$ref === undefined && out.type === undefined && out.anyOf === undefined) {
+    throw new Error(`Schema without type, $ref or anyOf at ${at}`);
   }
   return out;
 }
@@ -198,9 +196,6 @@ function compactSchema(node, at, refs) {
 function tsType(node) {
   if (node.anyOf) {
     return `(${node.anyOf.map(tsType).join(" | ")})`;
-  }
-  if (node.oneOf) {
-    return `(${node.oneOf.map(tsType).join(" | ")})`;
   }
   if (node.$ref) {
     return node.$ref.replace(/^#\/\$defs\//, "");
@@ -235,7 +230,7 @@ function tsType(node) {
 // emitDeclaration renders one component schema as an interface when it is an
 // object with properties, or as a type alias otherwise.
 function emitDeclaration(name, node) {
-  if (node.type === "object" && node.properties && !node.anyOf && !node.oneOf) {
+  if (node.type === "object" && node.properties && !node.anyOf) {
     const required = new Set(node.required || []);
     const lines = [`export interface ${name} {`];
     for (const [prop, schema] of Object.entries(node.properties)) {
@@ -509,7 +504,6 @@ interface JSONSchemaNode {
   enum?: string[];
   format?: "date-time";
   anyOf?: JSONSchemaNode[];
-  oneOf?: JSONSchemaNode[];
   required?: string[];
   additionalProperties?: boolean | JSONSchemaNode;
   items?: JSONSchemaNode;
@@ -538,9 +532,6 @@ export function isPlainObject(v: unknown): v is Record<string, unknown> {
 // node, resolving references through SCHEMA_DEFS.
 function matchesSchema(value: unknown, schema: JSONSchemaNode): boolean {
   if (schema.anyOf && !schema.anyOf.some((branch) => matchesSchema(value, branch))) {
-    return false;
-  }
-  if (schema.oneOf && schema.oneOf.filter((branch) => matchesSchema(value, branch)).length !== 1) {
     return false;
   }
   if (typeof schema.$ref === "string") {
@@ -600,7 +591,7 @@ function matchesSchema(value: unknown, schema: JSONSchemaNode): boolean {
     }
     return true;
   }
-  return Boolean(schema.anyOf || schema.oneOf);
+  return Boolean(schema.anyOf);
 }
 
 ${operations.some((op) => op.result === null)
