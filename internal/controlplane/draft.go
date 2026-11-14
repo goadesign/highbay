@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"reflect"
 	"slices"
 	"strconv"
 	"strings"
@@ -65,12 +66,32 @@ func (c *ControlPlane) readDraftSnapshot(
 	remake := missing || !exists
 	// Drop publishes only the new start. Its first materialization must read
 	// P/S even when the previous draft has already been deleted.
-	fromProject := !exists || missing && list.Start.Dropped != nil && list.Write == list.Start.Write
+	unmaterializedDrop := list.Start.Dropped != nil && list.Write == list.Start.Write && len(list.Entries) == 0
+	fromProject := !exists || missing && unmaterializedDrop
+	var draftInfo fs.FileInfo
+	var marker []byte
+	var markerMissing bool
 	if draft != nil {
-		marker, readErr := designeval.ReadRegularFile(draft, ".gitignore", maxLayoutFileBytes)
+		var readErr error
+		draftInfo, readErr = draft.Stat(".")
+		if readErr != nil {
+			return nil, saved, errors.Join(readErr, draft.Close())
+		}
+		marker, readErr = designeval.ReadRegularFile(draft, ".gitignore", maxLayoutFileBytes)
+		markerMissing = errors.Is(readErr, fs.ErrNotExist)
 		switch {
 		case errors.Is(readErr, fs.ErrNotExist):
-			readErr = writeDraftMarker(draft, list.Start.Write)
+			if unmaterializedDrop {
+				// Keep the old folder unmarked until it is removed. Stamping it
+				// with this start would hide a stopped remake after the list save.
+				remake, fromProject, readErr = true, true, nil
+			} else {
+				readErr = writeDraftMarker(draft, list.Start.Write)
+				if readErr == nil {
+					marker = []byte(fmt.Sprintf("%s%d\n*\n", draftMarkerPrefix, list.Start.Write))
+					markerMissing = false
+				}
+			}
 		case readErr == nil:
 			start, parseErr := draftMarkerStart(string(marker))
 			readErr = parseErr
@@ -87,7 +108,33 @@ func (c *ControlPlane) readDraftSnapshot(
 		}
 	}
 	if remake {
-		if err := c.makeDraft(ctx, wsDir, project, &list, fromProject); err != nil {
+		var commit string
+		var committed map[string]string
+		if fromProject {
+			// Repository commands run outside draftMu. A concurrent refresh or
+			// Drop wins rather than being overwritten by this prepared read.
+			c.draftMu.Unlock()
+			commit, committed, err = committedDraftDesign(ctx, wsDir)
+			c.draftMu.Lock()
+			if err != nil {
+				return nil, saved, gensurla.MakeUnprocessable(err)
+			}
+			current, currentExists, err := c.cards.loadMadeFrom()
+			if err != nil {
+				return nil, saved, err
+			}
+			sameDraft, err := draftStateMatches(project, draftInfo, marker, markerMissing)
+			if err != nil {
+				return nil, saved, gensurla.MakeUnprocessable(err)
+			}
+			if currentExists != exists || exists && !reflect.DeepEqual(current, list) || !sameDraft {
+				return nil, saved, gensurla.MakeConflict(errors.New(
+					"draft or design provenance changed while reading the project's commit; call refresh_story again",
+				))
+			}
+		}
+		if err := c.makeDraft(wsDir, project, &list, fromProject, commit, committed,
+			draftInfo, markerMissing); err != nil {
 			return nil, saved, gensurla.MakeUnprocessable(err)
 		}
 	}
@@ -108,7 +155,9 @@ func (c *ControlPlane) readDraftSnapshot(
 // makeDraft prepares a complete module with its ignore written first, saves
 // all new blobs and one list write, then publishes the folder. draftMu is held.
 func (c *ControlPlane) makeDraft(
-	ctx context.Context, wsDir string, project *os.Root, list *madeFromRecord, fromProject bool,
+	wsDir string, project *os.Root, list *madeFromRecord, fromProject bool,
+	commit string, committed map[string]string,
+	draftInfo fs.FileInfo, markerMissing bool,
 ) error {
 	var design map[string]string
 	var err error
@@ -143,13 +192,8 @@ func (c *ControlPlane) makeDraft(
 			files[file] = string(data)
 		}
 	}
-	var committed map[string]string
 	if fromProject {
-		commit, held, err := committedDraftDesign(ctx, wsDir)
-		if err != nil {
-			return err
-		}
-		list.Start.ProjectCommit, committed = commit, held
+		list.Start.ProjectCommit = commit
 	}
 	if err := removeOwnedDraft(project, draftStagingName); err != nil {
 		return err
@@ -229,6 +273,14 @@ func (c *ControlPlane) makeDraft(
 		}
 	}
 	list.Pending = nil
+	if markerMissing && draftInfo != nil {
+		// Only the unmaterialized Drop case retains a missing marker here.
+		// Remove its exact old folder before publishing the list: a stop then
+		// leaves a missing draft, never dropped text stamped as a new draft.
+		if err := removeUnmarkedDroppedDraft(project, draftInfo); err != nil {
+			return err
+		}
+	}
 	if err := c.cards.saveMadeFrom(*list); err != nil {
 		return err
 	}
@@ -343,6 +395,35 @@ func openDraftFolder(project *os.Root, name string) (*os.Root, error) {
 	return root, nil
 }
 
+// draftStateMatches checks the folder identity and marker captured before an
+// unlocked committed-design read. Missing and replaced folders are distinct.
+func draftStateMatches(
+	project *os.Root, before fs.FileInfo, marker []byte, missing bool,
+) (bool, error) {
+	root, err := openDraftFolder(project, draftFolderName)
+	if errors.Is(err, fs.ErrNotExist) {
+		return before == nil, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	info, statErr := root.Stat(".")
+	after, readErr := designeval.ReadRegularFile(root, ".gitignore", maxLayoutFileBytes)
+	if err := errors.Join(statErr, root.Close()); err != nil {
+		return false, err
+	}
+	if before == nil || !os.SameFile(before, info) {
+		return false, nil
+	}
+	if errors.Is(readErr, fs.ErrNotExist) {
+		return missing, nil
+	}
+	if readErr != nil {
+		return false, readErr
+	}
+	return !missing && string(marker) == string(after), nil
+}
+
 // writeDraftMarker creates only a missing ignore, before any other staged file.
 func writeDraftMarker(root *os.Root, start uint64) error {
 	f, err := root.OpenFile(".gitignore", os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
@@ -364,6 +445,24 @@ func draftMarkerStart(marker string) (uint64, error) {
 	return start, nil
 }
 
+// removeUnmarkedDroppedDraft removes only the real, still-unmarked old folder
+// inspected for an unmaterialized Drop. Drop already discarded its draft edits.
+func removeUnmarkedDroppedDraft(project *os.Root, before fs.FileInfo) error {
+	root, err := openDraftFolder(project, draftFolderName)
+	if err != nil {
+		return err
+	}
+	info, statErr := root.Stat(".")
+	_, markerErr := designeval.ReadRegularFile(root, ".gitignore", maxLayoutFileBytes)
+	if err := errors.Join(statErr, root.Close()); err != nil {
+		return err
+	}
+	if !os.SameFile(before, info) || !errors.Is(markerErr, fs.ErrNotExist) {
+		return gensurla.MakeConflict(errors.New("draft changed before its remake; call refresh_story again"))
+	}
+	return project.RemoveAll(draftFolderName)
+}
+
 // removeOwnedDraft removes only a real folder with Surla's first-written
 // marker. An unrelated directory, link or special file is never replaced.
 func removeOwnedDraft(project *os.Root, name string) error {
@@ -375,6 +474,18 @@ func removeOwnedDraft(project *os.Root, name string) error {
 		return err
 	}
 	marker, readErr := designeval.ReadRegularFile(root, ".gitignore", maxLayoutFileBytes)
+	if name == draftStagingName && errors.Is(readErr, fs.ErrNotExist) {
+		if err := root.Close(); err != nil {
+			return err
+		}
+		// Mkdir can succeed just before the first marker write is interrupted.
+		// Remove is nonrecursive: any unmarked data, even added concurrently,
+		// prevents recovery from deleting the folder.
+		if err := project.Remove(name); err != nil {
+			return fmt.Errorf("refuse replacing unowned folder %s: %w", name, err)
+		}
+		return nil
+	}
 	if readErr == nil {
 		_, readErr = draftMarkerStart(string(marker))
 	}

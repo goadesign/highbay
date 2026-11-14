@@ -4,7 +4,9 @@ package controlplane
 
 import (
 	"context"
+	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -120,6 +122,89 @@ func TestDraftRefusesUnownedStagingAndLinkedFolders(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, "user work", string(kept))
 	})
+}
+
+// TestDraftRetriesAStopBeforeTheFirstStagingMarker covers the only unmarked
+// staging folder safe to remove: one still empty after its Mkdir succeeded.
+func TestDraftRetriesAStopBeforeTheFirstStagingMarker(t *testing.T) {
+	project := t.TempDir()
+	writeWorkspaceFiles(t, project, validWorkspaceStub("package design\n"))
+	require.NoError(t, os.Mkdir(filepath.Join(project, draftStagingName), 0o700))
+	cp := newControlPlane(t, Options{WorkspaceDir: project})
+	files, _ := readDraftForTest(t, cp)
+	assert.Equal(t, "package design\n", files["design/design.go"])
+	_, err := os.Stat(filepath.Join(project, draftStagingName))
+	assert.ErrorIs(t, err, os.ErrNotExist)
+}
+
+// TestDraftRevalidatesAfterUnlockedGit checks both concurrent writers' states
+// and proves committed-design queries never hold the draft's lock.
+func TestDraftRevalidatesAfterUnlockedGit(t *testing.T) {
+	for _, change := range []string{"list", "draft"} {
+		t.Run(change, func(t *testing.T) {
+			project := t.TempDir()
+			writeWorkspaceFiles(t, project, validWorkspaceStub("package design\n"))
+			gitForLayoutTest(t, project, "init", "-q")
+			gitForLayoutTest(t, project, "add", "go.mod", "go.sum", "design/design.go")
+			gitForLayoutTest(t, project, "-c", "user.name=Test", "-c", "user.email=test@example.com", "commit", "-qm", "Initial")
+			realGit, err := exec.LookPath("git")
+			require.NoError(t, err)
+			gate := t.TempDir()
+			started, release := filepath.Join(gate, "started"), filepath.Join(gate, "release")
+			quote := func(s string) string { return "'" + strings.ReplaceAll(s, "'", "'\\''") + "'" }
+			script := "#!/bin/sh\nfor arg do\nif [ \"$arg\" = 'HEAD^{commit}' ]; then\n" +
+				": > " + quote(started) + "\nwhile [ ! -f " + quote(release) + " ]; do sleep 0.01; done\nfi\ndone\n" +
+				"exec " + quote(realGit) + " \"$@\"\n"
+			bin := t.TempDir()
+			require.NoError(t, os.WriteFile(filepath.Join(bin, "git"), []byte(script), 0o700))
+			t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+			cp := newControlPlane(t, Options{WorkspaceDir: project})
+			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			t.Cleanup(cancel)
+			t.Cleanup(func() { assert.NoError(t, os.WriteFile(release, nil, 0o600)) })
+			result := make(chan error, 1)
+			go func() {
+				ws, dev, ino := cp.currentWorkspaceTarget()
+				_, _, err := cp.readDraftSnapshot(ctx, ws, dev, ino)
+				result <- err
+			}()
+			require.Eventually(t, func() bool {
+				_, err := os.Stat(started)
+				return err == nil
+			}, 3*time.Second, 10*time.Millisecond)
+			require.True(t, cp.draftMu.TryLock(), "Git must not hold draftMu")
+			func() {
+				defer cp.draftMu.Unlock()
+				if change == "list" {
+					require.NoError(t, cp.cards.saveMadeFrom(madeFromRecord{
+						Write: 2, Start: madeFromStart{Write: 2}, Entries: map[string][]madeFromVersion{},
+					}))
+				} else {
+					writeWorkspaceFiles(t, filepath.Join(project, draftFolderName), map[string]string{
+						".gitignore": "# surla draft 1\n*\n", "design/design.go": "user work",
+					})
+				}
+			}()
+			require.NoError(t, os.WriteFile(release, nil, 0o600))
+			select {
+			case err := <-result:
+				assertServiceError(t, err, "conflict")
+				assert.ErrorContains(t, err, "call refresh_story again")
+			case <-ctx.Done():
+				t.Fatal("draft read did not finish after the Git query was released")
+			}
+			if change == "list" {
+				list, _, err := cp.cards.loadMadeFrom()
+				require.NoError(t, err)
+				assert.Equal(t, uint64(2), list.Start.Write)
+				assert.Equal(t, uint64(2), list.Write)
+			} else {
+				text, err := os.ReadFile(filepath.Join(project, draftFolderName, "design/design.go"))
+				require.NoError(t, err)
+				assert.Equal(t, "user work", string(text))
+			}
+		})
+	}
 }
 
 // TestDraftInitialCommittedAndUncommittedVersionsEnterTogether proves an
@@ -356,6 +441,133 @@ func TestMissingDraftAfterDropStillCapturesTheNewStartCommit(t *testing.T) {
 		{Version: designversion.Digest("package design\n\nvar A = 0\n"), Entered: list.Write + 1},
 		{Version: designversion.Digest("package design\n\nvar A = 3\n"), Entered: list.Write + 1},
 	}, provenance.Entries["design/design.go"])
+}
+
+// TestDroppedDraftWithMissingIgnoreDoesNotRetainOldEdits covers a deleted
+// marker after Drop has published its start but before the draft was remade.
+func TestDroppedDraftWithMissingIgnoreDoesNotRetainOldEdits(t *testing.T) {
+	project := t.TempDir()
+	writeWorkspaceFiles(t, project, validWorkspaceStub("package design\nvar A = 1\n"))
+	cp := newControlPlane(t, Options{WorkspaceDir: project})
+	readDraftForTest(t, cp)
+	require.NoError(t, os.Remove(filepath.Join(project, draftFolderName, ".gitignore")))
+	cp.draftMu.Lock()
+	list, _, err := cp.cards.loadMadeFrom()
+	require.NoError(t, err)
+	list.Write++
+	list.Start = madeFromStart{Write: list.Write, Dropped: &droppedBuild{
+		ChangeID: "chg", StartedAt: time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC), Number: 1,
+	}}
+	list.Entries, list.Taken = nil, nil
+	require.NoError(t, cp.cards.saveMadeFrom(list))
+	cp.draftMu.Unlock()
+	writeWorkspaceFiles(t, project, map[string]string{"design/design.go": "package design\nvar A = 3\n"})
+	got, provenance := readDraftForTest(t, cp)
+	assert.Equal(t, "package design\n\nvar A = 3\n", got["design/design.go"])
+	assert.NotEmpty(t, provenance.Entries)
+	assert.Equal(t, list.Start.Write, provenance.Start.Write)
+}
+
+// TestDroppedUnmarkedDraftPublicationRecoversAtEveryStop restarts the owner at
+// each durable boundary, including the list-before-rename interval that must
+// never relabel the old dropped text as a new-generation draft.
+func TestDroppedUnmarkedDraftPublicationRecoversAtEveryStop(t *testing.T) {
+	for _, phase := range []string{"before removal", "after removal", "after list", "after rename"} {
+		t.Run(phase, func(t *testing.T) {
+			project := t.TempDir()
+			initial := validWorkspaceStub("package design\nvar A = 1\n")
+			writeWorkspaceFiles(t, project, initial)
+			opts := Options{WorkspaceDir: project, CardsDir: t.TempDir()}
+			cp := newControlPlane(t, opts)
+			readDraftForTest(t, cp)
+			require.NoError(t, os.Remove(filepath.Join(project, draftFolderName, ".gitignore")))
+			cp.draftMu.Lock()
+			list, _, err := cp.cards.loadMadeFrom()
+			require.NoError(t, err)
+			list.Write++
+			list.Start = madeFromStart{Write: list.Write, Dropped: &droppedBuild{
+				ChangeID: "chg", StartedAt: time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC), Number: 1,
+			}}
+			list.Entries, list.Taken = nil, nil
+			require.NoError(t, cp.cards.saveMadeFrom(list))
+			cp.draftMu.Unlock()
+			next := validWorkspaceStub("package design\n\nvar A = 3\n")
+			writeWorkspaceFiles(t, project, next)
+			stage := validWorkspaceStub(next["design/design.go"])
+			stage[".gitignore"] = "# surla draft 2\n*\n"
+			writeWorkspaceFiles(t, filepath.Join(project, draftStagingName), stage)
+			if phase != "before removal" {
+				require.NoError(t, os.RemoveAll(filepath.Join(project, draftFolderName)))
+			}
+			if phase == "after list" || phase == "after rename" {
+				func() {
+					cp.draftMu.Lock()
+					defer cp.draftMu.Unlock()
+					list.Write++
+					version, err := cp.enterDraftVersion(&list, "design/design.go", draftDesignFiles(next))
+					require.NoError(t, err)
+					list.Taken = map[string]madeFromVersion{
+						"design/design.go": {Version: version, Entered: list.Write},
+					}
+					require.NoError(t, cp.cards.saveMadeFrom(list))
+				}()
+			}
+			if phase == "after rename" {
+				require.NoError(t, os.Rename(filepath.Join(project, draftStagingName), filepath.Join(project, draftFolderName)))
+				// A published draft must not consult the project on restart.
+				writeWorkspaceFiles(t, project, map[string]string{"go.mod": "broken", "design/design.go": "not Go"})
+			}
+			require.NoError(t, cp.Close())
+			reopened := newControlPlane(t, opts)
+			got, provenance := readDraftForTest(t, reopened)
+			assert.Equal(t, next, got)
+			assert.Equal(t, list.Start, provenance.Start)
+			assert.NotEmpty(t, provenance.Entries)
+			marker, err := os.ReadFile(filepath.Join(project, draftFolderName, ".gitignore"))
+			require.NoError(t, err)
+			assert.Equal(t, "# surla draft 2\n*\n", string(marker))
+		})
+	}
+}
+
+// TestDroppedUnmarkedDraftIsRemovedBeforeTheListWrite fails the real list
+// writer after removal, proving the implementation's ordering rather than
+// merely reconstructing the expected durable states.
+func TestDroppedUnmarkedDraftIsRemovedBeforeTheListWrite(t *testing.T) {
+	for _, start := range []uint64{1, 2} {
+		t.Run(fmt.Sprint(start), func(t *testing.T) {
+			project := t.TempDir()
+			writeWorkspaceFiles(t, project, validWorkspaceStub("package design\nvar A = 1\n"))
+			opts := Options{WorkspaceDir: project, CardsDir: t.TempDir()}
+			cp := newControlPlane(t, opts)
+			readDraftForTest(t, cp)
+			require.NoError(t, os.Remove(filepath.Join(project, draftFolderName, ".gitignore")))
+			list := madeFromRecord{Write: start, Start: madeFromStart{Write: start, Dropped: &droppedBuild{
+				ChangeID: "chg", StartedAt: time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC), Number: 1,
+			}}}
+			func() {
+				cp.draftMu.Lock()
+				defer cp.draftMu.Unlock()
+				require.NoError(t, cp.cards.saveMadeFrom(list))
+			}()
+			writeWorkspaceFiles(t, project, map[string]string{"design/design.go": "package design\nvar A = 3\n"})
+			blockedWrite := filepath.Join(cp.cards.dir, madeFromStagingFile)
+			require.NoError(t, os.Mkdir(blockedWrite, 0o700))
+			ws, dev, ino := cp.currentWorkspaceTarget()
+			_, _, err := cp.readDraftSnapshot(context.Background(), ws, dev, ino)
+			require.Error(t, err)
+			_, err = os.Stat(filepath.Join(project, draftFolderName))
+			assert.ErrorIs(t, err, os.ErrNotExist, "the old dropped folder must already be gone")
+			unchanged, _, err := cp.cards.loadMadeFrom()
+			require.NoError(t, err)
+			assert.Equal(t, list, unchanged, "the failed save must leave the drop's unmaterialized start")
+			require.NoError(t, os.Remove(blockedWrite))
+			require.NoError(t, cp.Close())
+			reopened := newControlPlane(t, opts)
+			got, _ := readDraftForTest(t, reopened)
+			assert.Equal(t, "package design\n\nvar A = 3\n", got["design/design.go"])
+		})
+	}
 }
 
 // readDraftForTest reads the actual refresh owner without starting evaluation.
