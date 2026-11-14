@@ -319,13 +319,15 @@ func TestViewsPageApprovesAPassedResult(t *testing.T) {
 
 	t.Run("approves", func(t *testing.T) {
 		target := &pageTarget{artifacts: spec.Artifacts}
-		cp := pageControlPlane(t, Options{ResolvePromotionTarget: target.resolve})
-		proposed := mustPropose(t, cp, guide, "chg-approve", "Route refunds to a manager.", refundAnalysis("Route refunds to a manager."))
+		cp := pageControlPlane(t, buildFixtureOptions(t, Options{ResolvePromotionTarget: target.resolve}))
+		proposed := saveProposedCardFixture(t, cp, pageOwner, "chg-approve", "Route refunds to a manager.", refundAnalysis("Route refunds to a manager."))
+		proposed = attachBuildSnapshot(t, cp, proposed.ChangeID)
 		confirmed, err := cp.ConfirmIntent(user, &gensurla.ConfirmIntentPayload{
 			ChangeID: proposed.ChangeID, RequestRevision: proposed.RequestRevision,
 			Answers: map[string]string{}, Examples: proposed.Examples,
 		})
 		require.NoError(t, err)
+		saveStoredBuildFixture(t, cp, confirmed)
 		report := passingReport(t, confirmed.RequestRevision, commit, spec)
 		target.update(func(p *pageTarget) { p.report = report })
 		svc := newPageVerifications(cp)
@@ -462,13 +464,15 @@ page.close();
 
 	t.Run("a refused approval still shows why", func(t *testing.T) {
 		target := &pageTarget{artifacts: spec.Artifacts}
-		cp := pageControlPlane(t, Options{ResolvePromotionTarget: target.resolve})
-		proposed := mustPropose(t, cp, guide, "chg-refused", "Route refunds to a manager.", refundAnalysis("Route refunds to a manager."))
+		cp := pageControlPlane(t, buildFixtureOptions(t, Options{ResolvePromotionTarget: target.resolve}))
+		proposed := saveProposedCardFixture(t, cp, pageOwner, "chg-refused", "Route refunds to a manager.", refundAnalysis("Route refunds to a manager."))
+		proposed = attachBuildSnapshot(t, cp, proposed.ChangeID)
 		confirmed, err := cp.ConfirmIntent(user, &gensurla.ConfirmIntentPayload{
 			ChangeID: proposed.ChangeID, RequestRevision: proposed.RequestRevision,
 			Answers: map[string]string{}, Examples: proposed.Examples,
 		})
 		require.NoError(t, err)
+		saveStoredBuildFixture(t, cp, confirmed)
 		svc := newPageVerifications(cp)
 		run := passedRun(confirmed, "dddddddddddddddddddddddddddddddd", commit, strings.Repeat("3", 64))
 		// The fixture models the owner observing this confirmed revision and selected tests.
@@ -495,13 +499,15 @@ page.close();
 
 	t.Run("stale revision uses the editor's recovery", func(t *testing.T) {
 		target := &pageTarget{artifacts: spec.Artifacts}
-		cp := pageControlPlane(t, Options{ResolvePromotionTarget: target.resolve})
-		proposed := mustPropose(t, cp, guide, "chg-stale", "Route refunds to a manager.", refundAnalysis("Route refunds to a manager."))
+		cp := pageControlPlane(t, buildFixtureOptions(t, Options{ResolvePromotionTarget: target.resolve}))
+		proposed := saveProposedCardFixture(t, cp, pageOwner, "chg-stale", "Route refunds to a manager.", refundAnalysis("Route refunds to a manager."))
+		proposed = attachBuildSnapshot(t, cp, proposed.ChangeID)
 		confirmed, err := cp.ConfirmIntent(user, &gensurla.ConfirmIntentPayload{
 			ChangeID: proposed.ChangeID, RequestRevision: proposed.RequestRevision,
 			Answers: map[string]string{}, Examples: proposed.Examples,
 		})
 		require.NoError(t, err)
+		saveStoredBuildFixture(t, cp, confirmed)
 		svc := newPageVerifications(cp)
 		run := passedRun(confirmed, "cccccccccccccccccccccccccccccccc", commit, strings.Repeat("3", 64))
 		// The fixture models the owner observing this confirmed revision and selected tests.

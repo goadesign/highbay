@@ -226,7 +226,7 @@ func TestAQueuedLiveStartUsesTheCurrentAcceptedTestsAndModel(t *testing.T) {
 		}},
 		{name: "user built the same revision again", state: "assigned", apply: func(t *testing.T) {
 			acceptTests(t, cp, "chg", repo.candidate)
-			_, err := cp.StartBuild(user, &gensurla.StartBuildPayload{ChangeID: "chg", RequestRevision: card.RequestRevision})
+			_, err := startBuildAgain(t, cp, user, "chg", card.RequestRevision)
 			require.NoError(t, err)
 		}},
 	} {

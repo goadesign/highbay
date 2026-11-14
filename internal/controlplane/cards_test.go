@@ -323,8 +323,8 @@ func TestASavedApprovalNeedsAPromotionTarget(t *testing.T) {
 
 // TestSavedCardInTodaysUntaggedFormWithApprovalDecodes verifies that a card
 // file written in today's untagged form with an Approval record (and no
-// TestSource field) decodes and is returned by get_change only while the
-// chooser gives its SuiteCommit.
+// TestSource field) decodes. Public approval visibility additionally needs a
+// current numbered build whose selected evaluator matches its SuiteCommit.
 func TestSavedCardInTodaysUntaggedFormWithApprovalDecodes(t *testing.T) {
 	alice := WithPrincipal(context.Background(), Principal{ID: "alice@example.com", CallerID: "alice@example.com", Kind: CallerUser})
 	suiteCommit := strings.Repeat("b", 40)
