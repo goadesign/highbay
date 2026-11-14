@@ -152,8 +152,13 @@ func TestViewsPageBuildUsesTheNewAgreementAndKeepsDraftAndProposal(t *testing.T)
 	cp := newBuildControlPlane(t, Options{Team: &TeamBinding{Owner: pageOwner, Service: f}})
 	cp.changesWait = 400 * time.Millisecond
 	cp.changesPoll = 20 * time.Millisecond
-	first := confirmedChange(t, cp, "chg")
-	_, err := cp.StartBuild(asCaller(pageOwner, CallerUser), &gensurla.StartBuildPayload{
+	proposed := saveDraftSourceCardFixture(t, cp, "chg", map[string]string{"design/design.go": "package design\n"})
+	first, err := cp.ConfirmIntent(asCaller(pageOwner, CallerUser), &gensurla.ConfirmIntentPayload{
+		ChangeID: proposed.ChangeID, RequestRevision: proposed.RequestRevision,
+		Answers: map[string]string{}, Examples: proposed.Examples,
+	})
+	require.NoError(t, err)
+	_, err = cp.StartBuild(asCaller(pageOwner, CallerUser), &gensurla.StartBuildPayload{
 		ChangeID: first.ChangeID, RequestRevision: first.RequestRevision,
 	})
 	require.NoError(t, err)
