@@ -545,7 +545,7 @@ func TestWrittenTestRunsReceiveNoProviderSettings(t *testing.T) {
 		Anthropic: map[string]string{"ANTHROPIC_API_KEY": sentinelKey, "ANTHROPIC_BASE_URL": sentinelURL},
 		Openai:    map[string]string{"OPENAI_API_KEY": sentinelOpenAIKey},
 	})
-	card := saveStoryCard(t, cp, "chg", StatusConfirmed, refundStory("Refund over the limit waits"))
+	card := saveBuildStoryCard(t, cp, "chg", StatusConfirmed, refundStory("Refund over the limit waits"))
 	_, err := cp.StartBuild(asCaller("alice@example.com", CallerUser), &gensurla.StartBuildPayload{ChangeID: "chg", RequestRevision: card.RequestRevision})
 	require.NoError(t, err)
 	acceptTests(t, cp, "chg", repo.tests)

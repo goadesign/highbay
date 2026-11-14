@@ -21,8 +21,8 @@ func TestViewsPageBuildIgnoresThePreviousChangesDelayedRead(t *testing.T) {
 	cp := newBuildControlPlane(t, Options{Team: &TeamBinding{Owner: pageOwner, Service: f}})
 	cp.changesWait = 400 * time.Millisecond
 	cp.changesPoll = 20 * time.Millisecond
-	confirmedChange(t, cp, "chg-first")
-	second := confirmedChange(t, cp, "chg-second")
+	buildableChange(t, cp, "chg-first")
+	second := buildableChange(t, cp, "chg-second")
 	started, err := cp.StartBuild(asCaller(pageOwner, CallerUser), &gensurla.StartBuildPayload{
 		ChangeID: second.ChangeID, RequestRevision: second.RequestRevision,
 	})
@@ -65,7 +65,7 @@ func TestViewsPageBuildWaitsForConfirmationAndARecoveredRead(t *testing.T) {
 	cp := newBuildControlPlane(t, Options{Team: &TeamBinding{Owner: pageOwner, Service: f}})
 	cp.changesWait = 400 * time.Millisecond
 	cp.changesPoll = 20 * time.Millisecond
-	confirmedChange(t, cp, "chg-confirmed")
+	buildableChange(t, cp, "chg-confirmed")
 	mustPropose(t, cp, asCaller(pageOwner, CallerGuide), "chg-unconfirmed", "Route refunds to a manager.", refundAnalysis("Route refunds to a manager."))
 	ps := startPageServer(t, cp)
 
@@ -106,7 +106,7 @@ func TestViewsPageBuildWaitsForTheListedAgreementBeforeCardReadCompletes(t *test
 	cp := newBuildControlPlane(t, Options{Team: &TeamBinding{Owner: pageOwner, Service: f}})
 	cp.changesWait = 400 * time.Millisecond
 	cp.changesPoll = 20 * time.Millisecond
-	first := confirmedChange(t, cp, "chg")
+	first := buildableChange(t, cp, "chg")
 	ps := startPageServer(t, cp)
 	ps.act("refine-agreement", func() {
 		_, err := cp.ConfirmIntent(asCaller(pageOwner, CallerUser), &gensurla.ConfirmIntentPayload{
@@ -152,7 +152,7 @@ func TestViewsPageBuildUsesTheNewAgreementAndKeepsDraftAndProposal(t *testing.T)
 	cp := newBuildControlPlane(t, Options{Team: &TeamBinding{Owner: pageOwner, Service: f}})
 	cp.changesWait = 400 * time.Millisecond
 	cp.changesPoll = 20 * time.Millisecond
-	first := confirmedChange(t, cp, "chg")
+	first := buildableChange(t, cp, "chg")
 	_, err := cp.StartBuild(asCaller(pageOwner, CallerUser), &gensurla.StartBuildPayload{
 		ChangeID: first.ChangeID, RequestRevision: first.RequestRevision,
 	})
@@ -234,7 +234,7 @@ func TestViewsPageBuildTeamRecoveryClearsTheOldInstructionEverywhere(t *testing.
 	cp := newBuildControlPlane(t, Options{Team: &TeamBinding{Owner: pageOwner, Service: f}})
 	cp.changesWait = 400 * time.Millisecond
 	cp.changesPoll = 20 * time.Millisecond
-	confirmedChange(t, cp, "chg")
+	buildableChange(t, cp, "chg")
 	ps := startPageServer(t, cp)
 	ps.act("allow-team-start", func() {
 		f.mu.Lock()

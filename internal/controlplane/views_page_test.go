@@ -385,7 +385,7 @@ again.close();
 		})
 		cp.changesWait = 400000000
 		cp.changesPoll = 20000000
-		confirmed := saveStoryCard(t, cp, "chg-written-approve", StatusConfirmed, refundStory("Refund over the limit waits"))
+		confirmed := saveBuildStoryCard(t, cp, "chg-written-approve", StatusConfirmed, refundStory("Refund over the limit waits"))
 		_, err := cp.StartBuild(user, &gensurla.StartBuildPayload{ChangeID: confirmed.ChangeID, RequestRevision: confirmed.RequestRevision})
 		require.NoError(t, err)
 		acceptTests(t, cp, confirmed.ChangeID, spec.SuiteCommit)

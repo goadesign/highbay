@@ -466,7 +466,7 @@ func selectedInputsFixture(t *testing.T) (*ControlPlane, *gensurla.ChangeCardRes
 		RunsDir: runsDir, WrittenTestRuns: &WrittenTestRuns{ReportDir: t.TempDir(), Timeout: time.Minute},
 	})
 	cp.changesWait, cp.changesPoll = 400*time.Millisecond, 20*time.Millisecond
-	card := confirmedChange(t, cp, "chg-selected-inputs")
+	card := buildableChange(t, cp, "chg-selected-inputs")
 	_, err := cp.StartBuild(asCaller(pageOwner, CallerUser), &gensurla.StartBuildPayload{
 		ChangeID: card.ChangeID, RequestRevision: card.RequestRevision,
 	})

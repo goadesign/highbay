@@ -37,6 +37,7 @@ func TestStartBuildOnlyAtTheConfirmedRevisionInForce(t *testing.T) {
 	guide := asCaller("alice@example.com", CallerGuide)
 	user := asCaller("alice@example.com", CallerUser)
 	proposed := mustPropose(t, cp, guide, "chg", "Refunds up to $50 are instant.", refundAnalysis("Refunds up to $50 are instant."))
+	proposed = attachBuildSnapshot(t, cp, "chg")
 	cases := []struct {
 		name     string
 		ctx      context.Context
@@ -107,7 +108,7 @@ func TestBuildingAgainReplacesTheBuildAndClearsReads(t *testing.T) {
 	user := asCaller("alice@example.com", CallerUser)
 	builder := asCaller("alice@example.com", CallerBuilder)
 	tests := asCaller("alice@example.com", CallerTestWriter)
-	first := confirmedChange(t, cp, "chg")
+	first := buildableChange(t, cp, "chg")
 	_, err := cp.StartBuild(user, &gensurla.StartBuildPayload{ChangeID: "chg", RequestRevision: first.RequestRevision})
 	require.NoError(t, err)
 
@@ -158,7 +159,7 @@ func TestBuildingAgainReplacesTheBuildAndClearsReads(t *testing.T) {
 	_, err = cp.StartBuild(user, &gensurla.StartBuildPayload{ChangeID: "chg", RequestRevision: first.RequestRevision})
 	assertRefused(t, err, "conflict")
 
-	rebuilt, err := cp.StartBuild(user, &gensurla.StartBuildPayload{ChangeID: "chg", RequestRevision: second.RequestRevision})
+	rebuilt, err := startBuildAgain(t, cp, user, "chg", second.RequestRevision)
 	require.NoError(t, err)
 	assert.Equal(t, second.RequestRevision, rebuilt.Build.RequestRevision)
 	assert.True(t, rebuilt.Build.InForce)
@@ -172,7 +173,7 @@ func TestBuildingAgainReplacesTheBuildAndClearsReads(t *testing.T) {
 
 	_, err = cp.GetBuilderAssignment(builder, &gensurla.GetBuilderAssignmentPayload{ChangeID: "chg"})
 	require.NoError(t, err)
-	again, err := cp.StartBuild(user, &gensurla.StartBuildPayload{ChangeID: "chg", RequestRevision: second.RequestRevision})
+	again, err := startBuildAgain(t, cp, user, "chg", second.RequestRevision)
 	require.NoError(t, err)
 	assert.False(t, again.Build.Builder.Read, "building the same revision again also starts over")
 }
@@ -186,7 +187,7 @@ func TestAssignmentsSayWhetherTheirBuildIsInForce(t *testing.T) {
 	user := asCaller("alice@example.com", CallerUser)
 	builder := asCaller("alice@example.com", CallerBuilder)
 	tests := asCaller("alice@example.com", CallerTestWriter)
-	first := confirmedChange(t, cp, "chg")
+	first := buildableChange(t, cp, "chg")
 	_, err := cp.StartBuild(user, &gensurla.StartBuildPayload{ChangeID: "chg", RequestRevision: first.RequestRevision})
 	require.NoError(t, err)
 	reads := []struct {
@@ -267,9 +268,9 @@ func TestStartBuildChecksTheChangeAgainAfterPreparing(t *testing.T) {
 			copy := &buildCopyFixture{folder: t.TempDir()}
 			cp := newBuildControlPlane(t, Options{})
 			cp.buildCopyFactory = func(context.Context, string, scaffold.Layout) (buildCopy, error) { return copy, nil }
-			card := saveStoryCard(t, cp, "chg", StatusConfirmed, refundStory("Refund over the limit"))
+			card := saveBuildStoryCard(t, cp, "chg", StatusConfirmed, refundStory("Refund over the limit"))
 			copy.refresh = func(context.Context) (testwriter.RefreshResult, error) {
-				saveStoryCard(t, cp, "chg", tc.status, refundStory("Refund over the new limit"))
+				saveBuildStoryCard(t, cp, "chg", tc.status, refundStory("Refund over the new limit"))
 				return testwriter.RefreshResult{State: testwriter.RefreshAtProjectCommit, Commit: strings.Repeat("c", 40)}, nil
 			}
 			_, err := cp.StartBuild(asCaller("alice@example.com", CallerUser), &gensurla.StartBuildPayload{ChangeID: "chg", RequestRevision: card.RequestRevision})
@@ -290,13 +291,13 @@ func TestTestAssignmentKeepsTheStoryAgreedAtTheBuiltRevision(t *testing.T) {
 	user := asCaller("alice@example.com", CallerUser)
 	tests := asCaller("alice@example.com", CallerTestWriter)
 	agreed := refundStory("Refund over the limit")
-	card := saveStoryCard(t, cp, "chg", StatusConfirmed, agreed)
+	card := saveBuildStoryCard(t, cp, "chg", StatusConfirmed, agreed)
 	_, err := cp.StartBuild(user, &gensurla.StartBuildPayload{ChangeID: "chg", RequestRevision: card.RequestRevision})
 	require.NoError(t, err)
 
 	revised := refundStory("Refund over the new limit")
 	revised[0].Flows = append(revised[0].Flows, designeval.StoryFlow{Key: "store-credit", Title: "Store credit", Complete: true})
-	saveStoryCard(t, cp, "chg", StatusNeedsConfirmation, revised)
+	saveBuildStoryCard(t, cp, "chg", StatusNeedsConfirmation, revised)
 
 	assignment, err := cp.GetTestWriterAssignment(tests, &gensurla.GetTestWriterAssignmentPayload{ChangeID: "chg"})
 	require.NoError(t, err)
@@ -318,7 +319,7 @@ func TestStartBuildRefusesAStoryWhoseTestsCannotBeNamed(t *testing.T) {
 	cp := newBuildControlPlane(t, Options{})
 	stories := refundStory("Refund over the limit")
 	stories[0].Flows = append(stories[0].Flows, designeval.StoryFlow{Key: "refund_over_limit", Title: "Same name", Complete: true})
-	card := saveStoryCard(t, cp, "chg", StatusConfirmed, stories)
+	card := saveBuildStoryCard(t, cp, "chg", StatusConfirmed, stories)
 	_, err := cp.StartBuild(asCaller("alice@example.com", CallerUser), &gensurla.StartBuildPayload{ChangeID: "chg", RequestRevision: card.RequestRevision})
 	assertRefused(t, err, "unprocessable")
 	assert.ErrorContains(t, err, "refund_over_limit")
@@ -332,8 +333,8 @@ func TestReportForAnotherRevisionIsRefused(t *testing.T) {
 	cp := newBuildControlPlane(t, Options{})
 	user := asCaller("alice@example.com", CallerUser)
 	tests := asCaller("alice@example.com", CallerTestWriter)
-	card := confirmedChange(t, cp, "chg")
-	confirmedChange(t, cp, "unbuilt")
+	card := buildableChange(t, cp, "chg")
+	buildableChange(t, cp, "unbuilt")
 	_, err := cp.StartBuild(user, &gensurla.StartBuildPayload{ChangeID: "chg", RequestRevision: card.RequestRevision})
 	require.NoError(t, err)
 	before := readBuildFile(t, cp, "chg")
@@ -374,8 +375,8 @@ func TestReportForAnotherRevisionIsRefused(t *testing.T) {
 func TestAssignmentsListOnlyTheCallersOwnChanges(t *testing.T) {
 	cp := newBuildControlPlane(t, Options{})
 	user := asCaller("alice@example.com", CallerUser)
-	older := confirmedChange(t, cp, "older")
-	newer := confirmedChange(t, cp, "newer")
+	older := buildableChange(t, cp, "older")
+	newer := buildableChange(t, cp, "newer")
 	_, err := cp.StartBuild(user, &gensurla.StartBuildPayload{ChangeID: "older", RequestRevision: older.RequestRevision})
 	require.NoError(t, err)
 	time.Sleep(2 * time.Millisecond)
@@ -412,11 +413,12 @@ func TestBuildFileIsDecodedStrictly(t *testing.T) {
 	commit := strings.Repeat("c", 40)
 	at := "2026-11-13T09:30:00Z"
 	cases := []struct {
-		name    string
-		edit    func(map[string]any) map[string]any
-		trailer string
-		refusal string
-		tests   gensurla.TestsKind
+		name       string
+		edit       func(map[string]any) map[string]any
+		trailer    string
+		refusal    string
+		tests      gensurla.TestsKind
+		notStarted bool
 	}{
 		{name: "unknown field", edit: func(f map[string]any) map[string]any { f["extra"] = true; return f }, refusal: "unknown field"},
 		{name: "unknown assignment field", edit: func(f map[string]any) map[string]any {
@@ -424,7 +426,7 @@ func TestBuildFileIsDecodedStrictly(t *testing.T) {
 			return f
 		}, refusal: "unknown field"},
 		{name: "trailing data", edit: func(f map[string]any) map[string]any { return f }, trailer: "{}", refusal: "trailing data"},
-		{name: "another change's build", edit: func(f map[string]any) map[string]any { f["change_id"] = "other"; return f }, refusal: "does not hold"},
+		{name: "another change's build", edit: func(f map[string]any) map[string]any { f["change_id"] = "other"; return f }, notStarted: true},
 		{name: "builder state", edit: func(f map[string]any) map[string]any {
 			f["builder"].(map[string]any)["state"] = "assigned"
 			return f
@@ -432,33 +434,33 @@ func TestBuildFileIsDecodedStrictly(t *testing.T) {
 		{name: "unknown test writer state", edit: func(f map[string]any) map[string]any {
 			f["test_writer"].(map[string]any)["state"] = "approved"
 			return f
-		}, refusal: "unknown test writer state"},
-		{name: "needs changes without findings", edit: testWriterState("needs_changes", nil, ""), refusal: "does not allow"},
-		{name: "assigned with a commit", edit: testWriterState("assigned", nil, commit), refusal: "does not allow"},
-		{name: "accepted without a commit", edit: testWriterState("accepted", nil, ""), refusal: "does not allow"},
+		}, refusal: "unknown test-writer state"},
+		{name: "needs changes without findings", edit: testWriterState("needs_changes", nil, ""), refusal: "do not match its state"},
+		{name: "assigned with a commit", edit: testWriterState("assigned", nil, commit), refusal: "do not match its state"},
+		{name: "accepted without a commit", edit: testWriterState("accepted", nil, ""), refusal: "do not match its state"},
 		{name: "needs changes", edit: savedTestWriter(map[string]any{
 			"state": "needs_changes", "findings": []string{"RefundOverLimit is not implemented"}, "checked_at": at,
 		}), tests: gensurla.TestsKindNeedsChanges},
 		{name: "accepted", edit: savedTestWriter(map[string]any{"state": "accepted", "commit": commit, "checked_at": at}), tests: gensurla.TestsKindAccepted},
-		{name: "not used is never saved", edit: savedTestWriter(map[string]any{"state": "not_used"}), refusal: "unknown test writer state"},
+		{name: "not used is never saved", edit: savedTestWriter(map[string]any{"state": "not_used"}), refusal: "unknown test-writer state"},
 		{name: "needs changes with a commit", edit: savedTestWriter(map[string]any{
 			"state": "needs_changes", "findings": []string{"RefundOverLimit is not implemented"}, "commit": commit, "checked_at": at,
-		}), refusal: "does not allow"},
+		}), refusal: "do not match its state"},
 		{name: "needs changes with a reason", edit: savedTestWriter(map[string]any{
 			"state": "needs_changes", "findings": []string{"RefundOverLimit is not implemented"}, "reason": "git failed", "checked_at": at,
-		}), refusal: "does not allow"},
+		}), refusal: "do not match its state"},
 		{name: "accepted with findings", edit: savedTestWriter(map[string]any{
 			"state": "accepted", "commit": commit, "findings": []string{"RefundOverLimit is not implemented"}, "checked_at": at,
-		}), refusal: "does not allow"},
+		}), refusal: "do not match its state"},
 		{name: "accepted with a step", edit: savedTestWriter(map[string]any{
 			"state": "accepted", "commit": commit, "step": "Report again.", "checked_at": at,
-		}), refusal: "does not allow"},
+		}), refusal: "do not match its state"},
 		{name: "could not run with findings", edit: savedTestWriter(map[string]any{
 			"state": "could_not_run", "reason": "git failed", "step": "Report again.", "findings": []string{"RefundOverLimit is not implemented"}, "checked_at": at,
-		}), refusal: "does not allow"},
+		}), refusal: "do not match its state"},
 		{name: "could not run with a commit", edit: savedTestWriter(map[string]any{
 			"state": "could_not_run", "reason": "git failed", "step": "Report again.", "commit": commit, "checked_at": at,
-		}), refusal: "does not allow"},
+		}), refusal: "do not match its state"},
 		{name: "could not run", edit: savedTestWriter(map[string]any{
 			"state": "could_not_run", "reason": "git could not write the tests branch", "step": "Free disk space, then report again.", "checked_at": at,
 		}), tests: gensurla.TestsKindCouldNotRun},
@@ -467,13 +469,13 @@ func TestBuildFileIsDecodedStrictly(t *testing.T) {
 		}), tests: gensurla.TestsKindCouldNotRun},
 		{name: "could not run, reason over its limit", edit: savedTestWriter(map[string]any{
 			"state": "could_not_run", "reason": strings.Repeat("é", maxCheckReason+1), "step": "Report again.", "checked_at": at,
-		}), refusal: "does not allow"},
+		}), refusal: "do not match its state"},
 		{name: "could not run, step over its limit", edit: savedTestWriter(map[string]any{
 			"state": "could_not_run", "reason": "git failed", "step": strings.Repeat("s", maxCheckStep+1), "checked_at": at,
-		}), refusal: "does not allow"},
+		}), refusal: "do not match its state"},
 		{name: "could not run without a step", edit: savedTestWriter(map[string]any{
 			"state": "could_not_run", "reason": "git failed", "checked_at": at,
-		}), refusal: "does not allow"},
+		}), refusal: "do not match its state"},
 		{name: "needs changes without its time", edit: savedTestWriter(map[string]any{
 			"state": "needs_changes", "findings": []string{"RefundOverLimit is not implemented"},
 		}), refusal: "verdict time"},
@@ -482,12 +484,12 @@ func TestBuildFileIsDecodedStrictly(t *testing.T) {
 			"state": "could_not_run", "reason": "git failed", "step": "Report again.",
 		}), refusal: "verdict time"},
 		{name: "assigned with a verdict time", edit: savedTestWriter(map[string]any{"state": "assigned", "checked_at": at}), refusal: "verdict time"},
-		{name: "reported with a reason", edit: savedTestWriter(map[string]any{"state": "reported", "reason": "git failed"}), refusal: "does not allow"},
-		{name: "assigned with a counted report", edit: func(f map[string]any) map[string]any { f["report_number"] = 3; return f }, refusal: "report number 0 while"},
+		{name: "reported with a reason", edit: savedTestWriter(map[string]any{"state": "reported", "reason": "git failed"}), refusal: "do not match its state"},
+		{name: "assigned with a counted report", edit: func(f map[string]any) map[string]any { f["report_number"] = 3; return f }, refusal: "report number does not match"},
 		{name: "reported without a counted report", edit: func(f map[string]any) map[string]any {
 			f["test_writer"].(map[string]any)["state"] = "reported"
 			return f
-		}, refusal: "at least 1 while"},
+		}, refusal: "report number does not match"},
 		{name: "a verdict given as the build started", edit: func(f map[string]any) map[string]any {
 			tw := f["test_writer"].(map[string]any)
 			tw["state"], tw["findings"], tw["checked_at"] = "needs_changes", []string{"RefundOverLimit is not implemented"}, at
@@ -504,14 +506,14 @@ func TestBuildFileIsDecodedStrictly(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			cp := newBuildControlPlane(t, Options{})
 			user := asCaller("alice@example.com", CallerUser)
-			card := confirmedChange(t, cp, "chg")
+			card := buildableChange(t, cp, "chg")
 			_, err := cp.StartBuild(user, &gensurla.StartBuildPayload{ChangeID: "chg", RequestRevision: card.RequestRevision})
 			require.NoError(t, err)
 			var file map[string]any
 			require.NoError(t, json.Unmarshal(readBuildFile(t, cp, "chg"), &file))
 			raw, err := json.Marshal(tc.edit(file))
 			require.NoError(t, err)
-			require.NoError(t, os.WriteFile(filepath.Join(cp.cards.dir, buildFileName("chg")), append(raw, tc.trailer...), 0o600))
+			require.NoError(t, os.WriteFile(filepath.Join(cp.cards.dir, openBuildRecordFile), append(raw, tc.trailer...), 0o600))
 
 			read, err := cp.GetBuild(user, &gensurla.GetBuildPayload{ChangeID: "chg"})
 			if tc.refusal != "" {
@@ -519,6 +521,10 @@ func TestBuildFileIsDecodedStrictly(t *testing.T) {
 				return
 			}
 			require.NoError(t, err)
+			if tc.notStarted {
+				assert.Equal(t, gensurla.BuildKindNotStarted, read.Build.Kind())
+				return
+			}
 			build, ok := read.Build.AsStarted()
 			require.True(t, ok)
 			assert.Equal(t, tc.tests, build.TestWriter.Tests.Kind())
@@ -545,7 +551,7 @@ func TestBuildFileIsDecodedStrictly(t *testing.T) {
 // listed exactly for the callers the table allows.
 func TestBuildOperationsFollowTheRoleTable(t *testing.T) {
 	cp := newBuildControlPlane(t, Options{})
-	card := confirmedChange(t, cp, "chg")
+	card := buildableChange(t, cp, "chg")
 	tokens := map[string]CallerKind{"user": CallerUser, "guide": CallerGuide, "builder": CallerBuilder, "tests": CallerTestWriter}
 	credentials := map[string]Principal{}
 	for token, kind := range tokens {
@@ -737,15 +743,15 @@ func assertRefused(t *testing.T, err error, name string) {
 // assertNoBuildSaved checks that changeID has no build file.
 func assertNoBuildSaved(t *testing.T, cp *ControlPlane, changeID string) {
 	t.Helper()
-	_, err := os.Stat(filepath.Join(cp.cards.dir, buildFileName(changeID)))
+	_, err := os.Stat(filepath.Join(cp.cards.dir, openBuildRecordFile))
 	assert.ErrorIs(t, err, os.ErrNotExist, "no build of %q is saved", changeID)
 }
 
 // readBuildFile returns the saved bytes of changeID's build.
 func readBuildFile(t *testing.T, cp *ControlPlane, changeID string) []byte {
 	t.Helper()
-	raw, err := os.ReadFile(filepath.Join(cp.cards.dir, buildFileName(changeID)))
-	require.NoError(t, err)
+	raw, err := os.ReadFile(filepath.Join(cp.cards.dir, openBuildRecordFile))
+	require.NoError(t, err, "read the open build while exercising %q", changeID)
 	return raw
 }
 

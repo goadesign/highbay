@@ -274,7 +274,7 @@ func TestTeamAssignmentGenerations(t *testing.T) {
 	require.Len(t, owed, 1)
 	assert.Equal(t, "test_writer", owed[0].Role)
 	// Owner read errors remain errors, rather than an empty successful owed set.
-	name := filepath.Join(cp.cards.dir, buildFileName("alice@example.com"))
+	name := filepath.Join(cp.cards.dir, openBuildRecordFile)
 	original, err := os.ReadFile(name)
 	require.NoError(t, err)
 	require.NoError(t, os.WriteFile(name, []byte("broken"), 0600))
@@ -294,7 +294,7 @@ func TestTeamAssignmentGenerationsMatchBuildWork(t *testing.T) {
 				opts.Verification = &VerificationConfig{RunsDir: t.TempDir()}
 			}
 			cp := newBuildControlPlane(t, opts)
-			card := confirmedChange(t, cp, "chg")
+			card := buildableChange(t, cp, "chg")
 			user := asCaller("alice@example.com", CallerUser)
 			started, err := cp.StartBuild(user, &gensurla.StartBuildPayload{ChangeID: "chg", RequestRevision: card.RequestRevision})
 			require.NoError(t, err)

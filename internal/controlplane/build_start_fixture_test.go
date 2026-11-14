@@ -3,6 +3,7 @@ package controlplane
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -10,6 +11,7 @@ import (
 
 	"github.com/goadesign/surla/internal/designeval"
 	"github.com/goadesign/surla/internal/scaffold"
+	"github.com/goadesign/surla/internal/testmodule"
 	"github.com/goadesign/surla/internal/testwriter"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/mod/modfile"
@@ -78,7 +80,7 @@ func newBuildControlPlane(t *testing.T, opts Options) *ControlPlane {
 	goMod := filepath.Join(opts.WorkspaceDir, "go.mod")
 	data, err := os.ReadFile(goMod)
 	if os.IsNotExist(err) {
-		data = []byte("module example.com/shop\n\ngo 1.27.3\n")
+		data = []byte(fmt.Sprintf("module example.com/shop\n\ngo 1.27.3\n\nrequire github.com/goadesign/surla/story %s\n", testmodule.SurlaVersion(t, "github.com/goadesign/surla/story")))
 		require.NoError(t, os.WriteFile(goMod, data, 0o600))
 	} else {
 		require.NoError(t, err)
@@ -90,10 +92,13 @@ func newBuildControlPlane(t *testing.T, opts Options) *ControlPlane {
 	} else {
 		require.NoError(t, err)
 	}
+	ensureBuildFixtureRepository(t, opts.WorkspaceDir)
 	cp := newControlPlane(t, opts)
 	cp.buildIdentityCheck = func(context.Context, string) error { return nil }
 	cp.buildSandboxCheck = func() error { return nil }
-	copy := &buildCopyFixture{folder: t.TempDir()}
+	_, prefix, err := resolveStarterRepo(t.Context(), cp.activeWorkspaceDir)
+	require.NoError(t, err)
+	copy := &buildCopyFixture{folder: filepath.Join(cp.activeWorkspaceDir, testwriter.Folder, filepath.FromSlash(prefix))}
 	cp.buildCopyFactory = func(context.Context, string, scaffold.Layout) (buildCopy, error) {
 		return copy, nil
 	}

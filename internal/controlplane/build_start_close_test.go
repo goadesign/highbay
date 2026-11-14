@@ -22,7 +22,7 @@ func TestStartBuildCloseDrainsAfterCancellation(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		cards := t.TempDir()
 		cp := newBuildControlPlane(t, Options{CardsDir: cards})
-		card := confirmedChange(t, cp, "chg")
+		card := buildableChange(t, cp, "chg")
 		entered, canceled := make(chan struct{}), make(chan struct{})
 		release := make(chan struct{})
 		releaseGeneration := sync.OnceFunc(func() { close(release) })

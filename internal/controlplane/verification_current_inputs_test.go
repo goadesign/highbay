@@ -33,7 +33,7 @@ func TestVerificationCurrentInputsFollowWrittenSelection(t *testing.T) {
 	})
 	user := asCaller("alice@example.com", CallerUser)
 	writer := asCaller("alice@example.com", CallerTestWriter)
-	card := confirmedChange(t, cp, "chg")
+	card := buildableChange(t, cp, "chg")
 	older, newer := strings.Repeat("1", 32), strings.Repeat("2", 32)
 	for i, runID := range []string{older, newer} {
 		writeListedRun(t, runsDir, "alice@example.com", card, runID,
@@ -96,7 +96,7 @@ func TestVerificationCurrentInputsFollowWrittenSelection(t *testing.T) {
 	saveListedTestState(t, cp, card.ChangeID, testsAccepted, oldCommit)
 	check(true, false)
 
-	buildPath := filepath.Join(cp.cards.dir, buildFileName(card.ChangeID))
+	buildPath := filepath.Join(cp.cards.dir, openBuildRecordFile)
 	before, err := os.ReadFile(buildPath)
 	require.NoError(t, err)
 	cardBefore, err := os.ReadFile(cp.cards.path(card.ChangeID))
@@ -136,7 +136,7 @@ func TestVerificationCurrentInputsUseFullStoredTuple(t *testing.T) {
 		return Options{CardsDir: cardsDir, Verification: &VerificationConfig{RunsDir: runsDir, Plan: selected}}
 	}
 	cp := newControlPlane(t, opts(plan))
-	card := confirmedChange(t, cp, "chg")
+	card := buildableChange(t, cp, "chg")
 	runID := strings.Repeat("1", 32)
 	writeListedRun(t, runsDir, "alice@example.com", card, runID, time.Date(2026, 10, 1, 9, 0, 0, 0, time.UTC), true)
 	assertNoBuildSaved(t, cp, card.ChangeID)
@@ -192,12 +192,12 @@ func TestVerificationCurrentInputsSafeFailures(t *testing.T) {
 				RunsDir: cfg.RunsDir, TracerProvider: provider,
 				WrittenTestRuns: &WrittenTestRuns{ReportDir: t.TempDir(), Timeout: time.Minute},
 			})
-			card := confirmedChange(t, cp, "chg")
+			card := buildableChange(t, cp, "chg")
 			runID := strings.Repeat("1", 32)
 			writeListedRun(t, cfg.RunsDir, "alice@example.com", card, runID, time.Date(2026, 10, 1, 9, 0, 0, 0, time.UTC), true)
 			target := cp.cards.path(card.ChangeID)
 			if strings.HasSuffix(damaged, "build") {
-				target = filepath.Join(cp.cards.dir, buildFileName(card.ChangeID))
+				target = filepath.Join(cp.cards.dir, openBuildRecordFile)
 			}
 			if strings.HasPrefix(damaged, "unreadable") {
 				if strings.HasSuffix(damaged, "card") {
@@ -254,13 +254,13 @@ func TestVerificationCurrentInputsIgnoreForeignCard(t *testing.T) {
 		RunsDir:         runsDir,
 		WrittenTestRuns: &WrittenTestRuns{ReportDir: t.TempDir(), Timeout: time.Minute},
 	})
-	card := confirmedChange(t, cp, "chg")
+	card := buildableChange(t, cp, "chg")
 	runID := strings.Repeat("1", 32)
 	writeListedRun(t, runsDir, "alice@example.com", card, runID, time.Date(2026, 10, 1, 9, 0, 0, 0, time.UTC), true)
 	require.NoError(t, os.Remove(cp.cards.path(card.ChangeID)))
 	mustPropose(t, cp, asCaller("bob@example.com", CallerGuide), card.ChangeID,
 		"Bob's current change.", refundAnalysis("Bob's current change."))
-	require.NoError(t, os.WriteFile(filepath.Join(cp.cards.dir, buildFileName(card.ChangeID)), []byte("{"), 0o600))
+	require.NoError(t, os.WriteFile(filepath.Join(cp.cards.dir, openBuildRecordFile), []byte("{"), 0o600))
 	got, err := cp.GetVerification(asCaller("alice@example.com", CallerUser), &gensurla.GetVerificationPayload{RunID: runID})
 	require.NoError(t, err)
 	assert.False(t, got.InputsCurrent)
@@ -273,7 +273,7 @@ func TestVerificationCurrentInputsIgnoreForeignCard(t *testing.T) {
 // before the supervisor can accept and publish a run identifier.
 func TestVerifyChangeReadsCurrentInputsBeforeAcceptance(t *testing.T) {
 	cp, card, cfg := verificationSetup(t)
-	require.NoError(t, os.WriteFile(filepath.Join(cp.cards.dir, buildFileName(card.ChangeID)), []byte("{"), 0o600))
+	require.NoError(t, os.WriteFile(filepath.Join(cp.cards.dir, openBuildRecordFile), []byte("{"), 0o600))
 	_, err := cp.VerifyChange(asCaller("alice@example.com", CallerUser), &gensurla.VerifyChangePayload{
 		ChangeID: card.ChangeID, RequestRevision: card.RequestRevision, CandidateCommit: strings.Repeat("a", 40),
 	})

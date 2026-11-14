@@ -8,7 +8,6 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -84,7 +83,6 @@ func TestTestWriterAssignmentHoldsTheAgreedTerms(t *testing.T) {
 // questions and preserved behaviors: the loaded build equals the saved one,
 // and empty lists stay empty rather than absent.
 func TestBuildFileKeepsTheAgreedTerms(t *testing.T) {
-	folder := t.TempDir()
 	example := &gensurla.ExampleItem{
 		ID: "check_01", Scenario: "Refund at the limit", InputSummary: "Order total $50.00 before tax",
 		ExpectedOutcome: "Instant refund to the original card", VerificationKind: "deterministic",
@@ -104,15 +102,14 @@ func TestBuildFileKeepsTheAgreedTerms(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			cp := newControlPlane(t, Options{})
-			saved := buildFile{
-				ChangeID: "chg", RequestRevision: "revision", StartedAt: time.Date(2026, 11, 13, 9, 30, 0, 0, time.UTC),
-				Roles: buildRolesBuilderAndTestWriter, Stories: refundStory("Refund over the limit"),
-				DesignSource: `{"design/design.go":"package design\n"}`,
-				Answers:      tc.answers, Examples: []*gensurla.ExampleItem{example}, PreservedBehaviors: tc.preserved,
-				TestWriter: testWriterAssignment{State: testsAssigned, WorkingFolder: &folder, Findings: []string{}},
-			}
-			require.NoError(t, cp.cards.saveBuild(saved))
-			loaded, found, err := cp.cards.loadBuild("chg")
+			saved := codecOpenBuild()
+			saved.ChangeID, saved.RequestRevision = "chg", "revision"
+			saved.Stories = refundStory("Refund over the limit")
+			saved.DesignSource = `{"design/design.go":"package design\n"}`
+			saved.Answers, saved.Examples, saved.PreservedBehaviors = tc.answers, []*gensurla.ExampleItem{example}, tc.preserved
+			saved.TestWriter.Findings = []string{}
+			require.NoError(t, cp.cards.saveOpenBuild(saved))
+			loaded, found, err := cp.cards.loadOpenBuild()
 			require.NoError(t, err)
 			require.True(t, found)
 			assert.Equal(t, saved, loaded)
@@ -161,12 +158,9 @@ func TestOnlyTheTestWriterReadsTheAgreedTerms(t *testing.T) {
 func TestBuildWithoutAgreedTermsAsksToBuildAgain(t *testing.T) {
 	cp := newBuildControlPlane(t, Options{})
 	agreed := confirmAgreedTerms(t, cp, "chg")
-	folder := t.TempDir()
-	raw, err := json.Marshal(buildFile{
-		ChangeID: "chg", RequestRevision: agreed.RequestRevision, StartedAt: time.Date(2026, 11, 13, 9, 30, 0, 0, time.UTC),
-		Roles: buildRolesBuilderAndTestWriter, Stories: refundStory("Refund over the limit"),
-		TestWriter: testWriterAssignment{State: testsAssigned, WorkingFolder: &folder, Findings: []string{}},
-	})
+	saved := fixtureOpenBuild(t, cp, agreed, buildRolesBuilderAndTestWriter)
+	saved.Examples = nil
+	raw, err := json.Marshal(saved)
 	require.NoError(t, err)
 	var fields map[string]json.RawMessage
 	require.NoError(t, json.Unmarshal(raw, &fields))
@@ -175,7 +169,7 @@ func TestBuildWithoutAgreedTermsAsksToBuildAgain(t *testing.T) {
 	delete(fields, "preserved_behaviors")
 	raw, err = json.Marshal(fields)
 	require.NoError(t, err)
-	require.NoError(t, os.WriteFile(filepath.Join(cp.cards.dir, buildFileName("chg")), raw, 0o600))
+	require.NoError(t, os.WriteFile(filepath.Join(cp.cards.dir, openBuildRecordFile), raw, 0o600))
 
 	build := mustStartedBuild(t, cp, agreedUser, "chg")
 	assert.True(t, build.InForce)
@@ -188,7 +182,7 @@ func TestBuildWithoutAgreedTermsAsksToBuildAgain(t *testing.T) {
 	assert.Contains(t, err.Error(), "the user builds this change again on the views page")
 	assert.Equal(t, before, readBuildFile(t, cp, "chg"), "a refused read records nothing")
 
-	_, err = cp.StartBuild(agreedUser, &gensurla.StartBuildPayload{ChangeID: "chg", RequestRevision: agreed.RequestRevision})
+	_, err = startBuildAgain(t, cp, agreedUser, "chg", agreed.RequestRevision)
 	require.NoError(t, err)
 	assignment, err := cp.GetTestWriterAssignment(agreedTestWriter, &gensurla.GetTestWriterAssignmentPayload{ChangeID: "chg"})
 	require.NoError(t, err)
@@ -206,6 +200,7 @@ func confirmAgreedTerms(t *testing.T, cp *ControlPlane, changeID string) *gensur
 	})
 	analysis.PreservedBehaviors = append(analysis.PreservedBehaviors, "Refunds of gift cards stay manual.")
 	proposed := mustPropose(t, cp, agreedGuide, changeID, "Refunds up to $50 are instant.", analysis)
+	proposed = attachBuildSnapshot(t, cp, changeID)
 	require.Len(t, proposed.Ambiguities, 2)
 	require.Len(t, proposed.Examples, 1)
 	edited := *proposed.Examples[0]

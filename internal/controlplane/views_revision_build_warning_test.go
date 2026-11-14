@@ -38,7 +38,7 @@ func TestViewsPageWarnsBeforeChangingABuiltRevision(t *testing.T) {
 			}
 			cp := newBuildControlPlane(t, opts)
 			cp.changesWait, cp.changesPoll = 400*time.Millisecond, 20*time.Millisecond
-			card := confirmedChange(t, cp, "chg-warning")
+			card := buildableChange(t, cp, "chg-warning")
 			if tc.build {
 				_, err := cp.StartBuild(asCaller(pageOwner, CallerUser), &gensurla.StartBuildPayload{
 					ChangeID: card.ChangeID, RequestRevision: card.RequestRevision,

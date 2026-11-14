@@ -647,7 +647,7 @@ func TestApproveMergeChecksTheChosenTestsCommit(t *testing.T) {
 					}
 				}
 				cp := newBuildControlPlane(t, opts)
-				card := saveStoryCard(t, cp, "chg", StatusConfirmed, refundStory("Refund over the limit waits"))
+				card := saveBuildStoryCard(t, cp, "chg", StatusConfirmed, refundStory("Refund over the limit waits"))
 				user := asCaller("alice@example.com", CallerUser)
 				if tc.startBuild {
 					_, err := cp.StartBuild(user, &gensurla.StartBuildPayload{ChangeID: "chg", RequestRevision: card.RequestRevision})
@@ -741,7 +741,7 @@ func TestSavedApprovalStaysValidOnlyWhileChosenTestsMatch(t *testing.T) {
 		WrittenTestRuns: &WrittenTestRuns{ReportDir: t.TempDir(), Command: []string{"/bin/sh", "-c", "exit 0", "sh"}, Timeout: time.Hour},
 		PromotionTarget: target,
 	})
-	card := saveStoryCard(t, cp, "chg", StatusConfirmed, refundStory("Refund over the limit waits"))
+	card := saveBuildStoryCard(t, cp, "chg", StatusConfirmed, refundStory("Refund over the limit waits"))
 	user := asCaller("alice@example.com", CallerUser)
 	_, err := cp.StartBuild(user, &gensurla.StartBuildPayload{ChangeID: "chg", RequestRevision: card.RequestRevision})
 	require.NoError(t, err)
@@ -812,7 +812,7 @@ func TestApproveMergeRejectsAcceptanceChangedDuringReportLoad(t *testing.T) {
 		WrittenTestRuns: &WrittenTestRuns{ReportDir: t.TempDir(), Command: []string{"/bin/sh", "-c", "exit 0", "sh"}, Timeout: time.Hour},
 		PromotionTarget: target,
 	})
-	card := saveStoryCard(t, cp, "chg", StatusConfirmed, refundStory("Refund over the limit waits"))
+	card := saveBuildStoryCard(t, cp, "chg", StatusConfirmed, refundStory("Refund over the limit waits"))
 	user := asCaller("alice@example.com", CallerUser)
 	_, err := cp.StartBuild(user, &gensurla.StartBuildPayload{ChangeID: "chg", RequestRevision: card.RequestRevision})
 	require.NoError(t, err)

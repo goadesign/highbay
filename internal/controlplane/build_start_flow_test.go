@@ -35,7 +35,7 @@ import (
 func TestStartBuildOrdersItsOwners(t *testing.T) {
 	f := &teamServiceFixture{}
 	cp := newBuildControlPlane(t, Options{Team: &TeamBinding{Owner: "alice@example.com", Service: f}})
-	card := saveStoryCard(t, cp, "chg", StatusConfirmed, refundStory("Agreed flow"))
+	card := saveBuildStoryCard(t, cp, "chg", StatusConfirmed, refundStory("Agreed flow"))
 	cp.mu.Lock()
 	record, _, err := cp.cards.load("chg")
 	require.NoError(t, err)
@@ -47,7 +47,7 @@ func TestStartBuildOrdersItsOwners(t *testing.T) {
 	require.NoError(t, err)
 	card.RequestRevision = record.card.RequestRevision
 	var events []string
-	copy := &buildCopyFixture{folder: t.TempDir()}
+	copy := &buildCopyFixture{folder: filepath.Join(cp.activeWorkspaceDir, testwriter.Folder)}
 	cp.buildCopyFactory = func(context.Context, string, scaffold.Layout) (buildCopy, error) {
 		assertNoBuildSaved(t, cp, "chg")
 		events = append(events, "open")
@@ -61,7 +61,7 @@ func TestStartBuildOrdersItsOwners(t *testing.T) {
 		events = append(events, "register")
 		workspace, _, _ := cp.currentWorkspaceTarget()
 		assert.Equal(t, BuilderAndTestWriter{BuilderFolder: workspace, TestWriterFolder: copy.folder}, folders)
-		saved, found, err := cp.cards.loadBuild("chg")
+		saved, found, err := cp.cards.loadOpenBuild()
 		require.NoError(t, err)
 		require.True(t, found, "registration follows the durable save")
 		assert.Equal(t, record.designSource, saved.DesignSource)
@@ -105,8 +105,8 @@ func TestStartBuildKeepsPostSaveOutcomes(t *testing.T) {
 	for _, scenario := range []string{"author", "operational", "reported during generation"} {
 		t.Run(scenario, func(t *testing.T) {
 			cp := newBuildControlPlane(t, Options{})
-			card := confirmedChange(t, cp, "chg")
-			copy := &buildCopyFixture{folder: t.TempDir()}
+			card := buildableChange(t, cp, "chg")
+			copy := &buildCopyFixture{folder: filepath.Join(cp.activeWorkspaceDir, testwriter.Folder)}
 			cp.buildCopyFactory = func(context.Context, string, scaffold.Layout) (buildCopy, error) { return copy, nil }
 			copy.prepare = func(context.Context, []designeval.StorySummary) error {
 				if scenario == "operational" {
@@ -201,8 +201,8 @@ func TestAPreparationThatCouldNotRunSaysWhatFailed(t *testing.T) {
 			provider := sdktrace.NewTracerProvider(sdktrace.WithSyncer(exporter))
 			t.Cleanup(func() { assert.NoError(t, provider.Shutdown(context.Background())) })
 			cp := newBuildControlPlane(t, Options{TracerProvider: provider})
-			card := confirmedChange(t, cp, "chg")
-			copy := &buildCopyFixture{folder: t.TempDir()}
+			card := buildableChange(t, cp, "chg")
+			copy := &buildCopyFixture{folder: filepath.Join(cp.activeWorkspaceDir, testwriter.Folder)}
 			cp.buildCopyFactory = func(context.Context, string, scaffold.Layout) (buildCopy, error) { return copy, nil }
 			copy.prepare = func(context.Context, []designeval.StorySummary) error { return tc.prepareErr }
 
@@ -241,7 +241,7 @@ func TestStartBuildRefusalsReachTheHTTPConsumer(t *testing.T) {
 	for _, name := range []string{"not_repository", "no_commit", "no_test_layout", "git_identity_missing", "copy_folder_in_use", "tests_branch_in_use", "working_copy_busy", "sandbox_unavailable"} {
 		t.Run(name, func(t *testing.T) {
 			cp := newBuildControlPlane(t, Options{})
-			card := confirmedChange(t, cp, "chg")
+			card := buildableChange(t, cp, "chg")
 			workspace, _, _ := cp.currentWorkspaceTarget()
 			step := ""
 			var branchMessage string
@@ -325,7 +325,7 @@ func TestStartBuildRefusalsReachTheHTTPConsumer(t *testing.T) {
 // is busy, and an unbound server names its enabling step without saving.
 func TestStartBuildOwnerPrecedesTheTurn(t *testing.T) {
 	cp := newBuildControlPlane(t, Options{})
-	card := confirmedChange(t, cp, "chg")
+	card := buildableChange(t, cp, "chg")
 	cp.workingCopyTurn <- struct{}{}
 	_, err := cp.StartBuild(asCaller("bob@example.com", CallerUser), &gensurla.StartBuildPayload{ChangeID: "chg", RequestRevision: card.RequestRevision})
 	assertRefused(t, err, "forbidden")
@@ -345,7 +345,7 @@ func TestStartBuildStoredEvaluatorBypassesWriterPrerequisites(t *testing.T) {
 		Verification: &VerificationConfig{RunsDir: t.TempDir()},
 		Team:         &TeamBinding{Owner: "alice@example.com", Service: f},
 	})
-	card := confirmedChange(t, cp, "chg")
+	card := buildableChange(t, cp, "chg")
 	cp.buildIdentityCheck = func(context.Context, string) error {
 		t.Error("stored evaluator checked writer identity")
 		return testwriter.ErrIdentityMissing
@@ -391,7 +391,7 @@ func TestStartBuildTeamWarningsKeepTheSavedBuild(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			f := &teamServiceFixture{start: func(context.Context) (*gensurla.ProjectTeam, error) { return nil, tc.err }}
 			cp := newBuildControlPlane(t, Options{Team: &TeamBinding{Owner: "alice@example.com", Service: f}})
-			card := confirmedChange(t, cp, "chg")
+			card := buildableChange(t, cp, "chg")
 			result, err := cp.StartBuild(asCaller("alice@example.com", CallerUser), &gensurla.StartBuildPayload{ChangeID: "chg", RequestRevision: card.RequestRevision})
 			require.NoError(t, err)
 			assert.Equal(t, tc.kind, result.Team.Kind())
@@ -417,7 +417,7 @@ func TestStartBuildOwnsItsAcceptedLifetime(t *testing.T) {
 		t.Run(fmt.Sprint("server_stop=", stopServer), func(t *testing.T) {
 			cards := t.TempDir()
 			cp := newBuildControlPlane(t, Options{CardsDir: cards})
-			card := confirmedChange(t, cp, "chg")
+			card := buildableChange(t, cp, "chg")
 			entered := make(chan context.Context, 1)
 			release := make(chan struct{})
 			copy := &buildCopyFixture{folder: t.TempDir(), prepare: func(ctx context.Context, _ []designeval.StorySummary) error {
@@ -487,8 +487,8 @@ func TestStartBuildDeadlineBoundaries(t *testing.T) {
 					assert.Equal(t, 5*time.Minute, limit)
 					return context.WithTimeout(ctx, limit)
 				}
-				card := confirmedChange(t, cp, "chg")
-				copy := &buildCopyFixture{folder: t.TempDir()}
+				card := buildableChange(t, cp, "chg")
+				copy := &buildCopyFixture{folder: filepath.Join(cp.activeWorkspaceDir, testwriter.Folder)}
 				cp.buildCopyFactory = func(context.Context, string, scaffold.Layout) (buildCopy, error) { return copy, nil }
 				copy.prepare = func(ctx context.Context, _ []designeval.StorySummary) error {
 					time.Sleep(elapsed)
@@ -522,7 +522,7 @@ func TestStartBuildDeadlineBoundaries(t *testing.T) {
 		cancel()
 		return ended, cancel
 	}
-	card := confirmedChange(t, cp, "chg")
+	card := buildableChange(t, cp, "chg")
 	_, err := cp.StartBuild(asCaller("alice@example.com", CallerUser), &gensurla.StartBuildPayload{ChangeID: "chg", RequestRevision: card.RequestRevision})
 	assertRefused(t, err, "unavailable")
 	assertNoBuildSaved(t, cp, "chg")

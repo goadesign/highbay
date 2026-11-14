@@ -24,7 +24,7 @@ import (
 // precede liveMu: an unrelated start cannot make these callers wait for it.
 func TestLiveStartRefusesUnauthorizedCardsWithoutWaiting(t *testing.T) {
 	cp, root := newLiveControlPlane(t, "serve")
-	saveStoryCard(t, cp, "chg-unconfirmed", StatusNeedsConfirmation, refundStory("Refund waits"))
+	saveBuildStoryCard(t, cp, "chg-unconfirmed", StatusNeedsConfirmation, refundStory("Refund waits"))
 	cases := []struct {
 		name, owner, changeID, refusal string
 	}{
@@ -69,7 +69,7 @@ func TestLiveStartRefusalsPreserveTheRunningTarget(t *testing.T) {
 	require.NoError(t, err)
 	before := readRunning(t, cp)
 	owned := boundTargetForTest(cp)
-	saveStoryCard(t, cp, "chg-unconfirmed", StatusNeedsConfirmation, refundStory("Refund waits"))
+	saveBuildStoryCard(t, cp, "chg-unconfirmed", StatusNeedsConfirmation, refundStory("Refund waits"))
 	for _, tc := range []struct {
 		owner, changeID, refusal string
 	}{
@@ -111,7 +111,7 @@ func TestWrittenLiveStartNeedsAModelBeforeLaunching(t *testing.T) {
 		},
 		Live: &LiveConfig{Command: []string{self}, Env: append(os.Environ(), liveTargetModeEnv+"=serve")},
 	})
-	card := confirmedChange(t, cp, "chg")
+	card := buildableChange(t, cp, "chg")
 	_, err = cp.StartBuild(asCaller("alice@example.com", CallerUser), &gensurla.StartBuildPayload{
 		ChangeID: "chg", RequestRevision: card.RequestRevision,
 	})
@@ -147,7 +147,7 @@ func TestAQueuedLiveStartUsesTheCurrentAcceptedTestsAndModel(t *testing.T) {
 		},
 		Live: &LiveConfig{Command: []string{self}, Env: append(os.Environ(), liveTargetModeEnv+"=serve")},
 	})
-	card := confirmedChange(t, cp, "chg")
+	card := buildableChange(t, cp, "chg")
 	user := asCaller("alice@example.com", CallerUser)
 	builder := asCaller("alice@example.com", CallerBuilder)
 	_, err = cp.StartBuild(user, &gensurla.StartBuildPayload{ChangeID: "chg", RequestRevision: card.RequestRevision})

@@ -56,7 +56,7 @@ func (s refusalContractService) GetBuilderAssignment(
 // including the exact build identity a stale page must show before Drop.
 func TestBuilderCopyRefusalsRoundTripThroughHTTP(t *testing.T) {
 	cp := newBuildControlPlane(t, Options{})
-	card := confirmedChange(t, cp, "chg")
+	card := buildableChange(t, cp, "chg")
 	started, err := cp.StartBuild(asCaller("alice@example.com", CallerUser),
 		&gensurla.StartBuildPayload{ChangeID: "chg", RequestRevision: card.RequestRevision})
 	require.NoError(t, err)
@@ -192,7 +192,7 @@ func TestBuilderAssignmentNamesItsCurrentFolder(t *testing.T) {
 				require.NoError(t, os.WriteFile(filepath.Join(folder, "go.work"),
 					[]byte("go 1.27.3\nuse .\n"), 0o600))
 			}
-			card := confirmedChange(t, cp, "chg")
+			card := buildableChange(t, cp, "chg")
 			_, err := cp.StartBuild(asCaller("alice@example.com", CallerUser),
 				&gensurla.StartBuildPayload{ChangeID: "chg", RequestRevision: card.RequestRevision})
 			require.NoError(t, err)
@@ -217,7 +217,7 @@ func TestBuilderAssignmentNamesItsCurrentFolder(t *testing.T) {
 // still excludes the user's Drop operation from every agent's tool catalog.
 func TestBuilderCopyPendingOperationsKeepTheirRoles(t *testing.T) {
 	cp := newBuildControlPlane(t, Options{})
-	confirmedChange(t, cp, "chg")
+	buildableChange(t, cp, "chg")
 	server := roleServer(t, cp)
 	for _, role := range []string{"user", "guide", "builder", "tests"} {
 		t.Run(role, func(t *testing.T) {
@@ -246,7 +246,7 @@ func TestBuilderCopyPendingOperationsKeepTheirRoles(t *testing.T) {
 // fact read must leave the assignment unread for a later successful retry.
 func TestBuilderAssignmentChecksOwnershipBeforeFolderFacts(t *testing.T) {
 	cp := newBuildControlPlane(t, Options{})
-	card := confirmedChange(t, cp, "chg")
+	card := buildableChange(t, cp, "chg")
 	_, err := cp.StartBuild(asCaller("alice@example.com", CallerUser),
 		&gensurla.StartBuildPayload{ChangeID: "chg", RequestRevision: card.RequestRevision})
 	require.NoError(t, err)

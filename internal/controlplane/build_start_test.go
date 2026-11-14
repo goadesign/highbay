@@ -155,7 +155,7 @@ func TestStartedBuildDerivesRequiredTestCount(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			build := startedBuild(heldBuild{file: buildFile{
 				Stories: tc.stories, TestWriter: testWriterAssignment{State: testsAssigned},
-			}})
+			}}, gensurla.NewBuildTakingBuilding(&gensurla.BuildBuilding{}))
 			assert.Equal(t, tc.count, build.RequiredTestCount)
 		})
 	}

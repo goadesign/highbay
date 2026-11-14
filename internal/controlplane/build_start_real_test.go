@@ -52,13 +52,11 @@ func TestStartBuildUsesTheProductionCopy(t *testing.T) {
 			cp := newControlPlane(t, Options{
 				WorkspaceDir: project, Team: &TeamBinding{Owner: "alice@example.com", Service: f},
 			})
-			card := confirmedChange(t, cp, "chg")
+			card := buildableChange(t, cp, "chg")
 			workspace, _, _ := cp.currentWorkspaceTarget()
 			folder := filepath.Join(workspace, testwriter.Folder, subdir)
 			for range 2 {
-				result, err := cp.StartBuild(asCaller("alice@example.com", CallerUser), &gensurla.StartBuildPayload{
-					ChangeID: "chg", RequestRevision: card.RequestRevision,
-				})
+				result, err := startBuildAgain(t, cp, asCaller("alice@example.com", CallerUser), "chg", card.RequestRevision)
 				require.NoError(t, err)
 				assert.Equal(t, productionBuildGit(t, repo, "rev-parse", "HEAD"),
 					productionBuildGit(t, folder, "rev-parse", "HEAD"))
@@ -111,7 +109,7 @@ func init() { time.Sleep(30 * time.Second) }`, 1)
 		assert.Equal(t, 5*time.Minute, limit)
 		return context.WithTimeout(ctx, time.Second)
 	}
-	card := confirmedChange(t, cp, "chg")
+	card := buildableChange(t, cp, "chg")
 	result, err := cp.StartBuild(asCaller("alice@example.com", CallerUser), &gensurla.StartBuildPayload{
 		ChangeID: "chg", RequestRevision: card.RequestRevision,
 	})

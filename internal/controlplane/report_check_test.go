@@ -271,7 +271,7 @@ func TestAVerdictThatCannotBeSavedIsJudgedAgain(t *testing.T) {
 	cp.reports.retry = 200 * time.Millisecond
 	reportTests(t, cp, revision)
 	require.Equal(t, 1, receive(t, checking))
-	staging := filepath.Join(cp.cards.dir, buildStagingFile)
+	staging := filepath.Join(cp.cards.dir, openBuildStagingFile)
 	require.NoError(t, os.Mkdir(staging, 0o700))
 	release <- struct{}{}
 	require.Equal(t, 2, receive(t, checking), "the checker judges the build again by itself")
@@ -303,7 +303,7 @@ func TestRetriesAfterAFailedSaveAreBounded(t *testing.T) {
 	cp, revision := newReportFixture(t, Options{TracerProvider: provider}, tests)
 	cp.reports.retry = 50 * time.Millisecond
 	reportTests(t, cp, revision)
-	staging := filepath.Join(cp.cards.dir, buildStagingFile)
+	staging := filepath.Join(cp.cards.dir, openBuildStagingFile)
 	require.NoError(t, os.Mkdir(staging, 0o700))
 	close(broken)
 
@@ -343,7 +343,7 @@ func TestAReportedBuildThatCouldNotBeReadIsJudgedOnceItCanBe(t *testing.T) {
 			// The build is made readable again well within the retries: three
 			// of them, half a second apart.
 			cp.reports.retry = 500 * time.Millisecond
-			file := filepath.Join(cp.cards.dir, buildFileName("chg"))
+			file := filepath.Join(cp.cards.dir, openBuildRecordFile)
 			var reported []byte
 			if place == "the scan" {
 				// The build is saved as reported with no wake, as a server
@@ -387,7 +387,7 @@ func TestRetriesAfterAFailedReadAreBounded(t *testing.T) {
 	}}
 	cp, _ := newReportFixture(t, Options{TracerProvider: provider}, tests)
 	cp.reports.retry = 50 * time.Millisecond
-	file := filepath.Join(cp.cards.dir, buildFileName("chg"))
+	file := filepath.Join(cp.cards.dir, openBuildRecordFile)
 	editBuildFile(t, cp, "chg", savedTestWriter(map[string]any{"state": testsReported}))
 	reported := readBuildFile(t, cp, "chg")
 	failedReads := func() int {
@@ -502,7 +502,7 @@ func TestAReportIsJudgedThroughTheProductionCopy(t *testing.T) {
 	cp := newControlPlane(t, Options{
 		WorkspaceDir: project, Team: &TeamBinding{Owner: "alice@example.com", Service: &teamServiceFixture{}},
 	})
-	card := confirmedChange(t, cp, "chg")
+	card := buildableChange(t, cp, "chg")
 	started, err := cp.StartBuild(asCaller("alice@example.com", CallerUser), &gensurla.StartBuildPayload{
 		ChangeID: "chg", RequestRevision: card.RequestRevision,
 	})
@@ -794,7 +794,7 @@ func TestVerdictsGiveSupervisionNewGenerations(t *testing.T) {
 func newReportFixture(t *testing.T, opts Options, copy *standInCopy) (*ControlPlane, string) {
 	t.Helper()
 	cp := newBuildControlPlane(t, opts)
-	card := confirmedChange(t, cp, "chg")
+	card := buildableChange(t, cp, "chg")
 	_, err := cp.StartBuild(asCaller("alice@example.com", CallerUser), &gensurla.StartBuildPayload{ChangeID: "chg", RequestRevision: card.RequestRevision})
 	require.NoError(t, err)
 	cp.buildCopyFactory = func(context.Context, string, scaffold.Layout) (buildCopy, error) { return copy, nil }
