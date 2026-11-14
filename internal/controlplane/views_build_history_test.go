@@ -53,6 +53,7 @@ func TestViewsPageHistoricalTakingUsesTheEligibleResultsOwnCommits(t *testing.T)
 			acceptTests(t, cp, card.ChangeID, tests)
 			report := passingReport(t, card.RequestRevision, candidate, reportSpec{
 				SuiteID: "orders_acceptance", SuiteCommit: tests, Environment: "sim",
+				Artifacts: map[string]string{"orders": strings.Repeat("a", 64)},
 			})
 			writeReportFile(t, reportDir, report)
 			_, err = cp.ApproveMerge(user, &gensurla.ApproveMergePayload{
