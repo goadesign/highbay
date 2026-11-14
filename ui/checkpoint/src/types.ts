@@ -80,7 +80,7 @@ export interface C4EdgeItem {
 }
 
 export interface ChangeBuild {
-  build: ({ "state": "not_started" } | { "builder": BuilderProgress; "in_force": boolean; "request_revision": string; "required_test_count": number; "started_at": string; "state": "started"; "test_writer": TestWriterProgress });
+  build: ({ "state": "not_started" } | { "builder": BuilderProgress; "in_force": boolean; "request_revision": string; "required_test_count": number; "started_at": string; "state": "started"; "taking": ({ "state": "building" } | { "base_in_branch": boolean; "candidate_branch": string; "candidate_commit": string; "run_id": string; "state": "passed"; "tests": ({ "source": "evaluator" } | { "branch": string; "commit": string; "source": "written_tests" }) } | { "state": "merged" } | { "kept_branches": string[]; "state": "dropped" }); "test_writer": TestWriterProgress });
   change_id: string;
 }
 
@@ -255,6 +255,7 @@ export interface StartedBuild {
   request_revision: string;
   required_test_count: number;
   started_at: string;
+  taking: ({ "state": "building" } | { "base_in_branch": boolean; "candidate_branch": string; "candidate_commit": string; "run_id": string; "state": "passed"; "tests": ({ "source": "evaluator" } | { "branch": string; "commit": string; "source": "written_tests" }) } | { "state": "merged" } | { "kept_branches": string[]; "state": "dropped" });
   test_writer: TestWriterProgress;
 }
 
@@ -1170,6 +1171,7 @@ const SCHEMA_DEFS: Record<string, JSONSchemaNode> = {
               "builder",
               "test_writer",
               "required_test_count",
+              "taking",
               "state"
             ],
             "properties": {
@@ -1194,6 +1196,138 @@ const SCHEMA_DEFS: Record<string, JSONSchemaNode> = {
                 "type": "string",
                 "enum": [
                   "started"
+                ]
+              },
+              "taking": {
+                "type": "object",
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "required": [
+                      "state"
+                    ],
+                    "properties": {
+                      "state": {
+                        "type": "string",
+                        "enum": [
+                          "building"
+                        ]
+                      }
+                    },
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "required": [
+                      "run_id",
+                      "candidate_commit",
+                      "candidate_branch",
+                      "tests",
+                      "base_in_branch",
+                      "state"
+                    ],
+                    "properties": {
+                      "base_in_branch": {
+                        "type": "boolean"
+                      },
+                      "candidate_branch": {
+                        "type": "string"
+                      },
+                      "candidate_commit": {
+                        "type": "string"
+                      },
+                      "run_id": {
+                        "type": "string"
+                      },
+                      "state": {
+                        "type": "string",
+                        "enum": [
+                          "passed"
+                        ]
+                      },
+                      "tests": {
+                        "type": "object",
+                        "anyOf": [
+                          {
+                            "type": "object",
+                            "required": [
+                              "source"
+                            ],
+                            "properties": {
+                              "source": {
+                                "type": "string",
+                                "enum": [
+                                  "evaluator"
+                                ]
+                              }
+                            },
+                            "additionalProperties": false
+                          },
+                          {
+                            "type": "object",
+                            "required": [
+                              "commit",
+                              "branch",
+                              "source"
+                            ],
+                            "properties": {
+                              "branch": {
+                                "type": "string"
+                              },
+                              "commit": {
+                                "type": "string"
+                              },
+                              "source": {
+                                "type": "string",
+                                "enum": [
+                                  "written_tests"
+                                ]
+                              }
+                            },
+                            "additionalProperties": false
+                          }
+                        ]
+                      }
+                    },
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "required": [
+                      "state"
+                    ],
+                    "properties": {
+                      "state": {
+                        "type": "string",
+                        "enum": [
+                          "merged"
+                        ]
+                      }
+                    },
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "required": [
+                      "kept_branches",
+                      "state"
+                    ],
+                    "properties": {
+                      "kept_branches": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      },
+                      "state": {
+                        "type": "string",
+                        "enum": [
+                          "dropped"
+                        ]
+                      }
+                    },
+                    "additionalProperties": false
+                  }
                 ]
               },
               "test_writer": {
@@ -2142,7 +2276,8 @@ const SCHEMA_DEFS: Record<string, JSONSchemaNode> = {
       "in_force",
       "builder",
       "test_writer",
-      "required_test_count"
+      "required_test_count",
+      "taking"
     ],
     "properties": {
       "builder": {
@@ -2161,6 +2296,138 @@ const SCHEMA_DEFS: Record<string, JSONSchemaNode> = {
       "started_at": {
         "type": "string",
         "format": "date-time"
+      },
+      "taking": {
+        "type": "object",
+        "anyOf": [
+          {
+            "type": "object",
+            "required": [
+              "state"
+            ],
+            "properties": {
+              "state": {
+                "type": "string",
+                "enum": [
+                  "building"
+                ]
+              }
+            },
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "required": [
+              "run_id",
+              "candidate_commit",
+              "candidate_branch",
+              "tests",
+              "base_in_branch",
+              "state"
+            ],
+            "properties": {
+              "base_in_branch": {
+                "type": "boolean"
+              },
+              "candidate_branch": {
+                "type": "string"
+              },
+              "candidate_commit": {
+                "type": "string"
+              },
+              "run_id": {
+                "type": "string"
+              },
+              "state": {
+                "type": "string",
+                "enum": [
+                  "passed"
+                ]
+              },
+              "tests": {
+                "type": "object",
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "required": [
+                      "source"
+                    ],
+                    "properties": {
+                      "source": {
+                        "type": "string",
+                        "enum": [
+                          "evaluator"
+                        ]
+                      }
+                    },
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "required": [
+                      "commit",
+                      "branch",
+                      "source"
+                    ],
+                    "properties": {
+                      "branch": {
+                        "type": "string"
+                      },
+                      "commit": {
+                        "type": "string"
+                      },
+                      "source": {
+                        "type": "string",
+                        "enum": [
+                          "written_tests"
+                        ]
+                      }
+                    },
+                    "additionalProperties": false
+                  }
+                ]
+              }
+            },
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "required": [
+              "state"
+            ],
+            "properties": {
+              "state": {
+                "type": "string",
+                "enum": [
+                  "merged"
+                ]
+              }
+            },
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "required": [
+              "kept_branches",
+              "state"
+            ],
+            "properties": {
+              "kept_branches": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "state": {
+                "type": "string",
+                "enum": [
+                  "dropped"
+                ]
+              }
+            },
+            "additionalProperties": false
+          }
+        ]
       },
       "test_writer": {
         "$ref": "#/$defs/TestWriterProgress"
