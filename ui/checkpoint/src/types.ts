@@ -183,6 +183,13 @@ export interface ModelConnection {
   connection: ({ "kind": "none" } | { "kind": "direct"; "model_name": string; "provider": "anthropic" | "openai" } | { "gateway_addr": string; "kind": "gateway" });
 }
 
+export interface OpenBuildRefusal {
+  build: StartedBuild;
+  change_id: string;
+  message: string;
+  name: string;
+}
+
 export interface PreviewArchitecturePayload {
   change_id: string;
   request_revision: string;
@@ -511,8 +518,8 @@ export interface Operations {
   wait_for_changes: { request: WaitForChangesRequest; result: ChangeListVersion; failure: ServerError };
   get_change: { request: GetChangeRequest; result: ChangeCardResult; failure: ServerError };
   get_story_refresh: { request: GetStoryRefreshRequest; result: StoryRefreshResult; failure: ServerError };
-  start_build: { request: StartBuildRequest; result: StartBuildResult; failure: ServerError };
-  drop_build: { request: DropBuildRequest; result: ChangeBuild; failure: ServerError };
+  start_build: { request: StartBuildRequest; result: StartBuildResult; failure: ServerError | OpenBuildRefusal };
+  drop_build: { request: DropBuildRequest; result: ChangeBuild; failure: ServerError | OpenBuildRefusal };
   get_build: { request: GetBuildRequest; result: ChangeBuild; failure: ServerError };
   get_test_findings: { request: GetTestFindingsRequest; result: TestFindings; failure: ServerError };
   get_team: { request: GetTeamRequest; result: TeamSnapshot; failure: ServerError };
@@ -687,12 +694,14 @@ function decodeGetStoryRefreshFailure(_status: number, value: unknown): value is
   return isServerError(value);
 }
 
-function decodeStartBuildFailure(_status: number, value: unknown): value is Operations["start_build"]["failure"] {
-  return isServerError(value);
+function decodeStartBuildFailure(status: number, value: unknown): value is Operations["start_build"]["failure"] {
+  return isServerError(value) ||
+    (status === 409 && matchesSchema(value, {"$ref":"#/$defs/OpenBuildRefusal"}));
 }
 
-function decodeDropBuildFailure(_status: number, value: unknown): value is Operations["drop_build"]["failure"] {
-  return isServerError(value);
+function decodeDropBuildFailure(status: number, value: unknown): value is Operations["drop_build"]["failure"] {
+  return isServerError(value) ||
+    (status === 409 && matchesSchema(value, {"$ref":"#/$defs/OpenBuildRefusal"}));
 }
 
 function decodeGetBuildFailure(_status: number, value: unknown): value is Operations["get_build"]["failure"] {
@@ -1760,6 +1769,30 @@ const SCHEMA_DEFS: Record<string, JSONSchemaNode> = {
             "additionalProperties": false
           }
         ]
+      }
+    },
+    "additionalProperties": false
+  },
+  "OpenBuildRefusal": {
+    "type": "object",
+    "required": [
+      "name",
+      "message",
+      "change_id",
+      "build"
+    ],
+    "properties": {
+      "build": {
+        "$ref": "#/$defs/StartedBuild"
+      },
+      "change_id": {
+        "type": "string"
+      },
+      "message": {
+        "type": "string"
+      },
+      "name": {
+        "type": "string"
       }
     },
     "additionalProperties": false
@@ -3257,6 +3290,11 @@ export function isModelConfigResult(value: unknown): value is ModelConfigResult 
 // isModelConnection validates a parsed answer against the generated ModelConnection schema.
 export function isModelConnection(value: unknown): value is ModelConnection {
   return matchesSchema(value, { $ref: "#/$defs/ModelConnection" });
+}
+
+// isOpenBuildRefusal validates a parsed answer against the generated OpenBuildRefusal schema.
+export function isOpenBuildRefusal(value: unknown): value is OpenBuildRefusal {
+  return matchesSchema(value, { $ref: "#/$defs/OpenBuildRefusal" });
 }
 
 // isProjectTeam validates a parsed answer against the generated ProjectTeam schema.

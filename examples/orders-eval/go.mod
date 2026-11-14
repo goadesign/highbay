@@ -7,7 +7,7 @@ require (
 	github.com/golang-jwt/jwt/v5 v5.3.1
 	github.com/stretchr/testify v1.12.1
 	goa.design/goa-ai v0.90.1-0.20261111075239-0114fb9d40d3
-	goa.design/goa/v3 v3.35.1-0.20261103205041-35e789e8f9b1
+	goa.design/goa/v3 v3.35.1-0.20261114184515-dee88e893eb3
 	google.golang.org/grpc v1.85.0
 )
 
