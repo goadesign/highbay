@@ -13,7 +13,9 @@ on:
     # run to have one; without it every pull request whose go.sum differs
     # from main's compiles from scratch. Remove team-start here when it has
     # merged into main.
-    branches: [main, team-start]
+    # builder-copy is the integration branch of the builder-copy slices; it
+    # runs for the same reason until it merges into team-start. Remove it then.
+    branches: [main, team-start, builder-copy]
   schedule:
     - cron: '17 7 * * *'
   workflow_dispatch:
