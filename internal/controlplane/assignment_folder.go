@@ -13,15 +13,12 @@ import (
 // builderWorkingFolder reports the folder currently used for builder
 // registration. Until the copy implementation lands, it is the bound project
 // folder. A go.work within the accepted source root belongs to this folder;
-// a workspace above that root must not control its Go commands.
-func (c *ControlPlane) builderWorkingFolder() (string, bool, error) {
-	c.workspaceMu.RLock()
-	defer c.workspaceMu.RUnlock()
-	folder := c.activeWorkspaceDir
+// a workspace above that root must not control its Go commands. Callers hold
+// workspaceMu and establish ownership before reading these filesystem facts.
+func builderWorkingFolder(folder, root string) (string, bool, error) {
 	if folder == "" {
 		return "", false, errors.New("no builder working folder is bound")
 	}
-	root := outermost(c.protectedDirs)
 	for dir := folder; ; dir = filepath.Dir(dir) {
 		_, err := os.Stat(filepath.Join(dir, "go.work"))
 		if err == nil {

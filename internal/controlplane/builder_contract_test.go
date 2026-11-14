@@ -5,6 +5,7 @@ package controlplane
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -122,7 +123,14 @@ func TestBuilderCopyRefusalsRoundTripThroughHTTP(t *testing.T) {
 			case *goa.ServiceError:
 				var actual *goa.ServiceError
 				require.ErrorAs(t, err, &actual)
-				assert.Equal(t, wanted, actual)
+				assert.Equal(t, wanted.Name, actual.Name)
+				assert.Equal(t, wanted.ID, actual.ID)
+				assert.Equal(t, wanted.Field, actual.Field)
+				assert.Equal(t, wanted.Message, actual.Message)
+				assert.Equal(t, wanted.Timeout, actual.Timeout)
+				assert.Equal(t, wanted.Temporary, actual.Temporary)
+				assert.Equal(t, wanted.Fault, actual.Fault)
+				assert.Nil(t, actual.Unwrap(), "the HTTP error carries no private cause")
 			}
 		})
 	}
@@ -139,8 +147,18 @@ func TestTypedRequestRefusalsRemainExpected(t *testing.T) {
 		fault bool
 	}{
 		{name: "copy refusal", err: copyRefusal},
+		{name: "wrapped copy refusal", err: fmt.Errorf("read assignment: %w", copyRefusal)},
+		{name: "single joined copy refusal", err: errors.Join(copyRefusal)},
 		{name: "open build refusal", err: openRefusal},
+		{name: "wrapped open build refusal", err: fmt.Errorf("start build: %w", openRefusal)},
 		{name: "standard refusal", err: gensurla.MakeConflict(errors.New("Read again."))},
+		{name: "wrapped standard refusal", err: fmt.Errorf("read assignment: %w",
+			gensurla.MakeConflict(errors.New("Read again.")))},
+		{name: "joined storage failure", err: errors.Join(copyRefusal, errors.New("storage failed")), fault: true},
+		{name: "joined cleanup failure", err: fmt.Errorf("read assignment: %w",
+			errors.Join(openRefusal, errors.New("cleanup failed"))), fault: true},
+		{name: "joined standard refusal and storage failure", err: errors.Join(
+			gensurla.MakeConflict(errors.New("Read again.")), errors.New("storage failed")), fault: true},
 		{name: "unexpected failure", err: errors.New("storage failed"), fault: true},
 		{name: "service fault", err: &goa.ServiceError{Name: "fault", Message: "storage failed", Fault: true}, fault: true},
 		{name: "joined fault", err: errors.Join(copyRefusal,
@@ -221,4 +239,53 @@ func TestBuilderCopyPendingOperationsKeepTheirRoles(t *testing.T) {
 			assertNoBuildSaved(t, cp, "chg")
 		})
 	}
+}
+
+// TestBuilderAssignmentChecksOwnershipBeforeFolderFacts poisons go.work so
+// unauthorized calls must refuse before inspecting it, and an owner's failed
+// fact read must leave the assignment unread for a later successful retry.
+func TestBuilderAssignmentChecksOwnershipBeforeFolderFacts(t *testing.T) {
+	cp := newBuildControlPlane(t, Options{})
+	card := confirmedChange(t, cp, "chg")
+	_, err := cp.StartBuild(asCaller("alice@example.com", CallerUser),
+		&gensurla.StartBuildPayload{ChangeID: "chg", RequestRevision: card.RequestRevision})
+	require.NoError(t, err)
+	before := readBuildFile(t, cp, "chg")
+	workspace, _, _ := cp.currentWorkspaceTarget()
+	goWork := filepath.Join(workspace, "go.work")
+	require.NoError(t, os.Symlink("go.work", goWork))
+	_, statErr := os.Stat(goWork)
+	require.Error(t, statErr, "the symlink loop must make folder facts unavailable")
+
+	for _, tc := range []struct {
+		name    string
+		caller  context.Context
+		refusal string
+	}{
+		{name: "missing principal", caller: t.Context(), refusal: "authenticated principal is required"},
+		{name: "another owner", caller: asCaller("bob@example.com", CallerBuilder), refusal: "forbidden"},
+		{name: "owner with unavailable facts", caller: asCaller("alice@example.com", CallerBuilder),
+			refusal: "read builder Go workspace"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := cp.GetBuilderAssignment(tc.caller,
+				&gensurla.GetBuilderAssignmentPayload{ChangeID: "chg"})
+			if tc.refusal == "forbidden" {
+				assertRefused(t, err, tc.refusal)
+			} else {
+				assert.ErrorContains(t, err, tc.refusal)
+			}
+			assert.Equal(t, before, readBuildFile(t, cp, "chg"),
+				"a refused read must not consume the assignment")
+		})
+	}
+	listed, err := cp.ListBuilderAssignments(asCaller("bob@example.com", CallerBuilder))
+	require.NoError(t, err, "another owner's empty list must not inspect the folder")
+	assert.Empty(t, listed.Assignments)
+
+	require.NoError(t, os.Remove(goWork))
+	read, err := cp.GetBuilderAssignment(asCaller("alice@example.com", CallerBuilder),
+		&gensurla.GetBuilderAssignmentPayload{ChangeID: "chg"})
+	require.NoError(t, err)
+	assert.True(t, read.Read, "the same assignment can be read after the filesystem is repaired")
 }

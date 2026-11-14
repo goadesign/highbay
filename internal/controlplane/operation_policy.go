@@ -82,16 +82,9 @@ func authorizeOperation(name string, next goa.Endpoint, recorder trace.Tracer) g
 		ctx, span := recorder.Start(ctx, "surla.request."+name)
 		defer span.End()
 		defer func() {
-			if err != nil {
-				var domain *goa.ServiceError
-				var copyRefusal *gensurla.CopyOffBranch
-				var openRefusal *gensurla.OpenBuildRefusal
-				serviceError := errors.As(err, &domain)
-				if serviceError && domain.Fault || !serviceError &&
-					!errors.As(err, &copyRefusal) && !errors.As(err, &openRefusal) {
-					span.RecordError(err)
-					span.SetStatus(codes.Error, "operation failed")
-				}
+			if err != nil && !expectedRequestRefusal(err) {
+				span.RecordError(err)
+				span.SetStatus(codes.Error, "operation failed")
 			}
 		}()
 
@@ -187,4 +180,32 @@ func filterMCPDiscovery(e *genmcp.Endpoints) {
 		catalog.Tools = tools
 		return catalog, nil
 	}
+}
+
+// expectedRequestRefusal classifies the owning named error of a single
+// wrapped failure. Independent joined failures keep their own meaning rather
+// than borrowing one child's refusal type and hiding another child's fault.
+func expectedRequestRefusal(err error) bool {
+	for err != nil {
+		if _, named := err.(goa.GoaErrorNamer); named {
+			switch failure := err.(type) {
+			case *goa.ServiceError:
+				return !failure.Fault
+			case *gensurla.CopyOffBranch, *gensurla.OpenBuildRefusal:
+				return true
+			default:
+				return false
+			}
+		}
+		if joined, ok := err.(interface{ Unwrap() []error }); ok {
+			causes := joined.Unwrap()
+			if len(causes) != 1 {
+				return false
+			}
+			err = causes[0]
+		} else {
+			err = errors.Unwrap(err)
+		}
+	}
+	return false
 }

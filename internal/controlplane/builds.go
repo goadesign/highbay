@@ -224,13 +224,15 @@ func (c *ControlPlane) ListBuilderAssignments(ctx context.Context) (*gensurla.Bu
 	if !ok {
 		return nil, errors.New("authenticated principal is required")
 	}
+	c.workspaceMu.RLock()
+	defer c.workspaceMu.RUnlock()
 	builds, err := c.ownedBuilds(principal.ID)
 	if err != nil {
 		return nil, err
 	}
 	items := make([]*gensurla.BuilderAssignment, len(builds))
 	if len(builds) > 0 {
-		folder, goworkOff, err := c.builderWorkingFolder()
+		folder, goworkOff, err := builderWorkingFolder(c.activeWorkspaceDir, outermost(c.protectedDirs))
 		if err != nil {
 			return nil, err
 		}
@@ -249,11 +251,18 @@ func (c *ControlPlane) GetBuilderAssignment(
 	ctx context.Context,
 	p *gensurla.GetBuilderAssignmentPayload,
 ) (*gensurla.BuilderAssignment, error) {
-	folder, goworkOff, err := c.builderWorkingFolder()
-	if err != nil {
-		return nil, err
-	}
+	c.workspaceMu.RLock()
+	defer c.workspaceMu.RUnlock()
+	var folder string
+	var goworkOff bool
 	held, err := c.readAssignment(ctx, "surla.controlplane.get_builder_assignment", p.ChangeID, func(saved *buildFile) (bool, error) {
+		// readAssignment established ownership; derive facts before recording
+		// the read, so a filesystem failure consumes no assignment.
+		var err error
+		folder, goworkOff, err = builderWorkingFolder(c.activeWorkspaceDir, outermost(c.protectedDirs))
+		if err != nil {
+			return false, err
+		}
 		changed := !saved.Builder.Read
 		saved.Builder.Read = true
 		return changed, nil
