@@ -323,8 +323,8 @@ func TestASavedApprovalNeedsAPromotionTarget(t *testing.T) {
 
 // TestSavedCardInTodaysUntaggedFormWithApprovalDecodes verifies that a card
 // file written in today's untagged form with an Approval record (and no
-// TestSource field) decodes. Public approval visibility additionally needs a
-// current numbered build whose selected evaluator matches its SuiteCommit.
+// TestSource field) decodes and stays visible while the selected stored
+// evaluator matches its SuiteCommit, independently of build assignments.
 func TestSavedCardInTodaysUntaggedFormWithApprovalDecodes(t *testing.T) {
 	alice := WithPrincipal(context.Background(), Principal{ID: "alice@example.com", CallerID: "alice@example.com", Kind: CallerUser})
 	suiteCommit := strings.Repeat("b", 40)
@@ -354,22 +354,8 @@ func TestSavedCardInTodaysUntaggedFormWithApprovalDecodes(t *testing.T) {
 	cfg := verificationConfig(t)
 	cfg.Plan.SuiteCommit = suiteCommit
 	target := &promotionTargetStub{artifacts: map[string]string{"orders": artifactDigest}}
-	cp := newControlPlane(t, buildFixtureOptions(t, Options{Verification: cfg, PromotionTarget: target}))
+	cp := newControlPlane(t, Options{Verification: cfg, PromotionTarget: target})
 	require.NoError(t, os.WriteFile(cp.cards.path("chg"), []byte(rawFile), 0o600))
-
-	decoded, found, err := cp.cards.load("chg")
-	require.NoError(t, err)
-	require.True(t, found)
-	require.NotNil(t, decoded.card.Approval, "the legacy untagged approval decodes")
-	assert.Equal(t, suiteCommit, decoded.card.Approval.SuiteCommit)
-	legacy, err := cp.GetChange(alice, &gensurla.GetChangePayload{ChangeID: "chg"})
-	require.NoError(t, err)
-	assert.Nil(t, legacy.Approval, "legacy evidence alone cannot supply a current numbered build")
-
-	// The consumer's positive case explicitly supplies a current saved
-	// snapshot and build; it does not claim the legacy card can start one.
-	card := attachBuildSnapshot(t, cp, "chg")
-	saveStoredBuildFixture(t, cp, card)
 	got, err := cp.GetChange(alice, &gensurla.GetChangePayload{ChangeID: "chg"})
 	require.NoError(t, err)
 	require.NotNil(t, got.Approval, "returned while the chooser gives its SuiteCommit")
