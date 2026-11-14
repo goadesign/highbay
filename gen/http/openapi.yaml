@@ -4102,6 +4102,8 @@ definitions:
                     required_test_count: 3718558671237355663
                     started_at: "2011-11-02T08:04:42Z"
                     state: started
+                    taking:
+                        state: merged
                     test_writer:
                         read: true
                         report: 7108203204833819401
@@ -4145,6 +4147,119 @@ definitions:
                             type: string
                             enum:
                                 - started
+                        taking:
+                            type: object
+                            description: 'Whether the user has taken this build: building until a verification of it passes; passed with the commits to merge; merged once the branch checked out in the project folder holds both commits of one passed run; dropped once the user dropped it. A project has one open build, and another change is built only once it is merged or dropped.'
+                            example:
+                                base_in_branch: true
+                                candidate_branch: Nisi ea omnis facilis a error.
+                                candidate_commit: 00b3ee3ef49f7c09f73773613a7adfd56aa732306c8c19f8b21a1bbb6e3025e8
+                                run_id: Harum eum.
+                                state: passed
+                                tests:
+                                    branch: Ea nostrum id.
+                                    commit: a9226c3d8ce94d154fd0cc9adaa6fc016fa3f53591bacb026987ca9c7d645b2c
+                                    source: written_tests
+                            anyOf:
+                                - type: object
+                                  properties:
+                                    state:
+                                        type: string
+                                        enum:
+                                            - building
+                                  required:
+                                    - state
+                                - type: object
+                                  properties:
+                                    base_in_branch:
+                                        type: boolean
+                                        description: 'False when the branch checked out in the project folder no longer holds the commit this build started from, because its history was rewritten: merging these commits brings that history back, and dropping the build and building again starts from the branch as it is.'
+                                        example: true
+                                    candidate_branch:
+                                        type: string
+                                        description: The builder's branch of this build, surla/build-<n>, which holds candidate_commit.
+                                        example: Iste voluptas voluptas exercitationem vitae aut aut.
+                                    candidate_commit:
+                                        type: string
+                                        description: The builder's commit the run passed.
+                                        example: 0394f9d8d78f8c45665cc484ce9ad6341f12d598271a59294341c5a3cba47b07
+                                        pattern: ^([0-9a-f]{40}|[0-9a-f]{64})$
+                                    run_id:
+                                        type: string
+                                        description: The newest passed run; get_verification takes it.
+                                        example: Iste sint sequi.
+                                    state:
+                                        type: string
+                                        enum:
+                                            - passed
+                                    tests:
+                                        type: object
+                                        description: written_tests with the accepted tests' commit to merge after the builder's; evaluator when the project verifies with its stored evaluator, whose tests are not merged.
+                                        example:
+                                            branch: Ea nostrum id.
+                                            commit: a9226c3d8ce94d154fd0cc9adaa6fc016fa3f53591bacb026987ca9c7d645b2c
+                                            source: written_tests
+                                        anyOf:
+                                            - type: object
+                                              properties:
+                                                source:
+                                                    type: string
+                                                    enum:
+                                                        - evaluator
+                                              required:
+                                                - source
+                                            - type: object
+                                              properties:
+                                                branch:
+                                                    type: string
+                                                    description: The test writer's branch of this build, surla/tests-<n>.
+                                                    example: Non excepturi dolorum quo quo.
+                                                commit:
+                                                    type: string
+                                                    description: Commit Surla recorded the accepted tests at.
+                                                    example: 7a008211732611bb258ab15cc49ebc9f491047a7
+                                                    pattern: ^([0-9a-f]{40}|[0-9a-f]{64})$
+                                                source:
+                                                    type: string
+                                                    enum:
+                                                        - written_tests
+                                              required:
+                                                - commit
+                                                - branch
+                                                - source
+                                  required:
+                                    - run_id
+                                    - candidate_commit
+                                    - candidate_branch
+                                    - tests
+                                    - base_in_branch
+                                    - state
+                                - type: object
+                                  properties:
+                                    state:
+                                        type: string
+                                        enum:
+                                            - merged
+                                  required:
+                                    - state
+                                - type: object
+                                  properties:
+                                    kept_branches:
+                                        type: array
+                                        items:
+                                            type: string
+                                            example: Eum veniam.
+                                        description: The build's own branches that exist and hold a commit made after the build's base, where its work stays (git log <branch> shows it); empty when nothing was committed for it.
+                                        example:
+                                            - Eum veniam.
+                                            - Vitae impedit quae est.
+                                    state:
+                                        type: string
+                                        enum:
+                                            - dropped
+                                  required:
+                                    - kept_branches
+                                    - state
                         test_writer:
                             $ref: '#/definitions/TestWriterProgress'
                       required:
@@ -4154,6 +4269,7 @@ definitions:
                         - builder
                         - test_writer
                         - required_test_count
+                        - taking
                         - state
             change_id:
                 type: string
@@ -4169,6 +4285,8 @@ definitions:
                 required_test_count: 3718558671237355663
                 started_at: "2011-11-02T08:04:42Z"
                 state: started
+                taking:
+                    state: merged
                 test_writer:
                     read: true
                     report: 7108203204833819401
@@ -7584,6 +7702,8 @@ definitions:
                 request_revision: Facilis nam.
                 required_test_count: 3718558671237355663
                 started_at: "2011-11-02T08:04:42Z"
+                taking:
+                    state: merged
                 test_writer:
                     read: true
                     report: 7108203204833819401
@@ -10358,6 +10478,8 @@ definitions:
                 request_revision: Facilis nam.
                 required_test_count: 3718558671237355663
                 started_at: "2011-11-02T08:04:42Z"
+                taking:
+                    state: merged
                 test_writer:
                     read: true
                     report: 7108203204833819401
@@ -10417,6 +10539,111 @@ definitions:
                 description: When the user started this build.
                 example: "2011-11-02T08:04:42Z"
                 format: date-time
+            taking:
+                type: object
+                description: 'Whether the user has taken this build: building until a verification of it passes; passed with the commits to merge; merged once the branch checked out in the project folder holds both commits of one passed run; dropped once the user dropped it. A project has one open build, and another change is built only once it is merged or dropped.'
+                example:
+                    state: merged
+                anyOf:
+                    - type: object
+                      properties:
+                        state:
+                            type: string
+                            enum:
+                                - building
+                      required:
+                        - state
+                    - type: object
+                      properties:
+                        base_in_branch:
+                            type: boolean
+                            description: 'False when the branch checked out in the project folder no longer holds the commit this build started from, because its history was rewritten: merging these commits brings that history back, and dropping the build and building again starts from the branch as it is.'
+                            example: true
+                        candidate_branch:
+                            type: string
+                            description: The builder's branch of this build, surla/build-<n>, which holds candidate_commit.
+                            example: Itaque libero voluptates.
+                        candidate_commit:
+                            type: string
+                            description: The builder's commit the run passed.
+                            example: 68ca44e7163aa9ea59cb75eb3a06224f345227263484824560fe9387bb4410cf
+                            pattern: ^([0-9a-f]{40}|[0-9a-f]{64})$
+                        run_id:
+                            type: string
+                            description: The newest passed run; get_verification takes it.
+                            example: Odio id ex earum quas iste.
+                        state:
+                            type: string
+                            enum:
+                                - passed
+                        tests:
+                            type: object
+                            description: written_tests with the accepted tests' commit to merge after the builder's; evaluator when the project verifies with its stored evaluator, whose tests are not merged.
+                            example:
+                                source: evaluator
+                            anyOf:
+                                - type: object
+                                  properties:
+                                    source:
+                                        type: string
+                                        enum:
+                                            - evaluator
+                                  required:
+                                    - source
+                                - type: object
+                                  properties:
+                                    branch:
+                                        type: string
+                                        description: The test writer's branch of this build, surla/tests-<n>.
+                                        example: Assumenda rem.
+                                    commit:
+                                        type: string
+                                        description: Commit Surla recorded the accepted tests at.
+                                        example: e7b8a5bf7dc42019d3b93f410d96af142cbeadba
+                                        pattern: ^([0-9a-f]{40}|[0-9a-f]{64})$
+                                    source:
+                                        type: string
+                                        enum:
+                                            - written_tests
+                                  required:
+                                    - commit
+                                    - branch
+                                    - source
+                      required:
+                        - run_id
+                        - candidate_commit
+                        - candidate_branch
+                        - tests
+                        - base_in_branch
+                        - state
+                    - type: object
+                      properties:
+                        state:
+                            type: string
+                            enum:
+                                - merged
+                      required:
+                        - state
+                    - type: object
+                      properties:
+                        kept_branches:
+                            type: array
+                            items:
+                                type: string
+                                example: Non ut natus.
+                            description: The build's own branches that exist and hold a commit made after the build's base, where its work stays (git log <branch> shows it); empty when nothing was committed for it.
+                            example:
+                                - Non ut natus.
+                                - Quod impedit aut repellendus dolor.
+                                - Sit eius expedita molestiae sunt ut aut.
+                                - Sit numquam.
+                        state:
+                            type: string
+                            enum:
+                                - dropped
+                      required:
+                        - kept_branches
+                        - state
             test_writer:
                 $ref: '#/definitions/TestWriterProgress'
         description: The usable build the user started for a change, with the builder's assignment and the test writer's progress when one is used. A build started with only the builder remains usable while stored verification settings supply its tests.
@@ -10427,6 +10654,8 @@ definitions:
             request_revision: Facilis nam.
             required_test_count: 3718558671237355663
             started_at: "2011-11-02T08:04:42Z"
+            taking:
+                state: merged
             test_writer:
                 read: true
                 report: 7108203204833819401
@@ -10441,6 +10670,7 @@ definitions:
             - builder
             - test_writer
             - required_test_count
+            - taking
     StopLiveTargetResult:
         title: StopLiveTargetResult
         type: object

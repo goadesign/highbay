@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
@@ -49,6 +50,17 @@ func (c *ControlPlane) StartBuild(
 	))
 	defer span.End()
 	select {
+	case c.builderCopyTurn <- struct{}{}:
+	default:
+		return nil, gensurla.MakeWorkingCopyBusy(errors.New("Another build is starting or the builder is reading its assignment. Start the build again when that has ended."))
+	}
+	builderTurnHeld := true
+	defer func() {
+		if builderTurnHeld {
+			<-c.builderCopyTurn
+		}
+	}()
+	select {
 	case c.workingCopyTurn <- struct{}{}:
 	default:
 		message := "Another build is starting or a test check is using the working copy. "
@@ -76,12 +88,57 @@ func (c *ControlPlane) StartBuild(
 	if _, _, err := designeval.StoryScenarios(record.stories); err != nil {
 		return nil, gensurla.MakeUnprocessable(fmt.Errorf("the agreed Story cannot name its required tests: %w", err))
 	}
+	// The user decides against the exact open start before any copy effect.
+	c.mu.RLock()
+	open, openFound, err := c.cards.loadOpenBuild()
+	var openCard storedChangeCard
+	if err == nil && openFound {
+		openCard, err = c.ownedCard(principal, open.ChangeID)
+	}
+	c.mu.RUnlock()
+	if err != nil {
+		return nil, recordBuildError(span, err, "read the open build")
+	}
+	var openProgress *gensurla.StartedBuild
+	if openFound {
+		openProgress, err = c.startedBuild(work, principal.ID, heldBuild{
+			file: open, inForce: buildInForce(open, openCard), storedEvaluator: c.storedEvaluator(),
+		})
+		if err != nil {
+			return nil, recordBuildError(span, err, "read the open build's passed runs")
+		}
+		if err := checkBuildReplacement(p, open, openProgress); err != nil {
+			return nil, err
+		}
+	}
 	source, layout, workspace, err := c.projectTestLayout(work)
 	if err != nil {
 		return nil, recordBuildError(span, buildStartError(work, "", err), "read test source")
 	}
 	if workspace == "" {
 		return nil, gensurla.MakeNotImplemented(errors.New("No project working folder is bound. Start this project with surla to build it."))
+	}
+	repo, _, err := resolveStarterRepo(work, workspace)
+	if err != nil {
+		return nil, recordBuildError(span, buildStartError(work, workspace, err), "read the project repository")
+	}
+	head, err := runGitRead(work, repo, "rev-parse", "--verify", "--quiet", "HEAD^{commit}")
+	if err != nil {
+		var exit *exec.ExitError
+		if errors.As(err, &exit) && exit.ExitCode() == 1 {
+			err = testwriter.ErrNoCommit
+		}
+		return nil, recordBuildError(span, buildStartError(work, workspace, err), "read the build base")
+	}
+	base := strings.TrimSpace(string(head))
+	number := 0
+	if openFound {
+		number, base = open.Number, open.Base
+	} else {
+		number, err = testwriter.NextNumber(work, workspace, 0)
+		if err != nil {
+			return nil, recordBuildError(span, err, "number the build")
+		}
 	}
 	var copy buildCopy
 	if source != testSourceStoredEvaluator {
@@ -123,8 +180,25 @@ func (c *ControlPlane) StartBuild(
 		c.mu.Unlock()
 		return nil, recordBuildError(span, buildStartError(work, workspace, err), "check change before save")
 	}
+	current, currentFound, err := c.cards.loadOpenBuild()
+	if err != nil {
+		c.mu.Unlock()
+		return nil, recordBuildError(span, err, "check the open build before save")
+	}
+	if currentFound != openFound || currentFound && (current.ChangeID != open.ChangeID || !current.StartedAt.Equal(open.StartedAt)) {
+		c.mu.Unlock()
+		return nil, gensurla.MakeConflict(errors.New("The open build changed while this start was being prepared. Read get_build and decide again."))
+	}
+	if currentFound {
+		currentProgress := startedBuild(heldBuild{file: current, inForce: buildInForce(current, record), storedEvaluator: c.storedEvaluator()}, openProgress.Taking)
+		if err := checkBuildReplacement(p, current, currentProgress); err != nil {
+			c.mu.Unlock()
+			return nil, err
+		}
+	}
 	saved := buildFile{
 		ChangeID: p.ChangeID, RequestRevision: p.RequestRevision, StartedAt: time.Now().UTC(),
+		Number: number, Base: base, GoMod: record.goMod, MadeFrom: *record.madeFrom,
 		Roles: buildRolesBuilderOnly, Stories: cloneStorySummaries(record.stories),
 		DesignSource: record.designSource, TestWriter: testWriterAssignment{State: testsAssigned},
 		Answers: confirmedAnswers(record.card), Examples: record.card.Examples,
@@ -134,16 +208,15 @@ func (c *ControlPlane) StartBuild(
 	if copy != nil {
 		folder := copy.Project()
 		saved.Roles = buildRolesBuilderAndTestWriter
-		saved.TestWriter.WorkingFolder = &folder
 		folders = BuilderAndTestWriter{BuilderFolder: workspace, TestWriterFolder: folder}
 	}
-	err = c.cards.saveBuild(saved)
+	err = c.cards.saveOpenBuild(saved)
 	c.mu.Unlock()
 	if err != nil {
 		return nil, recordBuildError(span, err, "save build")
 	}
 	result := &gensurla.StartBuildResult{
-		Build: startedBuild(heldBuild{file: saved, inForce: true, storedEvaluator: c.storedEvaluator()}),
+		Build: startedBuild(heldBuild{file: saved, inForce: true, storedEvaluator: c.storedEvaluator()}, gensurla.NewBuildTakingBuilding(&gensurla.BuildBuilding{})),
 	}
 	// Registration is durable local work and is never starved by a generation
 	// or window deadline. The project owner completes it even after cancellation.
@@ -172,10 +245,17 @@ func (c *ControlPlane) StartBuild(
 			result.Team = buildAgainTeamOutcome()
 			return result, nil
 		}
-		result.Build = startedBuild(current)
+		rendered, readErr := c.startedBuild(accepted, principal.ID, current)
+		if readErr != nil {
+			result.Team = buildAgainTeamOutcome()
+			return result, nil
+		}
+		result.Build = rendered
 	}
 	<-c.workingCopyTurn
 	heldTurn = false
+	<-c.builderCopyTurn
+	builderTurnHeld = false
 	cancel()
 	if accepted.Err() != nil {
 		result.Team = buildAgainTeamOutcome()
@@ -194,12 +274,12 @@ func (c *ControlPlane) saveBuildPreparation(
 ) (heldBuild, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	current, found, err := c.cards.loadBuild(saved.ChangeID)
+	current, found, err := c.cards.loadOpenBuild()
 	if err != nil {
 		return heldBuild{}, err
 	}
-	if !found {
-		return heldBuild{}, errors.New("the saved build disappeared during preparation")
+	if !found || current.ChangeID != saved.ChangeID {
+		return heldBuild{}, errors.New("the saved build was replaced during preparation")
 	}
 	if prepareErr != nil && current.RequestRevision == saved.RequestRevision &&
 		current.StartedAt.Equal(saved.StartedAt) && current.ReportNumber == saved.ReportNumber &&
@@ -216,7 +296,7 @@ func (c *ControlPlane) saveBuildPreparation(
 			reason, step := preparationFailure(ctx, prepareErr)
 			tw.Reason, tw.Step = boundedBuildReason(reason), step
 		}
-		if err := c.cards.saveBuild(current); err != nil {
+		if err := c.cards.saveOpenBuild(current); err != nil {
 			return heldBuild{}, err
 		}
 	}
@@ -277,7 +357,7 @@ func buildStartError(ctx context.Context, workspace string, err error) error {
 		return gensurla.MakeUnavailable(errors.New("The server stopped or the build-start limit ended before saving. Call again on a running server."))
 	}
 	switch {
-	case errors.Is(err, testwriter.ErrNotRepository):
+	case errors.Is(err, testwriter.ErrNotRepository), errors.Is(err, errNoRepository):
 		return gensurla.MakeNotRepository(fmt.Errorf("Project folder %s: %w", shquote.Quote(workspace), err))
 	case errors.Is(err, testwriter.ErrNoCommit):
 		return gensurla.MakeNoCommit(fmt.Errorf("Project folder %s: %w", shquote.Quote(workspace), err))
@@ -401,4 +481,22 @@ func buildTeamStep(cause string) string {
 			"the project folder and its build working folders, " + retry
 	}
 	return "The project team could not be prepared. Run surla in the project folder to see the step, " + retry
+}
+
+// checkBuildReplacement refuses another change while the open build remains,
+// and an unfinished restart without consent naming exactly the observed start.
+func checkBuildReplacement(p *gensurla.StartBuildPayload, saved buildFile, progress *gensurla.StartedBuild) error {
+	name, message := "", ""
+	if saved.ChangeID != p.ChangeID {
+		name = "previous_change_open"
+		message = fmt.Sprintf("Change %s still has an open build. Merge a passed run or drop that build before building %s.", saved.ChangeID, p.ChangeID)
+	} else if progress.Taking.Kind() == gensurla.BuildTakingKindBuilding &&
+		(p.Replaces == nil || p.Replaces.ChangeID != saved.ChangeID || p.Replaces.StartedAt != saved.StartedAt.UTC().Format(time.RFC3339Nano)) {
+		name = "unfinished_build_open"
+		message = fmt.Sprintf("No verification of change %s's open build has passed. Decide whether to build it again, then send replaces naming the build shown.", saved.ChangeID)
+	}
+	if name == "" {
+		return nil
+	}
+	return &gensurla.OpenBuildRefusal{Name: name, Message: message, ChangeID: saved.ChangeID, Build: progress}
 }

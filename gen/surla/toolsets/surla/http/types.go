@@ -1233,11 +1233,65 @@ type (
 		// or written_tests with their commit and a notice.
 		TestSource *ApprovalTestSource `json:"test_source"`
 	}
+	// BuildBuildingTransport is the internal JSON transport type for BuildBuildingTransport.
+	// It lives in the toolset-local http package and is used only for JSON
+	// decode + validation (missing-field detection) before transforming into
+	// the public tool type.
+	BuildBuildingTransport struct {
+	}
+	// BuildDroppedTransport is the internal JSON transport type for BuildDroppedTransport.
+	// It lives in the toolset-local http package and is used only for JSON
+	// decode + validation (missing-field detection) before transforming into
+	// the public tool type.
+	BuildDroppedTransport struct {
+		// The build's own branches that exist and hold a commit made after the build's
+		// base, where its work stays (git log <branch> shows it); empty when nothing
+		// was committed for it.
+		KeptBranches []string `json:"kept_branches"`
+	}
+	// BuildMergedTransport is the internal JSON transport type for BuildMergedTransport.
+	// It lives in the toolset-local http package and is used only for JSON
+	// decode + validation (missing-field detection) before transforming into
+	// the public tool type.
+	BuildMergedTransport struct {
+	}
 	// BuildNotStartedTransport is the internal JSON transport type for BuildNotStartedTransport.
 	// It lives in the toolset-local http package and is used only for JSON
 	// decode + validation (missing-field detection) before transforming into
 	// the public tool type.
 	BuildNotStartedTransport struct {
+	}
+	// BuildPassedTestsTransport is the internal JSON transport type for BuildPassedTestsTransport.
+	// It lives in the toolset-local http package and is used only for JSON
+	// decode + validation (missing-field detection) before transforming into
+	// the public tool type.
+	BuildPassedTestsTransport struct {
+		// Commit Surla recorded the accepted tests at.
+		Commit *string `json:"commit"`
+		// The test writer's branch of this build, surla/tests-<n>.
+		Branch *string `json:"branch"`
+	}
+	// BuildPassedTransport is the internal JSON transport type for BuildPassedTransport.
+	// It lives in the toolset-local http package and is used only for JSON
+	// decode + validation (missing-field detection) before transforming into
+	// the public tool type.
+	BuildPassedTransport struct {
+		// The newest passed run; get_verification takes it.
+		RunID *string `json:"run_id"`
+		// The builder's commit the run passed.
+		CandidateCommit *string `json:"candidate_commit"`
+		// The builder's branch of this build, surla/build-<n>, which holds
+		// candidate_commit.
+		CandidateBranch *string `json:"candidate_branch"`
+		// written_tests with the accepted tests' commit to merge after the builder's;
+		// evaluator when the project verifies with its stored evaluator, whose tests
+		// are not merged.
+		Tests *BuildPassedTestSource `json:"tests"`
+		// False when the branch checked out in the project folder no longer holds the
+		// commit this build started from, because its history was rewritten: merging
+		// these commits brings that history back, and dropping the build and building
+		// again starts from the branch as it is.
+		BaseInBranch *bool `json:"base_in_branch"`
 	}
 	// BuilderAssignmentTransport is the internal JSON transport type for BuilderAssignmentTransport.
 	// It lives in the toolset-local http package and is used only for JSON
@@ -1668,6 +1722,12 @@ type (
 		// Number of finished flows in the agreed Story. Zero means no test of this
 		// change's Story was required.
 		RequiredTestCount *int `json:"required_test_count"`
+		// Whether the user has taken this build: building until a verification of it
+		// passes; passed with the commits to merge; merged once the branch checked out
+		// in the project folder holds both commits of one passed run; dropped once the
+		// user dropped it. A project has one open build, and another change is built
+		// only once it is merged or dropped.
+		Taking *BuildTaking `json:"taking"`
 	}
 	// StoryActorItemTransport is the internal JSON transport type for StoryActorItemTransport.
 	// It lives in the toolset-local http package and is used only for JSON

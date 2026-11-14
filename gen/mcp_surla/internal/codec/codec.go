@@ -2461,6 +2461,51 @@ func ValidateGetBuildPayloadTransport(value *GetBuildPayloadTransport) (err erro
 	return err
 }
 
+// GetBuildResultBuildBuildingTransport stores JSON fields until they have been validated.
+type GetBuildResultBuildBuildingTransport struct {
+}
+
+// ValidateGetBuildResultBuildBuildingTransport checks decoded JSON before it becomes a service value.
+func ValidateGetBuildResultBuildBuildingTransport(value *GetBuildResultBuildBuildingTransport) (err error) {
+	if value == nil {
+		return goa.MissingFieldError("body", "JSON value")
+	}
+
+	return err
+}
+
+// GetBuildResultBuildDroppedTransport stores JSON fields until they have been validated.
+type GetBuildResultBuildDroppedTransport struct {
+	// The build's own branches that exist and hold a commit made after the build's
+	// base, where its work stays (git log <branch> shows it); empty when nothing
+	// was committed for it.
+	KeptBranches []string `json:"kept_branches"`
+}
+
+// ValidateGetBuildResultBuildDroppedTransport checks decoded JSON before it becomes a service value.
+func ValidateGetBuildResultBuildDroppedTransport(value *GetBuildResultBuildDroppedTransport) (err error) {
+	if value == nil {
+		return goa.MissingFieldError("body", "JSON value")
+	}
+	if value.KeptBranches == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("kept_branches", "body"))
+	}
+	return err
+}
+
+// GetBuildResultBuildMergedTransport stores JSON fields until they have been validated.
+type GetBuildResultBuildMergedTransport struct {
+}
+
+// ValidateGetBuildResultBuildMergedTransport checks decoded JSON before it becomes a service value.
+func ValidateGetBuildResultBuildMergedTransport(value *GetBuildResultBuildMergedTransport) (err error) {
+	if value == nil {
+		return goa.MissingFieldError("body", "JSON value")
+	}
+
+	return err
+}
+
 // GetBuildResultBuildNotStartedTransport stores JSON fields until they have been validated.
 type GetBuildResultBuildNotStartedTransport struct {
 }
@@ -2471,6 +2516,94 @@ func ValidateGetBuildResultBuildNotStartedTransport(value *GetBuildResultBuildNo
 		return goa.MissingFieldError("body", "JSON value")
 	}
 
+	return err
+}
+
+// GetBuildResultBuildPassedTestsTransport stores JSON fields until they have been validated.
+type GetBuildResultBuildPassedTestsTransport struct {
+	// Commit Surla recorded the accepted tests at.
+	Commit *string `json:"commit"`
+	// The test writer's branch of this build, surla/tests-<n>.
+	Branch *string `json:"branch"`
+}
+
+// ValidateGetBuildResultBuildPassedTestsTransport checks decoded JSON before it becomes a service value.
+func ValidateGetBuildResultBuildPassedTestsTransport(value *GetBuildResultBuildPassedTestsTransport) (err error) {
+	if value == nil {
+		return goa.MissingFieldError("body", "JSON value")
+	}
+	if value.Commit == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("commit", "body"))
+	}
+	if value.Branch == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("branch", "body"))
+	}
+	if value.Commit != nil {
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.commit", *value.Commit, "^([0-9a-f]{40}|[0-9a-f]{64})$"))
+	}
+	return err
+}
+
+// GetBuildResultBuildPassedTransport stores JSON fields until they have been validated.
+type GetBuildResultBuildPassedTransport struct {
+	// The newest passed run; get_verification takes it.
+	RunID *string `json:"run_id"`
+	// The builder's commit the run passed.
+	CandidateCommit *string `json:"candidate_commit"`
+	// The builder's branch of this build, surla/build-<n>, which holds
+	// candidate_commit.
+	CandidateBranch *string `json:"candidate_branch"`
+	// written_tests with the accepted tests' commit to merge after the builder's;
+	// evaluator when the project verifies with its stored evaluator, whose tests
+	// are not merged.
+	Tests *GetBuildResultBuildPassedTestSourceTransport `json:"tests"`
+	// False when the branch checked out in the project folder no longer holds the
+	// commit this build started from, because its history was rewritten: merging
+	// these commits brings that history back, and dropping the build and building
+	// again starts from the branch as it is.
+	BaseInBranch *bool `json:"base_in_branch"`
+}
+
+// ValidateGetBuildResultBuildPassedTransport checks decoded JSON before it becomes a service value.
+func ValidateGetBuildResultBuildPassedTransport(value *GetBuildResultBuildPassedTransport) (err error) {
+	if value == nil {
+		return goa.MissingFieldError("body", "JSON value")
+	}
+	if value.RunID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("run_id", "body"))
+	}
+	if value.CandidateCommit == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("candidate_commit", "body"))
+	}
+	if value.CandidateBranch == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("candidate_branch", "body"))
+	}
+	if value.Tests == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("tests", "body"))
+	}
+	if value.BaseInBranch == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("base_in_branch", "body"))
+	}
+	if value.CandidateCommit != nil {
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.candidate_commit", *value.CandidateCommit, "^([0-9a-f]{40}|[0-9a-f]{64})$"))
+	}
+	if value.Tests != nil {
+
+		if err2 := value.Tests.Validate(); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		} else {
+			switch string(value.Tests.Kind()) {
+			case "written_tests":
+				actual, _ := value.Tests.AsWrittenTests()
+				if actual != nil {
+					if err2 := ValidateGetBuildResultBuildPassedTestsTransport(actual); err2 != nil {
+						err = goa.MergeErrors(err, err2)
+					}
+				}
+			}
+		}
+
+	}
 	return err
 }
 
@@ -2489,6 +2622,19 @@ func ValidateGetBuildResultBuilderProgressTransport(value *GetBuildResultBuilder
 	if value.Read == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("read", "body"))
 	}
+	return err
+}
+
+// GetBuildResultOperatorEvaluatorTestsTransport stores JSON fields until they have been validated.
+type GetBuildResultOperatorEvaluatorTestsTransport struct {
+}
+
+// ValidateGetBuildResultOperatorEvaluatorTestsTransport checks decoded JSON before it becomes a service value.
+func ValidateGetBuildResultOperatorEvaluatorTestsTransport(value *GetBuildResultOperatorEvaluatorTestsTransport) (err error) {
+	if value == nil {
+		return goa.MissingFieldError("body", "JSON value")
+	}
+
 	return err
 }
 
@@ -2511,6 +2657,12 @@ type GetBuildResultStartedBuildTransport struct {
 	// Number of finished flows in the agreed Story. Zero means no test of this
 	// change's Story was required.
 	RequiredTestCount *int `json:"required_test_count"`
+	// Whether the user has taken this build: building until a verification of it
+	// passes; passed with the commits to merge; merged once the branch checked out
+	// in the project folder holds both commits of one passed run; dropped once the
+	// user dropped it. A project has one open build, and another change is built
+	// only once it is merged or dropped.
+	Taking *GetBuildResultBuildTakingTransport `json:"taking"`
 }
 
 // ValidateGetBuildResultStartedBuildTransport checks decoded JSON before it becomes a service value.
@@ -2536,6 +2688,9 @@ func ValidateGetBuildResultStartedBuildTransport(value *GetBuildResultStartedBui
 	if value.RequiredTestCount == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("required_test_count", "body"))
 	}
+	if value.Taking == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("taking", "body"))
+	}
 	if value.StartedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.started_at", *value.StartedAt, goa.FormatDateTime))
 	}
@@ -2553,6 +2708,30 @@ func ValidateGetBuildResultStartedBuildTransport(value *GetBuildResultStartedBui
 		if *value.RequiredTestCount < 0 {
 			err = goa.MergeErrors(err, goa.InvalidRangeError("body.required_test_count", *value.RequiredTestCount, 0, true))
 		}
+	}
+	if value.Taking != nil {
+
+		if err2 := value.Taking.Validate(); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		} else {
+			switch string(value.Taking.Kind()) {
+			case "passed":
+				actual, _ := value.Taking.AsPassed()
+				if actual != nil {
+					if err2 := ValidateGetBuildResultBuildPassedTransport(actual); err2 != nil {
+						err = goa.MergeErrors(err, err2)
+					}
+				}
+			case "dropped":
+				actual, _ := value.Taking.AsDropped()
+				if actual != nil {
+					if err2 := ValidateGetBuildResultBuildDroppedTransport(actual); err2 != nil {
+						err = goa.MergeErrors(err, err2)
+					}
+				}
+			}
+		}
+
 	}
 	return err
 }
@@ -10126,6 +10305,290 @@ func (u DeclineRevisionResultApprovalTestSourceTransport) MarshalJSON() ([]byte,
 	return json.Marshal(fields)
 }
 
+// GetBuildResultBuildPassedTestSourceTransport stores exactly one selected Goa OneOf branch.
+type GetBuildResultBuildPassedTestSourceTransport struct {
+	kind         GetBuildResultBuildPassedTestSourceTransportKind
+	Evaluator    *GetBuildResultOperatorEvaluatorTestsTransport
+	WrittenTests *GetBuildResultBuildPassedTestsTransport
+}
+
+// GetBuildResultBuildPassedTestSourceTransportKind identifies the selected branch of GetBuildResultBuildPassedTestSourceTransport.
+type GetBuildResultBuildPassedTestSourceTransportKind string
+
+const (
+	GetBuildResultBuildPassedTestSourceTransportKindEvaluator    GetBuildResultBuildPassedTestSourceTransportKind = "evaluator"
+	GetBuildResultBuildPassedTestSourceTransportKindWrittenTests GetBuildResultBuildPassedTestSourceTransportKind = "written_tests"
+)
+
+// Kind returns the selected branch.
+func (u GetBuildResultBuildPassedTestSourceTransport) Kind() GetBuildResultBuildPassedTestSourceTransportKind {
+	return u.kind
+}
+
+// NewGetBuildResultBuildPassedTestSourceTransportEvaluator creates GetBuildResultBuildPassedTestSourceTransport with its evaluator branch selected.
+func NewGetBuildResultBuildPassedTestSourceTransportEvaluator(value *GetBuildResultOperatorEvaluatorTestsTransport) GetBuildResultBuildPassedTestSourceTransport {
+	return GetBuildResultBuildPassedTestSourceTransport{kind: GetBuildResultBuildPassedTestSourceTransportKindEvaluator, Evaluator: value}
+}
+
+// AsEvaluator returns the evaluator branch when it is selected.
+func (u GetBuildResultBuildPassedTestSourceTransport) AsEvaluator() (_ *GetBuildResultOperatorEvaluatorTestsTransport, ok bool) {
+	if u.kind != GetBuildResultBuildPassedTestSourceTransportKindEvaluator {
+		return
+	}
+	return u.Evaluator, true
+}
+
+// SetEvaluator selects the evaluator branch.
+func (u *GetBuildResultBuildPassedTestSourceTransport) SetEvaluator(value *GetBuildResultOperatorEvaluatorTestsTransport) {
+	u.kind = GetBuildResultBuildPassedTestSourceTransportKindEvaluator
+	u.Evaluator = value
+}
+
+// NewGetBuildResultBuildPassedTestSourceTransportWrittenTests creates GetBuildResultBuildPassedTestSourceTransport with its written_tests branch selected.
+func NewGetBuildResultBuildPassedTestSourceTransportWrittenTests(value *GetBuildResultBuildPassedTestsTransport) GetBuildResultBuildPassedTestSourceTransport {
+	return GetBuildResultBuildPassedTestSourceTransport{kind: GetBuildResultBuildPassedTestSourceTransportKindWrittenTests, WrittenTests: value}
+}
+
+// AsWrittenTests returns the written_tests branch when it is selected.
+func (u GetBuildResultBuildPassedTestSourceTransport) AsWrittenTests() (_ *GetBuildResultBuildPassedTestsTransport, ok bool) {
+	if u.kind != GetBuildResultBuildPassedTestSourceTransportKindWrittenTests {
+		return
+	}
+	return u.WrittenTests, true
+}
+
+// SetWrittenTests selects the written_tests branch.
+func (u *GetBuildResultBuildPassedTestSourceTransport) SetWrittenTests(value *GetBuildResultBuildPassedTestsTransport) {
+	u.kind = GetBuildResultBuildPassedTestSourceTransportKindWrittenTests
+	u.WrittenTests = value
+}
+
+// Validate checks that one complete branch is selected.
+func (u GetBuildResultBuildPassedTestSourceTransport) Validate() error {
+	switch u.kind {
+	case GetBuildResultBuildPassedTestSourceTransportKindEvaluator:
+		if u.Evaluator == nil {
+			return goa.MissingFieldError("value", "GetBuildResultBuildPassedTestSourceTransport")
+		}
+		return nil
+	case GetBuildResultBuildPassedTestSourceTransportKindWrittenTests:
+		if u.WrittenTests == nil {
+			return goa.MissingFieldError("value", "GetBuildResultBuildPassedTestSourceTransport")
+		}
+		return nil
+	case "":
+		return goa.MissingFieldError("source", "GetBuildResultBuildPassedTestSourceTransport")
+	default:
+		return goa.InvalidEnumValueError("source", u.kind, []any{string(GetBuildResultBuildPassedTestSourceTransportKindEvaluator), string(GetBuildResultBuildPassedTestSourceTransportKindWrittenTests)})
+	}
+}
+
+// MarshalJSON writes the selected branch name and value.
+func (u GetBuildResultBuildPassedTestSourceTransport) MarshalJSON() ([]byte, error) {
+	if err := u.Validate(); err != nil {
+		return nil, err
+	}
+	var value any
+	switch u.kind {
+	case GetBuildResultBuildPassedTestSourceTransportKindEvaluator:
+		value = u.Evaluator
+	case GetBuildResultBuildPassedTestSourceTransportKindWrittenTests:
+		value = u.WrittenTests
+	default:
+		return nil, fmt.Errorf("unexpected GetBuildResultBuildPassedTestSourceTransport branch %q", u.kind)
+	}
+	data, err := json.Marshal(value)
+	if err != nil {
+		return nil, err
+	}
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(data, &fields); err != nil {
+		return nil, err
+	}
+	if fields == nil {
+		return nil, goa.InvalidFieldTypeError("source", nil, "non-null JSON object")
+	}
+	if _, exists := fields["source"]; exists {
+		return nil, fmt.Errorf("GetBuildResultBuildPassedTestSourceTransport branch already contains discriminator %q", "source")
+	}
+	tag, err := json.Marshal(string(u.kind))
+	if err != nil {
+		return nil, err
+	}
+	fields["source"] = tag
+	return json.Marshal(fields)
+}
+
+// GetBuildResultBuildTakingTransport stores exactly one selected Goa OneOf branch.
+type GetBuildResultBuildTakingTransport struct {
+	kind     GetBuildResultBuildTakingTransportKind
+	Building *GetBuildResultBuildBuildingTransport
+	Passed   *GetBuildResultBuildPassedTransport
+	Merged   *GetBuildResultBuildMergedTransport
+	Dropped  *GetBuildResultBuildDroppedTransport
+}
+
+// GetBuildResultBuildTakingTransportKind identifies the selected branch of GetBuildResultBuildTakingTransport.
+type GetBuildResultBuildTakingTransportKind string
+
+const (
+	GetBuildResultBuildTakingTransportKindBuilding GetBuildResultBuildTakingTransportKind = "building"
+	GetBuildResultBuildTakingTransportKindPassed   GetBuildResultBuildTakingTransportKind = "passed"
+	GetBuildResultBuildTakingTransportKindMerged   GetBuildResultBuildTakingTransportKind = "merged"
+	GetBuildResultBuildTakingTransportKindDropped  GetBuildResultBuildTakingTransportKind = "dropped"
+)
+
+// Kind returns the selected branch.
+func (u GetBuildResultBuildTakingTransport) Kind() GetBuildResultBuildTakingTransportKind {
+	return u.kind
+}
+
+// NewGetBuildResultBuildTakingTransportBuilding creates GetBuildResultBuildTakingTransport with its building branch selected.
+func NewGetBuildResultBuildTakingTransportBuilding(value *GetBuildResultBuildBuildingTransport) GetBuildResultBuildTakingTransport {
+	return GetBuildResultBuildTakingTransport{kind: GetBuildResultBuildTakingTransportKindBuilding, Building: value}
+}
+
+// AsBuilding returns the building branch when it is selected.
+func (u GetBuildResultBuildTakingTransport) AsBuilding() (_ *GetBuildResultBuildBuildingTransport, ok bool) {
+	if u.kind != GetBuildResultBuildTakingTransportKindBuilding {
+		return
+	}
+	return u.Building, true
+}
+
+// SetBuilding selects the building branch.
+func (u *GetBuildResultBuildTakingTransport) SetBuilding(value *GetBuildResultBuildBuildingTransport) {
+	u.kind = GetBuildResultBuildTakingTransportKindBuilding
+	u.Building = value
+}
+
+// NewGetBuildResultBuildTakingTransportPassed creates GetBuildResultBuildTakingTransport with its passed branch selected.
+func NewGetBuildResultBuildTakingTransportPassed(value *GetBuildResultBuildPassedTransport) GetBuildResultBuildTakingTransport {
+	return GetBuildResultBuildTakingTransport{kind: GetBuildResultBuildTakingTransportKindPassed, Passed: value}
+}
+
+// AsPassed returns the passed branch when it is selected.
+func (u GetBuildResultBuildTakingTransport) AsPassed() (_ *GetBuildResultBuildPassedTransport, ok bool) {
+	if u.kind != GetBuildResultBuildTakingTransportKindPassed {
+		return
+	}
+	return u.Passed, true
+}
+
+// SetPassed selects the passed branch.
+func (u *GetBuildResultBuildTakingTransport) SetPassed(value *GetBuildResultBuildPassedTransport) {
+	u.kind = GetBuildResultBuildTakingTransportKindPassed
+	u.Passed = value
+}
+
+// NewGetBuildResultBuildTakingTransportMerged creates GetBuildResultBuildTakingTransport with its merged branch selected.
+func NewGetBuildResultBuildTakingTransportMerged(value *GetBuildResultBuildMergedTransport) GetBuildResultBuildTakingTransport {
+	return GetBuildResultBuildTakingTransport{kind: GetBuildResultBuildTakingTransportKindMerged, Merged: value}
+}
+
+// AsMerged returns the merged branch when it is selected.
+func (u GetBuildResultBuildTakingTransport) AsMerged() (_ *GetBuildResultBuildMergedTransport, ok bool) {
+	if u.kind != GetBuildResultBuildTakingTransportKindMerged {
+		return
+	}
+	return u.Merged, true
+}
+
+// SetMerged selects the merged branch.
+func (u *GetBuildResultBuildTakingTransport) SetMerged(value *GetBuildResultBuildMergedTransport) {
+	u.kind = GetBuildResultBuildTakingTransportKindMerged
+	u.Merged = value
+}
+
+// NewGetBuildResultBuildTakingTransportDropped creates GetBuildResultBuildTakingTransport with its dropped branch selected.
+func NewGetBuildResultBuildTakingTransportDropped(value *GetBuildResultBuildDroppedTransport) GetBuildResultBuildTakingTransport {
+	return GetBuildResultBuildTakingTransport{kind: GetBuildResultBuildTakingTransportKindDropped, Dropped: value}
+}
+
+// AsDropped returns the dropped branch when it is selected.
+func (u GetBuildResultBuildTakingTransport) AsDropped() (_ *GetBuildResultBuildDroppedTransport, ok bool) {
+	if u.kind != GetBuildResultBuildTakingTransportKindDropped {
+		return
+	}
+	return u.Dropped, true
+}
+
+// SetDropped selects the dropped branch.
+func (u *GetBuildResultBuildTakingTransport) SetDropped(value *GetBuildResultBuildDroppedTransport) {
+	u.kind = GetBuildResultBuildTakingTransportKindDropped
+	u.Dropped = value
+}
+
+// Validate checks that one complete branch is selected.
+func (u GetBuildResultBuildTakingTransport) Validate() error {
+	switch u.kind {
+	case GetBuildResultBuildTakingTransportKindBuilding:
+		if u.Building == nil {
+			return goa.MissingFieldError("value", "GetBuildResultBuildTakingTransport")
+		}
+		return nil
+	case GetBuildResultBuildTakingTransportKindPassed:
+		if u.Passed == nil {
+			return goa.MissingFieldError("value", "GetBuildResultBuildTakingTransport")
+		}
+		return nil
+	case GetBuildResultBuildTakingTransportKindMerged:
+		if u.Merged == nil {
+			return goa.MissingFieldError("value", "GetBuildResultBuildTakingTransport")
+		}
+		return nil
+	case GetBuildResultBuildTakingTransportKindDropped:
+		if u.Dropped == nil {
+			return goa.MissingFieldError("value", "GetBuildResultBuildTakingTransport")
+		}
+		return nil
+	case "":
+		return goa.MissingFieldError("state", "GetBuildResultBuildTakingTransport")
+	default:
+		return goa.InvalidEnumValueError("state", u.kind, []any{string(GetBuildResultBuildTakingTransportKindBuilding), string(GetBuildResultBuildTakingTransportKindPassed), string(GetBuildResultBuildTakingTransportKindMerged), string(GetBuildResultBuildTakingTransportKindDropped)})
+	}
+}
+
+// MarshalJSON writes the selected branch name and value.
+func (u GetBuildResultBuildTakingTransport) MarshalJSON() ([]byte, error) {
+	if err := u.Validate(); err != nil {
+		return nil, err
+	}
+	var value any
+	switch u.kind {
+	case GetBuildResultBuildTakingTransportKindBuilding:
+		value = u.Building
+	case GetBuildResultBuildTakingTransportKindPassed:
+		value = u.Passed
+	case GetBuildResultBuildTakingTransportKindMerged:
+		value = u.Merged
+	case GetBuildResultBuildTakingTransportKindDropped:
+		value = u.Dropped
+	default:
+		return nil, fmt.Errorf("unexpected GetBuildResultBuildTakingTransport branch %q", u.kind)
+	}
+	data, err := json.Marshal(value)
+	if err != nil {
+		return nil, err
+	}
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(data, &fields); err != nil {
+		return nil, err
+	}
+	if fields == nil {
+		return nil, goa.InvalidFieldTypeError("state", nil, "non-null JSON object")
+	}
+	if _, exists := fields["state"]; exists {
+		return nil, fmt.Errorf("GetBuildResultBuildTakingTransport branch already contains discriminator %q", "state")
+	}
+	tag, err := json.Marshal(string(u.kind))
+	if err != nil {
+		return nil, err
+	}
+	fields["state"] = tag
+	return json.Marshal(fields)
+}
+
 // GetBuildResultbuildTransport stores exactly one selected Goa OneOf branch.
 type GetBuildResultbuildTransport struct {
 	kind       GetBuildResultbuildTransportKind
@@ -15595,8 +16058,72 @@ func encodeApprovalItemToReviseChangeResultApprovalItemTransport2(v *surla.Appro
 	return res
 }
 
+func encodeBuildBuildingToGetBuildResultBuildBuildingTransport(v *surla.BuildBuilding) *GetBuildResultBuildBuildingTransport {
+	res := &GetBuildResultBuildBuildingTransport{}
+
+	return res
+}
+
+func encodeBuildDroppedToGetBuildResultBuildDroppedTransport(v *surla.BuildDropped) *GetBuildResultBuildDroppedTransport {
+	res := &GetBuildResultBuildDroppedTransport{}
+	res.KeptBranches = make([]string, len(v.KeptBranches))
+	for i, val := range v.KeptBranches {
+		res.KeptBranches[i] = val
+	}
+
+	return res
+}
+
+func encodeBuildMergedToGetBuildResultBuildMergedTransport(v *surla.BuildMerged) *GetBuildResultBuildMergedTransport {
+	res := &GetBuildResultBuildMergedTransport{}
+
+	return res
+}
+
 func encodeBuildNotStartedToGetBuildResultBuildNotStartedTransport(v *surla.BuildNotStarted) *GetBuildResultBuildNotStartedTransport {
 	res := &GetBuildResultBuildNotStartedTransport{}
+
+	return res
+}
+
+func encodeBuildPassedTestsToGetBuildResultBuildPassedTestsTransport(v *surla.BuildPassedTests) *GetBuildResultBuildPassedTestsTransport {
+	res := &GetBuildResultBuildPassedTestsTransport{
+		Commit: &v.Commit,
+		Branch: &v.Branch,
+	}
+
+	return res
+}
+
+func encodeBuildPassedToGetBuildResultBuildPassedTransport(v *surla.BuildPassed) *GetBuildResultBuildPassedTransport {
+	res := &GetBuildResultBuildPassedTransport{
+		RunID:           &v.RunID,
+		CandidateCommit: &v.CandidateCommit,
+		CandidateBranch: &v.CandidateBranch,
+		BaseInBranch:    &v.BaseInBranch,
+	}
+	var testsValue GetBuildResultBuildPassedTestSourceTransport
+	switch string(v.Tests.Kind()) {
+	case "evaluator":
+		actual, _ := v.Tests.AsEvaluator()
+		var obj *GetBuildResultOperatorEvaluatorTestsTransport
+		if actual != nil {
+			obj = encodeOperatorEvaluatorTestsToGetBuildResultOperatorEvaluatorTestsTransport(actual)
+		}
+		u := testsValue
+		u.SetEvaluator((*GetBuildResultOperatorEvaluatorTestsTransport)(obj))
+		testsValue = u
+	case "written_tests":
+		actual, _ := v.Tests.AsWrittenTests()
+		var obj *GetBuildResultBuildPassedTestsTransport
+		if actual != nil {
+			obj = encodeBuildPassedTestsToGetBuildResultBuildPassedTestsTransport(actual)
+		}
+		u := testsValue
+		u.SetWrittenTests((*GetBuildResultBuildPassedTestsTransport)(obj))
+		testsValue = u
+	}
+	res.Tests = &testsValue
 
 	return res
 }
@@ -16013,6 +16540,12 @@ func encodeOperatorEvaluatorTestsToDeclineRevisionResultOperatorEvaluatorTestsTr
 	return res
 }
 
+func encodeOperatorEvaluatorTestsToGetBuildResultOperatorEvaluatorTestsTransport(v *surla.OperatorEvaluatorTests) *GetBuildResultOperatorEvaluatorTestsTransport {
+	res := &GetBuildResultOperatorEvaluatorTestsTransport{}
+
+	return res
+}
+
 func encodeOperatorEvaluatorTestsToGetChangeResultOperatorEvaluatorTestsTransport(v *surla.OperatorEvaluatorTests) *GetChangeResultOperatorEvaluatorTestsTransport {
 	res := &GetChangeResultOperatorEvaluatorTestsTransport{}
 
@@ -16399,6 +16932,46 @@ func encodeStartedBuildToGetBuildResultStartedBuildTransport(v *surla.StartedBui
 	}
 	res.Builder = encodeBuilderProgressToGetBuildResultBuilderProgressTransport(v.Builder)
 	res.TestWriter = encodeTestWriterProgressToGetBuildResultTestWriterProgressTransport(v.TestWriter)
+	var takingValue GetBuildResultBuildTakingTransport
+	switch string(v.Taking.Kind()) {
+	case "building":
+		actual, _ := v.Taking.AsBuilding()
+		var obj *GetBuildResultBuildBuildingTransport
+		if actual != nil {
+			obj = encodeBuildBuildingToGetBuildResultBuildBuildingTransport(actual)
+		}
+		u := takingValue
+		u.SetBuilding((*GetBuildResultBuildBuildingTransport)(obj))
+		takingValue = u
+	case "passed":
+		actual, _ := v.Taking.AsPassed()
+		var obj *GetBuildResultBuildPassedTransport
+		if actual != nil {
+			obj = encodeBuildPassedToGetBuildResultBuildPassedTransport(actual)
+		}
+		u := takingValue
+		u.SetPassed((*GetBuildResultBuildPassedTransport)(obj))
+		takingValue = u
+	case "merged":
+		actual, _ := v.Taking.AsMerged()
+		var obj *GetBuildResultBuildMergedTransport
+		if actual != nil {
+			obj = encodeBuildMergedToGetBuildResultBuildMergedTransport(actual)
+		}
+		u := takingValue
+		u.SetMerged((*GetBuildResultBuildMergedTransport)(obj))
+		takingValue = u
+	case "dropped":
+		actual, _ := v.Taking.AsDropped()
+		var obj *GetBuildResultBuildDroppedTransport
+		if actual != nil {
+			obj = encodeBuildDroppedToGetBuildResultBuildDroppedTransport(actual)
+		}
+		u := takingValue
+		u.SetDropped((*GetBuildResultBuildDroppedTransport)(obj))
+		takingValue = u
+	}
+	res.Taking = &takingValue
 
 	return res
 }

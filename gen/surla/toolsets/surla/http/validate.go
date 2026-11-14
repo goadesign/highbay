@@ -1678,6 +1678,68 @@ func ValidateApprovalItemTransport(body *ApprovalItemTransport) (err error) {
 	return
 }
 
+// ValidateBuildDroppedTransport runs the validations defined on BuildDroppedTransport.
+func ValidateBuildDroppedTransport(body *BuildDroppedTransport) (err error) {
+	if body.KeptBranches == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("kept_branches", "body"))
+	}
+	return
+}
+
+// ValidateBuildPassedTestsTransport runs the validations defined on BuildPassedTestsTransport.
+func ValidateBuildPassedTestsTransport(body *BuildPassedTestsTransport) (err error) {
+	if body.Commit == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("commit", "body"))
+	}
+	if body.Branch == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("branch", "body"))
+	}
+	if body.Commit != nil {
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.commit", *body.Commit, "^([0-9a-f]{40}|[0-9a-f]{64})$"))
+	}
+	return
+}
+
+// ValidateBuildPassedTransport runs the validations defined on BuildPassedTransport.
+func ValidateBuildPassedTransport(body *BuildPassedTransport) (err error) {
+	if body.RunID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("run_id", "body"))
+	}
+	if body.CandidateCommit == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("candidate_commit", "body"))
+	}
+	if body.CandidateBranch == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("candidate_branch", "body"))
+	}
+	if body.Tests == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("tests", "body"))
+	}
+	if body.BaseInBranch == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("base_in_branch", "body"))
+	}
+	if body.CandidateCommit != nil {
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.candidate_commit", *body.CandidateCommit, "^([0-9a-f]{40}|[0-9a-f]{64})$"))
+	}
+	if body.Tests != nil {
+
+		if err2 := body.Tests.Validate(); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		} else {
+			switch string(body.Tests.Kind()) {
+			case "written_tests":
+				actual, _ := body.Tests.AsWrittenTests()
+				if actual != nil {
+					if err2 := ValidateBuildPassedTestsTransport(actual); err2 != nil {
+						err = goa.MergeErrors(err, err2)
+					}
+				}
+			}
+		}
+
+	}
+	return
+}
+
 // ValidateBuilderAssignmentTransport runs the validations defined on BuilderAssignmentTransport.
 func ValidateBuilderAssignmentTransport(body *BuilderAssignmentTransport) (err error) {
 	if body.ChangeID == nil {
@@ -2292,6 +2354,9 @@ func ValidateStartedBuildTransport(body *StartedBuildTransport) (err error) {
 	if body.RequiredTestCount == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("required_test_count", "body"))
 	}
+	if body.Taking == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("taking", "body"))
+	}
 	if body.StartedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.started_at", *body.StartedAt, goa.FormatDateTime))
 	}
@@ -2309,6 +2374,30 @@ func ValidateStartedBuildTransport(body *StartedBuildTransport) (err error) {
 		if *body.RequiredTestCount < 0 {
 			err = goa.MergeErrors(err, goa.InvalidRangeError("body.required_test_count", *body.RequiredTestCount, 0, true))
 		}
+	}
+	if body.Taking != nil {
+
+		if err2 := body.Taking.Validate(); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		} else {
+			switch string(body.Taking.Kind()) {
+			case "passed":
+				actual, _ := body.Taking.AsPassed()
+				if actual != nil {
+					if err2 := ValidateBuildPassedTransport(actual); err2 != nil {
+						err = goa.MergeErrors(err, err2)
+					}
+				}
+			case "dropped":
+				actual, _ := body.Taking.AsDropped()
+				if actual != nil {
+					if err2 := ValidateBuildDroppedTransport(actual); err2 != nil {
+						err = goa.MergeErrors(err, err2)
+					}
+				}
+			}
+		}
+
 	}
 	return
 }

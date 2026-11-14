@@ -1029,8 +1029,47 @@ type (
 		// or written_tests with their commit and a notice.
 		TestSource ApprovalTestSource
 	}
+	// BuildBuilding is a nested type used by the generated JSON contract.
+	BuildBuilding = struct {
+	}
+	// BuildDropped is a nested type used by the generated JSON contract.
+	BuildDropped = struct {
+		// The build's own branches that exist and hold a commit made after the build's
+		// base, where its work stays (git log <branch> shows it); empty when nothing
+		// was committed for it.
+		KeptBranches []string
+	}
+	// BuildMerged is a nested type used by the generated JSON contract.
+	BuildMerged = struct {
+	}
 	// BuildNotStarted is a nested type used by the generated JSON contract.
 	BuildNotStarted = struct {
+	}
+	// BuildPassed is a nested type used by the generated JSON contract.
+	BuildPassed = struct {
+		// The newest passed run; get_verification takes it.
+		RunID string
+		// The builder's commit the run passed.
+		CandidateCommit string
+		// The builder's branch of this build, surla/build-<n>, which holds
+		// candidate_commit.
+		CandidateBranch string
+		// written_tests with the accepted tests' commit to merge after the builder's;
+		// evaluator when the project verifies with its stored evaluator, whose tests
+		// are not merged.
+		Tests BuildPassedTestSource
+		// False when the branch checked out in the project folder no longer holds the
+		// commit this build started from, because its history was rewritten: merging
+		// these commits brings that history back, and dropping the build and building
+		// again starts from the branch as it is.
+		BaseInBranch bool
+	}
+	// BuildPassedTests is a nested type used by the generated JSON contract.
+	BuildPassedTests = struct {
+		// Commit Surla recorded the accepted tests at.
+		Commit string
+		// The test writer's branch of this build, surla/tests-<n>.
+		Branch string
 	}
 	// BuilderAssignment is a nested type used by the generated JSON contract.
 	BuilderAssignment = struct {
@@ -1383,6 +1422,12 @@ type (
 		// Number of finished flows in the agreed Story. Zero means no test of this
 		// change's Story was required.
 		RequiredTestCount int
+		// Whether the user has taken this build: building until a verification of it
+		// passes; passed with the commits to merge; merged once the branch checked out
+		// in the project folder holds both commits of one passed run; dropped once the
+		// user dropped it. A project has one open build, and another change is built
+		// only once it is merged or dropped.
+		Taking BuildTaking
 	}
 	// StoryActorItem is a nested type used by the generated JSON contract.
 	StoryActorItem = struct {

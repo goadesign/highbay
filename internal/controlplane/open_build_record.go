@@ -20,9 +20,9 @@ import (
 )
 
 type (
-	// openBuildFile is the project's numbered build, including a snapshot of
-	// the agreed revision. Legacy per-change records stay separate until cutover.
-	openBuildFile struct {
+	// buildFile is the project's numbered build, including a snapshot of
+	// the agreed revision. Legacy per-change records are not read.
+	buildFile struct {
 		// ChangeID and RequestRevision identify the change and agreed revision built.
 		ChangeID        string `json:"change_id"`
 		RequestRevision string `json:"request_revision"`
@@ -38,8 +38,8 @@ type (
 		Examples           []*gensurla.ExampleItem     `json:"examples"`
 		PreservedBehaviors []string                    `json:"preserved_behaviors"`
 		// Builder and TestWriter retain assignment reads and the current verdict.
-		Builder    builderAssignment        `json:"builder"`
-		TestWriter openTestWriterAssignment `json:"test_writer"`
+		Builder    builderAssignment    `json:"builder"`
+		TestWriter testWriterAssignment `json:"test_writer"`
 		// ReportNumber distinguishes test reports within this start.
 		ReportNumber int `json:"report_number"`
 		// Number names this build's surla/build-N and surla/tests-N branches.
@@ -52,9 +52,9 @@ type (
 		MadeFrom madeFromSnapshot `json:"made_from"`
 	}
 
-	// openTestWriterAssignment derives its folder from the numbered build,
+	// testWriterAssignment derives its folder from the numbered build,
 	// rather than storing a path from an older checkout.
-	openTestWriterAssignment struct {
+	testWriterAssignment struct {
 		// State selects exactly the verdict fields permitted below.
 		State string `json:"state"`
 		// Read records that the writer read this assignment in full.
@@ -80,25 +80,25 @@ const (
 
 // decodeOpenBuild rejects unknown fields, trailing data and inconsistent build
 // states. It does not apply the legacy filename or stored-folder contract.
-func decodeOpenBuild(data []byte) (openBuildFile, error) {
-	var saved openBuildFile
+func decodeOpenBuild(data []byte) (buildFile, error) {
+	var saved buildFile
 	decoder := json.NewDecoder(bytes.NewReader(data))
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(&saved); err != nil {
-		return openBuildFile{}, fmt.Errorf("decode open build: %w", err)
+		return buildFile{}, fmt.Errorf("decode open build: %w", err)
 	}
 	if err := decoder.Decode(&struct{}{}); !errors.Is(err, io.EOF) {
-		return openBuildFile{}, errors.New("decode open build: trailing data")
+		return buildFile{}, errors.New("decode open build: trailing data")
 	}
 	if err := validateOpenBuild(saved); err != nil {
-		return openBuildFile{}, err
+		return buildFile{}, err
 	}
 	return saved, nil
 }
 
 // validateOpenBuild preserves the legacy state/report/time invariants and adds
 // the numbered build's base and immutable provenance.
-func validateOpenBuild(saved openBuildFile) error {
+func validateOpenBuild(saved buildFile) error {
 	if saved.ChangeID == "" || saved.RequestRevision == "" || saved.StartedAt.IsZero() {
 		return errors.New("open build has no change, revision or start time")
 	}
@@ -145,24 +145,24 @@ func validateOpenBuild(saved openBuildFile) error {
 }
 
 // loadOpenBuild returns absence as a value; malformed or unreadable records fail.
-func (s *cardStore) loadOpenBuild() (openBuildFile, bool, error) {
+func (s *cardStore) loadOpenBuild() (buildFile, bool, error) {
 	if s.lock == nil {
-		return openBuildFile{}, false, errCardsClosed
+		return buildFile{}, false, errCardsClosed
 	}
 	f, err := os.OpenFile(filepath.Join(s.dir, openBuildRecordFile), os.O_RDONLY|syscall.O_NOFOLLOW|syscall.O_NONBLOCK, 0)
 	if errors.Is(err, fs.ErrNotExist) {
-		return openBuildFile{}, false, nil
+		return buildFile{}, false, nil
 	}
 	if err != nil {
-		return openBuildFile{}, false, fmt.Errorf("read open build: %w", err)
+		return buildFile{}, false, fmt.Errorf("read open build: %w", err)
 	}
 	info, statErr := f.Stat()
 	if statErr != nil || !info.Mode().IsRegular() {
-		return openBuildFile{}, false, errors.Join(errors.New("record is not a regular file"), statErr, f.Close())
+		return buildFile{}, false, errors.Join(errors.New("record is not a regular file"), statErr, f.Close())
 	}
 	data, readErr := io.ReadAll(f)
 	if err := errors.Join(readErr, f.Close()); err != nil {
-		return openBuildFile{}, false, fmt.Errorf("read open build: %w", err)
+		return buildFile{}, false, fmt.Errorf("read open build: %w", err)
 	}
 	saved, err := decodeOpenBuild(data)
 	return saved, err == nil, err
@@ -171,7 +171,7 @@ func (s *cardStore) loadOpenBuild() (openBuildFile, bool, error) {
 // saveOpenBuild atomically replaces the numbered record. Callers hold c.mu;
 // errors before rename preserve the previous record, and a directory-sync error
 // explicitly reports that publication happened but crash durability is unknown.
-func (s *cardStore) saveOpenBuild(saved openBuildFile) error {
+func (s *cardStore) saveOpenBuild(saved buildFile) error {
 	if s.lock == nil {
 		return errCardsClosed
 	}

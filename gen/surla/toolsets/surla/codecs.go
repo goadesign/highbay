@@ -4633,6 +4633,292 @@ var getBuildResultFields = []tools.FieldMetadata{
 			},
 		},
 	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("taking")},
+		JSONType:    "object",
+		Description: "Whether the user has taken this build: building until a verification of it passes; passed with the commits to merge; merged once the branch checked out in the project folder holds both commits of one passed run; dropped once the user dropped it. A project has one open build, and another change is built only once it is merged or dropped.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("state")},
+				Value:         "started",
+			},
+		},
+	},
+	{
+		Path:     []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("taking"), tools.FixedField("state")},
+		JSONType: "string",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("state")},
+				Value:         "started",
+			},
+		},
+		DiscriminatorValues: []string{
+			"building",
+			"passed",
+			"merged",
+			"dropped",
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("taking")},
+		JSONType:    "object",
+		Description: "No verification of this build has passed yet, so there is nothing to merge: the builder finishes it, or the user drops it.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("state")},
+				Value:         "started",
+			},
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("taking"), tools.FixedField("state")},
+				Value:         "building",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("taking")},
+		JSONType:    "object",
+		Description: "A verification of this build passed and the user has not merged it: the commits of its newest passed run, which the user merges into the branch checked out in the project folder, the builder's first, then the tests'.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("state")},
+				Value:         "started",
+			},
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("taking"), tools.FixedField("state")},
+				Value:         "passed",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("taking"), tools.FixedField("run_id")},
+		JSONType:    "string",
+		Description: "The newest passed run; get_verification takes it.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("state")},
+				Value:         "started",
+			},
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("taking"), tools.FixedField("state")},
+				Value:         "passed",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("taking"), tools.FixedField("candidate_commit")},
+		JSONType:    "string",
+		Description: "The builder's commit the run passed.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("state")},
+				Value:         "started",
+			},
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("taking"), tools.FixedField("state")},
+				Value:         "passed",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("taking"), tools.FixedField("candidate_branch")},
+		JSONType:    "string",
+		Description: "The builder's branch of this build, surla/build-<n>, which holds candidate_commit.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("state")},
+				Value:         "started",
+			},
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("taking"), tools.FixedField("state")},
+				Value:         "passed",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("taking"), tools.FixedField("tests")},
+		JSONType:    "object",
+		Description: "written_tests with the accepted tests' commit to merge after the builder's; evaluator when the project verifies with its stored evaluator, whose tests are not merged.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("state")},
+				Value:         "started",
+			},
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("taking"), tools.FixedField("state")},
+				Value:         "passed",
+			},
+		},
+	},
+	{
+		Path:     []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("taking"), tools.FixedField("tests"), tools.FixedField("source")},
+		JSONType: "string",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("state")},
+				Value:         "started",
+			},
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("taking"), tools.FixedField("state")},
+				Value:         "passed",
+			},
+		},
+		DiscriminatorValues: []string{
+			"evaluator",
+			"written_tests",
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("taking"), tools.FixedField("tests")},
+		JSONType:    "object",
+		Description: "The run used the operator's evaluator: the one stored with surla verification set, or the one named on surla verify's command line.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("state")},
+				Value:         "started",
+			},
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("taking"), tools.FixedField("state")},
+				Value:         "passed",
+			},
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("taking"), tools.FixedField("tests"), tools.FixedField("source")},
+				Value:         "evaluator",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("taking"), tools.FixedField("tests")},
+		JSONType:    "object",
+		Description: "The accepted tests' commit a passed run used, which the user merges after the builder's commit, and the test writer's branch that holds it.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("state")},
+				Value:         "started",
+			},
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("taking"), tools.FixedField("state")},
+				Value:         "passed",
+			},
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("taking"), tools.FixedField("tests"), tools.FixedField("source")},
+				Value:         "written_tests",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("taking"), tools.FixedField("tests"), tools.FixedField("commit")},
+		JSONType:    "string",
+		Description: "Commit Surla recorded the accepted tests at.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("state")},
+				Value:         "started",
+			},
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("taking"), tools.FixedField("state")},
+				Value:         "passed",
+			},
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("taking"), tools.FixedField("tests"), tools.FixedField("source")},
+				Value:         "written_tests",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("taking"), tools.FixedField("tests"), tools.FixedField("branch")},
+		JSONType:    "string",
+		Description: "The test writer's branch of this build, surla/tests-<n>.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("state")},
+				Value:         "started",
+			},
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("taking"), tools.FixedField("state")},
+				Value:         "passed",
+			},
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("taking"), tools.FixedField("tests"), tools.FixedField("source")},
+				Value:         "written_tests",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("taking"), tools.FixedField("base_in_branch")},
+		JSONType:    "boolean",
+		Description: "False when the branch checked out in the project folder no longer holds the commit this build started from, because its history was rewritten: merging these commits brings that history back, and dropping the build and building again starts from the branch as it is.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("state")},
+				Value:         "started",
+			},
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("taking"), tools.FixedField("state")},
+				Value:         "passed",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("taking")},
+		JSONType:    "object",
+		Description: "The branch checked out in the project folder holds both commits of a passed run of this build, by merge or by a squash commit that holds every file they changed as they have it. Another change can be built.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("state")},
+				Value:         "started",
+			},
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("taking"), tools.FixedField("state")},
+				Value:         "merged",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("taking")},
+		JSONType:    "object",
+		Description: "The user dropped this build with drop_build: Surla builds nothing on it, no role has work for it, and another change can be built.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("state")},
+				Value:         "started",
+			},
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("taking"), tools.FixedField("state")},
+				Value:         "dropped",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("taking"), tools.FixedField("kept_branches")},
+		JSONType:    "array",
+		Description: "The build's own branches that exist and hold a commit made after the build's base, where its work stays (git log <branch> shows it); empty when nothing was committed for it.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("state")},
+				Value:         "started",
+			},
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("taking"), tools.FixedField("state")},
+				Value:         "dropped",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("taking"), tools.FixedField("kept_branches"), tools.DynamicField{}},
+		JSONType:    "string",
+		Description: "The build's own branches that exist and hold a commit made after the build's base, where its work stays (git log <branch> shows it); empty when nothing was committed for it.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("state")},
+				Value:         "started",
+			},
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("taking"), tools.FixedField("state")},
+				Value:         "dropped",
+			},
+		},
+	},
 }
 var getBuilderAssignmentPayloadFields = []tools.FieldMetadata{
 	{
@@ -24456,6 +24742,13 @@ func validateGetBuildResultStartedBuildTransportJSONValue(path string, value any
 			); err != nil {
 				return err
 			}
+		case "taking":
+			if err := validateGetBuildResultStartedBuildTransportTakingJSONValue(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Whether the user has taken this build: building until a verification of it passes; passed with the commits to merge; merged once the branch checked out in the project folder holds both commits of one passed run; dropped once the user dropped it. A project has one open build, and another change is built only once it is merged or dropped.",
+			); err != nil {
+				return err
+			}
 		case "test_writer":
 			if err := validateGetBuildResultTestWriterProgressTransportJSONValue(
 				generatedJSONChildPath(path, key, false),
@@ -24470,6 +24763,7 @@ func validateGetBuildResultStartedBuildTransportJSONValue(path string, value any
 				"request_revision",
 				"required_test_count",
 				"started_at",
+				"taking",
 				"test_writer",
 			})
 		}
@@ -24507,6 +24801,226 @@ func validateGetBuildResultBuilderProgressTransportJSONValue(path string, value 
 		default:
 			return unknownJSONFieldError(path, key, []string{
 				"read",
+			})
+		}
+	}
+	return nil
+}
+
+// validateGetBuildResultStartedBuildTransportTakingJSONValue checks one value whose JSON shape is fixed by the generated Goa type.
+func validateGetBuildResultStartedBuildTransportTakingJSONValue(path string, value any, description string) error {
+	field := path
+	if field == "" {
+		field = "$payload"
+	}
+	if value == nil {
+		return invalidGeneratedFieldTypeError(field, "object", "null", description)
+	}
+	typed, ok := value.(map[string]any)
+	if !ok {
+		return invalidGeneratedFieldTypeError(field, "object", decodedJSONType(value), description)
+	}
+	rawDiscriminator, discriminatorPresent := typed["state"]
+	discriminator, ok := rawDiscriminator.(string)
+	if !ok {
+		return invalidJSONUnionDiscriminator(generatedJSONChildPath(path, "state", false), rawDiscriminator, discriminatorPresent, []string{"building", "passed", "merged", "dropped"})
+	}
+	branch := make(map[string]any, len(typed)-1)
+	for key, item := range typed {
+		if key != "state" {
+			branch[key] = item
+		}
+	}
+	switch discriminator {
+	case "building":
+		return validateProposeChangeResultOperatorEvaluatorTestsTransportJSONValue(path, branch, "")
+	case "passed":
+		return validateGetBuildResultBuildPassedTransportJSONValue(path, branch, "")
+	case "merged":
+		return validateProposeChangeResultOperatorEvaluatorTestsTransportJSONValue(path, branch, "")
+	case "dropped":
+		return validateGetBuildResultBuildDroppedTransportJSONValue(path, branch, "")
+	default:
+		return invalidJSONUnionDiscriminator(generatedJSONChildPath(path, "state", false), discriminator, true, []string{"building", "passed", "merged", "dropped"})
+	}
+}
+
+// validateGetBuildResultBuildPassedTransportJSONValue checks one value whose JSON shape is fixed by the generated Goa type.
+func validateGetBuildResultBuildPassedTransportJSONValue(path string, value any, description string) error {
+	field := path
+	if field == "" {
+		field = "$payload"
+	}
+	if value == nil {
+		return invalidGeneratedFieldTypeError(field, "object", "null", description)
+	}
+	typed, ok := value.(map[string]any)
+	if !ok {
+		return invalidGeneratedFieldTypeError(field, "object", decodedJSONType(value), description)
+	}
+	keys := make([]string, 0, len(typed))
+	for key := range typed {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		switch key {
+		case "base_in_branch":
+			if err := validateBooleanJSONValue(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "False when the branch checked out in the project folder no longer holds the commit this build started from, because its history was rewritten: merging these commits brings that history back, and dropping the build and building again starts from the branch as it is.",
+			); err != nil {
+				return err
+			}
+		case "candidate_branch":
+			if err := validateStringJSONValue(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "The builder's branch of this build, surla/build-<n>, which holds candidate_commit.",
+			); err != nil {
+				return err
+			}
+		case "candidate_commit":
+			if err := validateStringJSONValue(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "The builder's commit the run passed.",
+			); err != nil {
+				return err
+			}
+		case "run_id":
+			if err := validateStringJSONValue(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "The newest passed run; get_verification takes it.",
+			); err != nil {
+				return err
+			}
+		case "tests":
+			if err := validateGetBuildResultBuildPassedTransportTestsJSONValue(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "written_tests with the accepted tests' commit to merge after the builder's; evaluator when the project verifies with its stored evaluator, whose tests are not merged.",
+			); err != nil {
+				return err
+			}
+		default:
+			return unknownJSONFieldError(path, key, []string{
+				"base_in_branch",
+				"candidate_branch",
+				"candidate_commit",
+				"run_id",
+				"tests",
+			})
+		}
+	}
+	return nil
+}
+
+// validateGetBuildResultBuildPassedTransportTestsJSONValue checks one value whose JSON shape is fixed by the generated Goa type.
+func validateGetBuildResultBuildPassedTransportTestsJSONValue(path string, value any, description string) error {
+	field := path
+	if field == "" {
+		field = "$payload"
+	}
+	if value == nil {
+		return invalidGeneratedFieldTypeError(field, "object", "null", description)
+	}
+	typed, ok := value.(map[string]any)
+	if !ok {
+		return invalidGeneratedFieldTypeError(field, "object", decodedJSONType(value), description)
+	}
+	rawDiscriminator, discriminatorPresent := typed["source"]
+	discriminator, ok := rawDiscriminator.(string)
+	if !ok {
+		return invalidJSONUnionDiscriminator(generatedJSONChildPath(path, "source", false), rawDiscriminator, discriminatorPresent, []string{"evaluator", "written_tests"})
+	}
+	branch := make(map[string]any, len(typed)-1)
+	for key, item := range typed {
+		if key != "source" {
+			branch[key] = item
+		}
+	}
+	switch discriminator {
+	case "evaluator":
+		return validateProposeChangeResultOperatorEvaluatorTestsTransportJSONValue(path, branch, "")
+	case "written_tests":
+		return validateGetBuildResultBuildPassedTestsTransportJSONValue(path, branch, "")
+	default:
+		return invalidJSONUnionDiscriminator(generatedJSONChildPath(path, "source", false), discriminator, true, []string{"evaluator", "written_tests"})
+	}
+}
+
+// validateGetBuildResultBuildPassedTestsTransportJSONValue checks one value whose JSON shape is fixed by the generated Goa type.
+func validateGetBuildResultBuildPassedTestsTransportJSONValue(path string, value any, description string) error {
+	field := path
+	if field == "" {
+		field = "$payload"
+	}
+	if value == nil {
+		return invalidGeneratedFieldTypeError(field, "object", "null", description)
+	}
+	typed, ok := value.(map[string]any)
+	if !ok {
+		return invalidGeneratedFieldTypeError(field, "object", decodedJSONType(value), description)
+	}
+	keys := make([]string, 0, len(typed))
+	for key := range typed {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		switch key {
+		case "branch":
+			if err := validateStringJSONValue(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "The test writer's branch of this build, surla/tests-<n>.",
+			); err != nil {
+				return err
+			}
+		case "commit":
+			if err := validateStringJSONValue(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Commit Surla recorded the accepted tests at.",
+			); err != nil {
+				return err
+			}
+		default:
+			return unknownJSONFieldError(path, key, []string{
+				"branch",
+				"commit",
+			})
+		}
+	}
+	return nil
+}
+
+// validateGetBuildResultBuildDroppedTransportJSONValue checks one value whose JSON shape is fixed by the generated Goa type.
+func validateGetBuildResultBuildDroppedTransportJSONValue(path string, value any, description string) error {
+	field := path
+	if field == "" {
+		field = "$payload"
+	}
+	if value == nil {
+		return invalidGeneratedFieldTypeError(field, "object", "null", description)
+	}
+	typed, ok := value.(map[string]any)
+	if !ok {
+		return invalidGeneratedFieldTypeError(field, "object", decodedJSONType(value), description)
+	}
+	keys := make([]string, 0, len(typed))
+	for key := range typed {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		switch key {
+		case "kept_branches":
+			if err := validateProposeChangePayloadCP1AnalysisAmbiguityTransportOptionsJSONValue(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "The build's own branches that exist and hold a commit made after the build's base, where its work stays (git log <branch> shows it); empty when nothing was committed for it.",
+			); err != nil {
+				return err
+			}
+		default:
+			return unknownJSONFieldError(path, key, []string{
+				"kept_branches",
 			})
 		}
 	}
@@ -26086,6 +26600,44 @@ func decodeStartedBuildTransportToStartedBuild(v *toolhttp.StartedBuildTransport
 	}
 	res.Builder = decodeBuilderProgressTransportToBuilderProgress(v.Builder)
 	res.TestWriter = decodeTestWriterProgressTransportToTestWriterProgress(v.TestWriter)
+	switch string(v.Taking.Kind()) {
+	case "building":
+		actual, _ := v.Taking.AsBuilding()
+		var obj *BuildBuilding
+		if actual != nil {
+			obj = decodeBuildBuildingTransportToBuildBuilding(actual)
+		}
+		u := res.Taking
+		u.SetBuilding((*BuildBuilding)(obj))
+		res.Taking = u
+	case "passed":
+		actual, _ := v.Taking.AsPassed()
+		var obj *BuildPassed
+		if actual != nil {
+			obj = decodeBuildPassedTransportToBuildPassed(actual)
+		}
+		u := res.Taking
+		u.SetPassed((*BuildPassed)(obj))
+		res.Taking = u
+	case "merged":
+		actual, _ := v.Taking.AsMerged()
+		var obj *BuildMerged
+		if actual != nil {
+			obj = decodeBuildMergedTransportToBuildMerged(actual)
+		}
+		u := res.Taking
+		u.SetMerged((*BuildMerged)(obj))
+		res.Taking = u
+	case "dropped":
+		actual, _ := v.Taking.AsDropped()
+		var obj *BuildDropped
+		if actual != nil {
+			obj = decodeBuildDroppedTransportToBuildDropped(actual)
+		}
+		u := res.Taking
+		u.SetDropped((*BuildDropped)(obj))
+		res.Taking = u
+	}
 
 	return res
 }
@@ -26201,6 +26753,63 @@ func decodeTestsCouldNotRunTransportToTestsCouldNotRun(v *toolhttp.TestsCouldNot
 
 	return res
 }
+func decodeBuildBuildingTransportToBuildBuilding(v *toolhttp.BuildBuildingTransport) *BuildBuilding {
+	res := &BuildBuilding{}
+
+	return res
+}
+func decodeBuildPassedTransportToBuildPassed(v *toolhttp.BuildPassedTransport) *BuildPassed {
+	res := &BuildPassed{
+		RunID:           *v.RunID,
+		CandidateCommit: *v.CandidateCommit,
+		CandidateBranch: *v.CandidateBranch,
+		BaseInBranch:    *v.BaseInBranch,
+	}
+	switch string(v.Tests.Kind()) {
+	case "evaluator":
+		actual, _ := v.Tests.AsEvaluator()
+		var obj *OperatorEvaluatorTests
+		if actual != nil {
+			obj = decodeOperatorEvaluatorTestsTransportToOperatorEvaluatorTests(actual)
+		}
+		u := res.Tests
+		u.SetEvaluator((*OperatorEvaluatorTests)(obj))
+		res.Tests = u
+	case "written_tests":
+		actual, _ := v.Tests.AsWrittenTests()
+		var obj *BuildPassedTests
+		if actual != nil {
+			obj = decodeBuildPassedTestsTransportToBuildPassedTests(actual)
+		}
+		u := res.Tests
+		u.SetWrittenTests((*BuildPassedTests)(obj))
+		res.Tests = u
+	}
+
+	return res
+}
+func decodeBuildPassedTestsTransportToBuildPassedTests(v *toolhttp.BuildPassedTestsTransport) *BuildPassedTests {
+	res := &BuildPassedTests{
+		Commit: *v.Commit,
+		Branch: *v.Branch,
+	}
+
+	return res
+}
+func decodeBuildMergedTransportToBuildMerged(v *toolhttp.BuildMergedTransport) *BuildMerged {
+	res := &BuildMerged{}
+
+	return res
+}
+func decodeBuildDroppedTransportToBuildDropped(v *toolhttp.BuildDroppedTransport) *BuildDropped {
+	res := &BuildDropped{}
+	res.KeptBranches = make([]string, len(v.KeptBranches))
+	for i, val := range v.KeptBranches {
+		res.KeptBranches[i] = val
+	}
+
+	return res
+}
 func encodeBuildNotStartedToBuildNotStartedTransport(v *BuildNotStarted) *toolhttp.BuildNotStartedTransport {
 	res := &toolhttp.BuildNotStartedTransport{}
 
@@ -26215,6 +26824,46 @@ func encodeStartedBuildToStartedBuildTransport(v *StartedBuild) *toolhttp.Starte
 	}
 	res.Builder = encodeBuilderProgressToBuilderProgressTransport(v.Builder)
 	res.TestWriter = encodeTestWriterProgressToTestWriterProgressTransport(v.TestWriter)
+	var takingValue toolhttp.BuildTaking
+	switch string(v.Taking.Kind()) {
+	case "building":
+		actual, _ := v.Taking.AsBuilding()
+		var obj *toolhttp.BuildBuildingTransport
+		if actual != nil {
+			obj = encodeBuildBuildingToBuildBuildingTransport(actual)
+		}
+		u := takingValue
+		u.SetBuilding((*toolhttp.BuildBuildingTransport)(obj))
+		takingValue = u
+	case "passed":
+		actual, _ := v.Taking.AsPassed()
+		var obj *toolhttp.BuildPassedTransport
+		if actual != nil {
+			obj = encodeBuildPassedToBuildPassedTransport(actual)
+		}
+		u := takingValue
+		u.SetPassed((*toolhttp.BuildPassedTransport)(obj))
+		takingValue = u
+	case "merged":
+		actual, _ := v.Taking.AsMerged()
+		var obj *toolhttp.BuildMergedTransport
+		if actual != nil {
+			obj = encodeBuildMergedToBuildMergedTransport(actual)
+		}
+		u := takingValue
+		u.SetMerged((*toolhttp.BuildMergedTransport)(obj))
+		takingValue = u
+	case "dropped":
+		actual, _ := v.Taking.AsDropped()
+		var obj *toolhttp.BuildDroppedTransport
+		if actual != nil {
+			obj = encodeBuildDroppedToBuildDroppedTransport(actual)
+		}
+		u := takingValue
+		u.SetDropped((*toolhttp.BuildDroppedTransport)(obj))
+		takingValue = u
+	}
+	res.Taking = &takingValue
 
 	return res
 }
@@ -26328,6 +26977,65 @@ func encodeTestsCouldNotRunToTestsCouldNotRunTransport(v *TestsCouldNotRun) *too
 		Reason:    &v.Reason,
 		Step:      &v.Step,
 		CheckedAt: &v.CheckedAt,
+	}
+
+	return res
+}
+func encodeBuildBuildingToBuildBuildingTransport(v *BuildBuilding) *toolhttp.BuildBuildingTransport {
+	res := &toolhttp.BuildBuildingTransport{}
+
+	return res
+}
+func encodeBuildPassedToBuildPassedTransport(v *BuildPassed) *toolhttp.BuildPassedTransport {
+	res := &toolhttp.BuildPassedTransport{
+		RunID:           &v.RunID,
+		CandidateCommit: &v.CandidateCommit,
+		CandidateBranch: &v.CandidateBranch,
+		BaseInBranch:    &v.BaseInBranch,
+	}
+	var testsValue toolhttp.BuildPassedTestSource
+	switch string(v.Tests.Kind()) {
+	case "evaluator":
+		actual, _ := v.Tests.AsEvaluator()
+		var obj *toolhttp.OperatorEvaluatorTestsTransport
+		if actual != nil {
+			obj = encodeOperatorEvaluatorTestsToOperatorEvaluatorTestsTransport(actual)
+		}
+		u := testsValue
+		u.SetEvaluator((*toolhttp.OperatorEvaluatorTestsTransport)(obj))
+		testsValue = u
+	case "written_tests":
+		actual, _ := v.Tests.AsWrittenTests()
+		var obj *toolhttp.BuildPassedTestsTransport
+		if actual != nil {
+			obj = encodeBuildPassedTestsToBuildPassedTestsTransport(actual)
+		}
+		u := testsValue
+		u.SetWrittenTests((*toolhttp.BuildPassedTestsTransport)(obj))
+		testsValue = u
+	}
+	res.Tests = &testsValue
+
+	return res
+}
+func encodeBuildPassedTestsToBuildPassedTestsTransport(v *BuildPassedTests) *toolhttp.BuildPassedTestsTransport {
+	res := &toolhttp.BuildPassedTestsTransport{
+		Commit: &v.Commit,
+		Branch: &v.Branch,
+	}
+
+	return res
+}
+func encodeBuildMergedToBuildMergedTransport(v *BuildMerged) *toolhttp.BuildMergedTransport {
+	res := &toolhttp.BuildMergedTransport{}
+
+	return res
+}
+func encodeBuildDroppedToBuildDroppedTransport(v *BuildDropped) *toolhttp.BuildDroppedTransport {
+	res := &toolhttp.BuildDroppedTransport{}
+	res.KeptBranches = make([]string, len(v.KeptBranches))
+	for i, val := range v.KeptBranches {
+		res.KeptBranches[i] = val
 	}
 
 	return res

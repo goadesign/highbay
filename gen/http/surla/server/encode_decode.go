@@ -5341,6 +5341,46 @@ func marshalSurlaStartedBuildToStartedBuildResponseBody(v *surla.StartedBuild) *
 	if v.TestWriter != nil {
 		res.TestWriter = marshalSurlaTestWriterProgressToTestWriterProgressResponseBody(v.TestWriter)
 	}
+	if v.Taking.Kind() != "" {
+		switch string(v.Taking.Kind()) {
+		case "building":
+			actual, _ := v.Taking.AsBuilding()
+			var obj *BuildBuildingResponseBody
+			if actual != nil {
+				obj = marshalSurlaBuildBuildingToBuildBuildingResponseBody(actual)
+			}
+			u := res.Taking
+			u.SetBuilding((*BuildBuildingResponseBody)(obj))
+			res.Taking = u
+		case "passed":
+			actual, _ := v.Taking.AsPassed()
+			var obj *BuildPassedResponseBody
+			if actual != nil {
+				obj = marshalSurlaBuildPassedToBuildPassedResponseBody(actual)
+			}
+			u := res.Taking
+			u.SetPassed((*BuildPassedResponseBody)(obj))
+			res.Taking = u
+		case "merged":
+			actual, _ := v.Taking.AsMerged()
+			var obj *BuildMergedResponseBody
+			if actual != nil {
+				obj = marshalSurlaBuildMergedToBuildMergedResponseBody(actual)
+			}
+			u := res.Taking
+			u.SetMerged((*BuildMergedResponseBody)(obj))
+			res.Taking = u
+		case "dropped":
+			actual, _ := v.Taking.AsDropped()
+			var obj *BuildDroppedResponseBody
+			if actual != nil {
+				obj = marshalSurlaBuildDroppedToBuildDroppedResponseBody(actual)
+			}
+			u := res.Taking
+			u.SetDropped((*BuildDroppedResponseBody)(obj))
+			res.Taking = u
+		}
+	}
 
 	return res
 }
@@ -5482,6 +5522,85 @@ func marshalSurlaTestsCouldNotRunToTestsCouldNotRunResponseBody(v *surla.TestsCo
 		Reason:    v.Reason,
 		Step:      v.Step,
 		CheckedAt: v.CheckedAt,
+	}
+
+	return res
+}
+
+// marshalSurlaBuildBuildingToBuildBuildingResponseBody builds a value of type
+// *BuildBuildingResponseBody from a value of type *surla.BuildBuilding.
+func marshalSurlaBuildBuildingToBuildBuildingResponseBody(v *surla.BuildBuilding) *BuildBuildingResponseBody {
+	res := &BuildBuildingResponseBody{}
+
+	return res
+}
+
+// marshalSurlaBuildPassedToBuildPassedResponseBody builds a value of type
+// *BuildPassedResponseBody from a value of type *surla.BuildPassed.
+func marshalSurlaBuildPassedToBuildPassedResponseBody(v *surla.BuildPassed) *BuildPassedResponseBody {
+	res := &BuildPassedResponseBody{
+		RunID:           v.RunID,
+		CandidateCommit: v.CandidateCommit,
+		CandidateBranch: v.CandidateBranch,
+		BaseInBranch:    v.BaseInBranch,
+	}
+	if v.Tests.Kind() != "" {
+		switch string(v.Tests.Kind()) {
+		case "evaluator":
+			actual, _ := v.Tests.AsEvaluator()
+			var obj *OperatorEvaluatorTestsResponseBody
+			if actual != nil {
+				obj = marshalSurlaOperatorEvaluatorTestsToOperatorEvaluatorTestsResponseBody(actual)
+			}
+			u := res.Tests
+			u.SetEvaluator((*OperatorEvaluatorTestsResponseBody)(obj))
+			res.Tests = u
+		case "written_tests":
+			actual, _ := v.Tests.AsWrittenTests()
+			var obj *BuildPassedTestsResponseBody
+			if actual != nil {
+				obj = marshalSurlaBuildPassedTestsToBuildPassedTestsResponseBody(actual)
+			}
+			u := res.Tests
+			u.SetWrittenTests((*BuildPassedTestsResponseBody)(obj))
+			res.Tests = u
+		}
+	}
+
+	return res
+}
+
+// marshalSurlaBuildPassedTestsToBuildPassedTestsResponseBody builds a value of
+// type *BuildPassedTestsResponseBody from a value of type
+// *surla.BuildPassedTests.
+func marshalSurlaBuildPassedTestsToBuildPassedTestsResponseBody(v *surla.BuildPassedTests) *BuildPassedTestsResponseBody {
+	res := &BuildPassedTestsResponseBody{
+		Commit: v.Commit,
+		Branch: v.Branch,
+	}
+
+	return res
+}
+
+// marshalSurlaBuildMergedToBuildMergedResponseBody builds a value of type
+// *BuildMergedResponseBody from a value of type *surla.BuildMerged.
+func marshalSurlaBuildMergedToBuildMergedResponseBody(v *surla.BuildMerged) *BuildMergedResponseBody {
+	res := &BuildMergedResponseBody{}
+
+	return res
+}
+
+// marshalSurlaBuildDroppedToBuildDroppedResponseBody builds a value of type
+// *BuildDroppedResponseBody from a value of type *surla.BuildDropped.
+func marshalSurlaBuildDroppedToBuildDroppedResponseBody(v *surla.BuildDropped) *BuildDroppedResponseBody {
+	res := &BuildDroppedResponseBody{}
+	if v.KeptBranches != nil {
+		res.KeptBranches = make([]string, len(v.KeptBranches))
+		for i, val := range v.KeptBranches {
+			res.KeptBranches[i] = val
+		}
+	} else {
+		res.KeptBranches = []string{}
 	}
 
 	return res

@@ -379,6 +379,452 @@ func (u *Build) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+// BuildPassedTestSource holds exactly one of its branch values.
+type BuildPassedTestSource struct {
+	kind         BuildPassedTestSourceKind
+	evaluator    *OperatorEvaluatorTestsTransport
+	writtenTests *BuildPassedTestsTransport
+}
+
+// BuildPassedTestSourceKind records which BuildPassedTestSource branch is selected.
+type BuildPassedTestSourceKind string
+
+const (
+	// BuildPassedTestSourceKindEvaluator identifies the evaluator branch.
+	BuildPassedTestSourceKindEvaluator BuildPassedTestSourceKind = "evaluator"
+	// BuildPassedTestSourceKindWrittenTests identifies the written_tests branch.
+	BuildPassedTestSourceKindWrittenTests BuildPassedTestSourceKind = "written_tests"
+)
+
+// Kind returns the selected branch.
+func (u BuildPassedTestSource) Kind() BuildPassedTestSourceKind {
+	return u.kind
+}
+
+// NewBuildPassedTestSourceEvaluator constructs BuildPassedTestSource with the evaluator branch set.
+func NewBuildPassedTestSourceEvaluator(v *OperatorEvaluatorTestsTransport) BuildPassedTestSource {
+	return BuildPassedTestSource{
+		kind:      BuildPassedTestSourceKindEvaluator,
+		evaluator: v,
+	}
+}
+
+// AsEvaluator returns the value when the evaluator branch is selected.
+func (u BuildPassedTestSource) AsEvaluator() (_ *OperatorEvaluatorTestsTransport, ok bool) {
+	if u.kind != BuildPassedTestSourceKindEvaluator {
+		return
+	}
+	return u.evaluator, true
+}
+
+// SetEvaluator selects the evaluator branch and stores v.
+func (u *BuildPassedTestSource) SetEvaluator(v *OperatorEvaluatorTestsTransport) {
+	*u = BuildPassedTestSource{
+		kind:      BuildPassedTestSourceKindEvaluator,
+		evaluator: v,
+	}
+}
+
+// NewBuildPassedTestSourceWrittenTests constructs BuildPassedTestSource with the written_tests branch set.
+func NewBuildPassedTestSourceWrittenTests(v *BuildPassedTestsTransport) BuildPassedTestSource {
+	return BuildPassedTestSource{
+		kind:         BuildPassedTestSourceKindWrittenTests,
+		writtenTests: v,
+	}
+}
+
+// AsWrittenTests returns the value when the written_tests branch is selected.
+func (u BuildPassedTestSource) AsWrittenTests() (_ *BuildPassedTestsTransport, ok bool) {
+	if u.kind != BuildPassedTestSourceKindWrittenTests {
+		return
+	}
+	return u.writtenTests, true
+}
+
+// SetWrittenTests selects the written_tests branch and stores v.
+func (u *BuildPassedTestSource) SetWrittenTests(v *BuildPassedTestsTransport) {
+	*u = BuildPassedTestSource{
+		kind:         BuildPassedTestSourceKindWrittenTests,
+		writtenTests: v,
+	}
+}
+
+// Validate ensures exactly one valid branch is selected.
+func (u BuildPassedTestSource) Validate() error {
+	_, err := u.Value()
+	return err
+}
+
+// Value returns the selected branch value, or the same selection error as Validate.
+// Go templates can read this method directly; an invalid selection stops execution.
+func (u BuildPassedTestSource) Value() (any, error) {
+	switch u.kind {
+	case "":
+		return nil, goa.InvalidEnumValueError("source", "", []any{
+			string(BuildPassedTestSourceKindEvaluator),
+			string(BuildPassedTestSourceKindWrittenTests),
+		})
+	case BuildPassedTestSourceKindEvaluator:
+		if u.evaluator == nil {
+			return nil, goa.MissingFieldError("value", "BuildPassedTestSource")
+		}
+		return u.evaluator, nil
+	case BuildPassedTestSourceKindWrittenTests:
+		if u.writtenTests == nil {
+			return nil, goa.MissingFieldError("value", "BuildPassedTestSource")
+		}
+		return u.writtenTests, nil
+	default:
+		return nil, goa.InvalidEnumValueError("source", u.kind, []any{
+			string(BuildPassedTestSourceKindEvaluator),
+			string(BuildPassedTestSourceKindWrittenTests),
+		})
+	}
+}
+
+// MarshalJSON writes the selected object branch beside its discriminator.
+func (u BuildPassedTestSource) MarshalJSON() ([]byte, error) {
+	value, err := u.Value()
+	if err != nil {
+		return nil, err
+	}
+	data, err := json.Marshal(value)
+	if err != nil {
+		return nil, err
+	}
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(data, &fields); err != nil {
+		return nil, err
+	}
+	if fields == nil {
+		return nil, goa.InvalidFieldTypeError("source", nil, "non-null JSON object")
+	}
+	if _, exists := fields["source"]; exists {
+		return nil, fmt.Errorf("BuildPassedTestSource branch already contains discriminator %q", "source")
+	}
+	tag, err := json.Marshal(string(u.kind))
+	if err != nil {
+		return nil, err
+	}
+	fields["source"] = tag
+	return json.Marshal(fields)
+}
+
+// UnmarshalJSON reads the discriminator and decodes its declared object branch.
+func (u *BuildPassedTestSource) UnmarshalJSON(data []byte) error {
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(data, &fields); err != nil {
+		return err
+	}
+	tag, exists := fields["source"]
+	if !exists {
+		return goa.MissingFieldError("source", "BuildPassedTestSource")
+	}
+	if bytes.Equal(bytes.TrimSpace(tag), []byte("null")) {
+		return goa.InvalidFieldTypeError("source", nil, "JSON string")
+	}
+	var raw struct {
+		Type  string
+		Value json.RawMessage
+	}
+	if err := json.Unmarshal(tag, &raw.Type); err != nil {
+		return err
+	}
+	delete(fields, "source")
+	value, err := json.Marshal(fields)
+	if err != nil {
+		return err
+	}
+	raw.Value = value
+	switch raw.Type {
+	case string(BuildPassedTestSourceKindEvaluator):
+		var v *OperatorEvaluatorTestsTransport
+		if err := json.Unmarshal(raw.Value, &v); err != nil {
+			return err
+		}
+		u.SetEvaluator(v)
+	case string(BuildPassedTestSourceKindWrittenTests):
+		var v *BuildPassedTestsTransport
+		if err := json.Unmarshal(raw.Value, &v); err != nil {
+			return err
+		}
+		u.SetWrittenTests(v)
+	default:
+		if raw.Type == "" {
+			return goa.MissingFieldError("source", "BuildPassedTestSource")
+		}
+		return goa.InvalidEnumValueError("source", raw.Type, []any{
+			string(BuildPassedTestSourceKindEvaluator),
+			string(BuildPassedTestSourceKindWrittenTests),
+		})
+	}
+	return nil
+}
+
+// BuildTaking holds exactly one of its branch values.
+type BuildTaking struct {
+	kind     BuildTakingKind
+	building *BuildBuildingTransport
+	passed   *BuildPassedTransport
+	merged   *BuildMergedTransport
+	dropped  *BuildDroppedTransport
+}
+
+// BuildTakingKind records which BuildTaking branch is selected.
+type BuildTakingKind string
+
+const (
+	// BuildTakingKindBuilding identifies the building branch.
+	BuildTakingKindBuilding BuildTakingKind = "building"
+	// BuildTakingKindPassed identifies the passed branch.
+	BuildTakingKindPassed BuildTakingKind = "passed"
+	// BuildTakingKindMerged identifies the merged branch.
+	BuildTakingKindMerged BuildTakingKind = "merged"
+	// BuildTakingKindDropped identifies the dropped branch.
+	BuildTakingKindDropped BuildTakingKind = "dropped"
+)
+
+// Kind returns the selected branch.
+func (u BuildTaking) Kind() BuildTakingKind {
+	return u.kind
+}
+
+// NewBuildTakingBuilding constructs BuildTaking with the building branch set.
+func NewBuildTakingBuilding(v *BuildBuildingTransport) BuildTaking {
+	return BuildTaking{
+		kind:     BuildTakingKindBuilding,
+		building: v,
+	}
+}
+
+// AsBuilding returns the value when the building branch is selected.
+func (u BuildTaking) AsBuilding() (_ *BuildBuildingTransport, ok bool) {
+	if u.kind != BuildTakingKindBuilding {
+		return
+	}
+	return u.building, true
+}
+
+// SetBuilding selects the building branch and stores v.
+func (u *BuildTaking) SetBuilding(v *BuildBuildingTransport) {
+	*u = BuildTaking{
+		kind:     BuildTakingKindBuilding,
+		building: v,
+	}
+}
+
+// NewBuildTakingPassed constructs BuildTaking with the passed branch set.
+func NewBuildTakingPassed(v *BuildPassedTransport) BuildTaking {
+	return BuildTaking{
+		kind:   BuildTakingKindPassed,
+		passed: v,
+	}
+}
+
+// AsPassed returns the value when the passed branch is selected.
+func (u BuildTaking) AsPassed() (_ *BuildPassedTransport, ok bool) {
+	if u.kind != BuildTakingKindPassed {
+		return
+	}
+	return u.passed, true
+}
+
+// SetPassed selects the passed branch and stores v.
+func (u *BuildTaking) SetPassed(v *BuildPassedTransport) {
+	*u = BuildTaking{
+		kind:   BuildTakingKindPassed,
+		passed: v,
+	}
+}
+
+// NewBuildTakingMerged constructs BuildTaking with the merged branch set.
+func NewBuildTakingMerged(v *BuildMergedTransport) BuildTaking {
+	return BuildTaking{
+		kind:   BuildTakingKindMerged,
+		merged: v,
+	}
+}
+
+// AsMerged returns the value when the merged branch is selected.
+func (u BuildTaking) AsMerged() (_ *BuildMergedTransport, ok bool) {
+	if u.kind != BuildTakingKindMerged {
+		return
+	}
+	return u.merged, true
+}
+
+// SetMerged selects the merged branch and stores v.
+func (u *BuildTaking) SetMerged(v *BuildMergedTransport) {
+	*u = BuildTaking{
+		kind:   BuildTakingKindMerged,
+		merged: v,
+	}
+}
+
+// NewBuildTakingDropped constructs BuildTaking with the dropped branch set.
+func NewBuildTakingDropped(v *BuildDroppedTransport) BuildTaking {
+	return BuildTaking{
+		kind:    BuildTakingKindDropped,
+		dropped: v,
+	}
+}
+
+// AsDropped returns the value when the dropped branch is selected.
+func (u BuildTaking) AsDropped() (_ *BuildDroppedTransport, ok bool) {
+	if u.kind != BuildTakingKindDropped {
+		return
+	}
+	return u.dropped, true
+}
+
+// SetDropped selects the dropped branch and stores v.
+func (u *BuildTaking) SetDropped(v *BuildDroppedTransport) {
+	*u = BuildTaking{
+		kind:    BuildTakingKindDropped,
+		dropped: v,
+	}
+}
+
+// Validate ensures exactly one valid branch is selected.
+func (u BuildTaking) Validate() error {
+	_, err := u.Value()
+	return err
+}
+
+// Value returns the selected branch value, or the same selection error as Validate.
+// Go templates can read this method directly; an invalid selection stops execution.
+func (u BuildTaking) Value() (any, error) {
+	switch u.kind {
+	case "":
+		return nil, goa.InvalidEnumValueError("state", "", []any{
+			string(BuildTakingKindBuilding),
+			string(BuildTakingKindPassed),
+			string(BuildTakingKindMerged),
+			string(BuildTakingKindDropped),
+		})
+	case BuildTakingKindBuilding:
+		if u.building == nil {
+			return nil, goa.MissingFieldError("value", "BuildTaking")
+		}
+		return u.building, nil
+	case BuildTakingKindPassed:
+		if u.passed == nil {
+			return nil, goa.MissingFieldError("value", "BuildTaking")
+		}
+		return u.passed, nil
+	case BuildTakingKindMerged:
+		if u.merged == nil {
+			return nil, goa.MissingFieldError("value", "BuildTaking")
+		}
+		return u.merged, nil
+	case BuildTakingKindDropped:
+		if u.dropped == nil {
+			return nil, goa.MissingFieldError("value", "BuildTaking")
+		}
+		return u.dropped, nil
+	default:
+		return nil, goa.InvalidEnumValueError("state", u.kind, []any{
+			string(BuildTakingKindBuilding),
+			string(BuildTakingKindPassed),
+			string(BuildTakingKindMerged),
+			string(BuildTakingKindDropped),
+		})
+	}
+}
+
+// MarshalJSON writes the selected object branch beside its discriminator.
+func (u BuildTaking) MarshalJSON() ([]byte, error) {
+	value, err := u.Value()
+	if err != nil {
+		return nil, err
+	}
+	data, err := json.Marshal(value)
+	if err != nil {
+		return nil, err
+	}
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(data, &fields); err != nil {
+		return nil, err
+	}
+	if fields == nil {
+		return nil, goa.InvalidFieldTypeError("state", nil, "non-null JSON object")
+	}
+	if _, exists := fields["state"]; exists {
+		return nil, fmt.Errorf("BuildTaking branch already contains discriminator %q", "state")
+	}
+	tag, err := json.Marshal(string(u.kind))
+	if err != nil {
+		return nil, err
+	}
+	fields["state"] = tag
+	return json.Marshal(fields)
+}
+
+// UnmarshalJSON reads the discriminator and decodes its declared object branch.
+func (u *BuildTaking) UnmarshalJSON(data []byte) error {
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(data, &fields); err != nil {
+		return err
+	}
+	tag, exists := fields["state"]
+	if !exists {
+		return goa.MissingFieldError("state", "BuildTaking")
+	}
+	if bytes.Equal(bytes.TrimSpace(tag), []byte("null")) {
+		return goa.InvalidFieldTypeError("state", nil, "JSON string")
+	}
+	var raw struct {
+		Type  string
+		Value json.RawMessage
+	}
+	if err := json.Unmarshal(tag, &raw.Type); err != nil {
+		return err
+	}
+	delete(fields, "state")
+	value, err := json.Marshal(fields)
+	if err != nil {
+		return err
+	}
+	raw.Value = value
+	switch raw.Type {
+	case string(BuildTakingKindBuilding):
+		var v *BuildBuildingTransport
+		if err := json.Unmarshal(raw.Value, &v); err != nil {
+			return err
+		}
+		u.SetBuilding(v)
+	case string(BuildTakingKindPassed):
+		var v *BuildPassedTransport
+		if err := json.Unmarshal(raw.Value, &v); err != nil {
+			return err
+		}
+		u.SetPassed(v)
+	case string(BuildTakingKindMerged):
+		var v *BuildMergedTransport
+		if err := json.Unmarshal(raw.Value, &v); err != nil {
+			return err
+		}
+		u.SetMerged(v)
+	case string(BuildTakingKindDropped):
+		var v *BuildDroppedTransport
+		if err := json.Unmarshal(raw.Value, &v); err != nil {
+			return err
+		}
+		u.SetDropped(v)
+	default:
+		if raw.Type == "" {
+			return goa.MissingFieldError("state", "BuildTaking")
+		}
+		return goa.InvalidEnumValueError("state", raw.Type, []any{
+			string(BuildTakingKindBuilding),
+			string(BuildTakingKindPassed),
+			string(BuildTakingKindMerged),
+			string(BuildTakingKindDropped),
+		})
+	}
+	return nil
+}
+
 // LiveTarget holds exactly one of its branch values.
 type LiveTarget struct {
 	kind                LiveTargetKind

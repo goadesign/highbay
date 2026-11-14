@@ -627,11 +627,62 @@ type ArchitecturePreviewResult struct {
 	Banner string
 }
 
+// No verification of this build has passed yet, so there is nothing to merge:
+// the builder finishes it, or the user drops it.
+type BuildBuilding struct {
+}
+
+// The user dropped this build with drop_build: Surla builds nothing on it, no
+// role has work for it, and another change can be built.
+type BuildDropped struct {
+	// The build's own branches that exist and hold a commit made after the build's
+	// base, where its work stays (git log <branch> shows it); empty when nothing
+	// was committed for it.
+	KeptBranches []string
+}
+
+// The branch checked out in the project folder holds both commits of a passed
+// run of this build, by merge or by a squash commit that holds every file they
+// changed as they have it. Another change can be built.
+type BuildMerged struct {
+}
+
 // This change has no usable build: the project's open build is another
 // change's or there is none, or its builder-only build lost the stored
 // verification settings that supplied its tests. Start a new build on the
 // views page.
 type BuildNotStarted struct {
+}
+
+// A verification of this build passed and the user has not merged it: the
+// commits of its newest passed run, which the user merges into the branch
+// checked out in the project folder, the builder's first, then the tests'.
+type BuildPassed struct {
+	// The newest passed run; get_verification takes it.
+	RunID string
+	// The builder's commit the run passed.
+	CandidateCommit string
+	// The builder's branch of this build, surla/build-<n>, which holds
+	// candidate_commit.
+	CandidateBranch string
+	// written_tests with the accepted tests' commit to merge after the builder's;
+	// evaluator when the project verifies with its stored evaluator, whose tests
+	// are not merged.
+	Tests BuildPassedTestSource
+	// False when the branch checked out in the project folder no longer holds the
+	// commit this build started from, because its history was rewritten: merging
+	// these commits brings that history back, and dropping the build and building
+	// again starts from the branch as it is.
+	BaseInBranch bool
+}
+
+// The accepted tests' commit a passed run used, which the user merges after
+// the builder's commit, and the test writer's branch that holds it.
+type BuildPassedTests struct {
+	// Commit Surla recorded the accepted tests at.
+	Commit string
+	// The test writer's branch of this build, surla/tests-<n>.
+	Branch string
 }
 
 type BuildStartStep string
@@ -1691,6 +1742,12 @@ type StartedBuild struct {
 	// Number of finished flows in the agreed Story. Zero means no test of this
 	// change's Story was required.
 	RequiredTestCount int
+	// Whether the user has taken this build: building until a verification of it
+	// passes; passed with the commits to merge; merged once the branch checked out
+	// in the project folder holds both commits of one passed run; dropped once the
+	// user dropped it. A project has one open build, and another change is built
+	// only once it is merged or dropped.
+	Taking BuildTaking
 }
 
 // StopLiveTargetResult is the result type of the surla service
@@ -2905,6 +2962,51 @@ func validatejsonArchitecturePreviewResultTransport(value *jsonArchitecturePrevi
 	return err
 }
 
+// jsonBuildBuildingTransport stores JSON fields until they have been validated.
+type jsonBuildBuildingTransport struct {
+}
+
+// validatejsonBuildBuildingTransport checks decoded JSON before it becomes a service value.
+func validatejsonBuildBuildingTransport(value *jsonBuildBuildingTransport) (err error) {
+	if value == nil {
+		return goa.MissingFieldError("body", "JSON value")
+	}
+
+	return err
+}
+
+// jsonBuildDroppedTransport stores JSON fields until they have been validated.
+type jsonBuildDroppedTransport struct {
+	// The build's own branches that exist and hold a commit made after the build's
+	// base, where its work stays (git log <branch> shows it); empty when nothing
+	// was committed for it.
+	KeptBranches []string `json:"kept_branches"`
+}
+
+// validatejsonBuildDroppedTransport checks decoded JSON before it becomes a service value.
+func validatejsonBuildDroppedTransport(value *jsonBuildDroppedTransport) (err error) {
+	if value == nil {
+		return goa.MissingFieldError("body", "JSON value")
+	}
+	if value.KeptBranches == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("kept_branches", "body"))
+	}
+	return err
+}
+
+// jsonBuildMergedTransport stores JSON fields until they have been validated.
+type jsonBuildMergedTransport struct {
+}
+
+// validatejsonBuildMergedTransport checks decoded JSON before it becomes a service value.
+func validatejsonBuildMergedTransport(value *jsonBuildMergedTransport) (err error) {
+	if value == nil {
+		return goa.MissingFieldError("body", "JSON value")
+	}
+
+	return err
+}
+
 // jsonBuildNotStartedTransport stores JSON fields until they have been validated.
 type jsonBuildNotStartedTransport struct {
 }
@@ -2915,6 +3017,94 @@ func validatejsonBuildNotStartedTransport(value *jsonBuildNotStartedTransport) (
 		return goa.MissingFieldError("body", "JSON value")
 	}
 
+	return err
+}
+
+// jsonBuildPassedTestsTransport stores JSON fields until they have been validated.
+type jsonBuildPassedTestsTransport struct {
+	// Commit Surla recorded the accepted tests at.
+	Commit *string `json:"commit"`
+	// The test writer's branch of this build, surla/tests-<n>.
+	Branch *string `json:"branch"`
+}
+
+// validatejsonBuildPassedTestsTransport checks decoded JSON before it becomes a service value.
+func validatejsonBuildPassedTestsTransport(value *jsonBuildPassedTestsTransport) (err error) {
+	if value == nil {
+		return goa.MissingFieldError("body", "JSON value")
+	}
+	if value.Commit == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("commit", "body"))
+	}
+	if value.Branch == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("branch", "body"))
+	}
+	if value.Commit != nil {
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.commit", *value.Commit, "^([0-9a-f]{40}|[0-9a-f]{64})$"))
+	}
+	return err
+}
+
+// jsonBuildPassedTransport stores JSON fields until they have been validated.
+type jsonBuildPassedTransport struct {
+	// The newest passed run; get_verification takes it.
+	RunID *string `json:"run_id"`
+	// The builder's commit the run passed.
+	CandidateCommit *string `json:"candidate_commit"`
+	// The builder's branch of this build, surla/build-<n>, which holds
+	// candidate_commit.
+	CandidateBranch *string `json:"candidate_branch"`
+	// written_tests with the accepted tests' commit to merge after the builder's;
+	// evaluator when the project verifies with its stored evaluator, whose tests
+	// are not merged.
+	Tests *jsonBuildPassedTestSourceTransport `json:"tests"`
+	// False when the branch checked out in the project folder no longer holds the
+	// commit this build started from, because its history was rewritten: merging
+	// these commits brings that history back, and dropping the build and building
+	// again starts from the branch as it is.
+	BaseInBranch *bool `json:"base_in_branch"`
+}
+
+// validatejsonBuildPassedTransport checks decoded JSON before it becomes a service value.
+func validatejsonBuildPassedTransport(value *jsonBuildPassedTransport) (err error) {
+	if value == nil {
+		return goa.MissingFieldError("body", "JSON value")
+	}
+	if value.RunID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("run_id", "body"))
+	}
+	if value.CandidateCommit == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("candidate_commit", "body"))
+	}
+	if value.CandidateBranch == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("candidate_branch", "body"))
+	}
+	if value.Tests == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("tests", "body"))
+	}
+	if value.BaseInBranch == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("base_in_branch", "body"))
+	}
+	if value.CandidateCommit != nil {
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.candidate_commit", *value.CandidateCommit, "^([0-9a-f]{40}|[0-9a-f]{64})$"))
+	}
+	if value.Tests != nil {
+
+		if err2 := value.Tests.Validate(); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		} else {
+			switch string(value.Tests.Kind()) {
+			case "written_tests":
+				actual, _ := value.Tests.AsWrittenTests()
+				if actual != nil {
+					if err2 := validatejsonBuildPassedTestsTransport(actual); err2 != nil {
+						err = goa.MergeErrors(err, err2)
+					}
+				}
+			}
+		}
+
+	}
 	return err
 }
 
@@ -5642,6 +5832,12 @@ type jsonStartedBuildTransport struct {
 	// Number of finished flows in the agreed Story. Zero means no test of this
 	// change's Story was required.
 	RequiredTestCount *changeBuildIntTransport `json:"required_test_count"`
+	// Whether the user has taken this build: building until a verification of it
+	// passes; passed with the commits to merge; merged once the branch checked out
+	// in the project folder holds both commits of one passed run; dropped once the
+	// user dropped it. A project has one open build, and another change is built
+	// only once it is merged or dropped.
+	Taking *jsonBuildTakingTransport `json:"taking"`
 }
 
 // validatejsonStartedBuildTransport checks decoded JSON before it becomes a service value.
@@ -5667,6 +5863,9 @@ func validatejsonStartedBuildTransport(value *jsonStartedBuildTransport) (err er
 	if value.RequiredTestCount == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("required_test_count", "body"))
 	}
+	if value.Taking == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("taking", "body"))
+	}
 	if value.StartedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.started_at", *value.StartedAt, goa.FormatDateTime))
 	}
@@ -5684,6 +5883,30 @@ func validatejsonStartedBuildTransport(value *jsonStartedBuildTransport) (err er
 		if int(*value.RequiredTestCount) < 0 {
 			err = goa.MergeErrors(err, goa.InvalidRangeError("body.required_test_count", int(*value.RequiredTestCount), 0, true))
 		}
+	}
+	if value.Taking != nil {
+
+		if err2 := value.Taking.Validate(); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		} else {
+			switch string(value.Taking.Kind()) {
+			case "passed":
+				actual, _ := value.Taking.AsPassed()
+				if actual != nil {
+					if err2 := validatejsonBuildPassedTransport(actual); err2 != nil {
+						err = goa.MergeErrors(err, err2)
+					}
+				}
+			case "dropped":
+				actual, _ := value.Taking.AsDropped()
+				if actual != nil {
+					if err2 := validatejsonBuildDroppedTransport(actual); err2 != nil {
+						err = goa.MergeErrors(err, err2)
+					}
+				}
+			}
+		}
+
 	}
 	return err
 }
@@ -7380,6 +7603,44 @@ func validateToolInputBindingItemOriginal(value *ToolInputBindingItem) (err erro
 	return err
 }
 
+// validateBuildDroppedOriginal checks the original typed value before JSON conversion.
+func validateBuildDroppedOriginal(value *BuildDropped) (err error) {
+	if value.KeptBranches == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("kept_branches", "value"))
+	}
+	return err
+}
+
+// validateBuildPassedOriginal checks the original typed value before JSON conversion.
+func validateBuildPassedOriginal(value *BuildPassed) (err error) {
+	if value.Tests.Kind() == "" {
+		err = goa.MergeErrors(err, goa.MissingFieldError("tests", "value"))
+	}
+	err = goa.MergeErrors(err, goa.ValidatePattern("value.candidate_commit", value.CandidateCommit, "^([0-9a-f]{40}|[0-9a-f]{64})$"))
+
+	if err2 := value.Tests.Validate(); err2 != nil {
+		err = goa.MergeErrors(err, err2)
+	} else {
+		switch string(value.Tests.Kind()) {
+		case "written_tests":
+			actual, _ := value.Tests.AsWrittenTests()
+			if actual != nil {
+				if err2 := validateBuildPassedTestsOriginal(actual); err2 != nil {
+					err = goa.MergeErrors(err, err2)
+				}
+			}
+		}
+	}
+
+	return err
+}
+
+// validateBuildPassedTestsOriginal checks the original typed value before JSON conversion.
+func validateBuildPassedTestsOriginal(value *BuildPassedTests) (err error) {
+	err = goa.MergeErrors(err, goa.ValidatePattern("value.commit", value.Commit, "^([0-9a-f]{40}|[0-9a-f]{64})$"))
+	return err
+}
+
 // validateBuildStartStepOriginal checks the original typed value before JSON conversion.
 func validateBuildStartStepOriginal(value BuildStartStep) (err error) {
 	if utf8.RuneCountInString(string(value)) < 1 {
@@ -7664,6 +7925,9 @@ func validateStartedBuildOriginal(value *StartedBuild) (err error) {
 	if value.TestWriter == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("test_writer", "value"))
 	}
+	if value.Taking.Kind() == "" {
+		err = goa.MergeErrors(err, goa.MissingFieldError("taking", "value"))
+	}
 	err = goa.MergeErrors(err, goa.ValidateFormat("value.started_at", value.StartedAt, goa.FormatDateTime))
 	if value.TestWriter != nil {
 		if err2 := validateTestWriterProgressOriginal(value.TestWriter); err2 != nil {
@@ -7673,6 +7937,28 @@ func validateStartedBuildOriginal(value *StartedBuild) (err error) {
 	if value.RequiredTestCount < 0 {
 		err = goa.MergeErrors(err, goa.InvalidRangeError("value.required_test_count", value.RequiredTestCount, 0, true))
 	}
+
+	if err2 := value.Taking.Validate(); err2 != nil {
+		err = goa.MergeErrors(err, err2)
+	} else {
+		switch string(value.Taking.Kind()) {
+		case "passed":
+			actual, _ := value.Taking.AsPassed()
+			if actual != nil {
+				if err2 := validateBuildPassedOriginal(actual); err2 != nil {
+					err = goa.MergeErrors(err, err2)
+				}
+			}
+		case "dropped":
+			actual, _ := value.Taking.AsDropped()
+			if actual != nil {
+				if err2 := validateBuildDroppedOriginal(actual); err2 != nil {
+					err = goa.MergeErrors(err, err2)
+				}
+			}
+		}
+	}
+
 	return err
 }
 
@@ -8935,6 +9221,410 @@ func (u *jsonApprovalTestSourceTransport) UnmarshalJSON(data []byte) error {
 		u.WrittenTests = value
 	default:
 		return goa.InvalidEnumValueError("source", raw.Type, []any{string(jsonApprovalTestSourceTransportKindEvaluator), string(jsonApprovalTestSourceTransportKindWrittenTests)})
+	}
+	return u.Validate()
+}
+
+// jsonBuildPassedTestSourceTransport stores exactly one selected Goa OneOf branch.
+type jsonBuildPassedTestSourceTransport struct {
+	kind         jsonBuildPassedTestSourceTransportKind
+	Evaluator    *jsonOperatorEvaluatorTestsTransport
+	WrittenTests *jsonBuildPassedTestsTransport
+}
+
+// jsonBuildPassedTestSourceTransportKind identifies the selected branch of jsonBuildPassedTestSourceTransport.
+type jsonBuildPassedTestSourceTransportKind string
+
+const (
+	jsonBuildPassedTestSourceTransportKindEvaluator    jsonBuildPassedTestSourceTransportKind = "evaluator"
+	jsonBuildPassedTestSourceTransportKindWrittenTests jsonBuildPassedTestSourceTransportKind = "written_tests"
+)
+
+// Kind returns the selected branch.
+func (u jsonBuildPassedTestSourceTransport) Kind() jsonBuildPassedTestSourceTransportKind {
+	return u.kind
+}
+
+// newjsonBuildPassedTestSourceTransportEvaluator creates jsonBuildPassedTestSourceTransport with its evaluator branch selected.
+func newjsonBuildPassedTestSourceTransportEvaluator(value *jsonOperatorEvaluatorTestsTransport) jsonBuildPassedTestSourceTransport {
+	return jsonBuildPassedTestSourceTransport{kind: jsonBuildPassedTestSourceTransportKindEvaluator, Evaluator: value}
+}
+
+// AsEvaluator returns the evaluator branch when it is selected.
+func (u jsonBuildPassedTestSourceTransport) AsEvaluator() (_ *jsonOperatorEvaluatorTestsTransport, ok bool) {
+	if u.kind != jsonBuildPassedTestSourceTransportKindEvaluator {
+		return
+	}
+	return u.Evaluator, true
+}
+
+// SetEvaluator selects the evaluator branch.
+func (u *jsonBuildPassedTestSourceTransport) SetEvaluator(value *jsonOperatorEvaluatorTestsTransport) {
+	u.kind = jsonBuildPassedTestSourceTransportKindEvaluator
+	u.Evaluator = value
+}
+
+// newjsonBuildPassedTestSourceTransportWrittenTests creates jsonBuildPassedTestSourceTransport with its written_tests branch selected.
+func newjsonBuildPassedTestSourceTransportWrittenTests(value *jsonBuildPassedTestsTransport) jsonBuildPassedTestSourceTransport {
+	return jsonBuildPassedTestSourceTransport{kind: jsonBuildPassedTestSourceTransportKindWrittenTests, WrittenTests: value}
+}
+
+// AsWrittenTests returns the written_tests branch when it is selected.
+func (u jsonBuildPassedTestSourceTransport) AsWrittenTests() (_ *jsonBuildPassedTestsTransport, ok bool) {
+	if u.kind != jsonBuildPassedTestSourceTransportKindWrittenTests {
+		return
+	}
+	return u.WrittenTests, true
+}
+
+// SetWrittenTests selects the written_tests branch.
+func (u *jsonBuildPassedTestSourceTransport) SetWrittenTests(value *jsonBuildPassedTestsTransport) {
+	u.kind = jsonBuildPassedTestSourceTransportKindWrittenTests
+	u.WrittenTests = value
+}
+
+// Validate checks that one complete branch is selected.
+func (u jsonBuildPassedTestSourceTransport) Validate() error {
+	switch u.kind {
+	case jsonBuildPassedTestSourceTransportKindEvaluator:
+		if u.Evaluator == nil {
+			return goa.MissingFieldError("value", "jsonBuildPassedTestSourceTransport")
+		}
+		return nil
+	case jsonBuildPassedTestSourceTransportKindWrittenTests:
+		if u.WrittenTests == nil {
+			return goa.MissingFieldError("value", "jsonBuildPassedTestSourceTransport")
+		}
+		return nil
+	case "":
+		return goa.MissingFieldError("source", "jsonBuildPassedTestSourceTransport")
+	default:
+		return goa.InvalidEnumValueError("source", u.kind, []any{string(jsonBuildPassedTestSourceTransportKindEvaluator), string(jsonBuildPassedTestSourceTransportKindWrittenTests)})
+	}
+}
+
+// MarshalJSON writes the selected branch name and value.
+func (u jsonBuildPassedTestSourceTransport) MarshalJSON() ([]byte, error) {
+	if err := u.Validate(); err != nil {
+		return nil, err
+	}
+	var value any
+	switch u.kind {
+	case jsonBuildPassedTestSourceTransportKindEvaluator:
+		value = u.Evaluator
+	case jsonBuildPassedTestSourceTransportKindWrittenTests:
+		value = u.WrittenTests
+	default:
+		return nil, fmt.Errorf("unexpected jsonBuildPassedTestSourceTransport branch %q", u.kind)
+	}
+	data, err := json.Marshal(value)
+	if err != nil {
+		return nil, err
+	}
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(data, &fields); err != nil {
+		return nil, err
+	}
+	if fields == nil {
+		return nil, goa.InvalidFieldTypeError("source", nil, "non-null JSON object")
+	}
+	if _, exists := fields["source"]; exists {
+		return nil, fmt.Errorf("jsonBuildPassedTestSourceTransport branch already contains discriminator %q", "source")
+	}
+	tag, err := json.Marshal(string(u.kind))
+	if err != nil {
+		return nil, err
+	}
+	fields["source"] = tag
+	return json.Marshal(fields)
+}
+
+// UnmarshalJSON reads one complete branch name and value.
+func (u *jsonBuildPassedTestSourceTransport) UnmarshalJSON(data []byte) error {
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(data, &fields); err != nil {
+		return err
+	}
+	tag, exists := fields["source"]
+	if !exists {
+		return goa.MissingFieldError("source", "jsonBuildPassedTestSourceTransport")
+	}
+	if bytes.Equal(bytes.TrimSpace(tag), []byte("null")) {
+		return goa.InvalidFieldTypeError("source", nil, "JSON string")
+	}
+	var raw struct {
+		Type  string
+		Value json.RawMessage
+	}
+	if err := json.Unmarshal(tag, &raw.Type); err != nil {
+		return err
+	}
+	delete(fields, "source")
+	value, err := json.Marshal(fields)
+	if err != nil {
+		return err
+	}
+	raw.Value = value
+	switch raw.Type {
+	case string(jsonBuildPassedTestSourceTransportKindEvaluator):
+		var value *jsonOperatorEvaluatorTestsTransport
+		decoder := json.NewDecoder(bytes.NewReader(raw.Value))
+		decoder.DisallowUnknownFields()
+		if err := decoder.Decode(&value); err != nil {
+			return err
+		}
+		u.kind = jsonBuildPassedTestSourceTransportKindEvaluator
+		u.Evaluator = value
+	case string(jsonBuildPassedTestSourceTransportKindWrittenTests):
+		var value *jsonBuildPassedTestsTransport
+		decoder := json.NewDecoder(bytes.NewReader(raw.Value))
+		decoder.DisallowUnknownFields()
+		if err := decoder.Decode(&value); err != nil {
+			return err
+		}
+		u.kind = jsonBuildPassedTestSourceTransportKindWrittenTests
+		u.WrittenTests = value
+	default:
+		return goa.InvalidEnumValueError("source", raw.Type, []any{string(jsonBuildPassedTestSourceTransportKindEvaluator), string(jsonBuildPassedTestSourceTransportKindWrittenTests)})
+	}
+	return u.Validate()
+}
+
+// jsonBuildTakingTransport stores exactly one selected Goa OneOf branch.
+type jsonBuildTakingTransport struct {
+	kind     jsonBuildTakingTransportKind
+	Building *jsonBuildBuildingTransport
+	Passed   *jsonBuildPassedTransport
+	Merged   *jsonBuildMergedTransport
+	Dropped  *jsonBuildDroppedTransport
+}
+
+// jsonBuildTakingTransportKind identifies the selected branch of jsonBuildTakingTransport.
+type jsonBuildTakingTransportKind string
+
+const (
+	jsonBuildTakingTransportKindBuilding jsonBuildTakingTransportKind = "building"
+	jsonBuildTakingTransportKindPassed   jsonBuildTakingTransportKind = "passed"
+	jsonBuildTakingTransportKindMerged   jsonBuildTakingTransportKind = "merged"
+	jsonBuildTakingTransportKindDropped  jsonBuildTakingTransportKind = "dropped"
+)
+
+// Kind returns the selected branch.
+func (u jsonBuildTakingTransport) Kind() jsonBuildTakingTransportKind {
+	return u.kind
+}
+
+// newjsonBuildTakingTransportBuilding creates jsonBuildTakingTransport with its building branch selected.
+func newjsonBuildTakingTransportBuilding(value *jsonBuildBuildingTransport) jsonBuildTakingTransport {
+	return jsonBuildTakingTransport{kind: jsonBuildTakingTransportKindBuilding, Building: value}
+}
+
+// AsBuilding returns the building branch when it is selected.
+func (u jsonBuildTakingTransport) AsBuilding() (_ *jsonBuildBuildingTransport, ok bool) {
+	if u.kind != jsonBuildTakingTransportKindBuilding {
+		return
+	}
+	return u.Building, true
+}
+
+// SetBuilding selects the building branch.
+func (u *jsonBuildTakingTransport) SetBuilding(value *jsonBuildBuildingTransport) {
+	u.kind = jsonBuildTakingTransportKindBuilding
+	u.Building = value
+}
+
+// newjsonBuildTakingTransportPassed creates jsonBuildTakingTransport with its passed branch selected.
+func newjsonBuildTakingTransportPassed(value *jsonBuildPassedTransport) jsonBuildTakingTransport {
+	return jsonBuildTakingTransport{kind: jsonBuildTakingTransportKindPassed, Passed: value}
+}
+
+// AsPassed returns the passed branch when it is selected.
+func (u jsonBuildTakingTransport) AsPassed() (_ *jsonBuildPassedTransport, ok bool) {
+	if u.kind != jsonBuildTakingTransportKindPassed {
+		return
+	}
+	return u.Passed, true
+}
+
+// SetPassed selects the passed branch.
+func (u *jsonBuildTakingTransport) SetPassed(value *jsonBuildPassedTransport) {
+	u.kind = jsonBuildTakingTransportKindPassed
+	u.Passed = value
+}
+
+// newjsonBuildTakingTransportMerged creates jsonBuildTakingTransport with its merged branch selected.
+func newjsonBuildTakingTransportMerged(value *jsonBuildMergedTransport) jsonBuildTakingTransport {
+	return jsonBuildTakingTransport{kind: jsonBuildTakingTransportKindMerged, Merged: value}
+}
+
+// AsMerged returns the merged branch when it is selected.
+func (u jsonBuildTakingTransport) AsMerged() (_ *jsonBuildMergedTransport, ok bool) {
+	if u.kind != jsonBuildTakingTransportKindMerged {
+		return
+	}
+	return u.Merged, true
+}
+
+// SetMerged selects the merged branch.
+func (u *jsonBuildTakingTransport) SetMerged(value *jsonBuildMergedTransport) {
+	u.kind = jsonBuildTakingTransportKindMerged
+	u.Merged = value
+}
+
+// newjsonBuildTakingTransportDropped creates jsonBuildTakingTransport with its dropped branch selected.
+func newjsonBuildTakingTransportDropped(value *jsonBuildDroppedTransport) jsonBuildTakingTransport {
+	return jsonBuildTakingTransport{kind: jsonBuildTakingTransportKindDropped, Dropped: value}
+}
+
+// AsDropped returns the dropped branch when it is selected.
+func (u jsonBuildTakingTransport) AsDropped() (_ *jsonBuildDroppedTransport, ok bool) {
+	if u.kind != jsonBuildTakingTransportKindDropped {
+		return
+	}
+	return u.Dropped, true
+}
+
+// SetDropped selects the dropped branch.
+func (u *jsonBuildTakingTransport) SetDropped(value *jsonBuildDroppedTransport) {
+	u.kind = jsonBuildTakingTransportKindDropped
+	u.Dropped = value
+}
+
+// Validate checks that one complete branch is selected.
+func (u jsonBuildTakingTransport) Validate() error {
+	switch u.kind {
+	case jsonBuildTakingTransportKindBuilding:
+		if u.Building == nil {
+			return goa.MissingFieldError("value", "jsonBuildTakingTransport")
+		}
+		return nil
+	case jsonBuildTakingTransportKindPassed:
+		if u.Passed == nil {
+			return goa.MissingFieldError("value", "jsonBuildTakingTransport")
+		}
+		return nil
+	case jsonBuildTakingTransportKindMerged:
+		if u.Merged == nil {
+			return goa.MissingFieldError("value", "jsonBuildTakingTransport")
+		}
+		return nil
+	case jsonBuildTakingTransportKindDropped:
+		if u.Dropped == nil {
+			return goa.MissingFieldError("value", "jsonBuildTakingTransport")
+		}
+		return nil
+	case "":
+		return goa.MissingFieldError("state", "jsonBuildTakingTransport")
+	default:
+		return goa.InvalidEnumValueError("state", u.kind, []any{string(jsonBuildTakingTransportKindBuilding), string(jsonBuildTakingTransportKindPassed), string(jsonBuildTakingTransportKindMerged), string(jsonBuildTakingTransportKindDropped)})
+	}
+}
+
+// MarshalJSON writes the selected branch name and value.
+func (u jsonBuildTakingTransport) MarshalJSON() ([]byte, error) {
+	if err := u.Validate(); err != nil {
+		return nil, err
+	}
+	var value any
+	switch u.kind {
+	case jsonBuildTakingTransportKindBuilding:
+		value = u.Building
+	case jsonBuildTakingTransportKindPassed:
+		value = u.Passed
+	case jsonBuildTakingTransportKindMerged:
+		value = u.Merged
+	case jsonBuildTakingTransportKindDropped:
+		value = u.Dropped
+	default:
+		return nil, fmt.Errorf("unexpected jsonBuildTakingTransport branch %q", u.kind)
+	}
+	data, err := json.Marshal(value)
+	if err != nil {
+		return nil, err
+	}
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(data, &fields); err != nil {
+		return nil, err
+	}
+	if fields == nil {
+		return nil, goa.InvalidFieldTypeError("state", nil, "non-null JSON object")
+	}
+	if _, exists := fields["state"]; exists {
+		return nil, fmt.Errorf("jsonBuildTakingTransport branch already contains discriminator %q", "state")
+	}
+	tag, err := json.Marshal(string(u.kind))
+	if err != nil {
+		return nil, err
+	}
+	fields["state"] = tag
+	return json.Marshal(fields)
+}
+
+// UnmarshalJSON reads one complete branch name and value.
+func (u *jsonBuildTakingTransport) UnmarshalJSON(data []byte) error {
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(data, &fields); err != nil {
+		return err
+	}
+	tag, exists := fields["state"]
+	if !exists {
+		return goa.MissingFieldError("state", "jsonBuildTakingTransport")
+	}
+	if bytes.Equal(bytes.TrimSpace(tag), []byte("null")) {
+		return goa.InvalidFieldTypeError("state", nil, "JSON string")
+	}
+	var raw struct {
+		Type  string
+		Value json.RawMessage
+	}
+	if err := json.Unmarshal(tag, &raw.Type); err != nil {
+		return err
+	}
+	delete(fields, "state")
+	value, err := json.Marshal(fields)
+	if err != nil {
+		return err
+	}
+	raw.Value = value
+	switch raw.Type {
+	case string(jsonBuildTakingTransportKindBuilding):
+		var value *jsonBuildBuildingTransport
+		decoder := json.NewDecoder(bytes.NewReader(raw.Value))
+		decoder.DisallowUnknownFields()
+		if err := decoder.Decode(&value); err != nil {
+			return err
+		}
+		u.kind = jsonBuildTakingTransportKindBuilding
+		u.Building = value
+	case string(jsonBuildTakingTransportKindPassed):
+		var value *jsonBuildPassedTransport
+		decoder := json.NewDecoder(bytes.NewReader(raw.Value))
+		decoder.DisallowUnknownFields()
+		if err := decoder.Decode(&value); err != nil {
+			return err
+		}
+		u.kind = jsonBuildTakingTransportKindPassed
+		u.Passed = value
+	case string(jsonBuildTakingTransportKindMerged):
+		var value *jsonBuildMergedTransport
+		decoder := json.NewDecoder(bytes.NewReader(raw.Value))
+		decoder.DisallowUnknownFields()
+		if err := decoder.Decode(&value); err != nil {
+			return err
+		}
+		u.kind = jsonBuildTakingTransportKindMerged
+		u.Merged = value
+	case string(jsonBuildTakingTransportKindDropped):
+		var value *jsonBuildDroppedTransport
+		decoder := json.NewDecoder(bytes.NewReader(raw.Value))
+		decoder.DisallowUnknownFields()
+		if err := decoder.Decode(&value); err != nil {
+			return err
+		}
+		u.kind = jsonBuildTakingTransportKindDropped
+		u.Dropped = value
+	default:
+		return goa.InvalidEnumValueError("state", raw.Type, []any{string(jsonBuildTakingTransportKindBuilding), string(jsonBuildTakingTransportKindPassed), string(jsonBuildTakingTransportKindMerged), string(jsonBuildTakingTransportKindDropped)})
 	}
 	return u.Validate()
 }
@@ -11441,6 +12131,237 @@ func DecodeArchitecturePreviewResult(data []byte) (out *ArchitecturePreviewResul
 	return out, nil
 }
 
+// EncodeBuildBuilding turns a service value into JSON using the field names in the Goa design.
+func EncodeBuildBuilding(in *BuildBuilding) ([]byte, error) {
+	if err := checkBuildBuildingValue(in); err != nil {
+		return nil, fmt.Errorf("encode BuildBuilding JSON: %w", err)
+	}
+	var body *jsonBuildBuildingTransport
+	{
+		body = &jsonBuildBuildingTransport{}
+	}
+	if err := validatejsonBuildBuildingTransport(body); err != nil {
+		return nil, fmt.Errorf("validate BuildBuilding JSON: %w", err)
+	}
+	data, err := json.Marshal(body)
+	if err != nil {
+		return nil, fmt.Errorf("encode BuildBuilding JSON: %w", err)
+	}
+	return data, nil
+}
+
+// ValidateBuildBuildingValue checks the original Go fields against their declared constraints.
+// It returns validation errors without encoding the value as JSON.
+
+func ValidateBuildBuildingValue(in *BuildBuilding) error {
+	if err := checkBuildBuildingValue(in); err != nil {
+		return fmt.Errorf("validate BuildBuilding value: %w", err)
+	}
+
+	if in == nil {
+		return goa.MissingFieldError("result", "BuildBuilding")
+	}
+
+	var body *jsonBuildBuildingTransport
+	{
+		body = &jsonBuildBuildingTransport{}
+	}
+	if err := validatejsonBuildBuildingTransport(body); err != nil {
+		return fmt.Errorf("validate BuildBuilding value: %w", err)
+	}
+	return nil
+}
+
+// DecodeBuildBuilding checks JSON field names from the Goa design and returns a service value.
+func DecodeBuildBuilding(data []byte) (out *BuildBuilding, err error) {
+	root, err := readStrictJSON(data)
+	if err != nil {
+		return out, fmt.Errorf("decode BuildBuilding JSON: %w", err)
+	}
+	if err := validateBuildBuildingJSONValue("", root, ""); err != nil {
+		return out, fmt.Errorf("decode BuildBuilding JSON: %w", err)
+	}
+	var body *jsonBuildBuildingTransport
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&body); err != nil {
+		return out, fmt.Errorf("decode BuildBuilding JSON: %w", err)
+	}
+	if err := decoder.Decode(&struct{}{}); err != io.EOF {
+		if err == nil {
+			return out, fmt.Errorf("decode BuildBuilding JSON: multiple JSON values")
+		}
+		return out, fmt.Errorf("decode BuildBuilding JSON after first value: %w", err)
+	}
+	if err := validatejsonBuildBuildingTransport(body); err != nil {
+		return out, fmt.Errorf("validate BuildBuilding JSON: %w", err)
+	}
+	{
+		out = &BuildBuilding{}
+	}
+	return out, nil
+}
+
+// EncodeBuildDropped turns a service value into JSON using the field names in the Goa design.
+func EncodeBuildDropped(in *BuildDropped) ([]byte, error) {
+	if err := checkBuildDroppedValue(in); err != nil {
+		return nil, fmt.Errorf("encode BuildDropped JSON: %w", err)
+	}
+	if err := validateBuildDroppedOriginal(in); err != nil {
+		return nil, fmt.Errorf("validate BuildDropped value: %w", err)
+	}
+	var body *jsonBuildDroppedTransport
+	{
+		body = &jsonBuildDroppedTransport{}
+		body.KeptBranches = make([]string, len(in.KeptBranches))
+		for i, val := range in.KeptBranches {
+			body.KeptBranches[i] = val
+		}
+	}
+	if err := validatejsonBuildDroppedTransport(body); err != nil {
+		return nil, fmt.Errorf("validate BuildDropped JSON: %w", err)
+	}
+	data, err := json.Marshal(body)
+	if err != nil {
+		return nil, fmt.Errorf("encode BuildDropped JSON: %w", err)
+	}
+	return data, nil
+}
+
+// ValidateBuildDroppedValue checks the original Go fields against their declared constraints.
+// It returns validation errors without encoding the value as JSON.
+
+func ValidateBuildDroppedValue(in *BuildDropped) error {
+	if err := checkBuildDroppedValue(in); err != nil {
+		return fmt.Errorf("validate BuildDropped value: %w", err)
+	}
+	if err := validateBuildDroppedOriginal(in); err != nil {
+		return fmt.Errorf("validate BuildDropped value: %w", err)
+	}
+
+	if in == nil {
+		return goa.MissingFieldError("result", "BuildDropped")
+	}
+
+	var body *jsonBuildDroppedTransport
+	{
+		body = &jsonBuildDroppedTransport{}
+		body.KeptBranches = make([]string, len(in.KeptBranches))
+		for i, val := range in.KeptBranches {
+			body.KeptBranches[i] = val
+		}
+	}
+	if err := validatejsonBuildDroppedTransport(body); err != nil {
+		return fmt.Errorf("validate BuildDropped value: %w", err)
+	}
+	return nil
+}
+
+// DecodeBuildDropped checks JSON field names from the Goa design and returns a service value.
+func DecodeBuildDropped(data []byte) (out *BuildDropped, err error) {
+	root, err := readStrictJSON(data)
+	if err != nil {
+		return out, fmt.Errorf("decode BuildDropped JSON: %w", err)
+	}
+	if err := validateBuildDroppedJSONValue("", root, ""); err != nil {
+		return out, fmt.Errorf("decode BuildDropped JSON: %w", err)
+	}
+	var body *jsonBuildDroppedTransport
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&body); err != nil {
+		return out, fmt.Errorf("decode BuildDropped JSON: %w", err)
+	}
+	if err := decoder.Decode(&struct{}{}); err != io.EOF {
+		if err == nil {
+			return out, fmt.Errorf("decode BuildDropped JSON: multiple JSON values")
+		}
+		return out, fmt.Errorf("decode BuildDropped JSON after first value: %w", err)
+	}
+	if err := validatejsonBuildDroppedTransport(body); err != nil {
+		return out, fmt.Errorf("validate BuildDropped JSON: %w", err)
+	}
+	{
+		out = &BuildDropped{}
+		out.KeptBranches = make([]string, len(body.KeptBranches))
+		for i, val := range body.KeptBranches {
+			out.KeptBranches[i] = val
+		}
+	}
+	return out, nil
+}
+
+// EncodeBuildMerged turns a service value into JSON using the field names in the Goa design.
+func EncodeBuildMerged(in *BuildMerged) ([]byte, error) {
+	if err := checkBuildMergedValue(in); err != nil {
+		return nil, fmt.Errorf("encode BuildMerged JSON: %w", err)
+	}
+	var body *jsonBuildMergedTransport
+	{
+		body = &jsonBuildMergedTransport{}
+	}
+	if err := validatejsonBuildMergedTransport(body); err != nil {
+		return nil, fmt.Errorf("validate BuildMerged JSON: %w", err)
+	}
+	data, err := json.Marshal(body)
+	if err != nil {
+		return nil, fmt.Errorf("encode BuildMerged JSON: %w", err)
+	}
+	return data, nil
+}
+
+// ValidateBuildMergedValue checks the original Go fields against their declared constraints.
+// It returns validation errors without encoding the value as JSON.
+
+func ValidateBuildMergedValue(in *BuildMerged) error {
+	if err := checkBuildMergedValue(in); err != nil {
+		return fmt.Errorf("validate BuildMerged value: %w", err)
+	}
+
+	if in == nil {
+		return goa.MissingFieldError("result", "BuildMerged")
+	}
+
+	var body *jsonBuildMergedTransport
+	{
+		body = &jsonBuildMergedTransport{}
+	}
+	if err := validatejsonBuildMergedTransport(body); err != nil {
+		return fmt.Errorf("validate BuildMerged value: %w", err)
+	}
+	return nil
+}
+
+// DecodeBuildMerged checks JSON field names from the Goa design and returns a service value.
+func DecodeBuildMerged(data []byte) (out *BuildMerged, err error) {
+	root, err := readStrictJSON(data)
+	if err != nil {
+		return out, fmt.Errorf("decode BuildMerged JSON: %w", err)
+	}
+	if err := validateBuildMergedJSONValue("", root, ""); err != nil {
+		return out, fmt.Errorf("decode BuildMerged JSON: %w", err)
+	}
+	var body *jsonBuildMergedTransport
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&body); err != nil {
+		return out, fmt.Errorf("decode BuildMerged JSON: %w", err)
+	}
+	if err := decoder.Decode(&struct{}{}); err != io.EOF {
+		if err == nil {
+			return out, fmt.Errorf("decode BuildMerged JSON: multiple JSON values")
+		}
+		return out, fmt.Errorf("decode BuildMerged JSON after first value: %w", err)
+	}
+	if err := validatejsonBuildMergedTransport(body); err != nil {
+		return out, fmt.Errorf("validate BuildMerged JSON: %w", err)
+	}
+	{
+		out = &BuildMerged{}
+	}
+	return out, nil
+}
+
 // EncodeBuildNotStarted turns a service value into JSON using the field names in the Goa design.
 func EncodeBuildNotStarted(in *BuildNotStarted) ([]byte, error) {
 	if err := checkBuildNotStartedValue(in); err != nil {
@@ -11508,6 +12429,248 @@ func DecodeBuildNotStarted(data []byte) (out *BuildNotStarted, err error) {
 	}
 	{
 		out = &BuildNotStarted{}
+	}
+	return out, nil
+}
+
+// EncodeBuildPassed turns a service value into JSON using the field names in the Goa design.
+func EncodeBuildPassed(in *BuildPassed) ([]byte, error) {
+	if err := checkBuildPassedValue(in); err != nil {
+		return nil, fmt.Errorf("encode BuildPassed JSON: %w", err)
+	}
+	if err := validateBuildPassedOriginal(in); err != nil {
+		return nil, fmt.Errorf("validate BuildPassed value: %w", err)
+	}
+	var body *jsonBuildPassedTransport
+	{
+		body = &jsonBuildPassedTransport{
+			RunID:           &in.RunID,
+			CandidateCommit: &in.CandidateCommit,
+			CandidateBranch: &in.CandidateBranch,
+			BaseInBranch:    &in.BaseInBranch,
+		}
+		var testsValue jsonBuildPassedTestSourceTransport
+		switch string(in.Tests.Kind()) {
+		case "evaluator":
+			actual, _ := in.Tests.AsEvaluator()
+			var obj *jsonOperatorEvaluatorTestsTransport
+			if actual != nil {
+				obj = encodeOperatorEvaluatorTestsToOperatorEvaluatorTestsTransport(actual)
+			}
+			u := testsValue
+			u.SetEvaluator((*jsonOperatorEvaluatorTestsTransport)(obj))
+			testsValue = u
+		case "written_tests":
+			actual, _ := in.Tests.AsWrittenTests()
+			var obj *jsonBuildPassedTestsTransport
+			if actual != nil {
+				obj = encodeBuildPassedTestsToBuildPassedTestsTransport(actual)
+			}
+			u := testsValue
+			u.SetWrittenTests((*jsonBuildPassedTestsTransport)(obj))
+			testsValue = u
+		}
+		body.Tests = &testsValue
+	}
+	if err := validatejsonBuildPassedTransport(body); err != nil {
+		return nil, fmt.Errorf("validate BuildPassed JSON: %w", err)
+	}
+	data, err := json.Marshal(body)
+	if err != nil {
+		return nil, fmt.Errorf("encode BuildPassed JSON: %w", err)
+	}
+	return data, nil
+}
+
+// ValidateBuildPassedValue checks the original Go fields against their declared constraints.
+// It returns validation errors without encoding the value as JSON.
+
+func ValidateBuildPassedValue(in *BuildPassed) error {
+	if err := checkBuildPassedValue(in); err != nil {
+		return fmt.Errorf("validate BuildPassed value: %w", err)
+	}
+	if err := validateBuildPassedOriginal(in); err != nil {
+		return fmt.Errorf("validate BuildPassed value: %w", err)
+	}
+
+	if in == nil {
+		return goa.MissingFieldError("result", "BuildPassed")
+	}
+
+	var body *jsonBuildPassedTransport
+	{
+		body = &jsonBuildPassedTransport{
+			RunID:           &in.RunID,
+			CandidateCommit: &in.CandidateCommit,
+			CandidateBranch: &in.CandidateBranch,
+			BaseInBranch:    &in.BaseInBranch,
+		}
+		var testsValue jsonBuildPassedTestSourceTransport
+		switch string(in.Tests.Kind()) {
+		case "evaluator":
+			actual, _ := in.Tests.AsEvaluator()
+			var obj *jsonOperatorEvaluatorTestsTransport
+			if actual != nil {
+				obj = encodeOperatorEvaluatorTestsToOperatorEvaluatorTestsTransport(actual)
+			}
+			u := testsValue
+			u.SetEvaluator((*jsonOperatorEvaluatorTestsTransport)(obj))
+			testsValue = u
+		case "written_tests":
+			actual, _ := in.Tests.AsWrittenTests()
+			var obj *jsonBuildPassedTestsTransport
+			if actual != nil {
+				obj = encodeBuildPassedTestsToBuildPassedTestsTransport(actual)
+			}
+			u := testsValue
+			u.SetWrittenTests((*jsonBuildPassedTestsTransport)(obj))
+			testsValue = u
+		}
+		body.Tests = &testsValue
+	}
+	if err := validatejsonBuildPassedTransport(body); err != nil {
+		return fmt.Errorf("validate BuildPassed value: %w", err)
+	}
+	return nil
+}
+
+// DecodeBuildPassed checks JSON field names from the Goa design and returns a service value.
+func DecodeBuildPassed(data []byte) (out *BuildPassed, err error) {
+	root, err := readStrictJSON(data)
+	if err != nil {
+		return out, fmt.Errorf("decode BuildPassed JSON: %w", err)
+	}
+	if err := validateBuildPassedJSONValue("", root, ""); err != nil {
+		return out, fmt.Errorf("decode BuildPassed JSON: %w", err)
+	}
+	var body *jsonBuildPassedTransport
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&body); err != nil {
+		return out, fmt.Errorf("decode BuildPassed JSON: %w", err)
+	}
+	if err := decoder.Decode(&struct{}{}); err != io.EOF {
+		if err == nil {
+			return out, fmt.Errorf("decode BuildPassed JSON: multiple JSON values")
+		}
+		return out, fmt.Errorf("decode BuildPassed JSON after first value: %w", err)
+	}
+	if err := validatejsonBuildPassedTransport(body); err != nil {
+		return out, fmt.Errorf("validate BuildPassed JSON: %w", err)
+	}
+	{
+		out = &BuildPassed{
+			RunID:           *body.RunID,
+			CandidateCommit: *body.CandidateCommit,
+			CandidateBranch: *body.CandidateBranch,
+			BaseInBranch:    *body.BaseInBranch,
+		}
+		switch string(body.Tests.Kind()) {
+		case "evaluator":
+			actual, _ := body.Tests.AsEvaluator()
+			var obj *OperatorEvaluatorTests
+			if actual != nil {
+				obj = decodeOperatorEvaluatorTestsTransportToOperatorEvaluatorTests(actual)
+			}
+			u := out.Tests
+			u.SetEvaluator((*OperatorEvaluatorTests)(obj))
+			out.Tests = u
+		case "written_tests":
+			actual, _ := body.Tests.AsWrittenTests()
+			var obj *BuildPassedTests
+			if actual != nil {
+				obj = decodeBuildPassedTestsTransportToBuildPassedTests(actual)
+			}
+			u := out.Tests
+			u.SetWrittenTests((*BuildPassedTests)(obj))
+			out.Tests = u
+		}
+	}
+	return out, nil
+}
+
+// EncodeBuildPassedTests turns a service value into JSON using the field names in the Goa design.
+func EncodeBuildPassedTests(in *BuildPassedTests) ([]byte, error) {
+	if err := checkBuildPassedTestsValue(in); err != nil {
+		return nil, fmt.Errorf("encode BuildPassedTests JSON: %w", err)
+	}
+	if err := validateBuildPassedTestsOriginal(in); err != nil {
+		return nil, fmt.Errorf("validate BuildPassedTests value: %w", err)
+	}
+	var body *jsonBuildPassedTestsTransport
+	{
+		body = &jsonBuildPassedTestsTransport{
+			Commit: &in.Commit,
+			Branch: &in.Branch,
+		}
+	}
+	if err := validatejsonBuildPassedTestsTransport(body); err != nil {
+		return nil, fmt.Errorf("validate BuildPassedTests JSON: %w", err)
+	}
+	data, err := json.Marshal(body)
+	if err != nil {
+		return nil, fmt.Errorf("encode BuildPassedTests JSON: %w", err)
+	}
+	return data, nil
+}
+
+// ValidateBuildPassedTestsValue checks the original Go fields against their declared constraints.
+// It returns validation errors without encoding the value as JSON.
+
+func ValidateBuildPassedTestsValue(in *BuildPassedTests) error {
+	if err := checkBuildPassedTestsValue(in); err != nil {
+		return fmt.Errorf("validate BuildPassedTests value: %w", err)
+	}
+	if err := validateBuildPassedTestsOriginal(in); err != nil {
+		return fmt.Errorf("validate BuildPassedTests value: %w", err)
+	}
+
+	if in == nil {
+		return goa.MissingFieldError("result", "BuildPassedTests")
+	}
+
+	var body *jsonBuildPassedTestsTransport
+	{
+		body = &jsonBuildPassedTestsTransport{
+			Commit: &in.Commit,
+			Branch: &in.Branch,
+		}
+	}
+	if err := validatejsonBuildPassedTestsTransport(body); err != nil {
+		return fmt.Errorf("validate BuildPassedTests value: %w", err)
+	}
+	return nil
+}
+
+// DecodeBuildPassedTests checks JSON field names from the Goa design and returns a service value.
+func DecodeBuildPassedTests(data []byte) (out *BuildPassedTests, err error) {
+	root, err := readStrictJSON(data)
+	if err != nil {
+		return out, fmt.Errorf("decode BuildPassedTests JSON: %w", err)
+	}
+	if err := validateBuildPassedJSONValue3("", root, ""); err != nil {
+		return out, fmt.Errorf("decode BuildPassedTests JSON: %w", err)
+	}
+	var body *jsonBuildPassedTestsTransport
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&body); err != nil {
+		return out, fmt.Errorf("decode BuildPassedTests JSON: %w", err)
+	}
+	if err := decoder.Decode(&struct{}{}); err != io.EOF {
+		if err == nil {
+			return out, fmt.Errorf("decode BuildPassedTests JSON: multiple JSON values")
+		}
+		return out, fmt.Errorf("decode BuildPassedTests JSON after first value: %w", err)
+	}
+	if err := validatejsonBuildPassedTestsTransport(body); err != nil {
+		return out, fmt.Errorf("validate BuildPassedTests JSON: %w", err)
+	}
+	{
+		out = &BuildPassedTests{
+			Commit: *body.Commit,
+			Branch: *body.Branch,
+		}
 	}
 	return out, nil
 }
@@ -19114,6 +20277,46 @@ func EncodeStartedBuild(in *StartedBuild) ([]byte, error) {
 		body.RequiredTestCount = &requiredTestCount
 		body.Builder = encodeBuilderProgressToBuilderProgressTransport(in.Builder)
 		body.TestWriter = encodeTestWriterProgressToTestWriterProgressTransport(in.TestWriter)
+		var takingValue jsonBuildTakingTransport
+		switch string(in.Taking.Kind()) {
+		case "building":
+			actual, _ := in.Taking.AsBuilding()
+			var obj *jsonBuildBuildingTransport
+			if actual != nil {
+				obj = encodeBuildBuildingToBuildBuildingTransport(actual)
+			}
+			u := takingValue
+			u.SetBuilding((*jsonBuildBuildingTransport)(obj))
+			takingValue = u
+		case "passed":
+			actual, _ := in.Taking.AsPassed()
+			var obj *jsonBuildPassedTransport
+			if actual != nil {
+				obj = encodeBuildPassedToBuildPassedTransport(actual)
+			}
+			u := takingValue
+			u.SetPassed((*jsonBuildPassedTransport)(obj))
+			takingValue = u
+		case "merged":
+			actual, _ := in.Taking.AsMerged()
+			var obj *jsonBuildMergedTransport
+			if actual != nil {
+				obj = encodeBuildMergedToBuildMergedTransport(actual)
+			}
+			u := takingValue
+			u.SetMerged((*jsonBuildMergedTransport)(obj))
+			takingValue = u
+		case "dropped":
+			actual, _ := in.Taking.AsDropped()
+			var obj *jsonBuildDroppedTransport
+			if actual != nil {
+				obj = encodeBuildDroppedToBuildDroppedTransport(actual)
+			}
+			u := takingValue
+			u.SetDropped((*jsonBuildDroppedTransport)(obj))
+			takingValue = u
+		}
+		body.Taking = &takingValue
 	}
 	if err := validatejsonStartedBuildTransport(body); err != nil {
 		return nil, fmt.Errorf("validate StartedBuild JSON: %w", err)
@@ -19151,6 +20354,46 @@ func ValidateStartedBuildValue(in *StartedBuild) error {
 		body.RequiredTestCount = &requiredTestCount
 		body.Builder = encodeBuilderProgressToBuilderProgressTransport(in.Builder)
 		body.TestWriter = encodeTestWriterProgressToTestWriterProgressTransport(in.TestWriter)
+		var takingValue jsonBuildTakingTransport
+		switch string(in.Taking.Kind()) {
+		case "building":
+			actual, _ := in.Taking.AsBuilding()
+			var obj *jsonBuildBuildingTransport
+			if actual != nil {
+				obj = encodeBuildBuildingToBuildBuildingTransport(actual)
+			}
+			u := takingValue
+			u.SetBuilding((*jsonBuildBuildingTransport)(obj))
+			takingValue = u
+		case "passed":
+			actual, _ := in.Taking.AsPassed()
+			var obj *jsonBuildPassedTransport
+			if actual != nil {
+				obj = encodeBuildPassedToBuildPassedTransport(actual)
+			}
+			u := takingValue
+			u.SetPassed((*jsonBuildPassedTransport)(obj))
+			takingValue = u
+		case "merged":
+			actual, _ := in.Taking.AsMerged()
+			var obj *jsonBuildMergedTransport
+			if actual != nil {
+				obj = encodeBuildMergedToBuildMergedTransport(actual)
+			}
+			u := takingValue
+			u.SetMerged((*jsonBuildMergedTransport)(obj))
+			takingValue = u
+		case "dropped":
+			actual, _ := in.Taking.AsDropped()
+			var obj *jsonBuildDroppedTransport
+			if actual != nil {
+				obj = encodeBuildDroppedToBuildDroppedTransport(actual)
+			}
+			u := takingValue
+			u.SetDropped((*jsonBuildDroppedTransport)(obj))
+			takingValue = u
+		}
+		body.Taking = &takingValue
 	}
 	if err := validatejsonStartedBuildTransport(body); err != nil {
 		return fmt.Errorf("validate StartedBuild value: %w", err)
@@ -19191,6 +20434,44 @@ func DecodeStartedBuild(data []byte) (out *StartedBuild, err error) {
 		}
 		out.Builder = decodeBuilderProgressTransportToBuilderProgress(body.Builder)
 		out.TestWriter = decodeTestWriterProgressTransportToTestWriterProgress(body.TestWriter)
+		switch string(body.Taking.Kind()) {
+		case "building":
+			actual, _ := body.Taking.AsBuilding()
+			var obj *BuildBuilding
+			if actual != nil {
+				obj = decodeBuildBuildingTransportToBuildBuilding(actual)
+			}
+			u := out.Taking
+			u.SetBuilding((*BuildBuilding)(obj))
+			out.Taking = u
+		case "passed":
+			actual, _ := body.Taking.AsPassed()
+			var obj *BuildPassed
+			if actual != nil {
+				obj = decodeBuildPassedTransportToBuildPassed(actual)
+			}
+			u := out.Taking
+			u.SetPassed((*BuildPassed)(obj))
+			out.Taking = u
+		case "merged":
+			actual, _ := body.Taking.AsMerged()
+			var obj *BuildMerged
+			if actual != nil {
+				obj = decodeBuildMergedTransportToBuildMerged(actual)
+			}
+			u := out.Taking
+			u.SetMerged((*BuildMerged)(obj))
+			out.Taking = u
+		case "dropped":
+			actual, _ := body.Taking.AsDropped()
+			var obj *BuildDropped
+			if actual != nil {
+				obj = decodeBuildDroppedTransportToBuildDropped(actual)
+			}
+			u := out.Taking
+			u.SetDropped((*BuildDropped)(obj))
+			out.Taking = u
+		}
 	}
 	return out, nil
 }
@@ -20876,7 +22157,7 @@ func DecodeTestWriterProgress(data []byte) (out *TestWriterProgress, err error) 
 	if err != nil {
 		return out, fmt.Errorf("decode TestWriterProgress JSON: %w", err)
 	}
-	if err := validateChangeBuildJSONValue4("", root, ""); err != nil {
+	if err := validateChangeBuildJSONValue5("", root, ""); err != nil {
 		return out, fmt.Errorf("decode TestWriterProgress JSON: %w", err)
 	}
 	var body *jsonTestWriterProgressTransport
@@ -21095,7 +22376,7 @@ func DecodeTestsAssigned(data []byte) (out *TestsAssigned, err error) {
 	if err != nil {
 		return out, fmt.Errorf("decode TestsAssigned JSON: %w", err)
 	}
-	if err := validateChangeBuildJSONValue6("", root, ""); err != nil {
+	if err := validateChangeBuildJSONValue7("", root, ""); err != nil {
 		return out, fmt.Errorf("decode TestsAssigned JSON: %w", err)
 	}
 	var body *jsonTestsAssignedTransport
@@ -21180,7 +22461,7 @@ func DecodeTestsCouldNotRun(data []byte) (out *TestsCouldNotRun, err error) {
 	if err != nil {
 		return out, fmt.Errorf("decode TestsCouldNotRun JSON: %w", err)
 	}
-	if err := validateChangeBuildJSONValue9("", root, ""); err != nil {
+	if err := validateChangeBuildJSONValue10("", root, ""); err != nil {
 		return out, fmt.Errorf("decode TestsCouldNotRun JSON: %w", err)
 	}
 	var body *jsonTestsCouldNotRunTransport
@@ -21269,7 +22550,7 @@ func DecodeTestsNeedChanges(data []byte) (out *TestsNeedChanges, err error) {
 	if err != nil {
 		return out, fmt.Errorf("decode TestsNeedChanges JSON: %w", err)
 	}
-	if err := validateChangeBuildJSONValue8("", root, ""); err != nil {
+	if err := validateChangeBuildJSONValue9("", root, ""); err != nil {
 		return out, fmt.Errorf("decode TestsNeedChanges JSON: %w", err)
 	}
 	var body *jsonTestsNeedChangesTransport
@@ -21485,7 +22766,7 @@ func DecodeTestsReported(data []byte) (out *TestsReported, err error) {
 	if err != nil {
 		return out, fmt.Errorf("decode TestsReported JSON: %w", err)
 	}
-	if err := validateChangeBuildJSONValue7("", root, ""); err != nil {
+	if err := validateChangeBuildJSONValue8("", root, ""); err != nil {
 		return out, fmt.Errorf("decode TestsReported JSON: %w", err)
 	}
 	var body *jsonTestsReportedTransport
@@ -23340,8 +24621,70 @@ func decodeApprovalItemTransportToApprovalItem(v *jsonApprovalItemTransport) *Ap
 	return res
 }
 
+func decodeBuildBuildingTransportToBuildBuilding(v *jsonBuildBuildingTransport) *BuildBuilding {
+	res := &BuildBuilding{}
+
+	return res
+}
+
+func decodeBuildDroppedTransportToBuildDropped(v *jsonBuildDroppedTransport) *BuildDropped {
+	res := &BuildDropped{}
+	res.KeptBranches = make([]string, len(v.KeptBranches))
+	for i, val := range v.KeptBranches {
+		res.KeptBranches[i] = val
+	}
+
+	return res
+}
+
+func decodeBuildMergedTransportToBuildMerged(v *jsonBuildMergedTransport) *BuildMerged {
+	res := &BuildMerged{}
+
+	return res
+}
+
 func decodeBuildNotStartedTransportToBuildNotStarted(v *jsonBuildNotStartedTransport) *BuildNotStarted {
 	res := &BuildNotStarted{}
+
+	return res
+}
+
+func decodeBuildPassedTestsTransportToBuildPassedTests(v *jsonBuildPassedTestsTransport) *BuildPassedTests {
+	res := &BuildPassedTests{
+		Commit: *v.Commit,
+		Branch: *v.Branch,
+	}
+
+	return res
+}
+
+func decodeBuildPassedTransportToBuildPassed(v *jsonBuildPassedTransport) *BuildPassed {
+	res := &BuildPassed{
+		RunID:           *v.RunID,
+		CandidateCommit: *v.CandidateCommit,
+		CandidateBranch: *v.CandidateBranch,
+		BaseInBranch:    *v.BaseInBranch,
+	}
+	switch string(v.Tests.Kind()) {
+	case "evaluator":
+		actual, _ := v.Tests.AsEvaluator()
+		var obj *OperatorEvaluatorTests
+		if actual != nil {
+			obj = decodeOperatorEvaluatorTestsTransportToOperatorEvaluatorTests(actual)
+		}
+		u := res.Tests
+		u.SetEvaluator((*OperatorEvaluatorTests)(obj))
+		res.Tests = u
+	case "written_tests":
+		actual, _ := v.Tests.AsWrittenTests()
+		var obj *BuildPassedTests
+		if actual != nil {
+			obj = decodeBuildPassedTestsTransportToBuildPassedTests(actual)
+		}
+		u := res.Tests
+		u.SetWrittenTests((*BuildPassedTests)(obj))
+		res.Tests = u
+	}
 
 	return res
 }
@@ -23817,6 +25160,44 @@ func decodeStartedBuildTransportToStartedBuild(v *jsonStartedBuildTransport) *St
 	}
 	res.Builder = decodeBuilderProgressTransportToBuilderProgress(v.Builder)
 	res.TestWriter = decodeTestWriterProgressTransportToTestWriterProgress(v.TestWriter)
+	switch string(v.Taking.Kind()) {
+	case "building":
+		actual, _ := v.Taking.AsBuilding()
+		var obj *BuildBuilding
+		if actual != nil {
+			obj = decodeBuildBuildingTransportToBuildBuilding(actual)
+		}
+		u := res.Taking
+		u.SetBuilding((*BuildBuilding)(obj))
+		res.Taking = u
+	case "passed":
+		actual, _ := v.Taking.AsPassed()
+		var obj *BuildPassed
+		if actual != nil {
+			obj = decodeBuildPassedTransportToBuildPassed(actual)
+		}
+		u := res.Taking
+		u.SetPassed((*BuildPassed)(obj))
+		res.Taking = u
+	case "merged":
+		actual, _ := v.Taking.AsMerged()
+		var obj *BuildMerged
+		if actual != nil {
+			obj = decodeBuildMergedTransportToBuildMerged(actual)
+		}
+		u := res.Taking
+		u.SetMerged((*BuildMerged)(obj))
+		res.Taking = u
+	case "dropped":
+		actual, _ := v.Taking.AsDropped()
+		var obj *BuildDropped
+		if actual != nil {
+			obj = decodeBuildDroppedTransportToBuildDropped(actual)
+		}
+		u := res.Taking
+		u.SetDropped((*BuildDropped)(obj))
+		res.Taking = u
+	}
 
 	return res
 }
@@ -24401,8 +25782,72 @@ func encodeApprovalItemToApprovalItemTransport2(v *ApprovalItem) *jsonApprovalIt
 	return res
 }
 
+func encodeBuildBuildingToBuildBuildingTransport(v *BuildBuilding) *jsonBuildBuildingTransport {
+	res := &jsonBuildBuildingTransport{}
+
+	return res
+}
+
+func encodeBuildDroppedToBuildDroppedTransport(v *BuildDropped) *jsonBuildDroppedTransport {
+	res := &jsonBuildDroppedTransport{}
+	res.KeptBranches = make([]string, len(v.KeptBranches))
+	for i, val := range v.KeptBranches {
+		res.KeptBranches[i] = val
+	}
+
+	return res
+}
+
+func encodeBuildMergedToBuildMergedTransport(v *BuildMerged) *jsonBuildMergedTransport {
+	res := &jsonBuildMergedTransport{}
+
+	return res
+}
+
 func encodeBuildNotStartedToBuildNotStartedTransport(v *BuildNotStarted) *jsonBuildNotStartedTransport {
 	res := &jsonBuildNotStartedTransport{}
+
+	return res
+}
+
+func encodeBuildPassedTestsToBuildPassedTestsTransport(v *BuildPassedTests) *jsonBuildPassedTestsTransport {
+	res := &jsonBuildPassedTestsTransport{
+		Commit: &v.Commit,
+		Branch: &v.Branch,
+	}
+
+	return res
+}
+
+func encodeBuildPassedToBuildPassedTransport(v *BuildPassed) *jsonBuildPassedTransport {
+	res := &jsonBuildPassedTransport{
+		RunID:           &v.RunID,
+		CandidateCommit: &v.CandidateCommit,
+		CandidateBranch: &v.CandidateBranch,
+		BaseInBranch:    &v.BaseInBranch,
+	}
+	var testsValue jsonBuildPassedTestSourceTransport
+	switch string(v.Tests.Kind()) {
+	case "evaluator":
+		actual, _ := v.Tests.AsEvaluator()
+		var obj *jsonOperatorEvaluatorTestsTransport
+		if actual != nil {
+			obj = encodeOperatorEvaluatorTestsToOperatorEvaluatorTestsTransport(actual)
+		}
+		u := testsValue
+		u.SetEvaluator((*jsonOperatorEvaluatorTestsTransport)(obj))
+		testsValue = u
+	case "written_tests":
+		actual, _ := v.Tests.AsWrittenTests()
+		var obj *jsonBuildPassedTestsTransport
+		if actual != nil {
+			obj = encodeBuildPassedTestsToBuildPassedTestsTransport(actual)
+		}
+		u := testsValue
+		u.SetWrittenTests((*jsonBuildPassedTestsTransport)(obj))
+		testsValue = u
+	}
+	res.Tests = &testsValue
 
 	return res
 }
@@ -24902,6 +26347,46 @@ func encodeStartedBuildToStartedBuildTransport(v *StartedBuild) *jsonStartedBuil
 	res.RequiredTestCount = &requiredTestCount
 	res.Builder = encodeBuilderProgressToBuilderProgressTransport(v.Builder)
 	res.TestWriter = encodeTestWriterProgressToTestWriterProgressTransport(v.TestWriter)
+	var takingValue jsonBuildTakingTransport
+	switch string(v.Taking.Kind()) {
+	case "building":
+		actual, _ := v.Taking.AsBuilding()
+		var obj *jsonBuildBuildingTransport
+		if actual != nil {
+			obj = encodeBuildBuildingToBuildBuildingTransport(actual)
+		}
+		u := takingValue
+		u.SetBuilding((*jsonBuildBuildingTransport)(obj))
+		takingValue = u
+	case "passed":
+		actual, _ := v.Taking.AsPassed()
+		var obj *jsonBuildPassedTransport
+		if actual != nil {
+			obj = encodeBuildPassedToBuildPassedTransport(actual)
+		}
+		u := takingValue
+		u.SetPassed((*jsonBuildPassedTransport)(obj))
+		takingValue = u
+	case "merged":
+		actual, _ := v.Taking.AsMerged()
+		var obj *jsonBuildMergedTransport
+		if actual != nil {
+			obj = encodeBuildMergedToBuildMergedTransport(actual)
+		}
+		u := takingValue
+		u.SetMerged((*jsonBuildMergedTransport)(obj))
+		takingValue = u
+	case "dropped":
+		actual, _ := v.Taking.AsDropped()
+		var obj *jsonBuildDroppedTransport
+		if actual != nil {
+			obj = encodeBuildDroppedToBuildDroppedTransport(actual)
+		}
+		u := takingValue
+		u.SetDropped((*jsonBuildDroppedTransport)(obj))
+		takingValue = u
+	}
+	res.Taking = &takingValue
 
 	return res
 }
@@ -24916,6 +26401,46 @@ func encodeStartedBuildToStartedBuildTransport2(v *StartedBuild) *jsonStartedBui
 	res.RequiredTestCount = &requiredTestCount
 	res.Builder = encodeBuilderProgressToBuilderProgressTransport(v.Builder)
 	res.TestWriter = encodeTestWriterProgressToTestWriterProgressTransport(v.TestWriter)
+	var takingValue jsonBuildTakingTransport
+	switch string(v.Taking.Kind()) {
+	case "building":
+		actual, _ := v.Taking.AsBuilding()
+		var obj *jsonBuildBuildingTransport
+		if actual != nil {
+			obj = encodeBuildBuildingToBuildBuildingTransport(actual)
+		}
+		u := takingValue
+		u.SetBuilding((*jsonBuildBuildingTransport)(obj))
+		takingValue = u
+	case "passed":
+		actual, _ := v.Taking.AsPassed()
+		var obj *jsonBuildPassedTransport
+		if actual != nil {
+			obj = encodeBuildPassedToBuildPassedTransport(actual)
+		}
+		u := takingValue
+		u.SetPassed((*jsonBuildPassedTransport)(obj))
+		takingValue = u
+	case "merged":
+		actual, _ := v.Taking.AsMerged()
+		var obj *jsonBuildMergedTransport
+		if actual != nil {
+			obj = encodeBuildMergedToBuildMergedTransport(actual)
+		}
+		u := takingValue
+		u.SetMerged((*jsonBuildMergedTransport)(obj))
+		takingValue = u
+	case "dropped":
+		actual, _ := v.Taking.AsDropped()
+		var obj *jsonBuildDroppedTransport
+		if actual != nil {
+			obj = encodeBuildDroppedToBuildDroppedTransport(actual)
+		}
+		u := takingValue
+		u.SetDropped((*jsonBuildDroppedTransport)(obj))
+		takingValue = u
+	}
+	res.Taking = &takingValue
 
 	return res
 }
@@ -24930,6 +26455,46 @@ func encodeStartedBuildToStartedBuildTransport3(v *StartedBuild) *jsonStartedBui
 	res.RequiredTestCount = &requiredTestCount
 	res.Builder = encodeBuilderProgressToBuilderProgressTransport(v.Builder)
 	res.TestWriter = encodeTestWriterProgressToTestWriterProgressTransport(v.TestWriter)
+	var takingValue jsonBuildTakingTransport
+	switch string(v.Taking.Kind()) {
+	case "building":
+		actual, _ := v.Taking.AsBuilding()
+		var obj *jsonBuildBuildingTransport
+		if actual != nil {
+			obj = encodeBuildBuildingToBuildBuildingTransport(actual)
+		}
+		u := takingValue
+		u.SetBuilding((*jsonBuildBuildingTransport)(obj))
+		takingValue = u
+	case "passed":
+		actual, _ := v.Taking.AsPassed()
+		var obj *jsonBuildPassedTransport
+		if actual != nil {
+			obj = encodeBuildPassedToBuildPassedTransport(actual)
+		}
+		u := takingValue
+		u.SetPassed((*jsonBuildPassedTransport)(obj))
+		takingValue = u
+	case "merged":
+		actual, _ := v.Taking.AsMerged()
+		var obj *jsonBuildMergedTransport
+		if actual != nil {
+			obj = encodeBuildMergedToBuildMergedTransport(actual)
+		}
+		u := takingValue
+		u.SetMerged((*jsonBuildMergedTransport)(obj))
+		takingValue = u
+	case "dropped":
+		actual, _ := v.Taking.AsDropped()
+		var obj *jsonBuildDroppedTransport
+		if actual != nil {
+			obj = encodeBuildDroppedToBuildDroppedTransport(actual)
+		}
+		u := takingValue
+		u.SetDropped((*jsonBuildDroppedTransport)(obj))
+		takingValue = u
+	}
+	res.Taking = &takingValue
 
 	return res
 }
@@ -26545,6 +28110,120 @@ func validateArchitecturePreviewResultJSONValue3(path string, value any, descrip
 	return nil
 }
 
+// validateBuildBuildingJSONValue checks one value whose JSON shape is fixed by the generated Goa type.
+func validateBuildBuildingJSONValue(path string, value any, description string) error {
+	field := path
+	if field == "" {
+		field = "$payload"
+	}
+	if value == nil {
+		return invalidGeneratedFieldTypeError(field, "object", "null", description)
+	}
+	typed, ok := value.(map[string]any)
+	if !ok {
+		return invalidGeneratedFieldTypeError(field, "object", decodedJSONType(value), description)
+	}
+	keys := make([]string, 0, len(typed))
+	for key := range typed {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		switch key {
+		default:
+			return unknownJSONFieldError(path, key, []string{})
+		}
+	}
+	return nil
+}
+
+// validateBuildDroppedJSONValue checks one value whose JSON shape is fixed by the generated Goa type.
+func validateBuildDroppedJSONValue(path string, value any, description string) error {
+	field := path
+	if field == "" {
+		field = "$payload"
+	}
+	if value == nil {
+		return invalidGeneratedFieldTypeError(field, "object", "null", description)
+	}
+	typed, ok := value.(map[string]any)
+	if !ok {
+		return invalidGeneratedFieldTypeError(field, "object", decodedJSONType(value), description)
+	}
+	keys := make([]string, 0, len(typed))
+	for key := range typed {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		switch key {
+		case "kept_branches":
+			if err := validateBuildDroppedJSONValue2(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "The build's own branches that exist and hold a commit made after the build's base, where its work stays (git log <branch> shows it); empty when nothing was committed for it.",
+			); err != nil {
+				return err
+			}
+		default:
+			return unknownJSONFieldError(path, key, []string{
+				"kept_branches",
+			})
+		}
+	}
+	return nil
+}
+
+// validateBuildDroppedJSONValue2 checks one value whose JSON shape is fixed by the generated Goa type.
+func validateBuildDroppedJSONValue2(path string, value any, description string) error {
+	field := path
+	if field == "" {
+		field = "$payload"
+	}
+	if value == nil {
+		return invalidGeneratedFieldTypeError(field, "array", "null", description)
+	}
+	typed, ok := value.([]any)
+	if !ok {
+		return invalidGeneratedFieldTypeError(field, "array", decodedJSONType(value), description)
+	}
+	for index, item := range typed {
+		if err := validateAgentPolicyItemJSONValue2(
+			generatedJSONChildPath(path, strconv.Itoa(index), true),
+			item, description,
+		); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// validateBuildMergedJSONValue checks one value whose JSON shape is fixed by the generated Goa type.
+func validateBuildMergedJSONValue(path string, value any, description string) error {
+	field := path
+	if field == "" {
+		field = "$payload"
+	}
+	if value == nil {
+		return invalidGeneratedFieldTypeError(field, "object", "null", description)
+	}
+	typed, ok := value.(map[string]any)
+	if !ok {
+		return invalidGeneratedFieldTypeError(field, "object", decodedJSONType(value), description)
+	}
+	keys := make([]string, 0, len(typed))
+	for key := range typed {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		switch key {
+		default:
+			return unknownJSONFieldError(path, key, []string{})
+		}
+	}
+	return nil
+}
+
 // validateBuildNotStartedJSONValue checks one value whose JSON shape is fixed by the generated Goa type.
 func validateBuildNotStartedJSONValue(path string, value any, description string) error {
 	field := path
@@ -26567,6 +28246,151 @@ func validateBuildNotStartedJSONValue(path string, value any, description string
 		switch key {
 		default:
 			return unknownJSONFieldError(path, key, []string{})
+		}
+	}
+	return nil
+}
+
+// validateBuildPassedJSONValue checks one value whose JSON shape is fixed by the generated Goa type.
+func validateBuildPassedJSONValue(path string, value any, description string) error {
+	field := path
+	if field == "" {
+		field = "$payload"
+	}
+	if value == nil {
+		return invalidGeneratedFieldTypeError(field, "object", "null", description)
+	}
+	typed, ok := value.(map[string]any)
+	if !ok {
+		return invalidGeneratedFieldTypeError(field, "object", decodedJSONType(value), description)
+	}
+	keys := make([]string, 0, len(typed))
+	for key := range typed {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		switch key {
+		case "base_in_branch":
+			if err := validateAgentPolicyItemJSONValue3(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "False when the branch checked out in the project folder no longer holds the commit this build started from, because its history was rewritten: merging these commits brings that history back, and dropping the build and building again starts from the branch as it is.",
+			); err != nil {
+				return err
+			}
+		case "candidate_branch":
+			if err := validateAgentPolicyItemJSONValue2(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "The builder's branch of this build, surla/build-<n>, which holds candidate_commit.",
+			); err != nil {
+				return err
+			}
+		case "candidate_commit":
+			if err := validateAgentPolicyItemJSONValue2(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "The builder's commit the run passed.",
+			); err != nil {
+				return err
+			}
+		case "run_id":
+			if err := validateAgentPolicyItemJSONValue2(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "The newest passed run; get_verification takes it.",
+			); err != nil {
+				return err
+			}
+		case "tests":
+			if err := validateBuildPassedJSONValue2(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "written_tests with the accepted tests' commit to merge after the builder's; evaluator when the project verifies with its stored evaluator, whose tests are not merged.",
+			); err != nil {
+				return err
+			}
+		default:
+			return unknownJSONFieldError(path, key, []string{
+				"base_in_branch",
+				"candidate_branch",
+				"candidate_commit",
+				"run_id",
+				"tests",
+			})
+		}
+	}
+	return nil
+}
+
+// validateBuildPassedJSONValue2 checks one value whose JSON shape is fixed by the generated Goa type.
+func validateBuildPassedJSONValue2(path string, value any, description string) error {
+	field := path
+	if field == "" {
+		field = "$payload"
+	}
+	if value == nil {
+		return invalidGeneratedFieldTypeError(field, "object", "null", description)
+	}
+	typed, ok := value.(map[string]any)
+	if !ok {
+		return invalidGeneratedFieldTypeError(field, "object", decodedJSONType(value), description)
+	}
+	discriminator, ok := typed["source"].(string)
+	if !ok {
+		return fmt.Errorf("%s: missing or invalid union discriminator", field)
+	}
+	branch := make(map[string]any, len(typed)-1)
+	for key, item := range typed {
+		if key != "source" {
+			branch[key] = item
+		}
+	}
+	switch discriminator {
+	case "evaluator":
+		return validateApprovalItemJSONValue4(path, branch, "")
+	case "written_tests":
+		return validateBuildPassedJSONValue3(path, branch, "")
+	default:
+		return fmt.Errorf("%s: unknown union discriminator %q", field, discriminator)
+	}
+}
+
+// validateBuildPassedJSONValue3 checks one value whose JSON shape is fixed by the generated Goa type.
+func validateBuildPassedJSONValue3(path string, value any, description string) error {
+	field := path
+	if field == "" {
+		field = "$payload"
+	}
+	if value == nil {
+		return invalidGeneratedFieldTypeError(field, "object", "null", description)
+	}
+	typed, ok := value.(map[string]any)
+	if !ok {
+		return invalidGeneratedFieldTypeError(field, "object", decodedJSONType(value), description)
+	}
+	keys := make([]string, 0, len(typed))
+	for key := range typed {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		switch key {
+		case "branch":
+			if err := validateAgentPolicyItemJSONValue2(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "The test writer's branch of this build, surla/tests-<n>.",
+			); err != nil {
+				return err
+			}
+		case "commit":
+			if err := validateAgentPolicyItemJSONValue2(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Commit Surla recorded the accepted tests at.",
+			); err != nil {
+				return err
+			}
+		default:
+			return unknownJSONFieldError(path, key, []string{
+				"branch",
+				"commit",
+			})
 		}
 	}
 	return nil
@@ -27954,8 +29778,15 @@ func validateChangeBuildJSONValue3(path string, value any, description string) e
 			); err != nil {
 				return err
 			}
-		case "test_writer":
+		case "taking":
 			if err := validateChangeBuildJSONValue4(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Whether the user has taken this build: building until a verification of it passes; passed with the commits to merge; merged once the branch checked out in the project folder holds both commits of one passed run; dropped once the user dropped it. A project has one open build, and another change is built only once it is merged or dropped.",
+			); err != nil {
+				return err
+			}
+		case "test_writer":
+			if err := validateChangeBuildJSONValue5(
 				generatedJSONChildPath(path, key, false),
 				typed[key], "The test writer's assignment.",
 			); err != nil {
@@ -27968,6 +29799,7 @@ func validateChangeBuildJSONValue3(path string, value any, description string) e
 				"request_revision",
 				"required_test_count",
 				"started_at",
+				"taking",
 				"test_writer",
 			})
 		}
@@ -27977,6 +29809,43 @@ func validateChangeBuildJSONValue3(path string, value any, description string) e
 
 // validateChangeBuildJSONValue4 checks one value whose JSON shape is fixed by the generated Goa type.
 func validateChangeBuildJSONValue4(path string, value any, description string) error {
+	field := path
+	if field == "" {
+		field = "$payload"
+	}
+	if value == nil {
+		return invalidGeneratedFieldTypeError(field, "object", "null", description)
+	}
+	typed, ok := value.(map[string]any)
+	if !ok {
+		return invalidGeneratedFieldTypeError(field, "object", decodedJSONType(value), description)
+	}
+	discriminator, ok := typed["state"].(string)
+	if !ok {
+		return fmt.Errorf("%s: missing or invalid union discriminator", field)
+	}
+	branch := make(map[string]any, len(typed)-1)
+	for key, item := range typed {
+		if key != "state" {
+			branch[key] = item
+		}
+	}
+	switch discriminator {
+	case "building":
+		return validateBuildBuildingJSONValue(path, branch, "")
+	case "passed":
+		return validateBuildPassedJSONValue(path, branch, "")
+	case "merged":
+		return validateBuildMergedJSONValue(path, branch, "")
+	case "dropped":
+		return validateBuildDroppedJSONValue(path, branch, "")
+	default:
+		return fmt.Errorf("%s: unknown union discriminator %q", field, discriminator)
+	}
+}
+
+// validateChangeBuildJSONValue5 checks one value whose JSON shape is fixed by the generated Goa type.
+func validateChangeBuildJSONValue5(path string, value any, description string) error {
 	field := path
 	if field == "" {
 		field = "$payload"
@@ -28010,7 +29879,7 @@ func validateChangeBuildJSONValue4(path string, value any, description string) e
 				return err
 			}
 		case "tests":
-			if err := validateChangeBuildJSONValue5(
+			if err := validateChangeBuildJSONValue6(
 				generatedJSONChildPath(path, key, false),
 				typed[key], "The tests' state: not_used when the project has stored verification settings; otherwise assigned, reported, needs_changes with the number of Surla's findings, accepted with the commit Surla recorded, or could_not_run with the reason and the user's step. Each verdict carries the time Surla reached it.",
 			); err != nil {
@@ -28027,8 +29896,8 @@ func validateChangeBuildJSONValue4(path string, value any, description string) e
 	return nil
 }
 
-// validateChangeBuildJSONValue5 checks one value whose JSON shape is fixed by the generated Goa type.
-func validateChangeBuildJSONValue5(path string, value any, description string) error {
+// validateChangeBuildJSONValue6 checks one value whose JSON shape is fixed by the generated Goa type.
+func validateChangeBuildJSONValue6(path string, value any, description string) error {
 	field := path
 	if field == "" {
 		field = "$payload"
@@ -28054,45 +29923,18 @@ func validateChangeBuildJSONValue5(path string, value any, description string) e
 	case "not_used":
 		return validateBuilderAssignmentJSONValue3(path, branch, "")
 	case "assigned":
-		return validateChangeBuildJSONValue6(path, branch, "")
-	case "reported":
 		return validateChangeBuildJSONValue7(path, branch, "")
-	case "needs_changes":
+	case "reported":
 		return validateChangeBuildJSONValue8(path, branch, "")
+	case "needs_changes":
+		return validateChangeBuildJSONValue9(path, branch, "")
 	case "accepted":
 		return validateBuilderAssignmentJSONValue5(path, branch, "")
 	case "could_not_run":
-		return validateChangeBuildJSONValue9(path, branch, "")
+		return validateChangeBuildJSONValue10(path, branch, "")
 	default:
 		return fmt.Errorf("%s: unknown union discriminator %q", field, discriminator)
 	}
-}
-
-// validateChangeBuildJSONValue6 checks one value whose JSON shape is fixed by the generated Goa type.
-func validateChangeBuildJSONValue6(path string, value any, description string) error {
-	field := path
-	if field == "" {
-		field = "$payload"
-	}
-	if value == nil {
-		return invalidGeneratedFieldTypeError(field, "object", "null", description)
-	}
-	typed, ok := value.(map[string]any)
-	if !ok {
-		return invalidGeneratedFieldTypeError(field, "object", decodedJSONType(value), description)
-	}
-	keys := make([]string, 0, len(typed))
-	for key := range typed {
-		keys = append(keys, key)
-	}
-	sort.Strings(keys)
-	for _, key := range keys {
-		switch key {
-		default:
-			return unknownJSONFieldError(path, key, []string{})
-		}
-	}
-	return nil
 }
 
 // validateChangeBuildJSONValue7 checks one value whose JSON shape is fixed by the generated Goa type.
@@ -28142,6 +29984,33 @@ func validateChangeBuildJSONValue8(path string, value any, description string) e
 	sort.Strings(keys)
 	for _, key := range keys {
 		switch key {
+		default:
+			return unknownJSONFieldError(path, key, []string{})
+		}
+	}
+	return nil
+}
+
+// validateChangeBuildJSONValue9 checks one value whose JSON shape is fixed by the generated Goa type.
+func validateChangeBuildJSONValue9(path string, value any, description string) error {
+	field := path
+	if field == "" {
+		field = "$payload"
+	}
+	if value == nil {
+		return invalidGeneratedFieldTypeError(field, "object", "null", description)
+	}
+	typed, ok := value.(map[string]any)
+	if !ok {
+		return invalidGeneratedFieldTypeError(field, "object", decodedJSONType(value), description)
+	}
+	keys := make([]string, 0, len(typed))
+	for key := range typed {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		switch key {
 		case "checked_at":
 			if err := validateAgentPolicyItemJSONValue2(
 				generatedJSONChildPath(path, key, false),
@@ -28166,8 +30035,8 @@ func validateChangeBuildJSONValue8(path string, value any, description string) e
 	return nil
 }
 
-// validateChangeBuildJSONValue9 checks one value whose JSON shape is fixed by the generated Goa type.
-func validateChangeBuildJSONValue9(path string, value any, description string) error {
+// validateChangeBuildJSONValue10 checks one value whose JSON shape is fixed by the generated Goa type.
+func validateChangeBuildJSONValue10(path string, value any, description string) error {
 	field := path
 	if field == "" {
 		field = "$payload"
@@ -33088,7 +34957,7 @@ func validateTestWriterAssignmentJSONValue(path string, value any, description s
 				return err
 			}
 		case "progress":
-			if err := validateChangeBuildJSONValue4(
+			if err := validateChangeBuildJSONValue5(
 				generatedJSONChildPath(path, key, false),
 				typed[key], "Where this assignment stands.",
 			); err != nil {
@@ -33333,7 +35202,7 @@ func validateTestWriterAssignmentItemJSONValue(path string, value any, descripti
 				return err
 			}
 		case "progress":
-			if err := validateChangeBuildJSONValue4(
+			if err := validateChangeBuildJSONValue5(
 				generatedJSONChildPath(path, key, false),
 				typed[key], "Where this assignment stands.",
 			); err != nil {
@@ -34756,6 +36625,94 @@ func checkArchitecturePreviewResultToolInputBindingItemValue(in *ToolInputBindin
 	return nil
 }
 
+// checkBuildBuildingValue checks text and cycles before conversion.
+func checkBuildBuildingValue(in *BuildBuilding) error {
+	if in == nil {
+		return fmt.Errorf("missing root value")
+	}
+	active := make(map[any]bool)
+	if err := checkBuildBuildingBuildBuildingValue(in, "$", active); err != nil {
+		return err
+	}
+	return nil
+}
+
+// checkBuildBuildingBuildBuildingValue checks one generated value on the active path.
+func checkBuildBuildingBuildBuildingValue(in *BuildBuilding, field string, active map[any]bool) error {
+	if in == nil {
+		return nil
+	}
+	if active[in] {
+		return fmt.Errorf("%s: cyclic Go value", field)
+	}
+	active[in] = true
+	defer delete(active, in)
+	if in != nil {
+	}
+	return nil
+}
+
+// checkBuildDroppedValue checks text and cycles before conversion.
+func checkBuildDroppedValue(in *BuildDropped) error {
+	if in == nil {
+		return fmt.Errorf("missing root value")
+	}
+	active := make(map[any]bool)
+	if err := checkBuildDroppedBuildDroppedValue(in, "$", active); err != nil {
+		return err
+	}
+	return nil
+}
+
+// checkBuildDroppedBuildDroppedValue checks one generated value on the active path.
+func checkBuildDroppedBuildDroppedValue(in *BuildDropped, field string, active map[any]bool) error {
+	if in == nil {
+		return nil
+	}
+	if active[in] {
+		return fmt.Errorf("%s: cyclic Go value", field)
+	}
+	active[in] = true
+	defer delete(active, in)
+	if in != nil {
+		for index1, item1 := range in.KeptBranches {
+			_ = index1
+			_ = item1
+			if !utf8.ValidString(string(item1)) {
+				return fmt.Errorf("%s: invalid UTF-8", generatedJSONChildPath(generatedJSONChildPath(field, "kept_branches", false), strconv.Itoa(index1), true))
+			}
+		}
+	}
+	return nil
+}
+
+// checkBuildMergedValue checks text and cycles before conversion.
+func checkBuildMergedValue(in *BuildMerged) error {
+	if in == nil {
+		return fmt.Errorf("missing root value")
+	}
+	active := make(map[any]bool)
+	if err := checkBuildMergedBuildMergedValue(in, "$", active); err != nil {
+		return err
+	}
+	return nil
+}
+
+// checkBuildMergedBuildMergedValue checks one generated value on the active path.
+func checkBuildMergedBuildMergedValue(in *BuildMerged, field string, active map[any]bool) error {
+	if in == nil {
+		return nil
+	}
+	if active[in] {
+		return fmt.Errorf("%s: cyclic Go value", field)
+	}
+	active[in] = true
+	defer delete(active, in)
+	if in != nil {
+	}
+	return nil
+}
+
 // checkBuildNotStartedValue checks text and cycles before conversion.
 func checkBuildNotStartedValue(in *BuildNotStarted) error {
 	if in == nil {
@@ -34779,6 +36736,91 @@ func checkBuildNotStartedBuildNotStartedValue(in *BuildNotStarted, field string,
 	active[in] = true
 	defer delete(active, in)
 	if in != nil {
+	}
+	return nil
+}
+
+// checkBuildPassedValue checks text and cycles before conversion.
+func checkBuildPassedValue(in *BuildPassed) error {
+	if in == nil {
+		return fmt.Errorf("missing root value")
+	}
+	active := make(map[any]bool)
+	if err := checkBuildPassedBuildPassedValue(in, "$", active); err != nil {
+		return err
+	}
+	return nil
+}
+
+// checkBuildPassedBuildPassedValue checks one generated value on the active path.
+func checkBuildPassedBuildPassedValue(in *BuildPassed, field string, active map[any]bool) error {
+	if in == nil {
+		return nil
+	}
+	if active[in] {
+		return fmt.Errorf("%s: cyclic Go value", field)
+	}
+	active[in] = true
+	defer delete(active, in)
+	if in != nil {
+		if !utf8.ValidString(string(in.RunID)) {
+			return fmt.Errorf("%s: invalid UTF-8", generatedJSONChildPath(field, "run_id", false))
+		}
+		if !utf8.ValidString(string(in.CandidateCommit)) {
+			return fmt.Errorf("%s: invalid UTF-8", generatedJSONChildPath(field, "candidate_commit", false))
+		}
+		if !utf8.ValidString(string(in.CandidateBranch)) {
+			return fmt.Errorf("%s: invalid UTF-8", generatedJSONChildPath(field, "candidate_branch", false))
+		}
+		if branch1, ok := in.Tests.AsEvaluator(); ok {
+			_ = branch1
+			if branch1 != nil {
+			}
+			if err := checkApprovalItemOperatorEvaluatorTestsValue(branch1, generatedJSONChildPath(field, "tests", false), active); err != nil {
+				return err
+			}
+		}
+		if branch1, ok := in.Tests.AsWrittenTests(); ok {
+			_ = branch1
+			if branch1 != nil {
+			}
+			if err := checkBuildPassedBuildPassedTestsValue(branch1, generatedJSONChildPath(field, "tests", false), active); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+// checkBuildPassedBuildPassedTestsValue checks one generated value on the active path.
+func checkBuildPassedBuildPassedTestsValue(in *BuildPassedTests, field string, active map[any]bool) error {
+	if in == nil {
+		return nil
+	}
+	if active[in] {
+		return fmt.Errorf("%s: cyclic Go value", field)
+	}
+	active[in] = true
+	defer delete(active, in)
+	if in != nil {
+		if !utf8.ValidString(string(in.Commit)) {
+			return fmt.Errorf("%s: invalid UTF-8", generatedJSONChildPath(field, "commit", false))
+		}
+		if !utf8.ValidString(string(in.Branch)) {
+			return fmt.Errorf("%s: invalid UTF-8", generatedJSONChildPath(field, "branch", false))
+		}
+	}
+	return nil
+}
+
+// checkBuildPassedTestsValue checks text and cycles before conversion.
+func checkBuildPassedTestsValue(in *BuildPassedTests) error {
+	if in == nil {
+		return fmt.Errorf("missing root value")
+	}
+	active := make(map[any]bool)
+	if err := checkBuildPassedBuildPassedTestsValue(in, "$", active); err != nil {
+		return err
 	}
 	return nil
 }
@@ -35507,6 +37549,38 @@ func checkChangeBuildStartedBuildValue(in *StartedBuild, field string, active ma
 		}
 		if err := checkChangeBuildTestWriterProgressValue(in.TestWriter, generatedJSONChildPath(field, "test_writer", false), active); err != nil {
 			return err
+		}
+		if branch1, ok := in.Taking.AsBuilding(); ok {
+			_ = branch1
+			if branch1 != nil {
+			}
+			if err := checkBuildBuildingBuildBuildingValue(branch1, generatedJSONChildPath(field, "taking", false), active); err != nil {
+				return err
+			}
+		}
+		if branch1, ok := in.Taking.AsPassed(); ok {
+			_ = branch1
+			if branch1 != nil {
+			}
+			if err := checkBuildPassedBuildPassedValue(branch1, generatedJSONChildPath(field, "taking", false), active); err != nil {
+				return err
+			}
+		}
+		if branch1, ok := in.Taking.AsMerged(); ok {
+			_ = branch1
+			if branch1 != nil {
+			}
+			if err := checkBuildMergedBuildMergedValue(branch1, generatedJSONChildPath(field, "taking", false), active); err != nil {
+				return err
+			}
+		}
+		if branch1, ok := in.Taking.AsDropped(); ok {
+			_ = branch1
+			if branch1 != nil {
+			}
+			if err := checkBuildDroppedBuildDroppedValue(branch1, generatedJSONChildPath(field, "taking", false), active); err != nil {
+				return err
+			}
 		}
 	}
 	return nil

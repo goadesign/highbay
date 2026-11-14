@@ -95,6 +95,48 @@ var BuilderProgress = Type("BuilderProgress", func() {
 	Required("read")
 })
 
+// BuildBuilding says no verification of the open build has passed yet.
+var BuildBuilding = Type("BuildBuilding", func() {
+	Description("No verification of this build has passed yet, so there is nothing to merge: the builder finishes it, or the user drops it.")
+})
+
+// BuildPassedTests names the tests' commit a passed run used and its branch.
+var BuildPassedTests = Type("BuildPassedTests", func() {
+	Description("The accepted tests' commit a passed run used, which the user merges after the builder's commit, and the test writer's branch that holds it.")
+	Attribute("commit", String, "Commit Surla recorded the accepted tests at.", func() { Pattern("^([0-9a-f]{40}|[0-9a-f]{64})$") })
+	Attribute("branch", String, "The test writer's branch of this build, surla/tests-<n>.")
+	Required("commit", "branch")
+})
+
+// BuildPassed names what the user merges to take the open build.
+var BuildPassed = Type("BuildPassed", func() {
+	Description("A verification of this build passed and the user has not merged it: the commits of its newest passed run, which the user merges into the branch checked out in the project folder, the builder's first, then the tests'.")
+	Attribute("run_id", String, "The newest passed run; get_verification takes it.")
+	Attribute("candidate_commit", String, "The builder's commit the run passed.", func() { Pattern("^([0-9a-f]{40}|[0-9a-f]{64})$") })
+	Attribute("candidate_branch", String, "The builder's branch of this build, surla/build-<n>, which holds candidate_commit.")
+	OneOf("tests", "written_tests with the accepted tests' commit to merge after the builder's; evaluator when the project verifies with its stored evaluator, whose tests are not merged.", func() {
+		TypeName("BuildPassedTestSource")
+		Meta("oneof:json:flatten")
+		Meta("oneof:type:field", "source")
+		Attribute("evaluator", OperatorEvaluatorTests)
+		Attribute("written_tests", BuildPassedTests)
+	})
+	Attribute("base_in_branch", Boolean, "False when the branch checked out in the project folder no longer holds the commit this build started from, because its history was rewritten: merging these commits brings that history back, and dropping the build and building again starts from the branch as it is.")
+	Required("run_id", "candidate_commit", "candidate_branch", "tests", "base_in_branch")
+})
+
+// BuildMerged says the user took the open build.
+var BuildMerged = Type("BuildMerged", func() {
+	Description("The branch checked out in the project folder holds both commits of a passed run of this build, by merge or by a squash commit that holds every file they changed as they have it. Another change can be built.")
+})
+
+// BuildDropped says the user dropped the open build.
+var BuildDropped = Type("BuildDropped", func() {
+	Description("The user dropped this build with drop_build: Surla builds nothing on it, no role has work for it, and another change can be built.")
+	Attribute("kept_branches", ArrayOf(String), "The build's own branches that exist and hold a commit made after the build's base, where its work stays (git log <branch> shows it); empty when nothing was committed for it.")
+	Required("kept_branches")
+})
+
 // StartedBuild is a change's build as the user started it.
 var StartedBuild = Type("StartedBuild", func() {
 	Description("The usable build the user started for a change, with the builder's assignment and the test writer's progress when one is used. A build started with only the builder remains usable while stored verification settings supply its tests.")
@@ -104,7 +146,16 @@ var StartedBuild = Type("StartedBuild", func() {
 	Attribute("builder", BuilderProgress, "The builder's assignment.")
 	Attribute("test_writer", TestWriterProgress, "The test writer's assignment.")
 	Attribute("required_test_count", Int, "Number of finished flows in the agreed Story. Zero means no test of this change's Story was required.", func() { Minimum(0) })
-	Required("request_revision", "started_at", "in_force", "builder", "test_writer", "required_test_count")
+	OneOf("taking", "Whether the user has taken this build: building until a verification of it passes; passed with the commits to merge; merged once the branch checked out in the project folder holds both commits of one passed run; dropped once the user dropped it. A project has one open build, and another change is built only once it is merged or dropped.", func() {
+		Meta("oneof:json:flatten")
+		Meta("oneof:type:field", "state")
+		TypeName("BuildTaking")
+		Attribute("building", BuildBuilding)
+		Attribute("passed", BuildPassed)
+		Attribute("merged", BuildMerged)
+		Attribute("dropped", BuildDropped)
+	})
+	Required("request_revision", "started_at", "in_force", "builder", "test_writer", "required_test_count", "taking")
 })
 
 // BuildNotStarted says the change has no usable build for its current test source.

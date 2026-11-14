@@ -14,12 +14,12 @@ import (
 )
 
 // codecOpenBuild supplies a fresh complete record for each independent case.
-func codecOpenBuild() openBuildFile {
-	return openBuildFile{
+func codecOpenBuild() buildFile {
+	return buildFile{
 		ChangeID: "refund", RequestRevision: "revision", StartedAt: time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC),
 		Roles: buildRolesBuilderAndTestWriter, Number: 2, Base: strings.Repeat("a", 40),
 		GoMod:      "module example.com/shop\n\ngo 1.27.3\n",
-		TestWriter: openTestWriterAssignment{State: testsAssigned},
+		TestWriter: testWriterAssignment{State: testsAssigned},
 		MadeFrom:   madeFromSnapshot{Start: madeFromStart{Write: 1}},
 	}
 }
@@ -29,56 +29,56 @@ func codecOpenBuild() openBuildFile {
 func TestOpenBuildRecordStrictDecode(t *testing.T) {
 	cases := []struct {
 		name  string
-		edit  func(*openBuildFile)
+		edit  func(*buildFile)
 		valid bool
 	}{
 		{name: "assigned", valid: true},
-		{name: "builder only has no saved folder", valid: true, edit: func(b *openBuildFile) { b.Roles = buildRolesBuilderOnly }},
-		{name: "reported", valid: true, edit: func(b *openBuildFile) { b.TestWriter.State, b.ReportNumber = testsReported, 1 }},
-		{name: "needs changes", valid: true, edit: func(b *openBuildFile) {
-			b.TestWriter = openTestWriterAssignment{State: testsNeedChanges, Findings: []string{"Fix hook."}, CheckedAt: b.StartedAt}
+		{name: "builder only has no saved folder", valid: true, edit: func(b *buildFile) { b.Roles = buildRolesBuilderOnly }},
+		{name: "reported", valid: true, edit: func(b *buildFile) { b.TestWriter.State, b.ReportNumber = testsReported, 1 }},
+		{name: "needs changes", valid: true, edit: func(b *buildFile) {
+			b.TestWriter = testWriterAssignment{State: testsNeedChanges, Findings: []string{"Fix hook."}, CheckedAt: b.StartedAt}
 		}},
-		{name: "accepted", valid: true, edit: func(b *openBuildFile) {
-			b.TestWriter = openTestWriterAssignment{State: testsAccepted, Commit: strings.Repeat("b", 64), CheckedAt: b.StartedAt}
+		{name: "accepted", valid: true, edit: func(b *buildFile) {
+			b.TestWriter = testWriterAssignment{State: testsAccepted, Commit: strings.Repeat("b", 64), CheckedAt: b.StartedAt}
 		}},
-		{name: "could not run", valid: true, edit: func(b *openBuildFile) {
-			b.TestWriter = openTestWriterAssignment{State: testsCouldNotRun, Reason: "Disk full.", Step: "Free space.", CheckedAt: b.StartedAt}
+		{name: "could not run", valid: true, edit: func(b *buildFile) {
+			b.TestWriter = testWriterAssignment{State: testsCouldNotRun, Reason: "Disk full.", Step: "Free space.", CheckedAt: b.StartedAt}
 		}},
-		{name: "no change", edit: func(b *openBuildFile) { b.ChangeID = "" }},
-		{name: "no revision", edit: func(b *openBuildFile) { b.RequestRevision = "" }},
-		{name: "no start", edit: func(b *openBuildFile) { b.StartedAt = time.Time{} }},
-		{name: "no number", edit: func(b *openBuildFile) { b.Number = 0 }},
-		{name: "negative number", edit: func(b *openBuildFile) { b.Number = -1 }},
-		{name: "invalid base", edit: func(b *openBuildFile) { b.Base = "HEAD" }},
-		{name: "no module", edit: func(b *openBuildFile) { b.GoMod = "" }},
-		{name: "invalid module", edit: func(b *openBuildFile) { b.GoMod = "module (" }},
-		{name: "no provenance", edit: func(b *openBuildFile) { b.MadeFrom = madeFromSnapshot{} }},
-		{name: "unknown role", edit: func(b *openBuildFile) { b.Roles = "automatic" }},
-		{name: "negative report", edit: func(b *openBuildFile) { b.ReportNumber = -1 }},
-		{name: "assigned report", edit: func(b *openBuildFile) { b.ReportNumber = 1 }},
-		{name: "reported without report", edit: func(b *openBuildFile) { b.TestWriter.State = testsReported }},
-		{name: "assigned findings", edit: func(b *openBuildFile) { b.TestWriter.Findings = []string{"unexpected"} }},
-		{name: "assigned commit", edit: func(b *openBuildFile) { b.TestWriter.Commit = strings.Repeat("b", 40) }},
-		{name: "assigned reason", edit: func(b *openBuildFile) { b.TestWriter.Reason = "unexpected" }},
-		{name: "assigned verdict time", edit: func(b *openBuildFile) { b.TestWriter.CheckedAt = b.StartedAt }},
-		{name: "unknown state", edit: func(b *openBuildFile) { b.TestWriter.State = "waiting" }},
-		{name: "empty findings", edit: func(b *openBuildFile) { b.TestWriter.State, b.TestWriter.CheckedAt = testsNeedChanges, b.StartedAt }},
-		{name: "invalid accepted commit", edit: func(b *openBuildFile) {
-			b.TestWriter = openTestWriterAssignment{State: testsAccepted, Commit: "HEAD", CheckedAt: b.StartedAt}
+		{name: "no change", edit: func(b *buildFile) { b.ChangeID = "" }},
+		{name: "no revision", edit: func(b *buildFile) { b.RequestRevision = "" }},
+		{name: "no start", edit: func(b *buildFile) { b.StartedAt = time.Time{} }},
+		{name: "no number", edit: func(b *buildFile) { b.Number = 0 }},
+		{name: "negative number", edit: func(b *buildFile) { b.Number = -1 }},
+		{name: "invalid base", edit: func(b *buildFile) { b.Base = "HEAD" }},
+		{name: "no module", edit: func(b *buildFile) { b.GoMod = "" }},
+		{name: "invalid module", edit: func(b *buildFile) { b.GoMod = "module (" }},
+		{name: "no provenance", edit: func(b *buildFile) { b.MadeFrom = madeFromSnapshot{} }},
+		{name: "unknown role", edit: func(b *buildFile) { b.Roles = "automatic" }},
+		{name: "negative report", edit: func(b *buildFile) { b.ReportNumber = -1 }},
+		{name: "assigned report", edit: func(b *buildFile) { b.ReportNumber = 1 }},
+		{name: "reported without report", edit: func(b *buildFile) { b.TestWriter.State = testsReported }},
+		{name: "assigned findings", edit: func(b *buildFile) { b.TestWriter.Findings = []string{"unexpected"} }},
+		{name: "assigned commit", edit: func(b *buildFile) { b.TestWriter.Commit = strings.Repeat("b", 40) }},
+		{name: "assigned reason", edit: func(b *buildFile) { b.TestWriter.Reason = "unexpected" }},
+		{name: "assigned verdict time", edit: func(b *buildFile) { b.TestWriter.CheckedAt = b.StartedAt }},
+		{name: "unknown state", edit: func(b *buildFile) { b.TestWriter.State = "waiting" }},
+		{name: "empty findings", edit: func(b *buildFile) { b.TestWriter.State, b.TestWriter.CheckedAt = testsNeedChanges, b.StartedAt }},
+		{name: "invalid accepted commit", edit: func(b *buildFile) {
+			b.TestWriter = testWriterAssignment{State: testsAccepted, Commit: "HEAD", CheckedAt: b.StartedAt}
 		}},
-		{name: "missing verdict time", edit: func(b *openBuildFile) {
-			b.TestWriter = openTestWriterAssignment{State: testsAccepted, Commit: strings.Repeat("b", 40)}
+		{name: "missing verdict time", edit: func(b *buildFile) {
+			b.TestWriter = testWriterAssignment{State: testsAccepted, Commit: strings.Repeat("b", 40)}
 		}},
-		{name: "reason character bound", valid: true, edit: func(b *openBuildFile) {
-			b.TestWriter = openTestWriterAssignment{State: testsCouldNotRun,
+		{name: "reason character bound", valid: true, edit: func(b *buildFile) {
+			b.TestWriter = testWriterAssignment{State: testsCouldNotRun,
 				Reason: strings.Repeat("é", maxCheckReason), Step: strings.Repeat("s", maxCheckStep), CheckedAt: b.StartedAt}
 		}},
-		{name: "reason too long", edit: func(b *openBuildFile) {
-			b.TestWriter = openTestWriterAssignment{State: testsCouldNotRun,
+		{name: "reason too long", edit: func(b *buildFile) {
+			b.TestWriter = testWriterAssignment{State: testsCouldNotRun,
 				Reason: strings.Repeat("é", maxCheckReason+1), Step: "Repair.", CheckedAt: b.StartedAt}
 		}},
-		{name: "step too long", edit: func(b *openBuildFile) {
-			b.TestWriter = openTestWriterAssignment{State: testsCouldNotRun,
+		{name: "step too long", edit: func(b *buildFile) {
+			b.TestWriter = testWriterAssignment{State: testsCouldNotRun,
 				Reason: "Disk full.", Step: strings.Repeat("s", maxCheckStep+1), CheckedAt: b.StartedAt}
 		}},
 	}

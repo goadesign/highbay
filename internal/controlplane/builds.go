@@ -1,23 +1,15 @@
 // This file owns builds: the user's decision to build a confirmed change at
-// one revision, saved in its own file beside the change's card, and the
+// one revision, saved once per project beside the change cards, and the
 // builder's and the test writer's assignments for that build.
 package controlplane
 
 import (
-	"bytes"
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
-	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
-	"io/fs"
-	"os"
+	"os/exec"
 	"path/filepath"
 	"slices"
-	"strings"
-	"syscall"
 	"time"
 	"unicode/utf8"
 
@@ -28,6 +20,9 @@ import (
 
 	gensurla "github.com/goadesign/surla/gen/surla"
 	"github.com/goadesign/surla/internal/designeval"
+	"github.com/goadesign/surla/internal/testwriter"
+	"github.com/goadesign/surla/internal/verify"
+	"github.com/goadesign/surla/internal/verifyrun"
 )
 
 type (
@@ -44,54 +39,6 @@ type (
 		storedEvaluator bool
 	}
 
-	// buildFile is the saved form of one change's build, in its own file beside
-	// the change's card in the cards directory. Starting a build again
-	// replaces the whole file. A file that does not match this schema, or
-	// whose test writer state contradicts its fields, stops the call that
-	// reads it.
-	buildFile struct {
-		// ChangeID is the Change Card the build is for; its hash names the file.
-		ChangeID string `json:"change_id"`
-		// RequestRevision is the confirmed revision the user built.
-		RequestRevision string `json:"request_revision"`
-		// StartedAt is when the user started this build.
-		StartedAt time.Time `json:"started_at"`
-		// Roles records which exact worker roles this build started with.
-		// It is never inferred from a folder or the current verification settings.
-		Roles string `json:"roles"`
-		// Stories is the Story as agreed at RequestRevision, copied from the
-		// card when the build started, because the test writer's work is
-		// judged against it and not against a later revision's Story.
-		Stories []designeval.StorySummary `json:"stories"`
-		// DesignSource is the canonical design as agreed at RequestRevision,
-		// copied from the card at the same second check as Stories.
-		DesignSource string `json:"design_source"`
-		// Answers pairs each question of the card as agreed at RequestRevision
-		// with the answer the user confirmed, in question order, copied at the
-		// same second check as Stories. The test writer's tests must hold the
-		// service to them, and the test writer may not read the card.
-		Answers []*gensurla.ConfirmedAnswer `json:"answers"`
-		// Examples are the confirmation examples as agreed at RequestRevision,
-		// copied at the same second check as Stories. confirm_intent confirms
-		// none without at least one, so every build has at least one.
-		Examples []*gensurla.ExampleItem `json:"examples"`
-		// PreservedBehaviors are the existing behaviors the card as agreed at
-		// RequestRevision keeps, copied at the same second check as Stories.
-		PreservedBehaviors []string `json:"preserved_behaviors"`
-		// Builder is the builder's assignment.
-		Builder builderAssignment `json:"builder"`
-		// TestWriter is the test writer's assignment.
-		TestWriter testWriterAssignment `json:"test_writer"`
-		// ReportNumber is the number of the test writer's latest report of
-		// this build. Every report_tests_finished raises it by one, so it is 0
-		// while the test writer's state is testsAssigned and at least 1 while
-		// it is testsReported. A verdict keeps the number of the report it
-		// answers, which is 0 for a verdict given as the build started. With
-		// ChangeID, RequestRevision and StartedAt it identifies the report a
-		// verdict answers (reportIdentity).
-		ReportNumber int `json:"report_number"`
-	}
-
 	// builderAssignment is the builder's saved assignment for one build. It
 	// has no state: it exists from the moment the user starts the build, and
 	// verification of the build's revision, not the assignment, judges the
@@ -99,36 +46,6 @@ type (
 	builderAssignment struct {
 		// Read records that the builder read the assignment in full.
 		Read bool `json:"read"`
-	}
-
-	// testWriterAssignment is the test writer's saved assignment for one
-	// build. Findings are set exactly in testsNeedChanges, Commit exactly in
-	// testsAccepted, Reason and Step exactly in testsCouldNotRun, and
-	// CheckedAt exactly in those three verdicts.
-	testWriterAssignment struct {
-		// State is one of testsAssigned, testsReported, testsNeedChanges,
-		// testsAccepted or testsCouldNotRun. That no test writer is used is
-		// never saved: reads derive it from storedEvaluator.
-		State string `json:"state"`
-		// Read records that the test writer read the assignment in full.
-		Read bool `json:"read"`
-		// WorkingFolder is present exactly for builder-and-test-writer builds,
-		// and names the working copy's project folder, not its repository root.
-		WorkingFolder *string `json:"working_folder,omitempty"`
-		// Findings lists what the last check found, in testsNeedChanges.
-		Findings []string `json:"findings"`
-		// Commit is the commit the accepted tests were recorded at, in
-		// testsAccepted.
-		Commit string `json:"commit"`
-		// Reason says why the check could not run, in testsCouldNotRun; at
-		// most maxCheckReason characters.
-		Reason string `json:"reason,omitzero"`
-		// Step is what the user does so the check can run, in
-		// testsCouldNotRun; at most maxCheckStep characters.
-		Step string `json:"step,omitzero"`
-		// CheckedAt is when the check reached its verdict, in
-		// testsNeedChanges, testsAccepted and testsCouldNotRun.
-		CheckedAt time.Time `json:"checked_at,omitzero"`
 	}
 )
 
@@ -154,13 +71,6 @@ const (
 	// declares.
 	maxCheckReason = 1024
 	maxCheckStep   = 512
-	// buildFileSuffix ends every build file name. Card listing reads only
-	// <hex>.json names, so it never reads a build file.
-	buildFileSuffix = ".build.json"
-	// buildStagingFile is the name, inside the cards directory, of the file
-	// each build save writes before renaming it over the build's file. Saves
-	// hold ControlPlane.mu, so one staging file suffices.
-	buildStagingFile = "pending-build"
 	// testsNotJudged is the sentence every accepted result of the test
 	// writer's tests carries, the one value the design's TestsAccepted
 	// not_judged allows.
@@ -177,12 +87,17 @@ func (c *ControlPlane) GetBuild(ctx context.Context, p *gensurla.GetBuildPayload
 		return nil, errors.New("authenticated principal is required")
 	}
 	c.mu.RLock()
-	defer c.mu.RUnlock()
 	record, err := c.ownedCard(principal, p.ChangeID)
+	var saved buildFile
+	var found bool
+	if err == nil {
+		saved, found, err = c.cards.loadOpenBuild()
+	}
+	c.mu.RUnlock()
 	if err != nil {
 		return nil, err
 	}
-	return c.changeBuild(record)
+	return c.changeBuild(ctx, record, saved, found)
 }
 
 // GetTestFindings returns, for the owner's page, the text of the findings of
@@ -306,6 +221,28 @@ func (c *ControlPlane) GetTestWriterAssignment(
 	ctx context.Context,
 	p *gensurla.GetTestWriterAssignmentPayload,
 ) (*gensurla.TestWriterAssignment, error) {
+	principal, ok := PrincipalFromContext(ctx)
+	if !ok {
+		return nil, errors.New("authenticated principal is required")
+	}
+	c.workspaceMu.RLock()
+	defer c.workspaceMu.RUnlock()
+	c.mu.RLock()
+	owned, err := c.ownedBuild(principal, p.ChangeID)
+	c.mu.RUnlock()
+	if err != nil {
+		return nil, err
+	}
+	if owned.file.Roles != buildRolesBuilderAndTestWriter {
+		return nil, gensurla.MakeNotFound(errors.New("this build has no test-writer assignment because it was started with stored verification settings"))
+	}
+	work, cancel := context.WithTimeout(ctx, layoutReadTimeout)
+	defer cancel()
+	_, prefix, err := resolveStarterRepo(work, c.activeWorkspaceDir)
+	if err != nil {
+		return nil, err
+	}
+	folder := filepath.Join(c.activeWorkspaceDir, testwriter.Folder, filepath.FromSlash(prefix))
 	held, err := c.readAssignment(ctx, "surla.controlplane.get_test_writer_assignment", p.ChangeID, func(saved *buildFile) (bool, error) {
 		if saved.Roles != buildRolesBuilderAndTestWriter {
 			return false, gensurla.MakeNotFound(errors.New("this build has no test-writer assignment because it was started with stored verification settings"))
@@ -344,7 +281,7 @@ func (c *ControlPlane) GetTestWriterAssignment(
 		InForce:            item.InForce,
 		Progress:           item.Progress,
 		Findings:           findings,
-		WorkingFolder:      *held.file.TestWriter.WorkingFolder,
+		WorkingFolder:      folder,
 		DesignSource:       held.file.DesignSource,
 		Stories:            storySummaryItems(held.file.Stories),
 		RequiredTests:      required,
@@ -401,11 +338,10 @@ func (c *ControlPlane) ReportTestsFinished(
 	}
 	saved.ReportNumber++
 	saved.TestWriter = testWriterAssignment{
-		State:         testsReported,
-		Read:          saved.TestWriter.Read,
-		WorkingFolder: saved.TestWriter.WorkingFolder,
+		State: testsReported,
+		Read:  saved.TestWriter.Read,
 	}
-	if err := c.cards.saveBuild(*saved); err != nil {
+	if err := c.cards.saveOpenBuild(*saved); err != nil {
 		return nil, recordBuildError(span, err, "save build")
 	}
 	select {
@@ -417,18 +353,19 @@ func (c *ControlPlane) ReportTestsFinished(
 }
 
 // changeBuild reads and renders record's usable build without changing it.
-// Callers hold c.mu and have already authorized access to record.
-func (c *ControlPlane) changeBuild(record storedChangeCard) (*gensurla.ChangeBuild, error) {
+// The caller has authorized access to record. Git and run reads happen after
+// the card lock is released.
+func (c *ControlPlane) changeBuild(ctx context.Context, record storedChangeCard, saved buildFile, found bool) (*gensurla.ChangeBuild, error) {
 	changeID := record.card.ChangeID
-	saved, found, err := c.cards.loadBuild(changeID)
-	if err != nil {
-		return nil, err
-	}
-	if !found || !c.usableBuild(saved) {
+	if !found || saved.ChangeID != changeID || !c.usableBuild(saved) {
 		return &gensurla.ChangeBuild{ChangeID: changeID, Build: gensurla.NewBuildNotStarted(&gensurla.BuildNotStarted{})}, nil
 	}
 	held := heldBuild{file: saved, inForce: buildInForce(saved, record), storedEvaluator: c.storedEvaluator()}
-	return &gensurla.ChangeBuild{ChangeID: changeID, Build: gensurla.NewBuildStarted(startedBuild(held))}, nil
+	build, err := c.startedBuild(ctx, record.owner, held)
+	if err != nil {
+		return nil, err
+	}
+	return &gensurla.ChangeBuild{ChangeID: changeID, Build: gensurla.NewBuildStarted(build)}, nil
 }
 
 // buildInForce reports whether saved is a build of record's agreed revision
@@ -439,7 +376,7 @@ func buildInForce(saved buildFile, record storedChangeCard) bool {
 }
 
 // startedBuild converts a held build into its transport form.
-func startedBuild(held heldBuild) *gensurla.StartedBuild {
+func startedBuild(held heldBuild, taking gensurla.BuildTaking) *gensurla.StartedBuild {
 	required := 0
 	for _, story := range held.file.Stories {
 		for _, flow := range story.Flows {
@@ -455,6 +392,7 @@ func startedBuild(held heldBuild) *gensurla.StartedBuild {
 		Builder:           builderProgress(held.file.Builder),
 		TestWriter:        testWriterProgress(held),
 		RequiredTestCount: required,
+		Taking:            taking,
 	}
 }
 
@@ -558,81 +496,6 @@ func recordBuildError(span trace.Span, err error, status string) error {
 	return err
 }
 
-// buildFileName names changeID's build file inside the cards directory.
-func buildFileName(changeID string) string {
-	sum := sha256.Sum256([]byte(changeID))
-	return hex.EncodeToString(sum[:]) + buildFileSuffix
-}
-
-// decodeBuild strictly decodes the build file named fileName: unknown fields
-// and trailing data are refused, the file must hold the build of the change
-// whose hash names it, the test writer's state must match its fields, and
-// the report number must be 0 while that state is testsAssigned and at least
-// 1 while it is testsReported: an assignment no one reported on has no
-// report, and every report counts.
-func decodeBuild(fileName string, data []byte) (buildFile, error) {
-	var saved buildFile
-	dec := json.NewDecoder(bytes.NewReader(data))
-	dec.DisallowUnknownFields()
-	if err := dec.Decode(&saved); err != nil {
-		return buildFile{}, fmt.Errorf("decode build file %s: %w", fileName, err)
-	}
-	if err := dec.Decode(&struct{}{}); !errors.Is(err, io.EOF) {
-		return buildFile{}, fmt.Errorf("decode build file %s: trailing data", fileName)
-	}
-	if saved.ChangeID == "" || buildFileName(saved.ChangeID) != fileName {
-		return buildFile{}, fmt.Errorf("build file %s does not hold that change's build", fileName)
-	}
-	if saved.RequestRevision == "" || saved.StartedAt.IsZero() {
-		return buildFile{}, fmt.Errorf("build of change %q has no revision or start time", saved.ChangeID)
-	}
-	if saved.ReportNumber < 0 {
-		return buildFile{}, fmt.Errorf("build of change %q has a negative report number", saved.ChangeID)
-	}
-	switch saved.Roles {
-	case buildRolesBuilderOnly:
-		if saved.TestWriter.WorkingFolder != nil {
-			return buildFile{}, fmt.Errorf("builder-only build of change %q has a test-writer folder", saved.ChangeID)
-		}
-	case buildRolesBuilderAndTestWriter:
-		if saved.TestWriter.WorkingFolder == nil || !filepath.IsAbs(*saved.TestWriter.WorkingFolder) {
-			return buildFile{}, fmt.Errorf("build of change %q has no absolute test-writer project folder", saved.ChangeID)
-		}
-	default:
-		return buildFile{}, fmt.Errorf("build of change %q has unknown roles %q", saved.ChangeID, saved.Roles)
-	}
-	tw := saved.TestWriter
-	noVerdictFields := tw.Reason == "" && tw.Step == ""
-	var valid, verdict bool
-	switch tw.State {
-	case testsAssigned, testsReported:
-		valid = len(tw.Findings) == 0 && tw.Commit == "" && noVerdictFields
-	case testsNeedChanges:
-		valid, verdict = len(tw.Findings) > 0 && tw.Commit == "" && noVerdictFields, true
-	case testsAccepted:
-		valid, verdict = len(tw.Findings) == 0 && commitIDPattern.MatchString(tw.Commit) && noVerdictFields, true
-	case testsCouldNotRun:
-		valid = len(tw.Findings) == 0 && tw.Commit == "" &&
-			boundedText(tw.Reason, maxCheckReason) && boundedText(tw.Step, maxCheckStep)
-		verdict = true
-	default:
-		return buildFile{}, fmt.Errorf("build of change %q has unknown test writer state %q", saved.ChangeID, tw.State)
-	}
-	if !valid {
-		return buildFile{}, fmt.Errorf("build of change %q has findings, a commit, a reason or a step its test writer state %q does not allow", saved.ChangeID, tw.State)
-	}
-	if verdict == tw.CheckedAt.IsZero() {
-		return buildFile{}, fmt.Errorf("build of change %q must have a verdict time exactly when its test writer state is a verdict (state %q)", saved.ChangeID, tw.State)
-	}
-	if (tw.State == testsAssigned && saved.ReportNumber != 0) || (tw.State == testsReported && saved.ReportNumber == 0) {
-		return buildFile{}, fmt.Errorf("build of change %q must have report number 0 while its test writer state is %q "+
-			"and at least 1 while it is %q (state %q, report %d)", saved.ChangeID, testsAssigned, testsReported, tw.State, saved.ReportNumber)
-	}
-	return saved, nil
-}
-
-// boundedText reports whether s is not empty and has at most limit
-// characters, as the design's MinLength(1) and MaxLength(limit) require.
 func boundedText(s string, limit int) bool {
 	return s != "" && utf8.RuneCountInString(s) <= limit
 }
@@ -650,6 +513,9 @@ func (c *ControlPlane) buildableCard(principal Principal, changeID, revision str
 	}
 	if agreed != revision {
 		return storedChangeCard{}, gensurla.MakeConflict(fmt.Errorf("request_revision %q is not the agreed revision of %q, %q; a proposed revision is built only after the user adopts it", revision, changeID, agreed))
+	}
+	if record.architecture == nil || record.goMod == "" || record.madeFrom == nil {
+		return storedChangeCard{}, gensurla.MakeUnprocessable(errors.New("The agreed revision has no evaluated design snapshot. Ask the guide to refresh_story and revise_change with its op_id, adopt that revision, then build again."))
 	}
 	return record, nil
 }
@@ -677,50 +543,36 @@ func (c *ControlPlane) ownedBuild(principal Principal, changeID string) (heldBui
 	if err != nil {
 		return heldBuild{}, err
 	}
-	saved, found, err := c.cards.loadBuild(changeID)
+	saved, found, err := c.cards.loadOpenBuild()
 	if err != nil {
 		return heldBuild{}, err
 	}
-	if !found || !c.usableBuild(saved) {
+	if !found || saved.ChangeID != changeID || !c.usableBuild(saved) {
 		return heldBuild{}, gensurla.MakeNotFound(fmt.Errorf("change_id %q has no usable build; start a new build on the views page", changeID))
 	}
 	return heldBuild{file: saved, inForce: buildInForce(saved, record), storedEvaluator: c.storedEvaluator()}, nil
 }
 
-// ownedBuilds returns the build of every change principal owns, most recently
-// started first (tie-broken by change_id). One unreadable card or build fails
-// the call rather than being left out.
+// ownedBuilds returns only the project's one usable build when owner owns its
+// card. A corrupt record or required card fails rather than being omitted.
 func (c *ControlPlane) ownedBuilds(owner string) ([]heldBuild, error) {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
-	records, err := c.cards.all()
+	saved, found, err := c.cards.loadOpenBuild()
+	if err != nil || !found {
+		return nil, err
+	}
+	record, found, err := c.cards.load(saved.ChangeID)
 	if err != nil {
 		return nil, err
 	}
-	var builds []heldBuild
-	for _, record := range records {
-		if record.owner != owner {
-			continue
-		}
-		saved, found, err := c.cards.loadBuild(record.card.ChangeID)
-		if err != nil {
-			return nil, err
-		}
-		if found && c.usableBuild(saved) {
-			builds = append(builds, heldBuild{
-				file:            saved,
-				inForce:         buildInForce(saved, record),
-				storedEvaluator: c.storedEvaluator(),
-			})
-		}
+	if !found {
+		return nil, fmt.Errorf("open build names missing change %q", saved.ChangeID)
 	}
-	slices.SortFunc(builds, func(a, b heldBuild) int {
-		if byTime := b.file.StartedAt.Compare(a.file.StartedAt); byTime != 0 {
-			return byTime
-		}
-		return strings.Compare(a.file.ChangeID, b.file.ChangeID)
-	})
-	return builds, nil
+	if record.owner != owner || !c.usableBuild(saved) {
+		return nil, nil
+	}
+	return []heldBuild{{file: saved, inForce: buildInForce(saved, record), storedEvaluator: c.storedEvaluator()}}, nil
 }
 
 // usableBuild is the single predicate for every build read and consumer. A build
@@ -759,7 +611,7 @@ func (c *ControlPlane) readAssignment(
 		return heldBuild{}, recordBuildError(span, err, "read assignment")
 	}
 	if changed {
-		if err := c.cards.saveBuild(held.file); err != nil {
+		if err := c.cards.saveOpenBuild(held.file); err != nil {
 			return heldBuild{}, recordBuildError(span, err, "save build")
 		}
 		span.AddEvent("assignment read for the first time")
@@ -767,61 +619,82 @@ func (c *ControlPlane) readAssignment(
 	return held, nil
 }
 
-// loadBuild returns the saved build of changeID, or false when the user never
-// built it. A build file that cannot be read or decoded is an error.
-func (s *cardStore) loadBuild(changeID string) (buildFile, bool, error) {
-	if s.lock == nil {
-		return buildFile{}, false, errCardsClosed
+// newestPassedBuild reads every run of this change and returns the newest pass
+// accepted for this start's revision, including one accepted exactly at start.
+// A later failed run never erases a pass. Missing run storage proves no pass.
+func (c *ControlPlane) newestPassedBuild(owner string, saved buildFile) (*verifyrun.Run, error) {
+	if c.runsDir == "" {
+		return nil, nil
 	}
-	name := buildFileName(changeID)
-	data, err := os.ReadFile(filepath.Join(s.dir, name))
-	if errors.Is(err, fs.ErrNotExist) {
-		return buildFile{}, false, nil
-	}
+	runs, err := verifyrun.List(c.runsDir, owner, saved.ChangeID)
 	if err != nil {
-		return buildFile{}, false, fmt.Errorf("read build of change %q: %w", changeID, err)
+		return nil, fmt.Errorf("read passed runs for the open build: %w", err)
 	}
-	saved, err := decodeBuild(name, data)
-	if err != nil {
-		return buildFile{}, false, err
+	for _, run := range runs {
+		if run.Request.Plan.RequestRevision == saved.RequestRevision &&
+			!run.Request.AcceptedAt.Before(saved.StartedAt) &&
+			run.State.Kind == verifyrun.StateCompleted && run.State.Report.Passed {
+			return &run, nil
+		}
 	}
-	return saved, true, nil
+	return nil, nil
 }
 
-// saveBuild replaces the build file of saved.ChangeID. It writes and syncs the
-// staging file, renames it over the build's file and syncs the directory, as
-// the card store saves cards; callers hold c.mu for writing. An error before
-// the rename leaves the previous build in place.
-func (s *cardStore) saveBuild(saved buildFile) error {
-	if s.lock == nil {
-		return errCardsClosed
-	}
-	// Times are saved in UTC, whatever location they were read or made in.
-	saved.StartedAt = saved.StartedAt.UTC()
-	saved.TestWriter.CheckedAt = saved.TestWriter.CheckedAt.UTC()
-	data, err := json.Marshal(saved)
+// startedBuild renders current run and branch facts outside the card lock.
+// A passed run is not attributed to branches that no longer hold its commits.
+func (c *ControlPlane) startedBuild(ctx context.Context, owner string, held heldBuild) (*gensurla.StartedBuild, error) {
+	run, err := c.newestPassedBuild(owner, held.file)
 	if err != nil {
-		return fmt.Errorf("encode build of change %q: %w", saved.ChangeID, err)
+		return nil, err
 	}
-	staging := filepath.Join(s.dir, buildStagingFile)
-	// O_NOFOLLOW: a link planted at the staging name must not redirect the
-	// write to another file.
-	f, err := os.OpenFile(staging, os.O_WRONLY|os.O_CREATE|os.O_TRUNC|syscall.O_NOFOLLOW, 0o600)
-	if err == nil {
-		_, err = f.Write(data)
-		if err == nil {
-			err = f.Sync()
+	if run == nil {
+		return startedBuild(held, gensurla.NewBuildTakingBuilding(&gensurla.BuildBuilding{})), nil
+	}
+	work, cancel := context.WithTimeout(ctx, layoutReadTimeout)
+	defer cancel()
+	workspace, _, _ := c.currentWorkspaceTarget()
+	repo, _, err := resolveStarterRepo(work, workspace)
+	if err != nil {
+		return nil, err
+	}
+	candidateBranch := testwriter.BuilderRole.Branch(held.file.Number)
+	if holds, err := buildCommitInHistory(work, repo, run.Request.Plan.CandidateCommit, candidateBranch); err != nil {
+		return nil, err
+	} else if !holds {
+		return nil, fmt.Errorf("passed candidate commit %s is no longer held by %s", run.Request.Plan.CandidateCommit, candidateBranch)
+	}
+	tests := gensurla.NewBuildPassedTestSourceEvaluator(&gensurla.OperatorEvaluatorTests{})
+	if run.Request.Plan.Tests == verify.TestsWritten {
+		branch := testwriter.TestsRole.Branch(held.file.Number)
+		if holds, err := buildCommitInHistory(work, repo, run.Request.Plan.SuiteCommit, branch); err != nil {
+			return nil, err
+		} else if !holds {
+			return nil, fmt.Errorf("passed tests commit %s is no longer held by %s", run.Request.Plan.SuiteCommit, branch)
 		}
-		err = errors.Join(err, f.Close())
+		tests = gensurla.NewBuildPassedTestSourceWrittenTests(&gensurla.BuildPassedTests{
+			Commit: run.Request.Plan.SuiteCommit, Branch: branch,
+		})
 	}
-	if err == nil {
-		err = os.Rename(staging, filepath.Join(s.dir, buildFileName(saved.ChangeID)))
-	}
+	baseInBranch, err := buildCommitInHistory(work, repo, held.file.Base, "HEAD")
 	if err != nil {
-		return fmt.Errorf("save build of change %q: %w", saved.ChangeID, err)
+		return nil, err
 	}
-	if err := syncDir(s.dir); err != nil {
-		return fmt.Errorf("build of change %q is saved but may not survive a crash: %w", saved.ChangeID, err)
+	return startedBuild(held, gensurla.NewBuildTakingPassed(&gensurla.BuildPassed{
+		RunID: run.Request.RunID, CandidateCommit: run.Request.Plan.CandidateCommit,
+		CandidateBranch: candidateBranch, Tests: tests, BaseInBranch: baseInBranch,
+	})), nil
+}
+
+// buildCommitInHistory distinguishes a normal non-ancestor from a failed Git
+// read; callers supply validated commits and Surla-owned branch names or HEAD.
+func buildCommitInHistory(ctx context.Context, repo, commit, tip string) (bool, error) {
+	_, err := runGitRead(ctx, repo, "merge-base", "--is-ancestor", commit, tip)
+	if err == nil {
+		return true, nil
 	}
-	return nil
+	var exit *exec.ExitError
+	if errors.As(err, &exit) && exit.ExitCode() == 1 {
+		return false, nil
+	}
+	return false, fmt.Errorf("check build commit history: %w", err)
 }

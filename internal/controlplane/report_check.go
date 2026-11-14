@@ -8,7 +8,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"slices"
 	"time"
 	"unicode/utf8"
 
@@ -208,28 +207,15 @@ func (r *reportChecker) reported(ctx context.Context) []string {
 	}
 	r.cp.mu.RLock()
 	defer r.cp.mu.RUnlock()
-	records, err := r.cp.cards.all()
+	saved, found, err := r.cp.cards.loadOpenBuild()
 	if err != nil {
 		r.recordReadFailure(ctx, err)
 		return nil
 	}
-	var builds []buildFile
-	for _, record := range records {
-		saved, found, err := r.cp.cards.loadBuild(record.card.ChangeID)
-		if err != nil {
-			r.recordReadFailure(ctx, err)
-			continue
-		}
-		if found && r.cp.usableBuild(saved) && saved.TestWriter.State == testsReported {
-			builds = append(builds, saved)
-		}
+	if !found || !r.cp.usableBuild(saved) || saved.TestWriter.State != testsReported {
+		return nil
 	}
-	slices.SortFunc(builds, func(a, b buildFile) int { return a.StartedAt.Compare(b.StartedAt) })
-	changes := make([]string, len(builds))
-	for i, saved := range builds {
-		changes[i] = saved.ChangeID
-	}
-	return changes
+	return []string{saved.ChangeID}
 }
 
 // judge judges the report of changeID's build in the working-copy turn.
@@ -260,13 +246,13 @@ func (r *reportChecker) judge(ctx context.Context, changeID string) {
 
 	// Phase 2: read the build.
 	r.cp.mu.RLock()
-	saved, found, err := r.cp.cards.loadBuild(changeID)
+	saved, found, err := r.cp.cards.loadOpenBuild()
 	r.cp.mu.RUnlock()
 	if err != nil {
 		r.recordReadFailure(ctx, err)
 		return
 	}
-	if !found || !r.cp.usableBuild(saved) || saved.TestWriter.State != testsReported {
+	if !found || saved.ChangeID != changeID || !r.cp.usableBuild(saved) || saved.TestWriter.State != testsReported {
 		return
 	}
 	id := reportIdentityOf(saved)
@@ -371,7 +357,7 @@ func (c *ControlPlane) openReportCopy(ctx context.Context) (buildCopy, error) {
 func (r *reportChecker) answersTo(id reportIdentity) (bool, error) {
 	r.cp.mu.RLock()
 	defer r.cp.mu.RUnlock()
-	saved, found, err := r.cp.cards.loadBuild(id.changeID)
+	saved, found, err := r.cp.cards.loadOpenBuild()
 	if err != nil {
 		return false, err
 	}
@@ -386,17 +372,16 @@ func (r *reportChecker) answersTo(id reportIdentity) (bool, error) {
 func (r *reportChecker) saveVerdict(id reportIdentity, verdict testWriterAssignment) (buildFile, bool, error) {
 	r.cp.mu.Lock()
 	defer r.cp.mu.Unlock()
-	saved, found, err := r.cp.cards.loadBuild(id.changeID)
+	saved, found, err := r.cp.cards.loadOpenBuild()
 	if err != nil || !found || reportIdentityOf(saved) != id {
 		return buildFile{}, false, err
 	}
-	verdict.WorkingFolder = saved.TestWriter.WorkingFolder
 	verdict.CheckedAt = r.now().UTC()
 	saved.TestWriter = verdict
 	if verdict.State == testsAccepted {
 		saved.Builder.Read = false
 	}
-	if err := r.cp.cards.saveBuild(saved); err != nil {
+	if err := r.cp.cards.saveOpenBuild(saved); err != nil {
 		return buildFile{}, false, err
 	}
 	return saved, true, nil
