@@ -14,17 +14,14 @@
 // The checks read the branches of the repository the copies share with the
 // project, which any program of the user can move or delete, so they keep
 // builds apart for agents that follow their instructions; they are not
-// isolation. Work brought from another build without its commits
-// (cherry-picked, squashed, or files checked out from its branch) holds none
-// of them and counts as the agent's own, and so does a commit that only a
-// moved or deleted branch reached, unless the caller passes that branch's tip
-// as recorded: Drop records the dropped build's tips for this.
+// isolation. CheckBuildCommit states what they cannot see.
 package testwriter
 
 import (
 	"context"
 	"fmt"
 	"math"
+	"os"
 	"slices"
 	"strconv"
 	"strings"
@@ -68,9 +65,10 @@ type (
 		// Files are the first five, in byte order, of the paths that the
 		// commits MergeBase reaches and the base does not changed: a moved
 		// file is its old and its new path, and a merge commit counts the
-		// paths its own resolution changed. Each is slash-separated from the
-		// repository's top folder and raw, as an agent chose it: callers
-		// quote it, or withhold one that is not printable, before showing it.
+		// paths where it differs from every parent. Each is slash-separated
+		// from the repository's top folder and raw, as an agent chose it:
+		// callers quote it, or withhold one that is not printable, before
+		// showing it.
 		Files []string
 		// FileCount is how many such paths there are, at least len(Files).
 		FileCount int
@@ -158,10 +156,13 @@ func ParseBuildBranch(name string) (Role, int, bool) {
 // through saved, every other through its branches. A branch an agent named
 // like a build branch counts too, which only skips numbers.
 //
-// It fails when that larger number is the largest int, which no number
-// follows, naming the branch or the open build it came from, and when git
-// fails.
+// It fails when saved is negative, which no build is numbered, when that
+// larger number is the largest int, which no number follows, naming the
+// branch or the open build it came from, and when git fails.
 func NextNumber(ctx context.Context, project string, saved int) (int, error) {
+	if saved < 0 {
+		return 0, fmt.Errorf("the open build's number %d is negative", saved)
+	}
 	branches, err := listSurlaBranches(ctx, project)
 	if err != nil {
 		return 0, err
@@ -198,20 +199,29 @@ func NextNumber(ctx context.Context, project string, saved int) (int, error) {
 //     base is commit;
 //   - Foreign: one entry for each commit m that git merge-base --all prints
 //     for commit and another build's tip and that base does not hold (git
-//     merge-base --is-ancestor m base exits 1), with the files git log
-//     --diff-merges=remerge lists for m --not base. Another build's tips are
-//     those of the build branches other than the build's two, and the
-//     recorded tips that no such branch of the same name reaches; a recorded
-//     tip whose commit the repository no longer holds is skipped, as no
-//     commit can hold it. git merge-base exits 1, printing nothing, only when
-//     the two share no commit: then nothing is found.
+//     merge-base --is-ancestor m base exits 1), with the files workFiles lists
+//     for m. Another build's tips are those of the build branches other than
+//     the build's two, and the recorded tips that no such branch of the same
+//     name reaches; a recorded tip whose commit the repository does not hold
+//     (git rev-parse exits 1) is skipped, as no commit can hold it. git
+//     merge-base exits 1, printing nothing, only when the two share no
+//     commit: then nothing is found.
 //
 // All facts are read, whichever of them fail. Foreign lists the branches by
 // name, then the recorded tips in their order, each with its merge bases in
 // git's order. It fails when ownBranch is not one of buildBranches, when
-// commit or base is not a commit of the repository, and when git fails,
-// including a list of files longer than one git command may print here
-// (maxGitStdout).
+// commit or base is not a commit of the repository, and when git fails in any
+// other way than the exits named above, such as on a missing or corrupt
+// object, a canceled ctx, or a list of files longer than one git command may
+// print here (maxGitStdout): a failure is never a pass.
+//
+// What no check sees, so it counts as the agent's own work: files brought
+// from another build without its commits (cherry-picked, squashed, or checked
+// out from its branch); a commit only a moved or deleted branch reached,
+// unless recorded holds that branch's tip; and history a shallow file in the
+// repository cuts short, which git then treats as having no parents, so a
+// commit of another build below the cut is not found. An info/grafts file,
+// like a replace ref, is ignored.
 func CheckBuildCommit(ctx context.Context, project, commit, ownBranch, base string,
 	buildBranches [2]string, recorded []BranchTip) (CommitCheck, error) {
 	if !slices.Contains(buildBranches[:], ownBranch) {
@@ -261,7 +271,7 @@ func CheckBuildCommit(ctx context.Context, project, commit, ownBranch, base stri
 // sorts them. Git refuses spaces and line breaks in a branch's name, so each
 // line it prints is an object name, a space and a name.
 func listSurlaBranches(ctx context.Context, project string) ([]surlaBranch, error) {
-	out, err := git(ctx, project, nil,
+	out, err := readGit(ctx, project,
 		"for-each-ref", "--format=%(objectname) %(refname:lstrip=2)", surlaBranchRefs)
 	if err != nil {
 		return nil, fmt.Errorf("list the build branches: %w", err)
@@ -322,8 +332,9 @@ func otherBuilds(ctx context.Context, project string, branches []surlaBranch, ow
 // foreignWork returns the other build's work commit x holds through that
 // build's tip: each commit git merge-base --all prints for x and the tip that
 // base b does not hold, with the files of its work.
-func foreignWork(ctx context.Context, project, x, b string, other BranchTip) ([]ForeignWork, error) {
-	out, err := git(ctx, project, nil, "merge-base", "--all", x, other.Commit)
+func foreignWork(ctx context.Context, project, x, b string,
+	other BranchTip) ([]ForeignWork, error) {
+	out, err := readGit(ctx, project, "merge-base", "--all", x, other.Commit)
 	if exitCode(err) == 1 {
 		// git merge-base exits 1, printing nothing, only when x and the tip
 		// share no commit, so x holds none of that build's.
@@ -352,17 +363,26 @@ func foreignWork(ctx context.Context, project, x, b string, other BranchTip) ([]
 
 // workFiles returns the first maxWorkFiles, in byte order, of the distinct
 // paths that the commits m reaches and base b does not changed, and how many
-// there are. git log lists each commit's paths against its parent, and a
-// merge's against what git merges again from its parents
-// (--diff-merges=remerge), so a file only the merge's own resolution changed
-// is named. Its other options make the user's settings change nothing: both
-// paths of a moved file (--no-renames), from the repository's top folder
-// (--no-relative), unquoted and ended by NUL (-z), and no signature
-// verification, which would run gpg and print its output among the paths
-// (--no-show-signature).
+// there are. git log lists each commit's paths against its parent, a root
+// commit's as all its files, and a merge's where the merge differs from
+// every parent (--diff-merges=dense-combined): a file only the merge's own
+// resolution added or changed is named, by comparing trees, so no merge
+// driver or textconv program the repository configures runs. A merge that
+// keeps one parent's version of a file is not named for it; that file is
+// named only through a commit of the work that changed it.
+//
+// These options pin each setting of the user's or the repository's that
+// changes the list: diff.renames (--no-renames: a moved file is its old and
+// new path), diff.relative (--no-relative: paths from the repository's top
+// folder), log.showRoot (--root), diff.ignoreSubmodules
+// (--ignore-submodules=none: a submodule's commit change is named),
+// core.quotePath (-z: raw paths ended by NUL) and log.showSignature
+// (--no-show-signature, which would run gpg and print its output among the
+// paths). Other settings only order the paths, which are sorted here.
 func workFiles(ctx context.Context, project, m, b string) ([]string, int, error) {
-	out, err := git(ctx, project, nil, "log", "--format=", "--name-only", "-z", "--no-renames", "--no-relative",
-		"--no-show-signature", "--diff-merges=remerge", m, "--not", b)
+	out, err := readGit(ctx, project, "log", "--format=", "--name-only", "-z", "--no-renames",
+		"--no-relative", "--root", "--ignore-submodules=none", "--no-show-signature",
+		"--diff-merges=dense-combined", m, "--not", b)
 	if err != nil {
 		return nil, 0, fmt.Errorf("list the files of the work of %s: %w", m, err)
 	}
@@ -382,17 +402,19 @@ func workFiles(ctx context.Context, project, m, b string) ([]string, int, error)
 func requireCommit(ctx context.Context, project, commit string) (string, error) {
 	id, found, err := lookupCommit(ctx, project, commit)
 	if err == nil && !found {
-		err = fmt.Errorf("commit %s is not in the project's repository", commit)
+		err = fmt.Errorf("%s is not a commit git can read in the project's repository", commit)
 	}
 	return id, err
 }
 
 // lookupCommit returns the full object name of the commit name resolves to in
-// the project's repository, and false when the repository holds no such
-// commit: git rev-parse --verify --quiet exits 1, printing nothing, only then.
+// the project's repository, and false when git finds no commit it can read
+// there: git rev-parse --verify --quiet exits 1, printing nothing, when the
+// object is missing or unreadable, is not a commit, or an abbreviation is
+// ambiguous. A corrupt object makes it exit 128, which is an error.
 // --end-of-options keeps a name from being read as an option.
 func lookupCommit(ctx context.Context, project, name string) (string, bool, error) {
-	id, err := git(ctx, project, nil, "rev-parse", "--verify", "--quiet", "--end-of-options", name+"^{commit}")
+	id, err := readGit(ctx, project, "rev-parse", "--verify", "--quiet", "--end-of-options", name+"^{commit}")
 	switch {
 	case err == nil:
 		return id, true, nil
@@ -406,7 +428,7 @@ func lookupCommit(ctx context.Context, project, name string) (string, bool, erro
 // isAncestor reports whether commit a is commit b or an ancestor of it: git
 // merge-base --is-ancestor exits 0 when it is and 1 when it is not.
 func isAncestor(ctx context.Context, project, a, b string) (bool, error) {
-	_, err := git(ctx, project, nil, "merge-base", "--is-ancestor", a, b)
+	_, err := readGit(ctx, project, "merge-base", "--is-ancestor", a, b)
 	switch {
 	case err == nil:
 		return true, nil
@@ -415,4 +437,16 @@ func isAncestor(ctx context.Context, project, a, b string) (bool, error) {
 	default:
 		return false, err
 	}
+}
+
+// readGit runs one of this file's read-only git queries in the project's
+// repository through git, with two more of the repository's say turned off,
+// as gitFlags turns off replace refs: an info/grafts file, which could make
+// a commit's parents stand for others and hide another build's commit
+// (GIT_GRAFT_FILE names an empty file instead), and a partial clone's
+// promisor remote, which git would otherwise ask for a missing object
+// (--no-lazy-fetch, git 2.45 or later), so a check never reaches the network.
+func readGit(ctx context.Context, project string, args ...string) (string, error) {
+	env := []string{"GIT_GRAFT_FILE=" + os.DevNull}
+	return git(ctx, project, env, append([]string{"--no-lazy-fetch"}, args...)...)
 }

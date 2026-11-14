@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -36,6 +37,12 @@ type (
 		base string
 		// recorded are the tips Drop recorded when the user dropped build 1.
 		recorded []BranchTip
+		// folder is the folder CheckBuildCommit is given, the project folder
+		// when empty.
+		folder string
+		// markers are files a program the repository configures writes when
+		// it runs; the call must leave none.
+		markers []string
 	}
 )
 
@@ -123,6 +130,11 @@ func TestNextNumber(t *testing.T) {
 			name:     "legacy surla/tests counts as build 0",
 			branches: []string{"surla/tests"},
 			want:     1,
+		},
+		{
+			name:    "review N8 a negative saved number, which no build has",
+			saved:   -5,
+			wantErr: "the open build's number -5 is negative",
 		},
 		{
 			name:     "review note 3 no number follows the largest int",
@@ -282,14 +294,15 @@ func TestCheckBuildCommitRefuses(t *testing.T) {
 			},
 		},
 		{
-			name: "G1 with seven files: the first five named, all seven counted",
+			name: "G1 with seven files, one changed twice: the first five named, seven counted",
 			arrange: func(t *testing.T, project, b0 string) (checkInput, CommitCheck) {
 				build := filepath.Join(project, BuilderRole.Folder)
 				files := map[string]string{}
 				for i := range 7 {
 					files["svc/refund"+strconv.Itoa(i)+".go"] = "package svc\n"
 				}
-				c1 := commitAll(t, build, "C1", files)
+				commitAll(t, build, "C1", files)
+				c1 := commitAll(t, build, "C1b", map[string]string{"svc/refund0.go": "package svc // again\n"})
 				joinBuild(t, project, BuilderRole, b0)
 				runGit(t, build, "merge", "--quiet", "--no-edit", "--no-ff", "surla/build-1")
 				return asCandidate(revision(t, project, "surla/build-2"), b0), CommitCheck{
@@ -386,7 +399,7 @@ func TestCheckBuildCommitRefuses(t *testing.T) {
 			},
 		},
 		{
-			name: "A6 a file only the dropped build's merge resolution added, named by --diff-merges=remerge (Q7)",
+			name: "A6 a file only the dropped build's merge resolution added, named (Q7)",
 			arrange: func(t *testing.T, project, b0 string) (checkInput, CommitCheck) {
 				commitBuild1(t, project, false)
 				build := filepath.Join(project, BuilderRole.Folder)
@@ -423,6 +436,164 @@ func TestCheckBuildCommitRefuses(t *testing.T) {
 					OnBranch: true,
 					FromBase: true,
 					Foreign:  []ForeignWork{work(c1, "surla/build-1", "svc/refund.go")},
+				}
+			},
+		},
+		{
+			name: "A07 an agent's info/grafts file drops C1 from the merge's parents: ignored",
+			arrange: func(t *testing.T, project, b0 string) (checkInput, CommitCheck) {
+				c1, t1 := commitBuild1(t, project, false)
+				build := filepath.Join(project, BuilderRole.Folder)
+				joinBuild(t, project, BuilderRole, b0)
+				c2 := commitAll(t, build, "C2", map[string]string{"svc/export.go": "package svc // export\n"})
+				runGit(t, build, "merge", "--quiet", "--no-edit", "--no-ff", "surla/build-1")
+				x := revision(t, project, "surla/build-2")
+				grafts := filepath.Join(commonDir(t, project), "info", "grafts")
+				require.NoError(t, os.MkdirAll(filepath.Dir(grafts), 0o750))
+				require.NoError(t, os.WriteFile(grafts, []byte(x+" "+c2+"\n"), 0o600))
+				in := asCandidate(x, b0)
+				in.recorded = droppedBuild1(c1, t1)
+				return in, CommitCheck{
+					OnBranch: true,
+					FromBase: true,
+					Foreign:  []ForeignWork{work(c1, "surla/build-1", "svc/refund.go")},
+				}
+			},
+		},
+		{
+			name: "A10 log.showRoot=false: the files of another build's root commit still named",
+			arrange: func(t *testing.T, project, b0 string) (checkInput, CommitCheck) {
+				build := filepath.Join(project, BuilderRole.Folder)
+				runGit(t, build, "switch", "--quiet", "--orphan", "surla/build-7")
+				root := commitAll(t, build, "notes", map[string]string{"notes.txt": "n\n"})
+				joinBuild(t, project, BuilderRole, b0)
+				runGit(t, build, "merge", "--quiet", "--no-edit", "--no-ff", "--allow-unrelated-histories",
+					"surla/build-7")
+				runGit(t, project, "config", "log.showRoot", "false")
+				return asCandidate(revision(t, project, "surla/build-2"), b0), CommitCheck{
+					OnBranch: true,
+					FromBase: true,
+					Foreign:  []ForeignWork{work(root, "surla/build-7", "notes.txt")},
+				}
+			},
+		},
+		{
+			name: "A11 a merge driver and a textconv program the repository configures never run",
+			arrange: func(t *testing.T, project, b0 string) (checkInput, CommitCheck) {
+				// Both sides change svc/a.go apart, so merging it runs the
+				// file's merge driver; the test merges before configuring one.
+				build := filepath.Join(project, BuilderRole.Folder)
+				source := func(a, z string) map[string]string {
+					text := "package svc\n\nfunc A() {" + a + "}\n\n\n\n\n\nfunc Z() {" + z + "}\n"
+					return map[string]string{"svc/a.go": text}
+				}
+				commitAll(t, build, "C0", source("", ""))
+				runGit(t, build, "switch", "--quiet", "-c", "side")
+				commitAll(t, build, "S", source(" side() ", ""))
+				runGit(t, build, "switch", "--quiet", "surla/build-1")
+				commitAll(t, build, "C1", source("", " one() "))
+				runGit(t, build, "merge", "--quiet", "--no-edit", "--no-ff", "side")
+				m := revision(t, project, "surla/build-1")
+				joinBuild(t, project, BuilderRole, b0)
+				runGit(t, build, "merge", "--quiet", "--ff-only", "surla/build-1")
+				probe, marker := probeProgram(t)
+				attributes := filepath.Join(commonDir(t, project), "info", "attributes")
+				require.NoError(t, os.WriteFile(attributes, []byte("*.go diff=probe merge=probe\n"), 0o600))
+				runGit(t, project, "config", "merge.probe.driver", probe+" %A")
+				runGit(t, project, "config", "diff.probe.textconv", probe)
+				in := asCandidate(revision(t, project, "surla/build-2"), b0)
+				in.markers = []string{marker}
+				return in, CommitCheck{
+					OnBranch: true,
+					FromBase: true,
+					Foreign:  []ForeignWork{work(m, "surla/build-1", "svc/a.go")},
+				}
+			},
+		},
+		{
+			name: "A10b log.showSignature with a configured gpg: signatures are not verified",
+			arrange: func(t *testing.T, project, b0 string) (checkInput, CommitCheck) {
+				c1, _ := commitBuild1(t, project, false)
+				build := filepath.Join(project, BuilderRole.Folder)
+				body := filepath.Join(t.TempDir(), "commit")
+				require.NoError(t, os.WriteFile(body, []byte("tree "+
+					runGit(t, project, "rev-parse", c1+"^{tree}")+"\nparent "+c1+
+					"\nauthor A <a@example.com> 1700000000 +0000\ncommitter A <a@example.com> 1700000000 +0000\n"+
+					"gpgsig -----BEGIN PGP SIGNATURE-----\n \n iQEzBAABCAAdFiEE\n -----END PGP SIGNATURE-----\n"+
+					"\nsigned on top of C1\n"), 0o600))
+				signed := runGit(t, project, "hash-object", "-t", "commit", "-w", body)
+				runGit(t, build, "switch", "--quiet", "--detach")
+				runGit(t, project, "update-ref", "refs/heads/surla/build-1", signed)
+				joinBuild(t, project, BuilderRole, b0)
+				runGit(t, build, "merge", "--quiet", "--no-edit", "--no-ff", "surla/build-1")
+				probe, marker := probeProgram(t)
+				runGit(t, project, "config", "log.showSignature", "true")
+				runGit(t, project, "config", "gpg.program", probe)
+				in := asCandidate(revision(t, project, "surla/build-2"), b0)
+				in.markers = []string{marker}
+				return in, CommitCheck{
+					OnBranch: true,
+					FromBase: true,
+					Foreign:  []ForeignWork{work(signed, "surla/build-1", "svc/refund.go")},
+				}
+			},
+		},
+		{
+			name: "A26 a project folder below the repository's top with diff.relative=true: paths from the top",
+			arrange: func(t *testing.T, project, b0 string) (checkInput, CommitCheck) {
+				c1, _ := commitBuild1(t, project, true)
+				joinBuild(t, project, BuilderRole, b0)
+				runGit(t, filepath.Join(project, BuilderRole.Folder), "merge", "--quiet", "--no-edit", "--no-ff",
+					"surla/build-1")
+				runGit(t, project, "config", "diff.relative", "true")
+				in := asCandidate(revision(t, project, "surla/build-2"), b0)
+				in.folder = filepath.Join(project, "svc")
+				return in, CommitCheck{
+					OnBranch: true,
+					FromBase: true,
+					Foreign:  []ForeignWork{work(c1, "surla/build-1", "svc/a.go", "svc/refund.go")},
+				}
+			},
+		},
+		{
+			name: "diff.ignoreSubmodules=all: a submodule commit of the other build still named",
+			arrange: func(t *testing.T, project, b0 string) (checkInput, CommitCheck) {
+				build := filepath.Join(project, BuilderRole.Folder)
+				runGit(t, build, "update-index", "--add", "--cacheinfo", "160000,"+b0+",vendor/lib")
+				runGit(t, build, "commit", "--quiet", "-m", "C1 adds a submodule")
+				// An empty folder, as checking out a submodule leaves, keeps the
+				// copy clean, so its join commits nothing.
+				require.NoError(t, os.MkdirAll(filepath.Join(build, "vendor", "lib"), 0o750))
+				c1 := revision(t, build, "HEAD")
+				joinBuild(t, project, BuilderRole, b0)
+				runGit(t, build, "merge", "--quiet", "--no-edit", "--no-ff", "surla/build-1")
+				runGit(t, project, "config", "diff.ignoreSubmodules", "all")
+				return asCandidate(revision(t, project, "surla/build-2"), b0), CommitCheck{
+					OnBranch: true,
+					FromBase: true,
+					Foreign:  []ForeignWork{work(c1, "surla/build-1", "vendor/lib")},
+				}
+			},
+		},
+		{
+			name: "A16 build 2's branch not made yet: off its branch, not an error",
+			arrange: func(t *testing.T, project, b0 string) (checkInput, CommitCheck) {
+				commitBuild1(t, project, false)
+				return asCandidate(b0, b0), CommitCheck{FromBase: true, IsBase: true}
+			},
+		},
+		{
+			name: "A17 legacy surla/tests merged into surla/tests-2: another build's branch",
+			arrange: func(t *testing.T, project, b0 string) (checkInput, CommitCheck) {
+				tests := filepath.Join(project, TestsRole.Folder)
+				runGit(t, tests, "switch", "--quiet", "-c", "surla/tests")
+				t0 := commitAll(t, tests, "T0", map[string]string{"eval/old.go": "package eval // old\n"})
+				joinBuild(t, project, TestsRole, b0)
+				runGit(t, tests, "merge", "--quiet", "--no-edit", "--no-ff", "surla/tests")
+				return asTestsTip(revision(t, project, "surla/tests-2"), b0), CommitCheck{
+					OnBranch: true,
+					FromBase: true,
+					Foreign:  []ForeignWork{work(t0, "surla/tests", "eval/old.go")},
 				}
 			},
 		},
@@ -549,7 +720,110 @@ func TestCheckBuildCommitAccepts(t *testing.T) {
 				return in, accepted
 			},
 		},
+		{
+			name: "A23 a recorded tip a partial clone lacks: skipped without asking its promisor remote",
+			arrange: func(t *testing.T, project, b0 string) (checkInput, CommitCheck) {
+				joinBuild(t, project, BuilderRole, b0)
+				x := commitAll(t, filepath.Join(project, BuilderRole.Folder), "C2",
+					map[string]string{"svc/export.go": "package svc // export\n"})
+				// A lazy fetch would run the remote's ext:: command, the probe.
+				probe, marker := probeProgram(t)
+				for _, kv := range [][2]string{
+					{"core.repositoryformatversion", "1"}, {"extensions.partialClone", "origin"},
+					{"remote.origin.url", "ext::" + probe}, {"remote.origin.promisor", "true"},
+					{"protocol.ext.allow", "always"},
+				} {
+					runGit(t, project, "config", kv[0], kv[1])
+				}
+				in := asCandidate(x, b0)
+				in.recorded = []BranchTip{{Branch: "surla/build-1", Commit: strings.Repeat("e", len(x))}}
+				in.markers = []string{marker}
+				return in, accepted
+			},
+		},
 	})
+}
+
+// TestCheckBuildCommitFailsWhenGitFails checks that a git failure other than
+// the exit 1 each check expects fails the call, so a damaged repository, a
+// canceled check or a caller's mistake is never taken for a pass.
+func TestCheckBuildCommitFailsWhenGitFails(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		name string
+		// arrange damages project, whose first commit is b0, and returns the
+		// call to make.
+		arrange func(t *testing.T, project, b0 string) checkInput
+	}{
+		{
+			name: "A15 a commit missing inside surla/build-1's history: git merge-base --all exits 255",
+			arrange: func(t *testing.T, project, b0 string) checkInput {
+				c1, _ := commitBuild1(t, project, false)
+				build := filepath.Join(project, BuilderRole.Folder)
+				commitAll(t, build, "C1b", map[string]string{"svc/refund2.go": "package svc // refund 2\n"})
+				joinBuild(t, project, BuilderRole, b0)
+				x := commitAll(t, build, "C2", map[string]string{"svc/export.go": "package svc // export\n"})
+				require.NoError(t, os.Remove(objectFile(t, project, c1)))
+				return asCandidate(x, b0)
+			},
+		},
+		{
+			name: "A15b a commit missing inside B's history: git merge-base --is-ancestor exits 128",
+			arrange: func(t *testing.T, project, b0 string) checkInput {
+				// Build 1 started at B too, so merge-base --all with its
+				// branch succeeds and only --is-ancestor <its commit> B walks
+				// past B; the tests copy leaves surla/tests-1, whose walk
+				// would also cross the missing commit.
+				base := commitAll(t, project, "P", map[string]string{"svc/p.go": "package svc // p\n"})
+				build := filepath.Join(project, BuilderRole.Folder)
+				runGit(t, build, "reset", "--quiet", "--hard", base)
+				commitAll(t, build, "C1", map[string]string{"svc/refund.go": "package svc // refund\n"})
+				joinBuild(t, project, BuilderRole, base)
+				commitAll(t, build, "C2", map[string]string{"svc/export.go": "package svc // export\n"})
+				runGit(t, build, "merge", "--quiet", "--no-edit", "--no-ff", "surla/build-1")
+				joinBuild(t, project, TestsRole, base)
+				runGit(t, project, "branch", "--quiet", "-D", "surla/tests-1")
+				require.NoError(t, os.Remove(objectFile(t, project, b0)))
+				return asCandidate(revision(t, project, "surla/build-2"), base)
+			},
+		},
+		{
+			name: "a recorded tip whose object is corrupt: git rev-parse exits 128",
+			arrange: func(t *testing.T, project, b0 string) checkInput {
+				c1, t1 := commitBuild1(t, project, false)
+				joinBuild(t, project, BuilderRole, b0)
+				x := commitAll(t, filepath.Join(project, BuilderRole.Folder), "C2",
+					map[string]string{"svc/export.go": "package svc // export\n"})
+				runGit(t, project, "branch", "--quiet", "-D", "surla/build-1")
+				object := objectFile(t, project, c1)
+				require.NoError(t, os.Remove(object))
+				require.NoError(t, os.WriteFile(object, []byte("not a zlib stream"), 0o444))
+				in := asCandidate(x, b0)
+				in.recorded = droppedBuild1(c1, t1)
+				return in
+			},
+		},
+		{
+			name: "the branch the commit must be on is not one of the build's",
+			arrange: func(t *testing.T, project, b0 string) checkInput {
+				joinBuild(t, project, BuilderRole, b0)
+				x := commitAll(t, filepath.Join(project, BuilderRole.Folder), "C2",
+					map[string]string{"svc/export.go": "package svc // export\n"})
+				in := asCandidate(x, b0)
+				in.role = Role{Prefix: "main-"}
+				return in
+			},
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			project, b0 := newBuildRepo(t)
+			got, err := checkBuild(t, project, tc.arrange(t, project, b0))
+			assert.Error(t, err, "a git failure is an error")
+			assert.Equal(t, CommitCheck{}, got, "never a pass")
+		})
+	}
 }
 
 // runCheckCases runs each case on a repository of its own and compares the
@@ -561,16 +835,54 @@ func runCheckCases(t *testing.T, cases []checkCase) {
 			t.Parallel()
 			project, b0 := newBuildRepo(t)
 			in, want := tc.arrange(t, project, b0)
-			own := [2]string{BuilderRole.Branch(openBuild), TestsRole.Branch(openBuild)}
-			got, err := CheckBuildCommit(t.Context(), project, in.commit, in.role.Branch(openBuild), in.base,
-				own, in.recorded)
+			got, err := checkBuild(t, project, in)
 			require.NoError(t, err)
 			assert.Equal(t, want.OnBranch, got.OnBranch, "on its branch")
 			assert.Equal(t, want.FromBase, got.FromBase, "from B")
 			assert.Equal(t, want.IsBase, got.IsBase, "B itself")
 			assert.ElementsMatch(t, want.Foreign, got.Foreign, "another build's work")
+			for _, marker := range in.markers {
+				assert.NoFileExists(t, marker, "no program the repository configures ran")
+			}
 		})
 	}
+}
+
+// checkBuild makes the CheckBuildCommit call in for build 2 of project.
+func checkBuild(t *testing.T, project string, in checkInput) (CommitCheck, error) {
+	t.Helper()
+	folder := in.folder
+	if folder == "" {
+		folder = project
+	}
+	own := [2]string{BuilderRole.Branch(openBuild), TestsRole.Branch(openBuild)}
+	return CheckBuildCommit(t.Context(), folder, in.commit, in.role.Branch(openBuild), in.base, own, in.recorded)
+}
+
+// objectFile returns the file that holds object id loose in the repository of
+// project, which the tests' repositories never pack.
+func objectFile(t *testing.T, project, id string) string {
+	t.Helper()
+	objects := runGit(t, project, "rev-parse", "--path-format=absolute", "--git-path", "objects")
+	return filepath.Join(objects, id[:2], id[2:])
+}
+
+// commonDir returns the repository's common folder, which every working copy
+// of it shares.
+func commonDir(t *testing.T, project string) string {
+	t.Helper()
+	return runGit(t, project, "rev-parse", "--path-format=absolute", "--git-common-dir")
+}
+
+// probeProgram writes, in a new folder, a shell script that records in a
+// marker file that it ran, and returns the script and the marker.
+func probeProgram(t *testing.T) (string, string) {
+	t.Helper()
+	dir := t.TempDir()
+	script, marker := filepath.Join(dir, "probe.sh"), filepath.Join(dir, "ran")
+	text := "#!/bin/sh\necho ran >> '" + marker + "'\ncat \"$1\" 2>/dev/null\n"
+	require.NoError(t, os.WriteFile(script, []byte(text), 0o700))
+	return script, marker
 }
 
 // newBuildRepo makes a project repository as the probes' mkrepo does: B0, its
