@@ -24,7 +24,7 @@ type pagePendingBuildRead struct {
 }
 
 // TestViewsPageBuildIgnoresAReadCapturedDuringPendingReplacement preserves a
-// successful replacement's saved start and working-copy receipt when a delayed
+// successful replacement's saved start and team receipt when a delayed
 // list update reads the previous build while the replacement POST is held. A
 // later Team update must coalesce with that read without blocking its own facts.
 // This proves page/HTTP behavior, not candidate execution or real window effects.
@@ -66,7 +66,7 @@ await until(() => page.$("#surla-build-start") && !page.$("#surla-build-start").
 await control(origin, "answer-later", { key: "GET /changes" });
 await until(() => page.$("#surla-build-start") && !page.$("#surla-build-start").disabled, "first Build did not remain ready after delaying its list update");
 page.$("#surla-build-start").click();
-await until(() => page.$("#surla-build-again") && !page.$("#surla-build-again").disabled && page.$("#surla-build-start-copy-receipt") && page.sent("GET", path).every((r) => r.status === 200), "the first saved build and its read did not finish");
+await until(() => page.$("#surla-build-again") && !page.$("#surla-build-again").disabled && page.$("#surla-build-start-team-receipt") && page.sent("GET", path).every((r) => r.status === 200), "the first saved build and its read did not finish");
 const oldStarted = JSON.parse(page.sent("POST", path)[0].answer).build.started_at;
 expect(page.text("#surla-build-details").includes(oldStarted), "the first saved start is missing");
 
@@ -98,15 +98,15 @@ await until(() => page.$("#surla-team-attention-builder"), "the real Team update
 expect(oldRead.status === undefined && replacement.status === undefined, "the captured old read or replacement escaped its gate");
 
 await control(origin, "release", { key: "POST " + path });
-await until(() => replacement.status === 200 && !page.$("#surla-build-starting") && page.$("#surla-build-start-copy-receipt"), "the replacement did not display its successful receipt");
+await until(() => replacement.status === 200 && !page.$("#surla-build-starting") && page.$("#surla-build-start-team-receipt"), "the replacement did not display its successful receipt");
 const newStarted = JSON.parse(replacement.answer).build.started_at;
 expect(newStarted !== oldStarted && page.text("#surla-build-details").includes(newStarted), "the replacement did not display its new saved start");
-const copyReceipt = page.text("#surla-build-start-copy-receipt");
-expect(copyReceipt.includes("the working copy was at the project commit"), "the replacement working-copy receipt is missing");
+const teamReceipt = page.text("#surla-build-start-team-receipt");
+expect(teamReceipt.includes("the team was ready"), "the replacement team receipt is missing");
 const regressions = [];
 const observe = () => {
   if (page.text("#surla-build-details").includes(oldStarted)) regressions.push("previous started_at flashed");
-  if (page.text("#surla-build-start-copy-receipt") !== copyReceipt) regressions.push("replacement working-copy receipt cleared");
+  if (page.text("#surla-build-start-team-receipt") !== teamReceipt) regressions.push("replacement team receipt cleared");
 };
 const observer = new page.win.MutationObserver(observe);
 observer.observe(page.$("#surla-build-section"), { childList: true, attributes: true, subtree: true });
@@ -120,7 +120,7 @@ observe();
 observer.disconnect();
 expect(regressions.length === 0, "a read captured during replacement overwrote successful Build facts: " + JSON.stringify(regressions));
 expect(page.text("#surla-build-details").includes(newStarted), "the replacement saved start was lost");
-expect(page.text("#surla-build-start-copy-receipt") === copyReceipt, "the replacement working-copy receipt was lost");
+expect(page.text("#surla-build-start-team-receipt") === teamReceipt, "the replacement team receipt was lost");
 expect(page.sent("POST", path).length === 2, "the delayed read repeated the replacement effect");
 page.close();
 `)

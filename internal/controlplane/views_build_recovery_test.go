@@ -225,7 +225,7 @@ page.close();
 
 // TestViewsPageBuildTeamRecoveryClearsTheOldInstructionEverywhere proves a
 // later successful Start agents supersedes a busy-window Build receipt in both
-// the card and global status, while retaining that Build's working-copy history.
+// the card and global status, while retaining the saved build's identity.
 func TestViewsPageBuildTeamRecoveryClearsTheOldInstructionEverywhere(t *testing.T) {
 	f := &teamServiceFixture{snapshot: pageTeamSnapshot("working")}
 	f.start = func(context.Context) (*gensurla.ProjectTeam, error) {
@@ -255,8 +255,9 @@ await until(() => page.$("#surla-build-start") && !page.$("#surla-build-start").
 page.$("#surla-build-start").click();
 await until(() => page.$("#surla-build-start-team-receipt") && page.$("#surla-build-again") && !page.$("#surla-build-again").disabled, "the busy-window build did not finish");
 expect(page.text("#surla-build-start-team-receipt").includes("the build was saved and the team window was busy") && page.text("#surla-build-start-team-receipt").includes(oldStep), "the busy-window result was not shown as a historical receipt");
-const copyReceipt = page.text("#surla-build-start-copy-receipt");
-expect(copyReceipt.includes("the working copy was at the project commit"), "the Build's working-copy history is missing");
+const savedStart = JSON.parse(page.sent("POST", path)[0].answer).build.started_at;
+expect(page.text("#surla-build-details").includes(savedStart), "the saved Build identity is missing");
+expect(!page.$("#surla-build-start-copy-receipt"), "the removed working-copy receipt returned");
 await control(origin, "act", { key: "allow-team-start" });
 page.$("#surla-build-view-team").click();
 await until(() => page.state() === "team" && page.$("#surla-team-start") && !page.$("#surla-team-start").disabled, "View team did not open the recovery action");
@@ -265,9 +266,10 @@ page.$("#surla-team-start").click();
 await until(() => page.$("#surla-team-start-receipt") && page.text("#surla-team-start-receipt").includes("Choose the builder in the newly opened team dialog."), "the successful Team start receipt did not appear");
 expect(!page.doc.body.textContent.includes(oldStep), "the superseded Build instruction remained visible in Team");
 page.$("#surla-nav-cp1").click();
-await until(() => page.$("#surla-build-start-copy-receipt"), "returning to the card lost the Build history");
+await until(() => page.$("#surla-build-again") && page.text("#surla-build-details").includes(savedStart), "returning to the card lost the saved Build");
 expect(!page.$("#surla-build-start-team-receipt") && !page.doc.body.textContent.includes(oldStep), "the old busy-window instruction returned on the card or global status");
-expect(page.text("#surla-build-start-copy-receipt") === copyReceipt, "Team recovery rewrote the Build's working-copy history");
+expect(page.text("#surla-build-details").includes(savedStart), "Team recovery rewrote the saved Build identity");
+expect(!page.$("#surla-build-start-copy-receipt"), "Team recovery restored the removed working-copy receipt");
 page.$("#surla-nav-team").click();
 await until(() => page.$("#surla-team-start-receipt"), "the latest Team receipt was lost on navigation");
 expect(!page.doc.body.textContent.includes(oldStep), "the old Build instruction returned after reopening Team");

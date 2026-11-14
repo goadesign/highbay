@@ -84,7 +84,6 @@ func (c *ControlPlane) StartBuild(
 		return nil, gensurla.MakeNotImplemented(errors.New("No project working folder is bound. Start this project with surla to build it."))
 	}
 	var copy buildCopy
-	refresh := gensurla.NewWorkingCopyNotUsed(&gensurla.BuildCopyNotUsed{})
 	if source != testSourceStoredEvaluator {
 		if source != testSourceStarterLayout {
 			return nil, gensurla.MakeNoTestLayout(errors.New("This project has neither stored verification settings nor Surla's test layout. Store verification settings, then build again."))
@@ -107,11 +106,10 @@ func (c *ControlPlane) StartBuild(
 		if err != nil {
 			return nil, recordBuildError(span, buildStartError(work, workspace, err), "open test-writer copy")
 		}
-		state, err := copy.Refresh(work)
+		_, err = copy.Refresh(work)
 		if err != nil {
 			return nil, recordBuildError(span, buildStartError(work, workspace, err), "refresh test-writer copy")
 		}
-		refresh = buildCopyOutcome(state)
 	}
 
 	// Save only after the second agreed-revision check. Clone this snapshot,
@@ -145,8 +143,7 @@ func (c *ControlPlane) StartBuild(
 		return nil, recordBuildError(span, err, "save build")
 	}
 	result := &gensurla.StartBuildResult{
-		Build:       startedBuild(heldBuild{file: saved, inForce: true, storedEvaluator: c.storedEvaluator()}),
-		WorkingCopy: refresh,
+		Build: startedBuild(heldBuild{file: saved, inForce: true, storedEvaluator: c.storedEvaluator()}),
 	}
 	// Registration is durable local work and is never starved by a generation
 	// or window deadline. The project owner completes it even after cancellation.
@@ -303,21 +300,6 @@ func buildStartError(ctx context.Context, workspace string, err error) error {
 	default:
 		return err
 	}
-}
-
-// buildCopyOutcome renders the copy owner's postcondition without another Git read.
-func buildCopyOutcome(result testwriter.RefreshResult) gensurla.WorkingCopy {
-	switch result.State {
-	case testwriter.RefreshAtProjectCommit:
-		return gensurla.NewWorkingCopyAtProjectCommit(&gensurla.BuildCopyAtProjectCommit{Commit: result.Commit})
-	case testwriter.RefreshNotContained:
-		return gensurla.NewWorkingCopyNotContained(&gensurla.BuildCopyNotContained{
-			Commit: result.Commit, Step: "Merge the tests branch into the project's branch, then build again.",
-		})
-	case testwriter.RefreshDirty:
-		return gensurla.NewWorkingCopyDirty(&gensurla.BuildCopyDirty{Commit: result.Commit})
-	}
-	panic("unknown working-copy refresh result")
 }
 
 // buildAgainTeamOutcome is the recovery for a saved start interrupted before its team phase.

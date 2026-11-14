@@ -42,12 +42,14 @@ type Endpoints struct {
 	ListTraces                goa.Endpoint
 	RefreshStory              goa.Endpoint
 	GetStoryRefresh           goa.Endpoint
+	UpdateDraft               goa.Endpoint
 	GetTeam                   goa.Endpoint
 	ShowTeamPane              goa.Endpoint
 	StartTeamAgents           goa.Endpoint
 	ListChanges               goa.Endpoint
 	WaitForChanges            goa.Endpoint
 	StartBuild                goa.Endpoint
+	DropBuild                 goa.Endpoint
 	GetBuild                  goa.Endpoint
 	GetTestFindings           goa.Endpoint
 	ListBuilderAssignments    goa.Endpoint
@@ -87,12 +89,14 @@ func NewEndpoints(s Service) *Endpoints {
 		ListTraces:                NewListTracesEndpoint(s),
 		RefreshStory:              NewRefreshStoryEndpoint(s),
 		GetStoryRefresh:           NewGetStoryRefreshEndpoint(s),
+		UpdateDraft:               NewUpdateDraftEndpoint(s),
 		GetTeam:                   NewGetTeamEndpoint(s),
 		ShowTeamPane:              NewShowTeamPaneEndpoint(s),
 		StartTeamAgents:           NewStartTeamAgentsEndpoint(s),
 		ListChanges:               NewListChangesEndpoint(s),
 		WaitForChanges:            NewWaitForChangesEndpoint(s),
 		StartBuild:                NewStartBuildEndpoint(s),
+		DropBuild:                 NewDropBuildEndpoint(s),
 		GetBuild:                  NewGetBuildEndpoint(s),
 		GetTestFindings:           NewGetTestFindingsEndpoint(s),
 		ListBuilderAssignments:    NewListBuilderAssignmentsEndpoint(s),
@@ -132,12 +136,14 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.ListTraces = m(e.ListTraces)
 	e.RefreshStory = m(e.RefreshStory)
 	e.GetStoryRefresh = m(e.GetStoryRefresh)
+	e.UpdateDraft = m(e.UpdateDraft)
 	e.GetTeam = m(e.GetTeam)
 	e.ShowTeamPane = m(e.ShowTeamPane)
 	e.StartTeamAgents = m(e.StartTeamAgents)
 	e.ListChanges = m(e.ListChanges)
 	e.WaitForChanges = m(e.WaitForChanges)
 	e.StartBuild = m(e.StartBuild)
+	e.DropBuild = m(e.DropBuild)
 	e.GetBuild = m(e.GetBuild)
 	e.GetTestFindings = m(e.GetTestFindings)
 	e.ListBuilderAssignments = m(e.ListBuilderAssignments)
@@ -382,6 +388,14 @@ func NewGetStoryRefreshEndpoint(s Service) goa.Endpoint {
 	}
 }
 
+// NewUpdateDraftEndpoint returns an endpoint function that calls the method
+// "update_draft" of service "surla".
+func NewUpdateDraftEndpoint(s Service) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		return s.UpdateDraft(ctx)
+	}
+}
+
 // NewGetTeamEndpoint returns an endpoint function that calls the method
 // "get_team" of service "surla".
 func NewGetTeamEndpoint(s Service) goa.Endpoint {
@@ -430,6 +444,15 @@ func NewStartBuildEndpoint(s Service) goa.Endpoint {
 	return func(ctx context.Context, req any) (any, error) {
 		p := req.(*StartBuildPayload)
 		return s.StartBuild(ctx, p)
+	}
+}
+
+// NewDropBuildEndpoint returns an endpoint function that calls the method
+// "drop_build" of service "surla".
+func NewDropBuildEndpoint(s Service) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*DropBuildPayload)
+		return s.DropBuild(ctx, p)
 	}
 }
 

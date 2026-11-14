@@ -31,13 +31,15 @@ type Service interface {
 	// analysis of it. Surla checks the analysis's structure and cross-field rules,
 	// gives ambiguities the IDs <change_id>-ambiguity-NN and examples the IDs
 	// check_01, check_02, ... in list order, binds the card to the authenticated
-	// owner, records the design source (or, when story_refresh_op_id is given,
-	// reads one workspace snapshot, verifies its digest against the owner's
-	// current succeeded refresh_story operation, and records both its evaluated
-	// Stories and its design/*.go files), and computes request_revision. Every
-	// card waits for user confirmation, including a card without ambiguities.
-	// Surla runs no model for this step and cannot judge whether the analysis is
-	// complete or correct.
+	// owner, and computes request_revision. With story_refresh_op_id, Surla saves
+	// what that succeeded refresh_story operation evaluated: the draft's design,
+	// Stories, architecture, go.mod and made-from list; it reads no file. A
+	// project with a go.mod requires story_refresh_op_id for a new card; with
+	// neither a go.mod nor an op_id, the card records no design. An op_id whose
+	// refresh read the draft before the user dropped a build is refused with
+	// drafted_before_drop. Every card waits for user confirmation, including a
+	// card without ambiguities. Surla runs no model for this step and cannot judge
+	// whether the analysis is complete or correct.
 	ProposeChange(context.Context, *ProposeChangePayload) (res *ChangeCardResult, err error)
 	// Save the next revision of an existing Checkpoint 1 Change Card from a
 	// revised feature request and the guide's analysis of it. Only the guide
@@ -53,16 +55,17 @@ type Service interface {
 	// revises exactly once, keeping or editing it through prior_id or dropping it
 	// through removed_example_ids. Surla keeps the IDs of kept examples, gives new
 	// examples the lowest check_NN ID neither card uses, adopts the evaluated
-	// Stories and design/*.go from the single workspace snapshot verified against
-	// story_refresh_op_id when story_refresh_op_id is given (or keeps the saved
-	// Stories and their design source together when story_refresh_op_id is omitted
-	// on a card with Stories, or records design/*.go from the bound workspace
-	// again when omitted on a card without Stories), and saves the new revision in
-	// needs_confirmation status for the user's review. The new revision has no
-	// answers, confirmed_by or approval: earlier decisions carry over only where
-	// the analysis restates them in its summary, examples or preserved behaviors.
-	// The result is the change as get_change returns it. Surla runs no model for
-	// this step and cannot judge whether the analysis is complete or correct.
+	// draft's design, Stories, architecture, go.mod and made-from list when
+	// story_refresh_op_id is given, without reading any file, or keeps every
+	// snapshot field of the revision it revises when it is omitted, even with zero
+	// Stories, and saves the new revision in needs_confirmation status for the
+	// user's review. The new revision has no answers, confirmed_by or approval:
+	// earlier decisions carry over only where the analysis restates them in its
+	// summary, examples or preserved behaviors. The result is the change as
+	// get_change returns it. Surla runs no model for this step and cannot judge
+	// whether the analysis is complete or correct. A project with a go.mod refuses
+	// an omitted op_id when the revision being revised has no design. A refresh
+	// from before the user dropped a build is refused with drafted_before_drop.
 	ReviseChange(context.Context, *ReviseChangePayload) (res *ChangeCardResult, err error)
 	// Confirm or refine a Checkpoint 1 Change Card with the complete ambiguity
 	// answers and example table, or adopt the revision the guide proposed beside a
@@ -99,11 +102,14 @@ type Service interface {
 	// and design source. Only the user may decline; the guide replaces a proposal
 	// by revising again. The result is the change as get_change returns it.
 	DeclineRevision(context.Context, *DeclineRevisionPayload) (res *ChangeCardResult, err error)
-	// Extract and validate the Checkpoint 2 C4 container topology, tool contracts,
-	// and Goa-AI guardrails from a candidate Goa design bound to a confirmed
-	// Change Card. Surla reads the candidate module snapshot from the bound
-	// workspace. The result reports what the design declares; it does not compare
-	// the design with the Change Card's requirements.
+	// Return the Checkpoint 2 C4 container topology, tool contracts, and Goa-AI
+	// guardrails of a confirmed Change Card's agreed revision, from the
+	// architecture its refresh evaluated and the revision saved; it reads and
+	// evaluates no file. It refuses a design with no Goa API or Service container
+	// and an agent without positive TimeBudget and DefaultCaps(MaxToolCalls). The
+	// result reports what the design declares; it does not compare the design with
+	// the Change Card's requirements. The guide sees the architecture of an
+	// unsaved draft with surla preview -dir <draft_folder>.
 	PreviewArchitecture(context.Context, *PreviewArchitecturePayload) (res *ArchitecturePreviewResult, err error)
 	// Apply a Fast Draft Mode prompt override on the live target start_live_target
 	// runs, or reject a compiled-rule prompt hack. Surla changes prompts only in a
@@ -140,16 +146,24 @@ type Service interface {
 	// restart.
 	GetLiveTarget(context.Context) (res *LiveTargetStatus, err error)
 	// Start Checkpoint 4 verification of a candidate commit for the owner's
-	// confirmed Change Card revision and return its run_id at once. With
-	// verification settings stored with surla verification set, the run uses the
-	// operator's evaluator and needs no build. Otherwise the user's build of that
-	// revision must exist and Surla must have accepted its tests: the run builds
-	// the candidate's programs from the candidate commit and runs the generated
-	// entry point of the tests at the accepted commit. The server builds the
-	// commit in Surla's sandbox and runs the tests in a separate process that
+	// confirmed Change Card revision and return its run_id at once. The change's
+	// build must be the project's open build, not dropped, and the builder's
+	// working copy must have joined it. Before any run Surla checks, with git in
+	// the project's repository: the candidate is on the build's branch
+	// surla/build-<n>, descends from the build's base and is not that base, and
+	// holds no commit of another build's branch that the base lacks; its design/
+	// files, read by the design walk in gofmt form, are the build's design source
+	// version for version; and every design version at its merge base with the
+	// project's commit is one the revision was made from. With verification
+	// settings stored with surla verification set, the run uses the operator's
+	// evaluator. Otherwise Surla must have accepted the build's tests: the run
+	// builds the candidate's programs from the candidate commit and runs the
+	// generated entry point of the tests at the accepted commit. The server builds
+	// the commit in Surla's sandbox and runs the tests in a separate process that
 	// keeps running when the caller disconnects or the server restarts;
 	// get_verification reads its state. Only the builder view of the report is
-	// ever returned, with where its tests came from.
+	// ever returned, with where its tests came from. A candidate the user already
+	// merged still verifies.
 	VerifyChange(context.Context, *VerifyChangePayload) (res *VerificationStatusResult, err error)
 	// Return the current state of a verification run to the owner who started it:
 	// running, completed with the builder view of its report, or not completed
@@ -178,7 +192,9 @@ type Service interface {
 	// no release folder or staged binaries are required and artifacts is empty.
 	// The report's suite_id and environment are what the tests at suite_commit
 	// declared and are recorded on the approval without a separate comparison.
-	// Nothing is merged or deployed.
+	// Nothing is merged or deployed. It checks again, with git, that the candidate
+	// is on the build's branch, descends from its base and holds no other build's
+	// work.
 	ApproveMerge(context.Context, *ApproveMergePayload) (res *ChangeCardResult, err error)
 	// Compare evaluated Goa designs and go.mod directives without emitting a
 	// blanket compatibility verdict.
@@ -232,28 +248,45 @@ type Service interface {
 	// progressToken, the tool sends MCP progress updates as starter
 	// generation/tests, initial commit creation, and publication start.
 	InitProject(context.Context, *InitProjectPayload) (res *InitProjectResult, err error)
-	// Read the active workspace's application module, or its public local eval/
-	// module when target is eval, compile that module's edited Goa design in
-	// Surla's sandbox, and atomically replace its gen/ directory. Preserve
-	// top-level user files and their permissions and leave go.mod and go.sum
-	// unchanged. Return the written paths and warnings; a warning after gen/
-	// publication still means generation succeeded. The tool compiles the design
-	// only; it does not build the application or run tests. Fix a rejected design
-	// and call again on the same running server.
+	// Write the open build's agreed design into the builder's working folder and
+	// regenerate its code. Surla replaces, creates or removes the Go files under
+	// the builder's design/ so that design/ holds exactly the build's design
+	// source (never a test file or testdata; a linked design/ is refused), then
+	// compares each module the design imports with the go.mod the revision was
+	// made from: when the builder's go.mod lacks a module or requires an older
+	// version, the call names go get <module>@<version> and go mod tidy, prefixed
+	// GOWORK=off when the assignment's gowork_off is true, writes design/ and
+	// generates nothing until they are run. A differing replace directive for a
+	// module the design imports is also named, including the saved replacement
+	// line or the fact that none was saved, so the builder corrects go.mod before
+	// calling again. Otherwise it compiles the design in Surla's sandbox and
+	// atomically replaces gen/, preserving top-level user files and leaving go.mod
+	// and go.sum unchanged. With target eval it regenerates the working folder's
+	// eval/ module from its own design. Return the written paths and warnings; a
+	// warning after gen/ publication still means generation succeeded. It compiles
+	// the design only; it does not build the application or run tests.
 	GenerateCode(context.Context, *GenerateCodePayload) (res *GenerateCodeResult, err error)
-	// Copy the active workspace's live files (uncommitted edits included) into a
-	// protected per-operation copy and run go test ./... for every Go module in it
-	// (without stored verification settings, leaving out the starter test module
-	// whose tests the test writer writes, and saying so), each in a Linux
-	// container with no network. Nothing in the workspace changes. Returns passed
-	// and a bounded message; read the full output with read_check_output.
+	// Copy the builder's working folder's live files (uncommitted edits included)
+	// into a protected per-operation copy and run go test ./... for every Go
+	// module in it (without stored verification settings, leaving out the starter
+	// test module whose tests the test writer writes, and saying so), each in a
+	// Linux container with no network. Nothing in the working folder changes.
+	// Returns passed and a bounded message; read the full output with
+	// read_check_output. It reads only the builder's working copy, never the
+	// project folder. It refuses as generate_code does when no build is open, the
+	// build was dropped, the assignment was not read since the build started, or
+	// the copy is off its branch.
 	CheckProject(context.Context) (res *CheckProjectResult, err error)
-	// Run go mod tidy for every Go module of the active workspace (without stored
-	// verification settings, leaving out the starter test module whose tests the
-	// test writer writes, and saying so) in a protected copy inside Linux
-	// containers, then write only the changed go.mod, go.sum and go.work.sum files
-	// back to the workspace through verified handles. A symlinked manifest or one
-	// edited during the call is refused for that module.
+	// Run go mod tidy for every Go module of the builder's working folder, its own
+	// working copy of the project (without stored verification settings, leaving
+	// out the starter test module whose tests the test writer writes, and saying
+	// so) in a protected copy inside Linux containers, then write only the changed
+	// go.mod, go.sum and go.work.sum files back to the working folder through
+	// verified handles. A symlinked manifest or one edited during the call is
+	// refused for that module. It reads only the builder's working copy, never the
+	// project folder. It refuses as generate_code does when no build is open, the
+	// build was dropped, the assignment was not read since the build started, or
+	// the copy is off its branch.
 	UpdateDependencies(context.Context) (res *UpdateDependenciesResult, err error)
 	// Return one page of at most 16 KiB of the full output a check_project or
 	// update_dependencies operation captured, with a cursor for the next page and
@@ -274,24 +307,58 @@ type Service interface {
 	// added. Requests rejected before authentication or decoding and separate
 	// verification processes are absent.
 	ListTraces(context.Context, *ListTracesPayload) (res *TraceList, err error)
-	// Read the bound workspace's Go module snapshot, compute its canonical
-	// snapshot_digest, and start or reuse the project owner's in-memory Story
-	// refresh operation for that workspace, which every caller acting for the
-	// owner reads. Return promptly with the operation's op_id, state, and
-	// snapshot_digest while sandboxed evaluation continues on a server-owned
-	// context that survives client disconnects. Refreshing an unchanged snapshot
-	// whose current operation is running or succeeded returns that operation
-	// without starting another evaluation; refreshing a changed snapshot or a
-	// failed operation cancels and replaces the prior operation.
+	// Read the guide's draft, .surla-draft in the project folder: its go.mod,
+	// go.sum and the Go files under design/ in gofmt form, never the rest of the
+	// project. When the draft is missing, Surla makes it first, from the newest
+	// design a Change Card holds whose versions are all on the draft's made-from
+	// list, with the project's go.mod and go.sum, or else from the project folder;
+	// after the user dropped a build, it makes the draft again from the project
+	// folder and says so in message until a revision is saved. Compute the
+	// canonical snapshot_digest and start or reuse the project owner's in-memory
+	// Story refresh operation, which every caller acting for the owner reads; it
+	// is reused only while the draft and its made-from list are unchanged. Return
+	// promptly with op_id, state, snapshot_digest and draft_folder while sandboxed
+	// evaluation continues on a server-owned context that survives client
+	// disconnects. A succeeded operation keeps the design, Stories, architecture,
+	// the draft's go.mod and the made-from list it read; propose_change and
+	// revise_change save them with the revision. A design file Go cannot parse, or
+	// one that imports a package of the project outside design/, is refused with
+	// its file and line.
 	RefreshStory(context.Context) (res *StoryRefreshResult, err error)
 	// Return the project owner's current in-memory Story refresh operation for the
-	// bound workspace, the same one for every caller acting for the owner: op_id,
-	// state (none, running, succeeded, or failed), snapshot_digest, and the
-	// evaluated stories (empty when the design does not load the Story module) or
-	// a failure diagnostic. When no refresh has been run yet in this server
-	// process for the bound workspace, state is none with a message instructing
-	// the caller to run refresh_story.
+	// guide's draft, the same one for every caller acting for the owner: op_id,
+	// state (none, running, succeeded, or failed), snapshot_digest, draft_folder,
+	// and the evaluated stories (empty when the design does not load the Story
+	// module) or a failure diagnostic. When no refresh has been run yet in this
+	// server process for the guide's draft, state is none with the intended
+	// draft_folder and a message instructing the caller to run refresh_story; this
+	// read succeeds before a go.mod or draft folder exists.
 	GetStoryRefresh(context.Context) (res *StoryRefreshResult, err error)
+	// The guide brings design changes made outside Surla into its draft, before
+	// drafting a new change and when told a design file changed in the project
+	// folder. Under the draft's lock Surla compares each design file's draft and
+	// live versions over a recorded base. The history base is the latest recorded
+	// version present in the project's committed history since the draft's start,
+	// or the starting folder version when that history supplies none. The
+	// comparison base is whichever of that history base and the outside version
+	// the draft last took was recorded later; with no previous take, it is the
+	// history base. A live version equal to the comparison base brings nothing. If
+	// the project's committed history gained a recorded version since the last
+	// take, Surla takes and reports the live version without merging it. Otherwise
+	// an outside change is taken when the draft did not change that file, merged
+	// with git merge-file when both changed it, and listed to correct when both
+	// changed the same lines or one side removed what the other changed. A draft
+	// file Go cannot parse, and a module the project's go.mod requires at another
+	// version or with another replace directive than the draft's, are listed to
+	// correct; Surla does not merge go.mod. Surla records an interrupted update so
+	// a later call can finish it without merging its result again; if the guide
+	// changed the file in between, the file is listed to correct. An uncommitted
+	// revert to an older version may bring nothing; when a build reports
+	// design_changed_outside for an uncommitted design change, the user commits
+	// the change in the project folder, then asks the guide to call update_draft,
+	// refresh_story and revise_change. Otherwise call refresh_story after this
+	// update. Takes no input.
+	UpdateDraft(context.Context) (res *DraftUpdateResult, err error)
 	// Read the project team's registered roles and current terminal, watcher and
 	// unread-assignment facts. Reading creates nothing and marks no assignment
 	// read. Only the user's browser session may call it. wait_for_changes covers
@@ -326,48 +393,73 @@ type Service interface {
 	// of view.
 	WaitForChanges(context.Context, *WaitForChangesPayload) (res *ChangeListVersion, err error)
 	// The user starts building a confirmed change at its agreed revision, the one
-	// in force, on the project owner's bound team; a revision the guide proposed
-	// beside it is built only after the user adopts it. Surla checks the change
-	// and prerequisites without effects, opens and refreshes the test-writer copy
-	// when used, checks the revision again, and saves the build with the agreed
-	// Story and design and the agreed revision's confirmed answers, examples and
-	// preserved behaviors. Surla immediately registers the build's exact roles and
-	// folders before generating required tests. Stored verification settings use
-	// only the builder and remove a former test writer. Building again replaces
-	// the build and both unread assignments. A refused start saves no build and
-	// registers no role; a refusal at the second revision check may leave a
-	// reusable working copy. Generation trouble and team warnings after saving
-	// leave the saved build intact. Accepted work belongs to the server and
-	// survives client disconnection. Copy work and generation have a five-minute
-	// limit under the project's turn; after that turn is released, bringing the
-	// team up has its own 45-second limit. A server stop after saving leaves the
-	// saved assignment or verdict; build again to complete it. get_build reads the
-	// saved build without this start's transient team or copy outcome.
+	// in force, on the project owner's bound team. A project has one open build.
+	// Building another change is refused with previous_change_open until the user
+	// has merged a passed run of the open build into the branch checked out in the
+	// project folder or dropped it with drop_build. Building the open build's own
+	// change again keeps its number and base and replaces its assignments; while
+	// no verification of it has passed, replaces must name the open build the page
+	// showed, else unfinished_build_open; once that build is merged or dropped,
+	// building its change again starts a new build. Surla first checks, without
+	// effects, merge or drop, a revision drafted before a drop, and the agreed
+	// design against the project's commit; numbers a new build one more than any
+	// surla/build-<n> or surla/tests-<n> branch and the open build; and saves it
+	// with its base, the project's commit, by one rename. Then it makes a missing
+	// working copy (.surla-build, and .surla-tests when a test writer is used) on
+	// the build's own branch and registers the builder and the test writer in
+	// their copies. Build moves no existing copy: each joins the build's branch
+	// when its worker first reads the assignment. A refused start saves nothing;
+	// after the save, a server stop leaves the build saved, and building again
+	// makes a missing copy and registers the roles. After the start's turns are
+	// released, bringing the team up has its own 45-second limit. get_build reads
+	// the saved build without this start's transient team outcome.
 	StartBuild(context.Context, *StartBuildPayload) (res *StartBuildResult, err error)
-	// Return a change's usable build for the current test source: not_started when
-	// none exists, including a builder-only build whose stored verification
-	// settings were removed; start a new build on the views page. Otherwise return
-	// the revision built, when, whether the builder read its assignment, the test
-	// writer's state (with the number of Surla's findings, never their text) and
-	// whether it read its assignment, and whether the build is for the change's
-	// revision in force. Reading changes nothing.
+	// The user drops the project's open build on the views page because the change
+	// will not be taken: Surla builds nothing on it, and another change can be
+	// built. The request names the build the page showed; a different open build
+	// (a second tab built or dropped meanwhile) is refused with its facts, and a
+	// build already dropped is refused. Drop writes one record, the start of the
+	// guide's made-from list naming the dropped build, by one rename: its only
+	// write. It changes no working copy, branch, draft or file of the user's: the
+	// build's commits stay on its branches, and the guide's next refresh_story
+	// makes the draft again from the project folder. From then on no role has work
+	// for the build, and the builder's and the test writer's tools tell them it
+	// was dropped. A merged build may be dropped too. The result is the dropped
+	// build as get_build reports it.
+	DropBuild(context.Context, *DropBuildPayload) (res *ChangeBuild, err error)
+	// Return a change's build when it is the project's open build, with whether
+	// the user has taken it: building, passed with the commits to merge, merged,
+	// or dropped. not_started when it is not, including a builder-only build whose
+	// stored verification settings were removed; start a new build on the views
+	// page. Otherwise return the revision built, when, whether each role read its
+	// assignment, the test writer's state with the number of Surla's findings
+	// (never their text), and whether the build is for the change's revision in
+	// force. Reading changes nothing; deciding merged reads the project's
+	// repository.
 	GetBuild(context.Context, *GetBuildPayload) (res *ChangeBuild, err error)
 	// Return the text of Surla's findings on the tests of a change's build, which
 	// get_build only counts, with the build's revision and start time, the number
 	// of the report Surla checked and when it reached the verdict. A build whose
 	// tests do not need changes is refused. Reading changes nothing.
 	GetTestFindings(context.Context, *GetTestFindingsPayload) (res *TestFindings, err error)
-	// List the builder's assignments, one per change the user built, most recently
-	// started first, each with its change, revision and whether it was read.
-	// Reading the list records nothing.
+	// List the builder's assignment for the project's open build while that role
+	// has work; empty otherwise. Reading the list records nothing and moves no
+	// working copy.
 	ListBuilderAssignments(context.Context) (res *BuilderAssignmentList, err error)
-	// Return the builder's assignment for a change in full and record that the
-	// builder read it at its revision. A new build of the change replaces the
-	// assignment, which then counts as unread.
+	// Return the builder's assignment for the open build's change in full and
+	// record that the builder read it at its revision. The first read of a new
+	// build joins the builder's working copy to the build's own branch,
+	// surla/build-<n> at the build's base: a copy with uncommitted work on an
+	// earlier build branch first gets that work committed there with the message
+	// "Left uncommitted when change <change_id> started"; a copy with nothing
+	// uncommitted joins from any branch. A copy with uncommitted work on any other
+	// branch, or a Git operation in progress, is refused with copy_off_branch, and
+	// a copy whose turn is held with working_copy_busy; nothing is marked read
+	// then. Building the change again makes the assignment unread.
 	GetBuilderAssignment(context.Context, *GetBuilderAssignmentPayload) (res *BuilderAssignment, err error)
-	// List the test writer's assignments, one per change the user built, most
-	// recently started first, each with its change, revision, state and whether it
-	// was read. Reading the list records nothing.
+	// List the test writer's assignment for the project's open build while that
+	// role has work; empty otherwise. Reading the list records nothing and moves
+	// no working copy.
 	ListTestWriterAssignments(context.Context) (res *TestWriterAssignmentList, err error)
 	// Return the test writer's assignment for a change in full (the working
 	// folder, the design and Story as agreed at the built revision, the user's
@@ -376,7 +468,13 @@ type Service interface {
 	// findings) and record that the test writer read it at its revision. Later
 	// revisions do not change what the build saved. A new build of the change
 	// replaces the assignment, which then counts as unread, and so does each
-	// verdict of Surla's check.
+	// verdict of Surla's check. The first read of a new build joins your working
+	// copy to the build's branch, surla/tests-<n> at the build's base. A read that
+	// marks the assignment read also writes the required tests' generated folder
+	// into your copy. A copy with uncommitted work on an earlier tests build
+	// branch first gets that work committed there; a clean copy joins from any
+	// branch. Other uncommitted work or a Git operation is refused with
+	// copy_off_branch; nothing is marked read then.
 	GetTestWriterAssignment(context.Context, *GetTestWriterAssignmentPayload) (res *TestWriterAssignment, err error)
 	// The test writer reports that its tests for a change at the build's revision
 	// are finished. Every report raises the build's report number by one and makes
@@ -404,7 +502,7 @@ const ServiceName = "surla"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [40]string{"golden_path", "propose_change", "revise_change", "confirm_intent", "get_change", "decline_revision", "preview_architecture", "draft_override", "start_live_target", "stop_live_target", "get_live_target", "verify_change", "get_verification", "list_verifications", "approve_merge", "diff", "configure_model", "get_model_connection", "hand_over_model_settings", "init_project", "generate_code", "check_project", "update_dependencies", "read_check_output", "list_traces", "refresh_story", "get_story_refresh", "get_team", "show_team_pane", "start_team_agents", "list_changes", "wait_for_changes", "start_build", "get_build", "get_test_findings", "list_builder_assignments", "get_builder_assignment", "list_test_writer_assignments", "get_test_writer_assignment", "report_tests_finished"}
+var MethodNames = [42]string{"golden_path", "propose_change", "revise_change", "confirm_intent", "get_change", "decline_revision", "preview_architecture", "draft_override", "start_live_target", "stop_live_target", "get_live_target", "verify_change", "get_verification", "list_verifications", "approve_merge", "diff", "configure_model", "get_model_connection", "hand_over_model_settings", "init_project", "generate_code", "check_project", "update_dependencies", "read_check_output", "list_traces", "refresh_story", "get_story_refresh", "update_draft", "get_team", "show_team_pane", "start_team_agents", "list_changes", "wait_for_changes", "start_build", "drop_build", "get_build", "get_test_findings", "list_builder_assignments", "get_builder_assignment", "list_test_writer_assignments", "get_test_writer_assignment", "report_tests_finished"}
 
 // Evaluated Goa-AI cost, safety, history, and cache policy for a single agent.
 type AgentPolicyItem struct {
@@ -512,8 +610,8 @@ type ArchitecturePreviewResult struct {
 	ChangeID string
 	// Bound CP1 request_revision digest.
 	RequestRevision string
-	// SHA-256 digest of the evaluated design snapshot (sorted path and content
-	// pairs).
+	// SHA-256 digest of the design snapshot the revision's refresh evaluated
+	// (sorted path and content pairs).
 	DesignDigest string
 	// API or primary service name declared in the design.
 	SystemName string
@@ -529,37 +627,10 @@ type ArchitecturePreviewResult struct {
 	Banner string
 }
 
-// The test-writer working copy is at the project's commit. It may be new,
-// already current, or advanced by this start.
-type BuildCopyAtProjectCommit struct {
-	// The working copy's current commit.
-	Commit string
-}
-
-// The working copy has uncommitted changes, so this start retained its commit
-// and files.
-type BuildCopyDirty struct {
-	// The retained working-copy commit.
-	Commit string
-}
-
-// The tests branch is not contained in the project's branch, so this start
-// retained the copy's commit.
-type BuildCopyNotContained struct {
-	// The retained working-copy commit.
-	Commit string
-	// Merge the tests branch into the project's branch, then build again.
-	Step BuildStartStep
-}
-
-// This project has stored verification settings, so this start uses no
-// test-writer working copy.
-type BuildCopyNotUsed struct {
-}
-
-// This change has no usable build for the current test source: the user has
-// not started one, or its builder-only build lost the stored verification
-// settings that supplied its tests. Start a new build on the views page.
+// This change has no usable build: the project's open build is another
+// change's or there is none, or its builder-only build lost the stored
+// verification settings that supplied its tests. Start a new build on the
+// views page.
 type BuildNotStarted struct {
 }
 
@@ -602,13 +673,20 @@ type BuilderAssignment struct {
 	// otherwise accepted, with the commit and time, when the build records
 	// accepted tests, and not_yet_accepted when it records none.
 	WrittenTests WrittenTests
+	// Absolute path of the folder to build in: the project's folder inside your
+	// working copy .surla-build, on the build's branch surla/build-<n>. Run git
+	// and go there, never in the project folder.
+	WorkingFolder string
+	// True when no go.work lies in working_folder or in a folder between it and
+	// the working copy's root: run every go command there as GOWORK=off go …, so a
+	// go.work of the project folder around your copy does not take it over.
+	GoworkOff bool
 }
 
 // BuilderAssignmentList is the result type of the surla service
 // list_builder_assignments method.
 type BuilderAssignmentList struct {
-	// Assignments, most recently started first; empty when the user has built no
-	// change.
+	// The open build's assignment while it needs this role; empty otherwise.
 	Assignments []*BuilderAssignment
 }
 
@@ -779,7 +857,7 @@ type CP1RevisionAnalysisExample struct {
 	VerificationKind string
 }
 
-// ChangeBuild is the result type of the surla service get_build method.
+// ChangeBuild is the result type of the surla service drop_build method.
 type ChangeBuild struct {
 	// Change Card identifier.
 	ChangeID string
@@ -958,6 +1036,33 @@ type ConfirmedAnswer struct {
 	Answer string
 }
 
+// A worker's working copy is not on its build's own branch, holds uncommitted
+// work Surla does not move, or has a Git operation in progress. Surla moves no
+// copy here: the facts and the goal say where the work belongs, and the worker
+// puts it there with git, then calls again.
+type CopyOffBranch struct {
+	// Error name.
+	Name string
+	// The facts and the goal in words, ending with the call to make again. A name
+	// the agent chose is shown shell-quoted when it is printable, and as "a name
+	// that is not shown" otherwise.
+	Message string
+	// The branch checked out in the copy, as message shows it; absent when the
+	// copy is detached.
+	Branch *string
+	// The build's own branch, surla/build-<n> or surla/tests-<n>; absent before
+	// the copy joined the build.
+	BuildBranch *string
+	// The Git operation in progress in the copy, read from the folder the
+	// project's repository keeps for it. A bisect is none.
+	Operation string
+	// The first five uncommitted paths of the copy (changes and untracked files,
+	// not ignored ones), as message shows them.
+	Uncommitted []string
+	// How many paths of the copy are uncommitted in all.
+	UncommittedCount int
+}
+
 // DeclineRevisionPayload is the payload type of the surla service
 // decline_revision method.
 type DeclineRevisionPayload struct {
@@ -1004,6 +1109,20 @@ type DiffResult struct {
 	Summary string
 }
 
+// A file of the draft that update_draft could not bring forward from the
+// project folder: the guide corrects it in the draft and calls update_draft
+// again until none is listed, then refresh_story.
+type DraftCorrection struct {
+	// Path relative to the draft folder, such as design/types.go or go.mod.
+	Path string
+	// What to correct: conflict markers where the draft and the project folder
+	// changed the same lines; a file removed on one side and changed on the other;
+	// a draft file Go cannot parse, with its line; or a module the project's
+	// go.mod requires at another version than the draft's, or that the draft's
+	// lacks, including differing replace directives.
+	Problem string
+}
+
 // DraftOverridePayload is the payload type of the surla service draft_override
 // method.
 type DraftOverridePayload struct {
@@ -1029,6 +1148,31 @@ type DraftOverrideResult struct {
 	Message string
 }
 
+// DraftUpdateResult is the result type of the surla service update_draft
+// method.
+type DraftUpdateResult struct {
+	// Absolute path of the guide's draft folder.
+	DraftFolder string
+	// Design files the draft took from the project folder because it had not
+	// changed them, in path order.
+	Taken []string
+	// Design files where the project folder's change and the draft's edits merged
+	// without conflict, in path order.
+	Merged []string
+	// Files to correct in the draft before refreshing, in path order; empty when
+	// none.
+	ToCorrect []*DraftCorrection
+}
+
+// DropBuildPayload is the payload type of the surla service drop_build method.
+type DropBuildPayload struct {
+	// change_id of the open build the page showed.
+	ChangeID string
+	// started_at of the open build the page showed, exactly as get_build reported
+	// it.
+	StartedAt string
+}
+
 // Concrete input and expected outcome confirmed at Checkpoint 1.
 type ExampleItem struct {
 	// Stable example identifier. Default code-assigned IDs use check_01, check_02,
@@ -1049,7 +1193,7 @@ type ExampleItem struct {
 // method.
 type GenerateCodePayload struct {
 	// Module to regenerate: candidate (the application, the default when omitted)
-	// or eval (the local eval/ module).
+	// or eval (the test module).
 	Target *string
 }
 
@@ -1305,6 +1449,21 @@ type ModelSettingsResult struct {
 	Connection Connection
 }
 
+// A refusal of start_build or drop_build that names the project's one open
+// build, so the page shows what blocks the request and offers Drop for exactly
+// that build. Nothing changed.
+type OpenBuildRefusal struct {
+	// Error name.
+	Name string
+	// What was refused, why, and the user's step, worded for the page.
+	Message string
+	// Change the open build is for; drop_build takes it.
+	ChangeID string
+	// The open build as get_build reports it, with the commits to merge once a
+	// verification of it passed; drop_build takes its started_at.
+	Build *StartedBuild
+}
+
 // The run used the operator's evaluator: the one stored with surla
 // verification set, or the one named on surla verify's command line.
 type OperatorEvaluatorTests struct {
@@ -1349,11 +1508,9 @@ type ProposeChangePayload struct {
 	ChangeID string
 	// The user's feature request.
 	Prompt string
-	// Optional op_id of a succeeded refresh_story operation for the bound
-	// workspace whose evaluated Stories this card adopts. When set, Surla reads
-	// one workspace snapshot, requires its snapshot_digest to match the
-	// operation's, and records both the evaluated Stories and that snapshot's
-	// design/*.go on the card. Omit when the card has no Story.
+	// op_id of a succeeded refresh_story operation whose evaluated draft this card
+	// adopts: its design, Stories, architecture, go.mod and made-from list.
+	// Required when the project folder holds a go.mod; Surla reads no file.
 	StoryRefreshOpID *string
 	// Your analysis of prompt against the target's current design.
 	Analysis *CP1Analysis
@@ -1404,6 +1561,18 @@ type ReadCheckOutputPayload struct {
 	Cursor *string
 }
 
+// The open build of this same change that the page showed the user when the
+// user agreed to build the change again before any verification of it passed.
+// A start whose replaces does not name the open build exactly was decided on a
+// stale page and is refused with the open build's facts.
+type ReplacedBuild struct {
+	// change_id of the open build the page showed.
+	ChangeID string
+	// started_at of the open build the page showed, exactly as get_build reported
+	// it.
+	StartedAt string
+}
+
 // ReportTestsFinishedPayload is the payload type of the surla service
 // report_tests_finished method.
 type ReportTestsFinishedPayload struct {
@@ -1437,12 +1606,11 @@ type ReviseChangePayload struct {
 	RequestRevision string
 	// The user's revised feature request.
 	Prompt string
-	// Optional op_id of a succeeded refresh_story operation for the bound
-	// workspace whose evaluated Stories this revision adopts. When set, Surla
-	// reads one workspace snapshot, requires its snapshot_digest to match the
-	// operation's, and records both the evaluated Stories and that snapshot's
-	// design/*.go on the revised card. When omitted on a card that already has
-	// Stories, the card's saved Stories and their design source are kept together.
+	// op_id of a succeeded refresh_story operation whose evaluated draft this
+	// revision adopts. When omitted, the revision keeps every snapshot field of
+	// the revision it revises: design, Stories, architecture, go.mod and made-from
+	// list, even with zero Stories. A project with a go.mod refuses an omitted
+	// op_id when that revision has no design. Surla reads no file.
 	StoryRefreshOpID *string
 	// Your analysis of the revised prompt against the current card and the
 	// target's current design.
@@ -1477,17 +1645,19 @@ type StartBuildPayload struct {
 	// The Change Card's agreed revision, the one in force (not a waiting
 	// proposal's).
 	RequestRevision string
+	// The open build of this same change the page showed, sent when the user
+	// agreed to build it again before any verification of it passed. Omit it
+	// otherwise.
+	Replaces *ReplacedBuild
 }
 
 // StartBuildResult is the result type of the surla service start_build method.
 type StartBuildResult struct {
-	// The build saved before generation or team admission.
+	// The build saved before Surla made any missing working copy and admitted the
+	// team.
 	Build *StartedBuild
 	// The team's immediate outcome after the build was saved.
 	Team Team
-	// The test-writer working copy after this start's refresh; not_used with
-	// stored verification settings.
-	WorkingCopy WorkingCopy
 }
 
 // StartLiveTargetPayload is the payload type of the surla service
@@ -1575,15 +1745,20 @@ type StoryQuestionItem struct {
 // StoryRefreshResult is the result type of the surla service refresh_story
 // method.
 type StoryRefreshResult struct {
-	// Identifier of the owner's current Story refresh operation for the bound
-	// workspace; present when state is running, succeeded, or failed. Pass it as
+	// Absolute path intended for the guide's draft, .surla-draft in the project
+	// folder, whose go.mod, go.sum and design/ refresh_story reads. When state is
+	// none, this path does not mean the folder exists; refresh_story makes it when
+	// needed.
+	DraftFolder string
+	// Identifier of the owner's current Story refresh operation for the guide's
+	// draft; present when state is running, succeeded, or failed. Pass it as
 	// story_refresh_op_id to propose_change or revise_change once state is
 	// succeeded to adopt the evaluated Story into a Change Card.
 	OpID *string
 	// Current operation state: none, running, succeeded, or failed.
 	State string
-	// Canonical SHA-256 digest of the workspace module snapshot read when this
-	// refresh started; present when state is running, succeeded, or failed.
+	// Canonical SHA-256 digest of the draft snapshot read when this refresh
+	// started; present when state is running, succeeded, or failed.
 	SnapshotDigest *string
 	// Evaluated domain Stories in declaration order when state is succeeded (empty
 	// when the design declares no Stories or when state is none, running, or
@@ -1591,7 +1766,9 @@ type StoryRefreshResult struct {
 	Stories []*StorySummaryItem
 	// Safe failure or timeout diagnostic when state is failed; omitted otherwise.
 	Diagnostic *string
-	// Summary of the current Story refresh state and next action.
+	// Summary of the current Story refresh state and next action. After a dropped
+	// build remakes the draft and until a revision is saved from it, begins by
+	// naming the dropped change and saying that edits made before then are gone.
 	Message string
 }
 
@@ -1639,9 +1816,11 @@ type TeamRoleState struct {
 	// held when Chorus reports a watcher, gone after its absence grace, unknown
 	// otherwise.
 	Watcher string
-	// unread when this role owes an assignment read, nothing_owed when the owner
-	// established none, unknown when the owner could not read assignments. The
-	// guide has no assignments.
+	// unread when this role owes an assignment read; nothing_owed when it has work
+	// and owes no read; no_work when the open build needs nothing from it (no
+	// build is open, the build was dropped, the test writer's tests are accepted,
+	// or a verification of the builder's build passed); unknown when the owner
+	// could not read assignments. The guide has no assignments.
 	Assignment string
 }
 
@@ -1692,7 +1871,9 @@ type TestWriterAssignment struct {
 	// progress gives in finding_count when its state is needs_changes, and none in
 	// any other state. Fix them in working_folder, then report again.
 	Findings []string
-	// Folder to write the tests in: your own working copy of the project.
+	// Folder to write the tests in: your own working copy of the project,
+	// .surla-tests, on the build's branch surla/tests-<n>. Do not commit there:
+	// Surla commits what it accepts.
 	WorkingFolder string
 	// The canonical design source as agreed at request_revision, copied when this
 	// build started; later revisions do not change it.
@@ -1738,8 +1919,7 @@ type TestWriterAssignmentItem struct {
 // TestWriterAssignmentList is the result type of the surla service
 // list_test_writer_assignments method.
 type TestWriterAssignmentList struct {
-	// Assignments, most recently started first; empty when the user has built no
-	// change.
+	// The open build's assignment while it needs this role; empty otherwise.
 	Assignments []*TestWriterAssignmentItem
 }
 
@@ -1787,8 +1967,9 @@ type TestsCouldNotRun struct {
 }
 
 // Surla checked the reported tests and found problems the test writer must fix
-// before reporting again. Their text is in the test writer's assignment
-// (get_test_writer_assignment) and, for the user, in get_test_findings.
+// before reporting again, including a working copy that is off its build's
+// branch or holds another build's work. Their text is in
+// get_test_writer_assignment and, for the user, in get_test_findings.
 type TestsNeedChanges struct {
 	// Number of problems Surla found.
 	FindingCount int
@@ -1931,8 +2112,8 @@ type UnverifiedApprovalItem struct {
 type UpdateDependenciesResult struct {
 	// Operation identifier; pass it to read_check_output to read the full output.
 	OpID string
-	// Workspace-relative go.mod, go.sum and go.work.sum files whose bytes changed
-	// and were written.
+	// Working-folder-relative go.mod, go.sum and go.work.sum files whose bytes
+	// changed and were written.
 	FilesWritten []string
 	// At most 16 KiB: what was updated, and Go's message for any module that could
 	// not be.
@@ -2068,6 +2249,40 @@ type WaitForChangesPayload struct {
 	Since string
 }
 
+// Error returns an error description.
+func (e *CopyOffBranch) Error() string {
+	return "A worker's working copy is not on its build's own branch, holds uncommitted work Surla does not move, or has a Git operation in progress. Surla moves no copy here: the facts and the goal say where the work belongs, and the worker puts it there with git, then calls again."
+}
+
+// ErrorName returns the error name.
+//
+// Deprecated: Use GoaErrorName - https://github.com/goadesign/goa/issues/3105
+func (e *CopyOffBranch) ErrorName() string {
+	return e.GoaErrorName()
+}
+
+// GoaErrorName returns the error name.
+func (e *CopyOffBranch) GoaErrorName() string {
+	return e.Name
+}
+
+// Error returns an error description.
+func (e *OpenBuildRefusal) Error() string {
+	return "A refusal of start_build or drop_build that names the project's one open build, so the page shows what blocks the request and offers Drop for exactly that build. Nothing changed."
+}
+
+// ErrorName returns the error name.
+//
+// Deprecated: Use GoaErrorName - https://github.com/goadesign/goa/issues/3105
+func (e *OpenBuildRefusal) ErrorName() string {
+	return e.GoaErrorName()
+}
+
+// GoaErrorName returns the error name.
+func (e *OpenBuildRefusal) GoaErrorName() string {
+	return e.Name
+}
+
 // MakeForbidden builds a goa.ServiceError from an error.
 func MakeForbidden(err error) *goa.ServiceError {
 	return goa.NewServiceError(err, "forbidden", false, false, false)
@@ -2081,6 +2296,11 @@ func MakeConflict(err error) *goa.ServiceError {
 // MakeUnprocessable builds a goa.ServiceError from an error.
 func MakeUnprocessable(err error) *goa.ServiceError {
 	return goa.NewServiceError(err, "unprocessable", false, false, false)
+}
+
+// MakeDraftedBeforeDrop builds a goa.ServiceError from an error.
+func MakeDraftedBeforeDrop(err error) *goa.ServiceError {
+	return goa.NewServiceError(err, "drafted_before_drop", false, false, false)
 }
 
 // MakeNotFound builds a goa.ServiceError from an error.
@@ -2151,6 +2371,31 @@ func MakeLiveTargetStopFailed(err error) *goa.ServiceError {
 // MakeNotImplemented builds a goa.ServiceError from an error.
 func MakeNotImplemented(err error) *goa.ServiceError {
 	return goa.NewServiceError(err, "not_implemented", false, false, false)
+}
+
+// MakeAssignmentUnread builds a goa.ServiceError from an error.
+func MakeAssignmentUnread(err error) *goa.ServiceError {
+	return goa.NewServiceError(err, "assignment_unread", false, false, false)
+}
+
+// MakeWorkingFolderMissing builds a goa.ServiceError from an error.
+func MakeWorkingFolderMissing(err error) *goa.ServiceError {
+	return goa.NewServiceError(err, "working_folder_missing", false, false, false)
+}
+
+// MakeBuildBranchMismatch builds a goa.ServiceError from an error.
+func MakeBuildBranchMismatch(err error) *goa.ServiceError {
+	return goa.NewServiceError(err, "build_branch_mismatch", false, false, false)
+}
+
+// MakeDesignChangedOutside builds a goa.ServiceError from an error.
+func MakeDesignChangedOutside(err error) *goa.ServiceError {
+	return goa.NewServiceError(err, "design_changed_outside", false, false, false)
+}
+
+// MakeMissingModules builds a goa.ServiceError from an error.
+func MakeMissingModules(err error) *goa.ServiceError {
+	return goa.NewServiceError(err, "missing_modules", false, false, false)
 }
 
 // MakeUnavailable builds a goa.ServiceError from an error.
@@ -2329,6 +2574,26 @@ func (value *checkOutputPageInt64Transport) UnmarshalJSON(data []byte) error {
 
 // ValidatecheckOutputPageInt64Transport checks decoded JSON before it becomes a service value.
 func ValidatecheckOutputPageInt64Transport(value checkOutputPageInt64Transport) (err error) {
+
+	return err
+}
+
+// copyOffBranchIntTransport stores JSON fields until they have been validated.
+type copyOffBranchIntTransport int
+
+// UnmarshalJSON reads an exact whole JSON number and stores it within this type's
+// declared range. Decimal and exponent spellings do not change its value.
+func (value *copyOffBranchIntTransport) UnmarshalJSON(data []byte) error {
+	number, err := rawjson.DecodeInteger[int](data)
+	if err != nil {
+		return fmt.Errorf("decode copyOffBranchIntTransport integer: %w", err)
+	}
+	*value = copyOffBranchIntTransport(number)
+	return nil
+}
+
+// ValidatecopyOffBranchIntTransport checks decoded JSON before it becomes a service value.
+func ValidatecopyOffBranchIntTransport(value copyOffBranchIntTransport) (err error) {
 
 	return err
 }
@@ -2560,8 +2825,8 @@ type jsonArchitecturePreviewResultTransport struct {
 	ChangeID *string `json:"change_id"`
 	// Bound CP1 request_revision digest.
 	RequestRevision *string `json:"request_revision"`
-	// SHA-256 digest of the evaluated design snapshot (sorted path and content
-	// pairs).
+	// SHA-256 digest of the design snapshot the revision's refresh evaluated
+	// (sorted path and content pairs).
 	DesignDigest *string `json:"design_digest"`
 	// API or primary service name declared in the design.
 	SystemName *string `json:"system_name"`
@@ -2637,92 +2902,6 @@ func validatejsonArchitecturePreviewResultTransport(value *jsonArchitecturePrevi
 			}
 		}
 	}
-	return err
-}
-
-// jsonBuildCopyAtProjectCommitTransport stores JSON fields until they have been validated.
-type jsonBuildCopyAtProjectCommitTransport struct {
-	// The working copy's current commit.
-	Commit *string `json:"commit"`
-}
-
-// validatejsonBuildCopyAtProjectCommitTransport checks decoded JSON before it becomes a service value.
-func validatejsonBuildCopyAtProjectCommitTransport(value *jsonBuildCopyAtProjectCommitTransport) (err error) {
-	if value == nil {
-		return goa.MissingFieldError("body", "JSON value")
-	}
-	if value.Commit == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("commit", "body"))
-	}
-	if value.Commit != nil {
-		err = goa.MergeErrors(err, goa.ValidatePattern("body.commit", *value.Commit, "^([0-9a-f]{40}|[0-9a-f]{64})$"))
-	}
-	return err
-}
-
-// jsonBuildCopyDirtyTransport stores JSON fields until they have been validated.
-type jsonBuildCopyDirtyTransport struct {
-	// The retained working-copy commit.
-	Commit *string `json:"commit"`
-}
-
-// validatejsonBuildCopyDirtyTransport checks decoded JSON before it becomes a service value.
-func validatejsonBuildCopyDirtyTransport(value *jsonBuildCopyDirtyTransport) (err error) {
-	if value == nil {
-		return goa.MissingFieldError("body", "JSON value")
-	}
-	if value.Commit == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("commit", "body"))
-	}
-	if value.Commit != nil {
-		err = goa.MergeErrors(err, goa.ValidatePattern("body.commit", *value.Commit, "^([0-9a-f]{40}|[0-9a-f]{64})$"))
-	}
-	return err
-}
-
-// jsonBuildCopyNotContainedTransport stores JSON fields until they have been validated.
-type jsonBuildCopyNotContainedTransport struct {
-	// The retained working-copy commit.
-	Commit *string `json:"commit"`
-	// Merge the tests branch into the project's branch, then build again.
-	Step *jsonBuildStartStepTransport `json:"step"`
-}
-
-// validatejsonBuildCopyNotContainedTransport checks decoded JSON before it becomes a service value.
-func validatejsonBuildCopyNotContainedTransport(value *jsonBuildCopyNotContainedTransport) (err error) {
-	if value == nil {
-		return goa.MissingFieldError("body", "JSON value")
-	}
-	if value.Commit == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("commit", "body"))
-	}
-	if value.Step == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("step", "body"))
-	}
-	if value.Commit != nil {
-		err = goa.MergeErrors(err, goa.ValidatePattern("body.commit", *value.Commit, "^([0-9a-f]{40}|[0-9a-f]{64})$"))
-	}
-	if value.Step != nil {
-		if utf8.RuneCountInString(string(*value.Step)) < 1 {
-			err = goa.MergeErrors(err, goa.InvalidLengthError("body.step", string(*value.Step), utf8.RuneCountInString(string(*value.Step)), 1, true))
-		}
-		if utf8.RuneCountInString(string(*value.Step)) > 512 {
-			err = goa.MergeErrors(err, goa.InvalidLengthError("body.step", string(*value.Step), utf8.RuneCountInString(string(*value.Step)), 512, false))
-		}
-	}
-	return err
-}
-
-// jsonBuildCopyNotUsedTransport stores JSON fields until they have been validated.
-type jsonBuildCopyNotUsedTransport struct {
-}
-
-// validatejsonBuildCopyNotUsedTransport checks decoded JSON before it becomes a service value.
-func validatejsonBuildCopyNotUsedTransport(value *jsonBuildCopyNotUsedTransport) (err error) {
-	if value == nil {
-		return goa.MissingFieldError("body", "JSON value")
-	}
-
 	return err
 }
 
@@ -2840,8 +3019,7 @@ func validatejsonBuildTeamWindowBusyTransport(value *jsonBuildTeamWindowBusyTran
 
 // jsonBuilderAssignmentListTransport stores JSON fields until they have been validated.
 type jsonBuilderAssignmentListTransport struct {
-	// Assignments, most recently started first; empty when the user has built no
-	// change.
+	// The open build's assignment while it needs this role; empty otherwise.
 	Assignments []*jsonBuilderAssignmentTransport `json:"assignments"`
 }
 
@@ -2882,6 +3060,14 @@ type jsonBuilderAssignmentTransport struct {
 	// otherwise accepted, with the commit and time, when the build records
 	// accepted tests, and not_yet_accepted when it records none.
 	WrittenTests *jsonWrittenTestsTransport `json:"written_tests"`
+	// Absolute path of the folder to build in: the project's folder inside your
+	// working copy .surla-build, on the build's branch surla/build-<n>. Run git
+	// and go there, never in the project folder.
+	WorkingFolder *string `json:"working_folder"`
+	// True when no go.work lies in working_folder or in a folder between it and
+	// the working copy's root: run every go command there as GOWORK=off go …, so a
+	// go.work of the project folder around your copy does not take it over.
+	GoworkOff *bool `json:"gowork_off"`
 }
 
 // validatejsonBuilderAssignmentTransport checks decoded JSON before it becomes a service value.
@@ -2900,6 +3086,12 @@ func validatejsonBuilderAssignmentTransport(value *jsonBuilderAssignmentTranspor
 	}
 	if value.Read == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("read", "body"))
+	}
+	if value.WorkingFolder == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("working_folder", "body"))
+	}
+	if value.GoworkOff == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("gowork_off", "body"))
 	}
 	if value.WrittenTests == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("written_tests", "body"))
@@ -3828,6 +4020,66 @@ func validatejsonConfirmedAnswerTransport(value *jsonConfirmedAnswerTransport) (
 	return err
 }
 
+// jsonCopyOffBranchTransport stores JSON fields until they have been validated.
+type jsonCopyOffBranchTransport struct {
+	// Error name.
+	Name *string `json:"name"`
+	// The facts and the goal in words, ending with the call to make again. A name
+	// the agent chose is shown shell-quoted when it is printable, and as "a name
+	// that is not shown" otherwise.
+	Message *string `json:"message"`
+	// The branch checked out in the copy, as message shows it; absent when the
+	// copy is detached.
+	Branch *string `json:"branch,omitempty"`
+	// The build's own branch, surla/build-<n> or surla/tests-<n>; absent before
+	// the copy joined the build.
+	BuildBranch *string `json:"build_branch,omitempty"`
+	// The Git operation in progress in the copy, read from the folder the
+	// project's repository keeps for it. A bisect is none.
+	Operation *string `json:"operation"`
+	// The first five uncommitted paths of the copy (changes and untracked files,
+	// not ignored ones), as message shows them.
+	Uncommitted []string `json:"uncommitted"`
+	// How many paths of the copy are uncommitted in all.
+	UncommittedCount *copyOffBranchIntTransport `json:"uncommitted_count"`
+}
+
+// validatejsonCopyOffBranchTransport checks decoded JSON before it becomes a service value.
+func validatejsonCopyOffBranchTransport(value *jsonCopyOffBranchTransport) (err error) {
+	if value == nil {
+		return goa.MissingFieldError("body", "JSON value")
+	}
+	if value.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if value.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if value.Operation == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("operation", "body"))
+	}
+	if value.Uncommitted == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("uncommitted", "body"))
+	}
+	if value.UncommittedCount == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("uncommitted_count", "body"))
+	}
+	if value.Operation != nil {
+		if !(*value.Operation == "none" || *value.Operation == "merge" || *value.Operation == "rebase" || *value.Operation == "am" || *value.Operation == "cherry_pick" || *value.Operation == "revert") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.operation", *value.Operation, []any{"none", "merge", "rebase", "am", "cherry_pick", "revert"}))
+		}
+	}
+	if len(value.Uncommitted) > 5 {
+		err = goa.MergeErrors(err, goa.InvalidLengthError("body.uncommitted", value.Uncommitted, len(value.Uncommitted), 5, false))
+	}
+	if value.UncommittedCount != nil {
+		if int(*value.UncommittedCount) < 0 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.uncommitted_count", int(*value.UncommittedCount), 0, true))
+		}
+	}
+	return err
+}
+
 // jsonDeclineRevisionPayloadTransport stores JSON fields until they have been validated.
 type jsonDeclineRevisionPayloadTransport struct {
 	// Change identifier.
@@ -3952,6 +4204,32 @@ func validatejsonDiffResultTransport(value *jsonDiffResultTransport) (err error)
 	return err
 }
 
+// jsonDraftCorrectionTransport stores JSON fields until they have been validated.
+type jsonDraftCorrectionTransport struct {
+	// Path relative to the draft folder, such as design/types.go or go.mod.
+	Path *string `json:"path"`
+	// What to correct: conflict markers where the draft and the project folder
+	// changed the same lines; a file removed on one side and changed on the other;
+	// a draft file Go cannot parse, with its line; or a module the project's
+	// go.mod requires at another version than the draft's, or that the draft's
+	// lacks, including differing replace directives.
+	Problem *string `json:"problem"`
+}
+
+// validatejsonDraftCorrectionTransport checks decoded JSON before it becomes a service value.
+func validatejsonDraftCorrectionTransport(value *jsonDraftCorrectionTransport) (err error) {
+	if value == nil {
+		return goa.MissingFieldError("body", "JSON value")
+	}
+	if value.Path == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("path", "body"))
+	}
+	if value.Problem == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("problem", "body"))
+	}
+	return err
+}
+
 // jsonDraftOverridePayloadTransport stores JSON fields until they have been validated.
 type jsonDraftOverridePayloadTransport struct {
 	// Override target kind (prompt_template or compiled_rule).
@@ -4011,6 +4289,48 @@ func validatejsonDraftOverrideResultTransport(value *jsonDraftOverrideResultTran
 	return err
 }
 
+// jsonDraftUpdateResultTransport stores JSON fields until they have been validated.
+type jsonDraftUpdateResultTransport struct {
+	// Absolute path of the guide's draft folder.
+	DraftFolder *string `json:"draft_folder"`
+	// Design files the draft took from the project folder because it had not
+	// changed them, in path order.
+	Taken []string `json:"taken"`
+	// Design files where the project folder's change and the draft's edits merged
+	// without conflict, in path order.
+	Merged []string `json:"merged"`
+	// Files to correct in the draft before refreshing, in path order; empty when
+	// none.
+	ToCorrect []*jsonDraftCorrectionTransport `json:"to_correct"`
+}
+
+// validatejsonDraftUpdateResultTransport checks decoded JSON before it becomes a service value.
+func validatejsonDraftUpdateResultTransport(value *jsonDraftUpdateResultTransport) (err error) {
+	if value == nil {
+		return goa.MissingFieldError("body", "JSON value")
+	}
+	if value.DraftFolder == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("draft_folder", "body"))
+	}
+	if value.Taken == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("taken", "body"))
+	}
+	if value.Merged == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("merged", "body"))
+	}
+	if value.ToCorrect == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("to_correct", "body"))
+	}
+	for _, e := range value.ToCorrect {
+		if e != nil {
+			if err2 := validatejsonDraftCorrectionTransport(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	return err
+}
+
 // jsonExampleItemTransport stores JSON fields until they have been validated.
 type jsonExampleItemTransport struct {
 	// Stable example identifier. Default code-assigned IDs use check_01, check_02,
@@ -4058,7 +4378,7 @@ func validatejsonExampleItemTransport(value *jsonExampleItemTransport) (err erro
 // jsonGenerateCodePayloadTransport stores JSON fields until they have been validated.
 type jsonGenerateCodePayloadTransport struct {
 	// Module to regenerate: candidate (the application, the default when omitted)
-	// or eval (the local eval/ module).
+	// or eval (the test module).
 	Target *string `json:"target,omitempty"`
 }
 
@@ -4753,6 +5073,44 @@ func validatejsonModelSettingsResultTransport(value *jsonModelSettingsResultTran
 	return err
 }
 
+// jsonOpenBuildRefusalTransport stores JSON fields until they have been validated.
+type jsonOpenBuildRefusalTransport struct {
+	// Error name.
+	Name *string `json:"name"`
+	// What was refused, why, and the user's step, worded for the page.
+	Message *string `json:"message"`
+	// Change the open build is for; drop_build takes it.
+	ChangeID *string `json:"change_id"`
+	// The open build as get_build reports it, with the commits to merge once a
+	// verification of it passed; drop_build takes its started_at.
+	Build *jsonStartedBuildTransport `json:"build"`
+}
+
+// validatejsonOpenBuildRefusalTransport checks decoded JSON before it becomes a service value.
+func validatejsonOpenBuildRefusalTransport(value *jsonOpenBuildRefusalTransport) (err error) {
+	if value == nil {
+		return goa.MissingFieldError("body", "JSON value")
+	}
+	if value.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if value.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if value.ChangeID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("change_id", "body"))
+	}
+	if value.Build == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("build", "body"))
+	}
+	if value.Build != nil {
+		if err2 := validatejsonStartedBuildTransport(value.Build); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	return err
+}
+
 // jsonOperatorEvaluatorTestsTransport stores JSON fields until they have been validated.
 type jsonOperatorEvaluatorTestsTransport struct {
 }
@@ -4886,11 +5244,9 @@ type jsonProposeChangePayloadTransport struct {
 	ChangeID *string `json:"change_id"`
 	// The user's feature request.
 	Prompt *string `json:"prompt"`
-	// Optional op_id of a succeeded refresh_story operation for the bound
-	// workspace whose evaluated Stories this card adopts. When set, Surla reads
-	// one workspace snapshot, requires its snapshot_digest to match the
-	// operation's, and records both the evaluated Stories and that snapshot's
-	// design/*.go on the card. Omit when the card has no Story.
+	// op_id of a succeeded refresh_story operation whose evaluated draft this card
+	// adopts: its design, Stories, architecture, go.mod and made-from list.
+	// Required when the project folder holds a go.mod; Surla reads no file.
 	StoryRefreshOpID *string `json:"story_refresh_op_id,omitempty"`
 	// Your analysis of prompt against the target's current design.
 	Analysis *jsonCP1AnalysisTransport `json:"analysis"`
@@ -5019,6 +5375,37 @@ func validatejsonReadCheckOutputPayloadTransport(value *jsonReadCheckOutputPaylo
 	return err
 }
 
+// jsonReplacedBuildTransport stores JSON fields until they have been validated.
+type jsonReplacedBuildTransport struct {
+	// change_id of the open build the page showed.
+	ChangeID *string `json:"change_id"`
+	// started_at of the open build the page showed, exactly as get_build reported
+	// it.
+	StartedAt *string `json:"started_at"`
+}
+
+// validatejsonReplacedBuildTransport checks decoded JSON before it becomes a service value.
+func validatejsonReplacedBuildTransport(value *jsonReplacedBuildTransport) (err error) {
+	if value == nil {
+		return goa.MissingFieldError("body", "JSON value")
+	}
+	if value.ChangeID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("change_id", "body"))
+	}
+	if value.StartedAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("started_at", "body"))
+	}
+	if value.ChangeID != nil {
+		if utf8.RuneCountInString(*value.ChangeID) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.change_id", *value.ChangeID, utf8.RuneCountInString(*value.ChangeID), 1, true))
+		}
+	}
+	if value.StartedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.started_at", *value.StartedAt, goa.FormatDateTime))
+	}
+	return err
+}
+
 // jsonRequiredTestTransport stores JSON fields until they have been validated.
 type jsonRequiredTestTransport struct {
 	// Name of the Story the flow belongs to.
@@ -5061,12 +5448,11 @@ type jsonReviseChangePayloadTransport struct {
 	RequestRevision *string `json:"request_revision"`
 	// The user's revised feature request.
 	Prompt *string `json:"prompt"`
-	// Optional op_id of a succeeded refresh_story operation for the bound
-	// workspace whose evaluated Stories this revision adopts. When set, Surla
-	// reads one workspace snapshot, requires its snapshot_digest to match the
-	// operation's, and records both the evaluated Stories and that snapshot's
-	// design/*.go on the revised card. When omitted on a card that already has
-	// Stories, the card's saved Stories and their design source are kept together.
+	// op_id of a succeeded refresh_story operation whose evaluated draft this
+	// revision adopts. When omitted, the revision keeps every snapshot field of
+	// the revision it revises: design, Stories, architecture, go.mod and made-from
+	// list, even with zero Stories. A project with a go.mod refuses an omitted
+	// op_id when that revision has no design. Surla reads no file.
 	StoryRefreshOpID *string `json:"story_refresh_op_id,omitempty"`
 	// Your analysis of the revised prompt against the current card and the
 	// target's current design.
@@ -5143,13 +5529,11 @@ func validatejsonRunningLiveTargetTransport(value *jsonRunningLiveTargetTranspor
 
 // jsonStartBuildResultTransport stores JSON fields until they have been validated.
 type jsonStartBuildResultTransport struct {
-	// The build saved before generation or team admission.
+	// The build saved before Surla made any missing working copy and admitted the
+	// team.
 	Build *jsonStartedBuildTransport `json:"build"`
 	// The team's immediate outcome after the build was saved.
 	Team *jsonTeamTransport `json:"team"`
-	// The test-writer working copy after this start's refresh; not_used with
-	// stored verification settings.
-	WorkingCopy *jsonWorkingCopyTransport `json:"working_copy"`
 }
 
 // validatejsonStartBuildResultTransport checks decoded JSON before it becomes a service value.
@@ -5162,9 +5546,6 @@ func validatejsonStartBuildResultTransport(value *jsonStartBuildResultTransport)
 	}
 	if value.Team == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("team", "body"))
-	}
-	if value.WorkingCopy == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("working_copy", "body"))
 	}
 	if value.Build != nil {
 		if err2 := validatejsonStartedBuildTransport(value.Build); err2 != nil {
@@ -5202,37 +5583,6 @@ func validatejsonStartBuildResultTransport(value *jsonStartBuildResultTransport)
 				actual, _ := value.Team.AsUnavailable()
 				if actual != nil {
 					if err2 := validatejsonBuildTeamUnavailableTransport(actual); err2 != nil {
-						err = goa.MergeErrors(err, err2)
-					}
-				}
-			}
-		}
-
-	}
-	if value.WorkingCopy != nil {
-
-		if err2 := value.WorkingCopy.Validate(); err2 != nil {
-			err = goa.MergeErrors(err, err2)
-		} else {
-			switch string(value.WorkingCopy.Kind()) {
-			case "at_project_commit":
-				actual, _ := value.WorkingCopy.AsAtProjectCommit()
-				if actual != nil {
-					if err2 := validatejsonBuildCopyAtProjectCommitTransport(actual); err2 != nil {
-						err = goa.MergeErrors(err, err2)
-					}
-				}
-			case "not_contained":
-				actual, _ := value.WorkingCopy.AsNotContained()
-				if actual != nil {
-					if err2 := validatejsonBuildCopyNotContainedTransport(actual); err2 != nil {
-						err = goa.MergeErrors(err, err2)
-					}
-				}
-			case "dirty":
-				actual, _ := value.WorkingCopy.AsDirty()
-				if actual != nil {
-					if err2 := validatejsonBuildCopyDirtyTransport(actual); err2 != nil {
 						err = goa.MergeErrors(err, err2)
 					}
 				}
@@ -5470,15 +5820,20 @@ func validatejsonStoryQuestionItemTransport(value *jsonStoryQuestionItemTranspor
 
 // jsonStoryRefreshResultTransport stores JSON fields until they have been validated.
 type jsonStoryRefreshResultTransport struct {
-	// Identifier of the owner's current Story refresh operation for the bound
-	// workspace; present when state is running, succeeded, or failed. Pass it as
+	// Absolute path intended for the guide's draft, .surla-draft in the project
+	// folder, whose go.mod, go.sum and design/ refresh_story reads. When state is
+	// none, this path does not mean the folder exists; refresh_story makes it when
+	// needed.
+	DraftFolder *string `json:"draft_folder"`
+	// Identifier of the owner's current Story refresh operation for the guide's
+	// draft; present when state is running, succeeded, or failed. Pass it as
 	// story_refresh_op_id to propose_change or revise_change once state is
 	// succeeded to adopt the evaluated Story into a Change Card.
 	OpID *string `json:"op_id,omitempty"`
 	// Current operation state: none, running, succeeded, or failed.
 	State *string `json:"state"`
-	// Canonical SHA-256 digest of the workspace module snapshot read when this
-	// refresh started; present when state is running, succeeded, or failed.
+	// Canonical SHA-256 digest of the draft snapshot read when this refresh
+	// started; present when state is running, succeeded, or failed.
 	SnapshotDigest *string `json:"snapshot_digest,omitempty"`
 	// Evaluated domain Stories in declaration order when state is succeeded (empty
 	// when the design declares no Stories or when state is none, running, or
@@ -5486,7 +5841,9 @@ type jsonStoryRefreshResultTransport struct {
 	Stories []*jsonStorySummaryItemTransport `json:"stories"`
 	// Safe failure or timeout diagnostic when state is failed; omitted otherwise.
 	Diagnostic *string `json:"diagnostic,omitempty"`
-	// Summary of the current Story refresh state and next action.
+	// Summary of the current Story refresh state and next action. After a dropped
+	// build remakes the draft and until a revision is saved from it, begins by
+	// naming the dropped change and saying that edits made before then are gone.
 	Message *string `json:"message"`
 }
 
@@ -5503,6 +5860,9 @@ func validatejsonStoryRefreshResultTransport(value *jsonStoryRefreshResultTransp
 	}
 	if value.Message == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if value.DraftFolder == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("draft_folder", "body"))
 	}
 	if value.State != nil {
 		if !(*value.State == "none" || *value.State == "running" || *value.State == "succeeded" || *value.State == "failed") {
@@ -5628,9 +5988,11 @@ type jsonTeamRoleStateTransport struct {
 	// held when Chorus reports a watcher, gone after its absence grace, unknown
 	// otherwise.
 	Watcher *string `json:"watcher"`
-	// unread when this role owes an assignment read, nothing_owed when the owner
-	// established none, unknown when the owner could not read assignments. The
-	// guide has no assignments.
+	// unread when this role owes an assignment read; nothing_owed when it has work
+	// and owes no read; no_work when the open build needs nothing from it (no
+	// build is open, the build was dropped, the test writer's tests are accepted,
+	// or a verification of the builder's build passed); unknown when the owner
+	// could not read assignments. The guide has no assignments.
 	Assignment *string `json:"assignment"`
 }
 
@@ -5678,8 +6040,8 @@ func validatejsonTeamRoleStateTransport(value *jsonTeamRoleStateTransport) (err 
 		}
 	}
 	if value.Assignment != nil {
-		if !(*value.Assignment == "unread" || *value.Assignment == "nothing_owed" || *value.Assignment == "unknown") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.assignment", *value.Assignment, []any{"unread", "nothing_owed", "unknown"}))
+		if !(*value.Assignment == "unread" || *value.Assignment == "nothing_owed" || *value.Assignment == "no_work" || *value.Assignment == "unknown") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.assignment", *value.Assignment, []any{"unread", "nothing_owed", "no_work", "unknown"}))
 		}
 	}
 	return err
@@ -5816,8 +6178,7 @@ func validatejsonTestWriterAssignmentItemTransport(value *jsonTestWriterAssignme
 
 // jsonTestWriterAssignmentListTransport stores JSON fields until they have been validated.
 type jsonTestWriterAssignmentListTransport struct {
-	// Assignments, most recently started first; empty when the user has built no
-	// change.
+	// The open build's assignment while it needs this role; empty otherwise.
 	Assignments []*jsonTestWriterAssignmentItemTransport `json:"assignments"`
 }
 
@@ -5857,7 +6218,9 @@ type jsonTestWriterAssignmentTransport struct {
 	// progress gives in finding_count when its state is needs_changes, and none in
 	// any other state. Fix them in working_folder, then report again.
 	Findings []string `json:"findings"`
-	// Folder to write the tests in: your own working copy of the project.
+	// Folder to write the tests in: your own working copy of the project,
+	// .surla-tests, on the build's branch surla/tests-<n>. Do not commit there:
+	// Surla commits what it accepts.
 	WorkingFolder *string `json:"working_folder"`
 	// The canonical design source as agreed at request_revision, copied when this
 	// build started; later revisions do not change it.
@@ -6469,8 +6832,8 @@ func validatejsonUnverifiedApprovalItemTransport(value *jsonUnverifiedApprovalIt
 type jsonUpdateDependenciesResultTransport struct {
 	// Operation identifier; pass it to read_check_output to read the full output.
 	OpID *string `json:"op_id"`
-	// Workspace-relative go.mod, go.sum and go.work.sum files whose bytes changed
-	// and were written.
+	// Working-folder-relative go.mod, go.sum and go.work.sum files whose bytes
+	// changed and were written.
 	FilesWritten []string `json:"files_written"`
 	// At most 16 KiB: what was updated, and Go's message for any module that could
 	// not be.
@@ -7013,30 +7376,6 @@ func validateToolContractItemOriginal(value *ToolContractItem) (err error) {
 func validateToolInputBindingItemOriginal(value *ToolInputBindingItem) (err error) {
 	if value.InjectedFields == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("injected_fields", "value"))
-	}
-	return err
-}
-
-// validateBuildCopyAtProjectCommitOriginal checks the original typed value before JSON conversion.
-func validateBuildCopyAtProjectCommitOriginal(value *BuildCopyAtProjectCommit) (err error) {
-	err = goa.MergeErrors(err, goa.ValidatePattern("value.commit", value.Commit, "^([0-9a-f]{40}|[0-9a-f]{64})$"))
-	return err
-}
-
-// validateBuildCopyDirtyOriginal checks the original typed value before JSON conversion.
-func validateBuildCopyDirtyOriginal(value *BuildCopyDirty) (err error) {
-	err = goa.MergeErrors(err, goa.ValidatePattern("value.commit", value.Commit, "^([0-9a-f]{40}|[0-9a-f]{64})$"))
-	return err
-}
-
-// validateBuildCopyNotContainedOriginal checks the original typed value before JSON conversion.
-func validateBuildCopyNotContainedOriginal(value *BuildCopyNotContained) (err error) {
-	err = goa.MergeErrors(err, goa.ValidatePattern("value.commit", value.Commit, "^([0-9a-f]{40}|[0-9a-f]{64})$"))
-	if utf8.RuneCountInString(string(value.Step)) < 1 {
-		err = goa.MergeErrors(err, goa.InvalidLengthError("value.step", string(value.Step), utf8.RuneCountInString(string(value.Step)), 1, true))
-	}
-	if utf8.RuneCountInString(string(value.Step)) > 512 {
-		err = goa.MergeErrors(err, goa.InvalidLengthError("value.step", string(value.Step), utf8.RuneCountInString(string(value.Step)), 512, false))
 	}
 	return err
 }
@@ -7654,6 +7993,23 @@ func validateConfirmIntentPayloadOriginal(value *ConfirmIntentPayload) (err erro
 	return err
 }
 
+// validateCopyOffBranchOriginal checks the original typed value before JSON conversion.
+func validateCopyOffBranchOriginal(value *CopyOffBranch) (err error) {
+	if value.Uncommitted == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("uncommitted", "value"))
+	}
+	if !(value.Operation == "none" || value.Operation == "merge" || value.Operation == "rebase" || value.Operation == "am" || value.Operation == "cherry_pick" || value.Operation == "revert") {
+		err = goa.MergeErrors(err, goa.InvalidEnumValueError("value.operation", value.Operation, []any{"none", "merge", "rebase", "am", "cherry_pick", "revert"}))
+	}
+	if len(value.Uncommitted) > 5 {
+		err = goa.MergeErrors(err, goa.InvalidLengthError("value.uncommitted", value.Uncommitted, len(value.Uncommitted), 5, false))
+	}
+	if value.UncommittedCount < 0 {
+		err = goa.MergeErrors(err, goa.InvalidRangeError("value.uncommitted_count", value.UncommittedCount, 0, true))
+	}
+	return err
+}
+
 // validateDeclineRevisionPayloadOriginal checks the original typed value before JSON conversion.
 func validateDeclineRevisionPayloadOriginal(value *DeclineRevisionPayload) (err error) {
 	if utf8.RuneCountInString(value.ChangeID) < 1 {
@@ -7713,6 +8069,20 @@ func validateDiffResultOriginal(value *DiffResult) (err error) {
 func validateDraftOverridePayloadOriginal(value *DraftOverridePayload) (err error) {
 	if !(value.TargetKind == "prompt_template" || value.TargetKind == "compiled_rule") {
 		err = goa.MergeErrors(err, goa.InvalidEnumValueError("value.target_kind", value.TargetKind, []any{"prompt_template", "compiled_rule"}))
+	}
+	return err
+}
+
+// validateDraftUpdateResultOriginal checks the original typed value before JSON conversion.
+func validateDraftUpdateResultOriginal(value *DraftUpdateResult) (err error) {
+	if value.Taken == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("taken", "value"))
+	}
+	if value.Merged == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("merged", "value"))
+	}
+	if value.ToCorrect == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("to_correct", "value"))
 	}
 	return err
 }
@@ -7983,6 +8353,19 @@ func validateModelSettingsResultOriginal(value *ModelSettingsResult) (err error)
 	return err
 }
 
+// validateOpenBuildRefusalOriginal checks the original typed value before JSON conversion.
+func validateOpenBuildRefusalOriginal(value *OpenBuildRefusal) (err error) {
+	if value.Build == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("build", "value"))
+	}
+	if value.Build != nil {
+		if err2 := validateStartedBuildOriginal(value.Build); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	return err
+}
+
 // validateProjectTeamOriginal checks the original typed value before JSON conversion.
 func validateProjectTeamOriginal(value *ProjectTeam) (err error) {
 	if value.Roles == nil {
@@ -8029,6 +8412,15 @@ func validateProposeChangePayloadOriginal(value *ProposeChangePayload) (err erro
 	return err
 }
 
+// validateReplacedBuildOriginal checks the original typed value before JSON conversion.
+func validateReplacedBuildOriginal(value *ReplacedBuild) (err error) {
+	if utf8.RuneCountInString(value.ChangeID) < 1 {
+		err = goa.MergeErrors(err, goa.InvalidLengthError("value.change_id", value.ChangeID, utf8.RuneCountInString(value.ChangeID), 1, true))
+	}
+	err = goa.MergeErrors(err, goa.ValidateFormat("value.started_at", value.StartedAt, goa.FormatDateTime))
+	return err
+}
+
 // validateReviseChangePayloadOriginal checks the original typed value before JSON conversion.
 func validateReviseChangePayloadOriginal(value *ReviseChangePayload) (err error) {
 	if value.Analysis == nil {
@@ -8049,9 +8441,6 @@ func validateStartBuildResultOriginal(value *StartBuildResult) (err error) {
 	}
 	if value.Team.Kind() == "" {
 		err = goa.MergeErrors(err, goa.MissingFieldError("team", "value"))
-	}
-	if value.WorkingCopy.Kind() == "" {
-		err = goa.MergeErrors(err, goa.MissingFieldError("working_copy", "value"))
 	}
 	if value.Build != nil {
 		if err2 := validateStartedBuildOriginal(value.Build); err2 != nil {
@@ -8088,34 +8477,6 @@ func validateStartBuildResultOriginal(value *StartBuildResult) (err error) {
 			actual, _ := value.Team.AsUnavailable()
 			if actual != nil {
 				if err2 := validateBuildTeamUnavailableOriginal(actual); err2 != nil {
-					err = goa.MergeErrors(err, err2)
-				}
-			}
-		}
-	}
-
-	if err2 := value.WorkingCopy.Validate(); err2 != nil {
-		err = goa.MergeErrors(err, err2)
-	} else {
-		switch string(value.WorkingCopy.Kind()) {
-		case "at_project_commit":
-			actual, _ := value.WorkingCopy.AsAtProjectCommit()
-			if actual != nil {
-				if err2 := validateBuildCopyAtProjectCommitOriginal(actual); err2 != nil {
-					err = goa.MergeErrors(err, err2)
-				}
-			}
-		case "not_contained":
-			actual, _ := value.WorkingCopy.AsNotContained()
-			if actual != nil {
-				if err2 := validateBuildCopyNotContainedOriginal(actual); err2 != nil {
-					err = goa.MergeErrors(err, err2)
-				}
-			}
-		case "dirty":
-			actual, _ := value.WorkingCopy.AsDirty()
-			if actual != nil {
-				if err2 := validateBuildCopyDirtyOriginal(actual); err2 != nil {
 					err = goa.MergeErrors(err, err2)
 				}
 			}
@@ -8166,8 +8527,8 @@ func validateTeamRoleStateOriginal(value *TeamRoleState) (err error) {
 	if !(value.Watcher == "held" || value.Watcher == "gone" || value.Watcher == "unknown") {
 		err = goa.MergeErrors(err, goa.InvalidEnumValueError("value.watcher", value.Watcher, []any{"held", "gone", "unknown"}))
 	}
-	if !(value.Assignment == "unread" || value.Assignment == "nothing_owed" || value.Assignment == "unknown") {
-		err = goa.MergeErrors(err, goa.InvalidEnumValueError("value.assignment", value.Assignment, []any{"unread", "nothing_owed", "unknown"}))
+	if !(value.Assignment == "unread" || value.Assignment == "nothing_owed" || value.Assignment == "no_work" || value.Assignment == "unknown") {
+		err = goa.MergeErrors(err, goa.InvalidEnumValueError("value.assignment", value.Assignment, []any{"unread", "nothing_owed", "no_work", "unknown"}))
 	}
 	return err
 }
@@ -10124,245 +10485,6 @@ func (u *jsonTestsTransport) UnmarshalJSON(data []byte) error {
 	return u.Validate()
 }
 
-// jsonWorkingCopyTransport stores exactly one selected Goa OneOf branch.
-type jsonWorkingCopyTransport struct {
-	kind            jsonWorkingCopyTransportKind
-	NotUsed         *jsonBuildCopyNotUsedTransport
-	AtProjectCommit *jsonBuildCopyAtProjectCommitTransport
-	NotContained    *jsonBuildCopyNotContainedTransport
-	Dirty           *jsonBuildCopyDirtyTransport
-}
-
-// jsonWorkingCopyTransportKind identifies the selected branch of jsonWorkingCopyTransport.
-type jsonWorkingCopyTransportKind string
-
-const (
-	jsonWorkingCopyTransportKindNotUsed         jsonWorkingCopyTransportKind = "not_used"
-	jsonWorkingCopyTransportKindAtProjectCommit jsonWorkingCopyTransportKind = "at_project_commit"
-	jsonWorkingCopyTransportKindNotContained    jsonWorkingCopyTransportKind = "not_contained"
-	jsonWorkingCopyTransportKindDirty           jsonWorkingCopyTransportKind = "dirty"
-)
-
-// Kind returns the selected branch.
-func (u jsonWorkingCopyTransport) Kind() jsonWorkingCopyTransportKind {
-	return u.kind
-}
-
-// newjsonWorkingCopyTransportNotUsed creates jsonWorkingCopyTransport with its not_used branch selected.
-func newjsonWorkingCopyTransportNotUsed(value *jsonBuildCopyNotUsedTransport) jsonWorkingCopyTransport {
-	return jsonWorkingCopyTransport{kind: jsonWorkingCopyTransportKindNotUsed, NotUsed: value}
-}
-
-// AsNotUsed returns the not_used branch when it is selected.
-func (u jsonWorkingCopyTransport) AsNotUsed() (_ *jsonBuildCopyNotUsedTransport, ok bool) {
-	if u.kind != jsonWorkingCopyTransportKindNotUsed {
-		return
-	}
-	return u.NotUsed, true
-}
-
-// SetNotUsed selects the not_used branch.
-func (u *jsonWorkingCopyTransport) SetNotUsed(value *jsonBuildCopyNotUsedTransport) {
-	u.kind = jsonWorkingCopyTransportKindNotUsed
-	u.NotUsed = value
-}
-
-// newjsonWorkingCopyTransportAtProjectCommit creates jsonWorkingCopyTransport with its at_project_commit branch selected.
-func newjsonWorkingCopyTransportAtProjectCommit(value *jsonBuildCopyAtProjectCommitTransport) jsonWorkingCopyTransport {
-	return jsonWorkingCopyTransport{kind: jsonWorkingCopyTransportKindAtProjectCommit, AtProjectCommit: value}
-}
-
-// AsAtProjectCommit returns the at_project_commit branch when it is selected.
-func (u jsonWorkingCopyTransport) AsAtProjectCommit() (_ *jsonBuildCopyAtProjectCommitTransport, ok bool) {
-	if u.kind != jsonWorkingCopyTransportKindAtProjectCommit {
-		return
-	}
-	return u.AtProjectCommit, true
-}
-
-// SetAtProjectCommit selects the at_project_commit branch.
-func (u *jsonWorkingCopyTransport) SetAtProjectCommit(value *jsonBuildCopyAtProjectCommitTransport) {
-	u.kind = jsonWorkingCopyTransportKindAtProjectCommit
-	u.AtProjectCommit = value
-}
-
-// newjsonWorkingCopyTransportNotContained creates jsonWorkingCopyTransport with its not_contained branch selected.
-func newjsonWorkingCopyTransportNotContained(value *jsonBuildCopyNotContainedTransport) jsonWorkingCopyTransport {
-	return jsonWorkingCopyTransport{kind: jsonWorkingCopyTransportKindNotContained, NotContained: value}
-}
-
-// AsNotContained returns the not_contained branch when it is selected.
-func (u jsonWorkingCopyTransport) AsNotContained() (_ *jsonBuildCopyNotContainedTransport, ok bool) {
-	if u.kind != jsonWorkingCopyTransportKindNotContained {
-		return
-	}
-	return u.NotContained, true
-}
-
-// SetNotContained selects the not_contained branch.
-func (u *jsonWorkingCopyTransport) SetNotContained(value *jsonBuildCopyNotContainedTransport) {
-	u.kind = jsonWorkingCopyTransportKindNotContained
-	u.NotContained = value
-}
-
-// newjsonWorkingCopyTransportDirty creates jsonWorkingCopyTransport with its dirty branch selected.
-func newjsonWorkingCopyTransportDirty(value *jsonBuildCopyDirtyTransport) jsonWorkingCopyTransport {
-	return jsonWorkingCopyTransport{kind: jsonWorkingCopyTransportKindDirty, Dirty: value}
-}
-
-// AsDirty returns the dirty branch when it is selected.
-func (u jsonWorkingCopyTransport) AsDirty() (_ *jsonBuildCopyDirtyTransport, ok bool) {
-	if u.kind != jsonWorkingCopyTransportKindDirty {
-		return
-	}
-	return u.Dirty, true
-}
-
-// SetDirty selects the dirty branch.
-func (u *jsonWorkingCopyTransport) SetDirty(value *jsonBuildCopyDirtyTransport) {
-	u.kind = jsonWorkingCopyTransportKindDirty
-	u.Dirty = value
-}
-
-// Validate checks that one complete branch is selected.
-func (u jsonWorkingCopyTransport) Validate() error {
-	switch u.kind {
-	case jsonWorkingCopyTransportKindNotUsed:
-		if u.NotUsed == nil {
-			return goa.MissingFieldError("value", "jsonWorkingCopyTransport")
-		}
-		return nil
-	case jsonWorkingCopyTransportKindAtProjectCommit:
-		if u.AtProjectCommit == nil {
-			return goa.MissingFieldError("value", "jsonWorkingCopyTransport")
-		}
-		return nil
-	case jsonWorkingCopyTransportKindNotContained:
-		if u.NotContained == nil {
-			return goa.MissingFieldError("value", "jsonWorkingCopyTransport")
-		}
-		return nil
-	case jsonWorkingCopyTransportKindDirty:
-		if u.Dirty == nil {
-			return goa.MissingFieldError("value", "jsonWorkingCopyTransport")
-		}
-		return nil
-	case "":
-		return goa.MissingFieldError("state", "jsonWorkingCopyTransport")
-	default:
-		return goa.InvalidEnumValueError("state", u.kind, []any{string(jsonWorkingCopyTransportKindNotUsed), string(jsonWorkingCopyTransportKindAtProjectCommit), string(jsonWorkingCopyTransportKindNotContained), string(jsonWorkingCopyTransportKindDirty)})
-	}
-}
-
-// MarshalJSON writes the selected branch name and value.
-func (u jsonWorkingCopyTransport) MarshalJSON() ([]byte, error) {
-	if err := u.Validate(); err != nil {
-		return nil, err
-	}
-	var value any
-	switch u.kind {
-	case jsonWorkingCopyTransportKindNotUsed:
-		value = u.NotUsed
-	case jsonWorkingCopyTransportKindAtProjectCommit:
-		value = u.AtProjectCommit
-	case jsonWorkingCopyTransportKindNotContained:
-		value = u.NotContained
-	case jsonWorkingCopyTransportKindDirty:
-		value = u.Dirty
-	default:
-		return nil, fmt.Errorf("unexpected jsonWorkingCopyTransport branch %q", u.kind)
-	}
-	data, err := json.Marshal(value)
-	if err != nil {
-		return nil, err
-	}
-	var fields map[string]json.RawMessage
-	if err := json.Unmarshal(data, &fields); err != nil {
-		return nil, err
-	}
-	if fields == nil {
-		return nil, goa.InvalidFieldTypeError("state", nil, "non-null JSON object")
-	}
-	if _, exists := fields["state"]; exists {
-		return nil, fmt.Errorf("jsonWorkingCopyTransport branch already contains discriminator %q", "state")
-	}
-	tag, err := json.Marshal(string(u.kind))
-	if err != nil {
-		return nil, err
-	}
-	fields["state"] = tag
-	return json.Marshal(fields)
-}
-
-// UnmarshalJSON reads one complete branch name and value.
-func (u *jsonWorkingCopyTransport) UnmarshalJSON(data []byte) error {
-	var fields map[string]json.RawMessage
-	if err := json.Unmarshal(data, &fields); err != nil {
-		return err
-	}
-	tag, exists := fields["state"]
-	if !exists {
-		return goa.MissingFieldError("state", "jsonWorkingCopyTransport")
-	}
-	if bytes.Equal(bytes.TrimSpace(tag), []byte("null")) {
-		return goa.InvalidFieldTypeError("state", nil, "JSON string")
-	}
-	var raw struct {
-		Type  string
-		Value json.RawMessage
-	}
-	if err := json.Unmarshal(tag, &raw.Type); err != nil {
-		return err
-	}
-	delete(fields, "state")
-	value, err := json.Marshal(fields)
-	if err != nil {
-		return err
-	}
-	raw.Value = value
-	switch raw.Type {
-	case string(jsonWorkingCopyTransportKindNotUsed):
-		var value *jsonBuildCopyNotUsedTransport
-		decoder := json.NewDecoder(bytes.NewReader(raw.Value))
-		decoder.DisallowUnknownFields()
-		if err := decoder.Decode(&value); err != nil {
-			return err
-		}
-		u.kind = jsonWorkingCopyTransportKindNotUsed
-		u.NotUsed = value
-	case string(jsonWorkingCopyTransportKindAtProjectCommit):
-		var value *jsonBuildCopyAtProjectCommitTransport
-		decoder := json.NewDecoder(bytes.NewReader(raw.Value))
-		decoder.DisallowUnknownFields()
-		if err := decoder.Decode(&value); err != nil {
-			return err
-		}
-		u.kind = jsonWorkingCopyTransportKindAtProjectCommit
-		u.AtProjectCommit = value
-	case string(jsonWorkingCopyTransportKindNotContained):
-		var value *jsonBuildCopyNotContainedTransport
-		decoder := json.NewDecoder(bytes.NewReader(raw.Value))
-		decoder.DisallowUnknownFields()
-		if err := decoder.Decode(&value); err != nil {
-			return err
-		}
-		u.kind = jsonWorkingCopyTransportKindNotContained
-		u.NotContained = value
-	case string(jsonWorkingCopyTransportKindDirty):
-		var value *jsonBuildCopyDirtyTransport
-		decoder := json.NewDecoder(bytes.NewReader(raw.Value))
-		decoder.DisallowUnknownFields()
-		if err := decoder.Decode(&value); err != nil {
-			return err
-		}
-		u.kind = jsonWorkingCopyTransportKindDirty
-		u.Dirty = value
-	default:
-		return goa.InvalidEnumValueError("state", raw.Type, []any{string(jsonWorkingCopyTransportKindNotUsed), string(jsonWorkingCopyTransportKindAtProjectCommit), string(jsonWorkingCopyTransportKindNotContained), string(jsonWorkingCopyTransportKindDirty)})
-	}
-	return u.Validate()
-}
-
 // jsonWrittenTestsTransport stores exactly one selected Goa OneOf branch.
 type jsonWrittenTestsTransport struct {
 	kind           jsonWrittenTestsTransportKind
@@ -11319,331 +11441,6 @@ func DecodeArchitecturePreviewResult(data []byte) (out *ArchitecturePreviewResul
 	return out, nil
 }
 
-// EncodeBuildCopyAtProjectCommit turns a service value into JSON using the field names in the Goa design.
-func EncodeBuildCopyAtProjectCommit(in *BuildCopyAtProjectCommit) ([]byte, error) {
-	if err := checkBuildCopyAtProjectCommitValue(in); err != nil {
-		return nil, fmt.Errorf("encode BuildCopyAtProjectCommit JSON: %w", err)
-	}
-	if err := validateBuildCopyAtProjectCommitOriginal(in); err != nil {
-		return nil, fmt.Errorf("validate BuildCopyAtProjectCommit value: %w", err)
-	}
-	var body *jsonBuildCopyAtProjectCommitTransport
-	{
-		body = &jsonBuildCopyAtProjectCommitTransport{
-			Commit: &in.Commit,
-		}
-	}
-	if err := validatejsonBuildCopyAtProjectCommitTransport(body); err != nil {
-		return nil, fmt.Errorf("validate BuildCopyAtProjectCommit JSON: %w", err)
-	}
-	data, err := json.Marshal(body)
-	if err != nil {
-		return nil, fmt.Errorf("encode BuildCopyAtProjectCommit JSON: %w", err)
-	}
-	return data, nil
-}
-
-// ValidateBuildCopyAtProjectCommitValue checks the original Go fields against their declared constraints.
-// It returns validation errors without encoding the value as JSON.
-
-func ValidateBuildCopyAtProjectCommitValue(in *BuildCopyAtProjectCommit) error {
-	if err := checkBuildCopyAtProjectCommitValue(in); err != nil {
-		return fmt.Errorf("validate BuildCopyAtProjectCommit value: %w", err)
-	}
-	if err := validateBuildCopyAtProjectCommitOriginal(in); err != nil {
-		return fmt.Errorf("validate BuildCopyAtProjectCommit value: %w", err)
-	}
-
-	if in == nil {
-		return goa.MissingFieldError("result", "BuildCopyAtProjectCommit")
-	}
-
-	var body *jsonBuildCopyAtProjectCommitTransport
-	{
-		body = &jsonBuildCopyAtProjectCommitTransport{
-			Commit: &in.Commit,
-		}
-	}
-	if err := validatejsonBuildCopyAtProjectCommitTransport(body); err != nil {
-		return fmt.Errorf("validate BuildCopyAtProjectCommit value: %w", err)
-	}
-	return nil
-}
-
-// DecodeBuildCopyAtProjectCommit checks JSON field names from the Goa design and returns a service value.
-func DecodeBuildCopyAtProjectCommit(data []byte) (out *BuildCopyAtProjectCommit, err error) {
-	root, err := readStrictJSON(data)
-	if err != nil {
-		return out, fmt.Errorf("decode BuildCopyAtProjectCommit JSON: %w", err)
-	}
-	if err := validateBuildCopyAtProjectCommitJSONValue("", root, ""); err != nil {
-		return out, fmt.Errorf("decode BuildCopyAtProjectCommit JSON: %w", err)
-	}
-	var body *jsonBuildCopyAtProjectCommitTransport
-	decoder := json.NewDecoder(bytes.NewReader(data))
-	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(&body); err != nil {
-		return out, fmt.Errorf("decode BuildCopyAtProjectCommit JSON: %w", err)
-	}
-	if err := decoder.Decode(&struct{}{}); err != io.EOF {
-		if err == nil {
-			return out, fmt.Errorf("decode BuildCopyAtProjectCommit JSON: multiple JSON values")
-		}
-		return out, fmt.Errorf("decode BuildCopyAtProjectCommit JSON after first value: %w", err)
-	}
-	if err := validatejsonBuildCopyAtProjectCommitTransport(body); err != nil {
-		return out, fmt.Errorf("validate BuildCopyAtProjectCommit JSON: %w", err)
-	}
-	{
-		out = &BuildCopyAtProjectCommit{
-			Commit: *body.Commit,
-		}
-	}
-	return out, nil
-}
-
-// EncodeBuildCopyDirty turns a service value into JSON using the field names in the Goa design.
-func EncodeBuildCopyDirty(in *BuildCopyDirty) ([]byte, error) {
-	if err := checkBuildCopyDirtyValue(in); err != nil {
-		return nil, fmt.Errorf("encode BuildCopyDirty JSON: %w", err)
-	}
-	if err := validateBuildCopyDirtyOriginal(in); err != nil {
-		return nil, fmt.Errorf("validate BuildCopyDirty value: %w", err)
-	}
-	var body *jsonBuildCopyDirtyTransport
-	{
-		body = &jsonBuildCopyDirtyTransport{
-			Commit: &in.Commit,
-		}
-	}
-	if err := validatejsonBuildCopyDirtyTransport(body); err != nil {
-		return nil, fmt.Errorf("validate BuildCopyDirty JSON: %w", err)
-	}
-	data, err := json.Marshal(body)
-	if err != nil {
-		return nil, fmt.Errorf("encode BuildCopyDirty JSON: %w", err)
-	}
-	return data, nil
-}
-
-// ValidateBuildCopyDirtyValue checks the original Go fields against their declared constraints.
-// It returns validation errors without encoding the value as JSON.
-
-func ValidateBuildCopyDirtyValue(in *BuildCopyDirty) error {
-	if err := checkBuildCopyDirtyValue(in); err != nil {
-		return fmt.Errorf("validate BuildCopyDirty value: %w", err)
-	}
-	if err := validateBuildCopyDirtyOriginal(in); err != nil {
-		return fmt.Errorf("validate BuildCopyDirty value: %w", err)
-	}
-
-	if in == nil {
-		return goa.MissingFieldError("result", "BuildCopyDirty")
-	}
-
-	var body *jsonBuildCopyDirtyTransport
-	{
-		body = &jsonBuildCopyDirtyTransport{
-			Commit: &in.Commit,
-		}
-	}
-	if err := validatejsonBuildCopyDirtyTransport(body); err != nil {
-		return fmt.Errorf("validate BuildCopyDirty value: %w", err)
-	}
-	return nil
-}
-
-// DecodeBuildCopyDirty checks JSON field names from the Goa design and returns a service value.
-func DecodeBuildCopyDirty(data []byte) (out *BuildCopyDirty, err error) {
-	root, err := readStrictJSON(data)
-	if err != nil {
-		return out, fmt.Errorf("decode BuildCopyDirty JSON: %w", err)
-	}
-	if err := validateBuildCopyDirtyJSONValue("", root, ""); err != nil {
-		return out, fmt.Errorf("decode BuildCopyDirty JSON: %w", err)
-	}
-	var body *jsonBuildCopyDirtyTransport
-	decoder := json.NewDecoder(bytes.NewReader(data))
-	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(&body); err != nil {
-		return out, fmt.Errorf("decode BuildCopyDirty JSON: %w", err)
-	}
-	if err := decoder.Decode(&struct{}{}); err != io.EOF {
-		if err == nil {
-			return out, fmt.Errorf("decode BuildCopyDirty JSON: multiple JSON values")
-		}
-		return out, fmt.Errorf("decode BuildCopyDirty JSON after first value: %w", err)
-	}
-	if err := validatejsonBuildCopyDirtyTransport(body); err != nil {
-		return out, fmt.Errorf("validate BuildCopyDirty JSON: %w", err)
-	}
-	{
-		out = &BuildCopyDirty{
-			Commit: *body.Commit,
-		}
-	}
-	return out, nil
-}
-
-// EncodeBuildCopyNotContained turns a service value into JSON using the field names in the Goa design.
-func EncodeBuildCopyNotContained(in *BuildCopyNotContained) ([]byte, error) {
-	if err := checkBuildCopyNotContainedValue(in); err != nil {
-		return nil, fmt.Errorf("encode BuildCopyNotContained JSON: %w", err)
-	}
-	if err := validateBuildCopyNotContainedOriginal(in); err != nil {
-		return nil, fmt.Errorf("validate BuildCopyNotContained value: %w", err)
-	}
-	var body *jsonBuildCopyNotContainedTransport
-	{
-		body = &jsonBuildCopyNotContainedTransport{
-			Commit: &in.Commit,
-		}
-		step := jsonBuildStartStepTransport(in.Step)
-		body.Step = &step
-	}
-	if err := validatejsonBuildCopyNotContainedTransport(body); err != nil {
-		return nil, fmt.Errorf("validate BuildCopyNotContained JSON: %w", err)
-	}
-	data, err := json.Marshal(body)
-	if err != nil {
-		return nil, fmt.Errorf("encode BuildCopyNotContained JSON: %w", err)
-	}
-	return data, nil
-}
-
-// ValidateBuildCopyNotContainedValue checks the original Go fields against their declared constraints.
-// It returns validation errors without encoding the value as JSON.
-
-func ValidateBuildCopyNotContainedValue(in *BuildCopyNotContained) error {
-	if err := checkBuildCopyNotContainedValue(in); err != nil {
-		return fmt.Errorf("validate BuildCopyNotContained value: %w", err)
-	}
-	if err := validateBuildCopyNotContainedOriginal(in); err != nil {
-		return fmt.Errorf("validate BuildCopyNotContained value: %w", err)
-	}
-
-	if in == nil {
-		return goa.MissingFieldError("result", "BuildCopyNotContained")
-	}
-
-	var body *jsonBuildCopyNotContainedTransport
-	{
-		body = &jsonBuildCopyNotContainedTransport{
-			Commit: &in.Commit,
-		}
-		step := jsonBuildStartStepTransport(in.Step)
-		body.Step = &step
-	}
-	if err := validatejsonBuildCopyNotContainedTransport(body); err != nil {
-		return fmt.Errorf("validate BuildCopyNotContained value: %w", err)
-	}
-	return nil
-}
-
-// DecodeBuildCopyNotContained checks JSON field names from the Goa design and returns a service value.
-func DecodeBuildCopyNotContained(data []byte) (out *BuildCopyNotContained, err error) {
-	root, err := readStrictJSON(data)
-	if err != nil {
-		return out, fmt.Errorf("decode BuildCopyNotContained JSON: %w", err)
-	}
-	if err := validateBuildCopyNotContainedJSONValue("", root, ""); err != nil {
-		return out, fmt.Errorf("decode BuildCopyNotContained JSON: %w", err)
-	}
-	var body *jsonBuildCopyNotContainedTransport
-	decoder := json.NewDecoder(bytes.NewReader(data))
-	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(&body); err != nil {
-		return out, fmt.Errorf("decode BuildCopyNotContained JSON: %w", err)
-	}
-	if err := decoder.Decode(&struct{}{}); err != io.EOF {
-		if err == nil {
-			return out, fmt.Errorf("decode BuildCopyNotContained JSON: multiple JSON values")
-		}
-		return out, fmt.Errorf("decode BuildCopyNotContained JSON after first value: %w", err)
-	}
-	if err := validatejsonBuildCopyNotContainedTransport(body); err != nil {
-		return out, fmt.Errorf("validate BuildCopyNotContained JSON: %w", err)
-	}
-	{
-		out = &BuildCopyNotContained{
-			Commit: *body.Commit,
-			Step:   BuildStartStep(*body.Step),
-		}
-	}
-	return out, nil
-}
-
-// EncodeBuildCopyNotUsed turns a service value into JSON using the field names in the Goa design.
-func EncodeBuildCopyNotUsed(in *BuildCopyNotUsed) ([]byte, error) {
-	if err := checkBuildCopyNotUsedValue(in); err != nil {
-		return nil, fmt.Errorf("encode BuildCopyNotUsed JSON: %w", err)
-	}
-	var body *jsonBuildCopyNotUsedTransport
-	{
-		body = &jsonBuildCopyNotUsedTransport{}
-	}
-	if err := validatejsonBuildCopyNotUsedTransport(body); err != nil {
-		return nil, fmt.Errorf("validate BuildCopyNotUsed JSON: %w", err)
-	}
-	data, err := json.Marshal(body)
-	if err != nil {
-		return nil, fmt.Errorf("encode BuildCopyNotUsed JSON: %w", err)
-	}
-	return data, nil
-}
-
-// ValidateBuildCopyNotUsedValue checks the original Go fields against their declared constraints.
-// It returns validation errors without encoding the value as JSON.
-
-func ValidateBuildCopyNotUsedValue(in *BuildCopyNotUsed) error {
-	if err := checkBuildCopyNotUsedValue(in); err != nil {
-		return fmt.Errorf("validate BuildCopyNotUsed value: %w", err)
-	}
-
-	if in == nil {
-		return goa.MissingFieldError("result", "BuildCopyNotUsed")
-	}
-
-	var body *jsonBuildCopyNotUsedTransport
-	{
-		body = &jsonBuildCopyNotUsedTransport{}
-	}
-	if err := validatejsonBuildCopyNotUsedTransport(body); err != nil {
-		return fmt.Errorf("validate BuildCopyNotUsed value: %w", err)
-	}
-	return nil
-}
-
-// DecodeBuildCopyNotUsed checks JSON field names from the Goa design and returns a service value.
-func DecodeBuildCopyNotUsed(data []byte) (out *BuildCopyNotUsed, err error) {
-	root, err := readStrictJSON(data)
-	if err != nil {
-		return out, fmt.Errorf("decode BuildCopyNotUsed JSON: %w", err)
-	}
-	if err := validateBuildCopyNotUsedJSONValue("", root, ""); err != nil {
-		return out, fmt.Errorf("decode BuildCopyNotUsed JSON: %w", err)
-	}
-	var body *jsonBuildCopyNotUsedTransport
-	decoder := json.NewDecoder(bytes.NewReader(data))
-	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(&body); err != nil {
-		return out, fmt.Errorf("decode BuildCopyNotUsed JSON: %w", err)
-	}
-	if err := decoder.Decode(&struct{}{}); err != io.EOF {
-		if err == nil {
-			return out, fmt.Errorf("decode BuildCopyNotUsed JSON: multiple JSON values")
-		}
-		return out, fmt.Errorf("decode BuildCopyNotUsed JSON after first value: %w", err)
-	}
-	if err := validatejsonBuildCopyNotUsedTransport(body); err != nil {
-		return out, fmt.Errorf("validate BuildCopyNotUsed JSON: %w", err)
-	}
-	{
-		out = &BuildCopyNotUsed{}
-	}
-	return out, nil
-}
-
 // EncodeBuildNotStarted turns a service value into JSON using the field names in the Goa design.
 func EncodeBuildNotStarted(in *BuildNotStarted) ([]byte, error) {
 	if err := checkBuildNotStartedValue(in); err != nil {
@@ -12057,6 +11854,8 @@ func EncodeBuilderAssignment(in *BuilderAssignment) ([]byte, error) {
 			RequestRevision: &in.RequestRevision,
 			InForce:         &in.InForce,
 			Read:            &in.Read,
+			WorkingFolder:   &in.WorkingFolder,
+			GoworkOff:       &in.GoworkOff,
 		}
 		var writtenTestsValue jsonWrittenTestsTransport
 		switch string(in.WrittenTests.Kind()) {
@@ -12122,6 +11921,8 @@ func ValidateBuilderAssignmentValue(in *BuilderAssignment) error {
 			RequestRevision: &in.RequestRevision,
 			InForce:         &in.InForce,
 			Read:            &in.Read,
+			WorkingFolder:   &in.WorkingFolder,
+			GoworkOff:       &in.GoworkOff,
 		}
 		var writtenTestsValue jsonWrittenTestsTransport
 		switch string(in.WrittenTests.Kind()) {
@@ -12191,6 +11992,8 @@ func DecodeBuilderAssignment(data []byte) (out *BuilderAssignment, err error) {
 			RequestRevision: *body.RequestRevision,
 			InForce:         *body.InForce,
 			Read:            *body.Read,
+			WorkingFolder:   *body.WorkingFolder,
+			GoworkOff:       *body.GoworkOff,
 		}
 		switch string(body.WrittenTests.Kind()) {
 		case "not_used":
@@ -14464,6 +14267,118 @@ func DecodeConfirmedAnswer(data []byte) (out *ConfirmedAnswer, err error) {
 	return out, nil
 }
 
+// EncodeCopyOffBranch turns a service value into JSON using the field names in the Goa design.
+func EncodeCopyOffBranch(in *CopyOffBranch) ([]byte, error) {
+	if err := checkCopyOffBranchValue(in); err != nil {
+		return nil, fmt.Errorf("encode CopyOffBranch JSON: %w", err)
+	}
+	if err := validateCopyOffBranchOriginal(in); err != nil {
+		return nil, fmt.Errorf("validate CopyOffBranch value: %w", err)
+	}
+	var body *jsonCopyOffBranchTransport
+	{
+		body = &jsonCopyOffBranchTransport{
+			Name:        &in.Name,
+			Message:     &in.Message,
+			Branch:      in.Branch,
+			BuildBranch: in.BuildBranch,
+			Operation:   &in.Operation,
+		}
+		uncommittedCount := copyOffBranchIntTransport(in.UncommittedCount)
+		body.UncommittedCount = &uncommittedCount
+		body.Uncommitted = make([]string, len(in.Uncommitted))
+		for i, val := range in.Uncommitted {
+			body.Uncommitted[i] = val
+		}
+	}
+	if err := validatejsonCopyOffBranchTransport(body); err != nil {
+		return nil, fmt.Errorf("validate CopyOffBranch JSON: %w", err)
+	}
+	data, err := json.Marshal(body)
+	if err != nil {
+		return nil, fmt.Errorf("encode CopyOffBranch JSON: %w", err)
+	}
+	return data, nil
+}
+
+// ValidateCopyOffBranchValue checks the original Go fields against their declared constraints.
+// It returns validation errors without encoding the value as JSON.
+
+func ValidateCopyOffBranchValue(in *CopyOffBranch) error {
+	if err := checkCopyOffBranchValue(in); err != nil {
+		return fmt.Errorf("validate CopyOffBranch value: %w", err)
+	}
+	if err := validateCopyOffBranchOriginal(in); err != nil {
+		return fmt.Errorf("validate CopyOffBranch value: %w", err)
+	}
+
+	if in == nil {
+		return goa.MissingFieldError("result", "CopyOffBranch")
+	}
+
+	var body *jsonCopyOffBranchTransport
+	{
+		body = &jsonCopyOffBranchTransport{
+			Name:        &in.Name,
+			Message:     &in.Message,
+			Branch:      in.Branch,
+			BuildBranch: in.BuildBranch,
+			Operation:   &in.Operation,
+		}
+		uncommittedCount := copyOffBranchIntTransport(in.UncommittedCount)
+		body.UncommittedCount = &uncommittedCount
+		body.Uncommitted = make([]string, len(in.Uncommitted))
+		for i, val := range in.Uncommitted {
+			body.Uncommitted[i] = val
+		}
+	}
+	if err := validatejsonCopyOffBranchTransport(body); err != nil {
+		return fmt.Errorf("validate CopyOffBranch value: %w", err)
+	}
+	return nil
+}
+
+// DecodeCopyOffBranch checks JSON field names from the Goa design and returns a service value.
+func DecodeCopyOffBranch(data []byte) (out *CopyOffBranch, err error) {
+	root, err := readStrictJSON(data)
+	if err != nil {
+		return out, fmt.Errorf("decode CopyOffBranch JSON: %w", err)
+	}
+	if err := validateCopyOffBranchJSONValue("", root, ""); err != nil {
+		return out, fmt.Errorf("decode CopyOffBranch JSON: %w", err)
+	}
+	var body *jsonCopyOffBranchTransport
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&body); err != nil {
+		return out, fmt.Errorf("decode CopyOffBranch JSON: %w", err)
+	}
+	if err := decoder.Decode(&struct{}{}); err != io.EOF {
+		if err == nil {
+			return out, fmt.Errorf("decode CopyOffBranch JSON: multiple JSON values")
+		}
+		return out, fmt.Errorf("decode CopyOffBranch JSON after first value: %w", err)
+	}
+	if err := validatejsonCopyOffBranchTransport(body); err != nil {
+		return out, fmt.Errorf("validate CopyOffBranch JSON: %w", err)
+	}
+	{
+		out = &CopyOffBranch{
+			Name:             *body.Name,
+			Message:          *body.Message,
+			Branch:           body.Branch,
+			BuildBranch:      body.BuildBranch,
+			Operation:        *body.Operation,
+			UncommittedCount: int(*body.UncommittedCount),
+		}
+		out.Uncommitted = make([]string, len(body.Uncommitted))
+		for i, val := range body.Uncommitted {
+			out.Uncommitted[i] = val
+		}
+	}
+	return out, nil
+}
+
 // EncodeDeclineRevisionPayload turns a service value into JSON using the field names in the Goa design.
 func EncodeDeclineRevisionPayload(in *DeclineRevisionPayload) ([]byte, error) {
 	if err := checkDeclineRevisionPayloadValue(in); err != nil {
@@ -14862,6 +14777,86 @@ func DecodeDiffResult(data []byte) (out *DiffResult, err error) {
 	return out, nil
 }
 
+// EncodeDraftCorrection turns a service value into JSON using the field names in the Goa design.
+func EncodeDraftCorrection(in *DraftCorrection) ([]byte, error) {
+	if err := checkDraftCorrectionValue(in); err != nil {
+		return nil, fmt.Errorf("encode DraftCorrection JSON: %w", err)
+	}
+	var body *jsonDraftCorrectionTransport
+	{
+		body = &jsonDraftCorrectionTransport{
+			Path:    &in.Path,
+			Problem: &in.Problem,
+		}
+	}
+	if err := validatejsonDraftCorrectionTransport(body); err != nil {
+		return nil, fmt.Errorf("validate DraftCorrection JSON: %w", err)
+	}
+	data, err := json.Marshal(body)
+	if err != nil {
+		return nil, fmt.Errorf("encode DraftCorrection JSON: %w", err)
+	}
+	return data, nil
+}
+
+// ValidateDraftCorrectionValue checks the original Go fields against their declared constraints.
+// It returns validation errors without encoding the value as JSON.
+
+func ValidateDraftCorrectionValue(in *DraftCorrection) error {
+	if err := checkDraftCorrectionValue(in); err != nil {
+		return fmt.Errorf("validate DraftCorrection value: %w", err)
+	}
+
+	if in == nil {
+		return goa.MissingFieldError("result", "DraftCorrection")
+	}
+
+	var body *jsonDraftCorrectionTransport
+	{
+		body = &jsonDraftCorrectionTransport{
+			Path:    &in.Path,
+			Problem: &in.Problem,
+		}
+	}
+	if err := validatejsonDraftCorrectionTransport(body); err != nil {
+		return fmt.Errorf("validate DraftCorrection value: %w", err)
+	}
+	return nil
+}
+
+// DecodeDraftCorrection checks JSON field names from the Goa design and returns a service value.
+func DecodeDraftCorrection(data []byte) (out *DraftCorrection, err error) {
+	root, err := readStrictJSON(data)
+	if err != nil {
+		return out, fmt.Errorf("decode DraftCorrection JSON: %w", err)
+	}
+	if err := validateDraftCorrectionJSONValue("", root, ""); err != nil {
+		return out, fmt.Errorf("decode DraftCorrection JSON: %w", err)
+	}
+	var body *jsonDraftCorrectionTransport
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&body); err != nil {
+		return out, fmt.Errorf("decode DraftCorrection JSON: %w", err)
+	}
+	if err := decoder.Decode(&struct{}{}); err != io.EOF {
+		if err == nil {
+			return out, fmt.Errorf("decode DraftCorrection JSON: multiple JSON values")
+		}
+		return out, fmt.Errorf("decode DraftCorrection JSON after first value: %w", err)
+	}
+	if err := validatejsonDraftCorrectionTransport(body); err != nil {
+		return out, fmt.Errorf("validate DraftCorrection JSON: %w", err)
+	}
+	{
+		out = &DraftCorrection{
+			Path:    *body.Path,
+			Problem: *body.Problem,
+		}
+	}
+	return out, nil
+}
+
 // EncodeDraftOverridePayload turns a service value into JSON using the field names in the Goa design.
 func EncodeDraftOverridePayload(in *DraftOverridePayload) ([]byte, error) {
 	if err := checkDraftOverridePayloadValue(in); err != nil {
@@ -15032,6 +15027,137 @@ func DecodeDraftOverrideResult(data []byte) (out *DraftOverrideResult, err error
 			RequiresRebuild: *body.RequiresRebuild,
 			PromptVersion:   body.PromptVersion,
 			Message:         *body.Message,
+		}
+	}
+	return out, nil
+}
+
+// EncodeDraftUpdateResult turns a service value into JSON using the field names in the Goa design.
+func EncodeDraftUpdateResult(in *DraftUpdateResult) ([]byte, error) {
+	if err := checkDraftUpdateResultValue(in); err != nil {
+		return nil, fmt.Errorf("encode DraftUpdateResult JSON: %w", err)
+	}
+	if err := validateDraftUpdateResultOriginal(in); err != nil {
+		return nil, fmt.Errorf("validate DraftUpdateResult value: %w", err)
+	}
+	var body *jsonDraftUpdateResultTransport
+	{
+		body = &jsonDraftUpdateResultTransport{
+			DraftFolder: &in.DraftFolder,
+		}
+		body.Taken = make([]string, len(in.Taken))
+		for i, val := range in.Taken {
+			body.Taken[i] = val
+		}
+		body.Merged = make([]string, len(in.Merged))
+		for i, val := range in.Merged {
+			body.Merged[i] = val
+		}
+		body.ToCorrect = make([]*jsonDraftCorrectionTransport, len(in.ToCorrect))
+		for i, val := range in.ToCorrect {
+			if val == nil {
+				body.ToCorrect[i] = nil
+				continue
+			}
+			body.ToCorrect[i] = encodeDraftCorrectionToDraftCorrectionTransport(val)
+		}
+	}
+	if err := validatejsonDraftUpdateResultTransport(body); err != nil {
+		return nil, fmt.Errorf("validate DraftUpdateResult JSON: %w", err)
+	}
+	data, err := json.Marshal(body)
+	if err != nil {
+		return nil, fmt.Errorf("encode DraftUpdateResult JSON: %w", err)
+	}
+	return data, nil
+}
+
+// ValidateDraftUpdateResultValue checks the original Go fields against their declared constraints.
+// It returns validation errors without encoding the value as JSON.
+
+func ValidateDraftUpdateResultValue(in *DraftUpdateResult) error {
+	if err := checkDraftUpdateResultValue(in); err != nil {
+		return fmt.Errorf("validate DraftUpdateResult value: %w", err)
+	}
+	if err := validateDraftUpdateResultOriginal(in); err != nil {
+		return fmt.Errorf("validate DraftUpdateResult value: %w", err)
+	}
+
+	if in == nil {
+		return goa.MissingFieldError("result", "DraftUpdateResult")
+	}
+
+	var body *jsonDraftUpdateResultTransport
+	{
+		body = &jsonDraftUpdateResultTransport{
+			DraftFolder: &in.DraftFolder,
+		}
+		body.Taken = make([]string, len(in.Taken))
+		for i, val := range in.Taken {
+			body.Taken[i] = val
+		}
+		body.Merged = make([]string, len(in.Merged))
+		for i, val := range in.Merged {
+			body.Merged[i] = val
+		}
+		body.ToCorrect = make([]*jsonDraftCorrectionTransport, len(in.ToCorrect))
+		for i, val := range in.ToCorrect {
+			if val == nil {
+				body.ToCorrect[i] = nil
+				continue
+			}
+			body.ToCorrect[i] = encodeDraftCorrectionToDraftCorrectionTransport(val)
+		}
+	}
+	if err := validatejsonDraftUpdateResultTransport(body); err != nil {
+		return fmt.Errorf("validate DraftUpdateResult value: %w", err)
+	}
+	return nil
+}
+
+// DecodeDraftUpdateResult checks JSON field names from the Goa design and returns a service value.
+func DecodeDraftUpdateResult(data []byte) (out *DraftUpdateResult, err error) {
+	root, err := readStrictJSON(data)
+	if err != nil {
+		return out, fmt.Errorf("decode DraftUpdateResult JSON: %w", err)
+	}
+	if err := validateDraftUpdateResultJSONValue("", root, ""); err != nil {
+		return out, fmt.Errorf("decode DraftUpdateResult JSON: %w", err)
+	}
+	var body *jsonDraftUpdateResultTransport
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&body); err != nil {
+		return out, fmt.Errorf("decode DraftUpdateResult JSON: %w", err)
+	}
+	if err := decoder.Decode(&struct{}{}); err != io.EOF {
+		if err == nil {
+			return out, fmt.Errorf("decode DraftUpdateResult JSON: multiple JSON values")
+		}
+		return out, fmt.Errorf("decode DraftUpdateResult JSON after first value: %w", err)
+	}
+	if err := validatejsonDraftUpdateResultTransport(body); err != nil {
+		return out, fmt.Errorf("validate DraftUpdateResult JSON: %w", err)
+	}
+	{
+		out = &DraftUpdateResult{
+			DraftFolder: *body.DraftFolder,
+		}
+		out.Taken = make([]string, len(body.Taken))
+		for i, val := range body.Taken {
+			out.Taken[i] = val
+		}
+		out.Merged = make([]string, len(body.Merged))
+		for i, val := range body.Merged {
+			out.Merged[i] = val
+		}
+		out.ToCorrect = make([]*DraftCorrection, len(body.ToCorrect))
+		for i, val := range body.ToCorrect {
+			if val == nil {
+				out.ToCorrect[i] = nil
+				continue
+			}
+			out.ToCorrect[i] = decodeDraftCorrectionTransportToDraftCorrection(val)
 		}
 	}
 	return out, nil
@@ -17479,6 +17605,98 @@ func DecodeModelSettingsResult(data []byte) (out *ModelSettingsResult, err error
 	return out, nil
 }
 
+// EncodeOpenBuildRefusal turns a service value into JSON using the field names in the Goa design.
+func EncodeOpenBuildRefusal(in *OpenBuildRefusal) ([]byte, error) {
+	if err := checkOpenBuildRefusalValue(in); err != nil {
+		return nil, fmt.Errorf("encode OpenBuildRefusal JSON: %w", err)
+	}
+	if err := validateOpenBuildRefusalOriginal(in); err != nil {
+		return nil, fmt.Errorf("validate OpenBuildRefusal value: %w", err)
+	}
+	var body *jsonOpenBuildRefusalTransport
+	{
+		body = &jsonOpenBuildRefusalTransport{
+			Name:     &in.Name,
+			Message:  &in.Message,
+			ChangeID: &in.ChangeID,
+		}
+		body.Build = encodeStartedBuildToStartedBuildTransport2(in.Build)
+	}
+	if err := validatejsonOpenBuildRefusalTransport(body); err != nil {
+		return nil, fmt.Errorf("validate OpenBuildRefusal JSON: %w", err)
+	}
+	data, err := json.Marshal(body)
+	if err != nil {
+		return nil, fmt.Errorf("encode OpenBuildRefusal JSON: %w", err)
+	}
+	return data, nil
+}
+
+// ValidateOpenBuildRefusalValue checks the original Go fields against their declared constraints.
+// It returns validation errors without encoding the value as JSON.
+
+func ValidateOpenBuildRefusalValue(in *OpenBuildRefusal) error {
+	if err := checkOpenBuildRefusalValue(in); err != nil {
+		return fmt.Errorf("validate OpenBuildRefusal value: %w", err)
+	}
+	if err := validateOpenBuildRefusalOriginal(in); err != nil {
+		return fmt.Errorf("validate OpenBuildRefusal value: %w", err)
+	}
+
+	if in == nil {
+		return goa.MissingFieldError("result", "OpenBuildRefusal")
+	}
+
+	var body *jsonOpenBuildRefusalTransport
+	{
+		body = &jsonOpenBuildRefusalTransport{
+			Name:     &in.Name,
+			Message:  &in.Message,
+			ChangeID: &in.ChangeID,
+		}
+		body.Build = encodeStartedBuildToStartedBuildTransport2(in.Build)
+	}
+	if err := validatejsonOpenBuildRefusalTransport(body); err != nil {
+		return fmt.Errorf("validate OpenBuildRefusal value: %w", err)
+	}
+	return nil
+}
+
+// DecodeOpenBuildRefusal checks JSON field names from the Goa design and returns a service value.
+func DecodeOpenBuildRefusal(data []byte) (out *OpenBuildRefusal, err error) {
+	root, err := readStrictJSON(data)
+	if err != nil {
+		return out, fmt.Errorf("decode OpenBuildRefusal JSON: %w", err)
+	}
+	if err := validateOpenBuildRefusalJSONValue("", root, ""); err != nil {
+		return out, fmt.Errorf("decode OpenBuildRefusal JSON: %w", err)
+	}
+	var body *jsonOpenBuildRefusalTransport
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&body); err != nil {
+		return out, fmt.Errorf("decode OpenBuildRefusal JSON: %w", err)
+	}
+	if err := decoder.Decode(&struct{}{}); err != io.EOF {
+		if err == nil {
+			return out, fmt.Errorf("decode OpenBuildRefusal JSON: multiple JSON values")
+		}
+		return out, fmt.Errorf("decode OpenBuildRefusal JSON after first value: %w", err)
+	}
+	if err := validatejsonOpenBuildRefusalTransport(body); err != nil {
+		return out, fmt.Errorf("validate OpenBuildRefusal JSON: %w", err)
+	}
+	{
+		out = &OpenBuildRefusal{
+			Name:     *body.Name,
+			Message:  *body.Message,
+			ChangeID: *body.ChangeID,
+		}
+		out.Build = decodeStartedBuildTransportToStartedBuild(body.Build)
+	}
+	return out, nil
+}
+
 // EncodeOperatorEvaluatorTests turns a service value into JSON using the field names in the Goa design.
 func EncodeOperatorEvaluatorTests(in *OperatorEvaluatorTests) ([]byte, error) {
 	if err := checkOperatorEvaluatorTestsValue(in); err != nil {
@@ -18213,6 +18431,92 @@ func DecodeReadCheckOutputPayload(data []byte) (out *ReadCheckOutputPayload, err
 	return out, nil
 }
 
+// EncodeReplacedBuild turns a service value into JSON using the field names in the Goa design.
+func EncodeReplacedBuild(in *ReplacedBuild) ([]byte, error) {
+	if err := checkReplacedBuildValue(in); err != nil {
+		return nil, fmt.Errorf("encode ReplacedBuild JSON: %w", err)
+	}
+	if err := validateReplacedBuildOriginal(in); err != nil {
+		return nil, fmt.Errorf("validate ReplacedBuild value: %w", err)
+	}
+	var body *jsonReplacedBuildTransport
+	{
+		body = &jsonReplacedBuildTransport{
+			ChangeID:  &in.ChangeID,
+			StartedAt: &in.StartedAt,
+		}
+	}
+	if err := validatejsonReplacedBuildTransport(body); err != nil {
+		return nil, fmt.Errorf("validate ReplacedBuild JSON: %w", err)
+	}
+	data, err := json.Marshal(body)
+	if err != nil {
+		return nil, fmt.Errorf("encode ReplacedBuild JSON: %w", err)
+	}
+	return data, nil
+}
+
+// ValidateReplacedBuildValue checks the original Go fields against their declared constraints.
+// It returns validation errors without encoding the value as JSON.
+
+func ValidateReplacedBuildValue(in *ReplacedBuild) error {
+	if err := checkReplacedBuildValue(in); err != nil {
+		return fmt.Errorf("validate ReplacedBuild value: %w", err)
+	}
+	if err := validateReplacedBuildOriginal(in); err != nil {
+		return fmt.Errorf("validate ReplacedBuild value: %w", err)
+	}
+
+	if in == nil {
+		return goa.MissingFieldError("result", "ReplacedBuild")
+	}
+
+	var body *jsonReplacedBuildTransport
+	{
+		body = &jsonReplacedBuildTransport{
+			ChangeID:  &in.ChangeID,
+			StartedAt: &in.StartedAt,
+		}
+	}
+	if err := validatejsonReplacedBuildTransport(body); err != nil {
+		return fmt.Errorf("validate ReplacedBuild value: %w", err)
+	}
+	return nil
+}
+
+// DecodeReplacedBuild checks JSON field names from the Goa design and returns a service value.
+func DecodeReplacedBuild(data []byte) (out *ReplacedBuild, err error) {
+	root, err := readStrictJSON(data)
+	if err != nil {
+		return out, fmt.Errorf("decode ReplacedBuild JSON: %w", err)
+	}
+	if err := validateReplacedBuildJSONValue("", root, ""); err != nil {
+		return out, fmt.Errorf("decode ReplacedBuild JSON: %w", err)
+	}
+	var body *jsonReplacedBuildTransport
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&body); err != nil {
+		return out, fmt.Errorf("decode ReplacedBuild JSON: %w", err)
+	}
+	if err := decoder.Decode(&struct{}{}); err != io.EOF {
+		if err == nil {
+			return out, fmt.Errorf("decode ReplacedBuild JSON: multiple JSON values")
+		}
+		return out, fmt.Errorf("decode ReplacedBuild JSON after first value: %w", err)
+	}
+	if err := validatejsonReplacedBuildTransport(body); err != nil {
+		return out, fmt.Errorf("validate ReplacedBuild JSON: %w", err)
+	}
+	{
+		out = &ReplacedBuild{
+			ChangeID:  *body.ChangeID,
+			StartedAt: *body.StartedAt,
+		}
+	}
+	return out, nil
+}
+
 // EncodeRequiredTest turns a service value into JSON using the field names in the Goa design.
 func EncodeRequiredTest(in *RequiredTest) ([]byte, error) {
 	if err := checkRequiredTestValue(in); err != nil {
@@ -18518,7 +18822,7 @@ func EncodeStartBuildResult(in *StartBuildResult) ([]byte, error) {
 	var body *jsonStartBuildResultTransport
 	{
 		body = &jsonStartBuildResultTransport{}
-		body.Build = encodeStartedBuildToStartedBuildTransport2(in.Build)
+		body.Build = encodeStartedBuildToStartedBuildTransport3(in.Build)
 		var teamValue jsonTeamTransport
 		switch string(in.Team.Kind()) {
 		case "ready":
@@ -18559,46 +18863,6 @@ func EncodeStartBuildResult(in *StartBuildResult) ([]byte, error) {
 			teamValue = u
 		}
 		body.Team = &teamValue
-		var workingCopyValue jsonWorkingCopyTransport
-		switch string(in.WorkingCopy.Kind()) {
-		case "not_used":
-			actual, _ := in.WorkingCopy.AsNotUsed()
-			var obj *jsonBuildCopyNotUsedTransport
-			if actual != nil {
-				obj = encodeBuildCopyNotUsedToBuildCopyNotUsedTransport(actual)
-			}
-			u := workingCopyValue
-			u.SetNotUsed((*jsonBuildCopyNotUsedTransport)(obj))
-			workingCopyValue = u
-		case "at_project_commit":
-			actual, _ := in.WorkingCopy.AsAtProjectCommit()
-			var obj *jsonBuildCopyAtProjectCommitTransport
-			if actual != nil {
-				obj = encodeBuildCopyAtProjectCommitToBuildCopyAtProjectCommitTransport(actual)
-			}
-			u := workingCopyValue
-			u.SetAtProjectCommit((*jsonBuildCopyAtProjectCommitTransport)(obj))
-			workingCopyValue = u
-		case "not_contained":
-			actual, _ := in.WorkingCopy.AsNotContained()
-			var obj *jsonBuildCopyNotContainedTransport
-			if actual != nil {
-				obj = encodeBuildCopyNotContainedToBuildCopyNotContainedTransport(actual)
-			}
-			u := workingCopyValue
-			u.SetNotContained((*jsonBuildCopyNotContainedTransport)(obj))
-			workingCopyValue = u
-		case "dirty":
-			actual, _ := in.WorkingCopy.AsDirty()
-			var obj *jsonBuildCopyDirtyTransport
-			if actual != nil {
-				obj = encodeBuildCopyDirtyToBuildCopyDirtyTransport(actual)
-			}
-			u := workingCopyValue
-			u.SetDirty((*jsonBuildCopyDirtyTransport)(obj))
-			workingCopyValue = u
-		}
-		body.WorkingCopy = &workingCopyValue
 	}
 	if err := validatejsonStartBuildResultTransport(body); err != nil {
 		return nil, fmt.Errorf("validate StartBuildResult JSON: %w", err)
@@ -18628,7 +18892,7 @@ func ValidateStartBuildResultValue(in *StartBuildResult) error {
 	var body *jsonStartBuildResultTransport
 	{
 		body = &jsonStartBuildResultTransport{}
-		body.Build = encodeStartedBuildToStartedBuildTransport2(in.Build)
+		body.Build = encodeStartedBuildToStartedBuildTransport3(in.Build)
 		var teamValue jsonTeamTransport
 		switch string(in.Team.Kind()) {
 		case "ready":
@@ -18669,46 +18933,6 @@ func ValidateStartBuildResultValue(in *StartBuildResult) error {
 			teamValue = u
 		}
 		body.Team = &teamValue
-		var workingCopyValue jsonWorkingCopyTransport
-		switch string(in.WorkingCopy.Kind()) {
-		case "not_used":
-			actual, _ := in.WorkingCopy.AsNotUsed()
-			var obj *jsonBuildCopyNotUsedTransport
-			if actual != nil {
-				obj = encodeBuildCopyNotUsedToBuildCopyNotUsedTransport(actual)
-			}
-			u := workingCopyValue
-			u.SetNotUsed((*jsonBuildCopyNotUsedTransport)(obj))
-			workingCopyValue = u
-		case "at_project_commit":
-			actual, _ := in.WorkingCopy.AsAtProjectCommit()
-			var obj *jsonBuildCopyAtProjectCommitTransport
-			if actual != nil {
-				obj = encodeBuildCopyAtProjectCommitToBuildCopyAtProjectCommitTransport(actual)
-			}
-			u := workingCopyValue
-			u.SetAtProjectCommit((*jsonBuildCopyAtProjectCommitTransport)(obj))
-			workingCopyValue = u
-		case "not_contained":
-			actual, _ := in.WorkingCopy.AsNotContained()
-			var obj *jsonBuildCopyNotContainedTransport
-			if actual != nil {
-				obj = encodeBuildCopyNotContainedToBuildCopyNotContainedTransport(actual)
-			}
-			u := workingCopyValue
-			u.SetNotContained((*jsonBuildCopyNotContainedTransport)(obj))
-			workingCopyValue = u
-		case "dirty":
-			actual, _ := in.WorkingCopy.AsDirty()
-			var obj *jsonBuildCopyDirtyTransport
-			if actual != nil {
-				obj = encodeBuildCopyDirtyToBuildCopyDirtyTransport(actual)
-			}
-			u := workingCopyValue
-			u.SetDirty((*jsonBuildCopyDirtyTransport)(obj))
-			workingCopyValue = u
-		}
-		body.WorkingCopy = &workingCopyValue
 	}
 	if err := validatejsonStartBuildResultTransport(body); err != nil {
 		return fmt.Errorf("validate StartBuildResult value: %w", err)
@@ -18780,44 +19004,6 @@ func DecodeStartBuildResult(data []byte) (out *StartBuildResult, err error) {
 			u := out.Team
 			u.SetUnavailable((*BuildTeamUnavailable)(obj))
 			out.Team = u
-		}
-		switch string(body.WorkingCopy.Kind()) {
-		case "not_used":
-			actual, _ := body.WorkingCopy.AsNotUsed()
-			var obj *BuildCopyNotUsed
-			if actual != nil {
-				obj = decodeBuildCopyNotUsedTransportToBuildCopyNotUsed(actual)
-			}
-			u := out.WorkingCopy
-			u.SetNotUsed((*BuildCopyNotUsed)(obj))
-			out.WorkingCopy = u
-		case "at_project_commit":
-			actual, _ := body.WorkingCopy.AsAtProjectCommit()
-			var obj *BuildCopyAtProjectCommit
-			if actual != nil {
-				obj = decodeBuildCopyAtProjectCommitTransportToBuildCopyAtProjectCommit(actual)
-			}
-			u := out.WorkingCopy
-			u.SetAtProjectCommit((*BuildCopyAtProjectCommit)(obj))
-			out.WorkingCopy = u
-		case "not_contained":
-			actual, _ := body.WorkingCopy.AsNotContained()
-			var obj *BuildCopyNotContained
-			if actual != nil {
-				obj = decodeBuildCopyNotContainedTransportToBuildCopyNotContained(actual)
-			}
-			u := out.WorkingCopy
-			u.SetNotContained((*BuildCopyNotContained)(obj))
-			out.WorkingCopy = u
-		case "dirty":
-			actual, _ := body.WorkingCopy.AsDirty()
-			var obj *BuildCopyDirty
-			if actual != nil {
-				obj = decodeBuildCopyDirtyTransportToBuildCopyDirty(actual)
-			}
-			u := out.WorkingCopy
-			u.SetDirty((*BuildCopyDirty)(obj))
-			out.WorkingCopy = u
 		}
 	}
 	return out, nil
@@ -19424,6 +19610,7 @@ func EncodeStoryRefreshResult(in *StoryRefreshResult) ([]byte, error) {
 	var body *jsonStoryRefreshResultTransport
 	{
 		body = &jsonStoryRefreshResultTransport{
+			DraftFolder:    &in.DraftFolder,
 			OpID:           in.OpID,
 			State:          &in.State,
 			SnapshotDigest: in.SnapshotDigest,
@@ -19467,6 +19654,7 @@ func ValidateStoryRefreshResultValue(in *StoryRefreshResult) error {
 	var body *jsonStoryRefreshResultTransport
 	{
 		body = &jsonStoryRefreshResultTransport{
+			DraftFolder:    &in.DraftFolder,
 			OpID:           in.OpID,
 			State:          &in.State,
 			SnapshotDigest: in.SnapshotDigest,
@@ -19514,6 +19702,7 @@ func DecodeStoryRefreshResult(data []byte) (out *StoryRefreshResult, err error) 
 	}
 	{
 		out = &StoryRefreshResult{
+			DraftFolder:    *body.DraftFolder,
 			OpID:           body.OpID,
 			State:          *body.State,
 			SnapshotDigest: body.SnapshotDigest,
@@ -23151,37 +23340,6 @@ func decodeApprovalItemTransportToApprovalItem(v *jsonApprovalItemTransport) *Ap
 	return res
 }
 
-func decodeBuildCopyAtProjectCommitTransportToBuildCopyAtProjectCommit(v *jsonBuildCopyAtProjectCommitTransport) *BuildCopyAtProjectCommit {
-	res := &BuildCopyAtProjectCommit{
-		Commit: *v.Commit,
-	}
-
-	return res
-}
-
-func decodeBuildCopyDirtyTransportToBuildCopyDirty(v *jsonBuildCopyDirtyTransport) *BuildCopyDirty {
-	res := &BuildCopyDirty{
-		Commit: *v.Commit,
-	}
-
-	return res
-}
-
-func decodeBuildCopyNotContainedTransportToBuildCopyNotContained(v *jsonBuildCopyNotContainedTransport) *BuildCopyNotContained {
-	res := &BuildCopyNotContained{
-		Commit: *v.Commit,
-		Step:   BuildStartStep(*v.Step),
-	}
-
-	return res
-}
-
-func decodeBuildCopyNotUsedTransportToBuildCopyNotUsed(v *jsonBuildCopyNotUsedTransport) *BuildCopyNotUsed {
-	res := &BuildCopyNotUsed{}
-
-	return res
-}
-
 func decodeBuildNotStartedTransportToBuildNotStarted(v *jsonBuildNotStartedTransport) *BuildNotStarted {
 	res := &BuildNotStarted{}
 
@@ -23219,6 +23377,8 @@ func decodeBuilderAssignmentTransportToBuilderAssignment(v *jsonBuilderAssignmen
 		RequestRevision: *v.RequestRevision,
 		InForce:         *v.InForce,
 		Read:            *v.Read,
+		WorkingFolder:   *v.WorkingFolder,
+		GoworkOff:       *v.GoworkOff,
 	}
 	switch string(v.WrittenTests.Kind()) {
 	case "not_used":
@@ -23431,6 +23591,15 @@ func decodeDesignSnapshotTransportToDesignSnapshot(v *jsonDesignSnapshotTranspor
 		tk := key
 		tv := val
 		res.Files[tk] = tv
+	}
+
+	return res
+}
+
+func decodeDraftCorrectionTransportToDraftCorrection(v *jsonDraftCorrectionTransport) *DraftCorrection {
+	res := &DraftCorrection{
+		Path:    *v.Path,
+		Problem: *v.Problem,
 	}
 
 	return res
@@ -24232,38 +24401,6 @@ func encodeApprovalItemToApprovalItemTransport2(v *ApprovalItem) *jsonApprovalIt
 	return res
 }
 
-func encodeBuildCopyAtProjectCommitToBuildCopyAtProjectCommitTransport(v *BuildCopyAtProjectCommit) *jsonBuildCopyAtProjectCommitTransport {
-	res := &jsonBuildCopyAtProjectCommitTransport{
-		Commit: &v.Commit,
-	}
-
-	return res
-}
-
-func encodeBuildCopyDirtyToBuildCopyDirtyTransport(v *BuildCopyDirty) *jsonBuildCopyDirtyTransport {
-	res := &jsonBuildCopyDirtyTransport{
-		Commit: &v.Commit,
-	}
-
-	return res
-}
-
-func encodeBuildCopyNotContainedToBuildCopyNotContainedTransport(v *BuildCopyNotContained) *jsonBuildCopyNotContainedTransport {
-	res := &jsonBuildCopyNotContainedTransport{
-		Commit: &v.Commit,
-	}
-	step := jsonBuildStartStepTransport(v.Step)
-	res.Step = &step
-
-	return res
-}
-
-func encodeBuildCopyNotUsedToBuildCopyNotUsedTransport(v *BuildCopyNotUsed) *jsonBuildCopyNotUsedTransport {
-	res := &jsonBuildCopyNotUsedTransport{}
-
-	return res
-}
-
 func encodeBuildNotStartedToBuildNotStartedTransport(v *BuildNotStarted) *jsonBuildNotStartedTransport {
 	res := &jsonBuildNotStartedTransport{}
 
@@ -24302,6 +24439,8 @@ func encodeBuilderAssignmentToBuilderAssignmentTransport(v *BuilderAssignment) *
 		RequestRevision: &v.RequestRevision,
 		InForce:         &v.InForce,
 		Read:            &v.Read,
+		WorkingFolder:   &v.WorkingFolder,
+		GoworkOff:       &v.GoworkOff,
 	}
 	var writtenTestsValue jsonWrittenTestsTransport
 	switch string(v.WrittenTests.Kind()) {
@@ -24541,6 +24680,15 @@ func encodeDesignSnapshotToDesignSnapshotTransport2(v *DesignSnapshot) *jsonDesi
 	return res
 }
 
+func encodeDraftCorrectionToDraftCorrectionTransport(v *DraftCorrection) *jsonDraftCorrectionTransport {
+	res := &jsonDraftCorrectionTransport{
+		Path:    &v.Path,
+		Problem: &v.Problem,
+	}
+
+	return res
+}
+
 func encodeExampleItemToExampleItemTransport(v *ExampleItem) *jsonExampleItemTransport {
 	res := &jsonExampleItemTransport{
 		ID:               &v.ID,
@@ -24759,6 +24907,20 @@ func encodeStartedBuildToStartedBuildTransport(v *StartedBuild) *jsonStartedBuil
 }
 
 func encodeStartedBuildToStartedBuildTransport2(v *StartedBuild) *jsonStartedBuildTransport {
+	res := &jsonStartedBuildTransport{
+		RequestRevision: &v.RequestRevision,
+		StartedAt:       &v.StartedAt,
+		InForce:         &v.InForce,
+	}
+	requiredTestCount := changeBuildIntTransport(v.RequiredTestCount)
+	res.RequiredTestCount = &requiredTestCount
+	res.Builder = encodeBuilderProgressToBuilderProgressTransport(v.Builder)
+	res.TestWriter = encodeTestWriterProgressToTestWriterProgressTransport(v.TestWriter)
+
+	return res
+}
+
+func encodeStartedBuildToStartedBuildTransport3(v *StartedBuild) *jsonStartedBuildTransport {
 	res := &jsonStartedBuildTransport{
 		RequestRevision: &v.RequestRevision,
 		StartedAt:       &v.StartedAt,
@@ -25874,7 +26036,7 @@ func validateArchitecturePreviewResultJSONValue(path string, value any, descript
 		case "design_digest":
 			if err := validateAgentPolicyItemJSONValue2(
 				generatedJSONChildPath(path, key, false),
-				typed[key], "SHA-256 digest of the evaluated design snapshot (sorted path and content pairs).",
+				typed[key], "SHA-256 digest of the design snapshot the revision's refresh evaluated (sorted path and content pairs).",
 			); err != nil {
 				return err
 			}
@@ -26383,149 +26545,6 @@ func validateArchitecturePreviewResultJSONValue3(path string, value any, descrip
 	return nil
 }
 
-// validateBuildCopyAtProjectCommitJSONValue checks one value whose JSON shape is fixed by the generated Goa type.
-func validateBuildCopyAtProjectCommitJSONValue(path string, value any, description string) error {
-	field := path
-	if field == "" {
-		field = "$payload"
-	}
-	if value == nil {
-		return invalidGeneratedFieldTypeError(field, "object", "null", description)
-	}
-	typed, ok := value.(map[string]any)
-	if !ok {
-		return invalidGeneratedFieldTypeError(field, "object", decodedJSONType(value), description)
-	}
-	keys := make([]string, 0, len(typed))
-	for key := range typed {
-		keys = append(keys, key)
-	}
-	sort.Strings(keys)
-	for _, key := range keys {
-		switch key {
-		case "commit":
-			if err := validateAgentPolicyItemJSONValue2(
-				generatedJSONChildPath(path, key, false),
-				typed[key], "The working copy's current commit.",
-			); err != nil {
-				return err
-			}
-		default:
-			return unknownJSONFieldError(path, key, []string{
-				"commit",
-			})
-		}
-	}
-	return nil
-}
-
-// validateBuildCopyDirtyJSONValue checks one value whose JSON shape is fixed by the generated Goa type.
-func validateBuildCopyDirtyJSONValue(path string, value any, description string) error {
-	field := path
-	if field == "" {
-		field = "$payload"
-	}
-	if value == nil {
-		return invalidGeneratedFieldTypeError(field, "object", "null", description)
-	}
-	typed, ok := value.(map[string]any)
-	if !ok {
-		return invalidGeneratedFieldTypeError(field, "object", decodedJSONType(value), description)
-	}
-	keys := make([]string, 0, len(typed))
-	for key := range typed {
-		keys = append(keys, key)
-	}
-	sort.Strings(keys)
-	for _, key := range keys {
-		switch key {
-		case "commit":
-			if err := validateAgentPolicyItemJSONValue2(
-				generatedJSONChildPath(path, key, false),
-				typed[key], "The retained working-copy commit.",
-			); err != nil {
-				return err
-			}
-		default:
-			return unknownJSONFieldError(path, key, []string{
-				"commit",
-			})
-		}
-	}
-	return nil
-}
-
-// validateBuildCopyNotContainedJSONValue checks one value whose JSON shape is fixed by the generated Goa type.
-func validateBuildCopyNotContainedJSONValue(path string, value any, description string) error {
-	field := path
-	if field == "" {
-		field = "$payload"
-	}
-	if value == nil {
-		return invalidGeneratedFieldTypeError(field, "object", "null", description)
-	}
-	typed, ok := value.(map[string]any)
-	if !ok {
-		return invalidGeneratedFieldTypeError(field, "object", decodedJSONType(value), description)
-	}
-	keys := make([]string, 0, len(typed))
-	for key := range typed {
-		keys = append(keys, key)
-	}
-	sort.Strings(keys)
-	for _, key := range keys {
-		switch key {
-		case "commit":
-			if err := validateAgentPolicyItemJSONValue2(
-				generatedJSONChildPath(path, key, false),
-				typed[key], "The retained working-copy commit.",
-			); err != nil {
-				return err
-			}
-		case "step":
-			if err := validateAgentPolicyItemJSONValue2(
-				generatedJSONChildPath(path, key, false),
-				typed[key], "Merge the tests branch into the project's branch, then build again.",
-			); err != nil {
-				return err
-			}
-		default:
-			return unknownJSONFieldError(path, key, []string{
-				"commit",
-				"step",
-			})
-		}
-	}
-	return nil
-}
-
-// validateBuildCopyNotUsedJSONValue checks one value whose JSON shape is fixed by the generated Goa type.
-func validateBuildCopyNotUsedJSONValue(path string, value any, description string) error {
-	field := path
-	if field == "" {
-		field = "$payload"
-	}
-	if value == nil {
-		return invalidGeneratedFieldTypeError(field, "object", "null", description)
-	}
-	typed, ok := value.(map[string]any)
-	if !ok {
-		return invalidGeneratedFieldTypeError(field, "object", decodedJSONType(value), description)
-	}
-	keys := make([]string, 0, len(typed))
-	for key := range typed {
-		keys = append(keys, key)
-	}
-	sort.Strings(keys)
-	for _, key := range keys {
-		switch key {
-		default:
-			return unknownJSONFieldError(path, key, []string{})
-		}
-	}
-	return nil
-}
-
 // validateBuildNotStartedJSONValue checks one value whose JSON shape is fixed by the generated Goa type.
 func validateBuildNotStartedJSONValue(path string, value any, description string) error {
 	field := path
@@ -26696,6 +26715,13 @@ func validateBuilderAssignmentJSONValue(path string, value any, description stri
 			); err != nil {
 				return err
 			}
+		case "gowork_off":
+			if err := validateAgentPolicyItemJSONValue3(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "True when no go.work lies in working_folder or in a folder between it and the working copy's root: run every go command there as GOWORK=off go …, so a go.work of the project folder around your copy does not take it over.",
+			); err != nil {
+				return err
+			}
 		case "in_force":
 			if err := validateAgentPolicyItemJSONValue3(
 				generatedJSONChildPath(path, key, false),
@@ -26717,6 +26743,13 @@ func validateBuilderAssignmentJSONValue(path string, value any, description stri
 			); err != nil {
 				return err
 			}
+		case "working_folder":
+			if err := validateAgentPolicyItemJSONValue2(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Absolute path of the folder to build in: the project's folder inside your working copy .surla-build, on the build's branch surla/build-<n>. Run git and go there, never in the project folder.",
+			); err != nil {
+				return err
+			}
 		case "written_tests":
 			if err := validateBuilderAssignmentJSONValue2(
 				generatedJSONChildPath(path, key, false),
@@ -26727,9 +26760,11 @@ func validateBuilderAssignmentJSONValue(path string, value any, description stri
 		default:
 			return unknownJSONFieldError(path, key, []string{
 				"change_id",
+				"gowork_off",
 				"in_force",
 				"read",
 				"request_revision",
+				"working_folder",
 				"written_tests",
 			})
 		}
@@ -26901,7 +26936,7 @@ func validateBuilderAssignmentListJSONValue(path string, value any, description 
 		case "assignments":
 			if err := validateBuilderAssignmentListJSONValue2(
 				generatedJSONChildPath(path, key, false),
-				typed[key], "Assignments, most recently started first; empty when the user has built no change.",
+				typed[key], "The open build's assignment while it needs this role; empty otherwise.",
 			); err != nil {
 				return err
 			}
@@ -29932,6 +29967,114 @@ func validateConfirmedAnswerJSONValue(path string, value any, description string
 	return nil
 }
 
+// validateCopyOffBranchJSONValue checks one value whose JSON shape is fixed by the generated Goa type.
+func validateCopyOffBranchJSONValue(path string, value any, description string) error {
+	field := path
+	if field == "" {
+		field = "$payload"
+	}
+	if value == nil {
+		return invalidGeneratedFieldTypeError(field, "object", "null", description)
+	}
+	typed, ok := value.(map[string]any)
+	if !ok {
+		return invalidGeneratedFieldTypeError(field, "object", decodedJSONType(value), description)
+	}
+	keys := make([]string, 0, len(typed))
+	for key := range typed {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		switch key {
+		case "branch":
+			if err := validateAgentPolicyItemJSONValue2(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "The branch checked out in the copy, as message shows it; absent when the copy is detached.",
+			); err != nil {
+				return err
+			}
+		case "build_branch":
+			if err := validateAgentPolicyItemJSONValue2(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "The build's own branch, surla/build-<n> or surla/tests-<n>; absent before the copy joined the build.",
+			); err != nil {
+				return err
+			}
+		case "message":
+			if err := validateAgentPolicyItemJSONValue2(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "The facts and the goal in words, ending with the call to make again. A name the agent chose is shown shell-quoted when it is printable, and as \"a name that is not shown\" otherwise.",
+			); err != nil {
+				return err
+			}
+		case "name":
+			if err := validateAgentPolicyItemJSONValue2(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Error name.",
+			); err != nil {
+				return err
+			}
+		case "operation":
+			if err := validateAgentPolicyItemJSONValue2(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "The Git operation in progress in the copy, read from the folder the project's repository keeps for it. A bisect is none.",
+			); err != nil {
+				return err
+			}
+		case "uncommitted":
+			if err := validateCopyOffBranchJSONValue2(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "The first five uncommitted paths of the copy (changes and untracked files, not ignored ones), as message shows them.",
+			); err != nil {
+				return err
+			}
+		case "uncommitted_count":
+			if err := validateAgentPolicyItemJSONValue4(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "How many paths of the copy are uncommitted in all.",
+			); err != nil {
+				return err
+			}
+		default:
+			return unknownJSONFieldError(path, key, []string{
+				"branch",
+				"build_branch",
+				"message",
+				"name",
+				"operation",
+				"uncommitted",
+				"uncommitted_count",
+			})
+		}
+	}
+	return nil
+}
+
+// validateCopyOffBranchJSONValue2 checks one value whose JSON shape is fixed by the generated Goa type.
+func validateCopyOffBranchJSONValue2(path string, value any, description string) error {
+	field := path
+	if field == "" {
+		field = "$payload"
+	}
+	if value == nil {
+		return invalidGeneratedFieldTypeError(field, "array", "null", description)
+	}
+	typed, ok := value.([]any)
+	if !ok {
+		return invalidGeneratedFieldTypeError(field, "array", decodedJSONType(value), description)
+	}
+	for index, item := range typed {
+		if err := validateAgentPolicyItemJSONValue2(
+			generatedJSONChildPath(path, strconv.Itoa(index), true),
+			item, description,
+		); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // validateDeclineRevisionPayloadJSONValue checks one value whose JSON shape is fixed by the generated Goa type.
 func validateDeclineRevisionPayloadJSONValue(path string, value any, description string) error {
 	field := path
@@ -30257,6 +30400,50 @@ func validateDiffResultJSONValue5(path string, value any, description string) er
 	return nil
 }
 
+// validateDraftCorrectionJSONValue checks one value whose JSON shape is fixed by the generated Goa type.
+func validateDraftCorrectionJSONValue(path string, value any, description string) error {
+	field := path
+	if field == "" {
+		field = "$payload"
+	}
+	if value == nil {
+		return invalidGeneratedFieldTypeError(field, "object", "null", description)
+	}
+	typed, ok := value.(map[string]any)
+	if !ok {
+		return invalidGeneratedFieldTypeError(field, "object", decodedJSONType(value), description)
+	}
+	keys := make([]string, 0, len(typed))
+	for key := range typed {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		switch key {
+		case "path":
+			if err := validateAgentPolicyItemJSONValue2(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Path relative to the draft folder, such as design/types.go or go.mod.",
+			); err != nil {
+				return err
+			}
+		case "problem":
+			if err := validateAgentPolicyItemJSONValue2(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "What to correct: conflict markers where the draft and the project folder changed the same lines; a file removed on one side and changed on the other; a draft file Go cannot parse, with its line; or a module the project's go.mod requires at another version than the draft's, or that the draft's lacks, including differing replace directives.",
+			); err != nil {
+				return err
+			}
+		default:
+			return unknownJSONFieldError(path, key, []string{
+				"path",
+				"problem",
+			})
+		}
+	}
+	return nil
+}
+
 // validateDraftOverridePayloadJSONValue checks one value whose JSON shape is fixed by the generated Goa type.
 func validateDraftOverridePayloadJSONValue(path string, value any, description string) error {
 	field := path
@@ -30369,6 +30556,141 @@ func validateDraftOverrideResultJSONValue(path string, value any, description st
 	return nil
 }
 
+// validateDraftUpdateResultJSONValue checks one value whose JSON shape is fixed by the generated Goa type.
+func validateDraftUpdateResultJSONValue(path string, value any, description string) error {
+	field := path
+	if field == "" {
+		field = "$payload"
+	}
+	if value == nil {
+		return invalidGeneratedFieldTypeError(field, "object", "null", description)
+	}
+	typed, ok := value.(map[string]any)
+	if !ok {
+		return invalidGeneratedFieldTypeError(field, "object", decodedJSONType(value), description)
+	}
+	keys := make([]string, 0, len(typed))
+	for key := range typed {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		switch key {
+		case "draft_folder":
+			if err := validateAgentPolicyItemJSONValue2(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Absolute path of the guide's draft folder.",
+			); err != nil {
+				return err
+			}
+		case "merged":
+			if err := validateDraftUpdateResultJSONValue2(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Design files where the project folder's change and the draft's edits merged without conflict, in path order.",
+			); err != nil {
+				return err
+			}
+		case "taken":
+			if err := validateDraftUpdateResultJSONValue3(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Design files the draft took from the project folder because it had not changed them, in path order.",
+			); err != nil {
+				return err
+			}
+		case "to_correct":
+			if err := validateDraftUpdateResultJSONValue4(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Files to correct in the draft before refreshing, in path order; empty when none.",
+			); err != nil {
+				return err
+			}
+		default:
+			return unknownJSONFieldError(path, key, []string{
+				"draft_folder",
+				"merged",
+				"taken",
+				"to_correct",
+			})
+		}
+	}
+	return nil
+}
+
+// validateDraftUpdateResultJSONValue2 checks one value whose JSON shape is fixed by the generated Goa type.
+func validateDraftUpdateResultJSONValue2(path string, value any, description string) error {
+	field := path
+	if field == "" {
+		field = "$payload"
+	}
+	if value == nil {
+		return invalidGeneratedFieldTypeError(field, "array", "null", description)
+	}
+	typed, ok := value.([]any)
+	if !ok {
+		return invalidGeneratedFieldTypeError(field, "array", decodedJSONType(value), description)
+	}
+	for index, item := range typed {
+		if err := validateAgentPolicyItemJSONValue2(
+			generatedJSONChildPath(path, strconv.Itoa(index), true),
+			item, description,
+		); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// validateDraftUpdateResultJSONValue3 checks one value whose JSON shape is fixed by the generated Goa type.
+func validateDraftUpdateResultJSONValue3(path string, value any, description string) error {
+	field := path
+	if field == "" {
+		field = "$payload"
+	}
+	if value == nil {
+		return invalidGeneratedFieldTypeError(field, "array", "null", description)
+	}
+	typed, ok := value.([]any)
+	if !ok {
+		return invalidGeneratedFieldTypeError(field, "array", decodedJSONType(value), description)
+	}
+	for index, item := range typed {
+		if err := validateAgentPolicyItemJSONValue2(
+			generatedJSONChildPath(path, strconv.Itoa(index), true),
+			item, description,
+		); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// validateDraftUpdateResultJSONValue4 checks one value whose JSON shape is fixed by the generated Goa type.
+func validateDraftUpdateResultJSONValue4(path string, value any, description string) error {
+	field := path
+	if field == "" {
+		field = "$payload"
+	}
+	if value == nil {
+		return invalidGeneratedFieldTypeError(field, "array", "null", description)
+	}
+	typed, ok := value.([]any)
+	if !ok {
+		return invalidGeneratedFieldTypeError(field, "array", decodedJSONType(value), description)
+	}
+	for index, item := range typed {
+		if item == nil {
+			continue
+		}
+		if err := validateDraftCorrectionJSONValue(
+			generatedJSONChildPath(path, strconv.Itoa(index), true),
+			item, description,
+		); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // validateGenerateCodePayloadJSONValue checks one value whose JSON shape is fixed by the generated Goa type.
 func validateGenerateCodePayloadJSONValue(path string, value any, description string) error {
 	field := path
@@ -30392,7 +30714,7 @@ func validateGenerateCodePayloadJSONValue(path string, value any, description st
 		case "target":
 			if err := validateAgentPolicyItemJSONValue2(
 				generatedJSONChildPath(path, key, false),
-				typed[key], "Module to regenerate: candidate (the application, the default when omitted) or eval (the local eval/ module).",
+				typed[key], "Module to regenerate: candidate (the application, the default when omitted) or eval (the test module).",
 			); err != nil {
 				return err
 			}
@@ -31642,6 +31964,66 @@ func validateModelSettingsResultJSONValue3(path string, value any, description s
 	return nil
 }
 
+// validateOpenBuildRefusalJSONValue checks one value whose JSON shape is fixed by the generated Goa type.
+func validateOpenBuildRefusalJSONValue(path string, value any, description string) error {
+	field := path
+	if field == "" {
+		field = "$payload"
+	}
+	if value == nil {
+		return invalidGeneratedFieldTypeError(field, "object", "null", description)
+	}
+	typed, ok := value.(map[string]any)
+	if !ok {
+		return invalidGeneratedFieldTypeError(field, "object", decodedJSONType(value), description)
+	}
+	keys := make([]string, 0, len(typed))
+	for key := range typed {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		switch key {
+		case "build":
+			if err := validateChangeBuildJSONValue3(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "The open build as get_build reports it, with the commits to merge once a verification of it passed; drop_build takes its started_at.",
+			); err != nil {
+				return err
+			}
+		case "change_id":
+			if err := validateAgentPolicyItemJSONValue2(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Change the open build is for; drop_build takes it.",
+			); err != nil {
+				return err
+			}
+		case "message":
+			if err := validateAgentPolicyItemJSONValue2(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "What was refused, why, and the user's step, worded for the page.",
+			); err != nil {
+				return err
+			}
+		case "name":
+			if err := validateAgentPolicyItemJSONValue2(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Error name.",
+			); err != nil {
+				return err
+			}
+		default:
+			return unknownJSONFieldError(path, key, []string{
+				"build",
+				"change_id",
+				"message",
+				"name",
+			})
+		}
+	}
+	return nil
+}
+
 // validatePreviewArchitecturePayloadJSONValue checks one value whose JSON shape is fixed by the generated Goa type.
 func validatePreviewArchitecturePayloadJSONValue(path string, value any, description string) error {
 	field := path
@@ -31877,7 +32259,7 @@ func validateProposeChangePayloadJSONValue(path string, value any, description s
 		case "story_refresh_op_id":
 			if err := validateAgentPolicyItemJSONValue2(
 				generatedJSONChildPath(path, key, false),
-				typed[key], "Optional op_id of a succeeded refresh_story operation for the bound workspace whose evaluated Stories this card adopts. When set, Surla reads one workspace snapshot, requires its snapshot_digest to match the operation's, and records both the evaluated Stories and that snapshot's design/*.go on the card. Omit when the card has no Story.",
+				typed[key], "op_id of a succeeded refresh_story operation whose evaluated draft this card adopts: its design, Stories, architecture, go.mod and made-from list. Required when the project folder holds a go.mod; Surla reads no file.",
 			); err != nil {
 				return err
 			}
@@ -31931,6 +32313,50 @@ func validateReadCheckOutputPayloadJSONValue(path string, value any, description
 			return unknownJSONFieldError(path, key, []string{
 				"cursor",
 				"op_id",
+			})
+		}
+	}
+	return nil
+}
+
+// validateReplacedBuildJSONValue checks one value whose JSON shape is fixed by the generated Goa type.
+func validateReplacedBuildJSONValue(path string, value any, description string) error {
+	field := path
+	if field == "" {
+		field = "$payload"
+	}
+	if value == nil {
+		return invalidGeneratedFieldTypeError(field, "object", "null", description)
+	}
+	typed, ok := value.(map[string]any)
+	if !ok {
+		return invalidGeneratedFieldTypeError(field, "object", decodedJSONType(value), description)
+	}
+	keys := make([]string, 0, len(typed))
+	for key := range typed {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		switch key {
+		case "change_id":
+			if err := validateAgentPolicyItemJSONValue2(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "change_id of the open build the page showed.",
+			); err != nil {
+				return err
+			}
+		case "started_at":
+			if err := validateAgentPolicyItemJSONValue2(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "started_at of the open build the page showed, exactly as get_build reported it.",
+			); err != nil {
+				return err
+			}
+		default:
+			return unknownJSONFieldError(path, key, []string{
+				"change_id",
+				"started_at",
 			})
 		}
 	}
@@ -32048,7 +32474,7 @@ func validateReviseChangePayloadJSONValue(path string, value any, description st
 		case "story_refresh_op_id":
 			if err := validateAgentPolicyItemJSONValue2(
 				generatedJSONChildPath(path, key, false),
-				typed[key], "Optional op_id of a succeeded refresh_story operation for the bound workspace whose evaluated Stories this revision adopts. When set, Surla reads one workspace snapshot, requires its snapshot_digest to match the operation's, and records both the evaluated Stories and that snapshot's design/*.go on the revised card. When omitted on a card that already has Stories, the card's saved Stories and their design source are kept together.",
+				typed[key], "op_id of a succeeded refresh_story operation whose evaluated draft this revision adopts. When omitted, the revision keeps every snapshot field of the revision it revises: design, Stories, architecture, go.mod and made-from list, even with zero Stories. A project with a go.mod refuses an omitted op_id when that revision has no design. Surla reads no file.",
 			); err != nil {
 				return err
 			}
@@ -32088,7 +32514,7 @@ func validateStartBuildResultJSONValue(path string, value any, description strin
 		case "build":
 			if err := validateChangeBuildJSONValue3(
 				generatedJSONChildPath(path, key, false),
-				typed[key], "The build saved before generation or team admission.",
+				typed[key], "The build saved before Surla made any missing working copy and admitted the team.",
 			); err != nil {
 				return err
 			}
@@ -32099,18 +32525,10 @@ func validateStartBuildResultJSONValue(path string, value any, description strin
 			); err != nil {
 				return err
 			}
-		case "working_copy":
-			if err := validateStartBuildResultJSONValue3(
-				generatedJSONChildPath(path, key, false),
-				typed[key], "The test-writer working copy after this start's refresh; not_used with stored verification settings.",
-			); err != nil {
-				return err
-			}
 		default:
 			return unknownJSONFieldError(path, key, []string{
 				"build",
 				"team",
-				"working_copy",
 			})
 		}
 	}
@@ -32149,43 +32567,6 @@ func validateStartBuildResultJSONValue2(path string, value any, description stri
 		return validateBuildTeamAmbiguousSpaceJSONValue(path, branch, "")
 	case "unavailable":
 		return validateBuildTeamUnavailableJSONValue(path, branch, "")
-	default:
-		return fmt.Errorf("%s: unknown union discriminator %q", field, discriminator)
-	}
-}
-
-// validateStartBuildResultJSONValue3 checks one value whose JSON shape is fixed by the generated Goa type.
-func validateStartBuildResultJSONValue3(path string, value any, description string) error {
-	field := path
-	if field == "" {
-		field = "$payload"
-	}
-	if value == nil {
-		return invalidGeneratedFieldTypeError(field, "object", "null", description)
-	}
-	typed, ok := value.(map[string]any)
-	if !ok {
-		return invalidGeneratedFieldTypeError(field, "object", decodedJSONType(value), description)
-	}
-	discriminator, ok := typed["state"].(string)
-	if !ok {
-		return fmt.Errorf("%s: missing or invalid union discriminator", field)
-	}
-	branch := make(map[string]any, len(typed)-1)
-	for key, item := range typed {
-		if key != "state" {
-			branch[key] = item
-		}
-	}
-	switch discriminator {
-	case "not_used":
-		return validateBuildCopyNotUsedJSONValue(path, branch, "")
-	case "at_project_commit":
-		return validateBuildCopyAtProjectCommitJSONValue(path, branch, "")
-	case "not_contained":
-		return validateBuildCopyNotContainedJSONValue(path, branch, "")
-	case "dirty":
-		return validateBuildCopyDirtyJSONValue(path, branch, "")
 	default:
 		return fmt.Errorf("%s: unknown union discriminator %q", field, discriminator)
 	}
@@ -32306,24 +32687,31 @@ func validateStoryRefreshResultJSONValue(path string, value any, description str
 			); err != nil {
 				return err
 			}
+		case "draft_folder":
+			if err := validateAgentPolicyItemJSONValue2(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Absolute path intended for the guide's draft, .surla-draft in the project folder, whose go.mod, go.sum and design/ refresh_story reads. When state is none, this path does not mean the folder exists; refresh_story makes it when needed.",
+			); err != nil {
+				return err
+			}
 		case "message":
 			if err := validateAgentPolicyItemJSONValue2(
 				generatedJSONChildPath(path, key, false),
-				typed[key], "Summary of the current Story refresh state and next action.",
+				typed[key], "Summary of the current Story refresh state and next action. After a dropped build remakes the draft and until a revision is saved from it, begins by naming the dropped change and saying that edits made before then are gone.",
 			); err != nil {
 				return err
 			}
 		case "op_id":
 			if err := validateAgentPolicyItemJSONValue2(
 				generatedJSONChildPath(path, key, false),
-				typed[key], "Identifier of the owner's current Story refresh operation for the bound workspace; present when state is running, succeeded, or failed. Pass it as story_refresh_op_id to propose_change or revise_change once state is succeeded to adopt the evaluated Story into a Change Card.",
+				typed[key], "Identifier of the owner's current Story refresh operation for the guide's draft; present when state is running, succeeded, or failed. Pass it as story_refresh_op_id to propose_change or revise_change once state is succeeded to adopt the evaluated Story into a Change Card.",
 			); err != nil {
 				return err
 			}
 		case "snapshot_digest":
 			if err := validateAgentPolicyItemJSONValue2(
 				generatedJSONChildPath(path, key, false),
-				typed[key], "Canonical SHA-256 digest of the workspace module snapshot read when this refresh started; present when state is running, succeeded, or failed.",
+				typed[key], "Canonical SHA-256 digest of the draft snapshot read when this refresh started; present when state is running, succeeded, or failed.",
 			); err != nil {
 				return err
 			}
@@ -32344,6 +32732,7 @@ func validateStoryRefreshResultJSONValue(path string, value any, description str
 		default:
 			return unknownJSONFieldError(path, key, []string{
 				"diagnostic",
+				"draft_folder",
 				"message",
 				"op_id",
 				"snapshot_digest",
@@ -32405,7 +32794,7 @@ func validateTeamRoleStateJSONValue(path string, value any, description string) 
 		case "assignment":
 			if err := validateAgentPolicyItemJSONValue2(
 				generatedJSONChildPath(path, key, false),
-				typed[key], "unread when this role owes an assignment read, nothing_owed when the owner established none, unknown when the owner could not read assignments. The guide has no assignments.",
+				typed[key], "unread when this role owes an assignment read; nothing_owed when it has work and owes no read; no_work when the open build needs nothing from it (no build is open, the build was dropped, the test writer's tests are accepted, or a verification of the builder's build passed); unknown when the owner could not read assignments. The guide has no assignments.",
 			); err != nil {
 				return err
 			}
@@ -32729,7 +33118,7 @@ func validateTestWriterAssignmentJSONValue(path string, value any, description s
 		case "working_folder":
 			if err := validateAgentPolicyItemJSONValue2(
 				generatedJSONChildPath(path, key, false),
-				typed[key], "Folder to write the tests in: your own working copy of the project.",
+				typed[key], "Folder to write the tests in: your own working copy of the project, .surla-tests, on the build's branch surla/tests-<n>. Do not commit there: Surla commits what it accepts.",
 			); err != nil {
 				return err
 			}
@@ -32992,7 +33381,7 @@ func validateTestWriterAssignmentListJSONValue(path string, value any, descripti
 		case "assignments":
 			if err := validateTestWriterAssignmentListJSONValue2(
 				generatedJSONChildPath(path, key, false),
-				typed[key], "Assignments, most recently started first; empty when the user has built no change.",
+				typed[key], "The open build's assignment while it needs this role; empty otherwise.",
 			); err != nil {
 				return err
 			}
@@ -33279,7 +33668,7 @@ func validateUpdateDependenciesResultJSONValue(path string, value any, descripti
 		case "files_written":
 			if err := validateUpdateDependenciesResultJSONValue2(
 				generatedJSONChildPath(path, key, false),
-				typed[key], "Workspace-relative go.mod, go.sum and go.work.sum files whose bytes changed and were written.",
+				typed[key], "Working-folder-relative go.mod, go.sum and go.work.sum files whose bytes changed and were written.",
 			); err != nil {
 				return err
 			}
@@ -34367,134 +34756,6 @@ func checkArchitecturePreviewResultToolInputBindingItemValue(in *ToolInputBindin
 	return nil
 }
 
-// checkBuildCopyAtProjectCommitValue checks text and cycles before conversion.
-func checkBuildCopyAtProjectCommitValue(in *BuildCopyAtProjectCommit) error {
-	if in == nil {
-		return fmt.Errorf("missing root value")
-	}
-	active := make(map[any]bool)
-	if err := checkBuildCopyAtProjectCommitBuildCopyAtProjectCommitValue(in, "$", active); err != nil {
-		return err
-	}
-	return nil
-}
-
-// checkBuildCopyAtProjectCommitBuildCopyAtProjectCommitValue checks one generated value on the active path.
-func checkBuildCopyAtProjectCommitBuildCopyAtProjectCommitValue(in *BuildCopyAtProjectCommit, field string, active map[any]bool) error {
-	if in == nil {
-		return nil
-	}
-	if active[in] {
-		return fmt.Errorf("%s: cyclic Go value", field)
-	}
-	active[in] = true
-	defer delete(active, in)
-	if in != nil {
-		if !utf8.ValidString(string(in.Commit)) {
-			return fmt.Errorf("%s: invalid UTF-8", generatedJSONChildPath(field, "commit", false))
-		}
-	}
-	return nil
-}
-
-// checkBuildCopyDirtyValue checks text and cycles before conversion.
-func checkBuildCopyDirtyValue(in *BuildCopyDirty) error {
-	if in == nil {
-		return fmt.Errorf("missing root value")
-	}
-	active := make(map[any]bool)
-	if err := checkBuildCopyDirtyBuildCopyDirtyValue(in, "$", active); err != nil {
-		return err
-	}
-	return nil
-}
-
-// checkBuildCopyDirtyBuildCopyDirtyValue checks one generated value on the active path.
-func checkBuildCopyDirtyBuildCopyDirtyValue(in *BuildCopyDirty, field string, active map[any]bool) error {
-	if in == nil {
-		return nil
-	}
-	if active[in] {
-		return fmt.Errorf("%s: cyclic Go value", field)
-	}
-	active[in] = true
-	defer delete(active, in)
-	if in != nil {
-		if !utf8.ValidString(string(in.Commit)) {
-			return fmt.Errorf("%s: invalid UTF-8", generatedJSONChildPath(field, "commit", false))
-		}
-	}
-	return nil
-}
-
-// checkBuildCopyNotContainedValue checks text and cycles before conversion.
-func checkBuildCopyNotContainedValue(in *BuildCopyNotContained) error {
-	if in == nil {
-		return fmt.Errorf("missing root value")
-	}
-	active := make(map[any]bool)
-	if err := checkBuildCopyNotContainedBuildCopyNotContainedValue(in, "$", active); err != nil {
-		return err
-	}
-	return nil
-}
-
-// checkBuildCopyNotContainedBuildCopyNotContainedValue checks one generated value on the active path.
-func checkBuildCopyNotContainedBuildCopyNotContainedValue(in *BuildCopyNotContained, field string, active map[any]bool) error {
-	if in == nil {
-		return nil
-	}
-	if active[in] {
-		return fmt.Errorf("%s: cyclic Go value", field)
-	}
-	active[in] = true
-	defer delete(active, in)
-	if in != nil {
-		if !utf8.ValidString(string(in.Commit)) {
-			return fmt.Errorf("%s: invalid UTF-8", generatedJSONChildPath(field, "commit", false))
-		}
-		if err := checkBuildCopyNotContainedBuildStartStepValue(in.Step, generatedJSONChildPath(field, "step", false), active); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-// checkBuildCopyNotContainedBuildStartStepValue checks one generated value on the active path.
-func checkBuildCopyNotContainedBuildStartStepValue(in BuildStartStep, field string, active map[any]bool) error {
-	if !utf8.ValidString(string(in)) {
-		return fmt.Errorf("%s: invalid UTF-8", field)
-	}
-	return nil
-}
-
-// checkBuildCopyNotUsedValue checks text and cycles before conversion.
-func checkBuildCopyNotUsedValue(in *BuildCopyNotUsed) error {
-	if in == nil {
-		return fmt.Errorf("missing root value")
-	}
-	active := make(map[any]bool)
-	if err := checkBuildCopyNotUsedBuildCopyNotUsedValue(in, "$", active); err != nil {
-		return err
-	}
-	return nil
-}
-
-// checkBuildCopyNotUsedBuildCopyNotUsedValue checks one generated value on the active path.
-func checkBuildCopyNotUsedBuildCopyNotUsedValue(in *BuildCopyNotUsed, field string, active map[any]bool) error {
-	if in == nil {
-		return nil
-	}
-	if active[in] {
-		return fmt.Errorf("%s: cyclic Go value", field)
-	}
-	active[in] = true
-	defer delete(active, in)
-	if in != nil {
-	}
-	return nil
-}
-
 // checkBuildNotStartedValue checks text and cycles before conversion.
 func checkBuildNotStartedValue(in *BuildNotStarted) error {
 	if in == nil {
@@ -34525,8 +34786,16 @@ func checkBuildNotStartedBuildNotStartedValue(in *BuildNotStarted, field string,
 // checkBuildStartStepValue checks text and cycles before conversion.
 func checkBuildStartStepValue(in BuildStartStep) error {
 	active := make(map[any]bool)
-	if err := checkBuildCopyNotContainedBuildStartStepValue(in, "$", active); err != nil {
+	if err := checkBuildStartStepBuildStartStepValue(in, "$", active); err != nil {
 		return err
+	}
+	return nil
+}
+
+// checkBuildStartStepBuildStartStepValue checks one generated value on the active path.
+func checkBuildStartStepBuildStartStepValue(in BuildStartStep, field string, active map[any]bool) error {
+	if !utf8.ValidString(string(in)) {
+		return fmt.Errorf("%s: invalid UTF-8", field)
 	}
 	return nil
 }
@@ -34554,7 +34823,7 @@ func checkBuildTeamAmbiguousSpaceBuildTeamAmbiguousSpaceValue(in *BuildTeamAmbig
 	active[in] = true
 	defer delete(active, in)
 	if in != nil {
-		if err := checkBuildCopyNotContainedBuildStartStepValue(in.Step, generatedJSONChildPath(field, "step", false), active); err != nil {
+		if err := checkBuildStartStepBuildStartStepValue(in.Step, generatedJSONChildPath(field, "step", false), active); err != nil {
 			return err
 		}
 	}
@@ -34584,7 +34853,7 @@ func checkBuildTeamUnavailableBuildTeamUnavailableValue(in *BuildTeamUnavailable
 	active[in] = true
 	defer delete(active, in)
 	if in != nil {
-		if err := checkBuildCopyNotContainedBuildStartStepValue(in.Step, generatedJSONChildPath(field, "step", false), active); err != nil {
+		if err := checkBuildStartStepBuildStartStepValue(in.Step, generatedJSONChildPath(field, "step", false), active); err != nil {
 			return err
 		}
 	}
@@ -34614,7 +34883,7 @@ func checkBuildTeamWindowBusyBuildTeamWindowBusyValue(in *BuildTeamWindowBusy, f
 	active[in] = true
 	defer delete(active, in)
 	if in != nil {
-		if err := checkBuildCopyNotContainedBuildStartStepValue(in.Step, generatedJSONChildPath(field, "step", false), active); err != nil {
+		if err := checkBuildStartStepBuildStartStepValue(in.Step, generatedJSONChildPath(field, "step", false), active); err != nil {
 			return err
 		}
 	}
@@ -34673,6 +34942,9 @@ func checkBuilderAssignmentBuilderAssignmentValue(in *BuilderAssignment, field s
 			if err := checkBuilderAssignmentTestsAcceptedValue(branch1, generatedJSONChildPath(field, "written_tests", false), active); err != nil {
 				return err
 			}
+		}
+		if !utf8.ValidString(string(in.WorkingFolder)) {
+			return fmt.Errorf("%s: invalid UTF-8", generatedJSONChildPath(field, "working_folder", false))
 		}
 	}
 	return nil
@@ -36113,6 +36385,59 @@ func checkConfirmedAnswerConfirmedAnswerValue(in *ConfirmedAnswer, field string,
 	return nil
 }
 
+// checkCopyOffBranchValue checks text and cycles before conversion.
+func checkCopyOffBranchValue(in *CopyOffBranch) error {
+	if in == nil {
+		return fmt.Errorf("missing root value")
+	}
+	active := make(map[any]bool)
+	if err := checkCopyOffBranchCopyOffBranchValue(in, "$", active); err != nil {
+		return err
+	}
+	return nil
+}
+
+// checkCopyOffBranchCopyOffBranchValue checks one generated value on the active path.
+func checkCopyOffBranchCopyOffBranchValue(in *CopyOffBranch, field string, active map[any]bool) error {
+	if in == nil {
+		return nil
+	}
+	if active[in] {
+		return fmt.Errorf("%s: cyclic Go value", field)
+	}
+	active[in] = true
+	defer delete(active, in)
+	if in != nil {
+		if !utf8.ValidString(string(in.Name)) {
+			return fmt.Errorf("%s: invalid UTF-8", generatedJSONChildPath(field, "name", false))
+		}
+		if !utf8.ValidString(string(in.Message)) {
+			return fmt.Errorf("%s: invalid UTF-8", generatedJSONChildPath(field, "message", false))
+		}
+		if in.Branch != nil {
+			if !utf8.ValidString(string(*in.Branch)) {
+				return fmt.Errorf("%s: invalid UTF-8", generatedJSONChildPath(field, "branch", false))
+			}
+		}
+		if in.BuildBranch != nil {
+			if !utf8.ValidString(string(*in.BuildBranch)) {
+				return fmt.Errorf("%s: invalid UTF-8", generatedJSONChildPath(field, "build_branch", false))
+			}
+		}
+		if !utf8.ValidString(string(in.Operation)) {
+			return fmt.Errorf("%s: invalid UTF-8", generatedJSONChildPath(field, "operation", false))
+		}
+		for index1, item1 := range in.Uncommitted {
+			_ = index1
+			_ = item1
+			if !utf8.ValidString(string(item1)) {
+				return fmt.Errorf("%s: invalid UTF-8", generatedJSONChildPath(generatedJSONChildPath(field, "uncommitted", false), strconv.Itoa(index1), true))
+			}
+		}
+	}
+	return nil
+}
+
 // checkDeclineRevisionPayloadValue checks text and cycles before conversion.
 func checkDeclineRevisionPayloadValue(in *DeclineRevisionPayload) error {
 	if in == nil {
@@ -36273,6 +36598,39 @@ func checkDiffResultDiffResultValue(in *DiffResult, field string, active map[any
 	return nil
 }
 
+// checkDraftCorrectionValue checks text and cycles before conversion.
+func checkDraftCorrectionValue(in *DraftCorrection) error {
+	if in == nil {
+		return fmt.Errorf("missing root value")
+	}
+	active := make(map[any]bool)
+	if err := checkDraftCorrectionDraftCorrectionValue(in, "$", active); err != nil {
+		return err
+	}
+	return nil
+}
+
+// checkDraftCorrectionDraftCorrectionValue checks one generated value on the active path.
+func checkDraftCorrectionDraftCorrectionValue(in *DraftCorrection, field string, active map[any]bool) error {
+	if in == nil {
+		return nil
+	}
+	if active[in] {
+		return fmt.Errorf("%s: cyclic Go value", field)
+	}
+	active[in] = true
+	defer delete(active, in)
+	if in != nil {
+		if !utf8.ValidString(string(in.Path)) {
+			return fmt.Errorf("%s: invalid UTF-8", generatedJSONChildPath(field, "path", false))
+		}
+		if !utf8.ValidString(string(in.Problem)) {
+			return fmt.Errorf("%s: invalid UTF-8", generatedJSONChildPath(field, "problem", false))
+		}
+	}
+	return nil
+}
+
 // checkDraftOverridePayloadValue checks text and cycles before conversion.
 func checkDraftOverridePayloadValue(in *DraftOverridePayload) error {
 	if in == nil {
@@ -36341,6 +36699,57 @@ func checkDraftOverrideResultDraftOverrideResultValue(in *DraftOverrideResult, f
 		}
 		if !utf8.ValidString(string(in.Message)) {
 			return fmt.Errorf("%s: invalid UTF-8", generatedJSONChildPath(field, "message", false))
+		}
+	}
+	return nil
+}
+
+// checkDraftUpdateResultValue checks text and cycles before conversion.
+func checkDraftUpdateResultValue(in *DraftUpdateResult) error {
+	if in == nil {
+		return fmt.Errorf("missing root value")
+	}
+	active := make(map[any]bool)
+	if err := checkDraftUpdateResultDraftUpdateResultValue(in, "$", active); err != nil {
+		return err
+	}
+	return nil
+}
+
+// checkDraftUpdateResultDraftUpdateResultValue checks one generated value on the active path.
+func checkDraftUpdateResultDraftUpdateResultValue(in *DraftUpdateResult, field string, active map[any]bool) error {
+	if in == nil {
+		return nil
+	}
+	if active[in] {
+		return fmt.Errorf("%s: cyclic Go value", field)
+	}
+	active[in] = true
+	defer delete(active, in)
+	if in != nil {
+		if !utf8.ValidString(string(in.DraftFolder)) {
+			return fmt.Errorf("%s: invalid UTF-8", generatedJSONChildPath(field, "draft_folder", false))
+		}
+		for index1, item1 := range in.Taken {
+			_ = index1
+			_ = item1
+			if !utf8.ValidString(string(item1)) {
+				return fmt.Errorf("%s: invalid UTF-8", generatedJSONChildPath(generatedJSONChildPath(field, "taken", false), strconv.Itoa(index1), true))
+			}
+		}
+		for index1, item1 := range in.Merged {
+			_ = index1
+			_ = item1
+			if !utf8.ValidString(string(item1)) {
+				return fmt.Errorf("%s: invalid UTF-8", generatedJSONChildPath(generatedJSONChildPath(field, "merged", false), strconv.Itoa(index1), true))
+			}
+		}
+		for index1, item1 := range in.ToCorrect {
+			_ = index1
+			_ = item1
+			if err := checkDraftCorrectionDraftCorrectionValue(item1, generatedJSONChildPath(generatedJSONChildPath(field, "to_correct", false), strconv.Itoa(index1), true), active); err != nil {
+				return err
+			}
 		}
 	}
 	return nil
@@ -37239,6 +37648,45 @@ func checkModelSettingsResultModelSettingsResultValue(in *ModelSettingsResult, f
 	return nil
 }
 
+// checkOpenBuildRefusalValue checks text and cycles before conversion.
+func checkOpenBuildRefusalValue(in *OpenBuildRefusal) error {
+	if in == nil {
+		return fmt.Errorf("missing root value")
+	}
+	active := make(map[any]bool)
+	if err := checkOpenBuildRefusalOpenBuildRefusalValue(in, "$", active); err != nil {
+		return err
+	}
+	return nil
+}
+
+// checkOpenBuildRefusalOpenBuildRefusalValue checks one generated value on the active path.
+func checkOpenBuildRefusalOpenBuildRefusalValue(in *OpenBuildRefusal, field string, active map[any]bool) error {
+	if in == nil {
+		return nil
+	}
+	if active[in] {
+		return fmt.Errorf("%s: cyclic Go value", field)
+	}
+	active[in] = true
+	defer delete(active, in)
+	if in != nil {
+		if !utf8.ValidString(string(in.Name)) {
+			return fmt.Errorf("%s: invalid UTF-8", generatedJSONChildPath(field, "name", false))
+		}
+		if !utf8.ValidString(string(in.Message)) {
+			return fmt.Errorf("%s: invalid UTF-8", generatedJSONChildPath(field, "message", false))
+		}
+		if !utf8.ValidString(string(in.ChangeID)) {
+			return fmt.Errorf("%s: invalid UTF-8", generatedJSONChildPath(field, "change_id", false))
+		}
+		if err := checkChangeBuildStartedBuildValue(in.Build, generatedJSONChildPath(field, "build", false), active); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // checkOperatorEvaluatorTestsValue checks text and cycles before conversion.
 func checkOperatorEvaluatorTestsValue(in *OperatorEvaluatorTests) error {
 	if in == nil {
@@ -37451,6 +37899,39 @@ func checkReadCheckOutputPayloadReadCheckOutputPayloadValue(in *ReadCheckOutputP
 	return nil
 }
 
+// checkReplacedBuildValue checks text and cycles before conversion.
+func checkReplacedBuildValue(in *ReplacedBuild) error {
+	if in == nil {
+		return fmt.Errorf("missing root value")
+	}
+	active := make(map[any]bool)
+	if err := checkReplacedBuildReplacedBuildValue(in, "$", active); err != nil {
+		return err
+	}
+	return nil
+}
+
+// checkReplacedBuildReplacedBuildValue checks one generated value on the active path.
+func checkReplacedBuildReplacedBuildValue(in *ReplacedBuild, field string, active map[any]bool) error {
+	if in == nil {
+		return nil
+	}
+	if active[in] {
+		return fmt.Errorf("%s: cyclic Go value", field)
+	}
+	active[in] = true
+	defer delete(active, in)
+	if in != nil {
+		if !utf8.ValidString(string(in.ChangeID)) {
+			return fmt.Errorf("%s: invalid UTF-8", generatedJSONChildPath(field, "change_id", false))
+		}
+		if !utf8.ValidString(string(in.StartedAt)) {
+			return fmt.Errorf("%s: invalid UTF-8", generatedJSONChildPath(field, "started_at", false))
+		}
+	}
+	return nil
+}
+
 // checkRequiredTestValue checks text and cycles before conversion.
 func checkRequiredTestValue(in *RequiredTest) error {
 	if in == nil {
@@ -37604,38 +38085,6 @@ func checkStartBuildResultStartBuildResultValue(in *StartBuildResult, field stri
 				return err
 			}
 		}
-		if branch1, ok := in.WorkingCopy.AsNotUsed(); ok {
-			_ = branch1
-			if branch1 != nil {
-			}
-			if err := checkBuildCopyNotUsedBuildCopyNotUsedValue(branch1, generatedJSONChildPath(field, "working_copy", false), active); err != nil {
-				return err
-			}
-		}
-		if branch1, ok := in.WorkingCopy.AsAtProjectCommit(); ok {
-			_ = branch1
-			if branch1 != nil {
-			}
-			if err := checkBuildCopyAtProjectCommitBuildCopyAtProjectCommitValue(branch1, generatedJSONChildPath(field, "working_copy", false), active); err != nil {
-				return err
-			}
-		}
-		if branch1, ok := in.WorkingCopy.AsNotContained(); ok {
-			_ = branch1
-			if branch1 != nil {
-			}
-			if err := checkBuildCopyNotContainedBuildCopyNotContainedValue(branch1, generatedJSONChildPath(field, "working_copy", false), active); err != nil {
-				return err
-			}
-		}
-		if branch1, ok := in.WorkingCopy.AsDirty(); ok {
-			_ = branch1
-			if branch1 != nil {
-			}
-			if err := checkBuildCopyDirtyBuildCopyDirtyValue(branch1, generatedJSONChildPath(field, "working_copy", false), active); err != nil {
-				return err
-			}
-		}
 	}
 	return nil
 }
@@ -37774,6 +38223,9 @@ func checkStoryRefreshResultStoryRefreshResultValue(in *StoryRefreshResult, fiel
 	active[in] = true
 	defer delete(active, in)
 	if in != nil {
+		if !utf8.ValidString(string(in.DraftFolder)) {
+			return fmt.Errorf("%s: invalid UTF-8", generatedJSONChildPath(field, "draft_folder", false))
+		}
 		if in.OpID != nil {
 			if !utf8.ValidString(string(*in.OpID)) {
 				return fmt.Errorf("%s: invalid UTF-8", generatedJSONChildPath(field, "op_id", false))

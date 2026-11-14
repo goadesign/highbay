@@ -415,10 +415,6 @@ func (j *wholeJourney) startBuild(t *testing.T) {
 	assert.True(t, started.Build.InForce)
 	assert.Equal(t, 2, started.Build.RequiredTestCount, "one test per finished flow")
 	assert.Equal(t, gensurla.TestsKindAssigned, started.Build.TestWriter.Tests.Kind())
-	copied, ok := started.WorkingCopy.AsAtProjectCommit()
-	require.True(t, ok, "the test writer's copy starts at the project's commit: %s",
-		started.WorkingCopy.Kind())
-	assert.Equal(t, j.projectCommit, copied.Commit)
 	team, ok := started.Team.AsReady()
 	require.True(t, ok, "the team is ready: %s", started.Team.Kind())
 	assert.Equal(t, "opened", team.Dialog, "the launcher opens for the new workers")

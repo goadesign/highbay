@@ -24,7 +24,9 @@ func pageTeamSnapshot(state string) gensurla.TeamSnapshot {
 // follows the one version chain, pane actions accept real empty 204 answers,
 // and a removed focused attention control returns focus to the current view.
 func TestViewsPageTeamFollowsAttentionAndShowsPane(t *testing.T) {
-	f := &teamServiceFixture{snapshot: pageTeamSnapshot("needs_you")}
+	snapshot := pageTeamSnapshot("needs_you")
+	snapshot.Roles[2].Assignment = "no_work"
+	f := &teamServiceFixture{snapshot: snapshot}
 	cp := pageControlPlane(t, Options{Team: &TeamBinding{Owner: pageOwner, Service: f}})
 	ps := startPageServer(t, cp)
 	ps.act("builder-working", func() {
@@ -46,6 +48,7 @@ page.$("#surla-nav-team").click();
 await until(() => page.state() === "team" && page.$("#surla-team-role-builder"), "Team did not open");
 expect(page.text("#surla-team-role-builder").includes("Chorus watcher absent") && page.text("#surla-team-role-builder").includes("Assignment unread"), "independent facts were inferred from terminal state");
 expect(page.text("#surla-team-role-test_writer").includes("Status unknown") && page.text("#surla-team-role-test_writer").includes("Chorus watcher held"), "unknown terminal hid a known watcher");
+expect(page.text("#surla-team-role-test_writer").includes("No work now"), "the declared no_work assignment fact is missing");
 expect(page.doc.activeElement === page.$("#surla-team-title"), "opening Team did not focus its title");
 page.$("#surla-team-attention-show-pane-builder").focus();
 await control(origin, "act", { key: "builder-working" });

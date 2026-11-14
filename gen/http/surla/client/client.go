@@ -124,6 +124,10 @@ type Client struct {
 	// get_story_refresh endpoint.
 	GetStoryRefreshDoer goahttp.Doer
 
+	// UpdateDraft Doer is the HTTP client used to make requests to the
+	// update_draft endpoint.
+	UpdateDraftDoer goahttp.Doer
+
 	// GetTeam Doer is the HTTP client used to make requests to the get_team
 	// endpoint.
 	GetTeamDoer goahttp.Doer
@@ -147,6 +151,10 @@ type Client struct {
 	// StartBuild Doer is the HTTP client used to make requests to the start_build
 	// endpoint.
 	StartBuildDoer goahttp.Doer
+
+	// DropBuild Doer is the HTTP client used to make requests to the drop_build
+	// endpoint.
+	DropBuildDoer goahttp.Doer
 
 	// GetBuild Doer is the HTTP client used to make requests to the get_build
 	// endpoint.
@@ -223,12 +231,14 @@ func NewClient(
 		ListTracesDoer:                doer,
 		RefreshStoryDoer:              doer,
 		GetStoryRefreshDoer:           doer,
+		UpdateDraftDoer:               doer,
 		GetTeamDoer:                   doer,
 		ShowTeamPaneDoer:              doer,
 		StartTeamAgentsDoer:           doer,
 		ListChangesDoer:               doer,
 		WaitForChangesDoer:            doer,
 		StartBuildDoer:                doer,
+		DropBuildDoer:                 doer,
 		GetBuildDoer:                  doer,
 		GetTestFindingsDoer:           doer,
 		ListBuilderAssignmentsDoer:    doer,
@@ -837,6 +847,25 @@ func (c *Client) GetStoryRefresh() goa.Endpoint {
 	}
 }
 
+// UpdateDraft returns an endpoint that makes HTTP requests to the surla
+// service update_draft server.
+func (c *Client) UpdateDraft() goa.Endpoint {
+	var (
+		decodeResponse = DecodeUpdateDraftResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildUpdateDraftRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.UpdateDraftDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("surla", "update_draft", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
 // GetTeam returns an endpoint that makes HTTP requests to the surla service
 // get_team server.
 func (c *Client) GetTeam() goa.Endpoint {
@@ -961,6 +990,30 @@ func (c *Client) StartBuild() goa.Endpoint {
 		resp, err := c.StartBuildDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("surla", "start_build", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// DropBuild returns an endpoint that makes HTTP requests to the surla service
+// drop_build server.
+func (c *Client) DropBuild() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeDropBuildRequest(c.encoder)
+		decodeResponse = DecodeDropBuildResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildDropBuildRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.DropBuildDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("surla", "drop_build", err)
 		}
 		return decodeResponse(resp)
 	}

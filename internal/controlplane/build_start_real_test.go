@@ -60,7 +60,8 @@ func TestStartBuildUsesTheProductionCopy(t *testing.T) {
 					ChangeID: "chg", RequestRevision: card.RequestRevision,
 				})
 				require.NoError(t, err)
-				assert.Equal(t, gensurla.WorkingCopyKindAtProjectCommit, result.WorkingCopy.Kind())
+				assert.Equal(t, productionBuildGit(t, repo, "rev-parse", "HEAD"),
+					productionBuildGit(t, folder, "rev-parse", "HEAD"))
 				finding, ok := result.Build.TestWriter.Tests.AsNeedsChanges()
 				require.True(t, ok, "the real module failure is saved after the build")
 				assert.Equal(t, 1, finding.FindingCount)

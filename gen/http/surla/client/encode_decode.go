@@ -132,6 +132,7 @@ func EncodeProposeChangeRequest(encoder func(*http.Request) goahttp.Encoder) fun
 // surla propose_change endpoint. restoreBody controls whether the response
 // body should be restored after having been read.
 // DecodeProposeChangeResponse may return the following errors:
+//   - "drafted_before_drop" (type *goa.ServiceError): http.StatusConflict
 //   - "conflict" (type *goa.ServiceError): http.StatusConflict
 //   - "unprocessable" (type *goa.ServiceError): http.StatusUnprocessableEntity
 //   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
@@ -173,19 +174,43 @@ func DecodeProposeChangeResponse(decoder func(*http.Response) goahttp.Decoder, r
 			res := NewProposeChangeChangeCardResultOK(&body)
 			return res, nil
 		case http.StatusConflict:
-			var (
-				body ProposeChangeConflictResponseBody
-				err  error
-			)
-			err = decoder(resp).Decode(&body)
-			if err != nil {
-				return nil, goahttp.ErrDecodingError("surla", "propose_change", err)
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "drafted_before_drop":
+				var (
+					body ProposeChangeDraftedBeforeDropResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("surla", "propose_change", err)
+				}
+				err = ValidateProposeChangeDraftedBeforeDropResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("surla", "propose_change", err)
+				}
+				return nil, NewProposeChangeDraftedBeforeDrop(&body)
+			case "conflict":
+				var (
+					body ProposeChangeConflictResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("surla", "propose_change", err)
+				}
+				err = ValidateProposeChangeConflictResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("surla", "propose_change", err)
+				}
+				return nil, NewProposeChangeConflict(&body)
+			default:
+				body, err := io.ReadAll(resp.Body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("surla", "propose_change", err)
+				}
+				return nil, goahttp.ErrInvalidResponse("surla", "propose_change", resp.StatusCode, string(body))
 			}
-			err = ValidateProposeChangeConflictResponseBody(&body)
-			if err != nil {
-				return nil, goahttp.ErrValidationError("surla", "propose_change", err)
-			}
-			return nil, NewProposeChangeConflict(&body)
 		case http.StatusUnprocessableEntity:
 			var (
 				body ProposeChangeUnprocessableResponseBody
@@ -259,8 +284,9 @@ func EncodeReviseChangeRequest(encoder func(*http.Request) goahttp.Encoder) func
 // surla revise_change endpoint. restoreBody controls whether the response body
 // should be restored after having been read.
 // DecodeReviseChangeResponse may return the following errors:
-//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "drafted_before_drop" (type *goa.ServiceError): http.StatusConflict
 //   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
 //   - "unprocessable" (type *goa.ServiceError): http.StatusUnprocessableEntity
 //   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
 //   - error: internal error
@@ -300,6 +326,44 @@ func DecodeReviseChangeResponse(decoder func(*http.Response) goahttp.Decoder, re
 			}
 			res := NewReviseChangeChangeCardResultOK(&body)
 			return res, nil
+		case http.StatusConflict:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "drafted_before_drop":
+				var (
+					body ReviseChangeDraftedBeforeDropResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("surla", "revise_change", err)
+				}
+				err = ValidateReviseChangeDraftedBeforeDropResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("surla", "revise_change", err)
+				}
+				return nil, NewReviseChangeDraftedBeforeDrop(&body)
+			case "conflict":
+				var (
+					body ReviseChangeConflictResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("surla", "revise_change", err)
+				}
+				err = ValidateReviseChangeConflictResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("surla", "revise_change", err)
+				}
+				return nil, NewReviseChangeConflict(&body)
+			default:
+				body, err := io.ReadAll(resp.Body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("surla", "revise_change", err)
+				}
+				return nil, goahttp.ErrInvalidResponse("surla", "revise_change", resp.StatusCode, string(body))
+			}
 		case http.StatusNotFound:
 			var (
 				body ReviseChangeNotFoundResponseBody
@@ -314,20 +378,6 @@ func DecodeReviseChangeResponse(decoder func(*http.Response) goahttp.Decoder, re
 				return nil, goahttp.ErrValidationError("surla", "revise_change", err)
 			}
 			return nil, NewReviseChangeNotFound(&body)
-		case http.StatusConflict:
-			var (
-				body ReviseChangeConflictResponseBody
-				err  error
-			)
-			err = decoder(resp).Decode(&body)
-			if err != nil {
-				return nil, goahttp.ErrDecodingError("surla", "revise_change", err)
-			}
-			err = ValidateReviseChangeConflictResponseBody(&body)
-			if err != nil {
-				return nil, goahttp.ErrValidationError("surla", "revise_change", err)
-			}
-			return nil, NewReviseChangeConflict(&body)
 		case http.StatusUnprocessableEntity:
 			var (
 				body ReviseChangeUnprocessableResponseBody
@@ -1529,11 +1579,16 @@ func EncodeVerifyChangeRequest(encoder func(*http.Request) goahttp.Encoder) func
 // surla verify_change endpoint. restoreBody controls whether the response body
 // should be restored after having been read.
 // DecodeVerifyChangeResponse may return the following errors:
-//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "assignment_unread" (type *goa.ServiceError): http.StatusConflict
+//   - "working_folder_missing" (type *goa.ServiceError): http.StatusConflict
+//   - "build_branch_mismatch" (type *goa.ServiceError): http.StatusConflict
+//   - "design_changed_outside" (type *goa.ServiceError): http.StatusConflict
 //   - "conflict" (type *goa.ServiceError): http.StatusConflict
 //   - "no_build" (type *goa.ServiceError): http.StatusConflict
 //   - "tests_not_accepted" (type *goa.ServiceError): http.StatusConflict
 //   - "no_test_layout" (type *goa.ServiceError): http.StatusConflict
+//   - "copy_off_branch" (type *surla.CopyOffBranch): http.StatusConflict
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
 //   - "not_implemented" (type *goa.ServiceError): http.StatusNotImplemented
 //   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
 //   - error: internal error
@@ -1573,23 +1628,65 @@ func DecodeVerifyChangeResponse(decoder func(*http.Response) goahttp.Decoder, re
 			}
 			res := NewVerifyChangeVerificationStatusResultOK(&body)
 			return res, nil
-		case http.StatusNotFound:
-			var (
-				body VerifyChangeNotFoundResponseBody
-				err  error
-			)
-			err = decoder(resp).Decode(&body)
-			if err != nil {
-				return nil, goahttp.ErrDecodingError("surla", "verify_change", err)
-			}
-			err = ValidateVerifyChangeNotFoundResponseBody(&body)
-			if err != nil {
-				return nil, goahttp.ErrValidationError("surla", "verify_change", err)
-			}
-			return nil, NewVerifyChangeNotFound(&body)
 		case http.StatusConflict:
 			en := resp.Header.Get("goa-error")
 			switch en {
+			case "assignment_unread":
+				var (
+					body VerifyChangeAssignmentUnreadResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("surla", "verify_change", err)
+				}
+				err = ValidateVerifyChangeAssignmentUnreadResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("surla", "verify_change", err)
+				}
+				return nil, NewVerifyChangeAssignmentUnread(&body)
+			case "working_folder_missing":
+				var (
+					body VerifyChangeWorkingFolderMissingResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("surla", "verify_change", err)
+				}
+				err = ValidateVerifyChangeWorkingFolderMissingResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("surla", "verify_change", err)
+				}
+				return nil, NewVerifyChangeWorkingFolderMissing(&body)
+			case "build_branch_mismatch":
+				var (
+					body VerifyChangeBuildBranchMismatchResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("surla", "verify_change", err)
+				}
+				err = ValidateVerifyChangeBuildBranchMismatchResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("surla", "verify_change", err)
+				}
+				return nil, NewVerifyChangeBuildBranchMismatch(&body)
+			case "design_changed_outside":
+				var (
+					body VerifyChangeDesignChangedOutsideResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("surla", "verify_change", err)
+				}
+				err = ValidateVerifyChangeDesignChangedOutsideResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("surla", "verify_change", err)
+				}
+				return nil, NewVerifyChangeDesignChangedOutside(&body)
 			case "conflict":
 				var (
 					body VerifyChangeConflictResponseBody
@@ -1646,6 +1743,20 @@ func DecodeVerifyChangeResponse(decoder func(*http.Response) goahttp.Decoder, re
 					return nil, goahttp.ErrValidationError("surla", "verify_change", err)
 				}
 				return nil, NewVerifyChangeNoTestLayout(&body)
+			case "copy_off_branch":
+				var (
+					body VerifyChangeCopyOffBranchResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("surla", "verify_change", err)
+				}
+				err = ValidateVerifyChangeCopyOffBranchResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("surla", "verify_change", err)
+				}
+				return nil, NewVerifyChangeCopyOffBranch(&body)
 			default:
 				body, err := io.ReadAll(resp.Body)
 				if err != nil {
@@ -1653,6 +1764,20 @@ func DecodeVerifyChangeResponse(decoder func(*http.Response) goahttp.Decoder, re
 				}
 				return nil, goahttp.ErrInvalidResponse("surla", "verify_change", resp.StatusCode, string(body))
 			}
+		case http.StatusNotFound:
+			var (
+				body VerifyChangeNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("surla", "verify_change", err)
+			}
+			err = ValidateVerifyChangeNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("surla", "verify_change", err)
+			}
+			return nil, NewVerifyChangeNotFound(&body)
 		case http.StatusNotImplemented:
 			var (
 				body VerifyChangeNotImplementedResponseBody
@@ -1972,10 +2097,11 @@ func EncodeApproveMergeRequest(encoder func(*http.Request) goahttp.Encoder) func
 // surla approve_merge endpoint. restoreBody controls whether the response body
 // should be restored after having been read.
 // DecodeApproveMergeResponse may return the following errors:
-//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "build_branch_mismatch" (type *goa.ServiceError): http.StatusConflict
 //   - "conflict" (type *goa.ServiceError): http.StatusConflict
 //   - "no_build" (type *goa.ServiceError): http.StatusConflict
 //   - "tests_not_accepted" (type *goa.ServiceError): http.StatusConflict
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
 //   - "unprocessable" (type *goa.ServiceError): http.StatusUnprocessableEntity
 //   - "not_implemented" (type *goa.ServiceError): http.StatusNotImplemented
 //   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
@@ -2016,23 +2142,23 @@ func DecodeApproveMergeResponse(decoder func(*http.Response) goahttp.Decoder, re
 			}
 			res := NewApproveMergeChangeCardResultOK(&body)
 			return res, nil
-		case http.StatusNotFound:
-			var (
-				body ApproveMergeNotFoundResponseBody
-				err  error
-			)
-			err = decoder(resp).Decode(&body)
-			if err != nil {
-				return nil, goahttp.ErrDecodingError("surla", "approve_merge", err)
-			}
-			err = ValidateApproveMergeNotFoundResponseBody(&body)
-			if err != nil {
-				return nil, goahttp.ErrValidationError("surla", "approve_merge", err)
-			}
-			return nil, NewApproveMergeNotFound(&body)
 		case http.StatusConflict:
 			en := resp.Header.Get("goa-error")
 			switch en {
+			case "build_branch_mismatch":
+				var (
+					body ApproveMergeBuildBranchMismatchResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("surla", "approve_merge", err)
+				}
+				err = ValidateApproveMergeBuildBranchMismatchResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("surla", "approve_merge", err)
+				}
+				return nil, NewApproveMergeBuildBranchMismatch(&body)
 			case "conflict":
 				var (
 					body ApproveMergeConflictResponseBody
@@ -2082,6 +2208,20 @@ func DecodeApproveMergeResponse(decoder func(*http.Response) goahttp.Decoder, re
 				}
 				return nil, goahttp.ErrInvalidResponse("surla", "approve_merge", resp.StatusCode, string(body))
 			}
+		case http.StatusNotFound:
+			var (
+				body ApproveMergeNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("surla", "approve_merge", err)
+			}
+			err = ValidateApproveMergeNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("surla", "approve_merge", err)
+			}
+			return nil, NewApproveMergeNotFound(&body)
 		case http.StatusUnprocessableEntity:
 			var (
 				body ApproveMergeUnprocessableResponseBody
@@ -2715,6 +2855,12 @@ func EncodeGenerateCodeRequest(encoder func(*http.Request) goahttp.Encoder) func
 // surla generate_code endpoint. restoreBody controls whether the response body
 // should be restored after having been read.
 // DecodeGenerateCodeResponse may return the following errors:
+//   - "no_build" (type *goa.ServiceError): http.StatusConflict
+//   - "assignment_unread" (type *goa.ServiceError): http.StatusConflict
+//   - "working_folder_missing" (type *goa.ServiceError): http.StatusConflict
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "copy_off_branch" (type *surla.CopyOffBranch): http.StatusConflict
+//   - "missing_modules" (type *goa.ServiceError): http.StatusUnprocessableEntity
 //   - "unprocessable" (type *goa.ServiceError): http.StatusUnprocessableEntity
 //   - "not_implemented" (type *goa.ServiceError): http.StatusNotImplemented
 //   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
@@ -2755,20 +2901,124 @@ func DecodeGenerateCodeResponse(decoder func(*http.Response) goahttp.Decoder, re
 			}
 			res := NewGenerateCodeResultOK(&body)
 			return res, nil
+		case http.StatusConflict:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "no_build":
+				var (
+					body GenerateCodeNoBuildResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("surla", "generate_code", err)
+				}
+				err = ValidateGenerateCodeNoBuildResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("surla", "generate_code", err)
+				}
+				return nil, NewGenerateCodeNoBuild(&body)
+			case "assignment_unread":
+				var (
+					body GenerateCodeAssignmentUnreadResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("surla", "generate_code", err)
+				}
+				err = ValidateGenerateCodeAssignmentUnreadResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("surla", "generate_code", err)
+				}
+				return nil, NewGenerateCodeAssignmentUnread(&body)
+			case "working_folder_missing":
+				var (
+					body GenerateCodeWorkingFolderMissingResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("surla", "generate_code", err)
+				}
+				err = ValidateGenerateCodeWorkingFolderMissingResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("surla", "generate_code", err)
+				}
+				return nil, NewGenerateCodeWorkingFolderMissing(&body)
+			case "conflict":
+				var (
+					body GenerateCodeConflictResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("surla", "generate_code", err)
+				}
+				err = ValidateGenerateCodeConflictResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("surla", "generate_code", err)
+				}
+				return nil, NewGenerateCodeConflict(&body)
+			case "copy_off_branch":
+				var (
+					body GenerateCodeCopyOffBranchResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("surla", "generate_code", err)
+				}
+				err = ValidateGenerateCodeCopyOffBranchResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("surla", "generate_code", err)
+				}
+				return nil, NewGenerateCodeCopyOffBranch(&body)
+			default:
+				body, err := io.ReadAll(resp.Body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("surla", "generate_code", err)
+				}
+				return nil, goahttp.ErrInvalidResponse("surla", "generate_code", resp.StatusCode, string(body))
+			}
 		case http.StatusUnprocessableEntity:
-			var (
-				body GenerateCodeUnprocessableResponseBody
-				err  error
-			)
-			err = decoder(resp).Decode(&body)
-			if err != nil {
-				return nil, goahttp.ErrDecodingError("surla", "generate_code", err)
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "missing_modules":
+				var (
+					body GenerateCodeMissingModulesResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("surla", "generate_code", err)
+				}
+				err = ValidateGenerateCodeMissingModulesResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("surla", "generate_code", err)
+				}
+				return nil, NewGenerateCodeMissingModules(&body)
+			case "unprocessable":
+				var (
+					body GenerateCodeUnprocessableResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("surla", "generate_code", err)
+				}
+				err = ValidateGenerateCodeUnprocessableResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("surla", "generate_code", err)
+				}
+				return nil, NewGenerateCodeUnprocessable(&body)
+			default:
+				body, err := io.ReadAll(resp.Body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("surla", "generate_code", err)
+				}
+				return nil, goahttp.ErrInvalidResponse("surla", "generate_code", resp.StatusCode, string(body))
 			}
-			err = ValidateGenerateCodeUnprocessableResponseBody(&body)
-			if err != nil {
-				return nil, goahttp.ErrValidationError("surla", "generate_code", err)
-			}
-			return nil, NewGenerateCodeUnprocessable(&body)
 		case http.StatusNotImplemented:
 			var (
 				body GenerateCodeNotImplementedResponseBody
@@ -2826,6 +3076,10 @@ func (c *Client) BuildCheckProjectRequest(ctx context.Context, v any) (*http.Req
 // surla check_project endpoint. restoreBody controls whether the response body
 // should be restored after having been read.
 // DecodeCheckProjectResponse may return the following errors:
+//   - "no_build" (type *goa.ServiceError): http.StatusConflict
+//   - "assignment_unread" (type *goa.ServiceError): http.StatusConflict
+//   - "working_folder_missing" (type *goa.ServiceError): http.StatusConflict
+//   - "copy_off_branch" (type *surla.CopyOffBranch): http.StatusConflict
 //   - "unprocessable" (type *goa.ServiceError): http.StatusUnprocessableEntity
 //   - "not_implemented" (type *goa.ServiceError): http.StatusNotImplemented
 //   - "unavailable" (type *goa.ServiceError): http.StatusServiceUnavailable
@@ -2867,6 +3121,72 @@ func DecodeCheckProjectResponse(decoder func(*http.Response) goahttp.Decoder, re
 			}
 			res := NewCheckProjectResultOK(&body)
 			return res, nil
+		case http.StatusConflict:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "no_build":
+				var (
+					body CheckProjectNoBuildResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("surla", "check_project", err)
+				}
+				err = ValidateCheckProjectNoBuildResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("surla", "check_project", err)
+				}
+				return nil, NewCheckProjectNoBuild(&body)
+			case "assignment_unread":
+				var (
+					body CheckProjectAssignmentUnreadResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("surla", "check_project", err)
+				}
+				err = ValidateCheckProjectAssignmentUnreadResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("surla", "check_project", err)
+				}
+				return nil, NewCheckProjectAssignmentUnread(&body)
+			case "working_folder_missing":
+				var (
+					body CheckProjectWorkingFolderMissingResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("surla", "check_project", err)
+				}
+				err = ValidateCheckProjectWorkingFolderMissingResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("surla", "check_project", err)
+				}
+				return nil, NewCheckProjectWorkingFolderMissing(&body)
+			case "copy_off_branch":
+				var (
+					body CheckProjectCopyOffBranchResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("surla", "check_project", err)
+				}
+				err = ValidateCheckProjectCopyOffBranchResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("surla", "check_project", err)
+				}
+				return nil, NewCheckProjectCopyOffBranch(&body)
+			default:
+				body, err := io.ReadAll(resp.Body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("surla", "check_project", err)
+				}
+				return nil, goahttp.ErrInvalidResponse("surla", "check_project", resp.StatusCode, string(body))
+			}
 		case http.StatusUnprocessableEntity:
 			var (
 				body CheckProjectUnprocessableResponseBody
@@ -2953,6 +3273,10 @@ func (c *Client) BuildUpdateDependenciesRequest(ctx context.Context, v any) (*ht
 // the surla update_dependencies endpoint. restoreBody controls whether the
 // response body should be restored after having been read.
 // DecodeUpdateDependenciesResponse may return the following errors:
+//   - "no_build" (type *goa.ServiceError): http.StatusConflict
+//   - "assignment_unread" (type *goa.ServiceError): http.StatusConflict
+//   - "working_folder_missing" (type *goa.ServiceError): http.StatusConflict
+//   - "copy_off_branch" (type *surla.CopyOffBranch): http.StatusConflict
 //   - "unprocessable" (type *goa.ServiceError): http.StatusUnprocessableEntity
 //   - "not_implemented" (type *goa.ServiceError): http.StatusNotImplemented
 //   - "unavailable" (type *goa.ServiceError): http.StatusServiceUnavailable
@@ -2994,6 +3318,72 @@ func DecodeUpdateDependenciesResponse(decoder func(*http.Response) goahttp.Decod
 			}
 			res := NewUpdateDependenciesResultOK(&body)
 			return res, nil
+		case http.StatusConflict:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "no_build":
+				var (
+					body UpdateDependenciesNoBuildResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("surla", "update_dependencies", err)
+				}
+				err = ValidateUpdateDependenciesNoBuildResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("surla", "update_dependencies", err)
+				}
+				return nil, NewUpdateDependenciesNoBuild(&body)
+			case "assignment_unread":
+				var (
+					body UpdateDependenciesAssignmentUnreadResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("surla", "update_dependencies", err)
+				}
+				err = ValidateUpdateDependenciesAssignmentUnreadResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("surla", "update_dependencies", err)
+				}
+				return nil, NewUpdateDependenciesAssignmentUnread(&body)
+			case "working_folder_missing":
+				var (
+					body UpdateDependenciesWorkingFolderMissingResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("surla", "update_dependencies", err)
+				}
+				err = ValidateUpdateDependenciesWorkingFolderMissingResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("surla", "update_dependencies", err)
+				}
+				return nil, NewUpdateDependenciesWorkingFolderMissing(&body)
+			case "copy_off_branch":
+				var (
+					body UpdateDependenciesCopyOffBranchResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("surla", "update_dependencies", err)
+				}
+				err = ValidateUpdateDependenciesCopyOffBranchResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("surla", "update_dependencies", err)
+				}
+				return nil, NewUpdateDependenciesCopyOffBranch(&body)
+			default:
+				body, err := io.ReadAll(resp.Body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("surla", "update_dependencies", err)
+				}
+				return nil, goahttp.ErrInvalidResponse("surla", "update_dependencies", resp.StatusCode, string(body))
+			}
 		case http.StatusUnprocessableEntity:
 			var (
 				body UpdateDependenciesUnprocessableResponseBody
@@ -3535,6 +3925,132 @@ func DecodeGetStoryRefreshResponse(decoder func(*http.Response) goahttp.Decoder,
 				return nil, goahttp.ErrDecodingError("surla", "get_story_refresh", err)
 			}
 			return nil, goahttp.ErrInvalidResponse("surla", "get_story_refresh", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildUpdateDraftRequest instantiates a HTTP request object with method and
+// path set to call the "surla" service "update_draft" endpoint
+func (c *Client) BuildUpdateDraftRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: UpdateDraftSurlaPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("surla", "update_draft", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// DecodeUpdateDraftResponse returns a decoder for responses returned by the
+// surla update_draft endpoint. restoreBody controls whether the response body
+// should be restored after having been read.
+// DecodeUpdateDraftResponse may return the following errors:
+//   - "unprocessable" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "not_implemented" (type *goa.ServiceError): http.StatusNotImplemented
+//   - "unavailable" (type *goa.ServiceError): http.StatusServiceUnavailable
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - error: internal error
+func DecodeUpdateDraftResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (result any, decodeErr error) {
+		responseBody := resp.Body
+		if restoreBody {
+			b, readErr := io.ReadAll(responseBody)
+			closeErr := responseBody.Close()
+			if err := errors.Join(readErr, closeErr); err != nil {
+				return nil, goahttp.ErrDecodingError("surla", "update_draft", err)
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer func() {
+				if err := responseBody.Close(); err != nil {
+					decodeErr = errors.Join(decodeErr, goahttp.ErrDecodingError("surla", "update_draft", err))
+				}
+			}()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body UpdateDraftResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("surla", "update_draft", err)
+			}
+			err = ValidateUpdateDraftResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("surla", "update_draft", err)
+			}
+			res := NewUpdateDraftDraftUpdateResultOK(&body)
+			return res, nil
+		case http.StatusUnprocessableEntity:
+			var (
+				body UpdateDraftUnprocessableResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("surla", "update_draft", err)
+			}
+			err = ValidateUpdateDraftUnprocessableResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("surla", "update_draft", err)
+			}
+			return nil, NewUpdateDraftUnprocessable(&body)
+		case http.StatusNotImplemented:
+			var (
+				body UpdateDraftNotImplementedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("surla", "update_draft", err)
+			}
+			err = ValidateUpdateDraftNotImplementedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("surla", "update_draft", err)
+			}
+			return nil, NewUpdateDraftNotImplemented(&body)
+		case http.StatusServiceUnavailable:
+			var (
+				body UpdateDraftUnavailableResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("surla", "update_draft", err)
+			}
+			err = ValidateUpdateDraftUnavailableResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("surla", "update_draft", err)
+			}
+			return nil, NewUpdateDraftUnavailable(&body)
+		case http.StatusForbidden:
+			var (
+				body UpdateDraftForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("surla", "update_draft", err)
+			}
+			err = ValidateUpdateDraftForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("surla", "update_draft", err)
+			}
+			return nil, NewUpdateDraftForbidden(&body)
+		default:
+			body, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("surla", "update_draft", err)
+			}
+			return nil, goahttp.ErrInvalidResponse("surla", "update_draft", resp.StatusCode, string(body))
 		}
 	}
 }
@@ -4128,6 +4644,10 @@ func EncodeStartBuildRequest(encoder func(*http.Request) goahttp.Encoder) func(*
 //   - "copy_folder_in_use" (type *goa.ServiceError): http.StatusConflict
 //   - "tests_branch_in_use" (type *goa.ServiceError): http.StatusConflict
 //   - "working_copy_busy" (type *goa.ServiceError): http.StatusConflict
+//   - "drafted_before_drop" (type *goa.ServiceError): http.StatusConflict
+//   - "design_changed_outside" (type *goa.ServiceError): http.StatusConflict
+//   - "previous_change_open" (type *surla.OpenBuildRefusal): http.StatusConflict
+//   - "unfinished_build_open" (type *surla.OpenBuildRefusal): http.StatusConflict
 //   - "unprocessable" (type *goa.ServiceError): http.StatusUnprocessableEntity
 //   - "not_implemented" (type *goa.ServiceError): http.StatusNotImplemented
 //   - "sandbox_unavailable" (type *goa.ServiceError): http.StatusNotImplemented
@@ -4299,6 +4819,62 @@ func DecodeStartBuildResponse(decoder func(*http.Response) goahttp.Decoder, rest
 					return nil, goahttp.ErrValidationError("surla", "start_build", err)
 				}
 				return nil, NewStartBuildWorkingCopyBusy(&body)
+			case "drafted_before_drop":
+				var (
+					body StartBuildDraftedBeforeDropResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("surla", "start_build", err)
+				}
+				err = ValidateStartBuildDraftedBeforeDropResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("surla", "start_build", err)
+				}
+				return nil, NewStartBuildDraftedBeforeDrop(&body)
+			case "design_changed_outside":
+				var (
+					body StartBuildDesignChangedOutsideResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("surla", "start_build", err)
+				}
+				err = ValidateStartBuildDesignChangedOutsideResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("surla", "start_build", err)
+				}
+				return nil, NewStartBuildDesignChangedOutside(&body)
+			case "previous_change_open":
+				var (
+					body StartBuildPreviousChangeOpenResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("surla", "start_build", err)
+				}
+				err = ValidateStartBuildPreviousChangeOpenResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("surla", "start_build", err)
+				}
+				return nil, NewStartBuildPreviousChangeOpen(&body)
+			case "unfinished_build_open":
+				var (
+					body StartBuildUnfinishedBuildOpenResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("surla", "start_build", err)
+				}
+				err = ValidateStartBuildUnfinishedBuildOpenResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("surla", "start_build", err)
+				}
+				return nil, NewStartBuildUnfinishedBuildOpen(&body)
 			default:
 				body, err := io.ReadAll(resp.Body)
 				if err != nil {
@@ -4392,6 +4968,185 @@ func DecodeStartBuildResponse(decoder func(*http.Response) goahttp.Decoder, rest
 				return nil, goahttp.ErrDecodingError("surla", "start_build", err)
 			}
 			return nil, goahttp.ErrInvalidResponse("surla", "start_build", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildDropBuildRequest instantiates a HTTP request object with method and
+// path set to call the "surla" service "drop_build" endpoint
+func (c *Client) BuildDropBuildRequest(ctx context.Context, v any) (*http.Request, error) {
+	var (
+		changeID string
+	)
+	{
+		p, ok := v.(*surla.DropBuildPayload)
+		if !ok {
+			return nil, goahttp.ErrInvalidType("surla", "drop_build", "*surla.DropBuildPayload", v)
+		}
+		changeID = p.ChangeID
+	}
+
+	rawPath := fmt.Sprintf("/changes/%v/build/drop", url.PathEscape(fmt.Sprint(changeID)))
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: DropBuildSurlaPath(changeID), RawPath: rawPath}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("surla", "drop_build", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeDropBuildRequest returns an encoder for requests sent to the surla
+// drop_build server.
+func EncodeDropBuildRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*surla.DropBuildPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("surla", "drop_build", "*surla.DropBuildPayload", v)
+		}
+		body := NewDropBuildRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("surla", "drop_build", err)
+		}
+		return nil
+	}
+}
+
+// DecodeDropBuildResponse returns a decoder for responses returned by the
+// surla drop_build endpoint. restoreBody controls whether the response body
+// should be restored after having been read.
+// DecodeDropBuildResponse may return the following errors:
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "build_changed" (type *surla.OpenBuildRefusal): http.StatusConflict
+//   - "not_implemented" (type *goa.ServiceError): http.StatusNotImplemented
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - error: internal error
+func DecodeDropBuildResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (result any, decodeErr error) {
+		responseBody := resp.Body
+		if restoreBody {
+			b, readErr := io.ReadAll(responseBody)
+			closeErr := responseBody.Close()
+			if err := errors.Join(readErr, closeErr); err != nil {
+				return nil, goahttp.ErrDecodingError("surla", "drop_build", err)
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer func() {
+				if err := responseBody.Close(); err != nil {
+					decodeErr = errors.Join(decodeErr, goahttp.ErrDecodingError("surla", "drop_build", err))
+				}
+			}()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body DropBuildResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("surla", "drop_build", err)
+			}
+			err = ValidateDropBuildResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("surla", "drop_build", err)
+			}
+			res := NewDropBuildChangeBuildOK(&body)
+			return res, nil
+		case http.StatusNotFound:
+			var (
+				body DropBuildNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("surla", "drop_build", err)
+			}
+			err = ValidateDropBuildNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("surla", "drop_build", err)
+			}
+			return nil, NewDropBuildNotFound(&body)
+		case http.StatusConflict:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "conflict":
+				var (
+					body DropBuildConflictResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("surla", "drop_build", err)
+				}
+				err = ValidateDropBuildConflictResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("surla", "drop_build", err)
+				}
+				return nil, NewDropBuildConflict(&body)
+			case "build_changed":
+				var (
+					body DropBuildBuildChangedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("surla", "drop_build", err)
+				}
+				err = ValidateDropBuildBuildChangedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("surla", "drop_build", err)
+				}
+				return nil, NewDropBuildBuildChanged(&body)
+			default:
+				body, err := io.ReadAll(resp.Body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("surla", "drop_build", err)
+				}
+				return nil, goahttp.ErrInvalidResponse("surla", "drop_build", resp.StatusCode, string(body))
+			}
+		case http.StatusNotImplemented:
+			var (
+				body DropBuildNotImplementedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("surla", "drop_build", err)
+			}
+			err = ValidateDropBuildNotImplementedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("surla", "drop_build", err)
+			}
+			return nil, NewDropBuildNotImplemented(&body)
+		case http.StatusForbidden:
+			var (
+				body DropBuildForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("surla", "drop_build", err)
+			}
+			err = ValidateDropBuildForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("surla", "drop_build", err)
+			}
+			return nil, NewDropBuildForbidden(&body)
+		default:
+			body, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("surla", "drop_build", err)
+			}
+			return nil, goahttp.ErrInvalidResponse("surla", "drop_build", resp.StatusCode, string(body))
 		}
 	}
 }
@@ -4741,6 +5496,10 @@ func (c *Client) BuildGetBuilderAssignmentRequest(ctx context.Context, v any) (*
 // by the surla get_builder_assignment endpoint. restoreBody controls whether
 // the response body should be restored after having been read.
 // DecodeGetBuilderAssignmentResponse may return the following errors:
+//   - "no_build" (type *goa.ServiceError): http.StatusConflict
+//   - "working_copy_busy" (type *goa.ServiceError): http.StatusConflict
+//   - "working_folder_missing" (type *goa.ServiceError): http.StatusConflict
+//   - "copy_off_branch" (type *surla.CopyOffBranch): http.StatusConflict
 //   - "not_found" (type *goa.ServiceError): http.StatusNotFound
 //   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
 //   - error: internal error
@@ -4780,6 +5539,72 @@ func DecodeGetBuilderAssignmentResponse(decoder func(*http.Response) goahttp.Dec
 			}
 			res := NewGetBuilderAssignmentBuilderAssignmentOK(&body)
 			return res, nil
+		case http.StatusConflict:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "no_build":
+				var (
+					body GetBuilderAssignmentNoBuildResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("surla", "get_builder_assignment", err)
+				}
+				err = ValidateGetBuilderAssignmentNoBuildResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("surla", "get_builder_assignment", err)
+				}
+				return nil, NewGetBuilderAssignmentNoBuild(&body)
+			case "working_copy_busy":
+				var (
+					body GetBuilderAssignmentWorkingCopyBusyResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("surla", "get_builder_assignment", err)
+				}
+				err = ValidateGetBuilderAssignmentWorkingCopyBusyResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("surla", "get_builder_assignment", err)
+				}
+				return nil, NewGetBuilderAssignmentWorkingCopyBusy(&body)
+			case "working_folder_missing":
+				var (
+					body GetBuilderAssignmentWorkingFolderMissingResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("surla", "get_builder_assignment", err)
+				}
+				err = ValidateGetBuilderAssignmentWorkingFolderMissingResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("surla", "get_builder_assignment", err)
+				}
+				return nil, NewGetBuilderAssignmentWorkingFolderMissing(&body)
+			case "copy_off_branch":
+				var (
+					body GetBuilderAssignmentCopyOffBranchResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("surla", "get_builder_assignment", err)
+				}
+				err = ValidateGetBuilderAssignmentCopyOffBranchResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("surla", "get_builder_assignment", err)
+				}
+				return nil, NewGetBuilderAssignmentCopyOffBranch(&body)
+			default:
+				body, err := io.ReadAll(resp.Body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("surla", "get_builder_assignment", err)
+				}
+				return nil, goahttp.ErrInvalidResponse("surla", "get_builder_assignment", resp.StatusCode, string(body))
+			}
 		case http.StatusNotFound:
 			var (
 				body GetBuilderAssignmentNotFoundResponseBody
@@ -4932,6 +5757,10 @@ func (c *Client) BuildGetTestWriterAssignmentRequest(ctx context.Context, v any)
 // returned by the surla get_test_writer_assignment endpoint. restoreBody
 // controls whether the response body should be restored after having been read.
 // DecodeGetTestWriterAssignmentResponse may return the following errors:
+//   - "no_build" (type *goa.ServiceError): http.StatusConflict
+//   - "working_copy_busy" (type *goa.ServiceError): http.StatusConflict
+//   - "working_folder_missing" (type *goa.ServiceError): http.StatusConflict
+//   - "copy_off_branch" (type *surla.CopyOffBranch): http.StatusConflict
 //   - "not_found" (type *goa.ServiceError): http.StatusNotFound
 //   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
 //   - error: internal error
@@ -4971,6 +5800,72 @@ func DecodeGetTestWriterAssignmentResponse(decoder func(*http.Response) goahttp.
 			}
 			res := NewGetTestWriterAssignmentTestWriterAssignmentOK(&body)
 			return res, nil
+		case http.StatusConflict:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "no_build":
+				var (
+					body GetTestWriterAssignmentNoBuildResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("surla", "get_test_writer_assignment", err)
+				}
+				err = ValidateGetTestWriterAssignmentNoBuildResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("surla", "get_test_writer_assignment", err)
+				}
+				return nil, NewGetTestWriterAssignmentNoBuild(&body)
+			case "working_copy_busy":
+				var (
+					body GetTestWriterAssignmentWorkingCopyBusyResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("surla", "get_test_writer_assignment", err)
+				}
+				err = ValidateGetTestWriterAssignmentWorkingCopyBusyResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("surla", "get_test_writer_assignment", err)
+				}
+				return nil, NewGetTestWriterAssignmentWorkingCopyBusy(&body)
+			case "working_folder_missing":
+				var (
+					body GetTestWriterAssignmentWorkingFolderMissingResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("surla", "get_test_writer_assignment", err)
+				}
+				err = ValidateGetTestWriterAssignmentWorkingFolderMissingResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("surla", "get_test_writer_assignment", err)
+				}
+				return nil, NewGetTestWriterAssignmentWorkingFolderMissing(&body)
+			case "copy_off_branch":
+				var (
+					body GetTestWriterAssignmentCopyOffBranchResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("surla", "get_test_writer_assignment", err)
+				}
+				err = ValidateGetTestWriterAssignmentCopyOffBranchResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("surla", "get_test_writer_assignment", err)
+				}
+				return nil, NewGetTestWriterAssignmentCopyOffBranch(&body)
+			default:
+				body, err := io.ReadAll(resp.Body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("surla", "get_test_writer_assignment", err)
+				}
+				return nil, goahttp.ErrInvalidResponse("surla", "get_test_writer_assignment", resp.StatusCode, string(body))
+			}
 		case http.StatusNotFound:
 			var (
 				body GetTestWriterAssignmentNotFoundResponseBody
@@ -5057,8 +5952,12 @@ func EncodeReportTestsFinishedRequest(encoder func(*http.Request) goahttp.Encode
 // by the surla report_tests_finished endpoint. restoreBody controls whether
 // the response body should be restored after having been read.
 // DecodeReportTestsFinishedResponse may return the following errors:
-//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "no_build" (type *goa.ServiceError): http.StatusConflict
+//   - "working_folder_missing" (type *goa.ServiceError): http.StatusConflict
+//   - "assignment_unread" (type *goa.ServiceError): http.StatusConflict
 //   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "copy_off_branch" (type *surla.CopyOffBranch): http.StatusConflict
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
 //   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
 //   - error: internal error
 func DecodeReportTestsFinishedResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
@@ -5097,6 +5996,86 @@ func DecodeReportTestsFinishedResponse(decoder func(*http.Response) goahttp.Deco
 			}
 			res := NewReportTestsFinishedTestWriterAssignmentItemOK(&body)
 			return res, nil
+		case http.StatusConflict:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "no_build":
+				var (
+					body ReportTestsFinishedNoBuildResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("surla", "report_tests_finished", err)
+				}
+				err = ValidateReportTestsFinishedNoBuildResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("surla", "report_tests_finished", err)
+				}
+				return nil, NewReportTestsFinishedNoBuild(&body)
+			case "working_folder_missing":
+				var (
+					body ReportTestsFinishedWorkingFolderMissingResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("surla", "report_tests_finished", err)
+				}
+				err = ValidateReportTestsFinishedWorkingFolderMissingResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("surla", "report_tests_finished", err)
+				}
+				return nil, NewReportTestsFinishedWorkingFolderMissing(&body)
+			case "assignment_unread":
+				var (
+					body ReportTestsFinishedAssignmentUnreadResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("surla", "report_tests_finished", err)
+				}
+				err = ValidateReportTestsFinishedAssignmentUnreadResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("surla", "report_tests_finished", err)
+				}
+				return nil, NewReportTestsFinishedAssignmentUnread(&body)
+			case "conflict":
+				var (
+					body ReportTestsFinishedConflictResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("surla", "report_tests_finished", err)
+				}
+				err = ValidateReportTestsFinishedConflictResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("surla", "report_tests_finished", err)
+				}
+				return nil, NewReportTestsFinishedConflict(&body)
+			case "copy_off_branch":
+				var (
+					body ReportTestsFinishedCopyOffBranchResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("surla", "report_tests_finished", err)
+				}
+				err = ValidateReportTestsFinishedCopyOffBranchResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("surla", "report_tests_finished", err)
+				}
+				return nil, NewReportTestsFinishedCopyOffBranch(&body)
+			default:
+				body, err := io.ReadAll(resp.Body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("surla", "report_tests_finished", err)
+				}
+				return nil, goahttp.ErrInvalidResponse("surla", "report_tests_finished", resp.StatusCode, string(body))
+			}
 		case http.StatusNotFound:
 			var (
 				body ReportTestsFinishedNotFoundResponseBody
@@ -5111,20 +6090,6 @@ func DecodeReportTestsFinishedResponse(decoder func(*http.Response) goahttp.Deco
 				return nil, goahttp.ErrValidationError("surla", "report_tests_finished", err)
 			}
 			return nil, NewReportTestsFinishedNotFound(&body)
-		case http.StatusConflict:
-			var (
-				body ReportTestsFinishedConflictResponseBody
-				err  error
-			)
-			err = decoder(resp).Decode(&body)
-			if err != nil {
-				return nil, goahttp.ErrDecodingError("surla", "report_tests_finished", err)
-			}
-			err = ValidateReportTestsFinishedConflictResponseBody(&body)
-			if err != nil {
-				return nil, goahttp.ErrValidationError("surla", "report_tests_finished", err)
-			}
-			return nil, NewReportTestsFinishedConflict(&body)
 		case http.StatusForbidden:
 			var (
 				body ReportTestsFinishedForbiddenResponseBody
@@ -6171,6 +7136,18 @@ func unmarshalTraceSpanResponseBodyToSurlaTraceSpan(v *TraceSpanResponseBody) *s
 	return res
 }
 
+// unmarshalDraftCorrectionResponseBodyToSurlaDraftCorrection builds a value of
+// type *surla.DraftCorrection from a value of type
+// *DraftCorrectionResponseBody.
+func unmarshalDraftCorrectionResponseBodyToSurlaDraftCorrection(v *DraftCorrectionResponseBody) *surla.DraftCorrection {
+	res := &surla.DraftCorrection{
+		Path:    *v.Path,
+		Problem: *v.Problem,
+	}
+
+	return res
+}
+
 // unmarshalTeamRoleStateResponseBodyToSurlaTeamRoleState builds a value of
 // type *surla.TeamRoleState from a value of type *TeamRoleStateResponseBody.
 func unmarshalTeamRoleStateResponseBodyToSurlaTeamRoleState(v *TeamRoleStateResponseBody) *surla.TeamRoleState {
@@ -6225,6 +7202,28 @@ func unmarshalLatestVerificationItemResponseBodyToSurlaLatestVerificationItem(v 
 		RunID:         *v.RunID,
 		State:         *v.State,
 		InputsCurrent: *v.InputsCurrent,
+	}
+
+	return res
+}
+
+// marshalSurlaReplacedBuildToReplacedBuildRequestBody builds a value of type
+// *ReplacedBuildRequestBody from a value of type *surla.ReplacedBuild.
+func marshalSurlaReplacedBuildToReplacedBuildRequestBody(v *surla.ReplacedBuild) *ReplacedBuildRequestBody {
+	res := &ReplacedBuildRequestBody{
+		ChangeID:  v.ChangeID,
+		StartedAt: v.StartedAt,
+	}
+
+	return res
+}
+
+// marshalReplacedBuildRequestBodyToSurlaReplacedBuild builds a value of type
+// *surla.ReplacedBuild from a value of type *ReplacedBuildRequestBody.
+func marshalReplacedBuildRequestBodyToSurlaReplacedBuild(v *ReplacedBuildRequestBody) *surla.ReplacedBuild {
+	res := &surla.ReplacedBuild{
+		ChangeID:  v.ChangeID,
+		StartedAt: v.StartedAt,
 	}
 
 	return res
@@ -6440,48 +7439,6 @@ func unmarshalBuildTeamUnavailableResponseBodyToSurlaBuildTeamUnavailable(v *Bui
 	return res
 }
 
-// unmarshalBuildCopyNotUsedResponseBodyToSurlaBuildCopyNotUsed builds a value
-// of type *surla.BuildCopyNotUsed from a value of type
-// *BuildCopyNotUsedResponseBody.
-func unmarshalBuildCopyNotUsedResponseBodyToSurlaBuildCopyNotUsed(v *BuildCopyNotUsedResponseBody) *surla.BuildCopyNotUsed {
-	res := &surla.BuildCopyNotUsed{}
-
-	return res
-}
-
-// unmarshalBuildCopyAtProjectCommitResponseBodyToSurlaBuildCopyAtProjectCommit
-// builds a value of type *surla.BuildCopyAtProjectCommit from a value of type
-// *BuildCopyAtProjectCommitResponseBody.
-func unmarshalBuildCopyAtProjectCommitResponseBodyToSurlaBuildCopyAtProjectCommit(v *BuildCopyAtProjectCommitResponseBody) *surla.BuildCopyAtProjectCommit {
-	res := &surla.BuildCopyAtProjectCommit{
-		Commit: *v.Commit,
-	}
-
-	return res
-}
-
-// unmarshalBuildCopyNotContainedResponseBodyToSurlaBuildCopyNotContained
-// builds a value of type *surla.BuildCopyNotContained from a value of type
-// *BuildCopyNotContainedResponseBody.
-func unmarshalBuildCopyNotContainedResponseBodyToSurlaBuildCopyNotContained(v *BuildCopyNotContainedResponseBody) *surla.BuildCopyNotContained {
-	res := &surla.BuildCopyNotContained{
-		Commit: *v.Commit,
-		Step:   surla.BuildStartStep(*v.Step),
-	}
-
-	return res
-}
-
-// unmarshalBuildCopyDirtyResponseBodyToSurlaBuildCopyDirty builds a value of
-// type *surla.BuildCopyDirty from a value of type *BuildCopyDirtyResponseBody.
-func unmarshalBuildCopyDirtyResponseBodyToSurlaBuildCopyDirty(v *BuildCopyDirtyResponseBody) *surla.BuildCopyDirty {
-	res := &surla.BuildCopyDirty{
-		Commit: *v.Commit,
-	}
-
-	return res
-}
-
 // unmarshalBuildNotStartedResponseBodyToSurlaBuildNotStarted builds a value of
 // type *surla.BuildNotStarted from a value of type
 // *BuildNotStartedResponseBody.
@@ -6500,6 +7457,8 @@ func unmarshalBuilderAssignmentResponseBodyToSurlaBuilderAssignment(v *BuilderAs
 		RequestRevision: *v.RequestRevision,
 		InForce:         *v.InForce,
 		Read:            *v.Read,
+		WorkingFolder:   *v.WorkingFolder,
+		GoworkOff:       *v.GoworkOff,
 	}
 	switch string(v.WrittenTests.Kind()) {
 	case "not_used":

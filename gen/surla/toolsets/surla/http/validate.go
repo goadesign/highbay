@@ -520,6 +520,12 @@ func ValidateGetBuilderAssignmentResultTransport(body *GetBuilderAssignmentResul
 	if body.Read == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("read", "body"))
 	}
+	if body.WorkingFolder == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("working_folder", "body"))
+	}
+	if body.GoworkOff == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("gowork_off", "body"))
+	}
 	if body.WrittenTests == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("written_tests", "body"))
 	}
@@ -679,6 +685,9 @@ func ValidateGetStoryRefreshResultTransport(body *GetStoryRefreshResultTransport
 	}
 	if body.Message == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.DraftFolder == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("draft_folder", "body"))
 	}
 	if body.State != nil {
 		if !(*body.State == "none" || *body.State == "running" || *body.State == "succeeded" || *body.State == "failed") {
@@ -1224,6 +1233,9 @@ func ValidateRefreshStoryResultTransport(body *RefreshStoryResultTransport) (err
 	if body.Message == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
 	}
+	if body.DraftFolder == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("draft_folder", "body"))
+	}
 	if body.State != nil {
 		if !(*body.State == "none" || *body.State == "running" || *body.State == "succeeded" || *body.State == "failed") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.state", *body.State, []any{"none", "running", "succeeded", "failed"}))
@@ -1430,6 +1442,30 @@ func ValidateUpdateDependenciesResultTransport(body *UpdateDependenciesResultTra
 	}
 	if body.Message == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	return
+}
+
+// ValidateUpdateDraftResultTransport runs the validations defined on UpdateDraftResultTransport.
+func ValidateUpdateDraftResultTransport(body *UpdateDraftResultTransport) (err error) {
+	if body.DraftFolder == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("draft_folder", "body"))
+	}
+	if body.Taken == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("taken", "body"))
+	}
+	if body.Merged == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("merged", "body"))
+	}
+	if body.ToCorrect == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("to_correct", "body"))
+	}
+	for _, e := range body.ToCorrect {
+		if e != nil {
+			if err2 := ValidateDraftCorrectionTransport(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
 	}
 	return
 }
@@ -1655,6 +1691,12 @@ func ValidateBuilderAssignmentTransport(body *BuilderAssignmentTransport) (err e
 	}
 	if body.Read == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("read", "body"))
+	}
+	if body.WorkingFolder == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("working_folder", "body"))
+	}
+	if body.GoworkOff == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("gowork_off", "body"))
 	}
 	if body.WrittenTests == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("written_tests", "body"))
@@ -2013,6 +2055,17 @@ func ValidateConfirmedAnswerTransport(body *ConfirmedAnswerTransport) (err error
 func ValidateDesignSnapshotTransport(body *DesignSnapshotTransport) (err error) {
 	if body.Files == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("files", "body"))
+	}
+	return
+}
+
+// ValidateDraftCorrectionTransport runs the validations defined on DraftCorrectionTransport.
+func ValidateDraftCorrectionTransport(body *DraftCorrectionTransport) (err error) {
+	if body.Path == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("path", "body"))
+	}
+	if body.Problem == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("problem", "body"))
 	}
 	return
 }

@@ -40,6 +40,7 @@ import {
   ProposedRevisionItem,
   Operations,
   ROUTES,
+  ServerFailure,
   StoryRefreshResult,
   TraceList,
   TeamRoleState,
@@ -48,7 +49,6 @@ import {
   VerificationListResult,
   VerificationStatusResult,
   isPlainObject,
-  isServerError,
 } from "./types";
 
 // WAIT_RETRY_MS is how long the page waits before asking again after the
@@ -68,6 +68,8 @@ interface Failure {
   status: number;
   // message is the server's own error message when it sent one.
   message: string;
+  // body retains only a validated response, including typed refusal facts.
+  body?: ServerFailure;
 }
 
 // Outcome is the page's view of one finished request.
@@ -657,13 +659,15 @@ export function bootstrapViewsPage() {
         message: "The server's answer to " + op + " did not match its declared result.",
       };
     }
+    const body = route.decodeFailure(status, parsed) ? parsed : undefined;
     return {
       ok: false,
       kind: status === 401 ? "session" : "server",
       status,
-      message: isServerError(parsed)
-        ? parsed.message
+      message: body !== undefined
+        ? body.message
         : "The server refused the request (HTTP " + status + ").",
+      body,
     };
   }
 
@@ -1393,9 +1397,7 @@ export function bootstrapViewsPage() {
       (result) => {
         if (sessionState !== "active") return;
         teamStartReceipt = { at: begun, result };
-        if (buildStartReceipt !== null) {
-          buildStartReceipt = { ...buildStartReceipt, team: null };
-        }
+        buildStartReceipt = null;
         statusEl.textContent = "This start (begun " + new Date(begun).toLocaleString() +
           ") returned: " + result.step;
         readTeam();
@@ -1583,7 +1585,7 @@ export function bootstrapViewsPage() {
         }
         buildSnapshot = { ...result.build, state: "started" };
         buildReadError = null;
-        buildStartReceipt = { at: begun, team: result.team, workingCopy: result.working_copy };
+        buildStartReceipt = { at: begun, team: result.team };
         followBuildFindings();
         statusEl.textContent = "The build started for the agreed revision.";
         readBuild(changeId);

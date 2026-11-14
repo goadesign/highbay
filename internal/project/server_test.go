@@ -206,7 +206,7 @@ func TestProjectIdentitySessionsAndRoles(t *testing.T) {
 			}
 			// The views page's HTTP-only operations are not listed as tools.
 			httpOrResourceOnly := map[string]bool{
-				"golden_path": true, "wait_for_changes": true, "start_build": true, "get_model_connection": true, "get_test_findings": true,
+				"golden_path": true, "wait_for_changes": true, "start_build": true, "drop_build": true, "get_model_connection": true, "get_test_findings": true,
 				"get_team": true, "show_team_pane": true, "start_team_agents": true, "hand_over_model_settings": true,
 			}
 			for _, name := range gensurla.MethodNames {
@@ -440,6 +440,8 @@ func policyHTTPRequests(card *gensurla.ChangeCardResult, propose, confirm string
 	revision := card.RequestRevision
 	revise := fmt.Sprintf(`{"change_id":"change","request_revision":%q,"prompt":"Keep refunds bounded","analysis":{"summary":"Bound refunds","ambiguities":[],"examples":[{"prior_id":"check_01","scenario":"refund","input_summary":"refund 10","expected_outcome":"refund 10","verification_kind":"deterministic"}],"removed_example_ids":[],"preserved_behaviors":[]}}`, revision)
 	return []policyHTTPRequest{
+		{"drop_build", http.MethodPost, "/changes/change/build/drop", `{"started_at":"2026-01-02T03:04:05Z"}`},
+		{"update_draft", http.MethodPost, "/workspace/draft/update", ""},
 		{"get_team", http.MethodGet, "/team", ""},
 		{"show_team_pane", http.MethodPost, "/team/pane", `{"role":"guide"}`},
 		{"start_team_agents", http.MethodPost, "/team/agents", ""},

@@ -5,12 +5,11 @@ import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from
 import type { ChangeBuild, ChangeCardResult, StartBuildResult, StartedBuild, VerificationStatusResult } from "../types";
 import { Alert, Badge, Button, Card } from "./shadcn";
 
-// BuildStartReceipt records one start's answers, rather than current health.
-// A later Start agents action removes team while retaining the copy receipt.
+// BuildStartReceipt records one start's team answer, rather than current health.
+// A later Start agents action supersedes this receipt.
 export interface BuildStartReceipt {
   at: string;
-  team: StartBuildResult["team"] | null;
-  workingCopy: StartBuildResult["working_copy"];
+  team: StartBuildResult["team"];
 }
 
 // BuildSectionProps keeps transport, saved-card and findings ownership in the
@@ -460,45 +459,23 @@ function BuildDetails({ card, build }: { card: ChangeCardResult; build: StartedB
   );
 }
 
-// StartReceipts describes historical launcher/copy outcomes in the past tense.
+// StartReceipts describes a historical launcher outcome in the past tense.
 // Owner instructions remain quotations returned then, never current advice.
 function StartReceipts({ receipt }: { receipt: BuildStartReceipt }) {
   const team = receipt.team;
-  const copy = receipt.workingCopy;
   let teamText = "";
-  if (team !== null) {
-    switch (team.state) {
-      case "ready": teamText = "the team was ready"; break;
-      case "window_busy": teamText = "the build was saved and the team window was busy"; break;
-      case "ambiguous_space": teamText = team.count + " matching team spaces"; break;
-      case "unavailable": teamText = "the build was saved and team startup was unavailable"; break;
-    }
-  }
-  let copyText: string;
-  switch (copy.state) {
-    case "not_used": copyText = "no working copy was used, because the project had stored verification settings"; break;
-    case "at_project_commit": copyText = "the working copy was at the project commit"; break;
-    case "dirty": copyText = "the working copy was kept with uncommitted work"; break;
-    case "not_contained": copyText = "the working copy was kept at its tests commit"; break;
+  switch (team.state) {
+    case "ready": teamText = "the team was ready"; break;
+    case "window_busy": teamText = "the build was saved and the team window was busy"; break;
+    case "ambiguous_space": teamText = team.count + " matching team spaces"; break;
+    case "unavailable": teamText = "the build was saved and team startup was unavailable"; break;
   }
   return (
     <div id="surla-build-start-receipts">
-      {team !== null ? (
-        <p id="surla-build-start-team-receipt">
-          This start (begun <time dateTime={receipt.at}>{receipt.at}</time>) found {teamText}.
-          {" "}The instruction returned then was: «{team.step}»
-        </p>
-      ) : null}
-      <p id="surla-build-start-copy-receipt">
-        This start (begun <time dateTime={receipt.at}>{receipt.at}</time>) found {copyText}.
-        {copy.state === "not_contained" ? <> The instruction returned then was: «{copy.step}»</> : null}
+      <p id="surla-build-start-team-receipt">
+        This start (begun <time dateTime={receipt.at}>{receipt.at}</time>) found {teamText}.
+        {" "}The instruction returned then was: «{team.step}»
       </p>
-      {copy.state !== "not_used" ? (
-        <details className="surla-details">
-          <summary>Working copy at this start</summary>
-          <p>Retained commit: <code>{copy.commit}</code></p>
-        </details>
-      ) : null}
     </div>
   );
 }

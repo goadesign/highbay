@@ -183,6 +183,13 @@ export interface ModelConnection {
   connection: ({ "kind": "none" } | { "kind": "direct"; "model_name": string; "provider": "anthropic" | "openai" } | { "gateway_addr": string; "kind": "gateway" });
 }
 
+export interface OpenBuildRefusal {
+  build: StartedBuild;
+  change_id: string;
+  message: string;
+  name: string;
+}
+
 export interface PreviewArchitecturePayload {
   change_id: string;
   request_revision: string;
@@ -214,6 +221,11 @@ export interface ProposedRevisionItem {
   ui_composition?: UICompositionItem;
 }
 
+export interface ReplacedBuild {
+  change_id: string;
+  started_at: string;
+}
+
 export interface ServerError {
   fault: boolean;
   id: string;
@@ -228,13 +240,13 @@ export interface ShowTeamPaneRequestBody {
 }
 
 export interface StartBuildRequestBody {
+  replaces?: ReplacedBuild;
   request_revision: string;
 }
 
 export interface StartBuildResult {
   build: StartedBuild;
   team: ({ "dialog": "opened" | "already_open" | "not_needed"; "roles": ProjectTeamRole[]; "space": string; "state": "ready"; "step": string; "team": string } | { "state": "window_busy"; "step": string } | { "count": number; "state": "ambiguous_space"; "step": string } | { "state": "unavailable"; "step": string });
-  working_copy: ({ "state": "not_used" } | { "commit": string; "state": "at_project_commit" } | { "commit": string; "state": "not_contained"; "step": string } | { "commit": string; "state": "dirty" });
 }
 
 export interface StartedBuild {
@@ -275,6 +287,7 @@ export interface StoryQuestionItem {
 
 export interface StoryRefreshResult {
   diagnostic?: string;
+  draft_folder: string;
   message: string;
   op_id?: string;
   snapshot_digest?: string;
@@ -299,7 +312,7 @@ export interface StorySummaryItem {
 }
 
 export interface TeamRoleState {
-  assignment: "unread" | "nothing_owed" | "unknown";
+  assignment: "unread" | "nothing_owed" | "no_work" | "unknown";
   attention: "none" | "permission" | "question" | "auth" | "silent" | "assignment" | "unknown";
   handle: string;
   role: "guide" | "builder" | "test_writer";
@@ -451,6 +464,8 @@ export type GetStoryRefreshRequest = Record<string, never>;
 
 export type StartBuildRequest = StartBuildRequestBody & { "change_id": string };
 
+export type DropBuildRequest = VerificationRunning & { "change_id": string };
+
 export interface GetBuildRequest {
   "change_id": string;
 }
@@ -495,34 +510,39 @@ export type GetModelConnectionRequest = Record<string, never>;
 
 export type ConfigureModelRequest = ConfigureModelPayload;
 
-// Operations maps each operation the page sends to its request and result.
+// Operations maps each operation the page sends to its request, result and
+// validated failure bodies.
 export interface Operations {
-  exchange_browser_link: { request: ExchangeBrowserLinkRequest; result: ExchangeBrowserLinkResponseBody };
-  list_changes: { request: ListChangesRequest; result: ChangeList };
-  wait_for_changes: { request: WaitForChangesRequest; result: ChangeListVersion };
-  get_change: { request: GetChangeRequest; result: ChangeCardResult };
-  get_story_refresh: { request: GetStoryRefreshRequest; result: StoryRefreshResult };
-  start_build: { request: StartBuildRequest; result: StartBuildResult };
-  get_build: { request: GetBuildRequest; result: ChangeBuild };
-  get_test_findings: { request: GetTestFindingsRequest; result: TestFindings };
-  get_team: { request: GetTeamRequest; result: TeamSnapshot };
-  show_team_pane: { request: ShowTeamPaneRequest; result: undefined };
-  start_team_agents: { request: StartTeamAgentsRequest; result: ProjectTeam };
-  confirm_intent: { request: ConfirmIntentRequest; result: ChangeCardResult };
-  decline_revision: { request: DeclineRevisionRequest; result: ChangeCardResult };
-  approve_merge: { request: ApproveMergeRequest; result: ChangeCardResult };
-  preview_architecture: { request: PreviewArchitectureRequest; result: ArchitecturePreviewResult };
-  list_verifications: { request: ListVerificationsRequest; result: VerificationListResult };
-  get_verification: { request: GetVerificationRequest; result: VerificationStatusResult };
-  list_traces: { request: ListTracesRequest; result: TraceList };
-  get_live_target: { request: GetLiveTargetRequest; result: LiveTargetStatus };
-  stop_live_target: { request: StopLiveTargetRequest; result: StopLiveTargetResult };
-  get_model_connection: { request: GetModelConnectionRequest; result: ModelConnection };
-  configure_model: { request: ConfigureModelRequest; result: ModelConfigResult };
+  exchange_browser_link: { request: ExchangeBrowserLinkRequest; result: ExchangeBrowserLinkResponseBody; failure: ServerError };
+  list_changes: { request: ListChangesRequest; result: ChangeList; failure: ServerError };
+  wait_for_changes: { request: WaitForChangesRequest; result: ChangeListVersion; failure: ServerError };
+  get_change: { request: GetChangeRequest; result: ChangeCardResult; failure: ServerError };
+  get_story_refresh: { request: GetStoryRefreshRequest; result: StoryRefreshResult; failure: ServerError };
+  start_build: { request: StartBuildRequest; result: StartBuildResult; failure: ServerError | OpenBuildRefusal };
+  drop_build: { request: DropBuildRequest; result: ChangeBuild; failure: ServerError | OpenBuildRefusal };
+  get_build: { request: GetBuildRequest; result: ChangeBuild; failure: ServerError };
+  get_test_findings: { request: GetTestFindingsRequest; result: TestFindings; failure: ServerError };
+  get_team: { request: GetTeamRequest; result: TeamSnapshot; failure: ServerError };
+  show_team_pane: { request: ShowTeamPaneRequest; result: undefined; failure: ServerError };
+  start_team_agents: { request: StartTeamAgentsRequest; result: ProjectTeam; failure: ServerError };
+  confirm_intent: { request: ConfirmIntentRequest; result: ChangeCardResult; failure: ServerError };
+  decline_revision: { request: DeclineRevisionRequest; result: ChangeCardResult; failure: ServerError };
+  approve_merge: { request: ApproveMergeRequest; result: ChangeCardResult; failure: ServerError };
+  preview_architecture: { request: PreviewArchitectureRequest; result: ArchitecturePreviewResult; failure: ServerError };
+  list_verifications: { request: ListVerificationsRequest; result: VerificationListResult; failure: ServerError };
+  get_verification: { request: GetVerificationRequest; result: VerificationStatusResult; failure: ServerError };
+  list_traces: { request: ListTracesRequest; result: TraceList; failure: ServerError };
+  get_live_target: { request: GetLiveTargetRequest; result: LiveTargetStatus; failure: ServerError };
+  stop_live_target: { request: StopLiveTargetRequest; result: StopLiveTargetResult; failure: ServerError };
+  get_model_connection: { request: GetModelConnectionRequest; result: ModelConnection; failure: ServerError };
+  configure_model: { request: ConfigureModelRequest; result: ModelConfigResult; failure: ServerError };
 }
 
 // OperationName names one operation the page sends.
 export type OperationName = keyof Operations;
+
+// ServerFailure is a validated failure body returned to the page.
+export type ServerFailure = Operations[OperationName]["failure"];
 
 // EncodedRequest is a request's same-origin address and JSON body.
 export interface EncodedRequest {
@@ -532,7 +552,7 @@ export interface EncodedRequest {
   body: string | undefined;
 }
 
-// Route is how one operation is sent and how its success is recognized.
+// Route is how one operation is sent and its returned bodies are recognized.
 export interface Route<K extends OperationName> {
   // method is the HTTP method.
   method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
@@ -542,6 +562,8 @@ export interface Route<K extends OperationName> {
   encode: (request: Operations[K]["request"]) => EncodedRequest;
   // decode reports whether a parsed answer is the operation's result.
   decode: (value: unknown) => value is Operations[K]["result"];
+  // decodeFailure validates a failure body against its declared HTTP status.
+  decodeFailure: (status: number, value: unknown) => value is Operations[K]["failure"];
 }
 
 function encodeExchangeBrowserLink(request: ExchangeBrowserLinkRequest): EncodedRequest {
@@ -570,6 +592,11 @@ function encodeGetStoryRefresh(_request: GetStoryRefreshRequest): EncodedRequest
 function encodeStartBuild(request: StartBuildRequest): EncodedRequest {
   const { change_id: _change_id, ...payload } = request;
   return { path: "/changes/" + encodeURIComponent(String(request.change_id)) + "/build", body: JSON.stringify(payload) };
+}
+
+function encodeDropBuild(request: DropBuildRequest): EncodedRequest {
+  const { change_id: _change_id, ...payload } = request;
+  return { path: "/changes/" + encodeURIComponent(String(request.change_id)) + "/build/drop", body: JSON.stringify(payload) };
 }
 
 function encodeGetBuild(request: GetBuildRequest): EncodedRequest {
@@ -647,30 +674,125 @@ function encodeConfigureModel(request: ConfigureModelRequest): EncodedRequest {
   return { path: "/cp1/model", body: JSON.stringify(request) };
 }
 
+function decodeExchangeBrowserLinkFailure(_status: number, value: unknown): value is Operations["exchange_browser_link"]["failure"] {
+  return isServerError(value);
+}
+
+function decodeListChangesFailure(_status: number, value: unknown): value is Operations["list_changes"]["failure"] {
+  return isServerError(value);
+}
+
+function decodeWaitForChangesFailure(_status: number, value: unknown): value is Operations["wait_for_changes"]["failure"] {
+  return isServerError(value);
+}
+
+function decodeGetChangeFailure(_status: number, value: unknown): value is Operations["get_change"]["failure"] {
+  return isServerError(value);
+}
+
+function decodeGetStoryRefreshFailure(_status: number, value: unknown): value is Operations["get_story_refresh"]["failure"] {
+  return isServerError(value);
+}
+
+function decodeStartBuildFailure(status: number, value: unknown): value is Operations["start_build"]["failure"] {
+  return isServerError(value) ||
+    (status === 409 && matchesSchema(value, {"$ref":"#/$defs/OpenBuildRefusal"}));
+}
+
+function decodeDropBuildFailure(status: number, value: unknown): value is Operations["drop_build"]["failure"] {
+  return isServerError(value) ||
+    (status === 409 && matchesSchema(value, {"$ref":"#/$defs/OpenBuildRefusal"}));
+}
+
+function decodeGetBuildFailure(_status: number, value: unknown): value is Operations["get_build"]["failure"] {
+  return isServerError(value);
+}
+
+function decodeGetTestFindingsFailure(_status: number, value: unknown): value is Operations["get_test_findings"]["failure"] {
+  return isServerError(value);
+}
+
+function decodeGetTeamFailure(_status: number, value: unknown): value is Operations["get_team"]["failure"] {
+  return isServerError(value);
+}
+
+function decodeShowTeamPaneFailure(_status: number, value: unknown): value is Operations["show_team_pane"]["failure"] {
+  return isServerError(value);
+}
+
+function decodeStartTeamAgentsFailure(_status: number, value: unknown): value is Operations["start_team_agents"]["failure"] {
+  return isServerError(value);
+}
+
+function decodeConfirmIntentFailure(_status: number, value: unknown): value is Operations["confirm_intent"]["failure"] {
+  return isServerError(value);
+}
+
+function decodeDeclineRevisionFailure(_status: number, value: unknown): value is Operations["decline_revision"]["failure"] {
+  return isServerError(value);
+}
+
+function decodeApproveMergeFailure(_status: number, value: unknown): value is Operations["approve_merge"]["failure"] {
+  return isServerError(value);
+}
+
+function decodePreviewArchitectureFailure(_status: number, value: unknown): value is Operations["preview_architecture"]["failure"] {
+  return isServerError(value);
+}
+
+function decodeListVerificationsFailure(_status: number, value: unknown): value is Operations["list_verifications"]["failure"] {
+  return isServerError(value);
+}
+
+function decodeGetVerificationFailure(_status: number, value: unknown): value is Operations["get_verification"]["failure"] {
+  return isServerError(value);
+}
+
+function decodeListTracesFailure(_status: number, value: unknown): value is Operations["list_traces"]["failure"] {
+  return isServerError(value);
+}
+
+function decodeGetLiveTargetFailure(_status: number, value: unknown): value is Operations["get_live_target"]["failure"] {
+  return isServerError(value);
+}
+
+function decodeStopLiveTargetFailure(_status: number, value: unknown): value is Operations["stop_live_target"]["failure"] {
+  return isServerError(value);
+}
+
+function decodeGetModelConnectionFailure(_status: number, value: unknown): value is Operations["get_model_connection"]["failure"] {
+  return isServerError(value);
+}
+
+function decodeConfigureModelFailure(_status: number, value: unknown): value is Operations["configure_model"]["failure"] {
+  return isServerError(value);
+}
+
 // ROUTES addresses every operation the page sends.
 export const ROUTES: { [K in OperationName]: Route<K> } = {
-  exchange_browser_link: { method: "POST", success: 201, encode: encodeExchangeBrowserLink, decode: isExchangeBrowserLinkResponseBody },
-  list_changes: { method: "GET", success: 200, encode: encodeListChanges, decode: isChangeList },
-  wait_for_changes: { method: "GET", success: 200, encode: encodeWaitForChanges, decode: isChangeListVersion },
-  get_change: { method: "GET", success: 200, encode: encodeGetChange, decode: isChangeCardResult },
-  get_story_refresh: { method: "GET", success: 200, encode: encodeGetStoryRefresh, decode: isStoryRefreshResult },
-  start_build: { method: "POST", success: 200, encode: encodeStartBuild, decode: isStartBuildResult },
-  get_build: { method: "GET", success: 200, encode: encodeGetBuild, decode: isChangeBuild },
-  get_test_findings: { method: "GET", success: 200, encode: encodeGetTestFindings, decode: isTestFindings },
-  get_team: { method: "GET", success: 200, encode: encodeGetTeam, decode: isTeamSnapshot },
-  show_team_pane: { method: "POST", success: 204, encode: encodeShowTeamPane, decode: isNoContent },
-  start_team_agents: { method: "POST", success: 200, encode: encodeStartTeamAgents, decode: isProjectTeam },
-  confirm_intent: { method: "POST", success: 200, encode: encodeConfirmIntent, decode: isChangeCardResult },
-  decline_revision: { method: "POST", success: 200, encode: encodeDeclineRevision, decode: isChangeCardResult },
-  approve_merge: { method: "POST", success: 200, encode: encodeApproveMerge, decode: isChangeCardResult },
-  preview_architecture: { method: "POST", success: 200, encode: encodePreviewArchitecture, decode: isArchitecturePreviewResult },
-  list_verifications: { method: "GET", success: 200, encode: encodeListVerifications, decode: isVerificationListResult },
-  get_verification: { method: "GET", success: 200, encode: encodeGetVerification, decode: isVerificationStatusResult },
-  list_traces: { method: "GET", success: 200, encode: encodeListTraces, decode: isTraceList },
-  get_live_target: { method: "GET", success: 200, encode: encodeGetLiveTarget, decode: isLiveTargetStatus },
-  stop_live_target: { method: "DELETE", success: 200, encode: encodeStopLiveTarget, decode: isStopLiveTargetResult },
-  get_model_connection: { method: "GET", success: 200, encode: encodeGetModelConnection, decode: isModelConnection },
-  configure_model: { method: "POST", success: 200, encode: encodeConfigureModel, decode: isModelConfigResult },
+  exchange_browser_link: { method: "POST", success: 201, encode: encodeExchangeBrowserLink, decode: isExchangeBrowserLinkResponseBody, decodeFailure: decodeExchangeBrowserLinkFailure },
+  list_changes: { method: "GET", success: 200, encode: encodeListChanges, decode: isChangeList, decodeFailure: decodeListChangesFailure },
+  wait_for_changes: { method: "GET", success: 200, encode: encodeWaitForChanges, decode: isChangeListVersion, decodeFailure: decodeWaitForChangesFailure },
+  get_change: { method: "GET", success: 200, encode: encodeGetChange, decode: isChangeCardResult, decodeFailure: decodeGetChangeFailure },
+  get_story_refresh: { method: "GET", success: 200, encode: encodeGetStoryRefresh, decode: isStoryRefreshResult, decodeFailure: decodeGetStoryRefreshFailure },
+  start_build: { method: "POST", success: 200, encode: encodeStartBuild, decode: isStartBuildResult, decodeFailure: decodeStartBuildFailure },
+  drop_build: { method: "POST", success: 200, encode: encodeDropBuild, decode: isChangeBuild, decodeFailure: decodeDropBuildFailure },
+  get_build: { method: "GET", success: 200, encode: encodeGetBuild, decode: isChangeBuild, decodeFailure: decodeGetBuildFailure },
+  get_test_findings: { method: "GET", success: 200, encode: encodeGetTestFindings, decode: isTestFindings, decodeFailure: decodeGetTestFindingsFailure },
+  get_team: { method: "GET", success: 200, encode: encodeGetTeam, decode: isTeamSnapshot, decodeFailure: decodeGetTeamFailure },
+  show_team_pane: { method: "POST", success: 204, encode: encodeShowTeamPane, decode: isNoContent, decodeFailure: decodeShowTeamPaneFailure },
+  start_team_agents: { method: "POST", success: 200, encode: encodeStartTeamAgents, decode: isProjectTeam, decodeFailure: decodeStartTeamAgentsFailure },
+  confirm_intent: { method: "POST", success: 200, encode: encodeConfirmIntent, decode: isChangeCardResult, decodeFailure: decodeConfirmIntentFailure },
+  decline_revision: { method: "POST", success: 200, encode: encodeDeclineRevision, decode: isChangeCardResult, decodeFailure: decodeDeclineRevisionFailure },
+  approve_merge: { method: "POST", success: 200, encode: encodeApproveMerge, decode: isChangeCardResult, decodeFailure: decodeApproveMergeFailure },
+  preview_architecture: { method: "POST", success: 200, encode: encodePreviewArchitecture, decode: isArchitecturePreviewResult, decodeFailure: decodePreviewArchitectureFailure },
+  list_verifications: { method: "GET", success: 200, encode: encodeListVerifications, decode: isVerificationListResult, decodeFailure: decodeListVerificationsFailure },
+  get_verification: { method: "GET", success: 200, encode: encodeGetVerification, decode: isVerificationStatusResult, decodeFailure: decodeGetVerificationFailure },
+  list_traces: { method: "GET", success: 200, encode: encodeListTraces, decode: isTraceList, decodeFailure: decodeListTracesFailure },
+  get_live_target: { method: "GET", success: 200, encode: encodeGetLiveTarget, decode: isLiveTargetStatus, decodeFailure: decodeGetLiveTargetFailure },
+  stop_live_target: { method: "DELETE", success: 200, encode: encodeStopLiveTarget, decode: isStopLiveTargetResult, decodeFailure: decodeStopLiveTargetFailure },
+  get_model_connection: { method: "GET", success: 200, encode: encodeGetModelConnection, decode: isModelConnection, decodeFailure: decodeGetModelConnectionFailure },
+  configure_model: { method: "POST", success: 200, encode: encodeConfigureModel, decode: isModelConfigResult, decodeFailure: decodeConfigureModelFailure },
 };
 
 interface JSONSchemaNode {
@@ -1651,6 +1773,30 @@ const SCHEMA_DEFS: Record<string, JSONSchemaNode> = {
     },
     "additionalProperties": false
   },
+  "OpenBuildRefusal": {
+    "type": "object",
+    "required": [
+      "name",
+      "message",
+      "change_id",
+      "build"
+    ],
+    "properties": {
+      "build": {
+        "$ref": "#/$defs/StartedBuild"
+      },
+      "change_id": {
+        "type": "string"
+      },
+      "message": {
+        "type": "string"
+      },
+      "name": {
+        "type": "string"
+      }
+    },
+    "additionalProperties": false
+  },
   "PreviewArchitecturePayload": {
     "type": "object",
     "required": [
@@ -1784,6 +1930,23 @@ const SCHEMA_DEFS: Record<string, JSONSchemaNode> = {
     },
     "additionalProperties": false
   },
+  "ReplacedBuild": {
+    "type": "object",
+    "required": [
+      "change_id",
+      "started_at"
+    ],
+    "properties": {
+      "change_id": {
+        "type": "string"
+      },
+      "started_at": {
+        "type": "string",
+        "format": "date-time"
+      }
+    },
+    "additionalProperties": false
+  },
   "ServerError": {
     "type": "object",
     "required": [
@@ -1839,6 +2002,9 @@ const SCHEMA_DEFS: Record<string, JSONSchemaNode> = {
       "request_revision"
     ],
     "properties": {
+      "replaces": {
+        "$ref": "#/$defs/ReplacedBuild"
+      },
       "request_revision": {
         "type": "string"
       }
@@ -1849,8 +2015,7 @@ const SCHEMA_DEFS: Record<string, JSONSchemaNode> = {
     "type": "object",
     "required": [
       "build",
-      "team",
-      "working_copy"
+      "team"
     ],
     "properties": {
       "build": {
@@ -1960,87 +2125,6 @@ const SCHEMA_DEFS: Record<string, JSONSchemaNode> = {
               },
               "step": {
                 "type": "string"
-              }
-            },
-            "additionalProperties": false
-          }
-        ]
-      },
-      "working_copy": {
-        "type": "object",
-        "anyOf": [
-          {
-            "type": "object",
-            "required": [
-              "state"
-            ],
-            "properties": {
-              "state": {
-                "type": "string",
-                "enum": [
-                  "not_used"
-                ]
-              }
-            },
-            "additionalProperties": false
-          },
-          {
-            "type": "object",
-            "required": [
-              "commit",
-              "state"
-            ],
-            "properties": {
-              "commit": {
-                "type": "string"
-              },
-              "state": {
-                "type": "string",
-                "enum": [
-                  "at_project_commit"
-                ]
-              }
-            },
-            "additionalProperties": false
-          },
-          {
-            "type": "object",
-            "required": [
-              "commit",
-              "step",
-              "state"
-            ],
-            "properties": {
-              "commit": {
-                "type": "string"
-              },
-              "state": {
-                "type": "string",
-                "enum": [
-                  "not_contained"
-                ]
-              },
-              "step": {
-                "type": "string"
-              }
-            },
-            "additionalProperties": false
-          },
-          {
-            "type": "object",
-            "required": [
-              "commit",
-              "state"
-            ],
-            "properties": {
-              "commit": {
-                "type": "string"
-              },
-              "state": {
-                "type": "string",
-                "enum": [
-                  "dirty"
-                ]
               }
             },
             "additionalProperties": false
@@ -2187,10 +2271,14 @@ const SCHEMA_DEFS: Record<string, JSONSchemaNode> = {
     "required": [
       "state",
       "stories",
-      "message"
+      "message",
+      "draft_folder"
     ],
     "properties": {
       "diagnostic": {
+        "type": "string"
+      },
+      "draft_folder": {
         "type": "string"
       },
       "message": {
@@ -2304,6 +2392,7 @@ const SCHEMA_DEFS: Record<string, JSONSchemaNode> = {
         "enum": [
           "unread",
           "nothing_owed",
+          "no_work",
           "unknown"
         ]
       },
@@ -3201,6 +3290,11 @@ export function isModelConfigResult(value: unknown): value is ModelConfigResult 
 // isModelConnection validates a parsed answer against the generated ModelConnection schema.
 export function isModelConnection(value: unknown): value is ModelConnection {
   return matchesSchema(value, { $ref: "#/$defs/ModelConnection" });
+}
+
+// isOpenBuildRefusal validates a parsed answer against the generated OpenBuildRefusal schema.
+export function isOpenBuildRefusal(value: unknown): value is OpenBuildRefusal {
+  return matchesSchema(value, { $ref: "#/$defs/OpenBuildRefusal" });
 }
 
 // isProjectTeam validates a parsed answer against the generated ProjectTeam schema.

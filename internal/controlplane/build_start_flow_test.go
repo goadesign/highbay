@@ -371,7 +371,6 @@ func TestStartBuildStoredEvaluatorBypassesWriterPrerequisites(t *testing.T) {
 	<-cp.workingCopyTurn
 	result, err := cp.StartBuild(asCaller("alice@example.com", CallerUser), &gensurla.StartBuildPayload{ChangeID: "chg", RequestRevision: card.RequestRevision})
 	require.NoError(t, err)
-	assert.Equal(t, gensurla.WorkingCopyKindNotUsed, result.WorkingCopy.Kind())
 	assert.Equal(t, gensurla.TestsKindNotUsed, result.Build.TestWriter.Tests.Kind())
 	assert.Equal(t, []string{"register", "start"}, f.calls)
 }

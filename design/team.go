@@ -14,7 +14,7 @@ var TeamRoleState = Type("TeamRoleState", func() {
 		Enum("none", "permission", "question", "auth", "silent", "assignment", "unknown")
 	})
 	Attribute("watcher", String, "held when Chorus reports a watcher, gone after its absence grace, unknown otherwise.", func() { Enum("held", "gone", "unknown") })
-	Attribute("assignment", String, "unread when this role owes an assignment read, nothing_owed when the owner established none, unknown when the owner could not read assignments. The guide has no assignments.", func() { Enum("unread", "nothing_owed", "unknown") })
+	Attribute("assignment", String, "unread when this role owes an assignment read; nothing_owed when it has work and owes no read; no_work when the open build needs nothing from it (no build is open, the build was dropped, the test writer's tests are accepted, or a verification of the builder's build passed); unknown when the owner could not read assignments. The guide has no assignments.", func() { Enum("unread", "nothing_owed", "no_work", "unknown") })
 	Required("role", "handle", "state", "attention", "watcher", "assignment")
 })
 

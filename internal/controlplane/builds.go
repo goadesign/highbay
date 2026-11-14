@@ -224,13 +224,21 @@ func (c *ControlPlane) ListBuilderAssignments(ctx context.Context) (*gensurla.Bu
 	if !ok {
 		return nil, errors.New("authenticated principal is required")
 	}
+	c.workspaceMu.RLock()
+	defer c.workspaceMu.RUnlock()
 	builds, err := c.ownedBuilds(principal.ID)
 	if err != nil {
 		return nil, err
 	}
 	items := make([]*gensurla.BuilderAssignment, len(builds))
-	for i, held := range builds {
-		items[i] = builderAssignmentResult(held)
+	if len(builds) > 0 {
+		folder, goworkOff, err := builderWorkingFolder(c.activeWorkspaceDir, outermost(c.protectedDirs))
+		if err != nil {
+			return nil, err
+		}
+		for i, held := range builds {
+			items[i] = builderAssignmentResult(held, folder, goworkOff)
+		}
 	}
 	return &gensurla.BuilderAssignmentList{Assignments: items}, nil
 }
@@ -243,7 +251,18 @@ func (c *ControlPlane) GetBuilderAssignment(
 	ctx context.Context,
 	p *gensurla.GetBuilderAssignmentPayload,
 ) (*gensurla.BuilderAssignment, error) {
+	c.workspaceMu.RLock()
+	defer c.workspaceMu.RUnlock()
+	var folder string
+	var goworkOff bool
 	held, err := c.readAssignment(ctx, "surla.controlplane.get_builder_assignment", p.ChangeID, func(saved *buildFile) (bool, error) {
+		// readAssignment established ownership; derive facts before recording
+		// the read, so a filesystem failure consumes no assignment.
+		var err error
+		folder, goworkOff, err = builderWorkingFolder(c.activeWorkspaceDir, outermost(c.protectedDirs))
+		if err != nil {
+			return false, err
+		}
 		changed := !saved.Builder.Read
 		saved.Builder.Read = true
 		return changed, nil
@@ -251,7 +270,7 @@ func (c *ControlPlane) GetBuilderAssignment(
 	if err != nil {
 		return nil, err
 	}
-	return builderAssignmentResult(held), nil
+	return builderAssignmentResult(held, folder, goworkOff), nil
 }
 
 // ListTestWriterAssignments returns the test writer's assignment of every
@@ -441,13 +460,15 @@ func startedBuild(held heldBuild) *gensurla.StartedBuild {
 
 // builderAssignmentResult converts a held build into the builder's
 // assignment.
-func builderAssignmentResult(held heldBuild) *gensurla.BuilderAssignment {
+func builderAssignmentResult(held heldBuild, folder string, goworkOff bool) *gensurla.BuilderAssignment {
 	return &gensurla.BuilderAssignment{
 		ChangeID:        held.file.ChangeID,
 		RequestRevision: held.file.RequestRevision,
 		InForce:         held.inForce,
 		Read:            held.file.Builder.Read,
 		WrittenTests:    writtenTests(held),
+		WorkingFolder:   folder,
+		GoworkOff:       goworkOff,
 	}
 }
 

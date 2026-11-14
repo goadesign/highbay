@@ -60,6 +60,7 @@ func TestStoryRefreshPreconditionsAndExpectedAbsence(t *testing.T) {
 		noneRes, err := cp.GetStoryRefresh(alice)
 		require.NoError(t, err)
 		assert.Equal(t, storyRefreshStateNone, noneRes.State)
+		assert.Equal(t, cp.activeWorkspaceDir, noneRes.DraftFolder, "none names the current read folder without requiring go.mod")
 		assert.Nil(t, noneRes.OpID)
 		assert.Nil(t, noneRes.SnapshotDigest)
 		assert.Empty(t, noneRes.Stories)

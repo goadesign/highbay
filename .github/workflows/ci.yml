@@ -238,6 +238,9 @@ jobs:
             git status --porcelain; git diff --stat; exit 1
           fi
 
+      - name: Test generated page contract consumers
+        run: node --test ui/checkpoint/build_test.mjs </dev/null
+
   full:
     name: Full / ${{ matrix.suite }}
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'

@@ -96,6 +96,7 @@ const watcherLabels: Record<TeamRoleState["watcher"], string> = {
 const assignmentLabels: Record<TeamRoleState["assignment"], string> = {
   unread: "Assignment unread",
   nothing_owed: "No unread assignment",
+  no_work: "No work now",
   unknown: "Assignment status unknown",
 };
 

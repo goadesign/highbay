@@ -335,7 +335,7 @@ type (
 	// the public tool type.
 	GenerateCodePayloadTransport struct {
 		// Module to regenerate: candidate (the application, the default when omitted)
-		// or eval (the local eval/ module).
+		// or eval (the test module).
 		Target *string `json:"target,omitempty"`
 	}
 	// GenerateCodeResultTransport is the internal JSON transport type for GenerateCodeResult.
@@ -401,6 +401,14 @@ type (
 		// otherwise accepted, with the commit and time, when the build records
 		// accepted tests, and not_yet_accepted when it records none.
 		WrittenTests *WrittenTests `json:"written_tests"`
+		// Absolute path of the folder to build in: the project's folder inside your
+		// working copy .surla-build, on the build's branch surla/build-<n>. Run git
+		// and go there, never in the project folder.
+		WorkingFolder *string `json:"working_folder"`
+		// True when no go.work lies in working_folder or in a folder between it and
+		// the working copy's root: run every go command there as GOWORK=off go …, so a
+		// go.work of the project folder around your copy does not take it over.
+		GoworkOff *bool `json:"gowork_off"`
 	}
 	// GetChangePayloadTransport is the internal JSON transport type for GetChangePayload.
 	// It lives in the toolset-local http package and is used only for JSON
@@ -496,15 +504,20 @@ type (
 	// decode + validation (missing-field detection) before transforming into
 	// the public tool type.
 	GetStoryRefreshResultTransport struct {
-		// Identifier of the owner's current Story refresh operation for the bound
-		// workspace; present when state is running, succeeded, or failed. Pass it as
+		// Absolute path intended for the guide's draft, .surla-draft in the project
+		// folder, whose go.mod, go.sum and design/ refresh_story reads. When state is
+		// none, this path does not mean the folder exists; refresh_story makes it when
+		// needed.
+		DraftFolder *string `json:"draft_folder"`
+		// Identifier of the owner's current Story refresh operation for the guide's
+		// draft; present when state is running, succeeded, or failed. Pass it as
 		// story_refresh_op_id to propose_change or revise_change once state is
 		// succeeded to adopt the evaluated Story into a Change Card.
 		OpID *string `json:"op_id,omitempty"`
 		// Current operation state: none, running, succeeded, or failed.
 		State *string `json:"state"`
-		// Canonical SHA-256 digest of the workspace module snapshot read when this
-		// refresh started; present when state is running, succeeded, or failed.
+		// Canonical SHA-256 digest of the draft snapshot read when this refresh
+		// started; present when state is running, succeeded, or failed.
 		SnapshotDigest *string `json:"snapshot_digest,omitempty"`
 		// Evaluated domain Stories in declaration order when state is succeeded (empty
 		// when the design declares no Stories or when state is none, running, or
@@ -512,7 +525,9 @@ type (
 		Stories []*StorySummaryItemTransport `json:"stories"`
 		// Safe failure or timeout diagnostic when state is failed; omitted otherwise.
 		Diagnostic *string `json:"diagnostic,omitempty"`
-		// Summary of the current Story refresh state and next action.
+		// Summary of the current Story refresh state and next action. After a dropped
+		// build remakes the draft and until a revision is saved from it, begins by
+		// naming the dropped change and saying that edits made before then are gone.
 		Message *string `json:"message"`
 	}
 	// GetTestWriterAssignmentPayloadTransport is the internal JSON transport type for GetTestWriterAssignmentPayload.
@@ -544,7 +559,9 @@ type (
 		// progress gives in finding_count when its state is needs_changes, and none in
 		// any other state. Fix them in working_folder, then report again.
 		Findings []string `json:"findings"`
-		// Folder to write the tests in: your own working copy of the project.
+		// Folder to write the tests in: your own working copy of the project,
+		// .surla-tests, on the build's branch surla/tests-<n>. Do not commit there:
+		// Surla commits what it accepts.
 		WorkingFolder *string `json:"working_folder"`
 		// The canonical design source as agreed at request_revision, copied when this
 		// build started; later revisions do not change it.
@@ -650,8 +667,7 @@ type (
 	// decode + validation (missing-field detection) before transforming into
 	// the public tool type.
 	ListBuilderAssignmentsResultTransport struct {
-		// Assignments, most recently started first; empty when the user has built no
-		// change.
+		// The open build's assignment while it needs this role; empty otherwise.
 		Assignments []*BuilderAssignmentTransport `json:"assignments"`
 	}
 	// ListChangesPayloadTransport is the internal JSON transport type for ListChangesPayload.
@@ -687,8 +703,7 @@ type (
 	// decode + validation (missing-field detection) before transforming into
 	// the public tool type.
 	ListTestWriterAssignmentsResultTransport struct {
-		// Assignments, most recently started first; empty when the user has built no
-		// change.
+		// The open build's assignment while it needs this role; empty otherwise.
 		Assignments []*TestWriterAssignmentItemTransport `json:"assignments"`
 	}
 	// ListTracesPayloadTransport is the internal JSON transport type for ListTracesPayload.
@@ -755,8 +770,8 @@ type (
 		ChangeID *string `json:"change_id"`
 		// Bound CP1 request_revision digest.
 		RequestRevision *string `json:"request_revision"`
-		// SHA-256 digest of the evaluated design snapshot (sorted path and content
-		// pairs).
+		// SHA-256 digest of the design snapshot the revision's refresh evaluated
+		// (sorted path and content pairs).
 		DesignDigest *string `json:"design_digest"`
 		// API or primary service name declared in the design.
 		SystemName *string `json:"system_name"`
@@ -780,11 +795,9 @@ type (
 		ChangeID *string `json:"change_id"`
 		// The user's feature request.
 		Prompt *string `json:"prompt"`
-		// Optional op_id of a succeeded refresh_story operation for the bound
-		// workspace whose evaluated Stories this card adopts. When set, Surla reads
-		// one workspace snapshot, requires its snapshot_digest to match the
-		// operation's, and records both the evaluated Stories and that snapshot's
-		// design/*.go on the card. Omit when the card has no Story.
+		// op_id of a succeeded refresh_story operation whose evaluated draft this card
+		// adopts: its design, Stories, architecture, go.mod and made-from list.
+		// Required when the project folder holds a go.mod; Surla reads no file.
 		StoryRefreshOpID *string `json:"story_refresh_op_id,omitempty"`
 		// Your analysis of prompt against the target's current design.
 		Analysis *CP1AnalysisTransport `json:"analysis"`
@@ -882,15 +895,20 @@ type (
 	// decode + validation (missing-field detection) before transforming into
 	// the public tool type.
 	RefreshStoryResultTransport struct {
-		// Identifier of the owner's current Story refresh operation for the bound
-		// workspace; present when state is running, succeeded, or failed. Pass it as
+		// Absolute path intended for the guide's draft, .surla-draft in the project
+		// folder, whose go.mod, go.sum and design/ refresh_story reads. When state is
+		// none, this path does not mean the folder exists; refresh_story makes it when
+		// needed.
+		DraftFolder *string `json:"draft_folder"`
+		// Identifier of the owner's current Story refresh operation for the guide's
+		// draft; present when state is running, succeeded, or failed. Pass it as
 		// story_refresh_op_id to propose_change or revise_change once state is
 		// succeeded to adopt the evaluated Story into a Change Card.
 		OpID *string `json:"op_id,omitempty"`
 		// Current operation state: none, running, succeeded, or failed.
 		State *string `json:"state"`
-		// Canonical SHA-256 digest of the workspace module snapshot read when this
-		// refresh started; present when state is running, succeeded, or failed.
+		// Canonical SHA-256 digest of the draft snapshot read when this refresh
+		// started; present when state is running, succeeded, or failed.
 		SnapshotDigest *string `json:"snapshot_digest,omitempty"`
 		// Evaluated domain Stories in declaration order when state is succeeded (empty
 		// when the design declares no Stories or when state is none, running, or
@@ -898,7 +916,9 @@ type (
 		Stories []*StorySummaryItemTransport `json:"stories"`
 		// Safe failure or timeout diagnostic when state is failed; omitted otherwise.
 		Diagnostic *string `json:"diagnostic,omitempty"`
-		// Summary of the current Story refresh state and next action.
+		// Summary of the current Story refresh state and next action. After a dropped
+		// build remakes the draft and until a revision is saved from it, begins by
+		// naming the dropped change and saying that edits made before then are gone.
 		Message *string `json:"message"`
 	}
 	// ReportTestsFinishedPayloadTransport is the internal JSON transport type for ReportTestsFinishedPayload.
@@ -942,12 +962,11 @@ type (
 		RequestRevision *string `json:"request_revision"`
 		// The user's revised feature request.
 		Prompt *string `json:"prompt"`
-		// Optional op_id of a succeeded refresh_story operation for the bound
-		// workspace whose evaluated Stories this revision adopts. When set, Surla
-		// reads one workspace snapshot, requires its snapshot_digest to match the
-		// operation's, and records both the evaluated Stories and that snapshot's
-		// design/*.go on the revised card. When omitted on a card that already has
-		// Stories, the card's saved Stories and their design source are kept together.
+		// op_id of a succeeded refresh_story operation whose evaluated draft this
+		// revision adopts. When omitted, the revision keeps every snapshot field of
+		// the revision it revises: design, Stories, architecture, go.mod and made-from
+		// list, even with zero Stories. A project with a go.mod refuses an omitted
+		// op_id when that revision has no design. Surla reads no file.
 		StoryRefreshOpID *string `json:"story_refresh_op_id,omitempty"`
 		// Your analysis of the revised prompt against the current card and the
 		// target's current design.
@@ -1063,12 +1082,35 @@ type (
 	UpdateDependenciesResultTransport struct {
 		// Operation identifier; pass it to read_check_output to read the full output.
 		OpID *string `json:"op_id"`
-		// Workspace-relative go.mod, go.sum and go.work.sum files whose bytes changed
-		// and were written.
+		// Working-folder-relative go.mod, go.sum and go.work.sum files whose bytes
+		// changed and were written.
 		FilesWritten []string `json:"files_written"`
 		// At most 16 KiB: what was updated, and Go's message for any module that could
 		// not be.
 		Message *string `json:"message"`
+	}
+	// UpdateDraftPayloadTransport is the internal JSON transport type for UpdateDraftPayload.
+	// It lives in the toolset-local http package and is used only for JSON
+	// decode + validation (missing-field detection) before transforming into
+	// the public tool type.
+	UpdateDraftPayloadTransport struct {
+	}
+	// UpdateDraftResultTransport is the internal JSON transport type for UpdateDraftResult.
+	// It lives in the toolset-local http package and is used only for JSON
+	// decode + validation (missing-field detection) before transforming into
+	// the public tool type.
+	UpdateDraftResultTransport struct {
+		// Absolute path of the guide's draft folder.
+		DraftFolder *string `json:"draft_folder"`
+		// Design files the draft took from the project folder because it had not
+		// changed them, in path order.
+		Taken []string `json:"taken"`
+		// Design files where the project folder's change and the draft's edits merged
+		// without conflict, in path order.
+		Merged []string `json:"merged"`
+		// Files to correct in the draft before refreshing, in path order; empty when
+		// none.
+		ToCorrect []*DraftCorrectionTransport `json:"to_correct"`
 	}
 	// VerifyChangePayloadTransport is the internal JSON transport type for VerifyChangePayload.
 	// It lives in the toolset-local http package and is used only for JSON
@@ -1219,6 +1261,14 @@ type (
 		// otherwise accepted, with the commit and time, when the build records
 		// accepted tests, and not_yet_accepted when it records none.
 		WrittenTests *WrittenTests `json:"written_tests"`
+		// Absolute path of the folder to build in: the project's folder inside your
+		// working copy .surla-build, on the build's branch surla/build-<n>. Run git
+		// and go there, never in the project folder.
+		WorkingFolder *string `json:"working_folder"`
+		// True when no go.work lies in working_folder or in a folder between it and
+		// the working copy's root: run every go command there as GOWORK=off go …, so a
+		// go.work of the project folder around your copy does not take it over.
+		GoworkOff *bool `json:"gowork_off"`
 	}
 	// BuilderProgressTransport is the internal JSON transport type for BuilderProgressTransport.
 	// It lives in the toolset-local http package and is used only for JSON
@@ -1425,6 +1475,20 @@ type (
 		// File contents keyed by module-relative path, such as design/design.go or
 		// go.mod.
 		Files map[string]string `json:"files"`
+	}
+	// DraftCorrectionTransport is the internal JSON transport type for DraftCorrectionTransport.
+	// It lives in the toolset-local http package and is used only for JSON
+	// decode + validation (missing-field detection) before transforming into
+	// the public tool type.
+	DraftCorrectionTransport struct {
+		// Path relative to the draft folder, such as design/types.go or go.mod.
+		Path *string `json:"path"`
+		// What to correct: conflict markers where the draft and the project folder
+		// changed the same lines; a file removed on one side and changed on the other;
+		// a draft file Go cannot parse, with its line; or a module the project's
+		// go.mod requires at another version than the draft's, or that the draft's
+		// lacks, including differing replace directives.
+		Problem *string `json:"problem"`
 	}
 	// ExampleItemTransport is the internal JSON transport type for ExampleItemTransport.
 	// It lives in the toolset-local http package and is used only for JSON
