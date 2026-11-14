@@ -504,6 +504,7 @@ func TestDroppedUnmarkedDraftPublicationRecoversAtEveryStop(t *testing.T) {
 					cp.draftMu.Lock()
 					defer cp.draftMu.Unlock()
 					list.Write++
+					list.Entries = map[string][]madeFromVersion{}
 					version, err := cp.enterDraftVersion(&list, "design/design.go", draftDesignFiles(next))
 					require.NoError(t, err)
 					list.Taken = map[string]madeFromVersion{
