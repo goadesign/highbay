@@ -64,7 +64,8 @@ func TestBuildTakingAtDesktopAndPhoneWidth(t *testing.T) {
 				Builder: &gensurla.BuilderProgress{Read: true},
 				TestWriter: &gensurla.TestWriterProgress{Read: true, Report: 1,
 					Tests: gensurla.NewTestsAccepted(&gensurla.TestsAccepted{
-						Commit: tests, CheckedAt: at, NotJudged: "Recorded layout fixture; no test execution.",
+						Commit: tests, CheckedAt: at,
+						NotJudged: "Surla checked that these tests build into the generated test program and declare every required scenario; it did not judge what they assert.",
 					}),
 				},
 				Taking: gensurla.NewBuildTakingPassed(&gensurla.BuildPassed{

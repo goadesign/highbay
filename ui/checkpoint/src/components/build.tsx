@@ -101,6 +101,8 @@ export function BuildSectionView({
   const questionRef = useRef<HTMLDivElement | null>(null);
   const removedFocus = useRef(false);
   const returnFocus = useRef(false);
+  // A whole taking panel can disappear when a stale Drop names another build.
+  const takingFocusRemoved = useCallback(() => { removedFocus.current = true; }, []);
   // sent prevents a second click before the page's pending state is rendered.
   const sent = useRef(false);
 
@@ -129,7 +131,7 @@ export function BuildSectionView({
       removedFocus.current = false;
       headingRef.current?.focus();
     }
-  }, [confirming, identity]);
+  });
 
   // Once invalidated, the old question cannot return when a session/revision
   // becomes eligible again. An outstanding request owns the submission latch.
@@ -231,11 +233,13 @@ export function BuildSectionView({
         <section id="surla-build-blocking-change" aria-label="Open build blocking this change">
           <p>{openBuildRefusal.message}</p>
           <BuildTakingView changeId={openBuildRefusal.change_id} build={openBuildRefusal.build}
-            disabled={disabled || starting} dropping={dropping} onDrop={onDrop} />
+            disabled={disabled || starting} dropping={dropping} onDrop={onDrop}
+            onFocusedControlRemoved={takingFocusRemoved} />
         </section>
       ) : null}
       {saved !== null && (openBuildRefusal === null || openBuildRefusal.change_id === card.change_id) ? <BuildTakingView changeId={card.change_id} build={saved}
-        disabled={disabled || starting || error !== null} dropping={dropping} onDrop={onDrop} /> : null}
+        disabled={disabled || starting || error !== null} dropping={dropping} onDrop={onDrop}
+        onFocusedControlRemoved={takingFocusRemoved} /> : null}
       {check !== null && !sentBack && (saved === null || open) ? (
         <p id="surla-build-state" data-inputs-current={checkKnown ? String(check.inputs_current) : "unknown"}>
           {!checkKnown
@@ -364,12 +368,13 @@ export function BuildSectionView({
 
 // BuildTakingView renders only owner-reported taking facts. Its separate Drop
 // question binds consent to the exact change/start and vanishes on invalidation.
-export function BuildTakingView({ changeId, build, disabled, dropping, onDrop }: {
+export function BuildTakingView({ changeId, build, disabled, dropping, onDrop, onFocusedControlRemoved }: {
   changeId: string;
   build: StartedBuild;
   disabled: boolean;
   dropping: boolean;
   onDrop: (build: ReplacedBuild) => void;
+  onFocusedControlRemoved: () => void;
 }) {
   const taking = build.taking;
   const open = taking.state === "building" || taking.state === "passed";
@@ -382,6 +387,16 @@ export function BuildTakingView({ changeId, build, disabled, dropping, onDrop }:
   const lostFocus = useRef(false);
   const canceled = useRef(false);
   const sent = useRef(false);
+  // Whole-panel removal needs a heading outside this subtree. Unrelated editor
+  // focus remains untouched, including when a background read removes a panel.
+  const attachTaking = useCallback((node: HTMLDivElement | null) => {
+    heading.current = node;
+    if (node === null) return;
+    return () => {
+      if (node.contains(document.activeElement)) onFocusedControlRemoved();
+      heading.current = null;
+    };
+  }, [onFocusedControlRemoved]);
   const attach = useCallback((node: HTMLDivElement | null) => {
     questionNode.current = node;
     if (node === null) return;
@@ -410,7 +425,7 @@ export function BuildTakingView({ changeId, build, disabled, dropping, onDrop }:
     setQuestion(null);
   }
   return (
-    <div id="surla-build-taking" data-state={taking.state} ref={heading} tabIndex={-1}>
+    <div id="surla-build-taking" data-state={taking.state} ref={attachTaking} tabIndex={-1}>
       {taking.state === "building" ? <p>No verification of change {changeId} has passed, so there is nothing to merge yet. Let the builder finish, or drop it.</p> : null}
       {taking.state === "passed" ? <BuildMergeInstructions taking={taking}
         candidateCommit={taking.candidate_commit}

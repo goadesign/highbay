@@ -210,3 +210,58 @@ expect(page.sent("POST", path)[1].body.replaces?.started_at === input.started &&
 page.close();
 `)
 }
+
+// TestViewsPageStaleDropKeepsFocusWhenTheTakingPanelIsRemoved checks the
+// stable heading fallback for a refused A-to-B switch and preserves focus in
+// the unsaved editor when a later owner observation removes B's panel.
+func TestViewsPageStaleDropKeepsFocusWhenTheTakingPanelIsRemoved(t *testing.T) {
+	cp := newBuildControlPlane(t, Options{Team: &TeamBinding{
+		Owner: pageOwner, Service: &teamServiceFixture{snapshot: pageTeamSnapshot("working")},
+	}})
+	cp.changesWait, cp.changesPoll = 400*time.Millisecond, 20*time.Millisecond
+	first := buildableChange(t, cp, "chg-focus-a")
+	second := buildableChange(t, cp, "chg-focus-b")
+	_, err := cp.StartBuild(asCaller(pageOwner, CallerUser), &gensurla.StartBuildPayload{
+		ChangeID: first.ChangeID, RequestRevision: first.RequestRevision,
+	})
+	require.NoError(t, err)
+	other := fixtureOpenBuild(t, cp, second, buildRolesBuilderAndTestWriter)
+	other.StartedAt = other.StartedAt.Add(time.Second)
+	restored := fixtureOpenBuild(t, cp, first, buildRolesBuilderAndTestWriter)
+	restored.StartedAt = other.StartedAt.Add(time.Second)
+	ps := startPageServer(t, cp)
+	for name, record := range map[string]buildFile{"other-build": other, "restore-build": restored} {
+		ps.act(name, func() {
+			cp.mu.Lock()
+			err := cp.cards.saveOpenBuild(record)
+			cp.mu.Unlock()
+			require.NoError(t, err)
+		})
+	}
+	runPageScript(t, ps, nil, `
+const path = "/changes/chg-focus-a/build", drop = path + "/drop";
+const page = await openPage(origin, { link: input.link });
+await until(() => page.$("#surla-open-change-chg-focus-a"), "change list did not load");
+page.$("#surla-open-change-chg-focus-a").click();
+await until(() => page.$("#surla-build-drop") && !page.$("#surla-build-drop").disabled && !page.$("#surla-build-loading"), "first build did not open");
+await control(origin, "hold", { key: "GET " + path });
+await control(origin, "hold", { key: "POST " + drop });
+page.$("#surla-build-drop").click();
+await until(() => page.$("#surla-build-drop-confirm"), "Drop did not ask");
+page.$("#surla-build-drop-confirm").click();
+await until(() => page.sent("POST", drop).length === 1 && page.doc.activeElement === page.$("#surla-build-taking"), "pending Drop did not retain a local focus target");
+await control(origin, "act", { key: "other-build" });
+await control(origin, "release", { key: "POST " + drop });
+await until(() => page.sent("POST", drop)[0].status === 409 && page.$("#surla-build-blocking-change"), "stale Drop did not name the other build");
+expect(page.doc.activeElement === page.$("#surla-build-title"), "removing the focused taking panel lost focus instead of using the stable Build heading");
+await control(origin, "release", { key: "GET " + path });
+await until(() => !page.$("#surla-build-loading"), "selected build recovery did not settle");
+const field = page.$('textarea[data-example-id="check_01"][data-field="scenario"]');
+page.type(field, "keep focused unsaved scenario"); field.focus();
+await control(origin, "act", { key: "restore-build" });
+await until(() => !page.$("#surla-build-blocking-change") && page.$("#surla-build-taking")?.dataset.state === "building", "fresh owner build did not remove the other panel");
+expect(page.doc.activeElement === field && field === page.$('textarea[data-example-id="check_01"][data-field="scenario"]') && field.value === "keep focused unsaved scenario", "removing an unfocused taking panel stole or replaced editor focus");
+expect(page.sent("POST", drop).length === 1, "focus recovery retried Drop");
+page.close();
+`)
+}
