@@ -2,8 +2,10 @@
 package designversion
 
 import (
+	"maps"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -47,16 +49,28 @@ func TestReadDraftReadsGoModGoSumAndTheDesignWalkInGofmtForm(t *testing.T) {
 	}, got)
 }
 
-// TestReadDraftRefusesALinkAnUnparsableFileAndAnImportOutsideDesign reads
-// drafts holding a link, a design file Go cannot parse, or an import of the
-// project's own packages, and checks that each refusal names the file, and
-// the line where Go reads one, while an import of a design subpackage is
-// read.
-func TestReadDraftRefusesALinkAnUnparsableFileAndAnImportOutsideDesign(t *testing.T) {
+// TestReadDraftRefusesWhatItCannotHoldAndReadsTheRest reads drafts holding a
+// link, a go.sum that is not UTF-8, a design file Go cannot parse, or an
+// import of a package of the project the snapshot does not hold, and checks
+// that each refusal names the file, and the line where Go reads one. It also
+// reads a draft importing a design subpackage, and one whose go.mod only the
+// evaluator refuses, and checks the snapshot.
+func TestReadDraftRefusesWhatItCannotHoldAndReadsTheRest(t *testing.T) {
+	const (
+		notHeld   = ", which the draft does not hold"
+		importsX  = "package design\n\nimport \"example.com/shop/internal/x\"\n"
+		blockForm = "module (\n\texample.com/shop\n)\n\ngo 1.27.3\n"
+	)
 	cases := []struct {
-		name    string
-		files   map[string]string
-		links   map[string]string
+		name string
+		// files are written over a draft that holds go.mod only.
+		files map[string]string
+		// links maps the path of a link to its target.
+		links map[string]string
+		// wantErr is a text of the refusal, where <draft> stands for the
+		// draft's folder, and wantIs an error the refusal wraps. With
+		// neither, the draft is read, and the snapshot holds its go.mod,
+		// go.sum and files under design/.
 		wantErr string
 		wantIs  error
 	}{
@@ -64,13 +78,13 @@ func TestReadDraftRefusesALinkAnUnparsableFileAndAnImportOutsideDesign(t *testin
 			name:    "link at a design file",
 			files:   map[string]string{"design/a.go": "package design\n"},
 			links:   map[string]string{"design/link.go": "a.go"},
-			wantErr: filepath.Join("design", "link.go") + " is a symbolic link",
+			wantErr: "<draft>/design/link.go is a symbolic link",
 		},
 		{
 			name:    "linked design folder",
 			files:   map[string]string{"real/a.go": "package design\n"},
 			links:   map[string]string{"design": "real"},
-			wantErr: "design is a symbolic link",
+			wantErr: "<draft>/design is a symbolic link",
 		},
 		{
 			name:   "linked go.mod",
@@ -79,31 +93,65 @@ func TestReadDraftRefusesALinkAnUnparsableFileAndAnImportOutsideDesign(t *testin
 			wantIs: designeval.ErrNotRegularFile,
 		},
 		{
+			name:    "go.sum not valid UTF-8",
+			files:   map[string]string{"go.sum": "\xff\n", "design/a.go": "package design\n"},
+			wantErr: "design snapshot file go.sum is not valid UTF-8",
+		},
+		{
 			name: "design file Go cannot parse",
 			files: map[string]string{
 				"design/types.go": "package design\n\n<<<<<<< draft\nvar A = 10\n=======\nvar A = 11\n>>>>>>> project folder\n",
 			},
-			wantErr: filepath.Join("design", "types.go") + ":3:1: expected declaration, found '<<'",
+			wantErr: "<draft>/design/types.go:3:1: expected declaration, found '<<'",
 		},
 		{
 			name:    "import of the project outside design",
-			files:   map[string]string{"design/api.go": "package design\n\nimport \"example.com/shop/internal/x\"\n"},
-			wantErr: filepath.Join("design", "api.go") + ":3:8: imports example.com/shop/internal/x, a package of the project outside design/",
+			files:   map[string]string{"design/api.go": importsX, "internal/x/x.go": "package x\n"},
+			wantErr: "<draft>/design/api.go:3:8: imports example.com/shop/internal/x" + notHeld,
 		},
 		{
-			name:  "import of a design subpackage",
-			files: map[string]string{"design/api.go": "package design\n\nimport \"example.com/shop/design/sub\"\n"},
+			name: "import of a folder whose name starts with design",
+			files: map[string]string{
+				"design/api.go":  "package design\n\nimport \"example.com/shop/designs/x\"\n",
+				"designs/x/x.go": "package x\n",
+			},
+			wantErr: "<draft>/design/api.go:3:8: imports example.com/shop/designs/x" + notHeld,
+		},
+		{
+			name: "import of a design folder the walk skips",
+			files: map[string]string{
+				"design/api.go":          "package design\n\nimport \"example.com/shop/design/testdata/x\"\n",
+				"design/testdata/x/x.go": "package x\n",
+			},
+			wantErr: "<draft>/design/api.go:3:8: imports example.com/shop/design/testdata/x" + notHeld,
+		},
+		{
+			name:    "module statement in block form",
+			files:   map[string]string{"go.mod": blockForm, "design/api.go": importsX},
+			wantErr: "<draft>/design/api.go:3:8: imports example.com/shop/internal/x" + notHeld,
+		},
+		{
+			name: "import of a design subpackage",
+			files: map[string]string{
+				"design/api.go":     "package design\n\nimport \"example.com/shop/design/sub\"\n",
+				"design/sub/sub.go": "package sub\n",
+			},
+		},
+		{
+			name: "go.mod only the evaluator refuses",
+			files: map[string]string{
+				"go.mod":      "module example.com/shop\n\nnot a directive\n",
+				"design/a.go": "package design\n",
+			},
 		},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			dir := t.TempDir()
 			files := map[string]string{"go.mod": draftGoMod}
-			for rel, text := range tc.files {
-				files[rel] = text
-			}
-			if _, linked := tc.links["go.mod"]; linked {
-				delete(files, "go.mod")
+			maps.Copy(files, tc.files)
+			for rel := range tc.links {
+				delete(files, rel)
 			}
 			writeFiles(t, dir, files)
 			for rel, target := range tc.links {
@@ -117,10 +165,16 @@ func TestReadDraftRefusesALinkAnUnparsableFileAndAnImportOutsideDesign(t *testin
 				assert.ErrorIs(t, err, tc.wantIs)
 				assert.ErrorContains(t, err, "go.mod")
 			case tc.wantErr != "":
-				assert.ErrorContains(t, err, filepath.Join(dir, tc.wantErr))
+				assert.ErrorContains(t, err, strings.ReplaceAll(tc.wantErr, "<draft>", dir))
 			default:
 				require.NoError(t, err)
-				assert.Equal(t, tc.files["design/api.go"], got["design/api.go"])
+				want := map[string]string{}
+				for rel, text := range files {
+					if rel == "go.mod" || rel == "go.sum" || strings.HasPrefix(rel, "design/") {
+						want[rel] = text
+					}
+				}
+				assert.Equal(t, want, got, "fixtures in gofmt form are read as written")
 			}
 		})
 	}

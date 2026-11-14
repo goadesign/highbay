@@ -1,9 +1,10 @@
 // Package designversion owns the versions of a design file, one of the Go
 // files under a module's design/ folder that the guide drafts and the builder
 // builds from. A version is a file's text in gofmt form (Canonical), named by
-// the SHA-256 of that text (Digest), so texts that differ only in layout,
-// import order or line endings are one version, and a hook that reformats a
-// file changes no version.
+// the SHA-256 of that text (Digest), so texts that gofmt prints alike are one
+// version: a change of layout, of import order within a group or of line
+// endings makes no new version, while a formatter that changes more than
+// gofmt does, such as goimports regrouping imports, does.
 //
 // Around that form the package reads the guide's draft as a refresh
 // evaluates it (ReadDraft), merges a design change made outside Surla into

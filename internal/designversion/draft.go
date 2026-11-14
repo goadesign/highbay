@@ -10,6 +10,7 @@ import (
 	"io/fs"
 	"maps"
 	"os"
+	"path"
 	"path/filepath"
 	"slices"
 	"strconv"
@@ -38,12 +39,19 @@ const maxModuleFileBytes = 1 << 20
 // It refuses, naming the file: a link at go.mod, go.sum or design/, or
 // anywhere the walk goes; a go.mod or go.sum that is not a regular file or
 // holds more than 1 MiB; a design/ that is not a folder; a draft with no
-// go.mod, or whose go.mod declares no module path; a path or file that is not
-// valid UTF-8. And, naming the file and line of each: a design file Go cannot
-// parse, and an import of a package of the draft's own module outside
-// design/, such as <module>/internal/x, which the draft does not hold, while
-// <module>/design/sub is part of the design. The module is the one the
-// draft's go.mod declares, so the one an evaluation of the snapshot loads.
+// go.mod; a path or file that is not valid UTF-8. And, naming the file and
+// line of each: a design file Go cannot parse, and an import of a package of
+// the draft's own module that the snapshot does not hold, either outside
+// design/, such as <module>/internal/x, or in a folder the walk skips, such
+// as <module>/design/testdata/x; <module>/design/sub is part of the design
+// once the walk reads a file of it. The module is the one go.mod declares,
+// read as the evaluator reads it. A go.mod that does not parse, or declares
+// no module, leaves imports unchecked: the evaluator refuses that go.mod, so
+// no evaluation of the snapshot succeeds.
+//
+// The design texts are in gofmt form, so an evaluation's diagnostics cite
+// lines of that form, which differ from the lines of a draft file that is
+// not in gofmt form.
 func ReadDraft(cleanDir string, root *os.Root) (map[string]string, error) {
 	goMod, err := designeval.ReadRegularFile(root, "go.mod", maxModuleFileBytes)
 	if err != nil {
@@ -68,9 +76,16 @@ func ReadDraft(cleanDir string, root *os.Root) (map[string]string, error) {
 	if err := designeval.ValidateUTF8Snapshot(files); err != nil {
 		return nil, fmt.Errorf("draft %s: %w", cleanDir, err)
 	}
-	module := modfile.ModulePath(goMod)
-	if module == "" {
-		return nil, fmt.Errorf("draft %s: go.mod declares no module path", cleanDir)
+	// The evaluator reads the module path with modfile.Parse, which reads a
+	// block-form module statement that modfile.ModulePath does not. A go.mod
+	// it cannot use is its to refuse, with its own message.
+	var module string
+	if parsed, err := modfile.Parse("go.mod", goMod, nil); err == nil && parsed.Module != nil {
+		module = parsed.Module.Mod.Path
+	}
+	held := map[string]bool{}
+	for rel := range design {
+		held[path.Dir(rel)] = true
 	}
 	// Every file is checked before refusing, so one refusal names every file
 	// and import the guide has to correct.
@@ -83,7 +98,9 @@ func ReadDraft(cleanDir string, root *os.Root) (map[string]string, error) {
 			continue
 		}
 		files[rel] = text
-		problems = append(problems, importsOutsideDesign(fset, file, module)...)
+		if module != "" {
+			problems = append(problems, importsNotHeld(fset, file, module, held)...)
+		}
 	}
 	if err := errors.Join(problems...); err != nil {
 		return nil, err
@@ -91,11 +108,12 @@ func ReadDraft(cleanDir string, root *os.Root) (map[string]string, error) {
 	return files, nil
 }
 
-// importsOutsideDesign returns one error for each import in file, parsed into
-// fset, of a package of module that is not module's design/ package or one
-// under it, naming the file, line and column of the import.
-func importsOutsideDesign(fset *token.FileSet, file *ast.File, module string) []error {
-	design := module + "/design"
+// importsNotHeld returns one error for each import in file, parsed into fset,
+// of a package of module whose folder, relative to the module, is not in held,
+// the folders that hold a file of the snapshot, naming the file, line and
+// column of the import. The module's own root package is never held: the
+// snapshot holds only folders under design/.
+func importsNotHeld(fset *token.FileSet, file *ast.File, module string, held map[string]bool) []error {
 	var problems []error
 	for _, spec := range file.Imports {
 		at := fset.Position(spec.Path.Pos())
@@ -106,12 +124,21 @@ func importsOutsideDesign(fset *token.FileSet, file *ast.File, module string) []
 			problems = append(problems, fmt.Errorf("%s: import path %s: %w", at, spec.Path.Value, err))
 			continue
 		}
-		inModule := imported == module || strings.HasPrefix(imported, module+"/")
-		inDesign := imported == design || strings.HasPrefix(imported, design+"/")
-		if inModule && !inDesign {
+		var folder string
+		switch {
+		case imported == module:
+			folder = "."
+		case strings.HasPrefix(imported, module+"/"):
+			folder = strings.TrimPrefix(imported, module+"/")
+		default:
+			// A package of another module or of the standard library.
+			continue
+		}
+		if !held[folder] {
 			problems = append(problems, fmt.Errorf(
-				"%s: imports %s, a package of the project outside design/, which the draft does not hold: "+
-					"import only packages under %s and other modules' packages", at, imported, design))
+				"%s: imports %s, which the draft does not hold: of the project's packages, a design imports "+
+					"only those under design/, outside hidden, vendor and testdata folders and nested modules",
+				at, imported))
 		}
 	}
 	return problems

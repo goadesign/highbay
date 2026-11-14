@@ -25,26 +25,30 @@ const (
 	maxConflicts = 127
 )
 
-// MergeFile merges into draft, the draft's text of one design file, the
-// changes that lead from base to project, the project folder's text of that
-// file, as `git merge-file -p` does; base is the version both descend from,
-// "" when neither had the file. Changes to separate lines are both kept, and
-// a change both made alike is kept once. Where both changed the same lines
+// MergeFile is one three-way merge, as `git merge-file -p` makes it: it merges
+// into draft, the draft's text of one design file, the changes that lead from
+// base to project, the project folder's text of that file. base is the
+// version draft and project both descend from, "" when neither had the file.
+// Changes to separate lines are both kept. Where both changed the same lines
 // differently, conflict is true and merged holds both changes between git's
 // markers, "<<<<<<< draft", "=======" and ">>>>>>> project folder", which Go
-// cannot parse until someone resolves them.
+// cannot parse until someone resolves them. A clean result need not be in
+// gofmt form: lines from both sides can need another alignment.
 //
-// Merging a clean result again with the same base and project returns it
-// unchanged. A result that holds markers, merged again, gets new markers
-// nested in them, so callers merge only a draft text Go can parse. A clean
-// result need not be in gofmt form: lines from both sides can need another
-// alignment.
+// Merging is not idempotent. git keeps a change both sides made alike once
+// only when it aligns both sides' differences from base the same way. Where
+// lines repeat, as blank lines and closing braces do, it can align them
+// otherwise, and then it reports a conflict, or applies the change twice
+// without reporting one. So a caller must never merge a project text into a
+// draft text that may already hold some of its changes since base, as the
+// result of an earlier merge of it over the same base does: that merge can
+// conflict, or duplicate those changes silently.
 //
 // Git runs on copies of the three texts in a temporary folder that MergeFile
-// removes, outside any repository and with no configuration file, so a user's
-// merge.conflictStyle cannot change the markers. A text git refuses, such as
-// one holding a NUL byte, and any failure to run git are errors, with merged
-// empty.
+// removes, outside any repository and with none of the user's configuration,
+// so a user's merge.conflictStyle cannot change the markers. A text git
+// refuses, such as one holding a NUL byte, and any failure to run git are
+// errors, with merged empty.
 func MergeFile(ctx context.Context, draft, base, project string) (merged string, conflict bool, err error) {
 	dir, err := os.MkdirTemp("", "surla-merge-*")
 	if err != nil {
@@ -61,7 +65,9 @@ func MergeFile(ctx context.Context, draft, base, project string) (merged string,
 			return "", false, fmt.Errorf("merge a design file: %w", err)
 		}
 	}
-	cmd := exec.CommandContext(ctx, "git", "merge-file", "-p", "-q",
+	// Without -q, which sends all of git's errors to /dev/null, a refusal
+	// such as "Cannot merge binary files" reaches the returned error.
+	cmd := exec.CommandContext(ctx, "git", "merge-file", "-p",
 		"-L", draftLabel, "-L", baseLabel, "-L", projectLabel, "draft", "base", "project")
 	cmd.Dir = dir
 	cmd.Env = mergeEnv(dir)
@@ -83,9 +89,9 @@ func MergeFile(ctx context.Context, draft, base, project string) (merged string,
 }
 
 // mergeEnv is the environment of MergeFile's git, run in dir: the server's
-// without any GIT_* variable, which could name a repository or add
-// configuration (GIT_CONFIG_PARAMETERS), with no system or global
-// configuration file, and with repository discovery stopped at dir, so that
+// without any GIT_* variable, such as an inherited GIT_DIR, whose
+// repository's configuration git would read; with no system or global
+// configuration file; and with repository discovery stopped at dir, so that
 // no repository around a temporary folder lends its configuration either.
 // LC_ALL=C keeps git's messages in English.
 func mergeEnv(dir string) []string {

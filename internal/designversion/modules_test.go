@@ -64,11 +64,23 @@ func TestMissingModulesNamesTheSavedVersionOfEachModuleTheBuilderLacks(t *testin
 			want:    []module.Version{{Path: "example.com/kit/telemetry", Version: "v0.3.0"}},
 		},
 		{
-			name:   "required twice, at the higher version",
+			name:    "prefix by path element",
+			design:  map[string]string{"design/design.go": "package design\n\nimport \"example.com/kitchen/x\"\n\nvar _ = x.Y\n"},
+			saved:   "module example.com/shop\n\ngo 1.27.3\n\nrequire example.com/kit v1.2.0\n",
+			builder: "module example.com/shop\n\ngo 1.27.3\n",
+		},
+		{
+			name:    "own module under a required module's path",
+			design:  map[string]string{"design/design.go": "package design\n\nimport \"example.com/org/shop/design/sub\"\n\nvar _ = sub.T\n"},
+			saved:   "module example.com/org/shop\n\ngo 1.27.3\n\nrequire example.com/org v1.3.0\n",
+			builder: "module example.com/org/shop\n\ngo 1.27.3\n\nrequire example.com/org v1.2.0\n",
+		},
+		{
+			name:   "required three times, at the highest version",
 			design: map[string]string{"design/design.go": usesGoa},
 			saved:  savedGoa,
 			builder: "module example.com/shop\n\ngo 1.27.3\n\n" +
-				"require goa.design/goa/v3 v3.35.0\n\nrequire goa.design/goa/v3 v3.30.0\n",
+				"require goa.design/goa/v3 v3.30.0\n\nrequire goa.design/goa/v3 v3.35.0\n\nrequire goa.design/goa/v3 v3.32.0\n",
 		},
 	}
 	for _, tc := range cases {
