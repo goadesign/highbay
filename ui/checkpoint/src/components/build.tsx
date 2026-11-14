@@ -69,6 +69,7 @@ export function BuildSectionView({
 }: BuildSectionProps) {
   const saved = build !== null && build.state === "started" ? build : null;
   const current = saved !== null && saved.in_force;
+  const requiresConfirmation = current || saved?.taking.state === "building";
   const displayedCurrent = currentRevision === card.request_revision &&
     (!current || saved.request_revision === card.request_revision);
   const confirmed = card.status === "confirmed";
@@ -85,7 +86,7 @@ export function BuildSectionView({
   // identity binds the question to the exact subject and start it described.
   const identity = JSON.stringify([card.change_id, card.request_revision, saved?.started_at ?? null]);
   const [questionIdentity, setQuestionIdentity] = useState<string | null>(null);
-  const confirming = questionIdentity === identity && current && eligible && !disabled && !starting;
+  const confirming = questionIdentity === identity && requiresConfirmation && eligible && !disabled && !starting;
   const headingRef = useRef<HTMLHeadingElement>(null);
   const triggerRef = useRef<HTMLSpanElement>(null);
   const questionRef = useRef<HTMLDivElement | null>(null);
@@ -142,7 +143,7 @@ export function BuildSectionView({
 
   // start is called only by the direct first/earlier action or final confirm.
   function start() {
-    if (blocked || sent.current || (current && !confirming)) {
+    if (blocked || sent.current || (requiresConfirmation && !confirming)) {
       return;
     }
     sent.current = true;
@@ -262,12 +263,14 @@ export function BuildSectionView({
       {showDirect ? <p id="surla-build-start-explanation">{startExplanation}</p> : null}
       <div className="surla-field-row">
         {showDirect ? (
-          <Button
-            id="surla-build-start"
-            variant={otherPrimary || sentBack || reviewPrimary ? "default" : "primary"}
-            disabled={blocked}
-            onClick={start}
-          >{directLabel}</Button>
+          <span ref={triggerRef}>
+            <Button
+              id="surla-build-start"
+              variant={otherPrimary || sentBack || reviewPrimary ? "default" : "primary"}
+              disabled={blocked || confirming}
+              onClick={requiresConfirmation ? () => setQuestionIdentity(identity) : start}
+            >{directLabel}</Button>
+          </span>
         ) : null}
         {check !== null ? (
           <Button
@@ -307,7 +310,9 @@ export function BuildSectionView({
           }}
         >
           <Alert variant="warning">
-            <p id="surla-build-question-title"><strong>Build the agreed revision again?</strong></p>
+            <p id="surla-build-question-title"><strong>{current
+              ? "Build the agreed revision again?"
+              : "Replace the earlier build with the agreed revision?"}</strong></p>
             <p>
               {saved?.test_writer.tests.state === "not_used"
                 ? "Building again replaces this build and makes the builder’s assignment unread again."

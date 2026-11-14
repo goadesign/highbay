@@ -1565,7 +1565,8 @@ export function bootstrapViewsPage() {
     };
     // The Build control binds its confirmation to this exact saved start;
     // synchronous rendering invalidates that question when the start changes.
-    if (buildSnapshot.state === "started" && buildSnapshot.in_force) {
+    if (buildSnapshot.state === "started" &&
+        (buildSnapshot.in_force || buildSnapshot.taking.state === "building")) {
       request.replaces = { change_id: changeId, started_at: buildSnapshot.started_at };
     }
     const begun = new Date().toISOString();
