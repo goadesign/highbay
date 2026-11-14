@@ -293,6 +293,9 @@ func TestStoryRefreshCloseCancelsWaitsAndWritesNothingAfterwards(t *testing.T) {
 		return statErr == nil
 	}, 5*time.Second, 10*time.Millisecond)
 
+	provenancePath := filepath.Join(cardsDir, madeFromFileName)
+	provenance, err := os.ReadFile(provenancePath)
+	require.NoError(t, err)
 	require.NoError(t, cp.Close())
 
 	// After Close returns, no Story refresh operation remains running or published.
@@ -304,14 +307,18 @@ func TestStoryRefreshCloseCancelsWaitsAndWritesNothingAfterwards(t *testing.T) {
 	_, err = cp.RefreshStory(alice)
 	assertServiceError(t, err, "unavailable")
 
-	// Nothing was written to cardsDir beyond the lock file and empty designeval parent.
+	// Refresh persisted its draft provenance before evaluation started. Close
+	// preserves it, and the canceled evaluator publishes no later card write.
 	entries, err := os.ReadDir(cardsDir)
 	require.NoError(t, err)
 	var names []string
 	for _, e := range entries {
 		names = append(names, e.Name())
 	}
-	assert.Equal(t, []string{"designeval", "lock"}, names)
+	assert.Equal(t, []string{"designeval", "lock", "made-from", "made-from.json"}, names)
+	afterProvenance, err := os.ReadFile(provenancePath)
+	require.NoError(t, err)
+	assert.Equal(t, provenance, afterProvenance)
 	evalEntries, err := os.ReadDir(filepath.Join(cardsDir, "designeval"))
 	require.NoError(t, err)
 	assert.Empty(t, evalEntries)
@@ -784,7 +791,9 @@ var _ = Service("orders", func() {
 	assert.Empty(t, nonStorySucceeded.Stories)
 	assert.Contains(t, nonStorySucceeded.Message, "the design declares no Stories")
 
-	// Adopting a succeeded refresh with zero Stories equals adopting none.
+	// With the same canonical design input, adopting a refresh with zero
+	// Stories equals adopting no Story evaluation. The project still holds
+	// the earlier Story design; compare against the evaluated draft folder.
 	adoptedZero, err := cp.ProposeChange(alice, &gensurla.ProposeChangePayload{
 		ChangeID:         "chg-zero-stories",
 		Prompt:           "Refunds up to $50 are instant.",
@@ -793,7 +802,7 @@ var _ = Service("orders", func() {
 	})
 	require.NoError(t, err)
 	assert.Nil(t, adoptedZero.Stories)
-	plainZero := mustPropose(t, newControlPlane(t, Options{WorkspaceDir: wsDir}), alice, "chg-zero-stories", "Refunds up to $50 are instant.", refundAnalysis("Refunds up to $50 are instant."))
+	plainZero := mustPropose(t, newControlPlane(t, Options{WorkspaceDir: filepath.Join(wsDir, draftFolderName)}), alice, "chg-zero-stories", "Refunds up to $50 are instant.", refundAnalysis("Refunds up to $50 are instant."))
 	assert.Equal(t, plainZero.RequestRevision, adoptedZero.RequestRevision)
 }
 

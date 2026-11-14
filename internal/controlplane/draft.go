@@ -63,6 +63,12 @@ func (c *ControlPlane) readDraftSnapshot(
 	if err != nil && !missing {
 		return nil, saved, gensurla.MakeUnprocessable(err)
 	}
+	if draft != nil && !exists {
+		// Publication always saves provenance before the folder rename. Without
+		// that record, even a marker cannot establish ownership of this folder.
+		refusal := gensurla.MakeUnprocessable(errors.New("The draft folder already exists but this project's draft provenance is missing. Preserve it by moving .surla-draft aside, or restore this project's draft records, then call refresh_story again."))
+		return nil, saved, errors.Join(refusal, draft.Close())
+	}
 	remake := missing || !exists
 	// Drop publishes only the new start. Its first materialization must read
 	// P/S even when the previous draft has already been deleted.
@@ -138,7 +144,7 @@ func (c *ControlPlane) readDraftSnapshot(
 				return nil, saved, gensurla.MakeUnprocessable(err)
 			}
 			if currentExists != exists || exists && !reflect.DeepEqual(current, list) || !sameDraft {
-				return nil, saved, gensurla.MakeConflict(errors.New(
+				return nil, saved, gensurla.MakeUnprocessable(errors.New(
 					"draft or design provenance changed while reading the project's commit; call refresh_story again",
 				))
 			}
@@ -468,7 +474,7 @@ func removeUnmarkedDroppedDraft(project *os.Root, before fs.FileInfo) error {
 		return err
 	}
 	if !os.SameFile(before, info) || !errors.Is(markerErr, fs.ErrNotExist) {
-		return gensurla.MakeConflict(errors.New("draft changed before its remake; call refresh_story again"))
+		return gensurla.MakeUnprocessable(errors.New("draft changed before its remake; call refresh_story again"))
 	}
 	return project.RemoveAll(draftFolderName)
 }

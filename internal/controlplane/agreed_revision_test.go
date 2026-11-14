@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -422,7 +423,7 @@ func TestAProposalKeepsItsOwnStoryAndDesignSource(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	writeWorkspaceFiles(t, ws, map[string]string{"design/design.go": "package design // exchanges\n"})
+	writeWorkspaceFiles(t, filepath.Join(ws, draftFolderName), map[string]string{"design/design.go": "package design // exchanges\n"})
 	draftOp := seedStoryRefreshForTest(t, cp, agreedOwner, storyRefreshStateSucceeded, pageStories(), "")
 	first := revisionPayload("chg", agreed.RequestRevision, "Refunds up to $60 are instant.", agreed.Examples[0].ID)
 	first.StoryRefreshOpID = &draftOp

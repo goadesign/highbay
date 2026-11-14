@@ -4,7 +4,12 @@ package controlplane
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -17,7 +22,44 @@ import (
 	"github.com/goadesign/surla/internal/designversion"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	goa "goa.design/goa/v3/pkg"
 )
+
+// TestDraftFirstUsePreservesAnExistingFolder rejects an unknown published
+// folder before writing a marker, provenance or replacement design.
+func TestDraftFirstUsePreservesAnExistingFolder(t *testing.T) {
+	for _, marked := range []bool{false, true} {
+		t.Run(fmt.Sprintf("marked=%t", marked), func(t *testing.T) {
+			project := t.TempDir()
+			writeWorkspaceFiles(t, project, validWorkspaceStub("package design\nvar FromProject = 1\n"))
+			folder := filepath.Join(project, draftFolderName)
+			original := map[string]string{"notes.txt": "Keep this preexisting work.\n"}
+			if marked {
+				original[".gitignore"] = "# surla draft 1\n*\n"
+			}
+			writeWorkspaceFiles(t, folder, original)
+			cp := newControlPlane(t, Options{WorkspaceDir: project})
+			_, err := cp.RefreshStory(WithPrincipal(t.Context(), Principal{ID: "owner", Kind: CallerGuide}))
+			assertServiceError(t, err, "unprocessable")
+			assert.ErrorContains(t, err, "draft provenance is missing")
+			for name, want := range original {
+				got, err := os.ReadFile(filepath.Join(folder, name))
+				require.NoError(t, err)
+				assert.Equal(t, want, string(got))
+			}
+			if !marked {
+				_, err = os.Stat(filepath.Join(folder, ".gitignore"))
+				assert.ErrorIs(t, err, os.ErrNotExist)
+			}
+			for _, name := range []string{madeFromFileName, "made-from"} {
+				_, err = os.Stat(filepath.Join(cp.cards.dir, name))
+				assert.ErrorIs(t, err, os.ErrNotExist)
+			}
+			_, err = os.Stat(filepath.Join(project, draftStagingName))
+			assert.ErrorIs(t, err, os.ErrNotExist)
+		})
+	}
+}
 
 // TestDraftFirstUsePublishesCanonicalFilesAndProvenance checks the public
 // folder result, replacement of owned interrupted staging and restart read.
@@ -140,7 +182,7 @@ func TestDraftRetriesAStopBeforeTheFirstStagingMarker(t *testing.T) {
 // TestDraftRevalidatesAfterUnlockedGit checks both concurrent writers' states
 // and proves committed-design queries never hold the draft's lock.
 func TestDraftRevalidatesAfterUnlockedGit(t *testing.T) {
-	for _, change := range []string{"list", "draft", "workspace"} {
+	for _, change := range []string{"list", "draft", "workspace", "HTTP list"} {
 		t.Run(change, func(t *testing.T) {
 			project := filepath.Join(t.TempDir(), "project")
 			writeWorkspaceFiles(t, project, validWorkspaceStub("package design\n"))
@@ -162,11 +204,40 @@ func TestDraftRevalidatesAfterUnlockedGit(t *testing.T) {
 			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 			t.Cleanup(cancel)
 			t.Cleanup(func() { assert.NoError(t, os.WriteFile(release, nil, 0o600)) })
-			result := make(chan error, 1)
+			type outcome struct {
+				err    error
+				status int
+				body   []byte
+			}
+			var server *httptest.Server
+			if change == "HTTP list" {
+				server = httptest.NewServer(NewHTTPHandler(cp, workflowAuthenticator(map[string]Principal{
+					"owner-token": {ID: "owner", Kind: CallerGuide},
+				})))
+				t.Cleanup(server.Close)
+			}
+			result := make(chan outcome, 1)
 			go func() {
+				if server != nil {
+					request, err := http.NewRequestWithContext(ctx, http.MethodPost, server.URL+"/workspace/story/refresh", nil)
+					if err != nil {
+						result <- outcome{err: err}
+						return
+					}
+					request.Header.Set("Authorization", "Bearer owner-token")
+					request.Header.Set("Accept", "application/json")
+					response, err := http.DefaultClient.Do(request)
+					if err != nil {
+						result <- outcome{err: err}
+						return
+					}
+					body, readErr := io.ReadAll(response.Body)
+					result <- outcome{err: errors.Join(readErr, response.Body.Close()), status: response.StatusCode, body: body}
+					return
+				}
 				ws, dev, ino := cp.currentWorkspaceTarget()
 				_, _, err := cp.readDraftSnapshot(ctx, ws, dev, ino)
-				result <- err
+				result <- outcome{err: err}
 			}()
 			require.Eventually(t, func() bool {
 				_, err := os.Stat(started)
@@ -175,7 +246,7 @@ func TestDraftRevalidatesAfterUnlockedGit(t *testing.T) {
 			require.True(t, cp.draftMu.TryLock(), "Git must not hold draftMu")
 			func() {
 				defer cp.draftMu.Unlock()
-				if change == "list" {
+				if change == "list" || change == "HTTP list" {
 					require.NoError(t, cp.cards.saveMadeFrom(madeFromRecord{
 						Write: 2, Start: madeFromStart{Write: 2}, Entries: map[string][]madeFromVersion{},
 					}))
@@ -194,18 +265,26 @@ func TestDraftRevalidatesAfterUnlockedGit(t *testing.T) {
 			}
 			require.NoError(t, os.WriteFile(release, nil, 0o600))
 			select {
-			case err := <-result:
-				if change == "workspace" {
+			case got := <-result:
+				err := got.err
+				if change == "HTTP list" {
+					require.NoError(t, err)
+					assert.Equal(t, http.StatusUnprocessableEntity, got.status, string(got.body))
+					var failure goa.ServiceError
+					require.NoError(t, json.Unmarshal(got.body, &failure))
+					assert.Equal(t, "unprocessable", failure.Name)
+					assert.Contains(t, failure.Message, "call refresh_story again")
+				} else if change == "workspace" {
 					assertServiceError(t, err, "unprocessable")
 					assert.ErrorContains(t, err, "was replaced or removed after startup")
 				} else {
-					assertServiceError(t, err, "conflict")
+					assertServiceError(t, err, "unprocessable")
 					assert.ErrorContains(t, err, "call refresh_story again")
 				}
 			case <-ctx.Done():
 				t.Fatal("draft read did not finish after the Git query was released")
 			}
-			if change == "list" {
+			if change == "list" || change == "HTTP list" {
 				list, _, err := cp.cards.loadMadeFrom()
 				require.NoError(t, err)
 				assert.Equal(t, uint64(2), list.Start.Write)
