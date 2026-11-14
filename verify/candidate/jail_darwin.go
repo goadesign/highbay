@@ -68,7 +68,7 @@ func (b resolvedBuild) runGoBuild(
 ) error {
 	spec := b.spec
 	goBin := filepath.Join(spec.GOROOT, "bin", "go")
-	profile := BuildProfile(spec.SourceDir, spec.GOROOT, spec.ModCache, spec.WorkDir, b.outDir)
+	profile := BuildProfile(spec.SourceDir, spec.GOROOT, spec.ModCache, spec.WorkDir)
 	cmdArgs := append([]string{"-p", profile, goBin}, args...)
 	cmd := exec.CommandContext(ctx, sandboxExec, append(cmdArgs, "-o", outPath, spec.Package)...)
 	cmd.Dir = spec.ModuleDir

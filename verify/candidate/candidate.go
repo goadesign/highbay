@@ -83,8 +83,8 @@ type (
 		// SourceDir is the declared source tree the build may read, such as the
 		// candidate module or a whole checkout whose modules replace each other.
 		// Besides SourceDir, the build can read only GOROOT, ModCache, WorkDir,
-		// the output directory and system libraries; a symbolic link or local
-		// replace directive that resolves anywhere else is denied.
+		// and system libraries; a symbolic link or local replace directive that
+		// resolves anywhere else is denied.
 		SourceDir string
 		// ModuleDir is the directory of the module being built. It must resolve
 		// inside SourceDir.
@@ -92,27 +92,26 @@ type (
 		// Package is the package to build, relative to ModuleDir, such as
 		// "./cmd/orders".
 		Package string
-		// Out is the output binary path; its directory is writable.
+		// Out is the output binary path; its directory must exist.
 		Out string
 		// GOROOT is the resolved Go toolchain root the build runs with. Its bin
 		// and tool binaries are the only programs the build may execute.
 		GOROOT string
 		// ModCache is the already populated module cache, read-only.
 		ModCache string
-		// WorkDir is a private writable directory for TMPDIR and GOCACHE.
+		// WorkDir is a private writable directory for TMPDIR, GOCACHE, and the
+		// staged output binary.
 		WorkDir string
 		// LogFile receives the build's output; it must lie outside ModuleDir.
 		LogFile string
 	}
 
 	// resolvedBuild is a BuildSpec whose directories resolveBuild has resolved to
-	// symlink-free paths, with Out inside outDir. Only resolveBuild creates one.
+	// symlink-free paths, with Out in its resolved output directory. Only
+	// resolveBuild creates one.
 	resolvedBuild struct {
 		// spec holds the resolved paths; spec.Out is the absolute output file.
 		spec BuildSpec
-		// outDir is the resolved output directory, the only place besides
-		// spec.WorkDir that the build may write.
-		outDir string
 	}
 
 	// limitedBuffer keeps a candidate's standard output for Output, up to a
@@ -296,20 +295,22 @@ func ExcerptFile(path string, maxBytes int64) (string, bool, error) {
 
 // Build compiles source in the build sandbox. The Go toolchain may start its
 // own compiler, assembler and linker, but the build can read only SourceDir,
-// the toolchain, the read-only module cache, its own work and output
-// directories, and system libraries; write only its work and output
-// directories; and use no network. Directives in candidate source, such as an
-// assembly #include of an outside file, and links or replace directives that
-// leave SourceDir are denied by the operating system. It fails with
-// ErrIsolationUnavailable where the sandbox cannot be enforced.
+// the toolchain, the read-only module cache, its own work directory, and system
+// libraries; write only its work directory; and use no network. Directives in
+// candidate source, such as an assembly #include of an outside file, and links
+// or replace directives that leave SourceDir are denied by the operating
+// system. Build compiles to a fresh staging path inside WorkDir and publishes
+// the verified regular file to spec.Out outside the sandbox, so the jailed
+// toolchain cannot read or overwrite sibling files in spec.Out's directory. It
+// fails with ErrIsolationUnavailable where the sandbox cannot be enforced.
 //
 // Besides SourceDir, the build trusts GOROOT and ModCache as fixed inputs: the
 // selected toolchain, and module versions verified against their checksums
 // when they were downloaded. A source file linked into either reads bytes the
 // build could already read by importing that toolchain package or module
 // version, so such a link grants nothing beyond that trust. Build does not
-// check that WorkDir and the output directory are fresh: a caller that relies
-// on them holding only this build's output must create them empty.
+// check that WorkDir is fresh: a caller that relies on it holding only this
+// build's cache and staged output must create it empty.
 //
 // run runs the prepared build command to completion. The caller decides which
 // process group owns the compiler, assembler and linker the build starts: a
@@ -321,7 +322,16 @@ func Build(ctx context.Context, spec BuildSpec, run func(*exec.Cmd) error) error
 	if err != nil {
 		return err
 	}
-	if err := b.goRun(ctx, run, b.spec.Out, "build", "-trimpath"); err != nil {
+	stageDir, err := os.MkdirTemp(b.spec.WorkDir, ".surla-stage-*")
+	if err != nil {
+		return fmt.Errorf("create build staging directory: %w", err)
+	}
+	defer os.RemoveAll(stageDir)
+	stageOut := filepath.Join(stageDir, filepath.Base(b.spec.Out))
+	if err := b.goRun(ctx, run, stageOut, "build", "-trimpath"); err != nil {
+		return fmt.Errorf("sandboxed build of %s: %w", spec.Package, err)
+	}
+	if err := publishStagedOutput(stageOut, b.spec.Out); err != nil {
 		return fmt.Errorf("sandboxed build of %s: %w", spec.Package, err)
 	}
 	return nil
@@ -340,12 +350,12 @@ func Build(ctx context.Context, spec BuildSpec, run func(*exec.Cmd) error) error
 // such as -o or -c, is rejected before the toolchain runs.
 //
 // spec.Out must not exist when BuildTest is called. BuildTest compiles to a
-// fresh staging path in the output directory and links the result to spec.Out
-// only when the toolchain produced a test binary, so other files written
-// during the build cannot be mistaken for the test binary or overwritten by
-// it. BuildTest returns true when it wrote the test binary, a regular file at
-// spec.Out. A package without _test.go files is not an error: BuildTest
-// returns false and a nil error and writes no test binary.
+// fresh staging path in WorkDir and publishes the result to spec.Out only when
+// the toolchain produced a test binary, so other files written during the build
+// cannot be mistaken for the test binary or overwritten by it. BuildTest
+// returns true when it wrote the test binary, a regular file at spec.Out. A
+// package without _test.go files is not an error: BuildTest returns false and a
+// nil error and writes no test binary.
 //
 // The caller runs the result only as a candidate: pin it with Pin and start
 // it with Exec, passing test flags such as -test.run and -test.timeout in
@@ -375,7 +385,7 @@ func BuildTest(ctx context.Context, spec BuildSpec, run func(*exec.Cmd) error) (
 	case !errors.Is(err, os.ErrNotExist):
 		return false, fmt.Errorf("inspect test binary path %s: %w", out, err)
 	}
-	stageDir, err := os.MkdirTemp(b.outDir, ".buildtest-*")
+	stageDir, err := os.MkdirTemp(b.spec.WorkDir, ".surla-stage-*")
 	if err != nil {
 		return false, fmt.Errorf("create test build staging directory: %w", err)
 	}
@@ -384,34 +394,22 @@ func BuildTest(ctx context.Context, spec BuildSpec, run func(*exec.Cmd) error) (
 	if err := b.goRun(ctx, run, stageOut, "test", "-c", "-trimpath", "-vet=off"); err != nil {
 		return false, fmt.Errorf("sandboxed test build of %s: %w", spec.Package, err)
 	}
-	info, err := os.Lstat(stageOut)
-	switch {
-	case errors.Is(err, os.ErrNotExist):
-		return false, nil
-	case err != nil:
-		return false, fmt.Errorf("inspect test binary %s: %w", out, err)
-	case !info.Mode().IsRegular():
-		return false, fmt.Errorf("test binary %s is not a regular file", out)
-	}
-	if err := os.Link(stageOut, out); err != nil {
-		return false, fmt.Errorf("publish test binary %s: %w", out, err)
-	}
-	return true, nil
+	return publishStagedTestBinary(stageOut, out)
 }
 
 // BuildProfile renders the macOS build sandbox profile. Paths must be absolute
 // and free of symlinks.
-func BuildProfile(sourceDir, goroot, modCache, workDir, outDir string) string {
+func BuildProfile(sourceDir, goroot, modCache, workDir string) string {
 	var b strings.Builder
 	b.WriteString("(version 1)\n(deny default)\n(allow process-fork)\n(allow sysctl-read)\n(allow signal (target self))\n")
 	fmt.Fprintf(&b, "(allow process-exec (subpath %s))\n", quote(goroot))
 	fmt.Fprintf(&b, "(allow file-read* (literal \"/\") (subpath \"/usr/lib\") (subpath \"/System\") (subpath \"/private/var/db/dyld\") "+
 		"(literal \"/dev/null\") (literal \"/dev/urandom\") (literal \"/dev/random\") "+
-		"(subpath %s) (subpath %s) (subpath %s) (subpath %s) (subpath %s))\n",
-		quote(sourceDir), quote(goroot), quote(modCache), quote(workDir), quote(outDir))
-	fmt.Fprintf(&b, "(allow file-write* (subpath %s) (subpath %s) (literal \"/dev/null\"))\n", quote(workDir), quote(outDir))
+		"(subpath %s) (subpath %s) (subpath %s) (subpath %s))\n",
+		quote(sourceDir), quote(goroot), quote(modCache), quote(workDir))
+	fmt.Fprintf(&b, "(allow file-write* (subpath %s) (literal \"/dev/null\"))\n", quote(workDir))
 	b.WriteString("(allow file-read-metadata (literal \"/var\") (literal \"/tmp\") (literal \"/etc\")")
-	for _, root := range []string{sourceDir, goroot, modCache, workDir, outDir} {
+	for _, root := range []string{sourceDir, goroot, modCache, workDir} {
 		for dir := filepath.Dir(root); dir != "/"; dir = filepath.Dir(dir) {
 			fmt.Fprintf(&b, " (literal %s)", quote(dir))
 		}
@@ -572,18 +570,87 @@ func resolveBuild(spec BuildSpec) (resolvedBuild, error) {
 		return resolvedBuild{}, err
 	}
 	spec.Out = filepath.Join(outDir, filepath.Base(absOut))
-	return resolvedBuild{spec: spec, outDir: outDir}, nil
+	return resolvedBuild{spec: spec}, nil
+}
+
+// publishStagedOutput opens stagedOut with O_RDONLY|O_NOFOLLOW|O_CLOEXEC,
+// verifies via fstat on the open descriptor that it is a regular file, and
+// atomically publishes its bytes to outPath.
+func publishStagedOutput(stagedOut, outPath string) error {
+	_, err := publishStagedOutputAllowMissing(stagedOut, outPath, false)
+	return err
+}
+
+// publishStagedTestBinary opens stagedOut with O_RDONLY|O_NOFOLLOW|O_CLOEXEC,
+// returns (false, nil) when stagedOut was not created (a package without tests),
+// and otherwise publishes the verified regular file to outPath without
+// replacing an existing file at outPath.
+func publishStagedTestBinary(stagedOut, outPath string) (bool, error) {
+	return publishStagedOutputAllowMissing(stagedOut, outPath, true)
+}
+
+// publishStagedOutputAllowMissing publishes stagedOut to outPath. When
+// allowMissing is true, a missing stagedOut returns (false, nil) and
+// publishing refuses to overwrite an existing destination file.
+func publishStagedOutputAllowMissing(stagedOut, outPath string, allowMissing bool) (bool, error) {
+	fd, err := syscall.Open(stagedOut, syscall.O_RDONLY|syscall.O_NOFOLLOW|syscall.O_CLOEXEC, 0)
+	if err != nil {
+		if allowMissing && errors.Is(err, syscall.ENOENT) {
+			return false, nil
+		}
+		return false, fmt.Errorf("open staged build output: %w", err)
+	}
+	var st syscall.Stat_t
+	if err := syscall.Fstat(fd, &st); err != nil {
+		syscall.Close(fd)
+		return false, fmt.Errorf("stat staged build output: %w", err)
+	}
+	if st.Mode&syscall.S_IFMT != syscall.S_IFREG {
+		syscall.Close(fd)
+		return false, fmt.Errorf("staged build output %s is not a regular file (mode %#o)", outPath, st.Mode)
+	}
+	srcFile := os.NewFile(uintptr(fd), stagedOut)
+	defer srcFile.Close()
+
+	tmp, err := os.CreateTemp(filepath.Dir(outPath), ".surla-out-*")
+	if err != nil {
+		return false, fmt.Errorf("create output binary %s: %w", outPath, err)
+	}
+	tmpName := tmp.Name()
+	defer os.Remove(tmpName)
+
+	if _, err := io.Copy(tmp, srcFile); err != nil {
+		tmp.Close()
+		return false, fmt.Errorf("write output binary %s: %w", outPath, err)
+	}
+	if err := tmp.Chmod(0o755); err != nil {
+		tmp.Close()
+		return false, fmt.Errorf("chmod output binary %s: %w", outPath, err)
+	}
+	if err := tmp.Close(); err != nil {
+		return false, fmt.Errorf("close output binary %s: %w", outPath, err)
+	}
+	if allowMissing {
+		if err := os.Link(tmpName, outPath); err != nil {
+			return false, fmt.Errorf("publish test binary %s: %w", outPath, err)
+		}
+		return true, nil
+	}
+	if err := os.Rename(tmpName, outPath); err != nil {
+		return false, fmt.Errorf("publish output binary %s: %w", outPath, err)
+	}
+	return true, nil
 }
 
 // goRun runs `go <args> -o <outPath> <Package>` from ModuleDir in the build
-// sandbox, which may write only WorkDir and the output directory, with the
-// toolchain's output in LogFile. It returns run's error unwrapped, an
-// "open build log" error when LogFile cannot be opened, or an error when
-// opening LogFile resolves to the same file as spec.Out. The fixed
-// environment keeps the build offline (GOPROXY=off), on the selected toolchain
-// (GOTOOLCHAIN=local), unable to change go.mod (-mod=readonly), and free of
-// cgo, with TMPDIR and GOCACHE inside WorkDir and no HOME, so os.UserConfigDir
-// leaves Go telemetry disabled without starting its detached child process.
+// sandbox, which may write only WorkDir, with the toolchain's output in
+// LogFile. It returns run's error unwrapped, an "open build log" error when
+// LogFile cannot be opened, or an error when opening LogFile resolves to the
+// same file as spec.Out. The fixed environment keeps the build offline
+// (GOPROXY=off), on the selected toolchain (GOTOOLCHAIN=local), unable to
+// change go.mod (-mod=readonly), and free of cgo, with TMPDIR and GOCACHE
+// inside WorkDir and no HOME, so os.UserConfigDir leaves Go telemetry disabled
+// without starting its detached child process.
 func (b resolvedBuild) goRun(
 	ctx context.Context,
 	run func(*exec.Cmd) error,
