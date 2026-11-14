@@ -93,15 +93,22 @@ paths:
                             temporary: false
                             timeout: false
                 "409":
-                    description: 'working_folder_missing: Your working folder is missing; ask the user to build this change again on the views page.'
+                    description: |-
+                        no_build: The user dropped this change's build: stop work on it and make no more edits or commits for it. The user starts builds on the views page.
+
+                        copy_off_branch: Your working copy cannot join the build: it holds uncommitted work on a branch that is not an earlier build branch, or a Git operation is in progress. The message states the facts and the goal; put your work right with git, then read the assignment again.
+
+                        working_copy_busy: Surla is starting a build in your working folder, or files there changed while Surla moved it (nothing was lost); call get_builder_assignment again.
+
+                        working_folder_missing: Your working folder is missing; ask the user to build this change again on the views page.
                     schema:
-                        $ref: '#/definitions/SurlaGetBuilderAssignmentWorkingFolderMissingResponseBody'
+                        $ref: '#/definitions/SurlaGetBuilderAssignmentNoBuildResponseBody'
                     examples:
                         application/vnd.goa.error:
                             fault: false
                             id: 123abc
                             message: parameter 'p' must be an integer
-                            name: working_folder_missing
+                            name: no_build
                             temporary: false
                             timeout: false
             schemes:
@@ -191,15 +198,22 @@ paths:
                             temporary: false
                             timeout: false
                 "409":
-                    description: 'working_folder_missing: Your working folder is missing; ask the user to build this change again on the views page.'
+                    description: |-
+                        no_build: The user dropped this change's build: stop work on it and make no more edits or commits for it. The user starts builds on the views page.
+
+                        copy_off_branch: Your working copy cannot join or serve this build: the message states its branch, the build's branch, any Git operation and what is uncommitted, and the goal. Put your test files on the build's branch, uncommitted, because Surla commits what it accepts; then call again.
+
+                        working_copy_busy: Surla is checking the tests in your working folder; call get_test_writer_assignment again when the check has ended.
+
+                        working_folder_missing: Your working folder is missing; ask the user to build this change again on the views page.
                     schema:
-                        $ref: '#/definitions/SurlaGetTestWriterAssignmentWorkingFolderMissingResponseBody'
+                        $ref: '#/definitions/SurlaGetTestWriterAssignmentNoBuildResponseBody'
                     examples:
                         application/vnd.goa.error:
                             fault: false
                             id: 123abc
                             message: parameter 'p' must be an integer
-                            name: working_folder_missing
+                            name: no_build
                             temporary: false
                             timeout: false
             schemes:
@@ -260,15 +274,24 @@ paths:
                             temporary: false
                             timeout: false
                 "409":
-                    description: 'conflict: request_revision is not the revision of your test assignment (read it again with get_test_writer_assignment), or no test writer is used because the project has stored verification settings. Nothing changed.'
+                    description: |-
+                        no_build: The user dropped this change's build: stop work on it and make no more edits or commits for it. The user starts builds on the views page.
+
+                        copy_off_branch: Your working copy cannot join or serve this build: the message states its branch, the build's branch, any Git operation and what is uncommitted, and the goal. Put your test files on the build's branch, uncommitted, because Surla commits what it accepts; then call again.
+
+                        working_folder_missing: Your working folder is missing; ask the user to build this change again on the views page.
+
+                        assignment_unread: A build started after your last read of your assignment: stop your current work, then call get_test_writer_assignment for its change.
+
+                        conflict: request_revision is not the revision of your test assignment (read it again with get_test_writer_assignment), or no test writer is used because the project has stored verification settings. Nothing changed.
                     schema:
-                        $ref: '#/definitions/SurlaReportTestsFinishedConflictResponseBody'
+                        $ref: '#/definitions/SurlaReportTestsFinishedNoBuildResponseBody'
                     examples:
                         application/vnd.goa.error:
                             fault: false
                             id: 123abc
                             message: parameter 'p' must be an integer
-                            name: conflict
+                            name: no_build
                             temporary: false
                             timeout: false
             schemes:
@@ -492,15 +515,38 @@ paths:
                             temporary: false
                             timeout: false
                 "409":
-                    description: 'design_changed_outside: A design file at the project''s commit is not a version the agreed revision was made from: it was changed outside Surla; nothing was saved. The message names the file and the commit. When the change is uncommitted, commit the design change in the project folder first; then the guide calls update_draft, refresh_story and revise_change, and the user adopts the revision and builds.'
+                    description: |-
+                        conflict: The Change Card is not confirmed or request_revision is not its agreed revision (a waiting proposal's revision cannot be built), or the agreed revision records no design to build from; nothing changed.
+
+                        not_repository: The project folder is not in a Git repository, which every build's working copies need; nothing was saved. The message ends with the step to create or select a repository.
+
+                        no_commit: The project repository has no commit for the build's working copies to start from; nothing was saved. The message ends with the step to make its first commit.
+
+                        no_test_layout: This project has neither stored verification settings nor Surla's test layout; nothing was saved. Store verification settings, then build again.
+
+                        git_identity_missing: Git has no configured name and address, which Surla uses to commit what a working copy left when it joins a new build and to record accepted tests; nothing was saved. Configure Git's name and address, then build again.
+
+                        copy_folder_in_use: A working copy's folder in the project folder, .surla-build or .surla-tests, is a file or a folder that is not a linked working copy of the project's repository; nothing was saved. The message names the folder and ends with the step to move it out of the project.
+
+                        tests_branch_in_use: The branch Surla checks out in a missing working copy, surla/build-<n> or surla/tests-<n>, is checked out in another folder; nothing was saved. The message names that folder, quoted, and ends with the step that frees the branch.
+
+                        working_copy_busy: Another build is starting, a worker is reading its assignment into its working copy, or a test check holds the test writer's working copy; nothing was saved. Start the build again when that has ended.
+
+                        previous_change_open: Another change's build is open, and the user has neither merged a passed run of it into the branch checked out in the project folder nor dropped it; nothing was saved. The body names that build, with the commits to merge once a run passed, so the page offers the merge commands and Drop.
+
+                        unfinished_build_open: Building this change again replaces its open build, which no verification has passed, and replaces does not name that build; nothing was saved. The page asks the user first, then sends replaces naming the build it showed.
+
+                        drafted_before_drop: The agreed revision was drafted before the user dropped another change, so its design can hold that change's design; nothing was saved. The guide revises the change from its draft; the user adopts the revision, then builds.
+
+                        design_changed_outside: A design file at the project's commit is not a version the agreed revision was made from: it was changed outside Surla; nothing was saved. The message names the file and the commit. When the change is uncommitted, commit the design change in the project folder first; then the guide calls update_draft, refresh_story and revise_change, and the user adopts the revision and builds.
                     schema:
-                        $ref: '#/definitions/SurlaStartBuildDesignChangedOutsideResponseBody'
+                        $ref: '#/definitions/SurlaStartBuildConflictResponseBody'
                     examples:
                         application/vnd.goa.error:
                             fault: false
                             id: 123abc
                             message: parameter 'p' must be an integer
-                            name: design_changed_outside
+                            name: conflict
                             temporary: false
                             timeout: false
                 "422":
@@ -516,15 +562,18 @@ paths:
                             temporary: false
                             timeout: false
                 "501":
-                    description: 'sandbox_unavailable: This system has no candidate sandbox; nothing was saved. When the host reports a specific sandbox prerequisite failure, the message includes its cause and remedy before: Start this project on a system with Surla''s candidate sandbox, then build again.'
+                    description: |-
+                        not_implemented: Start this project with surla to bind the team; nothing was saved.
+
+                        sandbox_unavailable: This system has no candidate sandbox; nothing was saved. When the host reports a specific sandbox prerequisite failure, the message includes its cause and remedy before: Start this project on a system with Surla's candidate sandbox, then build again.
                     schema:
-                        $ref: '#/definitions/SurlaStartBuildSandboxUnavailableResponseBody'
+                        $ref: '#/definitions/SurlaStartBuildNotImplementedResponseBody'
                     examples:
                         application/vnd.goa.error:
                             fault: false
                             id: 123abc
                             message: parameter 'p' must be an integer
-                            name: sandbox_unavailable
+                            name: not_implemented
                             temporary: false
                             timeout: false
                 "503":
@@ -595,17 +644,17 @@ paths:
                             temporary: false
                             timeout: false
                 "409":
-                    description: 'conflict: The build was already dropped; nothing changed.'
+                    description: |-
+                        build_changed: The open build is not the one the page showed: a second tab built or dropped meanwhile. Nothing changed; the body names the open build.
+
+                        conflict: The build was already dropped; nothing changed.
                     schema:
-                        $ref: '#/definitions/SurlaDropBuildConflictResponseBody'
-                    examples:
-                        application/vnd.goa.error:
-                            fault: false
-                            id: 123abc
-                            message: parameter 'p' must be an integer
-                            name: conflict
-                            temporary: false
-                            timeout: false
+                        $ref: '#/definitions/OpenBuildRefusal'
+                        required:
+                            - name
+                            - message
+                            - change_id
+                            - build
                 "501":
                     description: 'not_implemented: Start this project with surla to bind the team; nothing changed.'
                     schema:
@@ -804,15 +853,32 @@ paths:
                             temporary: false
                             timeout: false
                 "409":
-                    description: 'no_test_layout: Without stored verification settings: a commit lacks the test layout surla init makes, the accepted tests'' commit is no longer in the project''s repository, or the project folder is not in a git repository. The message names the commit or folder and what is missing, and ends with the step.'
+                    description: |-
+                        assignment_unread: A build started after your last read of your assignment: stop your current work, then call get_builder_assignment for its change.
+
+                        copy_off_branch: Your working copy is not on the build's branch: the message states its branch, the build's branch and what is uncommitted, and the goal. Put your work there with git, commit it, and verify again.
+
+                        working_folder_missing: Your working folder is missing; ask the user to build this change again on the views page.
+
+                        build_branch_mismatch: The candidate is not on your build's branch, does not descend from the build's base, is the base itself, or holds a commit of another build's branch that the base lacks. The message names the commit and, for another build's work, its branch and the files it changed, and states the goal: your branch and working copy hold none of that work.
+
+                        design_changed_outside: A design file at the candidate's merge base with the project's commit is not a version the revision was made from: it was changed outside Surla. The message names the file and the commit. When the change is uncommitted, the user commits the design change in the project folder, then asks the guide to call update_draft, refresh_story and revise_change.
+
+                        conflict: The Change Card is not confirmed or its request_revision does not match, the candidate commit is not in the project's repository, the project folder was replaced after the server started, the candidate's design/ files differ from the build's design source (the message names them; call generate_code, commit and verify again), or (without stored verification settings) the candidate changes hand-written files in the test module.
+
+                        no_build: No build of this change is open (the user built another change or none), the user dropped it, or (without stored verification settings) the open build is for another revision of the change. The message names what Surla found and the user's step.
+
+                        tests_not_accepted: Without stored verification settings: Surla has not accepted the tests of the change's build. The message names the test writer's state and who acts, and ends with the step.
+
+                        no_test_layout: Without stored verification settings: a commit lacks the test layout surla init makes, the accepted tests' commit is no longer in the project's repository, or the project folder is not in a git repository. The message names the commit or folder and what is missing, and ends with the step.
                     schema:
-                        $ref: '#/definitions/SurlaVerifyChangeNoTestLayoutResponseBody'
+                        $ref: '#/definitions/SurlaVerifyChangeAssignmentUnreadResponseBody'
                     examples:
                         application/vnd.goa.error:
                             fault: false
                             id: 123abc
                             message: parameter 'p' must be an integer
-                            name: no_test_layout
+                            name: assignment_unread
                             temporary: false
                             timeout: false
                 "501":
@@ -885,15 +951,22 @@ paths:
                             temporary: false
                             timeout: false
                 "409":
-                    description: 'tests_not_accepted: Without stored verification settings: Surla has not accepted the tests of the change''s build. The message names the test writer''s state and who acts, and ends with the step.'
+                    description: |-
+                        build_branch_mismatch: The run's candidate is no longer on the build's branch, or that branch now holds another build's work: the builder verifies again, then the user approves that run.
+
+                        conflict: The Change Card is not confirmed, its request_revision does not match, or the accepted tests changed while approving; confirm the card, read the current revision with get_change, or approve again.
+
+                        no_build: Without stored verification settings: the user has not built the change's revision in force with a test writer, so no tests are accepted for it. The message names the revision built, if any, and ends with the user's step.
+
+                        tests_not_accepted: Without stored verification settings: Surla has not accepted the tests of the change's build. The message names the test writer's state and who acts, and ends with the step.
                     schema:
-                        $ref: '#/definitions/SurlaApproveMergeTestsNotAcceptedResponseBody'
+                        $ref: '#/definitions/SurlaApproveMergeBuildBranchMismatchResponseBody'
                     examples:
                         application/vnd.goa.error:
                             fault: false
                             id: 123abc
                             message: parameter 'p' must be an integer
-                            name: tests_not_accepted
+                            name: build_branch_mismatch
                             temporary: false
                             timeout: false
                 "422":
@@ -1194,15 +1267,18 @@ paths:
                             temporary: false
                             timeout: false
                 "409":
-                    description: 'conflict: A Change Card with this change_id already exists; use revise_change or a new change_id.'
+                    description: |-
+                        drafted_before_drop: A build was dropped after this refresh. Call refresh_story to remake and evaluate the draft.
+
+                        conflict: A Change Card with this change_id already exists; use revise_change or a new change_id.
                     schema:
-                        $ref: '#/definitions/SurlaProposeChangeConflictResponseBody'
+                        $ref: '#/definitions/SurlaProposeChangeDraftedBeforeDropResponseBody'
                     examples:
                         application/vnd.goa.error:
                             fault: false
                             id: 123abc
                             message: parameter 'p' must be an integer
-                            name: conflict
+                            name: drafted_before_drop
                             temporary: false
                             timeout: false
                 "422":
@@ -1275,15 +1351,18 @@ paths:
                             temporary: false
                             timeout: false
                 "409":
-                    description: 'conflict: request_revision does not name the latest revision (the waiting proposal''s, when one waits); read the change with get_change.'
+                    description: |-
+                        drafted_before_drop: A build was dropped after this refresh. Call refresh_story to remake and evaluate the draft.
+
+                        conflict: request_revision does not name the latest revision (the waiting proposal's, when one waits); read the change with get_change.
                     schema:
-                        $ref: '#/definitions/SurlaReviseChangeConflictResponseBody'
+                        $ref: '#/definitions/SurlaReviseChangeDraftedBeforeDropResponseBody'
                     examples:
                         application/vnd.goa.error:
                             fault: false
                             id: 123abc
                             message: parameter 'p' must be an integer
-                            name: conflict
+                            name: drafted_before_drop
                             temporary: false
                             timeout: false
                 "422":
@@ -1563,15 +1642,22 @@ paths:
                             temporary: false
                             timeout: false
                 "409":
-                    description: 'no_test_layout: The candidate or accepted tests lacks the required test layout.'
+                    description: |-
+                        conflict: The change is not confirmed, a required commit is unavailable, the project folder was replaced, or the candidate changes hand-written test-module files or shares no history with the accepted tests.
+
+                        no_build: The current change revision has no usable build.
+
+                        tests_not_accepted: The current build has no accepted tests; the message names who acts next.
+
+                        no_test_layout: The candidate or accepted tests lacks the required test layout.
                     schema:
-                        $ref: '#/definitions/SurlaStartLiveTargetNoTestLayoutResponseBody'
+                        $ref: '#/definitions/SurlaStartLiveTargetConflictResponseBody'
                     examples:
                         application/vnd.goa.error:
                             fault: false
                             id: 123abc
                             message: parameter 'p' must be an integer
-                            name: no_test_layout
+                            name: conflict
                             temporary: false
                             timeout: false
                 "422":
@@ -1839,17 +1925,15 @@ paths:
                             temporary: false
                             timeout: false
                 "409":
-                    description: 'window_busy: Another Herdr dialog is open; close it and run surla again.'
+                    description: |-
+                        ambiguous_space: Several local spaces match the team name and folder; close the duplicates before starting agents again.
+
+                        window_busy: Another Herdr dialog is open; close it and run surla again.
                     schema:
-                        $ref: '#/definitions/ProjectEnsureTeamWindowBusyResponseBody'
-                    examples:
-                        application/vnd.goa.error:
-                            fault: false
-                            id: 123abc
-                            message: parameter 'p' must be an integer
-                            name: window_busy
-                            temporary: false
-                            timeout: false
+                        $ref: '#/definitions/TeamSpaceConflict'
+                        required:
+                            - name
+                            - count
                 "422":
                     description: 'unprocessable: The requested credential exchange does not exist or is invalid.'
                     schema:
@@ -1921,15 +2005,18 @@ paths:
                             temporary: false
                             timeout: false
                 "409":
-                    description: 'live_target_ended: The live target is no longer running; start it again with start_live_target.'
+                    description: |-
+                        no_live_target: No live target is running, so nothing changed. Call start_live_target with an owned confirmed change_id and a candidate commit first.
+
+                        live_target_ended: The live target is no longer running; start it again with start_live_target.
                     schema:
-                        $ref: '#/definitions/SurlaDraftOverrideLiveTargetEndedResponseBody'
+                        $ref: '#/definitions/SurlaDraftOverrideNoLiveTargetResponseBody'
                     examples:
                         application/vnd.goa.error:
                             fault: false
                             id: 123abc
                             message: parameter 'p' must be an integer
-                            name: live_target_ended
+                            name: no_live_target
                             temporary: false
                             timeout: false
                 "422":
@@ -1945,15 +2032,18 @@ paths:
                             temporary: false
                             timeout: false
                 "502":
-                    description: 'update_not_confirmed: The live target did not confirm the update, so it may or may not have applied it. Keep the draft and send it again.'
+                    description: |-
+                        target_rejected_credential: The live target rejected this server's key; nothing changed. Start the target again with start_live_target.
+
+                        update_not_confirmed: The live target did not confirm the update, so it may or may not have applied it. Keep the draft and send it again.
                     schema:
-                        $ref: '#/definitions/SurlaDraftOverrideUpdateNotConfirmedResponseBody'
+                        $ref: '#/definitions/SurlaDraftOverrideTargetRejectedCredentialResponseBody'
                     examples:
                         application/vnd.goa.error:
                             fault: false
                             id: 123abc
                             message: parameter 'p' must be an integer
-                            name: update_not_confirmed
+                            name: target_rejected_credential
                             temporary: false
                             timeout: false
             schemes:
@@ -2018,15 +2108,18 @@ paths:
                             temporary: false
                             timeout: false
                 "409":
-                    description: 'window_busy: Close the open Herdr dialog before starting agents.'
+                    description: |-
+                        ambiguous_space: Several spaces match the project; close the duplicates before starting agents again.
+
+                        window_busy: Close the open Herdr dialog before starting agents.
                     schema:
-                        $ref: '#/definitions/SurlaStartTeamAgentsWindowBusyResponseBody'
+                        $ref: '#/definitions/SurlaStartTeamAgentsAmbiguousSpaceResponseBody'
                     examples:
                         application/vnd.goa.error:
                             fault: false
                             id: 123abc
                             message: parameter 'p' must be an integer
-                            name: window_busy
+                            name: ambiguous_space
                             temporary: false
                             timeout: false
                 "503":
@@ -2074,15 +2167,18 @@ paths:
                             temporary: false
                             timeout: false
                 "409":
-                    description: 'pane_unavailable: The requested registered role has no owned pane to show.'
+                    description: |-
+                        window_busy: Close the open Herdr dialog before showing a pane.
+
+                        pane_unavailable: The requested registered role has no owned pane to show.
                     schema:
-                        $ref: '#/definitions/SurlaShowTeamPanePaneUnavailableResponseBody'
+                        $ref: '#/definitions/SurlaShowTeamPaneWindowBusyResponseBody'
                     examples:
                         application/vnd.goa.error:
                             fault: false
                             id: 123abc
                             message: parameter 'p' must be an integer
-                            name: pane_unavailable
+                            name: window_busy
                             temporary: false
                             timeout: false
                 "503":
@@ -2271,15 +2367,22 @@ paths:
                             temporary: false
                             timeout: false
                 "409":
-                    description: 'working_folder_missing: Your working folder is missing; ask the user to build this change again on the views page.'
+                    description: |-
+                        no_build: No build is open, or the user dropped it: stop work on it and make no more edits or commits for it. The user starts builds on the views page.
+
+                        assignment_unread: A build started after your last read of your assignment: stop your current work, then call get_builder_assignment for its change.
+
+                        copy_off_branch: Your working copy is not on the build's branch: the message states its branch, the build's branch and what is uncommitted, and the goal. Put your work there with git, commit it, and call again.
+
+                        working_folder_missing: Your working folder is missing; ask the user to build this change again on the views page.
                     schema:
-                        $ref: '#/definitions/SurlaCheckProjectWorkingFolderMissingResponseBody'
+                        $ref: '#/definitions/SurlaCheckProjectNoBuildResponseBody'
                     examples:
                         application/vnd.goa.error:
                             fault: false
                             id: 123abc
                             message: parameter 'p' must be an integer
-                            name: working_folder_missing
+                            name: no_build
                             temporary: false
                             timeout: false
                 "422":
@@ -2411,15 +2514,22 @@ paths:
                             temporary: false
                             timeout: false
                 "409":
-                    description: 'working_folder_missing: Your working folder is missing; ask the user to build this change again on the views page.'
+                    description: |-
+                        no_build: No build is open, or the user dropped it: stop work on it and make no more edits or commits for it. The user starts builds on the views page.
+
+                        assignment_unread: A build started after your last read of your assignment: stop your current work, then call get_builder_assignment for its change.
+
+                        copy_off_branch: Your working copy is not on the build's branch: the message states its branch, the build's branch and what is uncommitted, and the goal. Put your work there with git, commit it, and call again.
+
+                        working_folder_missing: Your working folder is missing; ask the user to build this change again on the views page.
                     schema:
-                        $ref: '#/definitions/SurlaUpdateDependenciesWorkingFolderMissingResponseBody'
+                        $ref: '#/definitions/SurlaUpdateDependenciesNoBuildResponseBody'
                     examples:
                         application/vnd.goa.error:
                             fault: false
                             id: 123abc
                             message: parameter 'p' must be an integer
-                            name: working_folder_missing
+                            name: no_build
                             temporary: false
                             timeout: false
                 "422":
@@ -2562,27 +2672,39 @@ paths:
                             temporary: false
                             timeout: false
                 "409":
-                    description: 'conflict: The open build is for a revision that is no longer the change''s revision in force; the user builds again.'
+                    description: |-
+                        no_build: No build is open, or the user dropped it: stop work on it and make no more edits or commits for it. The user starts builds on the views page.
+
+                        assignment_unread: A build started after your last read of your assignment: stop your current work, then call get_builder_assignment for its change.
+
+                        copy_off_branch: Your working copy is not on the build's branch: the message states its branch, the build's branch and what is uncommitted, and the goal. Put your work there with git, commit it, and call again.
+
+                        working_folder_missing: Your working folder is missing; ask the user to build this change again on the views page.
+
+                        conflict: The open build is for a revision that is no longer the change's revision in force; the user builds again.
                     schema:
-                        $ref: '#/definitions/SurlaGenerateCodeConflictResponseBody'
+                        $ref: '#/definitions/SurlaGenerateCodeNoBuildResponseBody'
                     examples:
                         application/vnd.goa.error:
                             fault: false
                             id: 123abc
                             message: parameter 'p' must be an integer
-                            name: conflict
+                            name: no_build
                             temporary: false
                             timeout: false
                 "422":
-                    description: 'unprocessable: The selected module of the working folder is absent, replaced, or invalid; correct its files and call again.'
+                    description: |-
+                        missing_modules: The builder's go.mod lacks a module the agreed design imports, requires an older version than the revision was made with, or has a differing replace directive. design/ was written and gen/ was not; the message names each required go get, go mod tidy or replacement correction in the working folder.
+
+                        unprocessable: The selected module of the working folder is absent, replaced, or invalid; correct its files and call again.
                     schema:
-                        $ref: '#/definitions/SurlaGenerateCodeUnprocessableResponseBody'
+                        $ref: '#/definitions/SurlaGenerateCodeMissingModulesResponseBody'
                     examples:
                         application/vnd.goa.error:
                             fault: false
                             id: 123abc
                             message: parameter 'p' must be an integer
-                            name: unprocessable
+                            name: missing_modules
                             temporary: false
                             timeout: false
                 "501":
