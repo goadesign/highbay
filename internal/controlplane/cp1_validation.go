@@ -378,7 +378,10 @@ func (c *ControlPlane) confirm(principal Principal, p *gensurla.ConfirmIntentPay
 	}
 	// base is the revision these answers and examples confirm: the proposal
 	// when the request adopts it, otherwise the revision in force.
-	base := storedRevision{card: record.card, designSource: record.designSource, stories: record.stories}
+	base := storedRevision{
+		card: record.card, designSource: record.designSource, stories: record.stories,
+		architecture: record.architecture, goMod: record.goMod, madeFrom: record.madeFrom,
+	}
 	adopting := record.proposed != nil && record.proposed.card.RequestRevision == p.RequestRevision
 	switch {
 	case adopting:
@@ -434,6 +437,9 @@ func (c *ControlPlane) confirm(principal Principal, p *gensurla.ConfirmIntentPay
 		owner:        record.owner,
 		designSource: base.designSource,
 		stories:      cloneStorySummaries(base.stories),
+		architecture: base.architecture,
+		goMod:        base.goMod,
+		madeFrom:     base.madeFrom,
 	}
 	if err := c.cards.save(saved); err != nil {
 		return storedChangeCard{}, false, err

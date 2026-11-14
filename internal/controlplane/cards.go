@@ -30,8 +30,9 @@ type (
 	// directory, so cards outlive the process that wrote them. The files are
 	// the only copy: each read decodes the file and each change replaces it.
 	// One process at a time may use a directory; openCardStore holds an
-	// exclusive lock on it until close. Callers hold ControlPlane.mu for
-	// every call: the read lock for loads, the write lock for saves and close.
+	// exclusive lock on it until close. Card and legacy build calls hold
+	// ControlPlane.mu: its read lock for loads and write lock for saves and
+	// close. The open-build and made-from records document their own locks.
 	cardStore struct {
 		// dir holds one <hex sha256(change_id)>.json file per card.
 		dir string
@@ -105,6 +106,13 @@ type (
 		// Stories holds the evaluated domain Stories adopted for this card
 		// revision in declaration order.
 		Stories []designeval.StorySummary `json:"stories"`
+		// Architecture is the evaluated topology, absent together with GoMod
+		// and MadeFrom on cards written before snapshot metadata was recorded.
+		Architecture *savedArchitecture `json:"architecture,omitempty"`
+		// GoMod is the module text evaluated with this revision.
+		GoMod string `json:"go_mod,omitempty"`
+		// MadeFrom keeps the revision's own provenance, independent of later drops.
+		MadeFrom *madeFromSnapshot `json:"made_from,omitempty"`
 		// SavedAt is when save last wrote the file. It sits outside Card so
 		// request_revision never covers it: saving the same content again
 		// keeps the revision and moves only this time.
@@ -123,6 +131,13 @@ type (
 		DesignSource string `json:"design_source"`
 		// Stories holds the proposal's evaluated domain Stories.
 		Stories []designeval.StorySummary `json:"stories"`
+		// Architecture is the evaluated topology, absent together with GoMod
+		// and MadeFrom on cards written before snapshot metadata was recorded.
+		Architecture *savedArchitecture `json:"architecture,omitempty"`
+		// GoMod is the module text evaluated with this revision.
+		GoMod string `json:"go_mod,omitempty"`
+		// MadeFrom keeps the revision's own provenance, independent of later drops.
+		MadeFrom *madeFromSnapshot `json:"made_from,omitempty"`
 	}
 )
 
@@ -244,6 +259,9 @@ func decodeCardBytes(label, fileName string, requireExactID bool, data []byte) (
 	if err != nil {
 		return storedChangeCard{}, err
 	}
+	if err := validateRevisionMetadata(f.Architecture, f.GoMod, f.MadeFrom); err != nil {
+		return storedChangeCard{}, fmt.Errorf("change card %q metadata: %w", label, err)
+	}
 	if f.SavedAt.IsZero() {
 		return storedChangeCard{}, fmt.Errorf("change card %q has no saved time", label)
 	}
@@ -252,6 +270,9 @@ func decodeCardBytes(label, fileName string, requireExactID bool, data []byte) (
 		owner:        f.Owner,
 		designSource: f.DesignSource,
 		stories:      stories,
+		architecture: f.Architecture,
+		goMod:        f.GoMod,
+		madeFrom:     f.MadeFrom,
 		savedAt:      f.SavedAt,
 	}
 	if f.Proposed == nil {
@@ -273,7 +294,13 @@ func decodeCardBytes(label, fileName string, requireExactID bool, data []byte) (
 		proposal.ConfirmedBy != nil || proposal.Approval != nil {
 		return storedChangeCard{}, fmt.Errorf("change card %q has a proposed revision that is not awaiting confirmation", label)
 	}
-	record.proposed = &storedRevision{card: proposal, designSource: f.Proposed.DesignSource, stories: proposalStories}
+	if err := validateRevisionMetadata(f.Proposed.Architecture, f.Proposed.GoMod, f.Proposed.MadeFrom); err != nil {
+		return storedChangeCard{}, fmt.Errorf("proposed revision metadata: %w", err)
+	}
+	record.proposed = &storedRevision{
+		card: proposal, designSource: f.Proposed.DesignSource, stories: proposalStories,
+		architecture: f.Proposed.Architecture, goMod: f.Proposed.GoMod, madeFrom: f.Proposed.MadeFrom,
+	}
 	return record, nil
 }
 
@@ -329,11 +356,22 @@ func (s *cardStore) save(record storedChangeCard) error {
 	if s.lock == nil {
 		return errCardsClosed
 	}
+	if err := validateRevisionMetadata(record.architecture, record.goMod, record.madeFrom); err != nil {
+		return fmt.Errorf("change card %q metadata: %w", record.card.ChangeID, err)
+	}
+	if p := record.proposed; p != nil {
+		if err := validateRevisionMetadata(p.architecture, p.goMod, p.madeFrom); err != nil {
+			return fmt.Errorf("proposed revision metadata: %w", err)
+		}
+	}
 	file := cardFile{
 		Card:         savedCardOf(record.card),
 		Owner:        record.owner,
 		DesignSource: record.designSource,
 		Stories:      persistedStories(record.card, record.stories),
+		Architecture: record.architecture,
+		GoMod:        record.goMod,
+		MadeFrom:     record.madeFrom,
 		SavedAt:      time.Now().UTC(),
 	}
 	if p := record.proposed; p != nil {
@@ -341,6 +379,9 @@ func (s *cardStore) save(record storedChangeCard) error {
 			Card:         savedCardOf(p.card),
 			DesignSource: p.designSource,
 			Stories:      persistedStories(p.card, p.stories),
+			Architecture: p.architecture,
+			GoMod:        p.goMod,
+			MadeFrom:     p.madeFrom,
 		}
 	}
 	data, err := json.Marshal(file)

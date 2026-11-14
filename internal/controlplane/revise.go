@@ -31,9 +31,10 @@ import (
 // needs_confirmation status with no answers, confirmed_by or approval. When
 // story_refresh_op_id is given, the revision adopts the evaluated Stories and
 // design/*.go snapshot from that succeeded refresh_story operation; when it
-// is omitted on a revision that has Stories, those Stories and their design
-// source carry over together; otherwise the design source is read from the
-// bound workspace, or kept when no workspace is bound.
+// is omitted on a revision with saved snapshot metadata, the whole snapshot
+// carries over, including when it declares no Stories. Older revisions with
+// Stories keep their Stories and design source together; otherwise the design
+// source is read from the bound workspace, or kept when no workspace is bound.
 //
 // A card that was never confirmed is replaced by the new revision. Beside a
 // confirmed card the new revision is saved as the proposal, replacing any
@@ -90,7 +91,9 @@ func (c *ControlPlane) ReviseChange(
 		if err != nil {
 			return nil, err
 		}
-	case len(latest.stories) > 0:
+	case latest.architecture != nil || len(latest.stories) > 0:
+		// A stored metadata group is complete by the card decoder. Its design
+		// stays with it even when the evaluation declared no Stories.
 		nextStories = cloneStorySummaries(latest.stories)
 	default:
 		if wsDir, wsDev, wsIno := c.currentWorkspaceTarget(); wsDir != "" {
@@ -146,7 +149,11 @@ func (c *ControlPlane) ReviseChange(
 
 	// Phase 3: save under the write lock only if no other request changed the
 	// change since Phase 1.
-	saved, err := c.saveRevision(span, principal, p, storedRevision{card: revised, designSource: designSrc, stories: nextStories})
+	next := storedRevision{card: revised, designSource: designSrc, stories: nextStories}
+	if p.StoryRefreshOpID == nil {
+		next.architecture, next.goMod, next.madeFrom = latest.architecture, latest.goMod, latest.madeFrom
+	}
+	saved, err := c.saveRevision(span, principal, p, next)
 	if err != nil {
 		return nil, err
 	}
@@ -184,7 +191,10 @@ func (r storedChangeCard) latest() storedRevision {
 	if r.proposed != nil {
 		return *r.proposed
 	}
-	return storedRevision{card: r.card, designSource: r.designSource, stories: r.stories}
+	return storedRevision{
+		card: r.card, designSource: r.designSource, stories: r.stories,
+		architecture: r.architecture, goMod: r.goMod, madeFrom: r.madeFrom,
+	}
 }
 
 // agreedRevision returns the revision the user agreed, which is the revision
@@ -256,7 +266,10 @@ func (c *ControlPlane) saveRevision(
 		span.SetAttributes(attribute.String("surla.public_summary", "Change Card request_revision changed concurrently (this request did not modify the Change Card); call get_change and retry revise_change."))
 		return storedChangeCard{}, err
 	}
-	saved := storedChangeCard{card: next.card, owner: principal.ID, designSource: next.designSource, stories: next.stories}
+	saved := storedChangeCard{
+		card: next.card, owner: principal.ID, designSource: next.designSource, stories: next.stories,
+		architecture: next.architecture, goMod: next.goMod, madeFrom: next.madeFrom,
+	}
 	summary := "Revised Change Card (needs_confirmation)."
 	if current.card.Status == StatusConfirmed {
 		saved = current

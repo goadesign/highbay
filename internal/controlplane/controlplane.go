@@ -186,6 +186,12 @@ type (
 		// stories holds the evaluated domain Stories adopted for this revision,
 		// or nil when none were adopted.
 		stories []designeval.StorySummary
+		// architecture is the evaluated topology retained outside the revision hash.
+		architecture *savedArchitecture
+		// goMod is the module text evaluated with this revision.
+		goMod string
+		// madeFrom is this revision's immutable design provenance, absent on older cards.
+		madeFrom *madeFromSnapshot
 		// savedAt is when the card store last wrote this card; zero for a
 		// record not yet saved. It is not part of request_revision.
 		savedAt time.Time
@@ -205,6 +211,12 @@ type (
 		designSource string
 		// stories holds the proposal's evaluated domain Stories, or nil.
 		stories []designeval.StorySummary
+		// architecture is the evaluated topology retained outside the revision hash.
+		architecture *savedArchitecture
+		// goMod is the module text evaluated with this revision.
+		goMod string
+		// madeFrom is this revision's immutable design provenance, absent on older cards.
+		madeFrom *madeFromSnapshot
 	}
 
 	// canonicalAnswerPair is a deterministic key/value entry for JSON hashing.
@@ -358,6 +370,9 @@ type (
 		// buildIdentityCheck and buildSandboxCheck replace host identity and sandbox availability checks in tests.
 		buildIdentityCheck func(context.Context, string) error
 		buildSandboxCheck  func() error
+		// builderCopyTurn reserves the builder's copy independently of test checks.
+		// Later copy operations take it without waiting before workingCopyTurn.
+		builderCopyTurn chan struct{}
 		// workingCopyTurn is the one lock on the project's test working copy,
 		// a channel with room for one value: a sender takes the turn, a
 		// receive releases it, and a waiter can give up when its context
@@ -365,7 +380,8 @@ type (
 		// writing the required tests into it, checking it or recording its
 		// accepted tests, for the whole of that step: a build start takes it
 		// without waiting, and the report checker holds it for each report it
-		// judges. Locks are taken in the order workingCopyTurn, reportMu, mu,
+		// judges. With workspaceMu as the outer lifetime gate, locks are taken in
+		// the order builderCopyTurn, workingCopyTurn, reportMu, draftMu, mu,
 		// never the other way: the turn's steps run for minutes, and mu guards
 		// every card and build read.
 		workingCopyTurn chan struct{}
@@ -376,6 +392,10 @@ type (
 		// waits for one Record, which takes milliseconds. Taken after
 		// workingCopyTurn and before mu.
 		reportMu sync.Mutex
+		// draftMu serializes the draft and its made-from list. Git and sandbox
+		// work never run under mu; only draft file copies and merge-file run
+		// under draftMu. The new draft owners activate this lock in later slices.
+		draftMu sync.Mutex
 		// reportWake tells the report checker that a report was recorded.
 		// It has room for one value; report_tests_finished sends without
 		// waiting, and a full channel already says the same.
@@ -507,6 +527,7 @@ func New(opts Options) (*ControlPlane, error) {
 		initRunner:             opts.InitRunner,
 		surlaVersion:           surlaVersion,
 		liveState:              newLiveState(opts.Live, cards.dir),
+		builderCopyTurn:        make(chan struct{}, 1),
 		workingCopyTurn:        make(chan struct{}, 1),
 		reportWake:             make(chan struct{}, 1),
 		team:                   opts.Team,
@@ -568,7 +589,9 @@ func NewHTTPHandler(svc gensurla.Service, auth RequestAuthenticator) http.Handle
 	)
 	gensurlahttp.Mount(mux, httpServer)
 
-	mcpAdapter := genmcpadapter.NewMCPAdapter(endpoints, nil)
+	mcpAdapter := genmcpadapter.NewMCPAdapter(endpoints, &genmcpadapter.MCPAdapterOptions{
+		ErrorMapper: mapMCPRefusal,
+	})
 	mcpEndpoints := genmcpadapter.NewEndpoints(mcpAdapter)
 	filterMCPDiscovery(mcpEndpoints)
 	mcpServer := genmcpsurla.New(
