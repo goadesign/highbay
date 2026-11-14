@@ -62,9 +62,10 @@ type (
 	}
 
 	buildExecEscapesResult struct {
-		ExecWorkDir string `json:"exec_workdir"`
-		ExecGit     string `json:"exec_git"`
-		ExecLdLinux string `json:"exec_ld_linux"`
+		ExecWorkDir        string `json:"exec_workdir"`
+		ExecGit            string `json:"exec_git"`
+		ExecLdLinux        string `json:"exec_ld_linux"`
+		WriteSiblingOutDir string `json:"write_sibling_outdir"`
 	}
 
 	buildSignalsDgramResult struct {
@@ -173,7 +174,19 @@ func main() {
 
 	switch os.Args[1] {
 	case "bystander-sleep":
-		time.Sleep(30 * time.Second)
+		time.Sleep(45 * time.Second)
+
+	case "build":
+		childBin := filepath.Join(filepath.Dir(os.Args[0]), "child")
+		child := exec.Command(childBin, "bystander-sleep")
+		child.Stdout = os.Stdout
+		child.Stderr = os.Stderr
+		if err := child.Start(); err != nil {
+			fmt.Fprintf(os.Stderr, "start child: %v\n", err)
+			os.Exit(1)
+		}
+		fmt.Printf("child_pid=%d\n", child.Process.Pid)
+		time.Sleep(45 * time.Second)
 
 	case "noop":
 		fmt.Println("noop-ok")
@@ -212,10 +225,15 @@ func main() {
 	case "build-exec-escapes":
 		probeInWork := os.Args[2]
 		ldLinux := os.Args[3]
+		var writeSiblingErr string
+		if len(os.Args) >= 5 {
+			writeSiblingErr = errStr(os.WriteFile(os.Args[4], []byte("overwritten"), 0o600))
+		}
 		enc.Encode(buildExecEscapesResult{
-			ExecWorkDir: errStr(exec.Command(probeInWork, "noop").Run()),
-			ExecGit:     errStr(exec.Command("/usr/lib/git-core/git", "--version").Run()),
-			ExecLdLinux: errStr(exec.Command(ldLinux, probeInWork, "noop").Run()),
+			ExecWorkDir:        errStr(exec.Command(probeInWork, "noop").Run()),
+			ExecGit:            errStr(exec.Command("/usr/lib/git-core/git", "--version").Run()),
+			ExecLdLinux:        errStr(exec.Command(ldLinux, probeInWork, "noop").Run()),
+			WriteSiblingOutDir: writeSiblingErr,
 		})
 
 	case "build-signals-and-dgram":

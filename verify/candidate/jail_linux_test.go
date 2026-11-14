@@ -27,9 +27,10 @@ type (
 	// buildExecEscapesResult decodes the JSON output of linuxprobe
 	// "build-exec-escapes".
 	buildExecEscapesResult struct {
-		ExecWorkDir string `json:"exec_workdir"`
-		ExecGit     string `json:"exec_git"`
-		ExecLdLinux string `json:"exec_ld_linux"`
+		ExecWorkDir        string `json:"exec_workdir"`
+		ExecGit            string `json:"exec_git"`
+		ExecLdLinux        string `json:"exec_ld_linux"`
+		WriteSiblingOutDir string `json:"write_sibling_outdir"`
 	}
 
 	// buildSignalsDgramResult decodes the JSON output of linuxprobe
@@ -208,6 +209,77 @@ func TestLinuxJailPrerequisitesAndGuards(t *testing.T) {
 		require.Error(t, err)
 		assert.ErrorIs(t, err, ErrIsolationUnavailable)
 	})
+
+	t.Run("canary_timeout_kills_process_group", func(t *testing.T) {
+		// In a container without --init (where PID 1 is go test rather than an
+		// init reaper), a killed grandchild reparented to PID 1 remains a zombie
+		// until the container exits unless this test process adopts and reaps it
+		// via PR_SET_CHILD_SUBREAPER (36). Wait4 with WNOHANG only reaps a
+		// process that has already been killed; a live child is untouched.
+		const prSetChildSubreaper = 36
+		_, _, subreaperErrno := syscall.RawSyscall(syscall.SYS_PRCTL, prSetChildSubreaper, 1, 0)
+		require.Zero(t, subreaperErrno)
+		t.Cleanup(func() {
+			syscall.RawSyscall(syscall.SYS_PRCTL, prSetChildSubreaper, 0, 0)
+		})
+		stopReap := make(chan struct{})
+		defer close(stopReap)
+		go func() {
+			ticker := time.NewTicker(20 * time.Millisecond)
+			defer ticker.Stop()
+			for {
+				select {
+				case <-stopReap:
+					return
+				case <-ticker.C:
+					entries, err := os.ReadDir("/proc")
+					if err != nil {
+						continue
+					}
+					for _, e := range entries {
+						pid, err := strconv.Atoi(e.Name())
+						if err != nil || pid <= 1 {
+							continue
+						}
+						comm, err := os.ReadFile(filepath.Join("/proc", e.Name(), "comm"))
+						if err != nil || strings.TrimSpace(string(comm)) != "child" {
+							continue
+						}
+						var ws syscall.WaitStatus
+						if _, err := syscall.Wait4(pid, &ws, syscall.WNOHANG, nil); err != nil {
+							continue
+						}
+					}
+				}
+			}
+		}()
+
+		probeBin := buildLinuxProbe(t)
+		probeBytes, err := os.ReadFile(probeBin)
+		require.NoError(t, err)
+
+		fakeGoroot := t.TempDir()
+		fakeBin := filepath.Join(fakeGoroot, "bin")
+		require.NoError(t, os.MkdirAll(fakeBin, 0o755))
+		require.NoError(t, os.WriteFile(filepath.Join(fakeBin, "go"), probeBytes, 0o755))
+		require.NoError(t, os.WriteFile(filepath.Join(fakeBin, "child"), probeBytes, 0o755))
+
+		start := time.Now()
+		err = ensureGOROOTCanaryWithTimeout(fakeGoroot, 250*time.Millisecond)
+		elapsed := time.Since(start)
+		require.ErrorIs(t, err, ErrIsolationUnavailable)
+		assert.Contains(t, err.Error(), "toolchain canary failed")
+		assert.Less(t, elapsed, 5*time.Second, "canary timeout must kill the jailed process group without waiting for the 45s child sleep")
+
+		_, after, found := strings.Cut(err.Error(), "child_pid=")
+		require.True(t, found, "expected child_pid in canary output: %v", err)
+		pidField, _, _ := strings.Cut(after, "\n")
+		pidField = strings.TrimRight(pidField, ")")
+		childPID, convErr := strconv.Atoi(strings.TrimSpace(pidField))
+		require.NoError(t, convErr)
+		require.Greater(t, childPID, 0)
+		assert.ErrorIs(t, syscall.Kill(childPID, 0), syscall.ESRCH, "child process must be dead when ensureGOROOTCanaryWithTimeout returns")
+	})
 }
 
 // TestLinuxJailBuildAndBuildTest verifies POS_build, POS_build_test, and the
@@ -329,11 +401,14 @@ func TestLinuxJailBuildAndBuildTest(t *testing.T) {
 			fakeGo := filepath.Join(fakeGoroot, "bin/go")
 			require.NoError(t, os.WriteFile(fakeGo, probeBytes, 0o755))
 
+			siblingOut := filepath.Join(outDir, "sibling.txt")
+			require.NoError(t, os.WriteFile(siblingOut, []byte("untouched"), 0o600))
+
 			escOut, _, err := runTestJailed(t, jailConfig{
 				Mode:      modeBuild,
 				NoScope:   tc.callerNoScope,
 				Binary:    fakeGo,
-				Args:      []string{"build-exec-escapes", probeInWork, ldLinux},
+				Args:      []string{"build-exec-escapes", probeInWork, ldLinux, siblingOut},
 				Dir:       srcDir,
 				Env:       buildEnv,
 				GOROOT:    fakeGoroot,
@@ -347,6 +422,10 @@ func TestLinuxJailBuildAndBuildTest(t *testing.T) {
 			assert.Contains(t, escRes.ExecWorkDir, "permission denied")
 			assert.Contains(t, escRes.ExecGit, "permission denied")
 			assert.Contains(t, escRes.ExecLdLinux, "permission denied")
+			assert.Contains(t, escRes.WriteSiblingOutDir, "permission denied")
+			gotSibling, err := os.ReadFile(siblingOut)
+			require.NoError(t, err)
+			assert.Equal(t, "untouched", string(gotSibling))
 
 			bystander := exec.Command(probeBin, "bystander-sleep")
 			require.NoError(t, bystander.Start())

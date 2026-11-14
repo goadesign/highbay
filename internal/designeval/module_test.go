@@ -215,6 +215,7 @@ func TestGoEnvForwardsGOPATHWhenGOMODCACHEIsUnset(t *testing.T) {
 	gopath := t.TempDir()
 	t.Setenv("HOME", t.TempDir())
 	t.Setenv("GOPATH", gopath)
+	t.Setenv("GOMODCACHE", "")
 	require.NoError(t, os.Unsetenv("GOMODCACHE"))
 
 	assert.Contains(t, goEnv(), "GOPATH="+gopath)
