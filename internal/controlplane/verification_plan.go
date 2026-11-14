@@ -324,26 +324,23 @@ func (c *ControlPlane) testsChoice(
 	principal Principal,
 	changeID, revision string,
 ) (commit string, source verify.TestsSource, err error) {
-	if _, unavailable := c.verifier.(noVerification); unavailable {
-		return "", "", gensurla.MakeNotImplemented(errVerificationUnavailable)
-	}
-	if v, stored := c.verifier.(storedVerification); stored {
+	switch v := c.verifier.(type) {
+	case storedVerification:
 		return v.cfg.Plan.SuiteCommit, verify.TestsEvaluator, nil
-	}
-	held, err := c.ownedBuild(principal, changeID)
-	var missing *goa.ServiceError
-	switch {
-	case errors.As(err, &missing) && missing.Name == "not_found":
-		return "", "", refuseNoBuild(changeID, revision, buildFile{}, false)
-	case err != nil:
-		return "", "", err
-	}
-	build := held.file
-	if build.RequestRevision != revision {
-		return "", "", refuseNoBuild(changeID, revision, build, true)
-	}
-	switch c.verifier.(type) {
 	case writtenTestVerification:
+		held, err := c.ownedBuild(principal, changeID)
+		var missing *goa.ServiceError
+		switch {
+		case errors.As(err, &missing) && missing.Name == "not_found":
+			// The caller checked the change, so what is missing is its build.
+			return "", "", refuseNoBuild(changeID, revision, buildFile{}, false)
+		case err != nil:
+			return "", "", err
+		}
+		build := held.file
+		if build.RequestRevision != revision {
+			return "", "", refuseNoBuild(changeID, revision, build, true)
+		}
 		if build.TestWriter.State != testsAccepted {
 			return "", "", testsNotAccepted{saved: build.TestWriter}
 		}
