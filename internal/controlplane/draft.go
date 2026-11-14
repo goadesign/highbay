@@ -144,7 +144,7 @@ func (c *ControlPlane) readDraftSnapshot(
 				return nil, saved, gensurla.MakeUnprocessable(err)
 			}
 			if currentExists != exists || exists && !reflect.DeepEqual(current, list) || !sameDraft {
-				return nil, saved, gensurla.MakeConflict(errors.New(
+				return nil, saved, gensurla.MakeUnprocessable(errors.New(
 					"draft or design provenance changed while reading the project's commit; call refresh_story again",
 				))
 			}
@@ -474,7 +474,7 @@ func removeUnmarkedDroppedDraft(project *os.Root, before fs.FileInfo) error {
 		return err
 	}
 	if !os.SameFile(before, info) || !errors.Is(markerErr, fs.ErrNotExist) {
-		return gensurla.MakeConflict(errors.New("draft changed before its remake; call refresh_story again"))
+		return gensurla.MakeUnprocessable(errors.New("draft changed before its remake; call refresh_story again"))
 	}
 	return project.RemoveAll(draftFolderName)
 }
