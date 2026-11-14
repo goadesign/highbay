@@ -295,6 +295,9 @@ func TestStoryRefreshCloseCancelsWaitsAndWritesNothingAfterwards(t *testing.T) {
 		return statErr == nil
 	}, 5*time.Second, 10*time.Millisecond)
 
+	provenancePath := filepath.Join(cardsDir, madeFromFileName)
+	provenance, err := os.ReadFile(provenancePath)
+	require.NoError(t, err)
 	require.NoError(t, cp.Close())
 
 	// After Close returns, no Story refresh operation remains running or published.
@@ -306,14 +309,18 @@ func TestStoryRefreshCloseCancelsWaitsAndWritesNothingAfterwards(t *testing.T) {
 	_, err = cp.RefreshStory(alice)
 	assertServiceError(t, err, "unavailable")
 
-	// Nothing was written to cardsDir beyond the lock file and empty designeval parent.
+	// Refresh persisted its draft provenance before evaluation started. Close
+	// preserves it, and the canceled evaluator publishes no later card write.
 	entries, err := os.ReadDir(cardsDir)
 	require.NoError(t, err)
 	var names []string
 	for _, e := range entries {
 		names = append(names, e.Name())
 	}
-	assert.Equal(t, []string{"designeval", "lock"}, names)
+	assert.Equal(t, []string{"designeval", "lock", "made-from", "made-from.json"}, names)
+	afterProvenance, err := os.ReadFile(provenancePath)
+	require.NoError(t, err)
+	assert.Equal(t, provenance, afterProvenance)
 	evalEntries, err := os.ReadDir(filepath.Join(cardsDir, "designeval"))
 	require.NoError(t, err)
 	assert.Empty(t, evalEntries)
