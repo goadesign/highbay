@@ -793,7 +793,10 @@ ${stylesCss}
   );
 }
 
-if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+// Node resolves module URLs through symlinks, while argv may retain an alias
+// such as macOS /var instead of /private/var. Compare the same physical file.
+if (process.argv[1] && fs.existsSync(process.argv[1]) &&
+    fs.realpathSync(process.argv[1]) === fs.realpathSync(fileURLToPath(import.meta.url))) {
   buildArtifacts().catch((err) => {
     console.error(err);
     process.exit(1);
