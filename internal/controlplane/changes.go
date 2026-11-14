@@ -127,16 +127,18 @@ func (c *ControlPlane) changeList(ctx context.Context, span trace.Span, owner st
 	}
 	c.mu.RLock()
 	records, err := c.cards.all()
-	var saved buildFile
-	var found bool
-	if err == nil {
-		saved, found, err = c.cards.loadOpenBuild()
-	}
-	c.mu.RUnlock()
 	if err != nil {
+		c.mu.RUnlock()
 		span.RecordError(err)
 		span.SetStatus(codes.Error, "read change cards")
 		return nil, errors.New("list changes: saved change cards could not be read")
+	}
+	saved, found, err := c.cards.loadOpenBuild()
+	c.mu.RUnlock()
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "read builds")
+		return nil, errors.New("list changes: saved builds could not be read")
 	}
 	records = slices.DeleteFunc(records, func(r storedChangeCard) bool { return r.owner != owner })
 	slices.SortFunc(records, func(a, b storedChangeCard) int {
