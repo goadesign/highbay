@@ -406,6 +406,12 @@ func TestTeamStalledReaderDrains(t *testing.T) {
 		joined <- struct{}{}
 		return ctx.Err()
 	}
+	// The fixture's own owner already published "waiting". Clear it so only the
+	// supervisor under test can report waiting, which it does only after it has
+	// applied the reader's snapshot at the unadvanced clock.
+	o.server.team.observationMu.Lock()
+	o.server.team.observed = nil
+	o.server.team.observationMu.Unlock()
 	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
 	done := make(chan error, 1)
