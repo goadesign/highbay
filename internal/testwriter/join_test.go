@@ -392,7 +392,17 @@ func TestJoinRecoversFromInterruptedSteps(t *testing.T) {
 
 		// Simulate a stop inside git switch -c after unpacking B2.
 		runGit(t, tw.Dir(), "read-tree", "-u", "--reset", b2)
+		twLock := filepath.Join(tw.gitDir, "index.lock")
+		writeFiles(t, tw.gitDir, map[string]string{"index.lock": "held\n"})
 		outcome, facts, err := tw.Join(t.Context(), TestsRole, 2, b2, "exports")
+		require.NoError(t, err)
+		assert.Equal(t, Refused, outcome)
+		assert.Equal(t, twLock, facts.IndexLock)
+		assert.Contains(t, facts.Step,
+			"If no git command is running in your working folder, delete "+twLock+", then call get_test_writer_assignment again.")
+		require.NoError(t, os.Remove(twLock))
+
+		outcome, facts, err = tw.Join(t.Context(), TestsRole, 2, b2, "exports")
 		require.NoError(t, err)
 		assert.Equal(t, Joined, outcome)
 		assert.Equal(t, "surla/tests-2", facts.Branch)
@@ -433,12 +443,22 @@ func TestJoinRecoversFromInterruptedSteps(t *testing.T) {
 		}
 		writeFiles(t, wc.Dir(), map[string]string{"big/f015.txt": ""})
 
-		// 2. When index.lock is present at the start of Join, Join refuses
-		// without deleting index.lock and names the recovery step for the
-		// role.
+		// 2. A copy already on its own branch (surla/build-1 for build 1)
+		// writes nothing and returns AlreadyJoined even when index.lock is
+		// held by another process (such as a prompt's or editor's git status).
 		lockPath := filepath.Join(wc.gitDir, "index.lock")
 		writeFiles(t, wc.gitDir, map[string]string{"index.lock": "held by external git\n"})
-		outcome, facts, err := wc.Join(t.Context(), BuilderRole, 2, b2, "exports")
+		outcome, facts, err := wc.Join(t.Context(), BuilderRole, 1, b1, "refunds")
+		require.NoError(t, err)
+		assert.Equal(t, AlreadyJoined, outcome)
+		assert.Equal(t, "surla/build-1", facts.Branch)
+		assert.Empty(t, facts.Step)
+		assert.FileExists(t, lockPath)
+
+		// 3. When index.lock is present on a path that goes on to write (build
+		// 2), Join refuses without deleting index.lock and names the recovery
+		// step for the role.
+		outcome, facts, err = wc.Join(t.Context(), BuilderRole, 2, b2, "exports")
 		require.NoError(t, err)
 		assert.Equal(t, Refused, outcome)
 		assert.Equal(t, "surla/build-1", facts.Branch)
@@ -449,31 +469,48 @@ func TestJoinRecoversFromInterruptedSteps(t *testing.T) {
 		assert.Equal(t, 16, facts.UncommittedCount)
 		assert.FileExists(t, lockPath, "Join must not delete an existing index.lock")
 
-		outcome, facts, err = wc.Join(t.Context(), TestsRole, 2, b2, "exports")
+		// 4. If another process acquires index.lock in the middle of Join
+		// (while writeCtx has not timed out), handleJoinWriteError refuses
+		// with the lock's path and recovery step without deleting the lock.
+		require.NoError(t, os.Remove(lockPath))
+		outcome, facts, err = wc.join(t.Context(), BuilderRole, 2, b2, "exports", joinHooks{
+			beforeSwitch: func() error {
+				writeFiles(t, wc.gitDir, map[string]string{"index.lock": "acquired mid-join\n"})
+				return nil
+			},
+		})
 		require.NoError(t, err)
 		assert.Equal(t, Refused, outcome)
 		assert.Equal(t, lockPath, facts.IndexLock)
 		assert.Contains(t, facts.Step,
-			"If no git command is running in your working folder, delete "+lockPath+", then call get_test_writer_assignment again.")
+			"If no git command is running in your working folder, delete "+lockPath+", then call get_builder_assignment again.")
 		assert.FileExists(t, lockPath)
 
-		// 3. If Surla's own copy-changing git command times out in this
-		// process, handleJoinWriteError removes the index.lock that command
-		// left behind.
+		// 5. After a timeout-killed write, a leftover index.lock stays on disk
+		// (Surla never deletes index.lock) and the next Join refuses with the
+		// lock's recovery step.
 		require.NoError(t, os.Remove(lockPath))
 		_, _, err = wc.join(t.Context(), BuilderRole, 2, b2, "exports", joinHooks{
-			writeTimeout: 20 * time.Millisecond,
+			writeTimeout: 500 * time.Millisecond,
 			beforeSwitch: func() error {
 				writeFiles(t, wc.gitDir, map[string]string{"index.lock": ""})
-				time.Sleep(40 * time.Millisecond)
+				time.Sleep(600 * time.Millisecond)
 				return nil
 			},
 		})
 		require.Error(t, err)
-		assert.NoFileExists(t, lockPath, "timeout-killed Join write must remove its own index.lock")
+		assert.FileExists(t, lockPath, "Surla never deletes index.lock after a timeout")
 
-		// 4. Re-plant the partial unpack (with the 0-byte big/f015.txt) after
-		// step 3's recoverStoppedSwitch completed, and cancel the caller
+		outcome, facts, err = wc.Join(t.Context(), BuilderRole, 2, b2, "exports")
+		require.NoError(t, err)
+		assert.Equal(t, Refused, outcome)
+		assert.Equal(t, lockPath, facts.IndexLock)
+		assert.Contains(t, facts.Step,
+			"If no git command is running in your working folder, delete "+lockPath+", then call get_builder_assignment again.")
+		require.NoError(t, os.Remove(lockPath))
+
+		// 6. Re-plant the partial unpack (with the 0-byte big/f015.txt) after
+		// step 4's recoverStoppedSwitch completed, and cancel the caller
 		// context right as beforeSwitch returns to verify the copy-changing
 		// commands finish under writeCtx without leaving index.lock or making
 		// a partial commit on surla/build-1.

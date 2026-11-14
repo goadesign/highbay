@@ -196,10 +196,6 @@ func (w WorkingCopy) join(ctx context.Context, role Role, n int, base, changeID 
 	if err != nil {
 		return 0, CopyFacts{}, err
 	}
-	if facts.IndexLock != "" {
-		facts.Step = indexLockStep(role, facts.IndexLock)
-		return Refused, facts, nil
-	}
 	if exists {
 		if !facts.Detached && rawBranch == ownBranch && facts.Operation == "none" {
 			return AlreadyJoined, facts, nil
@@ -215,6 +211,10 @@ func (w WorkingCopy) join(ctx context.Context, role Role, n int, base, changeID 
 		if facts.UncommittedCount > 0 {
 			return Refused, facts, nil
 		}
+	}
+	if facts.IndexLock != "" {
+		facts.Step = indexLockStep(role, facts.IndexLock)
+		return Refused, facts, nil
 	}
 	timeout := copyWriteTimeout
 	if hooks.writeTimeout > 0 {
@@ -280,19 +280,17 @@ func indexLockStep(role Role, lockPath string) string {
 }
 
 // handleJoinWriteError handles an error from a copy-changing git command in
-// join: if writeCtx timed out in this process (killing Surla's own git
-// command), it removes the index.lock that command left behind; if writeCtx
-// did not time out and index.lock is present (held by another process), it
-// returns Refused with the lock's recovery step.
+// join: if writeCtx did not time out and index.lock is present (held by
+// another process that acquired the lock during join), it returns Refused with
+// the lock's recovery step. Surla never deletes index.lock; if a timeout kills
+// a copy-changing git command while it holds index.lock, the next Join refuses
+// with the lock's recovery step.
 func (w WorkingCopy) handleJoinWriteError(writeCtx context.Context, role Role,
 	err error) (JoinOutcome, CopyFacts, error) {
-	lockPath := filepath.Join(w.gitDir, "index.lock")
 	if writeCtx.Err() != nil {
-		if rErr := os.Remove(lockPath); rErr != nil && !errors.Is(rErr, fs.ErrNotExist) {
-			return 0, CopyFacts{}, errors.Join(err, rErr)
-		}
 		return 0, CopyFacts{}, err
 	}
+	lockPath := filepath.Join(w.gitDir, "index.lock")
 	if _, lErr := os.Lstat(lockPath); lErr == nil {
 		_, afterFacts, fErr := w.readFacts(writeCtx)
 		if fErr == nil {
