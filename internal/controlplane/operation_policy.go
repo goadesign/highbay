@@ -186,26 +186,37 @@ func filterMCPDiscovery(e *genmcp.Endpoints) {
 // wrapped failure. Independent joined failures keep their own meaning rather
 // than borrowing one child's refusal type and hiding another child's fault.
 func expectedRequestRefusal(err error) bool {
+	switch failure := requestErrorOwner(err).(type) {
+	case *goa.ServiceError:
+		return !failure.Fault
+	case *gensurla.CopyOffBranch, *gensurla.OpenBuildRefusal:
+		return true
+	default:
+		return false
+	}
+}
+
+// requestErrorOwner follows only a single wrapping chain to its named owner.
+// A join of independent failures owns its meaning; choosing one child would
+// turn an unrelated storage failure into that child's ordinary refusal.
+func requestErrorOwner(err error) error {
 	for err != nil {
 		if _, named := err.(goa.GoaErrorNamer); named {
-			switch failure := err.(type) {
-			case *goa.ServiceError:
-				return !failure.Fault
-			case *gensurla.CopyOffBranch, *gensurla.OpenBuildRefusal:
-				return true
-			default:
-				return false
-			}
+			return err
 		}
 		if joined, ok := err.(interface{ Unwrap() []error }); ok {
 			causes := joined.Unwrap()
 			if len(causes) != 1 {
-				return false
+				return err
 			}
 			err = causes[0]
 		} else {
-			err = errors.Unwrap(err)
+			cause := errors.Unwrap(err)
+			if cause == nil {
+				return err
+			}
+			err = cause
 		}
 	}
-	return false
+	return nil
 }
