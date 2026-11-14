@@ -559,7 +559,12 @@ async function phoneScenario(input, facts, views) {
 // takingScenario inspects both requested viewport classes in one browser run.
 // The Go fixture supplies typed presentation facts; this proves no worker ran.
 async function takingScenario(input, facts, views) {
-  await until(views, "document.querySelector('#surla-build-taking[data-state=passed]') !== null");
+  const ready = await until(views, "document.querySelector('#surla-build-taking[data-state=passed]') !== null");
+  if (ready.timed_out) {
+    const state = await evaluate(views, "({ state: document.getElementById('surla-checkpoint-root')?.dataset.state, text: document.body.innerText.slice(0, 6000) })");
+    throw new Error("taking presentation did not load: " + JSON.stringify(state) + "; responses: " +
+      JSON.stringify(views.requests.filter(to(input.origin, "GET", "/changes/taking-layout/build")).map((request) => ({ status: request.status, failure: request.failure }))));
+  }
   facts.taking = [];
   for (const [name, width, height] of [["desktop", 1280, 900], ["mobile", 375, 800]]) {
     await views.dt.send("Emulation.setDeviceMetricsOverride", {
