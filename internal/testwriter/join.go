@@ -36,6 +36,12 @@ type (
 		// administrative folder: "none", "merge", "rebase", "am",
 		// "cherry_pick", or "revert". A bisect is "none".
 		Operation string
+		// IndexLock is the absolute path of index.lock in the working copy's
+		// administrative folder when the index is locked, or empty otherwise.
+		IndexLock string
+		// Step is the recovery instruction Join populates when refusing a
+		// working copy whose index.lock is present.
+		Step string
 		// Uncommitted lists up to the first five uncommitted or untracked
 		// paths in byte order, relative to the copy's root, each formatted via
 		// ShownName. It is an empty slice when UncommittedCount is 0.
@@ -61,6 +67,9 @@ type (
 		// branch and immediately before git switch -c creates the new build's
 		// branch.
 		beforeSwitch func() error
+		// writeTimeout overrides copyWriteTimeout when positive so tests can
+		// exercise timeout-killed copy-changing git commands.
+		writeTimeout time.Duration
 	}
 
 	// treeEntry is the destination mode and object ID of one path in git
@@ -187,6 +196,10 @@ func (w WorkingCopy) join(ctx context.Context, role Role, n int, base, changeID 
 	if err != nil {
 		return 0, CopyFacts{}, err
 	}
+	if facts.IndexLock != "" {
+		facts.Step = indexLockStep(role, facts.IndexLock)
+		return Refused, facts, nil
+	}
 	if exists {
 		if !facts.Detached && rawBranch == ownBranch && facts.Operation == "none" {
 			return AlreadyJoined, facts, nil
@@ -203,24 +216,25 @@ func (w WorkingCopy) join(ctx context.Context, role Role, n int, base, changeID 
 			return Refused, facts, nil
 		}
 	}
-	writeCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), copyWriteTimeout)
-	defer cancel()
-	if err := os.Remove(filepath.Join(w.gitDir, "index.lock")); err != nil && !errors.Is(err, fs.ErrNotExist) {
-		return 0, CopyFacts{}, fmt.Errorf("remove stale index.lock in the working copy's git folder: %w", err)
+	timeout := copyWriteTimeout
+	if hooks.writeTimeout > 0 {
+		timeout = hooks.writeTimeout
 	}
+	writeCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), timeout)
+	defer cancel()
 	if onEarlier {
 		stopped, err := w.recoverStoppedSwitch(writeCtx, baseCommit)
 		if err != nil {
-			return 0, CopyFacts{}, err
+			return w.handleJoinWriteError(writeCtx, role, err)
 		}
 		if !stopped {
 			if role == TestsRole {
 				if err := w.restoreTestsGenerated(writeCtx); err != nil {
-					return 0, CopyFacts{}, err
+					return w.handleJoinWriteError(writeCtx, role, err)
 				}
 			}
 			if err := w.commitLeftoversOnEarlier(writeCtx, rawBranch, changeID, hooks); err != nil {
-				return 0, CopyFacts{}, err
+				return w.handleJoinWriteError(writeCtx, role, err)
 			}
 		}
 	}
@@ -233,17 +247,61 @@ func (w WorkingCopy) join(ctx context.Context, role Role, n int, base, changeID 
 		if writeCtx.Err() == nil && exitCode(err) == 1 {
 			_, branchNowExists, lErr := lookupCommit(writeCtx, w.project, "refs/heads/"+ownBranch)
 			afterFacts, fErr := w.Facts(writeCtx)
-			if lErr == nil && !branchNowExists && fErr == nil && afterFacts.UncommittedCount > 0 {
+			if lErr == nil && !branchNowExists && fErr == nil && afterFacts.IndexLock == "" && afterFacts.UncommittedCount > 0 {
 				return ChangedDuringJoin, afterFacts, nil
 			}
 		}
-		return 0, CopyFacts{}, fmt.Errorf("switch the working copy to %s: %w", ownBranch, err)
+		return w.handleJoinWriteError(writeCtx, role, fmt.Errorf("switch the working copy to %s: %w", ownBranch, err))
 	}
 	joinedFacts, err := w.Facts(writeCtx)
 	if err != nil {
 		return 0, CopyFacts{}, err
 	}
 	return Joined, joinedFacts, nil
+}
+
+// indexLockStep formats the recovery instruction when a working copy's
+// index.lock is present at lockPath.
+func indexLockStep(role Role, lockPath string) string {
+	tool := "get_builder_assignment"
+	if role == TestsRole {
+		tool = "get_test_writer_assignment"
+	}
+	shown := lockPath
+	if !printableName(lockPath) {
+		shown = ShownName(lockPath)
+	}
+	return fmt.Sprintf(
+		"Your working folder's git index is locked: %s. If no git command is running in your working folder, delete %s, then call %s again.",
+		shown,
+		shown,
+		tool,
+	)
+}
+
+// handleJoinWriteError handles an error from a copy-changing git command in
+// join: if writeCtx timed out in this process (killing Surla's own git
+// command), it removes the index.lock that command left behind; if writeCtx
+// did not time out and index.lock is present (held by another process), it
+// returns Refused with the lock's recovery step.
+func (w WorkingCopy) handleJoinWriteError(writeCtx context.Context, role Role,
+	err error) (JoinOutcome, CopyFacts, error) {
+	lockPath := filepath.Join(w.gitDir, "index.lock")
+	if writeCtx.Err() != nil {
+		if rErr := os.Remove(lockPath); rErr != nil && !errors.Is(rErr, fs.ErrNotExist) {
+			return 0, CopyFacts{}, errors.Join(err, rErr)
+		}
+		return 0, CopyFacts{}, err
+	}
+	if _, lErr := os.Lstat(lockPath); lErr == nil {
+		_, afterFacts, fErr := w.readFacts(writeCtx)
+		if fErr == nil {
+			afterFacts.IndexLock = lockPath
+			afterFacts.Step = indexLockStep(role, lockPath)
+			return Refused, afterFacts, nil
+		}
+	}
+	return 0, CopyFacts{}, err
 }
 
 // readFacts returns the raw branch name (empty when detached) and the
@@ -269,6 +327,12 @@ func (w WorkingCopy) readFacts(ctx context.Context) (string, CopyFacts, error) {
 		return "", CopyFacts{}, err
 	}
 	facts.Operation = op
+	lockPath := filepath.Join(w.gitDir, "index.lock")
+	if _, err := os.Lstat(lockPath); err == nil {
+		facts.IndexLock = lockPath
+	} else if !errors.Is(err, fs.ErrNotExist) {
+		return "", CopyFacts{}, fmt.Errorf("inspect index.lock in the working copy's git folder: %w", err)
+	}
 	uncommitted, count, err := w.readUncommitted(ctx)
 	if err != nil {
 		return "", CopyFacts{}, err
@@ -408,7 +472,11 @@ func (w WorkingCopy) recoverStoppedSwitch(ctx context.Context, baseCommit string
 // between headTree and tree also differs between headTree and baseTree and has
 // baseTree's target mode and blob OID (allowing at most one empty-blob file
 // interrupted between open and write), with at least one path matching
-// baseTree.
+// baseTree. An agent's uncommitted edit that empties a file baseTree also
+// changes, alongside another path matching baseTree, is indistinguishable from
+// a file interrupted between open and write and is not committed as a
+// leftover; any non-empty edit to a file baseTree changes is preserved and
+// committed as a leftover.
 func (w WorkingCopy) isStoppedSwitch(ctx context.Context, headTree, baseTree, tree string) (bool, error) {
 	if tree == baseTree {
 		return true, nil

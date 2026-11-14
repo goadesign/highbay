@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -421,21 +422,70 @@ func TestJoinRecoversFromInterruptedSteps(t *testing.T) {
 		runGit(t, repo, "commit", "--quiet", "-m", "B2")
 		b2 := runGit(t, repo, "rev-parse", "HEAD")
 
-		// 1. Simulate a partial unpack of B2 (only 15 of B2's 200 files written
-		// to the working tree and index.lock left behind while HEAD and index
-		// are still at C1 on surla/build-1).
+		// 1. Simulate a partial unpack of B2: 15 of B2's 200 files written
+		// with B2's contents plus one 0-byte file (big/f015.txt) interrupted
+		// between open and write while HEAD and index are still at C1 on
+		// surla/build-1.
 		for i := range 15 {
 			writeFiles(t, wc.Dir(), map[string]string{
 				fmt.Sprintf("big/f%03d.txt", i): fmt.Sprintf("content %d\n", i),
 			})
 		}
-		writeFiles(t, wc.gitDir, map[string]string{"index.lock": ""})
+		writeFiles(t, wc.Dir(), map[string]string{"big/f015.txt": ""})
 
-		// Also cancel the caller context right as beforeSwitch returns to
-		// verify the copy-changing commands finish under writeCtx without
-		// leaving index.lock or making a partial commit on surla/build-1.
+		// 2. When index.lock is present at the start of Join, Join refuses
+		// without deleting index.lock and names the recovery step for the
+		// role.
+		lockPath := filepath.Join(wc.gitDir, "index.lock")
+		writeFiles(t, wc.gitDir, map[string]string{"index.lock": "held by external git\n"})
+		outcome, facts, err := wc.Join(t.Context(), BuilderRole, 2, b2, "exports")
+		require.NoError(t, err)
+		assert.Equal(t, Refused, outcome)
+		assert.Equal(t, "surla/build-1", facts.Branch)
+		assert.Equal(t, "none", facts.Operation)
+		assert.Equal(t, lockPath, facts.IndexLock)
+		assert.Contains(t, facts.Step,
+			"If no git command is running in your working folder, delete "+lockPath+", then call get_builder_assignment again.")
+		assert.Equal(t, 16, facts.UncommittedCount)
+		assert.FileExists(t, lockPath, "Join must not delete an existing index.lock")
+
+		outcome, facts, err = wc.Join(t.Context(), TestsRole, 2, b2, "exports")
+		require.NoError(t, err)
+		assert.Equal(t, Refused, outcome)
+		assert.Equal(t, lockPath, facts.IndexLock)
+		assert.Contains(t, facts.Step,
+			"If no git command is running in your working folder, delete "+lockPath+", then call get_test_writer_assignment again.")
+		assert.FileExists(t, lockPath)
+
+		// 3. If Surla's own copy-changing git command times out in this
+		// process, handleJoinWriteError removes the index.lock that command
+		// left behind.
+		require.NoError(t, os.Remove(lockPath))
+		_, _, err = wc.join(t.Context(), BuilderRole, 2, b2, "exports", joinHooks{
+			writeTimeout: 20 * time.Millisecond,
+			beforeSwitch: func() error {
+				writeFiles(t, wc.gitDir, map[string]string{"index.lock": ""})
+				time.Sleep(40 * time.Millisecond)
+				return nil
+			},
+		})
+		require.Error(t, err)
+		assert.NoFileExists(t, lockPath, "timeout-killed Join write must remove its own index.lock")
+
+		// 4. Re-plant the partial unpack (with the 0-byte big/f015.txt) after
+		// step 3's recoverStoppedSwitch completed, and cancel the caller
+		// context right as beforeSwitch returns to verify the copy-changing
+		// commands finish under writeCtx without leaving index.lock or making
+		// a partial commit on surla/build-1.
+		runGit(t, wc.Dir(), "read-tree", "-u", "--reset", c1)
+		for i := range 15 {
+			writeFiles(t, wc.Dir(), map[string]string{
+				fmt.Sprintf("big/f%03d.txt", i): fmt.Sprintf("content %d\n", i),
+			})
+		}
+		writeFiles(t, wc.Dir(), map[string]string{"big/f015.txt": ""})
 		ctx, cancel := context.WithCancel(t.Context())
-		outcome, facts, err := wc.join(ctx, BuilderRole, 2, b2, "exports", joinHooks{
+		outcome, facts, err = wc.join(ctx, BuilderRole, 2, b2, "exports", joinHooks{
 			beforeSwitch: func() error {
 				cancel()
 				return nil
@@ -444,10 +494,41 @@ func TestJoinRecoversFromInterruptedSteps(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, Joined, outcome)
 		assert.Equal(t, "surla/build-2", facts.Branch)
-		assert.NoFileExists(t, filepath.Join(wc.gitDir, "index.lock"))
+		assert.Empty(t, facts.IndexLock)
+		assert.Empty(t, facts.Step)
+		assert.NoFileExists(t, lockPath)
 		assert.Equal(t, c1, runGit(t, repo, "rev-parse", "surla/build-1"),
-			"partial B2 unpack must not be committed as leftovers on surla/build-1")
+			"partial B2 unpack (including one empty blob) must not be committed as leftovers on surla/build-1")
 		assert.Equal(t, b2, runGit(t, wc.Dir(), "rev-parse", "HEAD"))
+
+		// 5. Counterexample for isStoppedSwitch: when B3 changes both svc/a.go
+		// and svc/b.go, and the copy on surla/build-2 has one path equal to
+		// B3's (svc/a.go) alongside a non-empty agent edit to another path B3
+		// changes (svc/b.go), Join must NOT treat the working tree as a
+		// stopped switch; it must commit both files as leftovers on
+		// surla/build-2 before switching to surla/build-3.
+		writeFiles(t, repo, map[string]string{
+			"svc/a.go": "package svc // b3 a\n",
+			"svc/b.go": "package svc // b3 b\n",
+		})
+		runGit(t, repo, "add", "-A")
+		runGit(t, repo, "commit", "--quiet", "-m", "B3")
+		b3 := runGit(t, repo, "rev-parse", "HEAD")
+
+		writeFiles(t, wc.Dir(), map[string]string{
+			"svc/a.go": "package svc // b3 a\n",
+			"svc/b.go": "package svc // agent non-empty edit\n",
+		})
+		outcome, facts, err = wc.Join(t.Context(), BuilderRole, 3, b3, "invoices")
+		require.NoError(t, err)
+		assert.Equal(t, Joined, outcome)
+		assert.Equal(t, "surla/build-3", facts.Branch)
+		assert.Equal(t, "Left uncommitted when change invoices started",
+			runGit(t, repo, "log", "-1", "--format=%s", "surla/build-2"))
+		assert.Equal(t, "package svc // agent non-empty edit",
+			runGit(t, repo, "show", "surla/build-2:svc/b.go"))
+		assert.Equal(t, "package svc // b3 a",
+			runGit(t, repo, "show", "surla/build-2:svc/a.go"))
 	})
 }
 
