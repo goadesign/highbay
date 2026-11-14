@@ -178,17 +178,16 @@ func TestListChangesKeepsEarlierRevisionRuns(t *testing.T) {
 }
 
 // TestListChangesCurrentInputsFollowStoredSuite reopens the same records under
-// each immutable server configuration. The builder-only build stays fixed;
+// each immutable server configuration. No build is needed for stored tests;
 // changing only the selected suite changes the fact and the list version.
 func TestListChangesCurrentInputsFollowStoredSuite(t *testing.T) {
-	cardsDir, runsDir, workspace := t.TempDir(), t.TempDir(), t.TempDir()
+	cardsDir, runsDir := t.TempDir(), t.TempDir()
 	plan := verify.Plan{SuiteCommit: strings.Repeat("2", 40)}
 	options := func(selected verify.Plan) Options {
-		return Options{CardsDir: cardsDir, WorkspaceDir: workspace, Verification: &VerificationConfig{RunsDir: runsDir, Plan: selected}}
+		return Options{CardsDir: cardsDir, Verification: &VerificationConfig{RunsDir: runsDir, Plan: selected}}
 	}
-	cp := newControlPlane(t, buildFixtureOptions(t, options(plan)))
-	card := buildableChange(t, cp, "chg")
-	saveStoredBuildFixture(t, cp, card)
+	cp := newControlPlane(t, options(plan))
+	card := confirmedChange(t, cp, "chg")
 	runID := strings.Repeat("1", 32)
 	writeListedRun(t, runsDir, "alice@example.com", card, runID,
 		time.Date(2026, 10, 1, 9, 0, 0, 0, time.UTC), true)
@@ -198,7 +197,7 @@ func TestListChangesCurrentInputsFollowStoredSuite(t *testing.T) {
 	require.Len(t, baseline.Changes, 1)
 	require.NotNil(t, baseline.Changes[0].LatestVerification)
 	assert.True(t, baseline.Changes[0].LatestVerification.InputsCurrent)
-	assert.Equal(t, gensurla.TestsKindNotUsed, mustStartedBuild(t, cp, asCaller("alice@example.com", CallerUser), card.ChangeID).TestWriter.Tests.Kind())
+	assertNoBuildSaved(t, cp, card.ChangeID)
 	require.NoError(t, cp.Close(), "release the card store before reopening it")
 	cases := []struct {
 		name   string

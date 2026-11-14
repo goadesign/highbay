@@ -241,7 +241,8 @@ func latestVerification(run verifyrun.Run, inputsCurrent bool) *gensurla.LatestV
 }
 
 // verificationInputsCurrent compares only the agreed revision and selected
-// tests, using the usable build rendering already read by the owning operation.
+// tests. Written tests use the build already read by the owning operation;
+// stored evaluator inputs remain independent of build assignments.
 // A matching run remains historical evidence of its recorded candidate; it
 // does not establish the state of a working tree, deployment or approval.
 func (c *ControlPlane) verificationInputsCurrent(
@@ -253,9 +254,6 @@ func (c *ControlPlane) verificationInputsCurrent(
 	if agreed := record.agreedRevision(); agreed == "" || plan.RequestRevision != agreed {
 		return false
 	}
-	if !found || build.ChangeID != record.card.ChangeID || !c.usableBuild(build) || !buildInForce(build, record) {
-		return false
-	}
 	switch v := c.verifier.(type) {
 	case storedVerification:
 		selected := v.cfg.Plan
@@ -263,7 +261,8 @@ func (c *ControlPlane) verificationInputsCurrent(
 			plan.SuiteRepo == selected.SuiteRepo && plan.SuiteCommit == selected.SuiteCommit &&
 			plan.SuiteModule == selected.SuiteModule && plan.SuiteCommand == selected.SuiteCommand
 	case writtenTestVerification:
-		return plan.Tests == verify.TestsWritten && build.TestWriter.State == testsAccepted &&
+		return found && build.ChangeID == record.card.ChangeID && c.usableBuild(build) &&
+			buildInForce(build, record) && plan.Tests == verify.TestsWritten && build.TestWriter.State == testsAccepted &&
 			plan.SuiteCommit == build.TestWriter.Commit
 	default:
 		return false
