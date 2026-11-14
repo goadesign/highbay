@@ -20,6 +20,8 @@ import (
 	"syscall"
 	"time"
 	"unsafe"
+
+	"github.com/goadesign/surla/internal/procgroup"
 )
 
 type (
@@ -53,8 +55,6 @@ type (
 		ModCache string `json:"modcache"`
 		// WorkDir is the writable work directory for Build and BuildTest.
 		WorkDir string `json:"workdir"`
-		// OutDir is the resolved output directory for Build and BuildTest.
-		OutDir string `json:"outdir"`
 		// ListenPort is the loopback TCP port the process may bind and listen on.
 		ListenPort int `json:"listen_port"`
 		// ConnectPorts are the loopback TCP ports the process may connect to.
@@ -130,6 +130,14 @@ const (
 	// ptraceRemedyHint explains how to enable pidfd_getfd and process_vm_readv
 	// in containers and on hosts with Yama ptrace_scope == 2.
 	ptraceRemedyHint = "if running inside a container, pass --cap-add SYS_PTRACE or --security-opt seccomp=unconfined (or allow pidfd_getfd and process_vm_readv in the container seccomp profile); on a host with Yama ptrace_scope == 2, set sysctl kernel.yama.ptrace_scope=1 or grant CAP_SYS_PTRACE"
+
+	// canaryTimeout bounds how long ensureGOROOTCanary waits for the one-time
+	// jailed toolchain build.
+	canaryTimeout = 30 * time.Second
+
+	// canaryStopGrace bounds how long ensureGOROOTCanary waits for the jailed
+	// canary process group to empty after SIGKILL.
+	canaryStopGrace = 5 * time.Second
 )
 
 var (
@@ -335,6 +343,13 @@ func introspectionUnavailableError(op string, errno syscall.Errno) error {
 // GOROOT toolchain so any host toolchain syscall incompatibility fails with
 // ErrIsolationUnavailable and names the refused syscall.
 func ensureGOROOTCanary(goroot string) error {
+	return ensureGOROOTCanaryWithTimeout(goroot, canaryTimeout)
+}
+
+// ensureGOROOTCanaryWithTimeout runs the one-time jailed canary `go build` for
+// goroot under timeout, killing and waiting on the entire jailed process group
+// if the build fails or times out.
+func ensureGOROOTCanaryWithTimeout(goroot string, timeout time.Duration) error {
 	resolved, err := filepath.EvalSymlinks(goroot)
 	if err == nil {
 		goroot = resolved
@@ -356,7 +371,12 @@ func ensureGOROOTCanary(goroot string) error {
 	if err != nil {
 		return fmt.Errorf("%w: create canary directory: %v", ErrIsolationUnavailable, err)
 	}
-	defer os.RemoveAll(canaryDir)
+	var stuck bool
+	defer func() {
+		if !stuck {
+			os.RemoveAll(canaryDir)
+		}
+	}()
 
 	canarySrc, canaryWork, canaryMod := filepath.Join(canaryDir, "src"), filepath.Join(canaryDir, "work"), filepath.Join(canaryDir, "mod")
 	for _, d := range []string{canarySrc, canaryWork, canaryMod} {
@@ -376,12 +396,19 @@ func ensureGOROOTCanary(goroot string) error {
 			SourceDir: canarySrc, ModuleDir: canarySrc, Package: ".",
 			Out: canaryOut, GOROOT: goroot, ModCache: canaryMod, WorkDir: canaryWork,
 		},
-		outDir: canaryWork,
 	}
-	canaryCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	canaryCtx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 	var logBuf bytes.Buffer
-	if err := b.runGoBuildWithWriter(canaryCtx, (*exec.Cmd).Run, &logBuf, nil, canaryOut, "build", "-trimpath"); err != nil {
+	runCanary := func(cmd *exec.Cmd) error {
+		runErr, stopErr := procgroup.Run(cmd, syscall.SIGKILL, canaryStopGrace, canaryStopGrace)
+		if stopErr != nil {
+			stuck = true
+			return errors.Join(stopErr, runErr)
+		}
+		return runErr
+	}
+	if err := b.runGoBuildWithWriter(canaryCtx, runCanary, &logBuf, nil, canaryOut, "build", "-trimpath"); err != nil {
 		return fmt.Errorf("%w: toolchain canary failed for %s: %v (%s)", ErrIsolationUnavailable, goroot, err, strings.TrimSpace(logBuf.String()))
 	}
 	validatedGOROOTs.Store(key, struct{}{})
@@ -544,59 +571,6 @@ func startProcessWithConfig(
 		close(p.done)
 	}()
 	return p, nil
-}
-
-// publishStagedOutput opens stagedOut with O_RDONLY|O_NOFOLLOW|O_CLOEXEC,
-// verifies via fstat on the open descriptor that it is a regular file, and
-// publishes its bytes to outPath.
-func publishStagedOutput(stagedOut, outPath string) error {
-	return publishStagedOutputAllowMissing(stagedOut, outPath, false)
-}
-
-// publishStagedOutputAllowMissing publishes stagedOut to outPath, returning nil
-// when allowMissing is true and stagedOut does not exist.
-func publishStagedOutputAllowMissing(stagedOut, outPath string, allowMissing bool) error {
-	fd, err := syscall.Open(stagedOut, syscall.O_RDONLY|syscall.O_NOFOLLOW|syscall.O_CLOEXEC, 0)
-	if err != nil {
-		if allowMissing && errors.Is(err, syscall.ENOENT) {
-			return nil
-		}
-		return fmt.Errorf("open staged build output: %w", err)
-	}
-	var st syscall.Stat_t
-	if err := syscall.Fstat(fd, &st); err != nil {
-		syscall.Close(fd)
-		return fmt.Errorf("stat staged build output: %w", err)
-	}
-	if st.Mode&syscall.S_IFMT != syscall.S_IFREG {
-		syscall.Close(fd)
-		return fmt.Errorf("staged build output %s is not a regular file (mode %#o)", outPath, st.Mode)
-	}
-	srcFile := os.NewFile(uintptr(fd), stagedOut)
-	defer srcFile.Close()
-
-	tmp, err := os.CreateTemp(filepath.Dir(outPath), ".surla-out-*")
-	if err != nil {
-		return fmt.Errorf("create output binary %s: %w", outPath, err)
-	}
-	tmpName := tmp.Name()
-	defer os.Remove(tmpName)
-
-	if _, err := io.Copy(tmp, srcFile); err != nil {
-		tmp.Close()
-		return fmt.Errorf("write output binary %s: %w", outPath, err)
-	}
-	if err := tmp.Chmod(0o755); err != nil {
-		tmp.Close()
-		return fmt.Errorf("chmod output binary %s: %w", outPath, err)
-	}
-	if err := tmp.Close(); err != nil {
-		return fmt.Errorf("close output binary %s: %w", outPath, err)
-	}
-	if err := os.Rename(tmpName, outPath); err != nil {
-		return fmt.Errorf("publish output binary %s: %w", outPath, err)
-	}
-	return nil
 }
 
 // runJailLauncher executes inside the child /proc/self/exe process before main:
@@ -880,11 +854,6 @@ func applyLandlock(sys archSyscalls, cfg jailConfig) error {
 		if err := addPath(cfg.WorkDir, readWriteNoExec, false); err != nil {
 			return err
 		}
-		if cfg.OutDir != "" && cfg.OutDir != cfg.WorkDir {
-			if err := addPath(cfg.OutDir, readWriteNoExec, false); err != nil {
-				return err
-			}
-		}
 	default:
 		if err := addPath(cfg.Binary, landlockAccessFSReadFile|landlockAccessFSExecute, false); err != nil {
 			return err
@@ -936,9 +905,8 @@ func (b resolvedBuild) runGoBuild(
 	return b.runGoBuildWithWriter(ctx, run, logFile, logFile, outPath, args...)
 }
 
-// runGoBuildWithWriter runs one jailed `go` invocation, staging `-o` inside
-// spec.WorkDir, supervising seccomp user notifications, and publishing the
-// verified regular output file to outPath when the command succeeds.
+// runGoBuildWithWriter runs one jailed `go` invocation writing `-o` to outPath
+// inside spec.WorkDir and supervising seccomp user notifications.
 func (b resolvedBuild) runGoBuildWithWriter(
 	ctx context.Context,
 	run func(*exec.Cmd) error,
@@ -948,18 +916,11 @@ func (b resolvedBuild) runGoBuildWithWriter(
 	args ...string,
 ) error {
 	spec := b.spec
-	stageDir, err := os.MkdirTemp(spec.WorkDir, ".surla-stage-*")
-	if err != nil {
-		return fmt.Errorf("create build stage directory: %w", err)
-	}
-	defer os.RemoveAll(stageDir)
-
-	stagedOut := filepath.Join(stageDir, "out")
 	goArgs := append([]string{}, args...)
 	if len(goArgs) > 0 && goArgs[0] == "build" {
 		goArgs = append(goArgs, "-buildvcs=false")
 	}
-	goArgs = append(goArgs, "-o", stagedOut, spec.Package)
+	goArgs = append(goArgs, "-o", outPath, spec.Package)
 	env := b.buildEnv()
 	goBin := filepath.Join(spec.GOROOT, "bin", "go")
 
@@ -973,12 +934,7 @@ func (b resolvedBuild) runGoBuildWithWriter(
 		GOROOT:    spec.GOROOT,
 		ModCache:  spec.ModCache,
 		WorkDir:   spec.WorkDir,
-		OutDir:    b.outDir,
 	}
 	tracker := &refusalTracker{logFile: logFile}
-	if err := runSupervisedJailedWithContext(ctx, cfg, outWriter, tracker, run); err != nil {
-		return err
-	}
-	allowMissing := len(args) > 0 && args[0] == "test"
-	return publishStagedOutputAllowMissing(stagedOut, outPath, allowMissing)
+	return runSupervisedJailedWithContext(ctx, cfg, outWriter, tracker, run)
 }

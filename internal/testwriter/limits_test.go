@@ -16,44 +16,58 @@ import (
 	"github.com/goadesign/surla/internal/shquote"
 )
 
-// TestWithinLimitIsInclusiveAtTheDeadline runs a stand-in that sleeps just
-// below, exactly at and just above a limit: only below is the limit not
-// reached, and a caller's context that ended first is never the limit.
+// TestWithinLimitIsInclusiveAtTheDeadline places a step's return just below,
+// exactly at and just above a limit with an explicit clock: only below is the
+// limit not reached. With the real clock, a step past the limit is stopped
+// and has reached it, and a caller's context that ended first is never the
+// limit.
 func TestWithinLimitIsInclusiveAtTheDeadline(t *testing.T) {
 	t.Parallel()
 	const limit = 300 * time.Millisecond
-	sleep := func(d time.Duration) func(context.Context) error {
-		return func(ctx context.Context) error {
-			timer := time.NewTimer(d)
-			defer timer.Stop()
-			select {
-			case <-timer.C:
-				return nil
-			case <-ctx.Done():
-				return ctx.Err()
-			}
-		}
+	// waitForEnd stands in for a step that only ends when its context does.
+	waitForEnd := func(ctx context.Context) error {
+		<-ctx.Done()
+		return ctx.Err()
 	}
 	for _, tc := range []struct {
-		name  string
-		sleep time.Duration
-		want  bool
+		name     string
+		returned time.Duration
+		want     bool
 	}{
-		{name: "just below", sleep: limit - 100*time.Millisecond, want: false},
-		{name: "at", sleep: limit, want: true},
-		{name: "just above", sleep: limit + 100*time.Millisecond, want: true},
+		{name: "just below", returned: limit - time.Nanosecond, want: false},
+		{name: "at", returned: limit, want: true},
+		{name: "just above", returned: limit + time.Nanosecond, want: true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			reached, _ := withinLimit(t.Context(), limit, sleep(tc.sleep))
+			start := time.Now()
+			// The first reading starts the limit; the second is when the step returned.
+			readings := []time.Time{start, start.Add(tc.returned)}
+			now := func() time.Time {
+				reading := readings[0]
+				readings = readings[1:]
+				return reading
+			}
+			reached, err := withinLimit(t.Context(), now, limit, func(ctx context.Context) error {
+				deadline, ok := ctx.Deadline()
+				assert.True(t, ok && deadline.Equal(start.Add(limit)), "the step does not run under the limit's deadline")
+				return nil
+			})
+			assert.NoError(t, err)
 			assert.Equal(t, tc.want, reached)
 		})
 	}
+	t.Run("a step past the limit is stopped", func(t *testing.T) {
+		t.Parallel()
+		reached, err := withinLimit(t.Context(), time.Now, limit, waitForEnd)
+		assert.True(t, reached)
+		assert.ErrorIs(t, err, context.DeadlineExceeded)
+	})
 	t.Run("the caller's context ends first", func(t *testing.T) {
 		t.Parallel()
 		ctx, cancel := context.WithTimeout(t.Context(), limit/3)
 		defer cancel()
-		reached, err := withinLimit(ctx, limit, sleep(limit+100*time.Millisecond))
+		reached, err := withinLimit(ctx, time.Now, limit, waitForEnd)
 		assert.False(t, reached)
 		assert.ErrorIs(t, err, context.DeadlineExceeded)
 	})

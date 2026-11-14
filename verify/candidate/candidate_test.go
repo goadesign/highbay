@@ -678,7 +678,8 @@ func TestBuildTestReportsWhetherThePackageHasTests(t *testing.T) {
 
 		t.Run("symlinked GOCACHE README at output path in package without tests", func(t *testing.T) {
 			workDir := t.TempDir()
-			outDir := t.TempDir()
+			outDir := filepath.Join(workDir, "out")
+			require.NoError(t, os.MkdirAll(outDir, 0o700))
 			require.NoError(t, os.Symlink(outDir, filepath.Join(workDir, "gocache")))
 			out := filepath.Join(outDir, "README")
 			spec := testBuildSpec(t, noTestsMod, noTestsMod, out, filepath.Join(t.TempDir(), "build.log"))
@@ -718,7 +719,8 @@ func TestBuildTestReportsWhetherThePackageHasTests(t *testing.T) {
 
 		t.Run("compiler metadata created at output path in package with tests fails without overwriting", func(t *testing.T) {
 			workDir := t.TempDir()
-			outDir := t.TempDir()
+			outDir := filepath.Join(workDir, "out")
+			require.NoError(t, os.MkdirAll(outDir, 0o700))
 			require.NoError(t, os.Symlink(outDir, filepath.Join(workDir, "gocache")))
 			out := filepath.Join(outDir, "README")
 			spec := testBuildSpec(t, withTestsMod, withTestsMod, out, filepath.Join(t.TempDir(), "build.log"))
@@ -730,6 +732,26 @@ func TestBuildTestReportsWhetherThePackageHasTests(t *testing.T) {
 			readme, readErr := os.ReadFile(out)
 			require.NoError(t, readErr)
 			assert.Contains(t, string(readme), "cached build artifacts", "GOCACHE README must not be overwritten with the compiled test binary")
+		})
+
+		t.Run("output directory outside WorkDir is not writable inside the build sandbox", func(t *testing.T) {
+			workDir := t.TempDir()
+			outDir := t.TempDir()
+			sibling := filepath.Join(outDir, "sibling.txt")
+			require.NoError(t, os.WriteFile(sibling, []byte("untouched"), 0o600))
+			require.NoError(t, os.Symlink(outDir, filepath.Join(workDir, "gocache")))
+			buildLog := filepath.Join(t.TempDir(), "build.log")
+			spec := testBuildSpec(t, withTestsMod, withTestsMod, filepath.Join(outDir, "lib.test"), buildLog)
+			spec.WorkDir = workDir
+			hasTests, err := BuildTest(t.Context(), spec, (*exec.Cmd).Run)
+			require.Error(t, err, "toolchain must not be allowed to write to outDir through symlinked GOCACHE")
+			assert.False(t, hasTests)
+			logBytes, readErr := os.ReadFile(buildLog)
+			require.NoError(t, readErr)
+			assert.Contains(t, string(logBytes), "failed to initialize build cache")
+			gotSibling, readErr := os.ReadFile(sibling)
+			require.NoError(t, readErr)
+			assert.Equal(t, "untouched", string(gotSibling))
 		})
 	})
 }
