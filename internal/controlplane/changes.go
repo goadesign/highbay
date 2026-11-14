@@ -134,6 +134,10 @@ func (c *ControlPlane) changeList(ctx context.Context, span trace.Span, owner st
 		return nil, errors.New("list changes: saved change cards could not be read")
 	}
 	saved, found, err := c.cards.loadOpenBuild()
+	var activeFound bool
+	if err == nil {
+		activeFound, err = c.activeBuildFound(saved, found)
+	}
 	c.mu.RUnlock()
 	if err != nil {
 		span.RecordError(err)
@@ -173,7 +177,7 @@ func (c *ControlPlane) changeList(ctx context.Context, span trace.Span, owner st
 		}
 		if run, ok := latest[record.card.ChangeID]; ok {
 			item.LatestVerification = latestVerification(
-				run, c.verificationInputsCurrent(record, saved, found, run.Request.Plan),
+				run, c.verificationInputsCurrent(record, saved, activeFound, run.Request.Plan),
 			)
 		}
 		if record.proposed != nil {

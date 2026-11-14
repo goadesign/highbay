@@ -298,3 +298,37 @@ func editVerificationRequest(t *testing.T, runsDir, runID string, edit func(*ver
 	require.NoError(t, err)
 	require.NoError(t, os.WriteFile(file, raw, 0o600))
 }
+
+// TestDroppedWrittenBuildMakesVerificationInputsNonCurrent exercises all
+// three user-facing readers while retaining the historical report.
+func TestDroppedWrittenBuildMakesVerificationInputsNonCurrent(t *testing.T) {
+	runs := t.TempDir()
+	cp := newBuildControlPlane(t, Options{RunsDir: runs, WrittenTestRuns: &WrittenTestRuns{ReportDir: t.TempDir(), Timeout: time.Minute}})
+	card := buildableChange(t, cp, "chg")
+	user := asCaller("alice@example.com", CallerUser)
+	runID := strings.Repeat("a", 32)
+	writeListedRun(t, runs, "alice@example.com", card, runID, time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC), true)
+	setListedRunSource(t, runs, runID, verify.TestsWritten)
+	first, err := cp.StartBuild(user, &gensurla.StartBuildPayload{ChangeID: card.ChangeID, RequestRevision: card.RequestRevision})
+	require.NoError(t, err)
+	saveListedTestState(t, cp, card.ChangeID, testsAccepted, strings.Repeat("2", 40))
+	check := func(want bool) {
+		t.Helper()
+		one, err := cp.GetVerification(user, &gensurla.GetVerificationPayload{RunID: runID})
+		require.NoError(t, err)
+		assert.Equal(t, want, one.InputsCurrent)
+		list, err := cp.ListVerifications(user, &gensurla.ListVerificationsPayload{ChangeID: card.ChangeID})
+		require.NoError(t, err)
+		require.Len(t, list.Runs, 1)
+		assert.Equal(t, want, list.Runs[0].InputsCurrent)
+		changes, err := cp.ListChanges(user)
+		require.NoError(t, err)
+		require.Len(t, changes.Changes, 1)
+		require.NotNil(t, changes.Changes[0].LatestVerification)
+		assert.Equal(t, want, changes.Changes[0].LatestVerification.InputsCurrent)
+	}
+	check(true)
+	_, err = cp.DropBuild(user, &gensurla.DropBuildPayload{ChangeID: card.ChangeID, StartedAt: first.Build.StartedAt})
+	require.NoError(t, err)
+	check(false)
+}

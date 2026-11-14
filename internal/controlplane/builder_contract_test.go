@@ -213,8 +213,8 @@ func TestBuilderAssignmentNamesItsCurrentFolder(t *testing.T) {
 }
 
 // TestBuilderCopyPendingOperationsKeepTheirRoles proves the new operations
-// refuse without effects until their implementation lands, while discovery
-// still excludes the user's Drop operation from every agent's tool catalog.
+// preserve role access while Drop reports the absence of an open build and
+// the draft update remains pending.
 func TestBuilderCopyPendingOperationsKeepTheirRoles(t *testing.T) {
 	cp := newBuildControlPlane(t, Options{})
 	buildableChange(t, cp, "chg")
@@ -229,7 +229,10 @@ func TestBuilderCopyPendingOperationsKeepTheirRoles(t *testing.T) {
 				{path: "/workspace/draft/update", caller: "guide"},
 			} {
 				status, body := httpCall(t, server.URL, role, http.MethodPost, op.path, op.body)
-				if role == op.caller {
+				if role == op.caller && op.caller == "user" {
+					assert.Equal(t, http.StatusNotFound, status, body)
+					assert.Contains(t, body, "no open build")
+				} else if role == op.caller {
 					assert.Equal(t, http.StatusNotImplemented, status, body)
 					assert.Contains(t, body, "not available until the builder-copy change is complete")
 				} else {

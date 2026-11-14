@@ -22,6 +22,9 @@ func buildDropped(record madeFromRecord, build buildFile) bool {
 
 // DropBuild records a new provenance generation without changing any Git ref or draft.
 func (c *ControlPlane) DropBuild(ctx context.Context, p *gensurla.DropBuildPayload) (*gensurla.ChangeBuild, error) {
+	if _, err := c.ownedTeam(ctx); err != nil {
+		return nil, err
+	}
 	principal, ok := PrincipalFromContext(ctx)
 	if !ok {
 		return nil, errors.New("authenticated principal is required")
@@ -37,7 +40,7 @@ func (c *ControlPlane) DropBuild(ctx context.Context, p *gensurla.DropBuildPaylo
 		return nil, loadErr
 	}
 	if !found {
-		return nil, gensurla.MakeConflict(errors.New("There is no open build to drop."))
+		return nil, gensurla.MakeNotFound(errors.New("There is no open build to drop."))
 	}
 	work, cancel := context.WithTimeout(ctx, layoutReadTimeout)
 	defer cancel()
@@ -50,29 +53,15 @@ func (c *ControlPlane) DropBuild(ctx context.Context, p *gensurla.DropBuildPaylo
 	if err != nil {
 		return nil, err
 	}
-	tips := make(map[string]string)
-	for _, role := range []testwriter.Role{testwriter.BuilderRole, testwriter.TestsRole} {
-		branch := role.Branch(saved.Number)
-		tip, e := runGitRead(work, repo, "rev-parse", "--verify", "--quiet", "refs/heads/"+branch+"^{commit}")
-		if e != nil {
-			var exit *exec.ExitError
-			if errors.As(e, &exit) && exit.ExitCode() == 1 {
-				continue
-			}
-			return nil, e
-		}
-		commit := strings.TrimSpace(string(tip))
-		if commit == saved.Base {
-			continue
-		}
-		withinBase, err := buildCommitInHistory(work, repo, commit, saved.Base)
-		if err != nil {
-			return nil, err
-		}
-		if !withinBase {
-			tips[branch] = commit
-		}
+	tips, err := buildBranchTips(work, repo, saved.Number)
+	if err != nil {
+		return nil, err
 	}
+	branches, err := keptBuildBranches(work, repo, saved.Base, tips)
+	if err != nil {
+		return nil, err
+	}
+
 	c.draftMu.Lock()
 	c.mu.Lock()
 	record, err := c.ownedCard(principal, p.ChangeID)
@@ -92,7 +81,7 @@ func (c *ControlPlane) DropBuild(ctx context.Context, p *gensurla.DropBuildPaylo
 	if !currentFound {
 		c.mu.Unlock()
 		c.draftMu.Unlock()
-		return nil, gensurla.MakeConflict(errors.New("There is no open build to drop."))
+		return nil, gensurla.MakeNotFound(errors.New("There is no open build to drop."))
 	}
 	if current.ChangeID != saved.ChangeID || !current.StartedAt.Equal(saved.StartedAt) || p.ChangeID != current.ChangeID || p.StartedAt != current.StartedAt.UTC().Format(time.RFC3339Nano) {
 		currentCard, cardErr := c.ownedCard(principal, current.ChangeID)
@@ -125,10 +114,41 @@ func (c *ControlPlane) DropBuild(ctx context.Context, p *gensurla.DropBuildPaylo
 	if err != nil {
 		return nil, fmt.Errorf("save dropped build: %w", err)
 	}
+
+	return &gensurla.ChangeBuild{ChangeID: current.ChangeID, Build: gensurla.NewBuildStarted(startedBuild(heldBuild{file: current, inForce: buildInForce(current, record), storedEvaluator: c.storedEvaluator()}, gensurla.NewBuildTakingDropped(&gensurla.BuildDropped{KeptBranches: branches})))}, nil
+}
+
+// buildBranchTips captures only the numbered build's existing refs, including
+// tips at or behind the base, for later cross-build checks.
+func buildBranchTips(ctx context.Context, repo string, number int) (map[string]string, error) {
+	tips := make(map[string]string)
+	for _, role := range []testwriter.Role{testwriter.BuilderRole, testwriter.TestsRole} {
+		branch := role.Branch(number)
+		tip, err := runGitRead(ctx, repo, "rev-parse", "--verify", "--quiet", "refs/heads/"+branch+"^{commit}")
+		if err != nil {
+			var exit *exec.ExitError
+			if errors.As(err, &exit) && exit.ExitCode() == 1 {
+				continue
+			}
+			return nil, err
+		}
+		tips[branch] = strings.TrimSpace(string(tip))
+	}
+	return tips, nil
+}
+
+// keptBuildBranches reports current refs with work outside the saved base.
+func keptBuildBranches(ctx context.Context, repo, base string, tips map[string]string) ([]string, error) {
 	branches := make([]string, 0, len(tips))
-	for branch := range tips {
-		branches = append(branches, branch)
+	for branch, tip := range tips {
+		withinBase, err := buildCommitInHistory(ctx, repo, tip, base)
+		if err != nil {
+			return nil, err
+		}
+		if !withinBase {
+			branches = append(branches, branch)
+		}
 	}
 	slices.Sort(branches)
-	return &gensurla.ChangeBuild{ChangeID: current.ChangeID, Build: gensurla.NewBuildStarted(startedBuild(heldBuild{file: current, inForce: buildInForce(current, record), storedEvaluator: c.storedEvaluator()}, gensurla.NewBuildTakingDropped(&gensurla.BuildDropped{KeptBranches: branches})))}, nil
+	return branches, nil
 }

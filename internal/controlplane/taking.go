@@ -2,10 +2,9 @@
 package controlplane
 
 import (
+	"bytes"
 	"context"
-	"errors"
 	"fmt"
-	"os/exec"
 	"strings"
 
 	"github.com/goadesign/surla/internal/verify"
@@ -41,7 +40,7 @@ func commitTaken(ctx context.Context, repo, source, project string) (bool, error
 	if err != nil || !found {
 		return false, err
 	}
-	paths, err := runGitRead(ctx, repo, "diff-tree", "-r", "--no-renames", "--name-only", "-z", base, source)
+	paths, err := runGitRead(ctx, repo, "diff-tree", "-r", "--no-ext-diff", "--no-textconv", "--ignore-submodules=none", "--no-relative", "--no-renames", "--name-only", "-z", base, source)
 	if err != nil {
 		return false, err
 	}
@@ -53,15 +52,19 @@ func commitTaken(ctx context.Context, repo, source, project string) (bool, error
 	if err != nil {
 		return false, err
 	}
+	args := append([]string{"ls-tree", "-r", "-z", "--full-tree", source, "--"}, names...)
+	wanted, err := runGitRead(ctx, repo, args...)
+	if err != nil {
+		return false, err
+	}
 	for _, commit := range strings.Fields(string(history)) {
-		args := append([]string{"diff", "--quiet", "--no-renames", source, commit, "--"}, names...)
-		_, err = runGitRead(ctx, repo, args...)
-		if err == nil {
-			return true, nil
-		}
-		var exit *exec.ExitError
-		if !errors.As(err, &exit) || exit.ExitCode() != 1 {
+		args = append([]string{"ls-tree", "-r", "-z", "--full-tree", commit, "--"}, names...)
+		actual, err := runGitRead(ctx, repo, args...)
+		if err != nil {
 			return false, err
+		}
+		if bytes.Equal(wanted, actual) {
+			return true, nil
 		}
 	}
 	return false, nil
@@ -87,7 +90,7 @@ func dropSafeGuidance(ctx context.Context, repo, base, project, candidate string
 	if err != nil || !found {
 		return false, err
 	}
-	paths, err := runGitRead(ctx, repo, "diff-tree", "-r", "--no-renames", "--name-only", "-z", common, candidate)
+	paths, err := runGitRead(ctx, repo, "diff-tree", "-r", "--no-ext-diff", "--no-textconv", "--ignore-submodules=none", "--no-relative", "--no-renames", "--name-only", "-z", common, candidate)
 	if err != nil {
 		return false, err
 	}
@@ -95,7 +98,7 @@ func dropSafeGuidance(ctx context.Context, repo, base, project, candidate string
 	if len(names) == 1 && names[0] == "" {
 		return false, nil
 	}
-	args := append([]string{"log", "--format=", "--name-only", "-z", common + ".." + project, "--"}, names...)
+	args := append([]string{"log", "--no-show-signature", "--no-ext-diff", "--no-textconv", "--ignore-submodules=none", "--no-relative", "--no-renames", "--diff-merges=first-parent", "--format=", "--name-only", "-z", common + ".." + project, "--"}, names...)
 	changed, err := runGitRead(ctx, repo, args...)
 	return len(changed) != 0, err
 }

@@ -102,40 +102,6 @@ func (c *ControlPlane) StartBuild(
 	if err != nil {
 		return nil, recordBuildError(span, err, "read the open build")
 	}
-	var openProgress *gensurla.StartedBuild
-	if openFound {
-		openProgress, err = c.startedBuild(work, principal.ID, heldBuild{
-			file: open, inForce: buildInForce(open, openCard), storedEvaluator: c.storedEvaluator(),
-		})
-		if err != nil {
-			return nil, recordBuildError(span, err, "read the open build's passed runs")
-		}
-		if err := checkBuildReplacement(p, open, openProgress); err != nil {
-			if refusal, ok := err.(*gensurla.OpenBuildRefusal); ok && refusal.Name == "previous_change_open" {
-				if passed, ok := openProgress.Taking.AsPassed(); ok {
-					workspace, _, _ := c.currentWorkspaceTarget()
-					repo, _, readErr := resolveStarterRepo(work, workspace)
-					if readErr != nil {
-						return nil, readErr
-					}
-					head, readErr := runGitRead(work, repo, "rev-parse", "--verify", "HEAD^{commit}")
-					if readErr != nil {
-						return nil, readErr
-					}
-					safe, readErr := dropSafeGuidance(work, repo, open.Base, strings.TrimSpace(string(head)), passed.CandidateCommit)
-					if readErr != nil {
-						return nil, readErr
-					}
-					if safe {
-						refusal.Message += fmt.Sprintf(" If your branch already holds what you want from %s, Drop is safe: the next change starts from your branch as it is.", open.ChangeID)
-					}
-				} else {
-					refusal.Message += fmt.Sprintf(" No verification of %s has passed, so there is nothing to merge yet: let the builder finish, or drop it.", open.ChangeID)
-				}
-			}
-			return nil, err
-		}
-	}
 	source, layout, workspace, err := c.projectTestLayout(work)
 	if err != nil {
 		return nil, recordBuildError(span, buildStartError(work, "", err), "read test source")
@@ -156,6 +122,31 @@ func (c *ControlPlane) StartBuild(
 		return nil, recordBuildError(span, buildStartError(work, workspace, err), "read the build base")
 	}
 	base := strings.TrimSpace(string(head))
+	var openProgress *gensurla.StartedBuild
+	if openFound {
+		openProgress, err = c.startedBuildAt(work, principal.ID, heldBuild{
+			file: open, inForce: buildInForce(open, openCard), storedEvaluator: c.storedEvaluator(),
+		}, base)
+		if err != nil {
+			return nil, recordBuildError(span, err, "read the open build's passed runs")
+		}
+		if err := checkBuildReplacement(p, open, openProgress); err != nil {
+			if refusal, ok := err.(*gensurla.OpenBuildRefusal); ok && refusal.Name == "previous_change_open" {
+				if passed, ok := openProgress.Taking.AsPassed(); ok {
+					safe, readErr := dropSafeGuidance(work, repo, open.Base, base, passed.CandidateCommit)
+					if readErr != nil {
+						return nil, readErr
+					}
+					if safe {
+						refusal.Message += fmt.Sprintf(" If your branch already holds what you want from %s, Drop is safe: the next change starts from your branch as it is.", open.ChangeID)
+					}
+				} else {
+					refusal.Message += fmt.Sprintf(" No verification of %s has passed, so there is nothing to merge yet: let the builder finish, or drop it.", open.ChangeID)
+				}
+			}
+			return nil, err
+		}
+	}
 	number := 0
 	if openFound && openProgress.Taking.Kind() != gensurla.BuildTakingKindMerged && openProgress.Taking.Kind() != gensurla.BuildTakingKindDropped {
 		number, base = open.Number, open.Base

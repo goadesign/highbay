@@ -266,6 +266,9 @@ func (c *ControlPlane) ListVerifications(ctx context.Context, p *gensurla.ListVe
 			}
 		}
 		build, buildFound, buildErr := c.cards.loadOpenBuild()
+		if buildErr == nil {
+			buildFound, buildErr = c.activeBuildFound(build, buildFound)
+		}
 		if buildErr != nil {
 			c.mu.RUnlock()
 			span.RecordError(buildErr)
@@ -369,6 +372,10 @@ func (c *ControlPlane) currentVerificationInputs(
 		return false, nil
 	}
 	build, found, err := c.cards.loadOpenBuild()
+	if err != nil {
+		return false, err
+	}
+	found, err = c.activeBuildFound(build, found)
 	if err != nil {
 		return false, err
 	}

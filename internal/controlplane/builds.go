@@ -649,6 +649,11 @@ func (c *ControlPlane) newestPassedBuild(owner string, saved buildFile) (*verify
 // Branch names identify the numbered build where its commits were verified;
 // later ref changes do not erase a pass or block reads and recovery.
 func (c *ControlPlane) startedBuild(ctx context.Context, owner string, held heldBuild) (*gensurla.StartedBuild, error) {
+	return c.startedBuildAt(ctx, owner, held, "")
+}
+
+// startedBuildAt uses the caller's captured project commit when provided.
+func (c *ControlPlane) startedBuildAt(ctx context.Context, owner string, held heldBuild, project string) (*gensurla.StartedBuild, error) {
 	c.mu.RLock()
 	provenance, found, err := c.cards.loadMadeFrom()
 	c.mu.RUnlock()
@@ -656,11 +661,21 @@ func (c *ControlPlane) startedBuild(ctx context.Context, owner string, held held
 		return nil, err
 	}
 	if found && buildDropped(provenance, held.file) {
-		branches := make([]string, 0, len(provenance.Start.Dropped.BranchTips))
-		for branch := range provenance.Start.Dropped.BranchTips {
-			branches = append(branches, branch)
+		work, cancel := context.WithTimeout(ctx, layoutReadTimeout)
+		defer cancel()
+		workspace, _, _ := c.currentWorkspaceTarget()
+		repo, _, err := resolveStarterRepo(work, workspace)
+		if err != nil {
+			return nil, err
 		}
-		slices.Sort(branches)
+		tips, err := buildBranchTips(work, repo, held.file.Number)
+		if err != nil {
+			return nil, err
+		}
+		branches, err := keptBuildBranches(work, repo, held.file.Base, tips)
+		if err != nil {
+			return nil, err
+		}
 		return startedBuild(held, gensurla.NewBuildTakingDropped(&gensurla.BuildDropped{KeptBranches: branches})), nil
 	}
 	runs, err := c.eligibleBuildRuns(owner, held.file)
@@ -677,11 +692,13 @@ func (c *ControlPlane) startedBuild(ctx context.Context, owner string, held held
 	if err != nil {
 		return nil, err
 	}
-	projectBytes, err := runGitRead(work, repo, "rev-parse", "--verify", "HEAD^{commit}")
-	if err != nil {
-		return nil, err
+	if project == "" {
+		projectBytes, err := runGitRead(work, repo, "rev-parse", "--verify", "HEAD^{commit}")
+		if err != nil {
+			return nil, err
+		}
+		project = strings.TrimSpace(string(projectBytes))
 	}
-	project := strings.TrimSpace(string(projectBytes))
 	for _, candidate := range runs {
 		merged, err := runTaken(work, repo, project, candidate)
 		if err != nil {
@@ -722,4 +739,17 @@ func buildCommitInHistory(ctx context.Context, repo, commit, tip string) (bool, 
 		return false, nil
 	}
 	return false, fmt.Errorf("check build commit history: %w", err)
+}
+
+// activeBuildFound derives the written-test selection from one provenance read.
+// Callers hold c.mu and retain found separately when rendering a dropped build.
+func (c *ControlPlane) activeBuildFound(saved buildFile, found bool) (bool, error) {
+	if !found {
+		return false, nil
+	}
+	provenance, exists, err := c.cards.loadMadeFrom()
+	if err != nil {
+		return false, err
+	}
+	return !exists || !buildDropped(provenance, saved), nil
 }
