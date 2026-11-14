@@ -181,10 +181,10 @@ func TestListChangesKeepsEarlierRevisionRuns(t *testing.T) {
 // each immutable server configuration. The builder-only build stays fixed;
 // changing only the selected suite changes the fact and the list version.
 func TestListChangesCurrentInputsFollowStoredSuite(t *testing.T) {
-	cardsDir, runsDir := t.TempDir(), t.TempDir()
+	cardsDir, runsDir, workspace := t.TempDir(), t.TempDir(), t.TempDir()
 	plan := verify.Plan{SuiteCommit: strings.Repeat("2", 40)}
 	options := func(selected verify.Plan) Options {
-		return Options{CardsDir: cardsDir, Verification: &VerificationConfig{RunsDir: runsDir, Plan: selected}}
+		return Options{CardsDir: cardsDir, WorkspaceDir: workspace, Verification: &VerificationConfig{RunsDir: runsDir, Plan: selected}}
 	}
 	cp := newControlPlane(t, buildFixtureOptions(t, options(plan)))
 	card := buildableChange(t, cp, "chg")
