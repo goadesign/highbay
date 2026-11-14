@@ -317,10 +317,10 @@ func validateSnapshot(files map[string]string) (*modfile.File, error) {
 		}
 	}
 	if _, ok := files["go.mod"]; !ok {
-		return nil, errors.New("design snapshot has no go.mod: give the root directory of a Go module (the directory holding go.mod and design/)")
+		return nil, errors.New("design snapshot has no go.mod: run init_project or create go.mod in the project before calling refresh_story")
 	}
 	if _, ok := files["go.sum"]; !ok {
-		return nil, errors.New("design snapshot has no go.sum: the evaluator loads dependencies read-only, so go.sum must list every dependency's checksum; run `go mod tidy` in the module and try again")
+		return nil, errors.New("design snapshot has no go.sum: the evaluator loads dependencies read-only, so go.sum must list every dependency's checksum; run `GOWORK=off go mod tidy` in the module being evaluated and try again")
 	}
 	if designFiles == 0 {
 		return nil, errors.New("design snapshot has no design/*.go file")

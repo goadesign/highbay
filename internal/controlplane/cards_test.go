@@ -26,11 +26,10 @@ func TestCardsSurviveANewControlPlane(t *testing.T) {
 		Question: "Does the limit include tax?", Options: []string{"with_tax", "without_tax"},
 	})
 
-	opts := buildFixtureOptions(t, Options{CardsDir: dir, Verification: cfg})
+	opts := Options{CardsDir: dir, Verification: cfg}
 	first, err := New(opts)
 	require.NoError(t, err)
 	proposed := saveProposedCardFixture(t, first, "alice@example.com", "chg", "Refunds up to $50 are instant.", analysis)
-	proposed = attachBuildSnapshot(t, first, "chg")
 	require.Equal(t, StatusNeedsConfirmation, proposed.Status)
 	confirmed, err := first.ConfirmIntent(alice, &gensurla.ConfirmIntentPayload{
 		ChangeID: "chg", RequestRevision: proposed.RequestRevision,
@@ -39,7 +38,6 @@ func TestCardsSurviveANewControlPlane(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.Equal(t, StatusConfirmed, confirmed.Status)
-	saveStoredBuildFixture(t, first, confirmed)
 	require.NoError(t, first.Close())
 
 	restarted := newControlPlane(t, opts)

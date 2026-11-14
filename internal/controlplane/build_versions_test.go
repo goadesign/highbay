@@ -119,8 +119,7 @@ func TestChangeVersionReadsOnlyOwnersBuilds(t *testing.T) {
 	require.NoError(t, err)
 	before, err := cp.ListChanges(user)
 	require.NoError(t, err)
-	bob := asCaller("bob@example.com", CallerGuide)
-	mustPropose(t, cp, bob, "bob", "Refunds up to $50 are instant.", refundAnalysis("Refunds up to $50 are instant."))
+	saveProposedCardFixture(t, cp, "bob@example.com", "bob", "Refunds up to $50 are instant.", refundAnalysis("Refunds up to $50 are instant."))
 	bobBuild := strings.TrimSuffix(cp.cards.path("bob"), ".json") + ".build.json"
 	require.NoError(t, os.WriteFile(bobBuild, []byte(`{"invalid_build":true}`), 0o600))
 	after, err := cp.ListChanges(user)

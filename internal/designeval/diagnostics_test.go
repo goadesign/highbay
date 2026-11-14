@@ -133,7 +133,7 @@ func TestGenerationDiagnosticPreservesSnapshotValidationDetail(t *testing.T) {
 		name, mod, want     string
 		omitSum, omitDesign bool
 	}{
-		{name: "missing checksum file", omitSum: true, want: "run `go mod tidy`"},
+		{name: "missing checksum file", omitSum: true, want: "run `GOWORK=off go mod tidy`"},
 		{name: "malformed module", mod: "module (\n", want: "parse snapshot go.mod"},
 		{name: "missing design", omitDesign: true, want: "design snapshot has no design/*.go file"},
 		{name: "local replacement", mod: "module example.com/design\ngo 1.24\nreplace example.com/local => ./local\n", want: "only versioned replacements are supported"},
