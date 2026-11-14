@@ -140,9 +140,9 @@ func TestDraftRetriesAStopBeforeTheFirstStagingMarker(t *testing.T) {
 // TestDraftRevalidatesAfterUnlockedGit checks both concurrent writers' states
 // and proves committed-design queries never hold the draft's lock.
 func TestDraftRevalidatesAfterUnlockedGit(t *testing.T) {
-	for _, change := range []string{"list", "draft"} {
+	for _, change := range []string{"list", "draft", "workspace"} {
 		t.Run(change, func(t *testing.T) {
-			project := t.TempDir()
+			project := filepath.Join(t.TempDir(), "project")
 			writeWorkspaceFiles(t, project, validWorkspaceStub("package design\n"))
 			gitForLayoutTest(t, project, "init", "-q")
 			gitForLayoutTest(t, project, "add", "go.mod", "go.sum", "design/design.go")
@@ -179,17 +179,29 @@ func TestDraftRevalidatesAfterUnlockedGit(t *testing.T) {
 					require.NoError(t, cp.cards.saveMadeFrom(madeFromRecord{
 						Write: 2, Start: madeFromStart{Write: 2}, Entries: map[string][]madeFromVersion{},
 					}))
-				} else {
+				} else if change == "draft" {
 					writeWorkspaceFiles(t, filepath.Join(project, draftFolderName), map[string]string{
 						".gitignore": "# surla draft 1\n*\n", "design/design.go": "user work",
 					})
 				}
 			}()
+			if change == "workspace" {
+				require.NoError(t, os.Rename(project, project+"-moved"))
+				writeWorkspaceFiles(t, project, validWorkspaceStub("package design\nvar Replacement = 1\n"))
+				gitForLayoutTest(t, project, "init", "-q")
+				gitForLayoutTest(t, project, "add", "go.mod", "go.sum", "design/design.go")
+				gitForLayoutTest(t, project, "-c", "user.name=Test", "-c", "user.email=test@example.com", "commit", "-qm", "Replacement")
+			}
 			require.NoError(t, os.WriteFile(release, nil, 0o600))
 			select {
 			case err := <-result:
-				assertServiceError(t, err, "conflict")
-				assert.ErrorContains(t, err, "call refresh_story again")
+				if change == "workspace" {
+					assertServiceError(t, err, "unprocessable")
+					assert.ErrorContains(t, err, "was replaced or removed after startup")
+				} else {
+					assertServiceError(t, err, "conflict")
+					assert.ErrorContains(t, err, "call refresh_story again")
+				}
 			case <-ctx.Done():
 				t.Fatal("draft read did not finish after the Git query was released")
 			}
@@ -198,10 +210,20 @@ func TestDraftRevalidatesAfterUnlockedGit(t *testing.T) {
 				require.NoError(t, err)
 				assert.Equal(t, uint64(2), list.Start.Write)
 				assert.Equal(t, uint64(2), list.Write)
-			} else {
+			} else if change == "draft" {
 				text, err := os.ReadFile(filepath.Join(project, draftFolderName, "design/design.go"))
 				require.NoError(t, err)
 				assert.Equal(t, "user work", string(text))
+			} else {
+				_, exists, err := cp.cards.loadMadeFrom()
+				require.NoError(t, err)
+				assert.False(t, exists)
+				for _, folder := range []string{project, project + "-moved"} {
+					for _, name := range []string{draftFolderName, draftStagingName} {
+						_, err := os.Stat(filepath.Join(folder, name))
+						assert.ErrorIs(t, err, os.ErrNotExist, "neither folder may be changed")
+					}
+				}
 			}
 		})
 	}

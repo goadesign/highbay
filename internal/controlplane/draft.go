@@ -119,6 +119,16 @@ func (c *ControlPlane) readDraftSnapshot(
 			if err != nil {
 				return nil, saved, gensurla.MakeUnprocessable(err)
 			}
+			// The open root still names the original inode even if its path
+			// was replaced while Git resolved that path. Check the binding again
+			// before pairing Git's commit with any files or publishing effects.
+			_, verified, err := openModuleRootWithIdentity(wsDir, wsDev, wsIno)
+			if err != nil {
+				return nil, saved, err
+			}
+			if err := verified.Close(); err != nil {
+				return nil, saved, err
+			}
 			current, currentExists, err := c.cards.loadMadeFrom()
 			if err != nil {
 				return nil, saved, err
