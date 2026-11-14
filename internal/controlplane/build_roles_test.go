@@ -19,6 +19,7 @@ func TestBuilderOnlyBuildRequiresStoredSettings(t *testing.T) {
 	dir := t.TempDir()
 	opts := Options{
 		CardsDir:     dir,
+		WorkspaceDir: t.TempDir(),
 		Verification: &VerificationConfig{RunsDir: t.TempDir()},
 		Team:         &TeamBinding{Owner: "alice@example.com", Service: &teamServiceFixture{}},
 	}
