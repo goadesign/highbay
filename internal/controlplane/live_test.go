@@ -1162,3 +1162,25 @@ func TestChangeListVersionFollowsTheLiveTarget(t *testing.T) {
 	_, err = cp.StopLiveTarget(alice)
 	require.NoError(t, err)
 }
+
+// TestStoredEvaluatorLiveTargetSurvivesDrop verifies the real live-target
+// consumer before a build and after the user drops it.
+func TestStoredEvaluatorLiveTargetSurvivesDrop(t *testing.T) {
+	cp, _ := newLiveControlPlane(t, "serve")
+	user := asCaller("alice@example.com", CallerUser)
+	payload := &gensurla.StartLiveTargetPayload{ChangeID: liveTestChangeID, CandidateCommit: strings.Repeat("a", 40)}
+	_, err := cp.StartLiveTarget(user, payload)
+	require.NoError(t, err)
+	_, err = cp.StopLiveTarget(user)
+	require.NoError(t, err)
+	card, err := cp.GetChange(user, &gensurla.GetChangePayload{ChangeID: liveTestChangeID})
+	require.NoError(t, err)
+	first, err := cp.StartBuild(user, &gensurla.StartBuildPayload{ChangeID: liveTestChangeID, RequestRevision: card.RequestRevision})
+	require.NoError(t, err)
+	_, err = cp.DropBuild(user, &gensurla.DropBuildPayload{ChangeID: liveTestChangeID, StartedAt: first.Build.StartedAt})
+	require.NoError(t, err)
+	_, err = cp.StartLiveTarget(user, payload)
+	require.NoError(t, err)
+	_, err = cp.StopLiveTarget(user)
+	require.NoError(t, err)
+}
