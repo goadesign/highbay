@@ -19,6 +19,42 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// TestDraftFirstUsePreservesAnExistingFolder rejects an unknown published
+// folder before writing a marker, provenance or replacement design.
+func TestDraftFirstUsePreservesAnExistingFolder(t *testing.T) {
+	for _, marked := range []bool{false, true} {
+		t.Run(fmt.Sprintf("marked=%t", marked), func(t *testing.T) {
+			project := t.TempDir()
+			writeWorkspaceFiles(t, project, validWorkspaceStub("package design\nvar FromProject = 1\n"))
+			folder := filepath.Join(project, draftFolderName)
+			original := map[string]string{"notes.txt": "Keep this preexisting work.\n"}
+			if marked {
+				original[".gitignore"] = "# surla draft 1\n*\n"
+			}
+			writeWorkspaceFiles(t, folder, original)
+			cp := newControlPlane(t, Options{WorkspaceDir: project})
+			_, err := cp.RefreshStory(WithPrincipal(t.Context(), Principal{ID: "owner", Kind: CallerGuide}))
+			assertServiceError(t, err, "unprocessable")
+			assert.ErrorContains(t, err, "draft provenance is missing")
+			for name, want := range original {
+				got, err := os.ReadFile(filepath.Join(folder, name))
+				require.NoError(t, err)
+				assert.Equal(t, want, string(got))
+			}
+			if !marked {
+				_, err = os.Stat(filepath.Join(folder, ".gitignore"))
+				assert.ErrorIs(t, err, os.ErrNotExist)
+			}
+			for _, name := range []string{madeFromFileName, "made-from"} {
+				_, err = os.Stat(filepath.Join(cp.cards.dir, name))
+				assert.ErrorIs(t, err, os.ErrNotExist)
+			}
+			_, err = os.Stat(filepath.Join(project, draftStagingName))
+			assert.ErrorIs(t, err, os.ErrNotExist)
+		})
+	}
+}
+
 // TestDraftFirstUsePublishesCanonicalFilesAndProvenance checks the public
 // folder result, replacement of owned interrupted staging and restart read.
 func TestDraftFirstUsePublishesCanonicalFilesAndProvenance(t *testing.T) {

@@ -790,7 +790,9 @@ var _ = Service("orders", func() {
 	assert.Empty(t, nonStorySucceeded.Stories)
 	assert.Contains(t, nonStorySucceeded.Message, "the design declares no Stories")
 
-	// Adopting a succeeded refresh with zero Stories equals adopting none.
+	// With the same canonical design input, adopting a refresh with zero
+	// Stories equals adopting no Story evaluation. The project still holds
+	// the earlier Story design; compare against the evaluated draft folder.
 	adoptedZero, err := cp.ProposeChange(alice, &gensurla.ProposeChangePayload{
 		ChangeID:         "chg-zero-stories",
 		Prompt:           "Refunds up to $50 are instant.",
@@ -799,7 +801,7 @@ var _ = Service("orders", func() {
 	})
 	require.NoError(t, err)
 	assert.Nil(t, adoptedZero.Stories)
-	plainZero := mustPropose(t, newControlPlane(t, Options{WorkspaceDir: wsDir}), alice, "chg-zero-stories", "Refunds up to $50 are instant.", refundAnalysis("Refunds up to $50 are instant."))
+	plainZero := mustPropose(t, newControlPlane(t, Options{WorkspaceDir: filepath.Join(wsDir, draftFolderName)}), alice, "chg-zero-stories", "Refunds up to $50 are instant.", refundAnalysis("Refunds up to $50 are instant."))
 	assert.Equal(t, plainZero.RequestRevision, adoptedZero.RequestRevision)
 }
 
