@@ -228,20 +228,16 @@ func TestTeamVersionBelongsToResourceOwner(t *testing.T) {
 // revision debt, and proves neither inspection nor a failed read marks it read.
 func TestTeamAssignmentGenerations(t *testing.T) {
 	f := &teamServiceFixture{}
-	cardsDir := t.TempDir()
-	var cp *ControlPlane
-	for _, owner := range []string{"alice@example.com", "bob@example.com"} {
-		cp = newBuildControlPlane(t, Options{CardsDir: cardsDir, Team: &TeamBinding{Owner: owner, Service: f}})
-		guide := asCaller(owner, CallerGuide)
-		user := asCaller(owner, CallerUser)
-		card := mustPropose(t, cp, guide, owner, "Refunds up to $50 are instant.", refundAnalysis("Refunds up to $50 are instant."))
-		confirmed, err := cp.ConfirmIntent(user, &gensurla.ConfirmIntentPayload{ChangeID: owner, RequestRevision: card.RequestRevision, Answers: map[string]string{}, Examples: card.Examples})
-		require.NoError(t, err)
-		_, err = cp.StartBuild(user, &gensurla.StartBuildPayload{ChangeID: owner, RequestRevision: confirmed.RequestRevision})
-		require.NoError(t, err)
-		require.NoError(t, cp.Close())
-	}
-	cp = newBuildControlPlane(t, Options{CardsDir: cardsDir, Team: &TeamBinding{Owner: "alice@example.com", Service: f}})
+	opts := Options{CardsDir: t.TempDir(), WorkspaceDir: t.TempDir(),
+		Team: &TeamBinding{Owner: "alice@example.com", Service: f}}
+	cp := newBuildControlPlane(t, opts)
+	card := buildableChange(t, cp, "alice@example.com")
+	_, err := cp.StartBuild(asCaller("alice@example.com", CallerUser), &gensurla.StartBuildPayload{
+		ChangeID: card.ChangeID, RequestRevision: card.RequestRevision,
+	})
+	require.NoError(t, err)
+	require.NoError(t, cp.Close())
+	cp = newBuildControlPlane(t, opts)
 	first, err := cp.assignmentGenerations(t.Context())
 	require.NoError(t, err)
 	require.Len(t, first, 2)

@@ -25,7 +25,7 @@ import (
 // for legacy cards without metadata and tests of producer behavior.
 func buildableChange(t *testing.T, cp *ControlPlane, changeID string) *gensurla.ChangeCardResult {
 	t.Helper()
-	proposed := mustPropose(t, cp, asCaller("alice@example.com", CallerGuide), changeID,
+	proposed := saveProposedCardFixture(t, cp, "alice@example.com", changeID,
 		"Refunds up to $50 are instant.", refundAnalysis("Refunds up to $50 are instant."))
 	proposed = attachBuildSnapshot(t, cp, proposed.ChangeID)
 	confirmed, err := cp.ConfirmIntent(asCaller("alice@example.com", CallerUser), &gensurla.ConfirmIntentPayload{
@@ -108,6 +108,17 @@ func fixtureOpenBuild(
 		Answers: confirmedAnswers(card), Examples: card.Examples, PreservedBehaviors: card.PreservedBehaviors,
 		TestWriter: testWriterAssignment{State: testsAssigned},
 	}
+}
+
+// saveStoredBuildFixture supplies an explicit builder-only numbered record for
+// stored-evaluator unit tests. It exercises consumers, not build production.
+func saveStoredBuildFixture(t *testing.T, cp *ControlPlane, card *gensurla.ChangeCardResult) {
+	t.Helper()
+	build := fixtureOpenBuild(t, cp, card, buildRolesBuilderOnly)
+	cp.mu.Lock()
+	err := cp.cards.saveOpenBuild(build)
+	cp.mu.Unlock()
+	require.NoError(t, err)
 }
 
 // startBuildAgain explicitly names the unfinished start the fixture just read,

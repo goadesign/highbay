@@ -74,6 +74,24 @@ func newBuildControlPlane(t *testing.T, opts Options) *ControlPlane {
 	if opts.Team == nil {
 		opts.Team = &TeamBinding{Owner: "alice@example.com", Service: &teamServiceFixture{}}
 	}
+	opts = buildFixtureOptions(t, opts)
+	cp := newControlPlane(t, opts)
+	cp.buildIdentityCheck = func(context.Context, string) error { return nil }
+	cp.buildSandboxCheck = func() error { return nil }
+	_, prefix, err := resolveStarterRepo(t.Context(), cp.activeWorkspaceDir)
+	require.NoError(t, err)
+	copy := &buildCopyFixture{folder: filepath.Join(cp.activeWorkspaceDir, testwriter.Folder, filepath.FromSlash(prefix))}
+	cp.buildCopyFactory = func(context.Context, string, scaffold.Layout) (buildCopy, error) {
+		return copy, nil
+	}
+	return cp
+}
+
+// buildFixtureOptions supplies a real temporary Git project without installing
+// a team, runtime seams, or cleanup. Stored consumer and lifecycle tests retain
+// their own constructor, supervision and Close assertions.
+func buildFixtureOptions(t *testing.T, opts Options) Options {
+	t.Helper()
 	if opts.WorkspaceDir == "" {
 		opts.WorkspaceDir = t.TempDir()
 	}
@@ -93,14 +111,5 @@ func newBuildControlPlane(t *testing.T, opts Options) *ControlPlane {
 		require.NoError(t, err)
 	}
 	ensureBuildFixtureRepository(t, opts.WorkspaceDir)
-	cp := newControlPlane(t, opts)
-	cp.buildIdentityCheck = func(context.Context, string) error { return nil }
-	cp.buildSandboxCheck = func() error { return nil }
-	_, prefix, err := resolveStarterRepo(t.Context(), cp.activeWorkspaceDir)
-	require.NoError(t, err)
-	copy := &buildCopyFixture{folder: filepath.Join(cp.activeWorkspaceDir, testwriter.Folder, filepath.FromSlash(prefix))}
-	cp.buildCopyFactory = func(context.Context, string, scaffold.Layout) (buildCopy, error) {
-		return copy, nil
-	}
-	return cp
+	return opts
 }

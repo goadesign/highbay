@@ -441,7 +441,7 @@ func TestABuildStartIsRefusedDuringACheck(t *testing.T) {
 	assertRefused(t, err, "working_copy_busy")
 	close(release)
 	waitForTests(t, cp, gensurla.TestsKindAccepted)
-	_, err = cp.StartBuild(user, start)
+	_, err = startBuildAgain(t, cp, user, start.ChangeID, start.RequestRevision)
 	require.NoError(t, err, "the check released the turn")
 }
 
@@ -449,7 +449,7 @@ func TestABuildStartIsRefusedDuringACheck(t *testing.T) {
 // while a check runs: Close waits until the check, which takes a moment to
 // stop, has returned, and nothing is saved, so the build stays reported. A server started again
 // on the same folders judges that build without another report. Its working
-// copy cannot be opened here, as the fixture's project is no git repository,
+// copy cannot be opened after its test layout is removed from the fixture,
 // so the verdict is that the check could not run, with the step to build
 // again.
 func TestAStoppedServerSavesNothingAndARestartedOneJudges(t *testing.T) {
@@ -476,6 +476,9 @@ func TestAStoppedServerSavesNothingAndARestartedOneJudges(t *testing.T) {
 	assert.Equal(t, reported, readBuildFile(t, cp, "chg"), "nothing is saved after the report")
 	assert.Empty(t, tests.recorded())
 
+	// Remove only the owned fixture's layout after shutdown, before the real
+	// copy opener runs on restart. No generated code or candidate runs.
+	require.NoError(t, os.Remove(filepath.Join(opts.WorkspaceDir, "eval", "go.mod")))
 	opts.Team = &TeamBinding{Owner: "alice@example.com", Service: &teamServiceFixture{}}
 	restarted := newControlPlane(t, opts)
 	build := waitForTests(t, restarted, gensurla.TestsKindCouldNotRun)
@@ -665,7 +668,6 @@ func TestStoredEvaluatorProjectsNeverJudge(t *testing.T) {
 
 	editBuildFile(t, cp, "chg", func(f map[string]any) map[string]any {
 		f["roles"] = buildRolesBuilderAndTestWriter
-		f["test_writer"].(map[string]any)["working_folder"] = t.TempDir()
 		return f
 	})
 	before = readBuildFile(t, cp, "chg")

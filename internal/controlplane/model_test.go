@@ -234,7 +234,7 @@ func TestConfigureModelValidationTelemetryAndLiveEnv(t *testing.T) {
 		// live target, which gets only the handed-over snapshot.
 		t.Setenv("ANTHROPIC_API_KEY", "inherited-key-sentinel")
 		t.Setenv("ANTHROPIC_ADMIN_KEY", "inherited-admin-sentinel")
-		cp, err := New(Options{
+		cp := newControlPlane(t, buildFixtureOptions(t, Options{
 			CardsDir:     cardsDir,
 			Verification: &VerificationConfig{RunsDir: t.TempDir()},
 			Live: &LiveConfig{
@@ -254,8 +254,7 @@ func TestConfigureModelValidationTelemetryAndLiveEnv(t *testing.T) {
 					"SURLA_LIVE_MODEL_NAME=stale",
 				),
 			},
-		})
-		require.NoError(t, err)
+		}))
 		t.Cleanup(func() { assert.NoError(t, cp.Close()) })
 
 		seedLiveChange(t, cp)

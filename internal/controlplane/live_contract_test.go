@@ -95,7 +95,7 @@ func TestLiveStartRefusalsPreserveTheRunningTarget(t *testing.T) {
 
 // TestWrittenLiveStartNeedsAModelBeforeLaunching proves accepted tests alone
 // cannot trigger compilation without a usable model; stored fixtures above
-// continue to start with no choice and no build.
+// continue to start without a model choice, using their builder-only build.
 func TestWrittenLiveStartNeedsAModelBeforeLaunching(t *testing.T) {
 	self, err := os.Executable()
 	require.NoError(t, err)

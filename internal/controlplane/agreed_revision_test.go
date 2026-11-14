@@ -46,8 +46,16 @@ var (
 func TestARevisionOfAnAgreedChangeWaitsAndTheAgreedRevisionStaysInForce(t *testing.T) {
 	spec := agreedReportSpec()
 	target := &pageTarget{artifacts: spec.Artifacts}
-	cp := newControlPlane(t, Options{Verification: verificationConfig(t), ResolvePromotionTarget: target.resolve})
-	agreed := agreeChange(t, cp, "chg")
+	cp := newControlPlane(t, buildFixtureOptions(t, Options{Verification: verificationConfig(t), ResolvePromotionTarget: target.resolve}))
+	proposed := saveProposedCardFixture(t, cp, agreedOwner, "chg", "Refunds up to $50 are instant.",
+		refundAnalysis("Refunds up to $50 are instant.", refundTaxQuestion()))
+	proposed = attachBuildSnapshot(t, cp, "chg")
+	agreed, err := cp.ConfirmIntent(agreedUser, &gensurla.ConfirmIntentPayload{
+		ChangeID: "chg", RequestRevision: proposed.RequestRevision,
+		Answers: map[string]string{"chg-ambiguity-01": "with_tax"}, Examples: proposed.Examples,
+	})
+	require.NoError(t, err)
+	saveStoredBuildFixture(t, cp, agreed)
 	commit := strings.Repeat("1", 40)
 	report := passingReport(t, agreed.RequestRevision, commit, spec)
 	target.update(func(p *pageTarget) { p.report = report })
@@ -80,8 +88,7 @@ func TestARevisionOfAnAgreedChangeWaitsAndTheAgreedRevisionStaysInForce(t *testi
 	assert.Equal(t, proposal.RequestRevision, read.ProposedRevision.RequestRevision, "reading returns the proposal beside it")
 
 	_, err = cp.PreviewArchitecture(agreedGuide, &gensurla.PreviewArchitecturePayload{ChangeID: "chg", RequestRevision: agreed.RequestRevision})
-	assertServiceError(t, err, "unprocessable")
-	assert.ErrorContains(t, err, "workspace directory is not bound", "preview accepted the agreed revision and went on to read the design")
+	assert.ErrorContains(t, err, "design snapshot has no go.sum", "preview accepted the agreed revision and reached the fixture snapshot validation")
 
 	run, err := cp.VerifyChange(agreedBuilder, &gensurla.VerifyChangePayload{ChangeID: "chg", RequestRevision: agreed.RequestRevision, CandidateCommit: commit})
 	require.NoError(t, err, "verification of the agreed revision is accepted")
@@ -613,8 +620,7 @@ func TestBuildsFollowTheAgreedRevision(t *testing.T) {
 	cp := newBuildControlPlane(t, Options{WorkspaceDir: ws})
 	agreedOp := seedStoryRefreshForTest(t, cp, agreedOwner, storyRefreshStateSucceeded, sampleAdoptedStories(), "")
 	proposeWithStory(t, cp, agreedGuide, "chg", agreedOp)
-	proposed, err := cp.GetChange(agreedUser, &gensurla.GetChangePayload{ChangeID: "chg"})
-	require.NoError(t, err)
+	proposed := attachBuildSnapshot(t, cp, "chg")
 	agreed, err := cp.ConfirmIntent(agreedUser, &gensurla.ConfirmIntentPayload{
 		ChangeID: "chg", RequestRevision: proposed.RequestRevision, Answers: map[string]string{}, Examples: proposed.Examples,
 	})

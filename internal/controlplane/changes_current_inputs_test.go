@@ -48,9 +48,7 @@ func TestListChangesCurrentInputsFollowAcceptedWrittenTests(t *testing.T) {
 	listed(false) // No build has selected accepted written tests.
 	start := func() {
 		t.Helper()
-		_, err := cp.StartBuild(user, &gensurla.StartBuildPayload{
-			ChangeID: card.ChangeID, RequestRevision: card.RequestRevision,
-		})
+		_, err := startBuildAgain(t, cp, user, card.ChangeID, card.RequestRevision)
 		require.NoError(t, err)
 	}
 	start()
@@ -133,9 +131,10 @@ func TestListChangesCurrentInputsFollowAcceptedWrittenTests(t *testing.T) {
 func TestListChangesKeepsEarlierRevisionRuns(t *testing.T) {
 	runsDir := t.TempDir()
 	plan := verify.Plan{SuiteCommit: strings.Repeat("2", 40)}
-	cp := newControlPlane(t, Options{Verification: &VerificationConfig{RunsDir: runsDir, Plan: plan}})
+	cp := newControlPlane(t, buildFixtureOptions(t, Options{Verification: &VerificationConfig{RunsDir: runsDir, Plan: plan}}))
 	user := asCaller("alice@example.com", CallerUser)
 	first := buildableChange(t, cp, "chg")
+	saveStoredBuildFixture(t, cp, first)
 	runID := strings.Repeat("1", 32)
 	writeListedRun(t, runsDir, "alice@example.com", first, runID,
 		time.Date(2026, 10, 1, 9, 0, 0, 0, time.UTC), true)
@@ -179,7 +178,7 @@ func TestListChangesKeepsEarlierRevisionRuns(t *testing.T) {
 }
 
 // TestListChangesCurrentInputsFollowStoredSuite reopens the same records under
-// each immutable server configuration. No build is needed for stored tests;
+// each immutable server configuration. The builder-only build stays fixed;
 // changing only the selected suite changes the fact and the list version.
 func TestListChangesCurrentInputsFollowStoredSuite(t *testing.T) {
 	cardsDir, runsDir := t.TempDir(), t.TempDir()
@@ -187,8 +186,9 @@ func TestListChangesCurrentInputsFollowStoredSuite(t *testing.T) {
 	options := func(selected verify.Plan) Options {
 		return Options{CardsDir: cardsDir, Verification: &VerificationConfig{RunsDir: runsDir, Plan: selected}}
 	}
-	cp := newControlPlane(t, options(plan))
+	cp := newControlPlane(t, buildFixtureOptions(t, options(plan)))
 	card := buildableChange(t, cp, "chg")
+	saveStoredBuildFixture(t, cp, card)
 	runID := strings.Repeat("1", 32)
 	writeListedRun(t, runsDir, "alice@example.com", card, runID,
 		time.Date(2026, 10, 1, 9, 0, 0, 0, time.UTC), true)
@@ -198,7 +198,7 @@ func TestListChangesCurrentInputsFollowStoredSuite(t *testing.T) {
 	require.Len(t, baseline.Changes, 1)
 	require.NotNil(t, baseline.Changes[0].LatestVerification)
 	assert.True(t, baseline.Changes[0].LatestVerification.InputsCurrent)
-	assertNoBuildSaved(t, cp, card.ChangeID)
+	assert.Equal(t, gensurla.TestsKindNotUsed, mustStartedBuild(t, cp, asCaller("alice@example.com", CallerUser), card.ChangeID).TestWriter.Tests.Kind())
 	require.NoError(t, cp.Close(), "release the card store before reopening it")
 	cases := []struct {
 		name   string

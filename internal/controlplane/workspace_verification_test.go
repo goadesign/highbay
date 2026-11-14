@@ -315,6 +315,11 @@ func TestVerifyChangeRefusesWhatItCannotRunWithItsStep(t *testing.T) {
 			if tc.otherRev {
 				card = saveBuildStoryCard(t, cp, "chg", StatusConfirmed, refundStory("Refund over the limit waits for a manager"))
 			}
+			if tc.workspace == plain {
+				// The accepted fixture had a real repository at build time. Its
+				// owner can subsequently lose the Git metadata before verifying.
+				require.NoError(t, os.Rename(filepath.Join(plain, ".git"), filepath.Join(root, "plain-git-metadata")))
+			}
 			srv := roleServer(t, cp)
 			body := `{"request_revision":"` + card.RequestRevision + `","candidate_commit":"` + tc.candidate + `"}`
 
@@ -594,6 +599,7 @@ func TestVerifyChangeTestModuleGuardAcrossRegenerationMergeAndNextChange(t *test
 		Verification: &VerificationConfig{RunsDir: storedRunsDir, Plan: storedPlan, Command: []string{"/bin/sh", "-c", "exit 0", "sh"}, Timeout: time.Hour},
 	})
 	storedCard := saveBuildStoryCard(t, storedCP, "chg-stored", StatusConfirmed, refundStory("Refund over the limit waits"))
+	saveStoredBuildFixture(t, storedCP, storedCard)
 	storedRun, err := storedCP.VerifyChange(builder, &gensurla.VerifyChangePayload{
 		ChangeID: "chg-stored", RequestRevision: storedCard.RequestRevision, CandidateCommit: repo.modifiedTestFile,
 	})

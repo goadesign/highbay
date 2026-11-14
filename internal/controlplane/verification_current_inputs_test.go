@@ -71,7 +71,7 @@ func TestVerificationCurrentInputsFollowWrittenSelection(t *testing.T) {
 	check(false, false) // Written verification requires a usable build.
 	start := func() {
 		t.Helper()
-		_, err := cp.StartBuild(user, &gensurla.StartBuildPayload{ChangeID: card.ChangeID, RequestRevision: card.RequestRevision})
+		_, err := startBuildAgain(t, cp, user, card.ChangeID, card.RequestRevision)
 		require.NoError(t, err)
 	}
 	start()
@@ -128,18 +128,19 @@ func TestVerificationCurrentInputsFollowWrittenSelection(t *testing.T) {
 }
 
 // TestVerificationCurrentInputsUseFullStoredTuple verifies evaluator identity
-// even without a build. Each reopened server has one immutable selection.
+// with its builder-only build. Each reopened server has one immutable selection.
 func TestVerificationCurrentInputsUseFullStoredTuple(t *testing.T) {
 	cardsDir, runsDir := t.TempDir(), t.TempDir()
 	plan := verify.Plan{SuiteCommit: strings.Repeat("2", 40)}
 	opts := func(selected verify.Plan) Options {
 		return Options{CardsDir: cardsDir, Verification: &VerificationConfig{RunsDir: runsDir, Plan: selected}}
 	}
-	cp := newControlPlane(t, opts(plan))
+	cp := newControlPlane(t, buildFixtureOptions(t, opts(plan)))
 	card := buildableChange(t, cp, "chg")
+	saveStoredBuildFixture(t, cp, card)
 	runID := strings.Repeat("1", 32)
 	writeListedRun(t, runsDir, "alice@example.com", card, runID, time.Date(2026, 10, 1, 9, 0, 0, 0, time.UTC), true)
-	assertNoBuildSaved(t, cp, card.ChangeID)
+	assert.Equal(t, gensurla.TestsKindNotUsed, mustStartedBuild(t, cp, asCaller("alice@example.com", CallerUser), card.ChangeID).TestWriter.Tests.Kind())
 	require.NoError(t, cp.Close())
 	for _, tc := range []struct {
 		name   string
@@ -164,7 +165,7 @@ func TestVerificationCurrentInputsUseFullStoredTuple(t *testing.T) {
 			require.NoError(t, err)
 			require.Len(t, list.Runs, 1)
 			assert.Equal(t, got, list.Runs[0])
-			assertNoBuildSaved(t, reopened, card.ChangeID)
+			assert.Equal(t, gensurla.TestsKindNotUsed, mustStartedBuild(t, reopened, asCaller("alice@example.com", CallerUser), card.ChangeID).TestWriter.Tests.Kind())
 			require.NoError(t, reopened.Close())
 		})
 	}
@@ -269,7 +270,7 @@ func TestVerificationCurrentInputsIgnoreForeignCard(t *testing.T) {
 }
 
 // TestVerifyChangeReadsCurrentInputsBeforeAcceptance damages only the build:
-// stored-evaluator plan selection needs no build, but the observation must fail
+// stored-evaluator plan selection must read the same open-build prerequisite
 // before the supervisor can accept and publish a run identifier.
 func TestVerifyChangeReadsCurrentInputsBeforeAcceptance(t *testing.T) {
 	cp, card, cfg := verificationSetup(t)
@@ -278,11 +279,11 @@ func TestVerifyChangeReadsCurrentInputsBeforeAcceptance(t *testing.T) {
 		ChangeID: card.ChangeID, RequestRevision: card.RequestRevision, CandidateCommit: strings.Repeat("a", 40),
 	})
 	require.Error(t, err)
-	assert.Equal(t, `start verification for "chg": saved verification inputs could not be read`, err.Error())
+	assert.ErrorContains(t, err, "decode open build")
 	assert.NotContains(t, err.Error(), cp.cards.dir)
 	runs, err := verifyrun.List(cfg.RunsDir, "alice@example.com", card.ChangeID)
 	require.NoError(t, err)
-	assert.Empty(t, runs, "no accepted run is hidden behind an observation failure")
+	assert.Empty(t, runs, "no accepted run is hidden behind a failed open-build read")
 }
 
 // editVerificationRequest modifies a fixture's stored request before its reads.
