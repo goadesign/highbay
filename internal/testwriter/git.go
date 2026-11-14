@@ -175,17 +175,31 @@ func writeTree(ctx context.Context, wc WorkingCopy, index, src string) (string, 
 	return tree, nil
 }
 
-// commitTree makes tree the content of the working copy's branch. When the
-// branch's commit already holds tree it returns that commit. Otherwise it
-// commits tree with message on top of the branch with the user's own git
-// identity, never signed whatever the user's git settings say (signing could
-// wait on a prompt no one sees), points the copy's index at the commit when
-// the copy has the branch checked out, so the copy's status shows only edits
-// made after the check, and then moves the branch, failing if it moved
-// meanwhile.
-func commitTree(ctx context.Context, wc WorkingCopy, tree, message string) (string, error) {
+// commitTree makes tree the content of the working copy's branch (branchRef
+// when passed, or refs/heads/surla/tests otherwise). When the branch's commit
+// already holds tree it returns that commit. Otherwise it commits tree with
+// message on top of the branch with the user's own git identity, never signed
+// whatever the user's git settings say (signing could wait on a prompt no one
+// sees), points the copy's index at the commit when the copy has the branch
+// checked out, so the copy's status shows only edits made after the commit,
+// and then moves the branch, failing if it moved meanwhile.
+func commitTree(ctx context.Context, wc WorkingCopy, tree, message string,
+	branchRef ...string) (string, error) {
 	ref := "refs/heads/" + Branch
-	head, err := wc.git(ctx, wc.dir, nil, "rev-parse", "--verify", ref+"^{commit}")
+	if len(branchRef) > 0 && branchRef[0] != "" {
+		ref = branchRef[0]
+	}
+	return commitTreeWithHook(ctx, wc, ref, tree, message, nil)
+}
+
+// commitTreeWithHook commits tree onto ref (a full refs/heads/<branch> name)
+// in wc, updating wc's index first when wc has ref checked out, calling
+// afterCopyIndex if non-nil, and then updating ref with compare-and-swap on
+// its previous head commit.
+func commitTreeWithHook(ctx context.Context, wc WorkingCopy, ref, tree, message string,
+	afterCopyIndex func() error) (string, error) {
+	branch := strings.TrimPrefix(ref, "refs/heads/")
+	head, err := wc.git(ctx, wc.dir, nil, "rev-parse", "--verify", "--end-of-options", ref+"^{commit}")
 	if err != nil {
 		return "", err
 	}
@@ -198,7 +212,7 @@ func commitTree(ctx context.Context, wc WorkingCopy, tree, message string) (stri
 	}
 	commit, err := wc.git(ctx, wc.dir, nil, "commit-tree", "--no-gpg-sign", tree, "-p", head, "-m", message)
 	if err != nil {
-		return "", fmt.Errorf("commit the accepted tests: %w", err)
+		return "", fmt.Errorf("commit the working copy's changes: %w", err)
 	}
 	checkedOut, err := wc.git(ctx, wc.dir, nil, "symbolic-ref", "--quiet", "HEAD")
 	if err != nil && exitCode(err) != 1 {
@@ -209,20 +223,31 @@ func commitTree(ctx context.Context, wc WorkingCopy, tree, message string) (stri
 			return "", fmt.Errorf("update the working copy's index: %w", err)
 		}
 	}
+	if afterCopyIndex != nil {
+		if err := afterCopyIndex(); err != nil {
+			return "", err
+		}
+	}
 	if _, err := wc.git(ctx, wc.dir, nil, "update-ref", ref, commit, head); err != nil {
-		return "", fmt.Errorf("move %s to the accepted tests: %w", Branch, err)
+		return "", fmt.Errorf("move %s to the new commit: %w", branch, err)
 	}
 	return commit, nil
 }
 
 // gitEnv is the server's environment without the variables that would make
 // git act on another repository, work tree, index or object store than the
-// one named on its command line (gitenv.WithoutRedirects), and with terminal
-// prompts off: the inherited GIT_TERMINAL_PROMPT is dropped and replaced. The
-// user's identity and configuration-file settings stay, though commitTree
+// one named on its command line (gitenv.WithoutRedirects), with terminal
+// prompts off, and with grafts off (GIT_GRAFT_FILE=/dev/null) so an
+// info/grafts file in the repository cannot rewrite commit parents: the
+// inherited GIT_TERMINAL_PROMPT and GIT_GRAFT_FILE are dropped and replaced.
+// The user's identity and configuration-file settings stay, though commitTree
 // never signs.
 func gitEnv() []string {
-	return append(gitenv.WithoutRedirects(os.Environ(), "GIT_TERMINAL_PROMPT"), "GIT_TERMINAL_PROMPT=0")
+	return append(
+		gitenv.WithoutRedirects(os.Environ(), "GIT_TERMINAL_PROMPT", "GIT_GRAFT_FILE"),
+		"GIT_TERMINAL_PROMPT=0",
+		"GIT_GRAFT_FILE=/dev/null",
+	)
 }
 
 // git runs one git command on the working copy's repository, with worktree
