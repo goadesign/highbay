@@ -580,6 +580,23 @@ func currentProjectCommit(ctx context.Context, dir string) (string, string, stri
 
 // committedDesignAt applies the canonical design walk to any immutable commit.
 func committedDesignAt(ctx context.Context, dir, repo, prefix, commit string) (map[string]string, error) {
+	files, err := committedDesignFiles(ctx, dir, repo, prefix, commit)
+	if err != nil {
+		return nil, err
+	}
+	for file, text := range files {
+		canonical, err := designversion.Canonical(filepath.Join(dir, file), text)
+		if err != nil {
+			return nil, err
+		}
+		files[file] = canonical
+	}
+	return files, nil
+}
+
+// committedDesignFiles owns the same bounded design walk for strict current
+// snapshots and historical version matching. It preserves raw Go for its consumer.
+func committedDesignFiles(ctx context.Context, dir, repo, prefix, commit string) (map[string]string, error) {
 	out, err := runGitRead(ctx, repo, "ls-tree", "-r", "-z", commit, "--", prefix+"design")
 	if err != nil {
 		return nil, err
@@ -622,11 +639,7 @@ func committedDesignAt(ctx context.Context, dir, repo, prefix, commit string) (m
 		if !found {
 			return nil, fmt.Errorf("committed design %s disappeared", file)
 		}
-		canonical, err := designversion.Canonical(filepath.Join(dir, file), string(text))
-		if err != nil {
-			return nil, err
-		}
-		design[file] = canonical
+		design[file] = string(text)
 	}
 	return design, nil
 }

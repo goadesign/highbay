@@ -3,7 +3,6 @@ package controlplane
 
 import (
 	"context"
-	"crypto/rand"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -20,6 +19,7 @@ import (
 	"github.com/goadesign/surla/internal/designversion"
 	"go.opentelemetry.io/otel/codes"
 	"golang.org/x/mod/modfile"
+	"golang.org/x/sys/unix"
 )
 
 // draftFileUpdate is a prepared write or completion of an interrupted write.
@@ -294,6 +294,13 @@ func (c *ControlPlane) applyDraftUpdate(draft *os.Root, list *madeFromRecord, up
 			return err
 		}
 	}
+	// A previous attempt may have renamed the file but failed its directory
+	// sync. Completion-only recovery must establish durability again.
+	if !update.write {
+		if err := syncDraftUpdateParent(draft, update.pending.File); err != nil {
+			return err
+		}
+	}
 	completeDraftTake(list, update.pending)
 	return c.cards.saveMadeFrom(*list)
 }
@@ -313,34 +320,87 @@ func completeDraftTake(list *madeFromRecord, pending pendingDraftWrite) {
 	list.Pending = nil
 }
 
-// writeUpdatedDraftFile uses the existing root-relative same-directory rename
-// pattern. Deletions unlink the file; links are never followed for writes.
-func writeUpdatedDraftFile(root *os.Root, file, text, version string) (err error) {
-	if version == absentDesignVersion {
-		err := root.Remove(file)
-		if errors.Is(err, fs.ErrNotExist) {
-			return nil
-		}
-		return err
-	}
-	if err := root.MkdirAll(path.Dir(file), 0o700); err != nil {
-		return err
-	}
-	tmp := path.Join(path.Dir(file), ".surla-update-"+rand.Text()+".tmp")
-	f, err := root.OpenFile(tmp, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
+// writeUpdatedDraftFile reuses the existing no-follow atomic/fsync owner.
+// Every file or directory effect is durable before Pending can be completed.
+func writeUpdatedDraftFile(root *os.Root, file, text, version string) (retErr error) {
+	base, err := root.Open(".")
 	if err != nil {
 		return err
 	}
-	defer func() {
-		if err != nil {
-			err = errors.Join(err, root.Remove(tmp))
-		}
-	}()
-	_, writeErr := f.WriteString(text)
-	if err = errors.Join(writeErr, f.Sync(), f.Close()); err != nil {
+	defer func() { retErr = errors.Join(retErr, base.Close()) }()
+	dir, err := draftUpdateDirectory(int(base.Fd()), path.Dir(file), version != absentDesignVersion)
+	if errors.Is(err, unix.ENOENT) && version == absentDesignVersion {
+		return syncDraftUpdateParent(root, file)
+	}
+	if err != nil {
 		return err
 	}
-	return root.Rename(tmp, file)
+	defer func() { retErr = errors.Join(retErr, unix.Close(dir)) }()
+	if version == absentDesignVersion {
+		if err := unix.Unlinkat(dir, path.Base(file), 0); err != nil && !errors.Is(err, unix.ENOENT) {
+			return err
+		}
+		return fsyncDir(dir)
+	}
+	_, exists, err := readAtNoFollow(dir, path.Base(file))
+	if err != nil {
+		return err
+	}
+	_, err = writeAtomic(dir, path.Base(file), []byte(text), !exists)
+	return err
+}
+
+// draftUpdateDirectory creates each missing parent without following links,
+// syncing its parent before descending. Existing parents are synced too: a
+// prior attempt may have created them and stopped before that sync completed.
+func draftUpdateDirectory(base int, rel string, create bool) (int, error) {
+	current, err := openDirAt(base, ".")
+	if err != nil {
+		return -1, err
+	}
+	if rel == "." {
+		return current, nil
+	}
+	for _, part := range strings.Split(rel, "/") {
+		next, err := unix.Openat(current, part, openDirFlags, 0)
+		if errors.Is(err, unix.ENOENT) && create {
+			err = unix.Mkdirat(current, part, 0o700)
+			if err == nil || errors.Is(err, unix.EEXIST) {
+				next, err = unix.Openat(current, part, openDirFlags, 0)
+			}
+		}
+		if err != nil {
+			return -1, errors.Join(err, unix.Close(current))
+		}
+		syncErr := fsyncDir(current)
+		closeErr := unix.Close(current)
+		if err := errors.Join(syncErr, closeErr); err != nil {
+			return -1, errors.Join(err, unix.Close(next))
+		}
+		current = next
+	}
+	return current, nil
+}
+
+// syncDraftUpdateParent makes a visible recovered result durable before its
+// take is completed, without rewriting the guide's file or merging it again.
+func syncDraftUpdateParent(root *os.Root, file string) (retErr error) {
+	base, err := root.Open(".")
+	if err != nil {
+		return err
+	}
+	defer func() { retErr = errors.Join(retErr, base.Close()) }()
+	rel := path.Dir(file)
+	dir, err := draftUpdateDirectory(int(base.Fd()), rel, false)
+	for errors.Is(err, unix.ENOENT) && rel != "." {
+		rel = path.Dir(rel)
+		dir, err = draftUpdateDirectory(int(base.Fd()), rel, false)
+	}
+	if err != nil {
+		return err
+	}
+	defer func() { retErr = errors.Join(retErr, unix.Close(dir)) }()
+	return fsyncDir(dir)
 }
 
 // readDraftUpdateFiles reuses the canonical walk's safety without requiring Go

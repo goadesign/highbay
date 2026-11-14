@@ -15,7 +15,6 @@ import (
 
 // designHistory holds bounded immutable Git reads prepared outside state locks.
 type designHistory struct {
-	head string
 	// design is the head's design, even when head belongs to Start's history.
 	design map[string]string
 	// versions contains the canonical snapshots in head's history after Start.
@@ -51,7 +50,7 @@ func readDesignHistory(
 ) (designHistory, error) {
 	ctx, cancel := context.WithTimeout(ctx, layoutReadTimeout)
 	defer cancel()
-	h := designHistory{head: head, versions: map[string]map[string]string{}, gained: map[string]bool{}}
+	h := designHistory{versions: map[string]map[string]string{}, gained: map[string]bool{}}
 	if head == "" {
 		return h, nil
 	}
@@ -59,98 +58,109 @@ func readDesignHistory(
 	if err != nil {
 		return h, err
 	}
-	out, err := runGitRead(ctx, repo, "rev-list", "--parents", head)
+	h.design, err = committedDesignAt(ctx, dir, repo, prefix, head)
 	if err != nil {
 		return h, err
 	}
-	parents := map[string][]string{}
-	for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
-		fields := strings.Fields(line)
-		if len(fields) > 0 {
-			parents[fields[0]] = fields[1:]
-		}
+	// No commit can be gained when P is still S. In particular, do not read
+	// the potentially enormous ancestry that this generation excludes.
+	if head == saved.Start.ProjectCommit {
+		return h, nil
 	}
-	excluded := commitAncestors(parents, saved.Start.ProjectCommit)
+	args := []string{"rev-list", head}
 	if saved.Start.ProjectCommit != "" {
-		// S can be outside the new head after a rewrite; its ancestry must
-		// still be excluded rather than silently treating it as unborn.
-		old, err := runGitRead(ctx, repo, "rev-list", saved.Start.ProjectCommit)
-		if err != nil {
-			return h, err
-		}
-		for _, commit := range strings.Fields(string(old)) {
-			excluded[commit] = true
-		}
+		args = append(args, "--not", saved.Start.ProjectCommit)
 	}
-	for _, commit := range slices.Sorted(maps.Keys(parents)) {
-		if excluded[commit] && commit != head {
+	out, err := runGitRead(ctx, repo, args...)
+	if err != nil {
+		return h, err
+	}
+	for _, commit := range strings.Fields(string(out)) {
+		if commit == head {
+			h.versions[commit] = h.design
 			continue
 		}
-		design, err := committedDesignAt(ctx, dir, repo, prefix, commit)
+		design, err := committedHistoryDesign(ctx, dir, repo, prefix, commit)
 		if err != nil {
 			return h, err
 		}
 		h.versions[commit] = design
 	}
+	var boundary map[string]string
+	if saved.Start.ProjectCommit != "" && len(taken) > 0 {
+		boundary, err = committedHistoryDesign(ctx, dir, repo, prefix, saved.Start.ProjectCommit)
+		if err != nil {
+			return h, err
+		}
+	}
 	for file, take := range taken {
-		before := commitAncestors(parents, take.ProjectCommit)
-		if _, present := parents[take.ProjectCommit]; take.ProjectCommit != "" && !present {
-			old, err := runGitRead(ctx, repo, "rev-list", take.ProjectCommit)
-			if err != nil {
-				return h, err
-			}
-			for _, commit := range strings.Fields(string(old)) {
-				before[commit] = true
-			}
+		args := []string{"rev-list", head}
+		if saved.Start.ProjectCommit != "" {
+			args = append(args, "--not", saved.Start.ProjectCommit)
 		}
-		// Cache this file's versions independently: older history can hold
-		// the taken version even when S no longer holds it. A historical text
-		// that cannot parse cannot equal any canonical listed version.
-		fileVersions := map[string]string{}
-		for _, commit := range slices.Sorted(maps.Keys(parents)) {
-			text, found, err := readGitBlob(ctx, repo, commit, prefix+file)
-			if err != nil {
-				return h, err
-			}
-			version := absentDesignVersion
-			if found {
-				canonical, parseErr := designversion.Canonical(file, string(text))
-				version = "unparsable"
-				if parseErr == nil {
-					version = designversion.Digest(canonical)
-				}
-			}
-			fileVersions[commit] = version
+		if take.ProjectCommit != "" {
+			args = append(args, "--not", take.ProjectCommit)
 		}
+		gained, err := runGitRead(ctx, repo, args...)
+		if err != nil {
+			return h, err
+		}
+		// Only commits in the required post-S set can contribute a listed
+		// version. Ancestry queries ask Git directly instead of fetching and
+		// retaining all ancestors of S or of the take.
+		holding := []string{}
 		for commit, design := range h.versions {
-			if excluded[commit] || before[commit] {
+			if designFileVersion(design, file) == take.Version {
+				holding = append(holding, commit)
+			}
+		}
+		if boundary != nil && designFileVersion(boundary, file) == take.Version {
+			holding = append(holding, saved.Start.ProjectCommit)
+		}
+		for _, commit := range strings.Fields(string(gained)) {
+			design, found := h.versions[commit]
+			if !found {
 				continue
 			}
 			version := designFileVersion(design, file)
-			entered, listed := enteredVersion(saved.Entries[file], version)
-			if !listed || version == take.Version || entered >= take.Entered {
+			at, listed := enteredVersion(saved.Entries[file], version)
+			if !listed || version == take.Version || at >= take.Entered {
 				continue
 			}
-			descendsTake := false
-			for ancestor := range commitAncestors(parents, commit) {
-				if fileVersions[ancestor] == take.Version {
-					descendsTake = true
+			descends := false
+			for _, ancestor := range holding {
+				yes, err := buildCommitInHistory(ctx, repo, ancestor, commit)
+				if err != nil {
+					return h, err
+				}
+				if yes {
+					descends = true
 					break
 				}
 			}
-			if !descendsTake {
+			if !descends {
 				h.gained[file] = true
 				break
 			}
 		}
 	}
-	// Currentness excludes S's history, even though head's snapshot is needed
-	// by the base check when head == S. Keep that distinction explicit.
-	h.design = h.versions[head]
-	if excluded[head] {
-		delete(h.versions, head)
-	}
 	return h, nil
+}
+
+// committedHistoryDesign leaves malformed historical Go as a nonmatching raw
+// version. A repaired current commit remains usable; real Git/safety errors
+// still fail the read. The current commit uses strict committedDesignAt.
+func committedHistoryDesign(ctx context.Context, dir, repo, prefix, commit string) (map[string]string, error) {
+	files, err := committedDesignFiles(ctx, dir, repo, prefix, commit)
+	if err != nil {
+		return nil, err
+	}
+	for file, text := range files {
+		if canonical, parseErr := designversion.Canonical(file, text); parseErr == nil {
+			files[file] = canonical
+		}
+	}
+	return files, nil
 }
 
 // current compares entry order, including a committed revert to an older version.
@@ -188,23 +198,6 @@ func (h designHistory) base(file string, list madeFromRecord) string {
 		base = take.Version
 	}
 	return base
-}
-
-// commitAncestors derives reachability from one bounded --parents result.
-func commitAncestors(parents map[string][]string, commit string) map[string]bool {
-	seen := map[string]bool{}
-	queue := []string{commit}
-	for len(queue) > 0 {
-		last := len(queue) - 1
-		current := queue[last]
-		queue = queue[:last]
-		if current == "" || seen[current] {
-			continue
-		}
-		seen[current] = true
-		queue = append(queue, parents[current]...)
-	}
-	return seen
 }
 
 // enteredVersion reads the current entry of one distinct listed version.
