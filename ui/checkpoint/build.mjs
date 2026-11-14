@@ -36,6 +36,7 @@ const PAGE_OPERATIONS = [
   "surla#get_change",
   "surla#get_story_refresh",
   "surla#start_build",
+  "surla#drop_build",
   "surla#get_build",
   "surla#get_test_findings",
   "surla#get_team",
@@ -54,8 +55,8 @@ const PAGE_OPERATIONS = [
   "surla#configure_model",
 ];
 
-// ERROR_SCHEMA is Goa's error response body, which every failed operation
-// returns; the page shows its message.
+// ERROR_SCHEMA is Goa's standard error body, also returned by transport
+// validation and unexpected failures outside an operation's declared errors.
 const ERROR_SCHEMA = "Error";
 
 // TS_NAMES renames component schemas whose OpenAPI name would shadow a
@@ -72,6 +73,7 @@ const VALIDATED_KEYS = new Set([
   "items",
   "properties",
   "anyOf",
+  "oneOf",
   "format",
   "minimum",
   "maximum",
@@ -157,11 +159,12 @@ function compactSchema(node, at, refs) {
     }
     out.enum = node.enum;
   }
-  if (node.anyOf !== undefined) {
-    if (!Array.isArray(node.anyOf) || node.anyOf.length === 0) {
-      throw new Error(`Invalid anyOf at ${at}`);
+  for (const union of ["anyOf", "oneOf"]) {
+    if (node[union] === undefined) continue;
+    if (!Array.isArray(node[union]) || node[union].length === 0) {
+      throw new Error(`Invalid ${union} at ${at}`);
     }
-    out.anyOf = node.anyOf.map((branch, i) => compactSchema(branch, `${at}.anyOf[${i}]`, refs));
+    out[union] = node[union].map((branch, i) => compactSchema(branch, `${at}.${union}[${i}]`, refs));
   }
   if (node.required !== undefined) {
     out.required = node.required;
@@ -185,8 +188,8 @@ function compactSchema(node, at, refs) {
         ? node.additionalProperties
         : compactSchema(node.additionalProperties, `${at}.additionalProperties`, refs);
   }
-  if (out.$ref === undefined && out.type === undefined && out.anyOf === undefined) {
-    throw new Error(`Schema without type, $ref or anyOf at ${at}`);
+  if (out.$ref === undefined && out.type === undefined && out.anyOf === undefined && out.oneOf === undefined) {
+    throw new Error(`Schema without type, $ref, anyOf or oneOf at ${at}`);
   }
   return out;
 }
@@ -195,6 +198,9 @@ function compactSchema(node, at, refs) {
 function tsType(node) {
   if (node.anyOf) {
     return `(${node.anyOf.map(tsType).join(" | ")})`;
+  }
+  if (node.oneOf) {
+    return `(${node.oneOf.map(tsType).join(" | ")})`;
   }
   if (node.$ref) {
     return node.$ref.replace(/^#\/\$defs\//, "");
@@ -229,7 +235,7 @@ function tsType(node) {
 // emitDeclaration renders one component schema as an interface when it is an
 // object with properties, or as a type alias otherwise.
 function emitDeclaration(name, node) {
-  if (node.type === "object" && node.properties && !node.anyOf) {
+  if (node.type === "object" && node.properties && !node.anyOf && !node.oneOf) {
     const required = new Set(node.required || []);
     const lines = [`export interface ${name} {`];
     for (const [prop, schema] of Object.entries(node.properties)) {
@@ -250,7 +256,8 @@ function pascal(method) {
 }
 
 // findOperations locates each page operation in the OpenAPI document and
-// reads its method, path, parameters, body and single success response.
+// reads its method, path, parameters, body, single success response and
+// declared failure bodies, including alternatives sharing one HTTP status.
 // A null result represents a declared 204 response without content; all
 // body-bearing responses require a referenced JSON component schema.
 function findOperations(openApi, refs) {
@@ -296,7 +303,24 @@ function findOperations(openApi, refs) {
       result = tsName(component);
       refs.add(component);
     }
-    return { id, name, route, method, params, body, success: Number(status), result };
+    const failures = [];
+    const failureRefs = new Set();
+    for (const [code, failure] of Object.entries(op.responses)) {
+      if (code.startsWith("2")) continue;
+      if (!/^[345]\d\d$/.test(code)) {
+        throw new Error(`${id}: unsupported failure status ${code}`);
+      }
+      for (const [mediaType, content] of Object.entries(failure.content || {})) {
+        const schema = compactSchema(content.schema, `${id}.responses.${code}.${mediaType}`, failureRefs);
+        // The standard body is already the transport fallback, independent
+        // of status; only declared typed alternatives need a status check.
+        if (schema.$ref !== `#/$defs/${tsName(ERROR_SCHEMA)}`) {
+          failures.push({ status: Number(code), schema });
+        }
+      }
+    }
+    for (const component of failureRefs) refs.add(component);
+    return { id, name, route, method, params, body, success: Number(status), result, failures, failureRefs };
   });
 }
 
@@ -364,10 +388,21 @@ function encoderSource(op) {
   return lines.join("\n");
 }
 
-// generateTypesModule reads gen/http/openapi3.json and generates
-// ui/checkpoint/src/types.ts.
-function generateTypesModule() {
-  const openApi = JSON.parse(fs.readFileSync(openApiPath, "utf8"));
+// failureDecoderSource accepts the operation's declared bodies at their HTTP
+// statuses, plus Goa's standard transport and unexpected-failure body.
+function failureDecoderSource(op) {
+  const branches = op.failures.map(
+    (failure) => `(status === ${failure.status} && matchesSchema(value, ${JSON.stringify(failure.schema)}))`
+  );
+  const statusParam = branches.length === 0 ? "_status" : "status";
+  return `function decode${pascal(op.name)}Failure(${statusParam}: number, value: unknown): value is Operations[${JSON.stringify(op.name)}]["failure"] {
+  return is${tsName(ERROR_SCHEMA)}(value)${branches.map((branch) => ` ||\n    ${branch}`).join("")};
+}`;
+}
+
+// generateTypesModule derives the page's typed routes and validators from
+// the generated OpenAPI contract without writing an artifact.
+export function generateTypesModule(openApi) {
   const components = openApi.components?.schemas || {};
   const refs = new Set([ERROR_SCHEMA]);
   const operations = findOperations(openApi, refs);
@@ -396,6 +431,7 @@ function generateTypesModule() {
   const results = [
     ...new Set([
       ...operations.map((op) => op.result).filter((result) => result !== null),
+      ...operations.flatMap((op) => [...op.failureRefs].map(tsName)),
       tsName(ERROR_SCHEMA),
     ]),
   ].sort();
@@ -412,15 +448,22 @@ ${defNames.map((name) => emitDeclaration(name, defs[name])).join("\n\n")}
 
 ${operations.map(requestDeclaration).join("\n\n")}
 
-// Operations maps each operation the page sends to its request and result.
+// Operations maps each operation the page sends to its request, result and
+// validated failure bodies.
 export interface Operations {
 ${operations
-  .map((op) => `  ${op.name}: { request: ${pascal(op.name)}Request; result: ${op.result ?? "undefined"} };`)
+  .map((op) => {
+    const failures = [...new Set([tsName(ERROR_SCHEMA), ...op.failures.map((failure) => tsType(failure.schema))])];
+    return `  ${op.name}: { request: ${pascal(op.name)}Request; result: ${op.result ?? "undefined"}; failure: ${failures.join(" | ")} };`;
+  })
   .join("\n")}
 }
 
 // OperationName names one operation the page sends.
 export type OperationName = keyof Operations;
+
+// ServerFailure is a validated failure body returned to the page.
+export type ServerFailure = Operations[OperationName]["failure"];
 
 // EncodedRequest is a request's same-origin address and JSON body.
 export interface EncodedRequest {
@@ -430,7 +473,7 @@ export interface EncodedRequest {
   body: string | undefined;
 }
 
-// Route is how one operation is sent and how its success is recognized.
+// Route is how one operation is sent and its returned bodies are recognized.
 export interface Route<K extends OperationName> {
   // method is the HTTP method.
   method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
@@ -440,16 +483,20 @@ export interface Route<K extends OperationName> {
   encode: (request: Operations[K]["request"]) => EncodedRequest;
   // decode reports whether a parsed answer is the operation's result.
   decode: (value: unknown) => value is Operations[K]["result"];
+  // decodeFailure validates a failure body against its declared HTTP status.
+  decodeFailure: (status: number, value: unknown) => value is Operations[K]["failure"];
 }
 
 ${operations.map(encoderSource).join("\n\n")}
+
+${operations.map(failureDecoderSource).join("\n\n")}
 
 // ROUTES addresses every operation the page sends.
 export const ROUTES: { [K in OperationName]: Route<K> } = {
 ${operations
   .map(
     (op) =>
-      `  ${op.name}: { method: ${JSON.stringify(op.method)}, success: ${op.success}, encode: encode${pascal(op.name)}, decode: ${op.result === null ? "isNoContent" : `is${op.result}`} },`
+      `  ${op.name}: { method: ${JSON.stringify(op.method)}, success: ${op.success}, encode: encode${pascal(op.name)}, decode: ${op.result === null ? "isNoContent" : `is${op.result}`}, decodeFailure: decode${pascal(op.name)}Failure },`
   )
   .join("\n")}
 };
@@ -462,6 +509,7 @@ interface JSONSchemaNode {
   enum?: string[];
   format?: "date-time";
   anyOf?: JSONSchemaNode[];
+  oneOf?: JSONSchemaNode[];
   required?: string[];
   additionalProperties?: boolean | JSONSchemaNode;
   items?: JSONSchemaNode;
@@ -490,6 +538,9 @@ export function isPlainObject(v: unknown): v is Record<string, unknown> {
 // node, resolving references through SCHEMA_DEFS.
 function matchesSchema(value: unknown, schema: JSONSchemaNode): boolean {
   if (schema.anyOf && !schema.anyOf.some((branch) => matchesSchema(value, branch))) {
+    return false;
+  }
+  if (schema.oneOf && schema.oneOf.filter((branch) => matchesSchema(value, branch)).length !== 1) {
     return false;
   }
   if (typeof schema.$ref === "string") {
@@ -549,7 +600,7 @@ function matchesSchema(value: unknown, schema: JSONSchemaNode): boolean {
     }
     return true;
   }
-  return Boolean(schema.anyOf);
+  return Boolean(schema.anyOf || schema.oneOf);
 }
 
 ${operations.some((op) => op.result === null)
@@ -585,7 +636,7 @@ const stubCiInfoPlugin = {
 };
 
 async function buildArtifacts() {
-  const generatedTypesTs = generateTypesModule();
+  const generatedTypesTs = generateTypesModule(JSON.parse(fs.readFileSync(openApiPath, "utf8")));
   if (!checkOnly) {
     fs.writeFileSync(typesTsPath, generatedTypesTs, "utf8");
   }
@@ -751,7 +802,9 @@ ${stylesCss}
   );
 }
 
-buildArtifacts().catch((err) => {
-  console.error(err);
-  process.exit(1);
-});
+if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  buildArtifacts().catch((err) => {
+    console.error(err);
+    process.exit(1);
+  });
+}
