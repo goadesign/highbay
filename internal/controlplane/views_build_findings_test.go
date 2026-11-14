@@ -24,7 +24,7 @@ func pageGenerationFindings(t *testing.T) (*pageServer, *gensurla.ChangeCardResu
 	cp.changesWait = 400 * time.Millisecond
 	cp.changesPoll = 20 * time.Millisecond
 	var starts atomic.Int32
-	copy := &buildCopyFixture{folder: t.TempDir(), prepare: func(context.Context, []designeval.StorySummary) error {
+	copy := &buildCopyFixture{folder: fixtureTestWriterFolder(t, cp), prepare: func(context.Context, []designeval.StorySummary) error {
 		return &testwriter.AuthorError{Finding: testwriter.Finding{
 			Kind: testwriter.FindingGeneration, Message: fmt.Sprintf("Finding from build %d.", starts.Add(1)),
 		}}

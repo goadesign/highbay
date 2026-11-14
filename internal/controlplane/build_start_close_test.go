@@ -27,7 +27,7 @@ func TestStartBuildCloseDrainsAfterCancellation(t *testing.T) {
 		release := make(chan struct{})
 		releaseGeneration := sync.OnceFunc(func() { close(release) })
 		defer releaseGeneration()
-		copy := &buildCopyFixture{folder: t.TempDir()}
+		copy := &buildCopyFixture{folder: fixtureTestWriterFolder(t, cp)}
 		copy.prepare = func(ctx context.Context, _ []designeval.StorySummary) error {
 			close(entered)
 			<-ctx.Done()

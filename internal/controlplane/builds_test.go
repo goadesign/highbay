@@ -131,7 +131,7 @@ func TestBuildingAgainReplacesTheBuildAndClearsReads(t *testing.T) {
 	// The report wakes the report checker; its check waits until released,
 	// and a build start waits for no check (it is refused as busy).
 	release := make(chan struct{})
-	checked := &buildCopyFixture{folder: t.TempDir(), check: func(context.Context, []designeval.StorySummary) (testwriter.Verdict, error) {
+	checked := &buildCopyFixture{folder: fixtureTestWriterFolder(t, cp), check: func(context.Context, []designeval.StorySummary) (testwriter.Verdict, error) {
 		<-release
 		return testwriter.Verdict{Findings: []testwriter.Finding{{Kind: testwriter.FindingBuild, Message: "RefundOverLimit is not implemented"}}}, nil
 	}}
@@ -265,8 +265,8 @@ func TestStartBuildChecksTheChangeAgainAfterPreparing(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			copy := &buildCopyFixture{folder: t.TempDir()}
 			cp := newBuildControlPlane(t, Options{})
+			copy := &buildCopyFixture{folder: fixtureTestWriterFolder(t, cp)}
 			cp.buildCopyFactory = func(context.Context, string, scaffold.Layout) (buildCopy, error) { return copy, nil }
 			card := saveBuildStoryCard(t, cp, "chg", StatusConfirmed, refundStory("Refund over the limit"))
 			copy.refresh = func(context.Context) (testwriter.RefreshResult, error) {
@@ -370,8 +370,8 @@ func TestReportForAnotherRevisionIsRefused(t *testing.T) {
 	}
 }
 
-// TestAssignmentsListOnlyTheCallersOwnChanges lists builds most recently
-// started first, and gives another owner's agents none of them.
+// TestAssignmentsListOnlyTheCallersOwnChanges lists only the project's open
+// build and gives another owner's agents none of it.
 func TestAssignmentsListOnlyTheCallersOwnChanges(t *testing.T) {
 	cp := newBuildControlPlane(t, Options{})
 	user := asCaller("alice@example.com", CallerUser)
@@ -379,18 +379,20 @@ func TestAssignmentsListOnlyTheCallersOwnChanges(t *testing.T) {
 	newer := buildableChange(t, cp, "newer")
 	_, err := cp.StartBuild(user, &gensurla.StartBuildPayload{ChangeID: "older", RequestRevision: older.RequestRevision})
 	require.NoError(t, err)
-	time.Sleep(2 * time.Millisecond)
 	_, err = cp.StartBuild(user, &gensurla.StartBuildPayload{ChangeID: "newer", RequestRevision: newer.RequestRevision})
-	require.NoError(t, err)
+	var refusal *gensurla.OpenBuildRefusal
+	require.ErrorAs(t, err, &refusal)
+	assert.Equal(t, "previous_change_open", refusal.Name)
+	assert.Equal(t, "older", refusal.ChangeID)
 
 	builds, err := cp.ListBuilderAssignments(asCaller("alice@example.com", CallerBuilder))
 	require.NoError(t, err)
-	require.Len(t, builds.Assignments, 2)
-	assert.Equal(t, []string{"newer", "older"}, []string{builds.Assignments[0].ChangeID, builds.Assignments[1].ChangeID})
+	require.Len(t, builds.Assignments, 1)
+	assert.Equal(t, "older", builds.Assignments[0].ChangeID)
 	tests, err := cp.ListTestWriterAssignments(asCaller("alice@example.com", CallerTestWriter))
 	require.NoError(t, err)
-	require.Len(t, tests.Assignments, 2)
-	assert.Equal(t, []string{"newer", "older"}, []string{tests.Assignments[0].ChangeID, tests.Assignments[1].ChangeID})
+	require.Len(t, tests.Assignments, 1)
+	assert.Equal(t, "older", tests.Assignments[0].ChangeID)
 
 	otherBuilder := asCaller("bob@example.com", CallerBuilder)
 	otherTests := asCaller("bob@example.com", CallerTestWriter)
@@ -740,14 +742,21 @@ func assertRefused(t *testing.T, err error, name string) {
 	}
 }
 
-// assertNoBuildSaved checks that changeID has no build file.
+// assertNoBuildSaved checks that the project has no saved build of changeID.
+// Another change's one open record is preserved by a refused start.
 func assertNoBuildSaved(t *testing.T, cp *ControlPlane, changeID string) {
 	t.Helper()
-	_, err := os.Stat(filepath.Join(cp.cards.dir, openBuildRecordFile))
-	assert.ErrorIs(t, err, os.ErrNotExist, "no build of %q is saved", changeID)
+	raw, err := os.ReadFile(filepath.Join(cp.cards.dir, openBuildRecordFile))
+	if errors.Is(err, os.ErrNotExist) {
+		return
+	}
+	require.NoError(t, err)
+	saved, err := decodeOpenBuild(raw)
+	require.NoError(t, err)
+	assert.NotEqual(t, changeID, saved.ChangeID, "no build of %q is saved", changeID)
 }
 
-// readBuildFile returns the saved bytes of changeID's build.
+// readBuildFile returns the project-wide record while exercising changeID.
 func readBuildFile(t *testing.T, cp *ControlPlane, changeID string) []byte {
 	t.Helper()
 	raw, err := os.ReadFile(filepath.Join(cp.cards.dir, openBuildRecordFile))

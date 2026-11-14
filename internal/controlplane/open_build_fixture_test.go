@@ -16,6 +16,7 @@ import (
 	gensurla "github.com/goadesign/surla/gen/surla"
 	"github.com/goadesign/surla/internal/designeval"
 	"github.com/goadesign/surla/internal/designversion"
+	"github.com/goadesign/surla/internal/testwriter"
 	"github.com/stretchr/testify/require"
 )
 
@@ -81,8 +82,9 @@ func attachBuildSnapshot(t *testing.T, cp *ControlPlane, changeID string) *gensu
 		Start: madeFromStart{Write: 1, ProjectCommit: base}, Entries: entries,
 	}
 	if record.architecture == nil {
-		record.architecture = &savedArchitecture{DesignDigest: designeval.SnapshotDigest(snapshot)}
+		record.architecture = &savedArchitecture{}
 	}
+	record.architecture.DesignDigest = designeval.SnapshotDigest(snapshot)
 	record.card.RequestRevision, err = computeCanonicalRevision(record.card, record.owner, record.designSource)
 	require.NoError(t, err)
 	saveMetadataRecord(t, cp, record)
@@ -123,6 +125,16 @@ func startBuildAgain(
 		payload.Replaces = &gensurla.ReplacedBuild{ChangeID: changeID, StartedAt: open.StartedAt.Format(time.RFC3339Nano)}
 	}
 	return cp.StartBuild(caller, payload)
+}
+
+// fixtureTestWriterFolder derives the same project-relative copy path as the
+// assignment owner, including projects below the repository root.
+func fixtureTestWriterFolder(t *testing.T, cp *ControlPlane) string {
+	t.Helper()
+	workspace, _, _ := cp.currentWorkspaceTarget()
+	_, prefix, err := resolveStarterRepo(t.Context(), workspace)
+	require.NoError(t, err)
+	return filepath.Join(workspace, testwriter.Folder, filepath.FromSlash(prefix))
 }
 
 // ensureBuildFixtureRepository creates only a missing test repository and its

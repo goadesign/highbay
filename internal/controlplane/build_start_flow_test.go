@@ -45,9 +45,10 @@ func TestStartBuildOrdersItsOwners(t *testing.T) {
 	err = cp.cards.save(record)
 	cp.mu.Unlock()
 	require.NoError(t, err)
-	card.RequestRevision = record.card.RequestRevision
+	card = attachBuildSnapshot(t, cp, "chg")
+	record = loadMetadataRecord(t, cp, "chg")
 	var events []string
-	copy := &buildCopyFixture{folder: filepath.Join(cp.activeWorkspaceDir, testwriter.Folder)}
+	copy := &buildCopyFixture{folder: fixtureTestWriterFolder(t, cp)}
 	cp.buildCopyFactory = func(context.Context, string, scaffold.Layout) (buildCopy, error) {
 		assertNoBuildSaved(t, cp, "chg")
 		events = append(events, "open")
@@ -106,7 +107,7 @@ func TestStartBuildKeepsPostSaveOutcomes(t *testing.T) {
 		t.Run(scenario, func(t *testing.T) {
 			cp := newBuildControlPlane(t, Options{})
 			card := buildableChange(t, cp, "chg")
-			copy := &buildCopyFixture{folder: filepath.Join(cp.activeWorkspaceDir, testwriter.Folder)}
+			copy := &buildCopyFixture{folder: fixtureTestWriterFolder(t, cp)}
 			cp.buildCopyFactory = func(context.Context, string, scaffold.Layout) (buildCopy, error) { return copy, nil }
 			copy.prepare = func(context.Context, []designeval.StorySummary) error {
 				if scenario == "operational" {
@@ -202,7 +203,7 @@ func TestAPreparationThatCouldNotRunSaysWhatFailed(t *testing.T) {
 			t.Cleanup(func() { assert.NoError(t, provider.Shutdown(context.Background())) })
 			cp := newBuildControlPlane(t, Options{TracerProvider: provider})
 			card := buildableChange(t, cp, "chg")
-			copy := &buildCopyFixture{folder: filepath.Join(cp.activeWorkspaceDir, testwriter.Folder)}
+			copy := &buildCopyFixture{folder: fixtureTestWriterFolder(t, cp)}
 			cp.buildCopyFactory = func(context.Context, string, scaffold.Layout) (buildCopy, error) { return copy, nil }
 			copy.prepare = func(context.Context, []designeval.StorySummary) error { return tc.prepareErr }
 
@@ -420,7 +421,7 @@ func TestStartBuildOwnsItsAcceptedLifetime(t *testing.T) {
 			card := buildableChange(t, cp, "chg")
 			entered := make(chan context.Context, 1)
 			release := make(chan struct{})
-			copy := &buildCopyFixture{folder: t.TempDir(), prepare: func(ctx context.Context, _ []designeval.StorySummary) error {
+			copy := &buildCopyFixture{folder: fixtureTestWriterFolder(t, cp), prepare: func(ctx context.Context, _ []designeval.StorySummary) error {
 				entered <- ctx
 				select {
 				case <-ctx.Done():
@@ -488,7 +489,7 @@ func TestStartBuildDeadlineBoundaries(t *testing.T) {
 					return context.WithTimeout(ctx, limit)
 				}
 				card := buildableChange(t, cp, "chg")
-				copy := &buildCopyFixture{folder: filepath.Join(cp.activeWorkspaceDir, testwriter.Folder)}
+				copy := &buildCopyFixture{folder: fixtureTestWriterFolder(t, cp)}
 				cp.buildCopyFactory = func(context.Context, string, scaffold.Layout) (buildCopy, error) { return copy, nil }
 				copy.prepare = func(ctx context.Context, _ []designeval.StorySummary) error {
 					time.Sleep(elapsed)
