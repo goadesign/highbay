@@ -224,7 +224,8 @@ func TestDraftRevalidatesAfterUnlockedGit(t *testing.T) {
 						result <- outcome{err: err}
 						return
 					}
-					request.Header.Set("Authorization", "Bearer owner-token")
+					workflowAuthorization(request, "owner-token")
+					request.Header.Set("Content-Type", "application/json")
 					request.Header.Set("Accept", "application/json")
 					response, err := http.DefaultClient.Do(request)
 					if err != nil {
@@ -239,10 +240,20 @@ func TestDraftRevalidatesAfterUnlockedGit(t *testing.T) {
 				_, _, err := cp.readDraftSnapshot(ctx, ws, dev, ino)
 				result <- outcome{err: err}
 			}()
+			var early *outcome
 			require.Eventually(t, func() bool {
-				_, err := os.Stat(started)
-				return err == nil
+				select {
+				case got := <-result:
+					early = &got
+					return true
+				default:
+					_, err := os.Stat(started)
+					return err == nil
+				}
 			}, 3*time.Second, 10*time.Millisecond)
+			if early != nil {
+				t.Fatalf("refresh ended before the Git gate: status=%d error=%v body=%s", early.status, early.err, early.body)
+			}
 			require.True(t, cp.draftMu.TryLock(), "Git must not hold draftMu")
 			func() {
 				defer cp.draftMu.Unlock()
