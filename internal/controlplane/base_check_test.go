@@ -145,6 +145,9 @@ func TestUpdateDraftReportsProblemsAndKeepsOtherFilesMoving(t *testing.T) {
 	assert.Equal(t, bad, f.draft())
 	assert.Len(t, again.ToCorrect, 1)
 	f.guide("package design\nvar A=0\n")
+	// Commit the addition before exercising its removal. Reverting an
+	// uncommitted addition to original absence is the documented residual.
+	commitProjectDesign(t, f.dir, "design/new.go")
 	require.NoError(t, os.Remove(filepath.Join(f.dir, "design/new.go")))
 	r = f.update()
 	assert.Equal(t, []string{"design/new.go"}, r.Taken)

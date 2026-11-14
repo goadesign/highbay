@@ -538,7 +538,9 @@ func TestOlderDraftMarkerRemakesFromProject(t *testing.T) {
 	writeWorkspaceFiles(t, project, map[string]string{"design/design.go": "package design\nvar A = 3\n"})
 	got, provenance := readDraftForTest(t, cp)
 	assert.Equal(t, "package design\n\nvar A = 3\n", got["design/design.go"])
-	assert.Equal(t, list.Start, provenance.Start)
+	expectedStart := list.Start
+	expectedStart.FolderVersions = map[string]string{"design/design.go": designversion.Digest(got["design/design.go"])}
+	assert.Equal(t, expectedStart, provenance.Start, "the new generation captures its original folder on first materialization")
 	marker, err := os.ReadFile(filepath.Join(project, draftFolderName, ".gitignore"))
 	require.NoError(t, err)
 	assert.Equal(t, "# surla draft 2\n*\n", string(marker))
@@ -641,6 +643,9 @@ func TestDroppedUnmarkedDraftPublicationRecoversAtEveryStop(t *testing.T) {
 					defer cp.draftMu.Unlock()
 					list.Write++
 					list.Entries = map[string][]madeFromVersion{}
+					// A real list save at this boundary has already captured
+					// the complete original folder for the new generation.
+					list.Start.FolderVersions = map[string]string{"design/design.go": designversion.Digest(next["design/design.go"])}
 					version, err := cp.enterDraftVersion(&list, "design/design.go", draftDesignFiles(next))
 					require.NoError(t, err)
 					list.Taken = map[string]madeFromTake{
@@ -658,7 +663,9 @@ func TestDroppedUnmarkedDraftPublicationRecoversAtEveryStop(t *testing.T) {
 			reopened := newControlPlane(t, opts)
 			got, provenance := readDraftForTest(t, reopened)
 			assert.Equal(t, next, got)
-			assert.Equal(t, list.Start, provenance.Start)
+			expectedStart := list.Start
+			expectedStart.FolderVersions = map[string]string{"design/design.go": designversion.Digest(next["design/design.go"])}
+			assert.Equal(t, expectedStart, provenance.Start)
 			assert.NotEmpty(t, provenance.Entries)
 			marker, err := os.ReadFile(filepath.Join(project, draftFolderName, ".gitignore"))
 			require.NoError(t, err)
