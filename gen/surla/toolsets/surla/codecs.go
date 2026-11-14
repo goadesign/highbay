@@ -4723,7 +4723,7 @@ var getBuildResultFields = []tools.FieldMetadata{
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("taking"), tools.FixedField("candidate_branch")},
 		JSONType:    "string",
-		Description: "The builder's branch of this build, surla/build-<n>, which holds candidate_commit.",
+		Description: "The build's builder branch, surla/build-<n>, where this commit was verified.",
 		Branches: []tools.UnionBranch{
 			tools.TaggedUnionBranch{
 				Discriminator: []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("state")},
@@ -4828,7 +4828,7 @@ var getBuildResultFields = []tools.FieldMetadata{
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("taking"), tools.FixedField("tests"), tools.FixedField("branch")},
 		JSONType:    "string",
-		Description: "The test writer's branch of this build, surla/tests-<n>.",
+		Description: "The build's test-writer branch, surla/tests-<n>, where this commit was verified.",
 		Branches: []tools.UnionBranch{
 			tools.TaggedUnionBranch{
 				Discriminator: []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("state")},
@@ -24875,7 +24875,7 @@ func validateGetBuildResultBuildPassedTransportJSONValue(path string, value any,
 		case "candidate_branch":
 			if err := validateStringJSONValue(
 				generatedJSONChildPath(path, key, false),
-				typed[key], "The builder's branch of this build, surla/build-<n>, which holds candidate_commit.",
+				typed[key], "The build's builder branch, surla/build-<n>, where this commit was verified.",
 			); err != nil {
 				return err
 			}
@@ -24970,7 +24970,7 @@ func validateGetBuildResultBuildPassedTestsTransportJSONValue(path string, value
 		case "branch":
 			if err := validateStringJSONValue(
 				generatedJSONChildPath(path, key, false),
-				typed[key], "The test writer's branch of this build, surla/tests-<n>.",
+				typed[key], "The build's test-writer branch, surla/tests-<n>, where this commit was verified.",
 			); err != nil {
 				return err
 			}

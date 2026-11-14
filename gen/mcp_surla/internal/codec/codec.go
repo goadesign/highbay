@@ -2523,7 +2523,8 @@ func ValidateGetBuildResultBuildNotStartedTransport(value *GetBuildResultBuildNo
 type GetBuildResultBuildPassedTestsTransport struct {
 	// Commit Surla recorded the accepted tests at.
 	Commit *string `json:"commit"`
-	// The test writer's branch of this build, surla/tests-<n>.
+	// The build's test-writer branch, surla/tests-<n>, where this commit was
+	// verified.
 	Branch *string `json:"branch"`
 }
 
@@ -2550,8 +2551,7 @@ type GetBuildResultBuildPassedTransport struct {
 	RunID *string `json:"run_id"`
 	// The builder's commit the run passed.
 	CandidateCommit *string `json:"candidate_commit"`
-	// The builder's branch of this build, surla/build-<n>, which holds
-	// candidate_commit.
+	// The build's builder branch, surla/build-<n>, where this commit was verified.
 	CandidateBranch *string `json:"candidate_branch"`
 	// written_tests with the accepted tests' commit to merge after the builder's;
 	// evaluator when the project verifies with its stored evaluator, whose tests

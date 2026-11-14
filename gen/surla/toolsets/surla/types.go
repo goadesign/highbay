@@ -1051,8 +1051,7 @@ type (
 		RunID string
 		// The builder's commit the run passed.
 		CandidateCommit string
-		// The builder's branch of this build, surla/build-<n>, which holds
-		// candidate_commit.
+		// The build's builder branch, surla/build-<n>, where this commit was verified.
 		CandidateBranch string
 		// written_tests with the accepted tests' commit to merge after the builder's;
 		// evaluator when the project verifies with its stored evaluator, whose tests
@@ -1068,7 +1067,8 @@ type (
 	BuildPassedTests = struct {
 		// Commit Surla recorded the accepted tests at.
 		Commit string
-		// The test writer's branch of this build, surla/tests-<n>.
+		// The build's test-writer branch, surla/tests-<n>, where this commit was
+		// verified.
 		Branch string
 	}
 	// BuilderAssignment is a nested type used by the generated JSON contract.

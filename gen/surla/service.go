@@ -662,8 +662,7 @@ type BuildPassed struct {
 	RunID string
 	// The builder's commit the run passed.
 	CandidateCommit string
-	// The builder's branch of this build, surla/build-<n>, which holds
-	// candidate_commit.
+	// The build's builder branch, surla/build-<n>, where this commit was verified.
 	CandidateBranch string
 	// written_tests with the accepted tests' commit to merge after the builder's;
 	// evaluator when the project verifies with its stored evaluator, whose tests
@@ -681,7 +680,8 @@ type BuildPassed struct {
 type BuildPassedTests struct {
 	// Commit Surla recorded the accepted tests at.
 	Commit string
-	// The test writer's branch of this build, surla/tests-<n>.
+	// The build's test-writer branch, surla/tests-<n>, where this commit was
+	// verified.
 	Branch string
 }
 
@@ -3024,7 +3024,8 @@ func validatejsonBuildNotStartedTransport(value *jsonBuildNotStartedTransport) (
 type jsonBuildPassedTestsTransport struct {
 	// Commit Surla recorded the accepted tests at.
 	Commit *string `json:"commit"`
-	// The test writer's branch of this build, surla/tests-<n>.
+	// The build's test-writer branch, surla/tests-<n>, where this commit was
+	// verified.
 	Branch *string `json:"branch"`
 }
 
@@ -3051,8 +3052,7 @@ type jsonBuildPassedTransport struct {
 	RunID *string `json:"run_id"`
 	// The builder's commit the run passed.
 	CandidateCommit *string `json:"candidate_commit"`
-	// The builder's branch of this build, surla/build-<n>, which holds
-	// candidate_commit.
+	// The build's builder branch, surla/build-<n>, where this commit was verified.
 	CandidateBranch *string `json:"candidate_branch"`
 	// written_tests with the accepted tests' commit to merge after the builder's;
 	// evaluator when the project verifies with its stored evaluator, whose tests
@@ -28281,7 +28281,7 @@ func validateBuildPassedJSONValue(path string, value any, description string) er
 		case "candidate_branch":
 			if err := validateAgentPolicyItemJSONValue2(
 				generatedJSONChildPath(path, key, false),
-				typed[key], "The builder's branch of this build, surla/build-<n>, which holds candidate_commit.",
+				typed[key], "The build's builder branch, surla/build-<n>, where this commit was verified.",
 			); err != nil {
 				return err
 			}
@@ -28375,7 +28375,7 @@ func validateBuildPassedJSONValue3(path string, value any, description string) e
 		case "branch":
 			if err := validateAgentPolicyItemJSONValue2(
 				generatedJSONChildPath(path, key, false),
-				typed[key], "The test writer's branch of this build, surla/tests-<n>.",
+				typed[key], "The build's test-writer branch, surla/tests-<n>, where this commit was verified.",
 			); err != nil {
 				return err
 			}

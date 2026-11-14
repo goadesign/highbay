@@ -104,7 +104,7 @@ var BuildBuilding = Type("BuildBuilding", func() {
 var BuildPassedTests = Type("BuildPassedTests", func() {
 	Description("The accepted tests' commit a passed run used, which the user merges after the builder's commit, and the test writer's branch that holds it.")
 	Attribute("commit", String, "Commit Surla recorded the accepted tests at.", func() { Pattern("^([0-9a-f]{40}|[0-9a-f]{64})$") })
-	Attribute("branch", String, "The test writer's branch of this build, surla/tests-<n>.")
+	Attribute("branch", String, "The build's test-writer branch, surla/tests-<n>, where this commit was verified.")
 	Required("commit", "branch")
 })
 
@@ -113,7 +113,7 @@ var BuildPassed = Type("BuildPassed", func() {
 	Description("A verification of this build passed and the user has not merged it: the commits of its newest passed run, which the user merges into the branch checked out in the project folder, the builder's first, then the tests'.")
 	Attribute("run_id", String, "The newest passed run; get_verification takes it.")
 	Attribute("candidate_commit", String, "The builder's commit the run passed.", func() { Pattern("^([0-9a-f]{40}|[0-9a-f]{64})$") })
-	Attribute("candidate_branch", String, "The builder's branch of this build, surla/build-<n>, which holds candidate_commit.")
+	Attribute("candidate_branch", String, "The build's builder branch, surla/build-<n>, where this commit was verified.")
 	OneOf("tests", "written_tests with the accepted tests' commit to merge after the builder's; evaluator when the project verifies with its stored evaluator, whose tests are not merged.", func() {
 		TypeName("BuildPassedTestSource")
 		Meta("oneof:json:flatten")

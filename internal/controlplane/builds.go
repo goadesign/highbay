@@ -641,7 +641,8 @@ func (c *ControlPlane) newestPassedBuild(owner string, saved buildFile) (*verify
 }
 
 // startedBuild renders current run and branch facts outside the card lock.
-// A passed run is not attributed to branches that no longer hold its commits.
+// Branch names identify the numbered build where its commits were verified;
+// later ref changes do not erase a pass or block reads and recovery.
 func (c *ControlPlane) startedBuild(ctx context.Context, owner string, held heldBuild) (*gensurla.StartedBuild, error) {
 	run, err := c.newestPassedBuild(owner, held.file)
 	if err != nil {
@@ -658,19 +659,9 @@ func (c *ControlPlane) startedBuild(ctx context.Context, owner string, held held
 		return nil, err
 	}
 	candidateBranch := testwriter.BuilderRole.Branch(held.file.Number)
-	if holds, err := buildCommitInHistory(work, repo, run.Request.Plan.CandidateCommit, candidateBranch); err != nil {
-		return nil, err
-	} else if !holds {
-		return nil, fmt.Errorf("passed candidate commit %s is no longer held by %s", run.Request.Plan.CandidateCommit, candidateBranch)
-	}
 	tests := gensurla.NewBuildPassedTestSourceEvaluator(&gensurla.OperatorEvaluatorTests{})
 	if run.Request.Plan.Tests == verify.TestsWritten {
 		branch := testwriter.TestsRole.Branch(held.file.Number)
-		if holds, err := buildCommitInHistory(work, repo, run.Request.Plan.SuiteCommit, branch); err != nil {
-			return nil, err
-		} else if !holds {
-			return nil, fmt.Errorf("passed tests commit %s is no longer held by %s", run.Request.Plan.SuiteCommit, branch)
-		}
 		tests = gensurla.NewBuildPassedTestSourceWrittenTests(&gensurla.BuildPassedTests{
 			Commit: run.Request.Plan.SuiteCommit, Branch: branch,
 		})

@@ -5121,8 +5121,7 @@ type BuildPassedResponseBody struct {
 	RunID *string `form:"run_id,omitempty" json:"run_id,omitempty" xml:"run_id,omitempty"`
 	// The builder's commit the run passed.
 	CandidateCommit *string `form:"candidate_commit,omitempty" json:"candidate_commit,omitempty" xml:"candidate_commit,omitempty"`
-	// The builder's branch of this build, surla/build-<n>, which holds
-	// candidate_commit.
+	// The build's builder branch, surla/build-<n>, where this commit was verified.
 	CandidateBranch *string `form:"candidate_branch,omitempty" json:"candidate_branch,omitempty" xml:"candidate_branch,omitempty"`
 	// written_tests with the accepted tests' commit to merge after the builder's;
 	// evaluator when the project verifies with its stored evaluator, whose tests
@@ -5139,7 +5138,8 @@ type BuildPassedResponseBody struct {
 type BuildPassedTestsResponseBody struct {
 	// Commit Surla recorded the accepted tests at.
 	Commit *string `form:"commit,omitempty" json:"commit,omitempty" xml:"commit,omitempty"`
-	// The test writer's branch of this build, surla/tests-<n>.
+	// The build's test-writer branch, surla/tests-<n>, where this commit was
+	// verified.
 	Branch *string `form:"branch,omitempty" json:"branch,omitempty" xml:"branch,omitempty"`
 }
 

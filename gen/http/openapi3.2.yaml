@@ -18553,7 +18553,7 @@ components:
                                             example: true
                                         candidate_branch:
                                             type: string
-                                            description: The builder's branch of this build, surla/build-<n>, which holds candidate_commit.
+                                            description: The build's builder branch, surla/build-<n>, where this commit was verified.
                                             example: Iste voluptas voluptas exercitationem vitae aut aut.
                                         candidate_commit:
                                             type: string
@@ -18589,7 +18589,7 @@ components:
                                                   properties:
                                                     branch:
                                                         type: string
-                                                        description: The test writer's branch of this build, surla/tests-<n>.
+                                                        description: The build's test-writer branch, surla/tests-<n>, where this commit was verified.
                                                         example: Non excepturi dolorum quo quo.
                                                     commit:
                                                         type: string
@@ -24586,7 +24586,7 @@ components:
                                 example: true
                             candidate_branch:
                                 type: string
-                                description: The builder's branch of this build, surla/build-<n>, which holds candidate_commit.
+                                description: The build's builder branch, surla/build-<n>, where this commit was verified.
                                 example: Itaque libero voluptates.
                             candidate_commit:
                                 type: string
@@ -24620,7 +24620,7 @@ components:
                                       properties:
                                         branch:
                                             type: string
-                                            description: The test writer's branch of this build, surla/tests-<n>.
+                                            description: The build's test-writer branch, surla/tests-<n>, where this commit was verified.
                                             example: Assumenda rem.
                                         commit:
                                             type: string
