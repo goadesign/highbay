@@ -214,8 +214,19 @@ func TestRevisionMetadataSurvivesMechanicalTransitions(t *testing.T) {
 			assert.Equal(t, record.madeFrom, latest.madeFrom)
 
 			next := nextMetadataRevision(t, record, "b")
-			payload := &gensurla.ReviseChangePayload{ChangeID: "chg", RequestRevision: record.card.RequestRevision}
-			_, err := cp.saveRevision(trace.SpanFromContext(t.Context()),
+			// This private writer fixture models an already selected refresh.
+			// Public producer behavior is covered through refresh adoption.
+			cp.draftMu.Lock()
+			err := cp.cards.saveMadeFrom(madeFromRecord{
+				Write: 1, Start: next.madeFrom.Start, Entries: map[string][]madeFromVersion{},
+			})
+			cp.draftMu.Unlock()
+			require.NoError(t, err)
+			selectedOperation := "selected-refresh-operation"
+			payload := &gensurla.ReviseChangePayload{
+				ChangeID: "chg", RequestRevision: record.card.RequestRevision, StoryRefreshOpID: &selectedOperation,
+			}
+			_, err = cp.saveRevision(trace.SpanFromContext(t.Context()),
 				Principal{ID: "alice@example.com", Kind: CallerGuide}, payload, next)
 			require.NoError(t, err)
 			loaded := loadMetadataRecord(t, cp, "chg")
@@ -270,7 +281,7 @@ func TestReviseWithoutRefreshKeepsTheCompleteSavedSnapshot(t *testing.T) {
 						[]byte("module example.com/a\n\ngo 1.27.3\n"), 0o600))
 					cp := newControlPlane(t, Options{WorkspaceDir: workspace})
 					guide := asCaller("alice@example.com", CallerGuide)
-					mustPropose(t, cp, guide, "chg", "Keep refunds bounded", refundAnalysis("Keep refunds bounded"))
+					saveDraftSourceCardFixture(t, cp, "chg", map[string]string{"design/design.go": "package design\n\nconst Saved = true\n"})
 					record := loadMetadataRecord(t, cp, "chg")
 					record.architecture, record.goMod, record.madeFrom = metadataFixture("a")
 					if hasStories {

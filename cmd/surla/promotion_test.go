@@ -7,20 +7,30 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"io"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"syscall"
 	"testing"
 	"time"
 
 	gensurla "github.com/goadesign/surla/gen/surla"
 	"github.com/goadesign/surla/internal/controlplane"
+	"github.com/goadesign/surla/internal/testmodule"
 	"github.com/goadesign/surla/internal/verify"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+// promotionTeamFixture exercises the public build prerequisite without claiming
+// that this release-target test starts agents or verifies candidate execution.
+type promotionTeamFixture struct {
+	// registered records the actual StartBuild admission of its worker folders.
+	registered atomic.Bool
+}
 
 // suiteCommit is the evaluator suite commit these tests require.
 var suiteCommit = strings.Repeat("b", 40)
@@ -149,30 +159,74 @@ func TestReleaseTargetRefusesNonRegularFiles(t *testing.T) {
 // with different binaries and checks that the saved approval is no longer
 // returned, and comes back when the approved binaries are published again.
 func TestApproveMergeChecksTheStagedRelease(t *testing.T) {
+	if testing.Short() {
+		t.Skip("evaluates the real refresh/build prerequisites; the full suite covers release approval")
+	}
 	commit := strings.Repeat("c", 40)
 	release := t.TempDir()
 	publish(t, release, commit, map[string]string{"orders": "api v1", "orders-worker": "worker v1"})
 	alice := controlplane.WithPrincipal(context.Background(), controlplane.Principal{ID: "alice@example.com", CallerID: "alice@example.com", Kind: controlplane.CallerUser})
 
-	// The card is confirmed first, then the evaluator's report for its
-	// revision is saved, and serve restarts with the promotion target.
+	// Snapshot and build prerequisites use their actual public owners. The
+	// evaluator report below remains a report fixture, not execution proof.
+	project := newGitRepo(t)
+	files := testmodule.Snapshot(t, "", `package design
+
+import . "goa.design/goa/v3/dsl"
+
+var _ = API("orders", func() {})
+var _ = Service("orders", func() {
+	Method("health", func() {
+		Result(String)
+		HTTP(func() { GET("/health") })
+	})
+})
+`)
+	for name, contents := range files {
+		file := filepath.Join(project, filepath.FromSlash(name))
+		require.NoError(t, os.MkdirAll(filepath.Dir(file), 0o700))
+		require.NoError(t, os.WriteFile(file, []byte(contents), 0o600))
+	}
+	runTestGit(t, project, "config", "user.name", "Surla Test")
+	runTestGit(t, project, "config", "user.email", "test@example.com")
+	gitCommitAll(t, project, "Create the release approval project")
 	cardsDir := t.TempDir()
-	cp, err := controlplane.New(controlplane.Options{CardsDir: cardsDir})
+	team := &promotionTeamFixture{}
+	opts := controlplane.Options{
+		CardsDir: cardsDir, WorkspaceDir: project,
+		Verification: &controlplane.VerificationConfig{Plan: verify.Plan{SuiteCommit: suiteCommit}},
+		Team:         &controlplane.TeamBinding{Owner: "alice@example.com", Service: team},
+	}
+	cp, err := controlplane.New(opts)
 	require.NoError(t, err)
-	card, err := cp.ProposeChange(alice, &gensurla.ProposeChangePayload{ChangeID: "chg", Prompt: "Refunds up to $50 are instant.", Analysis: confirmedAnalysis()})
+	initial := cp
+	t.Cleanup(func() { assert.NoError(t, initial.Close()) })
+	refresh, err := cp.RefreshStory(alice)
+	require.NoError(t, err)
+	require.Eventually(t, func() bool {
+		refresh, err = cp.GetStoryRefresh(alice)
+		return err != nil || refresh.State != "running"
+	}, 2*time.Minute, 25*time.Millisecond)
+	require.NoError(t, err)
+	require.Equal(t, "succeeded", refresh.State, "%v", refresh.Diagnostic)
+	card, err := cp.ProposeChange(alice, &gensurla.ProposeChangePayload{
+		ChangeID: "chg", Prompt: "Refunds up to $50 are instant.", Analysis: confirmedAnalysis(), StoryRefreshOpID: refresh.OpID,
+	})
 	require.NoError(t, err)
 	card, err = cp.ConfirmIntent(alice, &gensurla.ConfirmIntentPayload{ChangeID: card.ChangeID, RequestRevision: card.RequestRevision, Answers: map[string]string{}, Examples: card.Examples})
 	require.NoError(t, err)
+	started, err := cp.StartBuild(alice, &gensurla.StartBuildPayload{ChangeID: card.ChangeID, RequestRevision: card.RequestRevision})
+	require.NoError(t, err)
+	assert.Equal(t, card.RequestRevision, started.Build.RequestRevision)
+	assert.True(t, team.registered.Load())
+	assert.Equal(t, gensurla.TeamKindUnavailable, started.Team.Kind(), "this host does not launch agents")
 	require.NoError(t, cp.Close())
 	report := saveReport(t, verify.Binding{
 		CandidateCommit: commit, RequestRevision: card.RequestRevision, SuiteID: "orders", SuiteCommit: suiteCommit,
 		Environment: "sim", Artifacts: map[string]string{"orders": digestOf("api v1"), "orders-worker": digestOf("worker v1")},
 	}, true)
-	cp, err = controlplane.New(controlplane.Options{
-		CardsDir:        cardsDir,
-		Verification:    &controlplane.VerificationConfig{Plan: verify.Plan{SuiteCommit: suiteCommit}},
-		PromotionTarget: newReleaseTarget(t, release, filepath.Dir(report.path)),
-	})
+	opts.PromotionTarget = newReleaseTarget(t, release, filepath.Dir(report.path))
+	cp, err = controlplane.New(opts)
 	require.NoError(t, err)
 	t.Cleanup(func() { assert.NoError(t, cp.Close()) })
 
@@ -226,6 +280,33 @@ func TestApproveMergeChecksTheStagedRelease(t *testing.T) {
 	assert.Contains(t, err.Error(), "publish the binaries the run built, whose folder the run's Proof view shows, into the release folder that the promotion settings name, in a folder named after the commit, or remove the promotion settings")
 	assert.NotContains(t, err.Error(), "/")
 	assert.NotContains(t, err.Error(), release)
+}
+
+// ReadTeam returns this test host's empty roster without contacting a launcher.
+func (f *promotionTeamFixture) ReadTeam(context.Context) (*gensurla.TeamSnapshot, error) {
+	return &gensurla.TeamSnapshot{Team: "release-approval", Roles: []*gensurla.TeamRoleState{}}, nil
+}
+
+// ShowPane refuses window work that this fixture does not own.
+func (f *promotionTeamFixture) ShowPane(context.Context, string) error {
+	return errors.New("the test host has no agent windows")
+}
+
+// StartAgents reports the actual unavailable host rather than fabricating work.
+func (f *promotionTeamFixture) StartAgents(context.Context) (*gensurla.ProjectTeam, error) {
+	return nil, errors.New("the test host does not launch agents")
+}
+
+// RegisterBuildRoles records admission through the existing public team seam.
+func (f *promotionTeamFixture) RegisterBuildRoles(context.Context, controlplane.BuildFolders) error {
+	f.registered.Store(true)
+	return nil
+}
+
+// Supervise ends with its owning control plane and starts no background worker.
+func (f *promotionTeamFixture) Supervise(ctx context.Context, _ controlplane.AssignmentReader) error {
+	<-ctx.Done()
+	return nil
 }
 
 // confirmedAnalysis returns the analysis these tests propose: the

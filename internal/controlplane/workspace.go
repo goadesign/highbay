@@ -416,61 +416,8 @@ func openModuleRootWithIdentity(dir string, expectedDev, expectedIno uint64) (st
 	return cleanDir, root, nil
 }
 
-// readWorkspaceModuleSnapshot reads the bound workspace's Go module and design
-// snapshot (`go.mod`, `go.sum`, and non-test `.go` files) through an
-// identity-verified `*os.Root` handle for `PreviewArchitecture`.
-func readWorkspaceModuleSnapshot(wsDir string, expectedDev, expectedIno uint64) (map[string]string, error) {
-	cleanDir, root, err := openModuleRootWithIdentity(wsDir, expectedDev, expectedIno)
-	if err != nil {
-		return nil, err
-	}
-	files, readErr := designeval.ReadModuleSnapshotFromRoot(cleanDir, root)
-	if err := errors.Join(readErr, root.Close()); err != nil {
-		return nil, gensurla.MakeUnprocessable(err)
-	}
-	if err := designeval.ValidateUTF8Snapshot(files); err != nil {
-		return nil, gensurla.MakeUnprocessable(err)
-	}
-	if _, hasGoMod := files["go.mod"]; !hasGoMod {
-		return nil, gensurla.MakeUnprocessable(fmt.Errorf(
-			"workspace %s does not contain a go.mod file; run init_project first or pass design in the request",
-			cleanDir,
-		))
-	}
-	return files, nil
-}
-
-// readWorkspaceDesignSource reads `design/*.go` files from the bound workspace
-// through an identity-verified `*os.Root` handle, closes the handle before
-// returning, validates that every file path and body is valid UTF-8, and
-// returns the design source a Change Card records for them: the files as a
-// JSON object keyed by module-relative path, with HTML characters unescaped
-// and no trailing newline. That exact text is saved as the card's
-// design_source and hashed into its request_revision, so it must not change
-// for the same files. When `design/` does not exist or contains no non-test
-// `.go` files, it returns "" so a card proposed before `init_project` has an
-// empty design source and does not block initialization. A workspace that was
-// replaced or cannot be read is unprocessable.
-func readWorkspaceDesignSource(wsDir string, expectedDev, expectedIno uint64) (string, error) {
-	cleanDir, root, err := openModuleRootWithIdentity(wsDir, expectedDev, expectedIno)
-	if err != nil {
-		return "", err
-	}
-	files, readErr := designeval.ReadDesignFilesFromRoot(cleanDir, root)
-	if err := errors.Join(readErr, root.Close()); err != nil {
-		return "", gensurla.MakeUnprocessable(err)
-	}
-	if len(files) == 0 {
-		return "", nil
-	}
-	if err := designeval.ValidateUTF8Snapshot(files); err != nil {
-		return "", gensurla.MakeUnprocessable(err)
-	}
-	return encodeDesignSource(files)
-}
-
 // designSourceFromModuleSnapshot extracts the non-test design/*.go entries from
-// a validated workspace module snapshot and encodes them with encodeDesignSource.
+// a canonical draft snapshot and encodes them with encodeDesignSource.
 func designSourceFromModuleSnapshot(files map[string]string) (string, error) {
 	var designFiles map[string]string
 	for rel, content := range files {
@@ -495,7 +442,7 @@ func encodeDesignSource(designFiles map[string]string) (string, error) {
 	enc := json.NewEncoder(&buf)
 	enc.SetEscapeHTML(false)
 	if err := enc.Encode(designFiles); err != nil {
-		return "", fmt.Errorf("encode workspace design source: %w", err)
+		return "", fmt.Errorf("encode design source: %w", err)
 	}
 	return strings.TrimSuffix(buf.String(), "\n"), nil
 }

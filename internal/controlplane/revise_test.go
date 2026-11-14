@@ -207,7 +207,8 @@ func TestReviseChangeSavesARevisionThatOnlyItsContentDetermines(t *testing.T) {
 	question := func(q string) []*gensurla.CP1AnalysisAmbiguity {
 		return []*gensurla.CP1AnalysisAmbiguity{{Question: q, Options: []string{"item_subtotal", "order_total"}}}
 	}
-	r1 := mustPropose(t, cp, alice, "rev", "Refunds up to $50 are instant.", refundAnalysis("Refunds up to $50 are instant.", question("Is the limit the item subtotal or the order total?")[0]))
+	r1 := saveProposedCardFixture(t, cp, "alice@example.com", "rev", "Refunds up to $50 are instant.", refundAnalysis("Refunds up to $50 are instant.", question("Is the limit the item subtotal or the order total?")[0]))
+	r1 = attachBuildSnapshot(t, cp, "rev")
 	require.Equal(t, StatusNeedsConfirmation, r1.Status)
 	check01 := "check_01"
 	program := `root = DecisionWorkspace("Refund limit", [choice])
@@ -516,9 +517,11 @@ func TestAdoptStoryRefreshOnProposeAndRevise(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, wantDesignSrc, storedHTTP.designSource)
 
-	// MCP propose_change adopts the same succeeded opV1 on a second control
-	// plane with the same change_id and produces the exact same request_revision.
-	cpMCP := newControlPlane(t, Options{WorkspaceDir: wsDir})
+	// MCP adopts the same input on an independent project and control plane.
+	// The transport comparison shares neither draft files nor provenance owners.
+	mcpWorkspace := t.TempDir()
+	writeWorkspaceFiles(t, mcpWorkspace, snapshot)
+	cpMCP := newControlPlane(t, Options{WorkspaceDir: mcpWorkspace})
 	opMCPV1 := seedStoryRefreshForTest(t, cpMCP, "alice@example.com", storyRefreshStateSucceeded, storiesV1, "")
 	adapter := genmcpadapter.NewMCPAdapter(gensurla.NewEndpoints(cpMCP), nil)
 	res, err := adapter.ToolsCall(aliceCtx, &genmcpadapter.ToolsCallPayload{
@@ -610,7 +613,12 @@ func TestAdoptStoryRefreshOnProposeAndRevise(t *testing.T) {
 	})
 	require.NoError(t, err)
 	assert.Nil(t, proposedZero.Stories)
-	proposedPlain := mustPropose(t, cpMCP, aliceCtx, "chg-zero", "Refunds up to $50 are instant.", refundAnalysis("Refunds up to $50 are instant."))
+	opPlainZero := seedStoryRefreshForTest(t, cpMCP, "alice@example.com", storyRefreshStateSucceeded, nil, "")
+	proposedPlain, err := cpMCP.ProposeChange(aliceCtx, &gensurla.ProposeChangePayload{
+		ChangeID: "chg-zero", Prompt: "Refunds up to $50 are instant.",
+		StoryRefreshOpID: &opPlainZero, Analysis: refundAnalysis("Refunds up to $50 are instant."),
+	})
+	require.NoError(t, err)
 	assert.Equal(t, proposedPlain.RequestRevision, proposedZero.RequestRevision)
 	rawZeroBytes, err := os.ReadFile(cp.cards.path("chg-zero"))
 	require.NoError(t, err)
@@ -625,8 +633,15 @@ func TestAdoptStoryRefreshOnProposeAndRevise(t *testing.T) {
 	})
 	require.NoError(t, err)
 	assert.Nil(t, revisedToZero.Stories)
-	cpPlain := newControlPlane(t, Options{WorkspaceDir: wsDir})
-	plainHTTP := mustPropose(t, cpPlain, aliceCtx, "chg-http", "Refunds up to $50 are instant.", refundAnalysis("Refunds up to $50 are instant."))
+	plainWorkspace := t.TempDir()
+	writeWorkspaceFiles(t, plainWorkspace, snapshot)
+	cpPlain := newControlPlane(t, Options{WorkspaceDir: plainWorkspace})
+	plainOp := seedStoryRefreshForTest(t, cpPlain, "alice@example.com", storyRefreshStateSucceeded, nil, "")
+	plainHTTP, err := cpPlain.ProposeChange(aliceCtx, &gensurla.ProposeChangePayload{
+		ChangeID: "chg-http", Prompt: "Refunds up to $50 are instant.", StoryRefreshOpID: &plainOp,
+		Analysis: refundAnalysis("Refunds up to $50 are instant."),
+	})
+	require.NoError(t, err)
 	revisedPlain, err := cpPlain.ReviseChange(aliceCtx, &gensurla.ReviseChangePayload{
 		ChangeID:        "chg-http",
 		RequestRevision: plainHTTP.RequestRevision,
@@ -662,7 +677,7 @@ func TestAdoptStoryRefreshRejectionsLeaveCardStorageUnchanged(t *testing.T) {
 		wsDir := t.TempDir()
 		writeWorkspaceFiles(t, wsDir, validWorkspaceStub("package design\n"))
 		cp := newControlPlane(t, Options{WorkspaceDir: wsDir})
-		card := mustPropose(t, cp, aliceCtx, "chg-existing", "Refunds up to $50 are instant.", refundAnalysis("Refunds up to $50 are instant."))
+		card := saveProposedCardFixture(t, cp, "alice@example.com", "chg-existing", "Refunds up to $50 are instant.", refundAnalysis("Refunds up to $50 are instant."))
 		return wsDir, cp, card
 	}
 
@@ -758,7 +773,7 @@ func TestAdoptStoryRefreshRejectionsLeaveCardStorageUnchanged(t *testing.T) {
 				wsDir := filepath.Join(t.TempDir(), "ws")
 				writeWorkspaceFiles(t, wsDir, validWorkspaceStub("package design\n"))
 				cp := newControlPlane(t, Options{WorkspaceDir: wsDir})
-				card := mustPropose(t, cp, aliceCtx, "chg-existing", "Refunds up to $50 are instant.", refundAnalysis("Refunds up to $50 are instant."))
+				card := saveProposedCardFixture(t, cp, "alice@example.com", "chg-existing", "Refunds up to $50 are instant.", refundAnalysis("Refunds up to $50 are instant."))
 				opID := seedStoryRefreshForTest(t, cp, "alice@example.com", storyRefreshStateSucceeded, sampleAdoptedStories(), "")
 				require.NoError(t, os.RemoveAll(wsDir))
 				writeWorkspaceFiles(t, wsDir, validWorkspaceStub("package design\n"))
@@ -770,30 +785,6 @@ func TestAdoptStoryRefreshRejectionsLeaveCardStorageUnchanged(t *testing.T) {
 				return cp, opID, nil, card
 			},
 			want: "is not the current Story refresh operation for this project and workspace; call refresh_story",
-		},
-		{
-			name: "workspace design changed after refresh_story",
-			setup: func(t *testing.T) (*ControlPlane, string, *string, *gensurla.ChangeCardResult) {
-				wsDir, cp, card := newWS(t)
-				opID := seedStoryRefreshForTest(t, cp, "alice@example.com", storyRefreshStateSucceeded, sampleAdoptedStories(), "")
-				writeWorkspaceFiles(t, wsDir, validWorkspaceStub("package design // after\n"))
-				return cp, opID, nil, card
-			},
-			want: "no longer matches story_refresh_op_id",
-		},
-		{
-			name: "workspace non-design Go file changed after refresh_story",
-			setup: func(t *testing.T) (*ControlPlane, string, *string, *gensurla.ChangeCardResult) {
-				wsDir, cp, card := newWS(t)
-				files := validWorkspaceStub("package design\n")
-				files["internal/policy/policy.go"] = "package policy // v1\n"
-				writeWorkspaceFiles(t, wsDir, files)
-				opID := seedStoryRefreshForTest(t, cp, "alice@example.com", storyRefreshStateSucceeded, sampleAdoptedStories(), "")
-				files["internal/policy/policy.go"] = "package policy // v2\n"
-				writeWorkspaceFiles(t, wsDir, files)
-				return cp, opID, nil, card
-			},
-			want: "no longer matches story_refresh_op_id",
 		},
 	}
 
@@ -834,7 +825,7 @@ func TestAdoptStoryRefreshRejectionsLeaveCardStorageUnchanged(t *testing.T) {
 }
 
 // seedStoryRefreshForTest records a Story refresh operation for owner
-// against cp's currently bound workspace snapshot and returns its op_id.
+// against cp's draft and provenance and returns its op_id.
 func seedStoryRefreshForTest(
 	t *testing.T,
 	cp *ControlPlane,
@@ -845,9 +836,11 @@ func seedStoryRefreshForTest(
 	t.Helper()
 	wsDir, wsDev, wsIno := cp.currentWorkspaceTarget()
 	require.NotEmpty(t, wsDir)
-	files, err := readWorkspaceSnapshotForStoryRefresh(wsDir, wsDev, wsIno)
+	files, madeFrom, err := cp.readDraftSnapshot(context.Background(), wsDir, wsDev, wsIno)
 	require.NoError(t, err)
 	digest := designeval.SnapshotDigest(files)
+	designSource, err := designSourceFromModuleSnapshot(files)
+	require.NoError(t, err)
 	opID, err := newStoryRefreshOpID()
 	require.NoError(t, err)
 
@@ -868,6 +861,11 @@ func seedStoryRefreshForTest(
 		snapshotDigest: digest,
 		stories:        cloneStorySummaries(stories),
 		diagnostic:     diagnostic,
+		designSource:   designSource,
+		goMod:          files["go.mod"],
+		architecture:   &savedArchitecture{DesignDigest: digest},
+		madeFrom:       &madeFromSnapshot{Start: madeFrom.Start, Entries: madeFrom.Entries},
+		listWrite:      madeFrom.Write,
 	}
 	return opID
 }

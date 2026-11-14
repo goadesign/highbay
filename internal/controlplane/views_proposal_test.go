@@ -5,6 +5,7 @@ package controlplane
 
 import (
 	"context"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -172,7 +173,7 @@ func proposalPage(t *testing.T) (*pageServer, string) {
 			},
 		})
 		wsDir, _, _ := cp.currentWorkspaceTarget()
-		writeWorkspaceFiles(t, wsDir, map[string]string{"design/design.go": "package design // exchanges\n"})
+		writeWorkspaceFiles(t, filepath.Join(wsDir, draftFolderName), map[string]string{"design/design.go": "package design // exchanges\n"})
 		storyOp := seedStoryRefreshForTest(t, cp, pageOwner, storyRefreshStateSucceeded, draft, "")
 		change, err := cp.GetChange(guide, &gensurla.GetChangePayload{ChangeID: "chg-proposal"})
 		require.NoError(t, err)
