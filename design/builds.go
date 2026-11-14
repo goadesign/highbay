@@ -102,7 +102,7 @@ var BuildBuilding = Type("BuildBuilding", func() {
 
 // BuildPassedTests names the tests' commit a passed run used and its branch.
 var BuildPassedTests = Type("BuildPassedTests", func() {
-	Description("The accepted tests' commit a passed run used, which the user merges after the builder's commit, and the test writer's branch that holds it.")
+	Description("The accepted tests' commit a passed run used, which the user merges after the builder's commit, and the build's test-writer branch, where this commit was verified.")
 	Attribute("commit", String, "Commit Surla recorded the accepted tests at.", func() { Pattern("^([0-9a-f]{40}|[0-9a-f]{64})$") })
 	Attribute("branch", String, "The build's test-writer branch, surla/tests-<n>, where this commit was verified.")
 	Required("commit", "branch")

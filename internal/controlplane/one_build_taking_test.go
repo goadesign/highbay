@@ -8,6 +8,8 @@ import (
 	"testing"
 	"time"
 
+	gensurla "github.com/goadesign/surla/gen/surla"
+	"github.com/goadesign/surla/internal/testwriter"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -79,4 +81,58 @@ func TestOneBuildDoesNotTreatUnreadableEvidenceAsUnfinished(t *testing.T) {
 	got, err := cp.newestPassedBuild("alice@example.com", buildFile{ChangeID: "x", RequestRevision: card.RequestRevision, StartedAt: start})
 	assert.Error(t, err)
 	assert.Nil(t, got)
+}
+
+// TestOneBuildPassRemainsReadableAfterItsBranchMovesOrDisappears uses real Git
+// history with a durable fixture report. Moving a ref after the report passed
+// must not erase that pass, make the page unreadable, or require new consent.
+// The stacked native journey separately proves the actual verification run.
+func TestOneBuildPassRemainsReadableAfterItsBranchMovesOrDisappears(t *testing.T) {
+	for _, action := range []string{"moved", "deleted"} {
+		t.Run(action, func(t *testing.T) {
+			cfg := verificationConfig(t)
+			cp := newBuildControlPlane(t, Options{Verification: cfg})
+			card := buildableChange(t, cp, "x")
+			user := asCaller("alice@example.com", CallerUser)
+			first, err := cp.StartBuild(user, &gensurla.StartBuildPayload{ChangeID: "x", RequestRevision: card.RequestRevision})
+			require.NoError(t, err)
+			cp.mu.RLock()
+			saved, found, err := cp.cards.loadOpenBuild()
+			cp.mu.RUnlock()
+			require.NoError(t, err)
+			require.True(t, found)
+			workspace, _, _ := cp.currentWorkspaceTarget()
+			require.NoError(t, os.WriteFile(filepath.Join(workspace, "candidate.txt"), []byte("candidate change\n"), 0o600))
+			productionBuildGit(t, workspace, "add", "--", "candidate.txt")
+			productionBuildGit(t, workspace, "commit", "--quiet", "-m", "Create the candidate fixture")
+			candidate := productionBuildGit(t, workspace, "rev-parse", "HEAD")
+			branch := testwriter.BuilderRole.Branch(saved.Number)
+			productionBuildGit(t, workspace, "branch", branch, candidate)
+			runID := strings.Repeat("a", 32)
+			writeListedRunAt(t, cfg.RunsDir, "alice@example.com", card, runID, saved.StartedAt.Add(time.Nanosecond), true, candidate)
+			before, err := cp.ListChanges(user)
+			require.NoError(t, err)
+			if action == "moved" {
+				productionBuildGit(t, workspace, "branch", "--force", branch, saved.Base)
+			} else {
+				productionBuildGit(t, workspace, "branch", "--delete", "--force", branch)
+			}
+			read, err := cp.GetBuild(user, &gensurla.GetBuildPayload{ChangeID: "x"})
+			require.NoError(t, err)
+			started, ok := read.Build.AsStarted()
+			require.True(t, ok)
+			passed, ok := started.Taking.AsPassed()
+			require.True(t, ok)
+			assert.Equal(t, runID, passed.RunID)
+			assert.Equal(t, candidate, passed.CandidateCommit)
+			assert.Equal(t, branch, passed.CandidateBranch)
+			assert.True(t, passed.BaseInBranch)
+			after, err := cp.ListChanges(user)
+			require.NoError(t, err)
+			assert.Equal(t, before.Version, after.Version)
+			restarted, err := cp.StartBuild(user, &gensurla.StartBuildPayload{ChangeID: "x", RequestRevision: card.RequestRevision})
+			require.NoError(t, err, "the matching pass permits restart without replaces")
+			assert.NotEqual(t, first.Build.StartedAt, restarted.Build.StartedAt)
+		})
+	}
 }

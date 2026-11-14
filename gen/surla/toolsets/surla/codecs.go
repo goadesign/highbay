@@ -4790,7 +4790,7 @@ var getBuildResultFields = []tools.FieldMetadata{
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("taking"), tools.FixedField("tests")},
 		JSONType:    "object",
-		Description: "The accepted tests' commit a passed run used, which the user merges after the builder's commit, and the test writer's branch that holds it.",
+		Description: "The accepted tests' commit a passed run used, which the user merges after the builder's commit, and the build's test-writer branch, where this commit was verified.",
 		Branches: []tools.UnionBranch{
 			tools.TaggedUnionBranch{
 				Discriminator: []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("state")},

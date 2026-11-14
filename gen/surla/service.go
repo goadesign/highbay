@@ -676,7 +676,8 @@ type BuildPassed struct {
 }
 
 // The accepted tests' commit a passed run used, which the user merges after
-// the builder's commit, and the test writer's branch that holds it.
+// the builder's commit, and the build's test-writer branch, where this commit
+// was verified.
 type BuildPassedTests struct {
 	// Commit Surla recorded the accepted tests at.
 	Commit string

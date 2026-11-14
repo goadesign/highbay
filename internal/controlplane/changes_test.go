@@ -493,8 +493,17 @@ func TestChangeListOperationsFollowTheRoleTable(t *testing.T) {
 // under runsDir, with its report, as a verify-run supervisor leaves it.
 func writeListedRun(t *testing.T, runsDir, owner string, card *gensurla.ChangeCardResult, runID string, accepted time.Time, passed bool) {
 	t.Helper()
+	writeListedRunAt(t, runsDir, owner, card, runID, accepted, passed, strings.Repeat("1", 40))
+}
+
+// writeListedRunAt binds a complete fixture report and request to the supplied
+// candidate, including a real commit for public-consumer branch recovery tests.
+func writeListedRunAt(
+	t *testing.T, runsDir, owner string, card *gensurla.ChangeCardResult,
+	runID string, accepted time.Time, passed bool, commit string,
+) {
+	t.Helper()
 	spec := reportSpec{SuiteID: "orders_acceptance", SuiteCommit: strings.Repeat("2", 40), Environment: "sim", Artifacts: map[string]string{"orders": strings.Repeat("a", 64)}}
-	commit := strings.Repeat("1", 40)
 	report := failingReport(t, card.RequestRevision, commit, spec)
 	if passed {
 		report = passingReport(t, card.RequestRevision, commit, spec)
