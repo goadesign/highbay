@@ -63,7 +63,7 @@ func TestValidateSnapshotRequiresACompleteModule(t *testing.T) {
 	}
 
 	_, err = validateSnapshot(without(valid, "go.sum"))
-	assert.ErrorContains(t, err, "run `go mod tidy` in the module", "a missing go.sum tells the user how to create it")
+	assert.ErrorContains(t, err, "run `GOWORK=off go mod tidy` in the module", "a missing go.sum tells the user how to create it")
 
 	versioned := testmodule.WithFile(valid, "go.mod", "module example.com/design\n\nreplace goa.design/goa/v3 => goa.design/goa/v3 v3.20.0\n")
 	_, err = validateSnapshot(versioned)

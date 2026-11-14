@@ -60,7 +60,7 @@ func TestStoryRefreshPreconditionsAndExpectedAbsence(t *testing.T) {
 		noneRes, err := cp.GetStoryRefresh(alice)
 		require.NoError(t, err)
 		assert.Equal(t, storyRefreshStateNone, noneRes.State)
-		assert.Equal(t, cp.activeWorkspaceDir, noneRes.DraftFolder, "none names the current read folder without requiring go.mod")
+		assert.Equal(t, filepath.Join(cp.activeWorkspaceDir, draftFolderName), noneRes.DraftFolder, "none names the intended draft without requiring go.mod")
 		assert.Nil(t, noneRes.OpID)
 		assert.Nil(t, noneRes.SnapshotDigest)
 		assert.Empty(t, noneRes.Stories)
@@ -132,7 +132,7 @@ func TestStoryRefreshPreconditionsAndExpectedAbsence(t *testing.T) {
 		for _, e := range entries {
 			names = append(names, e.Name())
 		}
-		assert.Equal(t, []string{"designeval", "lock"}, names, "Story refresh writes no card or refresh files to cardsDir")
+		assert.Equal(t, []string{"designeval", "lock", madeFromFileName}, names, "Story refresh persists provenance but no operation or card")
 		evalEntries, err := os.ReadDir(filepath.Join(cardsDir, "designeval"))
 		require.NoError(t, err)
 		assert.Empty(t, evalEntries, "Close removes the designeval build workspace")
@@ -295,6 +295,9 @@ func TestStoryRefreshCloseCancelsWaitsAndWritesNothingAfterwards(t *testing.T) {
 		return statErr == nil
 	}, 5*time.Second, 10*time.Millisecond)
 
+	provenancePath := filepath.Join(cardsDir, madeFromFileName)
+	provenance, err := os.ReadFile(provenancePath)
+	require.NoError(t, err)
 	require.NoError(t, cp.Close())
 
 	// After Close returns, no Story refresh operation remains running or published.
@@ -306,14 +309,18 @@ func TestStoryRefreshCloseCancelsWaitsAndWritesNothingAfterwards(t *testing.T) {
 	_, err = cp.RefreshStory(alice)
 	assertServiceError(t, err, "unavailable")
 
-	// Nothing was written to cardsDir beyond the lock file and empty designeval parent.
+	// Refresh persisted its draft provenance before evaluation started. Close
+	// preserves it, and the canceled evaluator publishes no later card write.
 	entries, err := os.ReadDir(cardsDir)
 	require.NoError(t, err)
 	var names []string
 	for _, e := range entries {
 		names = append(names, e.Name())
 	}
-	assert.Equal(t, []string{"designeval", "lock"}, names)
+	assert.Equal(t, []string{"designeval", "lock", "made-from", "made-from.json"}, names)
+	afterProvenance, err := os.ReadFile(provenancePath)
+	require.NoError(t, err)
+	assert.Equal(t, provenance, afterProvenance)
 	evalEntries, err := os.ReadDir(filepath.Join(cardsDir, "designeval"))
 	require.NoError(t, err)
 	assert.Empty(t, evalEntries)
@@ -331,7 +338,7 @@ func TestStoryRefreshReplacementFailureRetryAndExpiry(t *testing.T) {
 
 	t.Run("changed snapshot replaces running operation and replaced evaluation publishes nothing", func(t *testing.T) {
 		wsDir := t.TempDir()
-		v1Files := validWorkspaceStub("package design\n// v1\n")
+		v1Files := validWorkspaceStub("package design\n\n// v1\n")
 		writeWorkspaceFiles(t, wsDir, v1Files)
 		v1Digest := designeval.SnapshotDigest(v1Files)
 
@@ -352,9 +359,9 @@ func TestStoryRefreshReplacementFailureRetryAndExpiry(t *testing.T) {
 			return statErr == nil
 		}, 5*time.Second, 10*time.Millisecond)
 
-		// Change the workspace snapshot and refresh again.
-		v2Files := validWorkspaceStub("package design\n// v2\n")
-		writeWorkspaceFiles(t, wsDir, v2Files)
+		// Change the draft snapshot and refresh again.
+		v2Files := validWorkspaceStub("package design\n\n// v2\n")
+		writeWorkspaceFiles(t, filepath.Join(wsDir, draftFolderName), v2Files)
 		v2Digest := designeval.SnapshotDigest(v2Files)
 		require.NotEqual(t, v1Digest, v2Digest)
 
@@ -764,7 +771,7 @@ var _ = Service("orders", func() {
 })
 `
 	nonStorySnapshot := testmodule.Snapshot(t, "", nonStoryDesign)
-	writeWorkspaceFiles(t, wsDir, nonStorySnapshot)
+	writeWorkspaceFiles(t, filepath.Join(wsDir, draftFolderName), nonStorySnapshot)
 	wantNonStoryDigest := designeval.SnapshotDigest(nonStorySnapshot)
 
 	nonStoryStarted := callMCP("refresh_story")
@@ -783,7 +790,9 @@ var _ = Service("orders", func() {
 	assert.Empty(t, nonStorySucceeded.Stories)
 	assert.Contains(t, nonStorySucceeded.Message, "the design declares no Stories")
 
-	// Adopting a succeeded refresh with zero Stories equals adopting none.
+	// With the same canonical design input, adopting a refresh with zero
+	// Stories equals adopting no Story evaluation. The project still holds
+	// the earlier Story design; compare against the evaluated draft folder.
 	adoptedZero, err := cp.ProposeChange(alice, &gensurla.ProposeChangePayload{
 		ChangeID:         "chg-zero-stories",
 		Prompt:           "Refunds up to $50 are instant.",
@@ -792,7 +801,7 @@ var _ = Service("orders", func() {
 	})
 	require.NoError(t, err)
 	assert.Nil(t, adoptedZero.Stories)
-	plainZero := mustPropose(t, newControlPlane(t, Options{WorkspaceDir: wsDir}), alice, "chg-zero-stories", "Refunds up to $50 are instant.", refundAnalysis("Refunds up to $50 are instant."))
+	plainZero := mustPropose(t, newControlPlane(t, Options{WorkspaceDir: filepath.Join(wsDir, draftFolderName)}), alice, "chg-zero-stories", "Refunds up to $50 are instant.", refundAnalysis("Refunds up to $50 are instant."))
 	assert.Equal(t, plainZero.RequestRevision, adoptedZero.RequestRevision)
 }
 

@@ -516,9 +516,11 @@ func TestAdoptStoryRefreshOnProposeAndRevise(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, wantDesignSrc, storedHTTP.designSource)
 
-	// MCP propose_change adopts the same succeeded opV1 on a second control
-	// plane with the same change_id and produces the exact same request_revision.
-	cpMCP := newControlPlane(t, Options{WorkspaceDir: wsDir})
+	// MCP adopts the same input on an independent project and control plane.
+	// The transport comparison shares neither draft files nor provenance owners.
+	mcpWorkspace := t.TempDir()
+	writeWorkspaceFiles(t, mcpWorkspace, snapshot)
+	cpMCP := newControlPlane(t, Options{WorkspaceDir: mcpWorkspace})
 	opMCPV1 := seedStoryRefreshForTest(t, cpMCP, "alice@example.com", storyRefreshStateSucceeded, storiesV1, "")
 	adapter := genmcpadapter.NewMCPAdapter(gensurla.NewEndpoints(cpMCP), nil)
 	res, err := adapter.ToolsCall(aliceCtx, &genmcpadapter.ToolsCallPayload{
@@ -772,25 +774,23 @@ func TestAdoptStoryRefreshRejectionsLeaveCardStorageUnchanged(t *testing.T) {
 			want: "is not the current Story refresh operation for this project and workspace; call refresh_story",
 		},
 		{
-			name: "workspace design changed after refresh_story",
+			name: "draft design changed after refresh_story",
 			setup: func(t *testing.T) (*ControlPlane, string, *string, *gensurla.ChangeCardResult) {
 				wsDir, cp, card := newWS(t)
 				opID := seedStoryRefreshForTest(t, cp, "alice@example.com", storyRefreshStateSucceeded, sampleAdoptedStories(), "")
-				writeWorkspaceFiles(t, wsDir, validWorkspaceStub("package design // after\n"))
+				writeWorkspaceFiles(t, filepath.Join(wsDir, draftFolderName), validWorkspaceStub("package design // after\n"))
 				return cp, opID, nil, card
 			},
 			want: "no longer matches story_refresh_op_id",
 		},
 		{
-			name: "workspace non-design Go file changed after refresh_story",
+			name: "draft go.mod changed after refresh_story",
 			setup: func(t *testing.T) (*ControlPlane, string, *string, *gensurla.ChangeCardResult) {
 				wsDir, cp, card := newWS(t)
-				files := validWorkspaceStub("package design\n")
-				files["internal/policy/policy.go"] = "package policy // v1\n"
-				writeWorkspaceFiles(t, wsDir, files)
 				opID := seedStoryRefreshForTest(t, cp, "alice@example.com", storyRefreshStateSucceeded, sampleAdoptedStories(), "")
-				files["internal/policy/policy.go"] = "package policy // v2\n"
-				writeWorkspaceFiles(t, wsDir, files)
+				writeWorkspaceFiles(t, filepath.Join(wsDir, draftFolderName), map[string]string{
+					"go.mod": "module example.com/orders\n\ngo 1.24\n// dependency edit\n",
+				})
 				return cp, opID, nil, card
 			},
 			want: "no longer matches story_refresh_op_id",
@@ -834,7 +834,7 @@ func TestAdoptStoryRefreshRejectionsLeaveCardStorageUnchanged(t *testing.T) {
 }
 
 // seedStoryRefreshForTest records a Story refresh operation for owner
-// against cp's currently bound workspace snapshot and returns its op_id.
+// against cp's draft and provenance and returns its op_id.
 func seedStoryRefreshForTest(
 	t *testing.T,
 	cp *ControlPlane,
@@ -845,9 +845,11 @@ func seedStoryRefreshForTest(
 	t.Helper()
 	wsDir, wsDev, wsIno := cp.currentWorkspaceTarget()
 	require.NotEmpty(t, wsDir)
-	files, err := readWorkspaceSnapshotForStoryRefresh(wsDir, wsDev, wsIno)
+	files, madeFrom, err := cp.readDraftSnapshot(context.Background(), wsDir, wsDev, wsIno)
 	require.NoError(t, err)
 	digest := designeval.SnapshotDigest(files)
+	designSource, err := designSourceFromModuleSnapshot(files)
+	require.NoError(t, err)
 	opID, err := newStoryRefreshOpID()
 	require.NoError(t, err)
 
@@ -868,6 +870,11 @@ func seedStoryRefreshForTest(
 		snapshotDigest: digest,
 		stories:        cloneStorySummaries(stories),
 		diagnostic:     diagnostic,
+		designSource:   designSource,
+		goMod:          files["go.mod"],
+		architecture:   &savedArchitecture{DesignDigest: digest},
+		madeFrom:       &madeFromSnapshot{Start: madeFrom.Start, Entries: madeFrom.Entries},
+		listWrite:      madeFrom.Write,
 	}
 	return opID
 }
