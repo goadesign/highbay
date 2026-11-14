@@ -342,7 +342,7 @@ func (c *ControlPlane) testsChoice(
 	if build.RequestRevision != revision {
 		return "", "", refuseNoBuild(changeID, revision, build, true)
 	}
-	switch v := c.verifier.(type) {
+	switch c.verifier.(type) {
 	case writtenTestVerification:
 		if build.TestWriter.State != testsAccepted {
 			return "", "", testsNotAccepted{saved: build.TestWriter}
