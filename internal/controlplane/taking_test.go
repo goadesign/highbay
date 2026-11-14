@@ -292,3 +292,63 @@ func TestOlderPassedRunCanEstablishMerged(t *testing.T) {
 	require.True(t, ok)
 	assert.Equal(t, gensurla.BuildTakingKindMerged, started.Taking.Kind())
 }
+
+// TestDropGuidanceSeesMergeOnlyChanges checks history paths introduced by a
+// merge, even when no ordinary first-parent commit changed that file.
+func TestDropGuidanceSeesMergeOnlyChanges(t *testing.T) {
+	cp := newBuildControlPlane(t, Options{Verification: verificationConfig(t)})
+	workspace, _, _ := cp.currentWorkspaceTarget()
+	require.NoError(t, os.WriteFile(filepath.Join(workspace, "shared.txt"), []byte("base\n"), 0o600))
+	productionBuildGit(t, workspace, "add", "shared.txt")
+	productionBuildGit(t, workspace, "commit", "--quiet", "-m", "Base")
+	base := productionBuildGit(t, workspace, "rev-parse", "HEAD")
+	productionBuildGit(t, workspace, "switch", "--quiet", "-c", "candidate-fixture")
+	require.NoError(t, os.WriteFile(filepath.Join(workspace, "shared.txt"), []byte("candidate\n"), 0o600))
+	productionBuildGit(t, workspace, "add", "shared.txt")
+	productionBuildGit(t, workspace, "commit", "--quiet", "-m", "Candidate")
+	candidate := productionBuildGit(t, workspace, "rev-parse", "HEAD")
+	productionBuildGit(t, workspace, "switch", "--quiet", "-")
+	productionBuildGit(t, workspace, "switch", "--quiet", "-c", "side-fixture")
+	require.NoError(t, os.WriteFile(filepath.Join(workspace, "shared.txt"), []byte("side\n"), 0o600))
+	productionBuildGit(t, workspace, "add", "shared.txt")
+	productionBuildGit(t, workspace, "commit", "--quiet", "-m", "Side")
+	productionBuildGit(t, workspace, "switch", "--quiet", "-")
+	productionBuildGit(t, workspace, "merge", "--quiet", "--no-ff", "-m", "Merge side", "side-fixture")
+	project := productionBuildGit(t, workspace, "rev-parse", "HEAD")
+	safe, err := dropSafeGuidance(t.Context(), workspace, base, project, candidate)
+	require.NoError(t, err)
+	assert.True(t, safe)
+}
+
+// TestDropBeforeAnyAssignmentAdvancesTheNextNumber preserves the saved number
+// even when no worker ever created a numbered branch.
+func TestDropBeforeAnyAssignmentAdvancesTheNextNumber(t *testing.T) {
+	cp := newBuildControlPlane(t, Options{Verification: verificationConfig(t)})
+	card := buildableChange(t, cp, "x")
+	user := asCaller("alice@example.com", CallerUser)
+	first, err := cp.StartBuild(user, &gensurla.StartBuildPayload{ChangeID: "x", RequestRevision: card.RequestRevision})
+	require.NoError(t, err)
+	dropped, err := cp.DropBuild(user, &gensurla.DropBuildPayload{ChangeID: "x", StartedAt: first.Build.StartedAt})
+	require.NoError(t, err)
+	started, ok := dropped.Build.AsStarted()
+	require.True(t, ok)
+	info, ok := started.Taking.AsDropped()
+	require.True(t, ok)
+	assert.Empty(t, info.KeptBranches)
+	provenance, found, err := cp.cards.loadMadeFrom()
+	require.NoError(t, err)
+	require.True(t, found)
+	record := loadMetadataRecord(t, cp, "x")
+	record.madeFrom.Start = provenance.Start
+	record.madeFrom.Entries = nil
+	saveMetadataRecord(t, cp, record)
+	second, err := cp.StartBuild(user, &gensurla.StartBuildPayload{ChangeID: "x", RequestRevision: card.RequestRevision})
+	require.NoError(t, err)
+	assert.NotEqual(t, first.Build.StartedAt, second.Build.StartedAt)
+	cp.mu.RLock()
+	saved, found, err := cp.cards.loadOpenBuild()
+	cp.mu.RUnlock()
+	require.NoError(t, err)
+	require.True(t, found)
+	assert.Equal(t, 2, saved.Number)
+}
