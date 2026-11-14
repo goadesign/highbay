@@ -327,6 +327,9 @@ func (c *ControlPlane) testsChoice(
 	if _, unavailable := c.verifier.(noVerification); unavailable {
 		return "", "", gensurla.MakeNotImplemented(errVerificationUnavailable)
 	}
+	if v, stored := c.verifier.(storedVerification); stored {
+		return v.cfg.Plan.SuiteCommit, verify.TestsEvaluator, nil
+	}
 	held, err := c.ownedBuild(principal, changeID)
 	var missing *goa.ServiceError
 	switch {
@@ -340,8 +343,6 @@ func (c *ControlPlane) testsChoice(
 		return "", "", refuseNoBuild(changeID, revision, build, true)
 	}
 	switch v := c.verifier.(type) {
-	case storedVerification:
-		return v.cfg.Plan.SuiteCommit, verify.TestsEvaluator, nil
 	case writtenTestVerification:
 		if build.TestWriter.State != testsAccepted {
 			return "", "", testsNotAccepted{saved: build.TestWriter}

@@ -270,8 +270,8 @@ func TestVerificationCurrentInputsIgnoreForeignCard(t *testing.T) {
 }
 
 // TestVerifyChangeReadsCurrentInputsBeforeAcceptance damages only the build:
-// stored-evaluator plan selection must read the same open-build prerequisite
-// before the supervisor can accept and publish a run identifier.
+// the current-input read must fail before the supervisor accepts a run, even
+// though selecting the operator's stored evaluator does not need a build.
 func TestVerifyChangeReadsCurrentInputsBeforeAcceptance(t *testing.T) {
 	cp, card, cfg := verificationSetup(t)
 	require.NoError(t, os.WriteFile(filepath.Join(cp.cards.dir, openBuildRecordFile), []byte("{"), 0o600))
@@ -279,7 +279,7 @@ func TestVerifyChangeReadsCurrentInputsBeforeAcceptance(t *testing.T) {
 		ChangeID: card.ChangeID, RequestRevision: card.RequestRevision, CandidateCommit: strings.Repeat("a", 40),
 	})
 	require.Error(t, err)
-	assert.ErrorContains(t, err, "decode open build")
+	assert.ErrorContains(t, err, "saved verification inputs could not be read")
 	assert.NotContains(t, err.Error(), cp.cards.dir)
 	runs, err := verifyrun.List(cfg.RunsDir, "alice@example.com", card.ChangeID)
 	require.NoError(t, err)

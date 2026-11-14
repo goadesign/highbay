@@ -237,12 +237,11 @@ func newLiveControlPlane(t *testing.T, mode string) (*ControlPlane, string) {
 	return cp, LiveRoot(cardsDir)
 }
 
-// seedLiveChange supplies a confirmed card and its explicit builder-only
-// record for stored-evaluator live lifecycle unit tests.
+// seedLiveChange supplies a confirmed card without a build: stored-evaluator
+// live targets use the operator's suite independently of build assignments.
 func seedLiveChange(t *testing.T, cp *ControlPlane) {
 	t.Helper()
-	card := saveBuildStoryCard(t, cp, liveTestChangeID, StatusConfirmed, refundStory("Refund over the limit waits"))
-	saveStoredBuildFixture(t, cp, card)
+	saveBuildStoryCard(t, cp, liveTestChangeID, StatusConfirmed, refundStory("Refund over the limit waits"))
 }
 
 // boundTargetForTest reads the bound target for lifecycle assertions. Consumer
@@ -280,6 +279,9 @@ func goaErrorName(err error) string {
 
 func TestLiveTargetAppliesDraftsThroughTheGeneratedContract(t *testing.T) {
 	cp, root := newLiveControlPlane(t, "serve")
+	_, found, err := cp.cards.loadOpenBuild()
+	require.NoError(t, err)
+	require.False(t, found, "stored-evaluator live targets need no build")
 	alice := WithPrincipal(context.Background(), Principal{ID: "alice@example.com", CallerID: "alice@example.com", Kind: CallerUser})
 	commit := strings.Repeat("a", 40)
 
