@@ -410,8 +410,24 @@ func TestAssignmentsListOnlyTheCallersOwnChanges(t *testing.T) {
 
 // TestBuildFileIsDecodedStrictly damages a saved build in each way the
 // decoder must refuse, and checks that states a later check writes, with
-// their findings or commit, are read back as saved.
+// their findings or commit, are read back as saved. One real start supplies
+// immutable baseline bytes; each case gets its own store and decoded copy.
 func TestBuildFileIsDecodedStrictly(t *testing.T) {
+	producer := newBuildControlPlane(t, Options{})
+	user := asCaller("alice@example.com", CallerUser)
+	card := buildableChange(t, producer, "chg")
+	_, err := producer.StartBuild(user, &gensurla.StartBuildPayload{
+		ChangeID: card.ChangeID, RequestRevision: card.RequestRevision,
+	})
+	require.NoError(t, err)
+	baseline := readBuildFile(t, producer, "chg")
+	_, err = decodeOpenBuild(baseline)
+	require.NoError(t, err, "the unmodified owner-produced baseline must be valid")
+	cardJSON, err := os.ReadFile(producer.cards.path(card.ChangeID))
+	require.NoError(t, err)
+	workspace := producer.activeWorkspaceDir
+	require.NoError(t, producer.Close())
+
 	commit := strings.Repeat("c", 40)
 	at := "2026-11-13T09:30:00Z"
 	cases := []struct {
@@ -506,13 +522,10 @@ func TestBuildFileIsDecodedStrictly(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			cp := newBuildControlPlane(t, Options{})
-			user := asCaller("alice@example.com", CallerUser)
-			card := buildableChange(t, cp, "chg")
-			_, err := cp.StartBuild(user, &gensurla.StartBuildPayload{ChangeID: "chg", RequestRevision: card.RequestRevision})
-			require.NoError(t, err)
+			cp := newControlPlane(t, Options{WorkspaceDir: workspace})
+			require.NoError(t, os.WriteFile(cp.cards.path(card.ChangeID), cardJSON, 0o600))
 			var file map[string]any
-			require.NoError(t, json.Unmarshal(readBuildFile(t, cp, "chg"), &file))
+			require.NoError(t, json.Unmarshal(baseline, &file))
 			raw, err := json.Marshal(tc.edit(file))
 			require.NoError(t, err)
 			require.NoError(t, os.WriteFile(filepath.Join(cp.cards.dir, openBuildRecordFile), append(raw, tc.trailer...), 0o600))
