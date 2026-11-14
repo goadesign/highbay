@@ -47,6 +47,8 @@ const page = await openPage(origin, { link: input.link });
 await until(() => page.$("#surla-build-start") && !page.$("#surla-build-start").disabled, "first Build was not ready");
 page.$("#surla-build-start").click();
 await until(() => page.$("#surla-build-again") && !page.$("#surla-build-again").disabled && page.sent("GET", findingsPath).length === 1, "the first finding read was not held");
+expect(!("replaces" in page.sent("POST", buildPath)[0].body), "the first Build sent a replacement identity");
+const previousStart = JSON.parse(page.sent("POST", buildPath)[0].answer).build.started_at;
 expect(!page.text("#surla-build-findings").includes("Finding from build 1."), "held finding text appeared before its answer");
 const leaked = [];
 const observer = new page.win.MutationObserver(() => {
@@ -55,8 +57,11 @@ const observer = new page.win.MutationObserver(() => {
 observer.observe(page.$("#surla-build-section"), { subtree: true, childList: true, characterData: true });
 page.$("#surla-build-again").click();
 await until(() => page.$("#surla-build-confirm") && !page.$("#surla-build-confirm").disabled, "rebuild did not offer an enabled confirmation");
+expect(page.sent("POST", buildPath).length === 1, "opening the question sent a replacement");
 page.$("#surla-build-confirm").click();
 await until(() => page.sent("POST", buildPath).length === 2 && page.sent("POST", buildPath)[1].status === 200 && page.$("#surla-build-again") && !page.$("#surla-build-again").disabled, "second Build did not finish");
+const replacement = page.sent("POST", buildPath)[1].body.replaces;
+expect(replacement?.change_id === "chg" && replacement.started_at === previousStart && Object.keys(replacement).length === 2, "the restarted findings build did not name exactly its observed predecessor");
 await control(origin, "release", { key: "GET " + findingsPath });
 await until(() => page.text("#surla-build-findings").includes("Finding from build 2."), "the second verdict's user text did not appear");
 observer.disconnect();
