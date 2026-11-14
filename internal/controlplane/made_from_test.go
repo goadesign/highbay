@@ -2,8 +2,11 @@
 package controlplane
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -12,6 +15,7 @@ import (
 	"github.com/goadesign/surla/internal/designversion"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"golang.org/x/sys/unix"
 )
 
 // codecMadeFrom supplies fresh maps, including distinct versions entered together.
@@ -230,4 +234,98 @@ func TestDesignVersionRefusesLinks(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, text, string(guard))
 	})
+}
+
+// TestDesignVersionAndRecordFIFOStaging bounds each write in a separate trusted
+// test process, so a blocking-open regression cannot leave a stuck goroutine.
+// A reader distinguishes nonblocking-open alone from rejecting the descriptor
+// before any record or text can be sent into the pipe.
+func TestDesignVersionAndRecordFIFOStaging(t *testing.T) {
+	for _, kind := range []string{"build", "provenance", "version"} {
+		for _, reader := range []bool{false, true} {
+			t.Run(kind+map[bool]string{false: "/without reader", true: "/with reader"}[reader], func(t *testing.T) {
+				dir := t.TempDir()
+				store, err := openCardStore(dir)
+				require.NoError(t, err)
+				build, provenance := codecOpenBuild(), codecMadeFrom()
+				text := "package design\n"
+				require.NoError(t, store.saveOpenBuild(build))
+				require.NoError(t, store.saveMadeFrom(provenance))
+				version, err := store.saveDesignVersion(text)
+				require.NoError(t, err)
+				require.NoError(t, store.close())
+				staging := map[string]string{
+					"build":      filepath.Join(dir, openBuildStagingFile),
+					"provenance": filepath.Join(dir, madeFromStagingFile),
+					"version":    filepath.Join(dir, designVersionsDirectory, designVersionStagingFile),
+				}[kind]
+				require.NoError(t, unix.Mkfifo(staging, 0o600))
+				var readPipe *os.File
+				if reader {
+					fd, err := unix.Open(staging, unix.O_RDONLY|unix.O_NONBLOCK|unix.O_CLOEXEC, 0)
+					require.NoError(t, err)
+					readPipe = os.NewFile(uintptr(fd), "staging-reader")
+					defer func() { assert.NoError(t, readPipe.Close()) }()
+				}
+				executable, err := os.Executable()
+				require.NoError(t, err)
+				ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+				defer cancel()
+				command := exec.CommandContext(ctx, executable, "-test.run=^TestRecordStagingFIFOHelper$")
+				command.Env = append(os.Environ(), "SURLA_TEST_RECORD_STAGING_DIR="+dir,
+					"SURLA_TEST_RECORD_STAGING_KIND="+kind)
+				output, err := command.CombinedOutput()
+				require.NoError(t, ctx.Err(), "FIFO staging write blocked: %s", output)
+				require.NoError(t, err, "FIFO staging helper failed: %s", output)
+				if readPipe != nil {
+					data := make([]byte, 4096)
+					count, err := unix.Read(int(readPipe.Fd()), data)
+					assert.True(t, err == nil || errors.Is(err, unix.EAGAIN), "read staging pipe: %v", err)
+					assert.Zero(t, count, "staging data escaped into a FIFO before rejection")
+				}
+				reopened, err := openCardStore(dir)
+				require.NoError(t, err)
+				defer func() { assert.NoError(t, reopened.close()) }()
+				actualBuild, found, err := reopened.loadOpenBuild()
+				require.NoError(t, err)
+				assert.True(t, found)
+				assert.Equal(t, build.Number, actualBuild.Number)
+				actualProvenance, found, err := reopened.loadMadeFrom()
+				require.NoError(t, err)
+				assert.True(t, found)
+				assert.Equal(t, provenance.Write, actualProvenance.Write)
+				actualText, found, err := reopened.loadDesignVersion(version)
+				require.NoError(t, err)
+				assert.True(t, found)
+				assert.Equal(t, text, actualText)
+			})
+		}
+	}
+}
+
+// TestRecordStagingFIFOHelper invokes only the selected store write. Its parent
+// supplies and owns the directory, deadline, FIFO readers and cleanup.
+func TestRecordStagingFIFOHelper(t *testing.T) {
+	dir := os.Getenv("SURLA_TEST_RECORD_STAGING_DIR")
+	if dir == "" {
+		t.Skip("runs only as the bounded FIFO staging subprocess")
+	}
+	store, err := openCardStore(dir)
+	require.NoError(t, err)
+	defer func() { assert.NoError(t, store.close()) }()
+	switch os.Getenv("SURLA_TEST_RECORD_STAGING_KIND") {
+	case "build":
+		build := codecOpenBuild()
+		build.Number++
+		err = store.saveOpenBuild(build)
+	case "provenance":
+		provenance := codecMadeFrom()
+		provenance.Write++
+		err = store.saveMadeFrom(provenance)
+	case "version":
+		_, err = store.saveDesignVersion("package design\n\ntype Added string\n")
+	default:
+		t.Fatal("unknown FIFO staging helper operation")
+	}
+	assert.Error(t, err, "non-regular staging must be refused")
 }

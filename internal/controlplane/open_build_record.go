@@ -16,6 +16,7 @@ import (
 	gensurla "github.com/goadesign/surla/gen/surla"
 	"github.com/goadesign/surla/internal/designeval"
 	"github.com/goadesign/surla/internal/designversion"
+	"golang.org/x/sys/unix"
 )
 
 type (
@@ -185,7 +186,7 @@ func (s *cardStore) saveOpenBuild(saved openBuildFile) error {
 		return fmt.Errorf("encode open build: %w", err)
 	}
 	staging := filepath.Join(s.dir, openBuildStagingFile)
-	f, err := os.OpenFile(staging, os.O_WRONLY|os.O_CREATE|os.O_TRUNC|syscall.O_NOFOLLOW, 0o600)
+	f, err := openRegularStaging(unix.AT_FDCWD, staging)
 	if err == nil {
 		_, err = f.Write(data)
 		if err == nil {

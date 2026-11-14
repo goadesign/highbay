@@ -231,7 +231,7 @@ func (s *cardStore) saveMadeFrom(saved madeFromRecord) error {
 		return fmt.Errorf("encode design provenance: %w", err)
 	}
 	staging := filepath.Join(s.dir, madeFromStagingFile)
-	f, err := os.OpenFile(staging, os.O_WRONLY|os.O_CREATE|os.O_TRUNC|syscall.O_NOFOLLOW, 0o600)
+	f, err := openRegularStaging(unix.AT_FDCWD, staging)
 	if err == nil {
 		_, err = f.Write(data)
 		if err == nil {
@@ -300,12 +300,10 @@ func (s *cardStore) saveDesignVersion(text string) (version string, retErr error
 	} else if !errors.Is(err, fs.ErrNotExist) {
 		return "", err
 	}
-	fd, err := unix.Openat(int(dir.Fd()), designVersionStagingFile,
-		unix.O_WRONLY|unix.O_CREAT|unix.O_TRUNC|unix.O_NOFOLLOW, 0o600)
+	f, err := openRegularStaging(int(dir.Fd()), designVersionStagingFile)
 	if err != nil {
 		return "", fmt.Errorf("stage design version: %w", err)
 	}
-	f := os.NewFile(uintptr(fd), designVersionStagingFile)
 	_, writeErr := f.WriteString(text)
 	if writeErr == nil {
 		writeErr = f.Sync()
@@ -346,6 +344,26 @@ func (s *cardStore) openDesignVersions(create bool) (*os.File, error) {
 		return nil, err
 	}
 	return os.NewFile(uintptr(fd), designVersionsDirectory), nil
+}
+
+// openRegularStaging never waits for a FIFO reader and never writes or
+// truncates a non-regular descriptor. dir is either the held version directory
+// or AT_FDCWD with an absolute path inside the card store.
+func openRegularStaging(dir int, name string) (*os.File, error) {
+	fd, err := unix.Openat(dir, name,
+		unix.O_WRONLY|unix.O_CREAT|unix.O_NONBLOCK|unix.O_NOFOLLOW|unix.O_CLOEXEC, 0o600)
+	if err != nil {
+		return nil, err
+	}
+	f := os.NewFile(uintptr(fd), name)
+	info, statErr := f.Stat()
+	if statErr != nil || !info.Mode().IsRegular() {
+		return nil, errors.Join(errors.New("staging path is not a regular file"), statErr, f.Close())
+	}
+	if err := f.Truncate(0); err != nil {
+		return nil, errors.Join(err, f.Close())
+	}
+	return f, nil
 }
 
 // readDesignVersionFile validates only the requested immutable blob. Nonblocking
