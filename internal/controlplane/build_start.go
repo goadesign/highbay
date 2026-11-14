@@ -81,6 +81,9 @@ func (c *ControlPlane) StartBuild(
 	// Check the agreed revision before any working-copy or team effect.
 	c.mu.RLock()
 	record, err := c.buildableCard(principal, p.ChangeID, p.RequestRevision)
+	if err == nil {
+		err = c.checkDraftAfterDrop(record)
+	}
 	c.mu.RUnlock()
 	if err != nil {
 		return nil, recordBuildError(span, err, "check change for build")
@@ -108,6 +111,28 @@ func (c *ControlPlane) StartBuild(
 			return nil, recordBuildError(span, err, "read the open build's passed runs")
 		}
 		if err := checkBuildReplacement(p, open, openProgress); err != nil {
+			if refusal, ok := err.(*gensurla.OpenBuildRefusal); ok && refusal.Name == "previous_change_open" {
+				if passed, ok := openProgress.Taking.AsPassed(); ok {
+					workspace, _, _ := c.currentWorkspaceTarget()
+					repo, _, readErr := resolveStarterRepo(work, workspace)
+					if readErr != nil {
+						return nil, readErr
+					}
+					head, readErr := runGitRead(work, repo, "rev-parse", "--verify", "HEAD^{commit}")
+					if readErr != nil {
+						return nil, readErr
+					}
+					safe, readErr := dropSafeGuidance(work, repo, open.Base, strings.TrimSpace(string(head)), passed.CandidateCommit)
+					if readErr != nil {
+						return nil, readErr
+					}
+					if safe {
+						refusal.Message += fmt.Sprintf(" If your branch already holds what you want from %s, Drop is safe: the next change starts from your branch as it is.", open.ChangeID)
+					}
+				} else {
+					refusal.Message += fmt.Sprintf(" No verification of %s has passed, so there is nothing to merge yet: let the builder finish, or drop it.", open.ChangeID)
+				}
+			}
 			return nil, err
 		}
 	}
@@ -132,10 +157,14 @@ func (c *ControlPlane) StartBuild(
 	}
 	base := strings.TrimSpace(string(head))
 	number := 0
-	if openFound {
+	if openFound && openProgress.Taking.Kind() != gensurla.BuildTakingKindMerged && openProgress.Taking.Kind() != gensurla.BuildTakingKindDropped {
 		number, base = open.Number, open.Base
 	} else {
-		number, err = testwriter.NextNumber(work, workspace, 0)
+		last := 0
+		if openFound {
+			last = open.Number
+		}
+		number, err = testwriter.NextNumber(work, workspace, last)
 		if err != nil {
 			return nil, recordBuildError(span, err, "number the build")
 		}
@@ -186,6 +215,19 @@ func (c *ControlPlane) StartBuild(
 		return nil, recordBuildError(span, err, "check the open build before save")
 	}
 	if currentFound != openFound || currentFound && (current.ChangeID != open.ChangeID || !current.StartedAt.Equal(open.StartedAt)) {
+		c.mu.Unlock()
+		return nil, gensurla.MakeConflict(errors.New("The open build changed while this start was being prepared. Read get_build and decide again."))
+	}
+	provenance, hasProvenance, err := c.cards.loadMadeFrom()
+	if err != nil {
+		c.mu.Unlock()
+		return nil, err
+	}
+	if hasProvenance && provenance.Start.Dropped != nil && record.madeFrom.Start.Write < provenance.Start.Write {
+		c.mu.Unlock()
+		return nil, gensurla.MakeDraftedBeforeDrop(errors.New("A build was dropped after this revision was drafted. Ask the guide to call refresh_story and revise_change, adopt the revision, then build."))
+	}
+	if currentFound && hasProvenance && buildDropped(provenance, current) != (openProgress.Taking.Kind() == gensurla.BuildTakingKindDropped) {
 		c.mu.Unlock()
 		return nil, gensurla.MakeConflict(errors.New("The open build changed while this start was being prepared. Read get_build and decide again."))
 	}
@@ -487,6 +529,9 @@ func buildTeamStep(cause string) string {
 // and an unfinished restart without consent naming exactly the observed start.
 func checkBuildReplacement(p *gensurla.StartBuildPayload, saved buildFile, progress *gensurla.StartedBuild) error {
 	name, message := "", ""
+	if progress.Taking.Kind() == gensurla.BuildTakingKindMerged || progress.Taking.Kind() == gensurla.BuildTakingKindDropped {
+		return nil
+	}
 	if saved.ChangeID != p.ChangeID {
 		name = "previous_change_open"
 		message = fmt.Sprintf("Change %s still has an open build. Merge a passed run or drop that build before building %s.", saved.ChangeID, p.ChangeID)
@@ -499,4 +544,17 @@ func checkBuildReplacement(p *gensurla.StartBuildPayload, saved buildFile, progr
 		return nil
 	}
 	return &gensurla.OpenBuildRefusal{Name: name, Message: message, ChangeID: saved.ChangeID, Build: progress}
+}
+
+// checkDraftAfterDrop refuses only revisions older than an actual drop.
+// The caller holds c.mu, which serializes Drop's provenance publication.
+func (c *ControlPlane) checkDraftAfterDrop(record storedChangeCard) error {
+	provenance, found, err := c.cards.loadMadeFrom()
+	if err != nil {
+		return err
+	}
+	if found && provenance.Start.Dropped != nil && record.madeFrom.Start.Write < provenance.Start.Write {
+		return gensurla.MakeDraftedBeforeDrop(errors.New("A build was dropped after this revision was drafted. Ask the guide to call refresh_story and revise_change, adopt the revision, then build."))
+	}
+	return nil
 }

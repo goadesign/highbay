@@ -9,15 +9,6 @@ import (
 	gensurla "github.com/goadesign/surla/gen/surla"
 )
 
-// DropBuild refuses without changing any build until the drop owner is ready.
-func (c *ControlPlane) DropBuild(
-	ctx context.Context, p *gensurla.DropBuildPayload,
-) (*gensurla.ChangeBuild, error) {
-	return nil, gensurla.MakeNotImplemented(errors.New(
-		"not available until the builder-copy change is complete",
-	))
-}
-
 // UpdateDraft refuses without changing the draft until the draft owner is ready.
 func (c *ControlPlane) UpdateDraft(ctx context.Context) (*gensurla.DraftUpdateResult, error) {
 	return nil, gensurla.MakeNotImplemented(errors.New(

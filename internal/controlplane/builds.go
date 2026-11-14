@@ -10,6 +10,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"slices"
+	"strings"
 	"time"
 	"unicode/utf8"
 
@@ -550,6 +551,13 @@ func (c *ControlPlane) ownedBuild(principal Principal, changeID string) (heldBui
 	if !found || saved.ChangeID != changeID || !c.usableBuild(saved) {
 		return heldBuild{}, gensurla.MakeNotFound(fmt.Errorf("change_id %q has no usable build; start a new build on the views page", changeID))
 	}
+	provenance, hasProvenance, err := c.cards.loadMadeFrom()
+	if err != nil {
+		return heldBuild{}, err
+	}
+	if hasProvenance && buildDropped(provenance, saved) {
+		return heldBuild{}, gensurla.MakeNotFound(fmt.Errorf("The user dropped change %s: stop work on it; make no more edits or commits for it. The user starts builds on the views page.", saved.ChangeID))
+	}
 	return heldBuild{file: saved, inForce: buildInForce(saved, record), storedEvaluator: c.storedEvaluator()}, nil
 }
 
@@ -568,6 +576,13 @@ func (c *ControlPlane) ownedBuilds(owner string) ([]heldBuild, error) {
 	}
 	if !found {
 		return nil, fmt.Errorf("open build names missing change %q", saved.ChangeID)
+	}
+	provenance, hasProvenance, err := c.cards.loadMadeFrom()
+	if err != nil {
+		return nil, err
+	}
+	if hasProvenance && buildDropped(provenance, saved) {
+		return nil, nil
 	}
 	if record.owner != owner || !c.usableBuild(saved) {
 		return nil, nil
@@ -623,32 +638,36 @@ func (c *ControlPlane) readAssignment(
 // accepted for this start's revision, including one accepted exactly at start.
 // A later failed run never erases a pass. Missing run storage proves no pass.
 func (c *ControlPlane) newestPassedBuild(owner string, saved buildFile) (*verifyrun.Run, error) {
-	if c.runsDir == "" {
-		return nil, nil
+	runs, err := c.eligibleBuildRuns(owner, saved)
+	if err != nil || len(runs) == 0 {
+		return nil, err
 	}
-	runs, err := verifyrun.List(c.runsDir, owner, saved.ChangeID)
-	if err != nil {
-		return nil, fmt.Errorf("read passed runs for the open build: %w", err)
-	}
-	for _, run := range runs {
-		if run.Request.Plan.RequestRevision == saved.RequestRevision &&
-			!run.Request.AcceptedAt.Before(saved.StartedAt) &&
-			run.State.Kind == verifyrun.StateCompleted && run.State.Report.Passed {
-			return &run, nil
-		}
-	}
-	return nil, nil
+	return &runs[0], nil
 }
 
 // startedBuild renders current run and branch facts outside the card lock.
 // Branch names identify the numbered build where its commits were verified;
 // later ref changes do not erase a pass or block reads and recovery.
 func (c *ControlPlane) startedBuild(ctx context.Context, owner string, held heldBuild) (*gensurla.StartedBuild, error) {
-	run, err := c.newestPassedBuild(owner, held.file)
+	c.mu.RLock()
+	provenance, found, err := c.cards.loadMadeFrom()
+	c.mu.RUnlock()
 	if err != nil {
 		return nil, err
 	}
-	if run == nil {
+	if found && buildDropped(provenance, held.file) {
+		branches := make([]string, 0, len(provenance.Start.Dropped.BranchTips))
+		for branch := range provenance.Start.Dropped.BranchTips {
+			branches = append(branches, branch)
+		}
+		slices.Sort(branches)
+		return startedBuild(held, gensurla.NewBuildTakingDropped(&gensurla.BuildDropped{KeptBranches: branches})), nil
+	}
+	runs, err := c.eligibleBuildRuns(owner, held.file)
+	if err != nil {
+		return nil, err
+	}
+	if len(runs) == 0 {
 		return startedBuild(held, gensurla.NewBuildTakingBuilding(&gensurla.BuildBuilding{})), nil
 	}
 	work, cancel := context.WithTimeout(ctx, layoutReadTimeout)
@@ -658,6 +677,21 @@ func (c *ControlPlane) startedBuild(ctx context.Context, owner string, held held
 	if err != nil {
 		return nil, err
 	}
+	projectBytes, err := runGitRead(work, repo, "rev-parse", "--verify", "HEAD^{commit}")
+	if err != nil {
+		return nil, err
+	}
+	project := strings.TrimSpace(string(projectBytes))
+	for _, candidate := range runs {
+		merged, err := runTaken(work, repo, project, candidate)
+		if err != nil {
+			return nil, err
+		}
+		if merged {
+			return startedBuild(held, gensurla.NewBuildTakingMerged(&gensurla.BuildMerged{})), nil
+		}
+	}
+	run := runs[0]
 	candidateBranch := testwriter.BuilderRole.Branch(held.file.Number)
 	tests := gensurla.NewBuildPassedTestSourceEvaluator(&gensurla.OperatorEvaluatorTests{})
 	if run.Request.Plan.Tests == verify.TestsWritten {
@@ -666,7 +700,7 @@ func (c *ControlPlane) startedBuild(ctx context.Context, owner string, held held
 			Commit: run.Request.Plan.SuiteCommit, Branch: branch,
 		})
 	}
-	baseInBranch, err := buildCommitInHistory(work, repo, held.file.Base, "HEAD")
+	baseInBranch, err := buildCommitInHistory(work, repo, held.file.Base, project)
 	if err != nil {
 		return nil, err
 	}
