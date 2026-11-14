@@ -72,6 +72,7 @@ expect(liveState(page) === "none", "a fresh server shows " + liveState(page));
 expect(page.text("#surla-live-none").includes("The builder agent starts one from a commit to try prompt wording on it."), "the empty state does not say what starts a live target: " + page.text("#surla-live-none"));
 expect(!page.text("#surla-live-stage").includes("start_live_target"), "a sentence names an operation");
 expect(!page.$("#surla-live-stop"), "Stop is offered with nothing running");
+await until(() => page.$("#surla-model-current"), "the model connection was never read");
 expect(page.text("#surla-model-current").includes("Without stored verification settings, choose a model") && page.text("#surla-model-current").includes("With stored settings, the evaluator may supply its own model"), "the missing-model explanation must distinguish both verification profiles");
 const typed = page.$("#surla-model-name");
 page.type(typed, "typed-but-not-applied");

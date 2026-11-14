@@ -125,15 +125,7 @@ func startPageServer(t *testing.T, svc gensurla.Service) *pageServer {
 		}
 	}))
 	mux.HandleFunc("POST /__test/reply", ps.control(func(r pageReply) { ps.replies[r.Key] = append(ps.replies[r.Key], r) }))
-	mux.HandleFunc("POST /__test/act", ps.control(func(r pageReply) {
-		action, ok := ps.actions[r.Key]
-		switch {
-		case ok:
-			action()
-		case ps.fixtures == nil || !ps.fixtures(r.Key):
-			t.Errorf("no test action %q", r.Key)
-		}
-	}))
+	mux.HandleFunc("POST /__test/act", ps.runAction)
 	mux.Handle("/", ps.intercept(NewHTTPHandler(svc, ps.authenticate)))
 	ps.server = httptest.NewServer(mux)
 	t.Cleanup(func() {
@@ -149,11 +141,22 @@ func startPageServer(t *testing.T, svc gensurla.Service) *pageServer {
 }
 
 // act registers a named server-side change a script runs with
-// control(origin, "act", {key}).
+// control(origin, "act", {key}). Actions run without ps.mu, so one may wait
+// for a request the page has sent; an action that installs a gate uses
+// answerLater.
 func (ps *pageServer) act(name string, action func()) {
 	ps.mu.Lock()
 	defer ps.mu.Unlock()
 	ps.actions[name] = action
+}
+
+// answerLater installs an answer-later gate for key and runs arm under the
+// same lock, so interception cannot see the gate before arm has run.
+func (ps *pageServer) answerLater(key string, arm func()) {
+	ps.mu.Lock()
+	defer ps.mu.Unlock()
+	ps.gates[key] = &pageGate{open: make(chan struct{}), answered: true}
+	arm()
 }
 
 // pageControlPlane returns a control plane whose waiting read answers
@@ -276,6 +279,29 @@ func (ps *pageServer) control(apply func(pageReply)) http.HandlerFunc {
 		ps.mu.Unlock()
 		w.WriteHeader(http.StatusNoContent)
 	}
+}
+
+// runAction runs the named server-side action without holding ps.mu. A
+// request the page sent reaches the owner only after intercept takes ps.mu,
+// so an action that waits for that request under the lock would stall it
+// until the action gave up.
+func (ps *pageServer) runAction(w http.ResponseWriter, r *http.Request) {
+	var reply pageReply
+	if err := json.NewDecoder(r.Body).Decode(&reply); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	ps.mu.Lock()
+	action, ok := ps.actions[reply.Key]
+	fixtures := ps.fixtures
+	ps.mu.Unlock()
+	switch {
+	case ok:
+		action()
+	case fixtures == nil || !fixtures(reply.Key):
+		ps.t.Errorf("no test action %q", reply.Key)
+	}
+	w.WriteHeader(http.StatusNoContent)
 }
 
 // intercept holds or answers a request when a test asked for it, and

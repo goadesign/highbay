@@ -136,10 +136,7 @@ func TestViewsPageAnOlderPositiveListCannotRestoreApproval(t *testing.T) {
 	ps := startPageServer(t, service)
 	selectedInputsActions(t, ps, cp, card.ChangeID)
 	ps.act("hold-old-list", func() {
-		ps.gates["GET /changes/"+card.ChangeID+"/verifications"] = &pageGate{
-			open: make(chan struct{}), answered: true,
-		}
-		service.armed.Store(true)
+		ps.answerLater("GET /changes/"+card.ChangeID+"/verifications", func() { service.armed.Store(true) })
 	})
 	ps.act("await-old-list", func() {
 		select {

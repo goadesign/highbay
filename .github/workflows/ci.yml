@@ -13,7 +13,9 @@ on:
     # run to have one; without it every pull request whose go.sum differs
     # from main's compiles from scratch. Remove team-start here when it has
     # merged into main.
-    branches: [main, team-start]
+    # builder-copy is the integration branch of the builder-copy slices; it
+    # runs for the same reason until it merges into team-start. Remove it then.
+    branches: [main, team-start, builder-copy]
   schedule:
     - cron: '17 7 * * *'
   workflow_dispatch:
@@ -29,6 +31,7 @@ env:
   CI: "true"
   TEMPORAL_CLI_VERSION: 1.7.2
   TEMPORAL_CLI_SHA256: 561ac68bdb6c16c8e8cbbd49f12578218ff1776007c3f3ae0d0196c8c9a73e79
+  TEMPORAL_CLI_LINUX_AMD64_SHA256: e2f548af84e820b7d71f25fc6461a4e6a1ab7cdb6a80fde3c375641b0772375b
   # The root module's short tests take too long for one five-minute job, so
   # they run in two macOS jobs split by test name: "Go (., page tests)" runs
   # the top-level tests this pattern matches (go test -run) and "Go (.)"
@@ -60,9 +63,14 @@ jobs:
           go-version-file: ${{ matrix.module }}/go.mod
           # setup-go names its cache after the runner, the Go version and a
           # hash of these files, and never replaces a saved cache. Hashing this
-          # module's go.sum alone keeps the generated-code job and the other
-          # modules' jobs from saving the cache this job needs.
-          cache-dependency-path: ${{ matrix.module }}/go.sum
+          # module's go.sum and go.mod keeps the generated-code job and the
+          # other modules' jobs from saving the cache this job needs. go.mod
+          # is hashed too because a change to it alone (a requirement that
+          # becomes direct) can change what the tests compile while go.sum
+          # stays the same, and the old cache would then never be replaced.
+          cache-dependency-path: |
+            ${{ matrix.module }}/go.sum
+            ${{ matrix.module }}/go.mod
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         if: matrix.module == '.'
         with:
@@ -108,8 +116,11 @@ jobs:
         with:
           go-version-file: go.mod
           # This job builds and vets the same packages and test binaries as
-          # "Go (.)", so the two share one cache and either may save it.
-          cache-dependency-path: go.sum
+          # "Go (.)", so the two share one cache and either may save it: both
+          # hash the same files in the same order.
+          cache-dependency-path: |
+            go.sum
+            go.mod
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 26.0.0
@@ -150,7 +161,9 @@ jobs:
       - uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
         with:
           go-version-file: go.mod
-          cache-dependency-path: go.sum
+          cache-dependency-path: |
+            go.sum
+            go.mod
       - name: Build and vet
         env:
           BUILD_TAG: ${{ matrix.tag }}
@@ -168,7 +181,9 @@ jobs:
       - uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
         with:
           go-version-file: go.mod
-          cache-dependency-path: go.sum
+          cache-dependency-path: |
+            go.sum
+            go.mod
       - name: Vet and short race tests (including Linux candidate sandbox)
         # Only packages with tests are listed. The others, the generated
         # packages among them, have nothing to run, and compiling them and
@@ -212,6 +227,7 @@ jobs:
           # give this job a cache name different from the root test job's.
           cache-dependency-path: |
             go.sum
+            go.mod
             ui/checkpoint/package-lock.json
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
@@ -244,7 +260,7 @@ jobs:
   full:
     name: Full / ${{ matrix.suite }}
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
-    runs-on: macos-latest
+    runs-on: ${{ matrix.os || 'macos-latest' }}
     # Package alarms exclude compilation and setup; job limits remain backstops.
     timeout-minutes: ${{ matrix.job_timeout }}
     strategy:
@@ -252,6 +268,12 @@ jobs:
       matrix:
         include:
           - suite: unit-root
+            module: .
+            args: ./...
+            test_timeout: 20m
+            job_timeout: 30
+          - suite: unit-root-linux
+            os: ubuntu-latest
             module: .
             args: ./...
             test_timeout: 20m
@@ -272,6 +294,12 @@ jobs:
             test_timeout: 20m
             job_timeout: 30
           - suite: verifier
+            module: .
+            args: -tags=e2e ./internal/verify
+            test_timeout: 20m
+            job_timeout: 25
+          - suite: verifier-linux
+            os: ubuntu-latest
             module: .
             args: -tags=e2e ./internal/verify
             test_timeout: 20m
@@ -310,9 +338,11 @@ jobs:
       - uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
         with:
           go-version-file: ${{ matrix.module }}/go.mod
-          cache-dependency-path: ${{ matrix.module }}/go.sum
+          cache-dependency-path: |
+            ${{ matrix.module }}/go.sum
+            ${{ matrix.module }}/go.mod
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
-        if: matrix.suite == 'unit-root'
+        if: matrix.suite == 'unit-root' || matrix.suite == 'unit-root-linux'
         with:
           node-version: 26.0.0
           cache: npm
@@ -320,17 +350,23 @@ jobs:
       - name: Install the views page's test packages
         # Go tests never install these themselves and fail under CI without
         # them; install once before every test binary starts.
-        if: matrix.suite == 'unit-root'
+        if: matrix.suite == 'unit-root' || matrix.suite == 'unit-root-linux'
         run: |
           npm ci --prefix ui/checkpoint --no-audit --no-fund </dev/null
       - name: Install the Temporal CLI
         # The generation suite's Orders live-copy journey starts Temporal too.
-        if: matrix.suite == 'verifier' || matrix.suite == 'generation' || matrix.suite == 'orders-acceptance'
+        if: matrix.suite == 'verifier' || matrix.suite == 'verifier-linux' || matrix.suite == 'generation' || matrix.suite == 'orders-acceptance'
         run: |
-          archive="temporal_cli_${TEMPORAL_CLI_VERSION}_darwin_arm64.tar.gz"
+          if [ "${RUNNER_OS}" = "Linux" ]; then
+            archive="temporal_cli_${TEMPORAL_CLI_VERSION}_linux_amd64.tar.gz"
+            sha256="${TEMPORAL_CLI_LINUX_AMD64_SHA256}"
+          else
+            archive="temporal_cli_${TEMPORAL_CLI_VERSION}_darwin_arm64.tar.gz"
+            sha256="${TEMPORAL_CLI_SHA256}"
+          fi
           curl -fsSL -o "$RUNNER_TEMP/$archive" \
             "https://github.com/temporalio/cli/releases/download/v${TEMPORAL_CLI_VERSION}/$archive"
-          echo "${TEMPORAL_CLI_SHA256}  $RUNNER_TEMP/$archive" | shasum -a 256 -c -
+          echo "${sha256}  $RUNNER_TEMP/$archive" | shasum -a 256 -c -
           mkdir -p "$RUNNER_TEMP/bin"
           tar -xzf "$RUNNER_TEMP/$archive" -C "$RUNNER_TEMP/bin" temporal
           echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"

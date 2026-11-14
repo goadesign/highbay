@@ -37,10 +37,9 @@ func TestViewsPageBuildIgnoresAReadCapturedDuringPendingReplacement(t *testing.T
 	service := &pagePendingBuildRead{ControlPlane: cp, captured: make(chan *gensurla.ChangeBuild, 1)}
 	ps := startPageServer(t, service)
 	ps.act("hold-old-build-answer", func() {
-		// Test controls hold ps.mu, so interception cannot see the gate until
-		// the observer is also armed. The owner's next answer will be held.
-		ps.gates["GET /changes/chg/build"] = &pageGate{open: make(chan struct{}), answered: true}
-		service.armed.Store(true)
+		// Interception cannot see the gate until the observer is also armed.
+		// The owner's next answer will be held.
+		ps.answerLater("GET /changes/chg/build", func() { service.armed.Store(true) })
 	})
 	ps.act("new-attention", func() {
 		team.mu.Lock()
