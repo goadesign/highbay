@@ -173,3 +173,40 @@ await until(() => page.text("#surla-build-action-error").includes("refresh_story
 page.close();
 `)
 }
+
+// TestViewsPageUnfinishedRefusalRefreshesBeforeQuestion covers a start saved
+// after the page's stale absent-build observation, without automatic consent.
+func TestViewsPageUnfinishedRefusalRefreshesBeforeQuestion(t *testing.T) {
+	cp := newBuildControlPlane(t, Options{Team: &TeamBinding{
+		Owner: pageOwner, Service: &teamServiceFixture{snapshot: pageTeamSnapshot("working")},
+	}})
+	cp.changesWait, cp.changesPoll = 400*time.Millisecond, 20*time.Millisecond
+	card := buildableChange(t, cp, "chg-unfinished")
+	started, err := cp.StartBuild(asCaller(pageOwner, CallerUser), &gensurla.StartBuildPayload{
+		ChangeID: card.ChangeID, RequestRevision: card.RequestRevision,
+	})
+	require.NoError(t, err)
+	ps := startPageServer(t, cp)
+	runPageScript(t, ps, map[string]any{"started": started.Build.StartedAt}, `
+const path = "/changes/chg-unfinished/build";
+await control(origin, "reply", { key: "GET " + path, status: 200,
+  body: { change_id: "chg-unfinished", build: { state: "not_started" } } });
+const page = await openPage(origin, { link: input.link });
+await until(() => page.$("#surla-build-start") && !page.$("#surla-build-start").disabled, "stale absent observation did not offer first Build");
+page.$("#surla-build-start").click();
+await until(() => page.sent("POST", path)[0]?.status === 409 && page.$("#surla-build-again") && !page.$("#surla-build-again").disabled, "unfinished_build_open did not recover the saved build");
+expect(JSON.parse(page.sent("POST", path)[0].answer).name === "unfinished_build_open", "the fixture did not exercise the typed unfinished refusal");
+expect(!page.$("#surla-build-confirm") && !("replaces" in page.sent("POST", path)[0].body), "refusal invented replacement consent");
+const reads = page.sent("GET", path).length;
+await control(origin, "hold", { key: "GET " + path });
+page.$("#surla-build-again").click();
+await until(() => page.sent("GET", path).length > reads && page.$("#surla-build-loading"), "rebuild did not read its owner before asking");
+expect(!page.$("#surla-build-confirm") && page.sent("POST", path).length === 1, "rebuild asked or wrote before the fresh owner answer");
+await control(origin, "release", { key: "GET " + path });
+await until(() => page.$("#surla-build-confirm") && !page.$("#surla-build-confirm").disabled, "fresh owner answer did not ask for explicit consent");
+page.$("#surla-build-confirm").click();
+await until(() => page.sent("POST", path)[1]?.status === 200, "fresh confirmed rebuild did not start");
+expect(page.sent("POST", path)[1].body.replaces?.started_at === input.started && page.sent("POST", path)[1].body.replaces.change_id === "chg-unfinished", "confirmed replacement did not use the exact owner identity");
+page.close();
+`)
+}

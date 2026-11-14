@@ -471,7 +471,15 @@ export function BuildMergeInstructions({ taking, candidateCommit, testsCommit }:
 export function runBelongsToBuild(changeId: string, build: StartedBuild, run: VerificationStatusResult): boolean {
   return run.change_id === changeId && run.request_revision === build.request_revision &&
     run.state.type === "completed" && run.state.value.report.passed &&
-    Date.parse(run.accepted_at) >= Date.parse(build.started_at);
+    buildTimestampNanos(run.accepted_at) >= buildTimestampNanos(build.started_at);
+}
+
+// buildTimestampNanos preserves the owner's nanosecond boundary. Date.parse
+// supplies the epoch milliseconds; the validated RFC3339 fraction supplies the
+// remaining six digits that JavaScript's Date would otherwise discard.
+function buildTimestampNanos(at: string): bigint {
+  const fraction = at.match(/\.(\d{1,9})/)?.[1] ?? "";
+  return BigInt(Date.parse(at)) * 1_000_000n + BigInt(fraction.padEnd(9, "0").slice(3));
 }
 
 // SavedResultCommits keeps historical verification and approval evidence bound

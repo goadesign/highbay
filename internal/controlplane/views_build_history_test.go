@@ -33,7 +33,7 @@ func (s *pageTakingHistory) GetBuild(
 // older pass and approval after a newer pass, a prior start reusing identical
 // commits, and an initial approval page whose automatic history read fails.
 func TestViewsPageHistoricalTakingUsesTheEligibleResultsOwnCommits(t *testing.T) {
-	for _, mode := range []string{"eligible", "prior_start", "history_failure"} {
+	for _, mode := range []string{"eligible", "prior_start", "before_start", "at_start", "after_start", "history_failure"} {
 		t.Run(mode, func(t *testing.T) {
 			reportDir := t.TempDir()
 			cp := newBuildControlPlane(t, Options{
@@ -63,6 +63,7 @@ func TestViewsPageHistoricalTakingUsesTheEligibleResultsOwnCommits(t *testing.T)
 			require.NoError(t, err)
 			at, err := time.Parse(time.RFC3339Nano, started.Build.StartedAt)
 			require.NoError(t, err)
+			at = at.Truncate(time.Second).Add(123456789 * time.Nanosecond)
 			old := passedRun(card, strings.Repeat("a", 32), candidate, report.Digest)
 			old.AcceptedAt = at.Add(time.Second).Format(time.RFC3339Nano)
 			old.InputsCurrent = true
@@ -80,7 +81,16 @@ func TestViewsPageHistoricalTakingUsesTheEligibleResultsOwnCommits(t *testing.T)
 				newest.CandidateCommit, newest.SuiteCommit = candidate, tests
 				newest.TestSource = old.TestSource
 			}
+			switch mode {
+			case "before_start":
+				old.AcceptedAt = at.Add(-time.Nanosecond).Format(time.RFC3339Nano)
+			case "at_start":
+				old.AcceptedAt = at.Format(time.RFC3339Nano)
+			case "after_start":
+				old.AcceptedAt = at.Add(time.Nanosecond).Format(time.RFC3339Nano)
+			}
 			progress := *started.Build
+			progress.StartedAt = at.Format(time.RFC3339Nano)
 			progress.Taking = gensurla.NewBuildTakingPassed(&gensurla.BuildPassed{
 				RunID: newest.RunID, CandidateCommit: newest.CandidateCommit, CandidateBranch: "surla/build-7",
 				Tests: gensurla.NewBuildPassedTestSourceWrittenTests(&gensurla.BuildPassedTests{
@@ -94,7 +104,8 @@ func TestViewsPageHistoricalTakingUsesTheEligibleResultsOwnCommits(t *testing.T)
 			svc.set(old, newest)
 			svc.list(card.ChangeID, newest.RunID, old.RunID)
 			ps := startPageServer(t, svc)
-			runPageScript(t, ps, map[string]any{"mode": mode, "old": old.RunID}, `
+			eligible := mode == "eligible" || mode == "at_start" || mode == "after_start"
+			runPageScript(t, ps, map[string]any{"mode": mode, "old": old.RunID, "eligible": eligible}, `
 const history = "/changes/chg-history/verifications";
 if (input.mode === "history_failure") await control(origin, "reply", { key: "GET " + history, status: 503,
   body: { name: "unavailable", id: "history-read", message: "Saved verification history unavailable.", fault: false, temporary: true, timeout: false } });
@@ -109,7 +120,7 @@ if (input.mode !== "history_failure") {
 await until(() => page.sent("GET", history)[0].status !== undefined && !page.text("#surla-cp5-approval").includes("Reading saved verification runs"), "history read did not settle");
 const ownCommands = (region) => Array.from(region.querySelectorAll(".surla-build-merge li > code:first-child"), (node) => node.textContent);
 const expected = ["git merge " + "1".repeat(40), "git merge " + "2".repeat(40)];
-if (input.mode === "eligible") {
+if (input.eligible) {
   expect(JSON.stringify(ownCommands(page.$("#surla-cp5-approval"))) === JSON.stringify(expected), "recorded approval used the newest pass instead of its own C then T");
   expect(page.text("#surla-cp5-approval").includes("commit where this build started"), "eligible approval lost the rewrite warning");
 } else {
@@ -126,8 +137,8 @@ if (input.mode !== "history_failure") {
   page.$('button[data-run-id="' + input.old + '"]').click();
   await until(() => page.$("#surla-result-view").dataset.runId === input.old && page.text("#surla-cp4-inputs").includes("This result matches"), "old pass did not open");
   const commands = ownCommands(page.$("#surla-cp4-details"));
-  expect((commands.length > 0) === (input.mode === "eligible"), "old pass membership did not follow its saved start");
-  if (input.mode === "eligible") expect(JSON.stringify(commands) === JSON.stringify(expected), "older pass did not keep its own C then T");
+  expect((commands.length > 0) === input.eligible, "old pass membership did not follow its saved start");
+  if (input.eligible) expect(JSON.stringify(commands) === JSON.stringify(expected), "older pass did not keep its own C then T");
 }
 page.close();
 `)
