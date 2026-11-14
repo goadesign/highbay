@@ -15,6 +15,9 @@ import (
 
 // designHistory holds bounded immutable Git reads prepared outside state locks.
 type designHistory struct {
+	// start is a complete immutable original-folder snapshot; missing paths
+	// were absent at the start, including paths first added in the draft.
+	start madeFromStart
 	// design is the head's design, even when head belongs to Start's history.
 	design map[string]string
 	// versions contains the canonical snapshots in head's history after Start.
@@ -50,7 +53,7 @@ func readDesignHistory(
 ) (designHistory, error) {
 	ctx, cancel := context.WithTimeout(ctx, layoutReadTimeout)
 	defer cancel()
-	h := designHistory{versions: map[string]map[string]string{}, gained: map[string]bool{}}
+	h := designHistory{start: saved.Start, versions: map[string]map[string]string{}, gained: map[string]bool{}}
 	if head == "" {
 		return h, nil
 	}
@@ -166,6 +169,9 @@ func committedHistoryDesign(ctx context.Context, dir, repo, prefix, commit strin
 // current compares entry order, including a committed revert to an older version.
 func (h designHistory) current(file, version string, entries []madeFromVersion) bool {
 	entered, found := enteredVersion(entries, version)
+	if !found && version == absentDesignVersion && h.start.FolderVersions[file] == "" {
+		entered, found = h.start.Write, true
+	}
 	if !found {
 		return false
 	}
@@ -185,7 +191,10 @@ func (h designHistory) base(file string, list madeFromRecord) string {
 	if base == "" {
 		base = absentDesignVersion
 	}
-	entered, _ := enteredVersion(list.Entries[file], base)
+	entered, listed := enteredVersion(list.Entries[file], base)
+	if !listed && base == absentDesignVersion {
+		entered = list.Start.Write
+	}
 	found := false
 	for _, design := range h.versions {
 		version := designFileVersion(design, file)

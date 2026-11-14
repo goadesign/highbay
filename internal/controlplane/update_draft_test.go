@@ -3,8 +3,10 @@ package controlplane
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -26,7 +28,9 @@ type draftUpdateFixture struct {
 	dir       string
 	branch    string
 	candidate string
-	saves     int
+	// candidateOutside is the user's live text already incorporated in R.
+	candidateOutside string
+	saves            int
 }
 
 // TestUpdateDraftRule5Recovery replays all fourteen corrected-rule cases with
@@ -379,6 +383,7 @@ func (f *draftUpdateFixture) save() {
 	// A real candidate side branch makes C5's ancestry observable. Restore
 	// the user's branch and uncommitted folder text after authoring it.
 	live := f.projectText()
+	f.candidateOutside = live
 	branch := fmt.Sprintf("fixture-candidate-%d", f.saves)
 	gitForLayoutTest(f.t, f.dir, "checkout", "-qb", branch)
 	f.project(files[updateDesignFile])
@@ -392,7 +397,25 @@ func (f *draftUpdateFixture) save() {
 func (f *draftUpdateFixture) merge() {
 	f.t.Helper()
 	f.commit()
-	gitForLayoutTest(f.t, f.dir, "-c", "user.name=Test", "-c", "user.email=test@example.com", "merge", "--no-edit", f.candidate)
+	cmd := exec.Command("git", "-c", "user.name=Test", "-c", "user.email=test@example.com", "-c", "core.hooksPath=/dev/null", "merge", "--no-edit", f.candidate)
+	cmd.Dir = f.dir
+	cmd.Env = append(cleanGitEnv(), "GIT_CONFIG_GLOBAL="+os.DevNull)
+	output, err := cmd.CombinedOutput()
+	if err == nil {
+		return
+	}
+	var exit *exec.ExitError
+	require.True(f.t, errors.As(err, &exit), string(output))
+	require.Equal(f.t, 1, exit.ExitCode(), string(output))
+	// The model's main journey says the user took R. Git can require a
+	// resolution on these repeated Goa lines even though R already holds
+	// the complete earlier outside edit. Resolve to R only in that case;
+	// criss-crosses with a later outside edit must merge without this step.
+	current := gitForLayoutTest(f.t, f.dir, "show", "HEAD:"+updateDesignFile)
+	require.Equal(f.t, canonicalUpdateText(f.t, f.candidateOutside), canonicalUpdateText(f.t, current))
+	resolved := gitForLayoutTest(f.t, f.dir, "show", f.candidate+":"+updateDesignFile)
+	f.project(resolved)
+	f.commit()
 }
 
 // stop writes actual owner-prepared pending state and optionally its atomic

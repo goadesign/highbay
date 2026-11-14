@@ -515,8 +515,8 @@ func (c *ControlPlane) buildableCard(principal Principal, changeID, revision str
 	if agreed != revision {
 		return storedChangeCard{}, gensurla.MakeConflict(fmt.Errorf("request_revision %q is not the agreed revision of %q, %q; a proposed revision is built only after the user adopts it", revision, changeID, agreed))
 	}
-	if record.architecture == nil || record.goMod == "" || record.madeFrom == nil {
-		return storedChangeCard{}, gensurla.MakeUnprocessable(errors.New("The agreed revision has no evaluated design snapshot. Ask the guide to refresh_story and revise_change with its op_id, adopt that revision, then build again."))
+	if record.architecture == nil || record.goMod == "" || record.madeFrom == nil || record.designSource == "" {
+		return storedChangeCard{}, gensurla.MakeConflict(errors.New("The agreed revision records no design, so there is nothing to build from. Ask the guide to propose a revision from its draft, adopt it, then build."))
 	}
 	return record, nil
 }
