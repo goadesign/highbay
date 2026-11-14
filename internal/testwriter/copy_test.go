@@ -113,6 +113,17 @@ func TestOpenWorkingCopyRefuses(t *testing.T) {
 			wantErr: ErrFolderInUse,
 		},
 		{
+			name: "a working copy switched off the reserved branch",
+			project: func(t *testing.T) (string, []string) {
+				repo, _ := newProject(t, map[string]string{"README.md": "shop\n"})
+				wc, err := OpenWorkingCopy(t.Context(), repo)
+				require.NoError(t, err)
+				runGit(t, wc.Dir(), "switch", "--quiet", "-c", "mine")
+				return repo, []string{"move it out of the project", "does not have branch " + Branch + " checked out"}
+			},
+			wantErr: ErrFolderInUse,
+		},
+		{
 			name: "the reserved branch checked out in the project folder",
 			project: func(t *testing.T) (string, []string) {
 				repo, _ := newProject(t, map[string]string{"README.md": "shop\n"})

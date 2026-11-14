@@ -1,6 +1,7 @@
 package testwriter
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
@@ -259,6 +260,40 @@ func TestJoinRestoresAndCleansGeneratedPathsInTestsCopy(t *testing.T) {
 		designeval.StoryTestsPath)
 	assert.NotContains(t, runGit(t, repo, "ls-tree", "-r", "--name-only", "surla/tests-1"),
 		"eval/gen/evals/extra.go")
+
+	// A symbolic link at eval, eval/design, or eval/gen pointing to a folder
+	// outside the copy must never be followed to delete files outside the copy.
+	for idx, linkRel := range []string{"eval", "eval/design", "eval/gen"} {
+		outside := t.TempDir()
+		writeFiles(t, outside, map[string]string{
+			"gen/precious.txt":      "user's file\n",
+			"AGENTS_QUICKSTART.md":  "user's notes\n",
+			"design/story_tests.go": "user's code\n",
+			"story_tests.go":        "user's design code\n",
+			"precious.txt":          "user's gen file\n",
+		})
+		linkRepo, _ := newProject(t, map[string]string{"README.md": "shop\n"})
+		linkBase := runGit(t, linkRepo, "rev-parse", "HEAD")
+		linkCopy, err := MakeCopy(t.Context(), linkRepo, TestsRole, TestsRole.Branch(1), linkBase)
+		require.NoError(t, err)
+		target := filepath.Join(linkCopy.Dir(), filepath.FromSlash(linkRel))
+		require.NoError(t, os.MkdirAll(filepath.Dir(target), 0o755))
+		require.NoError(t, os.Symlink(outside, target))
+
+		outcome, _, err := linkCopy.Join(t.Context(), TestsRole, 2+idx, linkBase, "exports")
+		require.NoError(t, err)
+		assert.Equal(t, Joined, outcome)
+		assert.FileExists(t, filepath.Join(outside, "gen", "precious.txt"),
+			"Join must not delete outside files through link %s", linkRel)
+		assert.FileExists(t, filepath.Join(outside, "AGENTS_QUICKSTART.md"),
+			"Join must not delete outside files through link %s", linkRel)
+		assert.FileExists(t, filepath.Join(outside, "design", "story_tests.go"),
+			"Join must not delete outside files through link %s", linkRel)
+		assert.FileExists(t, filepath.Join(outside, "story_tests.go"),
+			"Join must not delete outside files through link %s", linkRel)
+		assert.FileExists(t, filepath.Join(outside, "precious.txt"),
+			"Join must not delete outside files through link %s", linkRel)
+	}
 }
 
 // TestJoinRecoversFromInterruptedSteps (J8 and review note 5) verifies that:
@@ -331,6 +366,89 @@ func TestJoinRecoversFromInterruptedSteps(t *testing.T) {
 		assert.Equal(t, c1, runGit(t, repo, "rev-parse", "surla/build-1"),
 			"no misleading leftover commit reverts surla/build-1 to base's tree")
 	})
+
+	t.Run("stop_inside_git_switch_c_tests_copy_with_differing_generated_files", func(t *testing.T) {
+		t.Parallel()
+		repo, _ := newProject(t, map[string]string{
+			"eval/gen/evals/suite.go":   "package evals // v1\n",
+			"eval/acceptance/a_test.go": "package acceptance // v1\n",
+		})
+		b1 := runGit(t, repo, "rev-parse", "HEAD")
+		tw, err := MakeCopy(t.Context(), repo, TestsRole, TestsRole.Branch(1), b1)
+		require.NoError(t, err)
+		writeFiles(t, tw.Dir(), map[string]string{"eval/acceptance/a_test.go": "package acceptance // T1\n"})
+		runGit(t, tw.Dir(), "commit", "--quiet", "-am", "T1")
+		t1 := runGit(t, tw.Dir(), "rev-parse", "HEAD")
+
+		// main moves to B2 with a regenerated eval/gen and a new service file.
+		writeFiles(t, repo, map[string]string{
+			"eval/gen/evals/suite.go": "package evals // v2\n",
+			"svc/b.go":                "package svc // b2\n",
+		})
+		runGit(t, repo, "add", "-A")
+		runGit(t, repo, "commit", "--quiet", "-m", "B2")
+		b2 := runGit(t, repo, "rev-parse", "HEAD")
+
+		// Simulate a stop inside git switch -c after unpacking B2.
+		runGit(t, tw.Dir(), "read-tree", "-u", "--reset", b2)
+		outcome, facts, err := tw.Join(t.Context(), TestsRole, 2, b2, "exports")
+		require.NoError(t, err)
+		assert.Equal(t, Joined, outcome)
+		assert.Equal(t, "surla/tests-2", facts.Branch)
+		assert.Equal(t, t1, runGit(t, repo, "rev-parse", "surla/tests-1"),
+			"no misleading leftover commit on surla/tests-1; got:\n%s",
+			runGit(t, repo, "log", "--stat", "--format=%s", t1+"..surla/tests-1"))
+	})
+
+	t.Run("cancelled_and_partial_switch_c", func(t *testing.T) {
+		t.Parallel()
+		repo, _ := newProject(t, map[string]string{"svc/a.go": "package svc // a\n"})
+		b1 := runGit(t, repo, "rev-parse", "HEAD")
+		wc, err := MakeCopy(t.Context(), repo, BuilderRole, BuilderRole.Branch(1), b1)
+		require.NoError(t, err)
+		writeFiles(t, wc.Dir(), map[string]string{"svc/c1.go": "package svc // c1\n"})
+		runGit(t, wc.Dir(), "add", "-A")
+		runGit(t, wc.Dir(), "commit", "--quiet", "-m", "C1")
+		c1 := runGit(t, wc.Dir(), "rev-parse", "HEAD")
+
+		// B2 adds 200 files on main.
+		b2Files := map[string]string{"svc/b.go": "package svc // b2\n"}
+		for i := range 200 {
+			b2Files[fmt.Sprintf("big/f%03d.txt", i)] = fmt.Sprintf("content %d\n", i)
+		}
+		writeFiles(t, repo, b2Files)
+		runGit(t, repo, "add", "-A")
+		runGit(t, repo, "commit", "--quiet", "-m", "B2")
+		b2 := runGit(t, repo, "rev-parse", "HEAD")
+
+		// 1. Simulate a partial unpack of B2 (only 15 of B2's 200 files written
+		// to the working tree and index.lock left behind while HEAD and index
+		// are still at C1 on surla/build-1).
+		for i := range 15 {
+			writeFiles(t, wc.Dir(), map[string]string{
+				fmt.Sprintf("big/f%03d.txt", i): fmt.Sprintf("content %d\n", i),
+			})
+		}
+		writeFiles(t, wc.gitDir, map[string]string{"index.lock": ""})
+
+		// Also cancel the caller context right as beforeSwitch returns to
+		// verify the copy-changing commands finish under writeCtx without
+		// leaving index.lock or making a partial commit on surla/build-1.
+		ctx, cancel := context.WithCancel(t.Context())
+		outcome, facts, err := wc.join(ctx, BuilderRole, 2, b2, "exports", joinHooks{
+			beforeSwitch: func() error {
+				cancel()
+				return nil
+			},
+		})
+		require.NoError(t, err)
+		assert.Equal(t, Joined, outcome)
+		assert.Equal(t, "surla/build-2", facts.Branch)
+		assert.NoFileExists(t, filepath.Join(wc.gitDir, "index.lock"))
+		assert.Equal(t, c1, runGit(t, repo, "rev-parse", "surla/build-1"),
+			"partial B2 unpack must not be committed as leftovers on surla/build-1")
+		assert.Equal(t, b2, runGit(t, wc.Dir(), "rev-parse", "HEAD"))
+	})
 }
 
 // TestJoinRefusesAndHandlesConcurrentEdit (J6, J9, J11, R1) verifies:
@@ -385,9 +503,21 @@ func TestJoinRefusesAndHandlesConcurrentEdit(t *testing.T) {
 	assert.Equal(t, Joined, outcome)
 	assert.Equal(t, "surla/build-3", facts.Branch)
 
-	// J9 dirty side branch and dirty detached HEAD are refused for build 4.
-	runGit(t, wc.Dir(), "switch", "--quiet", "side")
+	// J9 dirty side branch, dirty later build branch (k > n), and dirty
+	// detached HEAD are refused.
+	runGit(t, wc.Dir(), "switch", "--quiet", "surla/build-3")
 	writeFiles(t, wc.Dir(), map[string]string{"svc/dirty.go": "package svc\n"})
+	build3Tip := runGit(t, repo, "rev-parse", "surla/build-3")
+	runGit(t, repo, "branch", "-D", "surla/build-2")
+	outcome, facts, err = wc.Join(t.Context(), BuilderRole, 2, b2, "exports")
+	require.NoError(t, err)
+	assert.Equal(t, Refused, outcome, "uncommitted work on a later build branch (k=3 > n=2) must be refused")
+	assert.Equal(t, "surla/build-3", facts.Branch)
+	assert.Equal(t, []string{"'svc/dirty.go'"}, facts.Uncommitted)
+	assert.Equal(t, build3Tip, runGit(t, repo, "rev-parse", "surla/build-3"),
+		"later build branch must not receive a leftover commit for an earlier build")
+
+	runGit(t, wc.Dir(), "switch", "--quiet", "side")
 	outcome, facts, err = wc.Join(t.Context(), BuilderRole, 4, b2, "billing")
 	require.NoError(t, err)
 	assert.Equal(t, Refused, outcome)
@@ -442,11 +572,12 @@ func TestJoinRefusesAndHandlesConcurrentEdit(t *testing.T) {
 		runGit(t, repo, "show", "surla/build-3:svc/b.go"))
 }
 
-// TestGitIgnoresRepositoryGrafts verifies that gitEnv sets
-// GIT_GRAFT_FILE=/dev/null (dropping any inherited GIT_GRAFT_FILE) so an
-// agent-written info/grafts file in the project's repository cannot hide a
-// merge of another build's commit or make another build's commit look like an
-// ancestor of the build's base.
+// TestGitIgnoresRepositoryGrafts verifies that both readGit and gitEnv set
+// GIT_GRAFT_FILE=/dev/null and GIT_TERMINAL_PROMPT=0 (dropping any inherited
+// values) so an agent-written info/grafts file or inherited environment
+// variable cannot rewrite commit ancestry in CheckBuildCommit, Refresh,
+// copyBase, or Join, and terminal prompts stay disabled in working-copy git
+// commands.
 func TestGitIgnoresRepositoryGrafts(t *testing.T) {
 	repo, _ := newProject(t, map[string]string{"svc/a.go": "package svc\n"})
 	b0 := runGit(t, repo, "rev-parse", "HEAD")
@@ -470,14 +601,49 @@ func TestGitIgnoresRepositoryGrafts(t *testing.T) {
 	runGit(t, wc1.Dir(), "merge", "--quiet", "--no-ff", "-m", "merge C1", c1)
 	x := runGit(t, wc1.Dir(), "rev-parse", "HEAD")
 
-	// Write info/grafts both claiming X's only parent is C2 (dropping C1) and
-	// claiming C1 is an ancestor of B0, and point GIT_GRAFT_FILE in the
-	// process environment at that grafts file. Either graft would make rule 13
-	// pass if git read grafts.
-	graftsPath := runGit(t, repo, "rev-parse", "--path-format=absolute", "--git-path", "info/grafts")
-	require.NoError(t, os.WriteFile(graftsPath, []byte(x+" "+c2+"\n"+b0+" "+c1+"\n"), 0o644))
-	t.Setenv("GIT_GRAFT_FILE", graftsPath)
+	// Also open the legacy test writer working copy on surla/tests and commit
+	// unmerged T1 on it so Refresh and copyBase exercise gitEnv's merge-base
+	// without going through readGit.
+	tw, err := OpenWorkingCopy(t.Context(), repo)
+	require.NoError(t, err)
+	writeFiles(t, tw.Dir(), map[string]string{"eval/a_test.go": "package eval\n"})
+	runGit(t, tw.Dir(), "add", "-A")
+	runGit(t, tw.Dir(), "commit", "--quiet", "-m", "T1")
+	t1 := runGit(t, tw.Dir(), "rev-parse", "HEAD")
 
+	// Write info/grafts claiming X's only parent is C2 (dropping C1) and
+	// claiming C1 and T1 are ancestors of B0, and point GIT_GRAFT_FILE and
+	// GIT_TERMINAL_PROMPT in the process environment at non-default values.
+	graftsPath := runGit(t, repo, "rev-parse", "--path-format=absolute", "--git-path", "info/grafts")
+	require.NoError(t, os.WriteFile(graftsPath, []byte(x+" "+c2+"\n"+b0+" "+c1+" "+t1+"\n"), 0o644))
+	t.Setenv("GIT_GRAFT_FILE", graftsPath)
+	t.Setenv("GIT_TERMINAL_PROMPT", "1")
+
+	// 1. Refresh uses gitEnv (not readGit): if gitEnv did not set
+	// GIT_GRAFT_FILE=/dev/null, merge-base --is-ancestor t1 b0 would succeed
+	// via the graft and Refresh would report RefreshAtProjectCommit instead of
+	// RefreshNotContained.
+	refreshed, err := tw.Refresh(t.Context())
+	require.NoError(t, err)
+	assert.Equal(t, RefreshResult{State: RefreshNotContained, Commit: t1}, refreshed,
+		"Refresh must ignore info/grafts and inherited GIT_GRAFT_FILE via gitEnv")
+
+	// 2. Configure a required git clean filter in the repository that succeeds
+	// only when git runs with GIT_TERMINAL_PROMPT=0 and
+	// GIT_GRAFT_FILE=/dev/null, then run Join (which stages leftovers via
+	// gitEnv, not readGit).
+	runGit(t, repo, "config", "filter.envcheck.clean",
+		`test "$GIT_TERMINAL_PROMPT" = 0 && test "$GIT_GRAFT_FILE" = /dev/null && cat`)
+	runGit(t, repo, "config", "filter.envcheck.required", "true")
+	writeFiles(t, wc1.Dir(), map[string]string{
+		".gitattributes": "*.go filter=envcheck\n",
+		"svc/env.go":     "package svc // staged through filter\n",
+	})
+	outcome, _, err = wc1.Join(t.Context(), BuilderRole, 3, b0, "billing")
+	require.NoError(t, err, "Join's gitEnv must pass GIT_TERMINAL_PROMPT=0 and GIT_GRAFT_FILE=/dev/null")
+	assert.Equal(t, Joined, outcome)
+
+	// 3. CheckBuildCommit (readGit) also ignores info/grafts and GIT_GRAFT_FILE.
 	check, err := CheckBuildCommit(
 		t.Context(),
 		repo,

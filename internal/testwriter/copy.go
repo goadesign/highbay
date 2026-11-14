@@ -11,9 +11,9 @@
 // result on the copy's branch, which the user merges.
 //
 // Nothing here trusts the copy's author. Its files are compiled and run only
-// in the verify/candidate sandbox: where the sandbox is unavailable, Prepare
-// and Check fail with candidate.ErrIsolationUnavailable before any of the
-// author's code runs. No file inside the working copy can make git run a
+// in the verify/candidate sandbox, which exists only on macOS: elsewhere
+// Prepare and Check fail with candidate.ErrIsolationUnavailable before any of
+// the author's code runs. No file inside the working copy can make git run a
 // program: git is always pointed at the copy's repository through the folder
 // the project's repository keeps for it, never through the copy's own .git,
 // and it runs with hooks and the file system monitor disabled. A program the
@@ -247,10 +247,25 @@ func MakeCopy(ctx context.Context, projectDir string, role Role, branch, base st
 }
 
 // OpenWorkingCopy returns the test writer's working copy of the project in
-// projectDir, creating it on Branch at HEAD when missing. It stays as a
-// wrapper for existing callers until slice W1 moves them to OpenCopy and
-// MakeCopy.
+// projectDir, creating it on Branch at HEAD when missing, and refusing an
+// existing copy that does not have Branch checked out with ErrFolderInUse. It
+// stays as a wrapper for existing callers until slice W1 moves them to
+// OpenCopy and MakeCopy.
 func OpenWorkingCopy(ctx context.Context, projectDir string) (WorkingCopy, error) {
+	wc, ok, err := OpenCopy(ctx, projectDir, TestsRole)
+	if err != nil {
+		return WorkingCopy{}, err
+	}
+	if ok {
+		head, err := wc.git(ctx, wc.dir, nil, "symbolic-ref", "--quiet", "HEAD")
+		if err != nil || head != "refs/heads/"+Branch {
+			return WorkingCopy{}, folderInUse(TestsRole, fmt.Sprintf("%s does not have branch %s checked out", wc.dir, Branch))
+		}
+		if err := excludeFolders(ctx, filepath.Dir(wc.dir)); err != nil {
+			return WorkingCopy{}, err
+		}
+		return wc, nil
+	}
 	return MakeCopy(ctx, projectDir, TestsRole, Branch, "HEAD")
 }
 

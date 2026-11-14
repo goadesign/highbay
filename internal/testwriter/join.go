@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/goadesign/surla/internal/designeval"
 	"github.com/goadesign/surla/internal/shquote"
@@ -61,12 +62,19 @@ type (
 		// branch.
 		beforeSwitch func() error
 	}
+
+	// treeEntry is the destination mode and object ID of one path in git
+	// diff-tree output.
+	treeEntry struct {
+		mode string
+		oid  string
+	}
 )
 
 const (
 	// AlreadyJoined means the build's branch for this role already exists and
 	// the copy is on it with no Git operation in progress.
-	AlreadyJoined JoinOutcome = iota
+	AlreadyJoined JoinOutcome = iota + 1
 	// Joined means the build's branch did not exist and Join created and
 	// switched the copy onto it at the build's base.
 	Joined
@@ -78,6 +86,16 @@ const (
 	// commit and before git switch -c completed, so git switch -c refused
 	// without creating the build's branch.
 	ChangedDuringJoin
+
+	// copyWriteTimeout bounds the non-cancellable context used for
+	// copy-changing git commands so a caller cancellation mid-write does not
+	// SIGKILL git and leave index.lock or a half-unpacked working tree behind.
+	copyWriteTimeout = 2 * time.Minute
+
+	// emptyBlobOID is the SHA-1 object ID of an empty Git blob, which appears
+	// if a process is killed between creating a destination file and writing
+	// its contents during an unpack.
+	emptyBlobOID = "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391"
 )
 
 // testsGeneratedPaths are the paths inside the test module (eval/) that Surla
@@ -184,14 +202,26 @@ func (w WorkingCopy) join(ctx context.Context, role Role, n int, base, changeID 
 		if facts.UncommittedCount > 0 {
 			return Refused, facts, nil
 		}
-	} else {
-		if role == TestsRole {
-			if err := w.restoreTestsGenerated(ctx); err != nil {
+	}
+	writeCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), copyWriteTimeout)
+	defer cancel()
+	if err := os.Remove(filepath.Join(w.gitDir, "index.lock")); err != nil && !errors.Is(err, fs.ErrNotExist) {
+		return 0, CopyFacts{}, fmt.Errorf("remove stale index.lock in the working copy's git folder: %w", err)
+	}
+	if onEarlier {
+		stopped, err := w.recoverStoppedSwitch(writeCtx, baseCommit)
+		if err != nil {
+			return 0, CopyFacts{}, err
+		}
+		if !stopped {
+			if role == TestsRole {
+				if err := w.restoreTestsGenerated(writeCtx); err != nil {
+					return 0, CopyFacts{}, err
+				}
+			}
+			if err := w.commitLeftoversOnEarlier(writeCtx, rawBranch, changeID, hooks); err != nil {
 				return 0, CopyFacts{}, err
 			}
-		}
-		if err := w.commitLeftoversOnEarlier(ctx, rawBranch, baseCommit, changeID, hooks); err != nil {
-			return 0, CopyFacts{}, err
 		}
 	}
 	if hooks.beforeSwitch != nil {
@@ -199,17 +229,17 @@ func (w WorkingCopy) join(ctx context.Context, role Role, n int, base, changeID 
 			return 0, CopyFacts{}, err
 		}
 	}
-	if _, err := w.git(ctx, w.dir, nil, "switch", "--quiet", "-c", ownBranch, baseCommit); err != nil {
-		if ctx.Err() == nil && exitCode(err) == 1 {
-			_, branchNowExists, lErr := lookupCommit(ctx, w.project, "refs/heads/"+ownBranch)
-			afterFacts, fErr := w.Facts(ctx)
+	if _, err := w.git(writeCtx, w.dir, nil, "switch", "--quiet", "-c", ownBranch, baseCommit); err != nil {
+		if writeCtx.Err() == nil && exitCode(err) == 1 {
+			_, branchNowExists, lErr := lookupCommit(writeCtx, w.project, "refs/heads/"+ownBranch)
+			afterFacts, fErr := w.Facts(writeCtx)
 			if lErr == nil && !branchNowExists && fErr == nil && afterFacts.UncommittedCount > 0 {
 				return ChangedDuringJoin, afterFacts, nil
 			}
 		}
 		return 0, CopyFacts{}, fmt.Errorf("switch the working copy to %s: %w", ownBranch, err)
 	}
-	joinedFacts, err := w.Facts(ctx)
+	joinedFacts, err := w.Facts(writeCtx)
 	if err != nil {
 		return 0, CopyFacts{}, err
 	}
@@ -335,10 +365,121 @@ func (w WorkingCopy) readUncommitted(ctx context.Context) ([]string, int, error)
 	return shown, len(paths), nil
 }
 
+// recoverStoppedSwitch detects whether an earlier Join on w stopped inside
+// git switch -c while unpacking baseCommit's tree into the working copy
+// (before moving HEAD off the earlier build branch). It runs before
+// restoreTestsGenerated so differing generated files in baseCommit do not
+// obscure the stopped switch, and it recognizes both a completed unpack and a
+// partial unpack interrupted mid-flight. When a stopped switch is detected, it
+// finishes resetting the copy's index and working tree to baseCommit so git
+// switch -c can complete without committing baseCommit's files onto the
+// earlier build branch.
+func (w WorkingCopy) recoverStoppedSwitch(ctx context.Context, baseCommit string) (bool, error) {
+	headTree, err := w.git(ctx, w.dir, nil, "rev-parse", "--verify", "HEAD^{tree}")
+	if err != nil {
+		return false, err
+	}
+	baseTree, err := w.git(ctx, w.dir, nil, "rev-parse", "--verify", baseCommit+"^{tree}")
+	if err != nil {
+		return false, err
+	}
+	if headTree == baseTree {
+		return false, nil
+	}
+	tree, err := w.snapshotTree(ctx, nil)
+	if err != nil {
+		return false, err
+	}
+	if tree == headTree {
+		return false, nil
+	}
+	stopped, err := w.isStoppedSwitch(ctx, headTree, baseTree, tree)
+	if err != nil || !stopped {
+		return false, err
+	}
+	if _, err := w.git(ctx, w.dir, nil, "read-tree", "-u", "--reset", baseCommit); err != nil {
+		return false, fmt.Errorf("complete the interrupted switch in the working copy: %w", err)
+	}
+	return true, nil
+}
+
+// isStoppedSwitch reports whether tree (which differs from headTree) is a full
+// or partial unpack of baseTree on top of headTree: every path that differs
+// between headTree and tree also differs between headTree and baseTree and has
+// baseTree's target mode and blob OID (allowing at most one empty-blob file
+// interrupted between open and write), with at least one path matching
+// baseTree.
+func (w WorkingCopy) isStoppedSwitch(ctx context.Context, headTree, baseTree, tree string) (bool, error) {
+	if tree == baseTree {
+		return true, nil
+	}
+	baseOut, err := w.git(ctx, w.dir, nil, "diff-tree", "-r", "-z", "--no-renames", headTree, baseTree)
+	if err != nil {
+		return false, err
+	}
+	workOut, err := w.git(ctx, w.dir, nil, "diff-tree", "-r", "-z", "--no-renames", headTree, tree)
+	if err != nil {
+		return false, err
+	}
+	baseTargets, err := parseDiffTreeTargets(baseOut)
+	if err != nil {
+		return false, err
+	}
+	workTargets, err := parseDiffTreeTargets(workOut)
+	if err != nil {
+		return false, err
+	}
+	if len(workTargets) == 0 {
+		return false, nil
+	}
+	matched := 0
+	empty := 0
+	for path, we := range workTargets {
+		be, ok := baseTargets[path]
+		if !ok {
+			return false, nil
+		}
+		switch {
+		case we == be:
+			matched++
+		case be.mode != "000000" && we.mode == be.mode && we.oid == emptyBlobOID:
+			empty++
+			if empty > 1 {
+				return false, nil
+			}
+		default:
+			return false, nil
+		}
+	}
+	return matched > 0, nil
+}
+
+// parseDiffTreeTargets parses the NUL-delimited output of git diff-tree -r -z
+// --no-renames into a map from slash-separated path to destination treeEntry.
+func parseDiffTreeTargets(out string) (map[string]treeEntry, error) {
+	if out == "" {
+		return nil, nil
+	}
+	fields := strings.Split(strings.TrimSuffix(out, "\x00"), "\x00")
+	if len(fields)%2 != 0 {
+		return nil, fmt.Errorf("parse diff-tree output: expected header and path pairs, got %d fields", len(fields))
+	}
+	targets := make(map[string]treeEntry, len(fields)/2)
+	for i := 0; i < len(fields); i += 2 {
+		parts := strings.Fields(strings.TrimPrefix(fields[i], ":"))
+		if len(parts) < 5 {
+			return nil, fmt.Errorf("parse diff-tree header %q", fields[i])
+		}
+		targets[fields[i+1]] = treeEntry{mode: parts[1], oid: parts[3]}
+	}
+	return targets, nil
+}
+
 // restoreTestsGenerated restores and cleans Surla's generated paths in the
 // test writer's working copy (eval/gen, eval/AGENTS_QUICKSTART.md, and
 // eval/design/story_tests.go) so generated files and unmerged entries on them
-// never enter a leftover commit.
+// never enter a leftover commit. It never follows a symbolic link in a leading
+// path component out of the working copy.
 func (w WorkingCopy) restoreTestsGenerated(ctx context.Context) error {
 	relProject, err := filepath.Rel(w.dir, w.project)
 	if err != nil {
@@ -346,45 +487,70 @@ func (w WorkingCopy) restoreTestsGenerated(ctx context.Context) error {
 	}
 	for _, sub := range testsGeneratedPaths {
 		p := filepath.ToSlash(filepath.Join(relProject, sub))
-		_, headErr := w.git(ctx, w.dir, nil, "cat-file", "-e", "HEAD:"+p)
-		switch {
-		case headErr == nil:
-			if _, err := w.git(ctx, w.dir, nil, "reset", "--quiet", "HEAD", "--", p); err != nil {
-				return fmt.Errorf("reset %s in the test writer's working copy: %w", p, err)
+		allExist, hasNonDir, err := realParentDirs(w.dir, p)
+		if err != nil {
+			return err
+		}
+		out, err := w.git(ctx, w.dir, nil, "ls-tree", "HEAD", "--", p)
+		if err != nil {
+			return fmt.Errorf("inspect %s in HEAD of the test writer's working copy: %w", p, err)
+		}
+		if _, err := w.git(ctx, w.dir, nil, "reset", "--quiet", "HEAD", "--", p); err != nil {
+			return fmt.Errorf("reset %s in the test writer's working copy: %w", p, err)
+		}
+		if hasNonDir {
+			// A leading component of p (such as eval or eval/design) is a
+			// symbolic link or regular file, not a real folder: never follow
+			// links out of the copy.
+			continue
+		}
+		if allExist {
+			target := filepath.Join(w.dir, filepath.FromSlash(p))
+			if err := os.RemoveAll(target); err != nil {
+				return fmt.Errorf("remove %s in the test writer's working copy: %w", p, err)
 			}
+		}
+		if out != "" {
 			if _, err := w.git(ctx, w.dir, nil, "restore", "--source=HEAD", "--staged", "--worktree", "--", p); err != nil {
 				return fmt.Errorf("restore %s in the test writer's working copy: %w", p, err)
 			}
-			if _, err := w.git(ctx, w.dir, nil, "clean", "-fdq", "--", p); err != nil {
-				return fmt.Errorf("clean %s in the test writer's working copy: %w", p, err)
-			}
-		case exitCode(headErr) >= 0:
-			if _, err := w.git(ctx, w.dir, nil, "reset", "--quiet", "HEAD", "--", p); err != nil {
-				return fmt.Errorf("unstage %s in the test writer's working copy: %w", p, err)
-			}
-			if err := os.RemoveAll(filepath.Join(w.dir, filepath.FromSlash(p))); err != nil {
-				return fmt.Errorf("remove %s in the test writer's working copy: %w", p, err)
-			}
-		default:
-			return headErr
 		}
 	}
 	return nil
 }
 
+// realParentDirs inspects every parent component of slashPath under root using
+// os.Lstat (without following symbolic links). It reports whether all parent
+// components currently exist as real directories (allExist) and whether any
+// existing parent component is not a directory, such as a symbolic link or
+// regular file (hasNonDir).
+func realParentDirs(root, slashPath string) (allExist, hasNonDir bool, err error) {
+	cur := root
+	parts := strings.Split(slashPath, "/")
+	allExist = true
+	for _, part := range parts[:len(parts)-1] {
+		cur = filepath.Join(cur, part)
+		info, lErr := os.Lstat(cur)
+		if errors.Is(lErr, fs.ErrNotExist) {
+			allExist = false
+			continue
+		}
+		if lErr != nil {
+			return false, false, fmt.Errorf("inspect %s in the test writer's working copy: %w", cur, lErr)
+		}
+		if !info.IsDir() {
+			return false, true, nil
+		}
+	}
+	return allExist, false, nil
+}
+
 // commitLeftoversOnEarlier snapshots any uncommitted or untracked files of w in
 // a private index and commits them on rawBranch before Join switches the copy
-// to the new build's branch. If the copy's index and working tree already match
-// baseCommit's tree while HEAD's tree differs (from a previous Join that
-// stopped inside git switch -c after unpacking baseCommit's tree), no commit is
-// made.
+// to the new build's branch.
 func (w WorkingCopy) commitLeftoversOnEarlier(ctx context.Context,
-	rawBranch, baseCommit, changeID string, hooks joinHooks) (err error) {
+	rawBranch, changeID string, hooks joinHooks) error {
 	headTree, err := w.git(ctx, w.dir, nil, "rev-parse", "--verify", "HEAD^{tree}")
-	if err != nil {
-		return err
-	}
-	baseTree, err := w.git(ctx, w.dir, nil, "rev-parse", "--verify", baseCommit+"^{tree}")
 	if err != nil {
 		return err
 	}
@@ -392,34 +558,9 @@ func (w WorkingCopy) commitLeftoversOnEarlier(ctx context.Context,
 	if indexErr != nil && exitCode(indexErr) < 0 {
 		return indexErr
 	}
-	tmp, err := os.MkdirTemp("", "surla-join-*")
+	tree, err := w.snapshotTree(ctx, hooks.afterPrivateIndex)
 	if err != nil {
-		return fmt.Errorf("create a temporary folder for the join snapshot: %w", err)
-	}
-	defer func() {
-		err = errors.Join(err, os.RemoveAll(tmp))
-	}()
-	env := []string{"GIT_INDEX_FILE=" + filepath.Join(tmp, "index")}
-	if _, err := w.git(ctx, w.dir, env, "read-tree", "HEAD"); err != nil {
-		return fmt.Errorf("snapshot the working copy: %w", err)
-	}
-	if _, err := w.git(ctx, w.dir, env, "add", "--all"); err != nil {
-		return fmt.Errorf("snapshot the working copy: %w", err)
-	}
-	tree, err := w.git(ctx, w.dir, env, "write-tree")
-	if err != nil {
-		return fmt.Errorf("snapshot the working copy: %w", err)
-	}
-	if hooks.afterPrivateIndex != nil {
-		if err := hooks.afterPrivateIndex(); err != nil {
-			return err
-		}
-	}
-	if indexErr == nil && indexTree == baseTree && tree == baseTree && headTree != baseTree {
-		// An earlier Join stopped inside git switch -c after unpacking
-		// baseCommit's tree into the copy's index and working tree and before
-		// moving HEAD. Skip the leftover commit so rawBranch keeps its tip.
-		return nil
+		return err
 	}
 	if tree == headTree {
 		if indexErr != nil || indexTree != headTree {
@@ -435,4 +576,34 @@ func (w WorkingCopy) commitLeftoversOnEarlier(ctx context.Context,
 	message := "Left uncommitted when change " + changeID + " started"
 	_, err = commitTreeWithHook(ctx, w, "refs/heads/"+rawBranch, tree, message, hooks.afterCopyIndex)
 	return err
+}
+
+// snapshotTree records w's working tree (as git add --all on top of HEAD would
+// stage it) in a temporary private index inside w.gitDir and returns the
+// resulting tree object ID.
+func (w WorkingCopy) snapshotTree(ctx context.Context, afterPrivateIndex func() error) (tree string, err error) {
+	tmp, err := os.MkdirTemp(w.gitDir, "surla-join-*")
+	if err != nil {
+		return "", fmt.Errorf("create a temporary folder for the join snapshot: %w", err)
+	}
+	defer func() {
+		err = errors.Join(err, os.RemoveAll(tmp))
+	}()
+	env := []string{"GIT_INDEX_FILE=" + filepath.Join(tmp, "index")}
+	if _, err := w.git(ctx, w.dir, env, "read-tree", "HEAD"); err != nil {
+		return "", fmt.Errorf("snapshot the working copy: %w", err)
+	}
+	if _, err := w.git(ctx, w.dir, env, "add", "--all"); err != nil {
+		return "", fmt.Errorf("snapshot the working copy: %w", err)
+	}
+	tree, err = w.git(ctx, w.dir, env, "write-tree")
+	if err != nil {
+		return "", fmt.Errorf("snapshot the working copy: %w", err)
+	}
+	if afterPrivateIndex != nil {
+		if err := afterPrivateIndex(); err != nil {
+			return "", err
+		}
+	}
+	return tree, nil
 }
