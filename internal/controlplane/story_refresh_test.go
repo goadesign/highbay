@@ -60,7 +60,7 @@ func TestStoryRefreshPreconditionsAndExpectedAbsence(t *testing.T) {
 		noneRes, err := cp.GetStoryRefresh(alice)
 		require.NoError(t, err)
 		assert.Equal(t, storyRefreshStateNone, noneRes.State)
-		assert.Equal(t, cp.activeWorkspaceDir, noneRes.DraftFolder, "none names the current read folder without requiring go.mod")
+		assert.Equal(t, filepath.Join(cp.activeWorkspaceDir, draftFolderName), noneRes.DraftFolder, "none names the intended draft without requiring go.mod")
 		assert.Nil(t, noneRes.OpID)
 		assert.Nil(t, noneRes.SnapshotDigest)
 		assert.Empty(t, noneRes.Stories)
@@ -132,7 +132,7 @@ func TestStoryRefreshPreconditionsAndExpectedAbsence(t *testing.T) {
 		for _, e := range entries {
 			names = append(names, e.Name())
 		}
-		assert.Equal(t, []string{"designeval", "lock"}, names, "Story refresh writes no card or refresh files to cardsDir")
+		assert.Equal(t, []string{"designeval", "lock", madeFromFileName}, names, "Story refresh persists provenance but no operation or card")
 		evalEntries, err := os.ReadDir(filepath.Join(cardsDir, "designeval"))
 		require.NoError(t, err)
 		assert.Empty(t, evalEntries, "Close removes the designeval build workspace")
@@ -352,9 +352,9 @@ func TestStoryRefreshReplacementFailureRetryAndExpiry(t *testing.T) {
 			return statErr == nil
 		}, 5*time.Second, 10*time.Millisecond)
 
-		// Change the workspace snapshot and refresh again.
+		// Change the draft snapshot and refresh again.
 		v2Files := validWorkspaceStub("package design\n// v2\n")
-		writeWorkspaceFiles(t, wsDir, v2Files)
+		writeWorkspaceFiles(t, filepath.Join(wsDir, draftFolderName), v2Files)
 		v2Digest := designeval.SnapshotDigest(v2Files)
 		require.NotEqual(t, v1Digest, v2Digest)
 
@@ -764,7 +764,7 @@ var _ = Service("orders", func() {
 })
 `
 	nonStorySnapshot := testmodule.Snapshot(t, "", nonStoryDesign)
-	writeWorkspaceFiles(t, wsDir, nonStorySnapshot)
+	writeWorkspaceFiles(t, filepath.Join(wsDir, draftFolderName), nonStorySnapshot)
 	wantNonStoryDigest := designeval.SnapshotDigest(nonStorySnapshot)
 
 	nonStoryStarted := callMCP("refresh_story")

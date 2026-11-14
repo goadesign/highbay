@@ -1,5 +1,5 @@
 // This file implements bound-workspace Story refresh operations: refresh_story
-// reads the active workspace's Go module snapshot, starts or reuses an
+// reads the guide's draft and provenance snapshot, starts or reuses an
 // in-memory sandboxed evaluation per project owner and workspace identity,
 // and get_story_refresh reads the current operation state. Every caller acts
 // for the owner, so the user, the guide and the builder share one operation.
@@ -11,6 +11,8 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"path/filepath"
+	"reflect"
 	"slices"
 	"strings"
 	"time"
@@ -62,6 +64,16 @@ type (
 		// stories holds the evaluated Story summaries when state is
 		// storyRefreshStateSucceeded.
 		stories []designeval.StorySummary
+		// designSource is the canonical encoded design actually evaluated.
+		designSource string
+		// goMod is the evaluated draft module, retained for revision adoption.
+		goMod string
+		// architecture holds the successful evaluation's preview facts.
+		architecture *savedArchitecture
+		// listWrite identifies every persisted list change, including take recovery.
+		listWrite uint64
+		// madeFrom is the immutable list read alongside the evaluated draft.
+		madeFrom *madeFromSnapshot
 		// diagnostic holds the safe failure or timeout message when state is
 		// storyRefreshStateFailed.
 		diagnostic string
@@ -88,9 +100,8 @@ const (
 	completeSourcesDiagnosticTrailer = "\nIf the compiler reports that generator.CompleteSources is undefined,"
 )
 
-// RefreshStory reads the bound workspace's module snapshot, computes its
-// canonical snapshot digest, and starts or reuses the owner's current
-// in-memory Story refresh operation for that workspace.
+// RefreshStory reads the guide draft and provenance together, then starts
+// or reuses the owner's sandboxed evaluation without holding the draft lock.
 func (c *ControlPlane) RefreshStory(ctx context.Context) (*gensurla.StoryRefreshResult, error) {
 	principal, ok := PrincipalFromContext(ctx)
 	if !ok {
@@ -102,11 +113,15 @@ func (c *ControlPlane) RefreshStory(ctx context.Context) (*gensurla.StoryRefresh
 			"no workspace directory is bound to this control plane; start Surla from a project directory",
 		))
 	}
-	files, err := readWorkspaceSnapshotForStoryRefresh(wsDir, wsDev, wsIno)
+	files, madeFrom, err := c.readDraftSnapshot(ctx, wsDir, wsDev, wsIno)
 	if err != nil {
 		return nil, err
 	}
 	digest := designeval.SnapshotDigest(files)
+	designSource, err := designSourceFromModuleSnapshot(files)
+	if err != nil {
+		return nil, err
+	}
 
 	c.workspaceMu.RLock()
 	if c.serverCtx.Err() != nil {
@@ -131,7 +146,7 @@ func (c *ControlPlane) RefreshStory(ctx context.Context) (*gensurla.StoryRefresh
 
 	c.storyRefreshMu.Lock()
 	current := c.storyRefreshes[key]
-	if current != nil && current.snapshotDigest == digest &&
+	if current != nil && current.matchesDraft(digest, madeFrom) &&
 		(current.state == storyRefreshStateRunning || current.state == storyRefreshStateSucceeded) {
 		res := storyRefreshResultFromOp(current, wsDir)
 		c.storyRefreshMu.Unlock()
@@ -151,6 +166,10 @@ func (c *ControlPlane) RefreshStory(ctx context.Context) (*gensurla.StoryRefresh
 		state:          storyRefreshStateRunning,
 		snapshotDigest: digest,
 		cancel:         cancel,
+		designSource:   designSource,
+		goMod:          files["go.mod"],
+		madeFrom:       &madeFromSnapshot{Start: madeFrom.Start, Entries: madeFrom.Entries},
+		listWrite:      madeFrom.Write,
 	}
 	if c.storyRefreshes == nil {
 		c.storyRefreshes = make(map[storyRefreshKey]*storyRefreshOp)
@@ -252,6 +271,10 @@ func (c *ControlPlane) runStoryRefresh(
 	}
 	op.state = storyRefreshStateSucceeded
 	op.stories = cloneStorySummaries(res.Stories)
+	op.architecture = &savedArchitecture{
+		DesignDigest: op.snapshotDigest, SystemName: res.SystemName,
+		Containers: res.Containers, Edges: res.Edges, AgentPolicies: res.AgentPolicies, Tools: res.Tools,
+	}
 	op.diagnostic = ""
 }
 
@@ -269,12 +292,13 @@ func (c *ControlPlane) closeStoryRefreshes() {
 	c.storyRefreshMu.Unlock()
 }
 
-// adoptStoryRefresh reads one module snapshot from the bound workspace,
+// adoptStoryRefresh temporarily rereads the locked draft and list,
 // verifies that rawOpID is the owner's current succeeded Story refresh
 // operation for that exact workspace identity and snapshot digest, and returns
 // the snapshot's encoded design/*.go source and a deep copy of its evaluated
 // Stories (nil when the design declared zero Stories). Every rejection is an
-// unprocessable error naming refresh_story.
+// unprocessable error naming refresh_story. D2 replaces this transitional
+// stale-digest check with adoption directly from the retained operation.
 func (c *ControlPlane) adoptStoryRefresh(
 	principal Principal,
 	rawOpID string,
@@ -292,7 +316,7 @@ func (c *ControlPlane) adoptStoryRefresh(
 			opID,
 		))
 	}
-	files, err := readWorkspaceSnapshotForStoryRefresh(wsDir, wsDev, wsIno)
+	files, madeFrom, err := c.readDraftSnapshot(c.serverCtx, wsDir, wsDev, wsIno)
 	if err != nil {
 		return "", nil, gensurla.MakeUnprocessable(fmt.Errorf("%w; call refresh_story again", err))
 	}
@@ -310,6 +334,7 @@ func (c *ControlPlane) adoptStoryRefresh(
 	}
 	c.storyRefreshMu.Lock()
 	var opState, opDigest string
+	var sameList bool
 	var stories []designeval.StorySummary
 	matched := false
 	if sameWorkspace {
@@ -317,7 +342,8 @@ func (c *ControlPlane) adoptStoryRefresh(
 			matched = true
 			opState = op.state
 			opDigest = op.snapshotDigest
-			if opState == storyRefreshStateSucceeded && opDigest == digest {
+			sameList = op.matchesDraft(digest, madeFrom)
+			if opState == storyRefreshStateSucceeded && opDigest == digest && sameList {
 				stories = cloneStorySummaries(op.stories)
 			}
 		}
@@ -337,7 +363,7 @@ func (c *ControlPlane) adoptStoryRefresh(
 			opID, opState,
 		))
 	}
-	if opDigest != digest {
+	if opDigest != digest || !sameList {
 		return "", nil, gensurla.MakeUnprocessable(fmt.Errorf(
 			"workspace snapshot (%s) no longer matches story_refresh_op_id %q (%s); call refresh_story again",
 			digest, opID, opDigest,
@@ -350,6 +376,14 @@ func (c *ControlPlane) adoptStoryRefresh(
 	return designSrc, stories, nil
 }
 
+// matchesDraft compares both input owners; a take/recovery list write invalidates
+// reuse even if it left the canonical draft and immutable history unchanged.
+// storyRefreshMu protects op while callers compare it.
+func (op *storyRefreshOp) matchesDraft(digest string, list madeFromRecord) bool {
+	return op.snapshotDigest == digest && op.listWrite == list.Write &&
+		reflect.DeepEqual(op.madeFrom, &madeFromSnapshot{Start: list.Start, Entries: list.Entries})
+}
+
 // storyRefreshDeadline bounds one Story refresh evaluation.
 func (c *ControlPlane) storyRefreshDeadline(ctx context.Context) (context.Context, context.CancelFunc) {
 	withTimeout := c.storyRefreshWithTimeout
@@ -359,39 +393,16 @@ func (c *ControlPlane) storyRefreshDeadline(ctx context.Context) (context.Contex
 	return withTimeout(ctx, defaultStoryRefreshTimeout)
 }
 
-// readWorkspaceSnapshotForStoryRefresh reads the bound workspace's Go module
-// snapshot through an identity-verified os.Root handle without holding any
-// control-plane lock.
-func readWorkspaceSnapshotForStoryRefresh(wsDir string, wsDev, wsIno uint64) (map[string]string, error) {
-	cleanDir, root, err := openModuleRootWithIdentity(wsDir, wsDev, wsIno)
-	if err != nil {
-		return nil, err
-	}
-	files, readErr := designeval.ReadModuleSnapshotFromRoot(cleanDir, root)
-	if err := errors.Join(readErr, root.Close()); err != nil {
-		return nil, gensurla.MakeUnprocessable(err)
-	}
-	if err := designeval.ValidateUTF8Snapshot(files); err != nil {
-		return nil, gensurla.MakeUnprocessable(err)
-	}
-	if strings.TrimSpace(files["go.mod"]) == "" {
-		return nil, gensurla.MakeUnprocessable(fmt.Errorf(
-			"workspace %s does not contain a go.mod file; run init_project or create go.mod before calling refresh_story",
-			cleanDir,
-		))
-	}
-	return files, nil
-}
-
 // storyRefreshResultFromOp projects op (or nil when no refresh has run) into a
 // fresh gensurla.StoryRefreshResult. ControlPlane.storyRefreshMu must be held.
 func storyRefreshResultFromOp(op *storyRefreshOp, folder string) *gensurla.StoryRefreshResult {
+	folder = filepath.Join(folder, draftFolderName)
 	if op == nil {
 		return &gensurla.StoryRefreshResult{
 			State:       storyRefreshStateNone,
 			DraftFolder: folder,
 			Stories:     []*gensurla.StorySummaryItem{},
-			Message:     "No Story refresh has run for this workspace yet; call refresh_story to evaluate the workspace design.",
+			Message:     "No Story refresh has run for this workspace yet; call refresh_story to evaluate the draft design.",
 		}
 	}
 	id := op.id
@@ -429,6 +440,9 @@ func storyRefreshResultFromOp(op *storyRefreshOp, folder string) *gensurla.Story
 			"Story refresh %s failed for workspace snapshot %s.",
 			op.id, op.snapshotDigest,
 		)
+	}
+	if op.madeFrom != nil && op.madeFrom.Start.Dropped != nil {
+		res.Message += fmt.Sprintf(" Surla made this draft again from the project folder when the user dropped change %s; edits made before then are gone.", op.madeFrom.Start.Dropped.ChangeID)
 	}
 	return res
 }
