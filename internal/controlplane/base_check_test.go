@@ -7,7 +7,6 @@ import (
 	"strings"
 	"testing"
 
-	gensurla "github.com/goadesign/surla/gen/surla"
 	"github.com/goadesign/surla/internal/designversion"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"

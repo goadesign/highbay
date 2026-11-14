@@ -178,7 +178,7 @@ func TestSavedProvenanceDoesNotFollowTheLiveDraft(t *testing.T) {
 				BranchTips: map[string]string{},
 			},
 		},
-		Entries: map[string][]madeFromVersion{}, Taken: map[string]madeFromVersion{},
+		Entries: map[string][]madeFromVersion{}, Taken: map[string]madeFromTake{},
 	})
 	cp.draftMu.Unlock()
 	require.NoError(t, err)
