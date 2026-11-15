@@ -114,22 +114,30 @@ func TestReportV1TipGateChecksTheRealCopy(t *testing.T) {
 				want = "abort it"
 			case "foreign", "zero-file foreign", "same build branch":
 				other := testwriter.BuilderRole.Branch(2)
+				otherWork := workspace
+				projectBranch := ""
 				if scenario == "same build branch" {
-					other = testwriter.BuilderRole.Branch(build.Number)
+					copy, found, err := testwriter.OpenCopy(t.Context(), workspace, testwriter.BuilderRole)
+					require.NoError(t, err)
+					require.True(t, found)
+					otherWork = copy.Project()
+				} else {
+					projectBranch = productionBuildGit(t, workspace, "symbolic-ref", "--short", "HEAD")
+					productionBuildGit(t, workspace, "checkout", "-q", "-b", other, build.Base)
 				}
-				projectBranch := productionBuildGit(t, workspace, "symbolic-ref", "--short", "HEAD")
-				productionBuildGit(t, workspace, "checkout", "-q", "-b", other, build.Base)
 				if scenario != "zero-file foreign" {
 					files := map[string]string{"eval/a copy.txt": "Other branch's tests.\n"}
 					for i := range 5 {
 						files[fmt.Sprintf("eval/file%d.txt", i)] = "Other branch's tests.\n"
 					}
-					writeWorkspaceFiles(t, workspace, files)
-					productionBuildGit(t, workspace, "add", "eval")
+					writeWorkspaceFiles(t, otherWork, files)
+					productionBuildGit(t, otherWork, "add", "eval")
 				}
-				productionBuildGit(t, workspace, "commit", "-q", "--allow-empty", "-m", "Other branch work")
-				foreign = productionBuildGit(t, workspace, "rev-parse", "HEAD")
-				productionBuildGit(t, workspace, "checkout", "-q", projectBranch)
+				productionBuildGit(t, otherWork, "commit", "-q", "--allow-empty", "-m", "Other branch work")
+				foreign = productionBuildGit(t, otherWork, "rev-parse", "HEAD")
+				if projectBranch != "" {
+					productionBuildGit(t, workspace, "checkout", "-q", projectBranch)
+				}
 				productionBuildGit(t, folder, "merge", "--no-edit", foreign)
 				checkedTip = productionBuildGit(t, workspace, "rev-parse", "refs/heads/surla/tests-1")
 				if scenario != "same build branch" {
