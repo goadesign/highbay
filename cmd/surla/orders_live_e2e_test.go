@@ -102,8 +102,9 @@ func TestOrdersLiveCopyAppliesADraftThroughTheProjectServer(t *testing.T) {
 
 	// Each step below waits within its own allowance. The Story refresh and
 	// the live start outlast the server's own limits on them (journeyStepWait
-	// and journeyOwnerWait); every other step builds nothing and waits a
-	// minute or less.
+	// and journeyOwnerWait); every other step builds nothing and waits three
+	// minutes or less, enough on a slow machine, so that one that hangs fails
+	// under its own name.
 	refused := ordersDraftRefusal(t, stepContext(t, journeyQuickWait), client, ordersSystemPrompt, "Answer in one sentence.")
 	assert.Contains(t, refused, "start_live_target", "with no live copy, the refusal names the step that enables drafts")
 
@@ -168,8 +169,8 @@ func TestOrdersLiveCopyAppliesADraftThroughTheProjectServer(t *testing.T) {
 		"the copy changes prompts only for the key Surla minted")
 
 	// The server waits up to 30 seconds for the copy's processes to end, then
-	// removes its directory.
-	stopCtx := stepContext(t, 45*time.Second)
+	// removes its directory, which has no limit of its own.
+	stopCtx := stepContext(t, 3*time.Minute)
 	phaseStart = time.Now()
 	stopped, err := gensurla.DecodeStopLiveTargetResult(trustedSuiteCall(t, stopCtx, client, "stop_live_target", []byte(`{}`)))
 	t.Logf("stop live target: %s", time.Since(phaseStart))

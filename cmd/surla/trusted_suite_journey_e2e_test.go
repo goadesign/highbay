@@ -38,11 +38,13 @@ import (
 // the owner finished if its I/O fails.
 const journeyOwnerWait = defaultProjectVerifyTimeout + 2*time.Minute
 
-// journeyQuickWait bounds one step that builds, generates, evaluates and
-// starts nothing: a call the server answers from its stored state (a
-// proposal, a confirmation, a refusal), a prompt draft sent to a running live
-// copy, or a git read.
-const journeyQuickWait = time.Minute
+// journeyQuickWait is the upper bound on one step that builds, generates,
+// evaluates and starts nothing: a call that reads or writes the server's
+// stored state (a proposal, a confirmation, a refusal), a prompt draft sent
+// to a running live copy, or a git read. It does not measure speed: it is
+// generous enough for a slow machine and exists so that a step that hangs
+// fails under its own name.
+const journeyQuickWait = 3 * time.Minute
 
 // trustedSuiteCommit commits only the harmless evaluator comment and returns
 // the full candidate commit ID. Its git commands run with testGitEnv: no
