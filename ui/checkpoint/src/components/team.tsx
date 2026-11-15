@@ -147,7 +147,7 @@ export function TeamStageView({
       </div>
       {error !== null ? (
         <Alert id="surla-team-read-error" variant="destructive">
-          <strong>Could not read the team. </strong>{error}
+          {error}
         </Alert>
       ) : null}
       {loading ? (

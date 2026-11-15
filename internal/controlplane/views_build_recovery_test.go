@@ -175,6 +175,7 @@ const primary = (element) => element.classList.contains("surla-btn-primary");
 const page = await openPage(origin, { link: input.link });
 await until(() => page.$("#surla-build-start") && !page.$("#surla-build-start").disabled, "the earlier build did not offer the current-agreement action");
 expect(page.text("#surla-build-start") === "Build current agreed revision", "the earlier build's recovery action is unclear");
+expect(page.$("#surla-build-start").getAttribute("aria-describedby").split(/\s+/).includes("surla-build-start-explanation") && page.text("#surla-build-start-explanation").includes("From Build on, the tests and the builder’s code run on this machine as ordinary programs, with your access to files and the network; nothing confines them. Approval decides only what merges."), "earlier building offer omitted its execution explanation");
 expect(page.text("#surla-build-state").includes("Earlier build") && page.text("#surla-build-state").includes("The agreed revision has changed."), "the saved build is presented as current");
 expect(primary(page.$("#surla-build-start")) && !primary(page.$("#surla-build-view-team")), "the current-agreement Build is not the primary action");
 const earlierRead = page.sent("GET", path).find((read) => read.status === 200 && JSON.parse(read.answer).build.state === "started");
