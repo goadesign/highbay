@@ -5,6 +5,7 @@ package controlplane
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -63,6 +64,29 @@ func attachBuildSnapshot(t *testing.T, cp *ControlPlane, changeID string) *gensu
 		files["design/build_fixture.go"] = buildStorySource(t, record.stories)
 	}
 	entries := make(map[string][]madeFromVersion, len(files))
+	_, committed, err := committedDraftDesign(t.Context(), workspace)
+	require.NoError(t, err)
+	root, err := os.OpenRoot(workspace)
+	require.NoError(t, err)
+	folder, readErr := designeval.ReadDesignFilesFromRoot(workspace, root)
+	require.NoError(t, errors.Join(readErr, root.Close()))
+	original := map[string]string{}
+	for file, text := range folder {
+		canonical, err := designversion.Canonical(file, text)
+		require.NoError(t, err)
+		folder[file] = canonical
+		original[file] = designversion.Digest(canonical)
+	}
+	// A consumer fixture includes the actual initial committed/live versions,
+	// then its authored design. It does not claim those came from refresh.
+	for _, file := range designPaths(nil, committed, folder, files) {
+		for _, source := range []map[string]string{committed, folder} {
+			version := designFileVersion(source, file)
+			if _, found := enteredVersion(entries[file], version); !found {
+				entries[file] = append(entries[file], madeFromVersion{Version: version, Entered: 1})
+			}
+		}
+	}
 	snapshot := map[string]string{"go.mod": string(module)}
 	if sum, err := os.ReadFile(filepath.Join(workspace, "go.sum")); err == nil {
 		snapshot["go.sum"] = string(sum)
@@ -73,13 +97,16 @@ func attachBuildSnapshot(t *testing.T, cp *ControlPlane, changeID string) *gensu
 		canonical, err := designversion.Canonical(path, source)
 		require.NoError(t, err)
 		files[path], snapshot[path] = canonical, canonical
-		entries[path] = []madeFromVersion{{Version: designversion.Digest(canonical), Entered: 1}}
+		version := designversion.Digest(canonical)
+		if _, found := enteredVersion(entries[path], version); !found {
+			entries[path] = append(entries[path], madeFromVersion{Version: version, Entered: 1})
+		}
 	}
 	record.designSource, err = encodeDesignSource(files)
 	require.NoError(t, err)
 	record.goMod = string(module)
 	record.madeFrom = &madeFromSnapshot{
-		Start: madeFromStart{Write: 1, ProjectCommit: base}, Entries: entries,
+		Start: madeFromStart{Write: 1, ProjectCommit: base, FolderVersions: original}, Entries: entries,
 	}
 	if record.architecture == nil {
 		record.architecture = &savedArchitecture{}

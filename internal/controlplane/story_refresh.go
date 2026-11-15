@@ -410,6 +410,7 @@ func cloneMadeFromSnapshot(saved *madeFromSnapshot) *madeFromSnapshot {
 		return nil
 	}
 	cloned := &madeFromSnapshot{Start: saved.Start, Entries: maps.Clone(saved.Entries)}
+	cloned.Start.FolderVersions = maps.Clone(saved.Start.FolderVersions)
 	for file, versions := range cloned.Entries {
 		cloned.Entries[file] = slices.Clone(versions)
 	}

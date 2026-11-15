@@ -217,10 +217,9 @@ func TestBuilderAssignmentNamesItsCurrentFolder(t *testing.T) {
 	}
 }
 
-// TestBuilderCopyPendingOperationsKeepTheirRoles proves the new operations
-// preserve role access while Drop reports the absence of an open build and
-// the draft update remains pending.
-func TestBuilderCopyPendingOperationsKeepTheirRoles(t *testing.T) {
+// TestBuilderCopyOperationsKeepTheirRoles proves that Drop reports no open
+// build while only the guide may update the real draft through HTTP.
+func TestBuilderCopyOperationsKeepTheirRoles(t *testing.T) {
 	cp := newBuildControlPlane(t, Options{})
 	buildableChange(t, cp, "chg")
 	server := roleServer(t, cp)
@@ -238,8 +237,8 @@ func TestBuilderCopyPendingOperationsKeepTheirRoles(t *testing.T) {
 					assert.Equal(t, http.StatusNotFound, status, body)
 					assert.Contains(t, body, "no open build")
 				} else if role == op.caller {
-					assert.Equal(t, http.StatusNotImplemented, status, body)
-					assert.Contains(t, body, "not available until the builder-copy change is complete")
+					assert.Equal(t, http.StatusOK, status, body)
+					assert.Contains(t, body, "draft_folder")
 				} else {
 					assert.Equal(t, http.StatusForbidden, status, body)
 				}
