@@ -3,7 +3,11 @@ package controlplane
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"net/http"
+	"net/http/httptest"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -13,10 +17,14 @@ import (
 	"testing"
 	"time"
 
+	gensurlaclient "github.com/goadesign/surla/gen/http/surla/client"
+	genmcpclient "github.com/goadesign/surla/gen/jsonrpc/mcp_surla/client"
+	genmcpsurla "github.com/goadesign/surla/gen/mcp_surla"
 	gensurla "github.com/goadesign/surla/gen/surla"
 	"github.com/goadesign/surla/verify/candidate"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	goahttp "goa.design/goa/v3/http"
 )
 
 // TestBuilderCopyCheckPublishesOnlyInItsCopy exercises both public service
@@ -25,8 +33,18 @@ func TestBuilderCopyCheckPublishesOnlyInItsCopy(t *testing.T) {
 	installFakeDocker(t)
 	for _, prefix := range []string{".", "apps/shop"} {
 		t.Run(prefix, func(t *testing.T) {
-			project, cp, _, assignment := buildGenerationFixture(t, prefix)
+			project, cp, card, assignment := buildGenerationFixture(t, prefix)
 			configureBuilderCopyCheck(t, cp)
+			// An agreed revision may advance while the builder repairs files
+			// in its existing assignment; these tools do not generate design.
+			if prefix != "." {
+				record := loadMetadataRecord(t, cp, card.ChangeID)
+				record.card.Prompt += " More agreed work."
+				var err error
+				record.card.RequestRevision, err = computeCanonicalRevision(record.card, record.owner, record.designSource)
+				require.NoError(t, err)
+				saveMetadataRecord(t, cp, record)
+			}
 			daemon := newFakeDockerDaemon(t)
 			t.Setenv("DOCKER_HOST", daemon.hostURI)
 			working := assignment.WorkingFolder
@@ -68,9 +86,9 @@ func TestBuilderCopyCheckPublishesOnlyInItsCopy(t *testing.T) {
 }
 
 // TestBuilderCopyCheckRefusesBeforeStarting preserves the builder and project
-// when readiness, branch ownership, currentness or exclusive use fails.
+// when readiness, branch ownership or exclusive use fails.
 func TestBuilderCopyCheckRefusesBeforeStarting(t *testing.T) {
-	for _, state := range []string{"unread", "dropped", "off branch", "stale", "busy", "nested link"} {
+	for _, state := range []string{"unread", "dropped", "off branch", "busy", "nested link"} {
 		t.Run(state, func(t *testing.T) {
 			project, cp, card, assignment := buildGenerationFixture(t, "apps/shop")
 			configureBuilderCopyCheck(t, cp)
@@ -81,7 +99,7 @@ func TestBuilderCopyCheckRefusesBeforeStarting(t *testing.T) {
 				launches.Add(1)
 				return exec.Command(filepath.Join(t.TempDir(), "must-not-start"))
 			}
-			want := "conflict"
+			want := "working_copy_busy"
 			switch state {
 			case "unread":
 				build, found, err := cp.cards.loadOpenBuild()
@@ -102,13 +120,6 @@ func TestBuilderCopyCheckRefusesBeforeStarting(t *testing.T) {
 			case "off branch":
 				runGitForTest(t, assignment.WorkingFolder, "switch", "--quiet", "--detach")
 				want = "copy_off_branch"
-			case "stale":
-				record := loadMetadataRecord(t, cp, card.ChangeID)
-				record.card.Prompt += " More agreed work."
-				var err error
-				record.card.RequestRevision, err = computeCanonicalRevision(record.card, record.owner, record.designSource)
-				require.NoError(t, err)
-				saveMetadataRecord(t, cp, record)
 			case "busy":
 				cp.builderCopyTurn <- struct{}{}
 				t.Cleanup(func() { <-cp.builderCopyTurn })
@@ -181,7 +192,7 @@ func TestBuilderCopyCheckTurnCoversCleanup(t *testing.T) {
 				cancel()
 			}
 			_, err := cp.UpdateDependencies(asCaller("alice@example.com", CallerBuilder))
-			assertServiceError(t, err, "conflict")
+			assertServiceError(t, err, "working_copy_busy")
 			assert.Len(t, cp.builderCopyTurn, 1)
 			select {
 			case err := <-done:
@@ -219,6 +230,72 @@ func TestBuilderCopyCheckReleasesAfterLaunchFailure(t *testing.T) {
 		require.NoError(t, err)
 		assert.Empty(t, entries)
 	}
+}
+
+// TestBuilderCopyCheckBusyHTTPMCP proves the generated HTTP error contract and
+// MCP tool result preserve the busy-copy refusal before any helper starts.
+func TestBuilderCopyCheckBusyHTTPMCP(t *testing.T) {
+	_, cp, _, _ := buildGenerationFixture(t, ".")
+	configureBuilderCopyCheck(t, cp)
+	var launches atomic.Int64
+	cp.checkHelper = func() *exec.Cmd {
+		launches.Add(1)
+		return exec.Command(filepath.Join(t.TempDir(), "must-not-start"))
+	}
+	cp.builderCopyTurn <- struct{}{}
+	t.Cleanup(func() { <-cp.builderCopyTurn })
+	handler := NewHTTPHandler(cp, workflowAuthenticator(map[string]Principal{
+		"generation-token": {ID: "alice@example.com"},
+	}))
+	srv := httptest.NewServer(handler)
+	t.Cleanup(srv.Close)
+	origin, err := url.Parse(srv.URL)
+	require.NoError(t, err)
+	doer := generationDoer{client: srv.Client()}
+	httpTransport := gensurlaclient.NewClient(origin.Scheme, origin.Host,
+		doer, goahttp.RequestEncoder, goahttp.ResponseDecoder, false)
+	client := &gensurla.Client{
+		CheckProjectEndpoint: httpTransport.CheckProject(), UpdateDependenciesEndpoint: httpTransport.UpdateDependencies(),
+	}
+	mcpTransport := genmcpclient.NewClient(origin.Scheme, origin.Host,
+		doer, goahttp.RequestEncoder, goahttp.ResponseDecoder, false)
+	mcpClient := &genmcpsurla.Client{ToolsCallEndpoint: mcpTransport.ToolsCall()}
+	for _, tool := range []struct{ name, route string }{
+		{checkToolProject, "/workspace/check"},
+		{checkToolDependencies, "/workspace/dependencies"},
+	} {
+		t.Run(tool.name, func(t *testing.T) {
+			request := httptest.NewRequest(http.MethodPost, tool.route, nil)
+			request.Header.Set("Authorization", "Bearer generation-token-builder")
+			response := httptest.NewRecorder()
+			handler.ServeHTTP(response, request)
+			require.Equal(t, http.StatusConflict, response.Code)
+			var body goahttp.ErrorResponse
+			require.NoError(t, json.Unmarshal(response.Body.Bytes(), &body))
+			assert.Equal(t, "working_copy_busy", body.Name)
+			assert.Contains(t, body.Message, "call "+tool.name+" again")
+			var err error
+			if tool.name == checkToolProject {
+				_, err = client.CheckProject(t.Context())
+			} else {
+				_, err = client.UpdateDependencies(t.Context())
+			}
+			assertServiceError(t, err, "working_copy_busy")
+			result, err := mcpClient.ToolsCall(t.Context(), &genmcpsurla.ToolsCallPayload{
+				Name: tool.name, Arguments: json.RawMessage(`{}`),
+			})
+			require.NoError(t, err)
+			complete, ok := result.Outcome.AsComplete()
+			require.True(t, ok)
+			require.NotNil(t, complete.IsError)
+			assert.True(t, *complete.IsError)
+			require.NotEmpty(t, complete.Content)
+			require.NotNil(t, complete.Content[0].Text)
+			assert.Contains(t, *complete.Content[0].Text, "call "+tool.name+" again")
+		})
+	}
+	assert.Zero(t, launches.Load())
+	assert.Len(t, cp.builderCopyTurn, 1)
 }
 
 // configureBuilderCopyCheck adds the production helper configuration to the

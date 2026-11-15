@@ -123,7 +123,7 @@ const (
 // stored verification settings, because those tests belong to the test writer),
 // never changing the workspace. The work runs in a check helper process that
 // finishes and cleans up the operation even if this server dies. It requires an
-// authenticated principal and a current, read builder assignment. The builder
+// authenticated principal and a read assignment for the open build. The builder
 // turn remains reserved until the helper finishes its operation and cleanup.
 func (c *ControlPlane) CheckProject(ctx context.Context) (res *gensurla.CheckProjectResult, retErr error) {
 	if _, ok := PrincipalFromContext(ctx); !ok {

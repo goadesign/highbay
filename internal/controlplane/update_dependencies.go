@@ -58,7 +58,7 @@ var (
 // Modules are published one at a time with Go's normal partial semantics. Once
 // a manifest is replaced, later failures are reported next to the written
 // paths, never instead of them. It requires an authenticated principal and a
-// current, read builder assignment, reserved until helper cleanup completes.
+// read assignment for the open build, reserved until helper cleanup completes.
 func (c *ControlPlane) UpdateDependencies(ctx context.Context) (res *gensurla.UpdateDependenciesResult, retErr error) {
 	if _, ok := PrincipalFromContext(ctx); !ok {
 		return nil, errors.New("authenticated principal is required")

@@ -336,15 +336,12 @@ func (c *ControlPlane) runCheckHelper(ctx context.Context, tool string) (res che
 	select {
 	case c.builderCopyTurn <- struct{}{}:
 	default:
-		return checkHelperResult{}, gensurla.MakeConflict(fmt.Errorf("The builder's working copy is in use; call %s again when the current operation finishes.", tool))
+		return checkHelperResult{}, gensurla.MakeWorkingCopyBusy(fmt.Errorf("The builder's working copy is in use; call %s again when the current operation finishes.", tool))
 	}
 	defer func() { <-c.builderCopyTurn }()
 	ready, err := c.builderCopyReady(ctx, wsDir, tool)
 	if err != nil {
 		return checkHelperResult{}, err
-	}
-	if !ready.build.inForce {
-		return checkHelperResult{}, gensurla.MakeConflict(errors.New("The open build is for an earlier agreed revision; ask the user to build the current agreed revision on the views page."))
 	}
 	_, project, err := openModuleRootWithIdentity(wsDir, c.boundWorkspaceDev, c.boundWorkspaceIno)
 	if err != nil {
