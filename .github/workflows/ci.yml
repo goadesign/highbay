@@ -33,10 +33,11 @@ env:
   TEMPORAL_CLI_VERSION: 1.7.2
   TEMPORAL_CLI_SHA256: 561ac68bdb6c16c8e8cbbd49f12578218ff1776007c3f3ae0d0196c8c9a73e79
   TEMPORAL_CLI_LINUX_AMD64_SHA256: e2f548af84e820b7d71f25fc6461a4e6a1ab7cdb6a80fde3c375641b0772375b
-  # Root short coverage has three owners: pages in controlplane/project,
-  # controlplane without pages, and every other tested package without pages.
-  # The run/skip predicates are complementary, so each test has one owner.
+  # Root short coverage has four owners: pages in controlplane/project,
+  # two complementary controlplane groups, and all other tested packages.
+  # The run/skip predicates give every test exactly one owner.
   ROOT_PAGE_TESTS: '^Test(ViewsPage|Checkpoint)'
+  ROOT_CONTROLPLANE_FIRST_TESTS: '^Test[A-L]'
 
 jobs:
   tests:
@@ -162,10 +163,14 @@ jobs:
           go vet -tags browser ./internal/project </dev/null
 
   controlplane:
-    name: Go (., control plane)
+    name: Go (., control plane, ${{ matrix.partition }})
     if: github.event_name == 'push' || github.event_name == 'pull_request'
     runs-on: macos-latest
     timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        partition: [A-L, remaining]
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
       - uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
@@ -180,14 +185,14 @@ jobs:
           echo "modules=$(go env GOMODCACHE)" >> "$GITHUB_OUTPUT"
       - name: Restore the control plane's Go caches
         id: restored-go-cache
-        # Only Go (., control plane) saves this key. It includes the native
-        # fake Docker build as well as the race-instrumented test closure.
+        # Each half owns its key, including its runtime helper build closure.
+        # One half's narrower cache cannot replace the other half's cache.
         uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
         with:
           path: |
             ${{ steps.go-cache.outputs.build }}
             ${{ steps.go-cache.outputs.modules }}
-          key: short-root-controlplane-${{ runner.os }}-${{ runner.arch }}-go-${{ steps.go.outputs.go-version }}-${{ hashFiles('go.mod', 'go.sum') }}
+          key: short-root-controlplane-${{ matrix.partition }}-${{ runner.os }}-${{ runner.arch }}-go-${{ steps.go.outputs.go-version }}-${{ hashFiles('go.mod', 'go.sum') }}
       - name: Explain a dependency cache miss
         if: steps.restored-go-cache.outputs.cache-hit != 'true'
         run: |
@@ -202,12 +207,22 @@ jobs:
         run: |
           npm ci --prefix ui/checkpoint --no-audit --no-fund </dev/null
       - name: Vet and short race tests (control plane without page tests)
+        env:
+          CONTROLPLANE_PARTITION: ${{ matrix.partition }}
         run: |
           test_count=()
           if [ "$GITHUB_EVENT_NAME" = push ]; then
             test_count=(-count=1)
           fi
-          go test -race -vet=all -short -timeout 3m -json "${test_count[@]}" -skip "$ROOT_PAGE_TESTS" ./internal/controlplane </dev/null
+          run=$ROOT_CONTROLPLANE_FIRST_TESTS
+          skip=$ROOT_PAGE_TESTS
+          if [ "$CONTROLPLANE_PARTITION" = remaining ]; then
+            # Complement the first group so new names, Examples and Fuzz
+            # seeds also retain an owner without extending an alphabet range.
+            run=.
+            skip="$skip|$ROOT_CONTROLPLANE_FIRST_TESTS"
+          fi
+          go test -race -vet=all -short -timeout 3m -json "${test_count[@]}" -run "$run" -skip "$skip" ./internal/controlplane </dev/null
 
   # Warm short jobs target five minutes; cache misses are reported separately.
   # The Linux checks are separate jobs that run side by
