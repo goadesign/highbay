@@ -80,12 +80,18 @@ func (d credentialDoer) Do(r *http.Request) (*http.Response, error) {
 	return d.client.Do(r)
 }
 
+// journeyChangeArgs returns the tool arguments naming change, which
+// get_build, list_verifications and each worker's get_*_assignment take.
+func journeyChangeArgs(change string) []byte {
+	return []byte(`{"change_id":"` + change + `"}`)
+}
+
 // journeyReportArgs returns report_tests_finished's arguments for revision
-// of the journey's change.
-func journeyReportArgs(t *testing.T, revision string) []byte {
+// of change.
+func journeyReportArgs(t *testing.T, change, revision string) []byte {
 	t.Helper()
 	raw, err := json.Marshal(map[string]string{
-		"change_id": journeyChangeID, "request_revision": revision,
+		"change_id": change, "request_revision": revision,
 	})
 	require.NoError(t, err)
 	return raw
@@ -107,14 +113,14 @@ func journeyRefusal(t *testing.T, ctx context.Context, client *genmcpsurla.Clien
 	return toolErrorText(complete.Content)
 }
 
-// readBuild has client read the journey's change's build with get_build,
-// which every role may call, and returns the started build.
+// readBuild has client read change's build with get_build, which every role
+// may call, and returns the started build.
 func readBuild(
-	t *testing.T, ctx context.Context, client *genmcpsurla.Client,
+	t *testing.T, ctx context.Context, client *genmcpsurla.Client, change string,
 ) *gensurla.StartedBuild {
 	t.Helper()
 	read, err := gensurla.DecodeChangeBuild(
-		trustedSuiteCall(t, ctx, client, "get_build", journeyChangeArgs))
+		trustedSuiteCall(t, ctx, client, "get_build", journeyChangeArgs(change)))
 	require.NoError(t, err)
 	started, ok := read.Build.AsStarted()
 	require.True(t, ok, "the change has a build: %s", read.Build.Kind())
@@ -122,25 +128,53 @@ func readBuild(
 }
 
 // journeyVerifyArgs returns verify_change's arguments for candidateCommit at
-// revision of the journey's change.
-func journeyVerifyArgs(t *testing.T, revision, candidateCommit string) []byte {
+// revision of change.
+func journeyVerifyArgs(t *testing.T, change, revision, candidateCommit string) []byte {
 	t.Helper()
 	raw, err := gensurla.EncodeVerifyChangePayload(&gensurla.VerifyChangePayload{
-		ChangeID: journeyChangeID, RequestRevision: revision, CandidateCommit: candidateCommit,
+		ChangeID: change, RequestRevision: revision, CandidateCommit: candidateCommit,
 	})
 	require.NoError(t, err)
 	return raw
 }
 
-// listRuns has client list the verification runs of the journey's change.
+// listRuns has client list the verification runs of change.
 func listRuns(
-	t *testing.T, ctx context.Context, client *genmcpsurla.Client,
+	t *testing.T, ctx context.Context, client *genmcpsurla.Client, change string,
 ) []*gensurla.VerificationStatusResult {
 	t.Helper()
 	listed, err := gensurla.DecodeVerificationListResult(
-		trustedSuiteCall(t, ctx, client, "list_verifications", journeyChangeArgs))
+		trustedSuiteCall(t, ctx, client, "list_verifications", journeyChangeArgs(change)))
 	require.NoError(t, err)
 	return listed.Runs
+}
+
+// journeyFile returns the text of the file at path, which must exist.
+func journeyFile(t *testing.T, path string) string {
+	t.Helper()
+	raw, err := os.ReadFile(path)
+	require.NoError(t, err)
+	return string(raw)
+}
+
+// journeyBranchTip returns the commit branch points to in the repository of
+// the folder dir.
+func journeyBranchTip(t *testing.T, dir, branch string) string {
+	t.Helper()
+	return strings.TrimSpace(runTestGit(t, dir, "rev-parse", "refs/heads/"+branch))
+}
+
+// journeyCommitAll commits everything in the working copy at dir the way the
+// journey's builder commits its work, git add -A then git commit with
+// message, checks that this leaves nothing uncommitted or untracked there,
+// and returns the new commit.
+func journeyCommitAll(t *testing.T, dir, message string) string {
+	t.Helper()
+	runTestGit(t, dir, "add", "-A")
+	runTestGit(t, dir, "commit", "-q", "-m", message)
+	assert.Empty(t, runTestGit(t, dir, "status", "--porcelain", "--untracked-files=all"),
+		"git add -A and the commit leave the copy clean")
+	return strings.TrimSpace(runTestGit(t, dir, "rev-parse", "HEAD"))
 }
 
 // replaceOnce edits the file at path the way an agent edits a file in its
@@ -157,9 +191,9 @@ func replaceOnce(t *testing.T, path, old, replacement string) {
 	require.NoError(t, os.WriteFile(path, []byte(edited), info.Mode().Perm()))
 }
 
-// approvePayload returns what the page's Approve control sends for the
-// passing run: the change and its agreed revision, and the run's candidate
-// commit and report digest.
+// approvePayload returns what the page's Approve control sends for the first
+// change's newest passing run: the change and its agreed revision, and the
+// run's candidate commit and report digest.
 func (j *wholeJourney) approvePayload(t *testing.T) *gensurla.ApproveMergePayload {
 	t.Helper()
 	completed, ok := j.passed.State.AsCompleted()
@@ -170,6 +204,121 @@ func (j *wholeJourney) approvePayload(t *testing.T) *gensurla.ApproveMergePayloa
 		CandidateCommit: j.passed.CandidateCommit,
 		ReportDigest:    completed.Report.ReportDigest,
 	}
+}
+
+// passRun has the builder verify commit for the first change's agreed
+// revision and follows the run until it finishes. The run must pass every
+// scenario of the tests accepted at testsCommit and say that they are the
+// written tests of that commit. It returns the finished run, which stays in
+// the project's runs folder until the journey's cleanup drains it.
+func (j *wholeJourney) passRun(
+	t *testing.T, ctx context.Context, commit, testsCommit string,
+) *gensurla.VerificationStatusResult {
+	t.Helper()
+	run, err := gensurla.DecodeVerificationStatusResult(trustedSuiteCall(t, ctx, j.builder, "verify_change",
+		journeyVerifyArgs(t, journeyChangeID, j.confirmed, commit)))
+	require.NoError(t, err)
+	require.NotEmpty(t, run.RunID)
+	// configureProjectWorkspace keeps the project's runs in its state folder.
+	runsDir := filepath.Join(j.state.Dir, "runs")
+	j.t.Cleanup(func() { drainTrustedSuiteRun(runsDir, run.RunID, j.state.Dir, j.dir) })
+	args, err := gensurla.EncodeGetVerificationPayload(&gensurla.GetVerificationPayload{RunID: run.RunID})
+	require.NoError(t, err)
+	ticker := time.NewTicker(200 * time.Millisecond)
+	defer ticker.Stop()
+	for run.State.Kind() == gensurla.StateKindRunning {
+		select {
+		case <-ctx.Done():
+			t.Fatalf("the verification run did not finish: %v", ctx.Err())
+		case <-ticker.C:
+		}
+		run, err = gensurla.DecodeVerificationStatusResult(
+			trustedSuiteCall(t, ctx, j.builder, "get_verification", args))
+		require.NoError(t, err)
+	}
+	if stopped, ended := run.State.AsNotCompleted(); ended {
+		t.Fatalf("the run ended without a report: %s at stage %s: %s", stopped.Kind, stopped.Stage, stopped.Summary)
+	}
+	completed, ok := run.State.AsCompleted()
+	require.True(t, ok, "the run ends with a report: %s", run.State.Kind())
+	require.True(t, completed.Report.Passed,
+		"the builder's commit passes the accepted tests: %+v", completed.Report)
+	scenarios := make([]string, 0, len(completed.Report.Scenarios))
+	for _, s := range completed.Report.Scenarios {
+		scenarios = append(scenarios, s.ID)
+		assert.Equal(t, "passed", s.Outcome, "scenario %s", s.ID)
+	}
+	assert.ElementsMatch(t, journeyScenarios, scenarios, "the starter's scenarios and one per finished flow")
+	assert.Equal(t, commit, run.CandidateCommit)
+	assert.Equal(t, j.confirmed, run.RequestRevision)
+	assert.Equal(t, testsCommit, run.SuiteCommit, "the run uses the accepted tests")
+	written, ok := run.TestSource.AsWrittenTests()
+	require.True(t, ok, "the run's tests are the written ones: %s", run.TestSource.Kind())
+	assert.Equal(t, testsCommit, written.Commit)
+	assert.Equal(t, journeyWrittenTestsNotice, written.Notice)
+	return run
+}
+
+// passedTaking returns how build 1 reads once the run in j.passed passed and
+// before the user merges it: the two commits the user merges, the builder's
+// and the tests at j.testsCommit, each with build 1's branch it was verified
+// on, and the build's base still in the project's branch.
+func (j *wholeJourney) passedTaking() gensurla.BuildTaking {
+	return gensurla.NewBuildTakingPassed(&gensurla.BuildPassed{
+		RunID:           j.passed.RunID,
+		CandidateCommit: j.passed.CandidateCommit,
+		CandidateBranch: testwriter.BuilderRole.Branch(1),
+		Tests: gensurla.NewBuildPassedTestSourceWrittenTests(&gensurla.BuildPassedTests{
+			Commit: j.testsCommit, Branch: testwriter.TestsRole.Branch(1),
+		}),
+		BaseInBranch: true,
+	})
+}
+
+// assertPassedTaking checks that the user's page and an agent both read build
+// 1 as passedTaking describes it.
+func (j *wholeJourney) assertPassedTaking(t *testing.T, ctx context.Context) {
+	t.Helper()
+	for who, build := range j.buildReads(t, ctx, journeyChangeID) {
+		assert.Equal(t, j.passedTaking(), build.Taking,
+			"the %s reads the passed run's commits to merge and their branches", who)
+	}
+}
+
+// buildReads reads change's build as the user's page does and as an agent
+// does, the guide through get_build, and returns the started build each sees.
+func (j *wholeJourney) buildReads(
+	t *testing.T, ctx context.Context, change string,
+) map[string]*gensurla.StartedBuild {
+	t.Helper()
+	page, err := j.user.GetBuild(ctx, &gensurla.GetBuildPayload{ChangeID: change})
+	require.NoError(t, err)
+	shown, ok := page.Build.AsStarted()
+	require.True(t, ok, "the user's page reads a build of %s: %s", change, page.Build.Kind())
+	return map[string]*gensurla.StartedBuild{"user": shown, "guide": readBuild(t, ctx, j.guide, change)}
+}
+
+// builderWork returns the assignments list_builder_assignments gives the
+// builder: the open build's while it needs the builder, none otherwise.
+func (j *wholeJourney) builderWork(t *testing.T, ctx context.Context) []*gensurla.BuilderAssignment {
+	t.Helper()
+	listed, err := gensurla.DecodeBuilderAssignmentList(
+		trustedSuiteCall(t, ctx, j.builder, "list_builder_assignments", []byte(`{}`)))
+	require.NoError(t, err)
+	return listed.Assignments
+}
+
+// testWriterWork returns the assignments list_test_writer_assignments gives
+// the test writer: the open build's while it needs the test writer, none
+// otherwise.
+func (j *wholeJourney) testWriterWork(
+	t *testing.T, ctx context.Context,
+) []*gensurla.TestWriterAssignmentItem {
+	t.Helper()
+	listed, err := gensurla.DecodeTestWriterAssignmentList(
+		trustedSuiteCall(t, ctx, j.testWriter, "list_test_writer_assignments", []byte(`{}`)))
+	require.NoError(t, err)
+	return listed.Assignments
 }
 
 // startServer runs the real serve composition until the journey's test ends.
@@ -241,24 +390,24 @@ func (j *wholeJourney) scriptedAgent(t *testing.T, role string) (*genmcpsurla.Cl
 	return nil, ""
 }
 
-// reportTests has the test writer report its tests finished for the agreed
-// revision, checks that the report returns at once as reported with the
-// number report, and waits, reading get_build as the test writer, until
-// Surla's check replaces reported with its verdict on that report. It
+// reportTests has the test writer report its tests finished for change at
+// its agreed revision, checks that the report returns at once as reported
+// with the number report, and waits, reading get_build as the test writer,
+// until Surla's check replaces reported with its verdict on that report. It
 // returns the build with the verdict.
 func (j *wholeJourney) reportTests(
-	t *testing.T, ctx context.Context, report int,
+	t *testing.T, ctx context.Context, change, revision string, report int,
 ) *gensurla.StartedBuild {
 	t.Helper()
 	item, err := gensurla.DecodeTestWriterAssignmentItem(trustedSuiteCall(t, ctx, j.testWriter,
-		"report_tests_finished", journeyReportArgs(t, j.confirmed)))
+		"report_tests_finished", journeyReportArgs(t, change, revision)))
 	require.NoError(t, err)
 	require.Equal(t, gensurla.TestsKindReported, item.Progress.Tests.Kind(), "a report returns at once")
 	require.Equal(t, report, item.Progress.Report)
 	ticker := time.NewTicker(200 * time.Millisecond)
 	defer ticker.Stop()
 	for {
-		build := readBuild(t, ctx, j.testWriter)
+		build := readBuild(t, ctx, j.testWriter, change)
 		if build.TestWriter.Tests.Kind() != gensurla.TestsKindReported {
 			require.Equal(t, report, build.TestWriter.Report, "the verdict answers report %d", report)
 			return build
@@ -273,9 +422,10 @@ func (j *wholeJourney) reportTests(
 
 // latestVerifications reads the change list as the builder, through
 // list_changes, and as the user's page does, and returns the latest
-// verification each sees for the journey's change, the only change listed.
+// verification each sees for change, which must be the only change listed:
+// the journey's first change, until the guide proposes the second.
 func (j *wholeJourney) latestVerifications(
-	t *testing.T, ctx context.Context,
+	t *testing.T, ctx context.Context, change string,
 ) map[string]*gensurla.LatestVerificationItem {
 	t.Helper()
 	builder, err := gensurla.DecodeChangeList(
@@ -286,39 +436,40 @@ func (j *wholeJourney) latestVerifications(
 	latest := map[string]*gensurla.LatestVerificationItem{}
 	for who, list := range map[string]*gensurla.ChangeList{"builder": builder, "user": page} {
 		require.Len(t, list.Changes, 1)
+		require.Equal(t, change, list.Changes[0].ChangeID)
 		require.NotNil(t, list.Changes[0].LatestVerification, "the %s sees a latest verification", who)
 		latest[who] = list.Changes[0].LatestVerification
 	}
 	return latest
 }
 
-// testsBranch returns the commit the tests branch points to in the project's
-// repository.
-func (j *wholeJourney) testsBranch(t *testing.T) string {
+// testsBranch returns the commit the tests branch of the build numbered build
+// points to in the project's repository.
+func (j *wholeJourney) testsBranch(t *testing.T, build int) string {
 	t.Helper()
-	return strings.TrimSpace(runTestGit(t, j.dir, "rev-parse", "refs/heads/"+testwriter.TestsRole.Branch(1)))
+	return journeyBranchTip(t, j.dir, testwriter.TestsRole.Branch(build))
 }
 
-// readBuilderAssignment has the builder read its assignment for the journey's
-// change in full.
+// readBuilderAssignment has the builder read its assignment for change in
+// full.
 func (j *wholeJourney) readBuilderAssignment(
-	t *testing.T, ctx context.Context,
+	t *testing.T, ctx context.Context, change string,
 ) *gensurla.BuilderAssignment {
 	t.Helper()
 	assignment, err := gensurla.DecodeBuilderAssignment(
-		trustedSuiteCall(t, ctx, j.builder, "get_builder_assignment", journeyChangeArgs))
+		trustedSuiteCall(t, ctx, j.builder, "get_builder_assignment", journeyChangeArgs(change)))
 	require.NoError(t, err)
 	return assignment
 }
 
-// readTestWriterAssignment has the test writer read its assignment for the
-// journey's change in full.
+// readTestWriterAssignment has the test writer read its assignment for change
+// in full.
 func (j *wholeJourney) readTestWriterAssignment(
-	t *testing.T, ctx context.Context,
+	t *testing.T, ctx context.Context, change string,
 ) *gensurla.TestWriterAssignment {
 	t.Helper()
 	assignment, err := gensurla.DecodeTestWriterAssignment(
-		trustedSuiteCall(t, ctx, j.testWriter, "get_test_writer_assignment", journeyChangeArgs))
+		trustedSuiteCall(t, ctx, j.testWriter, "get_test_writer_assignment", journeyChangeArgs(change)))
 	require.NoError(t, err)
 	return assignment
 }

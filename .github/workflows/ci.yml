@@ -501,11 +501,16 @@ jobs:
             job_timeout: 70
           - suite: journey
             module: .
-            # One change through the project server, its team, a
-            # verification run and approval: about 2.5 to 4 minutes on a
+            # Three changes through the project server and its team. The first
+            # is built, verified, approved, verified and approved again after
+            # later tests, and merged by the user with git; the second is
+            # refused its build until that merge, then built and dropped; the
+            # third is built after the drop. Two verification runs, three
+            # build starts and five Story evaluations: about 4 minutes on a
             # developer machine with -race, several times that on this runner.
-            # Its package alarm outlasts the test's own 32-minute wait for a
-            # verification run, so a hung run ends with the test's message.
+            # Its package alarm outlasts the test's own 32-minute wait for one
+            # verification run by 8 minutes, so a hung run ends with the
+            # test's message when the steps before it took less than that.
             args: -tags=e2e -run '^TestWholeJourneyThroughTheProjectServer$' ./cmd/surla
             test_timeout: 40m
             job_timeout: 50
