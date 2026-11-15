@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -95,7 +96,7 @@ func (c *ControlPlane) GenerateCode(
 	if !ready.build.inForce {
 		return nil, gensurla.MakeConflict(errors.New("The open build is for an earlier agreed revision; ask the user to build the current agreed revision on the views page."))
 	}
-	moduleDir, workspace, err := designeval.OpenModuleRoot(ready.folder)
+	moduleDir, workspace, err := openBuildGenerationRoot(project, ready.folder)
 	if err != nil {
 		return nil, gensurla.MakeUnprocessable(fmt.Errorf("open the builder's module: %w", err))
 	}
@@ -170,6 +171,48 @@ func (c *ControlPlane) GenerateCode(
 		res.Warnings = append(res.Warnings, "gen/ was updated; the final progress notification could not be delivered")
 	}
 	return res, nil
+}
+
+// openBuildGenerationRoot walks from the held project without following any
+// directory link, then binds the module root to that exact opened directory.
+// The returned root is retained through generation; a nested copy path cannot
+// redirect writes into the user's project or another directory.
+func openBuildGenerationRoot(
+	project *os.Root, folder string,
+) (dir string, root *os.Root, retErr error) {
+	rel, err := filepath.Rel(project.Name(), folder)
+	if err != nil || !fs.ValidPath(filepath.ToSlash(rel)) {
+		return "", nil, fmt.Errorf("the builder's module is outside the bound project: %s", folder)
+	}
+	parent, err := project.Open(".")
+	if err != nil {
+		return "", nil, err
+	}
+	fd, openErr := openDirAt(int(parent.Fd()), filepath.ToSlash(rel))
+	if err := errors.Join(openErr, parent.Close()); err != nil {
+		return "", nil, errors.Join(err, closeFD(fd))
+	}
+	checked := os.NewFile(uintptr(fd), folder)
+	defer func() {
+		retErr = errors.Join(retErr, checked.Close())
+		if retErr != nil && root != nil {
+			retErr = errors.Join(retErr, root.Close())
+			root = nil
+		}
+	}()
+	before, err := checked.Stat()
+	if err != nil {
+		return "", nil, err
+	}
+	dir, root, err = designeval.OpenModuleRoot(folder)
+	if err != nil {
+		return "", nil, err
+	}
+	after, err := root.Stat(".")
+	if err != nil || !os.SameFile(before, after) {
+		return "", root, errors.Join(errors.New("the builder's module changed while opening it; call generate_code again"), err)
+	}
+	return dir, root, nil
 }
 
 // openGenerationEvalModule opens only the public eval/ child of the held
