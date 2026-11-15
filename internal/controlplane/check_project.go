@@ -1,4 +1,4 @@
-// This file implements check_project: copy the active workspace's live grant
+// This file implements check_project: copy the builder's working-copy grant
 // into a per-operation directory and run go test ./... for every builder-owned
 // workspace module in Linux containers (leaving out the starter test module
 // eval when the project's tests belong to the test writer), after downloading
@@ -117,13 +117,14 @@ const (
 	containerWork = "/work"
 )
 
-// CheckProject copies the active workspace's live files into a protected
+// CheckProject copies the open build's builder working files into a protected
 // per-operation copy and runs go test ./... for every Go module in it in
 // Linux containers (except the starter test module eval when the project has no
 // stored verification settings, because those tests belong to the test writer),
 // never changing the workspace. The work runs in a check helper process that
 // finishes and cleans up the operation even if this server dies. It requires an
-// authenticated principal.
+// authenticated principal and a current, read builder assignment. The builder
+// turn remains reserved until the helper finishes its operation and cleanup.
 func (c *ControlPlane) CheckProject(ctx context.Context) (res *gensurla.CheckProjectResult, retErr error) {
 	if _, ok := PrincipalFromContext(ctx); !ok {
 		return nil, errors.New("authenticated principal is required")

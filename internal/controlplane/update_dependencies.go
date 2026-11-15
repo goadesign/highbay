@@ -49,15 +49,16 @@ var (
 	fsyncDir = unix.Fsync
 )
 
-// UpdateDependencies runs go mod tidy for every Go module of the active
-// workspace in a protected copy (except the starter test module eval when the
+// UpdateDependencies runs go mod tidy for every Go module of the open build's
+// builder folder in a protected copy (except the starter test module eval when the
 // project has no stored verification settings, because those tests belong to
 // the test writer), populates go.work.sum when the copy has a go.work, and
 // publishes only the changed manifests. The work runs in a check helper
 // process that finishes and cleans up the operation even if this server dies.
 // Modules are published one at a time with Go's normal partial semantics. Once
 // a manifest is replaced, later failures are reported next to the written
-// paths, never instead of them. It requires an authenticated principal.
+// paths, never instead of them. It requires an authenticated principal and a
+// current, read builder assignment, reserved until helper cleanup completes.
 func (c *ControlPlane) UpdateDependencies(ctx context.Context) (res *gensurla.UpdateDependenciesResult, retErr error) {
 	if _, ok := PrincipalFromContext(ctx); !ok {
 		return nil, errors.New("authenticated principal is required")
