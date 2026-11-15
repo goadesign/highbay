@@ -607,7 +607,13 @@ func NewHTTPHandler(svc gensurla.Service, auth RequestAuthenticator) http.Handle
 		mux,
 		goahttp.RequestDecoder,
 		goahttp.ResponseEncoder,
-		nil,
+		func(ctx context.Context, _ http.ResponseWriter, err error) {
+			_, span := recorder.Start(ctx, "surla.mcp.transport_error")
+			defer span.End()
+			span.SetAttributes(attribute.String("error.classification", "mcp_transport"))
+			span.RecordError(err)
+			span.SetStatus(codes.Error, "MCP transport failure")
+		},
 	)
 	genmcpsurla.Mount(mux, mcpServer)
 
