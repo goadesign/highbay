@@ -1848,9 +1848,10 @@ an earlier revision, and **Build agreed revision** in either case while a
 proposed revision waits. Once the agreed revision is built, it offers **Build
 again…** instead, which asks first. Next to each control that sends a start,
 it explains which agents start: the builder and, unless the project uses
-configured tests, a test writer. It also says that Surla runs the tests on
-this machine with your permissions and asks you to read them before
-approving. It refuses to start from an
+configured tests, a test writer. It also says that, from Build on, the tests
+and the builder's code run on this machine as ordinary programs, with your
+access to files and the network, that nothing confines them, and that
+approval decides only what merges. It refuses to start from an
 unconfirmed change (`Confirm the change before building it.`) or an older
 revision, and builds the agreed revision even while the editor holds unsaved
 edits. It shows when the build started, the required test count, whether

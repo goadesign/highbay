@@ -241,8 +241,10 @@ After confirming, you press **Build this change** at the top of Decisions &
 Approval. The saved agreement stays below the build under **Agreed:** and
 your request. Open **Agreement details** to review it or **Refine agreed
 answers and examples** to edit it. The build control explains which agents
-start and that Surla runs the tests on this machine with your permissions,
-so you should read them before approving. **Stored verification settings**
+start and that, from Build on, the tests and the builder's code run on this
+machine as ordinary programs, with your access to files and the network;
+nothing confines them, and approval decides only what merges. **Stored
+verification settings**
 name a test suite of your own, an **evaluator**, at
 one exact commit; you save them with `surla verification set <file>`, and
 they apply when the server starts again. Building always uses the agreed
