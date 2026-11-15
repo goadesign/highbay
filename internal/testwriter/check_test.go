@@ -548,7 +548,8 @@ func fixtureProject(t *testing.T) map[string]string {
 		// Compile the valid baseline once in the checker's own build home.
 		// Only the compiler's normal cache survives; the source and binary do not.
 		tmp := t.TempDir()
-		writeFiles(t, tmp, module)
+		moduleDir := filepath.Join(tmp, "module")
+		writeFiles(t, moduleDir, module)
 		tc, err := resolveToolchain(t.Context(), tmp)
 		require.NoError(t, err)
 		home := filepath.Join(testChecker.workDir, "build-home")
@@ -557,7 +558,7 @@ func fixtureProject(t *testing.T) map[string]string {
 		ctx, cancel := context.WithTimeout(t.Context(), 10*time.Minute)
 		var keep bool
 		err = candidate.BuildModule(ctx, candidate.BuildSpec{
-			SourceDir: tmp, ModuleDir: tmp, Package: fixtureSuite.Command,
+			SourceDir: tmp, ModuleDir: moduleDir, Package: fixtureSuite.Command,
 			Out: filepath.Join(tmp, "suite"), GOROOT: tc.goroot, ModCache: tc.modCache,
 			WorkDir: home, LogFile: log,
 		}, runInGroup(&keep))
