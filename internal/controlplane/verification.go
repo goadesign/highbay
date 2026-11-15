@@ -90,6 +90,12 @@ func (c *ControlPlane) VerifyChange(ctx context.Context, p *gensurla.VerifyChang
 	}
 	c.workspaceMu.RLock()
 	ready, err := c.builderCopyReady(ctx, c.activeWorkspaceDir, "verify_change")
+	if _, written := c.verifier.(writtenTestVerification); written &&
+		(errors.Is(err, errNoRepository) || errors.Is(err, testwriter.ErrNotRepository)) {
+		// Readiness now observes the missing project repository before the
+		// layout reader does; retain that owner's declared, actionable refusal.
+		err = refuseNoTestLayout(&layoutRefusal{reason: refusedNoRepository, folder: c.activeWorkspaceDir})
+	}
 	if err == nil && (ready.build.file.ChangeID != held.file.ChangeID ||
 		ready.build.file.RequestRevision != held.file.RequestRevision ||
 		!ready.build.file.StartedAt.Equal(held.file.StartedAt)) {
