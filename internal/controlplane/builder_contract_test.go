@@ -252,6 +252,7 @@ func TestBuilderCopyOperationsKeepTheirRoles(t *testing.T) {
 func TestBuilderAssignmentChecksOwnershipBeforeFolderFacts(t *testing.T) {
 	repo := realTempDir(t)
 	workspace := filepath.Join(repo, "apps", "shop")
+	require.NoError(t, os.MkdirAll(workspace, 0o700))
 	gitForLayoutTest(t, repo, "init", "-q")
 	cp := newBuildControlPlane(t, Options{WorkspaceDir: workspace})
 	card := buildableChange(t, cp, "chg")
