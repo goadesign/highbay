@@ -431,6 +431,7 @@ func (c *Client) InitProject(ctx context.Context, p *InitProjectPayload) (res *I
 
 // GenerateCode calls the "generate_code" endpoint of the "surla" service.
 // GenerateCode may return the following errors:
+//   - "working_copy_busy" (type *goa.ServiceError): The builder's working copy is in use by another operation; call this tool again after that operation finishes. Nothing was changed.
 //   - "no_build" (type *goa.ServiceError): No build is open, or the user dropped it: stop work on it and make no more edits or commits for it. The user starts builds on the views page.
 //   - "assignment_unread" (type *goa.ServiceError): A build started after your last read of your assignment: stop your current work, then call get_builder_assignment for its change.
 //   - "copy_off_branch" (type *CopyOffBranch): Your working copy is not on the build's branch: the message states its branch, the build's branch and what is uncommitted, and the goal. Put your work there with git, commit it, and call again.
@@ -452,6 +453,7 @@ func (c *Client) GenerateCode(ctx context.Context, p *GenerateCodePayload) (res 
 
 // CheckProject calls the "check_project" endpoint of the "surla" service.
 // CheckProject may return the following errors:
+//   - "working_copy_busy" (type *goa.ServiceError): The builder's working copy is in use by another operation; call this tool again after that operation finishes. Nothing was changed.
 //   - "no_build" (type *goa.ServiceError): No build is open, or the user dropped it: stop work on it and make no more edits or commits for it. The user starts builds on the views page.
 //   - "assignment_unread" (type *goa.ServiceError): A build started after your last read of your assignment: stop your current work, then call get_builder_assignment for its change.
 //   - "copy_off_branch" (type *CopyOffBranch): Your working copy is not on the build's branch: the message states its branch, the build's branch and what is uncommitted, and the goal. Put your work there with git, commit it, and call again.
@@ -473,6 +475,7 @@ func (c *Client) CheckProject(ctx context.Context) (res *CheckProjectResult, err
 // UpdateDependencies calls the "update_dependencies" endpoint of the "surla"
 // service.
 // UpdateDependencies may return the following errors:
+//   - "working_copy_busy" (type *goa.ServiceError): The builder's working copy is in use by another operation; call this tool again after that operation finishes. Nothing was changed.
 //   - "no_build" (type *goa.ServiceError): No build is open, or the user dropped it: stop work on it and make no more edits or commits for it. The user starts builds on the views page.
 //   - "assignment_unread" (type *goa.ServiceError): A build started after your last read of your assignment: stop your current work, then call get_builder_assignment for its change.
 //   - "copy_off_branch" (type *CopyOffBranch): Your working copy is not on the build's branch: the message states its branch, the build's branch and what is uncommitted, and the goal. Put your work there with git, commit it, and call again.
@@ -646,7 +649,6 @@ func (c *Client) WaitForChanges(ctx context.Context, p *WaitForChangesPayload) (
 //   - "copy_folder_in_use" (type *goa.ServiceError): A working copy's folder in the project folder, .surla-build or .surla-tests, is a file or a folder that is not a linked working copy of the project's repository; nothing was saved. The message names the folder and ends with the step to move it out of the project.
 //   - "tests_branch_in_use" (type *goa.ServiceError): The branch Surla checks out in a missing working copy, surla/build-<n> or surla/tests-<n>, is checked out in another folder; nothing was saved. The message names that folder, quoted, and ends with the step that frees the branch.
 //   - "working_copy_busy" (type *goa.ServiceError): Another build is starting, a worker is reading its assignment into its working copy, or a test check holds the test writer's working copy; nothing was saved. Start the build again when that has ended.
-//   - "sandbox_unavailable" (type *goa.ServiceError): This system has no candidate sandbox; nothing was saved. When the host reports a specific sandbox prerequisite failure, the message includes its cause and remedy before: Start this project on a system with Surla's candidate sandbox, then build again.
 //   - "previous_change_open" (type *OpenBuildRefusal): Another change's build is open, and the user has neither merged a passed run of it into the branch checked out in the project folder nor dropped it; nothing was saved. The body names that build, with the commits to merge once a run passed, so the page offers the merge commands and Drop.
 //   - "unfinished_build_open" (type *OpenBuildRefusal): Building this change again replaces its open build, which no verification has passed, and replaces does not name that build; nothing was saved. The page asks the user first, then sends replaces naming the build it showed.
 //   - "drafted_before_drop" (type *goa.ServiceError): The agreed revision was drafted before the user dropped another change, so its design can hold that change's design; nothing was saved. The guide revises the change from its draft; the user adopts the revision, then builds.

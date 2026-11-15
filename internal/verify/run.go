@@ -125,7 +125,7 @@ type (
 		evidenceDir string
 	}
 
-	// buildToolchain is what a sandboxed candidate build runs with.
+	// buildToolchain is what a candidate build runs with.
 	buildToolchain struct {
 		// goroot is the resolved toolchain the candidate module selects.
 		goroot string
@@ -166,13 +166,6 @@ const (
 	// summarySuiteBuild is the builder-safe summary of an evaluator suite that
 	// did not build.
 	summarySuiteBuild = "The evaluator suite did not build."
-	// sandboxExit71 is the exit status (EX_OSERR) /usr/bin/sandbox-exec returns
-	// when macOS refuses to apply a sandbox profile (for example inside a nested
-	// restricted coding-agent shell), and also when a sandboxed child exits 71.
-	sandboxExit71 = 71
-	// summarySandboxExit71 is the builder-safe summary returned when a
-	// non-canceled sandboxed build command in Prepare exits with status 71.
-	summarySandboxExit71 = "The sandboxed command exited with status 71. If Surla is running inside a restricted coding-agent shell, its sandbox may have been blocked; run Surla from an unrestricted host shell."
 )
 
 // commitID matches a full commit ID in either Git object format: 40 hex digits
@@ -193,14 +186,12 @@ func IsCommitID(commit string) bool {
 // the CP4 report bound to everything that was tested. The report is also
 // written to ReportDir as <digest>.json.
 //
-// Both builds go through candidate.Build: an OS sandbox in which the build
-// reads nothing but its source tree, the toolchain, the module cache and its
-// own directories under WorkDir, writes nothing but those directories, and has
-// no network. The candidate's source tree is its module; the suite's is its
-// whole checkout, so it may replace sibling modules there. A committed link or
-// replace directive can reach only those trees: the bound commit, the trusted
-// toolchain and checksum-verified modules, and directories this run created
-// empty, because Run refuses a WorkDir that already has contents. The suite is
+// Both builds go through candidate.Build offline: they download nothing
+// (GOPROXY=off, -mod=readonly) and use the toolchain and module cache
+// prepareBuild resolved. A build is an ordinary process of the user, so a
+// committed link or replace directive that leaves the checkout reads the
+// user's files; the suite's module may replace sibling modules in its own
+// checkout. Run refuses a WorkDir that already has contents. The suite is
 // checked out only after the candidate is built. Every command's
 // output goes to files under WorkDir/evidence; errors quote only a bounded
 // excerpt.
@@ -240,7 +231,7 @@ func CandidateBinariesDir(workDir string) string {
 // Prepare runs the trusted preparation Run starts with: it checks the plan,
 // clones the candidate at its exact commit and builds its binaries into
 // WorkDir/candidate-bin, then clones the suite at its exact commit and builds
-// it into WorkDir/suite-bin, with the same sandbox, containment and evidence
+// it into WorkDir/suite-bin, with the same build and evidence
 // rules Run documents. Run calls it before describing and running the suite;
 // a live CP3 target calls it before starting the suite in --live mode, so
 // both build exactly the same way. The caller owns the process group, as for
@@ -310,7 +301,7 @@ func Prepare(ctx context.Context, p Plan) (Prepared, error) {
 			return Prepared{}, stageError(StageCheckout, "The candidate commit does not contain a configured binary package.", fmt.Errorf("binary %q package %q: %w", name, pkg, err))
 		}
 	}
-	toolchain, err := r.prepareBuild(ctx, "candidate", moduleDir, p.WorkDir)
+	toolchain, err := r.prepareBuild(ctx, "candidate", candidateDir, moduleDir, p.WorkDir)
 	if err != nil {
 		return Prepared{}, stageError(StageBuild, summaryCandidateBuild, err)
 	}
@@ -319,13 +310,13 @@ func Prepare(ctx context.Context, p Plan) (Prepared, error) {
 		out := filepath.Join(candidateBinDir, name)
 		logFile := filepath.Join(r.evidenceDir, "build-"+name+".log")
 		if err := candidate.Build(ctx, candidate.BuildSpec{
-			SourceDir: moduleDir, ModuleDir: moduleDir, Package: p.Binaries[name], Out: out,
+			SourceDir: candidateDir, ModuleDir: moduleDir, Package: p.Binaries[name], Out: out,
 			GOROOT: toolchain.goroot, ModCache: toolchain.modCache, WorkDir: toolchain.workDir,
 			LogFile: logFile,
 		}, (*exec.Cmd).Run); err != nil {
 			// The private error carries the end of the compiler's output and
 			// the log that holds all of it; the summary builders see does not.
-			return Prepared{}, stageError(StageBuild, buildSummary(ctx, err, summaryCandidateBuild),
+			return Prepared{}, stageError(StageBuild, summaryCandidateBuild,
 				fmt.Errorf("build candidate %s: %w%s", name, err, excerptFile(logFile, "build output")))
 		}
 		digest, err := sha256File(out)
@@ -347,13 +338,12 @@ func Prepare(ctx context.Context, p Plan) (Prepared, error) {
 	if _, err := resolveInside(suiteModuleDir, p.SuiteCommand); err != nil {
 		return Prepared{}, stageError(StageCheckout, summaryPlan, fmt.Errorf("suite command %q: %w", p.SuiteCommand, err))
 	}
-	suiteToolchain, err := r.prepareBuild(ctx, "suite", suiteModuleDir, p.WorkDir)
+	suiteToolchain, err := r.prepareBuild(ctx, "suite", suiteDir, suiteModuleDir, p.WorkDir)
 	if err != nil {
 		return Prepared{}, stageError(StageBuild, summarySuiteBuild, err)
 	}
-	// The suite builds in the same sandbox as the candidate, readable only
-	// within its own checkout: its module may replace sibling modules there,
-	// but no link or replace can pull in source outside SuiteCommit.
+	// The suite builds the same way as the candidate; its module may replace
+	// sibling modules in its checkout.
 	suiteBin := filepath.Join(suiteBinDir, "suite")
 	suiteLog := filepath.Join(r.evidenceDir, "build-suite.log")
 	if err := candidate.Build(ctx, candidate.BuildSpec{
@@ -362,7 +352,7 @@ func Prepare(ctx context.Context, p Plan) (Prepared, error) {
 		LogFile: suiteLog,
 	}, (*exec.Cmd).Run); err != nil {
 		// As for the candidate: compiler output goes only into the private error.
-		return Prepared{}, stageError(StageBuild, buildSummary(ctx, err, summarySuiteBuild),
+		return Prepared{}, stageError(StageBuild, summarySuiteBuild,
 			fmt.Errorf("build suite: %w%s", err, excerptFile(suiteLog, "build output")))
 	}
 	return Prepared{
@@ -585,17 +575,23 @@ func (r *runner) excerpt(label string) string {
 }
 
 // prepareBuild resolves the toolchain the module at moduleDir selects and
-// downloads its module dependencies, outside the sandbox, for the build named
-// label ("candidate" or "suite"). These steps fetch checksum-verified modules
-// and official toolchains and compile or execute no checked-out code; the
-// sandboxed build afterwards runs with no network. Evidence files and the
-// build home are named by label so the two builds never share them. Go runs
-// git to fetch a module straight from version control, so both commands run
-// without the variables that point git at another repository
+// downloads its module dependencies for the build named label ("candidate" or
+// "suite") of that module from the source root sourceDir. These steps fetch
+// checksum-verified modules and official toolchains and compile or execute no
+// checked-out code; the build afterwards downloads nothing (GOPROXY=off).
+// Both commands get the GOWORK value the build will have (candidate.GoWork),
+// so the download fetches the modules the build selects. Evidence files and
+// the build home are named by label so the two builds never share them. Go
+// runs git to fetch a module straight from version control, so both commands
+// run without the variables that point git at another repository
 // (gitenv.WithoutRedirects); the user's module, proxy, protocol and
 // credential settings stay.
-func (r *runner) prepareBuild(ctx context.Context, label, moduleDir, workDir string) (buildToolchain, error) {
-	env := gitenv.WithoutRedirects(os.Environ())
+func (r *runner) prepareBuild(ctx context.Context, label, sourceDir, moduleDir, workDir string) (buildToolchain, error) {
+	goWork, err := candidate.GoWork(sourceDir, moduleDir)
+	if err != nil {
+		return buildToolchain{}, fmt.Errorf("find the %s build's workspace: %w", label, err)
+	}
+	env := append(gitenv.WithoutRedirects(os.Environ()), "GOWORK="+goWork)
 	if err := r.run(ctx, "go-mod-download-"+label, moduleDir, env, "go", "mod", "download"); err != nil {
 		return buildToolchain{}, fmt.Errorf("download %s modules: %w", label, err)
 	}
@@ -677,18 +673,6 @@ func sha256File(path string) (string, error) {
 		return "", fmt.Errorf("hash %s: %w", path, err)
 	}
 	return hex.EncodeToString(h.Sum(nil)), nil
-}
-
-// buildSummary returns summarySandboxExit71 when a non-canceled sandboxed
-// build command exited with status 71, and defaultSummary otherwise.
-func buildSummary(ctx context.Context, err error, defaultSummary string) string {
-	if ctx.Err() == nil {
-		var exitErr *exec.ExitError
-		if errors.As(err, &exitErr) && exitErr.ExitCode() == sandboxExit71 {
-			return summarySandboxExit71
-		}
-	}
-	return defaultSummary
 }
 
 // stageError wraps err as the *StageError Run returns.

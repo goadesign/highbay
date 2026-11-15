@@ -33,7 +33,6 @@ import (
 	"github.com/goadesign/surla/internal/project"
 	"github.com/goadesign/surla/internal/testwriter"
 	"github.com/goadesign/surla/internal/verify"
-	"github.com/goadesign/surla/verify/candidate"
 )
 
 type (
@@ -122,7 +121,7 @@ func (h *Hooks) PricesScone(ctx context.Context) (eval.Result, error) {
 	// journeyCheckWait bounds one check of the test writer's report, from the
 	// report to the verdict. The control plane gives the whole check 15
 	// minutes (checkLimit in internal/controlplane), within which its
-	// sandboxed build has 10 minutes and its listing 60 seconds, and reaches
+	// build has 10 minutes and its listing 60 seconds, and reaches
 	// could_not_run itself at that limit; one more minute lets that verdict
 	// arrive before this wait ends. The verification run's wait is
 	// journeyOwnerWait, the server's own run limit plus its stop path.
@@ -159,7 +158,7 @@ var (
 // requires is sent back with the compiler's finding naming it; the report
 // with the hook is accepted and recorded on the tests branch, and the
 // builder's assignment names that commit; the builder's commit passes those
-// tests in a sandboxed run that says where the tests came from and that the
+// tests in a run that says where the tests came from and that the
 // test writer may read, and the change list shows it as current; the user
 // approves that run on the page without promotion settings, and the approval
 // names the builder's commit and the tests' commit; and a later acceptance of
@@ -167,9 +166,6 @@ var (
 // current, hides its approval, and refuses approving it again. Each step
 // stops the journey when it fails, because every later step builds on it.
 func TestWholeJourneyThroughTheProjectServer(t *testing.T) {
-	if err := candidate.CheckSandbox(); err != nil {
-		t.Skipf("the journey builds the starter and its tests in the candidate sandbox: %v", err)
-	}
 	j := newWholeJourney(t)
 	for _, step := range []struct {
 		name string

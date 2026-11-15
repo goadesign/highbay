@@ -368,7 +368,7 @@ func TestDraftCommittedWalkUsesTheProjectPrefixAndDesignExclusions(t *testing.T)
 }
 
 // TestRefreshReuseRequiresTheDraftAndTheList checks the real entry point and
-// retained operation facts while the sandbox process is held outside all locks.
+// retained operation facts while the evaluation process is held outside all locks.
 func TestRefreshReuseRequiresTheDraftAndTheList(t *testing.T) {
 	project := t.TempDir()
 	writeWorkspaceFiles(t, project, validWorkspaceStub("package design\n"))

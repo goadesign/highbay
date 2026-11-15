@@ -1,22 +1,20 @@
-// Command probe is a hostile stand-in candidate used to prove the sandbox. Each
-// argument names one action; the probe attempts it and prints one JSON object
-// per line reporting whether the operating system allowed it.
+// Command probe is a stand-in candidate the package's tests run through Exec,
+// Run and Output. Each argument names one action; the probe attempts it and
+// prints one JSON object per line reporting whether it succeeded.
 //
-// Actions: read:<path>, readdir:<path>, write:<path>, env:<name>,
-// connect:<host:port>, listen:<host:port>, stat:<path>, spawn,
-// stderr:<text> (prints text on standard error), exit:<code> (exits with code
-// at once).
+// Actions: write:<path>, env:<name>, orphan:<pidfile> (starts /bin/sleep 300
+// sharing the probe's standard output and standard error, writes its PID to
+// pidfile, and does not wait for it), stderr:<text> (prints text on standard
+// error), exit:<code> (exits with code at once).
 package main
 
 import (
 	"encoding/json"
 	"fmt"
-	"net"
 	"os"
 	"os/exec"
 	"strconv"
 	"strings"
-	"time"
 )
 
 // result reports one attempted action.
@@ -49,13 +47,6 @@ func main() {
 // attempt performs one action and records what it observed.
 func attempt(kind, target string, r *result) error {
 	switch kind {
-	case "read":
-		b, err := os.ReadFile(target)
-		r.Detail = string(b)
-		return err
-	case "readdir":
-		_, err := os.ReadDir(target)
-		return err
 	case "write":
 		return os.WriteFile(target, []byte("probe"), 0o600)
 	case "env":
@@ -65,23 +56,14 @@ func attempt(kind, target string, r *result) error {
 		}
 		r.Detail = v
 		return nil
-	case "connect":
-		c, err := net.DialTimeout("tcp", target, 2*time.Second)
-		if err != nil {
+	case "orphan":
+		child := exec.Command("/bin/sleep", "300")
+		child.Stdout, child.Stderr = os.Stdout, os.Stderr
+		if err := child.Start(); err != nil {
 			return err
 		}
-		return c.Close()
-	case "listen":
-		ln, err := net.Listen("tcp", target)
-		if err != nil {
-			return err
-		}
-		return ln.Close()
-	case "stat":
-		_, err := os.Stat(target)
-		return err
-	case "spawn":
-		return exec.Command("/bin/echo", "spawned").Run()
+		r.Detail = strconv.Itoa(child.Process.Pid)
+		return os.WriteFile(target, []byte(r.Detail), 0o600)
 	case "stderr":
 		_, err := fmt.Fprintln(os.Stderr, target)
 		return err

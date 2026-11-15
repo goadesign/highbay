@@ -35,7 +35,7 @@ import (
 
 // starterSurlaVersion is a published Surla version the starter's evaluator
 // module requires, as the scaffold tests use.
-const starterSurlaVersion = "v0.0.0-20261110163737-d9beac313142"
+const starterSurlaVersion = "v0.0.0-20261115014514-02c792da3ded"
 
 // headerCommand matches the command line Goa writes in generated file
 // headers, which names the program that generated them.

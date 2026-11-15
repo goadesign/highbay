@@ -199,14 +199,7 @@ var _ = Service("orders", func() {
 	require.NoError(t, err)
 	initial := cp
 	t.Cleanup(func() { assert.NoError(t, initial.Close()) })
-	refresh, err := cp.RefreshStory(alice)
-	require.NoError(t, err)
-	require.Eventually(t, func() bool {
-		refresh, err = cp.GetStoryRefresh(alice)
-		return err != nil || refresh.State != "running"
-	}, 2*time.Minute, 25*time.Millisecond)
-	require.NoError(t, err)
-	require.Equal(t, "succeeded", refresh.State, "%v", refresh.Diagnostic)
+	refresh := mustRefreshStory(t, cp, alice)
 	card, err := cp.ProposeChange(alice, &gensurla.ProposeChangePayload{
 		ChangeID: "chg", Prompt: "Refunds up to $50 are instant.", Analysis: confirmedAnalysis(), StoryRefreshOpID: refresh.OpID,
 	})

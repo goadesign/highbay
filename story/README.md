@@ -67,7 +67,7 @@ This module supplies the language and its expressions only. Surla, in the
 module above this one, does the rest with them:
 
 - When the guide (the coding agent the user talks to) calls `refresh_story`,
-  Surla's server evaluates the project's Story in its sandbox. It keeps the
+  Surla's server evaluates the project's Story. It keeps the
   evaluated Story with a change when the guide proposes or revises that
   change with the evaluation's `op_id`.
 - When the user builds the change, Surla generates one required test per

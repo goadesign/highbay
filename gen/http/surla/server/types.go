@@ -2540,6 +2540,25 @@ type InitProjectForbiddenResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// GenerateCodeWorkingCopyBusyResponseBody is the type of the "surla" service
+// "generate_code" endpoint HTTP response body for the "working_copy_busy"
+// error.
+type GenerateCodeWorkingCopyBusyResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // GenerateCodeNoBuildResponseBody is the type of the "surla" service
 // "generate_code" endpoint HTTP response body for the "no_build" error.
 type GenerateCodeNoBuildResponseBody struct {
@@ -2711,6 +2730,25 @@ type GenerateCodeForbiddenResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// CheckProjectWorkingCopyBusyResponseBody is the type of the "surla" service
+// "check_project" endpoint HTTP response body for the "working_copy_busy"
+// error.
+type CheckProjectWorkingCopyBusyResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // CheckProjectNoBuildResponseBody is the type of the "surla" service
 // "check_project" endpoint HTTP response body for the "no_build" error.
 type CheckProjectNoBuildResponseBody struct {
@@ -2849,6 +2887,25 @@ type CheckProjectUnavailableResponseBody struct {
 // CheckProjectForbiddenResponseBody is the type of the "surla" service
 // "check_project" endpoint HTTP response body for the "forbidden" error.
 type CheckProjectForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpdateDependenciesWorkingCopyBusyResponseBody is the type of the "surla"
+// service "update_dependencies" endpoint HTTP response body for the
+// "working_copy_busy" error.
+type UpdateDependenciesWorkingCopyBusyResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -3766,25 +3823,6 @@ type StartBuildUnprocessableResponseBody struct {
 // StartBuildNotImplementedResponseBody is the type of the "surla" service
 // "start_build" endpoint HTTP response body for the "not_implemented" error.
 type StartBuildNotImplementedResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// StartBuildSandboxUnavailableResponseBody is the type of the "surla" service
-// "start_build" endpoint HTTP response body for the "sandbox_unavailable"
-// error.
-type StartBuildSandboxUnavailableResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -10525,6 +10563,20 @@ func NewInitProjectForbiddenResponseBody(res *goa.ServiceError) *InitProjectForb
 	return body
 }
 
+// NewGenerateCodeWorkingCopyBusyResponseBody builds the HTTP response body
+// from the result of the "generate_code" endpoint of the "surla" service.
+func NewGenerateCodeWorkingCopyBusyResponseBody(res *goa.ServiceError) *GenerateCodeWorkingCopyBusyResponseBody {
+	body := &GenerateCodeWorkingCopyBusyResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewGenerateCodeNoBuildResponseBody builds the HTTP response body from the
 // result of the "generate_code" endpoint of the "surla" service.
 func NewGenerateCodeNoBuildResponseBody(res *goa.ServiceError) *GenerateCodeNoBuildResponseBody {
@@ -10659,6 +10711,20 @@ func NewGenerateCodeForbiddenResponseBody(res *goa.ServiceError) *GenerateCodeFo
 	return body
 }
 
+// NewCheckProjectWorkingCopyBusyResponseBody builds the HTTP response body
+// from the result of the "check_project" endpoint of the "surla" service.
+func NewCheckProjectWorkingCopyBusyResponseBody(res *goa.ServiceError) *CheckProjectWorkingCopyBusyResponseBody {
+	body := &CheckProjectWorkingCopyBusyResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewCheckProjectNoBuildResponseBody builds the HTTP response body from the
 // result of the "check_project" endpoint of the "surla" service.
 func NewCheckProjectNoBuildResponseBody(res *goa.ServiceError) *CheckProjectNoBuildResponseBody {
@@ -10769,6 +10835,21 @@ func NewCheckProjectUnavailableResponseBody(res *goa.ServiceError) *CheckProject
 // result of the "check_project" endpoint of the "surla" service.
 func NewCheckProjectForbiddenResponseBody(res *goa.ServiceError) *CheckProjectForbiddenResponseBody {
 	body := &CheckProjectForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdateDependenciesWorkingCopyBusyResponseBody builds the HTTP response
+// body from the result of the "update_dependencies" endpoint of the "surla"
+// service.
+func NewUpdateDependenciesWorkingCopyBusyResponseBody(res *goa.ServiceError) *UpdateDependenciesWorkingCopyBusyResponseBody {
+	body := &UpdateDependenciesWorkingCopyBusyResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -11480,20 +11561,6 @@ func NewStartBuildUnprocessableResponseBody(res *goa.ServiceError) *StartBuildUn
 // the result of the "start_build" endpoint of the "surla" service.
 func NewStartBuildNotImplementedResponseBody(res *goa.ServiceError) *StartBuildNotImplementedResponseBody {
 	body := &StartBuildNotImplementedResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewStartBuildSandboxUnavailableResponseBody builds the HTTP response body
-// from the result of the "start_build" endpoint of the "surla" service.
-func NewStartBuildSandboxUnavailableResponseBody(res *goa.ServiceError) *StartBuildSandboxUnavailableResponseBody {
-	body := &StartBuildSandboxUnavailableResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,

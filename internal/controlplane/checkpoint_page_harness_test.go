@@ -179,6 +179,16 @@ func pageControlPlane(t *testing.T, opts Options) *ControlPlane {
 // scope. It fails the test with the script's output when the script throws.
 func runPageScript(t *testing.T, ps *pageServer, input map[string]any, body string) {
 	t.Helper()
+	runPageScriptWithTimeout(t, ps, input, body, 2*time.Minute)
+}
+
+// runPageScriptWithTimeout gives the one real native report journey its own
+// process bound. Ordinary page tests keep runPageScript's two-minute bound.
+// Successful script diagnostics reach Go's JSON output as well as failures.
+func runPageScriptWithTimeout(
+	t *testing.T, ps *pageServer, input map[string]any, body string, timeout time.Duration,
+) {
+	t.Helper()
 	node := requirePageTools(t)
 	harness, err := filepath.Abs("../../ui/checkpoint/testing/page_harness.cjs")
 	require.NoError(t, err)
@@ -209,13 +219,16 @@ async function main() {
 }
 main().then(() => { process.stdout.write("PAGE-PASSED"); process.exit(0); }, (err) => { console.error(err && err.stack || err); process.exit(1); });
 `
-	ctx, cancel := context.WithTimeout(t.Context(), 2*time.Minute)
+	ctx, cancel := context.WithTimeout(t.Context(), timeout)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, node, "-e", script, inputPath)
 	cmd.Env = append(os.Environ(), "CI=true")
 	out, err := cmd.CombinedOutput()
 	require.NoError(t, err, "views page script failed:\n%s", out)
 	require.True(t, strings.HasSuffix(string(out), "PAGE-PASSED"), "views page script output:\n%s", out)
+	if diagnostics := strings.TrimSpace(strings.TrimSuffix(string(out), "PAGE-PASSED")); diagnostics != "" {
+		t.Logf("views page script diagnostics:\n%s", diagnostics)
+	}
 }
 
 // authenticate accepts the page session only with the same-origin mark a

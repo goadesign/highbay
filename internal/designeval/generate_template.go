@@ -1,5 +1,5 @@
 // This file holds the standalone generation program that Evaluator.Generate
-// compiles and runs inside verify/candidate.Exec's sandbox. It is a separate
+// compiles and runs with verify/candidate.Run. It is a separate
 // program from the evaluation harness, so evaluation never refers to
 // generator.CompleteSources and keeps working with every Goa version it
 // supports today.

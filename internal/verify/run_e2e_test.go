@@ -16,9 +16,9 @@ import (
 
 // TestRunVerifiesTheOrdersReference runs the whole verifier against this
 // repository's committed HEAD: it clones the candidate and the evaluator suite,
-// builds the orders binaries, runs the evaluator-owned acceptance suite in the
-// sandbox and assembles a bound report. It needs git, the temporal CLI and
-// macOS. Run with: go test -tags e2e ./internal/verify
+// builds the orders binaries, runs the evaluator-owned acceptance suite and
+// assembles a bound report. It needs git, the temporal CLI and macOS or Linux.
+// Run with: go test -tags e2e ./internal/verify
 func TestRunVerifiesTheOrdersReference(t *testing.T) {
 	repo, err := filepath.Abs(filepath.Join("..", ".."))
 	require.NoError(t, err)

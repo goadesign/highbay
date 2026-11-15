@@ -332,7 +332,7 @@ type (
 
 const (
 	// storyDeadline bounds the guide's Story evaluation, which compiles the
-	// workspace's design with the Go toolchain in its sandbox.
+	// workspace's design with the Go toolchain.
 	storyDeadline = 3 * time.Minute
 	// longStoryFlow is the key of the Story flow whose row of steps is wider
 	// than the page.

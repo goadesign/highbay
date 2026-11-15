@@ -221,7 +221,7 @@ func writeStarterPromotion(t *testing.T, workspace, service string) promotionFil
 // built and measured for the candidate commit, copied from the run's retained
 // work directory into a complete <release_dir>/<commit>/ published by one
 // rename; nothing is rebuilt, and no suite payload is replaced or executed
-// outside the existing candidate sandbox.
+// again.
 func assertTrustedSuiteJourney(t *testing.T, client *genmcpsurla.Client, user *gensurla.Client,
 	projectDir, cardsDir, runsDir, suiteCommit, changeID string, promotion promotionFile,
 ) {

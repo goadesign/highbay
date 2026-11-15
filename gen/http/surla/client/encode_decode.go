@@ -2855,6 +2855,7 @@ func EncodeGenerateCodeRequest(encoder func(*http.Request) goahttp.Encoder) func
 // surla generate_code endpoint. restoreBody controls whether the response body
 // should be restored after having been read.
 // DecodeGenerateCodeResponse may return the following errors:
+//   - "working_copy_busy" (type *goa.ServiceError): http.StatusConflict
 //   - "no_build" (type *goa.ServiceError): http.StatusConflict
 //   - "assignment_unread" (type *goa.ServiceError): http.StatusConflict
 //   - "working_folder_missing" (type *goa.ServiceError): http.StatusConflict
@@ -2904,6 +2905,20 @@ func DecodeGenerateCodeResponse(decoder func(*http.Response) goahttp.Decoder, re
 		case http.StatusConflict:
 			en := resp.Header.Get("goa-error")
 			switch en {
+			case "working_copy_busy":
+				var (
+					body GenerateCodeWorkingCopyBusyResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("surla", "generate_code", err)
+				}
+				err = ValidateGenerateCodeWorkingCopyBusyResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("surla", "generate_code", err)
+				}
+				return nil, NewGenerateCodeWorkingCopyBusy(&body)
 			case "no_build":
 				var (
 					body GenerateCodeNoBuildResponseBody
@@ -3076,6 +3091,7 @@ func (c *Client) BuildCheckProjectRequest(ctx context.Context, v any) (*http.Req
 // surla check_project endpoint. restoreBody controls whether the response body
 // should be restored after having been read.
 // DecodeCheckProjectResponse may return the following errors:
+//   - "working_copy_busy" (type *goa.ServiceError): http.StatusConflict
 //   - "no_build" (type *goa.ServiceError): http.StatusConflict
 //   - "assignment_unread" (type *goa.ServiceError): http.StatusConflict
 //   - "working_folder_missing" (type *goa.ServiceError): http.StatusConflict
@@ -3124,6 +3140,20 @@ func DecodeCheckProjectResponse(decoder func(*http.Response) goahttp.Decoder, re
 		case http.StatusConflict:
 			en := resp.Header.Get("goa-error")
 			switch en {
+			case "working_copy_busy":
+				var (
+					body CheckProjectWorkingCopyBusyResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("surla", "check_project", err)
+				}
+				err = ValidateCheckProjectWorkingCopyBusyResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("surla", "check_project", err)
+				}
+				return nil, NewCheckProjectWorkingCopyBusy(&body)
 			case "no_build":
 				var (
 					body CheckProjectNoBuildResponseBody
@@ -3273,6 +3303,7 @@ func (c *Client) BuildUpdateDependenciesRequest(ctx context.Context, v any) (*ht
 // the surla update_dependencies endpoint. restoreBody controls whether the
 // response body should be restored after having been read.
 // DecodeUpdateDependenciesResponse may return the following errors:
+//   - "working_copy_busy" (type *goa.ServiceError): http.StatusConflict
 //   - "no_build" (type *goa.ServiceError): http.StatusConflict
 //   - "assignment_unread" (type *goa.ServiceError): http.StatusConflict
 //   - "working_folder_missing" (type *goa.ServiceError): http.StatusConflict
@@ -3321,6 +3352,20 @@ func DecodeUpdateDependenciesResponse(decoder func(*http.Response) goahttp.Decod
 		case http.StatusConflict:
 			en := resp.Header.Get("goa-error")
 			switch en {
+			case "working_copy_busy":
+				var (
+					body UpdateDependenciesWorkingCopyBusyResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("surla", "update_dependencies", err)
+				}
+				err = ValidateUpdateDependenciesWorkingCopyBusyResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("surla", "update_dependencies", err)
+				}
+				return nil, NewUpdateDependenciesWorkingCopyBusy(&body)
 			case "no_build":
 				var (
 					body UpdateDependenciesNoBuildResponseBody
@@ -4650,7 +4695,6 @@ func EncodeStartBuildRequest(encoder func(*http.Request) goahttp.Encoder) func(*
 //   - "unfinished_build_open" (type *surla.OpenBuildRefusal): http.StatusConflict
 //   - "unprocessable" (type *goa.ServiceError): http.StatusUnprocessableEntity
 //   - "not_implemented" (type *goa.ServiceError): http.StatusNotImplemented
-//   - "sandbox_unavailable" (type *goa.ServiceError): http.StatusNotImplemented
 //   - "unavailable" (type *goa.ServiceError): http.StatusServiceUnavailable
 //   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
 //   - error: internal error
@@ -4897,43 +4941,19 @@ func DecodeStartBuildResponse(decoder func(*http.Response) goahttp.Decoder, rest
 			}
 			return nil, NewStartBuildUnprocessable(&body)
 		case http.StatusNotImplemented:
-			en := resp.Header.Get("goa-error")
-			switch en {
-			case "not_implemented":
-				var (
-					body StartBuildNotImplementedResponseBody
-					err  error
-				)
-				err = decoder(resp).Decode(&body)
-				if err != nil {
-					return nil, goahttp.ErrDecodingError("surla", "start_build", err)
-				}
-				err = ValidateStartBuildNotImplementedResponseBody(&body)
-				if err != nil {
-					return nil, goahttp.ErrValidationError("surla", "start_build", err)
-				}
-				return nil, NewStartBuildNotImplemented(&body)
-			case "sandbox_unavailable":
-				var (
-					body StartBuildSandboxUnavailableResponseBody
-					err  error
-				)
-				err = decoder(resp).Decode(&body)
-				if err != nil {
-					return nil, goahttp.ErrDecodingError("surla", "start_build", err)
-				}
-				err = ValidateStartBuildSandboxUnavailableResponseBody(&body)
-				if err != nil {
-					return nil, goahttp.ErrValidationError("surla", "start_build", err)
-				}
-				return nil, NewStartBuildSandboxUnavailable(&body)
-			default:
-				body, err := io.ReadAll(resp.Body)
-				if err != nil {
-					return nil, goahttp.ErrDecodingError("surla", "start_build", err)
-				}
-				return nil, goahttp.ErrInvalidResponse("surla", "start_build", resp.StatusCode, string(body))
+			var (
+				body StartBuildNotImplementedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("surla", "start_build", err)
 			}
+			err = ValidateStartBuildNotImplementedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("surla", "start_build", err)
+			}
+			return nil, NewStartBuildNotImplemented(&body)
 		case http.StatusServiceUnavailable:
 			var (
 				body StartBuildUnavailableResponseBody

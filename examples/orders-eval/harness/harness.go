@@ -3,16 +3,15 @@
 //
 // The evaluator never imports or directly executes candidate code. It starts
 // the candidate's digest-pinned binaries only through Surla's
-// verify/candidate.Exec, which runs each one as a single sandboxed process: an
-// explicit environment, a private state directory, loopback access to the
-// assigned ports only, and no child processes. The harness points the
+// verify/candidate.Exec, which gives each an explicit environment and a
+// private state directory. They run as ordinary processes of the user, in the
+// evaluator's process group. The harness points the
 // candidate's dependency URLs at a simulator owned by the scenario and talks to
 // it only with clients generated from the evaluator's own copy of the approved
 // contracts. Bearer tokens come from a test identity issuer whose key is
 // generated per environment; no real identity provider key is involved.
 //
-// The Temporal dev server each platform uses is trusted test infrastructure and
-// runs outside the sandbox.
+// The Temporal dev server each platform uses is trusted test infrastructure.
 package harness
 
 import (
@@ -24,7 +23,6 @@ import (
 	"io"
 	"net"
 	"net/http"
-	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -138,7 +136,7 @@ func (e *Env) Token(tenant, subject, scope string) (string, error) {
 	}).SignedString([]byte(e.signingKey))
 }
 
-// Start launches a Temporal dev server and, in the sandbox, a candidate orders
+// Start launches a Temporal dev server and a candidate orders
 // API and refund worker whose dependencies point at depsURL; it waits until the
 // API accepts connections. The caller must Close the platform on every path;
 // Start closes whatever it already started when it fails.
@@ -190,14 +188,11 @@ func (e *Env) start(ctx context.Context, depsURL, liveKey string) (*Platform, er
 // start brings up the platform's processes, recording each one for Close.
 func (p *Platform) start(ctx context.Context, depsURL, liveKey string) error {
 	e := p.env
-	depsPort, err := urlPort(depsURL)
-	if err != nil {
-		return err
-	}
+	var err error
 	if p.logDir, err = os.MkdirTemp("", "orders-eval-logs-*"); err != nil {
 		return fmt.Errorf("create log directory: %w", err)
 	}
-	temporalAddr, temporalPort, err := p.startTemporal(ctx)
+	temporalAddr, err := p.startTemporal(ctx)
 	if err != nil {
 		return err
 	}
@@ -209,10 +204,9 @@ func (p *Platform) start(ctx context.Context, depsURL, liveKey string) error {
 		return err
 	}
 	p.workerSpec = candidate.Spec{
-		Args:         []string{"--env", Environment, "--payments-url", depsURL, "--temporal", temporalAddr},
-		StateDir:     workerState,
-		ConnectPorts: []int{temporalPort, depsPort},
-		LogFile:      filepath.Join(p.logDir, "worker.log"),
+		Args:     []string{"--env", Environment, "--payments-url", depsURL, "--temporal", temporalAddr},
+		StateDir: workerState,
+		LogFile:  filepath.Join(p.logDir, "worker.log"),
 	}
 	if p.worker, err = p.exec(ctx, e.Worker, p.workerSpec); err != nil {
 		return fmt.Errorf("start refund worker: %w", err)
@@ -235,11 +229,9 @@ func (p *Platform) start(ctx context.Context, depsURL, liveKey string) error {
 		Args: []string{"--env", Environment, "--commerce-url", depsURL, "--temporal", temporalAddr,
 			"--listen", addr, "--model-provider", "gateway", "--model-gateway", p.gateway.addr,
 			"--state-dir", apiState},
-		Env:          apiEnv,
-		StateDir:     apiState,
-		ConnectPorts: []int{temporalPort, depsPort, p.gateway.port},
-		ListenPort:   apiPort,
-		LogFile:      filepath.Join(p.logDir, "orders.log"),
+		Env:      apiEnv,
+		StateDir: apiState,
+		LogFile:  filepath.Join(p.logDir, "orders.log"),
 	}
 	if p.api, err = p.exec(ctx, e.Orders, p.apiSpec); err != nil {
 		return fmt.Errorf("start orders API: %w", err)
@@ -317,7 +309,7 @@ func (p *Platform) RestartAPI(ctx context.Context) error {
 	p.api = api
 	waitCtx, cancel := context.WithTimeout(ctx, time.Minute)
 	defer cancel()
-	if err := WaitListening(waitCtx, "127.0.0.1:"+strconv.Itoa(spec.ListenPort)); err != nil {
+	if err := WaitListening(waitCtx, p.addr); err != nil {
 		return fmt.Errorf("restarted orders API never listened: %w\n%s", err, excerpt("orders", p.api))
 	}
 	return nil
@@ -378,7 +370,7 @@ func excerpt(name string, p *candidate.Process) string {
 	return name + ":\n" + text
 }
 
-// exec starts a sandboxed candidate process and records it for Close.
+// exec starts a candidate process and records it for Close.
 func (p *Platform) exec(ctx context.Context, a candidate.Artifact, spec candidate.Spec) (*candidate.Process, error) {
 	proc, err := candidate.Exec(ctx, a, spec)
 	if err != nil {
@@ -399,22 +391,22 @@ func (p *Platform) newStateDir() (string, error) {
 }
 
 // startTemporal starts the platform's in-memory Temporal dev server and
-// returns its frontend address and port once it listens. The server's
+// returns its frontend address once it listens. The server's
 // lifetime belongs to the platform and ends in Close; ctx bounds only the wait
 // for it to listen, so a canceled scenario stops waiting at once.
-func (p *Platform) startTemporal(ctx context.Context) (string, int, error) {
+func (p *Platform) startTemporal(ctx context.Context) (string, error) {
 	port, err := freePort()
 	if err != nil {
-		return "", 0, err
+		return "", err
 	}
 	uiPort, err := freePort()
 	if err != nil {
-		return "", 0, err
+		return "", err
 	}
 	logPath := filepath.Join(p.logDir, "temporal.log")
 	logFile, err := os.OpenFile(logPath, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o600)
 	if err != nil {
-		return "", 0, fmt.Errorf("create temporal log: %w", err)
+		return "", fmt.Errorf("create temporal log: %w", err)
 	}
 	defer logFile.Close()
 	serverCtx, stop := context.WithCancel(context.Background())
@@ -423,7 +415,7 @@ func (p *Platform) startTemporal(ctx context.Context) (string, int, error) {
 	cmd.Stdout, cmd.Stderr = logFile, logFile
 	if err := cmd.Start(); err != nil {
 		stop()
-		return "", 0, fmt.Errorf("start temporal: %w", err)
+		return "", fmt.Errorf("start temporal: %w", err)
 	}
 	p.temporal, p.stopTemporal, p.temporalDone = cmd, stop, make(chan struct{})
 	go func() {
@@ -434,22 +426,9 @@ func (p *Platform) startTemporal(ctx context.Context) (string, int, error) {
 	waitCtx, cancel := context.WithTimeout(ctx, time.Minute)
 	defer cancel()
 	if err := WaitListening(waitCtx, addr); err != nil {
-		return "", 0, fmt.Errorf("temporal never listened: %w\n%s", err, tailFile(logPath, maxExcerptBytes))
+		return "", fmt.Errorf("temporal never listened: %w\n%s", err, tailFile(logPath, maxExcerptBytes))
 	}
-	return addr, port, nil
-}
-
-// urlPort returns the TCP port of an http URL.
-func urlPort(raw string) (int, error) {
-	u, err := url.Parse(raw)
-	if err != nil {
-		return 0, fmt.Errorf("parse %s: %w", raw, err)
-	}
-	port, err := strconv.Atoi(u.Port())
-	if err != nil {
-		return 0, fmt.Errorf("%s has no numeric port: %w", raw, err)
-	}
-	return port, nil
+	return addr, nil
 }
 
 // freePort returns a currently free loopback port.

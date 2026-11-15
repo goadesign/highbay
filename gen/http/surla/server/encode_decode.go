@@ -2088,6 +2088,19 @@ func EncodeGenerateCodeError(encoder func(context.Context, http.ResponseWriter) 
 			return encodeError(ctx, w, v)
 		}
 		switch en.GoaErrorName() {
+		case "working_copy_busy":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGenerateCodeWorkingCopyBusyResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusConflict)
+			return enc.Encode(body)
 		case "no_build":
 			var res *goa.ServiceError
 			errors.As(v, &res)
@@ -2233,6 +2246,19 @@ func EncodeCheckProjectError(encoder func(context.Context, http.ResponseWriter) 
 			return encodeError(ctx, w, v)
 		}
 		switch en.GoaErrorName() {
+		case "working_copy_busy":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewCheckProjectWorkingCopyBusyResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusConflict)
+			return enc.Encode(body)
 		case "no_build":
 			var res *goa.ServiceError
 			errors.As(v, &res)
@@ -2365,6 +2391,19 @@ func EncodeUpdateDependenciesError(encoder func(context.Context, http.ResponseWr
 			return encodeError(ctx, w, v)
 		}
 		switch en.GoaErrorName() {
+		case "working_copy_busy":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewUpdateDependenciesWorkingCopyBusyResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusConflict)
+			return enc.Encode(body)
 		case "no_build":
 			var res *goa.ServiceError
 			errors.As(v, &res)
@@ -3499,19 +3538,6 @@ func EncodeStartBuildError(encoder func(context.Context, http.ResponseWriter) go
 				body = formatter(ctx, res)
 			} else {
 				body = NewStartBuildNotImplementedResponseBody(res)
-			}
-			w.Header().Set("goa-error", res.GoaErrorName())
-			w.WriteHeader(http.StatusNotImplemented)
-			return enc.Encode(body)
-		case "sandbox_unavailable":
-			var res *goa.ServiceError
-			errors.As(v, &res)
-			enc := encoder(ctx, w)
-			var body any
-			if formatter != nil {
-				body = formatter(ctx, res)
-			} else {
-				body = NewStartBuildSandboxUnavailableResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusNotImplemented)

@@ -74,7 +74,6 @@ func newBuildControlPlane(t *testing.T, opts Options) *ControlPlane {
 	opts = buildFixtureOptions(t, opts)
 	cp := newControlPlane(t, opts)
 	cp.buildIdentityCheck = func(context.Context, string) error { return nil }
-	cp.buildSandboxCheck = func() error { return nil }
 	_, prefix, err := resolveStarterRepo(t.Context(), cp.activeWorkspaceDir)
 	require.NoError(t, err)
 	copy := &buildCopyFixture{folder: filepath.Join(cp.activeWorkspaceDir, testwriter.Folder, filepath.FromSlash(prefix))}
@@ -109,4 +108,20 @@ func buildFixtureOptions(t *testing.T, opts Options) Options {
 	}
 	ensureBuildFixtureRepository(t, opts.WorkspaceDir)
 	return opts
+}
+
+// makeBuildFixtureBuilderCopy supplies the real copy omitted by the simulated
+// Build factory. Page consumers call it after Build and before an actual builder
+// assignment read, using the saved number and base without replacing the reader.
+func makeBuildFixtureBuilderCopy(t *testing.T, cp *ControlPlane) {
+	t.Helper()
+	cp.mu.RLock()
+	build, found, err := cp.cards.loadOpenBuild()
+	cp.mu.RUnlock()
+	require.NoError(t, err)
+	require.True(t, found, "the page fixture must start its build before making its copy")
+	workspace, _, _ := cp.currentWorkspaceTarget()
+	_, err = testwriter.MakeCopy(t.Context(), workspace, testwriter.BuilderRole,
+		testwriter.BuilderRole.Branch(build.Number), build.Base)
+	require.NoError(t, err)
 }

@@ -34,7 +34,6 @@ import (
 	"github.com/goadesign/surla/internal/scaffold"
 	"github.com/goadesign/surla/internal/testmodule"
 	"github.com/goadesign/surla/internal/testwriter"
-	"github.com/goadesign/surla/verify/candidate"
 )
 
 // standInCopy is a stand-in for the test writer's working copy that the
@@ -489,7 +488,7 @@ func TestAStoppedServerSavesNothingAndARestartedOneJudges(t *testing.T) {
 	tests := &standInCopy{check: func(ctx context.Context, call int) (testwriter.Verdict, error) {
 		checking <- call
 		<-ctx.Done()
-		// A sandboxed step takes a moment to stop; Close waits for it.
+		// A step that runs the author's code takes a moment to stop; Close waits for it.
 		time.Sleep(300 * time.Millisecond)
 		close(ended)
 		return testwriter.Verdict{}, ctx.Err()
@@ -527,9 +526,6 @@ func TestAStoppedServerSavesNothingAndARestartedOneJudges(t *testing.T) {
 // owner, writes the required tests again and saves its own verdict for the
 // report, with the module's finding for the test writer to fix.
 func TestAReportIsJudgedThroughTheProductionCopy(t *testing.T) {
-	if err := candidate.CheckSandbox(); err != nil {
-		t.Skipf("judging through the production copy requires the candidate sandbox: %v", err)
-	}
 	eval := map[string]string{
 		"go.mod":           fmt.Sprintf("module example.com/shop/eval\n\ngo 1.27.3\n\nrequire goa.design/goa/v3 %s\n", testmodule.SurlaVersion(t, "goa.design/goa/v3")),
 		"design/design.go": buildProbeDesign,
@@ -643,10 +639,6 @@ func TestACheckThatCannotRunNamesTheUsersStep(t *testing.T) {
 		{name: "the working copy cannot be opened", copyErr: errors.New("open /Users/someone/shop/.surla-tests: permission denied"),
 			tests: &standInCopy{check: accepting}, wantKind: gensurla.TestsKindCouldNotRun,
 			wantReason: []string{"could not open the test writer's working copy", "open <absolute path>: permission denied"}, wantStep: stepOpenCopy},
-		{name: "the sandbox does not start", tests: &standInCopy{prepareErr: fmt.Errorf("%w: sandbox-exec: sandbox_apply: Operation not permitted", candidate.ErrIsolationUnavailable)},
-			wantKind: gensurla.TestsKindCouldNotRun, wantReason: []string{"sandbox could not start", "Operation not permitted"}, wantStep: stepSandbox},
-		{name: "the sandbox does not start on Linux", tests: &standInCopy{prepareErr: fmt.Errorf("%w: pidfd_getfd(child) failed (operation not permitted): if running inside a container, pass --cap-add SYS_PTRACE", candidate.ErrIsolationUnavailable)},
-			wantKind: gensurla.TestsKindCouldNotRun, wantReason: []string{"sandbox could not start", "--cap-add SYS_PTRACE"}, wantStep: stepSandbox},
 		{name: "the required tests cannot be written", tests: &standInCopy{prepareErr: fmt.Errorf(
 			"%w: create staging directory: mkdirat /Users/someone/shop/.surla-tests/eval/.surla-gen-abc: permission denied", testwriter.ErrWriteGenerated)},
 			wantKind: gensurla.TestsKindCouldNotRun, wantReason: []string{"could not write the required tests", "permission denied"},
@@ -702,7 +694,7 @@ func TestACheckThatCannotRunNamesTheUsersStep(t *testing.T) {
 		})
 	}
 	for _, step := range []string{
-		stepOpenCopy, stepSandbox, stepLimit, stepFailure,
+		stepOpenCopy, stepLimit, stepFailure,
 		stepWriteCopy + ", then ask the test writer to report again.",
 		stepDependencies + ", then ask the test writer to report again.",
 	} {

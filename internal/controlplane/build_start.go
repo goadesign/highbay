@@ -16,7 +16,6 @@ import (
 	"github.com/goadesign/surla/internal/designeval"
 	"github.com/goadesign/surla/internal/shquote"
 	"github.com/goadesign/surla/internal/testwriter"
-	"github.com/goadesign/surla/verify/candidate"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
@@ -24,7 +23,7 @@ import (
 )
 
 // defaultBuildStartTimeout bounds opening and refreshing one copy and one
-// sandboxed generation while the start holds the copy turn. The team owner's
+// generation while the start holds the copy turn. The team owner's
 // window phase has its own 45-second bound after that turn is released.
 const defaultBuildStartTimeout = 5 * time.Minute
 
@@ -180,15 +179,6 @@ func (c *ControlPlane) StartBuild(
 	}
 	if err := identity(work, workspace); err != nil {
 		return nil, recordBuildError(span, buildStartError(work, workspace, err), "check Git identity")
-	}
-	if source != testSourceStoredEvaluator {
-		sandbox := c.buildSandboxCheck
-		if sandbox == nil {
-			sandbox = candidate.CheckSandbox
-		}
-		if err := sandbox(); err != nil {
-			return nil, recordBuildError(span, buildStartError(work, workspace, err), "check sandbox")
-		}
 	}
 	var (
 		copy           buildCopy
@@ -456,16 +446,6 @@ func buildStartError(ctx context.Context, workspace string, err error) error {
 		return gensurla.MakeCopyFolderInUse(err)
 	case errors.Is(err, testwriter.ErrBranchInUse):
 		return gensurla.MakeTestsBranchInUse(err)
-	case errors.Is(err, candidate.ErrIsolationUnavailable):
-		detail := strings.TrimSpace(strings.TrimPrefix(err.Error(), candidate.ErrIsolationUnavailable.Error()))
-		detail = strings.TrimSpace(strings.TrimPrefix(detail, ":"))
-		if detail != "" {
-			return gensurla.MakeSandboxUnavailable(fmt.Errorf(
-				"This system has no candidate sandbox (%s). Start this project on a system with Surla's candidate sandbox, then build again.",
-				detail,
-			))
-		}
-		return gensurla.MakeSandboxUnavailable(errors.New("This system has no candidate sandbox. Start this project on a system with Surla's candidate sandbox, then build again."))
 	default:
 		return err
 	}
