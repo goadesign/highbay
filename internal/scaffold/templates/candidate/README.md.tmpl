@@ -27,7 +27,7 @@ can run against it.
   `generate_code` MCP tool on the Surla project server to write that agreed
   design into its working copy's `design/` and regenerate `gen/`; it edits
   neither directory. An operator can run `surla gen`
-  in this directory from a shell that is not sandboxed): it runs Goa's generator for this module inside Surla's
+  in this directory from a shell that is not sandboxed: it runs Goa's generator for this module inside Surla's
   sandbox. Never edit `gen/`. Generation compiles the design only, so update the
   hand-written code in `internal/` and `cmd/` to match it; the builder then builds and tests
   the uncommitted files with `check_project`, as described in "Next steps".
@@ -84,7 +84,7 @@ can run against it.
   `eval/design/story_tests.go` lists the tests the Story requires, one
   scenario per finished flow, such as `prices_cookie`. `surla init` wrote it
   from `design/story.go`, and Surla writes it again from the agreed Story when
-  a build starts and at each report of the test writer; leave it as it is.
+  the test writer reads an unread assignment and at each report; leave it as it is.
   Regenerating `eval/` keeps those tests. If you store verification settings
   for another suite, no build writes it again, and it is yours to keep or
   delete.
@@ -114,7 +114,8 @@ initialized the Git repository, created the initial commit (`commit` in
 For each change:
 
 1. The guide calls `update_draft` before drafting a new change, writes only
-   in the draft folder it returns and corrects every file it lists. It calls
+   in the draft folder it returns and corrects the files it reports as needing
+   correction. It calls `update_draft` again until none remain, then calls
    `refresh_story`, waits for success and uses that evaluated draft with
    `propose_change`, or `revise_change` when the change is refined.
    You confirm it on the views page, which
