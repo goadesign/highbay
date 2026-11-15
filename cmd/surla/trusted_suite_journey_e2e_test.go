@@ -23,6 +23,7 @@ import (
 
 	genmcpsurla "github.com/goadesign/surla/gen/mcp_surla"
 	gensurla "github.com/goadesign/surla/gen/surla"
+	gensurlatools "github.com/goadesign/surla/gen/surla/toolsets/surla"
 	"github.com/goadesign/surla/internal/controlplane"
 	"github.com/goadesign/surla/internal/scaffold"
 	"github.com/goadesign/surla/internal/verifyrun"
@@ -264,7 +265,7 @@ func assertTrustedSuiteJourney(t *testing.T, client *genmcpsurla.Client, user *g
 	})
 	require.NoError(t, err)
 	assert.Equal(t, card.RequestRevision, startedBuild.Build.RequestRevision)
-	args, err = gensurla.EncodeGetBuilderAssignmentPayload(&gensurla.GetBuilderAssignmentPayload{ChangeID: changeID})
+	args, err = gensurlatools.MarshalGetBuilderAssignmentPayload(&gensurlatools.GetBuilderAssignmentPayload{ChangeID: changeID})
 	require.NoError(t, err)
 	assignment, err := gensurla.DecodeBuilderAssignment(trustedSuiteCall(t, phase, client, "get_builder_assignment", args))
 	require.NoError(t, err)
