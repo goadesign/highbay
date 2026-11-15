@@ -4,7 +4,7 @@
 //
 // Init builds the whole project in the operator-provided work directory,
 // running `go mod tidy` in each module and generating its code with a
-// Generator (Surla's sandboxed Goa generator, the one `surla gen` uses), and
+// Generator (Surla's Goa generator, the one `surla gen` uses), and
 // renames the staging directory to the target only when every step
 // succeeded. A failed or canceled step removes the staging directory, so the
 // target is never left half-written. When child cleanup cannot be confirmed,
@@ -59,7 +59,7 @@ type (
 		Module string
 		// SurlaVersion is the exact github.com/goadesign/surla version the
 		// evaluator module requires, such as
-		// v0.0.0-20261110163737-d9beac313142.
+		// v0.0.0-20261115014514-02c792da3ded.
 		SurlaVersion string
 	}
 
@@ -451,7 +451,7 @@ func newData(o Options) (data, error) {
 		return data{}, fmt.Errorf("-module %w", err)
 	}
 	if !ValidVersion(o.SurlaVersion) {
-		return data{}, fmt.Errorf("Surla version %q is not an exact module version such as v0.0.0-20261110163737-d9beac313142", o.SurlaVersion)
+		return data{}, fmt.Errorf("Surla version %q is not an exact module version such as v0.0.0-20261115014514-02c792da3ded", o.SurlaVersion)
 	}
 	mod, err := modfile.Parse("go.mod", []byte(surla.GoMod()), nil)
 	if err != nil {

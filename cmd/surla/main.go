@@ -84,8 +84,7 @@ Other commands:
   preview         print the architecture, agent policies and tool contracts a design
                   module declares; needs no server and no model key
   diff            compare the designs in two module directories
-  gen             regenerate a design module's gen/ inside Surla's sandbox and
-                  replace it atomically
+  gen             regenerate a design module's gen/ and replace it atomically
   verify          build a candidate commit and run an evaluator suite against it,
                   printing a verification report
   approve         check that a saved verification report passed and matches the

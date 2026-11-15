@@ -22,7 +22,6 @@ import (
 	"github.com/goadesign/surla/internal/scaffold"
 	"github.com/goadesign/surla/internal/shquote"
 	"github.com/goadesign/surla/internal/testwriter"
-	"github.com/goadesign/surla/verify/candidate"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel/codes"
@@ -235,10 +234,10 @@ func TestAPreparationThatCouldNotRunSaysWhatFailed(t *testing.T) {
 	}
 }
 
-// TestStartBuildRefusalsReachTheHTTPConsumer exercises all eight ordinary named
+// TestStartBuildRefusalsReachTheHTTPConsumer exercises all seven ordinary named
 // errors, their status, actionable suffix, and the absence of saved/team effects.
 func TestStartBuildRefusalsReachTheHTTPConsumer(t *testing.T) {
-	for _, name := range []string{"not_repository", "no_commit", "no_test_layout", "git_identity_missing", "copy_folder_in_use", "tests_branch_in_use", "working_copy_busy", "sandbox_unavailable"} {
+	for _, name := range []string{"not_repository", "no_commit", "no_test_layout", "git_identity_missing", "copy_folder_in_use", "tests_branch_in_use", "working_copy_busy"} {
 		t.Run(name, func(t *testing.T) {
 			cp := newBuildControlPlane(t, Options{})
 			card := confirmedChange(t, cp, "chg")
@@ -270,9 +269,6 @@ func TestStartBuildRefusalsReachTheHTTPConsumer(t *testing.T) {
 				cp.workingCopyTurn <- struct{}{}
 				defer func() { <-cp.workingCopyTurn }()
 				step = "Start the build again when that has ended."
-			case "sandbox_unavailable":
-				cp.buildSandboxCheck = func() error { return candidate.ErrIsolationUnavailable }
-				step = "Start this project on a system with Surla's candidate sandbox, then build again."
 			}
 			cp.buildCopyFactory = func(context.Context, string, scaffold.Layout) (buildCopy, error) {
 				if openErr == nil {
@@ -285,11 +281,7 @@ func TestStartBuildRefusalsReachTheHTTPConsumer(t *testing.T) {
 			}))
 			defer server.Close()
 			status, body := httpCall(t, server.URL, "fixture", http.MethodPost, "/changes/chg/build", `{"request_revision":"`+card.RequestRevision+`"}`)
-			want := http.StatusConflict
-			if name == "sandbox_unavailable" {
-				want = http.StatusNotImplemented
-			}
-			assert.Equal(t, want, status, body)
+			assert.Equal(t, http.StatusConflict, status, body)
 			var refusal struct{ Name, Message string }
 			require.NoError(t, json.Unmarshal([]byte(body), &refusal))
 			assert.Equal(t, name, refusal.Name)
@@ -299,21 +291,6 @@ func TestStartBuildRefusalsReachTheHTTPConsumer(t *testing.T) {
 			}
 			if name == "tests_branch_in_use" {
 				assert.Equal(t, branchMessage, refusal.Message, "the library's recovery text is propagated unchanged")
-			}
-			if name == "sandbox_unavailable" {
-				cp.buildSandboxCheck = func() error {
-					return fmt.Errorf(
-						"%w: pidfd_getfd(child) failed (operation not permitted): if running inside a container, pass --cap-add SYS_PTRACE or --security-opt seccomp=unconfined",
-						candidate.ErrIsolationUnavailable,
-					)
-				}
-				statusDetail, bodyDetail := httpCall(t, server.URL, "fixture", http.MethodPost, "/changes/chg/build", `{"request_revision":"`+card.RequestRevision+`"}`)
-				assert.Equal(t, http.StatusNotImplemented, statusDetail, bodyDetail)
-				var refusalDetail struct{ Name, Message string }
-				require.NoError(t, json.Unmarshal([]byte(bodyDetail), &refusalDetail))
-				assert.Equal(t, "sandbox_unavailable", refusalDetail.Name)
-				assert.Contains(t, refusalDetail.Message, "pidfd_getfd(child) failed (operation not permitted): if running inside a container, pass --cap-add SYS_PTRACE or --security-opt seccomp=unconfined")
-				assert.True(t, strings.HasSuffix(refusalDetail.Message, step), refusalDetail.Message)
 			}
 			assertNoBuildSaved(t, cp, "chg")
 			assert.Empty(t, cp.team.Service.(*teamServiceFixture).calls)
@@ -349,10 +326,6 @@ func TestStartBuildStoredEvaluatorBypassesWriterPrerequisites(t *testing.T) {
 	cp.buildIdentityCheck = func(context.Context, string) error {
 		t.Error("stored evaluator checked writer identity")
 		return testwriter.ErrIdentityMissing
-	}
-	cp.buildSandboxCheck = func() error {
-		t.Error("stored evaluator checked writer sandbox")
-		return candidate.ErrIsolationUnavailable
 	}
 	cp.buildCopyFactory = func(context.Context, string, scaffold.Layout) (buildCopy, error) {
 		t.Error("stored evaluator opened a writer copy")
@@ -496,7 +469,7 @@ func TestStartBuildDeadlineBoundaries(t *testing.T) {
 					if ctx.Err() != nil {
 						// A real subprocess may return an opaque exit error. The
 						// phase context, rather than that error, owns the reason.
-						return errors.New("sandboxed generation exited")
+						return errors.New("generation exited")
 					}
 					return nil
 				}

@@ -159,10 +159,10 @@ export function BuildSectionView({
     : saved !== null ? "Build current agreed revision" : "Build this change";
   const showDirect = !current && confirmed && displayedCurrent && build !== null;
   const startExplanation = saved?.test_writer.tests.state === "not_used"
-    ? "Build starts the builder. This project uses its configured tests. Surla runs those tests on this machine with your permissions: read them before you approve."
+    ? "Build starts the builder. This project uses its configured tests. From Build on, those tests and the builder’s code run on this machine as ordinary programs, with your access to files and the network; nothing confines them. Approval decides only what merges."
     : saved !== null
-      ? "Build starts the builder and the test writer. Surla uses the test writer’s accepted tests to check the builder’s work and to start live targets. The tests run on this machine with your permissions: read them before you approve."
-      : "Build starts the builder. If this project needs a test writer, it starts that writer too. Surla uses that writer’s accepted tests to check the builder’s work and to start live targets. The tests run on this machine with your permissions: read them before you approve.";
+      ? "Build starts the builder and the test writer. Surla uses the test writer’s accepted tests to check the builder’s work and to start live targets. From Build on, the tests and the builder’s code run on this machine as ordinary programs, with your access to files and the network; nothing confines them. Approval decides only what merges."
+      : "Build starts the builder. If this project needs a test writer, it starts that writer too. Surla uses that writer’s accepted tests to check the builder’s work and to start live targets. From Build on, the tests and the builder’s code run on this machine as ordinary programs, with your access to files and the network; nothing confines them. Approval decides only what merges.";
 
   return (
     <Card

@@ -71,11 +71,11 @@ func TestExplicitRelativeAndSymlinkParentsStorePhysicalWorkspace(t *testing.T) {
 	}
 }
 
-// TestEvaluationAndGenerationUseTheExplicitParent runs both sandboxed paths
+// TestEvaluationAndGenerationUseTheExplicitParent runs both program paths
 // with a design that checks where its evaluator output directory was allocated.
 func TestEvaluationAndGenerationUseTheExplicitParent(t *testing.T) {
 	if testing.Short() {
-		t.Skip("runs the sandboxed Go toolchain; the full suite (go test without -short) covers it")
+		t.Skip("runs the Go toolchain; the full suite (go test without -short) covers it")
 	}
 	tmp := isolatedTempDir(t)
 	parent := t.TempDir()
@@ -148,7 +148,7 @@ func TestEveryCloseReturnsTheOneCleanupResult(t *testing.T) {
 		}, want: "permission denied"},
 		{name: "kept for a stuck build", prepare: func(_ *testing.T, ev *Evaluator) {
 			ev.unsafe = true
-		}, want: "is kept because build processes may still use it"},
+		}, want: "is kept because an evaluation's processes may still use it"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -308,16 +308,16 @@ func TestTwoEvaluatorsOwnSeparateWorkspaces(t *testing.T) {
 	assert.Empty(t, entries(t, tmp))
 }
 
-func TestAStuckBuildMarksTheEvaluatorUnsafeForGood(t *testing.T) {
+func TestAStuckGroupMarksTheEvaluatorUnsafeForGood(t *testing.T) {
 	isolatedTempDir(t)
 	ev := NewEvaluator()
 	_, err := ev.admit()
 	require.NoError(t, err)
-	// Evaluate's deferred bookkeeping, given a stuck build's error.
-	ev.finish(errors.Join(&stuckBuildError{err: errors.New("group did not empty")}))
+	// Evaluate's deferred bookkeeping, given a stuck group's error.
+	ev.finish(errors.Join(&stuckGroupError{err: errors.New("group did not empty")}))
 	_, err = ev.Evaluate(t.Context(), incomplete)
 	require.Error(t, err, "a later evaluation still runs")
-	require.ErrorContains(t, ev.Close(), "is kept because build processes may still use it", "a later evaluation does not clear the mark")
+	require.ErrorContains(t, ev.Close(), "is kept because an evaluation's processes may still use it", "a later evaluation does not clear the mark")
 }
 
 // isolatedTempDir points TMPDIR at an empty directory owned by the test and

@@ -25,7 +25,6 @@ of [each tool](REFERENCE.md#mcp-tools) and of
 | Required test | The evaluation scenario Surla generates for one finished flow, with the hook method the test writer implements for it. |
 | Holdout | The scenario tag that hides a scenario's details from the builder. Tests the builder can read are never hidden, so Surla refuses the tag in written tests. |
 | Run directory | The folder in which one verification run keeps its request, its lock, its result and its logs. |
-| The sandbox | The operating-system sandbox (macOS `sandbox-exec` or Linux Landlock and Seccomp-BPF) in which the server evaluates Stories, builds programs and runs the candidate's programs. |
 | Stored verification settings | A settings file stored for the project with `surla verification set`. It names one evaluator suite at one commit, and every run uses that suite instead of written tests. |
 | Tests commit | The commit of the tests a run uses: the commit of the accepted tests on `surla/tests`, or the suite commit the stored verification settings name. |
 
@@ -68,7 +67,7 @@ The guide changes the Story by editing its Go source, then asks the server to
 evaluate it:
 
 1. `refresh_story` reads the project's module from the project folder, starts
-   its evaluation in the sandbox in the background, and returns at once with
+   its evaluation in the background, and returns at once with
    an `op_id`.
 2. `get_story_refresh` returns the current evaluation: `none`, `running`,
    `succeeded` with the evaluated Stories, or `failed` with a diagnostic.
@@ -140,8 +139,8 @@ finished flow; every string in a row is a quoted Go literal. The table holds
 those rows, not the Story, so the module's design never imports the
 project's Story. The root runs after Goa-AI's evaluation suites root and
 attaches one scenario per row to the module's single evaluation suite before
-Goa validates it. Generating the module, which `Evaluator.Generate` runs in
-the sandbox, then writes:
+Goa validates it. Generating the module, which `Evaluator.Generate` runs,
+then writes:
 
 - `gen/evals/<suite>/suite.go`, whose `Hooks` interface gains one method per
   required test;
@@ -201,7 +200,6 @@ Before saving the build, a start refuses, and saves nothing, when:
 | `git_identity_missing` | Git has no name and address to commit accepted tests with. | Configure Git's name and address. |
 | `copy_folder_in_use` | `.surla-tests` exists and is not Surla's working copy. | Move it out of the project. |
 | `tests_branch_in_use` | Another working copy holds `surla/tests`. | The message names that folder and the step that frees the branch. |
-| `sandbox_unavailable` | The system has no candidate sandbox. | Start the project on a system with Surla's sandbox (macOS or Linux with Landlock ABI v4+). |
 | `working_copy_busy` | Another start or a report check holds the project's working-copy turn. | Build again when it has ended. |
 
 The start then brings the copy forward to the project's current commit, but
@@ -251,16 +249,16 @@ author:
    table rendered from the saved Story in place of whatever the author left
    at that path, and writes the table and the generated folder there, so the
    author cannot change what is required.
-5. It downloads the module's dependencies, builds the test program in the
-   sandbox, and runs the program's `--describe` in the sandbox to list the
-   scenarios it declares.
+5. It downloads the module's dependencies, builds the test program, and runs
+   the program's `--describe` to list the scenarios it declares, each as an
+   ordinary process with the user's file and network access.
 6. It compares those scenarios with the required tests by the generator's own
    names.
 
 The whole judgment has a 15-minute limit. Within it, building the test
 program has 10 minutes and listing its scenarios 60 seconds.
 
-The download in step 5 runs outside the sandbox with the user's proxy
+The download in step 5 runs with the user's proxy
 settings, so its output is withheld, and Surla decides whose failure it is
 from what it can compare. A download reads only the module's `go.mod` and
 `go.sum`. When they are those of the copy's base, the author changed nothing
@@ -359,9 +357,9 @@ stored settings' suite, or `written_tests` with the tests commit and the
 notice "These tests were written by a separate agent on this machine and are
 not isolated from the builder." The views page, the page the server serves
 to the user's browser, shows that notice with the run in its Proof view. A
-test program the test writer wrote runs outside the sandbox with only `PATH`
-and a private `TMPDIR`, and no model key; it starts the candidate's programs
-in the sandbox. A run keeps its revision and its tests after the change is
+test program the test writer wrote runs with only `PATH` and a private
+`TMPDIR`, and no model key; it and the candidate's programs it starts run as
+ordinary processes with the user's file and network access. A run keeps its revision and its tests after the change is
 revised or the server restarts.
 
 The change list says, for each change's latest run, whether it names the
