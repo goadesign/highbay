@@ -269,9 +269,6 @@ export function BuildSectionView({
             onFocusedControlRemoved={takingFocusRemoved} />
         </section>
       ) : null}
-      {saved !== null && (openBuildRefusal === null || openBuildRefusal.change_id === card.change_id) ? <BuildTakingView changeId={card.change_id} build={saved}
-        disabled={disabled || starting || error !== null} dropping={dropping} onDrop={onDrop}
-        onFocusedControlRemoved={takingFocusRemoved} /> : null}
       {check !== null && !sentBack && (saved === null || open) ? (
         <p id="surla-build-state" data-inputs-current={checkKnown ? String(check.inputs_current) : "unknown"}>
           {!checkKnown
@@ -316,6 +313,9 @@ export function BuildSectionView({
           />
         </>
       ) : null}
+      {saved !== null && (openBuildRefusal === null || openBuildRefusal.change_id === card.change_id) ? <BuildTakingView changeId={card.change_id} build={saved}
+        disabled={disabled || starting || error !== null} dropping={dropping} onDrop={onDrop}
+        onFocusedControlRemoved={takingFocusRemoved} /> : null}
       {!confirmed ? <p>Confirm the change before building it.</p> : !displayedCurrent ? (
         <p>A newer agreed revision is available. Review it before starting a build.</p>
       ) : dirty ? (
