@@ -113,11 +113,10 @@ func (h *Hooks) PricesScone(ctx context.Context) (eval.Result, error) {
 	journeyCookiePrice = `	"cookie": 125,
 `
 	// journeyStepWait bounds a Story evaluation or a build start. The control
-	// plane gives a Story evaluation 5 minutes, and a build start 5 minutes for
-	// its copy and generation and then 45 seconds for the team's window phase,
-	// so this wait outlasts each by 60 and 15 seconds: the server reports its
-	// own limit first.
-	journeyStepWait = 6 * time.Minute
+	// plane allows 5 minutes of work, followed by up to 20 seconds of evaluator
+	// cleanup and, for a build, 45 seconds for the team's window phase. The
+	// remaining time lets the owner report its result before this wait ends.
+	journeyStepWait = 7 * time.Minute
 	// journeyCheckWait bounds one check of the test writer's report, from the
 	// report to the verdict. The control plane gives the whole check 15
 	// minutes (checkLimit in internal/controlplane), within which its

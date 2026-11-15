@@ -94,9 +94,19 @@ func (runtime projectRuntime) settings(kind string, args []string, stdout io.Wri
 
 // validatedSettings reuses the owning loaders and rejects removed storage fields before any persistence.
 func validatedSettings(kind, path string, state *project.State) ([]byte, error) {
-	protected, err := workspaceProtectedDirs(state.Record.Directory)
+	return validatedSettingsWithTimeout(kind, path, state, context.WithTimeout)
+}
+
+// validatedSettingsWithTimeout injects the workspace Git deadline factory without
+// changing the production allowance or the settings persistence boundary.
+func validatedSettingsWithTimeout(
+	kind, path string,
+	state *project.State,
+	withTimeout func(context.Context, time.Duration) (context.Context, context.CancelFunc),
+) ([]byte, error) {
+	protected, err := workspaceProtectedDirs(state.Record.Directory, withTimeout)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("%w; check that Git can read the workspace, then run surla %s set <file> again", err, kind)
 	}
 	if err := validateWorkspaceDirSeparation("settings file", path, protected...); err != nil {
 		return nil, err
