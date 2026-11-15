@@ -196,6 +196,7 @@ func builderCopyV1Fixture(t *testing.T, stored bool) (
 ) {
 	t.Helper()
 	cp, card, cfg := verificationSetup(t)
+	cp.team = &TeamBinding{Owner: "alice@example.com", Service: &teamServiceFixture{}}
 	workspace := cp.currentWorkspaceDir()
 	writeStarterAt(t, workspace, "example.com/shop")
 	commitAllForLayoutTest(t, workspace)
