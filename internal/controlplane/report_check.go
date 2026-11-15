@@ -18,7 +18,6 @@ import (
 	"github.com/goadesign/surla/internal/designeval"
 	"github.com/goadesign/surla/internal/scaffold"
 	"github.com/goadesign/surla/internal/testwriter"
-	"github.com/goadesign/surla/verify/candidate"
 )
 
 type (
@@ -32,8 +31,9 @@ type (
 	// and is bounded by limit. Its last step (confirm that the build still
 	// answers to the report checked, record accepted tests, save the
 	// verdict) holds reportMu, so a report cannot fall between the
-	// confirmation and the commit. When ctx ends, the sandboxed steps end
-	// with it and nothing is saved: the build stays reported, and the next
+	// confirmation and the commit. When ctx ends, the steps that run the
+	// author's code end with it and nothing is saved: the build stays
+	// reported, and the next
 	// run judges it.
 	reportChecker struct {
 		// cp owns the builds, the turn, reportMu, reportWake and the copy.
@@ -116,13 +116,11 @@ const (
 	// recordLockRetries attempts.
 	recordLockRetryPause = 500 * time.Millisecond
 
-	// stepOpenCopy, stepSandbox, stepNoCommonBase, stepLimit and stepFailure
+	// stepOpenCopy, stepNoCommonBase, stepLimit and stepFailure
 	// are the user's steps of a check that could not run, one per cause; each
 	// fits the design's 512 characters.
 	stepOpenCopy = "Build the change again: starting a build opens the test writer's working copy " +
 		"and names the step when it cannot."
-	stepSandbox = "Fix the sandbox problem the reason names (or run surla from a terminal that is not itself sandboxed), " +
-		"then ask the test writer to report again."
 	stepNoCommonBase = "Delete the test writer's working copy and branch, then build the change again: " +
 		"in the project folder run git worktree remove .surla-tests and git branch -D surla/tests."
 	stepLimit = "Check that git and Go module downloads work in the project folder, " +
@@ -527,8 +525,6 @@ func (r *reportChecker) couldNotRun(err error, deadline time.Time, failed string
 			"though building the test program and listing its tests each have their own shorter limit.", limitWords(r.limit)), stepLimit
 	case errors.As(err, &open):
 		reason, step = "Surla could not open the test writer's working copy: "+err.Error(), stepOpenCopy
-	case errors.Is(err, candidate.ErrIsolationUnavailable):
-		reason, step = "Surla's sandbox could not start: "+err.Error(), stepSandbox
 	case errors.Is(err, testwriter.ErrWriteGenerated):
 		reason = "Surla could not write the required tests into the test writer's working copy or its snapshot: " + err.Error()
 		step = stepWriteCopy + ", then ask the test writer to report again."

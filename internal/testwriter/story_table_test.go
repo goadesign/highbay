@@ -22,7 +22,7 @@ import (
 // copy has no change left. A later Story without a flow drops that flow's
 // requirement while its method stays and still builds.
 func TestTheStoryTableIsSurlas(t *testing.T) {
-	skipWithoutSandbox(t)
+	skipInShortMode(t)
 	repo, markers := newProject(t, fixtureProject(t))
 	base := runGit(t, repo, "rev-parse", "HEAD")
 	branch := TestsRole.Branch(1)
@@ -66,7 +66,7 @@ func TestTheStoryTableIsSurlas(t *testing.T) {
 	})
 
 	writeFiles(t, module, map[string]string{
-		"acceptance/acceptance.go": fixtureAcceptance(quietInit(filepath.Join(t.TempDir(), "unused")),
+		"acceptance/acceptance.go": fixtureAcceptance(quietInit,
 			"RefundOverLimit", "StoreCreditWithinLimit"),
 	})
 	noRows, _, err := designeval.StoryTests(os.DirFS(module), nil)

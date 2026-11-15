@@ -2,7 +2,7 @@
 // cannot be downloaded: the author's, who gets a finding, or one outside the
 // author's changes, which is ErrDependencies and the user's to clear.
 //
-// The download runs outside the sandbox with the user's proxy settings, so
+// The download runs with the user's proxy settings, so
 // its output is withheld and cannot say why it failed. What Surla can know
 // without it is whether the failure follows the author's changes. A download
 // reads only the module's go.mod and go.sum, so:

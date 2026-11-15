@@ -17,7 +17,7 @@ import (
 
 func TestEvaluateTreatsArchiveLookingTextAsPlainGo(t *testing.T) {
 	if testing.Short() {
-		t.Skip("runs the sandboxed Go toolchain; the full suite (go test without -short) covers it")
+		t.Skip("runs the Go toolchain; the full suite (go test without -short) covers it")
 	}
 	design := strings.Replace(minimalDesign, `Service("orders"`, "Service(\"orders\", func() {\n\tDescription(`first line\n-- example.go --\nlast line`)\n})\n\nvar _ = Service(\"orders2\"", 1)
 	res, err := testEvaluator.Evaluate(t.Context(), testmodule.Snapshot(t, "", design))
@@ -49,7 +49,7 @@ func TestEvaluateRefusesToUpgradeTheTargetsGenerator(t *testing.T) {
 
 func TestEvaluateKeepsTheTargetsOwnCoreVersions(t *testing.T) {
 	if testing.Short() {
-		t.Skip("runs the sandboxed Go toolchain; the full suite (go test without -short) covers it")
+		t.Skip("runs the Go toolchain; the full suite (go test without -short) covers it")
 	}
 	// A target pinned at an older goa than Surla's own is evaluated with
 	// its own version, not upgraded to Surla's and then rejected.
@@ -62,7 +62,7 @@ func TestEvaluateKeepsTheTargetsOwnCoreVersions(t *testing.T) {
 
 func TestEvaluateUsesTheTargetsOwnGeneratorVersion(t *testing.T) {
 	if testing.Short() {
-		t.Skip("runs the sandboxed Go toolchain; the full suite (go test without -short) covers it")
+		t.Skip("runs the Go toolchain; the full suite (go test without -short) covers it")
 	}
 	res, err := testEvaluator.Evaluate(t.Context(), testmodule.Snapshot(t, "", minimalDesign))
 	require.NoError(t, err)
@@ -71,9 +71,9 @@ func TestEvaluateUsesTheTargetsOwnGeneratorVersion(t *testing.T) {
 
 func TestEvaluateUsesTheBuildToolchainToResolveModules(t *testing.T) {
 	if testing.Short() {
-		t.Skip("runs the sandboxed Go toolchain; the full suite (go test without -short) covers it")
+		t.Skip("runs the Go toolchain; the full suite (go test without -short) covers it")
 	}
-	// Module resolution must run with the toolchain the sandboxed build
+	// Module resolution must run with the toolchain the build
 	// compiles with, never whatever go is first on PATH: a design may require
 	// that toolchain's exact Go version while PATH holds an older go.
 	tc, err := resolveToolchainEnv(t.Context())

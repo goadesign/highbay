@@ -159,11 +159,12 @@ type Service interface {
 	// evaluator. Otherwise Surla must have accepted the build's tests: the run
 	// builds the candidate's programs from the candidate commit and runs the
 	// generated entry point of the tests at the accepted commit. The server builds
-	// the commit in Surla's sandbox and runs the tests in a separate process that
-	// keeps running when the caller disconnects or the server restarts;
-	// get_verification reads its state. Only the builder view of the report is
-	// ever returned, with where its tests came from. A candidate the user already
-	// merged still verifies.
+	// the commit and runs the tests in a separate process that keeps running when
+	// the caller disconnects or the server restarts; the builds, the tests and the
+	// programs they start run as ordinary processes with the user's file and
+	// network access. get_verification reads its state. Only the builder view of
+	// the report is ever returned, with where its tests came from. A candidate the
+	// user already merged still verifies.
 	VerifyChange(context.Context, *VerifyChangePayload) (res *VerificationStatusResult, err error)
 	// Return the current state of a verification run to the owner who started it:
 	// running, completed with the builder view of its report, or not completed
@@ -259,12 +260,13 @@ type Service interface {
 	// generates nothing until they are run. A differing replace directive for a
 	// module the design imports is also named, including the saved replacement
 	// line or the fact that none was saved, so the builder corrects go.mod before
-	// calling again. Otherwise it compiles the design in Surla's sandbox and
-	// atomically replaces gen/, preserving top-level user files and leaving go.mod
-	// and go.sum unchanged. With target eval it regenerates the working folder's
-	// eval/ module from its own design. Return the written paths and warnings; a
-	// warning after gen/ publication still means generation succeeded. It compiles
-	// the design only; it does not build the application or run tests.
+	// calling again. Otherwise it compiles and runs the design as an ordinary
+	// process with the user's file and network access and atomically replaces
+	// gen/, preserving top-level user files and leaving go.mod and go.sum
+	// unchanged. With target eval it regenerates the working folder's eval/ module
+	// from its own design. Return the written paths and warnings; a warning after
+	// gen/ publication still means generation succeeded. It compiles the design
+	// only; it does not build the application or run tests.
 	GenerateCode(context.Context, *GenerateCodePayload) (res *GenerateCodeResult, err error)
 	// Copy the builder's working folder's live files (uncommitted edits included)
 	// into a protected per-operation copy and run go test ./... for every Go
@@ -317,7 +319,7 @@ type Service interface {
 	// canonical snapshot_digest and start or reuse the project owner's in-memory
 	// Story refresh operation, which every caller acting for the owner reads; it
 	// is reused only while the draft and its made-from list are unchanged. Return
-	// promptly with op_id, state, snapshot_digest and draft_folder while sandboxed
+	// promptly with op_id, state, snapshot_digest and draft_folder while
 	// evaluation continues on a server-owned context that survives client
 	// disconnects. A succeeded operation keeps the design, Stories, architecture,
 	// the draft's go.mod and the made-from list it read; propose_change and
@@ -2509,11 +2511,6 @@ func MakeTestsBranchInUse(err error) *goa.ServiceError {
 // MakeWorkingCopyBusy builds a goa.ServiceError from an error.
 func MakeWorkingCopyBusy(err error) *goa.ServiceError {
 	return goa.NewServiceError(err, "working_copy_busy", false, false, false)
-}
-
-// MakeSandboxUnavailable builds a goa.ServiceError from an error.
-func MakeSandboxUnavailable(err error) *goa.ServiceError {
-	return goa.NewServiceError(err, "sandbox_unavailable", false, false, false)
 }
 
 // agentPolicyItemIntTransport stores JSON fields until they have been validated.

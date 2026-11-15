@@ -367,9 +367,8 @@ type (
 		liveState
 		// buildCopyFactory replaces the copy owner only in deterministic start tests.
 		buildCopyFactory func(context.Context, string, scaffold.Layout) (buildCopy, error)
-		// buildIdentityCheck and buildSandboxCheck replace host identity and sandbox availability checks in tests.
+		// buildIdentityCheck replaces the host identity check in tests.
 		buildIdentityCheck func(context.Context, string) error
-		buildSandboxCheck  func() error
 		// builderCopyTurn reserves the builder's copy independently of test checks.
 		// Later copy operations take it without waiting before workingCopyTurn.
 		builderCopyTurn chan struct{}
@@ -392,7 +391,7 @@ type (
 		// waits for one Record, which takes milliseconds. Taken after
 		// workingCopyTurn and before mu.
 		reportMu sync.Mutex
-		// draftMu serializes the draft and its made-from list. Git and sandbox
+		// draftMu serializes the draft and its made-from list. Git and evaluation
 		// work never run under mu; only draft file copies and merge-file run
 		// under draftMu. The new draft owners activate this lock in later slices.
 		draftMu sync.Mutex

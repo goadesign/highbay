@@ -8,6 +8,7 @@ import (
 	"time"
 
 	gensurla "github.com/goadesign/surla/gen/surla"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -38,12 +39,25 @@ func mustRefreshStory(
 	require.NotNil(t, started.OpID)
 	var result *gensurla.StoryRefreshResult
 	var readErr error
-	require.Eventually(t, func() bool {
+	var diagnostic string
+	// Observe the owner's five-minute evaluation deadline and bounded cleanup.
+	require.EventuallyWithT(t, func(collect *assert.CollectT) {
 		result, readErr = cp.GetStoryRefresh(caller)
-		return readErr != nil || result.State == storyRefreshStateSucceeded || result.State == storyRefreshStateFailed
-	}, 2*time.Minute, 25*time.Millisecond, "refresh %s did not finish", *started.OpID)
+		if readErr != nil {
+			return // Stop immediately; the owning read error is asserted below.
+		}
+		if !assert.NotNil(collect, result, "refresh %s returned no state", *started.OpID) {
+			return
+		}
+		diagnostic = ""
+		if result.Diagnostic != nil {
+			diagnostic = *result.Diagnostic
+		}
+		assert.Contains(collect, []string{storyRefreshStateSucceeded, storyRefreshStateFailed},
+			result.State, "refresh %s last state: %s; diagnostic: %s", *started.OpID, result.State, diagnostic)
+	}, defaultStoryRefreshTimeout+30*time.Second, 25*time.Millisecond)
 	require.NoError(t, readErr)
-	require.Equal(t, storyRefreshStateSucceeded, result.State, "evaluation failed: %v", result.Diagnostic)
+	require.Equal(t, storyRefreshStateSucceeded, result.State, "evaluation failed: %s", diagnostic)
 	require.Equal(t, started.OpID, result.OpID)
 	return result
 }
