@@ -2035,7 +2035,15 @@ checks are:
   The other modules run on macOS. The root module's short tests run in five
   jobs. **Go (., page tests)** runs only `internal/controlplane` and
   `internal/project` on macOS, selecting `TestViewsPage…` and
-  `TestCheckpoint…`. **Go (., control plane, A-L)** runs non-page tests whose
+  `TestCheckpoint…` in two sequential commands. Both commands name both
+  packages: the first selects `^Test(Checkpoint|ViewsPage[A-L])`, and the
+  second selects every remaining page test by applying the full page pattern
+  and skipping the first group. Each command gives each package its own
+  three-minute alarm, so smaller groups replace the whole page suite's
+  aggregate alarm. The page job keeps its ten-minute backstop and one cache
+  owner; the commands reuse setup and the build cache. This split preserves
+  the total test work and does not guarantee a faster job.
+  **Go (., control plane, A-L)** runs non-page tests whose
   names start with `TestA` through `TestL`, on Linux.
   **Go (., control plane, remaining)** runs every other non-page test,
   including examples and fuzz seeds, also on Linux. **Go (.)** runs on macOS,

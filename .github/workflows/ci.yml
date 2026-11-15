@@ -149,12 +149,18 @@ jobs:
           npm ci --prefix ui/checkpoint --no-audit --no-fund </dev/null
       - name: Vet and short race tests (page tests)
         # Only these packages declare tests matching ROOT_PAGE_TESTS.
+        # Sequential complements give each smaller group its own package alarm.
         run: |
           test_count=()
           if [ "$GITHUB_EVENT_NAME" = push ]; then
             test_count=(-count=1)
           fi
-          go test -race -vet=all -short -timeout 3m -json "${test_count[@]}" -run "$ROOT_PAGE_TESTS" ./internal/controlplane ./internal/project </dev/null
+          first_page_tests='^Test(Checkpoint|ViewsPage[A-L])'
+          go test -race -vet=all -short -timeout 3m -json "${test_count[@]}" \
+            -run "$first_page_tests" ./internal/controlplane ./internal/project </dev/null
+          go test -race -vet=all -short -timeout 3m -json "${test_count[@]}" \
+            -run "$ROOT_PAGE_TESTS" -skip "$first_page_tests" \
+            ./internal/controlplane ./internal/project </dev/null
       - name: Vet the opt-in real-browser test
         # The views page's real-browser test builds only with the browser tag
         # and runs only on request; vetting it here keeps it compiling. This
