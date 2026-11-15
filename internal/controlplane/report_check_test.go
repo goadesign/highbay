@@ -1044,6 +1044,7 @@ func reportTests(t *testing.T, cp *ControlPlane, revision string) *gensurla.Test
 // alice's change "chg", recording both as read.
 func readBothAssignments(t *testing.T, cp *ControlPlane) {
 	t.Helper()
+	makeBuildFixtureBuilderCopy(t, cp)
 	_, err := cp.GetBuilderAssignment(asCaller("alice@example.com", CallerBuilder), &gensurla.GetBuilderAssignmentPayload{ChangeID: "chg"})
 	require.NoError(t, err)
 	_, err = cp.GetTestWriterAssignment(asCaller("alice@example.com", CallerTestWriter), &gensurla.GetTestWriterAssignmentPayload{ChangeID: "chg"})

@@ -111,7 +111,7 @@ func buildFixtureOptions(t *testing.T, opts Options) Options {
 }
 
 // makeBuildFixtureBuilderCopy supplies the real copy omitted by the simulated
-// Build factory. Page consumers call it after Build and before an actual builder
+// Build factory. Consumers call it after Build and before an actual builder
 // assignment read, using the saved number and base without replacing the reader.
 func makeBuildFixtureBuilderCopy(t *testing.T, cp *ControlPlane) {
 	t.Helper()
@@ -119,7 +119,7 @@ func makeBuildFixtureBuilderCopy(t *testing.T, cp *ControlPlane) {
 	build, found, err := cp.cards.loadOpenBuild()
 	cp.mu.RUnlock()
 	require.NoError(t, err)
-	require.True(t, found, "the page fixture must start its build before making its copy")
+	require.True(t, found, "the fixture must start its build before making its copy")
 	workspace, _, _ := cp.currentWorkspaceTarget()
 	_, err = testwriter.MakeCopy(t.Context(), workspace, testwriter.BuilderRole,
 		testwriter.BuilderRole.Branch(build.Number), build.Base)

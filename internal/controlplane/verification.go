@@ -90,6 +90,12 @@ func (c *ControlPlane) VerifyChange(ctx context.Context, p *gensurla.VerifyChang
 	}
 	c.workspaceMu.RLock()
 	ready, err := c.builderCopyReady(ctx, c.activeWorkspaceDir, "verify_change")
+	var readiness *goa.ServiceError
+	if errors.As(err, &readiness) && readiness.Name == "unprocessable" {
+		// Go workspace selection can refuse a module resolving outside the
+		// copy. Verify exposes that readiness goal through its declared conflict.
+		err = gensurla.MakeConflict(fmt.Errorf("%s. Restore the builder's module folder inside its assigned working copy, then call verify_change again.", readiness.Message))
+	}
 	if _, written := c.verifier.(writtenTestVerification); written &&
 		(errors.Is(err, errNoRepository) || errors.Is(err, testwriter.ErrNotRepository)) {
 		// Readiness now observes the missing project repository before the
