@@ -385,8 +385,16 @@ func TestListVerifications(t *testing.T) {
 
 // verificationSetup returns a control plane with a verification
 // configuration whose runs are supervised by a command that exits at once,
-// and a confirmed card owned by alice.
+// and a confirmed card owned by alice, using the stored-evaluator profile.
 func verificationSetup(t *testing.T) (*ControlPlane, *gensurla.ChangeCardResult, *VerificationConfig) {
+	t.Helper()
+	return verificationSetupForSource(t, true)
+}
+
+// verificationSetupForSource binds the source before New starts background work.
+func verificationSetupForSource(
+	t *testing.T, stored bool,
+) (*ControlPlane, *gensurla.ChangeCardResult, *VerificationConfig) {
 	t.Helper()
 	analysis := &gensurla.CP1Analysis{
 		Summary:     "Refunds up to $50 are instant.",
@@ -398,9 +406,7 @@ func verificationSetup(t *testing.T) (*ControlPlane, *gensurla.ChangeCardResult,
 		PreservedBehaviors: []string{},
 	}
 	cfg := verificationConfig(t)
-	cp := newControlPlane(t, buildFixtureOptions(t, Options{
-		Verification: cfg,
-	}))
+	cp := newControlPlane(t, buildFixtureOptions(t, verificationSourceOptions(cfg, stored)))
 	card := saveProposedCardFixture(t, cp, "alice@example.com", "chg", "Refunds up to $50 are instant.", analysis)
 	card = attachBuildSnapshot(t, cp, card.ChangeID)
 	card = mustConfirmNoop(t, cp, WithPrincipal(t.Context(), Principal{ID: "alice@example.com", CallerID: "alice@example.com", Kind: CallerUser}), card)

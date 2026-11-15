@@ -9,8 +9,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"go/scanner"
 	"maps"
 	"path"
+	"path/filepath"
 	"slices"
 	"strings"
 	"time"
@@ -344,25 +346,45 @@ func checkCandidateDesign(
 	}
 	actual, err := committedDesignAt(work, workspace, repo, prefix, candidate)
 	if err != nil {
+		// Parser faults describe candidate content, not private input storage.
+		// Preserve Git/read faults for the entry's safe response and raw span.
+		var syntax scanner.ErrorList
+		if errors.As(err, &syntax) && len(syntax) > 0 {
+			file, relativeErr := filepath.Rel(workspace, syntax[0].Pos.Filename)
+			if relativeErr != nil {
+				return err
+			}
+			return candidateDesignRefusal(candidate, []string{filepath.ToSlash(file)})
+		}
 		return err
 	}
 	var changed []string
 	for _, file := range designPaths(nil, expected, actual) {
 		if expected[file] != actual[file] {
-			changed = append(changed, testwriter.ShownName(file))
+			changed = append(changed, file)
 		}
 	}
 	if len(changed) > 0 {
-		return gensurla.MakeConflict(fmt.Errorf("candidate commit %s differs from this build's agreed design in %s: call generate_code, commit the agreed design, and call verify_change again", candidate, strings.Join(changed, ", ")))
+		return candidateDesignRefusal(candidate, changed)
 	}
 	base, found, err := mergeBaseCommit(work, repo, candidate, project)
 	if err != nil {
 		return err
 	}
 	if !found {
-		return gensurla.MakeConflict(fmt.Errorf("candidate commit %s shares no history with the project's current commit %s: ask the user to build the change again from that commit, then read the new assignment and make the change again", candidate, project))
+		return gensurla.MakeConflict(fmt.Errorf("candidate commit %s shares no history with the project's current commit %s: ask the user to Drop the current build on the views page; ask the guide to call update_draft, refresh_story and revise_change from the current project, adopt the revision, then start a new build, read its assignment and make the change again", candidate, project))
 	}
 	return checkDesignBase(work, workspace, base, &saved.MadeFrom)
+}
+
+// candidateDesignRefusal names differing candidate files and the builder's
+// existing generation recovery without exposing raw parser/read diagnostics.
+func candidateDesignRefusal(candidate string, files []string) error {
+	names := make([]string, len(files))
+	for i, file := range files {
+		names[i] = testwriter.ShownName(file)
+	}
+	return gensurla.MakeConflict(fmt.Errorf("candidate commit %s differs from this build's agreed design in %s: call generate_code, commit the agreed design, and call verify_change again", candidate, strings.Join(names, ", ")))
 }
 
 // candidateBuildRefusal gives the builder the branch and working-copy repair

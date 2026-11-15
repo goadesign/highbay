@@ -73,3 +73,14 @@ func readBuilderFixture(
 	require.Equal(t, copy.Project(), assignment.WorkingFolder)
 	return assignment, build
 }
+
+// verificationSourceOptions configures both unit profiles at construction so
+// the report checker never races a later replacement of its verifier.
+func verificationSourceOptions(cfg *VerificationConfig, stored bool) Options {
+	if stored {
+		return Options{Verification: cfg}
+	}
+	return Options{RunsDir: cfg.RunsDir, WrittenTestRuns: &WrittenTestRuns{
+		ReportDir: cfg.Plan.ReportDir, Command: cfg.Command, Timeout: cfg.Timeout,
+	}}
+}

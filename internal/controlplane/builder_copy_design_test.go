@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -13,6 +14,8 @@ import (
 	gensurla "github.com/goadesign/surla/gen/surla"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/codes"
 )
 
 // TestBuilderCopyV1CandidateDesign compares canonical design sets, retaining
@@ -23,7 +26,7 @@ func TestBuilderCopyV1CandidateDesign(t *testing.T) {
 		if stored {
 			profile = "stored"
 		}
-		for _, scenario := range []string{"changed", "added", "removed", "canonical", "excluded", "merged"} {
+		for _, scenario := range []string{"changed", "added", "removed", "malformed", "canonical", "excluded", "merged"} {
 			t.Run(profile+"/"+scenario, func(t *testing.T) {
 				cp, card, build, candidate, builder := builderCopyV1Fixture(t, stored)
 				file := "design/build_fixture.go"
@@ -38,6 +41,9 @@ func TestBuilderCopyV1CandidateDesign(t *testing.T) {
 				case "removed":
 					require.NoError(t, os.Remove(filepath.Join(builder, file)))
 					want = file
+				case "malformed":
+					want = "design/extra.go"
+					writeWorkspaceFiles(t, builder, map[string]string{want: "package"})
 				case "canonical":
 					files, err := decodeDesignSource(build.DesignSource)
 					require.NoError(t, err)
@@ -117,6 +123,66 @@ func TestBuilderCopyV1CandidateBase(t *testing.T) {
 	}
 }
 
+// TestBuilderCopyV1UnrelatedProjectHistory distinguishes a rewritten project
+// from an orphan candidate: C still belongs to its build, but Build again
+// cannot change that build's base, so recovery must start with Drop.
+func TestBuilderCopyV1UnrelatedProjectHistory(t *testing.T) {
+	for _, stored := range []bool{false, true} {
+		profile := "written"
+		if stored {
+			profile = "stored"
+		}
+		t.Run(profile, func(t *testing.T) {
+			cp, card, _, candidate, _ := builderCopyV1Fixture(t, stored)
+			workspace := cp.currentWorkspaceDir()
+			productionBuildGit(t, workspace, "checkout", "--orphan", "replacement-project")
+			productionBuildGit(t, workspace, "commit", "-q", "--allow-empty", "-m", "Replace project history")
+			project := productionBuildGit(t, workspace, "rev-parse", "HEAD")
+			payload := &gensurla.VerifyChangePayload{ChangeID: card.ChangeID, RequestRevision: card.RequestRevision, CandidateCommit: candidate}
+			result, err := cp.VerifyChange(asCaller("alice@example.com", CallerBuilder), payload)
+			assert.Nil(t, result)
+			assertRefusalSays(t, err, "conflict", "shares no history with the project's current commit "+project)
+			assert.ErrorContains(t, err, "Drop the current build on the views page")
+			assert.ErrorContains(t, err, "update_draft, refresh_story and revise_change")
+			assert.ErrorContains(t, err, "adopt the revision, then start a new build")
+			assertVerifyDesignTransportRefusal(t, cp, payload, "conflict", project, "Drop the current build")
+		})
+	}
+}
+
+// TestBuilderCopyV1DesignReadFailure preserves an operational Git fault on
+// the entry span while withholding its raw details from the caller.
+func TestBuilderCopyV1DesignReadFailure(t *testing.T) {
+	recorder := &recordingTracerProvider{}
+	previous := otel.GetTracerProvider()
+	otel.SetTracerProvider(recorder)
+	t.Cleanup(func() { otel.SetTracerProvider(previous) })
+	cp, card, _, candidate, _ := builderCopyV1Fixture(t, true)
+	realGit, err := exec.LookPath("git")
+	require.NoError(t, err)
+	bin := t.TempDir()
+	script := "#!/bin/sh\nfor arg do\n" +
+		"if [ \"$arg\" = \"$SURLA_DESIGN_FAULT_BLOB\" ]; then printf 'private_design_read_fault\\n' >&2; exit 1; fi\ndone\n" +
+		"exec \"$SURLA_DESIGN_REAL_GIT\" \"$@\"\n"
+	require.NoError(t, os.WriteFile(filepath.Join(bin, "git"), []byte(script), 0o700))
+	t.Setenv("SURLA_DESIGN_FAULT_BLOB", candidate+":design/build_fixture.go")
+	t.Setenv("SURLA_DESIGN_REAL_GIT", realGit)
+	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+	result, err := cp.VerifyChange(asCaller("alice@example.com", CallerBuilder), &gensurla.VerifyChangePayload{
+		ChangeID: card.ChangeID, RequestRevision: card.RequestRevision, CandidateCommit: candidate,
+	})
+	assert.Nil(t, result)
+	assert.EqualError(t, err, `start verification for "chg": saved verification inputs could not be read`)
+	spans := recorder.matching("surla.controlplane.start_verification")
+	require.Len(t, spans, 1)
+	assert.Equal(t, codes.Error, spans[0].statusCode)
+	require.Len(t, spans[0].errors, 1)
+	assert.ErrorContains(t, spans[0].errors[0], "private_design_read_fault")
+	entries, err := os.ReadDir(cp.runsDir)
+	require.NoError(t, err)
+	assert.Empty(t, entries)
+}
+
 // builderDesignBaseFixture lists A=0 and then A=1 through the draft owner
 // before creating the immutable build of A=2. A later revert to A=0 must not
 // replace the newer listed version, even though both texts occur in history.
@@ -125,10 +191,7 @@ func builderDesignBaseFixture(
 ) (*ControlPlane, *gensurla.ChangeCardResult, buildFile, string) {
 	t.Helper()
 	cfg := verificationConfig(t)
-	cp := newBuildControlPlane(t, Options{Verification: cfg})
-	if !stored {
-		cp.verifier = writtenTestVerification{runs: cfg}
-	}
+	cp := newBuildControlPlane(t, verificationSourceOptions(cfg, stored))
 	workspace := cp.currentWorkspaceDir()
 	writeStarterAt(t, workspace, "example.com/shop")
 	writeWorkspaceFiles(t, workspace, map[string]string{updateDesignFile: "package design\nvar A = 0\n"})
@@ -174,6 +237,7 @@ func assertVerifyDesignTransportRefusal(
 	assert.Equal(t, `"`+name+`"`, jsonAt(t, []byte(body), "name"))
 	assert.Contains(t, body, file)
 	assert.Contains(t, body, recovery)
+	assert.NotContains(t, body, cp.currentWorkspaceDir())
 	message, _ := mcpToolCall(t, server.URL, "builder", "verify_change", string(raw))
 	assert.Contains(t, message, file)
 	assert.Contains(t, message, recovery)

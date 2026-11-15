@@ -323,7 +323,7 @@ func builderCopyV1Fixture(t *testing.T, stored bool) (
 	*ControlPlane, *gensurla.ChangeCardResult, buildFile, string, string,
 ) {
 	t.Helper()
-	cp, card, cfg := verificationSetup(t)
+	cp, card, _ := verificationSetupForSource(t, stored)
 	cp.team = &TeamBinding{Owner: "alice@example.com", Service: &teamServiceFixture{}}
 	workspace := cp.currentWorkspaceDir()
 	writeStarterAt(t, workspace, "example.com/shop")
@@ -332,7 +332,6 @@ func builderCopyV1Fixture(t *testing.T, stored bool) (
 	build := fixtureOpenBuild(t, cp, card, buildRolesBuilderOnly)
 	build.Builder.Read = true
 	if !stored {
-		cp.verifier = writtenTestVerification{runs: cfg}
 		build.Roles = buildRolesBuilderAndTestWriter
 		build.TestWriter = testWriterAssignment{State: testsAccepted, Read: true, Commit: build.Base, CheckedAt: time.Now().UTC()}
 	}
