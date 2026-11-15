@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
@@ -14,6 +15,10 @@ import (
 	"github.com/goadesign/surla/internal/controlplane"
 	"github.com/goadesign/surla/internal/testmodule"
 )
+
+// storyRefreshWait follows the control plane's five-minute Story refresh
+// allowance, plus process cleanup and observation, as its real refresh tests do.
+const storyRefreshWait = 5*time.Minute + 30*time.Second
 
 // TestViewsPageShowsTheGuidesStoryEvaluation has the guide start a Story
 // evaluation with its own credential while the user's page shows the Story
@@ -120,7 +125,10 @@ var _ = Story("Order Refunds", func() {
 	guide := vp.agent(t, "guide")
 	link, err := vp.link()
 	require.NoError(t, err)
-	runViewsPageScript(t, node, map[string]any{"origin": vp.state.Origin(), "link": link, "guide": guide}, `
+	runViewsPageScriptWithTimeout(t, node, map[string]any{
+		"origin": vp.state.Origin(), "link": link, "guide": guide,
+		"refreshWaitMs": storyRefreshWait.Milliseconds(),
+	}, `
   const page = await openPage(origin, { link: input.link });
   await until(() => page.$("#surla-change-list-empty"), "the page did not open the empty project");
   page.$("#surla-nav-story").click();
@@ -128,12 +136,17 @@ var _ = Story("Order Refunds", func() {
   const started = await api(origin, "POST", "/workspace/story/refresh", undefined, input.guide);
   expect(started.status === 200 && started.body.state === "running", "the guide could not start an evaluation: " + JSON.stringify(started));
   await until(() => page.$("#surla-story-draft").dataset.state === "running", "the user's page did not show the running evaluation without a reload", 15000);
-  await until(() => page.$("#surla-story-draft").dataset.state !== "running", "the evaluation did not finish", 150000);
+  try {
+    await until(() => ["succeeded", "failed"].includes(page.$("#surla-story-draft")?.dataset.state), "the evaluation did not finish", input.refreshWaitMs);
+  } catch (err) {
+    const draft = page.$("#surla-story-draft");
+    throw new Error(String(err) + "; last draft state: " + draft?.dataset.state + "; draft: " + draft?.textContent);
+  }
   expect(page.$("#surla-story-draft").dataset.state === "succeeded", "the evaluation did not succeed: " + page.text("#surla-story-draft"));
   const flows = page.$$("#surla-story-draft .surla-story-flow");
   expect(JSON.stringify(flows.map((f) => [f.dataset.flowKey, f.querySelector(".surla-story-mark").textContent])) === JSON.stringify([["instant-refund", "will be tested end to end"], ["high-value-refund", "draft: not tested"]]), "the guide's Story is not drawn: " + page.text("#surla-story-draft"));
   page.close();
-`)
+`, storyRefreshWait+time.Minute)
 }
 
 // storyWorkspace writes files into a new workspace directory and returns it.
