@@ -240,8 +240,7 @@ export function BuildSectionView({
   const directLabel = card.proposed_revision !== undefined
     ? "Build agreed revision"
     : saved !== null ? "Build current agreed revision" : "Build this change";
-  const droppedCurrent = current && saved?.taking.state === "dropped";
-  const showDirect = (!current || !open) && !droppedCurrent && confirmed && displayedCurrent && build !== null;
+  const showDirect = (!current || !open) && confirmed && displayedCurrent && build !== null;
   const executionExplanation = saved?.test_writer.tests.state === "not_used"
     ? "From Build on, those tests and the builder’s code run on this machine as ordinary programs, with your access to files and the network; nothing confines them. Approval decides only what merges."
     : "From Build on, the tests and the builder’s code run on this machine as ordinary programs, with your access to files and the network; nothing confines them. Approval decides only what merges.";
@@ -371,7 +370,6 @@ export function BuildSectionView({
       {saved === null && blockingBuild === null ? <>
         {observations}{progress}{explanation}<div className="surla-field-row surla-build-actions">{actions}</div>
       </> : null}
-      {droppedCurrent ? <p>Ask the guide to refresh its draft before revising; adopt the revision, then build.</p> : null}
       {!confirmed ? <p>Confirm the change before building it.</p> : !displayedCurrent ? (
         <p>A newer agreed revision is available. Review it before starting a build.</p>
       ) : dirty ? (

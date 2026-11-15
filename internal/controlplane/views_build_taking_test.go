@@ -107,9 +107,11 @@ expect(page.$$(".surla-build-actions").length === 1, "build actions are split in
 const state = variants[input.state].state;
 expect(page.text("#surla-build-taking-state") === state[0].toUpperCase() + state.slice(1), "the header badge does not describe the saved taking state");
 expect(Boolean(page.$(".surla-build-header .surla-build-actions")), "current build controls are not in the header");
-expect(Boolean(page.$("#surla-build-start-explanation")) === (state === "merged"), "the execution explanation must accompany each direct Build offer");
-if (state === "dropped") expect(!page.$("#surla-build-start") && page.text("#surla-build-section").includes("adopt the revision, then build"), "current dropped build offered a doomed restart");
-if (state === "merged") expect(page.$("#surla-build-start").getAttribute("aria-describedby").includes("surla-build-start-explanation"), "direct Build did not describe execution");
+expect(Boolean(page.$("#surla-build-start-explanation")) === (state === "merged" || state === "dropped"), "the execution explanation must accompany each direct Build offer");
+if (state === "merged" || state === "dropped") {
+  const action = page.$("#surla-build-start");
+  expect(action && !action.disabled && action.getAttribute("aria-describedby").split(/\s+/).includes("surla-build-start-explanation") && page.text("#surla-build-start-explanation").includes("nothing confines them"), "direct Build lost its execution explanation");
+}
 if (closedFindings) {
   expect(page.text("#surla-build-findings").includes("1 finding") && page.$("#surla-build-findings").closest("#surla-build-details"), "closed build lost its historical finding count");
   expect(!page.$("#surla-build-findings button") && page.$("#surla-build-findings").getAttribute("aria-busy") === "false", "closed build exposes active findings controls or loading");

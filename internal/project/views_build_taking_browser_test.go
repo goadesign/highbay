@@ -133,9 +133,9 @@ func TestBuildTakingAtDesktopAndPhoneWidth(t *testing.T) {
 				assert.True(t, view.DropCancelled)
 			}
 			if state == "dropped" {
-				assert.True(t, view.NoStart)
+				assert.False(t, view.NoStart)
 			}
-			if state == "merged" {
+			if state == "merged" || state == "dropped" {
 				assert.True(t, view.Explanation)
 			}
 			t.Logf("%s presentation at %dpx: %+v", state, view.Width, view)

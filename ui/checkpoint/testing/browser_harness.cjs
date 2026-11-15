@@ -592,7 +592,8 @@ async function takingScenario(input, facts, views) {
           return style.whiteSpace === "pre" && ["auto", "scroll"].includes(style.overflowX) &&
             node.tabIndex === 0 && document.activeElement === node && node.getAttribute("role") === "region" && node.getAttribute("aria-label");
         }),
-        explanation: document.getElementById("surla-build-start-explanation")?.textContent.includes("nothing confines them") === true,
+        explanation: document.getElementById("surla-build-start-explanation")?.textContent.includes("nothing confines them") === true &&
+          document.getElementById("surla-build-start")?.getAttribute("aria-describedby")?.split(/\s+/).includes("surla-build-start-explanation") === true,
         no_start: document.getElementById("surla-build-start") === null,
         rewrite_warning: region.textContent.includes("commit where this build started") && region.textContent.includes("these merges bring that history back"),
         overflowing: [region, ...region.querySelectorAll("*")].filter((node) => {
