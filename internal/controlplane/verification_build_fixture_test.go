@@ -18,8 +18,8 @@ func commitBuilderCandidateFixture(
 	t *testing.T, cp *ControlPlane, card *gensurla.ChangeCardResult,
 ) string {
 	t.Helper()
-	assignment := readBuilderFixture(t, cp, card)
-	writeBuilderDesignFixture(t, assignment.WorkingFolder, assignment.DesignSource)
+	assignment, build := readBuilderFixture(t, cp, card)
+	writeBuilderDesignFixture(t, assignment.WorkingFolder, build.DesignSource)
 	writeWorkspaceFiles(t, assignment.WorkingFolder, map[string]string{
 		"builder_work.txt": "Implement the agreed change.\n",
 	})
@@ -33,7 +33,7 @@ func readBuilderCandidateFixture(
 	t *testing.T, cp *ControlPlane, card *gensurla.ChangeCardResult, candidate string,
 ) string {
 	t.Helper()
-	assignment := readBuilderFixture(t, cp, card)
+	assignment, _ := readBuilderFixture(t, cp, card)
 	gitForLayoutTest(t, assignment.WorkingFolder, "reset", "--hard", candidate)
 	return assignment.WorkingFolder
 }
@@ -52,7 +52,7 @@ func writeBuilderDesignFixture(t *testing.T, folder, source string) {
 // assignment through the owner, without changing tests or making a candidate.
 func readBuilderFixture(
 	t *testing.T, cp *ControlPlane, card *gensurla.ChangeCardResult,
-) *gensurla.BuilderAssignment {
+) (*gensurla.BuilderAssignment, buildFile) {
 	t.Helper()
 	cp.mu.RLock()
 	build, found, err := cp.cards.loadOpenBuild()
@@ -71,5 +71,5 @@ func readBuilderFixture(
 	require.NoError(t, err)
 	require.True(t, assignment.Read)
 	require.Equal(t, copy.Project(), assignment.WorkingFolder)
-	return assignment
+	return assignment, build
 }

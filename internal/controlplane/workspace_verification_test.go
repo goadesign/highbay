@@ -791,10 +791,10 @@ func TestVerifyChangeTestModuleGuardAcrossRegenerationMergeAndNextChange(t *test
 		},
 	})
 	require.NoError(t, err)
-	require.NotNil(t, revised.Proposed)
+	require.NotNil(t, revised.ProposedRevision)
 	card2, err = cp.ConfirmIntent(user, &gensurla.ConfirmIntentPayload{
-		ChangeID: card2.ChangeID, RequestRevision: revised.Proposed.RequestRevision,
-		Answers: map[string]string{}, Examples: revised.Proposed.Examples,
+		ChangeID: card2.ChangeID, RequestRevision: revised.ProposedRevision.RequestRevision,
+		Answers: map[string]string{}, Examples: revised.ProposedRevision.Examples,
 	})
 	require.NoError(t, err)
 	record = loadMetadataRecord(t, cp, card2.ChangeID)
