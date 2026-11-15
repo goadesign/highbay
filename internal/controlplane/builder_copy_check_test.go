@@ -120,9 +120,16 @@ func TestBuilderCopyCheckRefusesBeforeStarting(t *testing.T) {
 			}
 			ctx := asCaller("alice@example.com", CallerBuilder)
 			_, err := cp.CheckProject(ctx)
-			assertServiceError(t, err, want)
-			_, err = cp.UpdateDependencies(ctx)
-			assertServiceError(t, err, want)
+			_, updateErr := cp.UpdateDependencies(ctx)
+			for _, refusal := range []error{err, updateErr} {
+				if want == "copy_off_branch" {
+					var offBranch *gensurla.CopyOffBranch
+					require.ErrorAs(t, refusal, &offBranch)
+					assert.Equal(t, want, offBranch.Name)
+				} else {
+					assertServiceError(t, refusal, want)
+				}
+			}
 			assert.Zero(t, launches.Load())
 			assertFileContent(t, filepath.Join(project, "go.sum"), "user sum\n")
 			if state != "busy" {
