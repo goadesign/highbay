@@ -285,15 +285,16 @@ func (c *ControlPlane) verificationBuild(
 // checkCandidateBuildCommit applies rule 13 to an immutable candidate, using
 // both the repository's build branches and the tips preserved by Drop. It
 // takes no copy turn and changes no branch; its caller owns the entry's turn
-// and supplies the bound workspace. Approval passes the report's commit.
+// and supplies the bound workspace. Approval passes the report's commit. Each
+// entry formats a failed invariant for its own reader.
 func (c *ControlPlane) checkCandidateBuildCommit(
 	ctx context.Context, workspace string, saved buildFile, candidate string,
-) error {
+) (testwriter.CommitCheck, error) {
 	c.mu.RLock()
 	provenance, found, err := c.cards.loadMadeFrom()
 	c.mu.RUnlock()
 	if err != nil {
-		return err
+		return testwriter.CommitCheck{}, err
 	}
 	var recorded []testwriter.BranchTip
 	if found && provenance.Start.Dropped != nil {
@@ -306,22 +307,38 @@ func (c *ControlPlane) checkCandidateBuildCommit(
 	defer cancel()
 	exists, err := commitExists(work, workspace, candidate)
 	if err != nil {
-		return err
+		return testwriter.CommitCheck{}, err
 	}
 	if !exists {
-		return gensurla.MakeConflict(&layoutRefusal{reason: refusedUnknownCommit, commit: candidate})
+		return testwriter.CommitCheck{}, gensurla.MakeConflict(&layoutRefusal{reason: refusedUnknownCommit, commit: candidate})
 	}
 	branches := [2]string{testwriter.BuilderRole.Branch(saved.Number), testwriter.TestsRole.Branch(saved.Number)}
-	check, err := testwriter.CheckBuildCommit(work, workspace, candidate, branches[0], saved.Base, branches, recorded)
-	if err != nil {
-		return err
-	}
-	return candidateBuildRefusal(candidate, saved.Base, branches[0], check)
+	return testwriter.CheckBuildCommit(work, workspace, candidate, branches[0], saved.Base, branches, recorded)
 }
 
-// candidateBuildRefusal words every failed build invariant without inventing
-// file names for zero-file merges. L1 already bounds files and counts them all.
+// candidateBuildRefusal gives the builder the branch and working-copy repair
+// goal, including uncommitted file changes retained by a soft reset.
 func candidateBuildRefusal(candidate, base, branch string, check testwriter.CommitCheck) error {
+	reasons := buildCommitReasons(candidate, base, branch, check)
+	if reasons == "" {
+		return nil
+	}
+	return gensurla.MakeBuildBranchMismatch(fmt.Errorf("%s. Make %s and your working copy hold neither the other builds' commits nor their changes to the named files. Make your own work again as a new commit on %s from base %s, then call verify_change again; if you cannot, ask the user to build the change again and make your own work again from that build's base.", reasons, branch, branch, base))
+}
+
+// approvalBuildRefusal tells the user to have the builder repair and verify
+// the build again; approval never asks the user to make the builder's commits.
+func approvalBuildRefusal(candidate, base, branch string, check testwriter.CommitCheck) error {
+	reasons := buildCommitReasons(candidate, base, branch, check)
+	if reasons == "" {
+		return nil
+	}
+	return gensurla.MakeBuildBranchMismatch(fmt.Errorf("%s. Ask the builder to make %s and its working copy hold neither the other builds' commits nor their changes to the named files, make its own work again as a new commit on %s from base %s, and call verify_change again; then approve that run.", reasons, branch, branch, base))
+}
+
+// buildCommitReasons describes failed invariants without inventing file names
+// for zero-file merges. L1 already bounds files and counts them all.
+func buildCommitReasons(candidate, base, branch string, check testwriter.CommitCheck) string {
 	var reasons []string
 	if !check.OnBranch {
 		reasons = append(reasons, fmt.Sprintf("candidate commit %s is not on %s", candidate, branch))
@@ -347,10 +364,7 @@ func candidateBuildRefusal(candidate, base, branch string, check testwriter.Comm
 		}
 		reasons = append(reasons, reason)
 	}
-	if len(reasons) == 0 {
-		return nil
-	}
-	return gensurla.MakeBuildBranchMismatch(fmt.Errorf("%s. Put this change's work on %s from base %s, without another build's work, and commit it; if you cannot, ask the user to build the change again and make it again from that build's base.", strings.Join(reasons, "; "), branch, base))
+	return strings.Join(reasons, "; ")
 }
 
 // verificationPlanForTests completes the shared plan from testsChoice's

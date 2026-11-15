@@ -15,6 +15,7 @@ import (
 	"go.opentelemetry.io/otel/trace"
 
 	gensurla "github.com/goadesign/surla/gen/surla"
+	"github.com/goadesign/surla/internal/testwriter"
 	"github.com/goadesign/surla/internal/verify"
 	"github.com/goadesign/surla/internal/verifyrun"
 )
@@ -171,7 +172,11 @@ func (c *ControlPlane) ApproveMerge(
 	}
 	// A passed report names an immutable candidate, which must still belong
 	// to this open build after all unlocked report and artifact reads.
-	if err := c.checkCandidateBuildCommit(ctx, c.currentWorkspaceDir(), build.file, report.Binding.CandidateCommit); err != nil {
+	check, err := c.checkCandidateBuildCommit(ctx, c.currentWorkspaceDir(), build.file, report.Binding.CandidateCommit)
+	if err != nil {
+		return nil, err
+	}
+	if err := approvalBuildRefusal(report.Binding.CandidateCommit, build.file.Base, testwriter.BuilderRole.Branch(build.file.Number), check); err != nil {
 		return nil, err
 	}
 

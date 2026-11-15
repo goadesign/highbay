@@ -73,6 +73,10 @@ func TestBuilderCopyV1VerifyEntry(t *testing.T) {
 					}
 					require.Error(t, err)
 					assert.Contains(t, strings.ToLower(err.Error()), strings.ToLower(want))
+					if scenario == "foreign work" {
+						assert.ErrorContains(t, err, "Make surla/build-1 and your working copy hold neither")
+						assert.ErrorContains(t, err, "Make your own work again as a new commit on surla/build-1")
+					}
 					assert.Nil(t, result)
 					entries, readErr := os.ReadDir(cp.runsDir)
 					if !os.IsNotExist(readErr) {
@@ -154,6 +158,10 @@ func TestBuilderCopyV1ApprovalRechecksReportCommit(t *testing.T) {
 						assert.NoError(t, err)
 					} else {
 						assert.Error(t, err)
+						if scenario == "reset branch" || scenario == "deleted branch" {
+							assert.ErrorContains(t, err, "Ask the builder")
+							assert.ErrorContains(t, err, "call verify_change again; then approve that run")
+						}
 						record := loadMetadataRecord(t, cp, card.ChangeID)
 						assert.Nil(t, record.card.Approval)
 					}
@@ -172,19 +180,42 @@ func TestBuilderCopyV1ForeignWorkText(t *testing.T) {
 		check := testwriter.CommitCheck{OnBranch: true, FromBase: true,
 			Foreign: []testwriter.ForeignWork{{MergeBase: "foreign", Branch: "surla/build-2", Files: files, FileCount: len(files) * 2}},
 		}
-		err := candidateBuildRefusal("candidate", "base", "surla/build-1", check)
-		require.Error(t, err)
-		var refusal *goa.ServiceError
-		require.ErrorAs(t, err, &refusal)
-		assert.Equal(t, "build_branch_mismatch", refusal.Name)
-		assert.ErrorContains(t, err, "commit foreign on surla/build-2 merges work the user has not taken")
-		if len(files) == 0 {
-			assert.NotContains(t, err.Error(), "files")
-		} else {
-			assert.ErrorContains(t, err, "10 files")
-			assert.ErrorContains(t, err, testwriter.ShownName(files[0]))
-			assert.ErrorContains(t, err, "a name that is not shown")
-			assert.NotContains(t, err.Error(), "line\nbreak.go")
+		for _, reader := range []struct {
+			refuse func(string, string, string, testwriter.CommitCheck) error
+			goal   string
+			remake string
+			next   string
+		}{
+			{
+				refuse: candidateBuildRefusal,
+				goal:   "Make surla/build-1 and your working copy hold neither the other builds' commits nor their changes to the named files.",
+				remake: "Make your own work again as a new commit on surla/build-1 from base base",
+				next:   "then call verify_change again",
+			},
+			{
+				refuse: approvalBuildRefusal,
+				goal:   "Ask the builder to make surla/build-1 and its working copy hold neither the other builds' commits nor their changes to the named files",
+				remake: "make its own work again as a new commit on surla/build-1 from base base",
+				next:   "call verify_change again; then approve that run",
+			},
+		} {
+			err := reader.refuse("candidate", "base", "surla/build-1", check)
+			require.Error(t, err)
+			var refusal *goa.ServiceError
+			require.ErrorAs(t, err, &refusal)
+			assert.Equal(t, "build_branch_mismatch", refusal.Name)
+			assert.ErrorContains(t, err, "commit foreign on surla/build-2 merges work the user has not taken")
+			assert.ErrorContains(t, err, reader.goal)
+			assert.ErrorContains(t, err, reader.remake)
+			assert.ErrorContains(t, err, reader.next)
+			if len(files) == 0 {
+				assert.NotContains(t, err.Error(), "0 files")
+			} else {
+				assert.ErrorContains(t, err, "10 files")
+				assert.ErrorContains(t, err, testwriter.ShownName(files[0]))
+				assert.ErrorContains(t, err, "a name that is not shown")
+				assert.NotContains(t, err.Error(), "line\nbreak.go")
+			}
 		}
 	}
 }

@@ -15,6 +15,7 @@ import (
 
 	gensurla "github.com/goadesign/surla/gen/surla"
 	"github.com/goadesign/surla/internal/modelsettings"
+	"github.com/goadesign/surla/internal/testwriter"
 	"github.com/goadesign/surla/internal/verify"
 	"github.com/goadesign/surla/internal/verifyrun"
 )
@@ -92,7 +93,11 @@ func (c *ControlPlane) VerifyChange(ctx context.Context, p *gensurla.VerifyChang
 		err = gensurla.MakeConflict(errors.New("the open build changed while preparing verification: read get_builder_assignment and verify again"))
 	}
 	if err == nil {
-		err = c.checkCandidateBuildCommit(ctx, c.activeWorkspaceDir, held.file, p.CandidateCommit)
+		var check testwriter.CommitCheck
+		check, err = c.checkCandidateBuildCommit(ctx, c.activeWorkspaceDir, held.file, p.CandidateCommit)
+		if err == nil {
+			err = candidateBuildRefusal(p.CandidateCommit, held.file.Base, testwriter.BuilderRole.Branch(held.file.Number), check)
+		}
 	}
 	c.workspaceMu.RUnlock()
 	if err != nil {
