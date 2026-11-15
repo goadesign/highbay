@@ -50,7 +50,14 @@ go)
   mode=$(cat "$root/case")
   case "${PWD##*/}" in app) label=candidate ;; eval) label=suite ;; *) exit 11 ;; esac
   case "$1" in
-    mod) [ "$*" = 'mod download' ]; [ "$GOWORK" = off ]; exit 0 ;;
+    mod)
+      [ "$*" = 'mod download' ]; [ "$GOWORK" = off ]
+      if [ "$mode" = "go-mod-download-$label" ]; then
+        printf '%s\n' 'http://FAKE_PROXY_USER_521:fake@proxy.invalid/FAKE_PROXY_PATH_521 -FAKE_GOFLAGS_521'
+        printf '%s\n' 'http://FAKE_PROXY_USER_521:fake@proxy.invalid/FAKE_PROXY_PATH_521 -FAKE_GOFLAGS_521' >&2
+        exit 7
+      fi
+      exit 0 ;;
     env)
       [ "$*" = 'env GOROOT GOMODCACHE' ]
       if [ "$mode" = "go-env-$label" ]; then

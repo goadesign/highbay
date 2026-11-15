@@ -15,6 +15,11 @@ import (
 	"github.com/goadesign/surla/verify/candidate"
 )
 
+// plantedArtifactToken stands for text a test program could put in a
+// scenario's artifact name or digest, such as a holdout scenario's name. It
+// must stay in the saved report and never reach the builder view.
+const plantedArtifactToken = "FAKE_HOLDOUT_refund_over_limit_417"
+
 // TestPinnedArtifactEvidenceSatisfiesTheBinding checks the contract between
 // an evaluator suite and the verifier: evidence produced by
 // candidate.Artifact.Evidence under each binary's bound name is what Assemble
@@ -128,22 +133,224 @@ func TestAssembleRejectsMalformedInput(t *testing.T) {
 	}
 }
 
+// TestForBuildersExposesNoHoldoutDetail checks that a holdout reaches builders
+// only as holdout-<n> and its outcome, whether its checks failed or its
+// record of the binaries it ran did not match the binding.
 func TestForBuildersExposesNoHoldoutDetail(t *testing.T) {
 	both := testBinding().Artifacts
-	r, err := Assemble(testBinding(), testSuite(), eval.Report{SuiteID: "orders_acceptance", Scenarios: []eval.ScenarioReport{
-		scenario("a", true, both), scenario("b", true, both), holdoutResult(),
-	}}, 0)
-	require.NoError(t, err)
-	view := r.ForBuilders()
-	assert.Equal(t, []BuilderScenario{
-		{ID: "a", Outcome: OutcomePassed, Checks: []eval.Check{{Name: "check", Passed: true}}},
-		{ID: "b", Outcome: OutcomePassed, Checks: []eval.Check{{Name: "check", Passed: true}}},
-		{ID: "holdout-1", Outcome: OutcomeFailed},
-	}, view.Scenarios)
-	serialized, err := json.Marshal(view)
-	require.NoError(t, err)
-	for _, secret := range []string{`"h"`, "secret_holdout_check", "holdout diagnostic", "candidate:"} {
-		assert.NotContains(t, string(serialized), secret, "the serialized builder response must not reveal %s", secret)
+	mismatched := holdoutResult()
+	mismatched.Result.Artifacts = []eval.Artifact{
+		{Name: "candidate:orders", URI: "sha256:d1"},
+		{Name: "candidate:worker", URI: "sha256:" + plantedArtifactToken},
+	}
+	cases := []struct {
+		name    string
+		holdout eval.ScenarioReport
+		want    Outcome
+	}{
+		{"failed checks", holdoutResult(), OutcomeFailed},
+		{"record of binaries does not match", mismatched, OutcomeHarnessError},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			r, err := Assemble(testBinding(), testSuite(), eval.Report{SuiteID: "orders_acceptance", Scenarios: []eval.ScenarioReport{
+				scenario("a", true, both), scenario("b", true, both), c.holdout,
+			}}, 0)
+			require.NoError(t, err)
+			view := r.ForBuilders()
+			assert.Equal(t, []BuilderScenario{
+				{ID: "a", Outcome: OutcomePassed, Checks: []eval.Check{{Name: "check", Passed: true}}},
+				{ID: "b", Outcome: OutcomePassed, Checks: []eval.Check{{Name: "check", Passed: true}}},
+				{ID: "holdout-1", Outcome: c.want},
+			}, view.Scenarios)
+			serialized, err := json.Marshal(view)
+			require.NoError(t, err)
+			for _, secret := range []string{
+				`"h"`, "secret_holdout_check", "holdout diagnostic", "candidate:",
+				plantedArtifactToken, "record of the binaries",
+			} {
+				assert.NotContains(t, string(serialized), secret, "the serialized builder response must not reveal %s", secret)
+			}
+		})
+	}
+}
+
+// TestForBuildersNamesTheFailedArtifactCheckOnly checks each of
+// checkArtifacts' five checks on a repair scenario: the saved report keeps
+// the full detail, with whatever names and digests the test program
+// reported, and the builder view shows only the fixed sentence for the check
+// that failed. A record failing several checks gives the same detail and
+// sentence on every assembly.
+func TestForBuildersNamesTheFailedArtifactCheckOnly(t *testing.T) {
+	const (
+		start = "The test program's record of the binaries it ran does not match what Surla built ("
+		end   = "), so no check of this scenario counts; the full detail is in the saved report named by report_digest."
+	)
+	orders := eval.Artifact{Name: "candidate:orders", URI: "sha256:d1"}
+	worker := eval.Artifact{Name: "candidate:worker", URI: "sha256:d2"}
+	planted := eval.Artifact{Name: "candidate:" + plantedArtifactToken, URI: "sha256:d3"}
+	cases := []struct {
+		name      string
+		artifacts []eval.Artifact
+		detail    string
+		sentence  string
+		planted   bool
+	}{
+		{
+			name:      "digest unreadable",
+			artifacts: []eval.Artifact{orders, worker, {Name: "candidate:" + plantedArtifactToken, URI: "md5:d3"}},
+			detail:    "artifact candidate:" + plantedArtifactToken + " has no sha256 URI",
+			sentence:  start + "it recorded a binary without a SHA-256 digest" + end,
+			planted:   true,
+		},
+		{
+			name:      "reported twice",
+			artifacts: []eval.Artifact{orders, worker, planted, planted},
+			detail:    `scenario reported binary "` + plantedArtifactToken + `" twice`,
+			sentence:  start + "it recorded the same binary more than once" + end,
+			planted:   true,
+		},
+		{
+			name:      "missing",
+			artifacts: []eval.Artifact{orders},
+			detail:    `scenario did not report executing bound binary "worker"`,
+			sentence:  start + "it did not record running a binary Surla built" + end,
+		},
+		{
+			name:      "digest mismatch",
+			artifacts: []eval.Artifact{orders, {Name: "candidate:worker", URI: "sha256:" + plantedArtifactToken}},
+			detail:    "scenario executed worker with digest " + plantedArtifactToken + ", bound d2",
+			sentence:  start + "it recorded a binary whose digest is not that of the binary Surla built" + end,
+			planted:   true,
+		},
+		{
+			name:      "undeclared",
+			artifacts: []eval.Artifact{orders, worker, planted},
+			detail:    `scenario executed unbound binary "` + plantedArtifactToken + `"`,
+			sentence:  start + "it recorded running a binary Surla did not build" + end,
+			planted:   true,
+		},
+		{
+			name:      "nothing recorded names the first bound binary",
+			artifacts: nil,
+			detail:    `scenario did not report executing bound binary "orders"`,
+			sentence:  start + "it did not record running a binary Surla built" + end,
+		},
+		{
+			name: "missing comes before a mismatch and an undeclared binary",
+			artifacts: []eval.Artifact{
+				planted, {Name: "candidate:orders", URI: "sha256:" + plantedArtifactToken},
+			},
+			detail:   `scenario did not report executing bound binary "worker"`,
+			sentence: start + "it did not record running a binary Surla built" + end,
+			planted:  true,
+		},
+		{
+			name: "two mismatches name the first bound binary",
+			artifacts: []eval.Artifact{
+				{Name: "candidate:worker", URI: "sha256:other"},
+				{Name: "candidate:orders", URI: "sha256:" + plantedArtifactToken},
+			},
+			detail:   "scenario executed orders with digest " + plantedArtifactToken + ", bound d1",
+			sentence: start + "it recorded a binary whose digest is not that of the binary Surla built" + end,
+			planted:  true,
+		},
+		{
+			name: "an unreadable digest comes before an earlier duplicate",
+			artifacts: []eval.Artifact{
+				orders, orders, {Name: "candidate:" + plantedArtifactToken, URI: "md5:d3"},
+			},
+			detail:   "artifact candidate:" + plantedArtifactToken + " has no sha256 URI",
+			sentence: start + "it recorded a binary without a SHA-256 digest" + end,
+			planted:  true,
+		},
+		{
+			name: "two undeclared binaries name the first by name",
+			artifacts: []eval.Artifact{
+				orders, worker,
+				{Name: "candidate:zeta", URI: "sha256:d3"}, {Name: "candidate:alpha", URI: "sha256:d4"},
+			},
+			detail:   `scenario executed unbound binary "alpha"`,
+			sentence: start + "it recorded running a binary Surla did not build" + end,
+		},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			evidence := eval.Report{SuiteID: "orders_acceptance", Scenarios: []eval.ScenarioReport{
+				scenario("a", true, testBinding().Artifacts),
+				{ID: "b", StartedAt: time.Now(), Passed: true, Result: &eval.Result{
+					Checks: []eval.Check{{Name: "check", Passed: true}}, Artifacts: c.artifacts,
+				}},
+				scenario("h", true, testBinding().Artifacts),
+			}}
+			// Map order differs between assemblies; the outcome must not.
+			for range 32 {
+				r, err := Assemble(testBinding(), testSuite(), evidence, 0)
+				require.NoError(t, err)
+				require.NotNil(t, r.Scenarios[1].Detail)
+				assert.Equal(t, OutcomeHarnessError, r.Scenarios[1].Outcome)
+				assert.Equal(t, c.detail, r.Scenarios[1].Detail.Error, "the saved report keeps the full detail")
+				assert.Empty(t, r.Evidence.Scenarios[1].Error, "the suite's own report is kept unchanged")
+
+				view := r.ForBuilders()
+				assert.Equal(t, BuilderScenario{
+					ID: "b", Outcome: OutcomeHarnessError,
+					Checks: []eval.Check{{Name: "check", Passed: true}}, Error: c.sentence,
+				}, view.Scenarios[1])
+				serialized, err := json.Marshal(view)
+				require.NoError(t, err)
+				for _, private := range []string{plantedArtifactToken, "candidate:"} {
+					assert.NotContains(t, string(serialized), private, "the serialized builder response must not reveal %s", private)
+				}
+				saved, err := json.Marshal(r)
+				require.NoError(t, err)
+				if c.planted {
+					assert.Contains(t, string(saved), plantedArtifactToken, "the operator's saved report keeps what the test program reported")
+				}
+			}
+		})
+	}
+}
+
+// TestForBuildersKeepsTheSuitesOwnErrorAndChecks checks what the builder view
+// must keep showing verbatim for a repair scenario: the error the suite
+// reported, even when the scenario's record of binaries would also fail the
+// artifact check, and every check with its diagnostic.
+func TestForBuildersKeepsTheSuitesOwnErrorAndChecks(t *testing.T) {
+	both := testBinding().Artifacts
+	failing := []eval.Check{{Name: "refund_total", Passed: false, Diagnostic: "refund was 12, want 10"}}
+	cases := []struct {
+		name     string
+		scenario eval.ScenarioReport
+		want     BuilderScenario
+	}{
+		{
+			name:     "environment error without a result",
+			scenario: eval.ScenarioReport{ID: "b", StartedAt: time.Now(), Error: "temporal never listened"},
+			want:     BuilderScenario{ID: "b", Outcome: OutcomeHarnessError, Error: "temporal never listened"},
+		},
+		{
+			name: "environment error with a result whose binaries do not match",
+			scenario: eval.ScenarioReport{ID: "b", StartedAt: time.Now(), Error: "temporal never listened",
+				Result: &eval.Result{Checks: failing, Artifacts: []eval.Artifact{{Name: "candidate:orders", URI: "sha256:other"}}}},
+			want: BuilderScenario{ID: "b", Outcome: OutcomeHarnessError, Checks: failing, Error: "temporal never listened"},
+		},
+		{
+			name: "failed check with matching binaries",
+			scenario: eval.ScenarioReport{ID: "b", StartedAt: time.Now(), Result: &eval.Result{Checks: failing, Artifacts: []eval.Artifact{
+				{Name: "candidate:orders", URI: "sha256:d1"}, {Name: "candidate:worker", URI: "sha256:d2"},
+			}}},
+			want: BuilderScenario{ID: "b", Outcome: OutcomeFailed, Checks: failing},
+		},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			r, err := Assemble(testBinding(), testSuite(), eval.Report{SuiteID: "orders_acceptance", Scenarios: []eval.ScenarioReport{
+				scenario("a", true, both), c.scenario, scenario("h", true, both),
+			}}, 0)
+			require.NoError(t, err)
+			assert.Equal(t, c.want, r.ForBuilders().Scenarios[1])
+		})
 	}
 }
 

@@ -56,6 +56,20 @@
     "summary": "Checking out the evaluator suite failed."
   },
   {
+    "name": "go-mod-download-candidate",
+    "stage": "build",
+    "file": "go-mod-download-candidate.stderr",
+    "exit": 7,
+    "summary": "The candidate did not build."
+  },
+  {
+    "name": "go-mod-download-suite",
+    "stage": "build",
+    "file": "go-mod-download-suite.stderr",
+    "exit": 7,
+    "summary": "The evaluator suite did not build."
+  },
+  {
     "name": "go-env-candidate",
     "stage": "build",
     "file": "go-env-candidate.stderr",

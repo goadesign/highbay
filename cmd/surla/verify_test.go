@@ -18,6 +18,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"goa.design/goa-ai/eval"
 
 	"github.com/goadesign/surla/internal/verify"
 )
@@ -144,6 +145,69 @@ func TestWriteVerifyReportPrintsBeforeFailing(t *testing.T) {
 			assert.Equal(t, tc.wantIDs, ids)
 			if tc.builderView {
 				assert.NotContains(t, out.String(), "cross_customer_refund_refused")
+			}
+		})
+	}
+
+	// A repair scenario whose record of the binaries it ran failed Surla's
+	// artifact check: the check's detail quotes what the test program
+	// reported, so only the full report prints it.
+	const planted = "FAKE_HOLDOUT_refund_over_limit_417"
+	mismatched, err := verify.Assemble(
+		verify.Binding{
+			CandidateCommit: "abc", RequestRevision: "rev-1", SuiteID: "orders_acceptance",
+			SuiteCommit: "suite-1", Artifacts: map[string]string{"orders": "d1"}, Environment: "sim",
+		},
+		verify.Suite{ID: "orders_acceptance", Environment: "sim", Scenarios: []verify.Scenario{{ID: "refund_within_limit"}}},
+		eval.Report{SuiteID: "orders_acceptance", Scenarios: []eval.ScenarioReport{{
+			ID: "refund_within_limit", StartedAt: time.Now(), Passed: true,
+			Result: &eval.Result{
+				Checks:    []eval.Check{{Name: "check", Passed: true}},
+				Artifacts: []eval.Artifact{{Name: "candidate:orders", URI: "sha256:" + planted}},
+			},
+		}}}, 0)
+	require.NoError(t, err)
+	views := []struct {
+		name        string
+		builderView bool
+		want        string
+		wantAbsent  []string
+	}{
+		{
+			name: "full report keeps the artifact check's detail",
+			want: "scenario executed orders with digest " + planted + ", bound d1",
+		},
+		{
+			name:        "builder view names the failed artifact check only",
+			builderView: true,
+			want: "The test program's record of the binaries it ran does not match what Surla built " +
+				"(it recorded a binary whose digest is not that of the binary Surla built), " +
+				"so no check of this scenario counts; the full detail is in the saved report named by report_digest.",
+			wantAbsent: []string{planted, "candidate:"},
+		},
+	}
+	for _, tc := range views {
+		t.Run(tc.name, func(t *testing.T) {
+			var out bytes.Buffer
+			err := writeVerifyReport(&out, mismatched, tc.builderView)
+			require.EqualError(t, err, "verification did not pass (report "+mismatched.Digest+")")
+			var printed struct {
+				Scenarios []struct {
+					Outcome string `json:"outcome"`
+					Error   string `json:"error"`
+					Detail  struct {
+						Error string `json:"error"`
+					} `json:"detail"`
+				} `json:"scenarios"`
+			}
+			require.NoError(t, json.Unmarshal(out.Bytes(), &printed))
+			require.Len(t, printed.Scenarios, 1)
+			assert.Equal(t, "harness_error", printed.Scenarios[0].Outcome)
+			// The builder view carries the error on the scenario; the full
+			// report carries it in the scenario's detail.
+			assert.Equal(t, tc.want, printed.Scenarios[0].Error+printed.Scenarios[0].Detail.Error)
+			for _, absent := range tc.wantAbsent {
+				assert.NotContains(t, out.String(), absent)
 			}
 		})
 	}

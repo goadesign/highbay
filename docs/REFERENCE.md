@@ -527,7 +527,9 @@ func main() {
    attaches the evidence of every binary it used, such as
    `pinned["orders"].Evidence("orders")`, which `surla verify` compares with the
    digest it measured; missing or different evidence makes the scenario a
-   `harness_error`. Exit codes: `0` all passed; `1` the suite ran and a
+   `harness_error`. The builder view then says in one fixed sentence which
+   check failed; the names and digests the scenario reported stay in the
+   saved report. Exit codes: `0` all passed; `1` the suite ran and a
    scenario failed; `2` the suite could not run or finish cleanly. The program
    also accepts `--scenario <id>`, or `--tag <tag>`, and `--max-concurrency <n>`
    for direct runs.
