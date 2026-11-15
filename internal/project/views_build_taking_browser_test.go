@@ -48,6 +48,20 @@ func TestBuildTakingAtDesktopAndPhoneWidth(t *testing.T) {
 	harness, err := filepath.Abs("../../ui/checkpoint/testing/browser_harness.cjs")
 	require.NoError(t, err)
 	vp := startViewsProject(t, controlplane.Options{})
+	server := vp.server.Load()
+	// Bind a stand-in team for Build-state captures without starting workers.
+	require.NoError(t, vp.cp.Load().Close())
+	cp, err := controlplane.New(controlplane.Options{
+		CardsDir: vp.state.CardsDir(),
+		Team:     &controlplane.TeamBinding{Owner: vp.state.Record.Owner, Service: &phoneTeamOwner{Server: server}},
+	})
+	require.NoError(t, err)
+	vp.cp.Store(cp)
+	application := http.NewServeMux()
+	application.Handle("GET /views", controlplane.ViewsPage())
+	application.Handle("/", controlplane.NewHTTPHandler(cp, server.Authenticate))
+	handler := server.Handler(application)
+	vp.handler.Store(&handler)
 	card := proposeChange(t, vp.state.Origin(), vp.agent(t, "guide"), "taking-layout", "")
 	user := controlplane.WithPrincipal(t.Context(), controlplane.Principal{
 		ID: vp.state.Record.Owner, CallerID: "layout-user", Kind: controlplane.CallerUser,
@@ -82,11 +96,10 @@ func TestBuildTakingAtDesktopAndPhoneWidth(t *testing.T) {
 			}),
 		},
 	}
-	server := vp.server.Load()
-	application := http.NewServeMux()
+	application = http.NewServeMux()
 	application.Handle("GET /views", controlplane.ViewsPage())
 	application.Handle("/", controlplane.NewHTTPHandler(service, server.Authenticate))
-	handler := server.Handler(application)
+	handler = server.Handler(application)
 	vp.handler.Store(&handler)
 	capture := os.Getenv("SURLA_TEST_TAKING_CAPTURE_DIR")
 	if capture == "" {
@@ -97,20 +110,27 @@ func TestBuildTakingAtDesktopAndPhoneWidth(t *testing.T) {
 	started, ok := service.build.Build.AsStarted()
 	require.True(t, ok)
 	passed := started.Taking
-	for _, state := range []string{"passed", "building", "dropped", "merged"} {
+	for _, state := range []string{"passed", "building", "dropped", "merged", "replay", "dropped_stale"} {
 		fixture := *started
 		switch state {
 		case "passed":
 			fixture.Taking = passed
 		case "building":
 			fixture.Taking = gensurla.NewBuildTakingBuilding(&gensurla.BuildBuilding{})
-		case "dropped":
+		case "dropped", "dropped_stale":
 			fixture.Taking = gensurla.NewBuildTakingDropped(&gensurla.BuildDropped{KeptBranches: []string{}})
-		case "merged":
+		case "merged", "replay":
+			fixture.InForce = state == "replay"
+			if state == "merged" {
+				fixture.RequestRevision = strings.Repeat("0", 64)
+			}
 			fixture.Taking = gensurla.NewBuildTakingMerged(&gensurla.BuildMerged{})
 		}
 		service.mu.Lock()
-		service.build = &gensurla.ChangeBuild{ChangeID: card.ChangeID, Build: gensurla.NewBuildStarted(&fixture)}
+		service.build = &gensurla.ChangeBuild{
+			ChangeID: card.ChangeID, DraftedBeforeDrop: state == "dropped_stale",
+			Build: gensurla.NewBuildStarted(&fixture),
+		}
 		service.mu.Unlock()
 		link, err := vp.link()
 		require.NoError(t, err)
@@ -128,14 +148,18 @@ func TestBuildTakingAtDesktopAndPhoneWidth(t *testing.T) {
 				assert.True(t, view.RewriteWarning)
 				assert.True(t, view.CommandsUsable)
 			}
-			if state == "passed" || state == "building" {
-				assert.True(t, view.DropFocused)
-				assert.True(t, view.DropCancelled)
+			if state == "passed" || state == "building" || state == "replay" {
+				assert.True(t, view.QuestionFocused)
+				assert.True(t, view.QuestionCancelled)
 			}
 			if state == "dropped" {
 				assert.False(t, view.NoStart)
 			}
-			if state == "merged" || state == "dropped" {
+			if state == "replay" || state == "dropped_stale" {
+				assert.True(t, view.NoStart)
+			}
+			assert.Equal(t, state == "dropped_stale", view.EnablingStep)
+			if state == "merged" || state == "dropped" || state == "replay" {
 				assert.True(t, view.Explanation)
 			}
 			t.Logf("%s presentation at %dpx: %+v", state, view.Width, view)

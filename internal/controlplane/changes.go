@@ -134,10 +134,11 @@ func (c *ControlPlane) changeList(ctx context.Context, span trace.Span, owner st
 		return nil, errors.New("list changes: saved change cards could not be read")
 	}
 	saved, found, err := c.cards.loadOpenBuild()
-	var activeFound bool
+	var provenance madeFromRecord
 	if err == nil {
-		activeFound, err = c.activeBuildFound(saved, found)
+		provenance, _, err = c.cards.loadMadeFrom()
 	}
+	activeFound := found && !buildDropped(provenance, saved)
 	c.mu.RUnlock()
 	if err != nil {
 		span.RecordError(err)
@@ -154,7 +155,7 @@ func (c *ControlPlane) changeList(ctx context.Context, span trace.Span, owner st
 	buildVersions := make([]string, 0, len(records))
 	items := make([]*gensurla.ChangeListItem, 0, len(records))
 	for _, record := range records {
-		build, err := c.changeBuild(ctx, record, saved, found)
+		build, err := c.changeBuild(ctx, record, saved, found, draftedBeforeDrop(record, provenance))
 		if err != nil {
 			span.RecordError(err)
 			span.SetStatus(codes.Error, "read builds")

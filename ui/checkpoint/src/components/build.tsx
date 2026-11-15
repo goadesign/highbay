@@ -21,6 +21,7 @@ export interface BuildSectionProps {
   card: ChangeCardResult;
   currentRevision: string | null;
   build: ChangeBuild["build"] | null;
+  draftedBeforeDrop: boolean | null;
   loading: boolean;
   error: string | null;
   // actionError retains a failed start separately from saved-build read errors.
@@ -41,7 +42,7 @@ export interface BuildSectionProps {
   approvalAvailable: boolean;
   onRefresh: () => void;
   onReadFindings: () => void;
-  onPrepareBuild: (ready: (build: ChangeBuild["build"] | null) => void) => void;
+  onPrepareBuild: (ready: (build: ChangeBuild | null) => void) => void;
   onBuild: (replaces?: ReplacedBuild) => void;
   onDrop: (build: ReplacedBuild) => void;
   onOpenTeam: () => void;
@@ -55,6 +56,7 @@ export function BuildSectionView({
   card,
   currentRevision,
   build,
+  draftedBeforeDrop,
   loading,
   error,
   actionError,
@@ -83,11 +85,12 @@ export function BuildSectionView({
   const saved = build !== null && build.state === "started" ? build : null;
   const open = saved !== null && (saved.taking.state === "building" || saved.taking.state === "passed");
   const current = saved !== null && saved.in_force;
-  const requiresConfirmation = (current && open) || saved?.taking.state === "building";
+  const replay = current && saved.taking.state === "merged";
+  const requiresConfirmation = (current && open) || saved?.taking.state === "building" || replay;
   const displayedCurrent = currentRevision === card.request_revision &&
     (!current || saved.request_revision === card.request_revision);
   const confirmed = card.status === "confirmed";
-  const eligible = confirmed && displayedCurrent && build !== null && error === null;
+  const eligible = confirmed && displayedCurrent && build !== null && error === null && draftedBeforeDrop === false;
   const blockingBuild = openBuildRefusal !== null && openBuildRefusal.change_id !== card.change_id
     ? openBuildRefusal : null;
   const blocked = disabled || starting || dropping || loading || !eligible || blockingBuild !== null;
@@ -100,7 +103,7 @@ export function BuildSectionView({
   const reviewPrimary = open && approvalAvailable && !otherPrimary && !sentBack && matchedCheck &&
     report?.passed === true && !recordedCheck;
   // identity binds the question to the exact subject and start it described.
-  const identity = JSON.stringify([card.change_id, card.request_revision, saved?.request_revision ?? null, saved?.started_at ?? null, saved?.taking.state ?? null]);
+  const identity = JSON.stringify([card.change_id, card.request_revision, saved?.request_revision ?? null, saved?.started_at ?? null, saved?.taking.state ?? null, draftedBeforeDrop]);
   const [question, setQuestion] = useState<BuildQuestion | null>(null);
   const confirming = question?.kind === "rebuild" && question.identity === identity && requiresConfirmation && eligible && !disabled && !starting && !dropping && blockingBuild === null;
   const questionBusy = question !== null;
@@ -225,8 +228,9 @@ export function BuildSectionView({
         return;
       }
       const freshIdentity = JSON.stringify([
-        card.change_id, card.request_revision, fresh.state === "started" ? fresh.request_revision : null,
-        fresh.state === "started" ? fresh.started_at : null, fresh.state === "started" ? fresh.taking.state : null,
+        card.change_id, card.request_revision, fresh.build.state === "started" ? fresh.build.request_revision : null,
+        fresh.build.state === "started" ? fresh.build.started_at : null, fresh.build.state === "started" ? fresh.build.taking.state : null,
+        fresh.drafted_before_drop,
       ]);
       setQuestion((previous) => previous?.kind === "reading" && previous.identity === identity
         ? freshIdentity === identity ? { kind: "rebuild", identity } : null : previous);
@@ -240,7 +244,7 @@ export function BuildSectionView({
   const directLabel = card.proposed_revision !== undefined
     ? "Build agreed revision"
     : saved !== null ? "Build current agreed revision" : "Build this change";
-  const showDirect = (!current || !open) && confirmed && displayedCurrent && build !== null;
+  const showDirect = (!current || !open) && !replay && draftedBeforeDrop === false && confirmed && displayedCurrent && build !== null;
   const executionExplanation = saved?.test_writer.tests.state === "not_used"
     ? "From Build on, those tests and the builder’s code run on this machine as ordinary programs, with your access to files and the network; nothing confines them. Approval decides only what merges."
     : "From Build on, the tests and the builder’s code run on this machine as ordinary programs, with your access to files and the network; nothing confines them. Approval decides only what merges.";
@@ -294,7 +298,7 @@ export function BuildSectionView({
       {reviewPrimary ? "Review and approve" : "Review saved check"}
     </Button> : null}
     <Button id="surla-build-view-team" disabled={disabled || starting} onClick={onOpenTeam}>View team</Button>
-    {current && open && confirmed && displayedCurrent ? <span ref={triggerRef}>
+    {current && (open || replay) && draftedBeforeDrop === false && confirmed && displayedCurrent ? <span ref={triggerRef}>
       <Button id="surla-build-again" disabled={blocked || questionBusy}
         aria-describedby={blockingBuild !== null ? "surla-build-action-error" : undefined}
         onClick={ask}>Build again…</Button>
@@ -370,6 +374,11 @@ export function BuildSectionView({
       {saved === null && blockingBuild === null ? <>
         {observations}{progress}{explanation}<div className="surla-field-row surla-build-actions">{actions}</div>
       </> : null}
+      {draftedBeforeDrop === true ? <p id="surla-build-enabling-step">
+        This agreement was drafted before a build was dropped; ask the guide to refresh its draft with <code>refresh_story</code>
+        {" and propose a revision from that refresh with "}<code>revise_change</code>, then adopt that revision before building.
+        {" A proposal already waiting may predate the drop; adopting it alone may not enable Build."}
+      </p> : null}
       {!confirmed ? <p>Confirm the change before building it.</p> : !displayedCurrent ? (
         <p>A newer agreed revision is available. Review it before starting a build.</p>
       ) : dirty ? (
@@ -399,7 +408,11 @@ export function BuildSectionView({
               ? "Build the agreed revision again?"
               : "Replace the earlier build with the agreed revision?"}</strong></p>
             <p>
-              {saved?.test_writer.tests.state === "not_used"
+              {replay
+                ? saved?.test_writer.tests.state === "not_used"
+                  ? "This starts a new build number from your branch as it is now, for the same agreed revision, with a fresh unread builder assignment and this project’s configured tests. Earlier reports do not establish that the new build passed."
+                  : "This starts a new build number from your branch as it is now, for the same agreed revision, with fresh unread builder and test writer assignments. The test writer must report its tests and have them accepted again. Earlier reports do not establish that the new build passed."
+                : saved?.test_writer.tests.state === "not_used"
                 ? "Building again replaces this build and makes the builder’s assignment unread again."
                 : "Building again replaces this build, makes both assignments unread, sets the test writer’s work to Assigned, clears its report and verdict, and requires its tests to be reported, judged and accepted again before verification or a new live target."}
             </p>
@@ -494,7 +507,7 @@ export function BuildTakingView({ changeId, build, disabled, dropping, onDrop, o
         candidateCommit={taking.candidate_commit}
         testsCommit={taking.tests.source === "written_tests" ? taking.tests.commit : null}
         onFocusedControlRemoved={onFocusedControlRemoved} /> : null}
-      {taking.state === "merged" ? <p>It is in your branch. Another change can be built. No role has work on this build.</p> : null}
+      {taking.state === "merged" ? <p>It is in your branch. {build.in_force ? "Build another change or refine this one when there is more to do." : "Build the current agreed revision to implement the new agreement."} No role has work on this build.</p> : null}
       {taking.state === "dropped" ? <>
         {taking.kept_branches.length > 0 ? <ul>{taking.kept_branches.map((branch) => <li key={branch}><code>{branch}</code> — <code>git log {branch}</code> shows it.</li>)}</ul> : null}
         <p>Surla builds nothing on it. No role has work on this build. Another change can be built.</p>

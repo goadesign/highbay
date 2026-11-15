@@ -121,7 +121,12 @@ func (c *ControlPlane) DropBuild(ctx context.Context, p *gensurla.DropBuildPaylo
 		return nil, fmt.Errorf("save dropped build: %w", err)
 	}
 
-	return &gensurla.ChangeBuild{ChangeID: current.ChangeID, Build: gensurla.NewBuildStarted(startedBuild(heldBuild{file: current, inForce: buildInForce(current, record), storedEvaluator: c.storedEvaluator()}, gensurla.NewBuildTakingDropped(&gensurla.BuildDropped{KeptBranches: branches})))}, nil
+	return &gensurla.ChangeBuild{
+		ChangeID: current.ChangeID, DraftedBeforeDrop: draftedBeforeDrop(record, provenance),
+		Build: gensurla.NewBuildStarted(startedBuild(heldBuild{
+			file: current, inForce: buildInForce(current, record), storedEvaluator: c.storedEvaluator(),
+		}, gensurla.NewBuildTakingDropped(&gensurla.BuildDropped{KeptBranches: branches}))),
+	}, nil
 }
 
 // buildBranchTips captures only the numbered build's existing refs, including

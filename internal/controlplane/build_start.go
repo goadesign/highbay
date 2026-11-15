@@ -237,7 +237,7 @@ func (c *ControlPlane) StartBuild(
 		c.mu.Unlock()
 		return nil, err
 	}
-	if hasProvenance && provenance.Start.Dropped != nil && record.madeFrom.Start.Write < provenance.Start.Write {
+	if draftedBeforeDrop(record, provenance) {
 		c.mu.Unlock()
 		return nil, gensurla.MakeDraftedBeforeDrop(errors.New("A build was dropped after this revision was drafted. Ask the guide to call refresh_story and revise_change, adopt the revision, then build."))
 	}
@@ -576,12 +576,20 @@ func checkBuildReplacement(p *gensurla.StartBuildPayload, saved buildFile, progr
 // checkDraftAfterDrop refuses only revisions older than an actual drop.
 // The caller holds c.mu, which serializes Drop's provenance publication.
 func (c *ControlPlane) checkDraftAfterDrop(record storedChangeCard) error {
-	provenance, found, err := c.cards.loadMadeFrom()
+	provenance, _, err := c.cards.loadMadeFrom()
 	if err != nil {
 		return err
 	}
-	if found && provenance.Start.Dropped != nil && record.madeFrom.Start.Write < provenance.Start.Write {
+	if draftedBeforeDrop(record, provenance) {
 		return gensurla.MakeDraftedBeforeDrop(errors.New("A build was dropped after this revision was drafted. Ask the guide to call refresh_story and revise_change, adopt the revision, then build."))
 	}
 	return nil
+}
+
+// draftedBeforeDrop reports only the agreed design's freshness against an
+// actual drop. Missing agreement or design has its own build admission error.
+// Callers capture record and provenance under c.mu; no generation leaves the owner.
+func draftedBeforeDrop(record storedChangeCard, provenance madeFromRecord) bool {
+	return record.agreedRevision() != "" && record.madeFrom != nil &&
+		provenance.Start.Dropped != nil && record.madeFrom.Start.Write < provenance.Start.Write
 }
