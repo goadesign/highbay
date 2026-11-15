@@ -12,6 +12,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"slices"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -269,8 +270,9 @@ func TestBuilderCopyCheckBusyHTTPMCP(t *testing.T) {
 		{"generate_code", "/workspace/generate"},
 	} {
 		t.Run(tool.name, func(t *testing.T) {
-			request := httptest.NewRequest(http.MethodPost, tool.route, nil)
+			request := httptest.NewRequest(http.MethodPost, tool.route, strings.NewReader(`{}`))
 			request.Header.Set("Authorization", "Bearer generation-token-builder")
+			request.Header.Set("Content-Type", "application/json")
 			response := httptest.NewRecorder()
 			handler.ServeHTTP(response, request)
 			require.Equal(t, http.StatusConflict, response.Code)
