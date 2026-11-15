@@ -22,8 +22,11 @@ can run against it.
   `design/model.go` declares the C4 architecture model. `design/story.go`
   declares the Story: who uses the service and the flows their requests take
   (see "Change checkpoints" below).
-- `gen/` is generated from `design/`. After changing `design/`, the builder calls the
-  `generate_code` MCP tool on the Surla project server (or you run `surla gen`
+- `gen/` is generated from `design/`. The guide edits the next design in its
+  draft and proposes a revision for you to adopt. The builder calls the
+  `generate_code` MCP tool on the Surla project server to write that agreed
+  design into its working copy's `design/` and regenerate `gen/`; it edits
+  neither directory. An operator can run `surla gen`
   in this directory from a shell that is not sandboxed): it runs Goa's generator for this module inside Surla's
   sandbox. Never edit `gen/`. Generation compiles the design only, so update the
   hand-written code in `internal/` and `cmd/` to match it; the builder then builds and tests
@@ -70,12 +73,14 @@ can run against it.
   from `eval/design/` and calls `eval/acceptance`: its `Name`, `Hooks`,
   `New`, `Live` and `LiveThroughGateway`. When a build runs with a test
   writer (without stored verification settings), `eval/` (`eval/design/`
-  included) belongs to the test writer, and Surla regenerates `eval/gen/` at
-  build start and on each report; after changing `eval/design/`, the test
+  included) belongs to the test writer, and Surla regenerates `eval/gen/` when
+  the writer reads an unread assignment and at each report; after changing `eval/design/`, the test
   writer reports to have Surla generate it again or runs `surla gen -dir eval`
   from a shell that is not sandboxed. If you edit `eval/design/` yourself
   outside a build, regenerate its code with `surla gen -dir eval` (or have the
   builder call `generate_code` with `target: "eval"`).
+  The test writer runs every Go command with `GOWORK=off` and does not commit:
+  Surla commits the tests it accepts.
   `eval/design/story_tests.go` lists the tests the Story requires, one
   scenario per finished flow, such as `prices_cookie`. `surla init` wrote it
   from `design/story.go`, and Surla writes it again from the agreed Story when
@@ -108,19 +113,27 @@ initialized the Git repository, created the initial commit (`commit` in
 
 For each change:
 
-1. The guide describes the change with `propose_change`, and with
-   `revise_change` when it changes. You confirm it on the views page, which
+1. The guide calls `update_draft` before drafting a new change, writes only
+   in the draft folder it returns and corrects every file it lists. It calls
+   `refresh_story`, waits for success and uses that evaluated draft with
+   `propose_change`, or `revise_change` when the change is refined.
+   You confirm it on the views page, which
    also shows its architecture preview (`preview_architecture`). Then you start
    its build there: Surla gives the builder its assignment and, without stored
    verification settings, adds a test writer, which writes the tests the
    change's Story requires and reports them for Surla to check and accept.
-2. The builder edits the service code in this module. In a project that
+2. The builder reads its new assignment before working in its own project
+   copy and stays on the branch checked out there. It runs `git status`;
+   files left by earlier work must not be committed into this change. It
+   calls `generate_code` to write the agreed `design/` and regenerate `gen/`,
+   then edits the hand-written service code. In a project that
    builds with a test writer (without stored verification settings), the test
    module `eval/` (`eval/design/` included) belongs to the test writer: the
    builder leaves `eval/` untouched, and if the Story (`design/story.go`) or
    the test module's contract needs a change, asks you so the guide can draft
-   and you can confirm a revised change. When the builder edits `design/`, it
-   first calls `generate_code`, then updates the hand-written code to match.
+   and you can confirm a revised change. The builder edits neither `design/`
+   nor `gen/`. When its assignment's `gowork_off` is true, it prefixes every
+   Go command with `GOWORK=off`.
 3. The builder calls `check_project` to build and test its uncommitted files
    in Linux containers (Docker required), leaving `eval/` out when the project
    has no stored verification settings (or testing both modules when stored
@@ -130,7 +143,7 @@ For each change:
    when the project has no stored verification settings) and checks again.
    `read_check_output` returns the captured output, page by page, for the
    `op_id` in either result.
-4. The builder commits, then passes the new commit ID as `candidate_commit`
+4. The builder commits on its own branch, then passes the new commit ID as `candidate_commit`
    with the confirmed change's `change_id` to `start_live_target`, and also
    its `request_revision` to `verify_change`. Without stored verification
    settings, both use the tests Surla accepted for that build; choose a model
@@ -173,18 +186,19 @@ agents that build the service.
 
 ## Change checkpoints
 
-Surla reads this workspace's `design/*.go` privately when `propose_change` saves
-a Change Card. The saved source contributes to `request_revision`; callers do
-not upload it. The guide calls `refresh_story` to evaluate the workspace's
-domain Story and passes its succeeded `op_id` as `story_refresh_op_id` to adopt
-the Story and matching source.
+The guide writes only in the draft folder returned by `update_draft` or
+`refresh_story`, never in the project folder. It calls `refresh_story` to
+evaluate that draft and passes its succeeded `op_id` as `story_refresh_op_id`
+when proposing or revising a Change Card. The card saves that evaluated design
+and Story, not later project-folder edits. The saved source contributes to
+`request_revision`; callers do not upload it.
 An adopted Story remains paired with its source when a later revision omits
 `story_refresh_op_id`.
 
 The Story is `design/story.go`. It ships with one finished flow,
 `prices-cookie`, and with the test that flow requires: the method
 `PricesCookie` of package `eval/acceptance`. To describe new behavior, the
-guide adds a flow to that file and calls `refresh_story`. When you start a
+guide adds a flow to the draft's `design/story.go` and calls `refresh_story`. When you start a
 build of the change, each finished flow of its Story is a test the build
 requires, and the test writer adds the missing methods beside `PricesCookie`.
 
