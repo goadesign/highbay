@@ -23,6 +23,7 @@ import (
 	"github.com/stretchr/testify/require"
 	goahttp "goa.design/goa/v3/http"
 
+	genhttpclient "github.com/goadesign/surla/gen/http/surla/client"
 	genmcpclient "github.com/goadesign/surla/gen/jsonrpc/mcp_surla/client"
 	genmcpsurla "github.com/goadesign/surla/gen/mcp_surla"
 	gensurla "github.com/goadesign/surla/gen/surla"
@@ -86,6 +87,7 @@ func TestGenOnAFreshStarterChangesNothingAndKeepsModulesApart(t *testing.T) {
 	require.NoError(t, err)
 	// A test executable has no released module version in its build info.
 	opts.SurlaVersion = starterSurlaVersion
+	opts.Team = &controlplane.TeamBinding{Owner: "operator@example.com", Service: &promotionTeamFixture{}}
 	cp, err := controlplane.New(opts)
 	require.NoError(t, err)
 	_, err = cp.ConfigureModel(controlplane.WithPrincipal(t.Context(), controlplane.Principal{ID: "operator@example.com", CallerID: "user", Kind: controlplane.CallerUser}), &gensurla.ConfigureModelPayload{GatewayAddr: &gatewayAddr})
@@ -196,6 +198,7 @@ func TestGenOnAFreshStarterChangesNothingAndKeepsModulesApart(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, state.CardsDir(), opts.CardsDir)
 	opts.SurlaVersion = starterSurlaVersion
+	opts.Team = &controlplane.TeamBinding{Owner: "operator@example.com", Service: &promotionTeamFixture{}}
 	cp, err = controlplane.New(opts)
 	require.NoError(t, err)
 	_, err = cp.ConfigureModel(controlplane.WithPrincipal(t.Context(), controlplane.Principal{ID: "operator@example.com", CallerID: "user", Kind: controlplane.CallerUser}), &gensurla.ConfigureModelPayload{GatewayAddr: &gatewayAddr})
@@ -206,6 +209,10 @@ func TestGenOnAFreshStarterChangesNothingAndKeepsModulesApart(t *testing.T) {
 	require.NoError(t, err)
 	transport = genmcpclient.NewClient(serverURL.Scheme, serverURL.Host, &bearerDoer{client: srv.Client(), token: "test-token"}, goahttp.RequestEncoder, goahttp.ResponseDecoder, false)
 	client = &genmcpsurla.Client{ToolsCallEndpoint: transport.ToolsCall()}
+	userTransport := genhttpclient.NewClient(serverURL.Scheme, serverURL.Host,
+		&bearerDoer{client: srv.Client(), token: "test-token"},
+		goahttp.RequestEncoder, goahttp.ResponseDecoder, false)
+	user := &gensurla.Client{StartBuildEndpoint: userTransport.StartBuild()}
 	// The control-plane owner reloads the actual initialized child from workspace.json.
 	result, err = client.ToolsCall(ctx, call)
 	require.NoError(t, err)
@@ -216,7 +223,7 @@ func TestGenOnAFreshStarterChangesNothingAndKeepsModulesApart(t *testing.T) {
 	require.NotEmpty(t, complete.Content)
 	require.NotNil(t, complete.Content[0].Text)
 	assert.Contains(t, *complete.Content[0].Text, "already initialized at "+dir)
-	assertTrustedSuiteJourney(t, client, opts.CardsDir, opts.RunsDir, candidateCommit, initialized.Commit, "initialized", promotion)
+	assertTrustedSuiteJourney(t, client, user, dir, opts.CardsDir, opts.RunsDir, initialized.Commit, "initialized", promotion)
 
 	edits := []struct {
 		// module is the module directory surla gen runs in.

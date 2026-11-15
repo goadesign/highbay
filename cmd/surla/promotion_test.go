@@ -162,9 +162,7 @@ func TestApproveMergeChecksTheStagedRelease(t *testing.T) {
 	if testing.Short() {
 		t.Skip("evaluates the real refresh/build prerequisites; the full suite covers release approval")
 	}
-	commit := strings.Repeat("c", 40)
 	release := t.TempDir()
-	publish(t, release, commit, map[string]string{"orders": "api v1", "orders-worker": "worker v1"})
 	alice := controlplane.WithPrincipal(context.Background(), controlplane.Principal{ID: "alice@example.com", CallerID: "alice@example.com", Kind: controlplane.CallerUser})
 
 	// Snapshot and build prerequisites use their actual public owners. The
@@ -220,6 +218,19 @@ var _ = Service("orders", func() {
 	assert.Equal(t, card.RequestRevision, started.Build.RequestRevision)
 	assert.True(t, team.registered.Load())
 	assert.Equal(t, gensurla.TeamKindUnavailable, started.Team.Kind(), "this host does not launch agents")
+	builder := controlplane.WithPrincipal(t.Context(), controlplane.Principal{
+		ID: "alice@example.com", CallerID: "builder", Kind: controlplane.CallerBuilder,
+	})
+	assignment, err := cp.GetBuilderAssignment(builder, &gensurla.GetBuilderAssignmentPayload{ChangeID: card.ChangeID})
+	require.NoError(t, err)
+	require.True(t, assignment.Read)
+	require.NotEqual(t, project, assignment.WorkingFolder)
+	require.NoError(t, os.WriteFile(filepath.Join(assignment.WorkingFolder, "release-notes.txt"),
+		[]byte("The staged release is ready.\n"), 0o600))
+	runTestGit(t, assignment.WorkingFolder, "add", "release-notes.txt")
+	runTestGit(t, assignment.WorkingFolder, "commit", "-qm", "Prepare the staged release")
+	commit := strings.TrimSpace(runTestGit(t, assignment.WorkingFolder, "rev-parse", "HEAD"))
+	publish(t, release, commit, map[string]string{"orders": "api v1", "orders-worker": "worker v1"})
 	require.NoError(t, cp.Close())
 	report := saveReport(t, verify.Binding{
 		CandidateCommit: commit, RequestRevision: card.RequestRevision, SuiteID: "orders", SuiteCommit: suiteCommit,
