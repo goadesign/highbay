@@ -4,7 +4,7 @@
 //
 // Init builds the whole project in the operator-provided work directory,
 // running `go mod tidy` in each module and generating its code with a
-// Generator (Surla's sandboxed Goa generator, the one `surla gen` uses), and
+// Generator (Surla's Goa generator, the one `surla gen` uses), and
 // renames the staging directory to the target only when every step
 // succeeded. A failed or canceled step removes the staging directory, so the
 // target is never left half-written. When child cleanup cannot be confirmed,

@@ -1,6 +1,6 @@
 # Orders Reference Platform (`examples/orders`)
 
-**[← Back to Surla README](../../README.md)** · **[Agent Quickstart (`AGENTS_QUICKSTART.md`)](AGENTS_QUICKSTART.md)** · **[Isolated Acceptance Suite (`../orders-eval`)](../orders-eval/acceptance/acceptance_test.go)**
+**[← Back to Surla README](../../README.md)** · **[Agent Quickstart (`AGENTS_QUICKSTART.md`)](AGENTS_QUICKSTART.md)** · **[Acceptance Suite (`../orders-eval`)](../orders-eval/acceptance/acceptance_test.go)**
 
 `examples/orders` is a complete, Golden Path Goa-AI platform that demonstrates why teams build on Surla:
 
@@ -10,7 +10,7 @@
    - **Cursor pagination (`BoundedResult` + page cap + token budget):** `BoundedResult` declares the `returned`/`truncated`/`next_cursor` continuation contract on `list_orders` and `continue_orders`, `internal/orders/service.go` enforces the page limit (`ordersPageSize = 10`), and the evaluator's `within_token_budget` gate catches oversized tool responses.
    - **Human-in-the-loop pause/resume (`Confirmation`):** `request_refund` declares a design-time `Confirmation` gate that pauses the run until a manager holding `refunds:approve` scope approves or denies via `POST /runs/{run_id}/approval` (while customer tokens holding only `orders:chat` receive `403 Forbidden`).
    - **Bounded execution (`RunPolicy`):** Caps `orders.refund` at `MaxToolCalls(8)`, `MaxRecoveryTurns(2)`, and `TimeBudget("2m")`.
-3. **OS-sandboxed verification & holdout redaction (`surla verify` + `examples/orders-eval`):** The isolated evaluator builds and runs `orders` and `orders-worker` inside a macOS `sandbox-exec` jail, routes LLM calls through an evaluator-owned gRPC model gateway, kills the worker mid-refund (`kill -9`) to prove payment idempotency, restarts the API server while a refund awaits manager approval, and enforces a hard token/cost budget that catches seeded payload bloat (`TestSeededPayloadBloatFailsTheBudget`). A hidden scenario, tagged `holdout`, is one whose name, checks and logs the builder (the coding agent that writes the change) never sees.
+3. **Verification & holdout redaction (`surla verify` + `examples/orders-eval`):** The evaluator builds and runs `orders` and `orders-worker` as ordinary processes, routes LLM calls through an evaluator-owned gRPC model gateway, kills the worker mid-refund (`kill -9`) to prove payment idempotency, restarts the API server while a refund awaits manager approval, and enforces a hard token/cost budget that catches seeded payload bloat (`TestSeededPayloadBloatFailsTheBudget`). A hidden scenario, tagged `holdout`, is one whose name, checks and logs the builder (the coding agent that writes the change) never sees.
 
 ---
 
@@ -142,7 +142,7 @@ One change then goes like this:
    code; no test writer is used. Choose its agent app in the Chorus dialog.
 4. The builder writes the change, commits it and asks Surla to verify the
    commit (`verify_change`). Surla builds `orders` and `orders-worker` from
-   that commit in the operating-system sandbox and runs the
+   that commit and runs the
    `orders_acceptance` suite at the stored commit against them. The result
    appears on the views page.
 5. Publish the binaries the run built, then approve. Because this project
@@ -151,7 +151,7 @@ One change then goes like this:
    a folder named with that commit's full ID, writing the folder completely
    and renaming it into place in one step. Approval hashes those two files
    and accepts them only when their SHA-256 digests equal those of the
-   binaries the run built. The run built them in the sandbox with its own
+   binaries the run built. The run built them with its own
    build settings, so a build of your own need not match: publish the run's
    binaries. In the Proof view, select that completed run and copy its
    actual source folder from **Binaries built by this run**, shown as
@@ -211,12 +211,12 @@ the repository root (it needs the `temporal` CLI and macOS):
 go test -race -count=1 -tags e2e -run TestOrdersLiveCopyAppliesADraftThroughTheProjectServer ./cmd/surla
 ```
 
-## 4. Run OS-Sandboxed End-to-End Verification by Hand (`surla verify`)
+## 4. Run End-to-End Verification by Hand (`surla verify`)
 
 `surla verify` and `surla approve` are operator tools: they run the same
 verification and approval check from a shell, without a server or a team.
 
-`surla verify` checks out the exact committed `CandidateCommit` and `SuiteCommit` (uncommitted working-tree edits are never tested), builds `orders` and `orders-worker` inside an OS sandbox (`WorkDir/candidate-bin/`), runs the `orders_acceptance` suite in [`examples/orders-eval`](../orders-eval/design/suite.go) (`WorkDir/suite-bin/suite`), and writes the cryptographically bound `verify.Report` JSON:
+`surla verify` checks out the exact committed `CandidateCommit` and `SuiteCommit` (uncommitted working-tree edits are never tested), builds `orders` and `orders-worker` into `WorkDir/candidate-bin/`, runs the `orders_acceptance` suite in [`examples/orders-eval`](../orders-eval/design/suite.go) (`WorkDir/suite-bin/suite`), and writes the cryptographically bound `verify.Report` JSON:
 
 | Scenario (`orders_acceptance`) | Tag | What It Proves |
 | :--- | :--- | :--- |
@@ -268,7 +268,7 @@ go run ./cmd/surla verify \
   -builder-view
 ```
 
-By default, stdout prints `Report.ForBuilders()` where the `"holdout"` scenario is redacted to `"id": "holdout-1"` with all scenario inputs, declarations, checks, and failure logs stripped. In either view, a run that stops with a passing partial report or no report still prints raw operator diagnostics to stderr; do not share those diagnostics with builder agents. *(Note: in this public reference repo, `examples/orders-eval` is checked in alongside `examples/orders` to demonstrate the mechanism; in production, real hidden scenarios require keeping the evaluator suite repository (`-suite-repo`), `-work-dir`, and `-report-dir` unreadable to builder agents, since `ForBuilders()` redacts the report JSON while workspace boundaries protect the suite source and raw evidence on disk.)*
+By default, stdout prints `Report.ForBuilders()` where the `"holdout"` scenario is redacted to `"id": "holdout-1"` with all scenario inputs, declarations, checks, and failure logs stripped. In either view, a run that stops with a passing partial report or no report still prints raw operator diagnostics to stderr; do not share those diagnostics with builder agents. *(Note: in this public reference repo, `examples/orders-eval` is checked in alongside `examples/orders` to demonstrate the mechanism; in production, real hidden scenarios require keeping the evaluator suite repository (`-suite-repo`), `-work-dir`, and `-report-dir` unreadable to builder agents, since `ForBuilders()` redacts the report JSON while workspace boundaries protect the suite source and raw evidence on disk. The builder's programs run with your file access, so while a run executes they could read the suite's files on this machine.)*
 
 Once `surla verify` writes the full report to `"$VERIFY_DIR/reports/<digest>.json"`, run `surla approve` (`verify.Approve`) to re-derive the report from its raw evidence and verify that the candidate commit, confirmed `request_revision`, evaluator suite, environment, and measured candidate binary SHA-256 digests match the change being promoted:
 

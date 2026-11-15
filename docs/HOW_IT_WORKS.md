@@ -23,11 +23,12 @@ Each has its own credential, so the server always knows who is calling.
 | Herdr | The terminal program the agents and the server run in, one pane per agent. Its core, installed as `herdr-core` with the `hc` command, runs the terminals; the Herdr app shows them. | Running and showing the terminals. |
 | Chorus | The messaging service the agents use to talk to each other. It also provides the dialog where you choose which installed agent plays each role. | Conversation only: a message never makes work count as done. |
 
-Four more words appear on every step:
+Surla runs the code the agents write (the design at each refresh, the
+builder's programs and the test writer's tests) as ordinary processes on this
+machine, with your file and network access.
 
-- The **sandbox** is the operating-system sandbox (macOS `sandbox-exec` or
-  Linux Landlock and Seccomp-BPF) in which the server evaluates designs and
-  builds and runs the code the agents write for the application.
+Three more words appear on every step:
+
 - A **Story** is a plain description of what the system does, written as Go
   code in the project's design. It names the actors and their **flows**. A flow
   is one path from a starting event to an outcome, for example "a customer
@@ -79,7 +80,7 @@ flowchart TD
     F --> G["The test writer writes one test per finished flow and reports"]
     G --> H{"Surla checks the report"}
     H -->|"findings"| G
-    H -->|"accepted at one commit"| J["Surla builds the builder's commit in its sandbox and runs the accepted tests against it"]
+    H -->|"accepted at one commit"| J["Surla builds the builder's commit and runs the accepted tests against it"]
     F --> I["The builder writes the code, commits and asks Surla to verify"]
     I --> J
     J --> K["You approve the result on the page"]
@@ -162,7 +163,7 @@ manager approves it."
 
 1. **The guide writes the Story.** It edits the Story in the project's design
    and calls `refresh_story`, which returns at once while the server
-   evaluates the design in its sandbox. `get_story_refresh` then returns the
+   evaluates the design. `get_story_refresh` then returns the
    Story the server found: actors, finished and draft flows, steps and open
    questions. The Story view shows that draft while the guide works. Where
    the Story starts from depends on the project:
@@ -220,7 +221,7 @@ revision**; see [Going back](#going-back).
 ## Previewing the architecture
 
 The Architecture view asks the server for `preview_architecture` on the
-confirmed card. The server evaluates the project's design in a sandboxed
+confirmed card. The server evaluates the project's design in a separate
 process, with no model and no tokens, and shows what the design declares: its
 containers and the calls between them, each agent's time and tool-call
 limits, and each tool's schemas, including whether a tool declares a
@@ -256,8 +257,7 @@ The reference gives the exact contract of
    the project lacks what a build with a test writer needs: a Git repository
    with at least one commit, the test module `surla init` makes (`eval/` in
    the project folder), a Git name and address, a `.surla-tests` folder and a
-   `surla/tests` branch that nothing else uses, Surla's candidate sandbox
-   (macOS or Linux), and no other build start or test check in progress. Each refusal says
+   `surla/tests` branch that nothing else uses, and no other build start or test check in progress. Each refusal says
    what is missing and the step to take; the reference lists them under
    [`start_build`](REFERENCE.md#start_build).
 2. **The server opens the test writer's working copy** (described below) and
@@ -318,8 +318,8 @@ Surla declares the required tests in that module's Story table,
 `eval/design/story_tests.go`, which it writes at the start and again at each
 report; the test writer leaves that file as it is, and regenerating the
 module keeps the required tests. After changing the module's design, the
-test writer reports to have it generated again or, from a shell that is not
-sandboxed, runs `surla gen -dir eval` in its working copy first. It checks
+test writer reports to have it generated again or runs
+`surla gen -dir eval` in its working copy first. It checks
 its work with `go build ./...` in `eval/`, which fails naming any required
 method not yet written.
 Then it calls `report_tests_finished`. The report returns at once with the
@@ -340,13 +340,17 @@ reference gives the check's limits under
 2. It writes the required tests again from the Story saved with the build, so
    the test writer cannot change what is required.
 3. It builds the generated test program, `gen/cmd/<name>-evals` in the test
-   module, in Surla's build sandbox. A compiler error, such as a missing
+   module. A compiler error, such as a missing
    method, is a finding.
-4. It runs the program's `--describe` in the sandbox to list the scenarios,
+4. It runs the program's `--describe` to list the scenarios,
    the named tests, it declares. A required scenario that is missing is a
    finding, and so is a scenario tagged `holdout`, the tag that hides a
    scenario from what the server returns (see
    [hidden scenarios](#verifying-the-builders-commit)).
+
+The build and the listing run as ordinary processes with your file and network
+access, each in its own process group that the check stops. A process that
+starts its own session leaves its group and keeps running.
 
 The verdict replaces **Reported** and marks the test writer's assignment
 unread, so it reads it again.
@@ -355,7 +359,7 @@ unread, so it reads it again.
 | --- | --- | --- |
 | Needs changes | Surla found problems. The page shows their number; **Read findings** shows their text. | The test writer reads them in its assignment, fixes them and reports again. |
 | Accepted | Surla committed exactly the checked files on `surla/tests`, with your Git identity and the message `Add the tests Surla accepted for change <id>, report <n>`. The build details show that commit. The builder's assignment is marked unread too. | The builder can verify or start a live target with the chosen model. |
-| Could not run | The check stopped for a cause the test writer cannot fix, such as a time limit, Git trouble, a sandbox that could not start, or dependencies that cannot be downloaded where Surla runs. The page shows the reason and your step. | You take the step; it says whether the test writer then reports again or you build again. |
+| Could not run | The check stopped for a cause the test writer cannot fix, such as a time limit, Git trouble, or dependencies that cannot be downloaded where Surla runs. The page shows the reason and your step. | You take the step; it says whether the test writer then reports again or you build again. |
 
 An acceptance always carries the same sentence, which the page shows: "Surla
 checked that these tests build into the generated test program and declare
@@ -374,7 +378,7 @@ before you can approve.
 When the application calls an AI model, the builder can try prompt wording
 before committing it. It calls `start_live_target` with the confirmed change's
 ID and a commit. The server
-builds that commit in its sandbox and starts it as the **live target**: a
+builds that commit and starts it as the **live target**: a
 running copy of your application that only Surla started. Surla never
 changes prompts in an application you started or deployed. Without stored
 verification settings, the test program at that build's accepted tests commit
@@ -384,8 +388,8 @@ the operator's evaluator starts it; no build is needed, but the change must
 still be owned and confirmed. A refused change, tests, commit or model check
 keeps the target already running and its prompt drafts.
 
-The test program runs on this computer outside the sandbox, with your access
-to files and the network; the application it starts runs inside the sandbox.
+The test program and the application it starts run on this computer as
+ordinary processes, with your access to files and the network.
 The test writer's accepted program receives no provider settings. When you
 choose a direct provider, Surla serves that model to it through a loopback
 gateway in the live executor process. The evaluator in the stored verification settings still
@@ -451,18 +455,17 @@ An accepted call returns a run ID at once. The run happens in its own
 run's request, its lock, its result and its logs. The run continues when the
 builder disconnects or the server restarts. It:
 
-1. checks out the builder's commit and builds the application in Surla's
-   sandbox, which lets a build write only its own folders;
+1. checks out the builder's commit and builds the application;
 2. takes the accepted tests at the exact commit Surla recorded for this
    build, and builds their generated test program;
-3. runs that program, which starts each of the builder's programs in its own
-   sandbox, with access only to the local ports the run assigns.
+3. runs that program, which starts the builder's programs.
 
-The test program itself runs outside the sandbox: it starts the builder's
-programs in their own sandboxes, and macOS `sandbox-exec` does not nest one
-sandbox inside another. It starts with only `PATH` and a temporary folder in its
-environment: no model key and nothing else of yours. Surla's test layout
-plans with a scripted model during verification.
+The builds, the test program and the builder's programs run as ordinary
+processes with your file and network access, in one process group that the
+run owns and stops when it ends. A process that starts its own session leaves
+that group and keeps running. The test program starts with only `PATH`
+and a temporary folder in its environment: no model key and nothing else of
+yours. Surla's test layout plans with a scripted model during verification.
 
 Every run records where its tests came from. For tests the test writer wrote,
 the run's result, as `verify_change`, `get_verification` and
@@ -496,7 +499,9 @@ The server returns only the builder view of a report, to you and to the
 agents alike. An evaluator named in stored verification settings can declare
 **hidden scenarios**: scenarios tagged `holdout`, whose names, checks and logs
 never appear in what the server returns; the builder view shows only an
-anonymous outcome such as `holdout-1`. The test writer's tests cannot be
+anonymous outcome such as `holdout-1`. The builder's programs run with your
+file access, so while a run executes they could read the evaluator's files on
+this machine. The test writer's tests cannot be
 hidden, because Surla's check refuses the tag.
 
 With stored verification settings, a run uses the evaluator those settings

@@ -422,8 +422,8 @@ function ModelSection({
         </p>
       )}
       <p id="surla-model-note">
-        The program that starts a live target runs on this computer outside Surla’s sandbox, with
-        your access to files and the network; the service itself runs inside the sandbox. With
+        The program that starts a live target and the service it starts run on this computer as
+        ordinary processes, with your access to files and the network. With
         stored verification settings it is your stored evaluator, which gets the chosen provider’s
         settings. Otherwise it is the test writer’s tests Surla accepted, as in verification, and
         Surla gives it no provider setting: with a direct provider, Surla serves the chosen model

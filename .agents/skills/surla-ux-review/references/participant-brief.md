@@ -36,7 +36,7 @@ You are taking part in a usability study of a developer tool called
 - Do not compile, generate code from, or run your product's code yourself,
   for example with `goa gen`, `go build`, `go run`, or `go test` in your
   project. Your product's code runs only through Surla's commands, such as
-  `surla verify`, which run it inside Surla's sandbox. If Surla's README or
+  `surla verify`. If Surla's README or
   generated files tell you to run one of those commands yourself, or you
   need a step Surla gives you no way to run, do not run it. Say so in your
   report instead.

@@ -4130,7 +4130,6 @@ func EncodeStartBuildRequest(encoder func(*http.Request) goahttp.Encoder) func(*
 //   - "working_copy_busy" (type *goa.ServiceError): http.StatusConflict
 //   - "unprocessable" (type *goa.ServiceError): http.StatusUnprocessableEntity
 //   - "not_implemented" (type *goa.ServiceError): http.StatusNotImplemented
-//   - "sandbox_unavailable" (type *goa.ServiceError): http.StatusNotImplemented
 //   - "unavailable" (type *goa.ServiceError): http.StatusServiceUnavailable
 //   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
 //   - error: internal error
@@ -4321,43 +4320,19 @@ func DecodeStartBuildResponse(decoder func(*http.Response) goahttp.Decoder, rest
 			}
 			return nil, NewStartBuildUnprocessable(&body)
 		case http.StatusNotImplemented:
-			en := resp.Header.Get("goa-error")
-			switch en {
-			case "not_implemented":
-				var (
-					body StartBuildNotImplementedResponseBody
-					err  error
-				)
-				err = decoder(resp).Decode(&body)
-				if err != nil {
-					return nil, goahttp.ErrDecodingError("surla", "start_build", err)
-				}
-				err = ValidateStartBuildNotImplementedResponseBody(&body)
-				if err != nil {
-					return nil, goahttp.ErrValidationError("surla", "start_build", err)
-				}
-				return nil, NewStartBuildNotImplemented(&body)
-			case "sandbox_unavailable":
-				var (
-					body StartBuildSandboxUnavailableResponseBody
-					err  error
-				)
-				err = decoder(resp).Decode(&body)
-				if err != nil {
-					return nil, goahttp.ErrDecodingError("surla", "start_build", err)
-				}
-				err = ValidateStartBuildSandboxUnavailableResponseBody(&body)
-				if err != nil {
-					return nil, goahttp.ErrValidationError("surla", "start_build", err)
-				}
-				return nil, NewStartBuildSandboxUnavailable(&body)
-			default:
-				body, err := io.ReadAll(resp.Body)
-				if err != nil {
-					return nil, goahttp.ErrDecodingError("surla", "start_build", err)
-				}
-				return nil, goahttp.ErrInvalidResponse("surla", "start_build", resp.StatusCode, string(body))
+			var (
+				body StartBuildNotImplementedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("surla", "start_build", err)
 			}
+			err = ValidateStartBuildNotImplementedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("surla", "start_build", err)
+			}
+			return nil, NewStartBuildNotImplemented(&body)
 		case http.StatusServiceUnavailable:
 			var (
 				body StartBuildUnavailableResponseBody

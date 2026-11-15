@@ -24,8 +24,8 @@ can run against it.
   (see "Change checkpoints" below).
 - `gen/` is generated from `design/`. After changing `design/`, the builder calls the
   `generate_code` MCP tool on the Surla project server (or you run `surla gen`
-  in this directory from a shell that is not sandboxed): it runs Goa's generator for this module inside Surla's
-  sandbox. Never edit `gen/`. Generation compiles the design only, so update the
+  in this directory): it runs Goa's generator for this module with the
+  module's own versions. Never edit `gen/`. Generation compiles the design only, so update the
   hand-written code in `internal/` and `cmd/` to match it; the builder then builds and tests
   the uncommitted files with `check_project`, as described in "Next steps".
   `AGENTS_QUICKSTART.md` is generated with it and maps the agent, its tools
@@ -46,7 +46,7 @@ can run against it.
   model call to a goa-ai model gateway given with `-model-gateway host:port`;
   the gateway holds the model provider and its API keys.
 - `eval/` is a separate Go module: the starter evaluator suite. It runs the
-  `[[.Name]]` binary in Surla's sandbox and serves a scripted model (not an
+  `[[.Name]]` binary and serves a scripted model (not an
   LLM) through its own model gateway. Its four scenarios are:
   - `prices_tea`: asks "How much is tea?" and checks that the agent called
     `lookup_price` and answered from that call's result;
@@ -73,7 +73,7 @@ can run against it.
   included) belongs to the test writer, and Surla regenerates `eval/gen/` at
   build start and on each report; after changing `eval/design/`, the test
   writer reports to have Surla generate it again or runs `surla gen -dir eval`
-  from a shell that is not sandboxed. If you edit `eval/design/` yourself
+  first. If you edit `eval/design/` yourself
   outside a build, regenerate its code with `surla gen -dir eval` (or have the
   builder call `generate_code` with `target: "eval"`).
   `eval/design/story_tests.go` lists the tests the Story requires, one
@@ -86,7 +86,9 @@ can run against it.
 
 The evaluator suite lives in this repository, so anyone who can read the code
 can read its scenarios; none of them is hidden. Keep scenarios that must stay
-hidden from builders in an evaluator repository they cannot read.
+hidden from builders in an evaluator repository they cannot read. The
+builder's programs run with your file access, so while a run executes they
+could read that repository's files on this machine.
 
 ## Next steps
 

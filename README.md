@@ -26,7 +26,8 @@ and [Goa-AI](https://github.com/goadesign/goa-ai) generate the transports,
 schemas, validation, durable workflows and tool guardrails from that design at
 **0 LLM tokens**. One agent writes the code; a different agent writes the
 tests; Surla itself judges those tests and runs them against the code, which
-it builds and runs in an operating-system sandbox. You agree what is built
+it builds and runs as ordinary processes on your machine, with your file and
+network access. You agree what is built
 and approve the result in your browser. Surla deploys nothing and merges
 nothing.
 
@@ -75,7 +76,7 @@ to $50 get instant store credit; larger ones wait for a manager":
 6. **Tests.** The test writer writes those tests and reports. Surla does not
    take its word for it: it writes the required tests into the copy again,
    checks that nothing changed outside the test module (the project's `eval/`
-   folder), and builds and lists the test program in its sandbox. Problems go
+   folder), and builds and lists the test program. Problems go
    back to the test writer as findings, which you can also read on the page.
    When the tests pass the check, Surla accepts them at one commit on
    `surla/tests`.
@@ -84,7 +85,7 @@ to $50 get instant store credit; larger ones wait for a manager":
    try prompt wording after Surla accepts the tests, using a *live target*:
    a running copy of the application
    that the server starts from a commit. The builder then asks Surla to
-   verify its commit. Surla builds that commit in its sandbox and runs the
+   verify its commit. Surla builds that commit and runs the
    tests accepted for that exact revision against it. It refuses to verify
    until those tests are accepted. The result appears in the page's **Proof**
    view.
@@ -122,8 +123,9 @@ build and requires the tests to be reported, judged and accepted again before
 verification or a new live target.
 
 Two limits hold. All agents run as you on one machine, so they are separated
-by job, not walled off from each other. The test writer's test program runs on
-your machine outside the sandbox (the code under test runs inside it). The
+by job, not walled off from each other. Surla runs the code the agents write
+(the design at each refresh, the builder's programs and the test writer's
+test program) as ordinary processes with your file and network access. The
 page states the second limit next to **Build this change**. Each verification
 run records where its tests came from. For the test writer's tests, the
 **Proof** view shows with the run, and the agents read in its result, the
@@ -134,13 +136,9 @@ machine and are not isolated from the builder.
 
 Surla needs:
 
-- **macOS or Linux (Landlock ABI v4+, Linux 6.7+).** Surla's candidate sandbox
-  uses macOS `sandbox-exec` or Linux Landlock and Seccomp-BPF (when running
-  `surla` itself inside a Linux container, pass `--cap-add SYS_PTRACE` or
-  `--security-opt seccomp=unconfined`). Where the sandbox is unavailable,
-  every step that compiles or runs code in that sandbox is refused, such as
-  `surla preview`, `surla gen`, starting a build with a test writer and
-  verification.
+- **macOS or Linux.** Surla runs the code the agents write (the design at
+  each refresh, candidate builds, the candidate service, test listing, and the
+  test program) as ordinary processes with your file and network access.
 - **Go 1.27.3** or newer.
 - **Git**, with your name and address configured (`git config --global
   user.name` and `user.email`). Surla records accepted tests as commits under
@@ -227,16 +225,15 @@ for the project's state, settings and recovery.
 ## Use the tools without a team
 
 These commands need no server, no team and no model key. `surla init`,
-`surla preview` and `surla gen` run Goa inside Surla's sandbox with the
-module's own versions, so no separately installed `goa` is needed. Run them
-from an ordinary terminal, not from inside a coding agent's sandboxed shell:
-an outer sandbox can prevent Surla's sandbox from starting.
+`surla preview` and `surla gen` run Goa with the module's own versions, so no
+separately installed `goa` is needed. They compile and run the design as an
+ordinary process with your file and network access.
 
 ```bash
 # Scaffold a starter service and its test module:
 surla init -dir shop -module example.com/shop
 
-# Compile shop/design in the sandbox at 0 LLM tokens and print its
+# Compile shop/design at 0 LLM tokens and print its
 # containers, boundary edges, agent policies and tool contracts:
 surla preview -dir shop
 
@@ -263,7 +260,7 @@ then needs `-surla-version` with a published version, such as
 `-surla-version v0.0.0-20261110163737-d9beac313142`.
 
 After you edit a module's `design/`, `surla gen -dir <module>` regenerates its
-`gen/` in the sandbox and replaces it in one step. It needs `goa.design/goa/v3`
+`gen/` and replaces it in one step. It needs `goa.design/goa/v3`
 `v3.35.1-0.20261103205041-35e789e8f9b1` or later and refuses a design with gRPC
 transports; see [`surla gen`](docs/REFERENCE.md#surla-gen). The operator tools
 `surla verify` and `surla approve` build a commit, run a test suite from a
@@ -301,16 +298,18 @@ reverse-engineering the repository. Surla serves every agent the same
 
 The agent that writes the code never decides whether it works. Tests come
 from the test writer and count only after Surla's own check accepts them.
-Verification builds the builder's exact commit inside the sandbox
-(`verify/candidate`) and runs the accepted tests against it, with the code
-under test running in the sandbox too.
+Verification builds the builder's exact commit (`verify/candidate`) and runs
+the accepted tests against it; the code under test and the tests run as
+ordinary processes with your file and network access.
 
 - **Hidden scenarios.** A project can instead store verification settings
   (`surla verification set <file>`, applied when Surla starts again) that
   name a test suite of your own at one commit of a Git repository you choose;
   its builds then add only the builder. The suite's scenarios tagged
   `holdout` are hidden: [`Report.ForBuilders()`](internal/verify/report.go)
-  removes their names, inputs and logs from the report the builder sees.
+  removes their names, inputs and logs from the report the builder sees. The
+  builder's programs run with your file access, so while a run executes they
+  could read the suite's files on this machine.
 - **Real crash and budget proof.** The [`examples/orders-eval`](examples/orders-eval/)
   reference suite kills the Temporal worker in the middle of a refund
   (`kill -9`), restarts the API while an approval is paused, and fails any
