@@ -161,7 +161,7 @@ func TestBuilderGoWorkBuildsOnlyWithInternalWorkspace(t *testing.T) {
 	if testing.Short() {
 		t.Skip("native workspace builds run in the hosted full profile")
 	}
-	project, cp, _, assignment := buildGenerationFixture(t, "app")
+	project, cp, _, assignment := buildGenerationDesignFixture(t, "app", "package design\n")
 	_, _, root, err := builderCopyFolder(t.Context(), project)
 	require.NoError(t, err)
 	working := assignment.WorkingFolder
@@ -183,10 +183,10 @@ func TestBuilderGoWorkBuildsOnlyWithInternalWorkspace(t *testing.T) {
 			}
 			selected, err := candidate.GoWork(root, working)
 			require.NoError(t, err)
-			cmd := exec.CommandContext(t.Context(), "go", "mod", "download")
+			cmd := exec.CommandContext(t.Context(), "go", "list", "-deps", "-test", "./...")
 			cmd.Dir = working
 			cmd.Env = append(os.Environ(), "GOWORK="+selected, "GOPROXY=off", "GOTOOLCHAIN=local")
-			output, downloadErr := cmd.CombinedOutput()
+			output, prepareErr := cmd.CombinedOutput()
 			work := t.TempDir()
 			buildErr := candidate.Build(t.Context(), candidate.BuildSpec{
 				SourceDir: root, ModuleDir: working, Package: ".", Out: filepath.Join(work, "app"),
@@ -194,10 +194,10 @@ func TestBuilderGoWorkBuildsOnlyWithInternalWorkspace(t *testing.T) {
 				LogFile: filepath.Join(work, "build.log"),
 			}, (*exec.Cmd).Run)
 			if internal {
-				assert.NoError(t, downloadErr, "%s", output)
+				assert.NoError(t, prepareErr, "%s", output)
 				assert.NoError(t, buildErr)
 			} else {
-				assert.Error(t, downloadErr, "%s", output)
+				assert.Error(t, prepareErr, "%s", output)
 				assert.Error(t, buildErr)
 			}
 			assertFileContent(t, outer, outerBytes)

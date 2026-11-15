@@ -75,6 +75,8 @@ var evaluatorPlan = verify.Plan{Tests: verify.TestsEvaluator}
 // fakeRun stands in for verify.Run according to fakeModeEnv.
 func fakeRun(ctx context.Context, plan verify.Plan, environ []string) (verify.Report, error) {
 	switch os.Getenv(fakeModeEnv) {
+	case "workspace-preparation":
+		return verify.Run(ctx, plan, environ)
 	case "judge":
 		// An operator's suite whose judge needs its provider key: preparation
 		// runs in this process, the suite from environ.

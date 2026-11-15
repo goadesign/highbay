@@ -16,7 +16,7 @@ import (
 const (
 	// The application needs the root workspace; the evaluator is deliberately
 	// absent, and its own workspace points at a missing module.
-	writtenRootWorkspace   = "go 1.27.3\n\nuse (\n\t./app\n\t./lib\n)\n"
+	writtenRootWorkspace   = "go 1.27.3\n\nuse (\n\t./app\n\t./lib\n\t./unused\n)\n"
 	writtenModuleWorkspace = "go 1.27.3\n\nuse ./missing\n"
 )
 
@@ -32,8 +32,8 @@ func TestPrepareWrittenSuiteBuildsAsAModule(t *testing.T) {
 	script := "#!/bin/sh\nset -eu\n" +
 		"printf '%s|%s|%s\\n' \"$GOWORK\" \"$PWD\" \"$1\" >> " + shquote.Quote(calls) + "\n" +
 		"case \"$PWD\" in */eval) [ \"$GOWORK\" = off ]; [ -f ../lib/lib.go ] ;; esac\n" +
-		"case \"$1\" in\nmod) exit 0 ;;\n" +
-		"env) printf '%s\\n%s\\n' " + shquote.Quote(goroot) + " " + shquote.Quote(cache) + ";;\n" +
+		"case \"$1\" in\nmod|list) exit 0 ;;\n" +
+		"env) if [ \"$2\" = -json ]; then printf '%s\\n' " + shquote.Quote(goWorkToolchainJSON(t, goroot, cache)) + "; else printf '%s\\n%s\\n' " + shquote.Quote(goroot) + " " + shquote.Quote(cache) + "; fi ;;\n" +
 		"build) out=''; while [ \"$#\" -gt 0 ]; do if [ \"$1\" = '-o' ]; then shift; out=$1; fi; shift; done; " +
 		"[ -n \"$out\" ]; printf 'placeholder, never executed' > \"$out\" ;;\n*) exit 2 ;;\nesac\n"
 	require.NoError(t, os.WriteFile(filepath.Join(goroot, "bin", "go"), []byte(script), 0o700))
@@ -56,7 +56,11 @@ func TestPrepareWrittenSuiteBuildsAsAModule(t *testing.T) {
 		if i >= 3 {
 			checkout, module, selected = "suite", "eval", "off"
 		}
-		assert.Equal(t, selected+"|"+filepath.Join(physical, checkout, module)+"|"+[]string{"mod", "env", "build"}[i%3], line)
+		verbs := []string{"env", "list", "build"}
+		if i >= 3 {
+			verbs = []string{"mod", "env", "build"}
+		}
+		assert.Equal(t, selected+"|"+filepath.Join(physical, checkout, module)+"|"+verbs[i%3], line)
 	}
 	for _, checkout := range []string{repo, filepath.Join(work, "candidate"), filepath.Join(work, "suite")} {
 		rootWork, err := os.ReadFile(filepath.Join(checkout, "go.work"))

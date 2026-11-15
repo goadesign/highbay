@@ -165,20 +165,30 @@ func buildGenerationFixture(t *testing.T, prefix string) (
 	string, *ControlPlane, *gensurla.ChangeCardResult, *gensurla.BuilderAssignment,
 ) {
 	t.Helper()
+	return buildGenerationDesignFixture(t, prefix, buildProbeDesign)
+}
+
+// buildGenerationDesignFixture saves the caller's actual design before its
+// revision/base and real builder copy are selected. Workspace-only native
+// proof can use a self-contained design without changing an agreed file later.
+func buildGenerationDesignFixture(t *testing.T, prefix, design string) (
+	string, *ControlPlane, *gensurla.ChangeCardResult, *gensurla.BuilderAssignment,
+) {
+	t.Helper()
 	repo, project := productionBuildProject(t, prefix, reviewEval)
 	cp := newControlPlane(t, Options{
 		WorkspaceDir: project,
 		Team:         &TeamBinding{Owner: "alice@example.com", Service: &teamServiceFixture{}},
 	})
 	writeBuildDesignFixture(t, project, "go.mod", "module example.com/shop\n\ngo 1.27.3\n\nrequire goa.design/goa/v3 v3.35.0\n")
-	writeBuildDesignFixture(t, project, "design/design.go", buildProbeDesign)
+	writeBuildDesignFixture(t, project, "design/design.go", design)
 	runGitForTest(t, project, "add", "go.mod", "design/design.go")
 	runGitForTest(t, repo, "commit", "--quiet", "-m", "Save fixture design")
 	proposed := saveProposedCardFixture(t, cp, "alice@example.com", "generation",
 		"Build the shop.", refundAnalysis("Build the shop."))
 	record := loadMetadataRecord(t, cp, proposed.ChangeID)
 	var err error
-	record.designSource, err = encodeDesignSource(map[string]string{"design/design.go": buildProbeDesign})
+	record.designSource, err = encodeDesignSource(map[string]string{"design/design.go": design})
 	require.NoError(t, err)
 	record.card.RequestRevision, err = computeCanonicalRevision(record.card, record.owner, record.designSource)
 	require.NoError(t, err)

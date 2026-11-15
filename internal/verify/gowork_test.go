@@ -3,6 +3,7 @@
 package verify
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -32,8 +33,8 @@ func TestPrepareGoWorkUsesCheckoutRoot(t *testing.T) {
 			script := "#!/bin/sh\nset -eu\n" +
 				"printf '%s|%s|%s\\n' \"$GOWORK\" \"$PWD\" \"$1\" >> " + shquote.Quote(calls) + "\n" +
 				"case \"$1\" in\n" +
-				"mod) exit 0 ;;\n" +
-				"env) printf '%s\\n%s\\n' " + shquote.Quote(goroot) + " " + shquote.Quote(cache) + ";;\n" +
+				"mod|list) exit 0 ;;\n" +
+				"env) if [ \"$2\" = -json ]; then printf '%s\\n' " + shquote.Quote(goWorkToolchainJSON(t, goroot, cache)) + "; else printf '%s\\n%s\\n' " + shquote.Quote(goroot) + " " + shquote.Quote(cache) + "; fi ;;\n" +
 				"build) out=''; while [ \"$#\" -gt 0 ]; do if [ \"$1\" = '-o' ]; then shift; out=$1; fi; shift; done; " +
 				"[ -n \"$out\" ]; printf 'placeholder, never executed' > \"$out\" ;;\n" +
 				"*) exit 2 ;;\nesac\n"
@@ -59,7 +60,11 @@ func TestPrepareGoWorkUsesCheckoutRoot(t *testing.T) {
 				if internal {
 					selected = filepath.Join(physical, checkout, "go.work")
 				}
-				verb := []string{"mod", "env", "build"}[i%3]
+				verbs := []string{"mod", "env", "build"}
+				if internal {
+					verbs = []string{"env", "list", "build"}
+				}
+				verb := verbs[i%3]
 				assert.Equal(t, selected+"|"+filepath.Join(physical, checkout, module)+"|"+verb, line)
 			}
 			outsideAfter, err := os.ReadFile(filepath.Join(outer, "go.work"))
@@ -71,20 +76,26 @@ func TestPrepareGoWorkUsesCheckoutRoot(t *testing.T) {
 
 // goWorkVerificationFixture commits an application that imports a sibling
 // module whose version cannot be resolved without the checked-out workspace.
-// Both command-shape tests and hosted native preparation use this same input.
+// Unrelated broken packages, test-only imports and an unused workspace module
+// must not broaden configured preparation. Command-shape and hosted native
+// tests use this same input.
 func goWorkVerificationFixture(t *testing.T, internal bool) (string, string) {
 	t.Helper()
 	repo := t.TempDir()
 	files := map[string]string{
-		"app/go.mod":   "module example.invalid/app\n\ngo 1.27.3\n\nrequire example.invalid/lib v0.0.0\n",
-		"app/main.go":  "package main\nimport \"example.invalid/lib\"\nfunc main() { _ = lib.Value }\n",
-		"lib/go.mod":   "module example.invalid/lib\n\ngo 1.27.3\n",
-		"lib/lib.go":   "package lib\nconst Value = 42\n",
-		"eval/go.mod":  "module example.invalid/eval\n\ngo 1.27.3\n",
-		"eval/main.go": "package main\nfunc main() {}\n",
+		"app/go.mod":          "module example.invalid/app\n\ngo 1.27.3\n\nrequire example.invalid/lib v0.0.0\n",
+		"app/main.go":         "package main\nimport \"example.invalid/lib\"\nfunc main() { _ = lib.Value }\n",
+		"lib/go.mod":          "module example.invalid/lib\n\ngo 1.27.3\n",
+		"lib/lib.go":          "package lib\nconst Value = 42\n",
+		"eval/go.mod":         "module example.invalid/eval\n\ngo 1.27.3\n",
+		"eval/main.go":        "package main\nfunc main() {}\n",
+		"unused/go.mod":       "module example.invalid/unused\n\ngo 1.27.3\n\nrequire example.invalid/unneeded v0.0.0\n",
+		"unused/unused.go":    "package unused\nimport _ \"example.invalid/unneeded\"\n",
+		"app/tools/broken.go": "package tools\nimport _ \"example.invalid/unneeded-tools\"\n",
+		"app/main_test.go":    "package main\nimport _ \"example.invalid/unneeded-test\"\n",
 	}
 	if internal {
-		files["go.work"] = "go 1.27.3\n\nuse (\n\t./app\n\t./lib\n\t./eval\n)\n"
+		files["go.work"] = "go 1.27.3\n\nuse (\n\t./app\n\t./lib\n\t./eval\n\t./unused\n)\n"
 	}
 	paths := []string{"add", "--"}
 	for name, content := range files {
@@ -109,4 +120,16 @@ func goWorkVerificationPlan(repo, commit, work string) Plan {
 		SuiteRepo: repo, SuiteCommit: commit, SuiteModule: "eval", SuiteCommand: ".",
 		RequestRevision: "workspace-proof", WorkDir: work, Tests: TestsEvaluator,
 	}
+}
+
+// goWorkToolchainJSON stands in for Go's effective settings without running a
+// compiler or network command. No real operator configuration is used.
+func goWorkToolchainJSON(t *testing.T, goroot, cache string) string {
+	t.Helper()
+	data, err := json.Marshal(map[string]string{
+		"GOROOT": goroot, "GOMODCACHE": cache, "GOPROXY": "off", "GOSUMDB": "off",
+		"GOAUTH": "off", "GOTOOLCHAIN": "local",
+	})
+	require.NoError(t, err)
+	return string(data)
 }
