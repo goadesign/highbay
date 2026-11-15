@@ -188,11 +188,10 @@ func TestAssignmentsSayWhetherTheirBuildIsInForce(t *testing.T) {
 	copy := &buildCopyFixture{
 		folder: fixtureTestWriterFolder(t, cp),
 		check: func(context.Context, []designeval.StorySummary) (testwriter.Verdict, error) {
-			return testwriter.Verdict{}, nil
-		},
-		record: func(context.Context, testwriter.Verdict, string, string) (string, error) {
 			checked <- struct{}{}
-			return strings.Repeat("a", 40), nil
+			return testwriter.Verdict{
+				Findings: []testwriter.Finding{{Kind: testwriter.FindingBuild, Message: "need one more test"}},
+			}, nil
 		},
 	}
 	cp.buildCopyFactory = func(context.Context, string, scaffold.Layout) (buildCopy, error) { return copy, nil }
