@@ -70,8 +70,17 @@ func TestCardsSurviveANewControlPlane(t *testing.T) {
 	_, running := run.State.AsRunning()
 	assert.True(t, running, "a restarted control plane verifies a card confirmed before the restart")
 
-	_, err = restarted.ProposeChange(alice, &gensurla.ProposeChangePayload{ChangeID: "chg", Prompt: "Again.", Analysis: analysis})
+	// The duplicate proposal still uses valid module ingress. This established
+	// consumer fixture retains an actual draft snapshot without running Go.
+	saved := loadMetadataRecord(t, restarted, confirmed.ChangeID)
+	opID := seedStoryRefreshForTest(t, restarted, "alice@example.com", storyRefreshStateSucceeded, saved.stories, "")
+	_, err = restarted.ProposeChange(alice, &gensurla.ProposeChangePayload{
+		ChangeID: "chg", Prompt: "Again.", Analysis: analysis, StoryRefreshOpID: &opID,
+	})
 	assert.ErrorContains(t, err, "already exists")
+	unchanged, err := restarted.GetChange(alice, &gensurla.GetChangePayload{ChangeID: confirmed.ChangeID})
+	require.NoError(t, err)
+	assert.Equal(t, confirmed, unchanged, "the duplicate proposal does not overwrite the recovered card")
 }
 
 // TestCardsDirectoryIsHeldByOneControlPlane checks that a second control

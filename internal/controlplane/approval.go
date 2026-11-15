@@ -176,9 +176,8 @@ func (c *ControlPlane) ApproveMerge(
 	if err != nil {
 		return nil, err
 	}
-	if err := approvalBuildRefusal(report.Binding.CandidateCommit, build.file.Base, testwriter.BuilderRole.Branch(build.file.Number), check); err != nil {
-		return nil, err
-	}
+	candidateErr := approvalBuildRefusal(report.Binding.CandidateCommit, build.file.Base,
+		testwriter.BuilderRole.Branch(build.file.Number), check)
 
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -211,6 +210,11 @@ func (c *ControlPlane) ApproveMerge(
 	if nowBuild.file.Number != build.file.Number ||
 		!nowBuild.file.StartedAt.Equal(build.file.StartedAt) {
 		return nil, gensurla.MakeConflict(errors.New("the open build changed while approving: verify the current build, then approve its run"))
+	}
+	// A drop can change the recorded branch tips while Git reads them. Its
+	// current stop instruction wins over a semantic refusal of the old build.
+	if candidateErr != nil {
+		return nil, candidateErr
 	}
 	nowCommit, nowSource, err := c.testsChoice(principal, p.ChangeID, p.RequestRevision)
 	if err != nil || nowCommit != testsCommit {
