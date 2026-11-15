@@ -2005,19 +2005,30 @@ requests and on pushes to the branches its `push` trigger names: `main`, and
 an integration branch for as long as pull requests target one. The short
 checks are:
 
-- Vet and short race tests of each Go module on macOS: the root,
+- Vet and short race tests of each Go module: the root,
   [`story`](../story/README.md), `examples/orders` and `examples/orders-eval`.
-  The root module's short tests run in four jobs. **Go (., page tests)**
-  runs only `internal/controlplane` and `internal/project`, selecting
-  `TestViewsPage…` and `TestCheckpoint…`. **Go (., control plane, A-L)** runs
-  non-page tests whose names start with `TestA` through `TestL`.
+  The other modules run on macOS. The root module's short tests run in five
+  jobs. **Go (., page tests)** runs only `internal/controlplane` and
+  `internal/project` on macOS, selecting `TestViewsPage…` and
+  `TestCheckpoint…`. **Go (., control plane, A-L)** runs non-page tests whose
+  names start with `TestA` through `TestL`, on Linux.
   **Go (., control plane, remaining)** runs every other non-page test,
-  including examples and fuzz seeds. **Go (.)** derives every other package
-  with tests and skips page tests, so each current test runs once. Each of
+  including examples and fuzz seeds, also on Linux. **Go (.)** runs on macOS,
+  derives every other package with tests and skips page tests. These four
+  owners cover every root short test. **Go (., control plane, macOS-platform)**
+  additionally runs nine explicitly named non-page tests on macOS: failed
+  live-target cleanup and stop ownership, filesystem aliases, and opening
+  entries through the Darwin backend. Its static name check fails if a listed
+  test disappears. Pull requests do not execute the other generic non-page
+  control-plane tests on macOS; they still compile and receive full vet there
+  through the page job. Full macOS execution remains in the root control-plane
+  job on pushes to `main`, `team-start` and `builder-copy`, nightly runs and
+  manual full runs, alongside the Linux full job. Each of
   these jobs saves and restores its own Go build and module cache key,
   qualified by operating system, architecture, Go version and root dependency
-  files; one job's narrower build cannot become another job's saved cache.
-  Pushes to `main`, `team-start` and `builder-copy` run all four jobs and
+  files. The two Linux groups keep separate owner keys, and the macOS platform
+  subset has its own key. Pushes to `main`, `team-start` and `builder-copy` run
+  all five jobs with the same three-minute package alarm and
   save missing caches after success, making them available to pull requests
   targeting those branches. Each job targets five minutes with an exact
   cache hit; cold durations are recorded separately. On a miss, its job
