@@ -119,7 +119,7 @@ type (
 		// GONOPROXY, GONOSUMDB and GOINSECURE settings as KEY=value, passed
 		// to dependency-download containers and nothing else.
 		GoProxyEnv []string
-		// Evaluator evaluates Goa design snapshots for preview_architecture and
+		// Evaluator evaluates Goa design snapshots for refresh_story and
 		// diff. When nil, New constructs a default designeval.Evaluator (using
 		// <CardsDir>/designeval as its protected temporary parent when
 		// WorkspaceDir is set). When a host supplies Evaluator for a bound
@@ -657,23 +657,15 @@ func (c *ControlPlane) ProposeChange(ctx context.Context, p *gensurla.ProposeCha
 	if strings.TrimSpace(p.ChangeID) == "" || strings.TrimSpace(p.Prompt) == "" {
 		return nil, gensurla.MakeUnprocessable(errors.New("change_id and prompt are required"))
 	}
-	var designSrc string
-	var stories []designeval.StorySummary
-	switch {
-	case p.StoryRefreshOpID != nil:
+	var snapshot refreshedSnapshot
+	if p.StoryRefreshOpID != nil {
 		var err error
-		designSrc, stories, err = c.adoptStoryRefresh(principal, *p.StoryRefreshOpID)
+		snapshot, err = c.adoptStoryRefresh(principal, *p.StoryRefreshOpID)
 		if err != nil {
 			return nil, err
 		}
-	default:
-		if wsDir, wsDev, wsIno := c.currentWorkspaceTarget(); wsDir != "" {
-			src, err := readWorkspaceDesignSource(wsDir, wsDev, wsIno)
-			if err != nil {
-				return nil, err
-			}
-			designSrc = src
-		}
+	} else if err := c.requireRefreshForModule(); err != nil {
+		return nil, err
 	}
 
 	_, span := c.tracer("surla/controlplane").Start(
@@ -698,9 +690,9 @@ func (c *ControlPlane) ProposeChange(ctx context.Context, p *gensurla.ProposeCha
 		Ambiguities:        ambiguities,
 		Examples:           examples,
 		PreservedBehaviors: preserved,
-		Stories:            storySummaryItemsOrNil(stories),
+		Stories:            storySummaryItemsOrNil(snapshot.stories),
 	}
-	rev, err := computeCanonicalRevision(card, principal.ID, designSrc)
+	rev, err := computeCanonicalRevision(card, principal.ID, snapshot.designSource)
 	if err != nil {
 		span.SetAttributes(attribute.String("surla.public_summary", cp1SafeFaultSummary(false, cp1FaultRevision)))
 		span.RecordError(err)
@@ -714,6 +706,10 @@ func (c *ControlPlane) ProposeChange(ctx context.Context, p *gensurla.ProposeCha
 		card.UIComposition = &gensurla.UICompositionItem{Program: *p.Analysis.UIComposition, ComposedForRevision: rev}
 	}
 
+	if snapshot.madeFrom != nil {
+		c.draftMu.Lock()
+		defer c.draftMu.Unlock()
+	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	_, exists, err := c.cards.load(p.ChangeID)
@@ -727,17 +723,24 @@ func (c *ControlPlane) ProposeChange(ctx context.Context, p *gensurla.ProposeCha
 		span.SetAttributes(attribute.String("surla.public_summary", "Change Card ID already exists (this request did not overwrite the existing Change Card); call get_change or choose a new change_id."))
 		return nil, gensurla.MakeConflict(fmt.Errorf("change_id %q already exists", p.ChangeID))
 	}
+	if snapshot.madeFrom != nil {
+		if err := c.recordRefreshedSnapshot(span, snapshot); err != nil {
+			return nil, err
+		}
+	}
 	if err := c.cards.save(storedChangeCard{
 		card:         card,
 		owner:        principal.ID,
-		designSource: designSrc,
-		stories:      stories,
+		designSource: snapshot.designSource,
+		stories:      snapshot.stories,
+		architecture: snapshot.architecture, goMod: snapshot.goMod, madeFrom: snapshot.madeFrom,
 	}); err != nil {
 		span.SetAttributes(attribute.String("surla.public_summary", cp1SafeFaultSummary(false, cp1FaultStorageSave)))
 		span.RecordError(err)
 		span.SetStatus(codes.Error, "save cp1 change card")
 		return nil, err
 	}
+	c.suppressDraftDropNote(snapshot.madeFrom)
 	span.SetAttributes(attribute.String("surla.public_summary", fmt.Sprintf("Proposed Change Card (%s).", status)))
 	return card, nil
 }
@@ -815,10 +818,10 @@ func (c *ControlPlane) GetChange(ctx context.Context, p *gensurla.GetChangePaylo
 	return c.changeResult(ctx, record)
 }
 
-// PreviewArchitecture evaluates the candidate design module snapshot via the
-// real Goa evaluation engine (the control plane's designeval.Evaluator) bound to a confirmed CP1
-// Change Card and returns the validated C4 topology, directed edges, per-agent
-// runtime policies, and tool contracts.
+// PreviewArchitecture returns the evaluated architecture saved with the user's
+// confirmed revision. It reads no workspace and runs no evaluation, so a later
+// draft, project edit or waiting proposal cannot change that agreed preview.
+// Older cards without architecture must adopt a succeeded refresh first.
 func (c *ControlPlane) PreviewArchitecture(ctx context.Context, p *gensurla.PreviewArchitecturePayload) (*gensurla.ArchitecturePreviewResult, error) {
 	principal, ok := PrincipalFromContext(ctx)
 	if !ok {
@@ -847,23 +850,13 @@ func (c *ControlPlane) PreviewArchitecture(ctx context.Context, p *gensurla.Prev
 		return nil, gensurla.MakeConflict(fmt.Errorf("request_revision mismatch for %q: got %q, want %q", p.ChangeID, p.RequestRevision, record.card.RequestRevision))
 	}
 
-	wsDir, wsDev, wsIno := c.currentWorkspaceTarget()
-	if wsDir == "" {
-		return nil, gensurla.MakeUnprocessable(errors.New(
-			"workspace directory is not bound to this control plane",
-		))
+	if record.architecture == nil {
+		return nil, gensurla.MakeUnprocessable(errors.New("no architecture to show; call refresh_story, then revise_change with its op_id"))
 	}
-	designFiles, err := readWorkspaceModuleSnapshot(wsDir, wsDev, wsIno)
-	if err != nil {
-		return nil, err
-	}
-
-	if err := reportProgress(ctx, 0, 2, "Evaluating the candidate design in the sandbox"); err != nil {
-		return nil, err
-	}
-	evaluated, err := c.evaluator.Evaluate(ctx, designFiles)
-	if err != nil {
-		return nil, err
+	evaluated := designeval.Result{
+		SystemName: record.architecture.SystemName, Containers: record.architecture.Containers,
+		Edges: record.architecture.Edges, AgentPolicies: record.architecture.AgentPolicies,
+		Tools: record.architecture.Tools,
 	}
 	if evaluated.SystemName == "" || len(evaluated.Containers) == 0 {
 		return nil, gensurla.MakeUnprocessable(errors.New("design must declare at least one Goa API or Service container"))
@@ -874,10 +867,7 @@ func (c *ControlPlane) PreviewArchitecture(ctx context.Context, p *gensurla.Prev
 		}
 	}
 
-	designDigest := designeval.SnapshotDigest(designFiles)
-	if err := reportProgress(ctx, 2, 2, "Architecture preview ready"); err != nil {
-		return nil, err
-	}
+	designDigest := record.architecture.DesignDigest
 	banner := evaluated.Summary()
 
 	return &gensurla.ArchitecturePreviewResult{

@@ -169,7 +169,7 @@ page.close();
 }
 
 // TestCheckpointUIArchitecturePreviewOfTheBoundDesign opens the architecture
-// stage, which asks the server to evaluate the bound workspace design for
+// stage, which asks the server for the saved evaluated architecture for
 // the exact confirmed revision shown, and checks the drawing it renders. An
 // unconfirmed card shows the server's own refusal.
 func TestCheckpointUIArchitecturePreviewOfTheBoundDesign(t *testing.T) {
@@ -180,7 +180,7 @@ func TestCheckpointUIArchitecturePreviewOfTheBoundDesign(t *testing.T) {
 	writeWorkspaceFiles(t, workspace, testmodule.Snapshot(t, "", architectureTestDesign))
 	cp := pageControlPlane(t, Options{WorkspaceDir: workspace})
 	guide := WithPrincipal(context.Background(), Principal{ID: pageOwner, CallerID: "guide", Kind: CallerGuide})
-	mustPropose(t, cp, guide, "chg-arch", "Route refunds >= $50 to manager approval.", checkpointUIProposal())
+	mustProposeFromRefresh(t, cp, guide, "chg-arch", "Route refunds >= $50 to manager approval.", checkpointUIProposal())
 	ps := startPageServer(t, cp)
 	runPageScript(t, ps, nil, `
 const page = await openPage(origin, { link: input.link });

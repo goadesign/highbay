@@ -414,37 +414,33 @@ func TestRefreshReuseRequiresTheDraftAndTheList(t *testing.T) {
 }
 
 // TestMissingDraftRestoresTheLatestEligibleRevision exercises confirmed,
-// waiting and declined revisions through their owning card transitions.
+// waiting and declined stored revisions with real confirmation and decline.
 func TestMissingDraftRestoresTheLatestEligibleRevision(t *testing.T) {
 	for _, state := range []string{"confirmed", "waiting", "declined"} {
 		t.Run(state, func(t *testing.T) {
 			project := t.TempDir()
 			writeWorkspaceFiles(t, project, validWorkspaceStub("package design\nvar A = 1\n"))
 			cp := newControlPlane(t, Options{WorkspaceDir: project})
-			owner := asCaller("alice@example.com", CallerGuide)
 			user := asCaller("alice@example.com", CallerUser)
 			readDraftForTest(t, cp)
-			card := mustPropose(t, cp, owner, "chg", "Keep refunds bounded", refundAnalysis("Keep refunds bounded"))
+			card := saveDraftSourceCardFixture(t, cp, "chg", map[string]string{"design/design.go": "package design\n\nvar A = 1\n"})
 			card, err := cp.ConfirmIntent(user, &gensurla.ConfirmIntentPayload{
 				ChangeID: card.ChangeID, RequestRevision: card.RequestRevision,
 				Answers: map[string]string{}, Examples: card.Examples,
 			})
 			require.NoError(t, err)
 			if state != "confirmed" {
-				writeWorkspaceFiles(t, project, map[string]string{"design/design.go": "package design\nvar A = 2\n"})
-				card, err = cp.ReviseChange(owner, &gensurla.ReviseChangePayload{
-					ChangeID: card.ChangeID, RequestRevision: card.RequestRevision,
-					Prompt: "Keep refunds bounded with review", Analysis: &gensurla.CP1RevisionAnalysis{
-						Summary:     "Keep refunds bounded with review",
-						Ambiguities: []*gensurla.CP1AnalysisAmbiguity{},
-						Examples: []*gensurla.CP1RevisionAnalysisExample{{
-							PriorID: &card.Examples[0].ID, Scenario: "Refund at the limit",
-							InputSummary: "Order total $50.00", ExpectedOutcome: "Instant store credit",
-							VerificationKind: "deterministic",
-						}},
-						RemovedExampleIds: []string{}, PreservedBehaviors: card.PreservedBehaviors,
-					},
-				})
+				record := loadMetadataRecord(t, cp, "chg")
+				proposed := *record.card
+				proposed.Status, proposed.ConfirmedBy, proposed.Approval = StatusNeedsConfirmation, nil, nil
+				proposed.Prompt, proposed.Summary = "Keep refunds bounded with review", "Keep refunds bounded with review"
+				source, err := encodeDesignSource(map[string]string{"design/design.go": "package design\n\nvar A = 2\n"})
+				require.NoError(t, err)
+				proposed.RequestRevision, err = computeCanonicalRevision(&proposed, record.owner, source)
+				require.NoError(t, err)
+				record.proposed = &storedRevision{card: &proposed, designSource: source}
+				saveMetadataRecord(t, cp, record)
+				card, err = cp.GetChange(user, &gensurla.GetChangePayload{ChangeID: "chg"})
 				require.NoError(t, err)
 				if state == "declined" {
 					_, err = cp.DeclineRevision(user, &gensurla.DeclineRevisionPayload{
@@ -499,7 +495,7 @@ func TestOlderDraftMarkerRemakesFromProject(t *testing.T) {
 	writeWorkspaceFiles(t, project, validWorkspaceStub("package design\nvar A = 1\n"))
 	cp := newControlPlane(t, Options{WorkspaceDir: project})
 	readDraftForTest(t, cp)
-	mustPropose(t, cp, asCaller("alice@example.com", CallerGuide), "chg", "Keep refunds bounded", refundAnalysis("Keep refunds bounded"))
+	saveDraftSourceCardFixture(t, cp, "chg", map[string]string{"design/design.go": "package design\n\nvar A = 1\n"})
 	cp.draftMu.Lock()
 	list, _, err := cp.cards.loadMadeFrom()
 	require.NoError(t, err)
@@ -519,7 +515,7 @@ func TestOlderDraftMarkerRemakesFromProject(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "# surla draft 2\n*\n", string(marker))
 	result := storyRefreshResultFromOp(&storyRefreshOp{state: storyRefreshStateRunning,
-		madeFrom: &provenance}, project)
+		madeFrom: &provenance, dropNote: true}, project)
 	assert.Contains(t, result.Message, "user dropped change chg; edits made before then are gone")
 }
 
@@ -691,4 +687,21 @@ func readDraftForTest(t *testing.T, cp *ControlPlane) (map[string]string, madeFr
 	require.NoError(t, err)
 	require.NoError(t, designeval.ValidateUTF8Snapshot(files))
 	return files, madeFromSnapshot{Start: saved.Start, Entries: saved.Entries}
+}
+
+// saveDraftSourceCardFixture supplies an explicit legacy design for draft/card
+// recovery consumers; it does not claim a workspace proposal was evaluated.
+func saveDraftSourceCardFixture(
+	t *testing.T, cp *ControlPlane, changeID string, design map[string]string,
+) *gensurla.ChangeCardResult {
+	t.Helper()
+	saveProposedCardFixture(t, cp, "alice@example.com", changeID, "Keep refunds bounded", refundAnalysis("Keep refunds bounded"))
+	record := loadMetadataRecord(t, cp, changeID)
+	var err error
+	record.designSource, err = encodeDesignSource(design)
+	require.NoError(t, err)
+	record.card.RequestRevision, err = computeCanonicalRevision(record.card, record.owner, record.designSource)
+	require.NoError(t, err)
+	saveMetadataRecord(t, cp, record)
+	return record.card
 }

@@ -77,6 +77,30 @@ func trustedSuiteCall(t *testing.T, ctx context.Context, client *genmcpsurla.Cli
 	return complete.StructuredContent
 }
 
+// trustedSuiteRefresh selects an actual succeeded draft evaluation through
+// public MCP before a module-backed proposal. The caller owns the wait limit.
+func trustedSuiteRefresh(
+	t *testing.T, ctx context.Context, client *genmcpsurla.Client,
+) *gensurla.StoryRefreshResult {
+	t.Helper()
+	refresh, err := gensurla.DecodeStoryRefreshResult(trustedSuiteCall(t, ctx, client, "refresh_story", []byte(`{}`)))
+	require.NoError(t, err)
+	ticker := time.NewTicker(200 * time.Millisecond)
+	defer ticker.Stop()
+	for refresh.State == "running" {
+		select {
+		case <-ctx.Done():
+			t.Fatalf("Story refresh did not finish: %v", ctx.Err())
+		case <-ticker.C:
+		}
+		refresh, err = gensurla.DecodeStoryRefreshResult(trustedSuiteCall(t, ctx, client, "get_story_refresh", []byte(`{}`)))
+		require.NoError(t, err)
+	}
+	require.Equal(t, "succeeded", refresh.State, "%v", refresh.Diagnostic)
+	require.NotNil(t, refresh.OpID)
+	return refresh
+}
+
 // toolErrorText joins the text items of an MCP tool result, the
 // builder-safe message a failing tool returns, so a test failure shows it.
 func toolErrorText(content []*genmcpsurla.ContentItem) string {
@@ -121,8 +145,9 @@ func writeStarterVerification(t *testing.T, workspace, dir, modulePath, suiteCom
 // starts, and that runsDir holds no run of changeID for owner.
 func assertVerifyRefusedWithoutBuild(t *testing.T, ctx context.Context, client *genmcpsurla.Client, runsDir, owner, changeID, candidateCommit string) {
 	t.Helper()
+	refresh := trustedSuiteRefresh(t, ctx, client)
 	args, err := gensurla.EncodeProposeChangePayload(&gensurla.ProposeChangePayload{
-		ChangeID: changeID, Prompt: "Keep answering price questions.",
+		ChangeID: changeID, Prompt: "Keep answering price questions.", StoryRefreshOpID: refresh.OpID,
 		Analysis: &gensurla.CP1Analysis{
 			Summary:     "The helper keeps answering price questions through the price API.",
 			Ambiguities: []*gensurla.CP1AnalysisAmbiguity{},
@@ -202,8 +227,9 @@ func assertTrustedSuiteJourney(t *testing.T, client *genmcpsurla.Client,
 	t.Helper()
 	phase, cancel := context.WithTimeout(t.Context(), journeyOwnerWait)
 	defer cancel()
+	refresh := trustedSuiteRefresh(t, phase, client)
 	args, err := gensurla.EncodeProposeChangePayload(&gensurla.ProposeChangePayload{
-		ChangeID: changeID, Prompt: "Keep answering price questions.",
+		ChangeID: changeID, Prompt: "Keep answering price questions.", StoryRefreshOpID: refresh.OpID,
 		Analysis: &gensurla.CP1Analysis{
 			Summary: "The helper keeps answering price questions through the price API.",
 			Ambiguities: []*gensurla.CP1AnalysisAmbiguity{{

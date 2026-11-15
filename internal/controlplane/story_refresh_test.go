@@ -163,6 +163,7 @@ func TestSlowStoryRefreshDoesNotBlockGetChangeVerifyChangeOrProposeChange(t *tes
 	installFakeGo(t, "#!/bin/sh\n: > "+startedFile+"\nexec sleep 600\n")
 
 	cp := newControlPlane(t, Options{WorkspaceDir: wsDir})
+	existing := saveProposedCardFixture(t, cp, "alice@example.com", "existing", "Refunds up to $50 are instant.", refundAnalysis("Refunds up to $50 are instant."))
 
 	first, err := cp.RefreshStory(alice)
 	require.NoError(t, err)
@@ -186,27 +187,23 @@ func TestSlowStoryRefreshDoesNotBlockGetChangeVerifyChangeOrProposeChange(t *tes
 
 	// propose_change, get_change, and verify_change do not block on the running evaluation.
 	var (
-		proposed *gensurla.ChangeCardResult
-		propErr  error
-		gotCard  *gensurla.ChangeCardResult
-		getErr   error
-		verErr   error
+		propErr error
+		gotCard *gensurla.ChangeCardResult
+		getErr  error
+		verErr  error
 	)
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		proposed, propErr = cp.ProposeChange(alice, &gensurla.ProposeChangePayload{
+		_, propErr = cp.ProposeChange(alice, &gensurla.ProposeChangePayload{
 			ChangeID: "chg-unblocked",
 			Prompt:   "Refunds up to $50 are instant.",
 			Analysis: refundAnalysis("Refunds up to $50 are instant."),
 		})
-		if propErr != nil {
-			return
-		}
-		gotCard, getErr = cp.GetChange(alice, &gensurla.GetChangePayload{ChangeID: proposed.ChangeID})
+		gotCard, getErr = cp.GetChange(alice, &gensurla.GetChangePayload{ChangeID: existing.ChangeID})
 		_, verErr = cp.VerifyChange(alice, &gensurla.VerifyChangePayload{
-			ChangeID:        proposed.ChangeID,
-			RequestRevision: proposed.RequestRevision,
+			ChangeID:        existing.ChangeID,
+			RequestRevision: existing.RequestRevision,
 			CandidateCommit: strings.Repeat("a", 40),
 		})
 	}()
@@ -215,9 +212,10 @@ func TestSlowStoryRefreshDoesNotBlockGetChangeVerifyChangeOrProposeChange(t *tes
 	case <-time.After(2 * time.Second):
 		t.Fatal("propose_change, get_change, or verify_change blocked on a slow Story refresh")
 	}
-	require.NoError(t, propErr)
+	assertServiceError(t, propErr, "unprocessable")
+	assert.ErrorContains(t, propErr, "story_refresh_op_id is required")
 	require.NoError(t, getErr)
-	assert.Equal(t, proposed.RequestRevision, gotCard.RequestRevision)
+	assert.Equal(t, existing.RequestRevision, gotCard.RequestRevision)
 	assertServiceError(t, verErr, "not_implemented")
 
 	status, err := cp.GetStoryRefresh(alice)
@@ -732,8 +730,6 @@ var _ = Story("Order Refunds", func() {
 	// Adopting the succeeded Story refresh into a Change Card saves the
 	// evaluated Stories and hashes them into request_revision; preview_architecture
 	// still rejects a Story-only design.
-	cardWithoutStory := mustPropose(t, cp, alice, "chg-story-only", "Refunds up to $50 are instant.", refundAnalysis("Refunds up to $50 are instant."))
-	assert.Empty(t, cardWithoutStory.Stories)
 	cardWithStory, err := cp.ProposeChange(alice, &gensurla.ProposeChangePayload{
 		ChangeID:         "chg-story-adopted",
 		Prompt:           "Refunds up to $50 are instant.",
@@ -743,7 +739,12 @@ var _ = Story("Order Refunds", func() {
 	require.NoError(t, err)
 	require.Len(t, cardWithStory.Stories, 1)
 	assert.Equal(t, "Order Refunds", cardWithStory.Stories[0].Name)
-	assert.NotEqual(t, cardWithoutStory.RequestRevision, cardWithStory.RequestRevision)
+	withoutStory := *cardWithStory
+	withoutStory.Stories = nil
+	savedStory := loadMetadataRecord(t, cp, cardWithStory.ChangeID)
+	withoutStoryRevision, err := computeCanonicalRevision(&withoutStory, savedStory.owner, savedStory.designSource)
+	require.NoError(t, err)
+	assert.NotEqual(t, withoutStoryRevision, cardWithStory.RequestRevision)
 
 	cardWithStory, err = cp.ConfirmIntent(alice, &gensurla.ConfirmIntentPayload{ChangeID: cardWithStory.ChangeID, RequestRevision: cardWithStory.RequestRevision, Answers: map[string]string{}, Examples: cardWithStory.Examples})
 	require.NoError(t, err)
@@ -791,8 +792,8 @@ var _ = Service("orders", func() {
 	assert.Contains(t, nonStorySucceeded.Message, "the design declares no Stories")
 
 	// With the same canonical design input, adopting a refresh with zero
-	// Stories equals adopting no Story evaluation. The project still holds
-	// the earlier Story design; compare against the evaluated draft folder.
+	// Stories has the same canonical content as an empty Story list. Module
+	// proposals always select a refresh; no live-folder comparison is needed.
 	adoptedZero, err := cp.ProposeChange(alice, &gensurla.ProposeChangePayload{
 		ChangeID:         "chg-zero-stories",
 		Prompt:           "Refunds up to $50 are instant.",
@@ -801,8 +802,12 @@ var _ = Service("orders", func() {
 	})
 	require.NoError(t, err)
 	assert.Nil(t, adoptedZero.Stories)
-	plainZero := mustPropose(t, newControlPlane(t, Options{WorkspaceDir: filepath.Join(wsDir, draftFolderName)}), alice, "chg-zero-stories", "Refunds up to $50 are instant.", refundAnalysis("Refunds up to $50 are instant."))
-	assert.Equal(t, plainZero.RequestRevision, adoptedZero.RequestRevision)
+	emptyStories := *adoptedZero
+	emptyStories.Stories = []*gensurla.StorySummaryItem{}
+	savedZero := loadMetadataRecord(t, cp, adoptedZero.ChangeID)
+	emptyRevision, err := computeCanonicalRevision(&emptyStories, savedZero.owner, savedZero.designSource)
+	require.NoError(t, err)
+	assert.Equal(t, emptyRevision, adoptedZero.RequestRevision)
 }
 
 // writeWorkspaceFiles writes files into dir, creating parent directories.

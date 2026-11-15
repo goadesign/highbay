@@ -232,9 +232,8 @@ func TestTeamAssignmentGenerations(t *testing.T) {
 	var cp *ControlPlane
 	for _, owner := range []string{"alice@example.com", "bob@example.com"} {
 		cp = newBuildControlPlane(t, Options{CardsDir: cardsDir, Team: &TeamBinding{Owner: owner, Service: f}})
-		guide := asCaller(owner, CallerGuide)
 		user := asCaller(owner, CallerUser)
-		card := mustPropose(t, cp, guide, owner, "Refunds up to $50 are instant.", refundAnalysis("Refunds up to $50 are instant."))
+		card := saveProposedCardFixture(t, cp, owner, owner, "Refunds up to $50 are instant.", refundAnalysis("Refunds up to $50 are instant."))
 		confirmed, err := cp.ConfirmIntent(user, &gensurla.ConfirmIntentPayload{ChangeID: owner, RequestRevision: card.RequestRevision, Answers: map[string]string{}, Examples: card.Examples})
 		require.NoError(t, err)
 		_, err = cp.StartBuild(user, &gensurla.StartBuildPayload{ChangeID: owner, RequestRevision: confirmed.RequestRevision})
