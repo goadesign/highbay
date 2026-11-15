@@ -98,7 +98,7 @@ func TestPrepareAndCheckRefuseALinkedFolder(t *testing.T) {
 					assert.Contains(t, v.Findings[0].Message, ": "+named+" is a symbolic link")
 					return
 				}
-				_, err = testChecker.Prepare(t.Context(), wc, suite, nil)
+				_, err = testChecker.Prepare(t.Context(), wc, suite, branch, base, nil)
 				assert.Equal(t, before, projectFiles(t, repo), "the project is byte-identical")
 				require.ErrorIs(t, err, ErrLinkedFolder)
 				var author *AuthorError
@@ -118,8 +118,8 @@ func TestPrepareAndCheckRefuseALinkedFolder(t *testing.T) {
 
 // TestPrepareSeparatesFailuresTheAuthorCannotFix runs Prepare where the
 // failure is not the copy's author's: the caller's context already ended, or
-// the evaluator was closed. Each is an error marked ErrGeneration, not an
-// *AuthorError, and the copy's generated folder is not written.
+// the evaluator was closed. Neither is an *AuthorError or ErrWriteGenerated,
+// and the copy's generated folder is not written.
 func TestPrepareSeparatesFailuresTheAuthorCannotFix(t *testing.T) {
 	t.Parallel()
 	module := testmodule.Module(t, "example.com/shop/eval", "", map[string]string{"design/design.go": fixtureDesign})
@@ -135,9 +135,10 @@ func TestPrepareSeparatesFailuresTheAuthorCannotFix(t *testing.T) {
 		name    string
 		checker *Checker
 		ctx     context.Context
+		wantErr error
 	}{
-		{name: "the caller's context ended", checker: testChecker, ctx: ended},
-		{name: "the evaluator was closed", checker: NewChecker(closed, t.TempDir()), ctx: t.Context()},
+		{name: "the caller's context ended", checker: testChecker, ctx: ended, wantErr: context.Canceled},
+		{name: "the evaluator was closed", checker: NewChecker(closed, t.TempDir()), ctx: t.Context(), wantErr: ErrGeneration},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -145,11 +146,12 @@ func TestPrepareSeparatesFailuresTheAuthorCannotFix(t *testing.T) {
 			repo, _ := newProject(t, files)
 			wc, err := MakeCopy(t.Context(), repo, TestsRole, TestsRole.Branch(1), "HEAD")
 			require.NoError(t, err)
-			_, err = tc.checker.Prepare(tc.ctx, wc, Suite{Module: "eval", Command: "./cmd/shop-evals"}, nil)
+			_, err = tc.checker.Prepare(tc.ctx, wc, Suite{Module: "eval", Command: "./cmd/shop-evals"}, TestsRole.Branch(1), "HEAD", nil)
 			require.Error(t, err)
 			var author *AuthorError
 			assert.False(t, errors.As(err, &author), "not the author's to fix: %v", err)
-			assert.ErrorIs(t, err, ErrGeneration, "the generator failed, not the writing of its result")
+			assert.ErrorIs(t, err, tc.wantErr)
+			assert.NotErrorIs(t, err, ErrWriteGenerated, "not the writing of the generator's result")
 			assert.NoDirExists(t, filepath.Join(wc.Project(), "eval", "gen"))
 		})
 	}
@@ -193,7 +195,7 @@ func TestPrepareGivesAPlainErrorWhenTheCallerStopsDuringAModulePhase(t *testing.
 	ctx, cancel := context.WithCancel(t.Context())
 	done := make(chan error, 1)
 	go func() {
-		_, err := NewChecker(evaluator, t.TempDir()).Prepare(ctx, wc, Suite{Module: "eval", Command: "./gen/cmd/shop-evals"}, refundStories)
+		_, err := NewChecker(evaluator, t.TempDir()).Prepare(ctx, wc, Suite{Module: "eval", Command: "./gen/cmd/shop-evals"}, TestsRole.Branch(1), "HEAD", refundStories)
 		done <- err
 	}()
 	require.Eventually(t, func() bool {

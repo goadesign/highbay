@@ -33,7 +33,9 @@ type buildCopyFixture struct {
 func (f *buildCopyFixture) Project() string { return f.folder }
 
 // Prepare applies a generation outcome to the Story actually saved by the start.
-func (f *buildCopyFixture) Prepare(ctx context.Context, stories []designeval.StorySummary) error {
+func (f *buildCopyFixture) Prepare(
+	ctx context.Context, _, _ string, stories []designeval.StorySummary,
+) error {
 	if f.prepare != nil {
 		return f.prepare(ctx, stories)
 	}

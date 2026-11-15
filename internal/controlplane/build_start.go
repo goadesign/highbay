@@ -302,8 +302,10 @@ func (c *ControlPlane) StartBuild(
 					testsFolder = tWC.Project()
 					copy = c.newWriterBuildCopy(tWC, layout)
 				}
-			} else if facts, fErr := testsWC.Facts(work); fErr == nil && !facts.Detached &&
-				facts.Branch == testsBranch && facts.Operation == "none" {
+			} else if facts, fErr := testsWC.Facts(work); fErr != nil {
+				span.RecordError(fErr)
+			} else if !facts.Detached && facts.Branch == testsBranch &&
+				facts.Operation == "none" && facts.IndexLock == "" {
 				copy = c.newWriterBuildCopy(testsWC, layout)
 			}
 		}
@@ -334,7 +336,7 @@ func (c *ControlPlane) StartBuild(
 	if copy != nil {
 		err = work.Err()
 		if err == nil {
-			err = copy.Prepare(work, saved.Stories)
+			err = copy.Prepare(work, testwriter.TestsRole.Branch(saved.Number), saved.Base, saved.Stories)
 		}
 		// An author's failure becomes a finding. Any other is a failure of
 		// this start: the saved reason is worded for the page, and the trace
@@ -395,7 +397,11 @@ func (c *ControlPlane) saveBuildPreparation(
 		var author *testwriter.AuthorError
 		if errors.As(prepareErr, &author) {
 			tw.State = testsNeedChanges
-			tw.Findings = []string{author.Finding.Message + "\nCorrect the problem in the test module, then report_tests_finished."}
+			msg := author.Finding.Message
+			if author.Finding.Kind != testwriter.FindingWorkingCopy {
+				msg += "\nCorrect the problem in the test module, then report_tests_finished."
+			}
+			tw.Findings = []string{msg}
 		} else {
 			tw.State = testsCouldNotRun
 			reason, step := preparationFailure(ctx, prepareErr)

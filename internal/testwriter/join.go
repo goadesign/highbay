@@ -25,10 +25,9 @@ type (
 	// operation in progress in its administrative folder, and the uncommitted
 	// or untracked paths in its working tree.
 	CopyFacts struct {
-		// Branch is the checked-out branch's name when Detached is false, raw
-		// for a Surla build branch and shell-quoted via ShownName (or "a name
-		// that is not shown" when unprintable) for an agent's branch; empty
-		// when Detached is true.
+		// Branch is the checked-out branch's name when Detached is false,
+		// formatted via CleanName (plain when printable, or "a name that is not
+		// shown" when unprintable); empty when Detached is true.
 		Branch string
 		// Detached reports that the working copy's HEAD is not a symbolic ref.
 		Detached bool
@@ -44,7 +43,7 @@ type (
 		Step string
 		// Uncommitted lists up to the first five uncommitted or untracked
 		// paths in byte order, relative to the copy's root, each formatted via
-		// ShownName. It is an empty slice when UncommittedCount is 0.
+		// CleanName. It is an empty slice when UncommittedCount is 0.
 		Uncommitted []string
 		// UncommittedCount is the total number of uncommitted or untracked
 		// paths in the working copy.
@@ -117,15 +116,53 @@ var testsGeneratedPaths = []string{
 	"eval/" + designeval.StoryTestsPath,
 }
 
-// ShownName formats a branch or file name chosen by an agent for inclusion in
-// a refusal message: one POSIX shell word via shquote.Quote when printable, or
-// "a name that is not shown" when it contains a line break, control character,
-// or invalid UTF-8.
+// CleanName returns name unchanged when printable, or "a name that is not
+// shown" when it contains a line break, control character, or invalid UTF-8.
+func CleanName(name string) string {
+	if !printableName(name) {
+		return "a name that is not shown"
+	}
+	return name
+}
+
+// ShownName formats a branch or file name chosen by an agent for inclusion as a
+// shell word in a refusal message: one POSIX shell word via shquote.Quote when
+// printable, or "a name that is not shown" when it contains a line break,
+// control character, or invalid UTF-8.
 func ShownName(name string) string {
 	if !printableName(name) {
 		return "a name that is not shown"
 	}
 	return shquote.Quote(name)
+}
+
+// ShownBranch formats a checked-out branch name for prose in a refusal message
+// or finding: raw when it is a Surla build branch, "a name that is not shown"
+// when unprintable, and shell-quoted via shquote.Quote when it was chosen by an
+// agent.
+func ShownBranch(branch string) string {
+	if !printableName(branch) || branch == "a name that is not shown" {
+		return "a name that is not shown"
+	}
+	if _, _, ok := ParseBuildBranch(branch); ok {
+		return branch
+	}
+	return shquote.Quote(branch)
+}
+
+// IndexLockStep formats the recovery instruction when a working copy's
+// index.lock is present at lockPath and the caller will retry tool.
+func IndexLockStep(tool, lockPath string) string {
+	shown := lockPath
+	if !printableName(lockPath) {
+		shown = ShownName(lockPath)
+	}
+	return fmt.Sprintf(
+		"Your working folder's git index is locked (index.lock): %s. If no git command is running in your working folder, delete %s, then call %s again.",
+		shown,
+		shown,
+		tool,
+	)
 }
 
 // Facts reads the working copy's checked-out branch or detached state, any Git
@@ -163,16 +200,6 @@ func (w WorkingCopy) Join(ctx context.Context, role Role, n int,
 	return w.join(ctx, role, n, base, changeID, joinHooks{})
 }
 
-// shownBranch formats a checked-out branch name for CopyFacts.Branch: raw when
-// it is a Surla build branch, and ShownName(raw) when it was chosen by an
-// agent.
-func shownBranch(raw string) string {
-	if _, _, ok := ParseBuildBranch(raw); ok {
-		return raw
-	}
-	return ShownName(raw)
-}
-
 // join implements Join with optional test seams for interrupting or racing
 // intermediate steps.
 func (w WorkingCopy) join(ctx context.Context, role Role, n int, base, changeID string,
@@ -200,15 +227,24 @@ func (w WorkingCopy) join(ctx context.Context, role Role, n int, base, changeID 
 		if !facts.Detached && rawBranch == ownBranch && facts.Operation == "none" {
 			return AlreadyJoined, facts, nil
 		}
+		if facts.IndexLock != "" {
+			facts.Step = indexLockStep(role, facts.IndexLock)
+		}
 		return Refused, facts, nil
 	}
 	if facts.Operation != "none" {
+		if facts.IndexLock != "" {
+			facts.Step = indexLockStep(role, facts.IndexLock)
+		}
 		return Refused, facts, nil
 	}
 	parsedRole, k, isBuildBranch := ParseBuildBranch(rawBranch)
 	onEarlier := !facts.Detached && isBuildBranch && parsedRole == role && k < n
 	if !onEarlier {
 		if facts.UncommittedCount > 0 {
+			if facts.IndexLock != "" {
+				facts.Step = indexLockStep(role, facts.IndexLock)
+			}
 			return Refused, facts, nil
 		}
 	}
@@ -267,16 +303,7 @@ func indexLockStep(role Role, lockPath string) string {
 	if role == TestsRole {
 		tool = "get_test_writer_assignment"
 	}
-	shown := lockPath
-	if !printableName(lockPath) {
-		shown = ShownName(lockPath)
-	}
-	return fmt.Sprintf(
-		"Your working folder's git index is locked: %s. If no git command is running in your working folder, delete %s, then call %s again.",
-		shown,
-		shown,
-		tool,
-	)
+	return IndexLockStep(tool, lockPath)
 }
 
 // handleJoinWriteError handles an error from a copy-changing git command in
@@ -314,7 +341,7 @@ func (w WorkingCopy) readFacts(ctx context.Context) (string, CopyFacts, error) {
 	switch {
 	case err == nil:
 		rawBranch = strings.TrimPrefix(head, "refs/heads/")
-		facts.Branch = shownBranch(rawBranch)
+		facts.Branch = CleanName(rawBranch)
 	case exitCode(err) == 1:
 		facts.Detached = true
 	default:
@@ -402,7 +429,7 @@ func (w WorkingCopy) readOperation() (string, error) {
 }
 
 // readUncommitted returns the first maxWorkFiles uncommitted or untracked
-// paths in byte order, each formatted via ShownName, and the total count of
+// paths in byte order, each formatted via CleanName, and the total count of
 // uncommitted or untracked paths in w.
 func (w WorkingCopy) readUncommitted(ctx context.Context) ([]string, int, error) {
 	out, err := w.git(ctx, w.dir, nil, "status", "--porcelain", "-z", "--no-renames", "--untracked-files=all")
@@ -422,7 +449,7 @@ func (w WorkingCopy) readUncommitted(ctx context.Context) ([]string, int, error)
 	paths = slices.Compact(paths)
 	shown := make([]string, 0, min(len(paths), maxWorkFiles))
 	for _, p := range paths[:min(len(paths), maxWorkFiles)] {
-		shown = append(shown, ShownName(p))
+		shown = append(shown, CleanName(p))
 	}
 	return shown, len(paths), nil
 }

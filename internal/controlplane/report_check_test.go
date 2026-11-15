@@ -64,7 +64,9 @@ var standInCommit = strings.Repeat("a", 40)
 func (s *standInCopy) Project() string { return "/nonexistent/stand-in" }
 
 // Prepare returns prepareErr.
-func (s *standInCopy) Prepare(context.Context, []designeval.StorySummary) error {
+func (s *standInCopy) Prepare(
+	context.Context, string, string, []designeval.StorySummary,
+) error {
 	return s.prepareErr
 }
 
@@ -531,6 +533,24 @@ func TestAReportIsJudgedThroughTheProductionCopy(t *testing.T) {
 	require.Len(t, assignment.Findings, 1)
 	assert.Contains(t, assignment.Findings[0], "go.sum")
 	assert.NotContains(t, assignment.Findings[0], "report_tests_finished", "the checker's own finding, not the start's")
+
+	// When the test writer's copy is switched to a side branch (even with an
+	// unloadable go.mod committed on it), reporting produces a working_copy
+	// finding rather than could_not_run and writes no generated files on the
+	// side branch.
+	testsDir := filepath.Join(project, testwriter.TestsRole.Folder)
+	runGitForTest(t, testsDir, "switch", "--quiet", "-c", "mine")
+	runGitForTest(t, testsDir, "commit", "--quiet", "--allow-empty", "-m", "side commit")
+	reported2 := reportTests(t, cp, card.RequestRevision)
+	assert.Equal(t, 2, reported2.Progress.Report)
+	build = waitForTests(t, cp, gensurla.TestsKindNeedsChanges)
+	assert.Equal(t, 2, build.TestWriter.Report)
+	assignment, err = cp.GetTestWriterAssignment(asCaller("alice@example.com", CallerTestWriter), &gensurla.GetTestWriterAssignmentPayload{ChangeID: "chg"})
+	require.NoError(t, err)
+	require.Len(t, assignment.Findings, 1)
+	assert.Contains(t, assignment.Findings[0], "Your working copy (.surla-tests) is on branch 'mine'.")
+	assert.Contains(t, assignment.Findings[0], "Put your test files on surla/tests-1, uncommitted (Surla commits what it accepts), and report again.")
+	assert.Empty(t, productionBuildGit(t, testsDir, "status", "--porcelain", "--untracked-files=all"))
 }
 
 // TestTheWholeCheckLimit judges with a shortened limit and stand-in checks

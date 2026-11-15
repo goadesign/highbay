@@ -20,8 +20,9 @@ type (
 	buildCopy interface {
 		// Project returns the project's folder inside the copy.
 		Project() string
-		// Prepare writes the required tests for stories into the copy.
-		Prepare(context.Context, []designeval.StorySummary) error
+		// Prepare writes the required tests for stories into the copy on branch
+		// at base.
+		Prepare(ctx context.Context, branch, base string, stories []designeval.StorySummary) error
 		// Check judges the copy against stories on branch at base.
 		Check(ctx context.Context, branch, base string, stories []designeval.StorySummary) (testwriter.Verdict, error)
 		// Record commits an accepted verdict on branch and returns the commit.
@@ -66,8 +67,10 @@ func (c *ControlPlane) newWriterBuildCopy(wc testwriter.WorkingCopy, layout scaf
 func (w writerBuildCopy) Project() string { return w.copy.Project() }
 
 // Prepare writes the required tests from the saved Story through its owner.
-func (w writerBuildCopy) Prepare(ctx context.Context, stories []designeval.StorySummary) error {
-	_, err := w.checker.Prepare(ctx, w.copy, w.suite, stories)
+func (w writerBuildCopy) Prepare(
+	ctx context.Context, branch, base string, stories []designeval.StorySummary,
+) error {
+	_, err := w.checker.Prepare(ctx, w.copy, w.suite, branch, base, stories)
 	return err
 }
 

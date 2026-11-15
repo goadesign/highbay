@@ -30,6 +30,12 @@ var _ = Service("shop", func() {
 })
 `
 
+// reviewEval is a minimal test module used by the production build-start tests.
+var reviewEval = map[string]string{
+	"go.mod":           "module example.com/shop/eval\n\ngo 1.27.3\n",
+	"design/design.go": "package design\n",
+}
+
 // TestStartBuildUsesTheProductionCopy retains the reviewer's real-owner probe:
 // one copy across starts, correct project subfolder, clean original repository,
 // and an actionable generation finding. Only the external team is replaced.
@@ -226,6 +232,133 @@ func init() { time.Sleep(30 * time.Second) }`, 1)
 	assert.Equal(t, "Build this change again on the views page.", failure.Step)
 }
 
+// TestStoredEvaluatorMakesTheBuilderCopy verifies that a stored-evaluator build
+// makes .surla-build on surla/build-1 through the production path, creates no
+// .surla-tests copy, registers BuilderOnly, and does not check the sandbox.
+func TestStoredEvaluatorMakesTheBuilderCopy(t *testing.T) {
+	repo, project, cp, registered := reviewProject(t, Options{Verification: &VerificationConfig{RunsDir: t.TempDir()}})
+	cp.buildSandboxCheck = func() error {
+		t.Error("stored evaluator checked the sandbox")
+		return nil
+	}
+	card := buildableChange(t, cp, "chg")
+	result, err := cp.StartBuild(asCaller("alice@example.com", CallerUser), &gensurla.StartBuildPayload{
+		ChangeID: "chg", RequestRevision: card.RequestRevision,
+	})
+	require.NoError(t, err)
+	assert.Equal(t, gensurla.TeamKindReady, result.Team.Kind())
+	builder := filepath.Join(project, testwriter.BuilderRole.Folder)
+	assert.Equal(t, "surla/build-1", productionBuildGit(t, builder, "symbolic-ref", "--short", "HEAD"))
+	assert.NoDirExists(t, filepath.Join(project, testwriter.TestsRole.Folder))
+	assert.Equal(t, []BuildFolders{BuilderOnly{BuilderFolder: builder}}, *registered)
+	assert.Empty(t, productionBuildGit(t, repo, "status", "--porcelain", "--untracked-files=all"))
+}
+
+// TestBuildAgainMakesMissingCopiesAtTheSavedBase verifies that after a stop
+// that left no copies and a new project commit, Build again remakes both copies
+// at the saved base rather than the project's new HEAD.
+func TestBuildAgainMakesMissingCopiesAtTheSavedBase(t *testing.T) {
+	repo, project, cp, _ := reviewProject(t, Options{})
+	card := buildableChange(t, cp, "chg")
+	_, err := cp.StartBuild(asCaller("alice@example.com", CallerUser), &gensurla.StartBuildPayload{
+		ChangeID: "chg", RequestRevision: card.RequestRevision,
+	})
+	require.NoError(t, err)
+	b := productionBuildGit(t, repo, "rev-parse", "HEAD")
+	for _, role := range []testwriter.Role{testwriter.BuilderRole, testwriter.TestsRole} {
+		runGitForTest(t, repo, "worktree", "remove", "--force", filepath.Join(project, role.Folder))
+		runGitForTest(t, repo, "branch", "-D", role.Branch(1))
+	}
+	writeWorkspaceFiles(t, project, map[string]string{"later.txt": "later\n"})
+	runGitForTest(t, repo, "add", "later.txt")
+	runGitForTest(t, repo, "commit", "--quiet", "-m", "later")
+	_, err = startBuildAgain(t, cp, asCaller("alice@example.com", CallerUser), "chg", card.RequestRevision)
+	require.NoError(t, err)
+	for _, role := range []testwriter.Role{testwriter.BuilderRole, testwriter.TestsRole} {
+		dir := filepath.Join(project, role.Folder)
+		assert.Equal(t, b, productionBuildGit(t, dir, "rev-parse", "HEAD"), "%s at the saved base", role.Folder)
+		assert.Equal(t, role.Branch(1), productionBuildGit(t, dir, "symbolic-ref", "--short", "HEAD"))
+	}
+}
+
+// TestBuildNeverMovesAnExistingCopy verifies that when both copies are on side
+// branches with uncommitted work, Build again leaves them and prepares nothing
+// in the tests copy.
+func TestBuildNeverMovesAnExistingCopy(t *testing.T) {
+	_, project, cp, registered := reviewProject(t, Options{})
+	card := buildableChange(t, cp, "chg")
+	_, err := cp.StartBuild(asCaller("alice@example.com", CallerUser), &gensurla.StartBuildPayload{
+		ChangeID: "chg", RequestRevision: card.RequestRevision,
+	})
+	require.NoError(t, err)
+	tests := filepath.Join(project, testwriter.TestsRole.Folder)
+	require.NoError(t, os.RemoveAll(filepath.Join(tests, "eval", "gen")))
+	for _, role := range []testwriter.Role{testwriter.BuilderRole, testwriter.TestsRole} {
+		dir := filepath.Join(project, role.Folder)
+		runGitForTest(t, dir, "switch", "--quiet", "-c", "mine-"+role.Folder[1:])
+		writeWorkspaceFiles(t, dir, map[string]string{"wip.txt": "wip\n"})
+	}
+	_, err = startBuildAgain(t, cp, asCaller("alice@example.com", CallerUser), "chg", card.RequestRevision)
+	require.NoError(t, err)
+	for _, role := range []testwriter.Role{testwriter.BuilderRole, testwriter.TestsRole} {
+		dir := filepath.Join(project, role.Folder)
+		assert.Equal(t, "mine-"+role.Folder[1:], productionBuildGit(t, dir, "symbolic-ref", "--short", "HEAD"))
+		assert.FileExists(t, filepath.Join(dir, "wip.txt"))
+	}
+	assert.NoDirExists(t, filepath.Join(tests, "eval", "gen"), "no Prepare in a tests copy off its build branch")
+	assert.Len(t, *registered, 2)
+}
+
+// TestMakeCopyFailsAfterTheSave verifies that when MakeCopy fails after the
+// build is saved (because a deleted copy's registration is locked), StartBuild
+// registers only the role whose copy exists and returns the saved build with
+// team.unavailable ("Build this change again on the views page.").
+func TestMakeCopyFailsAfterTheSave(t *testing.T) {
+	t.Run("builder MakeCopy fails", func(t *testing.T) {
+		repo, project, cp, registered := reviewProject(t, Options{})
+		card := buildableChange(t, cp, "chg")
+		_, err := cp.StartBuild(asCaller("alice@example.com", CallerUser), &gensurla.StartBuildPayload{
+			ChangeID: "chg", RequestRevision: card.RequestRevision,
+		})
+		require.NoError(t, err)
+		*registered = nil
+		builder := filepath.Join(project, testwriter.BuilderRole.Folder)
+		runGitForTest(t, repo, "worktree", "lock", builder)
+		require.NoError(t, os.RemoveAll(builder))
+
+		result, err := startBuildAgain(t, cp, asCaller("alice@example.com", CallerUser), "chg", card.RequestRevision)
+		require.NoError(t, err)
+		assert.Equal(t, gensurla.TeamKindUnavailable, result.Team.Kind())
+		u, ok := result.Team.AsUnavailable()
+		require.True(t, ok)
+		assert.Equal(t, gensurla.BuildStartStep("Build this change again on the views page."), u.Step)
+		assert.Empty(t, *registered, "nothing is registered when .surla-build does not exist")
+	})
+
+	t.Run("tests MakeCopy fails", func(t *testing.T) {
+		repo, project, cp, registered := reviewProject(t, Options{})
+		card := buildableChange(t, cp, "chg")
+		_, err := cp.StartBuild(asCaller("alice@example.com", CallerUser), &gensurla.StartBuildPayload{
+			ChangeID: "chg", RequestRevision: card.RequestRevision,
+		})
+		require.NoError(t, err)
+		*registered = nil
+		builder := filepath.Join(project, testwriter.BuilderRole.Folder)
+		tests := filepath.Join(project, testwriter.TestsRole.Folder)
+		runGitForTest(t, repo, "worktree", "lock", tests)
+		require.NoError(t, os.RemoveAll(tests))
+
+		result, err := startBuildAgain(t, cp, asCaller("alice@example.com", CallerUser), "chg", card.RequestRevision)
+		require.NoError(t, err)
+		assert.Equal(t, gensurla.TeamKindUnavailable, result.Team.Kind())
+		u, ok := result.Team.AsUnavailable()
+		require.True(t, ok)
+		assert.Equal(t, gensurla.BuildStartStep("Build this change again on the views page."), u.Step)
+		assert.Equal(t, []BuildFolders{BuilderOnly{BuilderFolder: builder}}, *registered,
+			"only the existing builder copy is registered when .surla-tests is missing")
+	})
+}
+
 // productionBuildProject creates and commits only trusted fixture files, with
 // explicit local identity and no hooks/signing, for the real production owners.
 func productionBuildProject(
@@ -257,4 +390,22 @@ func productionBuildGit(t *testing.T, repo string, args ...string) string {
 	out, err := cmd.CombinedOutput()
 	require.NoError(t, err, string(out))
 	return strings.TrimSpace(string(out))
+}
+
+// reviewProject makes a production project and control plane that records
+// registrations.
+func reviewProject(t *testing.T, opts Options) (string, string, *ControlPlane, *[]BuildFolders) {
+	t.Helper()
+	repo, project := productionBuildProject(t, ".", reviewEval)
+	f := &teamServiceFixture{}
+	var registered []BuildFolders
+	f.register = func(_ context.Context, folders BuildFolders) error {
+		registered = append(registered, folders)
+		return nil
+	}
+	opts.WorkspaceDir = project
+	opts.Team = &TeamBinding{Owner: "alice@example.com", Service: f}
+	cp := newControlPlane(t, opts)
+	cp.buildSandboxCheck = func() error { return nil }
+	return repo, project, cp, &registered
 }

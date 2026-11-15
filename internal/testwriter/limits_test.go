@@ -280,6 +280,38 @@ func TestCheckStopsWhenTheHistoryIsReplaced(t *testing.T) {
 		require.Len(t, v.Findings, 1)
 		assert.Equal(t, FindingWorkingCopy, v.Findings[0].Kind)
 		assert.Contains(t, v.Findings[0].Message, "Your working copy (.surla-tests) is on branch surla/tests-1 with a git merge in progress.")
-		assert.Contains(t, v.Findings[0].Message, "Finish or abort the merge, leave your test files uncommitted on surla/tests-1, and report again.")
+		assert.Contains(t, v.Findings[0].Message, "A merge is in progress in your working copy: abort it, then put your test files on surla/tests-1, uncommitted (Surla commits what it accepts), and report again.")
+		assert.NotContains(t, v.Findings[0].Message, "Finish")
 	})
+}
+
+// TestWorkingCopyFindingText checks the finding's prose against 9.9(4) and
+// rule 13(b): paths plain, the lock step when index.lock is present, and abort
+// for the test writer when an operation is in progress.
+func TestWorkingCopyFindingText(t *testing.T) {
+	t.Parallel()
+	repo, _ := newProject(t, map[string]string{"README.md": "shop\n", "eval/go.mod": "module example.com/shop/eval\n"})
+	base := runGit(t, repo, "rev-parse", "HEAD")
+	branch := TestsRole.Branch(1)
+	wc, err := MakeCopy(t.Context(), repo, TestsRole, branch, base)
+	require.NoError(t, err)
+	runGit(t, wc.Dir(), "switch", "--quiet", "-c", "side-work")
+	writeFiles(t, wc.Dir(), map[string]string{"eval/refund_test.go": "package eval\n"})
+	writeFiles(t, wc.gitDir, map[string]string{"index.lock": ""})
+	t.Cleanup(func() { _ = os.Remove(filepath.Join(wc.gitDir, "index.lock")) })
+	v, err := testChecker.Check(t.Context(), wc, Suite{Module: "eval", Command: "./gen/cmd/shop-evals"}, branch, base, nil)
+	require.NoError(t, err)
+	require.Len(t, v.Findings, 1)
+	msg := v.Findings[0].Message
+	assert.Contains(t, msg, "eval/refund_test.go", "path shown")
+	assert.NotContains(t, msg, "'eval/refund_test.go'", "9.9(4): prose shows paths plain")
+	assert.Contains(t, msg, "index.lock", "9.9(4): prose carries the lock step when a lock exists")
+
+	require.NoError(t, os.Remove(filepath.Join(wc.gitDir, "index.lock")))
+	runGit(t, wc.Dir(), "switch", "--quiet", branch)
+	writeFiles(t, wc.gitDir, map[string]string{"MERGE_HEAD": base + "\n"})
+	v, err = testChecker.Check(t.Context(), wc, Suite{Module: "eval", Command: "./gen/cmd/shop-evals"}, branch, base, nil)
+	require.NoError(t, err)
+	require.Len(t, v.Findings, 1)
+	assert.NotContains(t, v.Findings[0].Message, "Finish", "rule 13(b): the test writer aborts, since finishing commits")
 }

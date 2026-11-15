@@ -88,7 +88,7 @@ func TestPrepareWritesOneRequiredMethodPerFinishedFlow(t *testing.T) {
 	wc, err := MakeCopy(t.Context(), repo, TestsRole, TestsRole.Branch(1), "HEAD")
 	require.NoError(t, err)
 
-	required, err := testChecker.Prepare(t.Context(), wc, fixtureSuite, refundStories)
+	required, err := testChecker.Prepare(t.Context(), wc, fixtureSuite, TestsRole.Branch(1), "HEAD", refundStories)
 	require.NoError(t, err)
 	assert.Equal(t, []designeval.StoryScenario{
 		{Story: "Refunds", Key: "refund-over-limit", Scenario: "refund_over_limit", Hook: "RefundOverLimit"},
@@ -118,7 +118,7 @@ func TestPrepareGivesTheAuthorItsGenerationFailure(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, os.WriteFile(design, append(raw, "\nvar _ = undefinedInTheDesign\n"...), 0o600))
 
-	_, err = testChecker.Prepare(t.Context(), wc, fixtureSuite, refundStories)
+	_, err = testChecker.Prepare(t.Context(), wc, fixtureSuite, TestsRole.Branch(1), "HEAD", refundStories)
 	var author *AuthorError
 	require.ErrorAs(t, err, &author)
 	assert.Equal(t, FindingGeneration, author.Finding.Kind)
@@ -154,7 +154,7 @@ func TestCheckJudgesTheWorkingCopy(t *testing.T) {
 	branch := TestsRole.Branch(1)
 	wc, err := MakeCopy(t.Context(), repo, TestsRole, branch, "HEAD")
 	require.NoError(t, err)
-	_, err = testChecker.Prepare(t.Context(), wc, fixtureSuite, refundStories)
+	_, err = testChecker.Prepare(t.Context(), wc, fixtureSuite, branch, start, refundStories)
 	require.NoError(t, err)
 	prepared, err := os.ReadFile(filepath.Join(wc.Project(), "eval", generatedSuite))
 	require.NoError(t, err)
@@ -306,7 +306,7 @@ func TestCheckIgnoresTheCopysOwnRepository(t *testing.T) {
 	branch := TestsRole.Branch(1)
 	wc, err := MakeCopy(t.Context(), repo, TestsRole, branch, "HEAD")
 	require.NoError(t, err)
-	_, err = testChecker.Prepare(t.Context(), wc, fixtureSuite, refundStories)
+	_, err = testChecker.Prepare(t.Context(), wc, fixtureSuite, branch, start, refundStories)
 	require.NoError(t, err)
 	prepared, err := os.ReadFile(filepath.Join(wc.Project(), "eval", generatedSuite))
 	require.NoError(t, err)

@@ -55,7 +55,7 @@ func TestTheStoryTableIsSurlas(t *testing.T) {
 
 	t.Run("Prepare replaces a link", func(t *testing.T) {
 		require.NoError(t, os.Symlink(outside, tablePath))
-		required, err := testChecker.Prepare(t.Context(), wc, fixtureSuite, refundStories)
+		required, err := testChecker.Prepare(t.Context(), wc, fixtureSuite, branch, base, refundStories)
 		require.NoError(t, err)
 		assert.Len(t, required, 2)
 		assertSurlasTable(t)
@@ -124,7 +124,7 @@ func TestTheStoryTableIsSurlas(t *testing.T) {
 
 	t.Run("Prepare at a report restores an edited table", func(t *testing.T) {
 		require.NoError(t, os.WriteFile(tablePath, noRows, 0o600))
-		_, err := testChecker.Prepare(t.Context(), wc, fixtureSuite, refundStories)
+		_, err := testChecker.Prepare(t.Context(), wc, fixtureSuite, branch, base, refundStories)
 		require.NoError(t, err)
 		assertSurlasTable(t)
 		v, err := testChecker.Check(t.Context(), wc, fixtureSuite, branch, base, refundStories)
@@ -137,7 +137,7 @@ func TestTheStoryTableIsSurlas(t *testing.T) {
 
 	t.Run("a revision removes a finished flow", func(t *testing.T) {
 		fewer := []designeval.StorySummary{{Name: "Refunds", Flows: refundStories[0].Flows[:1]}}
-		required, err := testChecker.Prepare(t.Context(), wc, fixtureSuite, fewer)
+		required, err := testChecker.Prepare(t.Context(), wc, fixtureSuite, branch, base, fewer)
 		require.NoError(t, err)
 		assert.Equal(t, []designeval.StoryScenario{
 			{Story: "Refunds", Key: "refund-over-limit", Scenario: "refund_over_limit", Hook: "RefundOverLimit"},

@@ -331,7 +331,7 @@ func (r *reportChecker) check(
 	if err != nil {
 		return nil, testwriter.Verdict{}, &openCopyError{err: err}
 	}
-	if err := copy.Prepare(ctx, stories); err != nil {
+	if err := copy.Prepare(ctx, branch, base, stories); err != nil {
 		return nil, testwriter.Verdict{}, err
 	}
 	v, err := copy.Check(ctx, branch, base, stories)

@@ -40,24 +40,29 @@ func TestFactsReadsBranchOperationsAndUncommitted(t *testing.T) {
 	}, facts)
 
 	// Agent-chosen branches (including surla/build-2-backup and surla/build-007)
-	// are shell-quoted; unprintable names are withheld.
+	// are plain in CopyFacts.Branch and shell-quoted in ShownBranch; unprintable
+	// names are withheld.
 	for _, tc := range []struct {
-		branch string
-		want   string
+		branch    string
+		wantShown string
 	}{
-		{branch: "feature/work", want: "'feature/work'"},
-		{branch: "surla/build-2-backup", want: "'surla/build-2-backup'"},
-		{branch: "surla/build-007", want: "'surla/build-007'"},
+		{branch: "feature/work", wantShown: "'feature/work'"},
+		{branch: "surla/build-2-backup", wantShown: "'surla/build-2-backup'"},
+		{branch: "surla/build-007", wantShown: "'surla/build-007'"},
 	} {
 		runGit(t, wc.Dir(), "switch", "--quiet", "-c", tc.branch, base)
 		facts, err = wc.Facts(t.Context())
 		require.NoError(t, err)
-		assert.Equal(t, tc.want, facts.Branch)
+		assert.Equal(t, tc.branch, facts.Branch)
+		assert.Equal(t, tc.wantShown, ShownBranch(facts.Branch))
 		assert.False(t, facts.Detached)
 	}
+	assert.Equal(t, "surla/build-1", ShownBranch("surla/build-1"))
+	assert.Equal(t, "a name that is not shown", CleanName("bad\nbranch"))
 	assert.Equal(t, "a name that is not shown", ShownName("bad\nbranch"))
 	assert.Equal(t, "a name that is not shown", ShownName("bad\x07path.go"))
-	assert.Equal(t, "a name that is not shown", shownBranch("bad\nbranch"))
+	assert.Equal(t, "a name that is not shown", ShownBranch("bad\nbranch"))
+	assert.Equal(t, "a name that is not shown", ShownBranch("a name that is not shown"))
 
 	// Detached HEAD.
 	runGit(t, wc.Dir(), "switch", "--quiet", "--detach", base)
@@ -118,11 +123,11 @@ func TestFactsReadsBranchOperationsAndUncommitted(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, 6, facts.UncommittedCount)
 	assert.Equal(t, []string{
-		"'a.txt'",
+		"a.txt",
 		"a name that is not shown",
-		"'c.txt'",
-		"'d.txt'",
-		"'e.txt'",
+		"c.txt",
+		"d.txt",
+		"e.txt",
 	}, facts.Uncommitted)
 }
 
@@ -631,7 +636,7 @@ func TestJoinRefusesAndHandlesConcurrentEdit(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, Refused, outcome, "uncommitted work on a later build branch (k=3 > n=2) must be refused")
 	assert.Equal(t, "surla/build-3", facts.Branch)
-	assert.Equal(t, []string{"'svc/dirty.go'"}, facts.Uncommitted)
+	assert.Equal(t, []string{"svc/dirty.go"}, facts.Uncommitted)
 	assert.Equal(t, build3Tip, runGit(t, repo, "rev-parse", "surla/build-3"),
 		"later build branch must not receive a leftover commit for an earlier build")
 
@@ -639,15 +644,15 @@ func TestJoinRefusesAndHandlesConcurrentEdit(t *testing.T) {
 	outcome, facts, err = wc.Join(t.Context(), BuilderRole, 4, b2, "billing")
 	require.NoError(t, err)
 	assert.Equal(t, Refused, outcome)
-	assert.Equal(t, "'side'", facts.Branch)
-	assert.Equal(t, []string{"'svc/dirty.go'"}, facts.Uncommitted)
+	assert.Equal(t, "side", facts.Branch)
+	assert.Equal(t, []string{"svc/dirty.go"}, facts.Uncommitted)
 
 	runGit(t, wc.Dir(), "switch", "--quiet", "--detach", sideTip)
 	outcome, facts, err = wc.Join(t.Context(), BuilderRole, 4, b2, "billing")
 	require.NoError(t, err)
 	assert.Equal(t, Refused, outcome)
 	assert.True(t, facts.Detached)
-	assert.Equal(t, []string{"'svc/dirty.go'"}, facts.Uncommitted)
+	assert.Equal(t, []string{"svc/dirty.go"}, facts.Uncommitted)
 	require.NoError(t, os.Remove(filepath.Join(wc.Dir(), "svc", "dirty.go")))
 
 	// J11: an operation in progress refuses Join both before and after the
@@ -675,7 +680,7 @@ func TestJoinRefusesAndHandlesConcurrentEdit(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, ChangedDuringJoin, outcome)
 	assert.Equal(t, "surla/build-3", facts.Branch)
-	assert.Equal(t, []string{"'svc/b.go'"}, facts.Uncommitted)
+	assert.Equal(t, []string{"svc/b.go"}, facts.Uncommitted)
 	_, exists, err := lookupCommit(t.Context(), repo, "refs/heads/surla/build-4")
 	require.NoError(t, err)
 	assert.False(t, exists, "surla/build-4 was not created when git switch -c refused")

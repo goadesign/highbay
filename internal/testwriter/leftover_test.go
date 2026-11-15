@@ -129,7 +129,7 @@ func TestALeftoverStagingFolderFailsNeitherPrepareNorCheck(t *testing.T) {
 	stage := map[string]string{leftoverStage + "/gen/evals/shop_acceptance/suite.go": "package half\n"}
 	writeFiles(t, module, stage)
 
-	_, err = testChecker.Prepare(t.Context(), wc, fixtureSuite, refundStories)
+	_, err = testChecker.Prepare(t.Context(), wc, fixtureSuite, branch, base, refundStories)
 	require.NoError(t, err, "a staging folder left by an interrupted publication does not fail the preparation")
 	assert.NoDirExists(t, filepath.Join(module, leftoverStage), "the preparation removed it")
 	suiteGo, err := os.ReadFile(filepath.Join(module, generatedSuite))
@@ -177,7 +177,7 @@ func TestALinkWithAStagingFoldersNameIsTheAuthorsFinding(t *testing.T) {
 	link := filepath.Join(wc.Project(), "eval", leftoverStage)
 	require.NoError(t, os.Symlink(outside, link))
 
-	_, err = testChecker.Prepare(t.Context(), wc, Suite{Module: "eval", Command: "./cmd/shop-evals"}, nil)
+	_, err = testChecker.Prepare(t.Context(), wc, Suite{Module: "eval", Command: "./cmd/shop-evals"}, TestsRole.Branch(1), "HEAD", nil)
 	var author *AuthorError
 	require.ErrorAs(t, err, &author, "a link the author placed is the author's to fix")
 	assert.Equal(t, FindingGeneration, author.Finding.Kind)
