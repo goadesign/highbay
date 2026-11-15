@@ -27,7 +27,7 @@ func codecMadeFrom() madeFromRecord {
 			{Version: strings.Repeat("b", 64), Entered: 1},
 			{Version: absentDesignVersion, Entered: 3},
 		}},
-		Taken: map[string]madeFromVersion{"design/types.go": {Version: absentDesignVersion, Entered: 3}},
+		Taken: map[string]madeFromTake{"design/types.go": {Version: absentDesignVersion, Entered: 3, ProjectCommit: strings.Repeat("a", 40)}},
 	}
 }
 
@@ -40,17 +40,45 @@ func TestMadeFromRecordStrictDecode(t *testing.T) {
 		valid bool
 	}{
 		{name: "same-write versions are valid", valid: true},
+		{name: "original folder identity", valid: true, edit: func(r *madeFromRecord) {
+			r.Start.FolderVersions = map[string]string{"design/types.go": strings.Repeat("b", 64)}
+		}},
+		{name: "invalid original folder path", edit: func(r *madeFromRecord) {
+			r.Start.FolderVersions = map[string]string{"../outside": absentDesignVersion}
+		}},
+		{name: "invalid original folder version", edit: func(r *madeFromRecord) {
+			r.Start.FolderVersions = map[string]string{"design/types.go": "bad"}
+		}},
+		{name: "invalid take commit", edit: func(r *madeFromRecord) {
+			take := r.Taken["design/types.go"]
+			take.ProjectCommit = "HEAD"
+			r.Taken["design/types.go"] = take
+		}},
+		{name: "empty take after starting commit", edit: func(r *madeFromRecord) {
+			take := r.Taken["design/types.go"]
+			take.ProjectCommit = ""
+			r.Taken["design/types.go"] = take
+		}},
+		{name: "empty take before first commit", valid: true, edit: func(r *madeFromRecord) {
+			r.Start.ProjectCommit = ""
+			take := r.Taken["design/types.go"]
+			take.ProjectCommit = ""
+			r.Taken["design/types.go"] = take
+		}},
+		{name: "invalid pending commit", edit: func(r *madeFromRecord) {
+			r.Pending = &pendingDraftWrite{File: "design/types.go", OutsideVersion: absentDesignVersion, Before: absentDesignVersion, Result: absentDesignVersion, ProjectCommit: "HEAD"}
+		}},
 		{name: "take survives later revision re-entry", valid: true, edit: func(r *madeFromRecord) {
 			r.Write = 4
 			r.Entries["design/types.go"][2].Entered = 4
-			r.Taken["design/types.go"] = madeFromVersion{Version: absentDesignVersion, Entered: 2}
+			r.Taken["design/types.go"] = madeFromTake{Version: absentDesignVersion, Entered: 2, ProjectCommit: strings.Repeat("a", 40)}
 		}},
 		{name: "empty initial history", valid: true, edit: func(r *madeFromRecord) { r.Entries, r.Taken = nil, nil }},
 		{name: "pending addition not yet entered", valid: true, edit: func(r *madeFromRecord) {
-			r.Pending = &pendingDraftWrite{File: "design/new.go", OutsideVersion: strings.Repeat("c", 64), Before: absentDesignVersion, Result: strings.Repeat("d", 64)}
+			r.Pending = &pendingDraftWrite{File: "design/new.go", OutsideVersion: strings.Repeat("c", 64), Before: absentDesignVersion, Result: strings.Repeat("d", 64), ProjectCommit: strings.Repeat("a", 40)}
 		}},
 		{name: "pending deletion", valid: true, edit: func(r *madeFromRecord) {
-			r.Pending = &pendingDraftWrite{File: "design/types.go", OutsideVersion: absentDesignVersion, Before: strings.Repeat("b", 64), Result: absentDesignVersion}
+			r.Pending = &pendingDraftWrite{File: "design/types.go", OutsideVersion: absentDesignVersion, Before: strings.Repeat("b", 64), Result: absentDesignVersion, ProjectCommit: strings.Repeat("a", 40)}
 		}},
 		{name: "dropped before branches", valid: true, edit: func(r *madeFromRecord) {
 			r.Start.Dropped = &droppedBuild{ChangeID: "refund", StartedAt: time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC), Number: 2}
@@ -67,19 +95,19 @@ func TestMadeFromRecordStrictDecode(t *testing.T) {
 		{name: "test file", edit: func(r *madeFromRecord) { r.Entries["design/types_test.go"] = r.Entries["design/types.go"] }},
 		{name: "testdata", edit: func(r *madeFromRecord) { r.Entries["design/testdata/types.go"] = r.Entries["design/types.go"] }},
 		{name: "taken not entered", edit: func(r *madeFromRecord) {
-			r.Taken["design/types.go"] = madeFromVersion{Version: strings.Repeat("c", 64), Entered: 2}
+			r.Taken["design/types.go"] = madeFromTake{Version: strings.Repeat("c", 64), Entered: 2, ProjectCommit: strings.Repeat("a", 40)}
 		}},
 		{name: "taken after last version entry", edit: func(r *madeFromRecord) {
-			r.Taken["design/types.go"] = madeFromVersion{Version: strings.Repeat("b", 64), Entered: 2}
+			r.Taken["design/types.go"] = madeFromTake{Version: strings.Repeat("b", 64), Entered: 2, ProjectCommit: strings.Repeat("a", 40)}
 		}},
 		{name: "taken after write", edit: func(r *madeFromRecord) {
-			r.Taken["design/types.go"] = madeFromVersion{Version: absentDesignVersion, Entered: 4}
+			r.Taken["design/types.go"] = madeFromTake{Version: absentDesignVersion, Entered: 4, ProjectCommit: strings.Repeat("a", 40)}
 		}},
 		{name: "invalid pending path", edit: func(r *madeFromRecord) {
-			r.Pending = &pendingDraftWrite{File: "../x.go", OutsideVersion: absentDesignVersion, Before: absentDesignVersion, Result: absentDesignVersion}
+			r.Pending = &pendingDraftWrite{File: "../x.go", OutsideVersion: absentDesignVersion, Before: absentDesignVersion, Result: absentDesignVersion, ProjectCommit: strings.Repeat("a", 40)}
 		}},
 		{name: "invalid pending before", edit: func(r *madeFromRecord) {
-			r.Pending = &pendingDraftWrite{File: "design/x.go", OutsideVersion: absentDesignVersion, Before: "", Result: absentDesignVersion}
+			r.Pending = &pendingDraftWrite{File: "design/x.go", OutsideVersion: absentDesignVersion, Before: "", Result: absentDesignVersion, ProjectCommit: strings.Repeat("a", 40)}
 		}},
 		{name: "drop lacks number", edit: func(r *madeFromRecord) {
 			r.Start.Dropped = &droppedBuild{ChangeID: "refund", StartedAt: time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)}

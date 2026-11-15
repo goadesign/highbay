@@ -901,9 +901,10 @@ func TestUnchangedConfirmationFromAnotherSessionKeepsRevision(t *testing.T) {
 	}
 	confirmed := send("first", raw)
 	saveStoredBuildFixture(t, cp, confirmed)
+	candidate := commitBuilderCandidateFixture(t, cp, confirmed)
 	first := WithPrincipal(t.Context(), Principal{ID: "owner", CallerID: "session-one", Kind: CallerUser})
-	target.report = passingReport(t, confirmed.RequestRevision, strings.Repeat("c", 40), spec)
-	approved, err := cp.ApproveMerge(first, &gensurla.ApproveMergePayload{ChangeID: confirmed.ChangeID, RequestRevision: confirmed.RequestRevision, CandidateCommit: strings.Repeat("c", 40), ReportDigest: target.report.Digest})
+	target.report = passingReport(t, confirmed.RequestRevision, candidate, spec)
+	approved, err := cp.ApproveMerge(first, &gensurla.ApproveMergePayload{ChangeID: confirmed.ChangeID, RequestRevision: confirmed.RequestRevision, CandidateCommit: candidate, ReportDigest: target.report.Digest})
 	require.NoError(t, err)
 	require.NotNil(t, approved.Approval)
 	payload.RequestRevision = approved.RequestRevision

@@ -479,7 +479,7 @@ func TestInitReadmeFirstRunSnippetsMatchTheProject(t *testing.T) {
 	// browser session may call confirm_intent, so the README never tells a
 	// reader to call it.
 	steps := between(t, readme, "For each change:", "## Change checkpoints")
-	assertInOrder(t, steps, "The guide", "`propose_change`", "You confirm it on the views page", "The builder", "`generate_code`", "`check_project`", "`update_dependencies`", "`read_check_output`", "The builder commits,", "`verify_change`", "operator tools", "surla verify")
+	assertInOrder(t, steps, "The guide", "`propose_change`", "You confirm it on the views page", "The builder", "`generate_code`", "`check_project`", "`update_dependencies`", "`read_check_output`", "The builder commits on its own branch,", "`verify_change`", "operator tools", "surla verify")
 	assert.NotContains(t, readme, "`confirm_intent`")
 	draft := between(t, readme, "To try prompt wording on a running", "the confirmed Change Card")
 	assertInOrder(t, draft, "builder calls `start_live_target`", "the builder writes", "`check_project`", "commits,", "`verify_change`")
@@ -495,7 +495,10 @@ func TestInitReadmeFirstRunSnippetsMatchTheProject(t *testing.T) {
 	require.NoError(t, err)
 	assert.Contains(t, string(evalAcceptance), `"missing_key_rejected"`)
 
-	assert.Contains(t, readme, "Surla reads this workspace's `design/*.go` privately")
+	assert.Contains(t, readme, "The guide writes only in the draft folder returned by `update_draft` or")
+	assert.Contains(t, readme, "The card saves that evaluated design\nand Story, not later project-folder edits.")
+	assert.Contains(t, readme, "The builder reads its new assignment before working in its own project")
+	assert.Contains(t, readme, "Surla commits the tests it accepts.")
 	assert.Contains(t, readme, "`story_refresh_op_id`")
 	assert.Contains(t, readme, "`request_revision`")
 

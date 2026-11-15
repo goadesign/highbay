@@ -1,9 +1,10 @@
 //go:build e2e && docker
 
 // This file drives the dependency-repair journey an agent follows on one
-// running server: build and test the working tree, add a dependency, repair
-// the module files and test again, through the authenticated MCP endpoint
-// and the local Docker engine, without restarting the server or committing.
+// running server: initialize and agree a build, read its builder assignment,
+// test that working copy, add a dependency, repair the module files and test
+// again, through authenticated MCP/HTTP and the local Docker engine. The
+// builder's edits remain uncommitted and the user's project stays unchanged.
 // It needs a running local Docker engine, so it builds only with the docker
 // tag as well: go test -tags e2e,docker.
 package main
@@ -24,6 +25,7 @@ import (
 	"github.com/stretchr/testify/require"
 	goahttp "goa.design/goa/v3/http"
 
+	genhttpclient "github.com/goadesign/surla/gen/http/surla/client"
 	genmcpclient "github.com/goadesign/surla/gen/jsonrpc/mcp_surla/client"
 	genmcpsurla "github.com/goadesign/surla/gen/mcp_surla"
 	gensurla "github.com/goadesign/surla/gen/surla"
@@ -57,9 +59,9 @@ func TestMatch(t *testing.T) {
 `
 )
 
-// Journey B: the root and eval modules each replace example.com/workdep
-// with a dependency-free base copy, so their own go.sum files need nothing
-// for it. go.work replaces the same module with a workspace copy whose
+// Journey B: the builder's root module replaces example.com/workdep with a
+// dependency-free base copy, so its go.sum needs nothing for it. go.work
+// replaces the same module with a workspace copy whose
 // identical API imports rsc.io/qr v0.2.0. Only the workspace graph needs
 // rsc.io/qr, so its checksums can come only from go.work.sum: the read-only
 // check must fail on writing go.work.sum, and update_dependencies must write
@@ -103,9 +105,10 @@ func TestName(t *testing.T) {
 
 // TestCheckProjectRepairsDependenciesOnOneServer initializes a starter
 // through MCP, then runs the missing go.sum and go.work workspace journeys
-// against the same running server and the local Docker engine. The server is
-// the embedded composition root (serveOptions and controlplane.New), not the
-// standalone surla serve process.
+// against the same running server, numbered builder copy and local Docker
+// engine. The server uses serveOptions and controlplane.New; only agent-window
+// effects use the existing test host. User approval/build use generated HTTP,
+// and guide/builder actions use MCP. It does not start standalone surla serve.
 func TestCheckProjectRepairsDependenciesOnOneServer(t *testing.T) {
 	isolateLocalWork(t)
 	t.Setenv("GIT_CONFIG_GLOBAL", os.DevNull)
@@ -123,6 +126,8 @@ func TestCheckProjectRepairsDependenciesOnOneServer(t *testing.T) {
 	require.NoError(t, err)
 	// A test executable has no released module version in its build info.
 	opts.SurlaVersion = starterSurlaVersion
+	team := &promotionTeamFixture{}
+	opts.Team = &controlplane.TeamBinding{Owner: "operator@example.com", Service: team}
 	cp, err := controlplane.New(opts)
 	require.NoError(t, err)
 	_, err = cp.ConfigureModel(controlplane.WithPrincipal(t.Context(), controlplane.Principal{ID: "operator@example.com", CallerID: "user", Kind: controlplane.CallerUser}), &gensurla.ConfigureModelPayload{GatewayAddr: &gatewayAddr})
@@ -139,12 +144,33 @@ func TestCheckProjectRepairsDependenciesOnOneServer(t *testing.T) {
 	transport := genmcpclient.NewClient(serverURL.Scheme, serverURL.Host, &bearerDoer{client: srv.Client(), token: "test-token"},
 		goahttp.RequestEncoder, goahttp.ResponseDecoder, false)
 	client := &genmcpsurla.Client{ToolsCallEndpoint: transport.ToolsCall()}
+	userTransport := genhttpclient.NewClient(serverURL.Scheme, serverURL.Host,
+		&bearerDoer{client: srv.Client(), token: "test-token"},
+		goahttp.RequestEncoder, goahttp.ResponseDecoder, false)
+	user := &gensurla.Client{
+		ConfirmIntentEndpoint: userTransport.ConfirmIntent(), StartBuildEndpoint: userTransport.StartBuild(),
+	}
 
 	args, err := gensurla.EncodeInitProjectPayload(&gensurla.InitProjectPayload{ModulePath: "example.com/shop"})
 	require.NoError(t, err)
 	initialized, err := gensurla.DecodeInitProjectResult(journeyCall(t, client, "init_project", args))
 	require.NoError(t, err)
-	dir := initialized.Dir
+	project := initialized.Dir
+	assignment := journeyBuild(t, client, user)
+	dir := assignment.WorkingFolder
+	require.NotEqual(t, project, dir, "the builder acts in its assignment, not the user's project")
+	require.True(t, team.registered.Load(), "StartBuild registered the real worker folders")
+	require.True(t, assignment.Read)
+	originalManifests := map[string]string{}
+	for _, name := range []string{"go.mod", "go.sum", "eval/go.mod", "eval/go.sum"} {
+		originalManifests[name] = readJourneyFile(t, filepath.Join(project, filepath.FromSlash(name)))
+	}
+	// This untracked file is outside the builder's grant. A check that reads
+	// the original project or lets Go search above the copy cannot pass.
+	const outsideWork = "the enclosing project's go.work must never be read\n"
+	writeJourneyFile(t, filepath.Join(project, "go.work"), outsideWork)
+	copyEvalMod := readJourneyFile(t, filepath.Join(dir, "eval", "go.mod"))
+	copyEvalSum := readJourneyFile(t, filepath.Join(dir, "eval", "go.sum"))
 
 	t.Run("the initialized starter passes", func(t *testing.T) {
 		res := journeyCheck(t, client)
@@ -173,27 +199,23 @@ func TestCheckProjectRepairsDependenciesOnOneServer(t *testing.T) {
 	})
 
 	t.Run("workspace-only checksums are repaired into go.work.sum", func(t *testing.T) {
-		evalDir := filepath.Join(dir, "eval")
 		writeJourneyFile(t, filepath.Join(dir, "testdata", "deps", "base", "go.mod"), workdepModule)
 		writeJourneyFile(t, filepath.Join(dir, "testdata", "deps", "base", "workdep.go"), workdepBase)
 		writeJourneyFile(t, filepath.Join(dir, "testdata", "deps", "workspace", "go.mod"), workdepModule+"\nrequire rsc.io/qr v0.2.0\n")
 		writeJourneyFile(t, filepath.Join(dir, "testdata", "deps", "workspace", "workdep.go"), workdepWorkspace)
 		appendFile(t, filepath.Join(dir, "go.mod"), workdepRequire+"\nreplace example.com/workdep => ./testdata/deps/base\n")
-		appendFile(t, filepath.Join(evalDir, "go.mod"), workdepRequire+"\nreplace example.com/workdep => ../testdata/deps/base\n")
 		writeJourneyFile(t, filepath.Join(dir, "workdepcheck", "name_test.go"), workdepTest)
-		writeJourneyFile(t, filepath.Join(evalDir, "workdepcheck", "name_test.go"), workdepTest)
 
-		// Standalone, each module resolves workdep to the base copy and
-		// passes with its current files.
+		// Without go.work, the builder's module resolves workdep to the base
+		// copy and passes. The test writer's eval/ remains untouched.
 		standalone := journeyCheck(t, client)
 		require.True(t, standalone.Passed, "premise: the modules pass without the workspace: %s", standalone.Message)
-		for _, sum := range []string{filepath.Join(dir, "go.sum"), filepath.Join(evalDir, "go.sum")} {
-			require.NotContains(t, readJourneyFile(t, sum), qrModule, "premise: %s has no checksum for the workspace-only module", sum)
-		}
+		require.NotContains(t, readJourneyFile(t, filepath.Join(dir, "go.sum")), qrModule,
+			"premise: the module has no checksum for the workspace-only dependency")
 		require.NoFileExists(t, filepath.Join(dir, "go.work.sum"))
 
 		goWork := "go " + goVersion(t, filepath.Join(dir, "go.mod")) +
-			"\n\nuse (\n\t.\n\t./eval\n)\n\nreplace example.com/workdep => ./testdata/deps/workspace\n"
+			"\n\nuse .\n\nreplace example.com/workdep => ./testdata/deps/workspace\n"
 		writeJourneyFile(t, filepath.Join(dir, "go.work"), goWork)
 
 		failed := journeyCheck(t, client)
@@ -213,6 +235,62 @@ func TestCheckProjectRepairsDependenciesOnOneServer(t *testing.T) {
 		assert.True(t, passed.Passed, passed.Message)
 		assertUncommitted(t, dir, "go.work", "go.work.sum", "testdata/deps/", "workdepcheck/")
 	})
+	for name, want := range originalManifests {
+		assert.Equal(t, want, readJourneyFile(t, filepath.Join(project, filepath.FromSlash(name))), name)
+	}
+	assert.Equal(t, outsideWork, readJourneyFile(t, filepath.Join(project, "go.work")))
+	assert.NoFileExists(t, filepath.Join(project, "go.work.sum"))
+	assert.Equal(t, copyEvalMod, readJourneyFile(t, filepath.Join(dir, "eval", "go.mod")))
+	assert.Equal(t, copyEvalSum, readJourneyFile(t, filepath.Join(dir, "eval", "go.sum")))
+}
+
+// journeyBuild adopts the guide's real evaluated snapshot, starts the user's
+// build through its generated HTTP endpoint, then reads the builder assignment
+// through MCP. It seeds no stored operation, revision, or working-copy state.
+func journeyBuild(
+	t *testing.T, client *genmcpsurla.Client, user *gensurla.Client,
+) *gensurla.BuilderAssignment {
+	t.Helper()
+	refreshCtx, cancelRefresh := context.WithTimeout(t.Context(), journeyCallTimeout)
+	defer cancelRefresh()
+	refresh := trustedSuiteRefresh(t, refreshCtx, client)
+	args, err := gensurla.EncodeProposeChangePayload(&gensurla.ProposeChangePayload{
+		ChangeID: "dependency-repair", Prompt: "Keep the shop working while checking new Go dependencies.",
+		StoryRefreshOpID: refresh.OpID,
+		Analysis: &gensurla.CP1Analysis{
+			Summary:     "Preserve the shop's behavior while building and testing with new Go dependencies.",
+			Ambiguities: []*gensurla.CP1AnalysisAmbiguity{},
+			Examples: []*gensurla.CP1AnalysisExample{{
+				Scenario: "Existing shop behavior", InputSummary: "Run the shop's existing tests.",
+				ExpectedOutcome: "Every existing test passes.", VerificationKind: "deterministic",
+			}},
+			PreservedBehaviors: []string{"The initialized shop's existing API and tests keep working."},
+		},
+	})
+	require.NoError(t, err)
+	proposed, err := gensurla.DecodeChangeCardResult(journeyCall(t, client, "propose_change", args))
+	require.NoError(t, err)
+	confirmCtx, cancelConfirm := context.WithTimeout(t.Context(), journeyCallTimeout)
+	defer cancelConfirm()
+	confirmed, err := user.ConfirmIntent(confirmCtx, &gensurla.ConfirmIntentPayload{
+		ChangeID: proposed.ChangeID, RequestRevision: proposed.RequestRevision,
+		Answers: map[string]string{}, Examples: proposed.Examples,
+	})
+	require.NoError(t, err)
+	buildCtx, cancelBuild := context.WithTimeout(t.Context(), journeyCallTimeout)
+	defer cancelBuild()
+	started, err := user.StartBuild(buildCtx, &gensurla.StartBuildPayload{
+		ChangeID: confirmed.ChangeID, RequestRevision: confirmed.RequestRevision,
+	})
+	require.NoError(t, err)
+	require.Equal(t, confirmed.RequestRevision, started.Build.RequestRevision)
+	args, err = json.Marshal(map[string]string{"change_id": confirmed.ChangeID})
+	require.NoError(t, err)
+	assignment, err := gensurla.DecodeBuilderAssignment(
+		journeyCall(t, client, "get_builder_assignment", args))
+	require.NoError(t, err)
+	require.Equal(t, confirmed.RequestRevision, assignment.RequestRevision)
+	return assignment
 }
 
 // journeyCall runs one MCP tool call that must complete without a tool error

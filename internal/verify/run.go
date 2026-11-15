@@ -1,6 +1,7 @@
 package verify
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -186,15 +187,17 @@ func IsCommitID(commit string) bool {
 // the CP4 report bound to everything that was tested. The report is also
 // written to ReportDir as <digest>.json.
 //
-// Both builds go through candidate.Build offline: they download nothing
+// Both builds compile offline through candidate: they download nothing
 // (GOPROXY=off, -mod=readonly) and use the toolchain and module cache
 // prepareBuild resolved. A build is an ordinary process of the user, so a
 // committed link or replace directive that leaves the checkout reads the
 // user's files; the suite's module may replace sibling modules in its own
 // checkout. Run refuses a WorkDir that already has contents. The suite is
-// checked out only after the candidate is built. Every command's
-// output goes to files under WorkDir/evidence; errors quote only a bounded
-// excerpt.
+// checked out only after the candidate is built. Workspace settings and
+// workspace package-loading output are discarded because they may contain
+// operator secrets. Standalone module downloads keep private evidence files,
+// but errors only name those files, never quote their output. Other commands
+// keep evidence with bounded error excerpts.
 //
 // Run starts its builds, the suite and the candidates the suite runs in the
 // caller's process group and does not stop processes they leave behind: its
@@ -301,7 +304,8 @@ func Prepare(ctx context.Context, p Plan) (Prepared, error) {
 			return Prepared{}, stageError(StageCheckout, "The candidate commit does not contain a configured binary package.", fmt.Errorf("binary %q package %q: %w", name, pkg, err))
 		}
 	}
-	toolchain, err := r.prepareBuild(ctx, "candidate", moduleDir, moduleDir, p.WorkDir)
+	toolchain, err := r.prepareBuild(ctx, "candidate", candidateDir, moduleDir, p.WorkDir,
+		slices.Sorted(maps.Values(p.Binaries)))
 	if err != nil {
 		return Prepared{}, stageError(StageBuild, summaryCandidateBuild, err)
 	}
@@ -310,7 +314,7 @@ func Prepare(ctx context.Context, p Plan) (Prepared, error) {
 		out := filepath.Join(candidateBinDir, name)
 		logFile := filepath.Join(r.evidenceDir, "build-"+name+".log")
 		if err := candidate.Build(ctx, candidate.BuildSpec{
-			SourceDir: moduleDir, ModuleDir: moduleDir, Package: p.Binaries[name], Out: out,
+			SourceDir: candidateDir, ModuleDir: moduleDir, Package: p.Binaries[name], Out: out,
 			GOROOT: toolchain.goroot, ModCache: toolchain.modCache, WorkDir: toolchain.workDir,
 			LogFile: logFile,
 		}, (*exec.Cmd).Run); err != nil {
@@ -338,15 +342,24 @@ func Prepare(ctx context.Context, p Plan) (Prepared, error) {
 	if _, err := resolveInside(suiteModuleDir, p.SuiteCommand); err != nil {
 		return Prepared{}, stageError(StageCheckout, summaryPlan, fmt.Errorf("suite command %q: %w", p.SuiteCommand, err))
 	}
-	suiteToolchain, err := r.prepareBuild(ctx, "suite", suiteDir, suiteModuleDir, p.WorkDir)
+	// Written tests are an independent module. Stored evaluators retain the
+	// checkout's workspace for lookup, download and compile alike.
+	buildSuite := candidate.BuildModule
+	var suiteToolchain buildToolchain
+	if p.Tests == TestsWritten {
+		suiteToolchain, err = r.prepareGoBuild(ctx, "suite", suiteModuleDir, p.WorkDir, "off", []string{p.SuiteCommand})
+	} else {
+		suiteToolchain, err = r.prepareBuild(ctx, "suite", suiteDir, suiteModuleDir, p.WorkDir, []string{p.SuiteCommand})
+		buildSuite = candidate.Build
+	}
 	if err != nil {
 		return Prepared{}, stageError(StageBuild, summarySuiteBuild, err)
 	}
-	// The suite builds the same way as the candidate; its module may replace
-	// sibling modules in its checkout.
+	// Keep the full checkout for both sources, including local replacements
+	// into sibling modules, even when the written test module ignores go.work.
 	suiteBin := filepath.Join(suiteBinDir, "suite")
 	suiteLog := filepath.Join(r.evidenceDir, "build-suite.log")
-	if err := candidate.Build(ctx, candidate.BuildSpec{
+	if err := buildSuite(ctx, candidate.BuildSpec{
 		SourceDir: suiteDir, ModuleDir: suiteModuleDir, Package: p.SuiteCommand, Out: suiteBin,
 		GOROOT: suiteToolchain.goroot, ModCache: suiteToolchain.modCache, WorkDir: suiteToolchain.workDir,
 		LogFile: suiteLog,
@@ -554,6 +567,26 @@ func (r *runner) run(ctx context.Context, label, dir string, env []string, name 
 	return nil
 }
 
+// downloadModule keeps standalone dependency diagnostics private. Go may
+// print a proxy's username/path or an invalid GOFLAGS value, so only the fixed
+// operation, typed process error and private filename leave this owner.
+func (r *runner) downloadModule(ctx context.Context, label, dir string, env []string) error {
+	name := "go-mod-download-" + label
+	stdout, stderr, err := r.outputs(name)
+	if err != nil {
+		return err
+	}
+	defer stdout.Close()
+	defer stderr.Close()
+	cmd := exec.CommandContext(ctx, "go", "mod", "download")
+	cmd.Dir, cmd.Env = dir, env
+	cmd.Stdout, cmd.Stderr = stdout, stderr
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("%s: %w; diagnostic output is private in %s", name, err, stderr.Name())
+	}
+	return nil
+}
+
 // outputs creates the evidence files for one command.
 func (r *runner) outputs(label string) (*os.File, *os.File, error) {
 	stdout, err := os.Create(filepath.Join(r.evidenceDir, label+".stdout"))
@@ -574,43 +607,125 @@ func (r *runner) excerpt(label string) string {
 	return excerptFile(filepath.Join(r.evidenceDir, label+".stderr"), "stderr")
 }
 
-// prepareBuild resolves the toolchain the module at moduleDir selects and
-// downloads its module dependencies for the build named label ("candidate" or
-// "suite") of that module from the source root sourceDir. These steps fetch
-// checksum-verified modules and official toolchains and compile or execute no
-// checked-out code; the build afterwards downloads nothing (GOPROXY=off).
-// Both commands get the GOWORK value the build will have (candidate.GoWork),
-// so the download fetches the modules the build selects. Evidence files and
-// the build home are named by label so the two builds never share them. Go
-// runs git to fetch a module straight from version control, so both commands
-// run without the variables that point git at another repository
-// (gitenv.WithoutRedirects); the user's module, proxy, protocol and
-// credential settings stay.
-func (r *runner) prepareBuild(ctx context.Context, label, sourceDir, moduleDir, workDir string) (buildToolchain, error) {
+// prepareBuild selects the checkout's workspace and prepares exactly packages,
+// the configured compile targets, with the operator's download settings.
+// A plan with no candidate targets still resolves its toolchain but loads no
+// workspace package. The following offline builds download nothing.
+func (r *runner) prepareBuild(
+	ctx context.Context, label, sourceDir, moduleDir, workDir string, packages []string,
+) (buildToolchain, error) {
 	goWork, err := candidate.GoWork(sourceDir, moduleDir)
 	if err != nil {
 		return buildToolchain{}, fmt.Errorf("find the %s build's workspace: %w", label, err)
 	}
-	env := append(gitenv.WithoutRedirects(os.Environ()), "GOWORK="+goWork)
-	if err := r.run(ctx, "go-mod-download-"+label, moduleDir, env, "go", "mod", "download"); err != nil {
-		return buildToolchain{}, fmt.Errorf("download %s modules: %w", label, err)
+	return r.prepareGoBuild(ctx, label, moduleDir, workDir, goWork, packages)
+}
+
+// prepareGoBuild keeps standalone module downloads unchanged. In a workspace,
+// Go 1.27.3's bare module download expands the module graph, including declared
+// versions that a workspace's local modules override for package builds:
+// https://go.dev/ref/mod#go-mod-download. Loading the configured packages with
+// -deps instead fetches their compile dependencies, without unrelated packages
+// or tests: https://pkg.go.dev/cmd/go@go1.27.3#hdr-List_packages_or_modules.
+// This parses sources reached through local replacements, including outside
+// the checkout, where module download only read go.mod. It compiles or executes
+// no checked-out code.
+func (r *runner) prepareGoBuild(
+	ctx context.Context, label, moduleDir, workDir, goWork string, packages []string,
+) (buildToolchain, error) {
+	var toolchain buildToolchain
+	if goWork == "off" {
+		env := append(gitenv.WithoutRedirects(os.Environ()), "GOWORK=off")
+		if err := r.downloadModule(ctx, label, moduleDir, env); err != nil {
+			return buildToolchain{}, fmt.Errorf("download %s modules: %w", label, err)
+		}
+		if err := r.run(ctx, "go-env-"+label, moduleDir, env, "go", "env", "GOROOT", "GOMODCACHE"); err != nil {
+			return buildToolchain{}, fmt.Errorf("resolve %s toolchain: %w", label, err)
+		}
+		out, err := os.ReadFile(filepath.Join(r.evidenceDir, "go-env-"+label+".stdout"))
+		if err != nil {
+			return buildToolchain{}, fmt.Errorf("read toolchain: %w", err)
+		}
+		lines := strings.Fields(string(out))
+		if len(lines) != 2 {
+			return buildToolchain{}, fmt.Errorf("unexpected go env output %q", out)
+		}
+		toolchain.goroot, toolchain.modCache = lines[0], lines[1]
+	} else {
+		var env []string
+		var err error
+		toolchain, env, err = workspaceBuildEnvironment(ctx, label, moduleDir, goWork)
+		if err != nil {
+			return buildToolchain{}, err
+		}
+		if len(packages) > 0 {
+			args := append([]string{"list", "-deps"}, packages...)
+			cmd := exec.CommandContext(ctx, filepath.Join(toolchain.goroot, "bin", "go"), args...)
+			cmd.Dir, cmd.Env = moduleDir, env
+			// Like the written-test dependency owner, withhold network command
+			// output: proxy and credential helpers may print operator secrets.
+			cmd.Stdout, cmd.Stderr = io.Discard, io.Discard
+			if err := cmd.Run(); err != nil {
+				return buildToolchain{}, fmt.Errorf("download %s modules: %w", label, err)
+			}
+		}
 	}
-	if err := r.run(ctx, "go-env-"+label, moduleDir, env, "go", "env", "GOROOT", "GOMODCACHE"); err != nil {
-		return buildToolchain{}, fmt.Errorf("resolve %s toolchain: %w", label, err)
-	}
-	out, err := os.ReadFile(filepath.Join(r.evidenceDir, "go-env-"+label+".stdout"))
-	if err != nil {
-		return buildToolchain{}, fmt.Errorf("read toolchain: %w", err)
-	}
-	lines := strings.Fields(string(out))
-	if len(lines) != 2 {
-		return buildToolchain{}, fmt.Errorf("unexpected go env output %q", out)
-	}
-	t := buildToolchain{goroot: lines[0], modCache: lines[1], workDir: filepath.Join(workDir, "build-home-"+label)}
-	if err := os.MkdirAll(t.workDir, 0o700); err != nil {
+	toolchain.workDir = filepath.Join(workDir, "build-home-"+label)
+	if err := os.MkdirAll(toolchain.workDir, 0o700); err != nil {
 		return buildToolchain{}, fmt.Errorf("create build home: %w", err)
 	}
-	return t, nil
+	return toolchain, nil
+}
+
+// workspaceBuildEnvironment resolves the operator's toolchain and effective
+// download policy through Go itself. Credential-bearing JSON stays in memory:
+// it is never runner evidence, a log or an error. The selected binary then uses
+// the same native/default compiler selectors as candidate.Build, with workspaces
+// on, cgo off and read-only manifests. HOME, XDG and credential helpers remain;
+// GOENV is disabled only after its effective download settings are retained.
+func workspaceBuildEnvironment(
+	ctx context.Context, label, moduleDir, goWork string,
+) (buildToolchain, []string, error) {
+	keys := []string{
+		"GOROOT", "GOMODCACHE", "GOPATH", "GOPROXY", "GOSUMDB", "GOPRIVATE",
+		"GONOPROXY", "GONOSUMDB", "GOINSECURE", "GOVCS", "GOAUTH", "GOTOOLCHAIN",
+	}
+	operatorEnv := append(gitenv.WithoutRedirects(os.Environ()), "GOWORK="+goWork)
+	cmd := exec.CommandContext(ctx, "go", append([]string{"env", "-json"}, keys...)...)
+	cmd.Dir, cmd.Env, cmd.Stderr = moduleDir, operatorEnv, io.Discard
+	var output bytes.Buffer
+	defer func() {
+		clear(output.Bytes())
+		output.Reset()
+	}()
+	cmd.Stdout = &output
+	if err := cmd.Run(); err != nil {
+		return buildToolchain{}, nil, fmt.Errorf("resolve %s toolchain: %w", label, err)
+	}
+	var settings map[string]string
+	decodeErr := json.Unmarshal(output.Bytes(), &settings)
+	clear(output.Bytes())
+	output.Reset()
+	if decodeErr != nil || settings["GOROOT"] == "" || settings["GOMODCACHE"] == "" {
+		return buildToolchain{}, nil, fmt.Errorf("resolve %s toolchain: invalid Go settings output", label)
+	}
+	// These selectors are absent from candidate.Build's explicit environment.
+	// Removing them and GOENV lets this selected Go binary own their defaults;
+	// an empty override alone would fall through to the persisted user file.
+	env := gitenv.WithoutRedirects(operatorEnv,
+		"GOENV", "GO111MODULE", "GOOS", "GOARCH", "GOAMD64", "GOARM", "GOARM64",
+		"GO386", "GOMIPS", "GOMIPS64", "GOPPC64", "GORISCV64", "GOWASM",
+		"GOEXPERIMENT", "GOFIPS140", "GODEBUG", "GOFLAGS", "CGO_ENABLED",
+	)
+	for _, key := range keys {
+		if key != "GOTOOLCHAIN" {
+			env = append(env, key+"="+settings[key])
+		}
+	}
+	// The initial lookup honors toolchain policy. Pin its resolved binary now,
+	// as compilation does, so package loading cannot select another toolchain.
+	env = append(env, "GOENV=off", "CGO_ENABLED=0", "GOFLAGS=-mod=readonly", "GOTOOLCHAIN=local")
+	return buildToolchain{goroot: settings["GOROOT"], modCache: settings["GOMODCACHE"]}, env, nil
 }
 
 // excerptFile returns the end of the evidence file at path, described as

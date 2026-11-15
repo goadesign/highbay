@@ -3,11 +3,9 @@
 package controlplane
 
 import (
-	"context"
 	"path/filepath"
 	"testing"
 	"testing/fstest"
-	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -63,22 +61,26 @@ func TestGenerateCodeKeepsTheStoryTablesTests(t *testing.T) {
 		"design/design.go":        storySuiteDesign,
 		designeval.StoryTestsPath: string(table),
 	}))
+	projectEval := generationFiles(t, workspace, "eval")
+	commitGenerationProject(t, workspace)
 	cp := newControlPlane(t, Options{
 		WorkspaceDir: workspace, CardsDir: t.TempDir(),
 		Evaluator: designeval.NewEvaluatorInDir(t.TempDir()),
+		Team:      &TeamBinding{Owner: "developer@example.com", Service: &teamServiceFixture{}},
 	})
-	ctx, cancel := context.WithTimeout(t.Context(), 3*time.Minute)
-	defer cancel()
+	_, assignment := generationNativeBuild(t, cp)
+	working := assignment.WorkingFolder
 	eval := "eval"
 	res, err := cp.GenerateCode(
-		WithPrincipal(ctx, Principal{ID: "developer@example.com", CallerID: "developer@example.com", Kind: CallerUser}),
+		WithPrincipal(generationRequest(t), Principal{ID: "developer@example.com", CallerID: "developer@example.com", Kind: CallerBuilder}),
 		&gensurla.GenerateCodePayload{Target: &eval},
 	)
 	require.NoError(t, err)
 	const suite = "gen/evals/orders_acceptance/suite.go"
 	assert.Contains(t, res.FilesWritten, suite)
-	assert.Contains(t, generationFiles(t, filepath.Join(workspace, "eval"), "gen")[suite],
+	assert.Contains(t, generationFiles(t, filepath.Join(working, "eval"), "gen")[suite],
 		"RefundOverLimit(context.Context) (eval.Result, error)", "the table's flow stays a scenario of the suite")
-	assert.Equal(t, string(table), generationFiles(t, filepath.Join(workspace, "eval"), "design")[designeval.StoryTestsPath],
+	assert.Equal(t, string(table), generationFiles(t, filepath.Join(working, "eval"), "design")[designeval.StoryTestsPath],
 		"generation leaves the table as it is")
+	assert.Equal(t, projectEval, generationFiles(t, workspace, "eval"), "the original test module is untouched")
 }

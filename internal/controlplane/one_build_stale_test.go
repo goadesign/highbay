@@ -45,6 +45,7 @@ func TestOneBuildLateConsumersPreserveTheNewOpenRecord(t *testing.T) {
 		newer.TestWriter = testWriterAssignment{State: testsAssigned}
 		require.NoError(t, cp.cards.saveOpenBuild(newer))
 	}()
+	makeBuildFixtureBuilderCopy(t, cp)
 	before := readBuildFile(t, cp, "y")
 	checker := newReportChecker(cp)
 	oldReport := reportIdentityOf(old)
@@ -65,7 +66,9 @@ func TestOneBuildLateConsumersPreserveTheNewOpenRecord(t *testing.T) {
 			assertRefused(t, err, "not_found")
 		}},
 		{name: "report still belongs", run: func(t *testing.T) {
+			cp.mu.RLock()
 			answers, err := checker.answersTo(oldReport)
+			cp.mu.RUnlock()
 			require.NoError(t, err)
 			assert.False(t, answers)
 		}},

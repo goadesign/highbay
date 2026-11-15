@@ -1,4 +1,4 @@
-// This file implements check_project: copy the active workspace's live grant
+// This file implements check_project: copy the builder's working-copy grant
 // into a per-operation directory and run go test ./... for every builder-owned
 // workspace module in Linux containers (leaving out the starter test module
 // eval when the project's tests belong to the test writer), after downloading
@@ -117,24 +117,25 @@ const (
 	containerWork = "/work"
 )
 
-// CheckProject copies the active workspace's live files into a protected
+// CheckProject copies the open build's builder working files into a protected
 // per-operation copy and runs go test ./... for every Go module in it in
 // Linux containers (except the starter test module eval when the project has no
 // stored verification settings, because those tests belong to the test writer),
 // never changing the workspace. The work runs in a check helper process that
 // finishes and cleans up the operation even if this server dies. It requires an
-// authenticated principal.
+// authenticated principal and a read assignment for the open build. The builder
+// turn remains reserved until the helper finishes its operation and cleanup.
 func (c *ControlPlane) CheckProject(ctx context.Context) (res *gensurla.CheckProjectResult, retErr error) {
 	if _, ok := PrincipalFromContext(ctx); !ok {
 		return nil, errors.New("authenticated principal is required")
 	}
 	ctx, span := c.tracer("surla/controlplane").Start(ctx, "surla.controlplane.check_project")
 	if err := c.admitCheckOperation(); err != nil {
-		endCheckSpan(span, err)
+		endCheckRequestSpan(span, err)
 		return nil, err
 	}
 	defer func() {
-		endCheckSpan(span, retErr)
+		endCheckRequestSpan(span, retErr)
 		c.checkOps.Done()
 	}()
 	ctx, cancel := c.checkDeadline(ctx)
@@ -152,7 +153,7 @@ func (c *ControlPlane) CheckProject(ctx context.Context) (res *gensurla.CheckPro
 // read lock of workspaceMu, which Close takes exclusively after canceling
 // serverCtx: an operation admitted before that point is registered before
 // Close waits on checkOps, and every later one sees serverCtx ended. Admitted
-// operations still run concurrently.
+// operations reserve the builder copy separately and refuse a busy copy.
 func (c *ControlPlane) admitCheckOperation() error {
 	if c.checker == nil || c.checkWorkDir == "" {
 		return gensurla.MakeNotImplemented(errors.New("check_project is not configured on this server"))
@@ -730,6 +731,16 @@ func clipText(s string, n int) string {
 		k--
 	}
 	return s[:k] + more
+}
+
+// endCheckRequestSpan keeps expected worker refusals on the request's normal
+// outcome path. Internal helper and cleanup spans still record actual errors.
+func endCheckRequestSpan(span trace.Span, err error) {
+	if expectedRequestRefusal(err) {
+		span.End()
+		return
+	}
+	endCheckSpan(span, err)
 }
 
 // endCheckSpan records a failed operation's error with error status and

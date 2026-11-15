@@ -12,6 +12,7 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -54,22 +55,25 @@ type blockedCheckExport struct {
 // TestCloseKeepsTracingUntilCheckRequestEnds proves that Close waits for a
 // check's final error span, even when setup fails before opening an engine.
 func TestCloseKeepsTracingUntilCheckRequestEnds(t *testing.T) {
-	deadline, cancel := context.WithTimeout(t.Context(), 5*time.Second)
-	defer cancel()
 	cardsDir := filepath.Join(t.TempDir(), "cards")
 	release := make(chan struct{})
 	exported := &blockedCheckExport{
 		InMemoryExporter: tracetest.NewInMemoryExporter(),
 		started:          make(chan struct{}),
 		release:          release,
-		deadline:         deadline,
 	}
 	tp := sdktrace.NewTracerProvider(sdktrace.WithSyncer(exported))
 	cp, err := New(Options{
-		CardsDir: cardsDir, Checker: candidate.NewContainerRunner(), CheckHelper: testCheckHelper(t), CheckTimeout: time.Minute,
+		CardsDir: cardsDir, WorkspaceDir: newShopModule(t, nil),
+		Checker: candidate.NewContainerRunner(), CheckHelper: testCheckHelper(t), CheckTimeout: time.Minute,
 		TracerProvider: tp,
 	})
 	require.NoError(t, err)
+	readCheckBuilderFixture(t, cp)
+	cp.checkHelper = func() *exec.Cmd { return exec.Command(filepath.Join(cardsDir, "missing-helper")) }
+	deadline, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+	defer cancel()
+	exported.deadline = deadline
 	previous := otel.GetTracerProvider()
 	otel.SetTracerProvider(tp)
 	t.Cleanup(func() {
@@ -102,7 +106,7 @@ func TestCloseKeepsTracingUntilCheckRequestEnds(t *testing.T) {
 	close(release)
 	select {
 	case err := <-requestDone:
-		assertServiceError(t, err, "not_implemented")
+		assert.ErrorContains(t, err, "start the check helper")
 	case <-deadline.Done():
 		t.Fatal("check did not finish")
 	}
@@ -112,7 +116,12 @@ func TestCloseKeepsTracingUntilCheckRequestEnds(t *testing.T) {
 	case <-deadline.Done():
 		t.Fatal("Close did not finish")
 	}
-	ended := exported.GetSpans()
+	var ended []tracetest.SpanStub
+	for _, span := range exported.GetSpans() {
+		if span.Name == "surla.controlplane.check_project" || span.Name == "surla.controlplane.recover_check_operations" {
+			ended = append(ended, span)
+		}
+	}
 	require.Len(t, ended, 3)
 	assert.Equal(t, "surla.controlplane.recover_check_operations", ended[0].Name)
 	assert.Equal(t, "surla.controlplane.check_project", ended[1].Name)

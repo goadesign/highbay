@@ -39,6 +39,9 @@ func TestBuilderOnlyBuildRequiresStoredSettings(t *testing.T) {
 			require.Len(t, owedWithStored.Unread, 1)
 			assert.Equal(t, "builder", owedWithStored.Unread[0].Role)
 			assert.NotContains(t, string(readBuildFile(t, cp, "chg")), "working_folder")
+			if roles == buildRolesBuilderAndTestWriter {
+				makeBuildFixtureBuilderCopy(t, cp)
+			}
 			require.NoError(t, cp.Close())
 
 			opts.Verification = nil

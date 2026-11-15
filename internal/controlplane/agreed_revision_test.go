@@ -57,7 +57,7 @@ func TestARevisionOfAnAgreedChangeWaitsAndTheAgreedRevisionStaysInForce(t *testi
 	})
 	require.NoError(t, err)
 	saveStoredBuildFixture(t, cp, agreed)
-	commit := strings.Repeat("1", 40)
+	commit := commitBuilderCandidateFixture(t, cp, agreed)
 	report := passingReport(t, agreed.RequestRevision, commit, spec)
 	target.update(func(p *pageTarget) { p.report = report })
 	approved, err := cp.ApproveMerge(agreedUser, &gensurla.ApproveMergePayload{
@@ -661,6 +661,7 @@ func TestBuildsFollowTheAgreedRevision(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, flowKeys(storySummaryItems(sampleAdoptedStories())), flowKeys(tests.Stories), "the build holds the agreed Story, not the proposal's")
 
+	makeBuildFixtureBuilderCopy(t, cp)
 	inForce := func() map[string]bool {
 		t.Helper()
 		build := mustStartedBuild(t, cp, agreedUser, "chg")

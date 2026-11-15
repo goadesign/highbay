@@ -26,7 +26,7 @@ type buildCopyFixture struct {
 	folder  string
 	prepare func(context.Context, []designeval.StorySummary) error
 	check   func(context.Context, []designeval.StorySummary) (testwriter.Verdict, error)
-	record  func(context.Context, testwriter.Verdict, string) (string, error)
+	record  func(context.Context, testwriter.Verdict, string, string) (string, error)
 }
 
 // Project is the test writer's independently assigned project folder.
@@ -54,9 +54,11 @@ func (f *buildCopyFixture) Check(
 }
 
 // Record runs the record hook, or returns a fixed commit.
-func (f *buildCopyFixture) Record(ctx context.Context, v testwriter.Verdict, _, message string) (string, error) {
+func (f *buildCopyFixture) Record(
+	ctx context.Context, v testwriter.Verdict, _, checkedTip, message string,
+) (string, error) {
 	if f.record != nil {
-		return f.record(ctx, v, message)
+		return f.record(ctx, v, checkedTip, message)
 	}
 	return strings.Repeat("a", 40), nil
 }
@@ -72,7 +74,6 @@ func newBuildControlPlane(t *testing.T, opts Options) *ControlPlane {
 	opts = buildFixtureOptions(t, opts)
 	cp := newControlPlane(t, opts)
 	cp.buildIdentityCheck = func(context.Context, string) error { return nil }
-
 	_, prefix, err := resolveStarterRepo(t.Context(), cp.activeWorkspaceDir)
 	require.NoError(t, err)
 	copy := &buildCopyFixture{folder: filepath.Join(cp.activeWorkspaceDir, testwriter.Folder, filepath.FromSlash(prefix))}
@@ -107,4 +108,20 @@ func buildFixtureOptions(t *testing.T, opts Options) Options {
 	}
 	ensureBuildFixtureRepository(t, opts.WorkspaceDir)
 	return opts
+}
+
+// makeBuildFixtureBuilderCopy supplies the real copy omitted by the simulated
+// Build factory. Consumers call it after Build and before an actual builder
+// assignment read, using the saved number and base without replacing the reader.
+func makeBuildFixtureBuilderCopy(t *testing.T, cp *ControlPlane) {
+	t.Helper()
+	cp.mu.RLock()
+	build, found, err := cp.cards.loadOpenBuild()
+	cp.mu.RUnlock()
+	require.NoError(t, err)
+	require.True(t, found, "the fixture must start its build before making its copy")
+	workspace, _, _ := cp.currentWorkspaceTarget()
+	_, err = testwriter.MakeCopy(t.Context(), workspace, testwriter.BuilderRole,
+		testwriter.BuilderRole.Branch(build.Number), build.Base)
+	require.NoError(t, err)
 }

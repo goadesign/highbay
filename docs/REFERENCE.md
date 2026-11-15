@@ -1206,6 +1206,16 @@ started with.
 
 ### Verification and approval
 
+#### Go workspace policy
+
+| Built source | Workspace selection for toolchain lookup, dependency download and compilation |
+| --- | --- |
+| Application binaries and tests, and suites from stored verification settings | Use the checkout's internal `go.work` when present; ignore a workspace above the checkout. |
+| Surla-written tests, both report checks and verification suites | Use `GOWORK=off`, including when `go.work` exists in the checkout root or the test module. The module's `go.mod` and `go.sum` own its dependencies. |
+
+Both policies keep the full checkout, including sibling files used by local
+module replacements.
+
 #### `verify_change`
 
 `POST /changes/{change_id}/verifications`. **Input:** `change_id`,
@@ -2054,6 +2064,21 @@ jobs for the control plane's page tests, its other tests, the design evaluator,
 and the remaining root packages. The page partition uses the same test-name
 pattern as the short checks; the remaining packages still run their own page
 tests.
+
+The **Full / docker-check** job also runs on pushes to `main`, `team-start`
+and `builder-copy`, nightly and on manual runs, on Ubuntu with its Docker
+engine. It executes the dependency-repair journey through one project server:
+the initialized builder copy passes, missing `go.sum` entries are repaired,
+and workspace-only checksums are repaired into `go.work.sum`, while the user's
+project stays unchanged. It uses `-tags=e2e,docker` and selects
+`TestCheckProjectRepairsDependenciesOnOneServer`; pull requests do not run it.
+The package alarm is 40 minutes and the job backstop is 50 minutes, including
+cold compilation and downloads. These are execution bounds, not measured
+completion times. To run the journey locally with a running Docker engine:
+
+```bash
+go test -race -count=1 -timeout 40m -tags=e2e,docker -run '^TestCheckProjectRepairsDependenciesOnOneServer$' ./cmd/surla
+```
 
 All full suites run nightly at 07:17 UTC and on a manual **Run workflow**
 request (`CI=true gh workflow run ci.yml --ref <branch> </dev/null`). This adds

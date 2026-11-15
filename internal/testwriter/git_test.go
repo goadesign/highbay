@@ -56,7 +56,7 @@ func TestSnapshotAndRecordUseTheProjectsRepository(t *testing.T) {
 			tree, err := writeTree(t.Context(), wc, index, src)
 			require.NoError(t, err)
 			assert.NoFileExists(t, marker, "no program named inside the copy runs while snapshotting")
-			commit, err := Record(t.Context(), Verdict{copy: wc, tree: tree}, branch, "Add the accepted tests")
+			commit, err := Record(t.Context(), Verdict{copy: wc, tree: tree}, branch, runGit(t, repo, "rev-parse", branch), "Add the accepted tests")
 			require.NoError(t, err)
 
 			assert.NoFileExists(t, marker, "no program named inside the copy runs while recording")
@@ -128,7 +128,7 @@ func TestRecordHoldsEveryCompiledFile(t *testing.T) {
 			})
 			tree, err := writeTree(t.Context(), wc, index, src)
 			require.NoError(t, err)
-			commit, err := Record(t.Context(), Verdict{copy: wc, tree: tree}, branch, "Add the accepted tests")
+			commit, err := Record(t.Context(), Verdict{copy: wc, tree: tree}, branch, runGit(t, repo, "rev-parse", branch), "Add the accepted tests")
 			require.NoError(t, err)
 
 			compiled := snapshotFiles(t, src)

@@ -61,6 +61,7 @@ func TestOneBuildAdmissionHasNoEffectsWithoutCurrentConsent(t *testing.T) {
 	other, err := cp.GetBuild(user, &gensurla.GetBuildPayload{ChangeID: "y"})
 	require.NoError(t, err)
 	assert.Equal(t, gensurla.BuildKindNotStarted, other.Build.Kind())
+	makeBuildFixtureBuilderCopy(t, cp)
 	assignments, err := cp.ListBuilderAssignments(asCaller("alice@example.com", CallerBuilder))
 	require.NoError(t, err)
 	require.Len(t, assignments.Assignments, 1)
@@ -81,6 +82,7 @@ func TestOneBuildRestartKeepsItsNumberAndBase(t *testing.T) {
 	cp.mu.RUnlock()
 	require.NoError(t, err)
 	require.True(t, found)
+	makeBuildFixtureBuilderCopy(t, cp)
 	_, err = cp.GetBuilderAssignment(asCaller("alice@example.com", CallerBuilder), &gensurla.GetBuilderAssignmentPayload{ChangeID: "x"})
 	require.NoError(t, err)
 	restarted, err := cp.StartBuild(user, &gensurla.StartBuildPayload{
@@ -116,9 +118,9 @@ func TestOneBuildRefusesLegacyMetadataBeforeEffects(t *testing.T) {
 		return nil, nil
 	}
 	_, err := cp.StartBuild(asCaller("alice@example.com", CallerUser), &gensurla.StartBuildPayload{ChangeID: "old", RequestRevision: card.RequestRevision})
-	assertRefused(t, err, "unprocessable")
-	assert.ErrorContains(t, err, "refresh_story")
-	assert.ErrorContains(t, err, "revise_change")
+	assertRefused(t, err, "conflict")
+	assert.ErrorContains(t, err, "The agreed revision records no design")
+	assert.ErrorContains(t, err, "Ask the guide to propose a revision from its draft, adopt it, then build.")
 	_, statErr := os.Stat(filepath.Join(cp.cards.dir, openBuildRecordFile))
 	assert.ErrorIs(t, statErr, os.ErrNotExist)
 	read, err := cp.GetChange(asCaller("alice@example.com", CallerGuide), &gensurla.GetChangePayload{ChangeID: "old"})

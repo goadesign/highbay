@@ -36,7 +36,7 @@ func TestTeamWrittenRosterClosedContract(t *testing.T) {
 	raw, err := os.ReadFile(filepath.Join(deps.RosterDirectory, team.Space+".json"))
 	require.NoError(t, err)
 	handle := "guide-" + state.Record.ID[:12]
-	message := "Work through the Story and the change with the user in this project's pane. Use your surla connection, starting with the surla://golden-path guidance resource and list_changes/get_change. Only the user confirms intent and approves results, on the views page."
+	_, message := roleFirstMessage("guide")
 	expected := fmt.Sprintf(`{"root":%q,"swarm":%q,"roles":[{"role":"guide","title":"Guide","handle":%q,"folder":%q,"first_message":%q,"connections":[{"name":"surla","url":"http://127.0.0.1:%d/mcp","credential_file":%q}],"place":null}]}`, state.Record.Directory, team.Team, handle, state.Record.Directory, message, state.Record.Port, state.AgentFile(handle))
 	assert.JSONEq(t, expected, string(raw))
 	assert.Equal(t, []string{"overlays", "spaces", "create", "terminals", "focus", "open"}, host.calls, "observe overlays and focus this space before opening its launcher")
