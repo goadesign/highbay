@@ -50,7 +50,7 @@ const page = await openPage(origin, { link: input.link });
 await until(() => page.$("#surla-build-taking") && !page.$("#surla-build-loading"), "taking state did not appear");
 const taking = page.text("#surla-build-taking");
 if (["passed", "rewritten", "evaluator"].includes(input.state)) {
-  expect(page.text("#surla-build-state") === "Passed: the builder’s commit passed the accepted tests.", "passed build still describes future building or checking");
+  expect(page.text("#surla-build-state") === "The builder’s commit passed the accepted tests.", "passed build still describes future building or checking");
   expect(page.$("#surla-build-state").nextElementSibling?.classList.contains("surla-build-merge"), "merge instructions are not immediately below the passed state");
   expect(!taking.includes("builder finishes") && !taking.includes("after the check passes"), "passed build retains a stale next step");
   const commands = page.$$("#surla-build-taking ol code").map((node) => node.textContent);
@@ -61,7 +61,7 @@ if (["passed", "rewritten", "evaluator"].includes(input.state)) {
   expect(taking.includes("commit where this build started") === (input.state === "rewritten"), "rewrite warning does not follow base_in_branch");
 } else {
   expect(!taking.includes("git merge"), "an unpassed or closed build offers merge commands");
-  if (input.state === "building") expect(taking.includes("nothing to merge yet"), "building omitted the next step");
+  if (input.state === "building") expect(taking.includes("Next: the test writer prepares tests") && !taking.includes("nothing to merge yet"), "building lost its next step or repeats an unpassed summary");
   if (input.state === "merged") expect(page.text("#surla-build-state") === "Merged." && taking.includes("No role has work"), "merged state is unclear");
   if (input.state === "dropped") expect(taking.includes("surla/tests-7") && !taking.includes("surla/build-7") && taking.includes("git log surla/tests-7"), "dropped state invented a retained branch");
   if (input.state === "empty") expect(taking.includes("Nothing was committed for it") && !taking.includes("surla/"), "empty dropped state invented work");
@@ -71,11 +71,14 @@ expect(Boolean(page.$("#surla-build-drop")) === open, "Drop availability does no
 for (const selector of ["#surla-build-builder", "#surla-build-test-writer", ...(input.state === "building" ? [] : ["#surla-build-not-judged"])]) {
   expect(Boolean(page.$(selector)?.closest("#surla-build-details")) === (input.state !== "building"), "role facts did not follow the active-versus-saved disclosure");
 }
-expect(page.$("#surla-build-details").textContent.includes("No tests of this change’s Story were required.") === (input.state !== "building"), "required-test facts are not in the saved disclosure");
+expect(page.$("#surla-build-details").textContent.includes("No tests of this change’s Story were required."), "required-test facts are not in the saved disclosure");
 expect(!page.$("#surla-build-details").open, "secondary build facts expanded by default");
 const buttons = page.$$(".surla-build-actions button");
 expect(buttons.length > 0 && (!open || buttons.at(-1).id === "surla-build-drop"), "Drop is not last in the single action row");
 expect(page.$$(".surla-build-actions").length === 1, "build actions are split into separate rows");
+expect(page.text("#surla-build-taking-state") === (input.state === "building" ? "Building" : ["passed", "evaluator", "rewritten"].includes(input.state) ? "Passed" : input.state === "merged" ? "Merged" : "Dropped"), "the header badge does not describe the saved taking state");
+expect(Boolean(page.$(".surla-build-header .surla-build-actions")), "current build controls are not in the header");
+expect(Boolean(page.$("#surla-build-start-explanation")) === ["dropped", "empty"].includes(input.state), "the execution warning appears outside the agreed Build-offer states");
 if (open) {
   page.$("#surla-build-drop").click();
   await until(() => page.$("#surla-build-drop-cancel"), "Drop did not ask");

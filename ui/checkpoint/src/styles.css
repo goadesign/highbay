@@ -727,9 +727,15 @@ summary { cursor: pointer; font-weight: 500; user-select: none; }
 .surla-live-prompts { margin: 0.4rem 0; padding-inline-start: 1.2rem; }
 .surla-live-prompts > li { margin-block: 0.25rem; }
 
-/* The Build decision uses the existing prose measure instead of an empty
-   full-width card. At phone width the card uses the available inline space. */
-#surla-build-section { max-inline-size: calc(75ch + 2.2rem); }
+/* Build keeps the shared card width; state and actions share its header and
+   wrap in source order at narrow widths. Commands scroll only within pre. */
+.surla-build-header { flex-wrap: wrap; align-items: center; }
+.surla-build-header h3 { margin-inline-end: auto; }
+.surla-build-badges { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+.surla-build-header .surla-build-actions { margin: 0; }
+.surla-build-roles { list-style: none; padding-inline-start: 0; }
+.surla-build-roles li { margin-block: 0.2rem; }
+.surla-build-roles p { margin-block: 0; }
 .surla-build-actions { margin-block: 0.75rem; }
 .surla-build-merge ol { padding-inline-start: 1.25rem; }
 .surla-build-merge li { min-inline-size: 0; margin-block-end: 0.75rem; }

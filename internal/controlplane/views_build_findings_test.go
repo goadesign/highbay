@@ -77,7 +77,7 @@ const current = JSON.parse(page.sent("POST", buildPath)[1].answer).build;
 expect(JSON.parse(answers[1].answer).started_at === current.started_at, "the shown text belongs to another start");
 const read = await api(origin, "GET", "/assignments/builder/chg", undefined, input.builder);
 expect(read.status === 200, "the builder could not read its assignment");
-await until(() => page.text("#surla-build-builder").includes("Assignment read."), "the assignment read did not refresh Build");
+await until(() => page.text("#surla-build-builder").includes("assignment read"), "the assignment read did not refresh Build");
 expect(page.sent("GET", findingsPath).length === 2, "an unchanged verdict was read again after an assignment change");
 page.close();
 `)

@@ -311,7 +311,7 @@ const before = page.sent("GET", cardPath).length;
 await control(origin, "reply", { key: "GET " + cardPath, status: 503, body: { name: "internal", message: "The saved card could not be refreshed." } });
 await control(origin, "hold", { key: "GET " + cardPath });
 await control(origin, "act", { key: "builder-reads-assignment" });
-await until(() => page.sent("GET", cardPath).length > before && page.sent("GET", buildPath).every((r) => r.status === 200) && page.sent("GET", runPath).every((r) => r.status === 200) && page.$("#surla-build-builder").textContent.includes("Assignment read"), "the changed build did not reach the page with its card refresh held");
+await until(() => page.sent("GET", cardPath).length > before && page.sent("GET", buildPath).every((r) => r.status === 200) && page.sent("GET", runPath).every((r) => r.status === 200) && page.$("#surla-build-builder").textContent.includes("assignment read"), "the changed build did not reach the page with its card refresh held");
 const held = page.sent("GET", cardPath)[before];
 expect(held.status === undefined && approve.disabled && page.text("#surla-cp4-inputs").includes("not known"), "an outstanding background card read left the rendered approval usable");
 expect(preserved(), "the pending card read discarded the report or draft");
