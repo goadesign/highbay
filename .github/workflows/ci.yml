@@ -1,5 +1,5 @@
-# Pushes run the short Go suites and generated-code checks in parallel.
-# Nightly and manually requested runs keep every sandbox and native journey.
+# Pushes run the short checks and partitioned full root suites in parallel.
+# Nightly and manually requested runs also keep every native journey.
 # All model calls use scripted providers; these jobs need no model credentials.
 # Real Docker coverage requires the separate e2e,docker tags and a local engine.
 name: CI
@@ -13,7 +13,7 @@ on:
     # run to have one; without it every pull request whose go.sum differs
     # from main's compiles from scratch. Remove team-start here when it has
     # merged into main.
-    branches: [main, team-start]
+    branches: [main, team-start, builder-copy]
   schedule:
     - cron: '17 7 * * *'
   workflow_dispatch:
@@ -252,6 +252,62 @@ jobs:
             git status --porcelain; git diff --stat; exit 1
           fi
 
+  full-root:
+    name: Full / root-${{ matrix.suite }} (${{ matrix.os }})
+    if: github.event_name == 'push' || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ${{ matrix.os }}
+    # Isolate the expensive owners; package alarms exclude setup/compilation.
+    # Hosted full runs, rather than short PR checks, establish these budgets.
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, ubuntu-latest]
+        suite: [pages, controlplane, designeval, remaining]
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: |
+            go.sum
+            go.mod
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        if: matrix.suite != 'designeval'
+        with:
+          node-version: 26.0.0
+          cache: npm
+          cache-dependency-path: ui/checkpoint/package-lock.json
+      - name: Install the views page's test packages
+        # The remaining packages include internal/project's page tests, and
+        # control-plane tests outside the page partition can use jsdom too.
+        if: matrix.suite != 'designeval'
+        run: |
+          npm ci --prefix ui/checkpoint --no-audit --no-fund </dev/null
+      - name: Run the full root partition
+        env:
+          ROOT_SUITE: ${{ matrix.suite }}
+        run: |
+          case "$ROOT_SUITE" in
+            pages)
+              go test -race -count=1 -timeout 20m -json -run "$ROOT_PAGE_TESTS" ./internal/controlplane </dev/null
+              ;;
+            controlplane)
+              go test -race -count=1 -timeout 20m -json -skip "$ROOT_PAGE_TESTS" ./internal/controlplane </dev/null
+              ;;
+            designeval)
+              go test -race -count=1 -timeout 20m -json ./internal/designeval </dev/null
+              ;;
+            remaining)
+              packages=$(go list ./... </dev/null | grep -Ev '^github.com/goadesign/surla/internal/(controlplane|designeval)$')
+              go test -race -count=1 -timeout 20m -json $packages </dev/null
+              ;;
+            *)
+              echo "Unknown full root partition: $ROOT_SUITE" >&2
+              exit 1
+              ;;
+          esac
+
   full:
     name: Full / ${{ matrix.suite }}
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
@@ -262,17 +318,6 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - suite: unit-root
-            module: .
-            args: ./...
-            test_timeout: 20m
-            job_timeout: 30
-          - suite: unit-root-linux
-            os: ubuntu-latest
-            module: .
-            args: ./...
-            test_timeout: 20m
-            job_timeout: 30
           - suite: unit-orders
             module: examples/orders
             args: ./...
@@ -336,18 +381,6 @@ jobs:
           cache-dependency-path: |
             ${{ matrix.module }}/go.sum
             ${{ matrix.module }}/go.mod
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
-        if: matrix.suite == 'unit-root' || matrix.suite == 'unit-root-linux'
-        with:
-          node-version: 26.0.0
-          cache: npm
-          cache-dependency-path: ui/checkpoint/package-lock.json
-      - name: Install the views page's test packages
-        # Go tests never install these themselves and fail under CI without
-        # them; install once before every test binary starts.
-        if: matrix.suite == 'unit-root' || matrix.suite == 'unit-root-linux'
-        run: |
-          npm ci --prefix ui/checkpoint --no-audit --no-fund </dev/null
       - name: Install the Temporal CLI
         # The generation suite's Orders live-copy journey starts Temporal too.
         if: matrix.suite == 'verifier' || matrix.suite == 'verifier-linux' || matrix.suite == 'generation' || matrix.suite == 'orders-acceptance'

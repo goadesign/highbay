@@ -2033,10 +2033,17 @@ checks are:
 To run the short tests locally, run `go test -race -short ./...` in each
 module.
 
-The full suite runs nightly at 07:17 UTC and on a manual **Run workflow**
-request (`CI=true gh workflow run ci.yml --ref <branch> </dev/null`). It runs
-each module's complete tests and the verifier, generation, starter and orders
-acceptance suites as parallel jobs. A passing short run does not prove the
+The root module's full tests also run on pushes to `main`, `team-start` and
+`builder-copy`, on both macOS and Linux. Each operating system has separate
+jobs for the control plane's page tests, its other tests, the design evaluator,
+and the remaining root packages. The page partition uses the same test-name
+pattern as the short checks; the remaining packages still run their own page
+tests.
+
+All full suites run nightly at 07:17 UTC and on a manual **Run workflow**
+request (`CI=true gh workflow run ci.yml --ref <branch> </dev/null`). This adds
+the other modules' complete tests and the verifier, generation, starter and
+orders acceptance suites as parallel jobs. A passing short run does not prove the
 sandboxed paths; changes to candidate execution or starter generation need
 the full suite. On macOS, with the Temporal CLI for the first three:
 
@@ -2062,7 +2069,7 @@ go test -race -count=1 -tags browser ./internal/project
 
 ```text
 .
-├── .github/workflows/ci.yml     # Short checks on pull requests and pushes; full suites nightly or on request
+├── .github/workflows/ci.yml     # Short PR checks, full root tests on integration pushes, all suites nightly or on request
 ├── cmd/surla/                   # The surla command: project start and stop, settings, init, preview, diff, gen, verify, approve
 ├── design/                      # Goa design of the server's contract
 │   ├── design.go                # Change Cards, checks, live target, verification, approval

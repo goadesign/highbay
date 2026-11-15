@@ -118,13 +118,20 @@ func TestProjectTestSourceFailsRatherThanAnswer(t *testing.T) {
 		"eval/go.mod": "module example.com/shop/eval\n\ngo 1.26\n",
 	}
 	t.Run("replaced workspace", func(t *testing.T) {
-		ws := t.TempDir()
+		ws := filepath.Join(t.TempDir(), "workspace")
 		writeWorkspaceFiles(t, ws, starter)
 		cp := newControlPlane(t, Options{WorkspaceDir: ws})
-		require.NoError(t, os.RemoveAll(ws))
-		require.NoError(t, os.Mkdir(ws, 0o700))
+		_, oldDev, oldIno, err := openWorkspaceRootAndStat(ws)
+		require.NoError(t, err)
+		// Retain the original under the temporary parent so its inode cannot
+		// be reused and both directories are cleaned up with this test.
+		require.NoError(t, os.Rename(ws, ws+"-original"))
 		writeWorkspaceFiles(t, ws, starter)
-		_, err := answerWithin(t, cp, t.Context())
+		_, newDev, newIno, err := openWorkspaceRootAndStat(ws)
+		require.NoError(t, err)
+		require.True(t, oldDev != newDev || oldIno != newIno,
+			"replacement has a distinct device/inode identity")
+		_, err = answerWithin(t, cp, t.Context())
 		assert.ErrorContains(t, err, "replaced or removed")
 	})
 	t.Run("ended context", func(t *testing.T) {
