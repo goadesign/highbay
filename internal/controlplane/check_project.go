@@ -153,7 +153,7 @@ func (c *ControlPlane) CheckProject(ctx context.Context) (res *gensurla.CheckPro
 // read lock of workspaceMu, which Close takes exclusively after canceling
 // serverCtx: an operation admitted before that point is registered before
 // Close waits on checkOps, and every later one sees serverCtx ended. Admitted
-// operations still run concurrently.
+// operations reserve the builder copy separately and refuse a busy copy.
 func (c *ControlPlane) admitCheckOperation() error {
 	if c.checker == nil || c.checkWorkDir == "" {
 		return gensurla.MakeNotImplemented(errors.New("check_project is not configured on this server"))

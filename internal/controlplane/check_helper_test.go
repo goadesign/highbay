@@ -198,6 +198,7 @@ func TestCanceledCreateIsAnsweredAndItsContainerRemoved(t *testing.T) {
 	cards := filepath.Join(realTempDir(t), "cards")
 	cp := openCheckCP(t, cards, newShopModule(t, nil))
 	defer func() { assert.NoError(t, cp.Close()) }()
+	readCheckBuilderFixture(t, cp)
 	wait, cancelWait := context.WithTimeout(t.Context(), lifecycleWaitTimeout)
 	defer cancelWait()
 	blocked, release, senderGone := make(chan struct{}), make(chan struct{}), make(chan struct{})
@@ -266,6 +267,7 @@ func TestUnansweredCreateKeepsItsPendingRecord(t *testing.T) {
 	cards := filepath.Join(realTempDir(t), "cards")
 	authCtx := WithPrincipal(t.Context(), Principal{ID: "alice@example.com", CallerID: "alice@example.com", Kind: CallerUser})
 	cp := openCheckCP(t, cards, newShopModule(t, nil))
+	readCheckBuilderFixture(t, cp)
 	_, err := cp.CheckProject(authCtx)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "mounts denied")
@@ -397,6 +399,7 @@ func TestOwnerRecordIsWrittenBeforeEachStep(t *testing.T) {
 			})
 			cp := openCheckCP(t, cards, newShopModule(t, nil))
 			defer func() { assert.NoError(t, cp.Close()) }()
+			readCheckBuilderFixture(t, cp)
 			_, err := cp.CheckProject(WithPrincipal(t.Context(), Principal{ID: "alice@example.com", CallerID: "alice@example.com", Kind: CallerUser}))
 			opDir := onlyOperationDir(t, cards)
 			mu.Lock()
@@ -484,6 +487,7 @@ func TestCheckHelperSpansJoinTheServerTrace(t *testing.T) {
 		CardsDir: filepath.Join(realTempDir(t), "cards"), WorkspaceDir: newShopModule(t, nil),
 		Checker: candidate.NewContainerRunner(), CheckHelper: testCheckHelper(t), CheckTimeout: time.Minute, TracerProvider: tp,
 	})
+	readCheckBuilderFixture(t, cp)
 	res, err := cp.CheckProject(WithPrincipal(t.Context(), Principal{ID: "alice@example.com", CallerID: "alice@example.com", Kind: CallerUser}))
 	require.NoError(t, err)
 	require.True(t, res.Passed)
@@ -527,6 +531,9 @@ func runKillCase(t *testing.T, self string, tc killCase) {
 	t.Setenv("DOCKER_HOST", daemon.hostURI)
 	workspace := newShopModule(t, map[string]string{"go.sum": "old-sum\n"})
 	cards := filepath.Join(realTempDir(t), "cards")
+	cp := openCheckCP(t, cards, workspace)
+	working := readCheckBuilderFixture(t, cp)
+	require.NoError(t, cp.Close())
 	wait, cancelWait := context.WithTimeout(t.Context(), lifecycleWaitTimeout)
 	defer cancelWait()
 	blocked, release, senderGone := make(chan struct{}), make(chan struct{}), make(chan struct{})
@@ -541,7 +548,7 @@ func runKillCase(t *testing.T, self string, tc killCase) {
 			// go mod tidy changed go.sum in the copy, so only cancellation
 			// can keep it from being published.
 			created := daemon.createdContainers()
-			src := findMount(t, &created[len(created)-1], workspace).Source
+			src := findMount(t, &created[len(created)-1], working).Source
 			assert.NoError(t, os.WriteFile(filepath.Join(src, "go.sum"), []byte("new-sum\n"), 0o644))
 		}
 		close(blocked)
@@ -617,6 +624,7 @@ func runKillCase(t *testing.T, self string, tc killCase) {
 	}
 	assert.NoDirExists(t, filepath.Join(opDir, "src"))
 	assertFileContent(t, filepath.Join(workspace, "go.sum"), "old-sum\n")
+	assertFileContent(t, filepath.Join(working, "go.sum"), "old-sum\n")
 }
 
 // onlyOperationDir returns the single operation directory under cards.
