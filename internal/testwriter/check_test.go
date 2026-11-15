@@ -473,10 +473,9 @@ func skipInShortMode(t *testing.T) {
 
 // publishedSurla is a Surla version on the module proxy whose suite contract
 // has everything the generated program calls; the starter's tests use the
-// same one. The fixture requires it as a starter does, because the snapshot
-// a check builds may read no Surla source outside it, and generation refuses
-// a replacement by a local folder.
-const publishedSurla = "v0.0.0-20261110163737-d9beac313142"
+// same one. The fixture requires it as a starter does, because generation
+// refuses a replacement by a local folder.
+const publishedSurla = "v0.0.0-20261115014514-02c792da3ded"
 
 // fixtureProject returns a project's files holding the fixture's test module
 // under eval/, as a test writer would start from: generated without a Story,

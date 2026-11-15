@@ -292,6 +292,6 @@ func pageReportModule(t *testing.T) map[string]string {
 		module[name] = string(data)
 	}
 	module["go.mod"] = strings.Replace(module["go.mod"], "require (",
-		"require (\n\tgithub.com/goadesign/surla v0.0.0-20261110163737-d9beac313142", 1)
+		"require (\n\tgithub.com/goadesign/surla v0.0.0-20261115014514-02c792da3ded", 1)
 	return testmodule.Tidy(t, module)
 }

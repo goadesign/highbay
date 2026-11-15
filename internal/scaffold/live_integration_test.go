@@ -47,7 +47,7 @@ type echoStream struct {
 
 // published is the Surla version the starter's go.mod pins; it exists on the
 // module proxy. It matches the internal tests' fixture of the same name.
-const published = "v0.0.0-20261110163737-d9beac313142"
+const published = "v0.0.0-20261115014514-02c792da3ded"
 
 // TestStarterLiveTargetAppliesADraftToTheNextModelRequest creates a real
 // starter project, commits it as C1, and runs the full CP3 journey through the

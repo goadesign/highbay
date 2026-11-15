@@ -24,14 +24,14 @@ import (
 )
 
 // published is a Surla version that exists on the module proxy.
-const published = "v0.0.0-20261110163737-d9beac313142"
+const published = "v0.0.0-20261115014514-02c792da3ded"
 
 func TestValidVersionAcceptsOnlyExactVersions(t *testing.T) {
 	for v, want := range map[string]bool{
 		"v1.2.3":     true,
 		"v1.2.3-pre": true,
 		published:    true,
-		"v0.0.0-20261110163737-d9beac313142+dirty": false,
+		"v0.0.0-20261115014514-02c792da3ded+dirty": false,
 		"latest":  false,
 		"main":    false,
 		"8ec6e09": false,
