@@ -65,7 +65,9 @@ func TestOneBuildLateConsumersPreserveTheNewOpenRecord(t *testing.T) {
 			assertRefused(t, err, "not_found")
 		}},
 		{name: "report still belongs", run: func(t *testing.T) {
+			cp.mu.RLock()
 			answers, err := checker.answersTo(oldReport)
+			cp.mu.RUnlock()
 			require.NoError(t, err)
 			assert.False(t, answers)
 		}},

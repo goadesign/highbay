@@ -189,7 +189,7 @@ func TestAssignmentsSayWhetherTheirBuildIsInForce(t *testing.T) {
 		check: func(context.Context, []designeval.StorySummary) (testwriter.Verdict, error) {
 			return testwriter.Verdict{}, nil
 		},
-		record: func(context.Context, testwriter.Verdict, string) (string, error) {
+		record: func(context.Context, testwriter.Verdict, string, string) (string, error) {
 			checked <- struct{}{}
 			return strings.Repeat("a", 40), nil
 		},

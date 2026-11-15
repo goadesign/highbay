@@ -49,12 +49,12 @@ type standInCopy struct {
 	// check answers Check calls.
 	check func(ctx context.Context, call int) (testwriter.Verdict, error)
 	// record answers Record calls; nil returns standInCommit.
-	record func(ctx context.Context, call int) (string, error)
+	record func(ctx context.Context, call int, checkedTip string) (string, error)
 	// checks and records count the calls so far.
 	checks, records int
 	// branches and messages list Record's target branches and commit messages
 	// in call order.
-	branches, messages []string
+	branches, parents, messages []string
 }
 
 // standInCommit is the commit the stand-in Record returns by default.
@@ -85,21 +85,22 @@ func (s *standInCopy) Check(
 	return s.check(ctx, call)
 }
 
-// Record keeps branch and message and answers with record, or standInCommit
+// Record keeps branch, checked tip and message and answers with record, or standInCommit
 // when record is nil.
 func (s *standInCopy) Record(
-	ctx context.Context, _ testwriter.Verdict, branch, message string,
+	ctx context.Context, _ testwriter.Verdict, branch, checkedTip, message string,
 ) (string, error) {
 	s.mu.Lock()
 	s.records++
 	call := s.records
 	s.branches = append(s.branches, branch)
+	s.parents = append(s.parents, checkedTip)
 	s.messages = append(s.messages, message)
 	s.mu.Unlock()
 	if s.record == nil {
 		return standInCommit, nil
 	}
-	return s.record(ctx, call)
+	return s.record(ctx, call, checkedTip)
 }
 
 // checked returns the number of Check calls so far.
@@ -128,6 +129,13 @@ func (s *standInCopy) recordedBranches() []string {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return slices.Clone(s.branches)
+}
+
+// recordedParents returns the exact checked tip supplied to every attempt.
+func (s *standInCopy) recordedParents() []string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return slices.Clone(s.parents)
 }
 
 // accepting is a stand-in check that accepts the copy.
@@ -195,7 +203,7 @@ func TestASecondReportDuringACheckIsJudgedAfterIt(t *testing.T) {
 					return testwriter.Verdict{}, nil
 				}
 				return needsChanges(fmt.Sprintf("finding of check %d", call)), nil
-			}, record: func(_ context.Context, call int) (string, error) {
+			}, record: func(_ context.Context, call int, _ string) (string, error) {
 				// Each record moves the tests branch to a commit of its own.
 				return strings.Repeat(fmt.Sprint(call), 40), nil
 			}}
@@ -236,7 +244,7 @@ func TestASecondReportDuringACheckIsJudgedAfterIt(t *testing.T) {
 // then counts as report 2, which is judged next.
 func TestAReportDuringRecordWaitsAndKeepsItsNumber(t *testing.T) {
 	recording, release := make(chan int, 2), make(chan struct{})
-	tests := &standInCopy{check: accepting, record: func(_ context.Context, call int) (string, error) {
+	tests := &standInCopy{check: accepting, record: func(_ context.Context, call int, _ string) (string, error) {
 		recording <- call
 		if call == 1 {
 			<-release
@@ -651,7 +659,7 @@ func TestACheckThatCannotRunNamesTheUsersStep(t *testing.T) {
 			wantStep: stepDependencies + ", then ask the test writer to report again."},
 		{name: "git fails", tests: &standInCopy{check: failing(errors.New("git write-tree in /private/var/folders/x/check: exit status 128"))},
 			wantKind: gensurla.TestsKindCouldNotRun, wantReason: []string{"check could not run", "git write-tree in <absolute path>: exit status 128"}, wantStep: stepFailure},
-		{name: "recording fails", tests: &standInCopy{check: accepting, record: func(context.Context, int) (string, error) {
+		{name: "recording fails", tests: &standInCopy{check: accepting, record: func(context.Context, int, string) (string, error) {
 			return "", errors.New("git commit-tree: exit status 1")
 		}}, wantKind: gensurla.TestsKindCouldNotRun, wantReason: []string{"could not record the accepted tests", "exit status 1"}, wantStep: stepFailure},
 		{name: "a long failure", tests: &standInCopy{check: failing(errors.New(strings.Repeat("é", 2*maxCheckReason)))},
@@ -874,7 +882,7 @@ func TestARecordWithAnOnBranchLockRetriesOnlyRecord(t *testing.T) {
 
 		standIn = &standInCopy{
 			check: accepting,
-			record: func(ctx context.Context, call int) (string, error) {
+			record: func(ctx context.Context, call int, _ string) (string, error) {
 				commit := productionBuildGit(t, testsDir, "commit-tree", "--no-gpg-sign", tree, "-p", tip, "-m", "Add accepted tests")
 				_, err := runGitRead(ctx, testsDir, "--git-dir="+testsGitDir, "--work-tree="+testsDir, "read-tree", commit)
 				if err != nil {
@@ -898,6 +906,7 @@ func TestARecordWithAnOnBranchLockRetriesOnlyRecord(t *testing.T) {
 		build := waitForTests(t, cp, gensurla.TestsKindAccepted)
 		assert.Equal(t, 1, standIn.checked(), "Check must not be rerun when Record retries on index.lock")
 		assert.Equal(t, 2, standIn.recordCalls(), "Record succeeded on the second attempt after the lock cleared")
+		assert.Equal(t, []string{tip, tip}, standIn.recordedParents(), "every retry stays bound to the same checked parent")
 		head := productionBuildGit(t, repo, "rev-parse", "surla/tests-1")
 		assert.NotEqual(t, tip, head)
 		assert.Equal(t, tip, productionBuildGit(t, repo, "rev-parse", head+"^"), "exactly one commit recorded on surla/tests-1")
@@ -931,7 +940,7 @@ func TestARecordWithAnOnBranchLockRetriesOnlyRecord(t *testing.T) {
 		tree := productionBuildGit(t, testsDir, "write-tree")
 		standIn = &standInCopy{
 			check: accepting,
-			record: func(ctx context.Context, _ int) (string, error) {
+			record: func(ctx context.Context, _ int, _ string) (string, error) {
 				commit := productionBuildGit(t, testsDir, "commit-tree", "--no-gpg-sign", tree, "-p", tip, "-m", "Add accepted tests")
 				_, err := runGitRead(ctx, testsDir, "--git-dir="+testsGitDir, "--work-tree="+testsDir, "read-tree", commit)
 				if err != nil {
@@ -963,7 +972,7 @@ func TestARecordWithAnOnBranchLockRetriesOnlyRecord(t *testing.T) {
 	t.Run("non-lock Record failure is attempted once", func(t *testing.T) {
 		tests := &standInCopy{
 			check: accepting,
-			record: func(context.Context, int) (string, error) {
+			record: func(context.Context, int, string) (string, error) {
 				return "", errors.New("git update-ref: cannot lock ref")
 			},
 		}
@@ -985,7 +994,7 @@ func TestARecordWithAnOnBranchLockRetriesOnlyRecord(t *testing.T) {
 		firstAttempt := make(chan struct{})
 		tests := &standInCopy{
 			check: accepting,
-			record: func(_ context.Context, call int) (string, error) {
+			record: func(_ context.Context, call int, _ string) (string, error) {
 				if call == 1 {
 					close(firstAttempt)
 				}
@@ -1018,6 +1027,12 @@ func newReportFixture(t *testing.T, opts Options, copy *standInCopy) (*ControlPl
 	card := buildableChange(t, cp, "chg")
 	_, err := cp.StartBuild(asCaller("alice@example.com", CallerUser), &gensurla.StartBuildPayload{ChangeID: "chg", RequestRevision: card.RequestRevision})
 	require.NoError(t, err)
+	saved := mustOpenBuildFile(t, cp)
+	// Keep the check/record stand-in, but let the pre-Record owner inspect a
+	// real numbered copy and its real branch, including the valid tip at B.
+	_, err = testwriter.MakeCopy(t.Context(), cp.currentWorkspaceDir(), testwriter.TestsRole,
+		testwriter.TestsRole.Branch(saved.Number), saved.Base)
+	require.NoError(t, err)
 	cp.buildCopyFactory = func(context.Context, string, scaffold.Layout) (buildCopy, error) { return copy, nil }
 	return cp, card.RequestRevision
 }
@@ -1047,9 +1062,16 @@ func readBothAssignments(t *testing.T, cp *ControlPlane) {
 // want, for at most ten seconds, and returns it.
 func waitForTests(t *testing.T, cp *ControlPlane, want gensurla.TestsKind) *gensurla.StartedBuild {
 	t.Helper()
+	return waitForNamedTests(t, cp, "chg", want)
+}
+
+// waitForNamedTests waits for the selected change without changing an
+// assignment read or assuming the old change still owns the open build.
+func waitForNamedTests(t *testing.T, cp *ControlPlane, changeID string, want gensurla.TestsKind) *gensurla.StartedBuild {
+	t.Helper()
 	deadline := time.Now().Add(10 * time.Second)
 	for {
-		build := mustStartedBuild(t, cp, asCaller("alice@example.com", CallerUser), "chg")
+		build := mustStartedBuild(t, cp, asCaller("alice@example.com", CallerUser), changeID)
 		if build.TestWriter.Tests.Kind() == want {
 			return build
 		}

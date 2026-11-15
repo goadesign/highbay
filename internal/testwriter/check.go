@@ -35,7 +35,6 @@ import (
 	"github.com/goadesign/surla/internal/designeval"
 	"github.com/goadesign/surla/internal/genpublish"
 	"github.com/goadesign/surla/internal/procgroup"
-	"github.com/goadesign/surla/internal/shquote"
 	"github.com/goadesign/surla/verify/candidate"
 	"github.com/goadesign/surla/verify/suite"
 )
@@ -105,14 +104,11 @@ type (
 	// FindingKind names the step of the check that failed.
 	FindingKind string
 
-	// AuthorError is a failure of Prepare that the working copy's author
-	// caused and can fix: the suite module cannot be opened (for example
-	// because a folder on its path is a symbolic link) or read, or its
-	// generation failed while working on the module's own files
-	// (designeval.FailedOnModule), such as a design that does not compile.
-	// Finding says what to change, worded as Check words the same failure.
-	// Callers find it with errors.As; any other error from Prepare is a
-	// failure the author cannot fix.
+	// AuthorError is a failure of Prepare or Record that the working copy's
+	// author can fix: generation failed on module files, a module path cannot
+	// be opened/read, or the copy's branch/checked tip changed before recording.
+	// Finding states the recovery with paths relative to the working copy.
+	// Callers find it with errors.As; other errors retain operational causes.
 	AuthorError struct {
 		// Finding is what the author must change, with paths relative to the
 		// working copy.
@@ -153,14 +149,15 @@ const (
 	FindingMissingScenario FindingKind = "missing_scenario"
 	// FindingOutsideModule means a file outside the test module differs
 	// from the copy's base. The message names the file, the base commit and
-	// the step that undoes the change.
+	// the required working-copy contents without a Git recipe.
 	FindingOutsideModule FindingKind = "outside_module"
 	// FindingHiddenTag means a declared scenario is tagged holdout. Tests in
 	// files the builder can read are not hidden.
 	FindingHiddenTag FindingKind = "hidden_tag"
 	// FindingWorkingCopy means the test writer's working copy is not on the
-	// build's tests branch or has a Git operation in progress. The message
-	// names the copy's state and tells the test writer to put its test
+	// build's tests branch, has a Git operation in progress, or its tip no
+	// longer belongs to that build. The message names the copy's state and
+	// tells the test writer to put its test
 	// files uncommitted on the build's tests branch and report again.
 	FindingWorkingCopy FindingKind = "working_copy"
 
@@ -256,13 +253,20 @@ func NewChecker(evaluator *designeval.Evaluator, workDir string) *Checker {
 // Record commits an accepted verdict's tree, exactly the files Check built
 // and described, on branch in the working copy's repository with message and
 // the user's own git identity, never signed and with hooks disabled, and
-// returns the commit. The message is the commit message; it carries no
-// attribution. When the branch already holds that tree, as when the copy did
-// not change since the last record, it returns the branch's commit and makes
-// none. Edits made in the copy after the check are not recorded; they show as
-// changes in the copy. A verdict with findings or not made by Check, an empty
-// branch, or an empty message is refused.
-func Record(ctx context.Context, v Verdict, branch, message string) (string, error) {
+// returns the commit. checkedTip is the full commit ID the caller checked
+// with CheckBuildCommit; the commit uses exactly that parent, or refuses if
+// the branch changed. The message carries no attribution. When the branch
+// already holds that tree, as when the copy did not change since the last
+// record, it returns the branch's commit and makes
+// none, after confirming that the tip still equals checkedTip. Edits made
+// after Check are not recorded. AuthorError marks a changed tip/branch or a
+// Git operation the author can fix. Other errors preserve operational causes;
+// if the reference was published but its index could not be updated, both the
+// returned commit and error name that publication. Empty branch, checkedTip
+// or message, and a verdict not made by Check or with findings are refused.
+func Record(
+	ctx context.Context, v Verdict, branch, checkedTip, message string,
+) (string, error) {
 	if !v.Accepted() {
 		return "", errors.New("record: the verdict has findings; only an accepted working copy is recorded")
 	}
@@ -272,10 +276,27 @@ func Record(ctx context.Context, v Verdict, branch, message string) (string, err
 	if strings.TrimSpace(branch) == "" {
 		return "", errors.New("record: the branch is empty")
 	}
+	if strings.TrimSpace(checkedTip) == "" {
+		return "", errors.New("record: the checked tip is empty")
+	}
 	if strings.TrimSpace(message) == "" {
 		return "", errors.New("record: the commit message is empty")
 	}
-	return commitTree(ctx, v.copy, "refs/heads/"+branch, v.tree, message)
+	tip, err := v.copy.requireCommit(ctx, checkedTip)
+	if err != nil {
+		return "", err
+	}
+	if tip != checkedTip {
+		return "", errors.New("record: the checked tip must be a full commit ID")
+	}
+	rawBranch, facts, err := v.copy.readFacts(ctx)
+	if err != nil {
+		return "", err
+	}
+	if facts.Detached || rawBranch != branch || facts.Operation != "none" {
+		return "", &AuthorError{Finding: workingCopyFinding(branch, facts)}
+	}
+	return commitTree(ctx, v.copy, "refs/heads/"+branch, v.tree, checkedTip, message)
 }
 
 // WithoutAbsolutePaths replaces every absolute file path in text with
@@ -668,17 +689,10 @@ func workingCopyFinding(branch string, facts CopyFacts) Finding {
 	return Finding{Kind: FindingWorkingCopy, Message: WithoutAbsolutePaths(msg)}
 }
 
-// outsideModule returns one finding per changed path that lies outside the
-// test module at modulePath, naming at most maxOutsideFindings and counting
-// the rest in one more finding. The module's own folder counts as inside: a
-// link put in its place is refused when the module is opened, with its own
-// finding. Each finding names base, the commit the copy's changes are measured
-// from, and the step that undoes the change whether or not the author
-// committed it in the copy: the git command that restores a file base has,
-// which names the file from the copy's root and literally, so it works from
-// any folder of the copy and for any file name, or deleting a file base does
-// not have. Restoring from the copy's own HEAD would bring a committed change
-// back, so the finding never leaves the commit unnamed.
+// outsideModule names changed paths outside the test module, bounded by
+// maxOutsideFindings plus one remainder count. Recovery states the required
+// working-copy contents relative to base, without prescribing Git commands or
+// deleting the copy/branch. A file absent from base must be absent from the copy.
 func outsideModule(changed []changedPath, modulePath, base string) []Finding {
 	var outside []changedPath
 	for _, c := range changed {
@@ -694,18 +708,14 @@ func outsideModule(changed []changedPath, modulePath, base string) []Finding {
 				len(outside)-i, modulePath, base)})
 			break
 		}
-		undo := fmt.Sprintf("restore it to commit %s, the base your working copy is measured from, by running "+
-			"git restore --source=%s --staged --worktree -- %s in your working copy, then report again.",
-			base, base, shquote.Quote(":(top,literal)"+c.path))
+		goal := fmt.Sprintf("make it match its version in commit %s, the build's base", base)
 		if c.added {
-			undo = fmt.Sprintf("commit %s, the base your working copy is measured from, does not have this file: "+
-				"delete it, then report again.", base)
+			goal = fmt.Sprintf("commit %s, the build's base, has no such file: make your working copy match that absence", base)
 		}
 		findings = append(findings, Finding{Kind: FindingOutsideModule, Message: WithoutAbsolutePaths(fmt.Sprintf(
-			"%s is changed outside the test module %s. Only files inside the test module may change: %s "+
-				"If you never changed it, the project's history was rewritten since your working copy was made: "+
-				"ask the user to delete the project's .surla-tests folder and its surla/tests branch, then build again.",
-			c.path, modulePath, undo))})
+			"%s is changed outside the test module %s. Only files inside the test module may change: %s; "+
+				"keep your own tests inside %s uncommitted (Surla commits what it accepts), then report again.",
+			c.path, modulePath, goal, modulePath))})
 	}
 	return findings
 }

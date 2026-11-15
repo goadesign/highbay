@@ -7,6 +7,7 @@ package testwriter
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -57,14 +58,15 @@ const (
 	maxGitStderr = 4 << 10
 )
 
-// gitFlags turn off what git would otherwise run on the repository's or the
+// gitFlags prevent optional read-side index refreshes and turn off what git
+// would otherwise run on the repository's or the
 // working copy's say: hooks (a repository's core.hooksPath may name a folder
 // of the working copy, which its author writes) and the file system monitor.
 // They also make git ignore replace refs, which the copy's author can add to
 // the repository the copy shares with the project: with them, a commit could
 // stand for another one, and a base compared with the copy could show the
 // author's own changes as already there.
-var gitFlags = []string{"--no-replace-objects", "-c", "core.hooksPath=/dev/null", "-c", "core.fsmonitor=false"}
+var gitFlags = []string{"--no-optional-locks", "--no-replace-objects", "-c", "core.hooksPath=/dev/null", "-c", "core.fsmonitor=false"}
 
 // Error returns the underlying failure's text.
 func (e *IndexLockError) Error() string {
@@ -170,16 +172,84 @@ func writeTree(ctx context.Context, wc WorkingCopy, index, src string) (string, 
 	return tree, nil
 }
 
-// commitTree makes tree the content of ref (a full refs/heads/<branch> name)
-// in the working copy's repository. When the branch's commit already holds
-// tree it returns that commit. Otherwise it commits tree with message on top
-// of the branch with the user's own git identity, never signed whatever the
-// user's git settings say (signing could wait on a prompt no one sees), points
-// the copy's index at the commit when the copy has the branch checked out, so
-// the copy's status shows only edits made after the commit, and then moves the
-// branch, failing if it moved meanwhile.
-func commitTree(ctx context.Context, wc WorkingCopy, ref, tree, message string) (string, error) {
-	return commitTreeWithHook(ctx, wc, ref, tree, message, nil)
+// commitTree records an accepted tree only on the exact tip the caller
+// checked. Its index reservation spans the expected-tip reference CAS; the
+// real index is published only after that CAS succeeds. Join retains its
+// separate commitTreeWithHook ordering and crash-recovery boundary below.
+func commitTree(
+	ctx context.Context, wc WorkingCopy, ref, tree, checkedTip, message string,
+) (commit string, err error) {
+	branch := strings.TrimPrefix(ref, "refs/heads/")
+	head, err := wc.git(ctx, wc.dir, nil, "rev-parse", "--verify", "--end-of-options", ref+"^{commit}")
+	if err != nil {
+		return "", err
+	}
+	if head != checkedTip {
+		return "", &AuthorError{Finding: Finding{Kind: FindingWorkingCopy, Message: fmt.Sprintf(
+			"The tests branch %s moved from checked commit %s to %s before recording. Put your own tests on %s, uncommitted (Surla commits what it accepts), and report again.",
+			ShownBranch(branch), checkedTip, head, ShownBranch(branch))}}
+	}
+	headTree, err := wc.git(ctx, wc.dir, nil, "rev-parse", "--verify", checkedTip+"^{tree}")
+	if err != nil {
+		return "", err
+	}
+	if headTree == tree {
+		return checkedTip, nil
+	}
+	created, err := wc.git(ctx, wc.dir, nil, "commit-tree", "--no-gpg-sign", tree, "-p", checkedTip, "-m", message)
+	if err != nil {
+		return "", fmt.Errorf("commit the working copy's changes: %w", err)
+	}
+
+	// Reserve the ordinary Git index lock while preparing a replacement
+	// privately. A rejected reference CAS must never alter the real index.
+	lockPath := filepath.Join(wc.gitDir, "index.lock")
+	lock, err := os.OpenFile(lockPath, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
+	if err != nil {
+		wrapped := fmt.Errorf("lock the working copy's index: %w", err)
+		if errors.Is(err, os.ErrExist) {
+			return "", &IndexLockError{Path: lockPath, Err: wrapped}
+		}
+		return "", wrapped
+	}
+	defer func() {
+		// Preserve a lock another actor replaced while this call ran.
+		owned, ownedErr := lock.Stat()
+		current, currentErr := os.Lstat(lockPath)
+		var removeErr error
+		switch {
+		case errors.Is(currentErr, os.ErrNotExist):
+		case ownedErr != nil:
+			removeErr = ownedErr
+		case currentErr != nil:
+			removeErr = currentErr
+		case os.SameFile(owned, current):
+			removeErr = os.Remove(lockPath)
+		default:
+			removeErr = errors.New("the working copy's index lock was replaced; it was left intact")
+		}
+		err = errors.Join(err, lock.Close(), removeErr)
+		if commit != "" && err != nil {
+			err = fmt.Errorf("recorded tests as commit %s on %s, but could not finish updating the working copy's index: %w", commit, ShownBranch(branch), err)
+		}
+	}()
+	tmp, err := os.MkdirTemp(wc.gitDir, "surla-record-*")
+	if err != nil {
+		return "", err
+	}
+	defer func() { err = errors.Join(err, os.RemoveAll(tmp)) }()
+	index := filepath.Join(tmp, "index")
+	if _, err := wc.git(ctx, wc.dir, []string{"GIT_INDEX_FILE=" + index}, "read-tree", created); err != nil {
+		return "", fmt.Errorf("prepare the working copy's index: %w", err)
+	}
+	if _, err := wc.git(ctx, wc.dir, nil, "update-ref", ref, created, checkedTip); err != nil {
+		return "", fmt.Errorf("move %s to the new commit: %w", branch, err)
+	}
+	commit = created
+	if err := os.Rename(index, filepath.Join(wc.gitDir, "index")); err != nil {
+		return commit, err
+	}
+	return commit, nil
 }
 
 // commitTreeWithHook commits tree onto ref (a full refs/heads/<branch> name)

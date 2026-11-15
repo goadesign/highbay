@@ -26,7 +26,7 @@ type buildCopyFixture struct {
 	folder  string
 	prepare func(context.Context, []designeval.StorySummary) error
 	check   func(context.Context, []designeval.StorySummary) (testwriter.Verdict, error)
-	record  func(context.Context, testwriter.Verdict, string) (string, error)
+	record  func(context.Context, testwriter.Verdict, string, string) (string, error)
 }
 
 // Project is the test writer's independently assigned project folder.
@@ -54,9 +54,11 @@ func (f *buildCopyFixture) Check(
 }
 
 // Record runs the record hook, or returns a fixed commit.
-func (f *buildCopyFixture) Record(ctx context.Context, v testwriter.Verdict, _, message string) (string, error) {
+func (f *buildCopyFixture) Record(
+	ctx context.Context, v testwriter.Verdict, _, checkedTip, message string,
+) (string, error) {
 	if f.record != nil {
-		return f.record(ctx, v, message)
+		return f.record(ctx, v, checkedTip, message)
 	}
 	return strings.Repeat("a", 40), nil
 }

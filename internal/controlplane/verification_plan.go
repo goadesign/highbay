@@ -295,6 +295,15 @@ func (c *ControlPlane) verificationBuild(
 func (c *ControlPlane) checkCandidateBuildCommit(
 	ctx context.Context, workspace string, saved buildFile, candidate string,
 ) (testwriter.CommitCheck, error) {
+	return c.checkBuildCommit(ctx, workspace, saved, candidate, testwriter.BuilderRole.Branch(saved.Number))
+}
+
+// checkBuildCommit applies L1 at the owning entry's explicit build branch.
+// Drop tips remain a control-plane read; callers own their copy turn and
+// supply the bound workspace without holding c.mu across Git reads.
+func (c *ControlPlane) checkBuildCommit(
+	ctx context.Context, workspace string, saved buildFile, commit, ownBranch string,
+) (testwriter.CommitCheck, error) {
 	c.mu.RLock()
 	provenance, found, err := c.cards.loadMadeFrom()
 	c.mu.RUnlock()
@@ -310,15 +319,15 @@ func (c *ControlPlane) checkCandidateBuildCommit(
 	}
 	work, cancel := context.WithTimeout(ctx, layoutReadTimeout)
 	defer cancel()
-	exists, err := commitExists(work, workspace, candidate)
+	exists, err := commitExists(work, workspace, commit)
 	if err != nil {
 		return testwriter.CommitCheck{}, err
 	}
 	if !exists {
-		return testwriter.CommitCheck{}, gensurla.MakeConflict(&layoutRefusal{reason: refusedUnknownCommit, commit: candidate})
+		return testwriter.CommitCheck{}, gensurla.MakeConflict(&layoutRefusal{reason: refusedUnknownCommit, commit: commit})
 	}
 	branches := [2]string{testwriter.BuilderRole.Branch(saved.Number), testwriter.TestsRole.Branch(saved.Number)}
-	return testwriter.CheckBuildCommit(work, workspace, candidate, branches[0], saved.Base, branches, recorded)
+	return testwriter.CheckBuildCommit(work, workspace, commit, ownBranch, saved.Base, branches, recorded)
 }
 
 // checkCandidateDesign admits the candidate's canonical agreed design only
@@ -416,7 +425,16 @@ func buildCommitReasons(candidate, base, branch string, check testwriter.CommitC
 	if check.IsBase {
 		reasons = append(reasons, fmt.Sprintf("candidate commit %s is this build's base and holds no builder work", candidate))
 	}
-	for _, foreign := range check.Foreign {
+	reasons = append(reasons, foreignBuildWorkReasons(check.Foreign)...)
+
+	return strings.Join(reasons, "; ")
+}
+
+// foreignBuildWorkReasons shares L1's bounded, quoted work facts between
+// builder refusals and test-writer findings, without builder-only base policy.
+func foreignBuildWorkReasons(work []testwriter.ForeignWork) []string {
+	var reasons []string
+	for _, foreign := range work {
 		reason := fmt.Sprintf("commit %s on %s merges work the user has not taken", foreign.MergeBase, testwriter.ShownBranch(foreign.Branch))
 		if foreign.FileCount > 0 {
 			files := make([]string, len(foreign.Files))
@@ -431,7 +449,7 @@ func buildCommitReasons(candidate, base, branch string, check testwriter.CommitC
 		}
 		reasons = append(reasons, reason)
 	}
-	return strings.Join(reasons, "; ")
+	return reasons
 }
 
 // verificationPlanForTests completes the shared plan from testsChoice's

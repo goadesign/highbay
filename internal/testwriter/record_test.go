@@ -27,7 +27,7 @@ func TestRecordCommitsTheCheckedTreeOnce(t *testing.T) {
 	judged := snapshotVerdict(t, wc)
 	writeFiles(t, wc.Project(), map[string]string{"eval/refund_test.txt": "edited after the check\n"})
 
-	commit, err := Record(t.Context(), judged, branch, "Add the accepted tests")
+	commit, err := Record(t.Context(), judged, branch, runGit(t, repo, "rev-parse", branch), "Add the accepted tests")
 	require.NoError(t, err)
 	assert.Equal(t, commit, runGit(t, repo, "rev-parse", branch))
 	assert.Equal(t, start, runGit(t, repo, "rev-parse", commit+"^"), "one commit on top of the branch")
@@ -40,7 +40,7 @@ func TestRecordCommitsTheCheckedTreeOnce(t *testing.T) {
 	assert.Empty(t, ranHooks(t, markers), "no hook runs, including the copy's own")
 
 	writeFiles(t, wc.Project(), map[string]string{"eval/refund_test.txt": "judged\n"})
-	again, err := Record(t.Context(), snapshotVerdict(t, wc), branch, "Add the accepted tests")
+	again, err := Record(t.Context(), snapshotVerdict(t, wc), branch, runGit(t, repo, "rev-parse", branch), "Add the accepted tests")
 	require.NoError(t, err)
 	assert.Equal(t, commit, again, "an unchanged copy returns the existing commit")
 	assert.Equal(t, commit, runGit(t, repo, "rev-parse", branch))
@@ -59,26 +59,29 @@ func TestRecordRefusesAVerdictWithFindingsOrNoMessage(t *testing.T) {
 	start := runGit(t, repo, "rev-parse", branch)
 	accepted := snapshotVerdict(t, wc)
 	cases := []struct {
-		name    string
-		verdict Verdict
-		branch  string
-		message string
-		wantErr string
+		name       string
+		verdict    Verdict
+		branch     string
+		checkedTip string
+		message    string
+		wantErr    string
 	}{
 		{
 			name:    "findings",
 			verdict: Verdict{Findings: []Finding{{Kind: FindingBuild, Message: "missing method"}}, copy: wc},
-			branch:  branch,
+			branch:  branch, checkedTip: start,
 			message: "Add the accepted tests",
 			wantErr: "only an accepted working copy is recorded",
 		},
-		{name: "empty branch", verdict: accepted, branch: " ", message: "Add the accepted tests", wantErr: "the branch is empty"},
-		{name: "empty message", verdict: accepted, branch: branch, message: " ", wantErr: "the commit message is empty"},
-		{name: "a verdict Check did not make", verdict: Verdict{}, branch: branch, message: "Add the accepted tests", wantErr: "did not come from Check"},
+		{name: "empty branch", verdict: accepted, branch: " ", checkedTip: start, message: "Add the accepted tests", wantErr: "the branch is empty"},
+		{name: "empty checked tip", verdict: accepted, branch: branch, checkedTip: " ", message: "Write tests", wantErr: "the checked tip is empty"},
+		{name: "symbolic checked tip", verdict: accepted, branch: branch, checkedTip: branch, message: "Write tests", wantErr: "must be a full commit ID"},
+		{name: "empty message", verdict: accepted, branch: branch, checkedTip: start, message: " ", wantErr: "the commit message is empty"},
+		{name: "a verdict Check did not make", verdict: Verdict{}, branch: branch, checkedTip: start, message: "Add the accepted tests", wantErr: "did not come from Check"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			_, err := Record(t.Context(), tc.verdict, tc.branch, tc.message)
+			_, err := Record(t.Context(), tc.verdict, tc.branch, tc.checkedTip, tc.message)
 			require.ErrorContains(t, err, tc.wantErr)
 			assert.Equal(t, start, runGit(t, repo, "rev-parse", branch))
 		})
@@ -104,7 +107,7 @@ func TestIdentityCheckMatchesRecord(t *testing.T) {
 	wc, err := MakeCopy(t.Context(), repo, TestsRole, branch, "HEAD")
 	require.NoError(t, err)
 	writeFiles(t, wc.Project(), map[string]string{"tests.txt": "accepted\n"})
-	commit, err := Record(t.Context(), snapshotVerdict(t, wc), branch, "Write tests")
+	commit, err := Record(t.Context(), snapshotVerdict(t, wc), branch, runGit(t, repo, "rev-parse", branch), "Write tests")
 	require.NoError(t, err)
 	assert.Equal(t, "Author <author@example.com> Committer <committer@example.com>", runGit(t, repo, "log", "-1", "--format=%an <%ae> %cn <%ce>", commit))
 	ctx, cancel := context.WithCancel(t.Context())
@@ -128,7 +131,7 @@ func TestReviewRecordWithAnOnBranchLock(t *testing.T) {
 	lock := filepath.Join(wc.gitDir, "index.lock")
 	writeFiles(t, wc.gitDir, map[string]string{"index.lock": ""})
 
-	commit, err := Record(t.Context(), accepted, branch, "Add the accepted tests")
+	commit, err := Record(t.Context(), accepted, branch, tip, "Add the accepted tests")
 	var lockErr *IndexLockError
 	require.ErrorAs(t, err, &lockErr)
 	assert.Equal(t, lock, lockErr.Path)
@@ -136,7 +139,7 @@ func TestReviewRecordWithAnOnBranchLock(t *testing.T) {
 	assert.Equal(t, tip, runGit(t, repo, "rev-parse", branch), "branch tip stays unmoved when index.lock blocks read-tree")
 
 	require.NoError(t, os.Remove(lock))
-	commit, err = Record(t.Context(), accepted, branch, "Add the accepted tests")
+	commit, err = Record(t.Context(), accepted, branch, tip, "Add the accepted tests")
 	require.NoError(t, err)
 	assert.Equal(t, commit, runGit(t, repo, "rev-parse", branch))
 	assert.Equal(t, tip, runGit(t, repo, "rev-parse", commit+"^"), "one commit on top of the branch")
