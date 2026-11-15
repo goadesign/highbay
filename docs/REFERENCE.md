@@ -2020,10 +2020,26 @@ checks are:
 
 - Vet and short race tests of each Go module on macOS: the root,
   [`story`](../story/README.md), `examples/orders` and `examples/orders-eval`.
-  The root module's tests run in two jobs so that each stays short:
-  **Go (., page tests)** runs the views page's tests (those named
-  `TestViewsPage…` and `TestCheckpoint…`) and **Go (.)** runs all the others,
-  so every test runs in exactly one of the two.
+  The root module's short tests run in three jobs. **Go (., page tests)**
+  runs only `internal/controlplane` and `internal/project`, selecting
+  `TestViewsPage…` and `TestCheckpoint…`. **Go (., control plane)** runs the
+  control plane's other short tests. **Go (.)** derives every other package
+  with tests and skips page tests, so each current test runs once. Each of
+  these jobs saves and restores its own Go build and module cache key,
+  qualified by operating system, architecture, Go version and root dependency
+  files; one job's narrower build cannot become another job's saved cache.
+  Pushes to `main`, `team-start` and `builder-copy` run all three jobs and
+  save missing caches after success, making them available to pull requests
+  targeting those branches. Each job targets five minutes with an exact
+  cache hit; cold durations are recorded separately. On a miss, its job
+  summary says `dependency cache miss: this run compiles all dependencies`.
+  Dependency or toolchain changes, or cache expiry or eviction, can cause a
+  miss; a base-branch push does not guarantee a hit for every pull request.
+  Pull-request short checks may reuse Go's cached test results for packages
+  whose inputs did not change. On pushes to those three branches, the short
+  checks use `-count=1` to execute their selected tests again. Full suites
+  also always use `-count=1`. These runs still reuse Go's build cache, which
+  avoids recompiling unchanged code.
 - A Linux build and vet of the root module, once without build tags and once
   with each of `e2e`, `scaffold`, `herdr`, `browser` and `docker`, and the
   Linux short tests (including `verify/candidate` in the Linux Landlock +
