@@ -75,7 +75,7 @@ func (c *ControlPlane) VerifyChange(ctx context.Context, p *gensurla.VerifyChang
 	select {
 	case c.builderCopyTurn <- struct{}{}:
 	default:
-		return nil, gensurla.MakeWorkingCopyBusy(errors.New("Surla is using the builder's working copy; call verify_change again when that operation has ended."))
+		return nil, gensurla.MakeConflict(errors.New("Surla is using the builder's working copy; call verify_change again when that operation has ended."))
 	}
 	defer func() { <-c.builderCopyTurn }()
 	c.mu.RLock()

@@ -13,6 +13,7 @@ import (
 	"github.com/goadesign/surla/internal/testwriter"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	goa "goa.design/goa/v3/pkg"
 )
 
 // TestBuilderCopyV1VerifyEntry checks that both test sources require the open
@@ -24,7 +25,7 @@ func TestBuilderCopyV1VerifyEntry(t *testing.T) {
 			profile = "stored evaluator"
 		}
 		t.Run(profile, func(t *testing.T) {
-			for _, scenario := range []string{"valid", "base", "off branch", "unread", "no build", "dropped", "foreign work", "copy busy"} {
+			for _, scenario := range []string{"valid", "base", "off branch", "unknown commit", "unread", "no build", "dropped", "foreign work", "copy busy"} {
 				t.Run(scenario, func(t *testing.T) {
 					cp, card, build, candidate, builder := builderCopyV1Fixture(t, stored)
 					workspace := cp.currentWorkspaceDir()
@@ -32,6 +33,8 @@ func TestBuilderCopyV1VerifyEntry(t *testing.T) {
 					switch scenario {
 					case "base":
 						candidate, want = build.Base, "holds no builder work"
+					case "unknown commit":
+						candidate, want = strings.Repeat("f", 40), "is not in the project's repository"
 					case "off branch":
 						productionBuildGit(t, builder, "reset", "--hard", build.Base)
 						want = "is not on surla/build-1"
@@ -171,6 +174,9 @@ func TestBuilderCopyV1ForeignWorkText(t *testing.T) {
 		}
 		err := candidateBuildRefusal("candidate", "base", "surla/build-1", check)
 		require.Error(t, err)
+		var refusal *goa.ServiceError
+		require.ErrorAs(t, err, &refusal)
+		assert.Equal(t, "build_branch_mismatch", refusal.Name)
 		assert.ErrorContains(t, err, "commit foreign on surla/build-2 merges work the user has not taken")
 		if len(files) == 0 {
 			assert.NotContains(t, err.Error(), "files")

@@ -304,6 +304,13 @@ func (c *ControlPlane) checkCandidateBuildCommit(
 	}
 	work, cancel := context.WithTimeout(ctx, layoutReadTimeout)
 	defer cancel()
+	exists, err := commitExists(work, workspace, candidate)
+	if err != nil {
+		return err
+	}
+	if !exists {
+		return gensurla.MakeConflict(&layoutRefusal{reason: refusedUnknownCommit, commit: candidate})
+	}
 	branches := [2]string{testwriter.BuilderRole.Branch(saved.Number), testwriter.TestsRole.Branch(saved.Number)}
 	check, err := testwriter.CheckBuildCommit(work, workspace, candidate, branches[0], saved.Base, branches, recorded)
 	if err != nil {
@@ -343,7 +350,7 @@ func candidateBuildRefusal(candidate, base, branch string, check testwriter.Comm
 	if len(reasons) == 0 {
 		return nil
 	}
-	return gensurla.MakeConflict(fmt.Errorf("%s. Put this change's work on %s from base %s, without another build's work, and commit it; if you cannot, ask the user to build the change again and make it again from that build's base.", strings.Join(reasons, "; "), branch, base))
+	return gensurla.MakeBuildBranchMismatch(fmt.Errorf("%s. Put this change's work on %s from base %s, without another build's work, and commit it; if you cannot, ask the user to build the change again and make it again from that build's base.", strings.Join(reasons, "; "), branch, base))
 }
 
 // verificationPlanForTests completes the shared plan from testsChoice's
