@@ -21,6 +21,15 @@ import (
 	"github.com/goadesign/surla/internal/designversion"
 )
 
+// committedDesignCanonicalError preserves a failed canonicalization's actual
+// Git path separately from parser positions, which //line directives can alter.
+type committedDesignCanonicalError struct {
+	// file is the authoritative module-relative path selected by the walk.
+	file string
+	// cause retains the original parser/formatter error for existing callers.
+	cause error
+}
+
 const (
 	// draftFolderName is the guide's module, outside the project's Git files.
 	draftFolderName = ".surla-draft"
@@ -29,6 +38,12 @@ const (
 	// draftMarkerPrefix distinguishes Surla's folders from unrelated user files.
 	draftMarkerPrefix = "# surla draft "
 )
+
+// Error preserves the original diagnostic text for existing draft consumers.
+func (e *committedDesignCanonicalError) Error() string { return e.cause.Error() }
+
+// Unwrap preserves typed parser causes without trusting their reported paths.
+func (e *committedDesignCanonicalError) Unwrap() error { return e.cause }
 
 // readDraftSnapshot reads the evaluator's canonical snapshot and its provenance
 // through the same materialization and lock owner used by UpdateDraft.
@@ -587,7 +602,7 @@ func committedDesignAt(ctx context.Context, dir, repo, prefix, commit string) (m
 	for file, text := range files {
 		canonical, err := designversion.Canonical(filepath.Join(dir, file), text)
 		if err != nil {
-			return nil, err
+			return nil, &committedDesignCanonicalError{file: file, cause: err}
 		}
 		files[file] = canonical
 	}

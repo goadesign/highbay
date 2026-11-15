@@ -12,7 +12,6 @@ import (
 	"go/scanner"
 	"maps"
 	"path"
-	"path/filepath"
 	"slices"
 	"strings"
 	"time"
@@ -349,12 +348,9 @@ func checkCandidateDesign(
 		// Parser faults describe candidate content, not private input storage.
 		// Preserve Git/read faults for the entry's safe response and raw span.
 		var syntax scanner.ErrorList
-		if errors.As(err, &syntax) && len(syntax) > 0 {
-			file, relativeErr := filepath.Rel(workspace, syntax[0].Pos.Filename)
-			if relativeErr != nil {
-				return err
-			}
-			return candidateDesignRefusal(candidate, []string{filepath.ToSlash(file)})
+		var source *committedDesignCanonicalError
+		if errors.As(err, &syntax) && errors.As(err, &source) {
+			return candidateDesignRefusal(candidate, []string{source.file})
 		}
 		return err
 	}

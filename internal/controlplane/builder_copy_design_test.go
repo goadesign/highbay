@@ -26,7 +26,7 @@ func TestBuilderCopyV1CandidateDesign(t *testing.T) {
 		if stored {
 			profile = "stored"
 		}
-		for _, scenario := range []string{"changed", "added", "removed", "malformed", "canonical", "excluded", "merged"} {
+		for _, scenario := range []string{"changed", "added", "removed", "malformed", "line directive", "absolute line directive", "canonical", "excluded", "merged"} {
 			t.Run(profile+"/"+scenario, func(t *testing.T) {
 				cp, card, build, candidate, builder := builderCopyV1Fixture(t, stored)
 				file := "design/build_fixture.go"
@@ -44,6 +44,13 @@ func TestBuilderCopyV1CandidateDesign(t *testing.T) {
 				case "malformed":
 					want = "design/extra.go"
 					writeWorkspaceFiles(t, builder, map[string]string{want: "package"})
+				case "line directive", "absolute line directive":
+					want = "design/extra.go"
+					pretend := "pretend.go"
+					if scenario == "absolute line directive" {
+						pretend = "/outside/pretend.go"
+					}
+					writeWorkspaceFiles(t, builder, map[string]string{want: "//line " + pretend + ":1\npackage"})
 				case "canonical":
 					files, err := decodeDesignSource(build.DesignSource)
 					require.NoError(t, err)
@@ -71,6 +78,7 @@ func TestBuilderCopyV1CandidateDesign(t *testing.T) {
 				assert.Nil(t, result)
 				assertRefusalSays(t, err, "conflict", want)
 				assert.ErrorContains(t, err, "call generate_code, commit the agreed design, and call verify_change again")
+				assert.NotContains(t, err.Error(), "pretend.go")
 				assertVerifyDesignTransportRefusal(t, cp, payload, "conflict", want, "generate_code")
 			})
 		}
@@ -238,9 +246,11 @@ func assertVerifyDesignTransportRefusal(
 	assert.Contains(t, body, file)
 	assert.Contains(t, body, recovery)
 	assert.NotContains(t, body, cp.currentWorkspaceDir())
+	assert.NotContains(t, body, "pretend.go")
 	message, _ := mcpToolCall(t, server.URL, "builder", "verify_change", string(raw))
 	assert.Contains(t, message, file)
 	assert.Contains(t, message, recovery)
+	assert.NotContains(t, message, "pretend.go")
 	entries, err := os.ReadDir(cp.runsDir)
 	if !os.IsNotExist(err) {
 		require.NoError(t, err)
