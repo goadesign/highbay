@@ -84,7 +84,7 @@ func TestVerificationAndLiveTargetsUseTheAcceptedTests(t *testing.T) {
 	gitForLayoutTest(t, repo.workspace, "checkout", "-q", "--detach", repo.tests)
 	runsDir := filepath.Join(root, "ops", "runs")
 	options := func() Options {
-		return Options{
+		return Options{BuildCacheDir: t.TempDir(),
 			Team:         &TeamBinding{Owner: "alice@example.com", Service: &teamServiceFixture{}},
 			CardsDir:     filepath.Join(root, "ops", "cards"),
 			WorkspaceDir: repo.workspace,
@@ -307,7 +307,7 @@ func TestVerifyChangeRefusesWhatItCannotRunWithItsStep(t *testing.T) {
 			runsDir := filepath.Join(realTempDir(t), "runs")
 			self, err := os.Executable()
 			require.NoError(t, err)
-			opts := Options{
+			opts := Options{BuildCacheDir: t.TempDir(),
 				WorkspaceDir:    workspace,
 				RunsDir:         runsDir,
 				SurlaVersion:    testSurlaVersion,
@@ -407,7 +407,7 @@ func TestANewAcceptanceChangesOnlyTheTestsCommit(t *testing.T) {
 	repo := newLayoutStoryRepo(t, filepath.Join(root, "repo"), refundStory("Refund over the limit waits"))
 	gitForLayoutTest(t, repo.workspace, "checkout", "-q", "--detach", repo.tests)
 	runsDir := filepath.Join(root, "runs")
-	cp := newBuildControlPlane(t, Options{
+	cp := newBuildControlPlane(t, Options{BuildCacheDir: t.TempDir(),
 		WorkspaceDir:    repo.workspace,
 		RunsDir:         runsDir,
 		SurlaVersion:    testSurlaVersion,
@@ -472,7 +472,7 @@ func TestVerifyChangeSaysWhoActsUntilTheTestsAreAccepted(t *testing.T) {
 			repo := cloneLayoutRepo(t, repo)
 			gitForLayoutTest(t, repo.workspace, "checkout", "-q", "--detach", repo.tests)
 			runsDir := filepath.Join(realTempDir(t), "runs")
-			cp := newBuildControlPlane(t, Options{
+			cp := newBuildControlPlane(t, Options{BuildCacheDir: t.TempDir(),
 				WorkspaceDir:    repo.workspace,
 				RunsDir:         runsDir,
 				SurlaVersion:    testSurlaVersion,
@@ -501,7 +501,7 @@ func TestVerifyChangeSaysWhoActsUntilTheTestsAreAccepted(t *testing.T) {
 func TestTestsNotAcceptedIsWordedForEachReader(t *testing.T) {
 	repo := newLayoutStoryRepo(t, filepath.Join(realTempDir(t), "repo"), refundStory("Refund over the limit waits"))
 	gitForLayoutTest(t, repo.workspace, "checkout", "-q", "--detach", repo.tests)
-	cp := newBuildControlPlane(t, Options{
+	cp := newBuildControlPlane(t, Options{BuildCacheDir: t.TempDir(),
 		WorkspaceDir:    repo.workspace,
 		RunsDir:         filepath.Join(realTempDir(t), "runs"),
 		SurlaVersion:    testSurlaVersion,
@@ -566,8 +566,10 @@ func TestTestWriterReadsOnlyTheRunsOfAnAssignedChange(t *testing.T) {
 			if tc.stored {
 				plan := layoutPlan(repo, "", repo.tests)
 				plan.ReportDir = realTempDir(t)
+				opts.BuildCacheDir = t.TempDir()
 				opts.Verification = &VerificationConfig{RunsDir: runsDir, Plan: plan, Command: exit, Timeout: time.Hour}
 			} else {
+				opts.BuildCacheDir = t.TempDir()
 				opts.WrittenTestRuns = &WrittenTestRuns{ReportDir: realTempDir(t), Command: exit, Timeout: time.Hour}
 			}
 			var cp *ControlPlane
@@ -629,7 +631,7 @@ func TestVerifyChangeTestModuleGuardAcrossRegenerationMergeAndNextChange(t *test
 	repoDir := filepath.Join(root, "repo")
 	repo := newLayoutStoryRepo(t, repoDir, refundStory("Refund over the limit waits"))
 	runsDir := filepath.Join(root, "runs")
-	cp := newBuildControlPlane(t, Options{
+	cp := newBuildControlPlane(t, Options{BuildCacheDir: t.TempDir(),
 		CardsDir:        filepath.Join(root, "cards"),
 		WorkspaceDir:    repo.workspace,
 		RunsDir:         runsDir,
@@ -653,7 +655,7 @@ func TestVerifyChangeTestModuleGuardAcrossRegenerationMergeAndNextChange(t *test
 	storedRepo := cloneLayoutRepo(t, repo)
 	storedPlan := layoutPlan(storedRepo, "", storedRepo.tests)
 	storedPlan.ReportDir = realTempDir(t)
-	storedCP := newBuildControlPlane(t, Options{
+	storedCP := newBuildControlPlane(t, Options{BuildCacheDir: t.TempDir(),
 		WorkspaceDir: storedRepo.workspace,
 		RunsDir:      storedRunsDir,
 		SurlaVersion: testSurlaVersion,
@@ -908,7 +910,7 @@ func TestVerifyChangeTestModuleFileLimitBelowAtAndAbove(t *testing.T) {
 			root := realTempDir(t)
 			repoDir := filepath.Join(root, "repo")
 			repo := newLayoutStoryRepo(t, repoDir, refundStory("Refund over the limit waits"))
-			cp := newBuildControlPlane(t, Options{
+			cp := newBuildControlPlane(t, Options{BuildCacheDir: t.TempDir(),
 				WorkspaceDir:    repo.workspace,
 				RunsDir:         filepath.Join(root, "runs"),
 				SurlaVersion:    testSurlaVersion,
@@ -1182,7 +1184,7 @@ func startRunFor(t *testing.T, cp *ControlPlane, verifiable bool, card *gensurla
 	plan.WorkDir = filepath.Join(runsDir, runID, "work")
 	_, err := verifyrun.Start(runsDir, verifyrun.Request{
 		RunID: runID, Owner: "alice@example.com", ChangeID: card.ChangeID, AcceptedAt: time.Now().UTC(), Timeout: time.Hour, Plan: plan,
-	}, []string{"/bin/sh", "-c", "exit 0", "sh"}, nil)
+	}, []string{"/bin/sh", "-c", "exit 0", "sh"}, nil, t.TempDir())
 	require.NoError(t, err)
 	return runID
 }

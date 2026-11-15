@@ -35,7 +35,7 @@ const (
 // TestMain lets the test binary act as `surla verify-run supervise|execute`
 // so the lifecycle runs in real processes.
 func TestMain(m *testing.M) {
-	if len(os.Args) == 4 && os.Args[1] == "verify-run" {
+	if len(os.Args) == 5 && os.Args[1] == "verify-run" {
 		os.Exit(helper(os.Args[2], os.Args[3]))
 	}
 	if len(os.Args) >= 2 && os.Args[1] == "--live" {
@@ -52,7 +52,7 @@ func helper(role, dir string) int {
 	var err error
 	switch role {
 	case "supervise":
-		err = Supervise(dir, []string{os.Args[0]})
+		err = Supervise(dir, []string{os.Args[0]}, os.Args[4])
 	case "execute":
 		err = Execute(dir, fakeRun, os.Stdout, os.Stderr)
 	case "live":
@@ -76,7 +76,7 @@ var evaluatorPlan = verify.Plan{Tests: verify.TestsEvaluator}
 func fakeRun(ctx context.Context, plan verify.Plan, environ []string) (verify.Report, error) {
 	switch os.Getenv(fakeModeEnv) {
 	case "workspace-preparation":
-		return verify.Run(ctx, plan, environ)
+		return verify.Run(ctx, plan, environ, os.Args[4])
 	case "judge":
 		// An operator's suite whose judge needs its provider key: preparation
 		// runs in this process, the suite from environ.
@@ -177,7 +177,7 @@ func start(t *testing.T, mode string) (string, string, int) {
 			SuiteCommit: strings.Repeat("b", 40), ReportDir: reports,
 			WorkDir: filepath.Join(root, runID, "work"), Tests: verify.TestsEvaluator,
 		},
-	}, []string{os.Args[0]}, nil)
+	}, []string{os.Args[0]}, nil, t.TempDir())
 	require.NoError(t, err)
 	return root, runID, pid
 }
@@ -349,15 +349,15 @@ func TestReadAndStartRejectInvalidRuns(t *testing.T) {
 		AcceptedAt: time.Now().UTC(),
 		Timeout:    time.Minute,
 		Plan:       verify.Plan{WorkDir: "w", Tests: verify.TestsEvaluator},
-	}, []string{os.Args[0]}, nil)
+	}, []string{os.Args[0]}, nil, t.TempDir())
 	assert.ErrorContains(t, err, "create run directory", "a run directory is never reused")
-	_, err = Start(root, Request{RunID: NewRunID(), Timeout: -time.Second}, []string{os.Args[0]}, nil)
+	_, err = Start(root, Request{RunID: NewRunID(), Timeout: -time.Second}, []string{os.Args[0]}, nil, t.TempDir())
 	assert.ErrorContains(t, err, "must not be negative")
-	_, err = Start(root, Request{RunID: NewRunID(), Timeout: time.Minute}, []string{os.Args[0]}, nil)
+	_, err = Start(root, Request{RunID: NewRunID(), Timeout: time.Minute}, []string{os.Args[0]}, nil, t.TempDir())
 	assert.ErrorContains(t, err, "work directory is required")
-	_, err = Start(root, Request{RunID: NewRunID(), Timeout: time.Minute, Plan: verify.Plan{WorkDir: "w"}}, []string{os.Args[0]}, nil)
+	_, err = Start(root, Request{RunID: NewRunID(), Timeout: time.Minute, Plan: verify.Plan{WorkDir: "w"}}, []string{os.Args[0]}, nil, t.TempDir())
 	assert.ErrorContains(t, err, "run owner is required")
-	_, err = Start(root, Request{RunID: NewRunID(), Owner: "alice", Timeout: time.Minute, Plan: verify.Plan{WorkDir: "w"}}, []string{os.Args[0]}, nil)
+	_, err = Start(root, Request{RunID: NewRunID(), Owner: "alice", Timeout: time.Minute, Plan: verify.Plan{WorkDir: "w"}}, []string{os.Args[0]}, nil, t.TempDir())
 	assert.ErrorContains(t, err, "run accepted_at time is required")
 }
 

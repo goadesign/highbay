@@ -88,10 +88,12 @@ func TestProjectTestSourceHasThreeAnswers(t *testing.T) {
 				writeWorkspaceFiles(t, opts.WorkspaceDir, tc.files)
 			}
 			if tc.stored {
+				opts.BuildCacheDir = t.TempDir()
 				opts.Verification = &VerificationConfig{RunsDir: t.TempDir()}
 			}
 			if tc.written {
 				opts.RunsDir = t.TempDir()
+				opts.BuildCacheDir = t.TempDir()
 				opts.WrittenTestRuns = &WrittenTestRuns{ReportDir: t.TempDir(), Timeout: time.Minute}
 			}
 			cp := newControlPlane(t, opts)

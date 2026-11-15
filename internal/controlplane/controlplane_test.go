@@ -925,7 +925,7 @@ func TestUnchangedConfirmationFromAnotherSessionKeepsRevision(t *testing.T) {
 	t.Cleanup(func() { assert.NoError(t, provider.Shutdown(context.Background())) })
 	spec := reportSpec{SuiteID: "suite", SuiteCommit: strings.Repeat("b", 40), Environment: "sim", Artifacts: map[string]string{"app": "artifact"}}
 	target := &promotionTargetStub{artifacts: spec.Artifacts}
-	cp := newControlPlane(t, buildFixtureOptions(t, Options{Verification: verificationConfig(t), PromotionTarget: target, TracerProvider: provider}))
+	cp := newControlPlane(t, buildFixtureOptions(t, Options{BuildCacheDir: t.TempDir(), Verification: verificationConfig(t), PromotionTarget: target, TracerProvider: provider}))
 	auth := fixtureCredentials(map[string]Principal{
 		"guide":  {ID: "owner", CallerID: "guide", Kind: CallerGuide},
 		"first":  {ID: "owner", CallerID: "session-one", Kind: CallerUser},

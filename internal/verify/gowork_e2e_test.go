@@ -30,7 +30,7 @@ func TestPrepareUsesCommittedNestedWorkspace(t *testing.T) {
 			const outside = "go 1.27.3\n\nuse ./untracked-app\n"
 			file := filepath.Join(outer, "go.work")
 			require.NoError(t, os.WriteFile(file, []byte(outside), 0o600))
-			prepared, err := Prepare(t.Context(), goWorkVerificationPlan(repo, commit, filepath.Join(outer, "run")))
+			prepared, err := Prepare(t.Context(), goWorkVerificationPlan(repo, commit, filepath.Join(outer, "run")), t.TempDir())
 			if internal {
 				require.NoError(t, err)
 				assert.Len(t, prepared.Binding.Artifacts, 1)
@@ -61,7 +61,7 @@ func TestPrepareWrittenSuiteIgnoresBothWorkspaces(t *testing.T) {
 	repo, commit := writtenWorkspaceVerificationFixture(t)
 	plan := goWorkVerificationPlan(repo, commit, filepath.Join(t.TempDir(), "run"))
 	plan.Tests = TestsWritten
-	prepared, err := Prepare(t.Context(), plan)
+	prepared, err := Prepare(t.Context(), plan, t.TempDir())
 	require.NoError(t, err)
 	assert.Len(t, prepared.Binding.Artifacts, 1)
 	assert.FileExists(t, prepared.SuiteBin)

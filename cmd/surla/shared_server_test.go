@@ -452,7 +452,7 @@ func TestSharedServerSignalExitAndDetachedVerificationSurvival(t *testing.T) {
 			ReportDir:       reportsDir,
 			Tests:           verify.TestsEvaluator,
 		},
-	}, []string{supervisorScript}, nil)
+	}, []string{supervisorScript}, nil, t.TempDir())
 	require.NoError(t, err)
 	t.Cleanup(func() {
 		assert.NoError(t, os.WriteFile(releaseFile, []byte("done"), 0o600))

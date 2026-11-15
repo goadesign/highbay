@@ -32,14 +32,15 @@ import (
 // CP3 prompt drafts. It lives no longer than the process that started it.
 //
 // LaunchLive, called by `surla serve`, creates a directory under the live root
-// and starts `surla verify-run live <dir>` as the leader of a new process
+// and starts `surla verify-run live <dir> <build-cache-dir>` as the leader of a new process
 // group, with the read end of a control pipe on its descriptor 3 and TMPDIR
 // set inside the directory. The executor (Live) watches that pipe before it
 // does anything else, then runs verify.Prepare and the suite's --live mode in
 // its own group and relays the suite's ready line. Every process the session
-// starts is in that one group, and every file it writes, apart from the
-// shared Go module and toolchain caches verify.Prepare inherits, is under the
-// directory.
+// starts begins in that group. Preparation keeps its checkouts, scratch,
+// outputs and evidence in the directory, and uses the explicitly supplied
+// retained package cache alongside the module cache and selected toolchain.
+// Programs run as the user and can write elsewhere with that user's access.
 //
 // Any terminal event ends the whole group at once: when preparation fails,
 // when the suite prints no valid ready line, or when the suite exits, the
@@ -187,14 +188,19 @@ func LeftoverLiveDirs(root string) ([]string, error) {
 // LaunchLive fails, no process was started and the directory it created is
 // removed. The allocated directory and child TMPDIR are absolute and
 // symlink-free, so preparation and suite processes can change directories
-// without changing them.
+// without changing them. buildCacheDir is required and passed only to the
+// internal executor, independently of operation scratch and saved live records.
 func LaunchLive(
 	root string,
 	plan verify.Plan,
 	key string,
 	command, env []string,
 	settings []modelsettings.Settings,
+	buildCacheDir string,
 ) (*LiveProcess, error) {
+	if buildCacheDir == "" {
+		return nil, errors.New("build cache directory is required")
+	}
 	if key == "" {
 		return nil, errors.New("live target key is required")
 	}
@@ -234,7 +240,7 @@ func LaunchLive(
 	if err != nil {
 		return nil, errors.Join(fmt.Errorf("create executor output pipe: %w", err), control.Close(), keep.Close(), os.RemoveAll(dir))
 	}
-	cmd := exec.Command(command[0], append(command[1:], "verify-run", "live", dir)...)
+	cmd := exec.Command(command[0], append(command[1:], "verify-run", "live", dir, buildCacheDir)...)
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	cmd.ExtraFiles = []*os.File{control}
 	cmd.Env = append(liveEnv(env), "TMPDIR="+tmp, suite.LiveKeyEnv+"="+key)
@@ -273,7 +279,7 @@ func LaunchLive(
 	return p, nil
 }
 
-// Live runs as `surla verify-run live <dir>`, the target's process-group
+// Live runs as `surla verify-run live <dir> <build-cache-dir>`, the target's process-group
 // leader. It starts watching its parent's control pipe before reading stdin,
 // then removes provider families so preparation receives no held setting.
 // Written tests receive a gateway: after preparation the executor applies

@@ -234,7 +234,7 @@ func TestConfigureModelValidationTelemetryAndLiveEnv(t *testing.T) {
 		// live target, which gets only the handed-over snapshot.
 		t.Setenv("ANTHROPIC_API_KEY", "inherited-key-sentinel")
 		t.Setenv("ANTHROPIC_ADMIN_KEY", "inherited-admin-sentinel")
-		cp := newControlPlane(t, buildFixtureOptions(t, Options{
+		cp := newControlPlane(t, buildFixtureOptions(t, Options{BuildCacheDir: t.TempDir(),
 			CardsDir:     cardsDir,
 			Verification: &VerificationConfig{RunsDir: t.TempDir()},
 			Live: &LiveConfig{

@@ -495,7 +495,7 @@ func TestStoredEvaluatorRunsReceiveEveryHeldProviderSnapshot(t *testing.T) {
 	cfg := verificationConfig(t)
 	cfg.Command = []string{"/bin/sh", "-c", presenceScript, filepath.Join(report, "run")}
 	t.Setenv("SURLA_TEST_FIRST_KEY", sentinelKey)
-	cp := newControlPlane(t, buildFixtureOptions(t, Options{Verification: cfg}))
+	cp := newControlPlane(t, buildFixtureOptions(t, Options{BuildCacheDir: t.TempDir(), Verification: cfg}))
 	alice := asCaller("alice@example.com", CallerUser)
 	card := saveProposedCardFixture(t, cp, "alice@example.com", "chg", "Refunds up to $50 are instant.", &gensurla.CP1Analysis{
 		Summary: "Refunds up to $50 are instant.", Ambiguities: []*gensurla.CP1AnalysisAmbiguity{}, PreservedBehaviors: []string{},
@@ -537,7 +537,7 @@ func TestWrittenTestRunsReceiveNoProviderSettings(t *testing.T) {
 	runsDir := filepath.Join(root, "runs")
 	report := t.TempDir()
 	t.Setenv("SURLA_TEST_FIRST_KEY", sentinelKey)
-	cp := newBuildControlPlane(t, Options{
+	cp := newBuildControlPlane(t, Options{BuildCacheDir: t.TempDir(),
 		WorkspaceDir: repo.workspace,
 		RunsDir:      runsDir,
 		SurlaVersion: testSurlaVersion,
@@ -573,7 +573,7 @@ func TestLiveStartFailureExportsProtectedDetail(t *testing.T) {
 	provider := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(recorder))
 	t.Cleanup(func() { assert.NoError(t, provider.Shutdown(context.Background())) })
 	cardsDir := t.TempDir()
-	cp := newControlPlane(t, buildFixtureOptions(t, Options{
+	cp := newControlPlane(t, buildFixtureOptions(t, Options{BuildCacheDir: t.TempDir(),
 		CardsDir: cardsDir, TracerProvider: provider,
 		Verification: &VerificationConfig{RunsDir: t.TempDir()},
 		Live:         &LiveConfig{Command: []string{self}, Env: append(os.Environ(), liveTargetModeEnv+"=leak"), StartTimeout: time.Minute},
@@ -625,7 +625,7 @@ func TestLiveStartFailureExportsNoKeyPieceAtTheCut(t *testing.T) {
 	// The stand-in is the executor: its standard error is the log, and it
 	// ends without a ready line.
 	script := `printf '%s' "$ANTHROPIC_API_KEY" >&2; head -c ` + strconv.Itoa(filler) + ` /dev/zero | tr '\000' y >&2; exit 1`
-	cp := newControlPlane(t, buildFixtureOptions(t, Options{
+	cp := newControlPlane(t, buildFixtureOptions(t, Options{BuildCacheDir: t.TempDir(),
 		CardsDir: cardsDir, TracerProvider: provider,
 		Verification: &VerificationConfig{RunsDir: t.TempDir()},
 		Live:         &LiveConfig{Command: []string{"/bin/sh", "-c", script, "executor"}, Env: os.Environ(), StartTimeout: time.Minute},
@@ -666,7 +666,7 @@ func TestSavedFilesHoldNoHandedOverValue(t *testing.T) {
 	runsDir := t.TempDir()
 	provider := sdktrace.NewTracerProvider()
 	t.Cleanup(func() { assert.NoError(t, provider.Shutdown(context.Background())) })
-	cp := newControlPlane(t, buildFixtureOptions(t, Options{
+	cp := newControlPlane(t, buildFixtureOptions(t, Options{BuildCacheDir: t.TempDir(),
 		CardsDir: cardsDir, TracerProvider: provider,
 		Verification: &VerificationConfig{RunsDir: runsDir},
 		Live:         &LiveConfig{Command: []string{self}, Env: append(os.Environ(), liveTargetModeEnv+"=serve"), StartTimeout: time.Minute},
@@ -711,7 +711,7 @@ func TestChangedSettingsReachTheNextLaunchOnly(t *testing.T) {
 [ "$ANTHROPIC_API_KEY" = "$SURLA_TEST_FIRST_KEY" ] && first=yes || first=no
 printf 'FIRST_KEY=%s\nKEY_SET=%s\n' "$first" "${ANTHROPIC_API_KEY:+yes}" > "$SURLA_TEST_PRESENCE_DIR/launch-$n"
 exec "$0" "$1" "$2" "$3"`
-	cp := newControlPlane(t, buildFixtureOptions(t, Options{
+	cp := newControlPlane(t, buildFixtureOptions(t, Options{BuildCacheDir: t.TempDir(),
 		Verification: &VerificationConfig{RunsDir: t.TempDir()},
 		Live: &LiveConfig{Command: []string{"/bin/sh", "-c", launch, self}, Env: append(os.Environ(), liveTargetModeEnv+"=serve"),
 			StartTimeout: time.Minute},

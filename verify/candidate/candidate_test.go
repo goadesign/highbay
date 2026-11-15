@@ -631,6 +631,7 @@ func TestBuildTestReportsWhetherThePackageHasTests(t *testing.T) {
 			out := filepath.Join(workDir, "gocache", "README")
 			spec := testBuildSpec(t, noTestsMod, noTestsMod, out, filepath.Join(t.TempDir(), "build.log"))
 			spec.WorkDir = workDir
+			spec.BuildCacheDir = filepath.Join(workDir, "gocache")
 			hasTests, err := BuildTest(t.Context(), spec, (*exec.Cmd).Run)
 			require.NoError(t, err)
 			assert.False(t, hasTests)
@@ -644,6 +645,7 @@ func TestBuildTestReportsWhetherThePackageHasTests(t *testing.T) {
 			out := filepath.Join(outDir, "README")
 			spec := testBuildSpec(t, noTestsMod, noTestsMod, out, filepath.Join(t.TempDir(), "build.log"))
 			spec.WorkDir = workDir
+			spec.BuildCacheDir = filepath.Join(workDir, "gocache")
 			hasTests, err := BuildTest(t.Context(), spec, (*exec.Cmd).Run)
 			require.NoError(t, err)
 			assert.False(t, hasTests)
@@ -656,6 +658,7 @@ func TestBuildTestReportsWhetherThePackageHasTests(t *testing.T) {
 			t.Chdir(gocacheDir)
 			spec := testBuildSpec(t, noTestsMod, noTestsMod, "README", filepath.Join(t.TempDir(), "build.log"))
 			spec.WorkDir = workDir
+			spec.BuildCacheDir = filepath.Join(workDir, "gocache")
 			hasTests, err := BuildTest(t.Context(), spec, (*exec.Cmd).Run)
 			require.NoError(t, err)
 			assert.False(t, hasTests)
@@ -685,6 +688,7 @@ func TestBuildTestReportsWhetherThePackageHasTests(t *testing.T) {
 			out := filepath.Join(outDir, "README")
 			spec := testBuildSpec(t, withTestsMod, withTestsMod, out, filepath.Join(t.TempDir(), "build.log"))
 			spec.WorkDir = workDir
+			spec.BuildCacheDir = filepath.Join(workDir, "gocache")
 			hasTests, err := BuildTest(t.Context(), spec, (*exec.Cmd).Run)
 			require.ErrorContains(t, err, "publish test binary")
 			require.ErrorIs(t, err, os.ErrExist)
@@ -848,6 +852,7 @@ func TestBuildRunsWithoutHomeOrTelemetry(t *testing.T) {
 				dir := t.TempDir()
 				spec := testBuildSpec(t, mod, mod, filepath.Join(dir, "out"), filepath.Join(dir, "build.log"))
 				spec.WorkDir = workDir
+				spec.BuildCacheDir = filepath.Join(workDir, "gocache")
 				run := func(cmd *exec.Cmd) error {
 					entered = true
 					readyWg.Done()
@@ -987,9 +992,10 @@ func writeModule(t *testing.T, files map[string]string) string {
 // directory.
 func testBuildSpec(t *testing.T, sourceDir, moduleDir, out, log string) BuildSpec {
 	t.Helper()
-	return BuildSpec{
+	work := t.TempDir()
+	return BuildSpec{BuildCacheDir: filepath.Join(work, "gocache"),
 		SourceDir: sourceDir, ModuleDir: moduleDir, Package: ".", Out: out,
-		GOROOT: goEnv(t, "GOROOT"), ModCache: goEnv(t, "GOMODCACHE"), WorkDir: t.TempDir(), LogFile: log,
+		GOROOT: goEnv(t, "GOROOT"), ModCache: goEnv(t, "GOMODCACHE"), WorkDir: work, LogFile: log,
 	}
 }
 

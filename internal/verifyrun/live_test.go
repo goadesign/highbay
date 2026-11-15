@@ -229,7 +229,7 @@ func startLiveWith(
 	command, env []string,
 	settings ...modelsettings.Settings,
 ) (*LiveProcess, error) {
-	p, err := LaunchLive(root, plan, key, command, env, settings)
+	p, err := LaunchLive(root, plan, key, command, env, settings, filepath.Join(root, "build-cache"))
 	if err != nil {
 		return nil, err
 	}
@@ -781,7 +781,7 @@ func TestAwaitReadyCapturesDetailOnTimeoutAndLeavesTheTargetToItsOwner(t *testin
 	t.Setenv(liveFakeEnv, "prepare-hangs")
 	self, err := os.Executable()
 	require.NoError(t, err)
-	p, err := LaunchLive(t.TempDir(), evaluatorPlan, "secret-key", []string{self}, os.Environ(), nil)
+	p, err := LaunchLive(t.TempDir(), evaluatorPlan, "secret-key", []string{self}, os.Environ(), nil, t.TempDir())
 	require.NoError(t, err)
 	pgid, _ := recordedPIDs(t, p.Dir(), 2)
 	ctx, cancel := context.WithTimeout(t.Context(), 300*time.Millisecond)

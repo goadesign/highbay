@@ -195,11 +195,11 @@ func writeCheckpointStatus(w io.Writer, opts controlplane.Options) {
 	}
 	switch {
 	case opts.Verification != nil:
-		fmt.Fprintf(w, "surla: CP4 (verify_change, get_verification, list_verifications): on with stored verification settings (runs in %s, reports in %s, evaluator suite commit %s)\n",
-			opts.Verification.RunsDir, opts.Verification.Plan.ReportDir, opts.Verification.Plan.SuiteCommit)
+		fmt.Fprintf(w, "surla: CP4 (verify_change, get_verification, list_verifications): on with stored verification settings (runs in %s, reports in %s, build cache in %s, evaluator suite commit %s)\n",
+			opts.Verification.RunsDir, opts.Verification.Plan.ReportDir, opts.BuildCacheDir, opts.Verification.Plan.SuiteCommit)
 	case opts.WrittenTestRuns != nil:
-		fmt.Fprintf(w, "surla: CP4 (verify_change, get_verification, list_verifications): on with the tests accepted for each change's build (runs in %s, reports in %s)\n",
-			opts.RunsDir, opts.WrittenTestRuns.ReportDir)
+		fmt.Fprintf(w, "surla: CP4 (verify_change, get_verification, list_verifications): on with the tests accepted for each change's build (runs in %s, reports in %s, build cache in %s)\n",
+			opts.RunsDir, opts.WrittenTestRuns.ReportDir, opts.BuildCacheDir)
 	default:
 		fmt.Fprintln(w, "surla: CP4 (verify_change, get_verification, list_verifications): off"+
 			" (use surla verification set, or run surla verify on the CLI)")
@@ -569,6 +569,7 @@ func projectServeOptions(state *project.State, environ []string) (controlplane.O
 		SurlaVersion:           surlaBuildVersion(),
 		Verification:           ws.verification,
 		RunsDir:                ws.runsDir,
+		BuildCacheDir:          ws.buildCacheDir,
 		WrittenTestRuns:        ws.writtenTestRuns,
 		PromotionTarget:        ws.promotionTarget,
 		ResolvePromotionTarget: ws.resolvePromotionTarget,

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -44,25 +45,30 @@ type verificationFile struct {
 const defaultProjectVerifyTimeout = 30 * time.Minute
 
 // runVerifyRun runs one internal role started by verifyrun: `surla verify-run
-// supervise <dir>` or `surla verify-run execute <dir>` for a verification run
-// (verifyrun.Start), or `surla verify-run live <dir>` for a CP3 live target
+// supervise <dir> <build-cache-dir>` or `surla verify-run execute <dir> <build-cache-dir>` for a verification run
+// (verifyrun.Start), or `surla verify-run live <dir> <build-cache-dir>` for a CP3 live target
 // (verifyrun.LaunchLive). Only verifyrun starts these; they are not listed in
 // the usage text.
 func runVerifyRun(args []string) error {
-	if len(args) != 2 {
-		return errors.New("verify-run takes a role (supervise, execute or live) and a run directory")
+	if len(args) != 3 || args[2] == "" {
+		return errors.New("verify-run takes a role (supervise, execute or live), a run directory and a build cache directory")
 	}
 	self, err := selfCommand()
 	if err != nil {
 		return err
 	}
+	buildCacheDir := args[2]
 	switch role, dir := args[0], args[1]; role {
 	case "supervise":
-		return verifyrun.Supervise(dir, self)
+		return verifyrun.Supervise(dir, self, buildCacheDir)
 	case "execute":
-		return verifyrun.Execute(dir, verify.Run, os.Stdout, os.Stderr)
+		return verifyrun.Execute(dir, func(ctx context.Context, plan verify.Plan, environ []string) (verify.Report, error) {
+			return verify.Run(ctx, plan, environ, buildCacheDir)
+		}, os.Stdout, os.Stderr)
 	case "live":
-		return verifyrun.Live(dir, verify.Prepare, newLiveProvider, os.Stdout, os.Stderr)
+		return verifyrun.Live(dir, func(ctx context.Context, plan verify.Plan) (verify.Prepared, error) {
+			return verify.Prepare(ctx, plan, buildCacheDir)
+		}, newLiveProvider, os.Stdout, os.Stderr)
 	default:
 		return fmt.Errorf("unknown verify-run role %q", role)
 	}
@@ -88,6 +94,10 @@ func runVerify(args []string) error {
 	if err != nil {
 		return err
 	}
+	plan.WorkDir, err = filepath.Abs(plan.WorkDir)
+	if err != nil {
+		return fmt.Errorf("resolve work directory: %w", err)
+	}
 	self, err := selfCommand()
 	if err != nil {
 		return err
@@ -107,7 +117,7 @@ func runVerify(args []string) error {
 	// no handed-over settings are added.
 	supervisor, err := verifyrun.Start(root, verifyrun.Request{
 		RunID: runID, Owner: "cli", AcceptedAt: time.Now().UTC(), Timeout: timeout, Plan: plan,
-	}, self, nil)
+	}, self, nil, filepath.Join(plan.WorkDir, "gocache"))
 	if err != nil {
 		return err
 	}

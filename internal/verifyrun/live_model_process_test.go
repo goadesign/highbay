@@ -111,7 +111,7 @@ func TestLiveModelGatewayEndsWithItsExecutor(t *testing.T) {
 			require.NoError(t, err)
 			env := append(os.Environ(), verify.LiveModelProviderEnv+"=anthropic", verify.LiveModelNameEnv+"=fixture")
 			p, err := LaunchLive(t.TempDir(), verify.Plan{Tests: verify.TestsWritten}, "secret-key", []string{self}, env,
-				[]modelsettings.Settings{held})
+				[]modelsettings.Settings{held}, t.TempDir())
 			require.NoError(t, err)
 			t.Cleanup(func() { assert.NoError(t, p.Stop()) })
 			ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)

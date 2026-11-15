@@ -245,9 +245,9 @@ export function BuildSectionView({
     ? "Build agreed revision"
     : saved !== null ? "Build current agreed revision" : "Build this change";
   const showDirect = (!current || !open) && !replay && draftedBeforeDrop === false && confirmed && displayedCurrent && build !== null;
-  const executionExplanation = saved?.test_writer.tests.state === "not_used"
+  const executionExplanation = (saved?.test_writer.tests.state === "not_used"
     ? "From Build on, those tests and the builder’s code run on this machine as ordinary programs, with your access to files and the network; nothing confines them. Approval decides only what merges."
-    : "From Build on, the tests and the builder’s code run on this machine as ordinary programs, with your access to files and the network; nothing confines them. Approval decides only what merges.";
+    : "From Build on, the tests and the builder’s code run on this machine as ordinary programs, with your access to files and the network; nothing confines them. Approval decides only what merges.") + " Surla keeps compiled packages for this project between live starts and verification runs. Go checks their existence and recorded size, not their contents against the selected source. Programs running as you can change that cache, like the module cache or toolchain, so a report can describe a binary or test program the selected source would not produce. Deleting the cache while idle forces a rebuild; it does not authenticate the other compiler inputs.";
   const startExplanation = (saved?.test_writer.tests.state === "not_used"
     ? "Build starts the builder. This project uses its configured tests. "
     : saved !== null
@@ -510,7 +510,7 @@ export function BuildTakingView({ changeId, build, disabled, dropping, onDrop, o
       {taking.state === "merged" ? <p>It is in your branch. {build.in_force ? "Build another change or refine this one when there is more to do." : "Build the current agreed revision to implement the new agreement."} No role has work on this build.</p> : null}
       {taking.state === "dropped" ? <>
         {taking.kept_branches.length > 0 ? <ul>{taking.kept_branches.map((branch) => <li key={branch}><code>{branch}</code> — <code>git log {branch}</code> shows it.</li>)}</ul> : null}
-        <p>Surla builds nothing on it. No role has work on this build. Another change can be built.</p>
+        <p>Surla builds nothing on it. No role has work on this build. If another change’s agreement was drafted before this drop, ask the guide to refresh its Story and propose a revision, then adopt that revision before building.</p>
       </> : null}
       {children}
       {header === null ? actionRow : null}

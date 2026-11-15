@@ -57,8 +57,10 @@ func TestNewRejectsAliasedWorkspaceStorage(t *testing.T) {
 						case "stage":
 							opts.InitStageDir = store
 						case "verification_runs":
+							opts.BuildCacheDir = t.TempDir()
 							opts.Verification = &VerificationConfig{RunsDir: store}
 						case "reports":
+							opts.BuildCacheDir = t.TempDir()
 							opts.Verification = &VerificationConfig{Plan: verify.Plan{ReportDir: store}}
 						}
 						cp, err := New(opts)

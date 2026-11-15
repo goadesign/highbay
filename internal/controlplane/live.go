@@ -256,7 +256,7 @@ func (c *ControlPlane) StartLiveTarget(ctx context.Context, p *gensurla.StartLiv
 		cmd = verCfg.Command
 	}
 	launchedAt := time.Now()
-	proc, err := verifyrun.LaunchLive(c.liveRoot, plan, key, cmd, env, settings)
+	proc, err := verifyrun.LaunchLive(c.liveRoot, plan, key, cmd, env, settings, c.buildCacheDir)
 	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, "live target did not launch")

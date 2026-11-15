@@ -42,7 +42,7 @@ func TestPrepareGoWorkUsesCheckoutRoot(t *testing.T) {
 			t.Setenv("PATH", filepath.Join(goroot, "bin")+string(os.PathListSeparator)+os.Getenv("PATH"))
 			t.Setenv("GOWORK", "off")
 			work := filepath.Join(outer, "run")
-			prepared, err := Prepare(t.Context(), goWorkVerificationPlan(repo, commit, work))
+			prepared, err := Prepare(t.Context(), goWorkVerificationPlan(repo, commit, work), t.TempDir())
 			require.NoError(t, err)
 			assert.Len(t, prepared.Binding.Artifacts, 1)
 			physical, err := filepath.EvalSymlinks(work)

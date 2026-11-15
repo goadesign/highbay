@@ -15,9 +15,9 @@
 // the run.
 //
 // Start, called by the API, takes the lock before it writes request.json and
-// hands the locked file to `surla verify-run supervise <dir>`, a new session
+// hands the locked file to `surla verify-run supervise <dir> <build-cache-dir>`, a new session
 // that keeps the lock for its whole life. The supervisor starts
-// `surla verify-run execute <dir>` as the leader of a new process group, so
+// `surla verify-run execute <dir> <build-cache-dir>` as the leader of a new process group, so
 // the builds, the evaluator suite and the candidates it runs all stay in that
 // one group. When the executor ends, for any reason, the supervisor kills the
 // group, waits until it is empty, and only then writes result.json. If the
@@ -223,8 +223,19 @@ func NewRunID() string {
 // entry, so only the test program receives them, but its initial
 // environment block, which same-user processes can read, keeps them. The run directory must not exist,
 // req.Plan.WorkDir must name the run's work directory, and req.Plan.Tests
-// must name one of the declared test sources.
-func Start(root string, req Request, command []string, settings []modelsettings.Settings) (int, error) {
+// must name one of the declared test sources. buildCacheDir is required and
+// is relayed to the executor as an argument; it never enters saved requests
+// or the test program's arguments or environment.
+func Start(
+	root string,
+	req Request,
+	command []string,
+	settings []modelsettings.Settings,
+	buildCacheDir string,
+) (int, error) {
+	if buildCacheDir == "" {
+		return 0, errors.New("build cache directory is required")
+	}
 	if !runIDPattern.MatchString(req.RunID) {
 		return 0, fmt.Errorf("run ID %q is not 32 lowercase hex characters", req.RunID)
 	}
@@ -269,7 +280,7 @@ func Start(root string, req Request, command []string, settings []modelsettings.
 		return 0, fmt.Errorf("create supervisor log: %w", err)
 	}
 	defer logFile.Close()
-	cmd := exec.Command(command[0], append(command[1:], "verify-run", "supervise", dir)...)
+	cmd := exec.Command(command[0], append(command[1:], "verify-run", "supervise", dir, buildCacheDir)...)
 	cmd.Env = os.Environ()
 	for _, s := range settings {
 		cmd.Env = append(cmd.Env, s.Environ()...)
@@ -284,7 +295,7 @@ func Start(root string, req Request, command []string, settings []modelsettings.
 	return cmd.Process.Pid, nil
 }
 
-// Supervise runs as `surla verify-run supervise <dir>`. It holds the run lock
+// Supervise runs as `surla verify-run supervise <dir> <build-cache-dir>`. It holds the run lock
 // it inherited on descriptor 3, starts the executor as the leader of a new
 // process group with the read end of a control pipe on its descriptor 3, and
 // waits for it. SIGTERM, SIGINT or SIGHUP cancels the run, and the request's
@@ -297,7 +308,10 @@ func Start(root string, req Request, command []string, settings []modelsettings.
 // read as failed scenarios, so it is kept only as the outcome's
 // PartialReportDigest.
 // command is the argument list that runs this program.
-func Supervise(dir string, command []string) error {
+func Supervise(dir string, command []string, buildCacheDir string) error {
+	if buildCacheDir == "" {
+		return errors.New("build cache directory is required")
+	}
 	syscall.CloseOnExec(passedFD)
 	lock := os.NewFile(passedFD, lockFile)
 	defer lock.Close()
@@ -320,7 +334,7 @@ func Supervise(dir string, command []string) error {
 		return fmt.Errorf("create executor log: %w", err)
 	}
 	defer logFile.Close()
-	cmd := exec.Command(command[0], append(command[1:], "verify-run", "execute", dir)...)
+	cmd := exec.Command(command[0], append(command[1:], "verify-run", "execute", dir, buildCacheDir)...)
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	cmd.ExtraFiles = []*os.File{control}
 	cmd.Stdout = &limitedWriter{w: &out, n: maxExecutorOutput}
@@ -363,7 +377,7 @@ func Supervise(dir string, command []string) error {
 	return writeJSON(dir, resultFile, result)
 }
 
-// Execute runs as `surla verify-run execute <dir>`, the leader of the run's
+// Execute runs as `surla verify-run execute <dir> <build-cache-dir>`, the leader of the run's
 // process group. It watches the control pipe on descriptor 3 and kills its
 // whole group when the supervisor dies. It then takes every provider family
 // out of its own process (takeProviderFamilies), so the run's preparation

@@ -282,7 +282,7 @@ func TestViewsPageLiveTargetNotConfirmedStopped(t *testing.T) {
 		}
 		require.NoError(t, os.RemoveAll(cardsDir))
 	})
-	cp, err := New(buildFixtureOptions(t, Options{
+	cp, err := New(buildFixtureOptions(t, Options{BuildCacheDir: t.TempDir(),
 		CardsDir:     cardsDir,
 		Verification: &VerificationConfig{RunsDir: t.TempDir()},
 		Live: &LiveConfig{
@@ -493,6 +493,7 @@ func pageLiveControlPlane(t *testing.T, mode string, opts Options) *ControlPlane
 	t.Helper()
 	self, err := os.Executable()
 	require.NoError(t, err)
+	opts.BuildCacheDir = t.TempDir()
 	opts.Verification = &VerificationConfig{RunsDir: t.TempDir()}
 	opts.Live = &LiveConfig{
 		Command:      []string{self},

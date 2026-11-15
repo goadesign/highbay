@@ -584,14 +584,15 @@ func runProgram(
 	buildLog := filepath.Join(tmpDir, "build.log")
 	phase = phaseCompile
 	if err := candidate.Build(ctx, candidate.BuildSpec{
-		SourceDir: buildDir,
-		ModuleDir: buildDir,
-		Package:   ".",
-		Out:       rawBin,
-		GOROOT:    tc.goroot,
-		ModCache:  tc.modCache,
-		WorkDir:   workDir,
-		LogFile:   buildLog,
+		SourceDir:     buildDir,
+		ModuleDir:     buildDir,
+		Package:       ".",
+		Out:           rawBin,
+		GOROOT:        tc.goroot,
+		ModCache:      tc.modCache,
+		WorkDir:       workDir,
+		BuildCacheDir: filepath.Join(workDir, "gocache"),
+		LogFile:       buildLog,
 	}, runInGroup); err != nil {
 		// A stuck build's processes may still be writing its log.
 		if stuck := (*stuckGroupError)(nil); errors.As(err, &stuck) {

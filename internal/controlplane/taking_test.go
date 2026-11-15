@@ -20,7 +20,7 @@ import (
 // TestCommitTakenRecognizesSquashBeforeLaterEdit checks the historical tree,
 // not only the current tree, while rejecting a different project edit.
 func TestCommitTakenRecognizesSquashBeforeLaterEdit(t *testing.T) {
-	cp := newBuildControlPlane(t, Options{Verification: verificationConfig(t)})
+	cp := newBuildControlPlane(t, Options{BuildCacheDir: t.TempDir(), Verification: verificationConfig(t)})
 	workspace, _, _ := cp.currentWorkspaceTarget()
 	base := productionBuildGit(t, workspace, "rev-parse", "HEAD")
 	productionBuildGit(t, workspace, "switch", "--quiet", "-c", "candidate-fixture")
@@ -50,7 +50,7 @@ func TestCommitTakenRecognizesSquashBeforeLaterEdit(t *testing.T) {
 // TestDropBuildPersistsAndRejectsRepeatedDrop checks the Drop result and
 // subsequent reads, including worker assignments and a repeated request.
 func TestDropBuildPersistsAndRejectsRepeatedDrop(t *testing.T) {
-	cp := newBuildControlPlane(t, Options{Verification: verificationConfig(t)})
+	cp := newBuildControlPlane(t, Options{BuildCacheDir: t.TempDir(), Verification: verificationConfig(t)})
 	card := buildableChange(t, cp, "x")
 	user := asCaller("alice@example.com", CallerUser)
 	first, err := cp.StartBuild(user, &gensurla.StartBuildPayload{ChangeID: "x", RequestRevision: card.RequestRevision})
@@ -81,7 +81,7 @@ func TestDropBuildPersistsAndRejectsRepeatedDrop(t *testing.T) {
 // TestDropRefusesStalePageKeepsTheOpenBuild ensures a stale identity never
 // changes the provenance, and gives the current start back to the page.
 func TestDropRefusesStalePageKeepsTheOpenBuild(t *testing.T) {
-	cp := newBuildControlPlane(t, Options{Verification: verificationConfig(t)})
+	cp := newBuildControlPlane(t, Options{BuildCacheDir: t.TempDir(), Verification: verificationConfig(t)})
 	card := buildableChange(t, cp, "x")
 	user := asCaller("alice@example.com", CallerUser)
 	first, err := cp.StartBuild(user, &gensurla.StartBuildPayload{ChangeID: "x", RequestRevision: card.RequestRevision})
@@ -147,7 +147,7 @@ func TestDropDuringStartPreservesBuild(t *testing.T) {
 // execute a program or turn a different tree into a merged build.
 func TestBuildReadIgnoresExternalDiff(t *testing.T) {
 	cfg := verificationConfig(t)
-	cp := newBuildControlPlane(t, Options{Verification: cfg})
+	cp := newBuildControlPlane(t, Options{BuildCacheDir: t.TempDir(), Verification: cfg})
 	card := buildableChange(t, cp, "x")
 	user := asCaller("alice@example.com", CallerUser)
 	_, err := cp.StartBuild(user, &gensurla.StartBuildPayload{ChangeID: "x", RequestRevision: card.RequestRevision})
@@ -186,7 +186,7 @@ func TestBuildReadIgnoresExternalDiff(t *testing.T) {
 // created refs without changing the immutable tips captured by Drop.
 func TestDroppedBuildReportsCurrentKeptBranches(t *testing.T) {
 	cfg := verificationConfig(t)
-	cp := newBuildControlPlane(t, Options{Verification: cfg})
+	cp := newBuildControlPlane(t, Options{BuildCacheDir: t.TempDir(), Verification: cfg})
 	card := buildableChange(t, cp, "x")
 	user := asCaller("alice@example.com", CallerUser)
 	first, err := cp.StartBuild(user, &gensurla.StartBuildPayload{ChangeID: "x", RequestRevision: card.RequestRevision})
@@ -223,7 +223,7 @@ func TestDroppedBuildReportsCurrentKeptBranches(t *testing.T) {
 // TestWrittenRunNeedsBothCommits uses independent candidate and tests commits;
 // taking tests alone is insufficient, while separately squashing both works.
 func TestWrittenRunNeedsBothCommits(t *testing.T) {
-	cp := newBuildControlPlane(t, Options{Verification: verificationConfig(t)})
+	cp := newBuildControlPlane(t, Options{BuildCacheDir: t.TempDir(), Verification: verificationConfig(t)})
 	workspace, _, _ := cp.currentWorkspaceTarget()
 	productionBuildGit(t, workspace, "switch", "--quiet", "-c", "candidate-fixture")
 	require.NoError(t, os.WriteFile(filepath.Join(workspace, "candidate.txt"), []byte("candidate\n"), 0o600))
@@ -256,7 +256,7 @@ func TestWrittenRunNeedsBothCommits(t *testing.T) {
 // lets any eligible pass prove that the user's branch took the build.
 func TestOlderPassedRunCanEstablishMerged(t *testing.T) {
 	cfg := verificationConfig(t)
-	cp := newBuildControlPlane(t, Options{Verification: cfg})
+	cp := newBuildControlPlane(t, Options{BuildCacheDir: t.TempDir(), Verification: cfg})
 	card := buildableChange(t, cp, "x")
 	y := buildableChange(t, cp, "y")
 	user := asCaller("alice@example.com", CallerUser)
@@ -310,7 +310,7 @@ func TestOlderPassedRunCanEstablishMerged(t *testing.T) {
 // TestDropGuidanceSeesMergeOnlyChanges checks history paths introduced by a
 // merge, even when no ordinary first-parent commit changed that file.
 func TestDropGuidanceSeesMergeOnlyChanges(t *testing.T) {
-	cp := newBuildControlPlane(t, Options{Verification: verificationConfig(t)})
+	cp := newBuildControlPlane(t, Options{BuildCacheDir: t.TempDir(), Verification: verificationConfig(t)})
 	workspace, _, _ := cp.currentWorkspaceTarget()
 	require.NoError(t, os.WriteFile(filepath.Join(workspace, "shared.txt"), []byte("base\n"), 0o600))
 	productionBuildGit(t, workspace, "add", "shared.txt")
@@ -340,7 +340,7 @@ func TestDropGuidanceSeesMergeOnlyChanges(t *testing.T) {
 // TestDropBeforeAnyAssignmentAdvancesTheNextNumber preserves the saved number
 // even when no worker ever created a numbered branch.
 func TestDropBeforeAnyAssignmentAdvancesTheNextNumber(t *testing.T) {
-	cp := newBuildControlPlane(t, Options{Verification: verificationConfig(t)})
+	cp := newBuildControlPlane(t, Options{BuildCacheDir: t.TempDir(), Verification: verificationConfig(t)})
 	card := buildableChange(t, cp, "x")
 	y := buildableChange(t, cp, "y")
 	user := asCaller("alice@example.com", CallerUser)
@@ -374,7 +374,7 @@ func TestDropBeforeAnyAssignmentAdvancesTheNextNumber(t *testing.T) {
 // TestDropSurvivesOwnerRestart reloads the Drop record without another save.
 func TestDropSurvivesOwnerRestart(t *testing.T) {
 	cfg := verificationConfig(t)
-	cp := newBuildControlPlane(t, Options{Verification: cfg})
+	cp := newBuildControlPlane(t, Options{BuildCacheDir: t.TempDir(), Verification: cfg})
 	card := buildableChange(t, cp, "x")
 	user := asCaller("alice@example.com", CallerUser)
 	first, err := cp.StartBuild(user, &gensurla.StartBuildPayload{ChangeID: "x", RequestRevision: card.RequestRevision})
@@ -387,7 +387,7 @@ func TestDropSurvivesOwnerRestart(t *testing.T) {
 	cardsDir := cp.cards.dir
 	workspace, _, _ := cp.currentWorkspaceTarget()
 	require.NoError(t, cp.Close())
-	reopened := newBuildControlPlane(t, Options{CardsDir: cardsDir, WorkspaceDir: workspace, Verification: cfg})
+	reopened := newBuildControlPlane(t, Options{BuildCacheDir: t.TempDir(), CardsDir: cardsDir, WorkspaceDir: workspace, Verification: cfg})
 	read, err := reopened.GetBuild(user, &gensurla.GetBuildPayload{ChangeID: "x"})
 	require.NoError(t, err)
 	started, ok := read.Build.AsStarted()
@@ -404,7 +404,7 @@ func TestDropSurvivesOwnerRestart(t *testing.T) {
 // TestDropAcceptsMergedBuild keeps Drop available even when the project took it.
 func TestDropAcceptsMergedBuild(t *testing.T) {
 	cfg := verificationConfig(t)
-	cp := newBuildControlPlane(t, Options{Verification: cfg})
+	cp := newBuildControlPlane(t, Options{BuildCacheDir: t.TempDir(), Verification: cfg})
 	card := buildableChange(t, cp, "x")
 	user := asCaller("alice@example.com", CallerUser)
 	first, err := cp.StartBuild(user, &gensurla.StartBuildPayload{ChangeID: "x", RequestRevision: card.RequestRevision})
@@ -439,7 +439,7 @@ func TestDropAcceptsMergedBuild(t *testing.T) {
 // refusal after the project branch is rewritten away from the build base.
 func TestRewriteRefusalExplainsWhenDropIsSafe(t *testing.T) {
 	cfg := verificationConfig(t)
-	cp := newBuildControlPlane(t, Options{Verification: cfg})
+	cp := newBuildControlPlane(t, Options{BuildCacheDir: t.TempDir(), Verification: cfg})
 	x := buildableChange(t, cp, "x")
 	y := buildableChange(t, cp, "y")
 	user := asCaller("alice@example.com", CallerUser)
