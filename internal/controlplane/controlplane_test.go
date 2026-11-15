@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -18,6 +19,7 @@ import (
 	"github.com/stretchr/testify/require"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
+	"golang.org/x/mod/modfile"
 
 	genmcpadapter "github.com/goadesign/surla/gen/mcp_surla"
 	gensurla "github.com/goadesign/surla/gen/surla"
@@ -428,6 +430,12 @@ func TestEvaluatedArchitecturePreviewFastDraftAndAuthenticatedHTTP(t *testing.T)
 	if testing.Short() {
 		t.Skip("runs the Go toolchain; the full suite (go test without -short) covers it")
 	}
+	for name, value := range map[string]string{
+		"GOPROXY": "off", "GOSUMDB": "off", "GONOPROXY": "none",
+		"GOENV": "off", "GOTOOLCHAIN": "local",
+	} {
+		t.Setenv(name, value)
+	}
 	ctx := WithPrincipal(context.Background(), Principal{ID: "alice@example.com", CallerID: "alice@example.com", Kind: CallerUser})
 	clearAnalysis := &gensurla.CP1Analysis{
 		Summary:     "Refunds with item_subtotal_cents < 5000 auto-approve; >= 5000 require manager approval.",
@@ -495,7 +503,20 @@ var _ = Service("orders", func() {
 	})
 })
 `
-	writeWorkspaceFiles(t, workspace, testmodule.Snapshot(t, "", candidateDesign))
+	files := goaGoaAIDSLFixture(t, candidateDesign)
+	writeWorkspaceFiles(t, workspace, files)
+	for _, args := range [][]string{
+		{"list", "-mod=readonly", "-deps", "./design/..."},
+		{"list", "-mod=readonly", "-m", "all"},
+	} {
+		cmd := exec.CommandContext(t.Context(), "go", args...)
+		cmd.Dir = workspace
+		cmd.Env = append(os.Environ(), "GOWORK=off", "GOFLAGS=")
+		output, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatalf("fixture input incomplete: prepare the Goa and Goa-AI DSL profile with GOPROXY=off: %v\n%s", err, output)
+		}
+	}
 	card, err := cp.ProposeChange(ctx, &gensurla.ProposeChangePayload{
 		ChangeID: "chg-clear",
 		Prompt:   "Auto-approve when item_subtotal_cents < 5000; require manager when item_subtotal_cents >= 5000.",
@@ -621,6 +642,39 @@ var _ = Service("orders", func() {
 		t.Fatalf("unexpected surla://golden-path content: %+v", goldenRes)
 	}
 
+	for name, want := range files {
+		got, err := os.ReadFile(filepath.Join(workspace, filepath.FromSlash(name)))
+		require.NoError(t, err)
+		assert.Equal(t, want, string(got), "evaluation preserves the fixture input")
+	}
+
+}
+
+// goaGoaAIDSLFixture returns private workspace values for the committed
+// target graph. Root versions must match before the evaluator runs.
+func goaGoaAIDSLFixture(t *testing.T, design string) map[string]string {
+	t.Helper()
+	profileDir := filepath.Join("..", "testmodule", "testdata", "goa-goaai-dsl")
+	files := map[string]string{"design/design.go": design}
+	for _, name := range []string{"go.mod", "go.sum"} {
+		data, err := os.ReadFile(filepath.Join(profileDir, name))
+		require.NoError(t, err, "fixture input incomplete: read committed Goa and Goa-AI DSL profile")
+		files[name] = string(data)
+	}
+	mod, err := modfile.Parse("go.mod", []byte(files["go.mod"]), nil)
+	require.NoError(t, err)
+	for _, path := range []string{"goa.design/goa/v3", "goa.design/goa-ai"} {
+		found := false
+		for _, dependency := range mod.Require {
+			if dependency.Mod.Path == path {
+				found = true
+				require.Equal(t, testmodule.SurlaVersion(t, path), dependency.Mod.Version,
+					"fixture input incomplete: update the profile after changing root requirements")
+			}
+		}
+		require.True(t, found, "fixture input incomplete: profile must require %s", path)
+	}
+	return files
 }
 
 // TestConfirmIntentRefinesNeedsConfirmationAndConfirmedCards verifies that the
