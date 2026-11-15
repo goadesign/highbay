@@ -328,6 +328,7 @@ func TestViewsPageApprovesAPassedResult(t *testing.T) {
 		})
 		require.NoError(t, err)
 		saveStoredBuildFixture(t, cp, confirmed)
+		commit := commitBuilderCandidateFixture(t, cp, confirmed)
 		report := passingReport(t, confirmed.RequestRevision, commit, spec)
 		target.update(func(p *pageTarget) { p.report = report })
 		svc := newPageVerifications(cp)
@@ -337,7 +338,7 @@ func TestViewsPageApprovesAPassedResult(t *testing.T) {
 		svc.set(run)
 		svc.list(confirmed.ChangeID, run.RunID)
 		ps := startPageServer(t, svc)
-		runPageScript(t, ps, map[string]any{"run": run.RunID, "digest": report.Digest, "revision": confirmed.RequestRevision}, viewsPageScriptHelpers+`
+		runPageScript(t, ps, map[string]any{"run": run.RunID, "digest": report.Digest, "revision": confirmed.RequestRevision, "candidate": commit}, viewsPageScriptHelpers+`
 const page = await openPage(origin, { link: input.link });
 await until(() => page.$("#surla-cp1-editor").dataset.changeId === "chg-approve", "the change did not open");
 page.$("#surla-nav-cp4").click();
@@ -348,12 +349,12 @@ await control(origin, "hold", { key: "POST /changes/approve" });
 page.$("#surla-cp5-approve").click();
 expect(page.$("#surla-cp5-approve").disabled && page.$("#surla-cp5-approve").textContent === "Approving..." && page.$("#surla-cp5-approve-region").getAttribute("aria-busy") === "true", "approving showed no busy state");
 const sent = page.sent("POST", "/changes/approve");
-expect(sent.length === 1 && JSON.stringify(sent[0].body) === JSON.stringify({ change_id: "chg-approve", request_revision: input.revision, candidate_commit: "1111111111111111111111111111111111111111", report_digest: input.digest }), "approval did not act on the exact revision and result shown: " + JSON.stringify(sent));
+expect(sent.length === 1 && JSON.stringify(sent[0].body) === JSON.stringify({ change_id: "chg-approve", request_revision: input.revision, candidate_commit: input.candidate, report_digest: input.digest }), "approval did not act on the exact revision and result shown: " + JSON.stringify(sent));
 await control(origin, "release", { key: "POST /changes/approve" });
 await until(() => page.$("#surla-cp5-approval"), "the recorded approval is not shown");
 expect(page.doc.activeElement === page.$("#surla-cp5-approval"), "approving did not move focus to the result");
 const approval = page.text("#surla-cp5-approval");
-expect(approval.includes("Approval recorded") && approval.includes("No merge or deploy side effect") && approval.includes(input.owner) && approval.includes(input.digest) && approval.includes("orders_acceptance") && approval.includes("Builder's commit:") && approval.includes("Tests' commit:") && approval.includes("1111111111111111111111111111111111111111") && approval.includes("2222222222222222222222222222222222222222"), "the approval panel lacks its record: " + approval);
+expect(approval.includes("Approval recorded") && approval.includes("No merge or deploy side effect") && approval.includes(input.owner) && approval.includes(input.digest) && approval.includes("orders_acceptance") && approval.includes("Builder's commit:") && approval.includes("Tests' commit:") && approval.includes(input.candidate) && approval.includes("2222222222222222222222222222222222222222"), "the approval panel lacks its record: " + approval);
 expect(!page.$("#surla-cp5-approval-dirty-warning"), "a clean approved card warned about unsaved edits");
 const outcome = page.$('textarea[data-field="expected_outcome"]');
 const saved = outcome.value;
@@ -391,6 +392,7 @@ again.close();
 		_, err := cp.StartBuild(user, &gensurla.StartBuildPayload{ChangeID: confirmed.ChangeID, RequestRevision: confirmed.RequestRevision})
 		require.NoError(t, err)
 		acceptTests(t, cp, confirmed.ChangeID, spec.SuiteCommit)
+		commit := commitBuilderCandidateFixture(t, cp, confirmed)
 		report := passingReport(t, confirmed.RequestRevision, commit, spec)
 		writeReportFile(t, reportDir, report)
 		svc := newPageVerifications(cp)
@@ -409,7 +411,7 @@ again.close();
 			stale.InputsCurrent = false
 			svc.set(&stale)
 		})
-		runPageScript(t, ps, map[string]any{"suiteCommit": spec.SuiteCommit}, viewsPageScriptHelpers+`
+		runPageScript(t, ps, map[string]any{"suiteCommit": spec.SuiteCommit, "candidate": commit}, viewsPageScriptHelpers+`
 const page = await openPage(origin, { link: input.link });
 await until(() => page.$("#surla-cp1-editor").dataset.changeId === "chg-written-approve", "the change did not open");
 page.$("#surla-nav-cp4").click();
@@ -417,7 +419,7 @@ await until(() => page.$("#surla-cp5-approve") && !page.$("#surla-cp5-approve").
 page.$("#surla-cp5-approve").click();
 await until(() => page.$("#surla-cp5-approval"), "the recorded approval is not shown");
 const approval = page.text("#surla-cp5-approval");
-expect(approval.includes("Builder's commit:") && approval.includes("1111111111111111111111111111111111111111") && approval.includes("Tests' commit:") && approval.includes("orders_acceptance @ " + input.suiteCommit) && approval.includes(" — merge commit " + input.suiteCommit + " (on branch surla/tests)."), "written-tests approval did not show both commits and the merge sentence: " + approval);
+expect(approval.includes("Builder's commit:") && approval.includes(input.candidate) && approval.includes("Tests' commit:") && approval.includes("orders_acceptance @ " + input.suiteCommit) && approval.includes(" — merge commit " + input.suiteCommit + " (on branch surla/tests)."), "written-tests approval did not show both commits and the merge sentence: " + approval);
 const reads = page.sent("GET", "/changes/chg-written-approve").length;
 await control(origin, "act", { key: "accept-new-tests" });
 await until(() => page.sent("GET", "/changes/chg-written-approve").length > reads && !page.$("#surla-cp5-approval"), "accepting another tests commit did not automatically hide the approval and merge sentence without clicking refresh");
