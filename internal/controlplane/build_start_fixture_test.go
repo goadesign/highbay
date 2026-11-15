@@ -92,7 +92,6 @@ func newBuildControlPlane(t *testing.T, opts Options) *ControlPlane {
 	}
 	cp := newControlPlane(t, opts)
 	cp.buildIdentityCheck = func(context.Context, string) error { return nil }
-	cp.buildSandboxCheck = func() error { return nil }
 	copy := &buildCopyFixture{folder: t.TempDir()}
 	cp.buildCopyFactory = func(context.Context, string, scaffold.Layout) (buildCopy, error) {
 		return copy, nil

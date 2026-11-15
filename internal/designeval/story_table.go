@@ -88,7 +88,7 @@ func StoryTests(module fs.FS, stories []StorySummary) ([]byte, []StoryScenario, 
 // designPackage returns the package name the module's design/*.go files
 // declare, other than the Story table itself and test files. Only files the
 // evaluator's build compiles count: build constraints and file name suffixes
-// are matched for the host's GOOS and GOARCH with cgo off, as the sandboxed
+// are matched for the host's GOOS and GOARCH with cgo off, as the
 // build runs, so a file kept out of the build (such as one tagged ignore) may
 // declare another package.
 func designPackage(module fs.FS) (string, error) {

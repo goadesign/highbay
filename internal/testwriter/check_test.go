@@ -3,14 +3,17 @@ package testwriter
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"maps"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"sync"
+	"syscall"
 	"testing"
 	"time"
 
@@ -38,7 +41,7 @@ var refundStories = []designeval.StorySummary{{
 	},
 }}
 
-// fixture caches the fixture project, which takes a sandboxed generation and
+// fixture caches the fixture project, which takes a generation and
 // a go mod tidy to build. Tests clone it.
 var fixture struct {
 	mu sync.Mutex
@@ -82,7 +85,7 @@ var _ = Suite("shop_acceptance", func() {
 // suite requires one hook method per finished flow, the result names them by
 // the generator's rule, and the project folder is byte-identical.
 func TestPrepareWritesOneRequiredMethodPerFinishedFlow(t *testing.T) {
-	skipWithoutSandbox(t)
+	skipInShortMode(t)
 	repo, markers := newProject(t, fixtureProject(t))
 	before := projectFiles(t, repo)
 	wc, err := OpenWorkingCopy(t.Context(), repo)
@@ -109,7 +112,7 @@ func TestPrepareWritesOneRequiredMethodPerFinishedFlow(t *testing.T) {
 // compiler, with no absolute path, and writes neither the Story table nor the
 // generated folder, so the copy holds only the author's change.
 func TestPrepareGivesTheAuthorItsGenerationFailure(t *testing.T) {
-	skipWithoutSandbox(t)
+	skipInShortMode(t)
 	repo, _ := newProject(t, fixtureProject(t))
 	wc, err := OpenWorkingCopy(t.Context(), repo)
 	require.NoError(t, err)
@@ -135,20 +138,19 @@ func TestPrepareGivesTheAuthorItsGenerationFailure(t *testing.T) {
 //   - a missing hook method;
 //   - an edit of the generated folder that drops a requirement;
 //   - a hand-written program that only prints the required names;
-//   - a build that reads a file outside the snapshot, which only the build
-//     sandbox refuses;
 //   - a listing that writes 256 MiB to its error stream, quoted from a
 //     bounded excerpt of its end while allocating far less than that;
 //   - a scenario tagged holdout.
 //
 // A complete copy whose package prints noise, including a JSON object, on
-// standard error and tries to write outside its sandbox while starting is
-// accepted, and the write never happens. Recording makes one commit holding
+// standard error and starts a child process while starting is accepted, and
+// no child a listing started still runs afterwards: each listing's process
+// group was stopped. Recording makes one commit holding
 // the files as checked, with the generated folder written from the Story,
 // unsigned though the repository asks for signed commits, and recording the
 // unchanged copy again returns that commit.
 func TestCheckJudgesTheWorkingCopy(t *testing.T) {
-	skipWithoutSandbox(t)
+	skipInShortMode(t)
 	repo, markers := newProject(t, fixtureProject(t))
 	start := runGit(t, repo, "rev-parse", "HEAD")
 	wc, err := OpenWorkingCopy(t.Context(), repo)
@@ -157,12 +159,8 @@ func TestCheckJudgesTheWorkingCopy(t *testing.T) {
 	require.NoError(t, err)
 	prepared, err := os.ReadFile(filepath.Join(wc.Project(), "eval", generatedSuite))
 	require.NoError(t, err)
-	outside := filepath.Join(t.TempDir(), "written-outside-the-sandbox")
-	quiet := quietInit(outside)
-	// header is readable by any build but the sandboxed one, which may read
-	// only the snapshot, the toolchain and the module cache.
-	header := filepath.Join(t.TempDir(), "outside.h")
-	require.NoError(t, os.WriteFile(header, []byte("#define OUTSIDE 1\n"), 0o600))
+	pidFile := filepath.Join(t.TempDir(), "children")
+	quiet := childInit(pidFile, false)
 	design := fixtureProject(t)["eval/design/design.go"]
 
 	steps := []struct {
@@ -197,18 +195,8 @@ func TestCheckJudgesTheWorkingCopy(t *testing.T) {
 			wantMessage: []string{"RefundOverLimit"},
 		},
 		{
-			name: "a build that reads outside the snapshot",
-			files: map[string]string{
-				"acceptance/acceptance.go": fixtureAcceptance(quiet, "RefundOverLimit", "StoreCreditWithinLimit"),
-				"acceptance/outside.s":     "#include \"" + header + "\"\n",
-			},
-			wantKind:    FindingBuild,
-			wantMessage: []string{"does not compile", "#include: open <absolute path>"},
-		},
-		{
 			name:        "a listing that fails after flooding its error stream",
 			files:       map[string]string{"acceptance/acceptance.go": fixtureAcceptance(floodInit, "RefundOverLimit", "StoreCreditWithinLimit")},
-			remove:      []string{"acceptance/outside.s"},
 			wantKind:    FindingListing,
 			wantMessage: []string{"exited with status 3", "earlier output left out", "end of the error stream"},
 			// The error stream is read only as a bounded excerpt. The whole
@@ -261,7 +249,9 @@ func TestCheckJudgesTheWorkingCopy(t *testing.T) {
 		}
 		assert.LessOrEqual(t, len(v.Findings[0].Message), maxFindingBytes, step.name)
 	}
-	assert.NoFileExists(t, outside, "--describe runs only in the sandbox")
+	for _, pid := range readPIDs(t, pidFile) {
+		assert.ErrorIs(t, syscall.Kill(pid, 0), syscall.ESRCH, "the listing's child %d was stopped with its group", pid)
+	}
 
 	// The repository asks for signed commits with a signing program that
 	// leaves a marker and fails: a recorded commit is never signed.
@@ -299,7 +289,7 @@ func TestCheckJudgesTheWorkingCopy(t *testing.T) {
 // filter never runs, and Record commits the generated suite written from the
 // Story.
 func TestCheckIgnoresTheCopysOwnRepository(t *testing.T) {
-	skipWithoutSandbox(t)
+	skipInShortMode(t)
 	repo, markers := newProject(t, fixtureProject(t))
 	wc, err := OpenWorkingCopy(t.Context(), repo)
 	require.NoError(t, err)
@@ -307,10 +297,9 @@ func TestCheckIgnoresTheCopysOwnRepository(t *testing.T) {
 	require.NoError(t, err)
 	prepared, err := os.ReadFile(filepath.Join(wc.Project(), "eval", generatedSuite))
 	require.NoError(t, err)
-	outside := filepath.Join(t.TempDir(), "written-outside-the-sandbox")
 	writeFiles(t, wc.Dir(), map[string]string{
 		"eval/.gitattributes":           authorsAttributes,
-		"eval/acceptance/acceptance.go": fixtureAcceptance(quietInit(outside), "RefundOverLimit", "StoreCreditWithinLimit"),
+		"eval/acceptance/acceptance.go": fixtureAcceptance(quietInit, "RefundOverLimit", "StoreCreditWithinLimit"),
 	})
 	marker := filepath.Join(t.TempDir(), "filter-ran")
 	for _, rewrite := range []func(t *testing.T, dir, marker string){replaceCopysGit, pointCopysGitInside} {
@@ -323,7 +312,6 @@ func TestCheckIgnoresTheCopysOwnRepository(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, strings.TrimSpace(string(prepared)), runGit(t, repo, "show", commit+":eval/"+generatedSuite))
 	}
-	assert.NoFileExists(t, outside)
 	assert.Empty(t, ranHooks(t, markers))
 }
 
@@ -335,7 +323,7 @@ func TestCheckIgnoresTheCopysOwnRepository(t *testing.T) {
 // is outside Surla's test layout, get no generated program, and Check says
 // what makes a module a Surla test module.
 func TestCheckWantsExactlyOneEvaluationSuite(t *testing.T) {
-	skipWithoutSandbox(t)
+	skipInShortMode(t)
 	repo, _ := newProject(t, fixtureProject(t))
 	wc, err := OpenWorkingCopy(t.Context(), repo)
 	require.NoError(t, err)
@@ -400,18 +388,18 @@ var _ = Suite("second", func() {
 }
 
 // TestCheckLimitsTheBuildAndTheListing runs a complete copy with stand-ins
-// for the sandboxed build and listing that sleep just below, at and just above
+// for the build and listing that sleep just below, at and just above
 // a shortened limit, and give a program and a declaration otherwise. Below the
 // limit the copy is accepted; at and above it the step's limit is the finding.
 // A stand-in listing that leaves out a required scenario gives that scenario's
 // finding.
 func TestCheckLimitsTheBuildAndTheListing(t *testing.T) {
-	skipWithoutSandbox(t)
+	skipInShortMode(t)
 	repo, _ := newProject(t, fixtureProject(t))
 	wc, err := OpenWorkingCopy(t.Context(), repo)
 	require.NoError(t, err)
 	writeFiles(t, filepath.Join(wc.Project(), "eval"), map[string]string{
-		"acceptance/acceptance.go": fixtureAcceptance(quietInit(filepath.Join(t.TempDir(), "unused")), "RefundOverLimit", "StoreCreditWithinLimit"),
+		"acceptance/acceptance.go": fixtureAcceptance(quietInit, "RefundOverLimit", "StoreCreditWithinLimit"),
 	})
 	const limit = 500 * time.Millisecond
 	declare := func(ids ...string) []byte {
@@ -430,8 +418,8 @@ func TestCheckLimitsTheBuildAndTheListing(t *testing.T) {
 			return os.WriteFile(spec.Out, []byte("stand-in program"), 0o700)
 		}
 	}
-	sleepThenList := func(d time.Duration, out []byte) func(context.Context, candidate.Artifact, candidate.Spec, int) ([]byte, error) {
-		return func(context.Context, candidate.Artifact, candidate.Spec, int) ([]byte, error) {
+	sleepThenList := func(d time.Duration, out []byte) func(context.Context, candidate.Artifact, candidate.Spec, int, func(*exec.Cmd) error) ([]byte, error) {
+		return func(context.Context, candidate.Artifact, candidate.Spec, int, func(*exec.Cmd) error) ([]byte, error) {
 			time.Sleep(d)
 			return out, nil
 		}
@@ -475,25 +463,19 @@ func TestCheckLimitsTheBuildAndTheListing(t *testing.T) {
 // module.
 const generatedSuite = "gen/evals/shop_acceptance/suite.go"
 
-// skipWithoutSandbox skips a test that compiles and runs code in the sandbox
-// in short mode and where the sandbox does not exist.
-func skipWithoutSandbox(t *testing.T) {
+// skipInShortMode skips a test that compiles and runs code in short mode.
+func skipInShortMode(t *testing.T) {
 	t.Helper()
 	if testing.Short() {
-		t.Skip("runs the sandboxed Go toolchain; the full suite (go test without -short) covers it")
+		t.Skip("runs the Go toolchain; the full suite (go test without -short) covers it")
 	}
-	if runtime.GOOS != "darwin" && runtime.GOOS != "linux" {
-		t.Skip("the sandbox is implemented on macOS and Linux")
-	}
-	require.NoError(t, candidate.CheckSandbox())
 }
 
 // publishedSurla is a Surla version on the module proxy whose suite contract
 // has everything the generated program calls; the starter's tests use the
-// same one. The fixture requires it as a starter does, because the snapshot
-// a check builds may read no Surla source outside it, and generation refuses
-// a replacement by a local folder.
-const publishedSurla = "v0.0.0-20261110163737-d9beac313142"
+// same one. The fixture requires it as a starter does, because generation
+// refuses a replacement by a local folder.
+const publishedSurla = "v0.0.0-20261115014514-02c792da3ded"
 
 // fixtureProject returns a project's files holding the fixture's test module
 // under eval/, as a test writer would start from: generated without a Story,
@@ -508,7 +490,7 @@ func fixtureProject(t *testing.T) map[string]string {
 		design := testmodule.Module(t, "example.com/shop/eval", "", map[string]string{"design/design.go": fixtureDesign})
 		// The acceptance package imports generated code, so it joins after
 		// tidying; the generator needs it to write the program.
-		design["acceptance/acceptance.go"] = fixtureAcceptance(quietInit(filepath.Join(os.TempDir(), "unused")))
+		design["acceptance/acceptance.go"] = fixtureAcceptance(quietInit)
 		generated, err := testEvaluator.Generate(t.Context(), design)
 		require.NoError(t, err)
 		require.Contains(t, generated, "gen/cmd/shop-evals/main.go", "the generator writes the program")
@@ -580,14 +562,49 @@ func init() {
 }
 
 // quietInit is an init body that prints noise on standard error, including a
-// declaration-shaped JSON object, and tries to write marker, which the
-// sandbox denies.
-func quietInit(marker string) string {
-	return fmt.Sprintf(`	fmt.Fprintln(os.Stderr, %q)
-	if err := os.WriteFile(%q, []byte("outside"), 0o600); err != nil {
-		fmt.Fprintln(os.Stderr, "write outside the sandbox:", err)
+// declaration-shaped JSON object.
+var quietInit = fmt.Sprintf("\tfmt.Fprintln(os.Stderr, %q)\n", `{"id":"noise","environment":"stderr","scenarios":[]}`)
+
+// childInit is quietInit followed by a child process: the init starts
+// /bin/sleep 300 and appends its process ID to pidFile. The child shares the
+// program's standard output when shareStdout is set and has no output
+// otherwise.
+func childInit(pidFile string, shareStdout bool) string {
+	files := "nil"
+	if shareStdout {
+		files = "[]*os.File{nil, os.Stdout}"
 	}
-`, `{"id":"noise","environment":"stderr","scenarios":[]}`, marker)
+	return quietInit + fmt.Sprintf(`	child, err := os.StartProcess("/bin/sleep", []string{"sleep", "300"}, &os.ProcAttr{Files: %s})
+	if err != nil {
+		panic(err)
+	}
+	pids, err := os.OpenFile(%q, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
+	if err != nil {
+		panic(err)
+	}
+	fmt.Fprintln(pids, child.Pid)
+	if err := pids.Close(); err != nil {
+		panic(err)
+	}
+`, files, pidFile)
+}
+
+// readPIDs returns the process IDs childInit appended to pidFile, none when no
+// listing ran it.
+func readPIDs(t *testing.T, pidFile string) []int {
+	t.Helper()
+	raw, err := os.ReadFile(pidFile)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil
+	}
+	require.NoError(t, err)
+	var pids []int
+	for _, field := range strings.Fields(string(raw)) {
+		pid, err := strconv.Atoi(field)
+		require.NoError(t, err)
+		pids = append(pids, pid)
+	}
+	return pids
 }
 
 // floodInit is an init body that writes 256 MiB to standard error, then a last
@@ -653,4 +670,45 @@ func projectFiles(t *testing.T, dir string) map[string]string {
 		return err
 	}))
 	return files
+}
+
+// TestRunInGroupStopsTheChildrenOfACommand runs a shell that starts a
+// background sleep and exits through runInGroup: the sleep no longer exists
+// afterwards, and the group is not reported stuck.
+func TestRunInGroupStopsTheChildrenOfACommand(t *testing.T) {
+	pidFile := filepath.Join(t.TempDir(), "child.pid")
+	var stuck bool
+	cmd := exec.CommandContext(t.Context(), "/bin/sh", "-c", `/bin/sleep 300 & echo $! > "$1"`, "sh", pidFile)
+	require.NoError(t, runInGroup(&stuck)(cmd))
+	assert.False(t, stuck)
+	pids := readPIDs(t, pidFile)
+	require.Len(t, pids, 1)
+	assert.ErrorIs(t, syscall.Kill(pids[0], 0), syscall.ESRCH, "the command's child was stopped with its group")
+}
+
+// TestCheckFindsAListingThatLeavesAProcessHoldingItsOutput gives the copy an
+// init that starts a child sharing the program's standard output: the listing
+// exits, the child keeps the output open, and the verdict is the author's
+// listing finding; the child no longer runs afterwards.
+func TestCheckFindsAListingThatLeavesAProcessHoldingItsOutput(t *testing.T) {
+	skipInShortMode(t)
+	repo, _ := newProject(t, fixtureProject(t))
+	wc, err := OpenWorkingCopy(t.Context(), repo)
+	require.NoError(t, err)
+	_, err = testChecker.Prepare(t.Context(), wc, fixtureSuite, refundStories)
+	require.NoError(t, err)
+	pidFile := filepath.Join(t.TempDir(), "children")
+	writeFiles(t, filepath.Join(wc.Project(), "eval"), map[string]string{
+		"acceptance/acceptance.go": fixtureAcceptance(childInit(pidFile, true), "RefundOverLimit", "StoreCreditWithinLimit"),
+	})
+	v, err := testChecker.Check(t.Context(), wc, fixtureSuite, refundStories)
+	require.NoError(t, err)
+	require.Len(t, v.Findings, 1, "%+v", v.Findings)
+	assert.Equal(t, FindingListing, v.Findings[0].Kind)
+	assert.Contains(t, v.Findings[0].Message, "left a process holding its standard output")
+	pids := readPIDs(t, pidFile)
+	require.NotEmpty(t, pids)
+	for _, pid := range pids {
+		assert.ErrorIs(t, syscall.Kill(pid, 0), syscall.ESRCH, "the listing's child %d was stopped with its group", pid)
+	}
 }

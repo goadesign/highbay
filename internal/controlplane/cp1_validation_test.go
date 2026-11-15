@@ -96,7 +96,7 @@ func TestValidateAmbiguityAnswersReportsEveryProblemOnce(t *testing.T) {
 // non-fault tool error results with the same domain error message.
 func TestChangeCardHTTPErrorsAndMCPToolPreservation(t *testing.T) {
 	if testing.Short() {
-		t.Skip("runs the sandboxed Go toolchain; the full suite (go test without -short) covers it")
+		t.Skip("runs the Go toolchain; the full suite (go test without -short) covers it")
 	}
 	aliceCtx := WithPrincipal(context.Background(), Principal{ID: "alice@example.com", CallerID: "alice@example.com", Kind: CallerUser})
 	ambiguous := &gensurla.CP1Analysis{

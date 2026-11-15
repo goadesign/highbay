@@ -1,5 +1,5 @@
 // This file follows real test-writer reports from the served page through the
-// production sandboxed checker and the tests branch, without running scenarios.
+// production checker and the tests branch, without running scenarios.
 package controlplane
 
 import (
@@ -15,7 +15,6 @@ import (
 	"github.com/goadesign/surla/internal/designeval"
 	"github.com/goadesign/surla/internal/testmodule"
 	"github.com/goadesign/surla/internal/testwriter"
-	"github.com/goadesign/surla/verify/candidate"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -247,13 +246,10 @@ page.close();
 // compiler finding for its missing hook, repairs that hook in the assigned
 // working folder, and observes the real worker recording the second report.
 // Only the external team/window owner is a fixture; generation, checking and
-// recording use the production owners and their candidate sandbox unchanged.
+// recording use the production owners unchanged.
 func TestViewsPageFollowsRealTestReports(t *testing.T) {
 	if testing.Short() {
-		t.Skip("runs real sandboxed test generation, compilation and repair; covered by the full suite")
-	}
-	if err := candidate.CheckSandbox(); err != nil {
-		t.Skipf("real report-worker page proof requires the candidate sandbox: %v", err)
+		t.Skip("runs real test generation, compilation and repair; covered by the full suite")
 	}
 	requirePageTools(t)
 	repo, project := productionBuildProject(t, ".", pageReportModule(t))
@@ -354,7 +350,7 @@ func TestViewsPageFollowsRealTestReports(t *testing.T) {
 // pageReportModule prepares the trusted starter-shaped fixture as the checker
 // tests do: the acceptance package exists before generation, and the generated
 // program's public Surla dependency is pinned before the final tidy. No authored
-// binary or scenario is executed here; Generate uses the candidate sandbox.
+// binary or scenario is executed here.
 func pageReportModule(t *testing.T) map[string]string {
 	t.Helper()
 	module := testmodule.Module(t, "example.com/shop/eval", "", map[string]string{
@@ -370,6 +366,6 @@ func pageReportModule(t *testing.T) map[string]string {
 		module[name] = string(data)
 	}
 	module["go.mod"] = strings.Replace(module["go.mod"], "require (",
-		"require (\n\tgithub.com/goadesign/surla v0.0.0-20261110163737-d9beac313142", 1)
+		"require (\n\tgithub.com/goadesign/surla v0.0.0-20261115014514-02c792da3ded", 1)
 	return testmodule.Tidy(t, module)
 }

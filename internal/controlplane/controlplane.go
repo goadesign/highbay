@@ -355,9 +355,8 @@ type (
 		liveState
 		// buildCopyFactory replaces the copy owner only in deterministic start tests.
 		buildCopyFactory func(context.Context, string, scaffold.Layout) (buildCopy, error)
-		// buildIdentityCheck and buildSandboxCheck replace host identity and sandbox availability checks in tests.
+		// buildIdentityCheck replaces the host identity check in tests.
 		buildIdentityCheck func(context.Context, string) error
-		buildSandboxCheck  func() error
 		// workingCopyTurn is the one lock on the project's test working copy,
 		// a channel with room for one value: a sender takes the turn, a
 		// receive releases it, and a waiter can give up when its context
@@ -835,7 +834,7 @@ func (c *ControlPlane) PreviewArchitecture(ctx context.Context, p *gensurla.Prev
 		return nil, err
 	}
 
-	if err := reportProgress(ctx, 0, 2, "Evaluating the candidate design in the sandbox"); err != nil {
+	if err := reportProgress(ctx, 0, 2, "Evaluating the candidate design"); err != nil {
 		return nil, err
 	}
 	evaluated, err := c.evaluator.Evaluate(ctx, designFiles)

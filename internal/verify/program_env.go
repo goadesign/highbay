@@ -1,8 +1,8 @@
 // This file names the environment a test program starts with. A program the
 // operator wrote keeps its caller's environment. A program agents on this
-// machine wrote gets only the names below, each with its reason: it runs
-// outside the sandbox; these names prevent Surla from handing it settings.
-// Its operating-system user can still read other same-user programs.
+// machine wrote gets only the names below, each with its reason, so Surla
+// hands it none of its own settings, such as model keys. It runs as an
+// ordinary process of the user and can still read other same-user programs.
 package verify
 
 import (

@@ -2361,7 +2361,7 @@ export function bootstrapViewsPage() {
             ) : null}
             {loading ? (
               <Card id="surla-cp2-loading" className="surla-card" role="status" aria-busy="true">
-                Evaluating the design in Surla's sandbox. This can take a little while.
+                Evaluating the design. This can take a little while.
               </Card>
             ) : null}
             {error !== null ? (
