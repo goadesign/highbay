@@ -2063,7 +2063,9 @@ running their respective full-suite partitions:
   Story target, with a relative replacement pointing to the target profile.
 - `internal/testmodule/testdata/goa-goaai-dsl` pins the target graph for a
   design importing the Goa and Goa-AI DSLs, used by the architecture preview
-  test. The root download supplies the evaluator's root-pinned dependencies.
+  test.
+- `internal/testmodule/testdata/goa-goaai-evaluator` pins the evaluator graph
+  for that target and replaces it with the adjacent target profile.
 
 Each test copies its target into a private workspace, checks the design and
 module list with fetching disabled, and runs the real evaluator. Missing inputs
@@ -2080,7 +2082,9 @@ GOWORK=off go -C internal/project/testdata/story-evaluator mod edit -require=git
 GOWORK=off go -C internal/testmodule/testdata/goa-goaai-dsl mod edit -require=goa.design/goa/v3@v3.35.1-0.20261103205041-35e789e8f9b1 -require=goa.design/goa-ai@v0.90.1-0.20261111075239-0114fb9d40d3 </dev/null
 GOWORK=off go -C internal/project/testdata/story-fixture mod download all </dev/null
 GOWORK=off go -C internal/project/testdata/story-evaluator mod download all </dev/null
+GOWORK=off go -C internal/testmodule/testdata/goa-goaai-evaluator mod edit -require=goa.design/goa/v3@v3.35.1-0.20261103205041-35e789e8f9b1 -require=goa.design/goa-ai@v0.90.1-0.20261111075239-0114fb9d40d3 -require=goa.design/model@v1.16.11-0.20261030164016-5e17c2e932fb </dev/null
 GOWORK=off go -C internal/testmodule/testdata/goa-goaai-dsl mod download all </dev/null
+GOWORK=off go -C internal/testmodule/testdata/goa-goaai-evaluator mod download all </dev/null
 ```
 
 Replace the versions above with the new root requirements and commit the
