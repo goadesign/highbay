@@ -133,7 +133,7 @@ func (c *ControlPlane) GenerateCode(
 		return nil, gensurla.MakeUnprocessable(fmt.Errorf("the local %s module has no go.mod; create or restore it before generating code", target))
 	}
 	if target != "eval" {
-		if err := buildGenerationModules(agreed, ready.build.file.GoMod, files["go.mod"], ready.folder, ready.goworkOff); err != nil {
+		if err := buildGenerationModules(agreed, ready.build.file.GoMod, files["go.mod"], ready.folder, ready.goWork); err != nil {
 			return nil, recordBuildError(span, err, "compare generation modules")
 		}
 	}
@@ -241,7 +241,7 @@ func openGenerationEvalModule(workspace *os.Root) (*os.Root, error) {
 // changing either manifest. The saved module is a constructed build invariant;
 // malformed builder files remain actionable user input.
 func buildGenerationModules(
-	design map[string]string, savedText, builderText, folder string, goworkOff bool,
+	design map[string]string, savedText, builderText, folder, goWork string,
 ) error {
 	saved, err := designversion.Requirements(savedText)
 	if err != nil {
@@ -258,9 +258,9 @@ func buildGenerationModules(
 	if len(missing) == 0 && len(replacements) == 0 {
 		return nil
 	}
-	prefix := ""
-	if goworkOff {
-		prefix = "GOWORK=off "
+	prefix := "GOWORK=off "
+	if goWork != "off" {
+		prefix = "GOWORK=" + shquote.Quote(goWork) + " "
 	}
 	steps := replacements
 	for _, required := range missing {

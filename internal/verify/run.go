@@ -301,7 +301,7 @@ func Prepare(ctx context.Context, p Plan) (Prepared, error) {
 			return Prepared{}, stageError(StageCheckout, "The candidate commit does not contain a configured binary package.", fmt.Errorf("binary %q package %q: %w", name, pkg, err))
 		}
 	}
-	toolchain, err := r.prepareBuild(ctx, "candidate", moduleDir, moduleDir, p.WorkDir)
+	toolchain, err := r.prepareBuild(ctx, "candidate", candidateDir, moduleDir, p.WorkDir)
 	if err != nil {
 		return Prepared{}, stageError(StageBuild, summaryCandidateBuild, err)
 	}
@@ -310,7 +310,7 @@ func Prepare(ctx context.Context, p Plan) (Prepared, error) {
 		out := filepath.Join(candidateBinDir, name)
 		logFile := filepath.Join(r.evidenceDir, "build-"+name+".log")
 		if err := candidate.Build(ctx, candidate.BuildSpec{
-			SourceDir: moduleDir, ModuleDir: moduleDir, Package: p.Binaries[name], Out: out,
+			SourceDir: candidateDir, ModuleDir: moduleDir, Package: p.Binaries[name], Out: out,
 			GOROOT: toolchain.goroot, ModCache: toolchain.modCache, WorkDir: toolchain.workDir,
 			LogFile: logFile,
 		}, (*exec.Cmd).Run); err != nil {
