@@ -107,17 +107,28 @@ if (open) {
 }
 if (input.state === "passed") {
   const replaceTaking = async (taking) => {
+    const before = page.sent("GET", path).length;
     await control(origin, "reply", { key: "GET " + path, status: 200,
       body: { change_id: "chg-taking", build: { ...saved, state: "started", taking } } });
     await control(origin, "act", { key: "resave-taking" });
-    await until(() => page.$("#surla-build-taking")?.dataset.state === taking.state && !page.$("#surla-build-loading"), "taking refresh did not settle");
+    const commandCount = taking.state === "passed" ? (taking.tests.source === "written_tests" ? 2 : 1) : 0;
+    await until(() => page.sent("GET", path).length > before && page.sent("GET", path).at(-1).status === 200 &&
+      page.$("#surla-build-taking")?.dataset.state === taking.state && page.$$("#surla-build-taking pre").length === commandCount &&
+      !page.$("#surla-build-loading"), "taking refresh did not settle");
   };
   page.$("#surla-build-taking pre").focus();
   await replaceTaking(variants.building);
   expect(page.doc.activeElement === page.$("#surla-build-title"), "removing a focused merge command lost the stable Build heading");
   await replaceTaking(passed);
+  page.$$("#surla-build-taking pre")[1].focus();
+  await replaceTaking(variants.evaluator);
+  expect(page.doc.activeElement === page.$("#surla-build-title"), "removing only the focused tests command lost the stable Build heading");
+  await replaceTaking(passed);
   const field = page.$('textarea[data-example-id="check_01"][data-field="scenario"]');
   page.type(field, "keep editor focus when commands vanish"); field.focus();
+  await replaceTaking(variants.evaluator);
+  expect(page.doc.activeElement === field && field.value === "keep editor focus when commands vanish", "removing only an unfocused tests command stole editor focus");
+  await replaceTaking(passed);
   await replaceTaking(variants.merged);
   expect(page.doc.activeElement === field && field.value === "keep editor focus when commands vanish", "removing unfocused commands stole external editor focus");
 }

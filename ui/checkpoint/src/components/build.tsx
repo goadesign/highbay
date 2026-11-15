@@ -504,19 +504,19 @@ export function BuildMergeInstructions({ taking, candidateCommit, testsCommit, o
 }) {
   // The owner supplies its stable fallback when a focused scrollport is
   // removed. Unfocused command subtrees never reclaim another control's focus.
-  const attachCommands = useCallback((node: HTMLDivElement | null) => {
+  const attachCommands = useCallback((node: HTMLPreElement | null) => {
     if (node === null) return;
     return () => {
       if (node.contains(document.activeElement)) onFocusedControlRemoved();
     };
   }, [onFocusedControlRemoved]);
-  return <div className="surla-build-merge" ref={attachCommands}>
+  return <div className="surla-build-merge">
     <h4>To take this change, run in the project folder:</h4>
     <ol>
-      <li><pre tabIndex={0} aria-label="Merge the builder’s commit"><code>git merge {candidateCommit}</code></pre>
+      <li><pre ref={attachCommands} tabIndex={0} aria-label="Merge the builder’s commit"><code>git merge {candidateCommit}</code></pre>
         <p>The builder’s commit, verified on <code>{taking.candidate_branch}</code>.</p></li>
       {testsCommit !== null && taking.tests.source === "written_tests" ? <li>
-        <pre tabIndex={0} aria-label="Merge the tests’ commit"><code>git merge {testsCommit}</code></pre>
+        <pre ref={attachCommands} tabIndex={0} aria-label="Merge the tests’ commit"><code>git merge {testsCommit}</code></pre>
         <p>Then the tests’ commit, verified on <code>{taking.tests.branch}</code>.</p></li> : null}
     </ol>
     <p>Build another change once you have, or drop this one. Surla does not merge or deploy anything.</p>
