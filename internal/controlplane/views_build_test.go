@@ -55,6 +55,7 @@ page.$("#surla-build-again").click();
 await until(() => page.$("#surla-build-confirm"), "Build again did not ask first");
 expect(page.text("#surla-build-question").includes("accepted again before verification or a new live target"), "the rebuild question does not explain the verification and live-target consequences");
 expect(page.text("#surla-build-confirm-explanation").includes("accepted tests to check the builder’s work and to start live targets"), "the rebuild explanation must name the accepted tests' live-target role");
+expect(page.text("#surla-build-confirm-explanation").includes("From Build on, the tests and the builder’s code run on this machine as ordinary programs, with your access to files and the network; nothing confines them. Approval decides only what merges."), "rebuild confirmation omitted the execution sentence");
 expect(page.sent("POST", path).length === 1, "opening rebuild confirmation sent a start");
 page.$("#surla-build-confirm").dispatchEvent(new page.win.KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
 await until(() => !page.$("#surla-build-confirm") && page.doc.activeElement === page.$("#surla-build-again") && !page.$("#surla-build-again").disabled, "Escape did not cancel and restore an enabled trigger's focus");

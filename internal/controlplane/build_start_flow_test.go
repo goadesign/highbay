@@ -317,7 +317,7 @@ func TestStartBuildOwnerPrecedesTheTurn(t *testing.T) {
 	unbound := newControlPlane(t, Options{})
 	_, err = unbound.StartBuild(asCaller("alice@example.com", CallerUser), &gensurla.StartBuildPayload{ChangeID: "chg", RequestRevision: card.RequestRevision})
 	assertRefused(t, err, "not_implemented")
-	assert.ErrorContains(t, err, "start this project with surla")
+	assert.ErrorContains(t, err, "Start this project with surla to use its team.")
 	assertNoBuildSaved(t, cp, "chg")
 }
 
