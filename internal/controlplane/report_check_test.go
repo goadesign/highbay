@@ -193,6 +193,7 @@ func TestASecondReportDuringACheckIsJudgedAfterIt(t *testing.T) {
 				return strings.Repeat(fmt.Sprint(call), 40), nil
 			}}
 			cp, revision := newReportFixture(t, Options{}, tests)
+			readBothAssignments(t, cp)
 
 			reportTests(t, cp, revision)
 			require.Equal(t, 1, receive(t, checking))
@@ -236,6 +237,7 @@ func TestAReportDuringRecordWaitsAndKeepsItsNumber(t *testing.T) {
 		return standInCommit, nil
 	}}
 	cp, revision := newReportFixture(t, Options{}, tests)
+	readBothAssignments(t, cp)
 
 	reportTests(t, cp, revision)
 	require.Equal(t, 1, receive(t, recording))
@@ -279,6 +281,7 @@ func TestAVerdictThatCannotBeSavedIsJudgedAgain(t *testing.T) {
 		return testwriter.Verdict{}, nil
 	}}
 	cp, revision := newReportFixture(t, Options{}, tests)
+	readBothAssignments(t, cp)
 	cp.reports.retry = 200 * time.Millisecond
 	reportTests(t, cp, revision)
 	require.Equal(t, 1, receive(t, checking))
@@ -312,6 +315,7 @@ func TestRetriesAfterAFailedSaveAreBounded(t *testing.T) {
 		return testwriter.Verdict{}, nil
 	}}
 	cp, revision := newReportFixture(t, Options{TracerProvider: provider}, tests)
+	readBothAssignments(t, cp)
 	cp.reports.retry = 50 * time.Millisecond
 	reportTests(t, cp, revision)
 	staging := filepath.Join(cp.cards.dir, openBuildStagingFile)
@@ -351,6 +355,7 @@ func TestAReportedBuildThatCouldNotBeReadIsJudgedOnceItCanBe(t *testing.T) {
 			t.Cleanup(func() { assert.NoError(t, provider.Shutdown(context.Background())) })
 			tests := &standInCopy{check: accepting}
 			cp, revision := newReportFixture(t, Options{TracerProvider: provider}, tests)
+			readBothAssignments(t, cp)
 			// The build is made readable again well within the retries: three
 			// of them, half a second apart.
 			cp.reports.retry = 500 * time.Millisecond
@@ -444,6 +449,7 @@ func TestABuildStartIsRefusedDuringACheck(t *testing.T) {
 		return testwriter.Verdict{}, nil
 	}}
 	cp, revision := newReportFixture(t, Options{}, tests)
+	readBothAssignments(t, cp)
 	user := asCaller("alice@example.com", CallerUser)
 	start := &gensurla.StartBuildPayload{ChangeID: "chg", RequestRevision: revision}
 	reportTests(t, cp, revision)
@@ -475,6 +481,7 @@ func TestAStoppedServerSavesNothingAndARestartedOneJudges(t *testing.T) {
 	}}
 	opts := Options{CardsDir: t.TempDir(), WorkspaceDir: t.TempDir()}
 	cp, revision := newReportFixture(t, opts, tests)
+	readBothAssignments(t, cp)
 	reportTests(t, cp, revision)
 	receive(t, checking)
 	reported := readBuildFile(t, cp, "chg")
@@ -521,8 +528,11 @@ func TestAReportIsJudgedThroughTheProductionCopy(t *testing.T) {
 		ChangeID: "chg", RequestRevision: card.RequestRevision,
 	})
 	require.NoError(t, err)
-	require.Equal(t, gensurla.TestsKindNeedsChanges, started.Build.TestWriter.Tests.Kind(), "the start found the module's problem")
-	assert.Equal(t, 0, started.Build.TestWriter.Report)
+	require.Equal(t, gensurla.TestsKindAssigned, started.Build.TestWriter.Tests.Kind())
+	initial, err := cp.GetTestWriterAssignment(asCaller("alice@example.com", CallerTestWriter), &gensurla.GetTestWriterAssignmentPayload{ChangeID: "chg"})
+	require.NoError(t, err)
+	require.Equal(t, gensurla.TestsKindNeedsChanges, initial.Progress.Tests.Kind(), "the marking read found the module's problem")
+	assert.Equal(t, 0, initial.Progress.Report)
 
 	reported := reportTests(t, cp, card.RequestRevision)
 	assert.Equal(t, 1, reported.Progress.Report)
@@ -534,17 +544,20 @@ func TestAReportIsJudgedThroughTheProductionCopy(t *testing.T) {
 	assert.Contains(t, assignment.Findings[0], "go.sum")
 	assert.NotContains(t, assignment.Findings[0], "report_tests_finished", "the checker's own finding, not the start's")
 
-	// When the test writer's copy is switched to a side branch (even with an
-	// unloadable go.mod committed on it), reporting produces a working_copy
-	// finding rather than could_not_run and writes no generated files on the
-	// side branch.
+	// When the test writer's copy is switched to a side branch after reporting
+	// (while the checker waits for the working-copy turn), the checker produces
+	// a working_copy finding rather than could_not_run and writes no generated
+	// files on the side branch.
 	testsDir := filepath.Join(project, testwriter.TestsRole.Folder)
-	runGitForTest(t, testsDir, "switch", "--quiet", "-c", "mine")
-	runGitForTest(t, testsDir, "commit", "--quiet", "--allow-empty", "-m", "side commit")
+	cp.workingCopyTurn <- struct{}{}
 	reported2 := reportTests(t, cp, card.RequestRevision)
 	assert.Equal(t, 2, reported2.Progress.Report)
+	runGitForTest(t, testsDir, "switch", "--quiet", "-c", "mine")
+	runGitForTest(t, testsDir, "commit", "--quiet", "--allow-empty", "-m", "side commit")
+	<-cp.workingCopyTurn
 	build = waitForTests(t, cp, gensurla.TestsKindNeedsChanges)
 	assert.Equal(t, 2, build.TestWriter.Report)
+	runGitForTest(t, testsDir, "switch", "--quiet", testwriter.TestsRole.Branch(1))
 	assignment, err = cp.GetTestWriterAssignment(asCaller("alice@example.com", CallerTestWriter), &gensurla.GetTestWriterAssignmentPayload{ChangeID: "chg"})
 	require.NoError(t, err)
 	require.Len(t, assignment.Findings, 1)
@@ -584,6 +597,7 @@ func TestTheWholeCheckLimit(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			cp, revision := newReportFixture(t, Options{}, &standInCopy{check: tc.check})
+			readBothAssignments(t, cp)
 			cp.reports.limit = limit
 			reportTests(t, cp, revision)
 			build := waitForTests(t, cp, tc.want)
@@ -644,11 +658,14 @@ func TestACheckThatCannotRunNamesTheUsersStep(t *testing.T) {
 			exporter := tracetest.NewInMemoryExporter()
 			provider := sdktrace.NewTracerProvider(sdktrace.WithSyncer(exporter))
 			t.Cleanup(func() { assert.NoError(t, provider.Shutdown(context.Background())) })
-			cp, revision := newReportFixture(t, Options{TracerProvider: provider}, tc.tests)
-			if tc.copyErr != nil {
-				cp.buildCopyFactory = func(context.Context, string, scaffold.Layout) (buildCopy, error) { return nil, tc.copyErr }
-			}
+			cp, revision := newReportFixture(t, Options{TracerProvider: provider}, &standInCopy{})
 			readBothAssignments(t, cp)
+			cp.buildCopyFactory = func(context.Context, string, scaffold.Layout) (buildCopy, error) {
+				if tc.copyErr != nil {
+					return nil, tc.copyErr
+				}
+				return tc.tests, nil
+			}
 			reportTests(t, cp, revision)
 
 			build := waitForTests(t, cp, tc.wantKind)

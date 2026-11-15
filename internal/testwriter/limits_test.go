@@ -309,6 +309,14 @@ func TestWorkingCopyFindingText(t *testing.T) {
 
 	require.NoError(t, os.Remove(filepath.Join(wc.gitDir, "index.lock")))
 	runGit(t, wc.Dir(), "switch", "--quiet", branch)
+	writeFiles(t, wc.gitDir, map[string]string{"index.lock": ""})
+	v, err = testChecker.Check(t.Context(), wc, Suite{Module: "eval", Command: "./gen/cmd/shop-evals"}, branch, base, nil)
+	require.NoError(t, err)
+	for _, f := range v.Findings {
+		assert.NotEqual(t, FindingWorkingCopy, f.Kind, "index.lock on the build's branch with no operation in progress is not a working_copy finding")
+	}
+	require.NoError(t, os.Remove(filepath.Join(wc.gitDir, "index.lock")))
+
 	writeFiles(t, wc.gitDir, map[string]string{"MERGE_HEAD": base + "\n"})
 	v, err = testChecker.Check(t.Context(), wc, Suite{Module: "eval", Command: "./gen/cmd/shop-evals"}, branch, base, nil)
 	require.NoError(t, err)

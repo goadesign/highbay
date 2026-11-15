@@ -50,7 +50,9 @@ func TestStartBuildOrdersItsOwners(t *testing.T) {
 	var events []string
 	copy := &buildCopyFixture{folder: fixtureTestWriterFolder(t, cp)}
 	cp.buildCopyFactory = func(context.Context, string, scaffold.Layout) (buildCopy, error) {
-		assertNoBuildSaved(t, cp, "chg")
+		if len(events) == 0 {
+			assertNoBuildSaved(t, cp, "chg")
+		}
 		events = append(events, "open")
 		return copy, nil
 	}
@@ -90,17 +92,19 @@ func TestStartBuildOrdersItsOwners(t *testing.T) {
 	}
 	result, err := cp.StartBuild(asCaller("alice@example.com", CallerUser), &gensurla.StartBuildPayload{ChangeID: "chg", RequestRevision: card.RequestRevision})
 	require.NoError(t, err)
-	assert.Equal(t, []string{"open", "register", "prepare", "start"}, events)
+	assert.Equal(t, []string{"open", "register", "start"}, events)
 	assert.Equal(t, 1, result.Build.RequiredTestCount)
 	assert.Equal(t, gensurla.TeamKindReady, result.Team.Kind())
 	assignment, err := cp.GetTestWriterAssignment(asCaller("alice@example.com", CallerTestWriter), &gensurla.GetTestWriterAssignmentPayload{ChangeID: "chg"})
 	require.NoError(t, err)
+	assert.Equal(t, []string{"open", "register", "start", "open", "prepare"}, events)
 	assert.Equal(t, record.designSource, assignment.DesignSource)
 	assert.Equal(t, copy.folder, assignment.WorkingFolder)
 }
 
 // TestStartBuildKeepsPostSaveOutcomes distinguishes author findings, operational
-// failures and reports made while required tests are being generated.
+// failures and reports made while required tests are being generated on the
+// marking read.
 func TestStartBuildKeepsPostSaveOutcomes(t *testing.T) {
 	for _, scenario := range []string{"author", "operational", "reported during generation"} {
 		t.Run(scenario, func(t *testing.T) {
@@ -118,18 +122,18 @@ func TestStartBuildKeepsPostSaveOutcomes(t *testing.T) {
 				}
 				return &testwriter.AuthorError{Finding: testwriter.Finding{Kind: testwriter.FindingGeneration, Message: "The test design does not compile."}}
 			}
-			result, err := cp.StartBuild(asCaller("alice@example.com", CallerUser), &gensurla.StartBuildPayload{ChangeID: "chg", RequestRevision: card.RequestRevision})
-			require.NoError(t, err, "a post-save generation failure never refuses the build")
+			_, err := cp.StartBuild(asCaller("alice@example.com", CallerUser), &gensurla.StartBuildPayload{ChangeID: "chg", RequestRevision: card.RequestRevision})
+			require.NoError(t, err)
+			assignment, err := cp.GetTestWriterAssignment(asCaller("alice@example.com", CallerTestWriter), &gensurla.GetTestWriterAssignmentPayload{ChangeID: "chg"})
+			require.NoError(t, err, "a preparation failure on the marking read never refuses the read")
 			saved := mustStartedBuild(t, cp, asCaller("alice@example.com", CallerUser), "chg")
-			assert.Equal(t, result.Build, saved)
+			assert.Equal(t, assignment.Progress, saved.TestWriter)
 			switch scenario {
 			case "author":
 				finding, ok := saved.TestWriter.Tests.AsNeedsChanges()
 				require.True(t, ok)
 				assert.Equal(t, 1, finding.FindingCount)
 				assert.NotEmpty(t, finding.CheckedAt)
-				assignment, err := cp.GetTestWriterAssignment(asCaller("alice@example.com", CallerTestWriter), &gensurla.GetTestWriterAssignmentPayload{ChangeID: "chg"})
-				require.NoError(t, err)
 				require.Len(t, assignment.Findings, 1, "the test writer reads the finding's text")
 				assert.True(t, strings.HasSuffix(assignment.Findings[0], "Correct the problem in the test module, then report_tests_finished."))
 			case "operational":
@@ -148,11 +152,11 @@ func TestStartBuildKeepsPostSaveOutcomes(t *testing.T) {
 }
 
 // TestAPreparationThatCouldNotRunSaysWhatFailed makes the preparation of a
-// saved build fail for causes the test writer cannot fix. Only a failure of
-// the generator is worded as one. A generated folder that could not be
-// written says so, with the cause and a step that clears it; a failure no
-// case names gives no private text, and its cause is on the start's span.
-// Each reason holds no absolute path and each step fits the contract.
+// saved build fail on the marking read for causes the test writer cannot fix.
+// Only a failure of the generator is worded as one. A generated folder that
+// could not be written says so, with the cause and a step that clears it; a
+// failure no case names gives no private text, and its cause is on the read's
+// span. Each reason holds no absolute path and each step fits the contract.
 func TestAPreparationThatCouldNotRunSaysWhatFailed(t *testing.T) {
 	const buildAgain = "Build this change again on the views page."
 	cases := []struct {
@@ -206,9 +210,11 @@ func TestAPreparationThatCouldNotRunSaysWhatFailed(t *testing.T) {
 			cp.buildCopyFactory = func(context.Context, string, scaffold.Layout) (buildCopy, error) { return copy, nil }
 			copy.prepare = func(context.Context, []designeval.StorySummary) error { return tc.prepareErr }
 
-			result, err := cp.StartBuild(asCaller("alice@example.com", CallerUser), &gensurla.StartBuildPayload{ChangeID: "chg", RequestRevision: card.RequestRevision})
-			require.NoError(t, err, "a failed preparation never refuses the saved build")
-			failure, ok := result.Build.TestWriter.Tests.AsCouldNotRun()
+			_, err := cp.StartBuild(asCaller("alice@example.com", CallerUser), &gensurla.StartBuildPayload{ChangeID: "chg", RequestRevision: card.RequestRevision})
+			require.NoError(t, err)
+			assignment, err := cp.GetTestWriterAssignment(asCaller("alice@example.com", CallerTestWriter), &gensurla.GetTestWriterAssignmentPayload{ChangeID: "chg"})
+			require.NoError(t, err, "a failed preparation never refuses the marking read")
+			failure, ok := assignment.Progress.Tests.AsCouldNotRun()
 			require.True(t, ok)
 			for _, want := range tc.wantReason {
 				assert.Contains(t, failure.Reason, want)
@@ -219,8 +225,8 @@ func TestAPreparationThatCouldNotRunSaysWhatFailed(t *testing.T) {
 			assert.LessOrEqual(t, utf8.RuneCountInString(failure.Reason), maxCheckReason)
 			assert.Equal(t, tc.wantStep, failure.Step)
 			assert.True(t, boundedText(failure.Step, maxCheckStep), "the step fits the contract")
-			span := waitForSpan(t, exporter, "surla.controlplane.start_build")
-			assert.Equal(t, codes.Error, span.Status.Code, "the failure is an error on the start's span")
+			span := waitForSpan(t, exporter, "surla.controlplane.get_test_writer_assignment")
+			assert.Equal(t, codes.Error, span.Status.Code, "the failure is an error on the read's span")
 			require.NotEmpty(t, span.Events)
 			var recorded string
 			for _, event := range span.Events {
@@ -423,9 +429,10 @@ func TestStartBuildTeamWarningsKeepTheSavedBuild(t *testing.T) {
 	}
 }
 
-// TestStartBuildOwnsItsAcceptedLifetime drives the real start while its client
-// disconnects or the server stops after saving. Close drains the start before
-// stores close; reopening proves the interrupted verdict and role mode persisted.
+// TestStartBuildOwnsItsAcceptedLifetime drives the real start and marking read
+// while the client disconnects or the server stops after saving. Close drains
+// accepted preparation before stores close; reopening proves the interrupted
+// verdict and role mode persisted.
 func TestStartBuildOwnsItsAcceptedLifetime(t *testing.T) {
 	for _, stopServer := range []bool{false, true} {
 		t.Run(fmt.Sprint("server_stop=", stopServer), func(t *testing.T) {
@@ -446,22 +453,26 @@ func TestStartBuildOwnsItsAcceptedLifetime(t *testing.T) {
 				}
 			}}
 			cp.buildCopyFactory = func(context.Context, string, scaffold.Layout) (buildCopy, error) { return copy, nil }
-			request, disconnect := context.WithCancel(asCaller("alice@example.com", CallerUser))
+			started, err := cp.StartBuild(asCaller("alice@example.com", CallerUser), &gensurla.StartBuildPayload{ChangeID: "chg", RequestRevision: card.RequestRevision})
+			require.NoError(t, err)
+			assert.Equal(t, gensurla.TeamKindReady, started.Team.Kind())
+
+			request, disconnect := context.WithCancel(asCaller("alice@example.com", CallerTestWriter))
 			defer disconnect()
 			type outcome struct {
-				result *gensurla.StartBuildResult
+				result *gensurla.TestWriterAssignment
 				err    error
 			}
 			finished := make(chan outcome, 1)
 			go func() {
-				result, err := cp.StartBuild(request, &gensurla.StartBuildPayload{ChangeID: "chg", RequestRevision: card.RequestRevision})
+				result, err := cp.GetTestWriterAssignment(request, &gensurla.GetTestWriterAssignmentPayload{ChangeID: "chg"})
 				finished <- outcome{result: result, err: err}
 			}()
 			var accepted context.Context
 			select {
 			case accepted = <-entered:
 			case <-time.After(3 * time.Second):
-				t.Fatal("start did not reach generation")
+				t.Fatal("read did not reach generation")
 			}
 			disconnect()
 			assert.NoError(t, accepted.Err(), "client disconnection does not cancel accepted generation")
@@ -474,16 +485,15 @@ func TestStartBuildOwnsItsAcceptedLifetime(t *testing.T) {
 			case got := <-finished:
 				require.NoError(t, got.err)
 				if stopServer {
-					assert.Equal(t, gensurla.TestsKindCouldNotRun, got.result.Build.TestWriter.Tests.Kind())
-					assert.Equal(t, gensurla.TeamKindUnavailable, got.result.Team.Kind())
+					assert.Equal(t, gensurla.TestsKindCouldNotRun, got.result.Progress.Tests.Kind())
 					reopened := newBuildControlPlane(t, Options{CardsDir: cards})
 					persisted := mustStartedBuild(t, reopened, asCaller("alice@example.com", CallerUser), "chg")
-					assert.Equal(t, got.result.Build, persisted)
+					assert.Equal(t, got.result.Progress, persisted.TestWriter)
 				} else {
-					assert.Equal(t, gensurla.TeamKindReady, got.result.Team.Kind())
+					assert.Equal(t, gensurla.TestsKindAssigned, got.result.Progress.Tests.Kind())
 				}
 			case <-time.After(3 * time.Second):
-				t.Fatal("accepted start did not drain")
+				t.Fatal("accepted read did not drain")
 			}
 		})
 	}
@@ -514,17 +524,19 @@ func TestStartBuildDeadlineBoundaries(t *testing.T) {
 					}
 					return nil
 				}
-				result, err := cp.StartBuild(asCaller("alice@example.com", CallerUser), &gensurla.StartBuildPayload{ChangeID: "chg", RequestRevision: card.RequestRevision})
+				_, err := cp.StartBuild(asCaller("alice@example.com", CallerUser), &gensurla.StartBuildPayload{ChangeID: "chg", RequestRevision: card.RequestRevision})
+				require.NoError(t, err)
+				assert.Equal(t, []string{"register", "start"}, cp.team.Service.(*teamServiceFixture).calls)
+				assignment, err := cp.GetTestWriterAssignment(asCaller("alice@example.com", CallerTestWriter), &gensurla.GetTestWriterAssignmentPayload{ChangeID: "chg"})
 				require.NoError(t, err)
 				want := gensurla.TestsKindCouldNotRun
 				if elapsed < defaultBuildStartTimeout {
 					want = gensurla.TestsKindAssigned
 				}
-				assert.Equal(t, want, result.Build.TestWriter.Tests.Kind())
-				if failure, ok := result.Build.TestWriter.Tests.AsCouldNotRun(); ok {
+				assert.Equal(t, want, assignment.Progress.Tests.Kind())
+				if failure, ok := assignment.Progress.Tests.AsCouldNotRun(); ok {
 					assert.Equal(t, "The build-start time limit ended before the required tests could be prepared.", failure.Reason)
 				}
-				assert.Equal(t, []string{"register", "start"}, cp.team.Service.(*teamServiceFixture).calls, "registration survives the phase limit and team start has its own lifetime")
 			})
 		})
 	}

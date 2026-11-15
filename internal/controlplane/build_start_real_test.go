@@ -71,6 +71,7 @@ func TestStartBuildUsesTheProductionCopy(t *testing.T) {
 				}
 				result, err := startBuildAgain(t, cp, asCaller("alice@example.com", CallerUser), "chg", card.RequestRevision)
 				require.NoError(t, err)
+				assert.Equal(t, gensurla.TestsKindAssigned, result.Build.TestWriter.Tests.Kind(), "StartBuild leaves preparation for the marking read")
 				head := productionBuildGit(t, repo, "rev-parse", "HEAD")
 				assert.Equal(t, head, productionBuildGit(t, builderFolder, "rev-parse", "HEAD"))
 				assert.Equal(t, testwriter.BuilderRole.Branch(1),
@@ -78,11 +79,11 @@ func TestStartBuildUsesTheProductionCopy(t *testing.T) {
 				assert.Equal(t, head, productionBuildGit(t, folder, "rev-parse", "HEAD"))
 				assert.Equal(t, testwriter.TestsRole.Branch(1),
 					productionBuildGit(t, folder, "symbolic-ref", "--short", "HEAD"))
-				finding, ok := result.Build.TestWriter.Tests.AsNeedsChanges()
-				require.True(t, ok, "the real module failure is saved after the build")
-				assert.Equal(t, 1, finding.FindingCount)
 				assignment, err := cp.GetTestWriterAssignment(asCaller("alice@example.com", CallerTestWriter), &gensurla.GetTestWriterAssignmentPayload{ChangeID: "chg"})
 				require.NoError(t, err)
+				finding, ok := assignment.Progress.Tests.AsNeedsChanges()
+				require.True(t, ok, "the real module failure is saved on the marking read")
+				assert.Equal(t, 1, finding.FindingCount)
 				require.Len(t, assignment.Findings, 1, "the test writer reads the finding's text")
 				assert.Contains(t, assignment.Findings[0], "go.sum")
 				assert.True(t, strings.HasSuffix(assignment.Findings[0], "Correct the problem in the test module, then report_tests_finished."))
@@ -222,11 +223,15 @@ func init() { time.Sleep(30 * time.Second) }`, 1)
 		return context.WithTimeout(ctx, time.Second)
 	}
 	card := buildableChange(t, cp, "chg")
-	result, err := cp.StartBuild(asCaller("alice@example.com", CallerUser), &gensurla.StartBuildPayload{
+	_, err := cp.StartBuild(asCaller("alice@example.com", CallerUser), &gensurla.StartBuildPayload{
 		ChangeID: "chg", RequestRevision: card.RequestRevision,
 	})
-	require.NoError(t, err, "the limit is reached after saving")
-	failure, ok := result.Build.TestWriter.Tests.AsCouldNotRun()
+	require.NoError(t, err)
+	assignment, err := cp.GetTestWriterAssignment(asCaller("alice@example.com", CallerTestWriter), &gensurla.GetTestWriterAssignmentPayload{
+		ChangeID: "chg",
+	})
+	require.NoError(t, err, "the limit is reached during the marking read")
+	failure, ok := assignment.Progress.Tests.AsCouldNotRun()
 	require.True(t, ok)
 	assert.Equal(t, "The build-start time limit ended before the required tests could be prepared.", failure.Reason)
 	assert.Equal(t, "Build this change again on the views page.", failure.Step)

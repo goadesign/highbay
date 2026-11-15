@@ -289,7 +289,7 @@ func WithoutAbsolutePaths(text string) string {
 
 // Prepare writes the required tests for stories into the working copy on
 // branch at base: it first verifies that the copy has branch checked out with
-// no Git operation in progress and no index.lock, then renders the copy's
+// no Git operation in progress, then renders the copy's
 // suite module's Story table (designeval.StoryTestsPath) from stories, runs
 // the design evaluator's generator on the module with it (comparing any
 // dependency failure against base), and writes the table and replaces the
@@ -303,8 +303,8 @@ func WithoutAbsolutePaths(text string) string {
 //
 // A failure the copy's author can fix is an *AuthorError carrying the finding
 // Check would give, worded relative to the copy (including FindingWorkingCopy
-// when the copy is off branch, has a Git operation in progress, or has
-// index.lock); a symbolic link on the way also wraps ErrLinkedFolder. Any
+// when the copy is off branch or has a Git operation in progress); a symbolic
+// link on the way also wraps ErrLinkedFolder. Any
 // other error is a failure the author cannot fix. Two are marked so a caller
 // can say what failed: ErrGeneration, when the generator failed (the context
 // ended, the platform has no sandbox, which also wraps
@@ -332,7 +332,7 @@ func (c *Checker) Prepare(
 	if err != nil {
 		return nil, err
 	}
-	if facts.Detached || rawBranch != branch || facts.Operation != "none" || facts.IndexLock != "" {
+	if facts.Detached || rawBranch != branch || facts.Operation != "none" {
 		return nil, &AuthorError{Finding: workingCopyFinding(branch, facts)}
 	}
 	rel, err := filepath.Rel(wc.dir, wc.project)
@@ -395,7 +395,7 @@ func (c *Checker) Check(
 	if err != nil {
 		return Verdict{}, err
 	}
-	if facts.Detached || rawBranch != branch || facts.Operation != "none" || facts.IndexLock != "" {
+	if facts.Detached || rawBranch != branch || facts.Operation != "none" {
 		return Verdict{Findings: []Finding{workingCopyFinding(branch, facts)}, copy: wc}, nil
 	}
 	if err := os.MkdirAll(c.workDir, 0o700); err != nil {
@@ -634,8 +634,7 @@ func limitText(d time.Duration) string {
 }
 
 // workingCopyFinding words a FindingWorkingCopy for a test writer's working
-// copy that is not on branch, has a Git operation in progress, or has
-// index.lock present.
+// copy that is not on branch or has a Git operation in progress.
 func workingCopyFinding(branch string, facts CopyFacts) Finding {
 	where := fmt.Sprintf("is on branch %s", ShownBranch(facts.Branch))
 	if facts.Detached {

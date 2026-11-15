@@ -36,14 +36,18 @@ func TestStartBuildCloseDrainsAfterCancellation(t *testing.T) {
 			return errors.New("generation subprocess exited after cancellation")
 		}
 		cp.buildCopyFactory = func(context.Context, string, scaffold.Layout) (buildCopy, error) { return copy, nil }
+		_, err := cp.StartBuild(asCaller("alice@example.com", CallerUser), &gensurla.StartBuildPayload{
+			ChangeID: "chg", RequestRevision: card.RequestRevision,
+		})
+		require.NoError(t, err)
 		type outcome struct {
-			result *gensurla.StartBuildResult
+			result *gensurla.TestWriterAssignment
 			err    error
 		}
 		started := make(chan outcome, 1)
 		go func() {
-			result, err := cp.StartBuild(asCaller("alice@example.com", CallerUser), &gensurla.StartBuildPayload{
-				ChangeID: "chg", RequestRevision: card.RequestRevision,
+			result, err := cp.GetTestWriterAssignment(asCaller("alice@example.com", CallerTestWriter), &gensurla.GetTestWriterAssignmentPayload{
+				ChangeID: "chg",
 			})
 			started <- outcome{result: result, err: err}
 		}()
@@ -65,11 +69,11 @@ func TestStartBuildCloseDrainsAfterCancellation(t *testing.T) {
 		if !returned {
 			assert.NoError(t, <-closed)
 		}
-		failure, ok := got.result.Build.TestWriter.Tests.AsCouldNotRun()
+		failure, ok := got.result.Progress.Tests.AsCouldNotRun()
 		require.True(t, ok)
 		assert.Equal(t, "The server stopped before the required tests could be prepared.", failure.Reason)
-		assert.Equal(t, gensurla.TeamKindUnavailable, got.result.Team.Kind())
 		reopened := newBuildControlPlane(t, Options{CardsDir: cards})
-		assert.Equal(t, got.result.Build, mustStartedBuild(t, reopened, asCaller("alice@example.com", CallerUser), "chg"))
+		persisted := mustStartedBuild(t, reopened, asCaller("alice@example.com", CallerUser), "chg")
+		assert.Equal(t, got.result.Progress, persisted.TestWriter)
 	})
 }

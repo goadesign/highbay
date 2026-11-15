@@ -181,7 +181,6 @@ func (c *ControlPlane) StartBuild(
 	}
 	var (
 		copy           buildCopy
-		testsWC        testwriter.WorkingCopy
 		builderExisted bool
 		testsExisted   bool
 	)
@@ -200,7 +199,7 @@ func (c *ControlPlane) StartBuild(
 			return nil, recordBuildError(span, buildStartError(work, workspace, err), "inspect builder copy")
 		}
 		if source != testSourceStoredEvaluator {
-			testsWC, testsExisted, err = testwriter.InspectCopy(
+			_, testsExisted, err = testwriter.InspectCopy(
 				work, workspace, testwriter.TestsRole, testwriter.TestsRole.Branch(number),
 			)
 			if err != nil {
@@ -289,24 +288,16 @@ func (c *ControlPlane) StartBuild(
 				builderFolder = bWC.Project()
 			}
 		}
-		if source != testSourceStoredEvaluator {
+		if source != testSourceStoredEvaluator && !testsExisted {
 			testsBranch := testwriter.TestsRole.Branch(saved.Number)
-			if !testsExisted {
-				tWC, tErr := testwriter.MakeCopy(work, workspace, testwriter.TestsRole, testsBranch, saved.Base)
-				if tErr != nil {
-					if makeErr == nil {
-						makeErr = tErr
-					}
-				} else {
-					testsExisted = true
-					testsFolder = tWC.Project()
-					copy = c.newWriterBuildCopy(tWC, layout)
+			tWC, tErr := testwriter.MakeCopy(work, workspace, testwriter.TestsRole, testsBranch, saved.Base)
+			if tErr != nil {
+				if makeErr == nil {
+					makeErr = tErr
 				}
-			} else if facts, fErr := testsWC.Facts(work); fErr != nil {
-				span.RecordError(fErr)
-			} else if !facts.Detached && facts.Branch == testsBranch &&
-				facts.Operation == "none" && facts.IndexLock == "" {
-				copy = c.newWriterBuildCopy(testsWC, layout)
+			} else {
+				testsExisted = true
+				testsFolder = tWC.Project()
 			}
 		}
 	}
@@ -329,35 +320,6 @@ func (c *ControlPlane) StartBuild(
 		span.SetStatus(codes.Error, "make working copy")
 		result.Team = buildAgainTeamOutcome()
 		return result, nil
-	}
-	// Temporary in W1 (removed by W2, which moves Prepare to the test writer's
-	// marking assignment read): prepare required tests only when Build just
-	// made the tests copy or found it already on this build's branch.
-	if copy != nil {
-		err = work.Err()
-		if err == nil {
-			err = copy.Prepare(work, testwriter.TestsRole.Branch(saved.Number), saved.Base, saved.Stories)
-		}
-		// An author's failure becomes a finding. Any other is a failure of
-		// this start: the saved reason is worded for the page, and the trace
-		// keeps the cause as it was.
-		if author := (*testwriter.AuthorError)(nil); err != nil && !errors.As(err, &author) {
-			span.RecordError(err)
-			span.SetStatus(codes.Error, "prepare required tests")
-		}
-		current, saveErr := c.saveBuildPreparation(work, saved, err)
-		if saveErr != nil {
-			span.RecordError(errors.New("saved build preparation could not be recorded"))
-			span.SetStatus(codes.Error, "record build preparation")
-			result.Team = buildAgainTeamOutcome()
-			return result, nil
-		}
-		rendered, readErr := c.startedBuild(accepted, principal.ID, current)
-		if readErr != nil {
-			result.Team = buildAgainTeamOutcome()
-			return result, nil
-		}
-		result.Build = rendered
 	}
 	<-c.workingCopyTurn
 	heldTurn = false
@@ -392,7 +354,6 @@ func (c *ControlPlane) saveBuildPreparation(
 		current.StartedAt.Equal(saved.StartedAt) && current.ReportNumber == saved.ReportNumber &&
 		current.TestWriter.State == testsAssigned {
 		tw := &current.TestWriter
-		tw.Read = false
 		tw.CheckedAt = time.Now().UTC()
 		var author *testwriter.AuthorError
 		if errors.As(prepareErr, &author) {
@@ -411,9 +372,12 @@ func (c *ControlPlane) saveBuildPreparation(
 			return heldBuild{}, err
 		}
 	}
-	record, err := c.ownedCard(Principal{ID: c.team.Owner}, saved.ChangeID)
+	record, ok, err := c.cards.load(saved.ChangeID)
 	if err != nil {
 		return heldBuild{}, err
+	}
+	if !ok {
+		return heldBuild{}, fmt.Errorf("unknown change_id %q", saved.ChangeID)
 	}
 	return heldBuild{file: current, inForce: buildInForce(current, record), storedEvaluator: c.storedEvaluator()}, nil
 }

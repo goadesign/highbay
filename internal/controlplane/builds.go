@@ -8,19 +8,16 @@ import (
 	"errors"
 	"fmt"
 	"os/exec"
-	"path/filepath"
 	"slices"
 	"strings"
 	"time"
 	"unicode/utf8"
 
-	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
 	goa "goa.design/goa/v3/pkg"
 
 	gensurla "github.com/goadesign/surla/gen/surla"
-	"github.com/goadesign/surla/internal/designeval"
 	"github.com/goadesign/surla/internal/testwriter"
 	"github.com/goadesign/surla/internal/verify"
 	"github.com/goadesign/surla/internal/verifyrun"
@@ -148,7 +145,13 @@ func (c *ControlPlane) ListBuilderAssignments(ctx context.Context) (*gensurla.Bu
 	}
 	items := make([]*gensurla.BuilderAssignment, len(builds))
 	if len(builds) > 0 {
-		folder, goworkOff, err := builderWorkingFolder(c.activeWorkspaceDir, outermost(c.protectedDirs))
+		work, cancel := context.WithTimeout(ctx, layoutReadTimeout)
+		defer cancel()
+		_, folder, copyRoot, err := builderCopyFolder(work, c.activeWorkspaceDir)
+		if err != nil {
+			return nil, err
+		}
+		folder, goworkOff, err := builderWorkingFolder(folder, copyRoot)
 		if err != nil {
 			return nil, err
 		}
@@ -157,36 +160,6 @@ func (c *ControlPlane) ListBuilderAssignments(ctx context.Context) (*gensurla.Bu
 		}
 	}
 	return &gensurla.BuilderAssignmentList{Assignments: items}, nil
-}
-
-// GetBuilderAssignment returns the builder's assignment for the caller's
-// change and records that the builder read it; a later build of the change
-// replaces it unread. It fails with not_found when the change or its build
-// does not exist and forbidden for another owner's change.
-func (c *ControlPlane) GetBuilderAssignment(
-	ctx context.Context,
-	p *gensurla.GetBuilderAssignmentPayload,
-) (*gensurla.BuilderAssignment, error) {
-	c.workspaceMu.RLock()
-	defer c.workspaceMu.RUnlock()
-	var folder string
-	var goworkOff bool
-	held, err := c.readAssignment(ctx, "surla.controlplane.get_builder_assignment", p.ChangeID, func(saved *buildFile) (bool, error) {
-		// readAssignment established ownership; derive facts before recording
-		// the read, so a filesystem failure consumes no assignment.
-		var err error
-		folder, goworkOff, err = builderWorkingFolder(c.activeWorkspaceDir, outermost(c.protectedDirs))
-		if err != nil {
-			return false, err
-		}
-		changed := !saved.Builder.Read
-		saved.Builder.Read = true
-		return changed, nil
-	})
-	if err != nil {
-		return nil, err
-	}
-	return builderAssignmentResult(held, folder, goworkOff), nil
 }
 
 // ListTestWriterAssignments returns the test writer's assignment of every
@@ -208,149 +181,6 @@ func (c *ControlPlane) ListTestWriterAssignments(ctx context.Context) (*gensurla
 		}
 	}
 	return &gensurla.TestWriterAssignmentList{Assignments: items}, nil
-}
-
-// GetTestWriterAssignment returns the test writer's assignment for the
-// caller's change in full, with the Story, answers, examples and preserved
-// behaviors as agreed at the built revision, one required test per finished
-// flow and the text of any findings, and records that the test writer read
-// it; a later build of the change replaces it unread. It fails with not_found
-// when the change or its build does not exist and forbidden for another
-// owner's change. A build that holds no example was saved without the agreed
-// terms: the read fails, naming the step to build again, and records nothing.
-func (c *ControlPlane) GetTestWriterAssignment(
-	ctx context.Context,
-	p *gensurla.GetTestWriterAssignmentPayload,
-) (*gensurla.TestWriterAssignment, error) {
-	principal, ok := PrincipalFromContext(ctx)
-	if !ok {
-		return nil, errors.New("authenticated principal is required")
-	}
-	c.workspaceMu.RLock()
-	defer c.workspaceMu.RUnlock()
-	c.mu.RLock()
-	owned, err := c.ownedBuild(principal, p.ChangeID)
-	c.mu.RUnlock()
-	if err != nil {
-		return nil, err
-	}
-	if owned.file.Roles != buildRolesBuilderAndTestWriter {
-		return nil, gensurla.MakeNotFound(errors.New("this build has no test-writer assignment because it was started with stored verification settings"))
-	}
-	work, cancel := context.WithTimeout(ctx, layoutReadTimeout)
-	defer cancel()
-	_, prefix, err := resolveStarterRepo(work, c.activeWorkspaceDir)
-	if err != nil {
-		return nil, err
-	}
-	folder := filepath.Join(c.activeWorkspaceDir, testwriter.Folder, filepath.FromSlash(prefix))
-	held, err := c.readAssignment(ctx, "surla.controlplane.get_test_writer_assignment", p.ChangeID, func(saved *buildFile) (bool, error) {
-		if saved.Roles != buildRolesBuilderAndTestWriter {
-			return false, gensurla.MakeNotFound(errors.New("this build has no test-writer assignment because it was started with stored verification settings"))
-		}
-		// Every confirmed revision has an example, so a build without one was
-		// saved without the agreed terms the tests are owed.
-		if len(saved.Examples) == 0 {
-			return false, fmt.Errorf("the build of change %q holds none of the agreed answers, examples and preserved behaviors; "+
-				"the user builds this change again on the views page", saved.ChangeID)
-		}
-		changed := !saved.TestWriter.Read
-		saved.TestWriter.Read = true
-		return changed, nil
-	})
-	if err != nil {
-		return nil, err
-	}
-	// start_build refused a Story whose flows cannot be named, so an error
-	// here means the saved Story changed outside this package.
-	scenarios, _, err := designeval.StoryScenarios(held.file.Stories)
-	if err != nil {
-		return nil, fmt.Errorf("name the required tests of change %q: %w", held.file.ChangeID, err)
-	}
-	required := make([]*gensurla.RequiredTest, len(scenarios))
-	for i, s := range scenarios {
-		required[i] = &gensurla.RequiredTest{Story: s.Story, FlowKey: s.Key, Scenario: s.Scenario, Hook: s.Hook}
-	}
-	item := testWriterAssignmentItem(held)
-	findings := []string{}
-	if item.Progress.Tests.Kind() == gensurla.TestsKindNeedsChanges {
-		findings = slices.Clone(held.file.TestWriter.Findings)
-	}
-	return &gensurla.TestWriterAssignment{
-		ChangeID:           item.ChangeID,
-		RequestRevision:    item.RequestRevision,
-		InForce:            item.InForce,
-		Progress:           item.Progress,
-		Findings:           findings,
-		WorkingFolder:      folder,
-		DesignSource:       held.file.DesignSource,
-		Stories:            storySummaryItems(held.file.Stories),
-		RequiredTests:      required,
-		Answers:            held.file.Answers,
-		Examples:           held.file.Examples,
-		PreservedBehaviors: held.file.PreservedBehaviors,
-	}, nil
-}
-
-// ReportTestsFinished records that the test writer finished its tests for the
-// caller's change at the build's revision: the build's report number rises by
-// one, the test writer's state becomes reported and any earlier verdict is
-// cleared. It then wakes the report checker without waiting for it, so the
-// verdict follows without another call. It fails with not_found when the
-// change or its build does not exist, forbidden for another owner's change,
-// and conflict for any other revision or in a project that verifies with its
-// stored evaluator, where no test writer is used; a refused report changes
-// nothing.
-func (c *ControlPlane) ReportTestsFinished(
-	ctx context.Context,
-	p *gensurla.ReportTestsFinishedPayload,
-) (*gensurla.TestWriterAssignmentItem, error) {
-	principal, ok := PrincipalFromContext(ctx)
-	if !ok {
-		return nil, errors.New("authenticated principal is required")
-	}
-	_, span := c.tracer("surla/controlplane").Start(ctx, "surla.controlplane.report_tests_finished", trace.WithAttributes(
-		attribute.String("surla.change_id", p.ChangeID),
-		attribute.String("surla.request_revision", p.RequestRevision),
-	))
-	defer span.End()
-	// reportMu first: a report waits while the report checker confirms,
-	// records and saves a verdict, so it never falls between them.
-	c.reportMu.Lock()
-	defer c.reportMu.Unlock()
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	held, err := c.ownedBuild(principal, p.ChangeID)
-	if err != nil {
-		return nil, recordBuildError(span, err, "load build")
-	}
-	saved := &held.file
-	if saved.Roles != buildRolesBuilderAndTestWriter {
-		return nil, gensurla.MakeNotFound(errors.New("this build has no test-writer assignment because it was started with stored verification settings"))
-	}
-	if held.storedEvaluator {
-		return nil, gensurla.MakeConflict(errors.New("no test writer is used: this project has stored verification settings"))
-	}
-	if saved.RequestRevision != p.RequestRevision {
-		return nil, gensurla.MakeConflict(fmt.Errorf(
-			"the test assignment for %q is for request_revision %q, not %q",
-			p.ChangeID, saved.RequestRevision, p.RequestRevision,
-		))
-	}
-	saved.ReportNumber++
-	saved.TestWriter = testWriterAssignment{
-		State: testsReported,
-		Read:  saved.TestWriter.Read,
-	}
-	if err := c.cards.saveOpenBuild(*saved); err != nil {
-		return nil, recordBuildError(span, err, "save build")
-	}
-	select {
-	case c.reportWake <- struct{}{}:
-	default: // A wake is already waiting; the checker reads every reported build.
-	}
-	span.SetAttributes(attribute.String("surla.tests_state", saved.TestWriter.State), attribute.Int("surla.report_number", saved.ReportNumber))
-	return testWriterAssignmentItem(held), nil
 }
 
 // changeBuild reads and renders record's usable build without changing it.
@@ -489,6 +319,10 @@ func verdictTime(at time.Time) string {
 // recordBuildError records err on span as a failure unless it is a refusal
 // the design declares, and returns err.
 func recordBuildError(span trace.Span, err error, status string) error {
+	var offBranch *gensurla.CopyOffBranch
+	if errors.As(err, &offBranch) {
+		return err
+	}
 	var refused *goa.ServiceError
 	if !errors.As(err, &refused) || refused.Fault {
 		span.RecordError(err)
@@ -497,6 +331,7 @@ func recordBuildError(span trace.Span, err error, status string) error {
 	return err
 }
 
+// boundedText reports whether s is non-empty and at most limit runes long.
 func boundedText(s string, limit int) bool {
 	return s != "" && utf8.RuneCountInString(s) <= limit
 }
@@ -537,8 +372,8 @@ func (c *ControlPlane) ownedCard(principal Principal, changeID string) (storedCh
 	return record, nil
 }
 
-// ownedBuild loads the build of the caller's change changeID, failing with
-// not_found when the change or its build does not exist. Callers hold c.mu.
+// ownedBuild loads the usable build of the caller's change changeID, failing
+// with not_found when the change or its build does not exist. Callers hold c.mu.
 func (c *ControlPlane) ownedBuild(principal Principal, changeID string) (heldBuild, error) {
 	record, err := c.ownedCard(principal, changeID)
 	if err != nil {
@@ -556,7 +391,7 @@ func (c *ControlPlane) ownedBuild(principal Principal, changeID string) (heldBui
 		return heldBuild{}, err
 	}
 	if hasProvenance && buildDropped(provenance, saved) {
-		return heldBuild{}, gensurla.MakeNotFound(fmt.Errorf("The user dropped change %s: stop work on it; make no more edits or commits for it. The user starts builds on the views page.", saved.ChangeID))
+		return heldBuild{}, gensurla.MakeNotFound(fmt.Errorf("change_id %q has no usable build; start a new build on the views page", changeID))
 	}
 	return heldBuild{file: saved, inForce: buildInForce(saved, record), storedEvaluator: c.storedEvaluator()}, nil
 }
@@ -598,40 +433,6 @@ func (c *ControlPlane) ownedBuilds(owner string) ([]heldBuild, error) {
 func (c *ControlPlane) usableBuild(saved buildFile) bool {
 	return saved.Roles == buildRolesBuilderAndTestWriter ||
 		saved.Roles == buildRolesBuilderOnly && c.storedEvaluator()
-}
-
-// readAssignment loads the build of the caller's change under the write lock,
-// applies markRead, and saves the build when markRead reports a change, all
-// within spanName.
-func (c *ControlPlane) readAssignment(
-	ctx context.Context,
-	spanName, changeID string,
-	markRead func(*buildFile) (bool, error),
-) (heldBuild, error) {
-	principal, ok := PrincipalFromContext(ctx)
-	if !ok {
-		return heldBuild{}, errors.New("authenticated principal is required")
-	}
-	_, span := c.tracer("surla/controlplane").Start(ctx, spanName, trace.WithAttributes(attribute.String("surla.change_id", changeID)))
-	defer span.End()
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	held, err := c.ownedBuild(principal, changeID)
-	if err != nil {
-		return heldBuild{}, recordBuildError(span, err, "load build")
-	}
-	span.SetAttributes(attribute.String("surla.request_revision", held.file.RequestRevision))
-	changed, err := markRead(&held.file)
-	if err != nil {
-		return heldBuild{}, recordBuildError(span, err, "read assignment")
-	}
-	if changed {
-		if err := c.cards.saveOpenBuild(held.file); err != nil {
-			return heldBuild{}, recordBuildError(span, err, "save build")
-		}
-		span.AddEvent("assignment read for the first time")
-	}
-	return held, nil
 }
 
 // newestPassedBuild reads every run of this change and returns the newest pass
