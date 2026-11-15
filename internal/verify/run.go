@@ -195,9 +195,9 @@ func IsCommitID(commit string) bool {
 // checkout. Run refuses a WorkDir that already has contents. The suite is
 // checked out only after the candidate is built. Workspace settings and
 // workspace package-loading output are discarded because they may contain
-// operator secrets. Checkout, dependency, toolchain and evaluator diagnostics
-// stay in private evidence files; outward errors name those files without
-// quoting their output.
+// operator secrets. Checkout, standalone dependency and toolchain operations,
+// and evaluator protocol diagnostics stay in private evidence files; outward
+// errors name those files without quoting their output.
 // Compiler failures retain bounded build-output excerpts.
 //
 // Run starts its builds, the suite and the candidates the suite runs in the

@@ -471,11 +471,12 @@ non-zero; a setup or build failure prints no report.
 | `-timeout <duration>` | Limit for the run (default `0`, no limit). A stopped run prints any partial report the evaluator saved and exits non-zero; a partial report can pass. |
 | `-builder-view` | Default `true`. `-builder-view=false` prints the full report and names hidden scenarios in the summary. Failures go to standard error in either view; do not show them to the builder. |
 
-Failures during checkout, dependency downloads, toolchain lookups and the
-evaluator protocol name the failed operation, its process status when present, and the private
-evidence file. Their raw standard output and standard error remain under
-`<work-dir>/evidence/`, including after the command ends, so the operator can
-inspect the named file and retry. Compiler failures still include bounded
+Failures during checkout, standalone dependency downloads and toolchain
+lookups, and the evaluator protocol name the failed operation, its process
+status when present, and the private evidence file. Their raw standard output
+and standard error remain under `<work-dir>/evidence/`, including after the
+command ends, so the operator can inspect the named file and retry. Workspace
+preparation diagnostics are discarded. Compiler failures still include bounded
 build-output excerpts.
 
 #### Evaluator suite command contract
