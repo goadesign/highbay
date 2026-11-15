@@ -1,5 +1,5 @@
 // This file follows real test-writer reports from the served page through the
-// production sandboxed checker and the tests branch, without running scenarios.
+// production checker and the tests branch, without running scenarios.
 package controlplane
 
 import (
@@ -15,7 +15,6 @@ import (
 	"github.com/goadesign/surla/internal/designeval"
 	"github.com/goadesign/surla/internal/testmodule"
 	"github.com/goadesign/surla/internal/testwriter"
-	"github.com/goadesign/surla/verify/candidate"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -85,6 +84,80 @@ const pageReportRefundHook = `
 func (h *Hooks) RefundOverLimit(context.Context) (eval.Result, error) { return eval.Result{}, nil }
 `
 
+// pageReportNativeStageScript bounds only the three real native stages. It
+// observes page responses without issuing requests; one read-only owner query
+// on failure separates check failures from a page that did not show the owner.
+const pageReportNativeStageScript = `
+async function nativeStage(name, report, expected, work, shown) {
+  const started = Date.now();
+  const limit = 5 * 60 * 1000;
+  let timer, ended, passed = false, stopped = false;
+  try {
+    await Promise.race([
+      (async () => {
+        await work();
+        while (!stopped) {
+          const observed = answers(buildPath).at(-1)?.build;
+          if (observed?.state === "started" && observed.test_writer.report === report) {
+            const state = observed.test_writer.tests.state;
+            if (["needs_changes", "accepted", "could_not_run"].includes(state) && state !== expected) {
+              throw new Error("unexpected terminal verdict " + state + " for " + name);
+            }
+          }
+          if (shown()) return;
+          await sleep(100);
+        }
+      })(),
+      new Promise((_, reject) => {
+        timer = setTimeout(() => {
+          stopped = true;
+          reject(new Error("native stage " + name + " reached its " + limit + "ms hang bound"));
+        }, limit);
+      }),
+    ]);
+    ended = Date.now();
+    passed = true;
+  } catch (error) {
+    ended = Date.now();
+    stopped = true;
+    console.error("NATIVE_STAGE_FAILURE " + name + ": " + error.message);
+    let owner;
+    try {
+      const response = await fetch(origin + buildPath, {
+        headers: { Authorization: "Bearer " + input.builder },
+        signal: AbortSignal.timeout(5000),
+      });
+      owner = { status: response.status, body: await response.json() };
+    } catch (diagnosticError) {
+      owner = { error: String(diagnosticError) };
+    }
+    const bounded = (value) => JSON.stringify(value ?? null).slice(0, 8000);
+    const latest = (path) => {
+      const response = page.sent("GET", path).findLast((r) => r.status !== undefined);
+      return response ? { status: response.status, answer: response.answer } : null;
+    };
+    console.error("NATIVE_STAGE_DIAGNOSTICS " + JSON.stringify({
+      owner: bounded(owner), observed_build: bounded(latest(buildPath)),
+      findings: bounded(latest(findingsPath)), rendered_findings: page.text("#surla-build-findings").slice(0, 4000),
+    }));
+    const tests = owner.body?.build?.test_writer;
+    if (tests?.tests.state === "could_not_run") {
+      throw new Error("product defect: the check could_not_run; " + error.message);
+    }
+    if (tests?.report === report && tests.tests.state === expected && !shown()) {
+      throw new Error("product defect: owner reached " + expected + " but the page did not show it; " + error.message);
+    }
+    throw error;
+  } finally {
+    stopped = true;
+    clearTimeout(timer);
+    console.log("NATIVE_STAGE " + JSON.stringify({
+      stage: name, duration_ms: ended - started, limit_ms: limit, result: passed ? "passed" : "failed",
+    }));
+  }
+}
+`
+
 // pageRealReportScript drives the served UI and agent HTTP entry points. Each
 // verdict arrives through the page's existing version wait, without reloads.
 const pageRealReportScript = `
@@ -112,12 +185,12 @@ async function report(number) {
   await version("reported-" + number);
   await control(origin, "act", { key: "release-check" });
 }
+` + pageReportNativeStageScript + `
 await until(() => page.$("#surla-cp1-editor").dataset.changeId === input.change, "the confirmed Story did not open");
 await until(() => page.$("#surla-build-start") && !page.$("#surla-build-start").disabled, "the agreed change offered no enabled Build control");
 checkControl(page, page.$("#surla-build-start"), "Build control");
-page.$("#surla-build-start").click();
-await until(() => page.sent("POST", buildPath).some((r) => r.status === 200), "the real Build did not finish preparing the Story tests", 45000);
-await until(() => shownBuild("assigned", 0), "the prepared Build did not appear on the page");
+await nativeStage("build", 0, "assigned", async () => page.$("#surla-build-start").click(),
+  () => page.sent("POST", buildPath).some((r) => r.status === 200) && shownBuild("assigned", 0));
 const started = shownBuild("assigned", 0);
 expect(started.required_test_count === 1 && started.request_revision === input.revision && started.in_force, "Build did not use exactly the complete Story flow: " + JSON.stringify(started));
 expect(!started.builder.read && !started.test_writer.read, "new assignments were already read");
@@ -139,8 +212,8 @@ const inputSelector = 'textarea[data-field="expected_outcome"]';
 const typed = page.$(inputSelector);
 page.type(typed, "Keep this unsaved expected outcome");
 
-await report(1);
-await until(() => shownBuild("needs_changes", 1) && page.$("#surla-build-findings"), "the real compilation finding did not reach the page", 45000);
+await nativeStage("report-1", 1, "needs_changes", () => report(1),
+  () => shownBuild("needs_changes", 1) && page.$("#surla-build-findings"));
 const rejected = shownBuild("needs_changes", 1);
 expect(rejected.test_writer.tests.finding_count === 1 && !rejected.test_writer.read, "the compilation verdict lacks its count or unread work");
 await until(() => answers(findingsPath).some((f) => f.report === 1), "the page did not read the user's finding text");
@@ -154,8 +227,8 @@ await version("needs_changes");
 
 await control(origin, "act", { key: "repair-hook" });
 await version("read-2");
-await report(2);
-await until(() => shownBuild("accepted", 2) && page.$("#surla-build-test-writer").dataset.state === "accepted", "the repaired hook was not accepted on the page", 45000);
+await nativeStage("report-2", 2, "accepted", () => report(2),
+  () => shownBuild("accepted", 2) && page.$("#surla-build-test-writer").dataset.state === "accepted");
 const accepted = shownBuild("accepted", 2);
 expect(/^[a-f0-9]{40,64}$/.test(accepted.test_writer.tests.commit) && !accepted.builder.read && !accepted.test_writer.read, "acceptance did not record a commit and new unread assignments: " + JSON.stringify(accepted));
 expect(page.text("#surla-build-builder").includes("Assignment unread") && page.text("#surla-build-test-writer").includes("Assignment unread"), "acceptance did not show both new unread assignments");
@@ -173,13 +246,10 @@ page.close();
 // compiler finding for its missing hook, repairs that hook in the assigned
 // working folder, and observes the real worker recording the second report.
 // Only the external team/window owner is a fixture; generation, checking and
-// recording use the production owners and their candidate sandbox unchanged.
+// recording use the production owners unchanged.
 func TestViewsPageFollowsRealTestReports(t *testing.T) {
 	if testing.Short() {
-		t.Skip("runs real sandboxed test generation, compilation and repair; covered by the full suite")
-	}
-	if err := candidate.CheckSandbox(); err != nil {
-		t.Skipf("real report-worker page proof requires the candidate sandbox: %v", err)
+		t.Skip("runs real test generation, compilation and repair; covered by the full suite")
 	}
 	requirePageTools(t)
 	repo, project := productionBuildProject(t, ".", pageReportModule(t))
@@ -194,7 +264,7 @@ func TestViewsPageFollowsRealTestReports(t *testing.T) {
 		RunsDir:         t.TempDir(),
 		WrittenTestRuns: &WrittenTestRuns{ReportDir: t.TempDir(), Command: []string{"/bin/sh", "-c", "exit 0", "sh"}, Timeout: time.Hour},
 	})
-	card := saveStoryCard(t, cp, "chg-real-report", StatusConfirmed, refundStory("Refund over the limit"))
+	card := saveBuildStoryCard(t, cp, "chg-real-report", StatusConfirmed, refundStory("Refund over the limit"))
 	user := asCaller(pageOwner, CallerUser)
 	before, err := cp.ListChanges(user)
 	require.NoError(t, err)
@@ -261,14 +331,14 @@ func TestViewsPageFollowsRealTestReports(t *testing.T) {
 		})
 	}
 
-	runPageScript(t, ps, map[string]any{
+	runPageScriptWithTimeout(t, ps, map[string]any{
 		"change": card.ChangeID, "revision": card.RequestRevision,
-	}, viewsPageScriptHelpers+pageRealReportScript)
+	}, viewsPageScriptHelpers+pageRealReportScript, 16*time.Minute)
 	build := mustStartedBuild(t, cp, user, card.ChangeID)
 	accepted, ok := build.TestWriter.Tests.AsAccepted()
 	require.True(t, ok, "the production worker accepted the repaired hook")
 	assert.Equal(t, 2, build.TestWriter.Report)
-	assert.Equal(t, accepted.Commit, productionBuildGit(t, repo, "rev-parse", "surla/tests"))
+	assert.Equal(t, accepted.Commit, productionBuildGit(t, repo, "rev-parse", testwriter.TestsRole.Branch(1)))
 	assert.NotEqual(t, productionBuildGit(t, repo, "rev-parse", "HEAD"), accepted.Commit)
 	assert.Equal(t, "Add the tests Surla accepted for change "+card.ChangeID+", report 2",
 		productionBuildGit(t, repo, "show", "-s", "--format=%s", accepted.Commit))
@@ -280,7 +350,7 @@ func TestViewsPageFollowsRealTestReports(t *testing.T) {
 // pageReportModule prepares the trusted starter-shaped fixture as the checker
 // tests do: the acceptance package exists before generation, and the generated
 // program's public Surla dependency is pinned before the final tidy. No authored
-// binary or scenario is executed here; Generate uses the candidate sandbox.
+// binary or scenario is executed here.
 func pageReportModule(t *testing.T) map[string]string {
 	t.Helper()
 	module := testmodule.Module(t, "example.com/shop/eval", "", map[string]string{
@@ -296,6 +366,6 @@ func pageReportModule(t *testing.T) map[string]string {
 		module[name] = string(data)
 	}
 	module["go.mod"] = strings.Replace(module["go.mod"], "require (",
-		"require (\n\tgithub.com/goadesign/surla v0.0.0-20261110163737-d9beac313142", 1)
+		"require (\n\tgithub.com/goadesign/surla v0.0.0-20261115014514-02c792da3ded", 1)
 	return testmodule.Tidy(t, module)
 }

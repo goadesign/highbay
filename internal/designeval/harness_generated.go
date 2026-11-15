@@ -2,7 +2,7 @@
 // interpreting transport expressions or rebuilding schemas.
 package designeval
 
-// harnessGeneratedHelpers is compiled into the sandboxed evaluator. Generated
+// harnessGeneratedHelpers is compiled into the evaluator program. Generated
 // bytes remain in that process; only their digests and tool schemas are returned.
 const harnessGeneratedHelpers = `
 type (

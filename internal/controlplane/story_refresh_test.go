@@ -99,10 +99,16 @@ func TestStoryRefreshPreconditionsAndExpectedAbsence(t *testing.T) {
 		assertServiceError(t, err, "unprocessable")
 		assert.ErrorContains(t, err, "not valid UTF-8")
 
-		// Replace the directory at wsDir with a new inode.
-		require.NoError(t, os.RemoveAll(wsDir))
+		// Keep the original directory alive so its inode cannot be reused.
+		_, oldDev, oldIno, err := openWorkspaceRootAndStat(wsDir)
+		require.NoError(t, err)
+		require.NoError(t, os.Rename(wsDir, wsDir+"-original"))
 		require.NoError(t, os.MkdirAll(wsDir, 0o755))
 		require.NoError(t, os.WriteFile(filepath.Join(wsDir, "go.mod"), []byte("module example.com/orders\n\ngo 1.24\n"), 0o600))
+
+		_, newDev, newIno, err := openWorkspaceRootAndStat(wsDir)
+		require.NoError(t, err)
+		require.True(t, oldDev != newDev || oldIno != newIno, "replacement has a distinct device/inode identity")
 
 		_, err = cp.RefreshStory(alice)
 		assertServiceError(t, err, "unprocessable")
@@ -601,12 +607,12 @@ func TestStoryRefreshOwnerIsolation(t *testing.T) {
 }
 
 // TestStoryRefreshEvaluatesStoryOnlyAndNonStoryDesignsWhilePreviewRejectsStoryOnly
-// exercises the full sandboxed evaluator through MCP and service calls on a
+// exercises the full evaluator through MCP and service calls on a
 // Story-only design and a design without the Story module, and verifies that
 // preview_architecture still rejects a Story-only design.
 func TestStoryRefreshEvaluatesStoryOnlyAndNonStoryDesignsWhilePreviewRejectsStoryOnly(t *testing.T) {
 	if testing.Short() {
-		t.Skip("runs the sandboxed Go toolchain; the full suite (go test without -short) covers it")
+		t.Skip("runs the Go toolchain; the full suite (go test without -short) covers it")
 	}
 	alice := WithPrincipal(context.Background(), Principal{ID: "alice@example.com", CallerID: "alice@example.com", Kind: CallerUser})
 	wsDir := t.TempDir()
@@ -675,18 +681,31 @@ var _ = Story("Order Refunds", func() {
 		return out
 	}
 
+	// Observe each operation through the owner's deadline and bounded cleanup,
+	// keeping the final state and diagnostic if the operation never finishes.
+	awaitRefresh := func() *gensurlatools.RefreshStoryResult {
+		t.Helper()
+		var last *gensurlatools.RefreshStoryResult
+		var diagnostic string
+		require.EventuallyWithT(t, func(collect *assert.CollectT) {
+			last = callMCP("get_story_refresh")
+			diagnostic = ""
+			if last.Diagnostic != nil {
+				diagnostic = *last.Diagnostic
+			}
+			assert.Contains(collect, []string{storyRefreshStateSucceeded, storyRefreshStateFailed},
+				last.State, "last refresh state: %s; diagnostic: %s", last.State, diagnostic)
+		}, defaultStoryRefreshTimeout+30*time.Second, 50*time.Millisecond)
+		require.Equal(t, storyRefreshStateSucceeded, last.State, "unexpected diagnostic: %s", diagnostic)
+		return last
+	}
+
 	started := callMCP("refresh_story")
 	require.NotNil(t, started.OpID)
 	require.NotNil(t, started.SnapshotDigest)
 	assert.Equal(t, wantStoryDigest, *started.SnapshotDigest)
 
-	var succeeded *gensurlatools.RefreshStoryResult
-	require.Eventually(t, func() bool {
-		cur := callMCP("get_story_refresh")
-		succeeded = cur
-		return cur.State == storyRefreshStateSucceeded || cur.State == storyRefreshStateFailed
-	}, 2*time.Minute, 50*time.Millisecond)
-	require.Equal(t, storyRefreshStateSucceeded, succeeded.State, "unexpected diagnostic: %v", succeeded.Diagnostic)
+	succeeded := awaitRefresh()
 
 	require.NotNil(t, succeeded.OpID)
 	assert.Equal(t, *started.OpID, *succeeded.OpID)
@@ -780,13 +799,7 @@ var _ = Service("orders", func() {
 	assert.NotEqual(t, *succeeded.OpID, *nonStoryStarted.OpID)
 	assert.Equal(t, wantNonStoryDigest, *nonStoryStarted.SnapshotDigest)
 
-	var nonStorySucceeded *gensurlatools.RefreshStoryResult
-	require.Eventually(t, func() bool {
-		cur := callMCP("get_story_refresh")
-		nonStorySucceeded = cur
-		return cur.State == storyRefreshStateSucceeded || cur.State == storyRefreshStateFailed
-	}, 2*time.Minute, 50*time.Millisecond)
-	require.Equal(t, storyRefreshStateSucceeded, nonStorySucceeded.State, "unexpected diagnostic: %v", nonStorySucceeded.Diagnostic)
+	nonStorySucceeded := awaitRefresh()
 
 	assert.Empty(t, nonStorySucceeded.Stories)
 	assert.Contains(t, nonStorySucceeded.Message, "the design declares no Stories")

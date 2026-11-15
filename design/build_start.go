@@ -71,14 +71,13 @@ func buildStartRefusals() {
 	Error("copy_folder_in_use", ErrorResult, "A working copy's folder in the project folder, .surla-build or .surla-tests, is a file or a folder that is not a linked working copy of the project's repository; nothing was saved. The message names the folder and ends with the step to move it out of the project.")
 	Error("tests_branch_in_use", ErrorResult, "The branch Surla checks out in a missing working copy, surla/build-<n> or surla/tests-<n>, is checked out in another folder; nothing was saved. The message names that folder, quoted, and ends with the step that frees the branch.")
 	Error("working_copy_busy", ErrorResult, "Another build is starting, a worker is reading its assignment into its working copy, or a test check holds the test writer's working copy; nothing was saved. Start the build again when that has ended.")
-	Error("sandbox_unavailable", ErrorResult, "This system has no candidate sandbox; nothing was saved. When the host reports a specific sandbox prerequisite failure, the message includes its cause and remedy before: Start this project on a system with Surla's candidate sandbox, then build again.")
 	Error("previous_change_open", OpenBuildRefusal, "Another change's build is open, and the user has neither merged a passed run of it into the branch checked out in the project folder nor dropped it; nothing was saved. The body names that build, with the commits to merge once a run passed, so the page offers the merge commands and Drop.")
 	Error("unfinished_build_open", OpenBuildRefusal, "Building this change again replaces its open build, which no verification has passed, and replaces does not name that build; nothing was saved. The page asks the user first, then sends replaces naming the build it showed.")
 	Error("drafted_before_drop", ErrorResult, "The agreed revision was drafted before the user dropped another change, so its design can hold that change's design; nothing was saved. The guide revises the change from its draft; the user adopts the revision, then builds.")
 	Error("design_changed_outside", ErrorResult, "A design file at the project's commit is not a version the agreed revision was made from: it was changed outside Surla; nothing was saved. The message names the file and the commit. When the change is uncommitted, commit the design change in the project folder first; then the guide calls update_draft, refresh_story and revise_change, and the user adopts the revision and builds.")
 }
 
-// buildStartRefusalResponses maps project state and host availability distinctly.
+// buildStartRefusalResponses maps each project-state refusal to a conflict.
 func buildStartRefusalResponses() {
 	Response("not_repository", StatusConflict)
 	Response("no_commit", StatusConflict)
@@ -87,7 +86,6 @@ func buildStartRefusalResponses() {
 	Response("copy_folder_in_use", StatusConflict)
 	Response("tests_branch_in_use", StatusConflict)
 	Response("working_copy_busy", StatusConflict)
-	Response("sandbox_unavailable", StatusNotImplemented)
 	Response("previous_change_open", StatusConflict)
 	Response("unfinished_build_open", StatusConflict)
 	Response("drafted_before_drop", StatusConflict)

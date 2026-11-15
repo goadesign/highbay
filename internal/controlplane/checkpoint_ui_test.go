@@ -36,7 +36,8 @@ func checkpointUIProposal() *gensurla.CP1Analysis {
 // them beside the latest card, and incoming revisions wait while the user has
 // edits or a request in flight. A revision the guide saves while the page's
 // own confirmation awaits its answer appears, as a proposal beside the now
-// confirmed change, only once the answer arrives.
+// confirmed change, only once the answer arrives. Cross-change updates must
+// complete and render without overwriting the editor's unsaved text.
 func TestCheckpointUIEditorConfirmAndRevisionRecovery(t *testing.T) {
 	cp := pageControlPlane(t, Options{})
 	guide := WithPrincipal(context.Background(), Principal{ID: pageOwner, CallerID: "guide", Kind: CallerGuide})
@@ -71,10 +72,40 @@ const r2 = editor().dataset.requestRevision;
 
 // A later list change does not overwrite edits typed after the confirmation.
 page.type(outcome(), "post-confirm draft edit");
-const listReads = page.sent("GET", "/changes").length;
+page.$("#surla-nav-changes").click();
+// On failure, project only bounded response facts: never request headers,
+// session credentials, query strings, or unrestricted response bodies.
+const crossChangeDiagnostics = () => {
+  const requests = page.requests
+    .filter((r) => r.method === "GET" && (r.path === "/changes" || r.path === "/change-updates"))
+    .slice(-12)
+    .map((r) => {
+      let result = { state: "no completed response body" };
+      if (typeof r.answer === "string") {
+        try {
+          const answer = JSON.parse(r.answer);
+          result = r.status === 200
+            ? { version: answer.version, changes: Array.isArray(answer.changes) ? answer.changes.slice(0, 10).map((c) => c.change_id) : undefined }
+            : { name: answer.name, message: typeof answer.message === "string" ? answer.message.slice(0, 512) : undefined };
+        } catch {
+          result = { state: "invalid JSON response", bytes: Buffer.byteLength(r.answer) };
+        }
+      }
+      return { method: r.method, path: r.path, status: r.status ?? null, result };
+    });
+  return { state: page.state(), status: page.status().slice(0, 2048), hidden: page.doc.hidden,
+    editor: { changeId: editor()?.dataset.changeId, requestRevision: editor()?.dataset.requestRevision },
+    renderedChanges: page.$$("#surla-change-list [data-change-id]").slice(0, 10).map((el) => el.dataset.changeId), requests };
+};
 await propose("chg-elsewhere", "Show carriers on receipts.", "Carrier shown");
-await until(() => page.sent("GET", "/changes").length > listReads, "the other change did not reach the page");
+try {
+  await until(() => page.$("#surla-open-change-chg-elsewhere"), "the other change did not reach the page");
+} catch (err) {
+  console.error("cross-change update: " + JSON.stringify(crossChangeDiagnostics()));
+  throw err;
+}
 expect(outcome().value === "post-confirm draft edit", "a list change overwrote a post-confirm edit");
+page.$("#surla-nav-cp1").click();
 
 // Refining without edits keeps multiline, space-padded text and the revision.
 page.type(outcome(), "  Instant store credit\nup to $50.00  ");
@@ -174,7 +205,7 @@ page.close();
 // unconfirmed card shows the server's own refusal.
 func TestCheckpointUIArchitecturePreviewOfTheBoundDesign(t *testing.T) {
 	if testing.Short() {
-		t.Skip("runs the sandboxed Go toolchain; the full suite (go test without -short) covers it")
+		t.Skip("runs the Go toolchain; the full suite (go test without -short) covers it")
 	}
 	workspace := t.TempDir()
 	writeWorkspaceFiles(t, workspace, testmodule.Snapshot(t, "", architectureTestDesign))

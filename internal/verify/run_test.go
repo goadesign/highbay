@@ -1,9 +1,7 @@
 package verify
 
 import (
-	"context"
 	"errors"
-	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -212,7 +210,7 @@ func TestRunChecksOutOnlyThePlansRepositoryWhateverGitEnvironmentItInherits(t *t
 }
 
 // TestPrepareBuildFetchesModulesWhateverGitEnvironmentItInherits downloads, as
-// a verification does before its sandboxed build, the modules of a module
+// a verification does before its build, the modules of a module
 // whose dependency is fetched straight from version control (GOPROXY=direct;
 // the user's own url.<base>.insteadOf maps it onto a local repository), in a
 // process whose git environment points at another repository (pointGitAt).
@@ -247,10 +245,55 @@ func TestPrepareBuildFetchesModulesWhateverGitEnvironmentItInherits(t *testing.T
 	pointGitAt(t, decoy)
 
 	r := &runner{evidenceDir: t.TempDir()}
-	toolchain, err := r.prepareBuild(t.Context(), "candidate", moduleDir, t.TempDir())
+	toolchain, err := r.prepareBuild(t.Context(), "candidate", moduleDir, moduleDir, t.TempDir())
 	require.NoError(t, err, "the dependency is fetched with the user's Git settings")
 	assert.Equal(t, modCache, toolchain.modCache)
 	assert.Equal(t, before, filesUnder(t, decoy), "the inherited repository is untouched")
+}
+
+// TestPrepareBuildDownloadsWhatTheModulesGoWorkNeeds downloads, as a
+// verification does before its build, the modules of a module whose go.work,
+// in the module's own folder, also uses a nested module that requires a
+// dependency the outer module does not. The offline build applies that go.work
+// (candidate.GoWork), so the download must too, even though the user's own
+// environment says GOWORK=off: the dependency is in the module cache
+// afterwards.
+func TestPrepareBuildDownloadsWhatTheModulesGoWorkNeeds(t *testing.T) {
+	dep, moduleDir := t.TempDir(), t.TempDir()
+	git(t, dep, "init", "--quiet")
+	require.NoError(t, os.WriteFile(filepath.Join(dep, "go.mod"), []byte("module example.invalid/dep.git\n\ngo 1.21\n"), 0o600))
+	require.NoError(t, os.WriteFile(filepath.Join(dep, "dep.go"), []byte("package dep\n"), 0o600))
+	git(t, dep, "add", ".")
+	git(t, dep, "-c", "user.name=t", "-c", "user.email=t@example.com", "commit", "--quiet", "-m", "dep")
+	git(t, dep, "tag", "v1.0.0")
+	for name, content := range map[string]string{
+		"go.mod":     "module example.invalid/main\n\ngo 1.21\n",
+		"go.work":    "go 1.21\n\nuse (\n\t.\n\t./lib\n)\n",
+		"lib/go.mod": "module example.invalid/lib\n\ngo 1.21\n\nrequire example.invalid/dep.git v1.0.0\n",
+		"lib/lib.go": "package lib\n\nimport _ \"example.invalid/dep.git\"\n",
+	} {
+		path := filepath.Join(moduleDir, filepath.FromSlash(name))
+		require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o700))
+		require.NoError(t, os.WriteFile(path, []byte(content), 0o600))
+	}
+	modCache := filepath.Join(t.TempDir(), "modcache")
+	t.Setenv("GOPROXY", "direct")
+	t.Setenv("GOSUMDB", "off")
+	t.Setenv("GOTOOLCHAIN", "local")
+	// -modcacherw lets the test's folder cleanup remove the module cache.
+	t.Setenv("GOFLAGS", "-mod=mod -modcacherw")
+	t.Setenv("GOMODCACHE", modCache)
+	t.Setenv("GOWORK", "off")
+	t.Setenv("GIT_CONFIG_COUNT", "1")
+	t.Setenv("GIT_CONFIG_KEY_0", "url.file://"+dep+".insteadOf")
+	t.Setenv("GIT_CONFIG_VALUE_0", "https://example.invalid/dep")
+	t.Setenv("GIT_ALLOW_PROTOCOL", "https:file")
+
+	r := &runner{evidenceDir: t.TempDir()}
+	_, err := r.prepareBuild(t.Context(), "candidate", moduleDir, moduleDir, t.TempDir())
+	require.NoError(t, err)
+	assert.DirExists(t, filepath.Join(modCache, "example.invalid", "dep.git@v1.0.0"),
+		"the download fetched the dependency the module's go.work needs")
 }
 
 // TestRunClonesARemoteRepositoryThroughTheUsersGitSettings runs a
@@ -284,77 +327,6 @@ func TestRunClonesARemoteRepositoryThroughTheUsersGitSettings(t *testing.T) {
 	require.ErrorAs(t, err, &stage)
 	assert.Equal(t, "The candidate commit does not contain the configured module.", stage.Summary,
 		"the remote repository was cloned: %v", err)
-}
-
-// TestBuildSummarySurfacesExit71GuidanceWithoutLeakingPrivateDiagnostics
-// verifies that buildSummary replaces the generic build failure summary with
-// conditional exit-71 recovery guidance only when a non-canceled build command
-// exits with status 71, while keeping compiler output and log paths inside
-// StageError.Err and out of StageError.Summary.
-func TestBuildSummarySurfacesExit71GuidanceWithoutLeakingPrivateDiagnostics(t *testing.T) {
-	exit71Err := exec.Command("sh", "-c", "exit 71").Run()
-	require.Error(t, exit71Err)
-	exit2Err := exec.Command("sh", "-c", "exit 2").Run()
-	require.Error(t, exit2Err)
-
-	canceledCtx, cancel := context.WithCancel(t.Context())
-	cancel()
-
-	cases := []struct {
-		name           string
-		ctx            context.Context
-		err            error
-		defaultSummary string
-		wantSummary    string
-	}{
-		{
-			name:           "candidate build exit 71",
-			ctx:            t.Context(),
-			err:            fmt.Errorf("sandboxed build: %w", exit71Err),
-			defaultSummary: summaryCandidateBuild,
-			wantSummary:    summarySandboxExit71,
-		},
-		{
-			name:           "suite build exit 71",
-			ctx:            t.Context(),
-			err:            fmt.Errorf("sandboxed build: %w", exit71Err),
-			defaultSummary: summarySuiteBuild,
-			wantSummary:    summarySandboxExit71,
-		},
-		{
-			name:           "ordinary compile failure keeps candidate summary",
-			ctx:            t.Context(),
-			err:            fmt.Errorf("sandboxed build: %w", exit2Err),
-			defaultSummary: summaryCandidateBuild,
-			wantSummary:    summaryCandidateBuild,
-		},
-		{
-			name:           "ordinary compile failure keeps suite summary",
-			ctx:            t.Context(),
-			err:            fmt.Errorf("sandboxed build: %w", exit2Err),
-			defaultSummary: summarySuiteBuild,
-			wantSummary:    summarySuiteBuild,
-		},
-		{
-			name:           "canceled context keeps default summary even on exit 71",
-			ctx:            canceledCtx,
-			err:            fmt.Errorf("sandboxed build: %w", exit71Err),
-			defaultSummary: summaryCandidateBuild,
-			wantSummary:    summaryCandidateBuild,
-		},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			got := buildSummary(tc.ctx, tc.err, tc.defaultSummary)
-			assert.Equal(t, tc.wantSummary, got)
-			stage := stageError(StageBuild, got, fmt.Errorf("build candidate orders: %w\nbuild output, full output in /private/secret/build.log:\nsandbox_apply: Operation not permitted", tc.err))
-			var se *StageError
-			require.ErrorAs(t, stage, &se)
-			assert.Equal(t, tc.wantSummary, se.Summary)
-			assert.NotContains(t, se.Summary, "/private/secret/build.log")
-			assert.Contains(t, se.Error(), "/private/secret/build.log")
-		})
-	}
 }
 
 // git runs one git command in dir and returns its output.

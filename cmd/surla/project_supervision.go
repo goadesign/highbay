@@ -231,23 +231,65 @@ func (o teamObservations) ReadWatchers(ctx context.Context, team, version string
 	return project.TeamWatcherView{Version: version, Held: held}, nil
 }
 
-// watcherPrefixReader prevents json.Decoder's read-ahead from consuming even
-// the first byte after the agents array. HTTP transport buffering is not retained.
-type watcherPrefixReader struct{ source io.Reader }
+// watcherPrefixReader prevents read-ahead past the agents array and collapses
+// runs of insignificant JSON whitespace. Feeding long runs one byte at a time
+// makes json.Decoder's token lookahead repeatedly scan the same whitespace.
+type watcherPrefixReader struct {
+	// source is bounded before normalization, so skipped bytes count too.
+	source io.Reader
+	// quoted protects every string byte from whitespace normalization.
+	quoted bool
+	// escaped tracks whether the previous string byte starts an escape.
+	escaped bool
+	// whitespace remembers an outside-string run's first forwarded byte.
+	whitespace bool
+}
 
-// Read gives the JSON tokenizer one byte at a time, within the prefix byte bound.
-func (r watcherPrefixReader) Read(p []byte) (int, error) {
+// Read forwards one byte without reading ahead. It preserves strings and one
+// separator per whitespace run, leaving all JSON syntax checks to the decoder.
+func (r *watcherPrefixReader) Read(p []byte) (int, error) {
 	if len(p) == 0 {
 		return 0, nil
 	}
-	return r.source.Read(p[:1])
+	for {
+		n, err := r.source.Read(p[:1])
+		if n == 0 {
+			return n, err
+		}
+		b := p[0]
+		if r.quoted {
+			switch {
+			case r.escaped:
+				r.escaped = false
+			case b == '\\':
+				r.escaped = true
+			case b == '"':
+				r.quoted = false
+			}
+			return n, err
+		}
+		switch b {
+		case ' ', '\t', '\n', '\r':
+			if r.whitespace {
+				if err != nil {
+					return 0, err
+				}
+				continue
+			}
+			r.whitespace = true
+		default:
+			r.whitespace = false
+			r.quoted = b == '"'
+		}
+		return n, err
+	}
 }
 
 // readTeamWatcherPrefix consumes only the owning generated response's ordered
 // swarm/agents prefix, closes before channels/inboxes, and retains registered
 // watcher facts only. A changed key order is unavailable evidence, not absence.
 func readTeamWatcherPrefix(reader io.Reader, team string, roles []project.TeamRole) (map[string]bool, error) {
-	decoder := json.NewDecoder(watcherPrefixReader{source: io.LimitReader(reader, teamViewPrefixMaxBytes)})
+	decoder := json.NewDecoder(&watcherPrefixReader{source: io.LimitReader(reader, teamViewPrefixMaxBytes)})
 	token, err := decoder.Token()
 	if err != nil || token != json.Delim('{') {
 		return nil, errors.New("invalid Chorus watcher prefix")

@@ -15,7 +15,7 @@ import (
 // rather than a selected list of expression fields, decide which sources change.
 func TestCompareGeneratedTransportChanges(t *testing.T) {
 	if testing.Short() {
-		t.Skip("runs the sandboxed Go toolchain; the full suite (go test without -short) covers it")
+		t.Skip("runs the Go toolchain; the full suite (go test without -short) covers it")
 	}
 	cases := []struct {
 		// name identifies the transport contract under test.
@@ -70,7 +70,7 @@ var _ = Service("orders", func() {
 // files: independent evaluator processes must return the same declarations.
 func TestCompareIdenticalCompiledSources(t *testing.T) {
 	if testing.Short() {
-		t.Skip("runs the sandboxed Go toolchain; the full suite (go test without -short) covers it")
+		t.Skip("runs the Go toolchain; the full suite (go test without -short) covers it")
 	}
 	files := testmodule.Snapshot(t, "", resourceReaderDesign)
 	report, err := Compare(t.Context(), testEvaluator, files, files)
@@ -85,7 +85,7 @@ func TestCompareIdenticalCompiledSources(t *testing.T) {
 // and imports come from the submitted module, never the evaluator's own module.
 func TestCompareKeepsAnOlderTargetsGoa(t *testing.T) {
 	if testing.Short() {
-		t.Skip("runs the sandboxed Go toolchain; the full suite (go test without -short) covers it")
+		t.Skip("runs the Go toolchain; the full suite (go test without -short) covers it")
 	}
 	// Starters created before Surla required goa 35e789e8 pin goa 3e08; their
 	// previews and diffs keep evaluating with that version.
@@ -98,7 +98,7 @@ func TestCompareKeepsAnOlderTargetsGoa(t *testing.T) {
 
 func TestCompareTargetModulePathChangesGeneratedOutput(t *testing.T) {
 	if testing.Short() {
-		t.Skip("runs the sandboxed Go toolchain; the full suite (go test without -short) covers it")
+		t.Skip("runs the Go toolchain; the full suite (go test without -short) covers it")
 	}
 	old := testmodule.Snapshot(t, "", grpcResultDesign)
 	updated := testmodule.Replace(t, old, "go.mod", "module example.com/design", "module example.com/renamed")

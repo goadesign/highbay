@@ -413,7 +413,7 @@ func TestGoCallersGetTheDesignRules(t *testing.T) {
 // authentication.
 func TestEvaluatedArchitecturePreviewFastDraftAndAuthenticatedHTTP(t *testing.T) {
 	if testing.Short() {
-		t.Skip("runs the sandboxed Go toolchain; the full suite (go test without -short) covers it")
+		t.Skip("runs the Go toolchain; the full suite (go test without -short) covers it")
 	}
 	ctx := WithPrincipal(context.Background(), Principal{ID: "alice@example.com", CallerID: "alice@example.com", Kind: CallerUser})
 	clearAnalysis := &gensurla.CP1Analysis{

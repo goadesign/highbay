@@ -191,14 +191,7 @@ var _ = Service("shop", func() {
 			require.NoError(t, os.WriteFile(file, []byte(content), 0o600))
 		}
 		alice := controlplane.WithPrincipal(context.Background(), controlplane.Principal{ID: "alice@example.com", CallerID: "alice@example.com", Kind: controlplane.CallerUser})
-		refresh, err := cp.RefreshStory(alice)
-		require.NoError(t, err)
-		require.Eventually(t, func() bool {
-			refresh, err = cp.GetStoryRefresh(alice)
-			return err != nil || refresh.State != "running"
-		}, 2*time.Minute, 25*time.Millisecond)
-		require.NoError(t, err)
-		require.Equal(t, "succeeded", refresh.State, "%v", refresh.Diagnostic)
+		refresh := mustRefreshStory(t, cp, alice)
 		// Adoption must retain the evaluated draft, even when the project folder
 		// changes after the selected refresh has completed.
 		require.NoError(t, os.WriteFile(filepath.Join(shopDir, "design", "design.go"), []byte("package design\n// later project edit\n"), 0o644))

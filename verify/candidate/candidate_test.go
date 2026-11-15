@@ -3,19 +3,21 @@ package candidate
 import (
 	"bufio"
 	"context"
+	"debug/buildinfo"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
-	"runtime"
+	"strconv"
 	"strings"
 	"sync"
+	"syscall"
 	"testing"
 	"time"
 
+	"github.com/goadesign/surla/internal/procgroup"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -30,100 +32,37 @@ type probeResult struct {
 // libGoMod is the go.mod of the single-package test modules.
 const libGoMod = "module example.com/lib\n\ngo 1.26\n"
 
-// TestExecEnforcesTheSandbox runs a hostile probe binary through Exec and
-// checks, from what the operating system actually allowed, that every
-// forbidden access fails and every assigned access works.
-func TestExecEnforcesTheSandbox(t *testing.T) {
-	requireSandbox(t)
+// TestExecGivesTheProcessOnlyItsEnvironment runs the probe through Exec with a
+// variable set in this test's own environment: the probe sees only HOME and
+// TMPDIR, both its physical state directory, and the entries of Spec.Env, and
+// a relative write lands in that state directory.
+func TestExecGivesTheProcessOnlyItsEnvironment(t *testing.T) {
 	probe := buildProbe(t)
-	state := t.TempDir()
-	protected := t.TempDir()
-	secret := filepath.Join(protected, "secret.txt")
-	require.NoError(t, os.WriteFile(secret, []byte("evaluator secret"), 0o600))
-	allowed := listen(t)
-	unassigned := listen(t)
-	listenPort := freePort(t)
 	t.Setenv("EVAL_SECRET", "must not leak")
-
+	state := t.TempDir()
+	physicalState, err := filepath.EvalSymlinks(state)
+	require.NoError(t, err)
 	p, err := Exec(t.Context(), probe, Spec{
-		Args: []string{
-			"read:" + secret,
-			"write:" + filepath.Join(protected, "out.txt"),
-			"write:" + filepath.Join(state, "ok.txt"),
-			"env:EVAL_SECRET",
-			"env:GIVEN",
-			fmt.Sprintf("connect:127.0.0.1:%d", allowed),
-			fmt.Sprintf("connect:127.0.0.1:%d", unassigned),
-			"connect:1.1.1.1:53",
-			fmt.Sprintf("listen:127.0.0.1:%d", listenPort),
-			fmt.Sprintf("listen:127.0.0.1:%d", freePort(t)),
-			"spawn",
-			"read:/etc/hosts",
-			"readdir:" + protected,
-			"stat:" + secret,
-			"stat:" + filepath.Join(state, "ok.txt"),
-		},
-		Env:          []string{"GIVEN=explicit"},
-		StateDir:     state,
-		ConnectPorts: []int{allowed},
-		ListenPort:   listenPort,
-		LogFile:      filepath.Join(t.TempDir(), "probe.log"),
+		Args:     []string{"env:EVAL_SECRET", "env:PATH", "env:GIVEN", "env:HOME", "env:TMPDIR", "write:ok.txt"},
+		Env:      []string{"GIVEN=explicit"},
+		StateDir: state,
+		LogFile:  filepath.Join(t.TempDir(), "probe.log"),
 	})
 	require.NoError(t, err)
 	out, truncated, err := excerptAfterExit(p)
 	require.NoError(t, err)
 	require.False(t, truncated)
-
-	got := map[string]bool{}
-	sc := bufio.NewScanner(strings.NewReader(out))
-	for sc.Scan() {
-		var r probeResult
-		require.NoError(t, json.Unmarshal(sc.Bytes(), &r), sc.Text())
-		got[strings.SplitN(r.Action, ":", 2)[0]+"@"+r.Action] = r.Allowed
-	}
-	cases := []struct {
-		name   string
-		action string
-		allow  bool
-	}{
-		{"read a protected file", "read:" + secret, false},
-		{"list a protected directory", "readdir:" + protected, false},
-		{"write outside its state", "write:" + filepath.Join(protected, "out.txt"), false},
-		{"write its own state", "write:" + filepath.Join(state, "ok.txt"), true},
-		{"see the evaluator's environment", "env:EVAL_SECRET", false},
-		{"see its explicit environment", "env:GIVEN", true},
-		{"connect to an assigned port", fmt.Sprintf("connect:127.0.0.1:%d", allowed), true},
-		{"connect to an unassigned loopback port", fmt.Sprintf("connect:127.0.0.1:%d", unassigned), false},
-		{"connect off the machine", "connect:1.1.1.1:53", false},
-		{"listen on its assigned port", fmt.Sprintf("listen:127.0.0.1:%d", listenPort), true},
-		{"spawn a child process", "spawn", false},
-		{"read other system files", "read:/etc/hosts", false},
-		{"learn whether a protected file exists", "stat:" + secret, runtime.GOOS == "linux"},
-		{"stat its own state", "stat:" + filepath.Join(state, "ok.txt"), true},
-	}
-	for _, c := range cases {
-		t.Run(c.name, func(t *testing.T) {
-			v, ok := got[strings.SplitN(c.action, ":", 2)[0]+"@"+c.action]
-			require.True(t, ok, "probe did not report %s", c.action)
-			assert.Equal(t, c.allow, v)
-		})
-	}
-	listenOthers := 0
-	for k, v := range got {
-		if strings.HasPrefix(k, "listen@") && !strings.HasSuffix(k, fmt.Sprintf(":%d", listenPort)) {
-			listenOthers++
-			assert.False(t, v, "listened on an unassigned port: %s", k)
-		}
-	}
-	assert.Equal(t, 1, listenOthers)
+	got := probeResults(t, out)
+	assert.False(t, got["env:EVAL_SECRET"].Allowed, "the caller's environment is not inherited")
+	assert.False(t, got["env:PATH"].Allowed, "only Spec.Env, HOME and TMPDIR are set")
+	assert.Equal(t, probeResult{Action: "env:GIVEN", Allowed: true, Detail: "explicit"}, got["env:GIVEN"])
+	assert.Equal(t, physicalState, got["env:HOME"].Detail)
+	assert.Equal(t, physicalState, got["env:TMPDIR"].Detail)
+	assert.True(t, got["write:ok.txt"].Allowed, got["write:ok.txt"].Detail)
+	assert.FileExists(t, filepath.Join(physicalState, "ok.txt"), "the working directory is the state directory")
 }
 
 func TestExecRefusesAModifiedBinary(t *testing.T) {
-	if runtime.GOOS != "darwin" && runtime.GOOS != "linux" {
-		_, execErr := Exec(t.Context(), Artifact{}, Spec{})
-		require.ErrorIs(t, execErr, ErrIsolationUnavailable)
-		return
-	}
 	probe := buildProbe(t)
 	require.NoError(t, os.Chmod(filepath.Dir(probe.path), 0o700))
 	require.NoError(t, os.Chmod(probe.path, 0o700))
@@ -174,7 +113,6 @@ func TestPinKeepsItsBinaryAfterTheCallerChangesDirectories(t *testing.T) {
 // TestExecUsesRelativeSymlinkedState preserves the physical state directory
 // selected by relative paths and by symlinks followed by parent components.
 func TestExecUsesRelativeSymlinkedState(t *testing.T) {
-	requireSandbox(t)
 	probe := buildProbe(t)
 	base := t.TempDir()
 	t.Chdir(base)
@@ -226,19 +164,11 @@ func TestExecUsesRelativeSymlinkedState(t *testing.T) {
 			assert.Equal(t, tc.state, results["env:HOME"].Detail)
 			assert.Equal(t, tc.state, results["env:TMPDIR"].Detail)
 			assert.FileExists(t, filepath.Join(tc.state, tc.name+".txt"))
-
-			inside, err := Exec(ctx, probe, Spec{
-				StateDir: tc.stateArg,
-				LogFile:  filepath.Join(tc.state, "inside.log"),
-			})
-			assert.Nil(t, inside)
-			assert.ErrorContains(t, err, "outside the candidate state directory")
 		})
 	}
 }
 
 func TestExcerptIsBoundedAndReportsTruncation(t *testing.T) {
-	requireSandbox(t)
 	probe := buildProbe(t)
 	state := t.TempDir()
 	p, err := Exec(t.Context(), probe, Spec{
@@ -263,7 +193,6 @@ func TestExcerptIsBoundedAndReportsTruncation(t *testing.T) {
 // standard output holds exactly the probe's result lines, and the log holds
 // only the noise. A limit below the output fails without returning a part.
 func TestOutputKeepsStandardOutputApart(t *testing.T) {
-	requireSandbox(t)
 	probe := buildProbe(t)
 	const noise = `{"id":"noise","scenarios":[]}`
 	args := []string{"stderr:" + noise, "env:GIVEN", "stderr:after"}
@@ -284,7 +213,7 @@ func TestOutputKeepsStandardOutputApart(t *testing.T) {
 				Env:      []string{"GIVEN=explicit"},
 				StateDir: t.TempDir(),
 				LogFile:  logFile,
-			}, tc.maxBytes)
+			}, tc.maxBytes, (*exec.Cmd).Run)
 			if tc.wantErr != nil {
 				require.ErrorIs(t, err, tc.wantErr)
 				assert.Nil(t, out)
@@ -310,80 +239,145 @@ func TestOutputKeepsStandardOutputApart(t *testing.T) {
 	}
 }
 
-// TestOutputEnforcesTheSandbox runs the probe through Output: writing outside
-// its state directory and starting a child process are denied as under Exec,
-// and an unsuccessful exit is returned with what the probe printed first.
-func TestOutputEnforcesTheSandbox(t *testing.T) {
-	requireSandbox(t)
-	outside := filepath.Join(t.TempDir(), "out.txt")
+// TestOutputReturnsWhatWasPrintedBeforeAFailedExit runs the probe through
+// Output until it exits with status 3: the exit error comes back with the
+// result the probe printed first.
+func TestOutputReturnsWhatWasPrintedBeforeAFailedExit(t *testing.T) {
 	out, err := Output(t.Context(), buildProbe(t), Spec{
-		Args:     []string{"write:" + outside, "spawn", "exit:3"},
+		Args:     []string{"env:GIVEN", "exit:3"},
+		Env:      []string{"GIVEN=explicit"},
 		StateDir: t.TempDir(),
 		LogFile:  filepath.Join(t.TempDir(), "probe.log"),
-	}, 1<<20)
+	}, 1<<20, (*exec.Cmd).Run)
 	var exitErr *exec.ExitError
 	require.ErrorAs(t, err, &exitErr)
 	assert.Equal(t, 3, exitErr.ExitCode())
-	var got []probeResult
-	dec := json.NewDecoder(strings.NewReader(string(out)))
-	for dec.More() {
-		var r probeResult
-		require.NoError(t, dec.Decode(&r))
-		got = append(got, r)
+	assert.Equal(t, map[string]probeResult{
+		"env:GIVEN": {Action: "env:GIVEN", Allowed: true, Detail: "explicit"},
+	}, probeResults(t, string(out)))
+}
+
+// TestRunWritesBothStreamsToTheLog runs the probe through Run: its standard
+// output and its standard error both land in the log, and a clean exit
+// returns nil.
+func TestRunWritesBothStreamsToTheLog(t *testing.T) {
+	logFile := filepath.Join(t.TempDir(), "probe.log")
+	require.NoError(t, Run(t.Context(), buildProbe(t), Spec{
+		Args:     []string{"env:GIVEN", "stderr:noise"},
+		Env:      []string{"GIVEN=explicit"},
+		StateDir: t.TempDir(),
+		LogFile:  logFile,
+	}, (*exec.Cmd).Run))
+	logged, err := os.ReadFile(logFile)
+	require.NoError(t, err)
+	assert.Contains(t, string(logged), `{"action":"env:GIVEN","allowed":true,"detail":"explicit"}`)
+	assert.Contains(t, string(logged), "noise\n")
+}
+
+// TestRunAndOutputAdmitBeforeTheRunner changes a pinned binary: Run and Output
+// refuse it with ErrDigestMismatch and never call the caller's runner.
+func TestRunAndOutputAdmitBeforeTheRunner(t *testing.T) {
+	probe := buildProbe(t)
+	require.NoError(t, os.Chmod(filepath.Dir(probe.path), 0o700))
+	require.NoError(t, os.Chmod(probe.path, 0o700))
+	require.NoError(t, os.WriteFile(probe.path, []byte("tampered"), 0o700))
+	never := func(*exec.Cmd) error {
+		t.Fatal("the runner must not run a refused artifact")
+		return nil
 	}
-	require.Len(t, got, 2, "both results printed before the exit are returned:\n%s", out)
-	assert.False(t, got[0].Allowed, "write outside the state directory: %s", got[0].Detail)
-	assert.False(t, got[1].Allowed, "child process: %s", got[1].Detail)
-	assert.NoFileExists(t, outside)
+	spec := Spec{StateDir: t.TempDir(), LogFile: filepath.Join(t.TempDir(), "x.log")}
+	require.ErrorIs(t, Run(t.Context(), probe, spec, never), ErrDigestMismatch)
+	_, err := Output(t.Context(), probe, spec, 1<<20, never)
+	require.ErrorIs(t, err, ErrDigestMismatch)
 }
 
-func TestExecRejectsALogFileInsideTheState(t *testing.T) {
-	requireSandbox(t)
-	state := t.TempDir()
-	_, err := Exec(t.Context(), buildProbe(t), Spec{StateDir: state, LogFile: filepath.Join(state, "probe.log")})
-	require.ErrorContains(t, err, "outside the candidate state directory")
+// TestExecLeavesChildrenInTheCallersGroup starts the probe through Exec with a
+// child that outlives it: the child runs in this test's own process group,
+// which Exec leaves to its caller, and is still running after the probe exits.
+func TestExecLeavesChildrenInTheCallersGroup(t *testing.T) {
+	pidFile := filepath.Join(t.TempDir(), "child.pid")
+	p, err := Exec(t.Context(), buildProbe(t), Spec{
+		Args:     []string{"orphan:" + pidFile},
+		StateDir: t.TempDir(),
+		LogFile:  filepath.Join(t.TempDir(), "probe.log"),
+	})
+	require.NoError(t, err)
+	require.NoError(t, p.Wait())
+	child := readPID(t, pidFile)
+	t.Cleanup(func() {
+		assert.NoError(t, syscall.Kill(child, syscall.SIGKILL))
+		assert.Eventually(t, func() bool { return gone(child) }, 10*time.Second, 50*time.Millisecond)
+	})
+	pgid, err := syscall.Getpgid(child)
+	require.NoError(t, err, "the child is still running")
+	assert.Equal(t, syscall.Getpgrp(), pgid)
 }
 
-// TestExecRejectsAliasedLogAdmission uses inert bytes as the digest-pinned
-// artifact. Every case must fail before launching it or opening its log.
-func TestExecRejectsAliasedLogAdmission(t *testing.T) {
-	requireSandbox(t)
-	base := t.TempDir()
-	state := filepath.Join(base, "state")
-	alias := filepath.Join(base, "STATE")
-	require.NoError(t, os.Mkdir(state, 0o700))
-	artifactPath := filepath.Join(base, "inert-artifact")
-	require.NoError(t, os.WriteFile(artifactPath, []byte("inert admission fixture"), 0o600))
-	digest, err := fileDigest(artifactPath)
-	require.NoError(t, err)
-	artifact := Artifact{path: artifactPath, digest: digest}
-	log := filepath.Join(state, "evidence.log")
-	require.NoError(t, os.WriteFile(log, []byte("preserved evidence"), 0o600))
-	link := filepath.Join(base, "log-link")
-	require.NoError(t, os.Symlink(log, link))
-	_, err = Exec(t.Context(), artifact, Spec{StateDir: state, LogFile: link})
-	require.ErrorContains(t, err, "outside the candidate state directory")
-	a, err := os.Stat(state)
-	require.NoError(t, err)
-	b, err := os.Stat(alias)
-	if os.IsNotExist(err) {
-		t.Log("filesystem does not provide this case alias; symlink admission was verified")
-	} else {
-		require.NoError(t, err)
-		require.True(t, os.SameFile(a, b))
-		for _, pair := range [][2]string{{state, alias}, {alias, state}} {
-			for _, suffix := range []string{"evidence.log", "missing/evidence.log"} {
-				_, err := Exec(t.Context(), artifact, Spec{StateDir: pair[0], LogFile: filepath.Join(pair[1], suffix)})
-				require.ErrorContains(t, err, "outside the candidate state directory")
-			}
+// TestRunAndOutputStopTheGroupTheirRunnerOwns runs the probe through Run and
+// Output with a runner that gives it its own process group, as Surla's
+// in-server callers do. The probe starts a child that outlives it and, under
+// Output, holds its standard output open: both calls return within the
+// runner's grace, and the child no longer exists afterwards.
+func TestRunAndOutputStopTheGroupTheirRunnerOwns(t *testing.T) {
+	probe := buildProbe(t)
+	ownGroup := func(cmd *exec.Cmd) error {
+		runErr, stopErr := procgroup.Run(cmd, syscall.SIGKILL, time.Second, 5*time.Second)
+		return errors.Join(runErr, stopErr)
+	}
+	for _, viaOutput := range []bool{false, true} {
+		name := "Run"
+		if viaOutput {
+			name = "Output"
 		}
+		t.Run(name, func(t *testing.T) {
+			pidFile := filepath.Join(t.TempDir(), "child.pid")
+			spec := Spec{
+				Args:     []string{"orphan:" + pidFile},
+				StateDir: t.TempDir(),
+				LogFile:  filepath.Join(t.TempDir(), "probe.log"),
+			}
+			start := time.Now()
+			if viaOutput {
+				_, err := Output(t.Context(), probe, spec, 1<<20, ownGroup)
+				// The child held standard output past the probe's exit, so the
+				// runner's grace closed it.
+				assert.ErrorIs(t, err, exec.ErrWaitDelay)
+			} else {
+				require.NoError(t, Run(t.Context(), probe, spec, ownGroup))
+			}
+			assert.Less(t, time.Since(start), 10*time.Second)
+			assert.True(t, gone(readPID(t, pidFile)), "the runner stopped the child with its group")
+		})
 	}
-	raw, err := os.ReadFile(log)
+}
+
+// probeResults decodes the probe's result lines in out, keyed by action.
+func probeResults(t *testing.T, out string) map[string]probeResult {
+	t.Helper()
+	got := map[string]probeResult{}
+	sc := bufio.NewScanner(strings.NewReader(out))
+	for sc.Scan() {
+		var r probeResult
+		require.NoError(t, json.Unmarshal(sc.Bytes(), &r), sc.Text())
+		got[r.Action] = r
+	}
+	require.NoError(t, sc.Err())
+	return got
+}
+
+// readPID reads the process ID the probe's orphan action wrote to path.
+func readPID(t *testing.T, path string) int {
+	t.Helper()
+	raw, err := os.ReadFile(path)
 	require.NoError(t, err)
-	assert.Equal(t, "preserved evidence", string(raw))
-	assert.NoDirExists(t, filepath.Join(state, "missing"))
-	_, err = Exec(t.Context(), artifact, Spec{StateDir: state, LogFile: log + "/child"})
-	require.Error(t, err, "filesystem errors must not become an outside verdict")
+	pid, err := strconv.Atoi(strings.TrimSpace(string(raw)))
+	require.NoError(t, err)
+	return pid
+}
+
+// gone reports whether no process with ID pid exists any more.
+func gone(pid int) bool {
+	return errors.Is(syscall.Kill(pid, 0), syscall.ESRCH)
 }
 
 // excerptAfterExit waits for the process and returns its whole output.
@@ -394,7 +388,7 @@ func excerptAfterExit(p *Process) (string, bool, error) {
 	return p.Excerpt(1 << 20)
 }
 
-// buildProbe builds the hostile probe and pins it.
+// buildProbe builds the probe and pins it.
 func buildProbe(t *testing.T) Artifact {
 	t.Helper()
 	bin := filepath.Join(t.TempDir(), "probe")
@@ -409,88 +403,6 @@ func buildProbe(t *testing.T) Artifact {
 	return a
 }
 
-// listen opens a loopback listener for the test's lifetime and returns its port.
-func listen(t *testing.T) int {
-	t.Helper()
-	ln, err := net.Listen("tcp", "127.0.0.1:0")
-	require.NoError(t, err)
-	t.Cleanup(func() { _ = ln.Close() })
-	go func() {
-		for {
-			c, err := ln.Accept()
-			if err != nil {
-				return
-			}
-			_ = c.Close()
-		}
-	}()
-	return ln.Addr().(*net.TCPAddr).Port
-}
-
-// freePort returns a currently unused loopback port.
-func freePort(t *testing.T) int {
-	t.Helper()
-	ln, err := net.Listen("tcp", "127.0.0.1:0")
-	require.NoError(t, err)
-	port := ln.Addr().(*net.TCPAddr).Port
-	require.NoError(t, ln.Close())
-	return port
-}
-
-func TestBuildDeniesReadsOutsideTheModule(t *testing.T) {
-	if testing.Short() {
-		t.Skip("runs the sandboxed Go toolchain; the full suite (go test without -short) covers it")
-	}
-	requireSandbox(t)
-	goroot, modCache := goEnv(t, "GOROOT"), goEnv(t, "GOMODCACHE")
-	protected := t.TempDir()
-	secret := filepath.Join(protected, "secret.h")
-	require.NoError(t, os.WriteFile(secret, []byte("#define SECRET 42\n"), 0o600))
-
-	mod := t.TempDir()
-	includePath, err := filepath.Rel(mod, secret)
-	require.NoError(t, err)
-	asmBody := func(expr string) string {
-		if runtime.GOARCH == "amd64" {
-			return "TEXT ·answer(SB),$0-8\n\tMOVQ $" + expr + ", AX\n\tMOVQ AX, ret+0(FP)\n\tRET\n"
-		}
-		return "TEXT ·answer(SB),$0-8\n\tMOVD $" + expr + ", R0\n\tMOVD R0, ret+0(FP)\n\tRET\n"
-	}
-	cases := []struct {
-		name    string
-		asm     string
-		wantErr bool
-	}{
-		{"plain module builds", asmBody("42"), false},
-		{"assembly include of a protected file is denied", "#include \"" + includePath + "\"\n" + asmBody("SECRET"), true},
-	}
-	for _, c := range cases {
-		t.Run(c.name, func(t *testing.T) {
-			require.NoError(t, os.WriteFile(filepath.Join(mod, "go.mod"), []byte("module probebuild\n\ngo 1.26\n"), 0o600))
-			require.NoError(t, os.WriteFile(filepath.Join(mod, "main.go"), []byte("package main\n\nfunc answer() int\n\nfunc main() { println(answer()) }\n"), 0o600))
-			require.NoError(t, os.WriteFile(filepath.Join(mod, "answer_"+runtime.GOARCH+".s"), []byte("#include \"textflag.h\"\n"+c.asm), 0o600))
-			logs := t.TempDir()
-			err := Build(t.Context(), BuildSpec{
-				SourceDir: mod, ModuleDir: mod, Package: ".", Out: filepath.Join(t.TempDir(), "probe"),
-				GOROOT: goroot, ModCache: modCache, WorkDir: t.TempDir(), LogFile: filepath.Join(logs, "build.log"),
-			}, (*exec.Cmd).Run)
-			log, _ := os.ReadFile(filepath.Join(logs, "build.log"))
-			if !c.wantErr {
-				require.NoError(t, err, string(log))
-				return
-			}
-			// Control: the same build outside the sandbox reads the protected
-			// file, so the sandboxed failure is the sandbox refusing it.
-			control := exec.Command("go", "build", "-o", filepath.Join(t.TempDir(), "control"), ".")
-			control.Dir = mod
-			controlOut, controlErr := control.CombinedOutput()
-			require.NoError(t, controlErr, "the unsandboxed control must succeed to prove the include works: %s", controlOut)
-			require.Error(t, err, "the sandboxed build must not read the protected file")
-			assert.Contains(t, string(log), "#include", "the build failed at the include:\n%s", log)
-		})
-	}
-}
-
 // goEnv returns one go env value.
 func goEnv(t *testing.T, name string) string {
 	t.Helper()
@@ -499,93 +411,141 @@ func goEnv(t *testing.T, name string) string {
 	return strings.TrimSpace(string(out))
 }
 
-func TestBuildReadsOnlyItsSourceDir(t *testing.T) {
+// TestBuildFollowsASiblingReplace builds a module that replaces a sibling
+// module in the same tree, which also holds unused links pointing outside it
+// or nowhere: Build and BuildTest both succeed.
+func TestBuildFollowsASiblingReplace(t *testing.T) {
 	if testing.Short() {
-		t.Skip("runs the sandboxed Go toolchain; the full suite (go test without -short) covers it")
+		t.Skip("runs the Go toolchain; the full suite (go test without -short) covers it")
 	}
-	requireSandbox(t)
-	goroot, modCache := goEnv(t, "GOROOT"), goEnv(t, "GOMODCACHE")
-	outside := t.TempDir()
-	require.NoError(t, os.WriteFile(filepath.Join(outside, "extra.go"), []byte("package main\n\nfunc extra() int { return 1 }\n"), 0o600))
+	root := writeModule(t, map[string]string{
+		"lib/go.mod":       "module example.com/lib\n\ngo 1.26\n",
+		"lib/lib.go":       "package lib\n\nfunc V() int { return 7 }\n",
+		"app/go.mod":       "module example.com/app\n\ngo 1.26\n\nrequire example.com/lib v0.0.0\n\nreplace example.com/lib => ../lib\n",
+		"app/main.go":      "package main\n\nimport \"example.com/lib\"\n\nfunc main() { println(lib.V()) }\n",
+		"app/main_test.go": "package main\n\nimport \"testing\"\n\nfunc TestV(t *testing.T) {}\n",
+	})
+	require.NoError(t, os.MkdirAll(filepath.Join(root, "docs"), 0o700))
+	require.NoError(t, os.Symlink(t.TempDir(), filepath.Join(root, "docs", "outside")))
+	require.NoError(t, os.Symlink("missing.md", filepath.Join(root, "docs", "dangling.md")))
+	app := filepath.Join(root, "app")
+	buildLog := filepath.Join(t.TempDir(), "build.log")
+	err := Build(t.Context(), testBuildSpec(t, root, app, filepath.Join(t.TempDir(), "app"), buildLog), (*exec.Cmd).Run)
+	require.NoError(t, err, logText(buildLog))
+	hasTests, err := BuildTest(t.Context(), testBuildSpec(t, root, app, filepath.Join(t.TempDir(), "app.test"), buildLog), (*exec.Cmd).Run)
+	require.NoError(t, err, logText(buildLog))
+	assert.True(t, hasTests)
 
-	// newTree writes a checkout holding an app module that replaces a sibling
-	// lib module, plus unused links in docs/ that point outside or nowhere.
-	newTree := func(t *testing.T) string {
-		root := t.TempDir()
-		files := map[string]string{
-			"lib/go.mod":  "module example.com/lib\n\ngo 1.26\n",
-			"lib/lib.go":  "package lib\n\nfunc V() int { return 7 }\n",
-			"app/go.mod":  "module example.com/app\n\ngo 1.26\n\nrequire example.com/lib v0.0.0\n\nreplace example.com/lib => ../lib\n",
-			"app/main.go": "package main\n\nimport \"example.com/lib\"\n\nfunc main() { println(lib.V()) }\n",
-		}
-		for name, content := range files {
-			path := filepath.Join(root, filepath.FromSlash(name))
-			require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o700))
-			require.NoError(t, os.WriteFile(path, []byte(content), 0o600))
-		}
-		require.NoError(t, os.MkdirAll(filepath.Join(root, "docs"), 0o700))
-		require.NoError(t, os.Symlink(outside, filepath.Join(root, "docs", "outside")))
-		require.NoError(t, os.Symlink("missing.md", filepath.Join(root, "docs", "dangling.md")))
-		return root
-	}
-	build := func(t *testing.T, sourceDir, moduleDir string) (string, error) {
-		logs := t.TempDir()
-		err := Build(t.Context(), BuildSpec{
-			SourceDir: sourceDir, ModuleDir: moduleDir, Package: ".", Out: filepath.Join(t.TempDir(), "app"),
-			GOROOT: goroot, ModCache: modCache, WorkDir: t.TempDir(), LogFile: filepath.Join(logs, "build.log"),
-		}, (*exec.Cmd).Run)
-		log, _ := os.ReadFile(filepath.Join(logs, "build.log"))
-		return string(log), err
-	}
-	// unsandboxed builds moduleDir with the host toolchain, proving that a
-	// sandboxed failure comes from the sandbox and not from broken source.
-	unsandboxed := func(t *testing.T, moduleDir string) {
-		cmd := exec.Command("go", "build", "-o", filepath.Join(t.TempDir(), "control"), ".")
-		cmd.Dir = moduleDir
-		out, err := cmd.CombinedOutput()
-		require.NoError(t, err, "the unsandboxed control must succeed: %s", out)
-	}
-
-	t.Run("sibling replace inside the source tree builds despite unused outside links", func(t *testing.T) {
-		root := newTree(t)
-		log, err := build(t, root, filepath.Join(root, "app"))
-		require.NoError(t, err, log)
-	})
-	t.Run("source file linked outside the source tree is denied", func(t *testing.T) {
-		root := newTree(t)
-		require.NoError(t, os.Symlink(filepath.Join(outside, "extra.go"), filepath.Join(root, "app", "extra.go")))
-		unsandboxed(t, filepath.Join(root, "app"))
-		log, err := build(t, root, filepath.Join(root, "app"))
-		require.Error(t, err, "the sandboxed build must not read the linked outside file")
-		assert.Contains(t, log, "extra.go", "the build failed reading the linked file:\n%s", log)
-	})
-	t.Run("replace leaving the source tree is denied", func(t *testing.T) {
-		root := newTree(t)
-		unsandboxed(t, filepath.Join(root, "app"))
-		log, err := build(t, filepath.Join(root, "app"), filepath.Join(root, "app"))
-		require.Error(t, err, "lib is outside SourceDir, so the sandbox must deny reading it")
-		wantReplaceLog := "example.com/lib"
-		if runtime.GOOS == "linux" {
-			wantReplaceLog = "/lib: permission denied"
-		}
-		assert.Contains(t, log, wantReplaceLog, "the build failed reading the replaced module:\n%s", log)
-	})
 	t.Run("module directory outside the source tree is rejected", func(t *testing.T) {
-		root := newTree(t)
-		_, err := build(t, filepath.Join(root, "lib"), filepath.Join(root, "app"))
+		err := Build(t.Context(), testBuildSpec(t, filepath.Join(root, "lib"), app, filepath.Join(t.TempDir(), "app"), buildLog), (*exec.Cmd).Run)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "is outside source directory")
+		_, err = GoWork(filepath.Join(root, "lib"), app)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "is outside source directory")
 	})
 }
 
-// TestBuildTestReportsWhetherThePackageHasTests compiles one package's tests in
-// the build sandbox and checks the three outcomes a caller acts on: a test
+// TestBuildAppliesAGoWorkOnlyInsideItsSourceRoot builds an app whose import
+// resolves only through the go.work of the workspace that holds it and the
+// imported module. With the workspace as the source root, GoWork names that
+// go.work and Build and BuildTest apply it and succeed. With the app as the
+// source root, the go.work lies above it: GoWork is "off", and both builds
+// fail on the import that only the workspace provides.
+func TestBuildAppliesAGoWorkOnlyInsideItsSourceRoot(t *testing.T) {
+	if testing.Short() {
+		t.Skip("runs the Go toolchain; the full suite (go test without -short) covers it")
+	}
+	ws := writeModule(t, map[string]string{
+		"go.work":          "go 1.26\n\nuse (\n\t./app\n\t./dep\n)\n",
+		"dep/go.mod":       "module example.com/dep\n\ngo 1.26\n",
+		"dep/dep.go":       "package dep\n\nfunc V() int { return 7 }\n",
+		"app/go.mod":       "module example.com/app\n\ngo 1.26\n",
+		"app/main.go":      "package main\n\nimport \"example.com/dep\"\n\nfunc main() { println(dep.V()) }\n",
+		"app/main_test.go": "package main\n\nimport \"testing\"\n\nfunc TestV(t *testing.T) {}\n",
+	})
+	app := filepath.Join(ws, "app")
+	physicalWS, err := filepath.EvalSymlinks(ws)
+	require.NoError(t, err)
+
+	t.Run("a go.work inside the source root applies", func(t *testing.T) {
+		goWork, err := GoWork(ws, app)
+		require.NoError(t, err)
+		assert.Equal(t, filepath.Join(physicalWS, "go.work"), goWork)
+		buildLog := filepath.Join(t.TempDir(), "build.log")
+		err = Build(t.Context(), testBuildSpec(t, ws, app, filepath.Join(t.TempDir(), "app"), buildLog), (*exec.Cmd).Run)
+		require.NoError(t, err, logText(buildLog))
+		hasTests, err := BuildTest(t.Context(), testBuildSpec(t, ws, app, filepath.Join(t.TempDir(), "app.test"), buildLog), (*exec.Cmd).Run)
+		require.NoError(t, err, logText(buildLog))
+		assert.True(t, hasTests)
+	})
+	t.Run("a go.work above the source root is ignored", func(t *testing.T) {
+		goWork, err := GoWork(app, app)
+		require.NoError(t, err)
+		assert.Equal(t, "off", goWork)
+		buildLog := filepath.Join(t.TempDir(), "build.log")
+		err = Build(t.Context(), testBuildSpec(t, app, app, filepath.Join(t.TempDir(), "app"), buildLog), (*exec.Cmd).Run)
+		require.Error(t, err)
+		assert.Contains(t, logText(buildLog), "example.com/dep")
+		_, err = BuildTest(t.Context(), testBuildSpec(t, app, app, filepath.Join(t.TempDir(), "app.test"), buildLog), (*exec.Cmd).Run)
+		require.Error(t, err)
+		assert.Contains(t, logText(buildLog), "example.com/dep")
+	})
+}
+
+// TestBuildDoesNotStampVersionControl builds a main package committed in a Git
+// repository: a plain go build stamps the commit into the binary, while Build,
+// which passes -buildvcs=false, stamps nothing and runs no git.
+func TestBuildDoesNotStampVersionControl(t *testing.T) {
+	if testing.Short() {
+		t.Skip("runs the Go toolchain; the full suite (go test without -short) covers it")
+	}
+	mod := writeModule(t, map[string]string{"go.mod": libGoMod, "main.go": "package main\n\nfunc main() {}\n"})
+	for _, args := range [][]string{
+		{"init", "--quiet"},
+		{"add", "."},
+		{"-c", "user.name=t", "-c", "user.email=t@example.com", "-c", "commit.gpgsign=false", "commit", "--quiet", "-m", "c"},
+	} {
+		cmd := exec.Command("git", append([]string{"-c", "core.hooksPath=/dev/null"}, args...)...)
+		cmd.Dir = mod
+		out, err := cmd.CombinedOutput()
+		require.NoError(t, err, string(out))
+	}
+	control := filepath.Join(t.TempDir(), "control")
+	build := exec.Command("go", "build", "-o", control, ".")
+	build.Dir = mod
+	out, err := build.CombinedOutput()
+	require.NoError(t, err, string(out))
+	require.True(t, stampsVCS(t, control), "control: a plain go build stamps the commit")
+
+	bin := filepath.Join(t.TempDir(), "app")
+	buildLog := filepath.Join(t.TempDir(), "build.log")
+	err = Build(t.Context(), testBuildSpec(t, mod, mod, bin, buildLog), (*exec.Cmd).Run)
+	require.NoError(t, err, logText(buildLog))
+	assert.False(t, stampsVCS(t, bin))
+}
+
+// stampsVCS reports whether the Go binary at path carries version-control
+// settings (vcs, vcs.revision and the like).
+func stampsVCS(t *testing.T, path string) bool {
+	t.Helper()
+	info, err := buildinfo.ReadFile(path)
+	require.NoError(t, err)
+	for _, setting := range info.Settings {
+		if strings.HasPrefix(setting.Key, "vcs") {
+			return true
+		}
+	}
+	return false
+}
+
+// TestBuildTestReportsWhetherThePackageHasTests compiles one package's tests
+// and checks the three outcomes a caller acts on: a test
 // binary, no tests, and a compile error.
 func TestBuildTestReportsWhetherThePackageHasTests(t *testing.T) {
 	if testing.Short() {
-		t.Skip("runs the sandboxed Go toolchain; the full suite (go test without -short) covers it")
+		t.Skip("runs the Go toolchain; the full suite (go test without -short) covers it")
 	}
-	requireSandbox(t)
 	cases := []struct {
 		name      string
 		pkg       string
@@ -623,7 +583,7 @@ func TestBuildTestReportsWhetherThePackageHasTests(t *testing.T) {
 				"lib.go":      "package lib\n\nfunc V() int { return 7 }\n",
 				"lib_test.go": "package lib\n\nimport \"testing\"\n\nfunc TestV(t *testing.T) { undefinedInTest() }\n",
 			},
-			wantErr: "sandboxed test build of .",
+			wantErr: "test build of .",
 		},
 	}
 	for _, c := range cases {
@@ -733,26 +693,6 @@ func TestBuildTestReportsWhetherThePackageHasTests(t *testing.T) {
 			require.NoError(t, readErr)
 			assert.Contains(t, string(readme), "cached build artifacts", "GOCACHE README must not be overwritten with the compiled test binary")
 		})
-
-		t.Run("output directory outside WorkDir is not writable inside the build sandbox", func(t *testing.T) {
-			workDir := t.TempDir()
-			outDir := t.TempDir()
-			sibling := filepath.Join(outDir, "sibling.txt")
-			require.NoError(t, os.WriteFile(sibling, []byte("untouched"), 0o600))
-			require.NoError(t, os.Symlink(outDir, filepath.Join(workDir, "gocache")))
-			buildLog := filepath.Join(t.TempDir(), "build.log")
-			spec := testBuildSpec(t, withTestsMod, withTestsMod, filepath.Join(outDir, "lib.test"), buildLog)
-			spec.WorkDir = workDir
-			hasTests, err := BuildTest(t.Context(), spec, (*exec.Cmd).Run)
-			require.Error(t, err, "toolchain must not be allowed to write to outDir through symlinked GOCACHE")
-			assert.False(t, hasTests)
-			logBytes, readErr := os.ReadFile(buildLog)
-			require.NoError(t, readErr)
-			assert.Contains(t, string(logBytes), "failed to initialize build cache")
-			gotSibling, readErr := os.ReadFile(sibling)
-			require.NoError(t, readErr)
-			assert.Equal(t, "untouched", string(gotSibling))
-		})
 	})
 }
 
@@ -761,7 +701,6 @@ func TestBuildTestReportsWhetherThePackageHasTests(t *testing.T) {
 // place of the package directory, and an existing output path are refused
 // before any command runs.
 func TestBuildTestRejectsBeforeRunningTheToolchain(t *testing.T) {
-	requireSandbox(t)
 	mod := writeModule(t, map[string]string{
 		"go.mod":      libGoMod,
 		"lib.go":      "package lib\n",
@@ -888,9 +827,8 @@ func TestBuildTestRejectsBeforeRunningTheToolchain(t *testing.T) {
 // detached child process or creating a user config directory in WorkDir.
 func TestBuildRunsWithoutHomeOrTelemetry(t *testing.T) {
 	if testing.Short() {
-		t.Skip("runs the sandboxed Go toolchain; the full suite (go test without -short) covers it")
+		t.Skip("runs the Go toolchain; the full suite (go test without -short) covers it")
 	}
-	requireSandbox(t)
 	mod := writeModule(t, map[string]string{
 		"go.mod": libGoMod, "main.go": "package main\n\nfunc main() {}\n",
 		"main_test.go": "package main\n\nimport \"testing\"\n\nfunc TestMainBuild(t *testing.T) {}\n",
@@ -973,90 +911,14 @@ func TestBuildRunsWithoutHomeOrTelemetry(t *testing.T) {
 	assert.ErrorIs(t, Build(ctx, testBuildSpec(t, mod, mod, filepath.Join(t.TempDir(), "out"), filepath.Join(t.TempDir(), "build.log")), (*exec.Cmd).Run), context.Canceled)
 }
 
-// TestBuildTestReadsOnlyItsSourceDir mirrors TestBuildReadsOnlyItsSourceDir for
-// test builds: a sibling replace inside SourceDir builds, while a test file
-// linked outside SourceDir, and a replace directive leaving it, are denied by
-// the sandbox although the same module builds outside it.
-func TestBuildTestReadsOnlyItsSourceDir(t *testing.T) {
-	if testing.Short() {
-		t.Skip("runs the sandboxed Go toolchain; the full suite (go test without -short) covers it")
-	}
-	requireSandbox(t)
-	outside := t.TempDir()
-	require.NoError(t, os.WriteFile(filepath.Join(outside, "extra_test.go"),
-		[]byte("package lib\n\nimport \"testing\"\n\nfunc TestExtra(t *testing.T) {}\n"), 0o600))
-	wantReplaceLog := "example.com/lib"
-	if runtime.GOOS == "linux" {
-		wantReplaceLog = "/lib: permission denied"
-	}
-	cases := []struct {
-		name    string
-		prepare func(t *testing.T, root string) (sourceDir string)
-		wantLog string
-	}{
-		{
-			name:    "sibling replace inside the source tree",
-			prepare: func(t *testing.T, root string) string { return root },
-		},
-		{
-			name: "test file linked outside the source tree",
-			prepare: func(t *testing.T, root string) string {
-				require.NoError(t, os.Symlink(filepath.Join(outside, "extra_test.go"), filepath.Join(root, "app", "extra_test.go")))
-				return root
-			},
-			wantLog: "extra_test.go",
-		},
-		{
-			name:    "replace leaving the source tree",
-			prepare: func(t *testing.T, root string) string { return filepath.Join(root, "app") },
-			wantLog: wantReplaceLog,
-		},
-	}
-	for _, c := range cases {
-		t.Run(c.name, func(t *testing.T) {
-			root := writeModule(t, map[string]string{
-				"lib/go.mod":      libGoMod,
-				"lib/lib.go":      "package lib\n\nfunc V() int { return 7 }\n",
-				"app/go.mod":      "module example.com/app\n\ngo 1.26\n\nrequire example.com/lib v0.0.0\n\nreplace example.com/lib => ../lib\n",
-				"app/app.go":      "package lib\n\nimport dep \"example.com/lib\"\n\nfunc V() int { return dep.V() }\n",
-				"app/app_test.go": "package lib\n\nimport \"testing\"\n\nfunc TestV(t *testing.T) {}\n",
-			})
-			sourceDir := c.prepare(t, root)
-			app := filepath.Join(root, "app")
-			control := exec.Command("go", "test", "-c", "-o", filepath.Join(t.TempDir(), "control.test"), ".")
-			control.Dir = app
-			control.Env = append(os.Environ(), "GOCACHE="+t.TempDir())
-			controlOut, controlErr := control.CombinedOutput()
-			require.NoError(t, controlErr, "the unsandboxed control must succeed: %s", controlOut)
-
-			log := filepath.Join(t.TempDir(), "build.log")
-			hasTests, err := BuildTest(t.Context(), testBuildSpec(t, sourceDir, app, filepath.Join(t.TempDir(), "app.test"), log), (*exec.Cmd).Run)
-			logText, _ := os.ReadFile(log)
-			if c.wantLog == "" {
-				require.NoError(t, err, string(logText))
-				assert.True(t, hasTests)
-				return
-			}
-			require.Error(t, err, "the sandboxed test build must not read outside SourceDir")
-			assert.Contains(t, string(logText), c.wantLog, "the build failed at the outside read:\n%s", logText)
-			wantDenied := "operation not permitted"
-			if runtime.GOOS == "linux" {
-				wantDenied = "permission denied"
-			}
-			assert.Contains(t, string(logText), wantDenied, "the sandbox denied the read:\n%s", logText)
-		})
-	}
-}
-
-// TestBuildTestBinaryRunsUnderExec builds a test binary in the build sandbox and
-// runs it through Pin and Exec: a test using t.TempDir passes inside its state
-// directory, and a test that starts a child process fails because the sandbox
-// denies starting it.
+// TestBuildTestBinaryRunsUnderExec builds a test binary and runs it through
+// Pin and Exec: a test using t.TempDir passes inside its state directory, and
+// a test that starts a child process passes too, because the test binary is an
+// ordinary process.
 func TestBuildTestBinaryRunsUnderExec(t *testing.T) {
 	if testing.Short() {
-		t.Skip("runs the sandboxed Go toolchain; the full suite (go test without -short) covers it")
+		t.Skip("runs the Go toolchain; the full suite (go test without -short) covers it")
 	}
-	requireSandbox(t)
 	mod := writeModule(t, map[string]string{
 		"go.mod": libGoMod,
 		"lib.go": "package lib\n",
@@ -1099,13 +961,12 @@ func TestSpawn(t *testing.T) {
 		LogFile:  filepath.Join(t.TempDir(), "test.log"),
 	})
 	require.NoError(t, err)
-	require.Error(t, p.Wait(), "TestSpawn must fail, so the test binary exits non-zero")
+	require.NoError(t, p.Wait())
 	got, truncated, err := p.Excerpt(1 << 20)
 	require.NoError(t, err)
 	require.False(t, truncated)
 	assert.Contains(t, got, "--- PASS: TestTempDir")
-	assert.Contains(t, got, "--- FAIL: TestSpawn")
-	assert.Contains(t, got, "operation not permitted")
+	assert.Contains(t, got, "--- PASS: TestSpawn")
 }
 
 // writeModule writes files, keyed by slash-separated relative path, under a new
@@ -1121,8 +982,9 @@ func writeModule(t *testing.T, files map[string]string) string {
 	return root
 }
 
-// testBuildSpec returns a BuildSpec for package "." of moduleDir with the
-// host's toolchain and module cache and a fresh work directory.
+// testBuildSpec returns a BuildSpec for package "." of moduleDir in the source
+// root sourceDir with the host's toolchain and module cache and a fresh work
+// directory.
 func testBuildSpec(t *testing.T, sourceDir, moduleDir, out, log string) BuildSpec {
 	t.Helper()
 	return BuildSpec{
@@ -1131,12 +993,12 @@ func testBuildSpec(t *testing.T, sourceDir, moduleDir, out, log string) BuildSpe
 	}
 }
 
-// requireSandbox skips t on unsupported OSes and requires CheckSandbox to
-// succeed on macOS and Linux.
-func requireSandbox(t *testing.T) {
-	t.Helper()
-	if runtime.GOOS != "darwin" && runtime.GOOS != "linux" {
-		t.Skip("the sandbox is implemented on macOS and Linux")
+// logText returns the build log at path for a failure message, or why it could
+// not be read.
+func logText(path string) string {
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return "the build log could not be read: " + err.Error()
 	}
-	require.NoError(t, CheckSandbox())
+	return string(b)
 }

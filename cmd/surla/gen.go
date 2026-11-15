@@ -22,7 +22,7 @@ import (
 const quickstartGuide = "AGENTS_QUICKSTART.md"
 
 // gen regenerates the gen/ directory of the design module in -dir from its
-// design, inside Surla's sandbox, and replaces gen/ in one atomic exchange.
+// design and replaces gen/ in one atomic exchange.
 //
 // It reads the module through one os.Root handle that it keeps until
 // publication ends, generates with a design evaluator it owns

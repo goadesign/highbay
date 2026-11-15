@@ -99,7 +99,7 @@ func TestQuickstartSectionsKeepGoaAIsLayout(t *testing.T) {
 	assert.Contains(t, quickstartSections["golden-rules"], "`generate_code`")
 }
 
-// TestGenerateProgramCompilesThePluginAsMain checks the files the sandboxed
+// TestGenerateProgramCompilesThePluginAsMain checks the files the
 // generation program is built from: both plugins and the layout rule with
 // their package clauses changed to main, registered in that order, and the
 // section texts as Go literals equal to this package's embedded files.

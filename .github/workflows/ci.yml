@@ -1,5 +1,5 @@
-# Pushes run the short Go suites and generated-code checks in parallel.
-# Nightly and manually requested runs keep every sandbox and native journey.
+# Pushes run the short checks and partitioned full root suites in parallel.
+# Nightly and manually requested runs also keep every native journey.
 # All model calls use scripted providers; these jobs need no model credentials.
 # Real Docker coverage requires the separate e2e,docker tags and a local engine.
 name: CI
@@ -15,6 +15,7 @@ on:
     # merged into main.
     # builder-copy is the integration branch of the builder-copy slices; it
     # runs for the same reason until it merges into team-start. Remove it then.
+
     branches: [main, team-start, builder-copy]
   schedule:
     - cron: '17 7 * * *'
@@ -32,22 +33,18 @@ env:
   TEMPORAL_CLI_VERSION: 1.7.2
   TEMPORAL_CLI_SHA256: 561ac68bdb6c16c8e8cbbd49f12578218ff1776007c3f3ae0d0196c8c9a73e79
   TEMPORAL_CLI_LINUX_AMD64_SHA256: e2f548af84e820b7d71f25fc6461a4e6a1ab7cdb6a80fde3c375641b0772375b
-  # The root module's short tests take too long for one five-minute job, so
-  # they run in two macOS jobs split by test name: "Go (., page tests)" runs
-  # the top-level tests this pattern matches (go test -run) and "Go (.)"
-  # skips exactly those (go test -skip). Every test runs in one of the two.
-  # The views page and checkpoint page tests take a third to two fifths of
-  # internal/controlplane's test time and are the part that grows fastest.
+  # Root short coverage has four owners: pages in controlplane/project,
+  # two complementary Linux controlplane groups, and other tested packages.
+  # A small macOS job additionally executes the platform-specific CP roots.
   ROOT_PAGE_TESTS: '^Test(ViewsPage|Checkpoint)'
+  ROOT_CONTROLPLANE_FIRST_TESTS: '^Test[A-L]'
 
 jobs:
   tests:
     name: Go (${{ matrix.module }})
     if: github.event_name == 'push' || github.event_name == 'pull_request'
     runs-on: macos-latest
-    # A module's first run after its go.sum changes starts with no Go cache and
-    # compiles every dependency with the race detector, which can take longer
-    # than five minutes. The run must finish for its cache to be saved.
+    # Keep the backstop; exact-cache-hit runs target five minutes. Record cold runs too.
     timeout-minutes: 10
     strategy:
       fail-fast: false
@@ -59,51 +56,58 @@ jobs:
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
       - uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
+        id: go
         with:
           go-version-file: ${{ matrix.module }}/go.mod
-          # setup-go names its cache after the runner, the Go version and a
-          # hash of these files, and never replaces a saved cache. Hashing this
-          # module's go.sum and go.mod keeps the generated-code job and the
-          # other modules' jobs from saving the cache this job needs. go.mod
-          # is hashed too because a change to it alone (a requirement that
-          # becomes direct) can change what the tests compile while go.sum
-          # stays the same, and the old cache would then never be replaced.
+          # Non-root modules retain setup-go's dependency-key ownership.
+          # The root's remaining-package closure has its own cache below.
+          cache: ${{ matrix.module != '.' }}
           cache-dependency-path: |
             ${{ matrix.module }}/go.sum
             ${{ matrix.module }}/go.mod
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+      - name: Locate the root job's Go caches
         if: matrix.module == '.'
-        with:
-          node-version: 26.0.0
-          cache: npm
-          cache-dependency-path: ui/checkpoint/package-lock.json
-      - name: Install the views page's test packages
-        # The views page tests in internal/controlplane and internal/project
-        # run the built page in jsdom; install it once before both binaries.
-        if: matrix.module == '.'
+        id: go-cache
         run: |
-          npm ci --prefix ui/checkpoint --no-audit --no-fund </dev/null
+          echo "build=$(go env GOCACHE)" >> "$GITHUB_OUTPUT"
+          echo "modules=$(go env GOMODCACHE)" >> "$GITHUB_OUTPUT"
+      - name: Restore the remaining root packages' Go caches
+        if: matrix.module == '.'
+        id: restored-go-cache
+        # Only Go (.) saves this owner key. Other short and full jobs can
+        # populate different build closures, so they cannot win this cache.
+        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
+        with:
+          path: |
+            ${{ steps.go-cache.outputs.build }}
+            ${{ steps.go-cache.outputs.modules }}
+          key: short-root-remaining-${{ runner.os }}-${{ runner.arch }}-go-${{ steps.go.outputs.go-version }}-${{ hashFiles('go.mod', 'go.sum') }}
+      - name: Explain a dependency cache miss
+        if: matrix.module == '.' && steps.restored-go-cache.outputs.cache-hit != 'true'
+        run: |
+          echo "dependency cache miss: this run compiles all dependencies" >> "$GITHUB_STEP_SUMMARY"
       - name: Vet and short race tests
         # Full vet checks share the race build with tests instead of compiling
         # a separate plain build. JSON retains individual test durations.
-        # In the root module, the page tests run in their own job instead,
-        # and only packages that have tests are named: ./... would also
-        # compile the generated packages that nothing imports, one of which
-        # pulls in several hundred dependencies, and with the race detector
-        # and no cache that alone took about five minutes. The Linux build
-        # jobs build and vet every package of the root module, and none of
-        # the packages left out here has code for one operating system.
+        # Root pages and the control plane have their own jobs. Enumerate
+        # the other tested packages, retaining the page skip for project.
+        # Linux's build-and-vet jobs still cover every package and build tag.
         env:
           MODULE: ${{ matrix.module }}
           TESTED: '{{if or .TestGoFiles .XTestGoFiles}}{{.ImportPath}}{{end}}'
         run: |
+          test_count=()
+          if [ "$GITHUB_EVENT_NAME" = push ]; then
+            test_count=(-count=1)
+          fi
           skip=
           packages=./...
           if [ "$MODULE" = . ]; then
             skip=$ROOT_PAGE_TESTS
             packages=$(go list -f "$TESTED" ./... </dev/null)
+            packages=$(printf '%s\n' "$packages" | grep -v '^github.com/goadesign/surla/internal/controlplane$')
           fi
-          go test -race -vet=all -short -timeout 3m -json -skip "$skip" $packages </dev/null
+          go test -race -vet=all -short -timeout 3m -json "${test_count[@]}" -skip "$skip" $packages </dev/null
 
   pages:
     name: Go (., page tests)
@@ -113,14 +117,28 @@ jobs:
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
       - uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
+        id: go
         with:
           go-version-file: go.mod
-          # This job builds and vets the same packages and test binaries as
-          # "Go (.)", so the two share one cache and either may save it: both
-          # hash the same files in the same order.
-          cache-dependency-path: |
-            go.sum
-            go.mod
+          cache: false
+      - name: Locate the page job's Go caches
+        id: go-cache
+        run: |
+          echo "build=$(go env GOCACHE)" >> "$GITHUB_OUTPUT"
+          echo "modules=$(go env GOMODCACHE)" >> "$GITHUB_OUTPUT"
+      - name: Restore the page packages' Go caches
+        id: restored-go-cache
+        # Only Go (., page tests) saves this key, including the browser vet closure.
+        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
+        with:
+          path: |
+            ${{ steps.go-cache.outputs.build }}
+            ${{ steps.go-cache.outputs.modules }}
+          key: short-root-pages-${{ runner.os }}-${{ runner.arch }}-go-${{ steps.go.outputs.go-version }}-${{ hashFiles('go.mod', 'go.sum') }}
+      - name: Explain a dependency cache miss
+        if: steps.restored-go-cache.outputs.cache-hit != 'true'
+        run: |
+          echo "dependency cache miss: this run compiles all dependencies" >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 26.0.0
@@ -130,13 +148,13 @@ jobs:
         run: |
           npm ci --prefix ui/checkpoint --no-audit --no-fund </dev/null
       - name: Vet and short race tests (page tests)
-        # The same packages as "Go (.)": those of the root module that have
-        # tests.
-        env:
-          TESTED: '{{if or .TestGoFiles .XTestGoFiles}}{{.ImportPath}}{{end}}'
+        # Only these packages declare tests matching ROOT_PAGE_TESTS.
         run: |
-          packages=$(go list -f "$TESTED" ./... </dev/null)
-          go test -race -vet=all -short -timeout 3m -json -run "$ROOT_PAGE_TESTS" $packages </dev/null
+          test_count=()
+          if [ "$GITHUB_EVENT_NAME" = push ]; then
+            test_count=(-count=1)
+          fi
+          go test -race -vet=all -short -timeout 3m -json "${test_count[@]}" -run "$ROOT_PAGE_TESTS" ./internal/controlplane ./internal/project </dev/null
       - name: Vet the opt-in real-browser test
         # The views page's real-browser test builds only with the browser tag
         # and runs only on request; vetting it here keeps it compiling. This
@@ -144,8 +162,103 @@ jobs:
         run: |
           go vet -tags browser ./internal/project </dev/null
 
-  # Every job of a push or pull request is meant to finish within five
-  # minutes. The Linux checks are therefore separate jobs that run side by
+  controlplane:
+    name: Go (., control plane, ${{ matrix.partition }})
+    if: github.event_name == 'push' || github.event_name == 'pull_request'
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - partition: A-L
+            os: ubuntu-latest
+          - partition: remaining
+            os: ubuntu-latest
+          - partition: macOS-platform
+            os: macos-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - name: Check the macOS platform test names
+        if: matrix.partition == 'macOS-platform'
+        id: platform-tests
+        env:
+          TEST_NAMES: |-
+            TestAFailedStopKeepsTheOwnerAndStartsNoOtherTarget
+            TestAStartThatFailsBeforeReadyAndCannotBeCleanedUpKeepsItsOwner
+            TestGetLiveTargetShowsATargetNotConfirmedStopped
+            TestCopyGrantExcludesProtectedDirectoryAliases
+            TestCopyEntryDecidesProtectedAliasWhenItOpensTheEntry
+            TestCheckBindingAcceptsOtherSpellingsThroughTheStartupPipeline
+            TestNewRejectsAliasedWorkspaceStorage
+            TestInitProjectAcceptsAnotherSpellingOfTheWorkspace
+            TestOpenEntryHandlesRegularFileDirectorySymlinkAndFIFO
+        run: |
+          pattern=
+          while IFS= read -r test_name; do
+            if ! git grep -q -E "^func ${test_name}\\(" -- 'internal/controlplane/*_test.go'; then
+              echo "Missing macOS platform test: $test_name" >&2
+              exit 1
+            fi
+            pattern="${pattern:+$pattern|}$test_name"
+          done <<< "$TEST_NAMES"
+          echo "pattern=^($pattern)$" >> "$GITHUB_OUTPUT"
+      - uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
+        id: go
+        with:
+          go-version-file: go.mod
+          cache: false
+      - name: Locate the control plane's Go caches
+        id: go-cache
+        run: |
+          echo "build=$(go env GOCACHE)" >> "$GITHUB_OUTPUT"
+          echo "modules=$(go env GOMODCACHE)" >> "$GITHUB_OUTPUT"
+      - name: Restore the control plane's Go caches
+        id: restored-go-cache
+        # Each partition owns its key, including its runtime helper builds.
+        # OS and architecture keep the Linux and macOS objects separate.
+        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
+        with:
+          path: |
+            ${{ steps.go-cache.outputs.build }}
+            ${{ steps.go-cache.outputs.modules }}
+          key: short-root-controlplane-${{ matrix.partition }}-${{ runner.os }}-${{ runner.arch }}-go-${{ steps.go.outputs.go-version }}-${{ hashFiles('go.mod', 'go.sum') }}
+      - name: Explain a dependency cache miss
+        if: steps.restored-go-cache.outputs.cache-hit != 'true'
+        run: |
+          echo "dependency cache miss: this run compiles all dependencies" >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 26.0.0
+          cache: npm
+          cache-dependency-path: ui/checkpoint/package-lock.json
+      - name: Install the views page's test packages
+        # Nonpage control-plane tests can use jsdom too.
+        run: |
+          npm ci --prefix ui/checkpoint --no-audit --no-fund </dev/null
+      - name: Vet and short race tests (control plane without page tests)
+        env:
+          CONTROLPLANE_PARTITION: ${{ matrix.partition }}
+          PLATFORM_TEST_PATTERN: ${{ steps.platform-tests.outputs.pattern }}
+        run: |
+          test_count=()
+          if [ "$GITHUB_EVENT_NAME" = push ]; then
+            test_count=(-count=1)
+          fi
+          run=$ROOT_CONTROLPLANE_FIRST_TESTS
+          skip=$ROOT_PAGE_TESTS
+          if [ "$CONTROLPLANE_PARTITION" = remaining ]; then
+            # Complement the first group so new names, Examples and Fuzz
+            # seeds also retain an owner without extending an alphabet range.
+            run=.
+            skip="$skip|$ROOT_CONTROLPLANE_FIRST_TESTS"
+          elif [ "$CONTROLPLANE_PARTITION" = macOS-platform ]; then
+            run=$PLATFORM_TEST_PATTERN
+          fi
+          go test -race -vet=all -short -timeout 3m -json "${test_count[@]}" -run "$run" -skip "$skip" ./internal/controlplane </dev/null
+
+  # Warm short jobs target five minutes; cache misses are reported separately.
+  # The Linux checks are separate jobs that run side by
   # side: one build-and-vet job per build tag, and one job for the tests.
   linux-build:
     name: Go (Linux, build ${{ matrix.tag || 'without tags' }})
@@ -184,13 +297,17 @@ jobs:
           cache-dependency-path: |
             go.sum
             go.mod
-      - name: Vet and short race tests (including Linux candidate sandbox)
+      - name: Vet and short race tests
         # Only packages with tests are listed. The others, the generated
         # packages among them, have nothing to run, and compiling them and
         # their large dependencies with the race detector took much of this
         # job; the build-and-vet jobs above compile and vet them for Linux.
         run: |
-          go test -race -vet=all -short -timeout 3m -json \
+          test_count=()
+          if [ "$GITHUB_EVENT_NAME" = push ]; then
+            test_count=(-count=1)
+          fi
+          go test -race -vet=all -short -timeout 3m -json "${test_count[@]}" \
             ./cmd/surla \
             ./internal/abspath \
             ./internal/designeval \
@@ -208,7 +325,7 @@ jobs:
             ./internal/verifyrun \
             ./verify/candidate \
             ./verify/suite </dev/null
-          go test -race -vet=all -timeout 1m -json \
+          go test -race -vet=all -timeout 1m -json "${test_count[@]}" \
             -run '^(TestCopyGrant|TestCopyEntry|TestOpenEntry)' \
             ./internal/controlplane </dev/null
 
@@ -257,6 +374,62 @@ jobs:
       - name: Test generated page contract consumers
         run: node --test ui/checkpoint/build_test.mjs </dev/null
 
+  full-root:
+    name: Full / root-${{ matrix.suite }} (${{ matrix.os }})
+    if: github.event_name == 'push' || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ${{ matrix.os }}
+    # Isolate the expensive owners; package alarms exclude setup/compilation.
+    # Hosted full runs, rather than short PR checks, establish these budgets.
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, ubuntu-latest]
+        suite: [pages, controlplane, designeval, remaining]
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: |
+            go.sum
+            go.mod
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        if: matrix.suite != 'designeval'
+        with:
+          node-version: 26.0.0
+          cache: npm
+          cache-dependency-path: ui/checkpoint/package-lock.json
+      - name: Install the views page's test packages
+        # The remaining packages include internal/project's page tests, and
+        # control-plane tests outside the page partition can use jsdom too.
+        if: matrix.suite != 'designeval'
+        run: |
+          npm ci --prefix ui/checkpoint --no-audit --no-fund </dev/null
+      - name: Run the full root partition
+        env:
+          ROOT_SUITE: ${{ matrix.suite }}
+        run: |
+          case "$ROOT_SUITE" in
+            pages)
+              go test -race -count=1 -timeout 20m -json -run "$ROOT_PAGE_TESTS" ./internal/controlplane </dev/null
+              ;;
+            controlplane)
+              go test -race -count=1 -timeout 20m -json -skip "$ROOT_PAGE_TESTS" ./internal/controlplane </dev/null
+              ;;
+            designeval)
+              go test -race -count=1 -timeout 20m -json ./internal/designeval </dev/null
+              ;;
+            remaining)
+              packages=$(go list ./... </dev/null | grep -Ev '^github.com/goadesign/surla/internal/(controlplane|designeval)$')
+              go test -race -count=1 -timeout 20m -json $packages </dev/null
+              ;;
+            *)
+              echo "Unknown full root partition: $ROOT_SUITE" >&2
+              exit 1
+              ;;
+          esac
+
   full:
     name: Full / ${{ matrix.suite }}
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
@@ -267,17 +440,6 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - suite: unit-root
-            module: .
-            args: ./...
-            test_timeout: 20m
-            job_timeout: 30
-          - suite: unit-root-linux
-            os: ubuntu-latest
-            module: .
-            args: ./...
-            test_timeout: 20m
-            job_timeout: 30
           - suite: unit-orders
             module: examples/orders
             args: ./...
@@ -312,7 +474,7 @@ jobs:
             job_timeout: 45
           - suite: journey
             module: .
-            # One change through the project server, its team, a sandboxed
+            # One change through the project server, its team, a
             # verification run and approval: about 2.5 to 4 minutes on a
             # developer machine with -race, several times that on this runner.
             # Its package alarm outlasts the test's own 32-minute wait for a
@@ -341,18 +503,6 @@ jobs:
           cache-dependency-path: |
             ${{ matrix.module }}/go.sum
             ${{ matrix.module }}/go.mod
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
-        if: matrix.suite == 'unit-root' || matrix.suite == 'unit-root-linux'
-        with:
-          node-version: 26.0.0
-          cache: npm
-          cache-dependency-path: ui/checkpoint/package-lock.json
-      - name: Install the views page's test packages
-        # Go tests never install these themselves and fail under CI without
-        # them; install once before every test binary starts.
-        if: matrix.suite == 'unit-root' || matrix.suite == 'unit-root-linux'
-        run: |
-          npm ci --prefix ui/checkpoint --no-audit --no-fund </dev/null
       - name: Install the Temporal CLI
         # The generation suite's Orders live-copy journey starts Temporal too.
         if: matrix.suite == 'verifier' || matrix.suite == 'verifier-linux' || matrix.suite == 'generation' || matrix.suite == 'orders-acceptance'
