@@ -6,6 +6,7 @@ package project
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -32,8 +33,6 @@ import (
 // saved address, with a test-only restart that replaces both, as starting
 // Surla again does.
 type viewsProject struct {
-	// t reports failures of a restart requested over HTTP.
-	t *testing.T
 	// state is the project's private state.
 	state *State
 	// opts configures every control plane the project starts; CardsDir is
@@ -203,6 +202,31 @@ func TestViewsPageReadsNeedTheSameOriginMark(t *testing.T) {
 	}
 }
 
+// TestViewsProjectRestartReportsStartupFailure preserves the constructor error
+// instead of proceeding with nil servers or acknowledging a failed HTTP restart.
+func TestViewsProjectRestartReportsStartupFailure(t *testing.T) {
+	t.Run("initial construction", func(t *testing.T) {
+		vp := &viewsProject{opts: controlplane.Options{SurlaVersion: "invalid"}}
+		err := vp.restart()
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "start the control plane: surla version")
+		assert.Nil(t, vp.cp.Load())
+		assert.Nil(t, vp.server.Load())
+		assert.Nil(t, vp.handler.Load())
+	})
+	t.Run("HTTP restart", func(t *testing.T) {
+		vp := startViewsProject(t, controlplane.Options{})
+		vp.opts.SurlaVersion = "invalid"
+		resp, err := http.Post(vp.state.Origin()+"/__test/restart", "text/plain", nil)
+		require.NoError(t, err)
+		body, err := io.ReadAll(resp.Body)
+		require.NoError(t, resp.Body.Close())
+		require.NoError(t, err)
+		assert.Equal(t, http.StatusInternalServerError, resp.StatusCode)
+		assert.Contains(t, string(body), "start the control plane: surla version")
+	})
+}
+
 // startViewsProject starts a project on its saved address with a control
 // plane configured by opts. Test-only endpoints restart the project
 // (POST /__test/restart) and mint a browser link from the server currently
@@ -211,8 +235,8 @@ func startViewsProject(t *testing.T, opts controlplane.Options) *viewsProject {
 	t.Helper()
 	state := testState(t)
 	opts.CardsDir = state.CardsDir()
-	vp := &viewsProject{t: t, state: state, opts: opts}
-	vp.restart()
+	vp := &viewsProject{state: state, opts: opts}
+	require.NoError(t, vp.restart())
 	t.Cleanup(func() {
 		if cp := vp.cp.Load(); cp != nil {
 			assert.NoError(t, cp.Close())
@@ -221,7 +245,10 @@ func startViewsProject(t *testing.T, opts controlplane.Options) *viewsProject {
 	api := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
 		case r.Method == http.MethodPost && r.URL.Path == "/__test/restart":
-			vp.restart()
+			if err := vp.restart(); err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
 			w.WriteHeader(http.StatusNoContent)
 		case r.Method == http.MethodPost && r.URL.Path == "/__test/link":
 			link, err := vp.link()
@@ -249,25 +276,21 @@ func startViewsProject(t *testing.T, opts controlplane.Options) *viewsProject {
 // plane and project server on the same state, as starting Surla again does:
 // saved changes and agent credentials survive, while every session and
 // everything the old control plane held only in memory, such as the Story
-// evaluation, ends.
-func (vp *viewsProject) restart() {
+// evaluation, ends. It returns construction or cleanup failures to the caller,
+// which must stop before using a project that failed to start.
+func (vp *viewsProject) restart() error {
 	if old := vp.cp.Load(); old != nil {
 		if err := old.Close(); err != nil {
-			vp.t.Errorf("stop the control plane: %v", err)
+			return fmt.Errorf("stop the control plane: %w", err)
 		}
 	}
 	cp, err := controlplane.New(vp.opts)
 	if err != nil {
-		vp.t.Errorf("start the control plane: %v", err)
-		return
+		return fmt.Errorf("start the control plane: %w", err)
 	}
 	server, err := NewServer(vp.state, func() {}, fixtureTeamDependencies(vp.state))
 	if err != nil {
-		vp.t.Errorf("start the project server: %v", err)
-		if closeErr := cp.Close(); closeErr != nil {
-			vp.t.Errorf("stop the control plane: %v", closeErr)
-		}
-		return
+		return errors.Join(fmt.Errorf("start the project server: %w", err), cp.Close())
 	}
 	application := http.NewServeMux()
 	application.Handle("GET /views", controlplane.ViewsPage())
@@ -276,6 +299,7 @@ func (vp *viewsProject) restart() {
 	vp.cp.Store(cp)
 	vp.server.Store(server)
 	vp.handler.Store(&handler)
+	return nil
 }
 
 // agent adds an agent in role to the project and returns its credential.
@@ -332,6 +356,15 @@ func requireViewsPageTools(t *testing.T) string {
 // throws.
 func runViewsPageScript(t *testing.T, node string, input map[string]any, body string) {
 	t.Helper()
+	runViewsPageScriptWithTimeout(t, node, input, body, 3*time.Minute)
+}
+
+// runViewsPageScriptWithTimeout gives a real owner operation its full allowance
+// without extending the shorter bound used by ordinary scripted page tests.
+func runViewsPageScriptWithTimeout(
+	t *testing.T, node string, input map[string]any, body string, timeout time.Duration,
+) {
+	t.Helper()
 	raw, err := json.Marshal(input)
 	require.NoError(t, err)
 	inputPath := filepath.Join(t.TempDir(), "input.json")
@@ -350,7 +383,7 @@ async function main() {
 }
 main().then(() => { process.stdout.write("PAGE-PASSED"); process.exit(0); }, (err) => { console.error(err && err.stack || err); process.exit(1); });
 `
-	ctx, cancel := context.WithTimeout(t.Context(), 3*time.Minute)
+	ctx, cancel := context.WithTimeout(t.Context(), timeout)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, node, "-e", script, inputPath)
 	cmd.Env = append(os.Environ(), "CI=true")
