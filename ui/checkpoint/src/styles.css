@@ -726,3 +726,19 @@ summary { cursor: pointer; font-weight: 500; user-select: none; }
 }
 .surla-live-prompts { margin: 0.4rem 0; padding-inline-start: 1.2rem; }
 .surla-live-prompts > li { margin-block: 0.25rem; }
+
+/* Build keeps the shared card width; state and actions share its header and
+   wrap in source order at narrow widths. Commands scroll only within pre. */
+.surla-build-header { flex-wrap: wrap; align-items: center; }
+.surla-build-header h3 { margin-inline-end: auto; }
+.surla-build-badges { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+.surla-build-header .surla-build-actions { margin: 0; }
+.surla-build-roles { list-style: none; padding-inline-start: 0; }
+.surla-build-roles li { margin-block: 0.2rem; }
+.surla-build-roles p { margin-block: 0; }
+.surla-build-actions { margin-block: 0.75rem; }
+.surla-build-merge ol { padding-inline-start: 1.25rem; }
+.surla-build-merge li { min-inline-size: 0; margin-block-end: 0.75rem; }
+.surla-build-merge pre { margin-block: 0.4rem 0.25rem; white-space: pre; overflow-wrap: normal; }
+.surla-build-merge pre code { padding: 0; background: transparent; white-space: pre; overflow-wrap: normal; word-break: normal; }
+.surla-build-merge li p { font-size: 0.875rem; color: var(--muted-foreground); }

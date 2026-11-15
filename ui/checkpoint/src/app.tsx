@@ -16,7 +16,7 @@ import { createRoot, Root } from "react-dom/client";
 import { ArchitecturePreviewView, IncomingChangeCardView } from "./components/c4-graph";
 import { ChangeListView } from "./components/change-list";
 import { CP1EditorView } from "./components/cp1-editor";
-import { BuildSectionView, BuildStartReceipt } from "./components/build";
+import { BuildSectionView, BuildStartReceipt, runBelongsToBuild } from "./components/build";
 import { VerificationView } from "./components/cp4-verification";
 import { ProposedRevisionView } from "./components/proposal";
 import { ApproveResultControl } from "./components/cp5-approve";
@@ -29,6 +29,7 @@ import { TraceDrawer, TraceFilter } from "./components/trace-drawer";
 import { isDraftDirty, PreservedDraft } from "./context/cp1-draft";
 import {
   ArchitecturePreviewResult,
+  ApprovalItem,
   ChangeCardResult,
   ChangeBuild,
   ChangeList,
@@ -37,10 +38,13 @@ import {
   LiveTargetStatus,
   ModelConnection,
   OperationName,
+  OpenBuildRefusal,
+  ReplacedBuild,
   ProposedRevisionItem,
   Operations,
   ROUTES,
   ServerFailure,
+  StartedBuild,
   StoryRefreshResult,
   TraceList,
   TeamRoleState,
@@ -568,6 +572,10 @@ export function bootstrapViewsPage() {
   let buildReadAgain = false;
   let buildGeneration = 0;
   let buildStartReceipt: BuildStartReceipt | null = null;
+  // A validated refusal may describe another change, whose build cannot be
+  // obtained from the selected card's get_build result.
+  let openBuildRefusal: OpenBuildRefusal | null = null;
+  let buildConfirmationRead: ((build: ChangeBuild["build"]) => void) | null = null;
   // Findings belong to one build/report/verdict, rather than only a change ID.
   let buildFindings: TestFindings | null = null;
   let findingsBasis: string | null = null;
@@ -807,6 +815,8 @@ export function bootstrapViewsPage() {
     sessionState = "ended";
     buildStartReceipt = null;
     buildStartError = null;
+    openBuildRefusal = null;
+    buildConfirmationRead = null;
     teamStartReceipt = null;
     buildGeneration++;
     rootEl.dataset.session = "ended";
@@ -1052,6 +1062,10 @@ export function bootstrapViewsPage() {
         proposalAnswers: keepProposalAnswers(ed.proposalAnswers, before, after),
         proposalError: before?.request_revision === after?.request_revision ? ed.proposalError : null,
       };
+      if ((ed.card.approval ?? ed.card.unverified_approval?.approval)?.report_digest !==
+          (latest.approval ?? latest.unverified_approval?.approval)?.report_digest) {
+        refreshVerificationObservations(latest.change_id);
+      }
       if (after !== undefined && before?.request_revision !== after.request_revision) {
         statusEl.textContent =
           (before === undefined
@@ -1156,6 +1170,36 @@ export function bootstrapViewsPage() {
     if (latest !== undefined) readVerification(latest.run_id, changeId);
     if (selectedVerificationChangeId === changeId && selectedRunId !== null &&
         selectedRunId !== latest?.run_id) readVerification(selectedRunId, changeId);
+    const card = activeEditor?.card;
+    const approval = card?.approval ?? card?.unverified_approval?.approval;
+    if (card?.change_id === changeId && approval !== undefined && knownTakingBuild(changeId) !== null &&
+        !listRequestErrors.has(changeId) && approvalRunFor(card, approval) === null) {
+      refreshVerificationsInBackground(changeId);
+    }
+  }
+
+  // knownTakingBuild excludes retained facts while the owner observation is
+  // stale, failed or being replaced. Saved results remain readable throughout.
+  function knownTakingBuild(changeId: string): StartedBuild | null {
+    return sessionState === "active" && !waitTroubleShown && buildChangeId === changeId &&
+      buildSnapshot?.state === "started" && buildReadError === null &&
+      !hasPending("get_build", changeId) && !hasPending("start_build", changeId) &&
+      !Array.from(pendingCalls).some((call) => call.op === "drop_build")
+      ? buildSnapshot : null;
+  }
+
+  // approvalRunFor correlates every recorded input to an eligible owner run;
+  // neither recency nor equal commits alone establishes this build's identity.
+  function approvalRunFor(card: ChangeCardResult, approval: ApprovalItem): VerificationStatusResult | null {
+    const build = knownTakingBuild(card.change_id);
+    if (build === null) return null;
+    for (const run of runsById.values()) {
+      if (runInputsKnown(run) && runBelongsToBuild(card.change_id, build, run) &&
+          run.request_revision === card.request_revision && run.candidate_commit === approval.candidate_commit &&
+          run.suite_commit === approval.suite_commit && run.test_source.source === approval.test_source.source &&
+          run.state.type === "completed" && run.state.value.report.report_digest === approval.report_digest) return run;
+    }
+    return null;
   }
 
   // latestVerificationFor uses the run identity supplied by the change owner.
@@ -1374,7 +1418,7 @@ export function bootstrapViewsPage() {
       .map((role) => role.role);
   }
 
-  // focusCurrentViewHeading recovers focus only when a focused team control
+  // focusCurrentViewHeading recovers focus only when a focused view control
   // disappears. Each rendered region starts with its current view's heading.
   function focusCurrentViewHeading() {
     const region = activeResult !== null && activeResult.kind !== "cp1-incoming-card"
@@ -1384,6 +1428,18 @@ export function bootstrapViewsPage() {
       heading.tabIndex = -1;
       heading.focus();
     }
+  }
+
+  // focusChangeDecisions is a stable removal callback for approval commands,
+  // including when their editor remains beside another view.
+  function focusChangeDecisions() {
+    editorRegionEl.focus();
+  }
+
+  // focusVerificationHeading keeps a removed result command in its own view.
+  // Its stable identity avoids ref cleanup during unrelated renders.
+  function focusVerificationHeading() {
+    focusResult("#surla-cp4-title");
   }
 
   // startTeamAgents is an explicit window request. Its dated receipt describes
@@ -1420,6 +1476,8 @@ export function bootstrapViewsPage() {
       buildReadError = null;
       buildStartReceipt = null;
       buildStartError = null;
+      openBuildRefusal = null;
+      buildConfirmationRead = null;
       followBuildFindings();
       buildGeneration++;
     }
@@ -1454,24 +1512,57 @@ export function bootstrapViewsPage() {
             if (before === null || JSON.stringify(before) !== JSON.stringify(result.build)) {
               verificationGeneration++;
               if (before !== null) refreshOpenCard(changeId);
-              refreshVerificationObservations(changeId);
             }
+            // An unchanged build still settles the dependency that held
+            // approval history back while this read was pending.
+            refreshVerificationObservations(changeId);
             followBuildFindings();
+            readBlockingBuild();
+            const ready = buildConfirmationRead;
+            buildConfirmationRead = null;
+            ready?.(result.build);
           }
         }
         done();
       },
       (message) => {
-        if (relevant() && generation === buildGeneration) buildReadError = message;
+        if (relevant() && generation === buildGeneration) {
+          buildReadError = message;
+          buildConfirmationRead = null;
+        }
         done();
       }
     );
+  }
+
+  // readBlockingBuild follows the known blocking change through the existing
+  // build-read chain. A read of the selected change alone cannot clear it.
+  // A different open start invalidates the existing question's exact identity.
+  function readBlockingBuild() {
+    const refused = openBuildRefusal;
+    if (refused === null || refused.change_id === activeEditor?.card.change_id ||
+        sessionState !== "active" || hasPending("get_build", refused.change_id)) return;
+    const selected = activeEditor?.card.change_id;
+    callServer("get_build", { change_id: refused.change_id }, refused.change_id,
+      (result) => {
+        if (sessionState !== "active" || activeEditor?.card.change_id !== selected ||
+            openBuildRefusal !== refused || result.change_id !== refused.change_id) return;
+        if (result.build.state !== "started" ||
+            (result.build.taking.state !== "building" && result.build.taking.state !== "passed")) {
+          openBuildRefusal = null;
+          buildStartError = null;
+        } else {
+          openBuildRefusal = { ...refused, build: result.build };
+        }
+      },
+      () => { /* Keep the last owner-reported blocker until a successful read. */ });
   }
 
   // currentFindingsBasis names the exact saved verdict whose text is useful.
   // Assignment reads can change independently without invalidating that text.
   function currentFindingsBasis(): string | null {
     if (buildChangeId === null || buildSnapshot?.state !== "started" ||
+        (buildSnapshot.taking.state !== "building" && buildSnapshot.taking.state !== "passed") ||
         buildSnapshot.test_writer.tests.state !== "needs_changes" ||
         hasPending("start_build", buildChangeId)) return null;
     return JSON.stringify([
@@ -1545,14 +1636,36 @@ export function bootstrapViewsPage() {
     );
   }
 
+  // prepareBuildConfirmation reads the saved build before the control asks
+  // the user to replace it. A failed or invalidated read cannot ask.
+  function prepareBuildConfirmation(ready: (build: ChangeBuild["build"]) => void) {
+    if (activeEditor === null || sessionState !== "active") return;
+    buildConfirmationRead = ready;
+    readBuild(activeEditor.card.change_id);
+  }
+
+  // retainOpenBuild uses only a failure body validated by the generated route.
+  function retainOpenBuild(failure: Failure) {
+    const body = failure.body;
+    if (body !== undefined && "build" in body &&
+        (body.name === "previous_change_open" || body.name === "unfinished_build_open" || body.name === "build_changed")) {
+      openBuildRefusal = body;
+      if (body.change_id === buildChangeId) {
+        buildSnapshot = { ...body.build, state: "started" };
+        buildReadError = null;
+      }
+    }
+  }
+
   // startBuild sends the revision displayed by the editor only after its
   // Build control has obtained any required replacement confirmation.
-  function startBuild() {
+  function startBuild(replaces?: ReplacedBuild) {
     const ed = activeEditor;
     if (ed === null || sessionState !== "active" || editorBusy ||
         ed.card.status !== "confirmed" || ed.incomingCard !== null ||
         buildChangeId !== ed.card.change_id || buildSnapshot === null ||
-        buildReadError !== null || hasPending("start_build", ed.card.change_id)) return;
+        buildReadError !== null || hasPending("start_build", ed.card.change_id) ||
+        (openBuildRefusal !== null && openBuildRefusal.change_id !== ed.card.change_id)) return;
     const changeId = ed.card.change_id;
     const revision = ed.card.request_revision;
     if (buildSnapshot.state === "started" && buildSnapshot.in_force &&
@@ -1565,15 +1678,17 @@ export function bootstrapViewsPage() {
     };
     // The Build control binds its confirmation to this exact saved start;
     // synchronous rendering invalidates that question when the start changes.
-    if (buildSnapshot.state === "started" &&
-        (buildSnapshot.in_force || buildSnapshot.taking.state === "building")) {
-      request.replaces = { change_id: changeId, started_at: buildSnapshot.started_at };
+    if (buildSnapshot.state === "started" && buildSnapshot.taking.state === "building") {
+      if (replaces?.change_id !== changeId || replaces.started_at !== buildSnapshot.started_at) return;
+      request.replaces = replaces;
     }
     const begun = new Date().toISOString();
     buildGeneration++;
     verificationGeneration++;
     buildStartReceipt = null;
     buildStartError = null;
+    openBuildRefusal = null;
+    buildConfirmationRead = null;
     buildFindings = null;
     findingsBasis = null;
     findingsError = null;
@@ -1607,11 +1722,48 @@ export function bootstrapViewsPage() {
         if (sessionState === "active" && activeEditor?.card.change_id === changeId) {
           buildStartError = (failure.kind === "server"
             ? "Build did not start. " : "Could not confirm whether the build started. ") + message;
-          statusEl.textContent = buildStartError;
+          retainOpenBuild(failure);
+          statusEl.textContent = openBuildRefusal !== null && openBuildRefusal.change_id !== changeId
+            ? "" : buildStartError;
           readBuild(changeId);
         }
       }
     );
+  }
+
+  // dropBuild submits only the start shown by the separate Drop question.
+  // The owner refuses stale consent and returns the current build's facts.
+  function dropBuild(target: ReplacedBuild) {
+    if (sessionState !== "active" || editorBusy || activeEditor === null ||
+        hasPending("drop_build", target.change_id)) return;
+    const shown = target.change_id === buildChangeId && buildSnapshot?.state === "started"
+      ? buildSnapshot : openBuildRefusal?.change_id === target.change_id ? openBuildRefusal.build : null;
+    if (shown === null || shown.started_at !== target.started_at ||
+        (shown.taking.state !== "building" && shown.taking.state !== "passed")) return;
+    const selected = activeEditor.card.change_id;
+    buildGeneration++;
+    buildConfirmationRead = null;
+    buildStartError = null;
+    callServer("drop_build", target, target.change_id,
+      (result) => {
+        if (sessionState !== "active" || activeEditor?.card.change_id !== selected) return;
+        buildGeneration++;
+        openBuildRefusal = null;
+        if (result.change_id === buildChangeId) buildSnapshot = result.build;
+        statusEl.textContent = "The build was dropped. Ask the guide to refresh its draft before revising; adopt the revision, then build.";
+        readBuild(selected);
+        refreshOpenCard(selected);
+        refreshVerificationObservations(selected);
+        readTeam();
+      },
+      (message, failure) => {
+        if (sessionState !== "active" || activeEditor?.card.change_id !== selected) return;
+        buildStartError = "Could not drop the build. " + message;
+        retainOpenBuild(failure);
+        statusEl.textContent = openBuildRefusal !== null && openBuildRefusal.change_id !== selected
+          ? "" : buildStartError;
+        readBuild(selected);
+      });
   }
 
   // showTeamPane sends only the registered role the user selected; the server
@@ -2175,6 +2327,11 @@ export function bootstrapViewsPage() {
         ) : null}
         <CP1EditorView
           card={ed.card}
+          build={knownTakingBuild(ed.card.change_id)}
+          approvalRun={ed.card.approval !== undefined ? approvalRunFor(ed.card, ed.card.approval) : null}
+          unverifiedApprovalRun={ed.card.unverified_approval !== undefined ? approvalRunFor(ed.card, ed.card.unverified_approval.approval) : null}
+          approvalRunsLoading={hasPending("list_verifications", ed.card.change_id)}
+          approvalRunsError={listRequestErrors.get(ed.card.change_id) ?? null}
           buildRevisionNotice={buildRevisionNotice}
           buildSection={
             <BuildSectionView
@@ -2187,6 +2344,8 @@ export function bootstrapViewsPage() {
               error={buildReadError}
               actionError={buildStartError}
               starting={hasPending("start_build", ed.card.change_id)}
+              dropping={Array.from(pendingCalls).some((call) => call.op === "drop_build")}
+              openBuildRefusal={openBuildRefusal}
               disabled={sessionState !== "active" || editorBusy}
               dirty={isDraftDirty(ed.card, ed.draftAnswers, ed.draftExamples)}
               startReceipt={buildStartReceipt}
@@ -2201,7 +2360,10 @@ export function bootstrapViewsPage() {
               onRefresh={() => readBuild(ed.card.change_id)}
               onReadFindings={readBuildFindings}
               onBuild={startBuild}
+              onPrepareBuild={prepareBuildConfirmation}
+              onDrop={dropBuild}
               onOpenTeam={openTeam}
+              onOpenChange={openChange}
               onReviewCheck={() => { if (latestCheck !== null) reviewSavedCheck(latestCheck); }}
             />
           }
@@ -2241,6 +2403,7 @@ export function bootstrapViewsPage() {
           onLoadLatestCard={handleLoadLatestCard}
           onLoadVerifications={() => handleListVerifications(ed.card.change_id)}
           onOpenStory={openStory}
+          onFocusedControlRemoved={focusChangeDecisions}
         />
 
         </>
@@ -2422,6 +2585,7 @@ export function bootstrapViewsPage() {
           <>
             <VerificationView
               changeId={effectiveChangeId}
+              build={knownTakingBuild(effectiveChangeId)}
               run={displayedRun}
               inputsKnown={displayedRun !== null && runInputsKnown(displayedRun)}
               listedRuns={listedRuns}
@@ -2442,9 +2606,11 @@ export function bootstrapViewsPage() {
                 else openChange(effectiveChangeId);
               }}
               onReturnToChangeCard={handleReturnToChangeCard}
+              onFocusedControlRemoved={focusVerificationHeading}
             />
             {displayedRun ? (
               <ApproveResultControl
+                build={buildChangeId === displayedRun.change_id && buildSnapshot?.state === "started" ? buildSnapshot : null}
                 run={displayedRun}
                 inputsKnown={runInputsKnown(displayedRun)}
                 card={
@@ -2850,7 +3016,22 @@ export function bootstrapViewsPage() {
         ) {
           return;
         }
-        const preserved = activeEditor ? snapshotUnsavedDraft(activeEditor) : null;
+        let preserved = activeEditor ? snapshotUnsavedDraft(activeEditor) : null;
+        // Different-card navigation keeps unsent proposal choices as existing
+        // preserved text. Adoption does not run this navigation-only capture.
+        if (activeEditor !== null && activeEditor.card.change_id !== loadedCard.change_id) {
+          const proposal = activeEditor.card.proposed_revision;
+          const lines: string[] = [];
+          if (proposal !== undefined) for (const question of proposal.ambiguities ?? []) {
+            const answer = activeEditor.proposalAnswers[question.id];
+            if (answer !== undefined) lines.push("[Proposed " + proposal.request_revision + "] " +
+              question.id + " (" + question.question + ")=" + answer);
+          }
+          if (lines.length > 0) preserved = {
+            fromRevision: preserved?.fromRevision ?? activeEditor.card.request_revision,
+            lines: [...(preserved?.lines ?? []), ...lines],
+          };
+        }
         const prior = nextPriorCard(activeEditor, loadedCard);
         if (activeEditor) {
           activeEditor = {
@@ -3139,6 +3320,7 @@ export function bootstrapViewsPage() {
       return;
     }
     const changeId = activeEditor.card.change_id;
+    listRequestErrors.delete(changeId);
     statusEl.textContent = "Loading the latest saved Change Card...";
     callEditorServer(
       "get_change",
@@ -3170,6 +3352,7 @@ export function bootstrapViewsPage() {
             : latestCard.unverified_approval
             ? "Showing the saved approval record (current promotion inputs could not be verified)."
             : "Showing the latest card without a current approval.";
+          refreshVerificationObservations(changeId);
           return;
         }
         const preserved = activeEditor ? snapshotUnsavedDraft(activeEditor) : null;
