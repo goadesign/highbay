@@ -51,8 +51,6 @@ func TestGenerateCodeKeepsTheStoryTablesTests(t *testing.T) {
 	if testing.Short() {
 		t.Skip("runs the sandboxed Go toolchain; the full suite (go test without -short) covers it")
 	}
-	ctx, cancel := context.WithTimeout(t.Context(), 3*time.Minute)
-	defer cancel()
 	stories := []designeval.StorySummary{{
 		Name:  "Refunds",
 		Flows: []designeval.StoryFlow{{Key: "refund-over-limit", Title: "A refund over the limit.", Complete: true}},
@@ -69,6 +67,8 @@ func TestGenerateCodeKeepsTheStoryTablesTests(t *testing.T) {
 		WorkspaceDir: workspace, CardsDir: t.TempDir(),
 		Evaluator: designeval.NewEvaluatorInDir(t.TempDir()),
 	})
+	ctx, cancel := context.WithTimeout(t.Context(), 3*time.Minute)
+	defer cancel()
 	eval := "eval"
 	res, err := cp.GenerateCode(
 		WithPrincipal(ctx, Principal{ID: "developer@example.com", CallerID: "developer@example.com", Kind: CallerUser}),

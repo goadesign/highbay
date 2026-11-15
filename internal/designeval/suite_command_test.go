@@ -173,7 +173,7 @@ func TestGeneratedProgramRunsTheStarterSuite(t *testing.T) {
 	if testing.Short() {
 		t.Skip("runs the sandboxed Go toolchain; the full suite (go test without -short) covers it")
 	}
-	evalInput, fullTree := starterEvalModule(t)
+	evalInput, fullTree, _ := starterEvalModule(t)
 	stories := []StorySummary{{Name: "Refunds", Flows: []StoryFlow{{Key: "refund-over-limit", Title: "A refund over the limit.", Complete: true}}}}
 	gen, err := generateWithTable(t, evalInput, stories)
 	require.NoError(t, err)
@@ -239,7 +239,7 @@ func TestAModuleOnlyAtTheLayoutsPathGetsNoProgram(t *testing.T) {
 	if testing.Short() {
 		t.Skip("runs the sandboxed Go toolchain; the full suite (go test without -short) covers it")
 	}
-	evalInput, _ := starterEvalModule(t)
+	evalInput, _, _ := starterEvalModule(t)
 	without := maps.Clone(evalInput)
 	for p := range without {
 		if path.Dir(p) == AcceptancePackage {
