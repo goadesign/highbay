@@ -1206,6 +1206,16 @@ started with.
 
 ### Verification and approval
 
+#### Go workspace policy
+
+| Built source | Workspace selection for toolchain lookup, dependency download and compilation |
+| --- | --- |
+| Application binaries and tests, and suites from stored verification settings | Use the checkout's internal `go.work` when present; ignore a workspace above the checkout. |
+| Surla-written tests, both report checks and verification suites | Use `GOWORK=off`, including when `go.work` exists in the checkout root or the test module. The module's `go.mod` and `go.sum` own its dependencies. |
+
+Both policies keep the full checkout, including sibling files used by local
+module replacements.
+
 #### `verify_change`
 
 `POST /changes/{change_id}/verifications`. **Input:** `change_id`,

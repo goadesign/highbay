@@ -333,19 +333,22 @@ func Build(ctx context.Context, spec BuildSpec, run func(*exec.Cmd) error) error
 	if err != nil {
 		return err
 	}
-	stageDir, err := os.MkdirTemp(b.spec.WorkDir, ".surla-stage-*")
+	return b.build(ctx, workFile(b.spec.SourceDir, b.spec.ModuleDir), run)
+}
+
+// BuildModule compiles a standalone module offline with GOWORK=off, ignoring
+// go.work files both inside the module and elsewhere in SourceDir. Surla's
+// report checker and written-test verification use it so the module's go.mod
+// and go.sum own its dependencies. SourceDir remains the whole checkout, so
+// local replacements can still read sibling modules. Path validation, fixed
+// offline environment, staging, publication, runner lifetime and errors are
+// otherwise the same as Build.
+func BuildModule(ctx context.Context, spec BuildSpec, run func(*exec.Cmd) error) error {
+	b, err := resolveBuild(spec)
 	if err != nil {
-		return fmt.Errorf("create build staging directory: %w", err)
+		return err
 	}
-	defer os.RemoveAll(stageDir)
-	stageOut := filepath.Join(stageDir, filepath.Base(b.spec.Out))
-	if err := b.goRun(ctx, run, stageOut, "build", "-trimpath"); err != nil {
-		return fmt.Errorf("build of %s: %w", spec.Package, err)
-	}
-	if err := publishStagedOutput(stageOut, b.spec.Out); err != nil {
-		return fmt.Errorf("build of %s: %w", spec.Package, err)
-	}
-	return nil
+	return b.build(ctx, "off", run)
 }
 
 // BuildTest compiles the tests of one candidate package into a single test
@@ -401,7 +404,7 @@ func BuildTest(ctx context.Context, spec BuildSpec, run func(*exec.Cmd) error) (
 	}
 	defer os.RemoveAll(stageDir)
 	stageOut := filepath.Join(stageDir, filepath.Base(out))
-	if err := b.goRun(ctx, run, stageOut, "test", "-c", "-trimpath", "-vet=off"); err != nil {
+	if err := b.goRun(ctx, run, workFile(b.spec.SourceDir, b.spec.ModuleDir), stageOut, "test", "-c", "-trimpath", "-vet=off"); err != nil {
 		return false, fmt.Errorf("test build of %s: %w", spec.Package, err)
 	}
 	return publishStagedTestBinary(stageOut, out)
@@ -608,6 +611,24 @@ func publishStagedOutputAllowMissing(stagedOut, outPath string, allowMissing boo
 	return true, nil
 }
 
+// build owns the shared compile, staging and publication of Build and
+// BuildModule. goWork is the fixed-off or checkout-selected value of its entry.
+func (b resolvedBuild) build(ctx context.Context, goWork string, run func(*exec.Cmd) error) error {
+	stageDir, err := os.MkdirTemp(b.spec.WorkDir, ".surla-stage-*")
+	if err != nil {
+		return fmt.Errorf("create build staging directory: %w", err)
+	}
+	defer os.RemoveAll(stageDir)
+	stageOut := filepath.Join(stageDir, filepath.Base(b.spec.Out))
+	if err := b.goRun(ctx, run, goWork, stageOut, "build", "-trimpath"); err != nil {
+		return fmt.Errorf("build of %s: %w", b.spec.Package, err)
+	}
+	if err := publishStagedOutput(stageOut, b.spec.Out); err != nil {
+		return fmt.Errorf("build of %s: %w", b.spec.Package, err)
+	}
+	return nil
+}
+
 // goRun runs `go <args> -o <outPath> <Package>` from ModuleDir with the
 // toolchain's output in LogFile. It returns run's error unwrapped, an "open
 // build log" error when LogFile cannot be opened, or an error when opening
@@ -615,14 +636,14 @@ func publishStagedOutputAllowMissing(stagedOut, outPath string, allowMissing boo
 // the build offline (GOPROXY=off), on the selected toolchain (GOTOOLCHAIN=local),
 // unable to change go.mod (-mod=readonly), with cgo off as Surla's builds have
 // always had it (turning it on would link C code into binaries that never had
-// it), with only a go.work file inside the source root (GoWork), with TMPDIR
-// and GOCACHE inside WorkDir and no HOME, so os.UserConfigDir leaves Go
+// it), with the entry-selected workspace or fixed off for BuildModule, and
+// with TMPDIR and GOCACHE inside WorkDir and no HOME, so os.UserConfigDir leaves Go
 // telemetry disabled without starting its detached child process. A build gets
 // -buildvcs=false, so it never runs git and stamps no version-control facts.
 func (b resolvedBuild) goRun(
 	ctx context.Context,
 	run func(*exec.Cmd) error,
-	outPath string,
+	goWork, outPath string,
 	args ...string,
 ) error {
 	spec := b.spec
@@ -652,13 +673,13 @@ func (b resolvedBuild) goRun(
 	goArgs = append(goArgs, "-o", outPath, spec.Package)
 	cmd := exec.CommandContext(ctx, filepath.Join(spec.GOROOT, "bin", "go"), goArgs...)
 	cmd.Dir = spec.ModuleDir
-	cmd.Env = b.buildEnv()
+	cmd.Env = b.buildEnv(goWork)
 	cmd.Stdout, cmd.Stderr = logFile, logFile
 	return run(cmd)
 }
 
-// buildEnv returns the fixed environment of every Go build.
-func (b resolvedBuild) buildEnv() []string {
+// buildEnv fixes the offline build environment with its entry's workspace.
+func (b resolvedBuild) buildEnv(goWork string) []string {
 	spec := b.spec
 	return []string{
 		"PATH=" + filepath.Join(spec.GOROOT, "bin") + ":/usr/bin:/bin",
@@ -667,7 +688,7 @@ func (b resolvedBuild) buildEnv() []string {
 		"GOCACHE=" + filepath.Join(spec.WorkDir, "gocache"),
 		"GOMODCACHE=" + spec.ModCache,
 		"GOTOOLCHAIN=local",
-		"GOWORK=" + workFile(spec.SourceDir, spec.ModuleDir),
+		"GOWORK=" + goWork,
 		"GOFLAGS=-mod=readonly",
 		"GOPROXY=off",
 		"GONOSUMDB=*",

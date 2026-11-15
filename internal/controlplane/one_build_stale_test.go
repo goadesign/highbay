@@ -45,6 +45,7 @@ func TestOneBuildLateConsumersPreserveTheNewOpenRecord(t *testing.T) {
 		newer.TestWriter = testWriterAssignment{State: testsAssigned}
 		require.NoError(t, cp.cards.saveOpenBuild(newer))
 	}()
+	makeBuildFixtureBuilderCopy(t, cp)
 	before := readBuildFile(t, cp, "y")
 	checker := newReportChecker(cp)
 	oldReport := reportIdentityOf(old)

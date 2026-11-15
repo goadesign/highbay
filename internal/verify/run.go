@@ -338,15 +338,24 @@ func Prepare(ctx context.Context, p Plan) (Prepared, error) {
 	if _, err := resolveInside(suiteModuleDir, p.SuiteCommand); err != nil {
 		return Prepared{}, stageError(StageCheckout, summaryPlan, fmt.Errorf("suite command %q: %w", p.SuiteCommand, err))
 	}
-	suiteToolchain, err := r.prepareBuild(ctx, "suite", suiteDir, suiteModuleDir, p.WorkDir)
+	// Written tests are an independent module. Stored evaluators retain the
+	// checkout's workspace for lookup, download and compile alike.
+	buildSuite := candidate.BuildModule
+	var suiteToolchain buildToolchain
+	if p.Tests == TestsWritten {
+		suiteToolchain, err = r.prepareGoBuild(ctx, "suite", suiteModuleDir, p.WorkDir, "off")
+	} else {
+		suiteToolchain, err = r.prepareBuild(ctx, "suite", suiteDir, suiteModuleDir, p.WorkDir)
+		buildSuite = candidate.Build
+	}
 	if err != nil {
 		return Prepared{}, stageError(StageBuild, summarySuiteBuild, err)
 	}
-	// The suite builds the same way as the candidate; its module may replace
-	// sibling modules in its checkout.
+	// Keep the full checkout for both sources, including local replacements
+	// into sibling modules, even when the written test module ignores go.work.
 	suiteBin := filepath.Join(suiteBinDir, "suite")
 	suiteLog := filepath.Join(r.evidenceDir, "build-suite.log")
-	if err := candidate.Build(ctx, candidate.BuildSpec{
+	if err := buildSuite(ctx, candidate.BuildSpec{
 		SourceDir: suiteDir, ModuleDir: suiteModuleDir, Package: p.SuiteCommand, Out: suiteBin,
 		GOROOT: suiteToolchain.goroot, ModCache: suiteToolchain.modCache, WorkDir: suiteToolchain.workDir,
 		LogFile: suiteLog,
@@ -591,6 +600,13 @@ func (r *runner) prepareBuild(ctx context.Context, label, sourceDir, moduleDir, 
 	if err != nil {
 		return buildToolchain{}, fmt.Errorf("find the %s build's workspace: %w", label, err)
 	}
+	return r.prepareGoBuild(ctx, label, moduleDir, workDir, goWork)
+}
+
+// prepareGoBuild uses one selected workspace value for download and toolchain
+// lookup. Checkout builds pass candidate.GoWork's value; written tests pass off.
+// It retains the caller's proxy/credential environment and separate evidence.
+func (r *runner) prepareGoBuild(ctx context.Context, label, moduleDir, workDir, goWork string) (buildToolchain, error) {
 	env := append(gitenv.WithoutRedirects(os.Environ()), "GOWORK="+goWork)
 	if err := r.run(ctx, "go-mod-download-"+label, moduleDir, env, "go", "mod", "download"); err != nil {
 		return buildToolchain{}, fmt.Errorf("download %s modules: %w", label, err)

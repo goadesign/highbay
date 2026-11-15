@@ -243,7 +243,7 @@ func NewChecker(evaluator *designeval.Evaluator, workDir string) *Checker {
 	return &Checker{
 		evaluator:  evaluator,
 		workDir:    workDir,
-		build:      candidate.Build,
+		build:      candidate.BuildModule,
 		list:       candidate.Output,
 		download:   downloadDependencies,
 		buildLimit: buildProgramLimit,
@@ -959,8 +959,8 @@ func writeStoryTests(root *os.Root, table []byte) (err error) {
 }
 
 // listScenarios builds the suite command of the module at the slash path
-// modulePath of the snapshot src within c.buildLimit, runs its --describe
-// within c.listLimit, each in its own process group, and returns the
+// modulePath of the snapshot src with workspaces off within c.buildLimit,
+// runs its --describe within c.listLimit, each in its own process group, and returns the
 // scenarios it declares, or findings when the module's dependencies, its build
 // or its listing fail or reach their limit. Dependencies that cannot be
 // downloaded for a cause outside the author's changes to wc are an error

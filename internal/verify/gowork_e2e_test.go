@@ -48,3 +48,21 @@ func TestPrepareUsesCommittedNestedWorkspace(t *testing.T) {
 		})
 	}
 }
+
+// TestPrepareWrittenSuiteIgnoresBothWorkspaces builds the same committed
+// app/lib checkout with a written suite: the app needs its workspace, while
+// eval ignores both workspaces and resolves its local sibling replacement.
+func TestPrepareWrittenSuiteIgnoresBothWorkspaces(t *testing.T) {
+	if testing.Short() {
+		t.Skip("native written-suite preparation runs in hosted e2e")
+	}
+	t.Setenv("GOPROXY", "off")
+	t.Setenv("GOTOOLCHAIN", "local")
+	repo, commit := writtenWorkspaceVerificationFixture(t)
+	plan := goWorkVerificationPlan(repo, commit, filepath.Join(t.TempDir(), "run"))
+	plan.Tests = TestsWritten
+	prepared, err := Prepare(t.Context(), plan)
+	require.NoError(t, err)
+	assert.Len(t, prepared.Binding.Artifacts, 1)
+	assert.FileExists(t, prepared.SuiteBin)
+}

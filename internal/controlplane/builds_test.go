@@ -205,6 +205,7 @@ func TestAssignmentsSayWhetherTheirBuildIsInForce(t *testing.T) {
 	_, err = testwriter.MakeCopy(t.Context(), cp.currentWorkspaceDir(), testwriter.TestsRole,
 		testwriter.TestsRole.Branch(build.Number), build.Base)
 	require.NoError(t, err)
+	makeBuildFixtureBuilderCopy(t, cp)
 	reads := []struct {
 		name string
 		read func() (bool, error)
