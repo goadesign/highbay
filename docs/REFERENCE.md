@@ -2065,6 +2065,21 @@ and the remaining root packages. The page partition uses the same test-name
 pattern as the short checks; the remaining packages still run their own page
 tests.
 
+The **Full / docker-check** job also runs on pushes to `main`, `team-start`
+and `builder-copy`, nightly and on manual runs, on Ubuntu with its Docker
+engine. It executes the dependency-repair journey through one project server:
+the initialized builder copy passes, missing `go.sum` entries are repaired,
+and workspace-only checksums are repaired into `go.work.sum`, while the user's
+project stays unchanged. It uses `-tags=e2e,docker` and selects
+`TestCheckProjectRepairsDependenciesOnOneServer`; pull requests do not run it.
+The package alarm is 40 minutes and the job backstop is 50 minutes, including
+cold compilation and downloads. These are execution bounds, not measured
+completion times. To run the journey locally with a running Docker engine:
+
+```bash
+go test -race -count=1 -timeout 40m -tags=e2e,docker -run '^TestCheckProjectRepairsDependenciesOnOneServer$' ./cmd/surla
+```
+
 All full suites run nightly at 07:17 UTC and on a manual **Run workflow**
 request (`CI=true gh workflow run ci.yml --ref <branch> </dev/null`). This adds
 the other modules' complete tests and the verifier, generation, starter and
