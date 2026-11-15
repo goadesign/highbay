@@ -18,6 +18,29 @@ func commitBuilderCandidateFixture(
 	t *testing.T, cp *ControlPlane, card *gensurla.ChangeCardResult,
 ) string {
 	t.Helper()
+	folder := readBuilderFixture(t, cp, card)
+	writeWorkspaceFiles(t, folder, map[string]string{
+		"builder_work.txt": "Implement the agreed change.\n",
+	})
+	return commitAllForLayoutTest(t, folder)
+}
+
+// readBuilderCandidateFixture places a test's authored immutable candidate on
+// its numbered build branch after the real assignment read. Its caller starts
+// the build at the intended project base; no saved build facts are rewritten.
+func readBuilderCandidateFixture(
+	t *testing.T, cp *ControlPlane, card *gensurla.ChangeCardResult, candidate string,
+) string {
+	t.Helper()
+	folder := readBuilderFixture(t, cp, card)
+	gitForLayoutTest(t, folder, "reset", "--hard", candidate)
+	return folder
+}
+
+// readBuilderFixture opens the build's real builder copy and reads its
+// assignment through the owner, without changing tests or making a candidate.
+func readBuilderFixture(t *testing.T, cp *ControlPlane, card *gensurla.ChangeCardResult) string {
+	t.Helper()
 	cp.mu.RLock()
 	build, found, err := cp.cards.loadOpenBuild()
 	cp.mu.RUnlock()
@@ -35,8 +58,5 @@ func commitBuilderCandidateFixture(
 	require.NoError(t, err)
 	require.True(t, assignment.Read)
 	require.Equal(t, copy.Project(), assignment.WorkingFolder)
-	writeWorkspaceFiles(t, copy.Project(), map[string]string{
-		"builder_work.txt": "Implement the agreed change.\n",
-	})
-	return commitAllForLayoutTest(t, copy.Project())
+	return copy.Project()
 }
