@@ -142,7 +142,7 @@ Surla needs:
   `surla preview`, `surla gen`, starting a build with a test writer and
   verification.
 - **Go 1.27.3** or newer.
-- **Git**, with your name and address configured (`git config --global
+- **Git 2.45 or newer**, with your name and address configured (`git config --global
   user.name` and `user.email`). Surla records accepted tests as commits under
   your identity, and a build is refused until Git has one.
 - **Docker Desktop**, or another local Docker engine. The builder builds and
@@ -162,7 +162,9 @@ curl -fsSL https://raw.githubusercontent.com/goadesign/chorus/main/scripts/insta
 ```
 
 Before it creates anything, `surla` checks for Herdr, Chorus and its version,
-and the browser opener. A missing Herdr or Chorus program is named with its
+the browser opener, and Git's `--no-lazy-fetch` capability, introduced in
+Git 2.45. An unsupported Git is named by its version with the step to install
+a newer one. A missing Herdr or Chorus program is named with its
 install command, or with the folder to add to your `PATH` when it is
 installed in `~/.local/bin`; an older Chorus is named with
 `chorus update -yes`. The reference says what each prerequisite is for under

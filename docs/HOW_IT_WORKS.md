@@ -105,6 +105,10 @@ You type `surla` in the project folder. The [README](../README.md#install)
 lists what to install first; when Herdr or Chorus is missing, `surla` stops
 and prints the command that installs it, or the folder to add to your
 `PATH` when the program is installed in `~/.local/bin`.
+Before creating project state or starting a server, it also checks that the
+Git on `PATH` supports `--no-lazy-fetch` (Git 2.45 or newer). An unsupported
+Git is named by its version; install a newer Git and run `surla` again. This
+check works in an empty folder, before you make a Git repository.
 
 1. **The server starts.** The first time, `surla` prints `Created a new,
    empty Surla project. Moving or renaming this folder starts a new project.`
