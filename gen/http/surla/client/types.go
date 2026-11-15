@@ -2540,6 +2540,25 @@ type InitProjectForbiddenResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
+// GenerateCodeWorkingCopyBusyResponseBody is the type of the "surla" service
+// "generate_code" endpoint HTTP response body for the "working_copy_busy"
+// error.
+type GenerateCodeWorkingCopyBusyResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
 // GenerateCodeNoBuildResponseBody is the type of the "surla" service
 // "generate_code" endpoint HTTP response body for the "no_build" error.
 type GenerateCodeNoBuildResponseBody struct {
@@ -2711,6 +2730,25 @@ type GenerateCodeForbiddenResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
+// CheckProjectWorkingCopyBusyResponseBody is the type of the "surla" service
+// "check_project" endpoint HTTP response body for the "working_copy_busy"
+// error.
+type CheckProjectWorkingCopyBusyResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
 // CheckProjectNoBuildResponseBody is the type of the "surla" service
 // "check_project" endpoint HTTP response body for the "no_build" error.
 type CheckProjectNoBuildResponseBody struct {
@@ -2849,6 +2887,25 @@ type CheckProjectUnavailableResponseBody struct {
 // CheckProjectForbiddenResponseBody is the type of the "surla" service
 // "check_project" endpoint HTTP response body for the "forbidden" error.
 type CheckProjectForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// UpdateDependenciesWorkingCopyBusyResponseBody is the type of the "surla"
+// service "update_dependencies" endpoint HTTP response body for the
+// "working_copy_busy" error.
+type UpdateDependenciesWorkingCopyBusyResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -10196,6 +10253,21 @@ func NewGenerateCodeResultOK(body *GenerateCodeResponseBody) *surla.GenerateCode
 	return v
 }
 
+// NewGenerateCodeWorkingCopyBusy builds a surla service generate_code endpoint
+// working_copy_busy error.
+func NewGenerateCodeWorkingCopyBusy(body *GenerateCodeWorkingCopyBusyResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
 // NewGenerateCodeNoBuild builds a surla service generate_code endpoint
 // no_build error.
 func NewGenerateCodeNoBuild(body *GenerateCodeNoBuildResponseBody) *goa.ServiceError {
@@ -10347,6 +10419,21 @@ func NewCheckProjectResultOK(body *CheckProjectResponseBody) *surla.CheckProject
 	return v
 }
 
+// NewCheckProjectWorkingCopyBusy builds a surla service check_project endpoint
+// working_copy_busy error.
+func NewCheckProjectWorkingCopyBusy(body *CheckProjectWorkingCopyBusyResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
 // NewCheckProjectNoBuild builds a surla service check_project endpoint
 // no_build error.
 func NewCheckProjectNoBuild(body *CheckProjectNoBuildResponseBody) *goa.ServiceError {
@@ -10481,6 +10568,21 @@ func NewUpdateDependenciesResultOK(body *UpdateDependenciesResponseBody) *surla.
 	v.FilesWritten = make([]string, len(body.FilesWritten))
 	for i, val := range body.FilesWritten {
 		v.FilesWritten[i] = val
+	}
+
+	return v
+}
+
+// NewUpdateDependenciesWorkingCopyBusy builds a surla service
+// update_dependencies endpoint working_copy_busy error.
+func NewUpdateDependenciesWorkingCopyBusy(body *UpdateDependenciesWorkingCopyBusyResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
 	}
 
 	return v
@@ -15567,6 +15669,30 @@ func ValidateInitProjectForbiddenResponseBody(body *InitProjectForbiddenResponse
 	return
 }
 
+// ValidateGenerateCodeWorkingCopyBusyResponseBody runs the validations defined
+// on GenerateCodeWorkingCopyBusyResponseBody
+func ValidateGenerateCodeWorkingCopyBusyResponseBody(body *GenerateCodeWorkingCopyBusyResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
 // ValidateGenerateCodeNoBuildResponseBody runs the validations defined on
 // GenerateCodeNoBuildResponseBody
 func ValidateGenerateCodeNoBuildResponseBody(body *GenerateCodeNoBuildResponseBody) (err error) {
@@ -15793,6 +15919,30 @@ func ValidateGenerateCodeForbiddenResponseBody(body *GenerateCodeForbiddenRespon
 	return
 }
 
+// ValidateCheckProjectWorkingCopyBusyResponseBody runs the validations defined
+// on CheckProjectWorkingCopyBusyResponseBody
+func ValidateCheckProjectWorkingCopyBusyResponseBody(body *CheckProjectWorkingCopyBusyResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
 // ValidateCheckProjectNoBuildResponseBody runs the validations defined on
 // CheckProjectNoBuildResponseBody
 func ValidateCheckProjectNoBuildResponseBody(body *CheckProjectNoBuildResponseBody) (err error) {
@@ -15974,6 +16124,30 @@ func ValidateCheckProjectUnavailableResponseBody(body *CheckProjectUnavailableRe
 // ValidateCheckProjectForbiddenResponseBody runs the validations defined on
 // CheckProjectForbiddenResponseBody
 func ValidateCheckProjectForbiddenResponseBody(body *CheckProjectForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateUpdateDependenciesWorkingCopyBusyResponseBody runs the validations
+// defined on UpdateDependenciesWorkingCopyBusyResponseBody
+func ValidateUpdateDependenciesWorkingCopyBusyResponseBody(body *UpdateDependenciesWorkingCopyBusyResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}

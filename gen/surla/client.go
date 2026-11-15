@@ -431,6 +431,7 @@ func (c *Client) InitProject(ctx context.Context, p *InitProjectPayload) (res *I
 
 // GenerateCode calls the "generate_code" endpoint of the "surla" service.
 // GenerateCode may return the following errors:
+//   - "working_copy_busy" (type *goa.ServiceError): The builder's working copy is in use by another operation; call this tool again after that operation finishes. Nothing was changed.
 //   - "no_build" (type *goa.ServiceError): No build is open, or the user dropped it: stop work on it and make no more edits or commits for it. The user starts builds on the views page.
 //   - "assignment_unread" (type *goa.ServiceError): A build started after your last read of your assignment: stop your current work, then call get_builder_assignment for its change.
 //   - "copy_off_branch" (type *CopyOffBranch): Your working copy is not on the build's branch: the message states its branch, the build's branch and what is uncommitted, and the goal. Put your work there with git, commit it, and call again.
@@ -452,6 +453,7 @@ func (c *Client) GenerateCode(ctx context.Context, p *GenerateCodePayload) (res 
 
 // CheckProject calls the "check_project" endpoint of the "surla" service.
 // CheckProject may return the following errors:
+//   - "working_copy_busy" (type *goa.ServiceError): The builder's working copy is in use by another operation; call this tool again after that operation finishes. Nothing was changed.
 //   - "no_build" (type *goa.ServiceError): No build is open, or the user dropped it: stop work on it and make no more edits or commits for it. The user starts builds on the views page.
 //   - "assignment_unread" (type *goa.ServiceError): A build started after your last read of your assignment: stop your current work, then call get_builder_assignment for its change.
 //   - "copy_off_branch" (type *CopyOffBranch): Your working copy is not on the build's branch: the message states its branch, the build's branch and what is uncommitted, and the goal. Put your work there with git, commit it, and call again.
@@ -473,6 +475,7 @@ func (c *Client) CheckProject(ctx context.Context) (res *CheckProjectResult, err
 // UpdateDependencies calls the "update_dependencies" endpoint of the "surla"
 // service.
 // UpdateDependencies may return the following errors:
+//   - "working_copy_busy" (type *goa.ServiceError): The builder's working copy is in use by another operation; call this tool again after that operation finishes. Nothing was changed.
 //   - "no_build" (type *goa.ServiceError): No build is open, or the user dropped it: stop work on it and make no more edits or commits for it. The user starts builds on the views page.
 //   - "assignment_unread" (type *goa.ServiceError): A build started after your last read of your assignment: stop your current work, then call get_builder_assignment for its change.
 //   - "copy_off_branch" (type *CopyOffBranch): Your working copy is not on the build's branch: the message states its branch, the build's branch and what is uncommitted, and the goal. Put your work there with git, commit it, and call again.

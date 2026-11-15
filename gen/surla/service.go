@@ -2451,6 +2451,11 @@ func MakeDesignChangedOutside(err error) *goa.ServiceError {
 	return goa.NewServiceError(err, "design_changed_outside", false, false, false)
 }
 
+// MakeWorkingCopyBusy builds a goa.ServiceError from an error.
+func MakeWorkingCopyBusy(err error) *goa.ServiceError {
+	return goa.NewServiceError(err, "working_copy_busy", false, false, false)
+}
+
 // MakeMissingModules builds a goa.ServiceError from an error.
 func MakeMissingModules(err error) *goa.ServiceError {
 	return goa.NewServiceError(err, "missing_modules", false, false, false)
@@ -2504,11 +2509,6 @@ func MakeCopyFolderInUse(err error) *goa.ServiceError {
 // MakeTestsBranchInUse builds a goa.ServiceError from an error.
 func MakeTestsBranchInUse(err error) *goa.ServiceError {
 	return goa.NewServiceError(err, "tests_branch_in_use", false, false, false)
-}
-
-// MakeWorkingCopyBusy builds a goa.ServiceError from an error.
-func MakeWorkingCopyBusy(err error) *goa.ServiceError {
-	return goa.NewServiceError(err, "working_copy_busy", false, false, false)
 }
 
 // MakeSandboxUnavailable builds a goa.ServiceError from an error.

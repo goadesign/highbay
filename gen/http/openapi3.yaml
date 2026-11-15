@@ -14915,6 +14915,8 @@ paths:
                                 timeout: false
                 "409":
                     description: |-
+                        working_copy_busy: The builder's working copy is in use by another operation; call this tool again after that operation finishes. Nothing was changed.
+
                         no_build: No build is open, or the user dropped it: stop work on it and make no more edits or commits for it. The user starts builds on the views page.
 
                         assignment_unread: A build started after your last read of your assignment: stop your current work, then call get_builder_assignment for its change.
@@ -14955,6 +14957,14 @@ paths:
                                         id: 123abc
                                         message: parameter 'p' must be an integer
                                         name: no_build
+                                        temporary: false
+                                        timeout: false
+                                working_copy_busy:
+                                    value:
+                                        fault: false
+                                        id: 123abc
+                                        message: parameter 'p' must be an integer
+                                        name: working_copy_busy
                                         temporary: false
                                         timeout: false
                                 working_folder_missing:
@@ -15107,6 +15117,8 @@ paths:
                                 timeout: false
                 "409":
                     description: |-
+                        working_copy_busy: The builder's working copy is in use by another operation; call this tool again after that operation finishes. Nothing was changed.
+
                         no_build: No build is open, or the user dropped it: stop work on it and make no more edits or commits for it. The user starts builds on the views page.
 
                         assignment_unread: A build started after your last read of your assignment: stop your current work, then call get_builder_assignment for its change.
@@ -15147,6 +15159,14 @@ paths:
                                         id: 123abc
                                         message: parameter 'p' must be an integer
                                         name: no_build
+                                        temporary: false
+                                        timeout: false
+                                working_copy_busy:
+                                    value:
+                                        fault: false
+                                        id: 123abc
+                                        message: parameter 'p' must be an integer
+                                        name: working_copy_busy
                                         temporary: false
                                         timeout: false
                                 working_folder_missing:
@@ -15327,6 +15347,8 @@ paths:
                                 timeout: false
                 "409":
                     description: |-
+                        working_copy_busy: The builder's working copy is in use by another operation; call this tool again after that operation finishes. Nothing was changed.
+
                         no_build: No build is open, or the user dropped it: stop work on it and make no more edits or commits for it. The user starts builds on the views page.
 
                         assignment_unread: A build started after your last read of your assignment: stop your current work, then call get_builder_assignment for its change.
@@ -15377,6 +15399,14 @@ paths:
                                         id: 123abc
                                         message: parameter 'p' must be an integer
                                         name: no_build
+                                        temporary: false
+                                        timeout: false
+                                working_copy_busy:
+                                    value:
+                                        fault: false
+                                        id: 123abc
+                                        message: parameter 'p' must be an integer
+                                        name: working_copy_busy
                                         temporary: false
                                         timeout: false
                                 working_folder_missing:
