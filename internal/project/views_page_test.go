@@ -332,6 +332,15 @@ func requireViewsPageTools(t *testing.T) string {
 // throws.
 func runViewsPageScript(t *testing.T, node string, input map[string]any, body string) {
 	t.Helper()
+	runViewsPageScriptWithTimeout(t, node, input, body, 3*time.Minute)
+}
+
+// runViewsPageScriptWithTimeout gives a real owner operation its full allowance
+// without extending the shorter bound used by ordinary scripted page tests.
+func runViewsPageScriptWithTimeout(
+	t *testing.T, node string, input map[string]any, body string, timeout time.Duration,
+) {
+	t.Helper()
 	raw, err := json.Marshal(input)
 	require.NoError(t, err)
 	inputPath := filepath.Join(t.TempDir(), "input.json")
@@ -350,7 +359,7 @@ async function main() {
 }
 main().then(() => { process.stdout.write("PAGE-PASSED"); process.exit(0); }, (err) => { console.error(err && err.stack || err); process.exit(1); });
 `
-	ctx, cancel := context.WithTimeout(t.Context(), 3*time.Minute)
+	ctx, cancel := context.WithTimeout(t.Context(), timeout)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, node, "-e", script, inputPath)
 	cmd.Env = append(os.Environ(), "CI=true")

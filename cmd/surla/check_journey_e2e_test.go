@@ -31,9 +31,14 @@ import (
 	"github.com/goadesign/surla/internal/verify"
 )
 
-// journeyCallTimeout bounds one MCP call; the first check pulls the image and
-// downloads the starter's modules.
-const journeyCallTimeout = 10 * time.Minute
+const (
+	// journeyCallTimeout bounds initialization and output reads, which do not
+	// run the container check operation.
+	journeyCallTimeout = 10 * time.Minute
+	// journeyCheckTimeout outlasts the owner's check allowance, up to two
+	// minutes of container cancellation/removal, and result reporting.
+	journeyCheckTimeout = defaultCheckTimeout + 3*time.Minute
+)
 
 // Journey A adds rsc.io/binaryregexp v0.2.0, a small published module with
 // no dependencies, the way a developer edits go.mod by hand: a requirement
@@ -142,7 +147,7 @@ func TestCheckProjectRepairsDependenciesOnOneServer(t *testing.T) {
 
 	args, err := gensurla.EncodeInitProjectPayload(&gensurla.InitProjectPayload{ModulePath: "example.com/shop"})
 	require.NoError(t, err)
-	initialized, err := gensurla.DecodeInitProjectResult(journeyCall(t, client, "init_project", args))
+	initialized, err := gensurla.DecodeInitProjectResult(journeyCall(t, client, "init_project", args, journeyCallTimeout))
 	require.NoError(t, err)
 	dir := initialized.Dir
 
@@ -215,11 +220,13 @@ func TestCheckProjectRepairsDependenciesOnOneServer(t *testing.T) {
 	})
 }
 
-// journeyCall runs one MCP tool call that must complete without a tool error
-// and returns its structured result.
-func journeyCall(t *testing.T, client *genmcpsurla.Client, name string, args []byte) json.RawMessage {
+// journeyCall runs one MCP tool call within the caller's owner allowance and
+// returns its structured result only when the call completes without an error.
+func journeyCall(
+	t *testing.T, client *genmcpsurla.Client, name string, args []byte, timeout time.Duration,
+) json.RawMessage {
 	t.Helper()
-	ctx, cancel := context.WithTimeout(t.Context(), journeyCallTimeout)
+	ctx, cancel := context.WithTimeout(t.Context(), timeout)
 	defer cancel()
 	result, err := client.ToolsCall(ctx, &genmcpsurla.ToolsCallPayload{Name: name, Arguments: args})
 	require.NoError(t, err)
@@ -232,7 +239,7 @@ func journeyCall(t *testing.T, client *genmcpsurla.Client, name string, args []b
 // journeyCheck calls check_project.
 func journeyCheck(t *testing.T, client *genmcpsurla.Client) *gensurla.CheckProjectResult {
 	t.Helper()
-	res, err := gensurla.DecodeCheckProjectResult(journeyCall(t, client, "check_project", []byte("{}")))
+	res, err := gensurla.DecodeCheckProjectResult(journeyCall(t, client, "check_project", []byte("{}"), journeyCheckTimeout))
 	require.NoError(t, err)
 	return res
 }
@@ -240,7 +247,7 @@ func journeyCheck(t *testing.T, client *genmcpsurla.Client) *gensurla.CheckProje
 // journeyUpdate calls update_dependencies.
 func journeyUpdate(t *testing.T, client *genmcpsurla.Client) *gensurla.UpdateDependenciesResult {
 	t.Helper()
-	res, err := gensurla.DecodeUpdateDependenciesResult(journeyCall(t, client, "update_dependencies", []byte("{}")))
+	res, err := gensurla.DecodeUpdateDependenciesResult(journeyCall(t, client, "update_dependencies", []byte("{}"), journeyCheckTimeout))
 	require.NoError(t, err)
 	return res
 }
@@ -253,7 +260,7 @@ func journeyOutput(t *testing.T, client *genmcpsurla.Client, opID string) string
 	for {
 		args, err := gensurla.EncodeReadCheckOutputPayload(payload)
 		require.NoError(t, err)
-		page, err := gensurla.DecodeCheckOutputPage(journeyCall(t, client, "read_check_output", args))
+		page, err := gensurla.DecodeCheckOutputPage(journeyCall(t, client, "read_check_output", args, journeyCallTimeout))
 		require.NoError(t, err)
 		out.WriteString(page.Text)
 		if page.NextCursor == nil {
