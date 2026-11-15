@@ -110,6 +110,11 @@ const (
 	// milliseconds to seconds, whereas a lock still there after these retries
 	// is a stale lock.
 	recordLockRetries = 5
+	// recordLockRetryPause bounds the wait between Record attempts on
+	// index.lock: 500 ms lets a running Git command finish without holding
+	// reportMu and the working-copy turn for more than a few seconds across
+	// recordLockRetries attempts.
+	recordLockRetryPause = 500 * time.Millisecond
 
 	// stepOpenCopy, stepSandbox, stepNoCommonBase, stepLimit and stepFailure
 	// are the user's steps of a check that could not run, one per cause; each
@@ -372,12 +377,13 @@ func (r *reportChecker) answersTo(id reportIdentity) (bool, error) {
 }
 
 // recordAccepted records v on branch with message, repeating Record alone up to
-// recordLockRetries times when it fails because of index.lock. Any other error,
-// or checkCtx ending, stops immediately.
+// recordLockRetries times when it fails because of index.lock, waiting at most
+// recordLockRetryPause between attempts while checkCtx is live. Any other
+// error, or checkCtx ending, stops immediately.
 func (r *reportChecker) recordAccepted(
 	checkCtx context.Context, copy buildCopy, v testwriter.Verdict, branch, message string,
 ) (string, error) {
-	pause := min(r.retry, 500*time.Millisecond)
+	pause := min(r.retry, recordLockRetryPause)
 	for attempt := 0; ; attempt++ {
 		commit, err := copy.Record(checkCtx, v, branch, message)
 		var lockErr *testwriter.IndexLockError
