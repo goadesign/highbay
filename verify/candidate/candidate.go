@@ -1,6 +1,6 @@
 // Package candidate builds and runs the code Surla's coding agents write.
-// Build and BuildTest compile a module offline to a staging path and publish
-// the result as a regular file. Pin copies a binary into a read-only,
+// Build, BuildTest and BuildModule compile a module offline to a staging path
+// and publish the result as a regular file. Pin copies a binary into a read-only,
 // digest-named store, and Exec, Run and Output start only a pinned binary
 // whose bytes still match its digest, with an explicit environment and its own
 // state directory as working directory, HOME and TMPDIR.
@@ -8,8 +8,8 @@
 // These are ordinary processes of the user who runs Surla: they can read and
 // write the user's files, use the network and start children; nothing here
 // confines them. The caller decides which process group owns them: Build,
-// BuildTest, Run and Output run the prepared command with the caller's run
-// function, and Exec starts it in the caller's own process group. A process
+// BuildTest, BuildModule, Run and Output run the prepared command with the
+// caller's run function, and Exec starts it in the caller's own process group. A process
 // that starts its own session or process group leaves that group, and no
 // caller's cleanup stops it.
 package candidate
@@ -77,7 +77,8 @@ type (
 		// SourceDir is the caller's source root, such as the candidate module
 		// or a whole checkout whose modules replace each other. A go.work file
 		// in ModuleDir, in SourceDir or in a folder between them applies to
-		// the build; one above SourceDir does not (GoWork).
+		// Build and BuildTest; one above SourceDir does not (GoWork).
+		// BuildModule ignores workspace files and retains the same source root.
 		SourceDir string
 		// ModuleDir is the directory of the module being built. It must
 		// resolve inside SourceDir.

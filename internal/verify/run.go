@@ -186,7 +186,7 @@ func IsCommitID(commit string) bool {
 // the CP4 report bound to everything that was tested. The report is also
 // written to ReportDir as <digest>.json.
 //
-// Both builds go through candidate.Build offline: they download nothing
+// Both builds compile offline through candidate: they download nothing
 // (GOPROXY=off, -mod=readonly) and use the toolchain and module cache
 // prepareBuild resolved. A build is an ordinary process of the user, so a
 // committed link or replace directive that leaves the checkout reads the

@@ -35,6 +35,9 @@ func TestChangeVersionFollowsBuildReadsAndReports(t *testing.T) {
 	}{
 		{name: "start", changed: true, run: func() error {
 			_, err := cp.StartBuild(user, &gensurla.StartBuildPayload{ChangeID: "chg", RequestRevision: card.RequestRevision})
+			if err == nil {
+				makeBuildFixtureBuilderCopy(t, cp)
+			}
 			return err
 		}},
 		{name: "build read", run: func() error {

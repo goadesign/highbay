@@ -756,6 +756,7 @@ func TestOnlyTheTestWriterAndTheUserReadFindings(t *testing.T) {
 		assert.NotContains(t, string(result), finding, "get_build over MCP as %s", token)
 		assert.False(t, listToolNames(t, srv.URL, token)["get_test_findings"], "no tool reads the findings")
 	}
+	makeBuildFixtureBuilderCopy(t, cp)
 	status, body := httpCall(t, srv.URL, "builder", http.MethodGet, "/assignments/builder/chg", "")
 	require.Equal(t, http.StatusOK, status, body)
 	assert.NotContains(t, body, finding)

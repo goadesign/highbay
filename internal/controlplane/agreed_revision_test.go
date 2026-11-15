@@ -661,6 +661,7 @@ func TestBuildsFollowTheAgreedRevision(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, flowKeys(storySummaryItems(sampleAdoptedStories())), flowKeys(tests.Stories), "the build holds the agreed Story, not the proposal's")
 
+	makeBuildFixtureBuilderCopy(t, cp)
 	inForce := func() map[string]bool {
 		t.Helper()
 		build := mustStartedBuild(t, cp, agreedUser, "chg")

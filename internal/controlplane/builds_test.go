@@ -111,6 +111,7 @@ func TestBuildingAgainReplacesTheBuildAndClearsReads(t *testing.T) {
 	_, err := cp.StartBuild(user, &gensurla.StartBuildPayload{ChangeID: "chg", RequestRevision: first.RequestRevision})
 	require.NoError(t, err)
 
+	makeBuildFixtureBuilderCopy(t, cp)
 	listed, err := cp.ListBuilderAssignments(builder)
 	require.NoError(t, err)
 	require.Len(t, listed.Assignments, 1)
@@ -406,6 +407,7 @@ func TestAssignmentsListOnlyTheCallersOwnChanges(t *testing.T) {
 	assert.Equal(t, "previous_change_open", refusal.Name)
 	assert.Equal(t, "older", refusal.ChangeID)
 
+	makeBuildFixtureBuilderCopy(t, cp)
 	builds, err := cp.ListBuilderAssignments(asCaller("alice@example.com", CallerBuilder))
 	require.NoError(t, err)
 	require.Len(t, builds.Assignments, 1)
@@ -614,6 +616,7 @@ func TestBuildOperationsFollowTheRoleTable(t *testing.T) {
 	status, body := httpCall(t, srv.URL, "user", http.MethodPost, "/changes/chg/build", revision)
 	require.Equal(t, http.StatusOK, status, body)
 
+	makeBuildFixtureBuilderCopy(t, cp)
 	// callers lists the fixture tokens the contract allows, independently of
 	// the policy table under test.
 	operations := []struct {

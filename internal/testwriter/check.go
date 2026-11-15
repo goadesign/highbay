@@ -65,7 +65,7 @@ type (
 		// share. The owner removes it.
 		workDir string
 		// build and list run a check's two steps that compile and run the
-		// author's code: candidate.Build and candidate.Output, each through
+		// author's code: candidate.BuildModule and candidate.Output, each through
 		// runInGroup. Tests wrap them with stand-ins that sleep.
 		build func(context.Context, candidate.BuildSpec, func(*exec.Cmd) error) error
 		list  func(context.Context, candidate.Artifact, candidate.Spec, int, func(*exec.Cmd) error) ([]byte, error)
@@ -370,7 +370,7 @@ func (c *Checker) Prepare(
 // writes the suite module's Story table there again from the stories (so the
 // author cannot change what is required) and generates its folder with it,
 // downloads the module's dependencies, compiles the generated suite command with
-// candidate.Build, lists the scenarios it declares by running its --describe
+// candidate.BuildModule, lists the scenarios it declares by running its --describe
 // with candidate.Output, reading standard output alone, each in its own
 // process group, and compares them with the required ones by the generator's
 // own names.
