@@ -580,10 +580,11 @@ async function takingScenario(input, facts, views) {
       return {
         width: document.documentElement.clientWidth,
         document_width: document.documentElement.scrollWidth,
-        commands: Array.from(region.querySelectorAll(".surla-build-merge li > code:first-child"), (node) => node.textContent),
+        commands: Array.from(region.querySelectorAll(".surla-build-merge pre"), (node) => node.textContent),
         rewrite_warning: region.textContent.includes("commit where this build started") && region.textContent.includes("these merges bring that history back"),
         overflowing: [region, ...region.querySelectorAll("*")].filter((node) => {
-          if (!node.getClientRects().length) return false;
+          // Exact command lines intentionally scroll inside their focusable pre.
+          if (!node.getClientRects().length || node.closest(".surla-build-merge pre")) return false;
           const box = node.getBoundingClientRect();
           return box.left < -1 || box.right > document.documentElement.clientWidth + 1 || node.scrollWidth > node.clientWidth + 1;
         }).map((node) => node.id || node.tagName),

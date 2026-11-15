@@ -49,8 +49,9 @@ func TestViewsPageHistoricalTakingUsesTheEligibleResultsOwnCommits(t *testing.T)
 				ChangeID: card.ChangeID, RequestRevision: card.RequestRevision,
 			})
 			require.NoError(t, err)
-			candidate, tests := strings.Repeat("1", 40), strings.Repeat("2", 40)
+			tests := strings.Repeat("2", 40)
 			acceptTests(t, cp, card.ChangeID, tests)
+			candidate := commitBuilderCandidateFixture(t, cp, card)
 			report := passingReport(t, card.RequestRevision, candidate, reportSpec{
 				SuiteID: "orders_acceptance", SuiteCommit: tests, Environment: "sim",
 				Artifacts: map[string]string{"orders": strings.Repeat("a", 64)},
@@ -113,7 +114,7 @@ func TestViewsPageHistoricalTakingUsesTheEligibleResultsOwnCommits(t *testing.T)
 				require.NoError(t, cp.cards.save(record))
 			})
 			eligible := mode == "eligible" || mode == "at_start" || mode == "after_start"
-			runPageScript(t, ps, map[string]any{"mode": mode, "old": old.RunID, "eligible": eligible}, `
+			runPageScript(t, ps, map[string]any{"mode": mode, "old": old.RunID, "eligible": eligible, "candidate": candidate}, `
 const history = "/changes/chg-history/verifications";
 if (input.mode === "history_failure") await control(origin, "reply", { key: "GET " + history, status: 503,
   body: { name: "unavailable", id: "history-read", message: "Saved verification history unavailable.", fault: false, temporary: true, timeout: false } });
@@ -127,7 +128,7 @@ if (input.mode !== "history_failure") {
 }
 await until(() => page.sent("GET", history)[0].status !== undefined && !page.text("#surla-cp5-approval").includes("Reading saved verification runs"), "history read did not settle");
 const ownCommands = (region) => Array.from(region.querySelectorAll(".surla-build-merge li > pre > code"), (node) => node.textContent);
-const expected = ["git merge " + "1".repeat(40), "git merge " + "2".repeat(40)];
+const expected = ["git merge " + input.candidate, "git merge " + "2".repeat(40)];
 if (input.eligible) {
   expect(JSON.stringify(ownCommands(page.$("#surla-cp5-approval"))) === JSON.stringify(expected), "recorded approval used the newest pass instead of its own C then T");
   expect(page.text("#surla-cp5-approval").includes("commit where this build started"), "eligible approval lost the rewrite warning");
