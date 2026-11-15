@@ -1,6 +1,5 @@
 // Package designeval holds the standalone Goa/Goa-AI/Model/Story evaluator
-// source template compiled and executed inside verify/candidate.Exec's
-// OS-enforced sandbox.
+// source template compiled and run with verify/candidate.Run.
 package designeval
 
 import (
@@ -10,7 +9,7 @@ import (
 
 const (
 	// harnessMainTemplate is the standalone evaluator program compiled and
-	// executed inside candidate.Exec against the temporary design package.
+	// run with candidate.Run against the temporary design package.
 	harnessMainTemplate = harnessMainHead + harnessMainHelpers + harnessGeneratedHelpers
 
 	// harnessStoryOutputField adds the Story summary slice to the harness
