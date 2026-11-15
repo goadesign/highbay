@@ -22,6 +22,7 @@ func TestViewsPageBuildRequiresASeparateRebuildConfirmation(t *testing.T) {
 	card := buildableChange(t, cp, "chg")
 	ps := startPageServer(t, cp)
 	ps.act("builder-read", func() {
+		makeBuildFixtureBuilderCopy(t, cp)
 		_, err := cp.GetBuilderAssignment(asCaller(pageOwner, CallerBuilder), &gensurla.GetBuilderAssignmentPayload{ChangeID: "chg"})
 		require.NoError(t, err)
 	})
@@ -87,13 +88,9 @@ func TestViewsPageRebuildEscapeDuringRefresh(t *testing.T) {
 			cp.changesWait = 400 * time.Millisecond
 			cp.changesPoll = 20 * time.Millisecond
 			card := buildableChange(t, cp, "chg")
-			var replaces *gensurla.ReplacedBuild
 			start := func() {
-				result, err := cp.StartBuild(asCaller(pageOwner, CallerUser), &gensurla.StartBuildPayload{
-					ChangeID: card.ChangeID, RequestRevision: card.RequestRevision, Replaces: replaces,
-				})
+				_, err := startBuildAgain(t, cp, asCaller(pageOwner, CallerUser), card.ChangeID, card.RequestRevision)
 				require.NoError(t, err)
-				replaces = &gensurla.ReplacedBuild{ChangeID: card.ChangeID, StartedAt: result.Build.StartedAt}
 			}
 			start()
 			ps := startPageServer(t, cp)

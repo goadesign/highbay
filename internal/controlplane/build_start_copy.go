@@ -14,7 +14,7 @@ import (
 
 type (
 	// buildCopy is the narrow execution boundary of the test writer's working
-	// copy: a start prepares a copy it made or found on its branch, and the
+	// copy: an assignment read prepares the copy on its branch, and the
 	// report checker opens, prepares, checks and records it. The production
 	// owner is testwriter; deterministic stand-ins exercise ordering and races.
 	buildCopy interface {
@@ -25,8 +25,8 @@ type (
 		Prepare(ctx context.Context, branch, base string, stories []designeval.StorySummary) error
 		// Check judges the copy against stories on branch at base.
 		Check(ctx context.Context, branch, base string, stories []designeval.StorySummary) (testwriter.Verdict, error)
-		// Record commits an accepted verdict on branch and returns the commit.
-		Record(ctx context.Context, v testwriter.Verdict, branch, message string) (string, error)
+		// Record commits an accepted verdict only on checkedTip of branch.
+		Record(ctx context.Context, v testwriter.Verdict, branch, checkedTip, message string) (string, error)
 	}
 	// writerBuildCopy keeps one opened copy and the suite checked before opening.
 	writerBuildCopy struct {
@@ -82,6 +82,8 @@ func (w writerBuildCopy) Check(
 }
 
 // Record commits an accepted verdict through its owner.
-func (w writerBuildCopy) Record(ctx context.Context, v testwriter.Verdict, branch, message string) (string, error) {
-	return testwriter.Record(ctx, v, branch, message)
+func (w writerBuildCopy) Record(
+	ctx context.Context, v testwriter.Verdict, branch, checkedTip, message string,
+) (string, error) {
+	return testwriter.Record(ctx, v, branch, checkedTip, message)
 }

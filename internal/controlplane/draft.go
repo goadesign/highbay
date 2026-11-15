@@ -21,6 +21,15 @@ import (
 	"github.com/goadesign/surla/internal/designversion"
 )
 
+// committedDesignCanonicalError preserves a failed canonicalization's actual
+// Git path separately from parser positions, which //line directives can alter.
+type committedDesignCanonicalError struct {
+	// file is the authoritative module-relative path selected by the walk.
+	file string
+	// cause retains the original parser/formatter error for existing callers.
+	cause error
+}
+
 const (
 	// draftFolderName is the guide's module, outside the project's Git files.
 	draftFolderName = ".surla-draft"
@@ -30,30 +39,54 @@ const (
 	draftMarkerPrefix = "# surla draft "
 )
 
-// readDraftSnapshot serializes the list and draft read, including a missing or
-// old-generation draft's remake. The workspace lifetime gate keeps Close from
-// releasing the card store while the draft owns it.
+// Error preserves the original diagnostic text for existing draft consumers.
+func (e *committedDesignCanonicalError) Error() string { return e.cause.Error() }
+
+// Unwrap preserves typed parser causes without trusting their reported paths.
+func (e *committedDesignCanonicalError) Unwrap() error { return e.cause }
+
+// readDraftSnapshot reads the evaluator's canonical snapshot and its provenance
+// through the same materialization and lock owner used by UpdateDraft.
 func (c *ControlPlane) readDraftSnapshot(
 	ctx context.Context, wsDir string, wsDev, wsIno uint64,
-) (files map[string]string, saved madeFromRecord, retErr error) {
+) (files map[string]string, saved madeFromRecord, err error) {
+	err = c.withDraftSnapshot(ctx, wsDir, wsDev, wsIno, func(_ *os.Root, draft *os.Root, list madeFromRecord) error {
+		var readErr error
+		files, readErr = designversion.ReadDraft(filepath.Join(wsDir, draftFolderName), draft)
+		saved = list
+		if readErr != nil {
+			return gensurla.MakeUnprocessable(readErr)
+		}
+		return nil
+	})
+	return files, saved, err
+}
+
+// withDraftSnapshot owns materialization, workspace identity and the draft/list
+// lock. Its consumer may read malformed Go text without weakening refresh's
+// canonical validation. Git queries release draftMu and revalidate before effects.
+func (c *ControlPlane) withDraftSnapshot(
+	ctx context.Context, wsDir string, wsDev, wsIno uint64,
+	use func(project, draft *os.Root, list madeFromRecord) error,
+) (retErr error) {
 	c.workspaceMu.RLock()
 	defer c.workspaceMu.RUnlock()
 	if c.serverCtx.Err() != nil {
-		return nil, saved, gensurla.MakeUnavailable(errors.New("the control plane is shutting down"))
+		return gensurla.MakeUnavailable(errors.New("the control plane is shutting down"))
 	}
 	if c.activeWorkspaceDir != wsDir || c.boundWorkspaceDev != wsDev || c.boundWorkspaceIno != wsIno {
-		return nil, saved, gensurla.MakeUnprocessable(errors.New("bound workspace changed; call refresh_story again"))
+		return gensurla.MakeUnprocessable(errors.New("bound workspace changed; call refresh_story again"))
 	}
 	c.draftMu.Lock()
 	defer c.draftMu.Unlock()
 	_, project, err := openModuleRootWithIdentity(wsDir, wsDev, wsIno)
 	if err != nil {
-		return nil, saved, err
+		return err
 	}
 	defer func() { retErr = errors.Join(retErr, project.Close()) }()
 	list, exists, err := c.cards.loadMadeFrom()
 	if err != nil {
-		return nil, saved, err
+		return err
 	}
 	if !exists {
 		list = madeFromRecord{Start: madeFromStart{Write: 1}, Entries: map[string][]madeFromVersion{}}
@@ -61,13 +94,13 @@ func (c *ControlPlane) readDraftSnapshot(
 	draft, err := openDraftFolder(project, draftFolderName)
 	missing := errors.Is(err, fs.ErrNotExist)
 	if err != nil && !missing {
-		return nil, saved, gensurla.MakeUnprocessable(err)
+		return gensurla.MakeUnprocessable(err)
 	}
 	if draft != nil && !exists {
 		// Publication always saves provenance before the folder rename. Without
 		// that record, even a marker cannot establish ownership of this folder.
 		refusal := gensurla.MakeUnprocessable(errors.New("The draft folder already exists but this project's draft provenance is missing. Preserve it by moving .surla-draft aside, or restore this project's draft records, then call refresh_story again."))
-		return nil, saved, errors.Join(refusal, draft.Close())
+		return errors.Join(refusal, draft.Close())
 	}
 	remake := missing || !exists
 	// Drop publishes only the new start. Its first materialization must read
@@ -81,7 +114,7 @@ func (c *ControlPlane) readDraftSnapshot(
 		var readErr error
 		draftInfo, readErr = draft.Stat(".")
 		if readErr != nil {
-			return nil, saved, errors.Join(readErr, draft.Close())
+			return errors.Join(readErr, draft.Close())
 		}
 		marker, readErr = designeval.ReadRegularFile(draft, ".gitignore", maxLayoutFileBytes)
 		markerMissing = errors.Is(readErr, fs.ErrNotExist)
@@ -110,79 +143,86 @@ func (c *ControlPlane) readDraftSnapshot(
 			}
 		}
 		if err := errors.Join(readErr, draft.Close()); err != nil {
-			return nil, saved, gensurla.MakeUnprocessable(err)
+			return gensurla.MakeUnprocessable(err)
 		}
 	}
 	if remake {
+		var restored *storedRevision
+		if !fromProject {
+			selected, found, err := c.newestDraftDesign(list.Start, list.Entries)
+			if err != nil {
+				return err
+			}
+			if found {
+				restored = &selected
+			}
+		}
 		var commit string
 		var committed map[string]string
-		if fromProject {
+		{
 			// Repository commands run outside draftMu. A concurrent refresh or
 			// Drop wins rather than being overwritten by this prepared read.
 			c.draftMu.Unlock()
-			commit, committed, err = committedDraftDesign(ctx, wsDir)
+			if fromProject {
+				commit, committed, err = committedDraftDesign(ctx, wsDir)
+			} else {
+				_, _, commit, err = currentProjectCommit(ctx, wsDir)
+			}
 			c.draftMu.Lock()
 			if err != nil {
-				return nil, saved, gensurla.MakeUnprocessable(err)
+				return gensurla.MakeUnprocessable(err)
 			}
 			// The open root still names the original inode even if its path
 			// was replaced while Git resolved that path. Check the binding again
 			// before pairing Git's commit with any files or publishing effects.
 			_, verified, err := openModuleRootWithIdentity(wsDir, wsDev, wsIno)
 			if err != nil {
-				return nil, saved, err
+				return err
 			}
 			if err := verified.Close(); err != nil {
-				return nil, saved, err
+				return err
 			}
 			current, currentExists, err := c.cards.loadMadeFrom()
 			if err != nil {
-				return nil, saved, err
+				return err
 			}
 			sameDraft, err := draftStateMatches(project, draftInfo, marker, markerMissing)
 			if err != nil {
-				return nil, saved, gensurla.MakeUnprocessable(err)
+				return gensurla.MakeUnprocessable(err)
 			}
 			if currentExists != exists || exists && !reflect.DeepEqual(current, list) || !sameDraft {
-				return nil, saved, gensurla.MakeUnprocessable(errors.New(
+				return gensurla.MakeUnprocessable(errors.New(
 					"draft or design provenance changed while reading the project's commit; call refresh_story again",
 				))
 			}
 		}
-		if err := c.makeDraft(wsDir, project, &list, fromProject, commit, committed,
+		if err := c.makeDraft(wsDir, project, &list, restored, fromProject, commit, committed,
 			draftInfo, markerMissing); err != nil {
-			return nil, saved, gensurla.MakeUnprocessable(err)
+			return gensurla.MakeUnprocessable(err)
 		}
 	}
 	draft, err = openDraftFolder(project, draftFolderName)
 	if err != nil {
-		return nil, saved, gensurla.MakeUnprocessable(err)
+		return gensurla.MakeUnprocessable(err)
 	}
-	files, readErr := designversion.ReadDraft(filepath.Join(wsDir, draftFolderName), draft)
-	if err := errors.Join(readErr, draft.Close()); err != nil {
-		return nil, saved, gensurla.MakeUnprocessable(err)
-	}
-	// Each read owns its maps: neither a later take nor a drop can mutate an
-	// operation's immutable provenance after the draft lock is released.
-	saved = list
-	return files, saved, nil
+	return errors.Join(use(project, draft, list), draft.Close())
 }
 
 // makeDraft prepares a complete module with its ignore written first, saves
 // all new blobs and one list write, then publishes the folder. draftMu is held.
 func (c *ControlPlane) makeDraft(
-	wsDir string, project *os.Root, list *madeFromRecord, fromProject bool,
+	wsDir string, project *os.Root, list *madeFromRecord, restored *storedRevision, fromProject bool,
 	commit string, committed map[string]string,
 	draftInfo fs.FileInfo, markerMissing bool,
 ) error {
 	var design map[string]string
 	var err error
-	if !fromProject {
-		if saved, found, err := c.newestDraftDesign(list.Entries); err != nil {
+	if restored != nil {
+		design, err = decodeDesignSource(restored.designSource)
+		if err != nil {
 			return err
-		} else if found {
-			design = saved
 		}
+		list.Entries = cloneMadeFromSnapshot(restored.madeFrom).Entries
 	}
 	var files map[string]string
 	usingProject := design == nil
@@ -210,6 +250,10 @@ func (c *ControlPlane) makeDraft(
 	}
 	if fromProject {
 		list.Start.ProjectCommit = commit
+		list.Start.FolderVersions = map[string]string{}
+		for file := range design {
+			list.Start.FolderVersions[file] = designFileVersion(design, file)
+		}
 	}
 	if err := removeOwnedDraft(project, draftStagingName); err != nil {
 		return err
@@ -275,7 +319,7 @@ func (c *ControlPlane) makeDraft(
 			}
 		}
 	}
-	list.Taken = map[string]madeFromVersion{}
+	list.Taken = map[string]madeFromTake{}
 	for file := range paths {
 		version := absentDesignVersion
 		if text, ok := design[file]; ok {
@@ -283,7 +327,7 @@ func (c *ControlPlane) makeDraft(
 		}
 		for _, entered := range list.Entries[file] {
 			if entered.Version == version {
-				list.Taken[file] = entered
+				list.Taken[file] = madeFromTake{Version: entered.Version, Entered: entered.Entered, ProjectCommit: commit}
 				break
 			}
 		}
@@ -330,53 +374,50 @@ func (c *ControlPlane) enterDraftVersion(
 // newestDraftDesign considers waiting proposals before their confirmed card,
 // and ignores declined revisions because the card owner no longer stores them.
 func (c *ControlPlane) newestDraftDesign(
-	entries map[string][]madeFromVersion,
-) (map[string]string, bool, error) {
+	start madeFromStart, entries map[string][]madeFromVersion,
+) (storedRevision, bool, error) {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 	records, err := c.cards.all()
 	if err != nil {
-		return nil, false, err
+		return storedRevision{}, false, err
 	}
 	slices.SortStableFunc(records, func(a, b storedChangeCard) int { return b.savedAt.Compare(a.savedAt) })
 	for _, record := range records {
 		revisions := []storedRevision{record.latest()}
 		if record.proposed != nil {
-			revisions = append(revisions, storedRevision{designSource: record.designSource})
+			revisions = append(revisions, storedRevision{designSource: record.designSource, madeFrom: record.madeFrom})
 		}
 		for _, revision := range revisions {
+			if revision.madeFrom == nil || revision.madeFrom.Start.Write != start.Write {
+				continue
+			}
 			design, err := decodeDesignSource(revision.designSource)
 			if err != nil {
-				return nil, false, err
+				return storedRevision{}, false, err
 			}
-			eligible := true
 			paths := map[string]bool{}
-			for file := range entries {
+			for file := range revision.madeFrom.Entries {
 				paths[file] = true
 			}
 			for file, text := range design {
-				if !validProvenancePath(file) {
-					return nil, false, fmt.Errorf("invalid saved design path %q", file)
-				}
 				canonical, err := designversion.Canonical(file, text)
 				if err != nil {
-					return nil, false, err
+					return storedRevision{}, false, err
 				}
 				design[file], paths[file] = canonical, true
 			}
+			eligible := true
 			for file := range paths {
-				version := absentDesignVersion
-				if text, ok := design[file]; ok {
-					version = designversion.Digest(text)
-				}
+				version := designFileVersion(design, file)
 				eligible = eligible && slices.ContainsFunc(entries[file], func(v madeFromVersion) bool { return v.Version == version })
 			}
 			if eligible {
-				return design, true, nil
+				return revision, true, nil
 			}
 		}
 	}
-	return nil, false, nil
+	return storedRevision{}, false, nil
 }
 
 // draftDesignFiles selects only the canonical design entries from ReadDraft.
@@ -517,12 +558,25 @@ func removeOwnedDraft(project *os.Root, name string) error {
 func committedDraftDesign(ctx context.Context, dir string) (string, map[string]string, error) {
 	ctx, cancel := context.WithTimeout(ctx, layoutReadTimeout)
 	defer cancel()
+	repo, prefix, commit, err := currentProjectCommit(ctx, dir)
+	if err != nil || commit == "" {
+		return commit, nil, err
+	}
+	design, err := committedDesignAt(ctx, dir, repo, prefix, commit)
+	return commit, design, err
+}
+
+// currentProjectCommit reads HEAD without interpreting any project file. An
+// uninitialized or unborn repository has no commit; other failures remain errors.
+func currentProjectCommit(ctx context.Context, dir string) (string, string, string, error) {
+	ctx, cancel := context.WithTimeout(ctx, layoutReadTimeout)
+	defer cancel()
 	repo, prefix, err := resolveStarterRepo(ctx, dir)
 	if errors.Is(err, errNoRepository) {
-		return "", nil, nil
+		return "", "", "", nil
 	}
 	if err != nil {
-		return "", nil, err
+		return "", "", "", err
 	}
 	head, err := runGitRead(ctx, repo, "rev-parse", "--verify", "--quiet", "HEAD^{commit}")
 	if err != nil {
@@ -530,14 +584,37 @@ func committedDraftDesign(ctx context.Context, dir string) (string, map[string]s
 		// broken repository or a canceled request.
 		var exit *exec.ExitError
 		if errors.As(err, &exit) && exit.ExitCode() == 1 {
-			return "", nil, nil
+			return "", "", "", nil
 		}
-		return "", nil, err
+		return "", "", "", err
 	}
 	commit := strings.TrimSpace(string(head))
+	return repo, prefix, commit, nil
+
+}
+
+// committedDesignAt applies the canonical design walk to any immutable commit.
+func committedDesignAt(ctx context.Context, dir, repo, prefix, commit string) (map[string]string, error) {
+	files, err := committedDesignFiles(ctx, dir, repo, prefix, commit)
+	if err != nil {
+		return nil, err
+	}
+	for file, text := range files {
+		canonical, err := designversion.Canonical(filepath.Join(dir, file), text)
+		if err != nil {
+			return nil, &committedDesignCanonicalError{file: file, cause: err}
+		}
+		files[file] = canonical
+	}
+	return files, nil
+}
+
+// committedDesignFiles owns the same bounded design walk for strict current
+// snapshots and historical version matching. It preserves raw Go for its consumer.
+func committedDesignFiles(ctx context.Context, dir, repo, prefix, commit string) (map[string]string, error) {
 	out, err := runGitRead(ctx, repo, "ls-tree", "-r", "-z", commit, "--", prefix+"design")
 	if err != nil {
-		return "", nil, err
+		return nil, err
 	}
 	entries := map[string]string{}
 	for _, entry := range strings.Split(string(out), "\x00") {
@@ -546,7 +623,7 @@ func committedDraftDesign(ctx context.Context, dir string) (string, map[string]s
 		}
 		meta, name, ok := strings.Cut(entry, "\t")
 		if !ok {
-			return "", nil, errors.New("git ls-tree returned an invalid design entry")
+			return nil, errors.New("git ls-tree returned an invalid design entry")
 		}
 		entries[strings.TrimPrefix(name, prefix)] = strings.Fields(meta)[0]
 	}
@@ -565,23 +642,19 @@ func committedDraftDesign(ctx context.Context, dir string) (string, map[string]s
 			continue
 		}
 		if entries[file] == "120000" || entries[file] == "160000" {
-			return "", nil, fmt.Errorf("committed design %s is a link or submodule", file)
+			return nil, fmt.Errorf("committed design %s is a link or submodule", file)
 		}
 		if !strings.HasSuffix(file, ".go") || strings.HasSuffix(file, "_test.go") {
 			continue
 		}
 		text, found, err := readGitBlob(ctx, repo, commit, prefix+file)
 		if err != nil {
-			return "", nil, err
+			return nil, err
 		}
 		if !found {
-			return "", nil, fmt.Errorf("committed design %s disappeared", file)
+			return nil, fmt.Errorf("committed design %s disappeared", file)
 		}
-		canonical, err := designversion.Canonical(filepath.Join(dir, file), string(text))
-		if err != nil {
-			return "", nil, err
-		}
-		design[file] = canonical
+		design[file] = string(text)
 	}
-	return commit, design, nil
+	return design, nil
 }

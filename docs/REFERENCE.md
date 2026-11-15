@@ -192,6 +192,13 @@ server's record. A new project saves a free port that no other project of
 this account saved, running or not, and keeps it. No caller chooses an
 identity, address, token or storage path.
 
+Before starting the server or accepting `surla verification set` or
+`surla promotion set`, Surla asks Git for the project's enclosing working tree
+so private files stay outside it. Each read has a 30-second allowance. A read
+that times out stops the operation, names `git rev-parse --show-toplevel`, and
+asks you to check that Git can read the workspace before retrying the command.
+A folder without a Git repository remains a valid project folder.
+
 `surla` finds that folder from the shell where it runs and starts the server
 with it. The server never looks the folder up itself, because Herdr starts it
 with the environment of the Herdr core, not the environment of your shell.
@@ -1206,6 +1213,16 @@ started with.
 
 ### Verification and approval
 
+#### Go workspace policy
+
+| Built source | Workspace selection for toolchain lookup, dependency download and compilation |
+| --- | --- |
+| Application binaries and tests, and suites from stored verification settings | Use the checkout's internal `go.work` when present; ignore a workspace above the checkout. |
+| Surla-written tests, both report checks and verification suites | Use `GOWORK=off`, including when `go.work` exists in the checkout root or the test module. The module's `go.mod` and `go.sum` own its dependencies. |
+
+Both policies keep the full checkout, including sibling files used by local
+module replacements.
+
 #### `verify_change`
 
 `POST /changes/{change_id}/verifications`. **Input:** `change_id`,
@@ -2005,19 +2022,33 @@ requests and on pushes to the branches its `push` trigger names: `main`, and
 an integration branch for as long as pull requests target one. The short
 checks are:
 
-- Vet and short race tests of each Go module on macOS: the root,
+- Vet and short race tests of each Go module: the root,
   [`story`](../story/README.md), `examples/orders` and `examples/orders-eval`.
-  The root module's short tests run in four jobs. **Go (., page tests)**
-  runs only `internal/controlplane` and `internal/project`, selecting
-  `TestViewsPage…` and `TestCheckpoint…`. **Go (., control plane, A-L)** runs
-  non-page tests whose names start with `TestA` through `TestL`.
+  The other modules run on macOS. The root module's short tests run in five
+  jobs. **Go (., page tests)** runs only `internal/controlplane` and
+  `internal/project` on macOS, selecting `TestViewsPage…` and
+  `TestCheckpoint…`. **Go (., control plane, A-L)** runs non-page tests whose
+  names start with `TestA` through `TestL`, on Linux.
   **Go (., control plane, remaining)** runs every other non-page test,
-  including examples and fuzz seeds. **Go (.)** derives every other package
-  with tests and skips page tests, so each current test runs once. Each of
+  including examples and fuzz seeds, also on Linux. **Go (.)** runs on macOS,
+  derives every other package with tests and skips page tests. These four
+  owners cover every root short test. **Go (., control plane, macOS-platform)**
+  additionally runs nine explicitly named non-page tests on macOS: failed
+  live-target cleanup and stop ownership, filesystem aliases, and opening
+  entries through the Darwin backend. Its static name check fails if a listed
+  test disappears. Pull requests do not execute the other generic non-page
+  control-plane tests on macOS; they still compile and receive full vet there
+  through the page job. Full macOS execution remains in the root control-plane
+  job on pushes to `main`, `team-start` and `builder-copy`, nightly runs and
+  manual full runs, alongside the Linux full job. Each of
   these jobs saves and restores its own Go build and module cache key,
   qualified by operating system, architecture, Go version and root dependency
-  files; one job's narrower build cannot become another job's saved cache.
-  Pushes to `main`, `team-start` and `builder-copy` run all four jobs and
+  files. The two Linux groups keep separate owner keys, and the macOS platform
+  subset has its own key. The module-matrix jobs use a 12-minute backstop to
+  finish cold checks and post-run cache saves, with the same three-minute
+  package alarms, race detection and vet checks.
+  Pushes to `main`, `team-start` and `builder-copy` run all five jobs with the
+  same three-minute package alarm and
   save missing caches after success, making them available to pull requests
   targeting those branches. Each job targets five minutes with an exact
   cache hit; cold durations are recorded separately. On a miss, its job
@@ -2043,6 +2074,21 @@ jobs for the control plane's page tests, its other tests, the design evaluator,
 and the remaining root packages. The page partition uses the same test-name
 pattern as the short checks; the remaining packages still run their own page
 tests.
+
+The **Full / docker-check** job also runs on pushes to `main`, `team-start`
+and `builder-copy`, nightly and on manual runs, on Ubuntu with its Docker
+engine. It executes the dependency-repair journey through one project server:
+the initialized builder copy passes, missing `go.sum` entries are repaired,
+and workspace-only checksums are repaired into `go.work.sum`, while the user's
+project stays unchanged. It uses `-tags=e2e,docker` and selects
+`TestCheckProjectRepairsDependenciesOnOneServer`; pull requests do not run it.
+The package alarm is 40 minutes and the job backstop is 50 minutes, including
+cold compilation and downloads. These are execution bounds, not measured
+completion times. To run the journey locally with a running Docker engine:
+
+```bash
+go test -race -count=1 -timeout 40m -tags=e2e,docker -run '^TestCheckProjectRepairsDependenciesOnOneServer$' ./cmd/surla
+```
 
 All full suites run nightly at 07:17 UTC and on a manual **Run workflow**
 request (`CI=true gh workflow run ci.yml --ref <branch> </dev/null`). This adds

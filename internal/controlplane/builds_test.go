@@ -111,6 +111,7 @@ func TestBuildingAgainReplacesTheBuildAndClearsReads(t *testing.T) {
 	_, err := cp.StartBuild(user, &gensurla.StartBuildPayload{ChangeID: "chg", RequestRevision: first.RequestRevision})
 	require.NoError(t, err)
 
+	makeBuildFixtureBuilderCopy(t, cp)
 	listed, err := cp.ListBuilderAssignments(builder)
 	require.NoError(t, err)
 	require.Len(t, listed.Assignments, 1)
@@ -189,7 +190,7 @@ func TestAssignmentsSayWhetherTheirBuildIsInForce(t *testing.T) {
 		check: func(context.Context, []designeval.StorySummary) (testwriter.Verdict, error) {
 			return testwriter.Verdict{}, nil
 		},
-		record: func(context.Context, testwriter.Verdict, string) (string, error) {
+		record: func(context.Context, testwriter.Verdict, string, string) (string, error) {
 			checked <- struct{}{}
 			return strings.Repeat("a", 40), nil
 		},
@@ -201,6 +202,11 @@ func TestAssignmentsSayWhetherTheirBuildIsInForce(t *testing.T) {
 	first := buildableChange(t, cp, "chg")
 	_, err := cp.StartBuild(user, &gensurla.StartBuildPayload{ChangeID: "chg", RequestRevision: first.RequestRevision})
 	require.NoError(t, err)
+	build := mustOpenBuildFile(t, cp)
+	_, err = testwriter.MakeCopy(t.Context(), cp.currentWorkspaceDir(), testwriter.TestsRole,
+		testwriter.TestsRole.Branch(build.Number), build.Base)
+	require.NoError(t, err)
+	makeBuildFixtureBuilderCopy(t, cp)
 	reads := []struct {
 		name string
 		read func() (bool, error)
@@ -401,6 +407,7 @@ func TestAssignmentsListOnlyTheCallersOwnChanges(t *testing.T) {
 	assert.Equal(t, "previous_change_open", refusal.Name)
 	assert.Equal(t, "older", refusal.ChangeID)
 
+	makeBuildFixtureBuilderCopy(t, cp)
 	builds, err := cp.ListBuilderAssignments(asCaller("alice@example.com", CallerBuilder))
 	require.NoError(t, err)
 	require.Len(t, builds.Assignments, 1)
@@ -609,6 +616,7 @@ func TestBuildOperationsFollowTheRoleTable(t *testing.T) {
 	status, body := httpCall(t, srv.URL, "user", http.MethodPost, "/changes/chg/build", revision)
 	require.Equal(t, http.StatusOK, status, body)
 
+	makeBuildFixtureBuilderCopy(t, cp)
 	// callers lists the fixture tokens the contract allows, independently of
 	// the policy table under test.
 	operations := []struct {

@@ -1,16 +1,44 @@
 package verify
 
 import (
+	"context"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/goadesign/surla/internal/abspath"
 )
+
+// TestWorkspaceBoundaryRootsPreservesCancellation makes a deadline's killed
+// process distinguishable from an ordinary Git failure, including when stderr
+// contains text otherwise interpreted as an expected non-Git workspace.
+func TestWorkspaceBoundaryRootsPreservesCancellation(t *testing.T) {
+	for _, cause := range []error{context.DeadlineExceeded, context.Canceled} {
+		t.Run(cause.Error(), func(t *testing.T) {
+			bin := t.TempDir()
+			script := "#!/bin/sh\nprintf 'fatal: not a git repository (or any parent)\\n' >&2\nexec /bin/sleep 60\n"
+			require.NoError(t, os.WriteFile(filepath.Join(bin, "git"), []byte(script), 0o700))
+			t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+			ctx, cancel := context.WithTimeout(t.Context(), 100*time.Millisecond)
+			defer cancel()
+			if cause == context.Canceled {
+				cancel()
+			}
+			roots, err := WorkspaceBoundaryRoots(ctx, t.TempDir())
+			assert.Nil(t, roots)
+			assert.ErrorIs(t, err, cause)
+			assert.ErrorContains(t, err, "git rev-parse --show-toplevel")
+			if cause == context.DeadlineExceeded {
+				assert.ErrorContains(t, err, "timed out")
+			}
+		})
+	}
+}
 
 // TestWorkspaceBoundaryRootsAndEnclosingWorktreeRoot verifies that
 // WorkspaceBoundaryRoots and EnclosingWorktreeRoot return the enclosing Git

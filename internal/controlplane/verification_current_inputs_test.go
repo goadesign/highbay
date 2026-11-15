@@ -269,20 +269,52 @@ func TestVerificationCurrentInputsIgnoreForeignCard(t *testing.T) {
 }
 
 // TestVerifyChangeReadsCurrentInputsBeforeAcceptance damages only the build:
-// the current-input read must fail before the supervisor accepts a run, even
-// though selecting the operator's stored evaluator does not need a build.
+// the entry's earliest current-input read must fail safely before a supervisor
+// accepts a run, while preserving its raw failure on the operation span.
 func TestVerifyChangeReadsCurrentInputsBeforeAcceptance(t *testing.T) {
-	cp, card, cfg := verificationSetup(t)
-	require.NoError(t, os.WriteFile(filepath.Join(cp.cards.dir, openBuildRecordFile), []byte("{"), 0o600))
-	_, err := cp.VerifyChange(asCaller("alice@example.com", CallerUser), &gensurla.VerifyChangePayload{
-		ChangeID: card.ChangeID, RequestRevision: card.RequestRevision, CandidateCommit: strings.Repeat("a", 40),
-	})
-	require.Error(t, err)
-	assert.ErrorContains(t, err, "saved verification inputs could not be read")
-	assert.NotContains(t, err.Error(), cp.cards.dir)
-	runs, err := verifyrun.List(cfg.RunsDir, "alice@example.com", card.ChangeID)
-	require.NoError(t, err)
-	assert.Empty(t, runs, "no accepted run is hidden behind a failed open-build read")
+	for _, damaged := range []string{"malformed build", "linked build"} {
+		t.Run(damaged, func(t *testing.T) {
+			exporter := tracetest.NewInMemoryExporter()
+			provider := sdktrace.NewTracerProvider(sdktrace.WithSyncer(exporter))
+			t.Cleanup(func() { assert.NoError(t, provider.Shutdown(context.Background())) })
+			cp, card, cfg := verificationSetup(t)
+			cp.traceProvider = provider
+			buildPath := filepath.Join(cp.cards.dir, openBuildRecordFile)
+			wantRaw := "unexpected EOF"
+			if damaged == "linked build" {
+				require.NoError(t, os.Remove(buildPath))
+				require.NoError(t, os.Symlink(filepath.Join(t.TempDir(), "build"), buildPath))
+				wantRaw = "read open build:"
+			} else {
+				require.NoError(t, os.WriteFile(buildPath, []byte("{"), 0o600))
+			}
+			_, err := cp.VerifyChange(asCaller("alice@example.com", CallerUser), &gensurla.VerifyChangePayload{
+				ChangeID: card.ChangeID, RequestRevision: card.RequestRevision, CandidateCommit: strings.Repeat("a", 40),
+			})
+			require.Error(t, err)
+			assert.Equal(t, `start verification for "`+card.ChangeID+`": saved verification inputs could not be read`, err.Error())
+			assert.NotContains(t, err.Error(), cp.cards.dir)
+			runs, err := verifyrun.List(cfg.RunsDir, "alice@example.com", card.ChangeID)
+			require.NoError(t, err)
+			assert.Empty(t, runs, "no accepted run is hidden behind a failed open-build read")
+			spans := exporter.GetSpans().Snapshots()
+			require.Len(t, spans, 1)
+			assert.Equal(t, "surla.controlplane.start_verification", spans[0].Name())
+			assert.Equal(t, codes.Error, spans[0].Status().Code)
+			var raw string
+			for _, event := range spans[0].Events() {
+				for _, attr := range event.Attributes {
+					if attr.Key == "exception.message" {
+						raw = attr.Value.AsString()
+					}
+				}
+			}
+			assert.Contains(t, raw, wantRaw)
+			if damaged == "linked build" {
+				assert.Contains(t, raw, cp.cards.dir, "the span keeps the original private-path diagnostic")
+			}
+		})
+	}
 }
 
 // editVerificationRequest modifies a fixture's stored request before its reads.

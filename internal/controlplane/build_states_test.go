@@ -82,6 +82,7 @@ func TestBuildStatesReadTheSameOnBothInterfaces(t *testing.T) {
 			card := buildableChange(t, cp, "chg")
 			_, err := cp.StartBuild(asCaller("alice@example.com", CallerUser), &gensurla.StartBuildPayload{ChangeID: "chg", RequestRevision: card.RequestRevision})
 			require.NoError(t, err)
+			makeBuildFixtureBuilderCopy(t, cp)
 			editBuildFile(t, cp, "chg", savedTestWriter(tc.saved))
 
 			status, body := httpCall(t, srv.URL, "user", http.MethodGet, "/changes/chg/build", "")
@@ -187,6 +188,9 @@ func TestStoredEvaluatorBuildsReadNotUsed(t *testing.T) {
 				card := buildableChange(t, cp, "chg")
 				_, err := cp.StartBuild(asCaller("alice@example.com", CallerUser), &gensurla.StartBuildPayload{ChangeID: "chg", RequestRevision: card.RequestRevision})
 				require.NoError(t, err)
+				if cp == stored {
+					makeBuildFixtureBuilderCopy(t, cp)
+				}
 				editBuildFile(t, cp, "chg", savedTestWriter(fields))
 			}
 

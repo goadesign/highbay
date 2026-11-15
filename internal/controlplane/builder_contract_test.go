@@ -194,10 +194,8 @@ func TestBuilderAssignmentNamesItsCurrentFolder(t *testing.T) {
 			_, err := cp.StartBuild(asCaller("alice@example.com", CallerUser),
 				&gensurla.StartBuildPayload{ChangeID: "chg", RequestRevision: card.RequestRevision})
 			require.NoError(t, err)
+			makeBuildFixtureBuilderCopy(t, cp)
 			if hasWorkspace {
-				head := productionBuildGit(t, folder, "rev-parse", "HEAD")
-				_, err := testwriter.MakeCopy(t.Context(), folder, testwriter.BuilderRole, testwriter.BuilderRole.Branch(1), head)
-				require.NoError(t, err)
 				require.NoError(t, os.WriteFile(filepath.Join(copyFolder, "go.work"),
 					[]byte("go 1.27.3\nuse .\n"), 0o600))
 			}
@@ -217,10 +215,9 @@ func TestBuilderAssignmentNamesItsCurrentFolder(t *testing.T) {
 	}
 }
 
-// TestBuilderCopyPendingOperationsKeepTheirRoles proves the new operations
-// preserve role access while Drop reports the absence of an open build and
-// the draft update remains pending.
-func TestBuilderCopyPendingOperationsKeepTheirRoles(t *testing.T) {
+// TestBuilderCopyOperationsKeepTheirRoles proves that Drop reports no open
+// build while only the guide may update the real draft through HTTP.
+func TestBuilderCopyOperationsKeepTheirRoles(t *testing.T) {
 	cp := newBuildControlPlane(t, Options{})
 	buildableChange(t, cp, "chg")
 	server := roleServer(t, cp)
@@ -238,8 +235,8 @@ func TestBuilderCopyPendingOperationsKeepTheirRoles(t *testing.T) {
 					assert.Equal(t, http.StatusNotFound, status, body)
 					assert.Contains(t, body, "no open build")
 				} else if role == op.caller {
-					assert.Equal(t, http.StatusNotImplemented, status, body)
-					assert.Contains(t, body, "not available until the builder-copy change is complete")
+					assert.Equal(t, http.StatusOK, status, body)
+					assert.Contains(t, body, "draft_folder")
 				} else {
 					assert.Equal(t, http.StatusForbidden, status, body)
 				}
@@ -249,24 +246,24 @@ func TestBuilderCopyPendingOperationsKeepTheirRoles(t *testing.T) {
 	}
 }
 
-// TestBuilderAssignmentChecksOwnershipBeforeFolderFacts poisons go.work so
-// unauthorized calls must refuse before inspecting it, and an owner's failed
+// TestBuilderAssignmentChecksOwnershipBeforeFolderFacts moves a nested module
+// outside its copy so unauthorized calls must refuse before inspecting it, and an owner's failed
 // fact read must leave the assignment unread for a later successful retry.
 func TestBuilderAssignmentChecksOwnershipBeforeFolderFacts(t *testing.T) {
-	cp := newBuildControlPlane(t, Options{})
+	_, workspace := productionBuildProject(t, "apps/shop", reviewEval)
+	cp := newBuildControlPlane(t, Options{WorkspaceDir: workspace})
 	card := buildableChange(t, cp, "chg")
 	_, err := cp.StartBuild(asCaller("alice@example.com", CallerUser),
 		&gensurla.StartBuildPayload{ChangeID: "chg", RequestRevision: card.RequestRevision})
 	require.NoError(t, err)
 	before := readBuildFile(t, cp, "chg")
-	workspace, _, _ := cp.currentWorkspaceTarget()
-	head := productionBuildGit(t, workspace, "rev-parse", "HEAD")
-	_, err = testwriter.MakeCopy(t.Context(), workspace, testwriter.BuilderRole, testwriter.BuilderRole.Branch(1), head)
+	makeBuildFixtureBuilderCopy(t, cp)
+	_, folder, _, err := builderCopyFolder(t.Context(), workspace)
 	require.NoError(t, err)
-	goWork := filepath.Join(workspace, testwriter.BuilderRole.Folder, "go.work")
-	require.NoError(t, os.Symlink("go.work", goWork))
-	_, statErr := os.Stat(goWork)
-	require.Error(t, statErr, "the symlink loop must make folder facts unavailable")
+	parent := filepath.Dir(folder)
+	saved := filepath.Join(t.TempDir(), "saved-apps")
+	require.NoError(t, os.Rename(parent, saved))
+	require.NoError(t, os.Symlink(filepath.Dir(workspace), parent))
 
 	for _, tc := range []struct {
 		name    string
@@ -276,7 +273,7 @@ func TestBuilderAssignmentChecksOwnershipBeforeFolderFacts(t *testing.T) {
 		{name: "missing principal", caller: t.Context(), refusal: "authenticated principal is required"},
 		{name: "another owner", caller: asCaller("bob@example.com", CallerBuilder), refusal: "forbidden"},
 		{name: "owner with unavailable facts", caller: asCaller("alice@example.com", CallerBuilder),
-			refusal: "read builder Go workspace"},
+			refusal: "outside source directory"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			_, err := cp.GetBuilderAssignment(tc.caller,
@@ -294,7 +291,8 @@ func TestBuilderAssignmentChecksOwnershipBeforeFolderFacts(t *testing.T) {
 	require.NoError(t, err, "another owner's empty list must not inspect the folder")
 	assert.Empty(t, listed.Assignments)
 
-	require.NoError(t, os.Remove(goWork))
+	require.NoError(t, os.Remove(parent))
+	require.NoError(t, os.Rename(saved, parent))
 	read, err := cp.GetBuilderAssignment(asCaller("alice@example.com", CallerBuilder),
 		&gensurla.GetBuilderAssignmentPayload{ChangeID: "chg"})
 	require.NoError(t, err)

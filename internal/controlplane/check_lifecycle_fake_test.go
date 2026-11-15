@@ -9,6 +9,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"io/fs"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -105,6 +106,8 @@ type (
 	checkClients struct {
 		// cp is the ControlPlane service under test.
 		cp *ControlPlane
+		// workingFolder is the real numbered assignment whose files the tools use.
+		workingFolder string
 		// httpClient calls the generated Goa HTTP endpoints with bearer auth.
 		httpClient *gensurla.Client
 		// mcpClient calls the generated MCP JSON-RPC endpoints with bearer auth.
@@ -301,8 +304,9 @@ func newCheckTestServer(t *testing.T, opts Options) checkClients {
 	opts.CheckHelper = testCheckHelper(t)
 	opts.CheckTimeout = 30 * time.Second
 	cp := newControlPlane(t, opts)
+	working := readCheckBuilderFixture(t, cp)
 	srv := httptest.NewServer(NewHTTPHandler(cp, workflowAuthenticator(map[string]Principal{
-		"generation-token": {ID: "developer@example.com"},
+		"generation-token": {ID: "alice@example.com"},
 	})))
 	t.Cleanup(srv.Close)
 	origin, err := url.Parse(srv.URL)
@@ -316,7 +320,82 @@ func newCheckTestServer(t *testing.T, opts Options) checkClients {
 		ReadCheckOutputEndpoint:    httpT.ReadCheckOutput(),
 	}
 	mcpC := &genmcpsurla.Client{ToolsCallEndpoint: mcpT.ToolsCall(), ToolsListEndpoint: mcpT.ToolsList()}
-	return checkClients{cp: cp, httpClient: httpC, mcpClient: mcpC}
+	return checkClients{cp: cp, workingFolder: working, httpClient: httpC, mcpClient: mcpC}
+}
+
+// readCheckBuilderFixture starts and reads a real numbered build for existing
+// helper tests. Its authored card snapshot replaces no evaluator producer; the
+// Git copy, build and marking-read owners are the production implementations.
+// Recovery-only fixtures do not call it.
+func readCheckBuilderFixture(t *testing.T, cp *ControlPlane) string {
+	t.Helper()
+	workspace := cp.currentWorkspaceDir()
+	prepareCheckProjectFixture(t, workspace)
+	cp.team = &TeamBinding{Owner: "alice@example.com", Service: &teamServiceFixture{}}
+	card := buildableChange(t, cp, "check-builder")
+	_, err := cp.StartBuild(asCaller("alice@example.com", CallerUser), &gensurla.StartBuildPayload{
+		ChangeID: card.ChangeID, RequestRevision: card.RequestRevision,
+	})
+	require.NoError(t, err)
+	assignment, err := cp.GetBuilderAssignment(asCaller("alice@example.com", CallerBuilder),
+		&gensurla.GetBuilderAssignmentPayload{ChangeID: card.ChangeID})
+	require.NoError(t, err)
+	return assignment.WorkingFolder
+}
+
+// prepareCheckProjectFixture commits the trusted fixture tree before Build
+// makes its copy. The minimal eval module supplies the real starter layout for
+// written-test fixtures; stored-evaluator tests retain their existing modules.
+func prepareCheckProjectFixture(t *testing.T, workspace string) {
+	t.Helper()
+	probe := exec.CommandContext(t.Context(), "git", "-C", workspace, "rev-parse", "--show-toplevel")
+	if err := probe.Run(); err != nil {
+		initGitWorktreeForBoundaryTest(t, workspace)
+	}
+	repo := productionBuildGit(t, workspace, "rev-parse", "--show-toplevel")
+	for _, setting := range []struct{ name, value string }{
+		{"user.name", "Build Tester"}, {"user.email", "build@example.com"},
+		{"commit.gpgsign", "false"}, {"core.hooksPath", "/dev/null"}, {"core.fsmonitor", "false"},
+	} {
+		runGitForTest(t, repo, "config", setting.name, setting.value)
+	}
+	if _, err := os.Stat(filepath.Join(workspace, "eval", "go.mod")); os.IsNotExist(err) {
+		writeTree(t, workspace, map[string]string{
+			"eval/go.mod": "module example.com/shop/eval\n\ngo 1.24\n",
+		})
+	} else {
+		require.NoError(t, err)
+	}
+	var files []string
+	err := filepath.WalkDir(repo, func(name string, entry fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if name == repo {
+			return nil
+		}
+		if entry.IsDir() {
+			if entry.Name() == ".git" || strings.HasPrefix(entry.Name(), ".surla") {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		rel, err := filepath.Rel(repo, name)
+		if err != nil {
+			return err
+		}
+		files = append(files, rel)
+		return nil
+	})
+	require.NoError(t, err)
+	runGitForTest(t, repo, append([]string{"add", "--"}, files...)...)
+	staged := exec.CommandContext(t.Context(), "git", "-C", repo, "diff", "--cached", "--quiet")
+	if err := staged.Run(); err != nil {
+		var exit *exec.ExitError
+		require.ErrorAs(t, err, &exit)
+		require.Equal(t, 1, exit.ExitCode())
+		runGitForTest(t, repo, "commit", "--quiet", "-m", "Save the check fixture")
+	}
 }
 
 // openCheckCP opens a ControlPlane configured with ContainerRunner without t.Cleanup.

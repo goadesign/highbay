@@ -21,6 +21,7 @@ import (
 	"github.com/goadesign/surla/internal/designeval"
 	"github.com/goadesign/surla/internal/shquote"
 	"github.com/goadesign/surla/internal/testwriter"
+	"github.com/goadesign/surla/verify/candidate"
 )
 
 // builderReadyCopy holds the open build and resolved paths for a builder
@@ -36,8 +37,8 @@ type builderReadyCopy struct {
 	// folder is the builder's module folder inside copyRoot
 	// (<workspace>/.surla-build/<prefix>).
 	folder string
-	// goworkOff reports whether Go commands in folder need GOWORK=off.
-	goworkOff bool
+	// goWork is candidate.GoWork's selected file inside copyRoot, or "off".
+	goWork string
 }
 
 // GetBuilderAssignment returns the builder's assignment for the caller's
@@ -638,16 +639,16 @@ func (c *ControlPlane) builderCopyReady(
 			)
 		}
 	}
-	folder, goworkOff, err := builderWorkingFolder(folder, copyRoot)
+	goWork, err := candidate.GoWork(copyRoot, folder)
 	if err != nil {
-		return builderReadyCopy{}, err
+		return builderReadyCopy{}, gensurla.MakeUnprocessable(fmt.Errorf("read builder Go workspace: %w", err))
 	}
 	return builderReadyCopy{
-		build:     held,
-		repo:      repo,
-		copyRoot:  copyRoot,
-		folder:    folder,
-		goworkOff: goworkOff,
+		build:    held,
+		repo:     repo,
+		copyRoot: copyRoot,
+		folder:   folder,
+		goWork:   goWork,
 	}, nil
 }
 

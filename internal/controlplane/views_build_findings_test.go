@@ -31,7 +31,9 @@ func pageGenerationFindings(t *testing.T) (*pageServer, *gensurla.ChangeCardResu
 	}}
 	cp.buildCopyFactory = func(context.Context, string, scaffold.Layout) (buildCopy, error) { return copy, nil }
 	card := buildableChange(t, cp, "chg")
-	return startPageServer(t, cp), card
+	ps := startPageServer(t, cp)
+	ps.act("make-builder-copy", func() { makeBuildFixtureBuilderCopy(t, cp) })
+	return ps, card
 }
 
 // TestViewsPageIgnoresFindingTextFromThePreviousBuild delivers the first build's
@@ -75,6 +77,7 @@ const answers = page.sent("GET", findingsPath);
 expect(answers.length === 2 && JSON.parse(answers[0].answer).findings[0].includes("build 1") && JSON.parse(answers[1].answer).findings[0].includes("build 2"), "the test did not deliver two different owner answers");
 const current = JSON.parse(page.sent("POST", buildPath)[1].answer).build;
 expect(JSON.parse(answers[1].answer).started_at === current.started_at, "the shown text belongs to another start");
+await control(origin, "act", { key: "make-builder-copy" });
 const read = await api(origin, "GET", "/assignments/builder/chg", undefined, input.builder);
 expect(read.status === 200, "the builder could not read its assignment");
 await until(() => page.text("#surla-build-builder").includes("assignment read"), "the assignment read did not refresh Build");

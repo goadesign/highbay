@@ -288,6 +288,7 @@ func TestViewsPageBackgroundCardReadRequiresRecoveryBeforeApproval(t *testing.T)
 	setListedRunSource(t, runsDir, runID, verify.TestsWritten)
 	ps := startPageServer(t, cp)
 	ps.act("builder-reads-assignment", func() {
+		makeBuildFixtureBuilderCopy(t, cp)
 		_, err := cp.GetBuilderAssignment(asCaller(pageOwner, CallerBuilder),
 			&gensurla.GetBuilderAssignmentPayload{ChangeID: card.ChangeID})
 		require.NoError(t, err)
