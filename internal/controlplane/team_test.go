@@ -596,6 +596,7 @@ func TestWhoHasWorkAndAssignmentLists(t *testing.T) {
 		ChangeID: card.ChangeID, RequestRevision: card.RequestRevision,
 	})
 	require.NoError(t, err)
+	makeBuildFixtureBuilderCopy(t, cp)
 	startedAt, err := time.Parse(time.RFC3339Nano, started.Build.StartedAt)
 	require.NoError(t, err)
 
@@ -679,6 +680,11 @@ func TestWhoHasWorkAndAssignmentLists(t *testing.T) {
 	acceptTests(t, cp, "chg", suiteCommit)
 	_, err = cp.GetBuilderAssignment(builder, &gensurla.GetBuilderAssignmentPayload{ChangeID: "chg"})
 	require.NoError(t, err)
+	builderTree := productionBuildGit(t, cp.activeWorkspaceDir, "write-tree")
+	commit = productionBuildGit(
+		t, cp.activeWorkspaceDir, "commit-tree", "--no-gpg-sign", builderTree, "-p", suiteCommit, "-m", "Builder candidate",
+	)
+	productionBuildGit(t, cp.activeWorkspaceDir, "update-ref", "refs/heads/surla/build-2", commit)
 	afterBuilderRead, err := cp.assignmentGenerations(t.Context())
 	require.NoError(t, err)
 	assert.True(t, afterBuilderRead.BuilderHasWork)
