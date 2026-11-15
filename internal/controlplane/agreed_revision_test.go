@@ -57,7 +57,7 @@ func TestARevisionOfAnAgreedChangeWaitsAndTheAgreedRevisionStaysInForce(t *testi
 	})
 	require.NoError(t, err)
 	saveStoredBuildFixture(t, cp, agreed)
-	commit := strings.Repeat("1", 40)
+	commit := commitBuilderCandidateFixture(t, cp, agreed)
 	report := passingReport(t, agreed.RequestRevision, commit, spec)
 	target.update(func(p *pageTarget) { p.report = report })
 	approved, err := cp.ApproveMerge(agreedUser, &gensurla.ApproveMergePayload{

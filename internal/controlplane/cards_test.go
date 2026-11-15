@@ -26,10 +26,11 @@ func TestCardsSurviveANewControlPlane(t *testing.T) {
 		Question: "Does the limit include tax?", Options: []string{"with_tax", "without_tax"},
 	})
 
-	opts := Options{CardsDir: dir, Verification: cfg}
+	opts := buildFixtureOptions(t, Options{CardsDir: dir, Verification: cfg})
 	first, err := New(opts)
 	require.NoError(t, err)
 	proposed := saveProposedCardFixture(t, first, "alice@example.com", "chg", "Refunds up to $50 are instant.", analysis)
+	proposed = attachBuildSnapshot(t, first, proposed.ChangeID)
 	require.Equal(t, StatusNeedsConfirmation, proposed.Status)
 	confirmed, err := first.ConfirmIntent(alice, &gensurla.ConfirmIntentPayload{
 		ChangeID: "chg", RequestRevision: proposed.RequestRevision,
@@ -38,12 +39,19 @@ func TestCardsSurviveANewControlPlane(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.Equal(t, StatusConfirmed, confirmed.Status)
+	saveStoredBuildFixture(t, first, confirmed)
+	candidate := commitBuilderCandidateFixture(t, first, confirmed)
+	beforeClose, err := first.GetBuild(alice, &gensurla.GetBuildPayload{ChangeID: confirmed.ChangeID})
+	require.NoError(t, err)
 	require.NoError(t, first.Close())
 
 	restarted := newControlPlane(t, opts)
 	got, err := restarted.GetChange(alice, &gensurla.GetChangePayload{ChangeID: "chg"})
 	require.NoError(t, err)
 	assert.Equal(t, confirmed, got, "the saved card comes back unchanged")
+	afterRestart, err := restarted.GetBuild(alice, &gensurla.GetBuildPayload{ChangeID: confirmed.ChangeID})
+	require.NoError(t, err)
+	assert.Equal(t, beforeClose, afterRestart, "the owner recovers the same numbered build and assignment read")
 
 	_, err = restarted.GetChange(WithPrincipal(context.Background(), Principal{ID: "bob@example.com", CallerID: "bob@example.com", Kind: CallerUser}), &gensurla.GetChangePayload{ChangeID: "chg"})
 	assert.ErrorContains(t, err, "is not the owner", "ownership is saved with the card")
@@ -56,7 +64,7 @@ func TestCardsSurviveANewControlPlane(t *testing.T) {
 	assert.Equal(t, confirmed.RequestRevision, again.RequestRevision, "the design source is saved, so the revision is reproduced")
 
 	run, err := restarted.VerifyChange(alice, &gensurla.VerifyChangePayload{
-		ChangeID: "chg", RequestRevision: confirmed.RequestRevision, CandidateCommit: confirmed.RequestRevision[:40],
+		ChangeID: "chg", RequestRevision: confirmed.RequestRevision, CandidateCommit: candidate,
 	})
 	require.NoError(t, err)
 	_, running := run.State.AsRunning()
@@ -152,7 +160,7 @@ func TestRequestsFinishingAfterCloseDoNotWrite(t *testing.T) {
 	cp, err := New(buildFixtureOptions(t, Options{CardsDir: dir, Verification: verificationConfig(t), PromotionTarget: target}))
 	require.NoError(t, err)
 	card := saveStoredCardBuildFixture(t, cp, nil)
-	const commit = "0123456789abcdef0123456789abcdef01234567"
+	commit := commitBuilderCandidateFixture(t, cp, card)
 	target.report = passingReport(t, card.RequestRevision, commit, spec)
 	alice := WithPrincipal(context.Background(), Principal{ID: "alice@example.com", CallerID: "alice@example.com", Kind: CallerUser})
 	approved := make(chan error, 1)

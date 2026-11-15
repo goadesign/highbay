@@ -505,13 +505,14 @@ func TestStoredEvaluatorRunsReceiveEveryHeldProviderSnapshot(t *testing.T) {
 	card = mustConfirmNoop(t, cp, alice, card)
 
 	saveStoredBuildFixture(t, cp, card)
+	candidate := commitBuilderCandidateFixture(t, cp, card)
 	handOverSettings(t, cp, &gensurla.HandOverModelSettingsPayload{
 		Anthropic: map[string]string{"ANTHROPIC_API_KEY": sentinelKey, "ANTHROPIC_BASE_URL": sentinelURL},
 		Openai:    map[string]string{"OPENAI_API_KEY": sentinelOpenAIKey, "OPENAI_ORG_ID": "org-visible"},
 	})
 	verifyOnce := func() string {
 		t.Helper()
-		run, err := cp.VerifyChange(alice, &gensurla.VerifyChangePayload{ChangeID: "chg", RequestRevision: card.RequestRevision, CandidateCommit: strings.Repeat("a", 40)})
+		run, err := cp.VerifyChange(alice, &gensurla.VerifyChangePayload{ChangeID: "chg", RequestRevision: card.RequestRevision, CandidateCommit: candidate})
 		require.NoError(t, err)
 		return waitForPresence(t, filepath.Join(report, "run"), run.RunID)
 	}
@@ -532,6 +533,7 @@ func TestWrittenTestRunsReceiveNoProviderSettings(t *testing.T) {
 	isolateProviderFamilies(t)
 	root := realTempDir(t)
 	repo := newLayoutRepo(t, filepath.Join(root, "repo"))
+	gitForLayoutTest(t, repo.workspace, "checkout", "-q", "--detach", repo.tests)
 	runsDir := filepath.Join(root, "runs")
 	report := t.TempDir()
 	t.Setenv("SURLA_TEST_FIRST_KEY", sentinelKey)
@@ -550,6 +552,7 @@ func TestWrittenTestRunsReceiveNoProviderSettings(t *testing.T) {
 	_, err := cp.StartBuild(asCaller("alice@example.com", CallerUser), &gensurla.StartBuildPayload{ChangeID: "chg", RequestRevision: card.RequestRevision})
 	require.NoError(t, err)
 	acceptTests(t, cp, "chg", repo.tests)
+	readBuilderCandidateFixture(t, cp, card, repo.candidate)
 	run, err := cp.VerifyChange(asCaller("alice@example.com", CallerBuilder), &gensurla.VerifyChangePayload{
 		ChangeID: "chg", RequestRevision: card.RequestRevision, CandidateCommit: repo.candidate,
 	})
