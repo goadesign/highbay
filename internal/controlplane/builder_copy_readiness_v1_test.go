@@ -3,6 +3,7 @@
 package controlplane
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"os"
@@ -13,6 +14,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel/codes"
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
+	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 )
 
 // TestBuilderCopyV1OutsideModuleReadiness rejects an intermediate directory
@@ -32,9 +35,11 @@ func TestBuilderCopyV1OutsideModuleReadiness(t *testing.T) {
 			stories := refundStory("Refund over the limit waits")
 			writeTree(t, workspace, map[string]string{"design/build_fixture.go": buildStorySource(t, stories)})
 			commitAllForLayoutTest(t, repo)
-			recorder := &recordingTracerProvider{}
+			exporter := tracetest.NewInMemoryExporter()
+			provider := sdktrace.NewTracerProvider(sdktrace.WithSyncer(exporter))
+			t.Cleanup(func() { assert.NoError(t, provider.Shutdown(context.Background())) })
 			opts := verificationSourceOptions(verificationConfig(t), stored)
-			opts.WorkspaceDir, opts.TracerProvider = workspace, recorder
+			opts.WorkspaceDir, opts.TracerProvider = workspace, provider
 			cp := newBuildControlPlane(t, opts)
 			card := saveBuildStoryCard(t, cp, "chg", StatusConfirmed, stories)
 			roles := buildRolesBuilderOnly
@@ -78,12 +83,16 @@ func TestBuilderCopyV1OutsideModuleReadiness(t *testing.T) {
 			require.NoError(t, err)
 			assert.Empty(t, entries, "no refused call accepts a verification run")
 			assert.Equal(t, before, readBuildFile(t, cp, card.ChangeID))
-			spans := recorder.matching("surla.controlplane.start_verification")
-			require.Len(t, spans, 3)
-			for _, span := range spans {
-				assert.Equal(t, codes.Unset, span.statusCode, "a declared refusal is not an operational failure")
-				assert.Empty(t, span.errors)
+			refusals := 0
+			for _, span := range exporter.GetSpans() {
+				if span.Name != "surla.controlplane.start_verification" {
+					continue
+				}
+				refusals++
+				assert.Equal(t, codes.Unset, span.Status.Code, "a declared refusal is not an operational failure")
+				assert.Empty(t, span.Events)
 			}
+			assert.Equal(t, 3, refusals)
 			require.NoError(t, os.Remove(parent))
 			require.NoError(t, os.Rename(saved, parent))
 			result, err = cp.VerifyChange(asCaller("alice@example.com", CallerBuilder), payload)
