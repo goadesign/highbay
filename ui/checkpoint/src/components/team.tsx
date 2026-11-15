@@ -8,14 +8,26 @@ import { Alert, Badge, Button, Card } from "./shadcn";
 // Role is a registered role from the generated team contract.
 type Role = TeamRoleState["role"];
 
+// TeamFactsError says why the page cannot show current team facts. Only a
+// failed read is named by the view in fixed words; the other messages are
+// complete sentences and stand alone.
+export interface TeamFactsError {
+  // kind is read_failed when a team read failed, team_unbound when the server
+  // has no team for this project and its message is the whole instruction,
+  // and not_followed when no read failed but the page stopped following.
+  kind: "read_failed" | "team_unbound" | "not_followed";
+  // message is the server's diagnostic or the page's reason, shown unchanged.
+  message: string;
+}
+
 // TeamStageProps supplies the shared team read and the page-owned actions.
 export interface TeamStageProps {
   // snapshot is the last successful read, retained when a refresh fails.
   snapshot: TeamSnapshot | null;
   // loading reflects an outstanding team read.
   loading: boolean;
-  // error is the last read failure; retained facts are stale while it is set.
-  error: string | null;
+  // error is why the facts are not current; retained facts are stale while it is set.
+  error: TeamFactsError | null;
   // starting prevents a second Start agents request while one is pending.
   starting: boolean;
   // disabled prevents actions after the browser session has ended.
@@ -147,7 +159,8 @@ export function TeamStageView({
       </div>
       {error !== null ? (
         <Alert id="surla-team-read-error" variant="destructive">
-          {error}
+          {error.kind === "read_failed" ? <strong>Could not read the project team. </strong> : null}
+          {error.message}
         </Alert>
       ) : null}
       {loading ? (
