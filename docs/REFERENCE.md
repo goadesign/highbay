@@ -2028,6 +2028,11 @@ checks are:
   summary says `dependency cache miss: this run compiles all dependencies`.
   Dependency or toolchain changes, or cache expiry or eviction, can cause a
   miss; a base-branch push does not guarantee a hit for every pull request.
+  Pull-request short checks may reuse Go's cached test results for packages
+  whose inputs did not change. On pushes to those three branches, the short
+  checks use `-count=1` to execute their selected tests again. Full suites
+  also always use `-count=1`. These runs still reuse Go's build cache, which
+  avoids recompiling unchanged code.
 - A Linux build and vet of the root module, once without build tags and once
   with each of `e2e`, `scaffold`, `herdr`, `browser` and `docker`, and the
   Linux short tests (including `verify/candidate` in the Linux Landlock +

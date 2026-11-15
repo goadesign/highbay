@@ -92,6 +92,10 @@ jobs:
           MODULE: ${{ matrix.module }}
           TESTED: '{{if or .TestGoFiles .XTestGoFiles}}{{.ImportPath}}{{end}}'
         run: |
+          test_count=()
+          if [ "$GITHUB_EVENT_NAME" = push ]; then
+            test_count=(-count=1)
+          fi
           skip=
           packages=./...
           if [ "$MODULE" = . ]; then
@@ -99,7 +103,7 @@ jobs:
             packages=$(go list -f "$TESTED" ./... </dev/null)
             packages=$(printf '%s\n' "$packages" | grep -v '^github.com/goadesign/surla/internal/controlplane$')
           fi
-          go test -race -vet=all -short -timeout 3m -json -skip "$skip" $packages </dev/null
+          go test -race -vet=all -short -timeout 3m -json "${test_count[@]}" -skip "$skip" $packages </dev/null
 
   pages:
     name: Go (., page tests)
@@ -142,7 +146,11 @@ jobs:
       - name: Vet and short race tests (page tests)
         # Only these packages declare tests matching ROOT_PAGE_TESTS.
         run: |
-          go test -race -vet=all -short -timeout 3m -json -run "$ROOT_PAGE_TESTS" ./internal/controlplane ./internal/project </dev/null
+          test_count=()
+          if [ "$GITHUB_EVENT_NAME" = push ]; then
+            test_count=(-count=1)
+          fi
+          go test -race -vet=all -short -timeout 3m -json "${test_count[@]}" -run "$ROOT_PAGE_TESTS" ./internal/controlplane ./internal/project </dev/null
       - name: Vet the opt-in real-browser test
         # The views page's real-browser test builds only with the browser tag
         # and runs only on request; vetting it here keeps it compiling. This
@@ -192,7 +200,11 @@ jobs:
           npm ci --prefix ui/checkpoint --no-audit --no-fund </dev/null
       - name: Vet and short race tests (control plane without page tests)
         run: |
-          go test -race -vet=all -short -timeout 3m -json -skip "$ROOT_PAGE_TESTS" ./internal/controlplane </dev/null
+          test_count=()
+          if [ "$GITHUB_EVENT_NAME" = push ]; then
+            test_count=(-count=1)
+          fi
+          go test -race -vet=all -short -timeout 3m -json "${test_count[@]}" -skip "$ROOT_PAGE_TESTS" ./internal/controlplane </dev/null
 
   # Warm short jobs target five minutes; cache misses are reported separately.
   # The Linux checks are separate jobs that run side by
@@ -240,7 +252,11 @@ jobs:
         # their large dependencies with the race detector took much of this
         # job; the build-and-vet jobs above compile and vet them for Linux.
         run: |
-          go test -race -vet=all -short -timeout 3m -json \
+          test_count=()
+          if [ "$GITHUB_EVENT_NAME" = push ]; then
+            test_count=(-count=1)
+          fi
+          go test -race -vet=all -short -timeout 3m -json "${test_count[@]}" \
             ./cmd/surla \
             ./internal/abspath \
             ./internal/designeval \
@@ -258,7 +274,7 @@ jobs:
             ./internal/verifyrun \
             ./verify/candidate \
             ./verify/suite </dev/null
-          go test -race -vet=all -timeout 1m -json \
+          go test -race -vet=all -timeout 1m -json "${test_count[@]}" \
             -run '^(TestCopyGrant|TestCopyEntry|TestOpenEntry)' \
             ./internal/controlplane </dev/null
 
