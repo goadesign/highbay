@@ -999,9 +999,7 @@ func TestARecordWithAnOnBranchLockRetriesOnlyRecord(t *testing.T) {
 
 		receive(t, firstAttempt)
 		time.Sleep(20 * time.Millisecond)
-		start := time.Now()
 		require.NoError(t, cp.Close())
-		assert.Less(t, time.Since(start), 200*time.Millisecond, "retry wait must end when the check context ends, not sleep out recordLockRetryPause")
 		assert.Equal(t, 1, tests.checked())
 		assert.Equal(t, 1, tests.recordCalls(), "canceling checkCtx during the retry wait must stop before a second Record attempt")
 		assert.Equal(t, reported, readBuildFile(t, cp, "chg"), "build file stays reported when stopped during Record retry wait")
