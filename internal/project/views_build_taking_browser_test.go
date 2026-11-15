@@ -11,6 +11,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -24,6 +25,7 @@ import (
 // interface, while the real project server retains auth, cards and sessions.
 type browserTakingService struct {
 	gensurla.Service
+	mu    sync.RWMutex
 	build *gensurla.ChangeBuild
 }
 
@@ -31,6 +33,8 @@ type browserTakingService struct {
 func (s *browserTakingService) GetBuild(
 	context.Context, *gensurla.GetBuildPayload,
 ) (*gensurla.ChangeBuild, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
 	return s.build, nil
 }
 
@@ -84,28 +88,58 @@ func TestBuildTakingAtDesktopAndPhoneWidth(t *testing.T) {
 	application.Handle("/", controlplane.NewHTTPHandler(service, server.Authenticate))
 	handler := server.Handler(application)
 	vp.handler.Store(&handler)
-	link, err := vp.link()
-	require.NoError(t, err)
 	capture := os.Getenv("SURLA_TEST_TAKING_CAPTURE_DIR")
 	if capture == "" {
 		capture = t.TempDir()
 	}
 	require.NoError(t, os.MkdirAll(capture, 0o700))
 	browser := startBrowser(t, executable, t.TempDir())
-	facts := driveBrowser(t, node, harness, browserInput{
-		DevTools: browser.devtools, Origin: vp.state.Origin(), Link: link,
-		ChangeIDs: []string{}, Taking: true, CaptureDirectory: capture,
-	})
-	require.Len(t, facts.Taking, 2)
-	for _, view := range facts.Taking {
-		assert.Contains(t, []int{1280, 375}, view.Width)
-		assert.LessOrEqual(t, view.DocumentWidth, view.Width)
-		assert.Equal(t, []string{"git merge " + candidate, "git merge " + tests}, view.Commands)
-		assert.True(t, view.RewriteWarning)
-		assert.True(t, view.DropFocused)
-		assert.True(t, view.DropCancelled)
-		assert.Empty(t, view.Overflowing)
-		t.Logf("taking presentation at %dpx: %+v", view.Width, view)
+	started, ok := service.build.Build.AsStarted()
+	require.True(t, ok)
+	passed := started.Taking
+	for _, state := range []string{"passed", "building", "dropped", "merged"} {
+		fixture := *started
+		switch state {
+		case "passed":
+			fixture.Taking = passed
+		case "building":
+			fixture.Taking = gensurla.NewBuildTakingBuilding(&gensurla.BuildBuilding{})
+		case "dropped":
+			fixture.Taking = gensurla.NewBuildTakingDropped(&gensurla.BuildDropped{KeptBranches: []string{}})
+		case "merged":
+			fixture.Taking = gensurla.NewBuildTakingMerged(&gensurla.BuildMerged{})
+		}
+		service.mu.Lock()
+		service.build = &gensurla.ChangeBuild{ChangeID: card.ChangeID, Build: gensurla.NewBuildStarted(&fixture)}
+		service.mu.Unlock()
+		link, err := vp.link()
+		require.NoError(t, err)
+		facts := driveBrowser(t, node, harness, browserInput{
+			DevTools: browser.devtools, Origin: vp.state.Origin(), Link: link,
+			ChangeIDs: []string{}, Taking: true, TakingState: state, CaptureDirectory: capture,
+		})
+		require.Len(t, facts.Taking, 2)
+		for _, view := range facts.Taking {
+			assert.Contains(t, []int{1280, 375}, view.Width)
+			assert.LessOrEqual(t, view.DocumentWidth, view.Width)
+			assert.Empty(t, view.Overflowing)
+			if state == "passed" {
+				assert.Equal(t, []string{"git merge " + candidate, "git merge " + tests}, view.Commands)
+				assert.True(t, view.RewriteWarning)
+				assert.True(t, view.CommandsUsable)
+			}
+			if state == "passed" || state == "building" {
+				assert.True(t, view.DropFocused)
+				assert.True(t, view.DropCancelled)
+			}
+			if state == "dropped" {
+				assert.False(t, view.NoStart)
+			}
+			if state == "merged" || state == "dropped" {
+				assert.True(t, view.Explanation)
+			}
+			t.Logf("%s presentation at %dpx: %+v", state, view.Width, view)
+		}
 	}
 	browser.stopAndCheck(t)
 }

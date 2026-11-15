@@ -100,9 +100,10 @@ await until(() => page.$("#surla-team-attention-builder"), "initial team was not
 page.$("#surla-nav-team").click();
 await until(() => page.$("#surla-team-start"), "Start agents is missing");
 expect(page.sent("POST", "/team/agents").length === 0, "opening Team started agents");
-await control(origin, "reply", { key: "GET /team", status: 503, body: { name: "unavailable", message: "Team owner unavailable." } });
+await control(origin, "reply", { key: "GET /team", status: 503, body: { name: "unavailable", id: "team-read", message: "Team owner unavailable.", temporary: true, timeout: false, fault: false } });
 page.$("#surla-team-refresh").click();
 await until(() => page.$("#surla-team-read-error"), "read failure was not shown");
+expect(page.text("#surla-team-read-error").includes("Team owner unavailable."), "Team lost the raw diagnostic");
 expect(page.text("#surla-team-stale").includes("Last-read"), "retained facts are presented as current");
 expect(page.text("#surla-team-attention-builder").includes("Last read:"), "global attention is presented as current after read failure");
 expect(page.$("#surla-team-role-builder").dataset.state === "needs_you", "failed read discarded known facts");
@@ -114,6 +115,22 @@ await until(() => page.$("#surla-team-start-receipt"), "explicit start receipt i
 expect(page.text("#surla-team-start-receipt").includes("This start (begun ") && page.text("#surla-team-start-receipt").includes("Choose the builder in the open team dialog."), "receipt is not dated owner text");
 await until(() => page.$("#surla-team-role-builder").dataset.state === "working" && !page.$("#surla-team-attention-builder"), "current facts were replaced by the historical start receipt");
 expect(page.sent("POST", "/team/agents").length === 1, "one click did not send one start");
+page.close();
+`)
+}
+
+// TestViewsPageUnboundTeamNamesTheEnablingStep checks the real owner refusal.
+func TestViewsPageUnboundTeamNamesTheEnablingStep(t *testing.T) {
+	cp := pageControlPlane(t, Options{})
+	ps := startPageServer(t, cp)
+	runPageScript(t, ps, nil, `
+const page = await openPage(origin, { link: input.link });
+await until(() => page.sent("GET", "/team").some((r) => r.status === 400), "unbound Team read did not return its real refusal");
+await until(() => page.text("#surla-checkpoint-status") === "Start this project with surla to use its team.", "header did not show the single owner instruction");
+page.$("#surla-nav-team").click();
+await until(() => page.$("#surla-team-read-error"), "Team did not show its diagnostic");
+expect(page.text("#surla-team-read-error") === "Start this project with surla to use its team.", "Team duplicated or changed the owner instruction");
+expect(page.sent("POST", "/team/agents").length === 0, "opening Team started agents");
 page.close();
 `)
 }
