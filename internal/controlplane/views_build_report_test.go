@@ -264,7 +264,7 @@ func TestViewsPageFollowsRealTestReports(t *testing.T) {
 		RunsDir:         t.TempDir(),
 		WrittenTestRuns: &WrittenTestRuns{ReportDir: t.TempDir(), Command: []string{"/bin/sh", "-c", "exit 0", "sh"}, Timeout: time.Hour},
 	})
-	card := saveStoryCard(t, cp, "chg-real-report", StatusConfirmed, refundStory("Refund over the limit"))
+	card := saveBuildStoryCard(t, cp, "chg-real-report", StatusConfirmed, refundStory("Refund over the limit"))
 	user := asCaller(pageOwner, CallerUser)
 	before, err := cp.ListChanges(user)
 	require.NoError(t, err)
@@ -338,7 +338,7 @@ func TestViewsPageFollowsRealTestReports(t *testing.T) {
 	accepted, ok := build.TestWriter.Tests.AsAccepted()
 	require.True(t, ok, "the production worker accepted the repaired hook")
 	assert.Equal(t, 2, build.TestWriter.Report)
-	assert.Equal(t, accepted.Commit, productionBuildGit(t, repo, "rev-parse", "surla/tests"))
+	assert.Equal(t, accepted.Commit, productionBuildGit(t, repo, "rev-parse", testwriter.TestsRole.Branch(1)))
 	assert.NotEqual(t, productionBuildGit(t, repo, "rev-parse", "HEAD"), accepted.Commit)
 	assert.Equal(t, "Add the tests Surla accepted for change "+card.ChangeID+", report 2",
 		productionBuildGit(t, repo, "show", "-s", "--format=%s", accepted.Commit))

@@ -308,9 +308,6 @@ func TestDownloadDependenciesFailsForAModuleItCannotFetch(t *testing.T) {
 // returns an *AuthorError with FindingWorkingCopy without running the
 // generator or writing generated files into the side branch.
 func TestPrepareAttributesCommittedDependencyChanges(t *testing.T) {
-	if runtime.GOOS != "darwin" && runtime.GOOS != "linux" {
-		t.Skip("Prepare refuses before generating where the sandbox does not exist")
-	}
 	t.Setenv("GOPROXY", "off")
 	const (
 		plainMod   = "module example.com/shop/eval\n\ngo 1.24\n"

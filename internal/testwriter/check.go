@@ -308,8 +308,8 @@ func WithoutAbsolutePaths(text string) string {
 // link on the way also wraps ErrLinkedFolder. Any
 // other error is a failure the author cannot fix. Two are marked so a caller
 // can say what failed: ErrGeneration, when the generator failed (the context
-// ended, or it failed while preparing its own files), and ErrWriteGenerated, when the generated folder could not be
-// written. A third is ErrDependencies: generation failed while loading the
+// ended, or it failed while preparing its own files), and ErrWriteGenerated,
+// when the generated folder could not be written. A third is ErrDependencies: generation failed while loading the
 // module's dependencies, and they cannot be downloaded where Surla runs for a
 // cause outside the author's changes since base (loadFailure). A staging
 // folder that an interrupted publication left in the module is removed and
@@ -348,7 +348,7 @@ func (c *Checker) Prepare(
 // commit would hold them into a private folder, compares them with base,
 // writes the suite module's Story table there again from the stories (so the
 // author cannot change what is required) and generates its folder with it,
-// downloads the module's dependencies, compiles the generated suite command in
+// downloads the module's dependencies, compiles the generated suite command with
 // candidate.Build, lists the scenarios it declares by running its --describe
 // with candidate.Output, reading standard output alone, each in its own
 // process group, and compares them with the required ones by the generator's

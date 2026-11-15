@@ -700,15 +700,17 @@ func TestRunInGroupStopsTheChildrenOfACommand(t *testing.T) {
 func TestCheckFindsAListingThatLeavesAProcessHoldingItsOutput(t *testing.T) {
 	skipInShortMode(t)
 	repo, _ := newProject(t, fixtureProject(t))
-	wc, err := OpenWorkingCopy(t.Context(), repo)
+	base := runGit(t, repo, "rev-parse", "HEAD")
+	branch := TestsRole.Branch(1)
+	wc, err := MakeCopy(t.Context(), repo, TestsRole, branch, base)
 	require.NoError(t, err)
-	_, err = testChecker.Prepare(t.Context(), wc, fixtureSuite, refundStories)
+	_, err = testChecker.Prepare(t.Context(), wc, fixtureSuite, branch, base, refundStories)
 	require.NoError(t, err)
 	pidFile := filepath.Join(t.TempDir(), "children")
 	writeFiles(t, filepath.Join(wc.Project(), "eval"), map[string]string{
 		"acceptance/acceptance.go": fixtureAcceptance(childInit(pidFile, true), "RefundOverLimit", "StoreCreditWithinLimit"),
 	})
-	v, err := testChecker.Check(t.Context(), wc, fixtureSuite, refundStories)
+	v, err := testChecker.Check(t.Context(), wc, fixtureSuite, branch, base, refundStories)
 	require.NoError(t, err)
 	require.Len(t, v.Findings, 1, "%+v", v.Findings)
 	assert.Equal(t, FindingListing, v.Findings[0].Kind)
