@@ -462,7 +462,8 @@ export function BuildTakingView({ changeId, build, disabled, dropping, onDrop, o
       {progress}
       {taking.state === "passed" ? <BuildMergeInstructions taking={taking}
         candidateCommit={taking.candidate_commit}
-        testsCommit={taking.tests.source === "written_tests" ? taking.tests.commit : null} /> : null}
+        testsCommit={taking.tests.source === "written_tests" ? taking.tests.commit : null}
+        onFocusedControlRemoved={onFocusedControlRemoved} /> : null}
       {taking.state === "merged" ? <p>It is in your branch. Another change can be built. No role has work on this build.</p> : null}
       {taking.state === "dropped" ? <>
         {taking.kept_branches.length > 0 ? <ul>{taking.kept_branches.map((branch) => <li key={branch}><code>{branch}</code> — <code>git log {branch}</code> shows it.</li>)}</ul> : null}
@@ -495,12 +496,21 @@ export function BuildTakingView({ changeId, build, disabled, dropping, onDrop, o
 
 // BuildMergeInstructions names the passed commits, never movable branch tips.
 // The branch labels describe where those commits were verified.
-export function BuildMergeInstructions({ taking, candidateCommit, testsCommit }: {
+export function BuildMergeInstructions({ taking, candidateCommit, testsCommit, onFocusedControlRemoved }: {
   taking: Extract<StartedBuild["taking"], { state: "passed" }>;
   candidateCommit: string;
   testsCommit: string | null;
+  onFocusedControlRemoved: () => void;
 }) {
-  return <div className="surla-build-merge">
+  // The owner supplies its stable fallback when a focused scrollport is
+  // removed. Unfocused command subtrees never reclaim another control's focus.
+  const attachCommands = useCallback((node: HTMLDivElement | null) => {
+    if (node === null) return;
+    return () => {
+      if (node.contains(document.activeElement)) onFocusedControlRemoved();
+    };
+  }, [onFocusedControlRemoved]);
+  return <div className="surla-build-merge" ref={attachCommands}>
     <h4>To take this change, run in the project folder:</h4>
     <ol>
       <li><pre tabIndex={0} aria-label="Merge the builder’s commit"><code>git merge {candidateCommit}</code></pre>
@@ -534,18 +544,20 @@ function buildTimestampNanos(at: string): bigint {
 
 // SavedResultCommits keeps historical verification and approval evidence bound
 // to its own inputs. Only an eligible run of the open build adds guidance.
-export function SavedResultCommits({ changeId, candidateCommit, testsCommit, build, run }: {
+export function SavedResultCommits({ changeId, candidateCommit, testsCommit, build, run, onFocusedControlRemoved }: {
   changeId: string;
   candidateCommit: string;
   testsCommit: string | null;
   build: StartedBuild | null;
   run: VerificationStatusResult | null;
+  onFocusedControlRemoved: () => void;
 }) {
   const taking = build?.taking;
   const matched = taking?.state === "passed" && run !== null && build !== null &&
     runBelongsToBuild(changeId, build, run) && run.candidate_commit === candidateCommit &&
     (run.test_source.source === "written_tests" ? run.suite_commit === testsCommit : testsCommit === null);
-  return matched ? <BuildMergeInstructions taking={taking} candidateCommit={candidateCommit} testsCommit={testsCommit} /> : <p>
+  return matched ? <BuildMergeInstructions taking={taking} candidateCommit={candidateCommit} testsCommit={testsCommit}
+    onFocusedControlRemoved={onFocusedControlRemoved} /> : <p>
     This saved result names the builder’s commit <code>{candidateCommit}</code>
     {testsCommit !== null ? <> and the tests’ commit <code>{testsCommit}</code></> : null}.
     {" Review the current build’s taking state before merging."}
@@ -604,6 +616,7 @@ function TestWriterFacts({ build, findingTexts, loading, error, disabled, onRead
   onRead: () => void;
 }) {
   const tests = build.test_writer.tests;
+  const open = build.taking.state === "building" || build.taking.state === "passed";
   let progress: string;
   switch (tests.state) {
     case "not_used": progress = "not needed; this project uses its configured tests"; break;
@@ -635,10 +648,10 @@ function TestWriterFacts({ build, findingTexts, loading, error, disabled, onRead
       {tests.state === "could_not_run" ? <p>{tests.reason} {tests.step}</p> : null}
       {tests.state === "accepted" ? <p id="surla-build-not-judged">{tests.not_judged}</p> : null}
       {tests.state === "needs_changes" ? (
-        <div id="surla-build-findings" aria-busy={loading}>
+        <div id="surla-build-findings" aria-busy={open && loading}>
           <p><strong>What Surla told the test writer</strong></p>
           <p>{findingCount} {findingCount === 1 ? "finding" : "findings"}</p>
-          {findingCount > 0 ? (
+          {open && findingCount > 0 ? (
             <>
               {loading ? <p role="status">Reading findings…</p> : null}
               {error !== null ? (

@@ -104,6 +104,14 @@ func TestViewsPageHistoricalTakingUsesTheEligibleResultsOwnCommits(t *testing.T)
 			svc.set(old, newest)
 			svc.list(card.ChangeID, newest.RunID, old.RunID)
 			ps := startPageServer(t, svc)
+			ps.act("resave-history", func() {
+				cp.mu.Lock()
+				defer cp.mu.Unlock()
+				record, ok, err := cp.cards.load(card.ChangeID)
+				require.NoError(t, err)
+				require.True(t, ok)
+				require.NoError(t, cp.cards.save(record))
+			})
 			eligible := mode == "eligible" || mode == "at_start" || mode == "after_start"
 			runPageScript(t, ps, map[string]any{"mode": mode, "old": old.RunID, "eligible": eligible}, `
 const history = "/changes/chg-history/verifications";
@@ -118,7 +126,7 @@ if (input.mode !== "history_failure") {
   await control(origin, "release", { key: "GET " + history });
 }
 await until(() => page.sent("GET", history)[0].status !== undefined && !page.text("#surla-cp5-approval").includes("Reading saved verification runs"), "history read did not settle");
-const ownCommands = (region) => Array.from(region.querySelectorAll(".surla-build-merge li > code:first-child"), (node) => node.textContent);
+const ownCommands = (region) => Array.from(region.querySelectorAll(".surla-build-merge li > pre > code"), (node) => node.textContent);
 const expected = ["git merge " + "1".repeat(40), "git merge " + "2".repeat(40)];
 if (input.eligible) {
   expect(JSON.stringify(ownCommands(page.$("#surla-cp5-approval"))) === JSON.stringify(expected), "recorded approval used the newest pass instead of its own C then T");
@@ -131,6 +139,24 @@ if (input.eligible) {
     expect(page.sent("GET", history).length === 1, "failed history read retried in a loop");
   }
 }
+const checkCommandRemoval = async (region, fallback, external) => {
+  const path = "/changes/chg-history/build", before = page.sent("GET", path).length;
+  await control(origin, "hold", { key: "GET " + path });
+  (external ?? region.querySelector(".surla-build-merge pre")).focus();
+  await control(origin, "act", { key: "resave-history" });
+  await until(() => page.sent("GET", path).length > before && ownCommands(region).length === 0, "held build refresh did not remove uncertain commands");
+  expect(page.doc.activeElement === (external ?? fallback), "removed result commands lost local fallback or stole external focus");
+  await control(origin, "release", { key: "GET " + path });
+  await until(() => ownCommands(region).length === 2, "fresh build read did not restore its own result commands");
+};
+if (input.mode === "eligible") {
+  const region = page.$("#surla-cp5-approval");
+  await checkCommandRemoval(region, page.$("#surla-cp1-editor"), null);
+  const field = page.$('textarea[data-example-id="check_01"][data-field="scenario"]');
+  page.type(field, "keep my editor focus through approval refresh");
+  await checkCommandRemoval(region, page.$("#surla-cp1-editor"), field);
+  expect(field.value === "keep my editor focus through approval refresh", "approval refresh lost unsaved editor text");
+}
 if (input.mode !== "history_failure") {
   page.$("#surla-nav-cp4").click();
   await until(() => page.$('button[data-run-id="' + input.old + '"]'), "saved old run was not listed");
@@ -139,6 +165,11 @@ if (input.mode !== "history_failure") {
   const commands = ownCommands(page.$("#surla-cp4-details"));
   expect((commands.length > 0) === input.eligible, "old pass membership did not follow its saved start");
   if (input.eligible) expect(JSON.stringify(commands) === JSON.stringify(expected), "older pass did not keep its own C then T");
+  if (input.mode === "eligible") {
+    const region = page.$("#surla-cp4-details"); region.open = true;
+    await checkCommandRemoval(region, page.$("#surla-cp4-title"), null);
+    await checkCommandRemoval(region, page.$("#surla-cp4-title"), page.$("#surla-load-verifications"));
+  }
 }
 page.close();
 `)

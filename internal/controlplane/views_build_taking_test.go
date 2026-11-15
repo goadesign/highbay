@@ -14,7 +14,7 @@ import (
 // TestViewsPageShowsTakingStates keeps commands bound to passed commit IDs and
 // lists only the dropped build's retained branches, including an empty list.
 func TestViewsPageShowsTakingStates(t *testing.T) {
-	for _, state := range []string{"building", "passed", "evaluator", "rewritten", "merged", "dropped", "empty"} {
+	for _, state := range []string{"building", "passed", "evaluator", "rewritten", "merged", "dropped", "empty", "merged_findings", "dropped_findings"} {
 		t.Run(state, func(t *testing.T) {
 			cp := newBuildControlPlane(t, Options{Team: &TeamBinding{
 				Owner: pageOwner, Service: &teamServiceFixture{snapshot: pageTeamSnapshot("working")},
@@ -28,7 +28,15 @@ func TestViewsPageShowsTakingStates(t *testing.T) {
 			encoded, err := gensurla.EncodeStartedBuild(started.Build)
 			require.NoError(t, err)
 			ps := startPageServer(t, cp)
-			runPageScript(t, ps, map[string]any{"build": string(encoded), "state": state}, `
+			ps.act("resave-taking", func() {
+				cp.mu.Lock()
+				defer cp.mu.Unlock()
+				record, ok, err := cp.cards.load(card.ChangeID)
+				require.NoError(t, err)
+				require.True(t, ok)
+				require.NoError(t, cp.cards.save(record))
+			})
+			runPageScript(t, ps, map[string]any{"build": string(encoded), "state": state, "notJudged": testsNotJudged}, `
 const path = "/changes/chg-taking/build";
 const candidate = "1".repeat(40), tests = "2".repeat(40);
 const passed = { state: "passed", run_id: "run-taking", candidate_commit: candidate,
@@ -40,10 +48,14 @@ const variants = {
   merged: { state: "merged" },
   dropped: { state: "dropped", kept_branches: ["surla/tests-7"] },
   empty: { state: "dropped", kept_branches: [] },
+  merged_findings: { state: "merged" },
+  dropped_findings: { state: "dropped", kept_branches: [] },
 };
 const saved = JSON.parse(input.build);
 if (input.state !== "building") saved.test_writer.tests = { state: "accepted", commit: tests,
-  checked_at: saved.started_at, not_judged: "The assertions were not judged." };
+  checked_at: saved.started_at, not_judged: input.notJudged };
+const closedFindings = input.state.endsWith("_findings");
+if (closedFindings) saved.test_writer.tests = { state: "needs_changes", checked_at: saved.started_at, finding_count: 1 };
 await control(origin, "reply", { key: "GET " + path, status: 200,
   body: { change_id: "chg-taking", build: { ...saved, state: "started", taking: variants[input.state] } } });
 const page = await openPage(origin, { link: input.link });
@@ -62,13 +74,13 @@ if (["passed", "rewritten", "evaluator"].includes(input.state)) {
 } else {
   expect(!taking.includes("git merge"), "an unpassed or closed build offers merge commands");
   if (input.state === "building") expect(taking.includes("Next: the test writer prepares tests") && !taking.includes("nothing to merge yet"), "building lost its next step or repeats an unpassed summary");
-  if (input.state === "merged") expect(page.text("#surla-build-state") === "Merged." && taking.includes("No role has work"), "merged state is unclear");
+  if (variants[input.state].state === "merged") expect(page.text("#surla-build-state") === "Merged." && taking.includes("No role has work"), "merged state is unclear");
   if (input.state === "dropped") expect(taking.includes("surla/tests-7") && !taking.includes("surla/build-7") && taking.includes("git log surla/tests-7"), "dropped state invented a retained branch");
   if (input.state === "empty") expect(taking.includes("Nothing was committed for it") && !taking.includes("surla/"), "empty dropped state invented work");
 }
 const open = ["building", "passed", "rewritten", "evaluator"].includes(input.state);
 expect(Boolean(page.$("#surla-build-drop")) === open, "Drop availability does not follow taking");
-for (const selector of ["#surla-build-builder", "#surla-build-test-writer", ...(input.state === "building" ? [] : ["#surla-build-not-judged"])]) {
+for (const selector of ["#surla-build-builder", "#surla-build-test-writer", ...(input.state === "building" || closedFindings ? [] : ["#surla-build-not-judged"])]) {
   expect(Boolean(page.$(selector)?.closest("#surla-build-details")) === (input.state !== "building"), "role facts did not follow the active-versus-saved disclosure");
 }
 expect(page.$("#surla-build-details").textContent.includes("No tests of this change’s Story were required."), "required-test facts are not in the saved disclosure");
@@ -76,9 +88,15 @@ expect(!page.$("#surla-build-details").open, "secondary build facts expanded by 
 const buttons = page.$$(".surla-build-actions button");
 expect(buttons.length > 0 && (!open || buttons.at(-1).id === "surla-build-drop"), "Drop is not last in the single action row");
 expect(page.$$(".surla-build-actions").length === 1, "build actions are split into separate rows");
-expect(page.text("#surla-build-taking-state") === (input.state === "building" ? "Building" : ["passed", "evaluator", "rewritten"].includes(input.state) ? "Passed" : input.state === "merged" ? "Merged" : "Dropped"), "the header badge does not describe the saved taking state");
+const state = variants[input.state].state;
+expect(page.text("#surla-build-taking-state") === state[0].toUpperCase() + state.slice(1), "the header badge does not describe the saved taking state");
 expect(Boolean(page.$(".surla-build-header .surla-build-actions")), "current build controls are not in the header");
-expect(Boolean(page.$("#surla-build-start-explanation")) === ["dropped", "empty"].includes(input.state), "the execution warning appears outside the agreed Build-offer states");
+expect(Boolean(page.$("#surla-build-start-explanation")) === (state === "dropped"), "the execution warning appears outside the agreed Build-offer states");
+if (closedFindings) {
+  expect(page.text("#surla-build-findings").includes("1 finding") && page.$("#surla-build-findings").closest("#surla-build-details"), "closed build lost its historical finding count");
+  expect(!page.$("#surla-build-findings button") && page.$("#surla-build-findings").getAttribute("aria-busy") === "false", "closed build exposes active findings controls or loading");
+  expect(page.sent("GET", path + "/findings").length === 0, "closed historical facts read active findings");
+}
 if (open) {
   page.$("#surla-build-drop").click();
   await until(() => page.$("#surla-build-drop-cancel"), "Drop did not ask");
@@ -86,6 +104,22 @@ if (open) {
   page.$("#surla-build-drop-cancel").click();
   await until(() => !page.$("#surla-build-drop-question"), "Drop cancel did not close");
   expect(page.doc.activeElement === page.$("#surla-build-drop"), "Drop cancel lost trigger focus");
+}
+if (input.state === "passed") {
+  const replaceTaking = async (taking) => {
+    await control(origin, "reply", { key: "GET " + path, status: 200,
+      body: { change_id: "chg-taking", build: { ...saved, state: "started", taking } } });
+    await control(origin, "act", { key: "resave-taking" });
+    await until(() => page.$("#surla-build-taking")?.dataset.state === taking.state && !page.$("#surla-build-loading"), "taking refresh did not settle");
+  };
+  page.$("#surla-build-taking pre").focus();
+  await replaceTaking(variants.building);
+  expect(page.doc.activeElement === page.$("#surla-build-title"), "removing a focused merge command lost the stable Build heading");
+  await replaceTaking(passed);
+  const field = page.$('textarea[data-example-id="check_01"][data-field="scenario"]');
+  page.type(field, "keep editor focus when commands vanish"); field.focus();
+  await replaceTaking(variants.merged);
+  expect(page.doc.activeElement === field && field.value === "keep editor focus when commands vanish", "removing unfocused commands stole external editor focus");
 }
 expect(page.sent("POST", path).length === 0 && page.sent("POST", path + "/drop").length === 0, "reading taking changed the build");
 page.close();

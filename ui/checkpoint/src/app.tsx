@@ -1418,7 +1418,7 @@ export function bootstrapViewsPage() {
       .map((role) => role.role);
   }
 
-  // focusCurrentViewHeading recovers focus only when a focused team control
+  // focusCurrentViewHeading recovers focus only when a focused view control
   // disappears. Each rendered region starts with its current view's heading.
   function focusCurrentViewHeading() {
     const region = activeResult !== null && activeResult.kind !== "cp1-incoming-card"
@@ -1428,6 +1428,18 @@ export function bootstrapViewsPage() {
       heading.tabIndex = -1;
       heading.focus();
     }
+  }
+
+  // focusChangeDecisions is a stable removal callback for approval commands,
+  // including when their editor remains beside another view.
+  function focusChangeDecisions() {
+    editorRegionEl.focus();
+  }
+
+  // focusVerificationHeading keeps a removed result command in its own view.
+  // Its stable identity avoids ref cleanup during unrelated renders.
+  function focusVerificationHeading() {
+    focusResult("#surla-cp4-title");
   }
 
   // startTeamAgents is an explicit window request. Its dated receipt describes
@@ -2389,6 +2401,7 @@ export function bootstrapViewsPage() {
           onLoadLatestCard={handleLoadLatestCard}
           onLoadVerifications={() => handleListVerifications(ed.card.change_id)}
           onOpenStory={openStory}
+          onFocusedControlRemoved={focusChangeDecisions}
         />
 
         </>
@@ -2591,6 +2604,7 @@ export function bootstrapViewsPage() {
                 else openChange(effectiveChangeId);
               }}
               onReturnToChangeCard={handleReturnToChangeCard}
+              onFocusedControlRemoved={focusVerificationHeading}
             />
             {displayedRun ? (
               <ApproveResultControl

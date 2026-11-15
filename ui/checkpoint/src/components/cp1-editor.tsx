@@ -56,6 +56,8 @@ export interface CP1EditorProps {
   onLoadVerifications: () => void;
   // onOpenStory shows the Story stage for this change.
   onOpenStory: () => void;
+  // onFocusedControlRemoved returns focus to the stable editor region.
+  onFocusedControlRemoved: () => void;
 }
 
 interface FieldTextareaProps {
@@ -165,6 +167,7 @@ export function CP1EditorView({
   onLoadLatestCard,
   onLoadVerifications,
   onOpenStory,
+  onFocusedControlRemoved,
 }: CP1EditorProps) {
   const ambiguities = Array.isArray(card.ambiguities) ? card.ambiguities : [];
   const stories = card.stories ?? [];
@@ -356,7 +359,7 @@ export function CP1EditorView({
           {approvalRunsError !== null ? <p role="status">Could not read this approval’s verification history. {approvalRunsError} Its current build membership is unknown.</p> : null}
           <SavedResultCommits changeId={card.change_id} candidateCommit={card.approval.candidate_commit}
             testsCommit={card.approval.test_source.source === "written_tests" ? card.approval.suite_commit : null}
-            build={build} run={approvalRun} />
+            build={build} run={approvalRun} onFocusedControlRemoved={onFocusedControlRemoved} />
           <details className="surla-details" id="surla-cp5-approval-details">
             <summary>Verified inputs and digests</summary>
             <p>
@@ -431,7 +434,7 @@ export function CP1EditorView({
           {approvalRunsError !== null ? <p role="status">Could not read this approval’s verification history. {approvalRunsError} Its current build membership is unknown.</p> : null}
           <SavedResultCommits changeId={card.change_id} candidateCommit={card.unverified_approval.approval.candidate_commit}
             testsCommit={card.unverified_approval.approval.test_source.source === "written_tests" ? card.unverified_approval.approval.suite_commit : null}
-            build={build} run={unverifiedApprovalRun} />
+            build={build} run={unverifiedApprovalRun} onFocusedControlRemoved={onFocusedControlRemoved} />
           <details className="surla-details" id="surla-cp5-unverified-approval-details">
             <summary>Recorded inputs and digests</summary>
             <p>
