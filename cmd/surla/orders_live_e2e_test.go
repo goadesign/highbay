@@ -99,14 +99,16 @@ func TestOrdersLiveCopyAppliesADraftThroughTheProjectServer(t *testing.T) {
 		&bearerDoer{client: srv.Client(), token: "test-token"},
 		goahttp.RequestEncoder, goahttp.ResponseDecoder, false)
 	client := &genmcpsurla.Client{ToolsCallEndpoint: transport.ToolsCall()}
-	ctx, cancel := context.WithTimeout(t.Context(), journeyOwnerWait)
-	defer cancel()
 
-	refused := ordersDraftRefusal(t, ctx, client, ordersSystemPrompt, "Answer in one sentence.")
+	// Each step below waits within its own allowance. The Story refresh and
+	// the live start outlast the server's own limits on them (journeyStepWait
+	// and journeyOwnerWait); every other step builds nothing and waits a
+	// minute or less.
+	refused := ordersDraftRefusal(t, stepContext(t, journeyQuickWait), client, ordersSystemPrompt, "Answer in one sentence.")
 	assert.Contains(t, refused, "start_live_target", "with no live copy, the refusal names the step that enables drafts")
 
 	phaseStart := time.Now()
-	refresh := trustedSuiteRefresh(t, ctx, client)
+	refresh := trustedSuiteRefresh(t, stepContext(t, journeyStepWait), client)
 	t.Logf("refresh: %s", time.Since(phaseStart))
 	args, err := gensurla.EncodeProposeChangePayload(&gensurla.ProposeChangePayload{
 		ChangeID: "orders-refund-wording", Prompt: "Answer refund questions in one sentence.", StoryRefreshOpID: refresh.OpID,
@@ -121,14 +123,14 @@ func TestOrdersLiveCopyAppliesADraftThroughTheProjectServer(t *testing.T) {
 		},
 	})
 	require.NoError(t, err)
-	proposed, err := gensurla.DecodeChangeCardResult(trustedSuiteCall(t, ctx, client, "propose_change", args))
+	proposed, err := gensurla.DecodeChangeCardResult(trustedSuiteCall(t, stepContext(t, journeyQuickWait), client, "propose_change", args))
 	require.NoError(t, err)
 	args, err = gensurla.EncodeConfirmIntentPayload(&gensurla.ConfirmIntentPayload{
 		ChangeID: proposed.ChangeID, RequestRevision: proposed.RequestRevision,
 		Answers: map[string]string{}, Examples: proposed.Examples,
 	})
 	require.NoError(t, err)
-	card, err := gensurla.DecodeChangeCardResult(trustedSuiteCall(t, ctx, client, "confirm_intent", args))
+	card, err := gensurla.DecodeChangeCardResult(trustedSuiteCall(t, stepContext(t, journeyQuickWait), client, "confirm_intent", args))
 	require.NoError(t, err)
 	require.Equal(t, controlplane.StatusConfirmed, card.Status)
 	args, err = gensurla.EncodeStartLiveTargetPayload(&gensurla.StartLiveTargetPayload{
@@ -136,7 +138,7 @@ func TestOrdersLiveCopyAppliesADraftThroughTheProjectServer(t *testing.T) {
 	})
 	require.NoError(t, err)
 	phaseStart = time.Now()
-	started, err := gensurla.DecodeLiveTargetResult(trustedSuiteCall(t, ctx, client, "start_live_target", args))
+	started, err := gensurla.DecodeLiveTargetResult(trustedSuiteCall(t, stepContext(t, journeyOwnerWait), client, "start_live_target", args))
 	t.Logf("start live target: %s", time.Since(phaseStart))
 	require.NoError(t, err)
 	assert.Equal(t, head, started.CandidateCommit)
@@ -148,7 +150,7 @@ func TestOrdersLiveCopyAppliesADraftThroughTheProjectServer(t *testing.T) {
 	})
 	require.NoError(t, err)
 	phaseStart = time.Now()
-	drafted, err := gensurla.DecodeDraftOverrideResult(trustedSuiteCall(t, ctx, client, "draft_override", args))
+	drafted, err := gensurla.DecodeDraftOverrideResult(trustedSuiteCall(t, stepContext(t, journeyQuickWait), client, "draft_override", args))
 	t.Logf("draft override: %s", time.Since(phaseStart))
 	require.NoError(t, err)
 	assert.True(t, drafted.AppliedInStore)
@@ -158,22 +160,25 @@ func TestOrdersLiveCopyAppliesADraftThroughTheProjectServer(t *testing.T) {
 		"the Orders copy accepted exactly the drafted text")
 	assert.Contains(t, drafted.Message, head)
 
-	assert.Contains(t, ordersDraftRefusal(t, ctx, client, ordersSystemPrompt, "Hello {{ .Name"), "does not render",
+	assert.Contains(t, ordersDraftRefusal(t, stepContext(t, journeyQuickWait), client, ordersSystemPrompt, "Hello {{ .Name"), "does not render",
 		"text that does not render is refused")
-	assert.Contains(t, ordersDraftRefusal(t, ctx, client, "orders.refund.other", "Hello."), "no prompt with this ID",
+	assert.Contains(t, ordersDraftRefusal(t, stepContext(t, journeyQuickWait), client, "orders.refund.other", "Hello."), "no prompt with this ID",
 		"an unregistered prompt is refused")
-	assert.Equal(t, http.StatusUnauthorized, ordersPromptStatus(t, ctx, started.URL, "not-the-minted-key"),
+	assert.Equal(t, http.StatusUnauthorized, ordersPromptStatus(t, started.URL, "not-the-minted-key"),
 		"the copy changes prompts only for the key Surla minted")
 
+	// The server waits up to 30 seconds for the copy's processes to end, then
+	// removes its directory.
+	stopCtx := stepContext(t, 45*time.Second)
 	phaseStart = time.Now()
-	stopped, err := gensurla.DecodeStopLiveTargetResult(trustedSuiteCall(t, ctx, client, "stop_live_target", []byte(`{}`)))
+	stopped, err := gensurla.DecodeStopLiveTargetResult(trustedSuiteCall(t, stopCtx, client, "stop_live_target", []byte(`{}`)))
 	t.Logf("stop live target: %s", time.Since(phaseStart))
 	require.NoError(t, err)
 	assert.True(t, stopped.Stopped)
 	liveDirs, err := verifyrun.LeftoverLiveDirs(controlplane.LiveRoot(opts.CardsDir))
 	require.NoError(t, err)
 	assert.Empty(t, liveDirs, "stopping the live copy removes its processes and directory")
-	refused = ordersDraftRefusal(t, ctx, client, ordersSystemPrompt, text)
+	refused = ordersDraftRefusal(t, stepContext(t, journeyQuickWait), client, ordersSystemPrompt, text)
 	assert.Contains(t, refused, "start_live_target", "after the stop, drafts are refused again")
 }
 
@@ -194,10 +199,11 @@ func ordersDraftRefusal(t *testing.T, ctx context.Context, client *genmcpsurla.C
 }
 
 // ordersPromptStatus sends a prompt change straight to the live copy at
-// origin with key, as only Surla should, and returns the HTTP status.
-func ordersPromptStatus(t *testing.T, ctx context.Context, origin, key string) int {
+// origin with key, as only Surla should, and returns the HTTP status. The
+// request waits at most 30 seconds.
+func ordersPromptStatus(t *testing.T, origin, key string) int {
 	t.Helper()
-	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
 	defer cancel()
 	req, err := http.NewRequestWithContext(ctx, http.MethodPut, origin+"/prompts/"+ordersSystemPrompt,
 		strings.NewReader(`{"template":"Hijacked."}`))

@@ -38,6 +38,12 @@ import (
 // the owner finished if its I/O fails.
 const journeyOwnerWait = defaultProjectVerifyTimeout + 2*time.Minute
 
+// journeyQuickWait bounds one step that builds, generates, evaluates and
+// starts nothing: a call the server answers from its stored state (a
+// proposal, a confirmation, a refusal), a prompt draft sent to a running live
+// copy, or a git read.
+const journeyQuickWait = time.Minute
+
 // trustedSuiteCommit commits only the harmless evaluator comment and returns
 // the full candidate commit ID. Its git commands run with testGitEnv: no
 // inherited GIT_* variable, so they act only on the repository at dir, and
@@ -102,6 +108,17 @@ func trustedSuiteRefresh(
 	return refresh
 }
 
+// stepContext returns a context that ends after wait, or with the test, for
+// one step of a journey. Each step gets its own, created immediately before
+// the step, so the time an earlier step took never shortens a later step's
+// wait, and a deadline error names the step that outlasted its own wait.
+func stepContext(t *testing.T, wait time.Duration) context.Context {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(t.Context(), wait)
+	t.Cleanup(cancel)
+	return ctx
+}
+
 // toolErrorText joins the text items of an MCP tool result, the
 // builder-safe message a failing tool returns, so a test failure shows it.
 func toolErrorText(content []*genmcpsurla.ContentItem) string {
@@ -143,10 +160,12 @@ func writeStarterVerification(t *testing.T, workspace, dir, modulePath, suiteCom
 // assertVerifyRefusedWithoutBuild proposes and confirms changeID through MCP
 // on a server without stored verification settings, and checks that
 // verify_change of candidateCommit is refused, naming the build the user
-// starts, and that runsDir holds no run of changeID for owner.
-func assertVerifyRefusedWithoutBuild(t *testing.T, ctx context.Context, client *genmcpsurla.Client, runsDir, owner, changeID, candidateCommit string) {
+// starts, and that runsDir holds no run of changeID for owner. The Story
+// refresh waits within journeyStepWait, which outlasts the server's own limit
+// on a Story evaluation; each later call waits within journeyQuickWait.
+func assertVerifyRefusedWithoutBuild(t *testing.T, client *genmcpsurla.Client, runsDir, owner, changeID, candidateCommit string) {
 	t.Helper()
-	refresh := trustedSuiteRefresh(t, ctx, client)
+	refresh := trustedSuiteRefresh(t, stepContext(t, journeyStepWait), client)
 	args, err := gensurla.EncodeProposeChangePayload(&gensurla.ProposeChangePayload{
 		ChangeID: changeID, Prompt: "Keep answering price questions.", StoryRefreshOpID: refresh.OpID,
 		Analysis: &gensurla.CP1Analysis{
@@ -160,19 +179,19 @@ func assertVerifyRefusedWithoutBuild(t *testing.T, ctx context.Context, client *
 		},
 	})
 	require.NoError(t, err)
-	proposed, err := gensurla.DecodeChangeCardResult(trustedSuiteCall(t, ctx, client, "propose_change", args))
+	proposed, err := gensurla.DecodeChangeCardResult(trustedSuiteCall(t, stepContext(t, journeyQuickWait), client, "propose_change", args))
 	require.NoError(t, err)
 	args, err = gensurla.EncodeConfirmIntentPayload(&gensurla.ConfirmIntentPayload{
 		ChangeID: changeID, RequestRevision: proposed.RequestRevision, Answers: map[string]string{}, Examples: proposed.Examples,
 	})
 	require.NoError(t, err)
-	card, err := gensurla.DecodeChangeCardResult(trustedSuiteCall(t, ctx, client, "confirm_intent", args))
+	card, err := gensurla.DecodeChangeCardResult(trustedSuiteCall(t, stepContext(t, journeyQuickWait), client, "confirm_intent", args))
 	require.NoError(t, err)
 	args, err = gensurla.EncodeVerifyChangePayload(&gensurla.VerifyChangePayload{
 		ChangeID: card.ChangeID, RequestRevision: card.RequestRevision, CandidateCommit: candidateCommit,
 	})
 	require.NoError(t, err)
-	result, err := client.ToolsCall(ctx, &genmcpsurla.ToolsCallPayload{Name: "verify_change", Arguments: args})
+	result, err := client.ToolsCall(stepContext(t, journeyQuickWait), &genmcpsurla.ToolsCallPayload{Name: "verify_change", Arguments: args})
 	require.NoError(t, err)
 	complete, ok := result.Outcome.AsComplete()
 	require.True(t, ok)
