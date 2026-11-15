@@ -126,7 +126,7 @@ func TestViewsPageTeamAndBuildUpdatesPreserveTheModelDraft(t *testing.T) {
 	cp := newBuildControlPlane(t, Options{Team: &TeamBinding{Owner: pageOwner, Service: f}})
 	cp.changesWait = 400 * time.Millisecond
 	cp.changesPoll = 20 * time.Millisecond
-	card := confirmedChange(t, cp, "chg")
+	card := buildableChange(t, cp, "chg")
 	ps := startPageServer(t, cp)
 	ps.act("start-build-and-attention", func() {
 		_, err := cp.StartBuild(asCaller(pageOwner, CallerUser), &gensurla.StartBuildPayload{

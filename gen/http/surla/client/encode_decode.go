@@ -7215,6 +7215,44 @@ func unmarshalStartedBuildResponseBodyToSurlaStartedBuild(v *StartedBuildRespons
 	}
 	res.Builder = unmarshalBuilderProgressResponseBodyToSurlaBuilderProgress(v.Builder)
 	res.TestWriter = unmarshalTestWriterProgressResponseBodyToSurlaTestWriterProgress(v.TestWriter)
+	switch string(v.Taking.Kind()) {
+	case "building":
+		actual, _ := v.Taking.AsBuilding()
+		var obj *surla.BuildBuilding
+		if actual != nil {
+			obj = unmarshalBuildBuildingResponseBodyToSurlaBuildBuilding(actual)
+		}
+		u := res.Taking
+		u.SetBuilding((*surla.BuildBuilding)(obj))
+		res.Taking = u
+	case "passed":
+		actual, _ := v.Taking.AsPassed()
+		var obj *surla.BuildPassed
+		if actual != nil {
+			obj = unmarshalBuildPassedResponseBodyToSurlaBuildPassed(actual)
+		}
+		u := res.Taking
+		u.SetPassed((*surla.BuildPassed)(obj))
+		res.Taking = u
+	case "merged":
+		actual, _ := v.Taking.AsMerged()
+		var obj *surla.BuildMerged
+		if actual != nil {
+			obj = unmarshalBuildMergedResponseBodyToSurlaBuildMerged(actual)
+		}
+		u := res.Taking
+		u.SetMerged((*surla.BuildMerged)(obj))
+		res.Taking = u
+	case "dropped":
+		actual, _ := v.Taking.AsDropped()
+		var obj *surla.BuildDropped
+		if actual != nil {
+			obj = unmarshalBuildDroppedResponseBodyToSurlaBuildDropped(actual)
+		}
+		u := res.Taking
+		u.SetDropped((*surla.BuildDropped)(obj))
+		res.Taking = u
+	}
 
 	return res
 }
@@ -7354,6 +7392,79 @@ func unmarshalTestsCouldNotRunResponseBodyToSurlaTestsCouldNotRun(v *TestsCouldN
 		Reason:    *v.Reason,
 		Step:      *v.Step,
 		CheckedAt: *v.CheckedAt,
+	}
+
+	return res
+}
+
+// unmarshalBuildBuildingResponseBodyToSurlaBuildBuilding builds a value of
+// type *surla.BuildBuilding from a value of type *BuildBuildingResponseBody.
+func unmarshalBuildBuildingResponseBodyToSurlaBuildBuilding(v *BuildBuildingResponseBody) *surla.BuildBuilding {
+	res := &surla.BuildBuilding{}
+
+	return res
+}
+
+// unmarshalBuildPassedResponseBodyToSurlaBuildPassed builds a value of type
+// *surla.BuildPassed from a value of type *BuildPassedResponseBody.
+func unmarshalBuildPassedResponseBodyToSurlaBuildPassed(v *BuildPassedResponseBody) *surla.BuildPassed {
+	res := &surla.BuildPassed{
+		RunID:           *v.RunID,
+		CandidateCommit: *v.CandidateCommit,
+		CandidateBranch: *v.CandidateBranch,
+		BaseInBranch:    *v.BaseInBranch,
+	}
+	switch string(v.Tests.Kind()) {
+	case "evaluator":
+		actual, _ := v.Tests.AsEvaluator()
+		var obj *surla.OperatorEvaluatorTests
+		if actual != nil {
+			obj = unmarshalOperatorEvaluatorTestsResponseBodyToSurlaOperatorEvaluatorTests(actual)
+		}
+		u := res.Tests
+		u.SetEvaluator((*surla.OperatorEvaluatorTests)(obj))
+		res.Tests = u
+	case "written_tests":
+		actual, _ := v.Tests.AsWrittenTests()
+		var obj *surla.BuildPassedTests
+		if actual != nil {
+			obj = unmarshalBuildPassedTestsResponseBodyToSurlaBuildPassedTests(actual)
+		}
+		u := res.Tests
+		u.SetWrittenTests((*surla.BuildPassedTests)(obj))
+		res.Tests = u
+	}
+
+	return res
+}
+
+// unmarshalBuildPassedTestsResponseBodyToSurlaBuildPassedTests builds a value
+// of type *surla.BuildPassedTests from a value of type
+// *BuildPassedTestsResponseBody.
+func unmarshalBuildPassedTestsResponseBodyToSurlaBuildPassedTests(v *BuildPassedTestsResponseBody) *surla.BuildPassedTests {
+	res := &surla.BuildPassedTests{
+		Commit: *v.Commit,
+		Branch: *v.Branch,
+	}
+
+	return res
+}
+
+// unmarshalBuildMergedResponseBodyToSurlaBuildMerged builds a value of type
+// *surla.BuildMerged from a value of type *BuildMergedResponseBody.
+func unmarshalBuildMergedResponseBodyToSurlaBuildMerged(v *BuildMergedResponseBody) *surla.BuildMerged {
+	res := &surla.BuildMerged{}
+
+	return res
+}
+
+// unmarshalBuildDroppedResponseBodyToSurlaBuildDropped builds a value of type
+// *surla.BuildDropped from a value of type *BuildDroppedResponseBody.
+func unmarshalBuildDroppedResponseBodyToSurlaBuildDropped(v *BuildDroppedResponseBody) *surla.BuildDropped {
+	res := &surla.BuildDropped{}
+	res.KeptBranches = make([]string, len(v.KeptBranches))
+	for i, val := range v.KeptBranches {
+		res.KeptBranches[i] = val
 	}
 
 	return res

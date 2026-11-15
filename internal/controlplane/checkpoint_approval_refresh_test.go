@@ -23,15 +23,16 @@ func TestCheckpointUIRefreshesApprovalWithoutDiscardingEdits(t *testing.T) {
 		Environment: "sim", Artifacts: map[string]string{"orders": strings.Repeat("a", 64)},
 	}
 	target := &pageTarget{artifacts: spec.Artifacts}
-	cp := pageControlPlane(t, Options{ResolvePromotionTarget: target.resolve})
-	guide := WithPrincipal(context.Background(), Principal{ID: pageOwner, CallerID: "guide", Kind: CallerGuide})
+	cp := pageControlPlane(t, buildFixtureOptions(t, Options{ResolvePromotionTarget: target.resolve}))
 	user := WithPrincipal(context.Background(), Principal{ID: pageOwner, CallerID: pageUserID, Kind: CallerUser})
-	proposed := mustPropose(t, cp, guide, "approval-refresh", "Refunds above $50 require a manager.", refundAnalysis("Refunds above $50 require a manager."))
+	proposed := saveProposedCardFixture(t, cp, pageOwner, "approval-refresh", "Refunds above $50 require a manager.", refundAnalysis("Refunds above $50 require a manager."))
+	proposed = attachBuildSnapshot(t, cp, proposed.ChangeID)
 	confirmed, err := cp.ConfirmIntent(user, &gensurla.ConfirmIntentPayload{
 		ChangeID: proposed.ChangeID, RequestRevision: proposed.RequestRevision,
 		Answers: map[string]string{}, Examples: proposed.Examples,
 	})
 	require.NoError(t, err)
+	saveStoredBuildFixture(t, cp, confirmed)
 	commit := strings.Repeat("1", 40)
 	report := passingReport(t, confirmed.RequestRevision, commit, spec)
 	target.update(func(p *pageTarget) { p.report = report })

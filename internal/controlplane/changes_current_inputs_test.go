@@ -29,7 +29,7 @@ func TestListChangesCurrentInputsFollowAcceptedWrittenTests(t *testing.T) {
 		WrittenTestRuns: &WrittenTestRuns{ReportDir: t.TempDir(), Timeout: time.Minute},
 	})
 	user := asCaller("alice@example.com", CallerUser)
-	card := confirmedChange(t, cp, "chg")
+	card := buildableChange(t, cp, "chg")
 	runID := strings.Repeat("1", 32)
 	writeListedRun(t, runsDir, "alice@example.com", card, runID,
 		time.Date(2026, 10, 1, 9, 0, 0, 0, time.UTC), true)
@@ -48,9 +48,7 @@ func TestListChangesCurrentInputsFollowAcceptedWrittenTests(t *testing.T) {
 	listed(false) // No build has selected accepted written tests.
 	start := func() {
 		t.Helper()
-		_, err := cp.StartBuild(user, &gensurla.StartBuildPayload{
-			ChangeID: card.ChangeID, RequestRevision: card.RequestRevision,
-		})
+		_, err := startBuildAgain(t, cp, user, card.ChangeID, card.RequestRevision)
 		require.NoError(t, err)
 	}
 	start()
@@ -84,7 +82,7 @@ func TestListChangesCurrentInputsFollowAcceptedWrittenTests(t *testing.T) {
 	listed(true)
 
 	// The list must neither consume assignments nor rewrite the saved build.
-	buildPath := filepath.Join(cp.cards.dir, buildFileName(card.ChangeID))
+	buildPath := filepath.Join(cp.cards.dir, openBuildRecordFile)
 	before, err := os.ReadFile(buildPath)
 	require.NoError(t, err)
 	listed(true)
@@ -98,11 +96,11 @@ func TestListChangesCurrentInputsFollowAcceptedWrittenTests(t *testing.T) {
 	// A formerly usable builder-only build supplies no written tests after a
 	// switch away from a stored evaluator, even if its saved verdict matches.
 	cp.mu.Lock()
-	saved, found, err := cp.cards.loadBuild(card.ChangeID)
+	saved, found, err := cp.cards.loadOpenBuild()
 	require.NoError(t, err)
 	require.True(t, found)
-	saved.Roles, saved.TestWriter.WorkingFolder = buildRolesBuilderOnly, nil
-	require.NoError(t, cp.cards.saveBuild(saved))
+	saved.Roles = buildRolesBuilderOnly
+	require.NoError(t, cp.cards.saveOpenBuild(saved))
 	cp.mu.Unlock()
 	listed(false)
 
@@ -133,9 +131,10 @@ func TestListChangesCurrentInputsFollowAcceptedWrittenTests(t *testing.T) {
 func TestListChangesKeepsEarlierRevisionRuns(t *testing.T) {
 	runsDir := t.TempDir()
 	plan := verify.Plan{SuiteCommit: strings.Repeat("2", 40)}
-	cp := newControlPlane(t, Options{Verification: &VerificationConfig{RunsDir: runsDir, Plan: plan}})
+	cp := newControlPlane(t, buildFixtureOptions(t, Options{Verification: &VerificationConfig{RunsDir: runsDir, Plan: plan}}))
 	user := asCaller("alice@example.com", CallerUser)
-	first := confirmedChange(t, cp, "chg")
+	first := buildableChange(t, cp, "chg")
+	saveStoredBuildFixture(t, cp, first)
 	runID := strings.Repeat("1", 32)
 	writeListedRun(t, runsDir, "alice@example.com", first, runID,
 		time.Date(2026, 10, 1, 9, 0, 0, 0, time.UTC), true)
@@ -281,12 +280,12 @@ func saveListedTestState(t *testing.T, cp *ControlPlane, changeID, state, commit
 	t.Helper()
 	cp.mu.Lock()
 	defer cp.mu.Unlock()
-	saved, found, err := cp.cards.loadBuild(changeID)
+	saved, found, err := cp.cards.loadOpenBuild()
 	require.NoError(t, err)
 	require.True(t, found)
 	saved.ReportNumber = 1
 	saved.TestWriter = testWriterAssignment{
-		State: state, Commit: commit, WorkingFolder: saved.TestWriter.WorkingFolder,
+		State: state, Commit: commit,
 	}
 	switch state {
 	case testsNeedChanges:
@@ -297,7 +296,7 @@ func saveListedTestState(t *testing.T, cp *ControlPlane, changeID, state, commit
 	if state != testsReported {
 		saved.TestWriter.CheckedAt = time.Date(2026, 10, 2, 9, 0, 0, 0, time.UTC)
 	}
-	require.NoError(t, cp.cards.saveBuild(saved))
+	require.NoError(t, cp.cards.saveOpenBuild(saved))
 }
 
 // setListedRunSource changes only the fixture request's test source. The

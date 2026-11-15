@@ -24,7 +24,9 @@ import (
 func TestTheStoryTableIsSurlas(t *testing.T) {
 	skipInShortMode(t)
 	repo, markers := newProject(t, fixtureProject(t))
-	wc, err := OpenWorkingCopy(t.Context(), repo)
+	base := runGit(t, repo, "rev-parse", "HEAD")
+	branch := TestsRole.Branch(1)
+	wc, err := MakeCopy(t.Context(), repo, TestsRole, branch, "HEAD")
 	require.NoError(t, err)
 	module := filepath.Join(wc.Project(), "eval")
 	tablePath := filepath.Join(module, filepath.FromSlash(designeval.StoryTestsPath))
@@ -53,7 +55,7 @@ func TestTheStoryTableIsSurlas(t *testing.T) {
 
 	t.Run("Prepare replaces a link", func(t *testing.T) {
 		require.NoError(t, os.Symlink(outside, tablePath))
-		required, err := testChecker.Prepare(t.Context(), wc, fixtureSuite, refundStories)
+		required, err := testChecker.Prepare(t.Context(), wc, fixtureSuite, branch, base, refundStories)
 		require.NoError(t, err)
 		assert.Len(t, required, 2)
 		assertSurlasTable(t)
@@ -100,7 +102,7 @@ func TestTheStoryTableIsSurlas(t *testing.T) {
 				require.NoError(t, os.RemoveAll(filepath.Join(module, "design", "aaa.go")))
 				require.NoError(t, os.WriteFile(tablePath, want, 0o600))
 			})
-			v, err := testChecker.Check(t.Context(), wc, fixtureSuite, refundStories)
+			v, err := testChecker.Check(t.Context(), wc, fixtureSuite, branch, base, refundStories)
 			require.NoError(t, err)
 			assertNoAbsolutePath(t, v.Findings)
 			if len(step.wantFinding) > 0 {
@@ -112,7 +114,7 @@ func TestTheStoryTableIsSurlas(t *testing.T) {
 				return
 			}
 			require.True(t, v.Accepted(), "%+v", v.Findings)
-			commit, err := Record(t.Context(), v, "Add the accepted tests")
+			commit, err := Record(t.Context(), v, branch, "Add the accepted tests")
 			require.NoError(t, err)
 			assert.Equal(t, strings.TrimSpace(string(want)), runGit(t, repo, "show", commit+":eval/"+designeval.StoryTestsPath),
 				"the commit holds Surla's table, not the author's")
@@ -122,20 +124,20 @@ func TestTheStoryTableIsSurlas(t *testing.T) {
 
 	t.Run("Prepare at a report restores an edited table", func(t *testing.T) {
 		require.NoError(t, os.WriteFile(tablePath, noRows, 0o600))
-		_, err := testChecker.Prepare(t.Context(), wc, fixtureSuite, refundStories)
+		_, err := testChecker.Prepare(t.Context(), wc, fixtureSuite, branch, base, refundStories)
 		require.NoError(t, err)
 		assertSurlasTable(t)
-		v, err := testChecker.Check(t.Context(), wc, fixtureSuite, refundStories)
+		v, err := testChecker.Check(t.Context(), wc, fixtureSuite, branch, base, refundStories)
 		require.NoError(t, err)
 		require.True(t, v.Accepted(), "%+v", v.Findings)
-		_, err = Record(t.Context(), v, "Add the accepted tests")
+		_, err = Record(t.Context(), v, branch, "Add the accepted tests")
 		require.NoError(t, err)
 		assert.Empty(t, runGit(t, wc.Dir(), "status", "--porcelain", "--untracked-files=all"), "the copy holds what was recorded")
 	})
 
 	t.Run("a revision removes a finished flow", func(t *testing.T) {
 		fewer := []designeval.StorySummary{{Name: "Refunds", Flows: refundStories[0].Flows[:1]}}
-		required, err := testChecker.Prepare(t.Context(), wc, fixtureSuite, fewer)
+		required, err := testChecker.Prepare(t.Context(), wc, fixtureSuite, branch, base, fewer)
 		require.NoError(t, err)
 		assert.Equal(t, []designeval.StoryScenario{
 			{Story: "Refunds", Key: "refund-over-limit", Scenario: "refund_over_limit", Hook: "RefundOverLimit"},
@@ -146,7 +148,7 @@ func TestTheStoryTableIsSurlas(t *testing.T) {
 		suiteGo, err := os.ReadFile(filepath.Join(module, generatedSuite))
 		require.NoError(t, err)
 		assert.NotContains(t, string(suiteGo), "StoreCreditWithinLimit")
-		v, err := testChecker.Check(t.Context(), wc, fixtureSuite, fewer)
+		v, err := testChecker.Check(t.Context(), wc, fixtureSuite, branch, base, fewer)
 		require.NoError(t, err)
 		assert.True(t, v.Accepted(), "the left-over method still builds: %+v", v.Findings)
 	})

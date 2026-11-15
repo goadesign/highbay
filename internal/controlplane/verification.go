@@ -265,7 +265,10 @@ func (c *ControlPlane) ListVerifications(ctx context.Context, p *gensurla.ListVe
 					"the test writer reads only the runs of a change it has an assignment for, and change %q has none", p.ChangeID))
 			}
 		}
-		build, buildErr := c.changeBuild(record)
+		build, buildFound, buildErr := c.cards.loadOpenBuild()
+		if buildErr == nil {
+			buildFound, buildErr = c.activeBuildFound(build, buildFound)
+		}
 		if buildErr != nil {
 			c.mu.RUnlock()
 			span.RecordError(buildErr)
@@ -300,7 +303,7 @@ func (c *ControlPlane) ListVerifications(ctx context.Context, p *gensurla.ListVe
 				return nil, fmt.Errorf("list verifications for %q: saved binaries location could not be read", p.ChangeID)
 			}
 			out = append(out, statusResult(r.Request, r.State,
-				c.verificationInputsCurrent(record, build, r.Request.Plan), binariesDir))
+				c.verificationInputsCurrent(record, build, buildFound, r.Request.Plan), binariesDir))
 		}
 		return &gensurla.VerificationListResult{
 			ChangeID: p.ChangeID,
@@ -368,11 +371,15 @@ func (c *ControlPlane) currentVerificationInputs(
 	if !exists || record.owner != principal.ID {
 		return false, nil
 	}
-	build, err := c.changeBuild(record)
+	build, found, err := c.cards.loadOpenBuild()
 	if err != nil {
 		return false, err
 	}
-	return c.verificationInputsCurrent(record, build, plan), nil
+	found, err = c.activeBuildFound(build, found)
+	if err != nil {
+		return false, err
+	}
+	return c.verificationInputsCurrent(record, build, found, plan), nil
 }
 
 // runTestSource renders where a run's tests came from, from its stored plan,

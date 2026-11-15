@@ -5019,6 +5019,12 @@ type StartedBuildResponseBody struct {
 	// Number of finished flows in the agreed Story. Zero means no test of this
 	// change's Story was required.
 	RequiredTestCount *int `form:"required_test_count,omitempty" json:"required_test_count,omitempty" xml:"required_test_count,omitempty"`
+	// Whether the user has taken this build: building until a verification of it
+	// passes; passed with the commits to merge; merged once the branch checked out
+	// in the project folder holds both commits of one passed run; dropped once the
+	// user dropped it. A project has one open build, and another change is built
+	// only once it is merged or dropped.
+	Taking *BuildTakingResponseBody `form:"taking,omitempty" json:"taking,omitempty" xml:"taking,omitempty"`
 }
 
 // BuilderProgressResponseBody is used to define fields on response body types.
@@ -5084,6 +5090,50 @@ type TestsCouldNotRunResponseBody struct {
 	Step *string `form:"step,omitempty" json:"step,omitempty" xml:"step,omitempty"`
 	// When Surla's check stopped.
 	CheckedAt *string `form:"checked_at,omitempty" json:"checked_at,omitempty" xml:"checked_at,omitempty"`
+}
+
+// BuildBuildingResponseBody is used to define fields on response body types.
+type BuildBuildingResponseBody struct {
+}
+
+// BuildPassedResponseBody is used to define fields on response body types.
+type BuildPassedResponseBody struct {
+	// The newest passed run; get_verification takes it.
+	RunID *string `form:"run_id,omitempty" json:"run_id,omitempty" xml:"run_id,omitempty"`
+	// The builder's commit the run passed.
+	CandidateCommit *string `form:"candidate_commit,omitempty" json:"candidate_commit,omitempty" xml:"candidate_commit,omitempty"`
+	// The build's builder branch, surla/build-<n>, where this commit was verified.
+	CandidateBranch *string `form:"candidate_branch,omitempty" json:"candidate_branch,omitempty" xml:"candidate_branch,omitempty"`
+	// written_tests with the accepted tests' commit to merge after the builder's;
+	// evaluator when the project verifies with its stored evaluator, whose tests
+	// are not merged.
+	Tests *BuildPassedTestSourceResponseBody `form:"tests,omitempty" json:"tests,omitempty" xml:"tests,omitempty"`
+	// False when the branch checked out in the project folder no longer holds the
+	// commit this build started from, because its history was rewritten: merging
+	// these commits brings that history back, and dropping the build and building
+	// again starts from the branch as it is.
+	BaseInBranch *bool `form:"base_in_branch,omitempty" json:"base_in_branch,omitempty" xml:"base_in_branch,omitempty"`
+}
+
+// BuildPassedTestsResponseBody is used to define fields on response body types.
+type BuildPassedTestsResponseBody struct {
+	// Commit Surla recorded the accepted tests at.
+	Commit *string `form:"commit,omitempty" json:"commit,omitempty" xml:"commit,omitempty"`
+	// The build's test-writer branch, surla/tests-<n>, where this commit was
+	// verified.
+	Branch *string `form:"branch,omitempty" json:"branch,omitempty" xml:"branch,omitempty"`
+}
+
+// BuildMergedResponseBody is used to define fields on response body types.
+type BuildMergedResponseBody struct {
+}
+
+// BuildDroppedResponseBody is used to define fields on response body types.
+type BuildDroppedResponseBody struct {
+	// The build's own branches that exist and hold a commit made after the build's
+	// base, where its work stays (git log <branch> shows it); empty when nothing
+	// was committed for it.
+	KeptBranches []string `form:"kept_branches,omitempty" json:"kept_branches,omitempty" xml:"kept_branches,omitempty"`
 }
 
 // ProjectTeamResponseBody is used to define fields on response body types.
@@ -5516,6 +5566,188 @@ func (u *ApprovalTestSourceResponseBody) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+// BuildPassedTestSourceResponseBody holds exactly one of its branch values.
+type BuildPassedTestSourceResponseBody struct {
+	kind         BuildPassedTestSourceResponseBodyKind
+	evaluator    *OperatorEvaluatorTestsResponseBody
+	writtenTests *BuildPassedTestsResponseBody
+}
+
+// BuildPassedTestSourceResponseBodyKind records which BuildPassedTestSourceResponseBody branch is selected.
+type BuildPassedTestSourceResponseBodyKind string
+
+const (
+	// BuildPassedTestSourceResponseBodyKindEvaluator identifies the evaluator branch.
+	BuildPassedTestSourceResponseBodyKindEvaluator BuildPassedTestSourceResponseBodyKind = "evaluator"
+	// BuildPassedTestSourceResponseBodyKindWrittenTests identifies the written_tests branch.
+	BuildPassedTestSourceResponseBodyKindWrittenTests BuildPassedTestSourceResponseBodyKind = "written_tests"
+)
+
+// Kind returns the selected branch.
+func (u BuildPassedTestSourceResponseBody) Kind() BuildPassedTestSourceResponseBodyKind {
+	return u.kind
+}
+
+// NewBuildPassedTestSourceResponseBodyEvaluator constructs BuildPassedTestSourceResponseBody with the evaluator branch set.
+func NewBuildPassedTestSourceResponseBodyEvaluator(v *OperatorEvaluatorTestsResponseBody) BuildPassedTestSourceResponseBody {
+	return BuildPassedTestSourceResponseBody{
+		kind:      BuildPassedTestSourceResponseBodyKindEvaluator,
+		evaluator: v,
+	}
+}
+
+// AsEvaluator returns the value when the evaluator branch is selected.
+func (u BuildPassedTestSourceResponseBody) AsEvaluator() (_ *OperatorEvaluatorTestsResponseBody, ok bool) {
+	if u.kind != BuildPassedTestSourceResponseBodyKindEvaluator {
+		return
+	}
+	return u.evaluator, true
+}
+
+// SetEvaluator selects the evaluator branch and stores v.
+func (u *BuildPassedTestSourceResponseBody) SetEvaluator(v *OperatorEvaluatorTestsResponseBody) {
+	*u = BuildPassedTestSourceResponseBody{
+		kind:      BuildPassedTestSourceResponseBodyKindEvaluator,
+		evaluator: v,
+	}
+}
+
+// NewBuildPassedTestSourceResponseBodyWrittenTests constructs BuildPassedTestSourceResponseBody with the written_tests branch set.
+func NewBuildPassedTestSourceResponseBodyWrittenTests(v *BuildPassedTestsResponseBody) BuildPassedTestSourceResponseBody {
+	return BuildPassedTestSourceResponseBody{
+		kind:         BuildPassedTestSourceResponseBodyKindWrittenTests,
+		writtenTests: v,
+	}
+}
+
+// AsWrittenTests returns the value when the written_tests branch is selected.
+func (u BuildPassedTestSourceResponseBody) AsWrittenTests() (_ *BuildPassedTestsResponseBody, ok bool) {
+	if u.kind != BuildPassedTestSourceResponseBodyKindWrittenTests {
+		return
+	}
+	return u.writtenTests, true
+}
+
+// SetWrittenTests selects the written_tests branch and stores v.
+func (u *BuildPassedTestSourceResponseBody) SetWrittenTests(v *BuildPassedTestsResponseBody) {
+	*u = BuildPassedTestSourceResponseBody{
+		kind:         BuildPassedTestSourceResponseBodyKindWrittenTests,
+		writtenTests: v,
+	}
+}
+
+// Validate ensures exactly one valid branch is selected.
+func (u BuildPassedTestSourceResponseBody) Validate() error {
+	_, err := u.Value()
+	return err
+}
+
+// Value returns the selected branch value, or the same selection error as Validate.
+// Go templates can read this method directly; an invalid selection stops execution.
+func (u BuildPassedTestSourceResponseBody) Value() (any, error) {
+	switch u.kind {
+	case "":
+		return nil, goa.InvalidEnumValueError("source", "", []any{
+			string(BuildPassedTestSourceResponseBodyKindEvaluator),
+			string(BuildPassedTestSourceResponseBodyKindWrittenTests),
+		})
+	case BuildPassedTestSourceResponseBodyKindEvaluator:
+		if u.evaluator == nil {
+			return nil, goa.MissingFieldError("value", "BuildPassedTestSourceResponseBody")
+		}
+		return u.evaluator, nil
+	case BuildPassedTestSourceResponseBodyKindWrittenTests:
+		if u.writtenTests == nil {
+			return nil, goa.MissingFieldError("value", "BuildPassedTestSourceResponseBody")
+		}
+		return u.writtenTests, nil
+	default:
+		return nil, goa.InvalidEnumValueError("source", u.kind, []any{
+			string(BuildPassedTestSourceResponseBodyKindEvaluator),
+			string(BuildPassedTestSourceResponseBodyKindWrittenTests),
+		})
+	}
+}
+
+// MarshalJSON writes the selected object branch beside its discriminator.
+func (u BuildPassedTestSourceResponseBody) MarshalJSON() ([]byte, error) {
+	value, err := u.Value()
+	if err != nil {
+		return nil, err
+	}
+	data, err := json.Marshal(value)
+	if err != nil {
+		return nil, err
+	}
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(data, &fields); err != nil {
+		return nil, err
+	}
+	if fields == nil {
+		return nil, goa.InvalidFieldTypeError("source", nil, "non-null JSON object")
+	}
+	if _, exists := fields["source"]; exists {
+		return nil, fmt.Errorf("BuildPassedTestSourceResponseBody branch already contains discriminator %q", "source")
+	}
+	tag, err := json.Marshal(string(u.kind))
+	if err != nil {
+		return nil, err
+	}
+	fields["source"] = tag
+	return json.Marshal(fields)
+}
+
+// UnmarshalJSON reads the discriminator and decodes its declared object branch.
+func (u *BuildPassedTestSourceResponseBody) UnmarshalJSON(data []byte) error {
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(data, &fields); err != nil {
+		return err
+	}
+	tag, exists := fields["source"]
+	if !exists {
+		return goa.MissingFieldError("source", "BuildPassedTestSourceResponseBody")
+	}
+	if bytes.Equal(bytes.TrimSpace(tag), []byte("null")) {
+		return goa.InvalidFieldTypeError("source", nil, "JSON string")
+	}
+	var raw struct {
+		Type  string
+		Value json.RawMessage
+	}
+	if err := json.Unmarshal(tag, &raw.Type); err != nil {
+		return err
+	}
+	delete(fields, "source")
+	value, err := json.Marshal(fields)
+	if err != nil {
+		return err
+	}
+	raw.Value = value
+	switch raw.Type {
+	case string(BuildPassedTestSourceResponseBodyKindEvaluator):
+		var v *OperatorEvaluatorTestsResponseBody
+		if err := json.Unmarshal(raw.Value, &v); err != nil {
+			return err
+		}
+		u.SetEvaluator(v)
+	case string(BuildPassedTestSourceResponseBodyKindWrittenTests):
+		var v *BuildPassedTestsResponseBody
+		if err := json.Unmarshal(raw.Value, &v); err != nil {
+			return err
+		}
+		u.SetWrittenTests(v)
+	default:
+		if raw.Type == "" {
+			return goa.MissingFieldError("source", "BuildPassedTestSourceResponseBody")
+		}
+		return goa.InvalidEnumValueError("source", raw.Type, []any{
+			string(BuildPassedTestSourceResponseBodyKindEvaluator),
+			string(BuildPassedTestSourceResponseBodyKindWrittenTests),
+		})
+	}
+	return nil
+}
+
 // BuildResponseBody holds exactly one of its branch values.
 type BuildResponseBody struct {
 	kind       BuildResponseBodyKind
@@ -5693,6 +5925,270 @@ func (u *BuildResponseBody) UnmarshalJSON(data []byte) error {
 		return goa.InvalidEnumValueError("state", raw.Type, []any{
 			string(BuildResponseBodyKindNotStarted),
 			string(BuildResponseBodyKindStarted),
+		})
+	}
+	return nil
+}
+
+// BuildTakingResponseBody holds exactly one of its branch values.
+type BuildTakingResponseBody struct {
+	kind     BuildTakingResponseBodyKind
+	building *BuildBuildingResponseBody
+	passed   *BuildPassedResponseBody
+	merged   *BuildMergedResponseBody
+	dropped  *BuildDroppedResponseBody
+}
+
+// BuildTakingResponseBodyKind records which BuildTakingResponseBody branch is selected.
+type BuildTakingResponseBodyKind string
+
+const (
+	// BuildTakingResponseBodyKindBuilding identifies the building branch.
+	BuildTakingResponseBodyKindBuilding BuildTakingResponseBodyKind = "building"
+	// BuildTakingResponseBodyKindPassed identifies the passed branch.
+	BuildTakingResponseBodyKindPassed BuildTakingResponseBodyKind = "passed"
+	// BuildTakingResponseBodyKindMerged identifies the merged branch.
+	BuildTakingResponseBodyKindMerged BuildTakingResponseBodyKind = "merged"
+	// BuildTakingResponseBodyKindDropped identifies the dropped branch.
+	BuildTakingResponseBodyKindDropped BuildTakingResponseBodyKind = "dropped"
+)
+
+// Kind returns the selected branch.
+func (u BuildTakingResponseBody) Kind() BuildTakingResponseBodyKind {
+	return u.kind
+}
+
+// NewBuildTakingResponseBodyBuilding constructs BuildTakingResponseBody with the building branch set.
+func NewBuildTakingResponseBodyBuilding(v *BuildBuildingResponseBody) BuildTakingResponseBody {
+	return BuildTakingResponseBody{
+		kind:     BuildTakingResponseBodyKindBuilding,
+		building: v,
+	}
+}
+
+// AsBuilding returns the value when the building branch is selected.
+func (u BuildTakingResponseBody) AsBuilding() (_ *BuildBuildingResponseBody, ok bool) {
+	if u.kind != BuildTakingResponseBodyKindBuilding {
+		return
+	}
+	return u.building, true
+}
+
+// SetBuilding selects the building branch and stores v.
+func (u *BuildTakingResponseBody) SetBuilding(v *BuildBuildingResponseBody) {
+	*u = BuildTakingResponseBody{
+		kind:     BuildTakingResponseBodyKindBuilding,
+		building: v,
+	}
+}
+
+// NewBuildTakingResponseBodyPassed constructs BuildTakingResponseBody with the passed branch set.
+func NewBuildTakingResponseBodyPassed(v *BuildPassedResponseBody) BuildTakingResponseBody {
+	return BuildTakingResponseBody{
+		kind:   BuildTakingResponseBodyKindPassed,
+		passed: v,
+	}
+}
+
+// AsPassed returns the value when the passed branch is selected.
+func (u BuildTakingResponseBody) AsPassed() (_ *BuildPassedResponseBody, ok bool) {
+	if u.kind != BuildTakingResponseBodyKindPassed {
+		return
+	}
+	return u.passed, true
+}
+
+// SetPassed selects the passed branch and stores v.
+func (u *BuildTakingResponseBody) SetPassed(v *BuildPassedResponseBody) {
+	*u = BuildTakingResponseBody{
+		kind:   BuildTakingResponseBodyKindPassed,
+		passed: v,
+	}
+}
+
+// NewBuildTakingResponseBodyMerged constructs BuildTakingResponseBody with the merged branch set.
+func NewBuildTakingResponseBodyMerged(v *BuildMergedResponseBody) BuildTakingResponseBody {
+	return BuildTakingResponseBody{
+		kind:   BuildTakingResponseBodyKindMerged,
+		merged: v,
+	}
+}
+
+// AsMerged returns the value when the merged branch is selected.
+func (u BuildTakingResponseBody) AsMerged() (_ *BuildMergedResponseBody, ok bool) {
+	if u.kind != BuildTakingResponseBodyKindMerged {
+		return
+	}
+	return u.merged, true
+}
+
+// SetMerged selects the merged branch and stores v.
+func (u *BuildTakingResponseBody) SetMerged(v *BuildMergedResponseBody) {
+	*u = BuildTakingResponseBody{
+		kind:   BuildTakingResponseBodyKindMerged,
+		merged: v,
+	}
+}
+
+// NewBuildTakingResponseBodyDropped constructs BuildTakingResponseBody with the dropped branch set.
+func NewBuildTakingResponseBodyDropped(v *BuildDroppedResponseBody) BuildTakingResponseBody {
+	return BuildTakingResponseBody{
+		kind:    BuildTakingResponseBodyKindDropped,
+		dropped: v,
+	}
+}
+
+// AsDropped returns the value when the dropped branch is selected.
+func (u BuildTakingResponseBody) AsDropped() (_ *BuildDroppedResponseBody, ok bool) {
+	if u.kind != BuildTakingResponseBodyKindDropped {
+		return
+	}
+	return u.dropped, true
+}
+
+// SetDropped selects the dropped branch and stores v.
+func (u *BuildTakingResponseBody) SetDropped(v *BuildDroppedResponseBody) {
+	*u = BuildTakingResponseBody{
+		kind:    BuildTakingResponseBodyKindDropped,
+		dropped: v,
+	}
+}
+
+// Validate ensures exactly one valid branch is selected.
+func (u BuildTakingResponseBody) Validate() error {
+	_, err := u.Value()
+	return err
+}
+
+// Value returns the selected branch value, or the same selection error as Validate.
+// Go templates can read this method directly; an invalid selection stops execution.
+func (u BuildTakingResponseBody) Value() (any, error) {
+	switch u.kind {
+	case "":
+		return nil, goa.InvalidEnumValueError("state", "", []any{
+			string(BuildTakingResponseBodyKindBuilding),
+			string(BuildTakingResponseBodyKindPassed),
+			string(BuildTakingResponseBodyKindMerged),
+			string(BuildTakingResponseBodyKindDropped),
+		})
+	case BuildTakingResponseBodyKindBuilding:
+		if u.building == nil {
+			return nil, goa.MissingFieldError("value", "BuildTakingResponseBody")
+		}
+		return u.building, nil
+	case BuildTakingResponseBodyKindPassed:
+		if u.passed == nil {
+			return nil, goa.MissingFieldError("value", "BuildTakingResponseBody")
+		}
+		return u.passed, nil
+	case BuildTakingResponseBodyKindMerged:
+		if u.merged == nil {
+			return nil, goa.MissingFieldError("value", "BuildTakingResponseBody")
+		}
+		return u.merged, nil
+	case BuildTakingResponseBodyKindDropped:
+		if u.dropped == nil {
+			return nil, goa.MissingFieldError("value", "BuildTakingResponseBody")
+		}
+		return u.dropped, nil
+	default:
+		return nil, goa.InvalidEnumValueError("state", u.kind, []any{
+			string(BuildTakingResponseBodyKindBuilding),
+			string(BuildTakingResponseBodyKindPassed),
+			string(BuildTakingResponseBodyKindMerged),
+			string(BuildTakingResponseBodyKindDropped),
+		})
+	}
+}
+
+// MarshalJSON writes the selected object branch beside its discriminator.
+func (u BuildTakingResponseBody) MarshalJSON() ([]byte, error) {
+	value, err := u.Value()
+	if err != nil {
+		return nil, err
+	}
+	data, err := json.Marshal(value)
+	if err != nil {
+		return nil, err
+	}
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(data, &fields); err != nil {
+		return nil, err
+	}
+	if fields == nil {
+		return nil, goa.InvalidFieldTypeError("state", nil, "non-null JSON object")
+	}
+	if _, exists := fields["state"]; exists {
+		return nil, fmt.Errorf("BuildTakingResponseBody branch already contains discriminator %q", "state")
+	}
+	tag, err := json.Marshal(string(u.kind))
+	if err != nil {
+		return nil, err
+	}
+	fields["state"] = tag
+	return json.Marshal(fields)
+}
+
+// UnmarshalJSON reads the discriminator and decodes its declared object branch.
+func (u *BuildTakingResponseBody) UnmarshalJSON(data []byte) error {
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(data, &fields); err != nil {
+		return err
+	}
+	tag, exists := fields["state"]
+	if !exists {
+		return goa.MissingFieldError("state", "BuildTakingResponseBody")
+	}
+	if bytes.Equal(bytes.TrimSpace(tag), []byte("null")) {
+		return goa.InvalidFieldTypeError("state", nil, "JSON string")
+	}
+	var raw struct {
+		Type  string
+		Value json.RawMessage
+	}
+	if err := json.Unmarshal(tag, &raw.Type); err != nil {
+		return err
+	}
+	delete(fields, "state")
+	value, err := json.Marshal(fields)
+	if err != nil {
+		return err
+	}
+	raw.Value = value
+	switch raw.Type {
+	case string(BuildTakingResponseBodyKindBuilding):
+		var v *BuildBuildingResponseBody
+		if err := json.Unmarshal(raw.Value, &v); err != nil {
+			return err
+		}
+		u.SetBuilding(v)
+	case string(BuildTakingResponseBodyKindPassed):
+		var v *BuildPassedResponseBody
+		if err := json.Unmarshal(raw.Value, &v); err != nil {
+			return err
+		}
+		u.SetPassed(v)
+	case string(BuildTakingResponseBodyKindMerged):
+		var v *BuildMergedResponseBody
+		if err := json.Unmarshal(raw.Value, &v); err != nil {
+			return err
+		}
+		u.SetMerged(v)
+	case string(BuildTakingResponseBodyKindDropped):
+		var v *BuildDroppedResponseBody
+		if err := json.Unmarshal(raw.Value, &v); err != nil {
+			return err
+		}
+		u.SetDropped(v)
+	default:
+		if raw.Type == "" {
+			return goa.MissingFieldError("state", "BuildTakingResponseBody")
+		}
+		return goa.InvalidEnumValueError("state", raw.Type, []any{
+			string(BuildTakingResponseBodyKindBuilding),
+			string(BuildTakingResponseBodyKindPassed),
+			string(BuildTakingResponseBodyKindMerged),
+			string(BuildTakingResponseBodyKindDropped),
 		})
 	}
 	return nil
@@ -19473,6 +19969,9 @@ func ValidateStartedBuildResponseBody(body *StartedBuildResponseBody) (err error
 	if body.RequiredTestCount == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("required_test_count", "body"))
 	}
+	if body.Taking == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("taking", "body"))
+	}
 	if body.StartedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.started_at", *body.StartedAt, goa.FormatDateTime))
 	}
@@ -19490,6 +19989,30 @@ func ValidateStartedBuildResponseBody(body *StartedBuildResponseBody) (err error
 		if *body.RequiredTestCount < 0 {
 			err = goa.MergeErrors(err, goa.InvalidRangeError("body.required_test_count", *body.RequiredTestCount, 0, true))
 		}
+	}
+	if body.Taking != nil {
+
+		if err2 := body.Taking.Validate(); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		} else {
+			switch string(body.Taking.Kind()) {
+			case "passed":
+				actual, _ := body.Taking.AsPassed()
+				if actual != nil {
+					if err2 := validateBuildPassedResponseBody(actual, "body.taking.value"); err2 != nil {
+						err = goa.MergeErrors(err, err2)
+					}
+				}
+			case "dropped":
+				actual, _ := body.Taking.AsDropped()
+				if actual != nil {
+					if err2 := validateBuildDroppedResponseBody(actual, "body.taking.value"); err2 != nil {
+						err = goa.MergeErrors(err, err2)
+					}
+				}
+			}
+		}
+
 	}
 	return
 }
@@ -19515,6 +20038,9 @@ func validateStartedBuildResponseBody(body *StartedBuildResponseBody, path strin
 	if body.RequiredTestCount == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("required_test_count", path))
 	}
+	if body.Taking == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("taking", path))
+	}
 	if body.StartedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat(path+".started_at", *body.StartedAt, goa.FormatDateTime))
 	}
@@ -19532,6 +20058,30 @@ func validateStartedBuildResponseBody(body *StartedBuildResponseBody, path strin
 		if *body.RequiredTestCount < 0 {
 			err = goa.MergeErrors(err, goa.InvalidRangeError(path+".required_test_count", *body.RequiredTestCount, 0, true))
 		}
+	}
+	if body.Taking != nil {
+
+		if err2 := body.Taking.Validate(); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		} else {
+			switch string(body.Taking.Kind()) {
+			case "passed":
+				actual, _ := body.Taking.AsPassed()
+				if actual != nil {
+					if err2 := validateBuildPassedResponseBody(actual, path+".taking.value"); err2 != nil {
+						err = goa.MergeErrors(err, err2)
+					}
+				}
+			case "dropped":
+				actual, _ := body.Taking.AsDropped()
+				if actual != nil {
+					if err2 := validateBuildDroppedResponseBody(actual, path+".taking.value"); err2 != nil {
+						err = goa.MergeErrors(err, err2)
+					}
+				}
+			}
+		}
+
 	}
 	return
 }
@@ -19812,6 +20362,134 @@ func validateTestsCouldNotRunResponseBody(body *TestsCouldNotRunResponseBody, pa
 	}
 	if body.CheckedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat(path+".checked_at", *body.CheckedAt, goa.FormatDateTime))
+	}
+	return
+}
+
+// ValidateBuildPassedResponseBody runs the validations defined on BuildPassed
+func ValidateBuildPassedResponseBody(body *BuildPassedResponseBody) (err error) {
+	if body.RunID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("run_id", "body"))
+	}
+	if body.CandidateCommit == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("candidate_commit", "body"))
+	}
+	if body.CandidateBranch == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("candidate_branch", "body"))
+	}
+	if body.Tests == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("tests", "body"))
+	}
+	if body.BaseInBranch == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("base_in_branch", "body"))
+	}
+	if body.CandidateCommit != nil {
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.candidate_commit", *body.CandidateCommit, "^([0-9a-f]{40}|[0-9a-f]{64})$"))
+	}
+	if body.Tests != nil {
+
+		if err2 := body.Tests.Validate(); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		} else {
+			switch string(body.Tests.Kind()) {
+			case "written_tests":
+				actual, _ := body.Tests.AsWrittenTests()
+				if actual != nil {
+					if err2 := validateBuildPassedTestsResponseBody(actual, "body.tests.value"); err2 != nil {
+						err = goa.MergeErrors(err, err2)
+					}
+				}
+			}
+		}
+
+	}
+	return
+}
+
+// validateBuildPassedResponseBody checks BuildPassed and reports errors using
+// the path supplied by its caller
+func validateBuildPassedResponseBody(body *BuildPassedResponseBody, path string) (err error) {
+	if body.RunID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("run_id", path))
+	}
+	if body.CandidateCommit == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("candidate_commit", path))
+	}
+	if body.CandidateBranch == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("candidate_branch", path))
+	}
+	if body.Tests == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("tests", path))
+	}
+	if body.BaseInBranch == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("base_in_branch", path))
+	}
+	if body.CandidateCommit != nil {
+		err = goa.MergeErrors(err, goa.ValidatePattern(path+".candidate_commit", *body.CandidateCommit, "^([0-9a-f]{40}|[0-9a-f]{64})$"))
+	}
+	if body.Tests != nil {
+
+		if err2 := body.Tests.Validate(); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		} else {
+			switch string(body.Tests.Kind()) {
+			case "written_tests":
+				actual, _ := body.Tests.AsWrittenTests()
+				if actual != nil {
+					if err2 := validateBuildPassedTestsResponseBody(actual, path+".tests.value"); err2 != nil {
+						err = goa.MergeErrors(err, err2)
+					}
+				}
+			}
+		}
+
+	}
+	return
+}
+
+// ValidateBuildPassedTestsResponseBody runs the validations defined on
+// BuildPassedTests
+func ValidateBuildPassedTestsResponseBody(body *BuildPassedTestsResponseBody) (err error) {
+	if body.Commit == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("commit", "body"))
+	}
+	if body.Branch == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("branch", "body"))
+	}
+	if body.Commit != nil {
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.commit", *body.Commit, "^([0-9a-f]{40}|[0-9a-f]{64})$"))
+	}
+	return
+}
+
+// validateBuildPassedTestsResponseBody checks BuildPassedTests and reports
+// errors using the path supplied by its caller
+func validateBuildPassedTestsResponseBody(body *BuildPassedTestsResponseBody, path string) (err error) {
+	if body.Commit == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("commit", path))
+	}
+	if body.Branch == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("branch", path))
+	}
+	if body.Commit != nil {
+		err = goa.MergeErrors(err, goa.ValidatePattern(path+".commit", *body.Commit, "^([0-9a-f]{40}|[0-9a-f]{64})$"))
+	}
+	return
+}
+
+// ValidateBuildDroppedResponseBody runs the validations defined on BuildDropped
+func ValidateBuildDroppedResponseBody(body *BuildDroppedResponseBody) (err error) {
+	if body.KeptBranches == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("kept_branches", "body"))
+	}
+	return
+}
+
+// validateBuildDroppedResponseBody checks BuildDropped and reports errors
+// using the path supplied by its caller
+func validateBuildDroppedResponseBody(body *BuildDroppedResponseBody, path string) (err error) {
+	if body.KeptBranches == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("kept_branches", path))
 	}
 	return
 }

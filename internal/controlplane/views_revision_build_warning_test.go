@@ -38,12 +38,7 @@ func TestViewsPageWarnsBeforeChangingABuiltRevision(t *testing.T) {
 			}
 			cp := newBuildControlPlane(t, opts)
 			cp.changesWait, cp.changesPoll = 400*time.Millisecond, 20*time.Millisecond
-			proposed := saveDraftSourceCardFixture(t, cp, "chg-warning", map[string]string{"design/design.go": "package design\n"})
-			card, err := cp.ConfirmIntent(asCaller(pageOwner, CallerUser), &gensurla.ConfirmIntentPayload{
-				ChangeID: proposed.ChangeID, RequestRevision: proposed.RequestRevision,
-				Answers: map[string]string{}, Examples: proposed.Examples,
-			})
-			require.NoError(t, err)
+			card := buildableChange(t, cp, "chg-warning")
 			if tc.build {
 				_, err := cp.StartBuild(asCaller(pageOwner, CallerUser), &gensurla.StartBuildPayload{
 					ChangeID: card.ChangeID, RequestRevision: card.RequestRevision,

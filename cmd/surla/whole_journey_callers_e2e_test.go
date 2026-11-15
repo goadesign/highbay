@@ -296,7 +296,7 @@ func (j *wholeJourney) latestVerifications(
 // repository.
 func (j *wholeJourney) testsBranch(t *testing.T) string {
 	t.Helper()
-	return strings.TrimSpace(runTestGit(t, j.dir, "rev-parse", "refs/heads/"+testwriter.Branch))
+	return strings.TrimSpace(runTestGit(t, j.dir, "rev-parse", "refs/heads/"+testwriter.TestsRole.Branch(1)))
 }
 
 // readBuilderAssignment has the builder read its assignment for the journey's

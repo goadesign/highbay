@@ -152,11 +152,11 @@ func TestCheckpointUIApprovalStates(t *testing.T) {
 	cfg := verificationConfig(t)
 	cfg.Plan.SuiteCommit = spec.SuiteCommit
 	target := &pageTarget{artifacts: spec.Artifacts}
-	cp := pageControlPlane(t, Options{Verification: cfg, ResolvePromotionTarget: target.resolve})
-	guide := WithPrincipal(context.Background(), Principal{ID: pageOwner, CallerID: "guide", Kind: CallerGuide})
+	cp := pageControlPlane(t, buildFixtureOptions(t, Options{Verification: cfg, ResolvePromotionTarget: target.resolve}))
 	user := WithPrincipal(context.Background(), Principal{ID: pageOwner, CallerID: pageUserID, Kind: CallerUser})
 	confirm := func(changeID string) *gensurla.ChangeCardResult {
-		proposed := mustPropose(t, cp, guide, changeID, "Refunds over $50 require approval.", refundAnalysis("Refunds over $50 require approval."))
+		proposed := saveProposedCardFixture(t, cp, pageOwner, changeID, "Refunds over $50 require approval.", refundAnalysis("Refunds over $50 require approval."))
+		proposed = attachBuildSnapshot(t, cp, changeID)
 		confirmed, err := cp.ConfirmIntent(user, &gensurla.ConfirmIntentPayload{
 			ChangeID: changeID, RequestRevision: proposed.RequestRevision, Answers: map[string]string{}, Examples: proposed.Examples,
 		})
@@ -165,6 +165,7 @@ func TestCheckpointUIApprovalStates(t *testing.T) {
 	}
 	confirm("chg-unapproved")
 	approved := confirm("chg-approved")
+	saveStoredBuildFixture(t, cp, approved)
 	const commit = "2222222222222222222222222222222222222222"
 	report := passingReport(t, approved.RequestRevision, commit, spec)
 	target.update(func(p *pageTarget) { p.report = report })

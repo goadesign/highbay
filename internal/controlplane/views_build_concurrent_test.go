@@ -33,7 +33,7 @@ func TestViewsPageBuildIgnoresAReadCapturedDuringPendingReplacement(t *testing.T
 	cp := newBuildControlPlane(t, Options{Team: &TeamBinding{Owner: pageOwner, Service: team}})
 	cp.changesWait = 400 * time.Millisecond
 	cp.changesPoll = 20 * time.Millisecond
-	confirmedChange(t, cp, "chg")
+	buildableChange(t, cp, "chg")
 	service := &pagePendingBuildRead{ControlPlane: cp, captured: make(chan *gensurla.ChangeBuild, 1)}
 	ps := startPageServer(t, service)
 	ps.act("hold-old-build-answer", func() {
@@ -66,6 +66,7 @@ await control(origin, "answer-later", { key: "GET /changes" });
 await until(() => page.$("#surla-build-start") && !page.$("#surla-build-start").disabled, "first Build did not remain ready after delaying its list update");
 page.$("#surla-build-start").click();
 await until(() => page.$("#surla-build-again") && !page.$("#surla-build-again").disabled && page.$("#surla-build-start-team-receipt") && page.sent("GET", path).every((r) => r.status === 200), "the first saved build and its read did not finish");
+expect(!("replaces" in page.sent("POST", path)[0].body), "the first Build sent a replacement identity");
 const oldStarted = JSON.parse(page.sent("POST", path)[0].answer).build.started_at;
 expect(page.text("#surla-build-details").includes(oldStarted), "the first saved start is missing");
 
@@ -74,10 +75,12 @@ await control(origin, "hold", { key: "POST " + path });
 await until(() => page.$("#surla-build-again") && !page.$("#surla-build-again").disabled, "the first build's background read did not settle before replacement");
 page.$("#surla-build-again").click();
 await until(() => page.$("#surla-build-confirm") && !page.$("#surla-build-confirm").disabled, "the replacement confirmation did not become ready");
+expect(page.sent("POST", path).length === 1, "opening the question sent a replacement");
 page.$("#surla-build-confirm").click();
 await until(() => page.sent("POST", path).length === 2 && page.$("#surla-build-starting"), "the replacement POST was not held pending");
 const replacement = page.sent("POST", path)[1];
 expect(replacement.status === undefined, "replacement completed before the race was armed");
+expect(replacement.body.replaces?.change_id === "chg" && replacement.body.replaces.started_at === oldStarted && Object.keys(replacement.body.replaces).length === 2, "the held replacement did not name exactly the observed prior build");
 
 // Run the delayed list's normal get_build handler during replacement, holding
 // only its answer. Capture is armed before that list can dispatch the read.

@@ -14,14 +14,15 @@ import (
 	"github.com/goadesign/surla/internal/shquote"
 )
 
-// TestOpenWorkingCopyCreatesOneCopy opens the working copy of a project at
+// TestMakeCopyCreatesOneCopy opens the working copy of a project at
 // its repository's top level and of one in a subfolder, twice each. The copy
 // is created once, in a .surla-prefixed folder of the project (the prefix
 // check_project skips; check_copy_test covers that rule), on its own branch
 // at the project's commit, the repository's own exclude file names it once,
 // the project's status stays clean, and no hook runs.
-func TestOpenWorkingCopyCreatesOneCopy(t *testing.T) {
+func TestMakeCopyCreatesOneCopy(t *testing.T) {
 	t.Parallel()
+	branch := TestsRole.Branch(1)
 	cases := []struct {
 		name string
 		// project is the project's folder inside the repository.
@@ -39,19 +40,24 @@ func TestOpenWorkingCopyCreatesOneCopy(t *testing.T) {
 			project := filepath.Join(repo, tc.project)
 			start := runGit(t, repo, "rev-parse", "HEAD")
 
-			wc, err := OpenWorkingCopy(t.Context(), project)
+			wc, err := MakeCopy(t.Context(), project, TestsRole, branch, "HEAD")
 			require.NoError(t, err)
 			assert.True(t, strings.HasPrefix(Folder, ".surla"), "check_project skips .surla-prefixed folders")
 			assert.Equal(t, filepath.Join(project, Folder), wc.Dir())
 			assert.Equal(t, filepath.Join(wc.Dir(), tc.project), wc.Project())
 			assert.FileExists(t, filepath.Join(wc.Project(), "README.md"), "the copy holds the project's files")
-			assert.Equal(t, "refs/heads/"+Branch, runGit(t, wc.Dir(), "symbolic-ref", "HEAD"))
+			assert.Equal(t, "refs/heads/"+branch, runGit(t, wc.Dir(), "symbolic-ref", "HEAD"))
 			assert.Equal(t, start, runGit(t, wc.Dir(), "rev-parse", "HEAD"), "the branch starts at the project's commit")
 			assert.Empty(t, runGit(t, repo, "status", "--porcelain", "--untracked-files=all"), "the new copy is not in the project's status")
 
-			again, err := OpenWorkingCopy(t.Context(), project)
+			inspected, ok, err := InspectCopy(t.Context(), project, TestsRole, branch)
 			require.NoError(t, err)
-			assert.Equal(t, wc, again, "opening again returns the same copy")
+			require.True(t, ok)
+			assert.Equal(t, wc, inspected)
+
+			again, err := MakeCopy(t.Context(), project, TestsRole, branch, "HEAD")
+			require.NoError(t, err)
+			assert.Equal(t, wc, again, "making again returns the same copy")
 			listed := runGit(t, repo, "worktree", "list", "--porcelain")
 			assert.Equal(t, 2, strings.Count(listed, "worktree "), "one linked copy beside the project:\n%s", listed)
 			exclude, err := os.ReadFile(runGit(t, repo, "rev-parse", "--path-format=absolute", "--git-path", "info/exclude"))
@@ -64,10 +70,11 @@ func TestOpenWorkingCopyCreatesOneCopy(t *testing.T) {
 	}
 }
 
-// TestOpenWorkingCopyRefuses checks each named refusal and that a refused
+// TestMakeCopyAndInspectCopyRefuse checks each named refusal and that a refused
 // project gets no copy and no exclude entry.
-func TestOpenWorkingCopyRefuses(t *testing.T) {
+func TestMakeCopyAndInspectCopyRefuse(t *testing.T) {
 	t.Parallel()
+	branch := TestsRole.Branch(1)
 	cases := []struct {
 		name string
 		// project returns the project folder to open and the steps the
@@ -77,13 +84,16 @@ func TestOpenWorkingCopyRefuses(t *testing.T) {
 		// notSteps are steps the error must not name, because they would not
 		// work in that case or would touch more than the one registration.
 		notSteps []string
+		// inspectAlso checks InspectCopy on the same refusal before MakeCopy.
+		inspectAlso bool
 	}{
 		{
 			name: "a folder outside git",
 			project: func(t *testing.T) (string, []string) {
 				return t.TempDir(), []string{"run git init in the project folder"}
 			},
-			wantErr: ErrNotRepository,
+			wantErr:     ErrNotRepository,
+			inspectAlso: true,
 		},
 		{
 			name: "a repository without a commit",
@@ -99,70 +109,65 @@ func TestOpenWorkingCopyRefuses(t *testing.T) {
 			project: func(t *testing.T) (string, []string) {
 				repo, _ := newProject(t, map[string]string{"README.md": "shop\n"})
 				writeFiles(t, repo, map[string]string{Folder + "/notes.txt": "mine\n"})
-				return repo, []string{"move it out of the project"}
+				return repo, []string{"move it out of the project, then try again"}
 			},
-			wantErr: ErrFolderInUse,
+			wantErr:     ErrFolderInUse,
+			inspectAlso: true,
 		},
 		{
 			name: "a file of the same name",
 			project: func(t *testing.T) (string, []string) {
 				repo, _ := newProject(t, map[string]string{"README.md": "shop\n"})
 				writeFiles(t, repo, map[string]string{Folder: "mine\n"})
-				return repo, []string{"move it out of the project"}
+				return repo, []string{"move it out of the project, then try again"}
 			},
-			wantErr: ErrFolderInUse,
-		},
-		{
-			name: "a working copy switched off the reserved branch",
-			project: func(t *testing.T) (string, []string) {
-				repo, _ := newProject(t, map[string]string{"README.md": "shop\n"})
-				wc, err := OpenWorkingCopy(t.Context(), repo)
-				require.NoError(t, err)
-				runGit(t, wc.Dir(), "switch", "--quiet", "-c", "mine")
-				return repo, []string{"move it out of the project", "does not have branch " + Branch + " checked out"}
-			},
-			wantErr: ErrFolderInUse,
+			wantErr:     ErrFolderInUse,
+			inspectAlso: true,
 		},
 		{
 			name: "the reserved branch checked out in the project folder",
 			project: func(t *testing.T) (string, []string) {
 				repo, _ := newProject(t, map[string]string{"README.md": "shop\n"})
-				runGit(t, repo, "switch", "--quiet", "--create", Branch)
+				runGit(t, repo, "switch", "--quiet", "--create", branch)
 				return repo, []string{shquote.Quote(repo) + " has it checked out; switch that folder to another branch"}
 			},
-			wantErr:  ErrBranchInUse,
-			notSteps: []string{"git worktree"},
+			wantErr:     ErrBranchInUse,
+			notSteps:    []string{"git worktree"},
+			inspectAlso: true,
 		},
 		{
 			name: "the reserved branch held by a deleted working copy elsewhere",
 			project: func(t *testing.T) (string, []string) {
 				repo, _ := newProject(t, map[string]string{"README.md": "shop\n"})
-				elsewhere := heldElsewhere(t, repo, false)
+				elsewhere := heldElsewhere(t, repo, branch, false)
 				return repo, []string{"remove that registration with " + removeStep(elsewhere) + " in the project"}
 			},
-			wantErr:  ErrBranchInUse,
-			notSteps: []string{"switch that folder", "git worktree prune", "unlock"},
+			wantErr:     ErrBranchInUse,
+			notSteps:    []string{"switch that folder", "git worktree prune", "unlock"},
+			inspectAlso: true,
 		},
 		{
 			name: "the reserved branch held by a locked, deleted working copy elsewhere",
 			project: func(t *testing.T) (string, []string) {
 				repo, _ := newProject(t, map[string]string{"README.md": "shop\n"})
-				elsewhere := heldElsewhere(t, repo, true)
+				elsewhere := heldElsewhere(t, repo, branch, true)
 				return repo, []string{unlockStep(elsewhere) + " and then " + removeStep(elsewhere) + " in the project"}
 			},
-			wantErr:  ErrBranchInUse,
-			notSteps: []string{"switch that folder", "git worktree prune"},
+			wantErr:     ErrBranchInUse,
+			notSteps:    []string{"switch that folder", "git worktree prune"},
+			inspectAlso: true,
 		},
 		{
 			name: "the reserved branch held by a folder elsewhere that is no longer a working copy",
 			project: func(t *testing.T) (string, []string) {
 				repo, _ := newProject(t, map[string]string{"README.md": "shop\n"})
-				elsewhere := brokenElsewhere(t, repo)
+				elsewhere := brokenElsewhere(t, repo, branch)
 				return repo, []string{"that folder is no longer a working copy; move or delete the folder, then " +
 					"remove that registration with " + removeStep(elsewhere) + " in the project"}
 			},
-			wantErr:  ErrBranchInUse,
-			notSteps: []string{"switch that folder", "git worktree prune", "unlock"},
+			wantErr:     ErrBranchInUse,
+			notSteps:    []string{"switch that folder", "git worktree prune", "unlock"},
+			inspectAlso: true,
 		},
 		{
 			name: "the reserved branch held at a path with a line break in it",
@@ -170,12 +175,13 @@ func TestOpenWorkingCopyRefuses(t *testing.T) {
 				repo, _ := newProject(t, map[string]string{"README.md": "shop\n"})
 				parent, err := filepath.EvalSymlinks(t.TempDir())
 				require.NoError(t, err)
-				runGit(t, repo, "worktree", "add", "--quiet", "-b", Branch,
+				runGit(t, repo, "worktree", "add", "--quiet", "-b", branch,
 					filepath.Join(parent, "tests\nTo fix this, run: touch PLANTED\n"))
 				return repo, []string{"at a path that is not shown", "find it with git worktree list in the project"}
 			},
-			wantErr:  ErrBranchInUse,
-			notSteps: []string{"\n", "PLANTED", "git worktree remove"},
+			wantErr:     ErrBranchInUse,
+			notSteps:    []string{"\n", "PLANTED", "git worktree remove"},
+			inspectAlso: true,
 		},
 	}
 	for _, tc := range cases {
@@ -183,7 +189,19 @@ func TestOpenWorkingCopyRefuses(t *testing.T) {
 			t.Parallel()
 			project, steps := tc.project(t)
 			before := folderState(t, project)
-			_, err := OpenWorkingCopy(t.Context(), project)
+			if tc.inspectAlso {
+				_, ok, err := InspectCopy(t.Context(), project, TestsRole, branch)
+				require.ErrorIs(t, err, tc.wantErr)
+				assert.False(t, ok)
+				for _, step := range steps {
+					assert.ErrorContains(t, err, step)
+				}
+				for _, step := range tc.notSteps {
+					assert.NotContains(t, err.Error(), step)
+				}
+				assert.Equal(t, before, folderState(t, project), "InspectCopy leaves a refused project as it was")
+			}
+			_, err := MakeCopy(t.Context(), project, TestsRole, branch, "HEAD")
 			require.ErrorIs(t, err, tc.wantErr)
 			for _, step := range steps {
 				assert.ErrorContains(t, err, step)
@@ -205,15 +223,16 @@ func TestOpenWorkingCopyRefuses(t *testing.T) {
 // create a file if any of it were expanded: no such file appears.
 func TestTheBranchRefusalsStepsWork(t *testing.T) {
 	t.Parallel()
+	branch := TestsRole.Branch(1)
 	for _, locked := range []bool{false, true} {
 		t.Run(fmt.Sprintf("locked=%t", locked), func(t *testing.T) {
 			t.Parallel()
 			repo, _ := newProject(t, map[string]string{"README.md": "shop\n"})
-			elsewhere := heldElsewhere(t, repo, locked)
+			elsewhere := heldElsewhere(t, repo, branch, locked)
 			unrelated := filepath.Join(t.TempDir(), "unrelated")
 			runGit(t, repo, "worktree", "add", "--quiet", "-b", "unrelated", unrelated)
 			require.NoError(t, os.RemoveAll(unrelated))
-			_, err := OpenWorkingCopy(t.Context(), repo)
+			_, err := MakeCopy(t.Context(), repo, TestsRole, branch, "HEAD")
 			require.ErrorIs(t, err, ErrBranchInUse)
 
 			steps := []string{removeStep(elsewhere)}
@@ -227,9 +246,9 @@ func TestTheBranchRefusalsStepsWork(t *testing.T) {
 			for _, planted := range []string{"INJECTED", "INJECTED2"} {
 				assert.NoFileExists(t, filepath.Join(repo, planted), "the folder's name was read as shell syntax")
 			}
-			wc, err := OpenWorkingCopy(t.Context(), repo)
+			wc, err := MakeCopy(t.Context(), repo, TestsRole, branch, "HEAD")
 			require.NoError(t, err)
-			assert.Equal(t, "refs/heads/"+Branch, runGit(t, wc.Dir(), "symbolic-ref", "HEAD"))
+			assert.Equal(t, "refs/heads/"+branch, runGit(t, wc.Dir(), "symbolic-ref", "HEAD"))
 			assert.Contains(t, runGit(t, repo, "worktree", "list", "--porcelain"), "branch refs/heads/unrelated",
 				"the step touches only the one registration")
 		})
@@ -243,9 +262,10 @@ func TestTheBranchRefusalsStepsWork(t *testing.T) {
 // shell, frees the branch: the copy then opens.
 func TestTheStepForAFolderThatIsNoLongerAWorkingCopyWorks(t *testing.T) {
 	t.Parallel()
+	branch := TestsRole.Branch(1)
 	repo, _ := newProject(t, map[string]string{"README.md": "shop\n"})
-	elsewhere := brokenElsewhere(t, repo)
-	_, err := OpenWorkingCopy(t.Context(), repo)
+	elsewhere := brokenElsewhere(t, repo, branch)
+	_, err := MakeCopy(t.Context(), repo, TestsRole, branch, "HEAD")
 	require.ErrorIs(t, err, ErrBranchInUse)
 	require.ErrorContains(t, err, removeStep(elsewhere))
 
@@ -256,20 +276,20 @@ func TestTheStepForAFolderThatIsNoLongerAWorkingCopyWorks(t *testing.T) {
 
 	require.NoError(t, os.RemoveAll(elsewhere))
 	runInShell(t, repo, removeStep(elsewhere))
-	wc, err := OpenWorkingCopy(t.Context(), repo)
+	wc, err := MakeCopy(t.Context(), repo, TestsRole, branch, "HEAD")
 	require.NoError(t, err)
-	assert.Equal(t, "refs/heads/"+Branch, runGit(t, wc.Dir(), "symbolic-ref", "HEAD"))
+	assert.Equal(t, "refs/heads/"+branch, runGit(t, wc.Dir(), "symbolic-ref", "HEAD"))
 }
 
 // brokenElsewhere makes a linked working copy of repo outside the project hold
-// Branch and then deletes only its .git entry, so the folder still exists but
+// branch and then deletes only its .git entry, so the folder still exists but
 // is no longer a working copy. It returns the folder's path as git records it.
-func brokenElsewhere(t *testing.T, repo string) string {
+func brokenElsewhere(t *testing.T, repo, branch string) string {
 	t.Helper()
 	parent, err := filepath.EvalSymlinks(t.TempDir())
 	require.NoError(t, err)
 	elsewhere := filepath.Join(parent, "tests kept")
-	runGit(t, repo, "worktree", "add", "--quiet", "-b", Branch, elsewhere)
+	runGit(t, repo, "worktree", "add", "--quiet", "-b", branch, elsewhere)
 	require.NoError(t, os.Remove(filepath.Join(elsewhere, ".git")))
 	return elsewhere
 }
@@ -299,17 +319,17 @@ func runInShell(t *testing.T, dir, command string) {
 }
 
 // heldElsewhere makes a linked working copy of repo outside the project hold
-// Branch, locks its registration when locked is set, deletes its folder with
+// branch, locks its registration when locked is set, deletes its folder with
 // the file system, and returns that folder's path as git records it. The
 // folder's name holds a space, a quote, a command substitution and a
 // backquoted command, each of which would create a file in the folder a
 // shell runs in if a step naming the path let the shell expand it.
-func heldElsewhere(t *testing.T, repo string, locked bool) string {
+func heldElsewhere(t *testing.T, repo, branch string, locked bool) string {
 	t.Helper()
 	parent, err := filepath.EvalSymlinks(t.TempDir())
 	require.NoError(t, err)
 	elsewhere := filepath.Join(parent, "tests $(touch INJECTED) it's `touch INJECTED2`")
-	runGit(t, repo, "worktree", "add", "--quiet", "-b", Branch, elsewhere)
+	runGit(t, repo, "worktree", "add", "--quiet", "-b", branch, elsewhere)
 	if locked {
 		runGit(t, repo, "worktree", "lock", "--reason", "on a removable disk", elsewhere)
 	}
@@ -317,15 +337,16 @@ func heldElsewhere(t *testing.T, repo string, locked bool) string {
 	return elsewhere
 }
 
-// TestOpenWorkingCopyRecreatesADeletedCopy deletes the copy's folder with the
+// TestMakeCopyRecreatesADeletedCopy deletes the copy's folder with the
 // file system after a commit on its branch, while git still registers it as
-// holding the branch: opening again drops that registration of Surla's own
+// holding the branch: making again drops that registration of Surla's own
 // copy and checks the same branch out again, so the accepted commit is kept,
 // and restores the exclude entry the user removed.
-func TestOpenWorkingCopyRecreatesADeletedCopy(t *testing.T) {
+func TestMakeCopyRecreatesADeletedCopy(t *testing.T) {
 	t.Parallel()
+	branch := TestsRole.Branch(1)
 	repo, markers := newProject(t, map[string]string{"README.md": "shop\n"})
-	wc, err := OpenWorkingCopy(t.Context(), repo)
+	wc, err := MakeCopy(t.Context(), repo, TestsRole, branch, "HEAD")
 	require.NoError(t, err)
 	writeFiles(t, wc.Dir(), map[string]string{"tests.txt": "accepted\n"})
 	runGit(t, wc.Dir(), "add", "tests.txt")
@@ -333,12 +354,12 @@ func TestOpenWorkingCopyRecreatesADeletedCopy(t *testing.T) {
 	tip := runGit(t, wc.Dir(), "rev-parse", "HEAD")
 	require.NoError(t, os.RemoveAll(wc.Dir()))
 	listed := runGit(t, repo, "worktree", "list", "--porcelain")
-	require.Contains(t, listed, "worktree "+wc.Dir()+"\nHEAD "+tip+"\nbranch refs/heads/"+Branch+"\nprunable",
+	require.Contains(t, listed, "worktree "+wc.Dir()+"\nHEAD "+tip+"\nbranch refs/heads/"+branch+"\nprunable",
 		"git still registers the deleted copy as holding the branch")
 	exclude := runGit(t, repo, "rev-parse", "--path-format=absolute", "--git-path", "info/exclude")
 	require.NoError(t, os.WriteFile(exclude, nil, 0o644))
 
-	again, err := OpenWorkingCopy(t.Context(), repo)
+	again, err := MakeCopy(t.Context(), repo, TestsRole, branch, "HEAD")
 	require.NoError(t, err)
 	assert.Equal(t, wc, again)
 	assert.Equal(t, tip, runGit(t, again.Dir(), "rev-parse", "HEAD"), "the branch keeps its commits")
@@ -433,15 +454,23 @@ func TestBuilderRoleFolderAndBranchRefusals(t *testing.T) {
 		repo, _ := newProject(t, map[string]string{"README.md": "shop\n"})
 		writeFiles(t, repo, map[string]string{BuilderRole.Folder + "/notes.txt": "mine\n"})
 		before := folderState(t, repo)
+		wantMsg := "the project's .surla-build entry is not Surla's working copy (" +
+			shquote.Quote(filepath.Join(repo, BuilderRole.Folder)) +
+			" is not a linked working copy of the project's repository): move it out of the project, then try again"
 
 		_, ok, err := OpenCopy(t.Context(), repo, BuilderRole)
 		require.ErrorIs(t, err, ErrFolderInUse)
 		assert.False(t, ok)
-		assert.ErrorContains(t, err, "the project's .surla-build entry is not Surla's working copy: move it out of the project, then try again")
+		assert.ErrorContains(t, err, wantMsg)
+
+		_, ok, err = InspectCopy(t.Context(), repo, BuilderRole, BuilderRole.Branch(1))
+		require.ErrorIs(t, err, ErrFolderInUse)
+		assert.False(t, ok)
+		assert.ErrorContains(t, err, wantMsg)
 
 		_, err = MakeCopy(t.Context(), repo, BuilderRole, BuilderRole.Branch(1), "HEAD")
 		require.ErrorIs(t, err, ErrFolderInUse)
-		assert.ErrorContains(t, err, "the project's .surla-build entry is not Surla's working copy: move it out of the project, then try again")
+		assert.ErrorContains(t, err, wantMsg)
 		assert.Equal(t, before, folderState(t, repo))
 	})
 
@@ -452,7 +481,14 @@ func TestBuilderRoleFolderAndBranchRefusals(t *testing.T) {
 		runGit(t, repo, "switch", "--quiet", "--create", branch)
 		before := folderState(t, repo)
 
-		_, err := MakeCopy(t.Context(), repo, BuilderRole, branch, "HEAD")
+		_, ok, err := InspectCopy(t.Context(), repo, BuilderRole, branch)
+		require.ErrorIs(t, err, ErrBranchInUse)
+		assert.False(t, ok)
+		assert.ErrorContains(t, err, "branch surla/build-1, which Surla reserves for the builder's working copy, is held by another working copy")
+		assert.ErrorContains(t, err, shquote.Quote(repo)+" has it checked out; switch that folder to another branch")
+		assert.Equal(t, before, folderState(t, repo))
+
+		_, err = MakeCopy(t.Context(), repo, BuilderRole, branch, "HEAD")
 		require.ErrorIs(t, err, ErrBranchInUse)
 		assert.ErrorContains(t, err, "branch surla/build-1, which Surla reserves for the builder's working copy, is held by another working copy")
 		assert.ErrorContains(t, err, shquote.Quote(repo)+" has it checked out; switch that folder to another branch")

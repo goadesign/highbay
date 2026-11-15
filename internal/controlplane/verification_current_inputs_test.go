@@ -33,7 +33,7 @@ func TestVerificationCurrentInputsFollowWrittenSelection(t *testing.T) {
 	})
 	user := asCaller("alice@example.com", CallerUser)
 	writer := asCaller("alice@example.com", CallerTestWriter)
-	card := confirmedChange(t, cp, "chg")
+	card := buildableChange(t, cp, "chg")
 	older, newer := strings.Repeat("1", 32), strings.Repeat("2", 32)
 	for i, runID := range []string{older, newer} {
 		writeListedRun(t, runsDir, "alice@example.com", card, runID,
@@ -71,7 +71,7 @@ func TestVerificationCurrentInputsFollowWrittenSelection(t *testing.T) {
 	check(false, false) // Written verification requires a usable build.
 	start := func() {
 		t.Helper()
-		_, err := cp.StartBuild(user, &gensurla.StartBuildPayload{ChangeID: card.ChangeID, RequestRevision: card.RequestRevision})
+		_, err := startBuildAgain(t, cp, user, card.ChangeID, card.RequestRevision)
 		require.NoError(t, err)
 	}
 	start()
@@ -96,7 +96,7 @@ func TestVerificationCurrentInputsFollowWrittenSelection(t *testing.T) {
 	saveListedTestState(t, cp, card.ChangeID, testsAccepted, oldCommit)
 	check(true, false)
 
-	buildPath := filepath.Join(cp.cards.dir, buildFileName(card.ChangeID))
+	buildPath := filepath.Join(cp.cards.dir, openBuildRecordFile)
 	before, err := os.ReadFile(buildPath)
 	require.NoError(t, err)
 	cardBefore, err := os.ReadFile(cp.cards.path(card.ChangeID))
@@ -192,12 +192,12 @@ func TestVerificationCurrentInputsSafeFailures(t *testing.T) {
 				RunsDir: cfg.RunsDir, TracerProvider: provider,
 				WrittenTestRuns: &WrittenTestRuns{ReportDir: t.TempDir(), Timeout: time.Minute},
 			})
-			card := confirmedChange(t, cp, "chg")
+			card := buildableChange(t, cp, "chg")
 			runID := strings.Repeat("1", 32)
 			writeListedRun(t, cfg.RunsDir, "alice@example.com", card, runID, time.Date(2026, 10, 1, 9, 0, 0, 0, time.UTC), true)
 			target := cp.cards.path(card.ChangeID)
 			if strings.HasSuffix(damaged, "build") {
-				target = filepath.Join(cp.cards.dir, buildFileName(card.ChangeID))
+				target = filepath.Join(cp.cards.dir, openBuildRecordFile)
 			}
 			if strings.HasPrefix(damaged, "unreadable") {
 				if strings.HasSuffix(damaged, "card") {
@@ -254,13 +254,13 @@ func TestVerificationCurrentInputsIgnoreForeignCard(t *testing.T) {
 		RunsDir:         runsDir,
 		WrittenTestRuns: &WrittenTestRuns{ReportDir: t.TempDir(), Timeout: time.Minute},
 	})
-	card := confirmedChange(t, cp, "chg")
+	card := buildableChange(t, cp, "chg")
 	runID := strings.Repeat("1", 32)
 	writeListedRun(t, runsDir, "alice@example.com", card, runID, time.Date(2026, 10, 1, 9, 0, 0, 0, time.UTC), true)
 	require.NoError(t, os.Remove(cp.cards.path(card.ChangeID)))
 	saveProposedCardFixture(t, cp, "bob@example.com", card.ChangeID,
 		"Bob's current change.", refundAnalysis("Bob's current change."))
-	require.NoError(t, os.WriteFile(filepath.Join(cp.cards.dir, buildFileName(card.ChangeID)), []byte("{"), 0o600))
+	require.NoError(t, os.WriteFile(filepath.Join(cp.cards.dir, openBuildRecordFile), []byte("{"), 0o600))
 	got, err := cp.GetVerification(asCaller("alice@example.com", CallerUser), &gensurla.GetVerificationPayload{RunID: runID})
 	require.NoError(t, err)
 	assert.False(t, got.InputsCurrent)
@@ -269,20 +269,20 @@ func TestVerificationCurrentInputsIgnoreForeignCard(t *testing.T) {
 }
 
 // TestVerifyChangeReadsCurrentInputsBeforeAcceptance damages only the build:
-// stored-evaluator plan selection needs no build, but the observation must fail
-// before the supervisor can accept and publish a run identifier.
+// the current-input read must fail before the supervisor accepts a run, even
+// though selecting the operator's stored evaluator does not need a build.
 func TestVerifyChangeReadsCurrentInputsBeforeAcceptance(t *testing.T) {
 	cp, card, cfg := verificationSetup(t)
-	require.NoError(t, os.WriteFile(filepath.Join(cp.cards.dir, buildFileName(card.ChangeID)), []byte("{"), 0o600))
+	require.NoError(t, os.WriteFile(filepath.Join(cp.cards.dir, openBuildRecordFile), []byte("{"), 0o600))
 	_, err := cp.VerifyChange(asCaller("alice@example.com", CallerUser), &gensurla.VerifyChangePayload{
 		ChangeID: card.ChangeID, RequestRevision: card.RequestRevision, CandidateCommit: strings.Repeat("a", 40),
 	})
 	require.Error(t, err)
-	assert.Equal(t, `start verification for "chg": saved verification inputs could not be read`, err.Error())
+	assert.ErrorContains(t, err, "saved verification inputs could not be read")
 	assert.NotContains(t, err.Error(), cp.cards.dir)
 	runs, err := verifyrun.List(cfg.RunsDir, "alice@example.com", card.ChangeID)
 	require.NoError(t, err)
-	assert.Empty(t, runs, "no accepted run is hidden behind an observation failure")
+	assert.Empty(t, runs, "no accepted run is hidden behind a failed open-build read")
 }
 
 // editVerificationRequest modifies a fixture's stored request before its reads.
@@ -297,4 +297,38 @@ func editVerificationRequest(t *testing.T, runsDir, runID string, edit func(*ver
 	raw, err = json.Marshal(req)
 	require.NoError(t, err)
 	require.NoError(t, os.WriteFile(file, raw, 0o600))
+}
+
+// TestDroppedWrittenBuildMakesVerificationInputsNonCurrent exercises all
+// three user-facing readers while retaining the historical report.
+func TestDroppedWrittenBuildMakesVerificationInputsNonCurrent(t *testing.T) {
+	runs := t.TempDir()
+	cp := newBuildControlPlane(t, Options{RunsDir: runs, WrittenTestRuns: &WrittenTestRuns{ReportDir: t.TempDir(), Timeout: time.Minute}})
+	card := buildableChange(t, cp, "chg")
+	user := asCaller("alice@example.com", CallerUser)
+	runID := strings.Repeat("a", 32)
+	writeListedRun(t, runs, "alice@example.com", card, runID, time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC), true)
+	setListedRunSource(t, runs, runID, verify.TestsWritten)
+	first, err := cp.StartBuild(user, &gensurla.StartBuildPayload{ChangeID: card.ChangeID, RequestRevision: card.RequestRevision})
+	require.NoError(t, err)
+	saveListedTestState(t, cp, card.ChangeID, testsAccepted, strings.Repeat("2", 40))
+	check := func(want bool) {
+		t.Helper()
+		one, err := cp.GetVerification(user, &gensurla.GetVerificationPayload{RunID: runID})
+		require.NoError(t, err)
+		assert.Equal(t, want, one.InputsCurrent)
+		list, err := cp.ListVerifications(user, &gensurla.ListVerificationsPayload{ChangeID: card.ChangeID})
+		require.NoError(t, err)
+		require.Len(t, list.Runs, 1)
+		assert.Equal(t, want, list.Runs[0].InputsCurrent)
+		changes, err := cp.ListChanges(user)
+		require.NoError(t, err)
+		require.Len(t, changes.Changes, 1)
+		require.NotNil(t, changes.Changes[0].LatestVerification)
+		assert.Equal(t, want, changes.Changes[0].LatestVerification.InputsCurrent)
+	}
+	check(true)
+	_, err = cp.DropBuild(user, &gensurla.DropBuildPayload{ChangeID: card.ChangeID, StartedAt: first.Build.StartedAt})
+	require.NoError(t, err)
+	check(false)
 }

@@ -64,8 +64,8 @@ type (
 	}
 
 	// WorkingCopy is a worker's linked git working copy of one project.
-	// Only OpenCopy and MakeCopy (and OpenWorkingCopy) create one, so its
-	// folders are always a working copy Surla created or verified.
+	// Only OpenCopy, InspectCopy and MakeCopy create one, so its folders are
+	// always a working copy Surla created or verified.
 	WorkingCopy struct {
 		// dir is the absolute, symlink-free root of the linked working copy: a
 		// checkout of the whole repository at <project>/<role.Folder>.
@@ -81,27 +81,9 @@ type (
 		// read.
 		gitDir string
 	}
-
-	// RefreshResult reports the working copy's commit after a start tried to
-	// bring it to the project's commit. Every state carries the actual
-	// retained HEAD.
-	RefreshResult struct {
-		State  RefreshState
-		Commit string
-	}
-
-	// RefreshState is the reason Refresh retained or advanced the working copy.
-	RefreshState string
 )
 
 const (
-	// RefreshAtProjectCommit means HEAD equals the project's commit, whether
-	// the copy was already there or this start advanced it.
-	RefreshAtProjectCommit RefreshState = "at_project_commit"
-	// RefreshNotContained preserves tests not merged into the project's branch.
-	RefreshNotContained RefreshState = "not_contained"
-	// RefreshDirty preserves the test writer's uncommitted or untracked files.
-	RefreshDirty RefreshState = "dirty"
 	// Folder is the test writer's working copy folder name inside the project.
 	// Its ".surla" prefix makes the project's own checks (check_project) skip
 	// it, and the local exclude entry keeps it out of the project's git status.
@@ -176,12 +158,53 @@ func OpenCopy(ctx context.Context, projectDir string, role Role) (WorkingCopy, b
 	case err != nil:
 		return WorkingCopy{}, false, fmt.Errorf("inspect %s: %w", dir, err)
 	case !info.IsDir():
-		return WorkingCopy{}, false, folderInUse(role, dir+" is not a folder")
+		return WorkingCopy{}, false, folderInUse(role, shquote.Quote(dir)+" is not a folder")
 	}
 	if wc.gitDir, err = registeredCopy(ctx, project, dir, role); err != nil {
 		return WorkingCopy{}, false, err
 	}
 	return wc, true, nil
+}
+
+// InspectCopy inspects the role's linked working copy of the project in
+// projectDir at <project>/<role.Folder> without creating a folder or branch or
+// writing info/exclude. When <project>/<role.Folder> exists, it verifies that
+// the folder is a linked working copy of the project's repository and returns
+// it with true, nil (or ErrFolderInUse when it is not). When
+// <project>/<role.Folder> does not exist, it checks that no other working copy
+// of the repository holds branch (returning ErrBranchInUse when one does) and
+// returns WorkingCopy{}, false, nil.
+func InspectCopy(ctx context.Context, projectDir string, role Role,
+	branch string) (WorkingCopy, bool, error) {
+	project, rel, err := resolveProject(ctx, projectDir)
+	if err != nil {
+		return WorkingCopy{}, false, err
+	}
+	dir := filepath.Join(project, role.Folder)
+	wc := WorkingCopy{dir: dir, project: filepath.Join(dir, rel)}
+	info, err := os.Lstat(dir)
+	switch {
+	case err == nil && !info.IsDir():
+		return WorkingCopy{}, false, folderInUse(role, shquote.Quote(dir)+" is not a folder")
+	case err == nil:
+		if wc.gitDir, err = registeredCopy(ctx, project, dir, role); err != nil {
+			return WorkingCopy{}, false, err
+		}
+		return wc, true, nil
+	case !errors.Is(err, fs.ErrNotExist):
+		return WorkingCopy{}, false, fmt.Errorf("inspect %s: %w", dir, err)
+	}
+	listed, err := listCopies(ctx, project)
+	if err != nil {
+		return WorkingCopy{}, false, err
+	}
+	for _, c := range listed {
+		if same, err := samePath(c.path, dir); c.branch != "refs/heads/"+branch || err == nil && same {
+			continue
+		}
+		return WorkingCopy{}, false, branchInUse(c, role, branch)
+	}
+	return WorkingCopy{}, false, nil
 }
 
 // MakeCopy returns the role's linked working copy of the project in
@@ -208,7 +231,7 @@ func MakeCopy(ctx context.Context, projectDir string, role Role, branch, base st
 	info, err := os.Lstat(dir)
 	switch {
 	case err == nil && !info.IsDir():
-		return WorkingCopy{}, folderInUse(role, dir+" is not a folder")
+		return WorkingCopy{}, folderInUse(role, shquote.Quote(dir)+" is not a folder")
 	case err == nil:
 		if wc.gitDir, err = registeredCopy(ctx, project, dir, role); err != nil {
 			return WorkingCopy{}, err
@@ -247,29 +270,6 @@ func MakeCopy(ctx context.Context, projectDir string, role Role, branch, base st
 	return wc, nil
 }
 
-// OpenWorkingCopy returns the test writer's working copy of the project in
-// projectDir, creating it on Branch at HEAD when missing, and refusing an
-// existing copy that does not have Branch checked out with ErrFolderInUse. It
-// stays as a wrapper for existing callers until slice W1 moves them to
-// OpenCopy and MakeCopy.
-func OpenWorkingCopy(ctx context.Context, projectDir string) (WorkingCopy, error) {
-	wc, ok, err := OpenCopy(ctx, projectDir, TestsRole)
-	if err != nil {
-		return WorkingCopy{}, err
-	}
-	if ok {
-		head, err := wc.git(ctx, wc.dir, nil, "symbolic-ref", "--quiet", "HEAD")
-		if err != nil || head != "refs/heads/"+Branch {
-			return WorkingCopy{}, folderInUse(TestsRole, fmt.Sprintf("%s does not have branch %s checked out", wc.dir, Branch))
-		}
-		if err := excludeFolders(ctx, filepath.Dir(wc.dir)); err != nil {
-			return WorkingCopy{}, err
-		}
-		return wc, nil
-	}
-	return MakeCopy(ctx, projectDir, TestsRole, Branch, "HEAD")
-}
-
 // Dir returns the absolute root of the working copy, a checkout of the whole
 // repository. Project returns the folder the worker works in, which may be
 // below this root when the project is in a repository subfolder.
@@ -281,16 +281,6 @@ func (w WorkingCopy) Dir() string {
 // project's modules, such as its evaluator module, are found.
 func (w WorkingCopy) Project() string {
 	return w.project
-}
-
-// Refresh brings a clean copy forward only when its tests branch is already
-// contained in the project's current commit. Untracked files count as dirty.
-// Only a build start calls it, under the project's working-copy turn. Git's
-// fast-forward merge preserves/refuses later editor changes instead of resetting
-// them; hooks and automatic stashing are disabled. Every copy command uses the
-// trusted administrative directory, never the copy author's .git file.
-func (w WorkingCopy) Refresh(ctx context.Context) (RefreshResult, error) {
-	return w.refresh(ctx, nil)
 }
 
 // Error returns the role-specific refusal message.
@@ -345,57 +335,9 @@ func resolveProject(ctx context.Context, projectDir string) (string, string, err
 func folderInUse(role Role, detail string) error {
 	return roleError{
 		sentinel: ErrFolderInUse,
-		msg: fmt.Sprintf("the project's %s entry is not Surla's working copy: move it out of the project, then try again (%s)",
+		msg: fmt.Sprintf("the project's %s entry is not Surla's working copy (%s): move it out of the project, then try again",
 			role.Folder, detail),
 	}
-}
-
-// refresh's seam models an editor writing after the clean observation. Git,
-// rather than that earlier observation, owns safe checkout at the transition.
-func (w WorkingCopy) refresh(ctx context.Context, beforeAdvance func()) (RefreshResult, error) {
-	if err := w.opened(); err != nil {
-		return RefreshResult{}, err
-	}
-	head, err := w.git(ctx, w.dir, nil, "rev-parse", "--verify", "HEAD^{commit}")
-	if err != nil {
-		return RefreshResult{}, err
-	}
-	target, err := git(ctx, filepath.Dir(w.dir), nil, "rev-parse", "--verify", "HEAD^{commit}")
-	if err != nil {
-		return RefreshResult{}, err
-	}
-	if _, err := w.git(ctx, w.dir, nil, "merge-base", "--is-ancestor", head, target); err != nil {
-		if exitCode(err) == 1 {
-			return RefreshResult{State: RefreshNotContained, Commit: head}, nil
-		}
-		return RefreshResult{}, err
-	}
-	status, err := w.git(ctx, w.dir, nil, "status", "--porcelain", "-z", "--untracked-files=all")
-	if err != nil {
-		return RefreshResult{}, err
-	}
-	if status != "" {
-		return RefreshResult{State: RefreshDirty, Commit: head}, nil
-	}
-	if head == target {
-		return RefreshResult{State: RefreshAtProjectCommit, Commit: head}, nil
-	}
-	if beforeAdvance != nil {
-		beforeAdvance()
-	}
-	if _, err := w.git(ctx, w.dir, nil, "merge", "--ff-only", "--no-edit", "--no-autostash", target); err != nil {
-		// A late author edit may prevent the fast-forward. Confirm that
-		// condition before calling it dirty; other Git failures stay failures.
-		status, statusErr := w.git(ctx, w.dir, nil, "status", "--porcelain", "-z", "--untracked-files=all")
-		if statusErr == nil && status != "" {
-			head, headErr := w.git(ctx, w.dir, nil, "rev-parse", "--verify", "HEAD^{commit}")
-			if headErr == nil {
-				return RefreshResult{State: RefreshDirty, Commit: head}, nil
-			}
-		}
-		return RefreshResult{}, fmt.Errorf("advance the test writer's working copy: %w", err)
-	}
-	return RefreshResult{State: RefreshAtProjectCommit, Commit: target}, nil
 }
 
 // excludeFolders adds BuilderRole's and TestsRole's folder patterns to the
@@ -477,7 +419,7 @@ func registeredCopy(ctx context.Context, project, dir string, role Role) (string
 	}
 	switch len(found) {
 	case 0:
-		return "", folderInUse(role, dir+" is not a linked working copy of the project's repository")
+		return "", folderInUse(role, shquote.Quote(dir)+" is not a linked working copy of the project's repository")
 	case 1:
 		return found[0], nil
 	default:

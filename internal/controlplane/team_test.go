@@ -228,19 +228,16 @@ func TestTeamVersionBelongsToResourceOwner(t *testing.T) {
 // revision debt, and proves neither inspection nor a failed read marks it read.
 func TestTeamAssignmentGenerations(t *testing.T) {
 	f := &teamServiceFixture{}
-	cardsDir := t.TempDir()
-	var cp *ControlPlane
-	for _, owner := range []string{"alice@example.com", "bob@example.com"} {
-		cp = newBuildControlPlane(t, Options{CardsDir: cardsDir, Team: &TeamBinding{Owner: owner, Service: f}})
-		user := asCaller(owner, CallerUser)
-		card := saveProposedCardFixture(t, cp, owner, owner, "Refunds up to $50 are instant.", refundAnalysis("Refunds up to $50 are instant."))
-		confirmed, err := cp.ConfirmIntent(user, &gensurla.ConfirmIntentPayload{ChangeID: owner, RequestRevision: card.RequestRevision, Answers: map[string]string{}, Examples: card.Examples})
-		require.NoError(t, err)
-		_, err = cp.StartBuild(user, &gensurla.StartBuildPayload{ChangeID: owner, RequestRevision: confirmed.RequestRevision})
-		require.NoError(t, err)
-		require.NoError(t, cp.Close())
-	}
-	cp = newBuildControlPlane(t, Options{CardsDir: cardsDir, Team: &TeamBinding{Owner: "alice@example.com", Service: f}})
+	opts := Options{CardsDir: t.TempDir(), WorkspaceDir: t.TempDir(),
+		Team: &TeamBinding{Owner: "alice@example.com", Service: f}}
+	cp := newBuildControlPlane(t, opts)
+	card := buildableChange(t, cp, "alice@example.com")
+	_, err := cp.StartBuild(asCaller("alice@example.com", CallerUser), &gensurla.StartBuildPayload{
+		ChangeID: card.ChangeID, RequestRevision: card.RequestRevision,
+	})
+	require.NoError(t, err)
+	require.NoError(t, cp.Close())
+	cp = newBuildControlPlane(t, opts)
 	first, err := cp.assignmentGenerations(t.Context())
 	require.NoError(t, err)
 	require.Len(t, first, 2)
@@ -273,7 +270,7 @@ func TestTeamAssignmentGenerations(t *testing.T) {
 	require.Len(t, owed, 1)
 	assert.Equal(t, "test_writer", owed[0].Role)
 	// Owner read errors remain errors, rather than an empty successful owed set.
-	name := filepath.Join(cp.cards.dir, buildFileName("alice@example.com"))
+	name := filepath.Join(cp.cards.dir, openBuildRecordFile)
 	original, err := os.ReadFile(name)
 	require.NoError(t, err)
 	require.NoError(t, os.WriteFile(name, []byte("broken"), 0600))
@@ -293,7 +290,7 @@ func TestTeamAssignmentGenerationsMatchBuildWork(t *testing.T) {
 				opts.Verification = &VerificationConfig{RunsDir: t.TempDir()}
 			}
 			cp := newBuildControlPlane(t, opts)
-			card := confirmedChange(t, cp, "chg")
+			card := buildableChange(t, cp, "chg")
 			user := asCaller("alice@example.com", CallerUser)
 			started, err := cp.StartBuild(user, &gensurla.StartBuildPayload{ChangeID: "chg", RequestRevision: card.RequestRevision})
 			require.NoError(t, err)

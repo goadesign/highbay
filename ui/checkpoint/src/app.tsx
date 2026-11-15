@@ -1559,6 +1559,16 @@ export function bootstrapViewsPage() {
         buildSnapshot.request_revision !== revision) return;
     const listedRevision = changeList?.changes.find((item) => item.change_id === changeId)?.request_revision;
     if (listedRevision !== undefined && listedRevision !== revision) return;
+    const request: Operations["start_build"]["request"] = {
+      change_id: changeId,
+      request_revision: revision,
+    };
+    // The Build control binds its confirmation to this exact saved start;
+    // synchronous rendering invalidates that question when the start changes.
+    if (buildSnapshot.state === "started" &&
+        (buildSnapshot.in_force || buildSnapshot.taking.state === "building")) {
+      request.replaces = { change_id: changeId, started_at: buildSnapshot.started_at };
+    }
     const begun = new Date().toISOString();
     buildGeneration++;
     verificationGeneration++;
@@ -1569,7 +1579,7 @@ export function bootstrapViewsPage() {
     findingsError = null;
     findingsReadAgain = false;
     callServer(
-      "start_build", { change_id: changeId, request_revision: revision }, changeId,
+      "start_build", request, changeId,
       (result) => {
         if (sessionState !== "active" || activeEditor?.card.change_id !== changeId ||
             activeEditor.card.request_revision !== revision) return;

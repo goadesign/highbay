@@ -82,6 +82,7 @@ func TestVerificationAndLiveTargetsUseTheAcceptedTests(t *testing.T) {
 	runsDir := filepath.Join(root, "ops", "runs")
 	options := func() Options {
 		return Options{
+			Team:         &TeamBinding{Owner: "alice@example.com", Service: &teamServiceFixture{}},
 			CardsDir:     filepath.Join(root, "ops", "cards"),
 			WorkspaceDir: repo.workspace,
 			RunsDir:      runsDir,
@@ -108,7 +109,7 @@ func TestVerificationAndLiveTargetsUseTheAcceptedTests(t *testing.T) {
 	// can reopen the card store.
 	first := newBuildControlPlane(t, options())
 
-	card := confirmedChange(t, first, "chg")
+	card := buildableChange(t, first, "chg")
 	verifyPayload := &gensurla.VerifyChangePayload{ChangeID: "chg", RequestRevision: card.RequestRevision, CandidateCommit: repo.candidate}
 	livePayload := &gensurla.StartLiveTargetPayload{ChangeID: "chg", CandidateCommit: repo.candidate}
 	_, err = first.VerifyChange(builder, verifyPayload)
@@ -176,6 +177,16 @@ func TestVerificationAndLiveTargetsUseTheAcceptedTests(t *testing.T) {
 			require.NoError(t, err)
 			require.NotEmpty(t, listed.Runs)
 			assert.Equal(t, writtenTests, listed.Runs[0].TestSource, "list_verifications")
+			if server.name == "server reopened from the same card store" {
+				build, err := cp.GetBuild(user, &gensurla.GetBuildPayload{ChangeID: card.ChangeID})
+				require.NoError(t, err)
+				open, ok := build.Build.AsStarted()
+				require.True(t, ok)
+				_, err = cp.DropBuild(user, &gensurla.DropBuildPayload{ChangeID: card.ChangeID, StartedAt: open.StartedAt})
+				require.NoError(t, err)
+				_, err = cp.StartLiveTarget(builder, livePayload)
+				assertRefusalSays(t, err, "no_build", "change \"chg\" has no build with a test writer")
+			}
 		})
 	}
 }
@@ -302,7 +313,7 @@ func TestVerifyChangeRefusesWhatItCannotRunWithItsStep(t *testing.T) {
 				cp, card = builtWithoutTestWriter(t, opts)
 			} else {
 				cp = newBuildControlPlane(t, opts)
-				card = saveStoryCard(t, cp, "chg", StatusConfirmed, refundStory("Refund over the limit waits"))
+				card = saveBuildStoryCard(t, cp, "chg", StatusConfirmed, refundStory("Refund over the limit waits"))
 			}
 			builder := asCaller("alice@example.com", CallerBuilder)
 			if tc.build == assigned || tc.build == accepted {
@@ -313,7 +324,12 @@ func TestVerifyChangeRefusesWhatItCannotRunWithItsStep(t *testing.T) {
 				acceptTests(t, cp, "chg", tc.tests)
 			}
 			if tc.otherRev {
-				card = saveStoryCard(t, cp, "chg", StatusConfirmed, refundStory("Refund over the limit waits for a manager"))
+				card = saveBuildStoryCard(t, cp, "chg", StatusConfirmed, refundStory("Refund over the limit waits for a manager"))
+			}
+			if tc.workspace == plain {
+				// The accepted fixture had a real repository at build time. Its
+				// owner can subsequently lose the Git metadata before verifying.
+				require.NoError(t, os.Rename(filepath.Join(plain, ".git"), filepath.Join(root, "plain-git-metadata")))
 			}
 			srv := roleServer(t, cp)
 			body := `{"request_revision":"` + card.RequestRevision + `","candidate_commit":"` + tc.candidate + `"}`
@@ -359,7 +375,7 @@ func TestANewAcceptanceChangesOnlyTheTestsCommit(t *testing.T) {
 		SurlaVersion:    testSurlaVersion,
 		WrittenTestRuns: &WrittenTestRuns{ReportDir: realTempDir(t), Command: []string{"/bin/sh", "-c", "exit 0", "sh"}, Timeout: time.Hour},
 	})
-	card := saveStoryCard(t, cp, "chg", StatusConfirmed, refundStory("Refund over the limit waits"))
+	card := saveBuildStoryCard(t, cp, "chg", StatusConfirmed, refundStory("Refund over the limit waits"))
 	_, err := cp.StartBuild(asCaller("alice@example.com", CallerUser), &gensurla.StartBuildPayload{ChangeID: "chg", RequestRevision: card.RequestRevision})
 	require.NoError(t, err)
 	// verifyAfterAccepting accepts the tests at commit, verifies the
@@ -421,7 +437,7 @@ func TestVerifyChangeSaysWhoActsUntilTheTestsAreAccepted(t *testing.T) {
 				SurlaVersion:    testSurlaVersion,
 				WrittenTestRuns: &WrittenTestRuns{ReportDir: realTempDir(t), Command: []string{"/bin/sh", "-c", "exit 0", "sh"}, Timeout: time.Hour},
 			})
-			card := saveStoryCard(t, cp, "chg", StatusConfirmed, refundStory("Refund over the limit waits"))
+			card := saveBuildStoryCard(t, cp, "chg", StatusConfirmed, refundStory("Refund over the limit waits"))
 			_, err := cp.StartBuild(asCaller("alice@example.com", CallerUser), &gensurla.StartBuildPayload{ChangeID: "chg", RequestRevision: card.RequestRevision})
 			require.NoError(t, err)
 			saveTestWriter(t, cp, "chg", tc.tw)
@@ -448,7 +464,7 @@ func TestTestsNotAcceptedIsWordedForEachReader(t *testing.T) {
 		SurlaVersion:    testSurlaVersion,
 		WrittenTestRuns: &WrittenTestRuns{ReportDir: realTempDir(t), Command: []string{"/bin/sh", "-c", "exit 0", "sh"}, Timeout: time.Hour},
 	})
-	card := saveStoryCard(t, cp, "chg", StatusConfirmed, refundStory("Refund over the limit waits"))
+	card := saveBuildStoryCard(t, cp, "chg", StatusConfirmed, refundStory("Refund over the limit waits"))
 	_, err := cp.StartBuild(asCaller("alice@example.com", CallerUser), &gensurla.StartBuildPayload{ChangeID: "chg", RequestRevision: card.RequestRevision})
 	require.NoError(t, err)
 	saveTestWriter(t, cp, "chg", testWriterAssignment{State: testsReported, Findings: []string{}})
@@ -514,7 +530,7 @@ func TestTestWriterReadsOnlyTheRunsOfAnAssignedChange(t *testing.T) {
 				cp, card = builtWithoutTestWriter(t, opts)
 			} else {
 				cp = newBuildControlPlane(t, opts)
-				card = saveStoryCard(t, cp, "chg", StatusConfirmed, refundStory("Refund over the limit waits"))
+				card = saveBuildStoryCard(t, cp, "chg", StatusConfirmed, refundStory("Refund over the limit waits"))
 			}
 			testWriter := asCaller("alice@example.com", CallerTestWriter)
 			if tc.build {
@@ -593,7 +609,8 @@ func TestVerifyChangeTestModuleGuardAcrossRegenerationMergeAndNextChange(t *test
 		SurlaVersion: testSurlaVersion,
 		Verification: &VerificationConfig{RunsDir: storedRunsDir, Plan: storedPlan, Command: []string{"/bin/sh", "-c", "exit 0", "sh"}, Timeout: time.Hour},
 	})
-	storedCard := saveStoryCard(t, storedCP, "chg-stored", StatusConfirmed, refundStory("Refund over the limit waits"))
+	storedCard := saveBuildStoryCard(t, storedCP, "chg-stored", StatusConfirmed, refundStory("Refund over the limit waits"))
+	saveStoredBuildFixture(t, storedCP, storedCard)
 	storedRun, err := storedCP.VerifyChange(builder, &gensurla.VerifyChangePayload{
 		ChangeID: "chg-stored", RequestRevision: storedCard.RequestRevision, CandidateCommit: repo.modifiedTestFile,
 	})
@@ -605,7 +622,7 @@ func TestVerifyChangeTestModuleGuardAcrossRegenerationMergeAndNextChange(t *test
 	excludeFile := filepath.Join(repoDir, ".git", "info", "exclude")
 	require.NoError(t, os.WriteFile(excludeFile, []byte("/.surla-tests/\n"), 0o600))
 	gitForLayoutTest(t, repoDir, "worktree", "add", "-q", "-B", "surla/tests", filepath.Join(repoDir, ".surla-tests"), repo.candidate)
-	card1 := saveStoryCard(t, cp, "chg-1", StatusConfirmed, refundStory("Refund over the limit waits"))
+	card1 := saveBuildStoryCard(t, cp, "chg-1", StatusConfirmed, refundStory("Refund over the limit waits"))
 	_, err = cp.StartBuild(user, &gensurla.StartBuildPayload{ChangeID: "chg-1", RequestRevision: card1.RequestRevision})
 	require.NoError(t, err)
 	testsWorktree := filepath.Join(repoDir, ".surla-tests", "services", "shop")
@@ -681,7 +698,22 @@ func TestVerifyChangeTestModuleGuardAcrossRegenerationMergeAndNextChange(t *test
 
 	// 3. Change 2 starts from M1; .surla-tests is fast-forwarded to M1,
 	// and the test writer commits T2 on surla/tests.
-	card2 := saveStoryCard(t, cp, "chg-2", StatusConfirmed, refundStory("Refund over the limit waits for a director"))
+	card2 := saveBuildStoryCard(t, cp, "chg-2", StatusConfirmed, refundStory("Refund over the limit waits for a director"))
+	// The first build has no passed run in this fixture. Drop it before the
+	// second change and explicitly supply the refreshed revision's start.
+	current, err := cp.GetBuild(user, &gensurla.GetBuildPayload{ChangeID: "chg-1"})
+	require.NoError(t, err)
+	open, ok := current.Build.AsStarted()
+	require.True(t, ok)
+	_, err = cp.DropBuild(user, &gensurla.DropBuildPayload{ChangeID: "chg-1", StartedAt: open.StartedAt})
+	require.NoError(t, err)
+	provenance, found, err := cp.cards.loadMadeFrom()
+	require.NoError(t, err)
+	require.True(t, found)
+	record := loadMetadataRecord(t, cp, "chg-2")
+	record.madeFrom.Start = provenance.Start
+	record.madeFrom.Entries = nil
+	saveMetadataRecord(t, cp, record)
 	_, err = cp.StartBuild(user, &gensurla.StartBuildPayload{ChangeID: "chg-2", RequestRevision: card2.RequestRevision})
 	require.NoError(t, err)
 	gitForLayoutTest(t, testsWorktree, "merge", "-q", "--ff-only", m1)
@@ -787,7 +819,7 @@ func TestVerifyChangeTestModuleFileLimitBelowAtAndAbove(t *testing.T) {
 			})
 			user := asCaller("alice@example.com", CallerUser)
 			builder := asCaller("alice@example.com", CallerBuilder)
-			card := saveStoryCard(t, cp, "chg", StatusConfirmed, refundStory("Refund over the limit waits"))
+			card := saveBuildStoryCard(t, cp, "chg", StatusConfirmed, refundStory("Refund over the limit waits"))
 			_, err := cp.StartBuild(user, &gensurla.StartBuildPayload{ChangeID: "chg", RequestRevision: card.RequestRevision})
 			require.NoError(t, err)
 			acceptTests(t, cp, "chg", repo.tests)
@@ -946,7 +978,7 @@ func builtWithoutTestWriter(t *testing.T, opts Options) (*ControlPlane, *gensurl
 		Command: []string{"/bin/sh", "-c", "exit 0", "sh"}, Timeout: time.Hour,
 	}
 	first := newBuildControlPlane(t, stored)
-	card := saveStoryCard(t, first, "chg", StatusConfirmed, refundStory("Refund over the limit waits"))
+	card := saveBuildStoryCard(t, first, "chg", StatusConfirmed, refundStory("Refund over the limit waits"))
 	_, err := first.StartBuild(asCaller("alice@example.com", CallerUser), &gensurla.StartBuildPayload{ChangeID: "chg", RequestRevision: card.RequestRevision})
 	require.NoError(t, err)
 	assert.Equal(t, `"`+buildRolesBuilderOnly+`"`, jsonAt(t, readBuildFile(t, first, "chg"), "roles"), "a stored evaluator's build has no test writer")
@@ -993,16 +1025,15 @@ func saveTestWriter(t *testing.T, cp *ControlPlane, changeID string, tw testWrit
 	t.Helper()
 	cp.mu.Lock()
 	defer cp.mu.Unlock()
-	build, found, err := cp.cards.loadBuild(changeID)
+	build, found, err := cp.cards.loadOpenBuild()
 	require.NoError(t, err)
 	require.True(t, found, "change %q has a build", changeID)
-	tw.WorkingFolder = build.TestWriter.WorkingFolder
 	build.TestWriter = tw
 	// A reported build has had at least one report; a verdict keeps its report's number.
 	if tw.State != testsAssigned {
 		build.ReportNumber = max(build.ReportNumber, 1)
 	}
-	require.NoError(t, cp.cards.saveBuild(build))
+	require.NoError(t, cp.cards.saveOpenBuild(build))
 }
 
 // startRunFor starts a verification run of card for its owner and returns its

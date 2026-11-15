@@ -24,7 +24,7 @@ func TestViewsPageSeparatesRecordedRunsFromCurrentInputs(t *testing.T) {
 	})
 	cp.changesWait, cp.changesPoll = 400*time.Millisecond, 20*time.Millisecond
 	user := asCaller(pageOwner, CallerUser)
-	card := confirmedChange(t, cp, "chg-summary")
+	card := buildableChange(t, cp, "chg-summary")
 	_, err := cp.StartBuild(user, &gensurla.StartBuildPayload{
 		ChangeID: card.ChangeID, RequestRevision: card.RequestRevision,
 	})

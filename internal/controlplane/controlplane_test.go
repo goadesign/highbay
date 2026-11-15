@@ -871,7 +871,7 @@ func TestUnchangedConfirmationFromAnotherSessionKeepsRevision(t *testing.T) {
 	t.Cleanup(func() { assert.NoError(t, provider.Shutdown(context.Background())) })
 	spec := reportSpec{SuiteID: "suite", SuiteCommit: strings.Repeat("b", 40), Environment: "sim", Artifacts: map[string]string{"app": "artifact"}}
 	target := &promotionTargetStub{artifacts: spec.Artifacts}
-	cp := newControlPlane(t, Options{Verification: verificationConfig(t), PromotionTarget: target, TracerProvider: provider})
+	cp := newControlPlane(t, buildFixtureOptions(t, Options{Verification: verificationConfig(t), PromotionTarget: target, TracerProvider: provider}))
 	auth := fixtureCredentials(map[string]Principal{
 		"guide":  {ID: "owner", CallerID: "guide", Kind: CallerGuide},
 		"first":  {ID: "owner", CallerID: "session-one", Kind: CallerUser},
@@ -879,8 +879,8 @@ func TestUnchangedConfirmationFromAnotherSessionKeepsRevision(t *testing.T) {
 	})
 	srv := httptest.NewServer(NewHTTPHandler(cp, auth))
 	defer srv.Close()
-	guide := WithPrincipal(t.Context(), Principal{ID: "owner", CallerID: "guide", Kind: CallerGuide})
-	card := mustPropose(t, cp, guide, "session-change", "Keep the same rules", refundAnalysis("Keep the same rules"))
+	card := saveProposedCardFixture(t, cp, "owner", "session-change", "Keep the same rules", refundAnalysis("Keep the same rules"))
+	card = attachBuildSnapshot(t, cp, card.ChangeID)
 	payload := &gensurla.ConfirmIntentPayload{ChangeID: card.ChangeID, RequestRevision: card.RequestRevision, Answers: map[string]string{}, Examples: card.Examples}
 	raw, err := gensurla.EncodeConfirmIntentPayload(payload)
 	require.NoError(t, err)
@@ -900,6 +900,7 @@ func TestUnchangedConfirmationFromAnotherSessionKeepsRevision(t *testing.T) {
 		return result
 	}
 	confirmed := send("first", raw)
+	saveStoredBuildFixture(t, cp, confirmed)
 	first := WithPrincipal(t.Context(), Principal{ID: "owner", CallerID: "session-one", Kind: CallerUser})
 	target.report = passingReport(t, confirmed.RequestRevision, strings.Repeat("c", 40), spec)
 	approved, err := cp.ApproveMerge(first, &gensurla.ApproveMergePayload{ChangeID: confirmed.ChangeID, RequestRevision: confirmed.RequestRevision, CandidateCommit: strings.Repeat("c", 40), ReportDigest: target.report.Digest})

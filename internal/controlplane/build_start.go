@@ -5,7 +5,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os/exec"
 	"path/filepath"
+	"strings"
 	"time"
 
 	genproject "github.com/goadesign/surla/gen/project"
@@ -47,6 +49,17 @@ func (c *ControlPlane) StartBuild(
 	))
 	defer span.End()
 	select {
+	case c.builderCopyTurn <- struct{}{}:
+	default:
+		return nil, gensurla.MakeWorkingCopyBusy(errors.New("Another build is starting or the builder is reading its assignment. Start the build again when that has ended."))
+	}
+	builderTurnHeld := true
+	defer func() {
+		if builderTurnHeld {
+			<-c.builderCopyTurn
+		}
+	}()
+	select {
 	case c.workingCopyTurn <- struct{}{}:
 	default:
 		message := "Another build is starting or a test check is using the working copy. "
@@ -67,12 +80,26 @@ func (c *ControlPlane) StartBuild(
 	// Check the agreed revision before any working-copy or team effect.
 	c.mu.RLock()
 	record, err := c.buildableCard(principal, p.ChangeID, p.RequestRevision)
+	if err == nil {
+		err = c.checkDraftAfterDrop(record)
+	}
 	c.mu.RUnlock()
 	if err != nil {
 		return nil, recordBuildError(span, err, "check change for build")
 	}
 	if _, _, err := designeval.StoryScenarios(record.stories); err != nil {
 		return nil, gensurla.MakeUnprocessable(fmt.Errorf("the agreed Story cannot name its required tests: %w", err))
+	}
+	// The user decides against the exact open start before any copy effect.
+	c.mu.RLock()
+	open, openFound, err := c.cards.loadOpenBuild()
+	var openCard storedChangeCard
+	if err == nil && openFound {
+		openCard, err = c.ownedCard(principal, open.ChangeID)
+	}
+	c.mu.RUnlock()
+	if err != nil {
+		return nil, recordBuildError(span, err, "read the open build")
 	}
 	source, layout, workspace, err := c.projectTestLayout(work)
 	if err != nil {
@@ -81,25 +108,93 @@ func (c *ControlPlane) StartBuild(
 	if workspace == "" {
 		return nil, gensurla.MakeNotImplemented(errors.New("No project working folder is bound. Start this project with surla to build it."))
 	}
-	var copy buildCopy
-	if source != testSourceStoredEvaluator {
-		if source != testSourceStarterLayout {
-			return nil, gensurla.MakeNoTestLayout(errors.New("This project has neither stored verification settings nor Surla's test layout. Store verification settings, then build again."))
+	repo, prefix, err := resolveStarterRepo(work, workspace)
+	if err != nil {
+		return nil, recordBuildError(span, buildStartError(work, workspace, err), "read the project repository")
+	}
+	head, err := runGitRead(work, repo, "rev-parse", "--verify", "--quiet", "HEAD^{commit}")
+	if err != nil {
+		var exit *exec.ExitError
+		if errors.As(err, &exit) && exit.ExitCode() == 1 {
+			err = testwriter.ErrNoCommit
 		}
-		identity := c.buildIdentityCheck
-		if identity == nil {
-			identity = testwriter.CheckIdentity
-		}
-		if err := identity(work, workspace); err != nil {
-			return nil, recordBuildError(span, buildStartError(work, workspace, err), "check Git identity")
-		}
-		copy, err = c.openBuildCopy(work, workspace, layout)
+		return nil, recordBuildError(span, buildStartError(work, workspace, err), "read the build base")
+	}
+	base := strings.TrimSpace(string(head))
+	var openProgress *gensurla.StartedBuild
+	if openFound {
+		openProgress, err = c.startedBuildAt(work, principal.ID, heldBuild{
+			file: open, inForce: buildInForce(open, openCard), storedEvaluator: c.storedEvaluator(),
+		}, base)
 		if err != nil {
-			return nil, recordBuildError(span, buildStartError(work, workspace, err), "open test-writer copy")
+			return nil, recordBuildError(span, err, "read the open build's passed runs")
 		}
-		_, err = copy.Refresh(work)
+		if err := checkBuildReplacement(p, open, openProgress); err != nil {
+			if refusal, ok := err.(*gensurla.OpenBuildRefusal); ok && refusal.Name == "previous_change_open" {
+				if passed, ok := openProgress.Taking.AsPassed(); ok {
+					safe, readErr := dropSafeGuidance(work, repo, open.Base, base, passed.CandidateCommit)
+					if readErr != nil {
+						return nil, readErr
+					}
+					if safe {
+						refusal.Message += fmt.Sprintf(" If your branch already holds what you want from %s, Drop is safe: the next change starts from your branch as it is.", open.ChangeID)
+					}
+				} else {
+					refusal.Message += fmt.Sprintf(" No verification of %s has passed, so there is nothing to merge yet: let the builder finish, or drop it.", open.ChangeID)
+				}
+			}
+			return nil, err
+		}
+	}
+	number := 0
+	if openFound && openProgress.Taking.Kind() != gensurla.BuildTakingKindMerged && openProgress.Taking.Kind() != gensurla.BuildTakingKindDropped {
+		number, base = open.Number, open.Base
+	} else {
+		last := 0
+		if openFound {
+			last = open.Number
+		}
+		number, err = testwriter.NextNumber(work, workspace, last)
 		if err != nil {
-			return nil, recordBuildError(span, buildStartError(work, workspace, err), "refresh test-writer copy")
+			return nil, recordBuildError(span, err, "number the build")
+		}
+	}
+	if source != testSourceStoredEvaluator && source != testSourceStarterLayout {
+		return nil, gensurla.MakeNoTestLayout(errors.New("This project has neither stored verification settings nor Surla's test layout. Store verification settings, then build again."))
+	}
+	identity := c.buildIdentityCheck
+	if identity == nil {
+		identity = testwriter.CheckIdentity
+	}
+	if err := identity(work, workspace); err != nil {
+		return nil, recordBuildError(span, buildStartError(work, workspace, err), "check Git identity")
+	}
+	var (
+		copy           buildCopy
+		builderExisted bool
+		testsExisted   bool
+	)
+	if c.buildCopyFactory != nil {
+		if source != testSourceStoredEvaluator {
+			copy, err = c.openBuildCopy(work, workspace, layout)
+			if err != nil {
+				return nil, recordBuildError(span, buildStartError(work, workspace, err), "open test-writer copy")
+			}
+		}
+	} else {
+		_, builderExisted, err = testwriter.InspectCopy(
+			work, workspace, testwriter.BuilderRole, testwriter.BuilderRole.Branch(number),
+		)
+		if err != nil {
+			return nil, recordBuildError(span, buildStartError(work, workspace, err), "inspect builder copy")
+		}
+		if source != testSourceStoredEvaluator {
+			_, testsExisted, err = testwriter.InspectCopy(
+				work, workspace, testwriter.TestsRole, testwriter.TestsRole.Branch(number),
+			)
+			if err != nil {
+				return nil, recordBuildError(span, buildStartError(work, workspace, err), "inspect test-writer copy")
+			}
 		}
 	}
 
@@ -114,59 +209,112 @@ func (c *ControlPlane) StartBuild(
 		c.mu.Unlock()
 		return nil, recordBuildError(span, buildStartError(work, workspace, err), "check change before save")
 	}
+	current, currentFound, err := c.cards.loadOpenBuild()
+	if err != nil {
+		c.mu.Unlock()
+		return nil, recordBuildError(span, err, "check the open build before save")
+	}
+	if currentFound != openFound || currentFound && (current.ChangeID != open.ChangeID || !current.StartedAt.Equal(open.StartedAt)) {
+		c.mu.Unlock()
+		return nil, gensurla.MakeConflict(errors.New("The open build changed while this start was being prepared. Read get_build and decide again."))
+	}
+	provenance, hasProvenance, err := c.cards.loadMadeFrom()
+	if err != nil {
+		c.mu.Unlock()
+		return nil, err
+	}
+	if hasProvenance && provenance.Start.Dropped != nil && record.madeFrom.Start.Write < provenance.Start.Write {
+		c.mu.Unlock()
+		return nil, gensurla.MakeDraftedBeforeDrop(errors.New("A build was dropped after this revision was drafted. Ask the guide to call refresh_story and revise_change, adopt the revision, then build."))
+	}
+	if currentFound && hasProvenance && buildDropped(provenance, current) != (openProgress.Taking.Kind() == gensurla.BuildTakingKindDropped) {
+		c.mu.Unlock()
+		return nil, gensurla.MakeConflict(errors.New("The open build changed while this start was being prepared. Read get_build and decide again."))
+	}
+	if currentFound {
+		currentProgress := startedBuild(heldBuild{file: current, inForce: buildInForce(current, record), storedEvaluator: c.storedEvaluator()}, openProgress.Taking)
+		if err := checkBuildReplacement(p, current, currentProgress); err != nil {
+			c.mu.Unlock()
+			return nil, err
+		}
+	}
+	roles := buildRolesBuilderOnly
+	if source != testSourceStoredEvaluator {
+		roles = buildRolesBuilderAndTestWriter
+	}
 	saved := buildFile{
 		ChangeID: p.ChangeID, RequestRevision: p.RequestRevision, StartedAt: time.Now().UTC(),
-		Roles: buildRolesBuilderOnly, Stories: cloneStorySummaries(record.stories),
+		Number: number, Base: base, GoMod: record.goMod, MadeFrom: *record.madeFrom,
+		Roles: roles, Stories: cloneStorySummaries(record.stories),
 		DesignSource: record.designSource, TestWriter: testWriterAssignment{State: testsAssigned},
 		Answers: confirmedAnswers(record.card), Examples: record.card.Examples,
 		PreservedBehaviors: append([]string{}, record.card.PreservedBehaviors...),
 	}
-	var folders BuildFolders = BuilderOnly{BuilderFolder: workspace}
-	if copy != nil {
-		folder := copy.Project()
-		saved.Roles = buildRolesBuilderAndTestWriter
-		saved.TestWriter.WorkingFolder = &folder
-		folders = BuilderAndTestWriter{BuilderFolder: workspace, TestWriterFolder: folder}
-	}
-	err = c.cards.saveBuild(saved)
+	err = c.cards.saveOpenBuild(saved)
 	c.mu.Unlock()
 	if err != nil {
 		return nil, recordBuildError(span, err, "save build")
 	}
 	result := &gensurla.StartBuildResult{
-		Build: startedBuild(heldBuild{file: saved, inForce: true, storedEvaluator: c.storedEvaluator()}),
+		Build: startedBuild(heldBuild{file: saved, inForce: true, storedEvaluator: c.storedEvaluator()}, gensurla.NewBuildTakingBuilding(&gensurla.BuildBuilding{})),
 	}
-	// Registration is durable local work and is never starved by a generation
-	// or window deadline. The project owner completes it even after cancellation.
-	if err := team.RegisterBuildRoles(accepted, folders); err != nil {
-		span.RecordError(errors.New("saved build roles could not be registered"))
-		span.SetStatus(codes.Error, "register saved build roles")
-		result.Team = buildAgainTeamOutcome()
-		return result, nil
+	builderFolder := filepath.Join(workspace, testwriter.BuilderRole.Folder, filepath.FromSlash(prefix))
+	testsFolder := filepath.Join(workspace, testwriter.TestsRole.Folder, filepath.FromSlash(prefix))
+	var makeErr error
+	if c.buildCopyFactory != nil {
+		builderExisted = true
+		if copy != nil {
+			testsExisted = true
+			testsFolder = copy.Project()
+		}
+	} else {
+		builderBranch := testwriter.BuilderRole.Branch(saved.Number)
+		if !builderExisted {
+			bWC, bErr := testwriter.MakeCopy(work, workspace, testwriter.BuilderRole, builderBranch, saved.Base)
+			if bErr != nil {
+				makeErr = bErr
+			} else {
+				builderExisted = true
+				builderFolder = bWC.Project()
+			}
+		}
+		if source != testSourceStoredEvaluator && !testsExisted {
+			testsBranch := testwriter.TestsRole.Branch(saved.Number)
+			tWC, tErr := testwriter.MakeCopy(work, workspace, testwriter.TestsRole, testsBranch, saved.Base)
+			if tErr != nil {
+				if makeErr == nil {
+					makeErr = tErr
+				}
+			} else {
+				testsExisted = true
+				testsFolder = tWC.Project()
+			}
+		}
 	}
-	if copy != nil {
-		err = work.Err()
-		if err == nil {
-			err = copy.Prepare(work, saved.Stories)
+	if builderExisted {
+		var folders BuildFolders = BuilderOnly{BuilderFolder: builderFolder}
+		if source != testSourceStoredEvaluator && testsExisted {
+			folders = BuilderAndTestWriter{BuilderFolder: builderFolder, TestWriterFolder: testsFolder}
 		}
-		// An author's failure becomes a finding. Any other is a failure of
-		// this start: the saved reason is worded for the page, and the trace
-		// keeps the cause as it was.
-		if author := (*testwriter.AuthorError)(nil); err != nil && !errors.As(err, &author) {
-			span.RecordError(err)
-			span.SetStatus(codes.Error, "prepare required tests")
-		}
-		current, saveErr := c.saveBuildPreparation(work, saved, err)
-		if saveErr != nil {
-			span.RecordError(errors.New("saved build preparation could not be recorded"))
-			span.SetStatus(codes.Error, "record build preparation")
+		// Registration is durable local work and is never starved by a generation
+		// or window deadline. The project owner completes it even after cancellation.
+		if err := team.RegisterBuildRoles(accepted, folders); err != nil {
+			span.RecordError(errors.New("saved build roles could not be registered"))
+			span.SetStatus(codes.Error, "register saved build roles")
 			result.Team = buildAgainTeamOutcome()
 			return result, nil
 		}
-		result.Build = startedBuild(current)
+	}
+	if makeErr != nil {
+		span.RecordError(makeErr)
+		span.SetStatus(codes.Error, "make working copy")
+		result.Team = buildAgainTeamOutcome()
+		return result, nil
 	}
 	<-c.workingCopyTurn
 	heldTurn = false
+	<-c.builderCopyTurn
+	builderTurnHeld = false
 	cancel()
 	if accepted.Err() != nil {
 		result.Team = buildAgainTeamOutcome()
@@ -185,35 +333,41 @@ func (c *ControlPlane) saveBuildPreparation(
 ) (heldBuild, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	current, found, err := c.cards.loadBuild(saved.ChangeID)
+	current, found, err := c.cards.loadOpenBuild()
 	if err != nil {
 		return heldBuild{}, err
 	}
-	if !found {
-		return heldBuild{}, errors.New("the saved build disappeared during preparation")
+	if !found || current.ChangeID != saved.ChangeID {
+		return heldBuild{}, errors.New("the saved build was replaced during preparation")
 	}
 	if prepareErr != nil && current.RequestRevision == saved.RequestRevision &&
 		current.StartedAt.Equal(saved.StartedAt) && current.ReportNumber == saved.ReportNumber &&
 		current.TestWriter.State == testsAssigned {
 		tw := &current.TestWriter
-		tw.Read = false
 		tw.CheckedAt = time.Now().UTC()
 		var author *testwriter.AuthorError
 		if errors.As(prepareErr, &author) {
 			tw.State = testsNeedChanges
-			tw.Findings = []string{author.Finding.Message + "\nCorrect the problem in the test module, then report_tests_finished."}
+			msg := author.Finding.Message
+			if author.Finding.Kind != testwriter.FindingWorkingCopy {
+				msg += "\nCorrect the problem in the test module, then report_tests_finished."
+			}
+			tw.Findings = []string{msg}
 		} else {
 			tw.State = testsCouldNotRun
 			reason, step := preparationFailure(ctx, prepareErr)
 			tw.Reason, tw.Step = boundedBuildReason(reason), step
 		}
-		if err := c.cards.saveBuild(current); err != nil {
+		if err := c.cards.saveOpenBuild(current); err != nil {
 			return heldBuild{}, err
 		}
 	}
-	record, err := c.ownedCard(Principal{ID: c.team.Owner}, saved.ChangeID)
+	record, ok, err := c.cards.load(saved.ChangeID)
 	if err != nil {
 		return heldBuild{}, err
+	}
+	if !ok {
+		return heldBuild{}, fmt.Errorf("unknown change_id %q", saved.ChangeID)
 	}
 	return heldBuild{file: current, inForce: buildInForce(current, record), storedEvaluator: c.storedEvaluator()}, nil
 }
@@ -268,14 +422,14 @@ func buildStartError(ctx context.Context, workspace string, err error) error {
 		return gensurla.MakeUnavailable(errors.New("The server stopped or the build-start limit ended before saving. Call again on a running server."))
 	}
 	switch {
-	case errors.Is(err, testwriter.ErrNotRepository):
+	case errors.Is(err, testwriter.ErrNotRepository), errors.Is(err, errNoRepository):
 		return gensurla.MakeNotRepository(fmt.Errorf("Project folder %s: %w", shquote.Quote(workspace), err))
 	case errors.Is(err, testwriter.ErrNoCommit):
 		return gensurla.MakeNoCommit(fmt.Errorf("Project folder %s: %w", shquote.Quote(workspace), err))
 	case errors.Is(err, testwriter.ErrIdentityMissing):
 		return gensurla.MakeGitIdentityMissing(err)
 	case errors.Is(err, testwriter.ErrFolderInUse):
-		return gensurla.MakeCopyFolderInUse(fmt.Errorf("Working-copy folder %s is not Surla's working copy. Move it out of the project, then try again.", shquote.Quote(filepath.Join(workspace, testwriter.Folder))))
+		return gensurla.MakeCopyFolderInUse(err)
 	case errors.Is(err, testwriter.ErrBranchInUse):
 		return gensurla.MakeTestsBranchInUse(err)
 	default:
@@ -382,4 +536,38 @@ func buildTeamStep(cause string) string {
 			"the project folder and its build working folders, " + retry
 	}
 	return "The project team could not be prepared. Run surla in the project folder to see the step, " + retry
+}
+
+// checkBuildReplacement refuses another change while the open build remains,
+// and an unfinished restart without consent naming exactly the observed start.
+func checkBuildReplacement(p *gensurla.StartBuildPayload, saved buildFile, progress *gensurla.StartedBuild) error {
+	name, message := "", ""
+	if progress.Taking.Kind() == gensurla.BuildTakingKindMerged || progress.Taking.Kind() == gensurla.BuildTakingKindDropped {
+		return nil
+	}
+	if saved.ChangeID != p.ChangeID {
+		name = "previous_change_open"
+		message = fmt.Sprintf("Change %s still has an open build. Merge a passed run or drop that build before building %s.", saved.ChangeID, p.ChangeID)
+	} else if progress.Taking.Kind() == gensurla.BuildTakingKindBuilding &&
+		(p.Replaces == nil || p.Replaces.ChangeID != saved.ChangeID || p.Replaces.StartedAt != saved.StartedAt.UTC().Format(time.RFC3339Nano)) {
+		name = "unfinished_build_open"
+		message = fmt.Sprintf("No verification of change %s's open build has passed. Decide whether to build it again, then send replaces naming the build shown.", saved.ChangeID)
+	}
+	if name == "" {
+		return nil
+	}
+	return &gensurla.OpenBuildRefusal{Name: name, Message: message, ChangeID: saved.ChangeID, Build: progress}
+}
+
+// checkDraftAfterDrop refuses only revisions older than an actual drop.
+// The caller holds c.mu, which serializes Drop's provenance publication.
+func (c *ControlPlane) checkDraftAfterDrop(record storedChangeCard) error {
+	provenance, found, err := c.cards.loadMadeFrom()
+	if err != nil {
+		return err
+	}
+	if found && provenance.Start.Dropped != nil && record.madeFrom.Start.Write < provenance.Start.Write {
+		return gensurla.MakeDraftedBeforeDrop(errors.New("A build was dropped after this revision was drafted. Ask the guide to call refresh_story and revise_change, adopt the revision, then build."))
+	}
+	return nil
 }

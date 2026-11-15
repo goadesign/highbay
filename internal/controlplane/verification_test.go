@@ -398,14 +398,14 @@ func verificationSetup(t *testing.T) (*ControlPlane, *gensurla.ChangeCardResult,
 		PreservedBehaviors: []string{},
 	}
 	cfg := verificationConfig(t)
-	cp := newControlPlane(t, Options{
+	cp := newControlPlane(t, buildFixtureOptions(t, Options{
 		Verification: cfg,
-	})
-	card, err := cp.ProposeChange(WithPrincipal(context.Background(), Principal{ID: "alice@example.com", CallerID: "alice@example.com", Kind: CallerUser}),
-		&gensurla.ProposeChangePayload{ChangeID: "chg", Prompt: "Refunds up to $50 are instant.", Analysis: analysis})
-	require.NoError(t, err)
+	}))
+	card := saveProposedCardFixture(t, cp, "alice@example.com", "chg", "Refunds up to $50 are instant.", analysis)
+	card = attachBuildSnapshot(t, cp, card.ChangeID)
 	card = mustConfirmNoop(t, cp, WithPrincipal(t.Context(), Principal{ID: "alice@example.com", CallerID: "alice@example.com", Kind: CallerUser}), card)
 	require.Equal(t, StatusConfirmed, card.Status)
+	saveStoredBuildFixture(t, cp, card)
 	return cp, card, cfg
 }
 

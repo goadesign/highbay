@@ -24,7 +24,7 @@ import (
 // precede liveMu: an unrelated start cannot make these callers wait for it.
 func TestLiveStartRefusesUnauthorizedCardsWithoutWaiting(t *testing.T) {
 	cp, root := newLiveControlPlane(t, "serve")
-	saveStoryCard(t, cp, "chg-unconfirmed", StatusNeedsConfirmation, refundStory("Refund waits"))
+	saveBuildStoryCard(t, cp, "chg-unconfirmed", StatusNeedsConfirmation, refundStory("Refund waits"))
 	cases := []struct {
 		name, owner, changeID, refusal string
 	}{
@@ -69,7 +69,7 @@ func TestLiveStartRefusalsPreserveTheRunningTarget(t *testing.T) {
 	require.NoError(t, err)
 	before := readRunning(t, cp)
 	owned := boundTargetForTest(cp)
-	saveStoryCard(t, cp, "chg-unconfirmed", StatusNeedsConfirmation, refundStory("Refund waits"))
+	saveBuildStoryCard(t, cp, "chg-unconfirmed", StatusNeedsConfirmation, refundStory("Refund waits"))
 	for _, tc := range []struct {
 		owner, changeID, refusal string
 	}{
@@ -95,7 +95,7 @@ func TestLiveStartRefusalsPreserveTheRunningTarget(t *testing.T) {
 
 // TestWrittenLiveStartNeedsAModelBeforeLaunching proves accepted tests alone
 // cannot trigger compilation without a usable model; stored fixtures above
-// continue to start with no choice and no build.
+// continue to start without a model choice, using their builder-only build.
 func TestWrittenLiveStartNeedsAModelBeforeLaunching(t *testing.T) {
 	self, err := os.Executable()
 	require.NoError(t, err)
@@ -111,7 +111,7 @@ func TestWrittenLiveStartNeedsAModelBeforeLaunching(t *testing.T) {
 		},
 		Live: &LiveConfig{Command: []string{self}, Env: append(os.Environ(), liveTargetModeEnv+"=serve")},
 	})
-	card := confirmedChange(t, cp, "chg")
+	card := buildableChange(t, cp, "chg")
 	_, err = cp.StartBuild(asCaller("alice@example.com", CallerUser), &gensurla.StartBuildPayload{
 		ChangeID: "chg", RequestRevision: card.RequestRevision,
 	})
@@ -147,7 +147,7 @@ func TestAQueuedLiveStartUsesTheCurrentAcceptedTestsAndModel(t *testing.T) {
 		},
 		Live: &LiveConfig{Command: []string{self}, Env: append(os.Environ(), liveTargetModeEnv+"=serve")},
 	})
-	card := confirmedChange(t, cp, "chg")
+	card := buildableChange(t, cp, "chg")
 	user := asCaller("alice@example.com", CallerUser)
 	builder := asCaller("alice@example.com", CallerBuilder)
 	_, err = cp.StartBuild(user, &gensurla.StartBuildPayload{ChangeID: "chg", RequestRevision: card.RequestRevision})
@@ -226,7 +226,7 @@ func TestAQueuedLiveStartUsesTheCurrentAcceptedTestsAndModel(t *testing.T) {
 		}},
 		{name: "user built the same revision again", state: "assigned", apply: func(t *testing.T) {
 			acceptTests(t, cp, "chg", repo.candidate)
-			_, err := cp.StartBuild(user, &gensurla.StartBuildPayload{ChangeID: "chg", RequestRevision: card.RequestRevision})
+			_, err := startBuildAgain(t, cp, user, "chg", card.RequestRevision)
 			require.NoError(t, err)
 		}},
 	} {

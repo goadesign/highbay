@@ -40,15 +40,23 @@ var (
 // TestARevisionOfAnAgreedChangeWaitsAndTheAgreedRevisionStaysInForce
 // revises a confirmed and approved change and checks that the agreed
 // revision is still read, previewed (its revision check passes and preview
-// goes on to evaluate the design), verified and approved at its revision
+// checks the saved architecture), verified and approved at its revision
 // while the proposal waits, with its answers, confirmation, approval, Story
 // and source untouched on disk; after the user adopts the proposal, each of
 // those operations refuses the earlier revision.
 func TestARevisionOfAnAgreedChangeWaitsAndTheAgreedRevisionStaysInForce(t *testing.T) {
 	spec := agreedReportSpec()
 	target := &pageTarget{artifacts: spec.Artifacts}
-	cp := newControlPlane(t, Options{Verification: verificationConfig(t), ResolvePromotionTarget: target.resolve})
-	agreed := agreeChange(t, cp, "chg")
+	cp := newControlPlane(t, buildFixtureOptions(t, Options{Verification: verificationConfig(t), ResolvePromotionTarget: target.resolve}))
+	proposed := saveProposedCardFixture(t, cp, agreedOwner, "chg", "Refunds up to $50 are instant.",
+		refundAnalysis("Refunds up to $50 are instant.", refundTaxQuestion()))
+	proposed = attachBuildSnapshot(t, cp, "chg")
+	agreed, err := cp.ConfirmIntent(agreedUser, &gensurla.ConfirmIntentPayload{
+		ChangeID: "chg", RequestRevision: proposed.RequestRevision,
+		Answers: map[string]string{"chg-ambiguity-01": "with_tax"}, Examples: proposed.Examples,
+	})
+	require.NoError(t, err)
+	saveStoredBuildFixture(t, cp, agreed)
 	commit := strings.Repeat("1", 40)
 	report := passingReport(t, agreed.RequestRevision, commit, spec)
 	target.update(func(p *pageTarget) { p.report = report })
@@ -82,7 +90,7 @@ func TestARevisionOfAnAgreedChangeWaitsAndTheAgreedRevisionStaysInForce(t *testi
 
 	_, err = cp.PreviewArchitecture(agreedGuide, &gensurla.PreviewArchitecturePayload{ChangeID: "chg", RequestRevision: agreed.RequestRevision})
 	assertServiceError(t, err, "unprocessable")
-	assert.ErrorContains(t, err, "no architecture to show", "preview accepted the agreed revision but this legacy card has no saved architecture")
+	assert.ErrorContains(t, err, "design must declare at least one Goa API or Service container", "preview accepted the agreed revision and applied its saved Story-only architecture checks")
 
 	run, err := cp.VerifyChange(agreedBuilder, &gensurla.VerifyChangePayload{ChangeID: "chg", RequestRevision: agreed.RequestRevision, CandidateCommit: commit})
 	require.NoError(t, err, "verification of the agreed revision is accepted")
@@ -169,8 +177,8 @@ func TestAProposalIsReplacedByTheNextRevisionAndAStaleOneIsRefused(t *testing.T)
 // revision in force under a new request_revision, the slot is empty, and no
 // approval carries over. A missing answer refuses the adoption.
 func TestAdoptingMakesTheProposalTheRevisionInForce(t *testing.T) {
-	cp := newControlPlane(t, Options{Verification: verificationConfig(t)})
-	saveCard(t, cp, &gensurla.ApprovalItem{
+	cp := newControlPlane(t, buildFixtureOptions(t, Options{Verification: verificationConfig(t)}))
+	saveStoredCardBuildFixture(t, cp, &gensurla.ApprovalItem{
 		ApprovedBy: agreedOwner, ReportDigest: strings.Repeat("d", 64), CandidateCommit: strings.Repeat("c", 40),
 		SuiteID: "orders", SuiteCommit: strings.Repeat("b", 40), Environment: "sim",
 		Artifacts: map[string]string{"orders": strings.Repeat("e", 64)}, ScenarioCount: 1,
@@ -208,8 +216,8 @@ func TestAdoptingMakesTheProposalTheRevisionInForce(t *testing.T) {
 // file equals the one before the revision except for its saved time, and a
 // second decline or one naming the agreed revision is refused.
 func TestDecliningRestoresTheAgreedChangeExactly(t *testing.T) {
-	cp := newControlPlane(t, Options{Verification: verificationConfig(t)})
-	saveCard(t, cp, &gensurla.ApprovalItem{
+	cp := newControlPlane(t, buildFixtureOptions(t, Options{Verification: verificationConfig(t)}))
+	saveStoredCardBuildFixture(t, cp, &gensurla.ApprovalItem{
 		ApprovedBy: agreedOwner, ReportDigest: strings.Repeat("d", 64), CandidateCommit: strings.Repeat("c", 40),
 		SuiteID: "orders", SuiteCommit: strings.Repeat("b", 40), Environment: "sim",
 		Artifacts: map[string]string{"orders": strings.Repeat("e", 64)}, ScenarioCount: 1,
@@ -626,8 +634,7 @@ func TestBuildsFollowTheAgreedRevision(t *testing.T) {
 	cp := newBuildControlPlane(t, Options{WorkspaceDir: ws})
 	agreedOp := seedStoryRefreshForTest(t, cp, agreedOwner, storyRefreshStateSucceeded, sampleAdoptedStories(), "")
 	proposeWithStory(t, cp, agreedGuide, "chg", agreedOp)
-	proposed, err := cp.GetChange(agreedUser, &gensurla.GetChangePayload{ChangeID: "chg"})
-	require.NoError(t, err)
+	proposed := attachBuildSnapshot(t, cp, "chg")
 	agreed, err := cp.ConfirmIntent(agreedUser, &gensurla.ConfirmIntentPayload{
 		ChangeID: "chg", RequestRevision: proposed.RequestRevision, Answers: map[string]string{}, Examples: proposed.Examples,
 	})

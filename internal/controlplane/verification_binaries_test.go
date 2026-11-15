@@ -286,7 +286,7 @@ func binariesReadFixture(t *testing.T) (*ControlPlane, *gensurla.ChangeCardResul
 		RunsDir:         runsDir,
 		WrittenTestRuns: &WrittenTestRuns{ReportDir: t.TempDir(), Timeout: time.Minute},
 	})
-	card := confirmedChange(t, cp, "chg")
+	card := buildableChange(t, cp, "chg")
 	runID := strings.Repeat("1", 32)
 	writeListedRun(t, runsDir, "alice@example.com", card, runID,
 		time.Date(2026, 10, 1, 9, 0, 0, 0, time.UTC), true)

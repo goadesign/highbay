@@ -5,8 +5,8 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -25,7 +25,7 @@ func TestChangeVersionFollowsBuildReadsAndReports(t *testing.T) {
 	user := asCaller("alice@example.com", CallerUser)
 	builder := asCaller("alice@example.com", CallerBuilder)
 	writer := asCaller("alice@example.com", CallerTestWriter)
-	card := confirmedChange(t, cp, "chg")
+	card := buildableChange(t, cp, "chg")
 	before, err := cp.ListChanges(user)
 	require.NoError(t, err)
 	cases := []struct {
@@ -73,7 +73,11 @@ func TestChangeVersionFollowsBuildReadsAndReports(t *testing.T) {
 			return err
 		}},
 		{name: "same revision starts again", changed: true, run: func() error {
-			_, err := cp.StartBuild(user, &gensurla.StartBuildPayload{ChangeID: "chg", RequestRevision: card.RequestRevision})
+			_, err := startBuildAgain(t, cp, user, "chg", card.RequestRevision)
+			return err
+		}},
+		{name: "writer read after restart", changed: true, run: func() error {
+			_, err := cp.GetTestWriterAssignment(writer, &gensurla.GetTestWriterAssignmentPayload{ChangeID: "chg"})
 			return err
 		}},
 		// Reporting comes last: the real worker then owns the copy turn while
@@ -114,19 +118,19 @@ func TestChangeVersionReadsOnlyOwnersBuilds(t *testing.T) {
 	t.Cleanup(func() { assert.NoError(t, provider.Shutdown(context.Background())) })
 	cp := newBuildControlPlane(t, Options{TracerProvider: provider})
 	user := asCaller("alice@example.com", CallerUser)
-	card := confirmedChange(t, cp, "chg")
+	card := buildableChange(t, cp, "chg")
 	_, err := cp.StartBuild(user, &gensurla.StartBuildPayload{ChangeID: "chg", RequestRevision: card.RequestRevision})
 	require.NoError(t, err)
 	before, err := cp.ListChanges(user)
 	require.NoError(t, err)
 	saveProposedCardFixture(t, cp, "bob@example.com", "bob", "Refunds up to $50 are instant.", refundAnalysis("Refunds up to $50 are instant."))
-	bobBuild := filepath.Join(cp.cards.dir, buildFileName("bob"))
+	bobBuild := strings.TrimSuffix(cp.cards.path("bob"), ".json") + ".build.json"
 	require.NoError(t, os.WriteFile(bobBuild, []byte(`{"invalid_build":true}`), 0o600))
 	after, err := cp.ListChanges(user)
 	require.NoError(t, err)
 	assert.Equal(t, before, after)
 
-	require.NoError(t, os.WriteFile(filepath.Join(cp.cards.dir, buildFileName("chg")), []byte(`{"invalid_build":true}`), 0o600))
+	require.NoError(t, os.WriteFile(filepath.Join(cp.cards.dir, openBuildRecordFile), []byte(`{"invalid_build":true}`), 0o600))
 	_, err = cp.ListChanges(user)
 	assert.EqualError(t, err, "list changes: saved builds could not be read")
 	_, err = cp.WaitForChanges(user, &gensurla.WaitForChangesPayload{Since: before.Version})
@@ -148,16 +152,13 @@ func TestChangeVersionReadsOnlyOwnersBuilds(t *testing.T) {
 // the same not_started rendering and that unexposed saved fields do not affect
 // the version. No test verdict is manufactured here.
 func TestChangeVersionUsesRenderedBuild(t *testing.T) {
-	cp := newControlPlane(t, Options{})
+	cp := newBuildControlPlane(t, Options{})
 	user := asCaller("alice@example.com", CallerUser)
-	card := confirmedChange(t, cp, "chg")
+	card := buildableChange(t, cp, "chg")
 	missing, err := cp.ListChanges(user)
 	require.NoError(t, err)
-	saved := buildFile{
-		ChangeID: "chg", RequestRevision: card.RequestRevision, StartedAt: time.Now().UTC(),
-		Roles: buildRolesBuilderOnly, TestWriter: testWriterAssignment{State: testsAssigned},
-	}
-	require.NoError(t, cp.cards.saveBuild(saved))
+	saved := fixtureOpenBuild(t, cp, card, buildRolesBuilderOnly)
+	require.NoError(t, cp.cards.saveOpenBuild(saved))
 	unusable, err := cp.ListChanges(user)
 	require.NoError(t, err)
 	assert.Equal(t, missing, unusable)
@@ -166,17 +167,15 @@ func TestChangeVersionUsesRenderedBuild(t *testing.T) {
 	assert.Equal(t, gensurla.BuildKindNotStarted, read.Build.Kind())
 
 	saved.Roles = buildRolesBuilderAndTestWriter
-	folder := t.TempDir()
-	saved.TestWriter.WorkingFolder = &folder
-	require.NoError(t, cp.cards.saveBuild(saved))
+
+	require.NoError(t, cp.cards.saveOpenBuild(saved))
 	usable, err := cp.ListChanges(user)
 	require.NoError(t, err)
 	assert.NotEqual(t, unusable.Version, usable.Version)
 	before, err := cp.GetBuild(user, &gensurla.GetBuildPayload{ChangeID: "chg"})
 	require.NoError(t, err)
 	saved.DesignSource = "unexposed saved design"
-	folder = t.TempDir()
-	require.NoError(t, cp.cards.saveBuild(saved))
+	require.NoError(t, cp.cards.saveOpenBuild(saved))
 	after, err := cp.GetBuild(user, &gensurla.GetBuildPayload{ChangeID: "chg"})
 	require.NoError(t, err)
 	assert.Equal(t, before, after)

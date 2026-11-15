@@ -127,13 +127,14 @@ func TestApproveMergeRecordsApprovalOnlyForTheCheckedRevision(t *testing.T) {
 		cfg := verificationConfig(t)
 		cfg.Plan.SuiteCommit = spec.SuiteCommit
 		target := &promotionTargetStub{artifacts: maps.Clone(spec.Artifacts)}
-		cp := newControlPlane(t, Options{
+		cp := newControlPlane(t, buildFixtureOptions(t, Options{
 			Verification:    cfg,
 			PromotionTarget: target,
-		})
-		card, err := cp.ProposeChange(aliceCtx, &gensurla.ProposeChangePayload{ChangeID: "chg", Prompt: "Refunds up to $50 are instant.", Analysis: analysis})
-		require.NoError(t, err)
+		}))
+		card := saveProposedCardFixture(t, cp, "alice@example.com", "chg", "Refunds up to $50 are instant.", analysis)
+		card = attachBuildSnapshot(t, cp, card.ChangeID)
 		card = mustConfirmNoop(t, cp, aliceCtx, card)
+		saveStoredBuildFixture(t, cp, card)
 		require.Equal(t, StatusConfirmed, card.Status)
 		target.report = passingReport(t, card.RequestRevision, commit, spec)
 		return cp, target, card
@@ -188,10 +189,11 @@ func TestApproveMergeRecordsApprovalOnlyForTheCheckedRevision(t *testing.T) {
 	t.Run("approval without promotion settings loads the report from the verifier and records empty artifacts", func(t *testing.T) {
 		cfg := verificationConfig(t)
 		cfg.Plan.SuiteCommit = spec.SuiteCommit
-		cp := newControlPlane(t, Options{Verification: cfg})
-		card, err := cp.ProposeChange(aliceCtx, &gensurla.ProposeChangePayload{ChangeID: "chg", Prompt: "Refunds up to $50 are instant.", Analysis: analysis})
-		require.NoError(t, err)
+		cp := newControlPlane(t, buildFixtureOptions(t, Options{Verification: cfg}))
+		card := saveProposedCardFixture(t, cp, "alice@example.com", "chg", "Refunds up to $50 are instant.", analysis)
+		card = attachBuildSnapshot(t, cp, card.ChangeID)
 		card = mustConfirmNoop(t, cp, aliceCtx, card)
+		saveStoredBuildFixture(t, cp, card)
 		report := passingReport(t, card.RequestRevision, commit, spec)
 		writeReportFile(t, cfg.Plan.ReportDir, report)
 
@@ -423,13 +425,12 @@ func TestApproveMergeRecordsApprovalOnlyForTheCheckedRevision(t *testing.T) {
 		}
 		cfg := verificationConfig(t)
 		cfg.Plan.SuiteCommit = spec.SuiteCommit
-		cp := newControlPlane(t, Options{
+		cp := newControlPlane(t, buildFixtureOptions(t, Options{
 			Verification:    cfg,
 			PromotionTarget: &promotionTargetStub{artifacts: maps.Clone(spec.Artifacts)},
-		})
-		card, err := cp.ProposeChange(aliceCtx, &gensurla.ProposeChangePayload{ChangeID: "chg", Prompt: "Refunds up to $50 are instant.", Analysis: ambiguous})
-		require.NoError(t, err)
-		_, err = approve(aliceCtx, cp, card, strings.Repeat("0", 64))
+		}))
+		card := saveProposedCardFixture(t, cp, "alice@example.com", "chg", "Refunds up to $50 are instant.", ambiguous)
+		_, err := approve(aliceCtx, cp, card, strings.Repeat("0", 64))
 		assert.ErrorContains(t, err, "must be confirmed")
 	})
 
@@ -647,8 +648,11 @@ func TestApproveMergeChecksTheChosenTestsCommit(t *testing.T) {
 					}
 				}
 				cp := newBuildControlPlane(t, opts)
-				card := saveStoryCard(t, cp, "chg", StatusConfirmed, refundStory("Refund over the limit waits"))
+				card := saveBuildStoryCard(t, cp, "chg", StatusConfirmed, refundStory("Refund over the limit waits"))
 				user := asCaller("alice@example.com", CallerUser)
+				if tc.stored {
+					saveStoredBuildFixture(t, cp, card)
+				}
 				if tc.startBuild {
 					_, err := cp.StartBuild(user, &gensurla.StartBuildPayload{ChangeID: "chg", RequestRevision: card.RequestRevision})
 					require.NoError(t, err)
@@ -741,7 +745,7 @@ func TestSavedApprovalStaysValidOnlyWhileChosenTestsMatch(t *testing.T) {
 		WrittenTestRuns: &WrittenTestRuns{ReportDir: t.TempDir(), Command: []string{"/bin/sh", "-c", "exit 0", "sh"}, Timeout: time.Hour},
 		PromotionTarget: target,
 	})
-	card := saveStoryCard(t, cp, "chg", StatusConfirmed, refundStory("Refund over the limit waits"))
+	card := saveBuildStoryCard(t, cp, "chg", StatusConfirmed, refundStory("Refund over the limit waits"))
 	user := asCaller("alice@example.com", CallerUser)
 	_, err := cp.StartBuild(user, &gensurla.StartBuildPayload{ChangeID: "chg", RequestRevision: card.RequestRevision})
 	require.NoError(t, err)
@@ -778,7 +782,7 @@ func TestSavedApprovalStaysValidOnlyWhileChosenTestsMatch(t *testing.T) {
 	assert.Nil(t, read.UnverifiedApproval)
 
 	// 3. Rebuild and accept T again -> returned.
-	_, err = cp.StartBuild(user, &gensurla.StartBuildPayload{ChangeID: "chg", RequestRevision: card.RequestRevision})
+	_, err = startBuildAgain(t, cp, user, "chg", card.RequestRevision)
 	require.NoError(t, err)
 	read, err = cp.GetChange(user, &gensurla.GetChangePayload{ChangeID: "chg"})
 	require.NoError(t, err)
@@ -812,7 +816,7 @@ func TestApproveMergeRejectsAcceptanceChangedDuringReportLoad(t *testing.T) {
 		WrittenTestRuns: &WrittenTestRuns{ReportDir: t.TempDir(), Command: []string{"/bin/sh", "-c", "exit 0", "sh"}, Timeout: time.Hour},
 		PromotionTarget: target,
 	})
-	card := saveStoryCard(t, cp, "chg", StatusConfirmed, refundStory("Refund over the limit waits"))
+	card := saveBuildStoryCard(t, cp, "chg", StatusConfirmed, refundStory("Refund over the limit waits"))
 	user := asCaller("alice@example.com", CallerUser)
 	_, err := cp.StartBuild(user, &gensurla.StartBuildPayload{ChangeID: "chg", RequestRevision: card.RequestRevision})
 	require.NoError(t, err)
@@ -875,11 +879,11 @@ func TestCurrentCardAllFiveApprovalStatesAndSpanRecording(t *testing.T) {
 	cfg := verificationConfig(t)
 	cfg.Plan.SuiteCommit = spec.SuiteCommit
 	target := &promotionTargetStub{artifacts: maps.Clone(spec.Artifacts)}
-	cp := newControlPlane(t, Options{
+	cp := newControlPlane(t, buildFixtureOptions(t, Options{
 		CardsDir:        cardsDir,
 		Verification:    cfg,
 		PromotionTarget: target,
-	})
+	}))
 	srv := httptest.NewServer(NewHTTPHandler(cp, workflowAuthenticator(map[string]Principal{"alice-token": {ID: "alice@example.com"}})))
 	t.Cleanup(srv.Close)
 	adapter := genmcpadapter.NewMCPAdapter(gensurla.NewEndpoints(cp), nil)
@@ -958,9 +962,10 @@ func TestCurrentCardAllFiveApprovalStatesAndSpanRecording(t *testing.T) {
 	}
 
 	// State 1: no approval record.
-	card, err := cp.ProposeChange(aliceCtx, &gensurla.ProposeChangePayload{ChangeID: "chg", Prompt: "Refunds up to $50 are instant.", Analysis: analysis})
-	require.NoError(t, err)
+	card := saveProposedCardFixture(t, cp, "alice@example.com", "chg", "Refunds up to $50 are instant.", analysis)
+	card = attachBuildSnapshot(t, cp, card.ChangeID)
 	card = mustConfirmNoop(t, cp, aliceCtx, card)
+	saveStoredBuildFixture(t, cp, card)
 	for _, got := range []*gensurla.ChangeCardResult{
 		mustGetChange(t, cp, aliceCtx, "chg"),
 		mustConfirmNoop(t, cp, aliceCtx, card),

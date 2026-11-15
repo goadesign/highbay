@@ -25,6 +25,7 @@ func TestViewsPageConfirmedBuildLeadsTheFoldedAgreement(t *testing.T) {
 			&gensurla.CP1AnalysisAmbiguity{
 				Question: "Does the limit include tax?", Options: []string{"Subtotal only", "With tax"},
 			}))
+	proposed = attachBuildSnapshot(t, cp, proposed.ChangeID)
 	questionID := proposed.Ambiguities[0].ID
 	card, err := cp.ConfirmIntent(asCaller(pageOwner, CallerUser), &gensurla.ConfirmIntentPayload{
 		ChangeID: proposed.ChangeID, RequestRevision: proposed.RequestRevision,

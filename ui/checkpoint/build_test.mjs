@@ -136,6 +136,7 @@ for (const [operation, name] of [["start_build", "previous_change_open"], ["drop
         builder: { read: false },
         test_writer: { tests: { state: "assigned" }, read: false, report: 0 },
         required_test_count: 1,
+        taking: { state: "building" },
       },
     };
     const before = structuredClone(body);
@@ -147,6 +148,9 @@ for (const [operation, name] of [["start_build", "previous_change_open"], ["drop
     const malformed = structuredClone(body);
     delete malformed.build.request_revision;
     assert.equal(generated.ROUTES[operation].decodeFailure(409, malformed), false);
+    const missingTaking = structuredClone(body);
+    delete missingTaking.build.taking;
+    assert.equal(generated.ROUTES[operation].decodeFailure(409, missingTaking), false);
     assert.equal(generated.ROUTES[operation].decodeFailure(409, { ...body, build: undefined }), false);
   });
 }

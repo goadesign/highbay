@@ -752,7 +752,7 @@ func TestHistoryLeavesOutOnlyTheUsersSuccessfulReads(t *testing.T) {
 func TestUserGETRoutesOnlyRead(t *testing.T) {
 	workspace := t.TempDir()
 	cp := newBuildControlPlane(t, Options{WorkspaceDir: workspace})
-	card := confirmedChange(t, cp, "chg")
+	card := buildableChange(t, cp, "chg")
 	srv := httptest.NewServer(NewHTTPHandler(cp, fixtureCredentials(map[string]Principal{
 		"user": {ID: "alice@example.com", CallerID: "user", Kind: CallerUser},
 	})))

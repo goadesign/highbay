@@ -2007,15 +2007,17 @@ checks are:
 
 - Vet and short race tests of each Go module on macOS: the root,
   [`story`](../story/README.md), `examples/orders` and `examples/orders-eval`.
-  The root module's short tests run in three jobs. **Go (., page tests)**
+  The root module's short tests run in four jobs. **Go (., page tests)**
   runs only `internal/controlplane` and `internal/project`, selecting
-  `TestViewsPage…` and `TestCheckpoint…`. **Go (., control plane)** runs the
-  control plane's other short tests. **Go (.)** derives every other package
+  `TestViewsPage…` and `TestCheckpoint…`. **Go (., control plane, A-L)** runs
+  non-page tests whose names start with `TestA` through `TestL`.
+  **Go (., control plane, remaining)** runs every other non-page test,
+  including examples and fuzz seeds. **Go (.)** derives every other package
   with tests and skips page tests, so each current test runs once. Each of
   these jobs saves and restores its own Go build and module cache key,
   qualified by operating system, architecture, Go version and root dependency
   files; one job's narrower build cannot become another job's saved cache.
-  Pushes to `main`, `team-start` and `builder-copy` run all three jobs and
+  Pushes to `main`, `team-start` and `builder-copy` run all four jobs and
   save missing caches after success, making them available to pull requests
   targeting those branches. Each job targets five minutes with an exact
   cache hit; cold durations are recorded separately. On a miss, its job
