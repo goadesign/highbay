@@ -103,7 +103,8 @@ jobs:
           packages=./...
           if [ "$MODULE" = . ]; then
             skip=$ROOT_PAGE_TESTS
-            packages=$(go list -f "$TESTED" ./... </dev/null | grep -v '^github.com/goadesign/surla/internal/controlplane$')
+            packages=$(go list -f "$TESTED" ./... </dev/null)
+            packages=$(printf '%s\n' "$packages" | grep -v '^github.com/goadesign/surla/internal/controlplane$')
           fi
           go test -race -vet=all -short -timeout 3m -json -skip "$skip" $packages </dev/null
 
