@@ -250,10 +250,7 @@ func TestBuilderCopyOperationsKeepTheirRoles(t *testing.T) {
 // outside its copy so unauthorized calls must refuse before inspecting it, and an owner's failed
 // fact read must leave the assignment unread for a later successful retry.
 func TestBuilderAssignmentChecksOwnershipBeforeFolderFacts(t *testing.T) {
-	repo := realTempDir(t)
-	workspace := filepath.Join(repo, "apps", "shop")
-	require.NoError(t, os.MkdirAll(workspace, 0o700))
-	gitForLayoutTest(t, repo, "init", "-q")
+	_, workspace := productionBuildProject(t, "apps/shop", reviewEval)
 	cp := newBuildControlPlane(t, Options{WorkspaceDir: workspace})
 	card := buildableChange(t, cp, "chg")
 	_, err := cp.StartBuild(asCaller("alice@example.com", CallerUser),
