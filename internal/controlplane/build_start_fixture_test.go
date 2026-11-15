@@ -72,7 +72,6 @@ func newBuildControlPlane(t *testing.T, opts Options) *ControlPlane {
 	opts = buildFixtureOptions(t, opts)
 	cp := newControlPlane(t, opts)
 	cp.buildIdentityCheck = func(context.Context, string) error { return nil }
-	cp.buildSandboxCheck = func() error { return nil }
 	_, prefix, err := resolveStarterRepo(t.Context(), cp.activeWorkspaceDir)
 	require.NoError(t, err)
 	copy := &buildCopyFixture{folder: filepath.Join(cp.activeWorkspaceDir, testwriter.Folder, filepath.FromSlash(prefix))}

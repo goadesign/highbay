@@ -47,7 +47,7 @@ var _ = Service("orders", func() {
 // exact output lists, preserved user files, and safe source-error recovery.
 func TestGenerateCodeHTTPMCPAndIteration(t *testing.T) {
 	if testing.Short() {
-		t.Skip("runs the sandboxed Go toolchain; the full suite (go test without -short) covers it")
+		t.Skip("runs the Go toolchain; the full suite (go test without -short) covers it")
 	}
 	workspace := t.TempDir()
 	snapshot := testmodule.Snapshot(t, "", generationDesign)
@@ -219,7 +219,7 @@ func TestGenerateCodeHTTPMCPAndIteration(t *testing.T) {
 	assert.Equal(t, candidateBeforeEval, generationFiles(t, working, "gen"))
 	assert.Equal(t, evalBeforeFailure, generationFiles(t, filepath.Join(working, "eval"), "gen"))
 
-	// Both designs compile as Go but fail inside the sandboxed generator.
+	// Both designs compile as Go but fail inside the generator.
 	// Their explanations must survive the MCP protocol-error path, followed
 	// by successful generation after correction on this same server.
 	for _, failure := range []struct {

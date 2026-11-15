@@ -65,10 +65,11 @@ type (
 		// holds each check's temporary folder and the build cache checks
 		// share. The owner removes it.
 		workDir string
-		// build and list run a check's two sandboxed steps: candidate.Build
-		// and candidate.Output. Tests wrap them with stand-ins that sleep.
+		// build and list run a check's two steps that compile and run the
+		// author's code: candidate.Build and candidate.Output, each through
+		// runInGroup. Tests wrap them with stand-ins that sleep.
 		build func(context.Context, candidate.BuildSpec, func(*exec.Cmd) error) error
-		list  func(context.Context, candidate.Artifact, candidate.Spec, int) ([]byte, error)
+		list  func(context.Context, candidate.Artifact, candidate.Spec, int, func(*exec.Cmd) error) ([]byte, error)
 		// download downloads, with the go command goBin, the dependencies of
 		// the module in dir: downloadDependencies, for which tests stand in
 		// so that they need no network.
@@ -164,7 +165,7 @@ const (
 	// files uncommitted on the build's tests branch and report again.
 	FindingWorkingCopy FindingKind = "working_copy"
 
-	// buildProgramLimit bounds one sandboxed build of the test program. It
+	// buildProgramLimit bounds one build of the test program. It
 	// compiles the test module and its dependencies with an empty or warm
 	// build cache, which takes a few minutes at most for a starter's
 	// dependencies; ten leaves room for a slower machine while still
@@ -185,9 +186,9 @@ const (
 	maxFindingBytes = 8 << 10
 	// maxDeclarationBytes bounds what --describe may print.
 	maxDeclarationBytes = 1 << 20
-	// buildStopGrace bounds how long a canceled build gets to exit, and how
-	// long its process group may take to empty.
-	buildStopGrace = 10 * time.Second
+	// groupStopGrace bounds how long a canceled build or listing gets to
+	// exit, and how long its process group may take to empty.
+	groupStopGrace = 10 * time.Second
 )
 
 // ErrGeneration and ErrWriteGenerated mark the two steps of Prepare and Check
@@ -195,8 +196,8 @@ const (
 // Callers tell them apart with errors.Is to say what failed.
 var (
 	// ErrGeneration marks a failure of the generator itself: while it
-	// prepared or removed its own files, started its sandbox or read its
-	// output, or because ctx ended or the platform has no sandbox; or Story
+	// prepared or removed its own files, started its program or read its
+	// output, or because ctx ended; or Story
 	// flows that map to the same scenario or hook. It wraps the evaluator's
 	// error, from which designeval.GenerationDiagnostic derives the
 	// caller-safe text.
@@ -307,9 +308,7 @@ func WithoutAbsolutePaths(text string) string {
 // link on the way also wraps ErrLinkedFolder. Any
 // other error is a failure the author cannot fix. Two are marked so a caller
 // can say what failed: ErrGeneration, when the generator failed (the context
-// ended, the platform has no sandbox, which also wraps
-// candidate.ErrIsolationUnavailable, or it failed while preparing its own
-// files), and ErrWriteGenerated, when the generated folder could not be
+// ended, or it failed while preparing its own files), and ErrWriteGenerated, when the generated folder could not be
 // written. A third is ErrDependencies: generation failed while loading the
 // module's dependencies, and they cannot be downloaded where Surla runs for a
 // cause outside the author's changes since base (loadFailure). A staging
@@ -350,10 +349,10 @@ func (c *Checker) Prepare(
 // writes the suite module's Story table there again from the stories (so the
 // author cannot change what is required) and generates its folder with it,
 // downloads the module's dependencies, compiles the generated suite command in
-// the verify/candidate build sandbox, lists the scenarios it declares by
-// running its --describe in the candidate sandbox, reading standard output
-// alone, and compares them with the required ones by the generator's own
-// names.
+// candidate.Build, lists the scenarios it declares by running its --describe
+// with candidate.Output, reading standard output alone, each in its own
+// process group, and compares them with the required ones by the generator's
+// own names.
 //
 // The verdict is accepted, or carries findings for the first step the
 // author's files failed: a working copy not on branch or with a Git operation
@@ -365,19 +364,19 @@ func (c *Checker) Prepare(
 // not finish within buildProgramLimit, or a listing within listTestsLimit,
 // is a finding too. No finding holds an absolute path
 // (WithoutAbsolutePaths). The working copy itself is not written. Errors are
-// failures that say nothing about the author's work: the platform has no
-// sandbox (candidate.ErrIsolationUnavailable), ctx ended, the module's
+// failures that say nothing about the author's work: ctx ended, the module's
 // dependencies cannot be downloaded where Surla runs for a cause outside the
 // author's changes (ErrDependencies), or git, the file system or the build's
 // process cleanup failed. ctx bounds the whole check.
 //
-// Only time bounds the bytes the author's code writes to disk: what the
-// sandboxed build writes to its log and to the build cache in the Checker's
-// folder within its limit, and what --describe writes to its standard error
-// and its state folder within its own. Its standard output is kept in
-// memory, at most 1 MiB. The check's own folder, holding that log, standard
-// error and state, is removed when Check returns; the build cache stays until
-// the owner removes the Checker's folder.
+// The author's code runs as an ordinary process of the user, with the user's
+// file and network access. In its own folders, only time bounds what it
+// writes: what the build writes to its log and to the build cache in the
+// Checker's folder within its limit, and what --describe writes to its
+// standard error and its state folder within its own. Its standard output is
+// kept in memory, at most 1 MiB. The check's own folder, holding that log,
+// standard error and state, is removed when Check returns; the build cache
+// stays until the owner removes the Checker's folder.
 func (c *Checker) Check(
 	ctx context.Context, wc WorkingCopy, s Suite, branch, base string, stories []designeval.StorySummary,
 ) (_ Verdict, err error) {
@@ -408,7 +407,7 @@ func (c *Checker) Check(
 	keep := false
 	defer func() {
 		if keep {
-			err = fmt.Errorf("%w; %s is kept because build processes may still use it", err, tmp)
+			err = fmt.Errorf("%w; %s is kept because processes the check started may still use it", err, tmp)
 			return
 		}
 		err = errors.Join(err, candidate.RemoveStore(filepath.Join(tmp, "store")), os.RemoveAll(tmp))
@@ -521,23 +520,24 @@ func publish(ctx context.Context, root *os.Root, files map[string][]byte) error 
 	return nil
 }
 
-// runBuild runs a check's build in its own process group, the build's owning
-// boundary: whatever ends it, the compiler, assembler and linker it started
-// are killed and waited for. A group that does not empty is reported with the
-// build's own error and marked by stuck.
-func runBuild(stuck *bool) func(*exec.Cmd) error {
+// runInGroup runs a check's build or listing in its own process group, the
+// command's owning boundary: whatever ends it, the processes it started that
+// are still in the group are killed and waited for. A group that does not
+// empty is reported with the command's own error and marked by stuck. A
+// process that leaves the group (setsid) is not stopped.
+func runInGroup(stuck *bool) func(*exec.Cmd) error {
 	return func(cmd *exec.Cmd) error {
-		runErr, stopErr := procgroup.Run(cmd, syscall.SIGKILL, buildStopGrace, buildStopGrace)
+		runErr, stopErr := procgroup.Run(cmd, syscall.SIGKILL, groupStopGrace, groupStopGrace)
 		if stopErr != nil {
 			*stuck = true
-			return errors.Join(fmt.Errorf("build processes did not exit: %w", stopErr), runErr)
+			return errors.Join(fmt.Errorf("processes did not exit: %w", stopErr), runErr)
 		}
 		return runErr
 	}
 }
 
-// goEnv is the environment of the go commands a check runs outside the
-// sandbox: the user's module download settings, with cgo, workspaces,
+// goEnv is the environment of the go commands a check runs to download
+// modules: the user's module download settings, with cgo, workspaces,
 // toolchain switching and injected go flags turned off.
 func goEnv() []string {
 	env := []string{
@@ -553,7 +553,7 @@ func goEnv() []string {
 }
 
 // downloadDependencies runs go mod download with the go command goBin in the
-// module at dir, outside the sandbox and with goEnv, so with the user's module
+// module at dir with goEnv, so with the user's module
 // download settings. Its output is discarded and never reaches a finding or a
 // reason: it may print those settings, a proxy's address and credentials
 // among them.
@@ -708,13 +708,6 @@ func outsideModule(changed []changedPath, modulePath, base string) []Finding {
 			c.path, modulePath, undo))})
 	}
 	return findings
-}
-
-// isFailure reports whether err from generating, building or running the
-// author's code says nothing about the author's work: ctx ended or the
-// platform has no sandbox.
-func isFailure(ctx context.Context, err error) bool {
-	return ctx.Err() != nil || errors.Is(err, candidate.ErrIsolationUnavailable)
 }
 
 // decodeDeclaration decodes exactly one suite.Declaration from out: unknown
@@ -886,7 +879,7 @@ func (c *Checker) generate(
 	files[designeval.StoryTestsPath] = string(table)
 	generated, err := c.evaluator.Generate(ctx, files)
 	if err != nil {
-		if isFailure(ctx, err) || !designeval.FailedOnModule(err) {
+		if ctx.Err() != nil || !designeval.FailedOnModule(err) {
 			return nil, fmt.Errorf("%w: %w", ErrGeneration, err)
 		}
 		cause := err
@@ -956,14 +949,14 @@ func writeStoryTests(root *os.Root, table []byte) (err error) {
 }
 
 // listScenarios builds the suite command of the module at the slash path
-// modulePath of the snapshot src, in the build sandbox, with src as the only
-// source it may read, within c.buildLimit, runs its --describe in the
-// candidate sandbox within c.listLimit, and returns the scenarios it
-// declares, or findings when the module's dependencies, its build or its
-// listing fail or reach their limit. Dependencies that cannot be downloaded
-// for a cause outside the author's changes to wc are an error wrapping
-// ErrDependencies instead (dependencyFailure). tmp is the check's private
-// folder; keep is set when build processes may still use it.
+// modulePath of the snapshot src within c.buildLimit, runs its --describe
+// within c.listLimit, each in its own process group, and returns the
+// scenarios it declares, or findings when the module's dependencies, its build
+// or its listing fail or reach their limit. Dependencies that cannot be
+// downloaded for a cause outside the author's changes to wc are an error
+// wrapping ErrDependencies instead (dependencyFailure). tmp is the check's
+// private folder; keep is set when processes the build or the listing started
+// may still use it.
 func (c *Checker) listScenarios(
 	ctx context.Context, wc WorkingCopy, baseCommit, tmp, src, modulePath, command string, keep *bool,
 ) ([]suite.DeclaredScenario, []Finding, error) {
@@ -1017,7 +1010,7 @@ func (c *Checker) listScenarios(
 		return c.build(ctx, candidate.BuildSpec{
 			SourceDir: src, ModuleDir: moduleDir, Package: command, Out: bin,
 			GOROOT: tc.goroot, ModCache: modCache, WorkDir: buildHome, LogFile: buildLog,
-		}, runBuild(keep))
+		}, runInGroup(keep))
 	})
 	if reached && !*keep {
 		return nil, finding(FindingBuild, fmt.Sprintf("The test program did not finish building within %s. "+
@@ -1025,7 +1018,7 @@ func (c *Checker) listScenarios(
 			limitText(c.buildLimit))), nil
 	}
 	if err != nil {
-		if *keep || isFailure(ctx, err) {
+		if *keep || ctx.Err() != nil {
 			return nil, nil, fmt.Errorf("build the suite command: %w", err)
 		}
 		found, readErr := logFinding(FindingBuild, "The suite command does not compile:\n", buildLog, src)
@@ -1044,10 +1037,10 @@ func (c *Checker) listScenarios(
 		var err error
 		out, err = c.list(ctx, art, candidate.Spec{
 			Args: []string{"--describe"}, StateDir: filepath.Join(tmp, "state"), LogFile: stderrLog,
-		}, maxDeclarationBytes)
+		}, maxDeclarationBytes, runInGroup(keep))
 		return err
 	})
-	if reached {
+	if reached && !*keep {
 		return nil, finding(FindingListing, fmt.Sprintf("Listing the tests (--describe) did not finish within %s. "+
 			"Listing must not wait: the test module's package initialization (init functions and package-level "+
 			"variables) and a zero Hooks must not need the program under test.", limitText(c.listLimit))), nil
@@ -1055,11 +1048,17 @@ func (c *Checker) listScenarios(
 	var exitErr *exec.ExitError
 	switch {
 	case err == nil:
-	case isFailure(ctx, err):
+	case *keep || ctx.Err() != nil:
 		return nil, nil, fmt.Errorf("list the declared scenarios: %w", err)
 	case errors.Is(err, candidate.ErrOutputTooLarge):
 		return nil, finding(FindingListing, fmt.Sprintf(
 			"The suite command's --describe printed more than %d bytes on standard output.", maxDeclarationBytes)), nil
+	case errors.Is(err, exec.ErrWaitDelay):
+		// The program exited, but a process it started still held its
+		// standard output when the group's grace ran out.
+		return nil, finding(FindingListing, "The suite command's --describe exited but left a process holding its "+
+			"standard output. Listing must not start background processes: the test module's package "+
+			"initialization (init functions and package-level variables) and a zero Hooks must start none."), nil
 	case errors.As(err, &exitErr):
 		head := fmt.Sprintf("The suite command's --describe exited with status %d. Its standard error:\n", exitErr.ExitCode())
 		found, readErr := logFinding(FindingListing, head, stderrLog, src)

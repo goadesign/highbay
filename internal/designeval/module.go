@@ -20,7 +20,7 @@ import (
 
 type (
 	// goCommand runs the go command of one toolchain: the toolchain the
-	// sandboxed build compiles with, so resolving a design's modules and
+	// build compiles with, so resolving a design's modules and
 	// compiling it agree on the Go version. A design whose go.mod needs a
 	// newer Go than that toolchain fails explicitly instead of switching.
 	goCommand struct {
@@ -61,7 +61,7 @@ const (
 // program against the target module staged in buildDir/target, using exactly
 // the dependency versions the target selects.
 //
-// Outside any sandbox, and without running target code, it:
+// With the operator's Go settings, and without running target code, it:
 //  1. checks the target is a complete module: its design packages load with
 //     -mod=readonly, so a go.mod or go.sum that is missing a dependency or a
 //     checksum fails here instead of being filled in, and records which
@@ -286,8 +286,8 @@ func (g goCommand) runTo(ctx context.Context, dir, logPath, outPath string, args
 	return nil
 }
 
-// goEnv is the environment for the evaluator's go commands outside the
-// sandbox.
+// goEnv is the environment of the evaluator's module commands: the operator's
+// Go settings, unlike a build's fixed environment.
 func goEnv() []string {
 	env := []string{
 		"PATH=" + os.Getenv("PATH"), "HOME=" + os.Getenv("HOME"),

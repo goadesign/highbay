@@ -170,7 +170,6 @@ func buildGenerationFixture(t *testing.T, prefix string) (
 		WorkspaceDir: project,
 		Team:         &TeamBinding{Owner: "alice@example.com", Service: &teamServiceFixture{}},
 	})
-	cp.buildSandboxCheck = func() error { return nil }
 	writeBuildDesignFixture(t, project, "go.mod", "module example.com/shop\n\ngo 1.27.3\n\nrequire goa.design/goa/v3 v3.35.0\n")
 	writeBuildDesignFixture(t, project, "design/design.go", buildProbeDesign)
 	runGitForTest(t, project, "add", "go.mod", "design/design.go")

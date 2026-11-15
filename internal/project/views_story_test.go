@@ -89,7 +89,7 @@ func TestViewsPageShowsTheGuidesStoryEvaluation(t *testing.T) {
 // reload.
 func TestViewsPageShowsTheGuidesSucceededStory(t *testing.T) {
 	if testing.Short() {
-		t.Skip("runs the sandboxed Go toolchain; the full suite (go test without -short) covers it")
+		t.Skip("runs the Go toolchain; the full suite (go test without -short) covers it")
 	}
 	node := requireViewsPageTools(t)
 	ws := storyWorkspace(t, testmodule.Tidy(t, map[string]string{
