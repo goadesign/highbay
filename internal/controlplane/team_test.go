@@ -508,9 +508,11 @@ func TestTeamBindAssignmentsBeforeSupervise(t *testing.T) {
 // TestWhoHasWorkAndAssignmentLists checks who has work across no build, a
 // dropped build, every test-writer state, builder verification runs (before
 // start, another change or revision, failed, not completed, passed, and
-// unreadable), approval with and without promotion settings, and building
-// again. List operations and Unread hold only roles with work, while single
-// assignment reads by change_id stay readable after acceptance or a passed run.
+// unreadable), approval with and without promotion settings, building again,
+// and a written-tests build read while stored verification settings are
+// configured. List operations and Unread hold only roles with work, while
+// single assignment reads by change_id stay readable after acceptance or a
+// passed run.
 func TestWhoHasWorkAndAssignmentLists(t *testing.T) {
 	runsDir := t.TempDir()
 	reportDir := t.TempDir()
@@ -837,13 +839,42 @@ func TestWhoHasWorkAndAssignmentLists(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, wList.Assignments, 1)
 
+	// Reading that written-tests build while stored verification settings are
+	// configured never gives the test writer work in either the team read or
+	// list_test_writer_assignments.
+	cardsDir := cp.cards.dir
+	workspaceDir := cp.activeWorkspaceDir
+	require.NoError(t, cp.Close())
+	configured := newControlPlane(t, Options{
+		CardsDir:     cardsDir,
+		WorkspaceDir: workspaceDir,
+		RunsDir:      runsDir,
+		Verification: &VerificationConfig{RunsDir: runsDir},
+		Team:         &TeamBinding{Owner: "alice@example.com", Service: &teamServiceFixture{}},
+	})
+	configuredTeam, err := configured.assignmentGenerations(t.Context())
+	require.NoError(t, err)
+	assert.True(t, configuredTeam.BuilderHasWork)
+	assert.False(t, configuredTeam.TestWriterHasWork)
+	assert.True(t, configuredTeam.HasWork("builder"))
+	assert.False(t, configuredTeam.HasWork("test_writer"))
+	require.Len(t, configuredTeam.Unread, 1)
+	assert.Equal(t, "builder", configuredTeam.Unread[0].Role)
+	bList, err = configured.ListBuilderAssignments(builder)
+	require.NoError(t, err)
+	require.Len(t, bList.Assignments, 1)
+	assert.Equal(t, gensurla.WrittenTestsKindNotUsed, bList.Assignments[0].WrittenTests.Kind())
+	wList, err = configured.ListTestWriterAssignments(writer)
+	require.NoError(t, err)
+	assert.Empty(t, wList.Assignments)
+
 	// An unreadable run record makes both ListBuilderAssignments and
 	// assignmentGenerations fail rather than reporting no work.
 	corruptDir := filepath.Join(runsDir, verifyrun.NewRunID())
 	require.NoError(t, os.MkdirAll(corruptDir, 0o700))
 	require.NoError(t, os.WriteFile(filepath.Join(corruptDir, "request.json"), []byte("{"), 0o600))
-	_, err = cp.ListBuilderAssignments(builder)
+	_, err = configured.ListBuilderAssignments(builder)
 	assert.Error(t, err)
-	_, err = cp.assignmentGenerations(t.Context())
+	_, err = configured.assignmentGenerations(t.Context())
 	assert.Error(t, err)
 }

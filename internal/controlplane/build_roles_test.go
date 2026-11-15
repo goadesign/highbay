@@ -28,6 +28,16 @@ func TestBuilderOnlyBuildRequiresStoredSettings(t *testing.T) {
 			require.NoError(t, cp.cards.saveOpenBuild(saved))
 			assert.Equal(t, gensurla.TestsKindNotUsed,
 				mustStartedBuild(t, cp, asCaller("alice@example.com", CallerUser), "chg").TestWriter.Tests.Kind())
+			writersWithStored, err := cp.ListTestWriterAssignments(asCaller("alice@example.com", CallerTestWriter))
+			require.NoError(t, err)
+			assert.Empty(t, writersWithStored.Assignments, "configured tests never give the test writer work")
+			owedWithStored, err := cp.assignmentGenerations(t.Context())
+			require.NoError(t, err)
+			assert.True(t, owedWithStored.BuilderHasWork)
+			assert.False(t, owedWithStored.TestWriterHasWork)
+			assert.False(t, owedWithStored.HasWork("test_writer"))
+			require.Len(t, owedWithStored.Unread, 1)
+			assert.Equal(t, "builder", owedWithStored.Unread[0].Role)
 			assert.NotContains(t, string(readBuildFile(t, cp, "chg")), "working_folder")
 			require.NoError(t, cp.Close())
 
