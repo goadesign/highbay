@@ -45,7 +45,7 @@ var _ = Suite("orders_acceptance", func() {
 // suite still requires the flow's hook.
 func TestGenKeepsTheStoryTablesTests(t *testing.T) {
 	if testing.Short() {
-		t.Skip("runs the sandboxed Go toolchain; the full suite (go test without -short) covers it")
+		t.Skip("runs the Go toolchain; the full suite (go test without -short) covers it")
 	}
 	tmp := t.TempDir()
 	t.Setenv("TMPDIR", tmp)

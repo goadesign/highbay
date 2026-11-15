@@ -109,7 +109,7 @@ func TestARevisionOfAnAgreedChangeWaitsAndTheAgreedRevisionStaysInForce(t *testi
 // design with the Go toolchain at the agreed revision while a proposal waits.
 func TestTheAgreedRevisionStaysPreviewableWhileAProposalWaits(t *testing.T) {
 	if testing.Short() {
-		t.Skip("runs the sandboxed Go toolchain; the full suite (go test without -short) covers it")
+		t.Skip("runs the Go toolchain; the full suite (go test without -short) covers it")
 	}
 	workspace := t.TempDir()
 	writeWorkspaceFiles(t, workspace, testmodule.Snapshot(t, "", `package design

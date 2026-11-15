@@ -49,7 +49,7 @@ var _ = Suite("orders_acceptance", func() {
 // flow's hook.
 func TestGenerateCodeKeepsTheStoryTablesTests(t *testing.T) {
 	if testing.Short() {
-		t.Skip("runs the sandboxed Go toolchain; the full suite (go test without -short) covers it")
+		t.Skip("runs the Go toolchain; the full suite (go test without -short) covers it")
 	}
 	ctx, cancel := context.WithTimeout(t.Context(), 3*time.Minute)
 	defer cancel()

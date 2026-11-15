@@ -595,12 +595,12 @@ func TestStoryRefreshOwnerIsolation(t *testing.T) {
 }
 
 // TestStoryRefreshEvaluatesStoryOnlyAndNonStoryDesignsWhilePreviewRejectsStoryOnly
-// exercises the full sandboxed evaluator through MCP and service calls on a
+// exercises the full evaluator through MCP and service calls on a
 // Story-only design and a design without the Story module, and verifies that
 // preview_architecture still rejects a Story-only design.
 func TestStoryRefreshEvaluatesStoryOnlyAndNonStoryDesignsWhilePreviewRejectsStoryOnly(t *testing.T) {
 	if testing.Short() {
-		t.Skip("runs the sandboxed Go toolchain; the full suite (go test without -short) covers it")
+		t.Skip("runs the Go toolchain; the full suite (go test without -short) covers it")
 	}
 	alice := WithPrincipal(context.Background(), Principal{ID: "alice@example.com", CallerID: "alice@example.com", Kind: CallerUser})
 	wsDir := t.TempDir()

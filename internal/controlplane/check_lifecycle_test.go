@@ -537,14 +537,14 @@ func TestUpdateDependenciesLifecycle(t *testing.T) {
 }
 
 // TestCheckOperationsConcurrentIsolation verifies disjoint per-operation
-// sandboxes and output cursors across concurrent check_project and
+// work folders and output cursors across concurrent check_project and
 // update_dependencies calls, plus live directory-lock serialization across two
 // servers updating dependencies on the same workspace.
 func TestCheckOperationsConcurrentIsolation(t *testing.T) {
 	installFakeDocker(t)
 	daemon := newFakeDockerDaemon(t)
 	t.Setenv("DOCKER_HOST", daemon.hostURI)
-	t.Run("check_and_update_use_disjoint_sandboxes", func(t *testing.T) {
+	t.Run("check_and_update_use_disjoint_work_folders", func(t *testing.T) {
 		testConcurrentCheckAndUpdate(t, daemon)
 	})
 	t.Run("two_servers_serialize_live_directory_lock", func(t *testing.T) {
@@ -655,7 +655,7 @@ func TestCheckOperationsRecoveryAndRetainedOwner(t *testing.T) {
 
 // testConcurrentCheckAndUpdate launches CheckProject and UpdateDependencies
 // concurrently against a bounded barrier in daemon.onStart, fails immediately
-// if either request exits before entering the sandbox, cancels and drains
+// if either request exits before its container starts, cancels and drains
 // blocked callbacks on every teardown path, edits live go.sum mid-flight, and
 // checks snapshot isolation, manifest-conflict refusal, and cross-op cursors.
 func testConcurrentCheckAndUpdate(t *testing.T, daemon *fakeDockerDaemon) {
@@ -720,12 +720,12 @@ func testConcurrentCheckAndUpdate(t *testing.T, daemon *fakeDockerDaemon) {
 	case <-bothEntered:
 	case <-checkDone:
 		cancel()
-		require.FailNowf(t, "check_project exited before entering sandbox", "res=%+v err=%v", checkRes, checkErr)
+		require.FailNowf(t, "check_project exited before its container started", "res=%+v err=%v", checkRes, checkErr)
 	case <-updateDone:
 		cancel()
-		require.FailNowf(t, "update_dependencies exited before entering sandbox", "res=%+v err=%v", updateRes, updateErr)
+		require.FailNowf(t, "update_dependencies exited before its container started", "res=%+v err=%v", updateRes, updateErr)
 	case <-ctx.Done():
-		require.FailNowf(t, "timed out waiting for concurrent operations to enter sandbox", "ctx=%v", ctx.Err())
+		require.FailNowf(t, "timed out waiting for concurrent operations to start their containers", "ctx=%v", ctx.Err())
 	}
 
 	enteredMu.Lock()

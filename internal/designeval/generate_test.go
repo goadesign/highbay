@@ -24,7 +24,7 @@ const preCompleteSourcesGoa = "v3.35.1-0.20261102054348-8481e49a6c89"
 
 func TestGenerateReturnsWhatGoaGenWrites(t *testing.T) {
 	if testing.Short() {
-		t.Skip("runs the sandboxed Go toolchain; the full suite (go test without -short) covers it")
+		t.Skip("runs the Go toolchain; the full suite (go test without -short) covers it")
 	}
 	files := testmodule.Snapshot(t, completeSourcesGoa, minimalDesign)
 	out, err := testEvaluator.Generate(t.Context(), files)
@@ -43,7 +43,7 @@ func TestGenerateReturnsWhatGoaGenWrites(t *testing.T) {
 
 func TestGenerateNeedsAGoaWithCompleteSources(t *testing.T) {
 	if testing.Short() {
-		t.Skip("runs the sandboxed Go toolchain; the full suite (go test without -short) covers it")
+		t.Skip("runs the Go toolchain; the full suite (go test without -short) covers it")
 	}
 	cases := []struct {
 		name string
@@ -105,7 +105,7 @@ func TestGenerateNeedsAGoaWithCompleteSources(t *testing.T) {
 
 func TestGenerateRefusesAGRPCDesign(t *testing.T) {
 	if testing.Short() {
-		t.Skip("runs the sandboxed Go toolchain; the full suite (go test without -short) covers it")
+		t.Skip("runs the Go toolchain; the full suite (go test without -short) covers it")
 	}
 	design := strings.Replace(minimalDesign, `Method("get_order", func() {`, "Method(\"get_order\", func() {\n\t\tGRPC(func() {})", 1)
 	_, err := testEvaluator.Generate(t.Context(), testmodule.Snapshot(t, completeSourcesGoa, design))
@@ -125,7 +125,7 @@ func withGoaReplace(t *testing.T, required, replaced string) map[string]string {
 	return testmodule.Tidy(t, files)
 }
 
-// TestGenerateWritesSurlasQuickstartSections runs the sandboxed generation
+// TestGenerateWritesSurlasQuickstartSections runs the generation
 // program on designs with an agent, without and with an evaluation suite.
 // AGENTS_QUICKSTART.md carries Surla's header, liftoff and golden-rules
 // sections, and Surla's evaluations section only when no suite is declared;
@@ -133,7 +133,7 @@ func withGoaReplace(t *testing.T, required, replaced string) map[string]string {
 // code stays.
 func TestGenerateWritesSurlasQuickstartSections(t *testing.T) {
 	if testing.Short() {
-		t.Skip("runs the sandboxed Go toolchain; the full suite (go test without -short) covers it")
+		t.Skip("runs the Go toolchain; the full suite (go test without -short) covers it")
 	}
 	const design = `package design
 import (
@@ -194,7 +194,7 @@ var _ = Service("helpdesk", func() {
 // compiles. The same module without its table declares none of them.
 func TestGenerateWithAStoryTableStarterEvaluatorLifecycle(t *testing.T) {
 	if testing.Short() {
-		t.Skip("runs the sandboxed Go toolchain; the full suite (go test without -short) covers it")
+		t.Skip("runs the Go toolchain; the full suite (go test without -short) covers it")
 	}
 	evalInput, fullTree := starterEvalModule(t)
 	plain, err := testEvaluator.Generate(t.Context(), evalInput)
@@ -437,7 +437,7 @@ func (h *Hooks) InstantStoreCredit(ctx context.Context) (eval.Result, error) {
 // declares.
 func TestGenerateWithAnEmptyStoryTableAddsNoScenario(t *testing.T) {
 	if testing.Short() {
-		t.Skip("runs the sandboxed Go toolchain; the full suite (go test without -short) covers it")
+		t.Skip("runs the Go toolchain; the full suite (go test without -short) covers it")
 	}
 	files, _ := starterEvalModule(t)
 	plain, err := testEvaluator.Generate(t.Context(), files)
@@ -494,7 +494,7 @@ func TestGenerateWithAnEmptyStoryTableAddsNoScenario(t *testing.T) {
 // the table has a row.
 func TestGenerateWithAStoryTableRejectsFlowCollisionsAndSuiteCountErrors(t *testing.T) {
 	if testing.Short() {
-		t.Skip("runs the sandboxed Go toolchain; the full suite (go test without -short) covers it")
+		t.Skip("runs the Go toolchain; the full suite (go test without -short) covers it")
 	}
 	singleSuiteDesign := `package design
 import (
@@ -641,7 +641,7 @@ var _ = Suite("second_suite", func() {
 // break, or the flow's key for a blank title, and builds the program.
 func TestGenerateWithAStoryTableQuotesSpecialTitlesAndBlankTitles(t *testing.T) {
 	if testing.Short() {
-		t.Skip("runs the sandboxed Go toolchain; the full suite (go test without -short) covers it")
+		t.Skip("runs the Go toolchain; the full suite (go test without -short) covers it")
 	}
 	evalInput, fullTree := starterEvalModule(t)
 	specialTitle := "Line 1: \"quoted\" `backtick` \\backslash\\\nLine 2"
@@ -692,7 +692,7 @@ func (h *Hooks) BlankTitleFlow(ctx context.Context) (eval.Result, error) {
 
 func TestEvaluateAndGeneratePreserveGoaOnlyTargetWithGoModOnlyGoaAIChecksum(t *testing.T) {
 	if testing.Short() {
-		t.Skip("runs the sandboxed Go toolchain; the full suite (go test without -short) covers it")
+		t.Skip("runs the Go toolchain; the full suite (go test without -short) covers it")
 	}
 	// Build a tidy module that requires goa-ai, then strip goa-ai's zip
 	// checksum line from go.sum while keeping its /go.mod checksum line and a
@@ -796,7 +796,6 @@ func starterEvalModule(t *testing.T) (evalInput, fullTree map[string]string) {
 	// The acceptance package imports code generation writes, so it joins the
 	// input after tidying; generation loads only the design packages.
 	evalInput["acceptance/acceptance.go"] = readRendered("acceptance/acceptance.go.tmpl")
-	evalInput["acceptance/forwarder.go"] = readRendered("acceptance/forwarder.go.tmpl")
 	initGen, err := testEvaluator.Generate(t.Context(), evalInput)
 	require.NoError(t, err)
 
@@ -808,7 +807,6 @@ func starterEvalModule(t *testing.T) (evalInput, fullTree map[string]string) {
 			"replace github.com/goadesign/surla => " + repoRoot + "\n",
 		"design/design.go":         designSrc,
 		"acceptance/acceptance.go": readRendered("acceptance/acceptance.go.tmpl"),
-		"acceptance/forwarder.go":  readRendered("acceptance/forwarder.go.tmpl"),
 		"scripted/scripted.go":     readRendered("scripted/scripted.go.tmpl"),
 	}
 	withGen := maps.Clone(fullTree)

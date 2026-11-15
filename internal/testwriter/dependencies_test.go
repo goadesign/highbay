@@ -5,7 +5,6 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"testing"
 
@@ -46,9 +45,6 @@ func failingDownload(marker string, calls *int) func(context.Context, string, st
 // files are at fault, it stays the author's finding: the author cannot hide a
 // defect of its own module behind a failed download.
 func TestALoadFailureOutsideTheModuleIsNotTheAuthorsFinding(t *testing.T) {
-	if runtime.GOOS != "darwin" && runtime.GOOS != "linux" {
-		t.Skip("Prepare refuses before generating where the sandbox does not exist")
-	}
 	// No go command of this test may reach the network.
 	t.Setenv("GOPROXY", "off")
 	const (
@@ -134,7 +130,7 @@ func TestALoadFailureOutsideTheModuleIsNotTheAuthorsFinding(t *testing.T) {
 // finding is the author's and names the commit it was compared with; when
 // they do not, the check could not run.
 func TestADownloadFailureOutsideTheModuleIsNotTheAuthorsFinding(t *testing.T) {
-	skipWithoutSandbox(t)
+	skipInShortMode(t)
 	const edit = "\n// The author's change.\n"
 	cases := []struct {
 		name string

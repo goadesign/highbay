@@ -51,7 +51,7 @@ const published = "v0.0.0-20261110163737-d9beac313142"
 
 // TestStarterLiveTargetAppliesADraftToTheNextModelRequest creates a real
 // starter project, commits it as C1, and runs the full CP3 journey through the
-// control plane for one confirmed Change Card, with real sandboxed builds and
+// control plane for one confirmed Change Card, with real builds and
 // processes and a fake model that echoes the system prompt:
 // start_live_target builds C1 and starts it with the generated suite's --live
 // mode through a loopback model gateway, draft_override replaces the helper's
@@ -60,8 +60,8 @@ const published = "v0.0.0-20261110163737-d9beac313142"
 // into source and commits C2: a live target for C2 sends it with no draft,
 // and verify_change of C2 for the same card passes. A second card skips CP3
 // and verifies C1 directly. Each card is proposed with a fixed analysis, as a
-// coding agent would send it. It needs the network and, for the sandbox,
-// macOS. The two journeys are subtests so each can run with its own process
+// coding agent would send it. It needs the network and macOS or Linux. The
+// two journeys are subtests so each can run with its own process
 // deadline while the default full run retains the shared fixture and sequence.
 func TestStarterLiveTargetAppliesADraftToTheNextModelRequest(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "shop")
