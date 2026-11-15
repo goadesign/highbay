@@ -980,6 +980,30 @@ func TestARecordWithAnOnBranchLockRetriesOnlyRecord(t *testing.T) {
 		assert.Contains(t, failed.Reason, "Surla could not record the accepted tests")
 		assert.Equal(t, stepFailure, failed.Step)
 	})
+
+	t.Run("wait between retries ends when check context ends", func(t *testing.T) {
+		firstAttempt := make(chan struct{})
+		tests := &standInCopy{
+			check: accepting,
+			record: func(_ context.Context, call int) (string, error) {
+				if call == 1 {
+					close(firstAttempt)
+				}
+				return "", &testwriter.IndexLockError{Path: "/tmp/index.lock", Err: errors.New("index.lock")}
+			},
+		}
+		cp, revision := newReportFixture(t, Options{}, tests)
+		readBothAssignments(t, cp)
+		reportTests(t, cp, revision)
+		reported := readBuildFile(t, cp, "chg")
+
+		receive(t, firstAttempt)
+		time.Sleep(20 * time.Millisecond)
+		require.NoError(t, cp.Close())
+		assert.Equal(t, 1, tests.checked())
+		assert.Equal(t, 1, tests.recordCalls(), "canceling checkCtx during the retry wait must stop before a second Record attempt")
+		assert.Equal(t, reported, readBuildFile(t, cp, "chg"), "build file stays reported when stopped during Record retry wait")
+	})
 }
 
 // newReportFixture returns a control plane with options opts and a bound
