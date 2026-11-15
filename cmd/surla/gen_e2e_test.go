@@ -113,7 +113,9 @@ func TestGenOnAFreshStarterChangesNothingAndKeepsModulesApart(t *testing.T) {
 	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Minute)
 	defer cancel()
 	call := &genmcpsurla.ToolsCallPayload{Name: "init_project", Arguments: args}
+	phaseStart := time.Now()
 	result, err := client.ToolsCall(ctx, call)
+	t.Logf("init_project: %s", time.Since(phaseStart))
 	require.NoError(t, err)
 	complete, ok := result.Outcome.AsComplete()
 	require.True(t, ok, "initialization completes in the same MCP call")
@@ -159,7 +161,9 @@ func TestGenOnAFreshStarterChangesNothingAndKeepsModulesApart(t *testing.T) {
 
 	for _, module := range []string{dir, evalDir} {
 		var out bytes.Buffer
+		phaseStart = time.Now()
 		require.NoError(t, runGen([]string{"-dir", module}, &out, io.Discard))
+		t.Logf("gen unchanged %s: %s", module, time.Since(phaseStart))
 		assert.Contains(t, out.String(), "added: 0\nchanged: 0\nremoved: 0\n", module)
 	}
 	assert.Equal(t, created, files(t, dir, "."), "regenerating an untouched starter changes no byte")
@@ -223,7 +227,9 @@ func TestGenOnAFreshStarterChangesNothingAndKeepsModulesApart(t *testing.T) {
 	require.NotEmpty(t, complete.Content)
 	require.NotNil(t, complete.Content[0].Text)
 	assert.Contains(t, *complete.Content[0].Text, "already initialized at "+dir)
+	phaseStart = time.Now()
 	assertTrustedSuiteJourney(t, client, user, dir, opts.CardsDir, opts.RunsDir, initialized.Commit, "initialized", promotion)
+	t.Logf("trusted suite journey: %s", time.Since(phaseStart))
 
 	edits := []struct {
 		// module is the module directory surla gen runs in.
@@ -247,7 +253,9 @@ func TestGenOnAFreshStarterChangesNothingAndKeepsModulesApart(t *testing.T) {
 		require.Contains(t, string(src), e.old)
 		require.NoError(t, os.WriteFile(path, []byte(strings.Replace(string(src), e.old, e.new, 1)), 0o644))
 		var out bytes.Buffer
+		phaseStart = time.Now()
 		require.NoError(t, runGen([]string{"-dir", e.module}, &out, io.Discard))
+		t.Logf("gen edited %s: %s", e.module, time.Since(phaseStart))
 		assert.NotContains(t, out.String(), "changed: 0\n", "the edit changes generated files in %s", e.module)
 		assert.Equal(t, before, files(t, dir, e.other), "regenerating %s leaves %s unchanged", e.module, e.other)
 	}
