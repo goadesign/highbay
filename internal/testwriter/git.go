@@ -194,6 +194,13 @@ func commitTree(
 		return "", err
 	}
 	if headTree == tree {
+		rawBranch, facts, err := wc.readFacts(ctx)
+		if err != nil {
+			return "", err
+		}
+		if facts.Detached || rawBranch != branch || facts.Operation != "none" {
+			return "", &AuthorError{Finding: workingCopyFinding(branch, facts)}
+		}
 		return checkedTip, nil
 	}
 	created, err := wc.git(ctx, wc.dir, nil, "commit-tree", "--no-gpg-sign", tree, "-p", checkedTip, "-m", message)
@@ -233,6 +240,19 @@ func commitTree(
 			err = fmt.Errorf("recorded tests as commit %s on %s, but could not finish updating the working copy's index: %w", commit, ShownBranch(branch), err)
 		}
 	}()
+	// Ordinary Git switches need this same index lock. Revalidate after
+	// reserving it so a switch completed during commit-tree cannot make us
+	// publish an index for a different checked-out branch.
+	rawBranch, facts, err := wc.readFacts(ctx)
+	if err != nil {
+		return "", err
+	}
+	if facts.Detached || rawBranch != branch || facts.Operation != "none" {
+		// This call removes its own reservation before the finding is returned;
+		// it must not tell the author to clear our transient index lock.
+		facts.IndexLock = ""
+		return "", &AuthorError{Finding: workingCopyFinding(branch, facts)}
+	}
 	tmp, err := os.MkdirTemp(wc.gitDir, "surla-record-*")
 	if err != nil {
 		return "", err

@@ -333,7 +333,15 @@ func (r *reportChecker) judge(ctx context.Context, changeID string) {
 			case recordErr != nil:
 				failure = recordErr
 				var author *testwriter.AuthorError
-				if errors.As(recordErr, &author) {
+				if commit != "" {
+					// A published commit is a durable fact even if the check's
+					// deadline elapsed before its index could be published.
+					verdict = testWriterAssignment{State: testsCouldNotRun,
+						Reason: boundReason(testwriter.WithoutAbsolutePaths(fmt.Sprintf(
+							"Tests were recorded as commit %s, but Surla could not finish recording: %v", commit, recordErr))),
+						Step: stepFailure,
+					}
+				} else if errors.As(recordErr, &author) {
 					verdict = r.verdictOf(testwriter.Verdict{}, recordErr, deadline)
 				} else {
 					verdict = r.couldNotRun(recordErr, deadline, "Surla could not record the accepted tests")
@@ -489,12 +497,10 @@ func (r *reportChecker) recordAccepted(
 			r.cp.mu.Unlock()
 			return "", current, confirmErr, nil
 		}
-		attemptCtx, cancel := context.WithTimeout(checkCtx, layoutReadTimeout)
-		commit, recordErr = copy.Record(attemptCtx, v, branch, checkedTip, message)
-		cancel()
+		commit, recordErr = copy.Record(checkCtx, v, branch, checkedTip, message)
 		r.cp.mu.Unlock()
 		var lockErr *testwriter.IndexLockError
-		if recordErr == nil || !errors.As(recordErr, &lockErr) || attempt >= recordLockRetries || checkCtx.Err() != nil {
+		if commit != "" || recordErr == nil || !errors.As(recordErr, &lockErr) || attempt >= recordLockRetries || checkCtx.Err() != nil {
 			return commit, true, nil, recordErr
 		}
 		timer := time.NewTimer(pause)

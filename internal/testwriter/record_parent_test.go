@@ -150,3 +150,60 @@ func armRecordGitMutation(t *testing.T, repo, ref, checkedTip, foreign, index st
 	}
 	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
 }
+
+// TestRecordV1SwitchBeforeIndexReservation covers normal Git switching after
+// Record's first Facts read, including the equal-tree path that writes no ref.
+func TestRecordV1SwitchBeforeIndexReservation(t *testing.T) {
+	for _, equal := range []bool{false, true} {
+		name := "changed tree"
+		if equal {
+			name = "equal tree"
+		}
+		t.Run(name, func(t *testing.T) {
+			repo, _ := newProject(t, map[string]string{"eval/hooks.txt": "original\n"})
+			branch := TestsRole.Branch(1)
+			wc, err := MakeCopy(t.Context(), repo, TestsRole, branch, "HEAD")
+			require.NoError(t, err)
+			tip := runGit(t, repo, "rev-parse", branch)
+			if !equal {
+				writeFiles(t, wc.Project(), map[string]string{"eval/hooks.txt": "judged\n"})
+			}
+			verdict := snapshotVerdict(t, wc)
+			realGit, err := exec.LookPath("git")
+			require.NoError(t, err)
+			bin := t.TempDir()
+			trigger := "commit-tree"
+			if equal {
+				trigger = tip + "^{tree}"
+			}
+			script := "#!/bin/sh\nfor arg do\n" +
+				"if [ \"$arg\" = \"$SURLA_SWITCH_TRIGGER\" ] && mkdir \"$SURLA_SWITCH_DIR/claimed\" 2>/dev/null; then\n" +
+				"\"$SURLA_SWITCH_GIT\" -C \"$SURLA_SWITCH_WC\" -c core.hooksPath=/dev/null switch -q -c side-work || exit $?\n" +
+				"cp \"$SURLA_SWITCH_INDEX\" \"$SURLA_SWITCH_DIR/index\" || exit $?\nfi\ndone\n" +
+				"exec \"$SURLA_SWITCH_GIT\" \"$@\"\n"
+			require.NoError(t, os.WriteFile(filepath.Join(bin, "git"), []byte(script), 0o700))
+			for key, value := range map[string]string{
+				"SURLA_SWITCH_GIT": realGit, "SURLA_SWITCH_WC": wc.Dir(), "SURLA_SWITCH_TRIGGER": trigger,
+				"SURLA_SWITCH_INDEX": filepath.Join(wc.gitDir, "index"), "SURLA_SWITCH_DIR": bin,
+			} {
+				t.Setenv(key, value)
+			}
+			t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+			commit, err := Record(t.Context(), verdict, branch, tip, "Accept tests")
+			var author *AuthorError
+			require.ErrorAs(t, err, &author)
+			assert.Equal(t, FindingWorkingCopy, author.Finding.Kind)
+			assert.Contains(t, author.Finding.Message, "side-work")
+			assert.NotContains(t, author.Finding.Message, "index.lock", "our reservation ends before the finding is returned")
+			assert.Empty(t, commit)
+			assert.Equal(t, tip, runGit(t, repo, "rev-parse", branch))
+			assert.Equal(t, "side-work", runGit(t, wc.Dir(), "symbolic-ref", "--short", "HEAD"))
+			before, err := os.ReadFile(filepath.Join(bin, "index"))
+			require.NoError(t, err)
+			after, err := os.ReadFile(filepath.Join(wc.gitDir, "index"))
+			require.NoError(t, err)
+			assert.Equal(t, before, after, "Record cannot publish its index over the side-work index")
+			assert.NoFileExists(t, filepath.Join(wc.gitDir, "index.lock"))
+		})
+	}
+}

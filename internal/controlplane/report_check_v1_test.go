@@ -348,29 +348,45 @@ func TestReportV1OperationalTipReadFailure(t *testing.T) {
 // TestReportV1PublishedCommitFailureIsTruthful verifies the caller preserves
 // a Record result that published its ref before an operational index failure.
 func TestReportV1PublishedCommitFailureIsTruthful(t *testing.T) {
-	var cp *ControlPlane
-	published := make(chan string, 1)
-	tests := &standInCopy{check: accepting, record: func(_ context.Context, _ int, checkedTip string) (string, error) {
-		workspace := cp.activeWorkspaceDir
-		commit := productionBuildGit(t, workspace, "commit-tree", checkedTip+"^{tree}", "-p", checkedTip, "-m", "Accepted tests")
-		productionBuildGit(t, workspace, "update-ref", "refs/heads/surla/tests-1", commit, checkedTip)
-		published <- commit
-		return commit, fmt.Errorf("recorded tests as commit %s on surla/tests-1, but could not finish updating the working copy's index: rename /private/report-index-details: permission denied", commit)
-	}}
-	var revision string
-	cp, revision = newReportFixture(t, Options{}, tests)
-	readBothAssignments(t, cp)
-	reportTests(t, cp, revision)
-	commit := receive(t, published)
-	build := waitForTests(t, cp, gensurla.TestsKindCouldNotRun)
-	failed, ok := build.TestWriter.Tests.AsCouldNotRun()
-	require.True(t, ok)
-	assert.Contains(t, failed.Reason, "recorded tests as commit "+commit)
-	assert.Contains(t, failed.Reason, "permission denied")
-	assert.NotContains(t, failed.Reason, "/private/report-index-details")
-	assert.NotContains(t, failed.Reason, "nothing recorded")
-	assert.Equal(t, 1, tests.recordCalls(), "a published reference is never retried against the stale parent")
-	assert.Equal(t, commit, productionBuildGit(t, cp.currentWorkspaceDir(), "rev-parse", "surla/tests-1"))
+	for _, expired := range []bool{false, true} {
+		name := "before deadline"
+		if expired {
+			name = "after deadline"
+		}
+		t.Run(name, func(t *testing.T) {
+			var cp *ControlPlane
+			published := make(chan string, 1)
+			tests := &standInCopy{check: accepting, record: func(ctx context.Context, _ int, checkedTip string) (string, error) {
+				workspace := cp.activeWorkspaceDir
+				commit := productionBuildGit(t, workspace, "commit-tree", checkedTip+"^{tree}", "-p", checkedTip, "-m", "Accepted tests")
+				productionBuildGit(t, workspace, "update-ref", "refs/heads/surla/tests-1", commit, checkedTip)
+				published <- commit
+				if expired {
+					<-ctx.Done()
+				}
+				return commit, fmt.Errorf("recorded tests as commit %s on surla/tests-1, but could not finish updating the working copy's index: rename /private/report-index-details: permission denied", commit)
+			}}
+			var revision string
+			cp, revision = newReportFixture(t, Options{}, tests)
+			if expired {
+				cp.reports.limit = 5 * time.Second
+			}
+			readBothAssignments(t, cp)
+			reportTests(t, cp, revision)
+			commit := receive(t, published)
+			build := waitForTests(t, cp, gensurla.TestsKindCouldNotRun)
+			failed, ok := build.TestWriter.Tests.AsCouldNotRun()
+			require.True(t, ok)
+			assert.Contains(t, failed.Reason, "recorded tests as commit "+commit)
+			assert.Contains(t, failed.Reason, "permission denied")
+			assert.NotContains(t, failed.Reason, "/private/report-index-details")
+			assert.NotContains(t, failed.Reason, "nothing recorded")
+			assert.NotContains(t, failed.Reason, "did not finish within")
+			assert.Equal(t, stepFailure, failed.Step)
+			assert.Equal(t, 1, tests.recordCalls(), "a published reference is never retried against the stale parent")
+			assert.Equal(t, commit, productionBuildGit(t, cp.currentWorkspaceDir(), "rev-parse", "surla/tests-1"))
+		})
+	}
 }
 
 // TestReportV1DropDuringTipReadSavesNothing places Drop inside the new L1
@@ -411,4 +427,87 @@ func TestReportV1DropDuringTipReadSavesNothing(t *testing.T) {
 	waitForSpan(t, exporter, "surla.controlplane.check_reported_tests")
 	assert.Zero(t, tests.recordCalls())
 	assert.Equal(t, before, readBuildFile(t, cp, build.ChangeID))
+}
+
+// TestReportV1DropCapturesTipsAtPublication places a report after Drop has
+// read its tests tip but before Drop persists. If the capture were outside
+// c.mu, the contending Record can publish C and the retained snapshot loses C.
+func TestReportV1DropCapturesTipsAtPublication(t *testing.T) {
+	checking := make(chan int, 1)
+	releaseCheck := make(chan struct{})
+	published := make(chan string, 1)
+	var cp *ControlPlane
+	tests := &standInCopy{check: func(ctx context.Context, call int) (testwriter.Verdict, error) {
+		checking <- call
+		select {
+		case <-releaseCheck:
+			return testwriter.Verdict{}, nil
+		case <-ctx.Done():
+			return testwriter.Verdict{}, ctx.Err()
+		}
+	}, record: func(_ context.Context, _ int, checkedTip string) (string, error) {
+		workspace := cp.activeWorkspaceDir
+		commit := productionBuildGit(t, workspace, "commit-tree", checkedTip+"^{tree}", "-p", checkedTip, "-m", "Concurrent accepted tests")
+		productionBuildGit(t, workspace, "update-ref", "refs/heads/surla/tests-1", commit, checkedTip)
+		published <- commit
+		return commit, nil
+	}}
+	exporter := tracetest.NewInMemoryExporter()
+	provider := sdktrace.NewTracerProvider(sdktrace.WithSyncer(exporter))
+	t.Cleanup(func() { assert.NoError(t, provider.Shutdown(context.Background())) })
+	var revision string
+	cp, revision = newReportFixture(t, Options{TracerProvider: provider}, tests)
+	readBothAssignments(t, cp)
+	build := mustOpenBuildFile(t, cp)
+	reportTests(t, cp, revision)
+	receive(t, checking)
+	realGit, err := exec.LookPath("git")
+	require.NoError(t, err)
+	gate := newPublishGate(t)
+	defer func() { assert.NoError(t, gate.release()) }()
+	bin := t.TempDir()
+	script := "#!/bin/sh\nfor arg do\n" +
+		"if [ \"$arg\" = 'refs/heads/surla/tests-1^{commit}' ] && mkdir \"$SURLA_DROP_GATE/claimed\" 2>/dev/null; then\n" +
+		"\"$SURLA_DROP_REAL_GIT\" \"$@\" > \"$SURLA_DROP_GATE/tip\" || exit $?\ncat \"$SURLA_DROP_GATE/tip\"\n" +
+		"exec 3<> \"$SURLA_DROP_GATE/release\"\n: > \"$SURLA_DROP_GATE/in-write\"\ndd bs=1 count=1 <&3 >/dev/null 2>&1\nexec 3>&-\nexit 0\nfi\ndone\n" +
+		"exec \"$SURLA_DROP_REAL_GIT\" \"$@\"\n"
+	require.NoError(t, os.WriteFile(filepath.Join(bin, "git"), []byte(script), 0o700))
+	t.Setenv("SURLA_DROP_GATE", gate.dir)
+	t.Setenv("SURLA_DROP_REAL_GIT", realGit)
+	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+	dropped := make(chan error, 1)
+	go func() {
+		_, err := cp.DropBuild(asCaller("alice@example.com", CallerUser), &gensurla.DropBuildPayload{
+			ChangeID: build.ChangeID, StartedAt: verdictTime(build.StartedAt),
+		})
+		dropped <- err
+	}()
+	select {
+	case <-gate.held:
+	case <-time.After(10 * time.Second):
+		t.Fatal("Drop did not reach its tip capture")
+	}
+	// This probe selects the schedule, not the expected result: an unsafe
+	// outside-lock capture lets Record finish and reproduces the lost tip;
+	// the serialized owner lets Drop win before that Record can publish.
+	serialized := !cp.mu.TryRLock()
+	if !serialized {
+		cp.mu.RUnlock()
+	}
+	close(releaseCheck)
+	if !serialized {
+		receive(t, published)
+	}
+	require.NoError(t, gate.release())
+	require.NoError(t, receive(t, dropped))
+	waitForSpan(t, exporter, "surla.controlplane.check_reported_tests")
+	actual := productionBuildGit(t, cp.currentWorkspaceDir(), "rev-parse", "surla/tests-1")
+	provenance, found, err := cp.cards.loadMadeFrom()
+	require.NoError(t, err)
+	require.True(t, found)
+	require.NotNil(t, provenance.Start.Dropped)
+	assert.Equal(t, actual, provenance.Start.Dropped.BranchTips["surla/tests-1"], "Drop must retain the last durable Record tip")
+	if serialized {
+		assert.Zero(t, tests.recordCalls(), "the report cannot publish after Drop's captured tips")
+	}
 }
