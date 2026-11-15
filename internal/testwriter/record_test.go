@@ -2,7 +2,9 @@ package testwriter
 
 import (
 	"context"
+	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -108,6 +110,54 @@ func TestIdentityCheckMatchesRecord(t *testing.T) {
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
 	assert.ErrorIs(t, CheckIdentity(ctx, repo), context.Canceled)
+}
+
+// TestReviewRecordWithAnOnBranchLock verifies that an accepted verdict recorded
+// while index.lock exists in the copy (which is on its build's branch) fails
+// with *IndexLockError naming the lock file and leaves the branch tip unmoved,
+// and succeeds once index.lock is removed.
+func TestReviewRecordWithAnOnBranchLock(t *testing.T) {
+	t.Parallel()
+	repo, _ := newProject(t, map[string]string{"eval/go.mod": "module example.com/shop/eval\n"})
+	branch := TestsRole.Branch(1)
+	wc, err := MakeCopy(t.Context(), repo, TestsRole, branch, "HEAD")
+	require.NoError(t, err)
+	tip := runGit(t, repo, "rev-parse", branch)
+	writeFiles(t, wc.Project(), map[string]string{"eval/refund_test.txt": "judged\n"})
+	accepted := snapshotVerdict(t, wc)
+	lock := filepath.Join(wc.gitDir, "index.lock")
+	writeFiles(t, wc.gitDir, map[string]string{"index.lock": ""})
+
+	commit, err := Record(t.Context(), accepted, branch, "Add the accepted tests")
+	var lockErr *IndexLockError
+	require.ErrorAs(t, err, &lockErr)
+	assert.Equal(t, lock, lockErr.Path)
+	assert.Empty(t, commit)
+	assert.Equal(t, tip, runGit(t, repo, "rev-parse", branch), "branch tip stays unmoved when index.lock blocks read-tree")
+
+	require.NoError(t, os.Remove(lock))
+	commit, err = Record(t.Context(), accepted, branch, "Add the accepted tests")
+	require.NoError(t, err)
+	assert.Equal(t, commit, runGit(t, repo, "rev-parse", branch))
+	assert.Equal(t, tip, runGit(t, repo, "rev-parse", commit+"^"), "one commit on top of the branch")
+}
+
+// TestGitEnvSetsEnglishLocale verifies that gitEnv drops inherited LC_ALL and
+// LANGUAGE entries and appends LC_ALL=C once so Git's messages stay in English.
+func TestGitEnvSetsEnglishLocale(t *testing.T) {
+	t.Setenv("LC_ALL", "fr_FR.UTF-8")
+	t.Setenv("LANGUAGE", "fr_FR:fr")
+	env := gitEnv()
+	var lcAllCount int
+	for _, kv := range env {
+		name, _, _ := strings.Cut(kv, "=")
+		assert.NotEqual(t, "LANGUAGE", name, "inherited LANGUAGE must be removed")
+		if name == "LC_ALL" {
+			lcAllCount++
+			assert.Equal(t, "LC_ALL=C", kv)
+		}
+	}
+	assert.Equal(t, 1, lcAllCount, "LC_ALL=C must appear exactly once")
 }
 
 // snapshotVerdict returns an accepted verdict for the copy's current files,

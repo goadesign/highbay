@@ -372,8 +372,8 @@ func (c *ControlPlane) ownedCard(principal Principal, changeID string) (storedCh
 	return record, nil
 }
 
-// ownedBuild loads the usable build of the caller's change changeID, failing
-// with not_found when the change or its build does not exist. Callers hold c.mu.
+// ownedBuild loads the build of the caller's change changeID, failing with
+// not_found when the change or its build does not exist. Callers hold c.mu.
 func (c *ControlPlane) ownedBuild(principal Principal, changeID string) (heldBuild, error) {
 	record, err := c.ownedCard(principal, changeID)
 	if err != nil {
@@ -391,7 +391,7 @@ func (c *ControlPlane) ownedBuild(principal Principal, changeID string) (heldBui
 		return heldBuild{}, err
 	}
 	if hasProvenance && buildDropped(provenance, saved) {
-		return heldBuild{}, gensurla.MakeNotFound(fmt.Errorf("change_id %q has no usable build; start a new build on the views page", changeID))
+		return heldBuild{}, gensurla.MakeNotFound(fmt.Errorf("The user dropped change %s: stop work on it; make no more edits or commits for it. The user starts builds on the views page.", saved.ChangeID))
 	}
 	return heldBuild{file: saved, inForce: buildInForce(saved, record), storedEvaluator: c.storedEvaluator()}, nil
 }

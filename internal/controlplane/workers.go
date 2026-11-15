@@ -278,7 +278,7 @@ func (c *ControlPlane) GetTestWriterAssignment(
 	if !held.file.StartedAt.Equal(owned.file.StartedAt) {
 		c.mu.Unlock()
 		return nil, recordBuildError(span, gensurla.MakeWorkingCopyBusy(errors.New(
-			"Surla is checking the tests in your working folder; call get_test_writer_assignment again when the check has ended.",
+			"A new build started while Surla was moving your working copy; call get_test_writer_assignment again.",
 		)), "load build")
 	}
 	if held.file.Roles != buildRolesBuilderAndTestWriter {
@@ -534,8 +534,14 @@ func (c *ControlPlane) workerOwnedBuild(principal Principal, changeID string) (h
 // builderCopyReady checks that an open, undropped build exists, that the
 // builder has read its assignment since the build started, and that the
 // builder's working copy (.surla-build) exists on its build branch with no
-// in-progress Git operation or index lock. Callers hold workspaceMu.RLock or
-// pass a bound workspace.
+// in-progress Git operation or index lock.
+//
+// Callers take c.builderCopyTurn before calling builderCopyReady and hold it
+// until their work with the copy finishes (a synchronous generation, or an
+// asynchronous helper's completion and cleanup), pass the bound workspace (or
+// hold workspaceMu.RLock), and hold no c.mu. The returned builderReadyCopy
+// carries the open build, which the caller compares with the change it was
+// asked about.
 func (c *ControlPlane) builderCopyReady(
 	ctx context.Context, workspace, operation string,
 ) (builderReadyCopy, error) {

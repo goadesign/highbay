@@ -38,6 +38,15 @@ type (
 		// change means deleting it; otherwise the base's file is restored.
 		added bool
 	}
+
+	// IndexLockError reports that updating the working copy's index failed
+	// because Git could not create index.lock at Path.
+	IndexLockError struct {
+		// Path is the absolute path of index.lock in the working copy's git folder.
+		Path string
+		// Err is the underlying git read-tree failure.
+		Err error
+	}
 )
 
 const (
@@ -56,6 +65,16 @@ const (
 // stand for another one, and a base compared with the copy could show the
 // author's own changes as already there.
 var gitFlags = []string{"--no-replace-objects", "-c", "core.hooksPath=/dev/null", "-c", "core.fsmonitor=false"}
+
+// Error returns the underlying failure's text.
+func (e *IndexLockError) Error() string {
+	return e.Err.Error()
+}
+
+// Unwrap returns the underlying failure.
+func (e *IndexLockError) Unwrap() error {
+	return e.Err
+}
 
 // Write keeps what fits in the limit and counts the rest.
 func (c *capBuffer) Write(p []byte) (int, error) {
@@ -191,7 +210,14 @@ func commitTreeWithHook(ctx context.Context, wc WorkingCopy, ref, tree, message 
 	}
 	if checkedOut == ref {
 		if _, err := wc.git(ctx, wc.dir, nil, "read-tree", commit); err != nil {
-			return "", fmt.Errorf("update the working copy's index: %w", err)
+			wrapped := fmt.Errorf("update the working copy's index: %w", err)
+			if isIndexLockFailure(err) {
+				return "", &IndexLockError{
+					Path: filepath.Join(wc.gitDir, "index.lock"),
+					Err:  wrapped,
+				}
+			}
+			return "", wrapped
 		}
 	}
 	if afterCopyIndex != nil {
@@ -205,19 +231,32 @@ func commitTreeWithHook(ctx context.Context, wc WorkingCopy, ref, tree, message 
 	return commit, nil
 }
 
+// isIndexLockFailure reports whether err came from Git failing to create
+// index.lock in its captured stderr (under LC_ALL=C).
+func isIndexLockFailure(err error) bool {
+	msg := err.Error()
+	return strings.Contains(msg, "Unable to create '") && strings.Contains(msg, "/index.lock': File exists")
+}
+
 // gitEnv is the server's environment without the variables that would make
 // git act on another repository, work tree, index or object store than the
 // one named on its command line (gitenv.WithoutRedirects), with terminal
-// prompts off, and with grafts off (GIT_GRAFT_FILE=/dev/null) so an
-// info/grafts file in the repository cannot rewrite commit parents: the
-// inherited GIT_TERMINAL_PROMPT and GIT_GRAFT_FILE are dropped and replaced.
-// The user's identity and configuration-file settings stay, though commitTree
-// never signs.
+// prompts off, with grafts off (GIT_GRAFT_FILE=/dev/null) so an info/grafts
+// file in the repository cannot rewrite commit parents, and with LC_ALL=C so
+// Git's diagnostic messages are in English: the inherited GIT_TERMINAL_PROMPT,
+// GIT_GRAFT_FILE, LC_ALL and LANGUAGE are dropped and replaced. The user's
+// identity and configuration-file settings stay, though commitTree never signs.
 func gitEnv() []string {
+	return gitEnvFrom(os.Environ())
+}
+
+// gitEnvFrom builds gitEnv from environ.
+func gitEnvFrom(environ []string) []string {
 	return append(
-		gitenv.WithoutRedirects(os.Environ(), "GIT_TERMINAL_PROMPT", "GIT_GRAFT_FILE"),
+		gitenv.WithoutRedirects(environ, "GIT_TERMINAL_PROMPT", "GIT_GRAFT_FILE", "LC_ALL", "LANGUAGE"),
 		"GIT_TERMINAL_PROMPT=0",
 		"GIT_GRAFT_FILE=/dev/null",
+		"LC_ALL=C",
 	)
 }
 
