@@ -264,6 +264,15 @@ func TestForBuildersNamesTheFailedArtifactCheckOnly(t *testing.T) {
 			sentence: start + "it recorded a binary without a SHA-256 digest" + end,
 			planted:  true,
 		},
+		{
+			name: "two undeclared binaries name the first by name",
+			artifacts: []eval.Artifact{
+				orders, worker,
+				{Name: "candidate:zeta", URI: "sha256:d3"}, {Name: "candidate:alpha", URI: "sha256:d4"},
+			},
+			detail:   `scenario executed unbound binary "alpha"`,
+			sentence: start + "it recorded running a binary Surla did not build" + end,
+		},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
