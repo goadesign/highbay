@@ -2109,7 +2109,12 @@ go test -race -count=1 -timeout 40m -tags=e2e,docker -run '^TestCheckProjectRepa
 All full suites run nightly at 07:17 UTC and on a manual **Run workflow**
 request (`CI=true gh workflow run ci.yml --ref <branch> </dev/null`). This adds
 the other modules' complete tests and the verifier, generation, starter and
-orders acceptance suites as parallel jobs. A passing short run does not prove
+orders acceptance suites as parallel jobs. **Full / generation** uses a
+60-minute package alarm and a 70-minute job backstop for the suite's project
+compilations on slow runners, including cold builds. The job limit also
+covers setup and downloads. These are execution bounds, not measured
+completion times or a reduction in compilation work.
+A passing short run does not prove
 paths that build and run agent-written code; changes to candidate execution
 or starter generation need the full suite. On macOS, with the Temporal CLI
 for the first three:
