@@ -982,6 +982,16 @@ type StartBuildResponseBody struct {
 type DropBuildResponseBody struct {
 	// Change Card identifier.
 	ChangeID *string `form:"change_id,omitempty" json:"change_id,omitempty" xml:"change_id,omitempty"`
+	// True only when the current agreed revision has saved design provenance from
+	// before the current actual drop: start_build would refuse it with
+	// drafted_before_drop. It becomes true after that drop and false once the user
+	// adopts a revision drafted after the drop, even if its request_revision is
+	// unchanged. A waiting proposal does not change this fact; ask the guide to
+	// refresh_story and revise_change from that refresh, then adopt the revision
+	// before building. False says only that this refusal does not apply, not that
+	// every other build check will pass; it is also false without an agreed
+	// revision or saved design provenance. start_build rechecks concurrent changes.
+	DraftedBeforeDrop *bool `form:"drafted_before_drop,omitempty" json:"drafted_before_drop,omitempty" xml:"drafted_before_drop,omitempty"`
 	// not_started when the change has no usable build for the current test source;
 	// start a new build on the views page. Otherwise started with the usable build.
 	Build *BuildResponseBody `form:"build,omitempty" json:"build,omitempty" xml:"build,omitempty"`
@@ -992,6 +1002,16 @@ type DropBuildResponseBody struct {
 type GetBuildResponseBody struct {
 	// Change Card identifier.
 	ChangeID *string `form:"change_id,omitempty" json:"change_id,omitempty" xml:"change_id,omitempty"`
+	// True only when the current agreed revision has saved design provenance from
+	// before the current actual drop: start_build would refuse it with
+	// drafted_before_drop. It becomes true after that drop and false once the user
+	// adopts a revision drafted after the drop, even if its request_revision is
+	// unchanged. A waiting proposal does not change this fact; ask the guide to
+	// refresh_story and revise_change from that refresh, then adopt the revision
+	// before building. False says only that this refusal does not apply, not that
+	// every other build check will pass; it is also false without an agreed
+	// revision or saved design provenance. start_build rechecks concurrent changes.
+	DraftedBeforeDrop *bool `form:"drafted_before_drop,omitempty" json:"drafted_before_drop,omitempty" xml:"drafted_before_drop,omitempty"`
 	// not_started when the change has no usable build for the current test source;
 	// start a new build on the views page. Otherwise started with the usable build.
 	Build *BuildResponseBody `form:"build,omitempty" json:"build,omitempty" xml:"build,omitempty"`
@@ -1030,11 +1050,12 @@ type GetBuilderAssignmentResponseBody struct {
 	ChangeID *string `form:"change_id,omitempty" json:"change_id,omitempty" xml:"change_id,omitempty"`
 	// Change Card revision to build; verify_change takes it.
 	RequestRevision *string `form:"request_revision,omitempty" json:"request_revision,omitempty" xml:"request_revision,omitempty"`
-	// True when request_revision is the change's confirmed revision in force, as
-	// get_build reports it. It stays true while a revision the guide proposed
-	// waits beside the agreed one, and is false once the user has adopted a
-	// proposed revision or confirmed another revision: verify_change then refuses
-	// this revision, and the assignment stays as it is until the user builds again.
+	// True when request_revision is the change's agreed revision, the one in
+	// force, as get_build reports it. It stays true while a proposed revision
+	// waits and when refreshed provenance is adopted without changing
+	// request_revision. If adoption or confirmation changes the agreed
+	// request_revision, it becomes false; verify_change refuses this earlier
+	// revision, and the assignment stays as it is until the user builds again.
 	InForce *bool `form:"in_force,omitempty" json:"in_force,omitempty" xml:"in_force,omitempty"`
 	// True once you read this assignment in full with get_builder_assignment.
 	Read *bool `form:"read,omitempty" json:"read,omitempty" xml:"read,omitempty"`
@@ -1067,11 +1088,12 @@ type GetTestWriterAssignmentResponseBody struct {
 	ChangeID *string `form:"change_id,omitempty" json:"change_id,omitempty" xml:"change_id,omitempty"`
 	// Change Card revision the tests are for; report_tests_finished takes it.
 	RequestRevision *string `form:"request_revision,omitempty" json:"request_revision,omitempty" xml:"request_revision,omitempty"`
-	// True when request_revision is the change's confirmed revision in force, as
-	// get_build reports it. It stays true while a revision the guide proposed
-	// waits beside the agreed one, and is false once the user has adopted a
-	// proposed revision or confirmed another revision: the assignment then stays
-	// for this earlier revision until the user builds again.
+	// True when request_revision is the change's agreed revision, the one in
+	// force, as get_build reports it. It stays true while a proposed revision
+	// waits and when refreshed provenance is adopted without changing
+	// request_revision. If adoption or confirmation changes the agreed
+	// request_revision, it becomes false; the assignment stays on the earlier
+	// revision until the user builds again.
 	InForce *bool `form:"in_force,omitempty" json:"in_force,omitempty" xml:"in_force,omitempty"`
 	// Where this assignment stands.
 	Progress *TestWriterProgressResponseBody `form:"progress,omitempty" json:"progress,omitempty" xml:"progress,omitempty"`
@@ -1114,11 +1136,12 @@ type ReportTestsFinishedResponseBody struct {
 	ChangeID *string `form:"change_id,omitempty" json:"change_id,omitempty" xml:"change_id,omitempty"`
 	// Change Card revision the tests are for.
 	RequestRevision *string `form:"request_revision,omitempty" json:"request_revision,omitempty" xml:"request_revision,omitempty"`
-	// True when request_revision is the change's confirmed revision in force, as
-	// get_build reports it. It stays true while a revision the guide proposed
-	// waits beside the agreed one, and is false once the user has adopted a
-	// proposed revision or confirmed another revision: the assignment then stays
-	// for this earlier revision until the user builds again.
+	// True when request_revision is the change's agreed revision, the one in
+	// force, as get_build reports it. It stays true while a proposed revision
+	// waits and when refreshed provenance is adopted without changing
+	// request_revision. If adoption or confirmation changes the agreed
+	// request_revision, it becomes false; the assignment stays on the earlier
+	// revision until the user builds again.
 	InForce *bool `form:"in_force,omitempty" json:"in_force,omitempty" xml:"in_force,omitempty"`
 	// Where this assignment stands.
 	Progress *TestWriterProgressResponseBody `form:"progress,omitempty" json:"progress,omitempty" xml:"progress,omitempty"`
@@ -5064,10 +5087,11 @@ type StartedBuildResponseBody struct {
 	// When the user started this build.
 	StartedAt *string `form:"started_at,omitempty" json:"started_at,omitempty" xml:"started_at,omitempty"`
 	// True when request_revision is the change's agreed revision, the one in
-	// force. It stays true while a revision the guide proposed waits beside the
-	// agreed one, and turns false once the user adopts a proposed revision or
-	// confirms another revision: the assignments then stay as they are, for this
-	// earlier revision, until the user builds again.
+	// force, as get_build reports it. It stays true while a proposed revision
+	// waits and when refreshed provenance is adopted without changing
+	// request_revision. If adoption or confirmation changes the agreed
+	// request_revision, it becomes false; the assignments stay on the earlier
+	// revision until the user builds again.
 	InForce *bool `form:"in_force,omitempty" json:"in_force,omitempty" xml:"in_force,omitempty"`
 	// The builder's assignment.
 	Builder *BuilderProgressResponseBody `form:"builder,omitempty" json:"builder,omitempty" xml:"builder,omitempty"`
@@ -5240,11 +5264,12 @@ type BuilderAssignmentResponseBody struct {
 	ChangeID *string `form:"change_id,omitempty" json:"change_id,omitempty" xml:"change_id,omitempty"`
 	// Change Card revision to build; verify_change takes it.
 	RequestRevision *string `form:"request_revision,omitempty" json:"request_revision,omitempty" xml:"request_revision,omitempty"`
-	// True when request_revision is the change's confirmed revision in force, as
-	// get_build reports it. It stays true while a revision the guide proposed
-	// waits beside the agreed one, and is false once the user has adopted a
-	// proposed revision or confirmed another revision: verify_change then refuses
-	// this revision, and the assignment stays as it is until the user builds again.
+	// True when request_revision is the change's agreed revision, the one in
+	// force, as get_build reports it. It stays true while a proposed revision
+	// waits and when refreshed provenance is adopted without changing
+	// request_revision. If adoption or confirmation changes the agreed
+	// request_revision, it becomes false; verify_change refuses this earlier
+	// revision, and the assignment stays as it is until the user builds again.
 	InForce *bool `form:"in_force,omitempty" json:"in_force,omitempty" xml:"in_force,omitempty"`
 	// True once you read this assignment in full with get_builder_assignment.
 	Read *bool `form:"read,omitempty" json:"read,omitempty" xml:"read,omitempty"`
@@ -5275,11 +5300,12 @@ type TestWriterAssignmentItemResponseBody struct {
 	ChangeID *string `form:"change_id,omitempty" json:"change_id,omitempty" xml:"change_id,omitempty"`
 	// Change Card revision the tests are for.
 	RequestRevision *string `form:"request_revision,omitempty" json:"request_revision,omitempty" xml:"request_revision,omitempty"`
-	// True when request_revision is the change's confirmed revision in force, as
-	// get_build reports it. It stays true while a revision the guide proposed
-	// waits beside the agreed one, and is false once the user has adopted a
-	// proposed revision or confirmed another revision: the assignment then stays
-	// for this earlier revision until the user builds again.
+	// True when request_revision is the change's agreed revision, the one in
+	// force, as get_build reports it. It stays true while a proposed revision
+	// waits and when refreshed provenance is adopted without changing
+	// request_revision. If adoption or confirmation changes the agreed
+	// request_revision, it becomes false; the assignment stays on the earlier
+	// revision until the user builds again.
 	InForce *bool `form:"in_force,omitempty" json:"in_force,omitempty" xml:"in_force,omitempty"`
 	// Where this assignment stands.
 	Progress *TestWriterProgressResponseBody `form:"progress,omitempty" json:"progress,omitempty" xml:"progress,omitempty"`
@@ -11571,7 +11597,8 @@ func NewStartBuildForbidden(body *StartBuildForbiddenResponseBody) *goa.ServiceE
 // result from a HTTP "OK" response.
 func NewDropBuildChangeBuildOK(body *DropBuildResponseBody) *surla.ChangeBuild {
 	v := &surla.ChangeBuild{
-		ChangeID: *body.ChangeID,
+		ChangeID:          *body.ChangeID,
+		DraftedBeforeDrop: *body.DraftedBeforeDrop,
 	}
 	switch string(body.Build.Kind()) {
 	case "not_started":
@@ -11674,7 +11701,8 @@ func NewDropBuildForbidden(body *DropBuildForbiddenResponseBody) *goa.ServiceErr
 // result from a HTTP "OK" response.
 func NewGetBuildChangeBuildOK(body *GetBuildResponseBody) *surla.ChangeBuild {
 	v := &surla.ChangeBuild{
-		ChangeID: *body.ChangeID,
+		ChangeID:          *body.ChangeID,
+		DraftedBeforeDrop: *body.DraftedBeforeDrop,
 	}
 	switch string(body.Build.Kind()) {
 	case "not_started":
@@ -13513,6 +13541,9 @@ func ValidateDropBuildResponseBody(body *DropBuildResponseBody) (err error) {
 	if body.ChangeID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("change_id", "body"))
 	}
+	if body.DraftedBeforeDrop == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("drafted_before_drop", "body"))
+	}
 	if body.Build == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("build", "body"))
 	}
@@ -13541,6 +13572,9 @@ func ValidateDropBuildResponseBody(body *DropBuildResponseBody) (err error) {
 func ValidateGetBuildResponseBody(body *GetBuildResponseBody) (err error) {
 	if body.ChangeID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("change_id", "body"))
+	}
+	if body.DraftedBeforeDrop == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("drafted_before_drop", "body"))
 	}
 	if body.Build == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("build", "body"))

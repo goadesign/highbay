@@ -714,11 +714,12 @@ type BuilderAssignment struct {
 	ChangeID string
 	// Change Card revision to build; verify_change takes it.
 	RequestRevision string
-	// True when request_revision is the change's confirmed revision in force, as
-	// get_build reports it. It stays true while a revision the guide proposed
-	// waits beside the agreed one, and is false once the user has adopted a
-	// proposed revision or confirmed another revision: verify_change then refuses
-	// this revision, and the assignment stays as it is until the user builds again.
+	// True when request_revision is the change's agreed revision, the one in
+	// force, as get_build reports it. It stays true while a proposed revision
+	// waits and when refreshed provenance is adopted without changing
+	// request_revision. If adoption or confirmation changes the agreed
+	// request_revision, it becomes false; verify_change refuses this earlier
+	// revision, and the assignment stays as it is until the user builds again.
 	InForce bool
 	// True once you read this assignment in full with get_builder_assignment.
 	Read bool
@@ -915,6 +916,16 @@ type CP1RevisionAnalysisExample struct {
 type ChangeBuild struct {
 	// Change Card identifier.
 	ChangeID string
+	// True only when the current agreed revision has saved design provenance from
+	// before the current actual drop: start_build would refuse it with
+	// drafted_before_drop. It becomes true after that drop and false once the user
+	// adopts a revision drafted after the drop, even if its request_revision is
+	// unchanged. A waiting proposal does not change this fact; ask the guide to
+	// refresh_story and revise_change from that refresh, then adopt the revision
+	// before building. False says only that this refusal does not apply, not that
+	// every other build check will pass; it is also false without an agreed
+	// revision or saved design provenance. start_build rechecks concurrent changes.
+	DraftedBeforeDrop bool
 	// not_started when the change has no usable build for the current test source;
 	// start a new build on the views page. Otherwise started with the usable build.
 	Build Build
@@ -1733,10 +1744,11 @@ type StartedBuild struct {
 	// When the user started this build.
 	StartedAt string
 	// True when request_revision is the change's agreed revision, the one in
-	// force. It stays true while a revision the guide proposed waits beside the
-	// agreed one, and turns false once the user adopts a proposed revision or
-	// confirms another revision: the assignments then stay as they are, for this
-	// earlier revision, until the user builds again.
+	// force, as get_build reports it. It stays true while a proposed revision
+	// waits and when refreshed provenance is adopted without changing
+	// request_revision. If adoption or confirmation changes the agreed
+	// request_revision, it becomes false; the assignments stay on the earlier
+	// revision until the user builds again.
 	InForce bool
 	// The builder's assignment.
 	Builder *BuilderProgress
@@ -1919,11 +1931,12 @@ type TestWriterAssignment struct {
 	ChangeID string
 	// Change Card revision the tests are for; report_tests_finished takes it.
 	RequestRevision string
-	// True when request_revision is the change's confirmed revision in force, as
-	// get_build reports it. It stays true while a revision the guide proposed
-	// waits beside the agreed one, and is false once the user has adopted a
-	// proposed revision or confirmed another revision: the assignment then stays
-	// for this earlier revision until the user builds again.
+	// True when request_revision is the change's agreed revision, the one in
+	// force, as get_build reports it. It stays true while a proposed revision
+	// waits and when refreshed provenance is adopted without changing
+	// request_revision. If adoption or confirmation changes the agreed
+	// request_revision, it becomes false; the assignment stays on the earlier
+	// revision until the user builds again.
 	InForce bool
 	// Where this assignment stands.
 	Progress *TestWriterProgress
@@ -1966,11 +1979,12 @@ type TestWriterAssignmentItem struct {
 	ChangeID string
 	// Change Card revision the tests are for.
 	RequestRevision string
-	// True when request_revision is the change's confirmed revision in force, as
-	// get_build reports it. It stays true while a revision the guide proposed
-	// waits beside the agreed one, and is false once the user has adopted a
-	// proposed revision or confirmed another revision: the assignment then stays
-	// for this earlier revision until the user builds again.
+	// True when request_revision is the change's agreed revision, the one in
+	// force, as get_build reports it. It stays true while a proposed revision
+	// waits and when refreshed provenance is adopted without changing
+	// request_revision. If adoption or confirmation changes the agreed
+	// request_revision, it becomes false; the assignment stays on the earlier
+	// revision until the user builds again.
 	InForce bool
 	// Where this assignment stands.
 	Progress *TestWriterProgress
@@ -3235,11 +3249,12 @@ type jsonBuilderAssignmentTransport struct {
 	ChangeID *string `json:"change_id"`
 	// Change Card revision to build; verify_change takes it.
 	RequestRevision *string `json:"request_revision"`
-	// True when request_revision is the change's confirmed revision in force, as
-	// get_build reports it. It stays true while a revision the guide proposed
-	// waits beside the agreed one, and is false once the user has adopted a
-	// proposed revision or confirmed another revision: verify_change then refuses
-	// this revision, and the assignment stays as it is until the user builds again.
+	// True when request_revision is the change's agreed revision, the one in
+	// force, as get_build reports it. It stays true while a proposed revision
+	// waits and when refreshed provenance is adopted without changing
+	// request_revision. If adoption or confirmation changes the agreed
+	// request_revision, it becomes false; verify_change refuses this earlier
+	// revision, and the assignment stays as it is until the user builds again.
 	InForce *bool `json:"in_force"`
 	// True once you read this assignment in full with get_builder_assignment.
 	Read *bool `json:"read"`
@@ -3762,6 +3777,16 @@ func validatejsonCP1RevisionAnalysisTransport(value *jsonCP1RevisionAnalysisTran
 type jsonChangeBuildTransport struct {
 	// Change Card identifier.
 	ChangeID *string `json:"change_id"`
+	// True only when the current agreed revision has saved design provenance from
+	// before the current actual drop: start_build would refuse it with
+	// drafted_before_drop. It becomes true after that drop and false once the user
+	// adopts a revision drafted after the drop, even if its request_revision is
+	// unchanged. A waiting proposal does not change this fact; ask the guide to
+	// refresh_story and revise_change from that refresh, then adopt the revision
+	// before building. False says only that this refusal does not apply, not that
+	// every other build check will pass; it is also false without an agreed
+	// revision or saved design provenance. start_build rechecks concurrent changes.
+	DraftedBeforeDrop *bool `json:"drafted_before_drop"`
 	// not_started when the change has no usable build for the current test source;
 	// start a new build on the views page. Otherwise started with the usable build.
 	Build *jsonBuildTransport `json:"build"`
@@ -3774,6 +3799,9 @@ func validatejsonChangeBuildTransport(value *jsonChangeBuildTransport) (err erro
 	}
 	if value.ChangeID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("change_id", "body"))
+	}
+	if value.DraftedBeforeDrop == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("drafted_before_drop", "body"))
 	}
 	if value.Build == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("build", "body"))
@@ -5818,10 +5846,11 @@ type jsonStartedBuildTransport struct {
 	// When the user started this build.
 	StartedAt *string `json:"started_at"`
 	// True when request_revision is the change's agreed revision, the one in
-	// force. It stays true while a revision the guide proposed waits beside the
-	// agreed one, and turns false once the user adopts a proposed revision or
-	// confirms another revision: the assignments then stay as they are, for this
-	// earlier revision, until the user builds again.
+	// force, as get_build reports it. It stays true while a proposed revision
+	// waits and when refreshed provenance is adopted without changing
+	// request_revision. If adoption or confirmation changes the agreed
+	// request_revision, it becomes false; the assignments stay on the earlier
+	// revision until the user builds again.
 	InForce *bool `json:"in_force"`
 	// The builder's assignment.
 	Builder *jsonBuilderProgressTransport `json:"builder"`
@@ -6362,11 +6391,12 @@ type jsonTestWriterAssignmentItemTransport struct {
 	ChangeID *string `json:"change_id"`
 	// Change Card revision the tests are for.
 	RequestRevision *string `json:"request_revision"`
-	// True when request_revision is the change's confirmed revision in force, as
-	// get_build reports it. It stays true while a revision the guide proposed
-	// waits beside the agreed one, and is false once the user has adopted a
-	// proposed revision or confirmed another revision: the assignment then stays
-	// for this earlier revision until the user builds again.
+	// True when request_revision is the change's agreed revision, the one in
+	// force, as get_build reports it. It stays true while a proposed revision
+	// waits and when refreshed provenance is adopted without changing
+	// request_revision. If adoption or confirmation changes the agreed
+	// request_revision, it becomes false; the assignment stays on the earlier
+	// revision until the user builds again.
 	InForce *bool `json:"in_force"`
 	// Where this assignment stands.
 	Progress *jsonTestWriterProgressTransport `json:"progress"`
@@ -6427,11 +6457,12 @@ type jsonTestWriterAssignmentTransport struct {
 	ChangeID *string `json:"change_id"`
 	// Change Card revision the tests are for; report_tests_finished takes it.
 	RequestRevision *string `json:"request_revision"`
-	// True when request_revision is the change's confirmed revision in force, as
-	// get_build reports it. It stays true while a revision the guide proposed
-	// waits beside the agreed one, and is false once the user has adopted a
-	// proposed revision or confirmed another revision: the assignment then stays
-	// for this earlier revision until the user builds again.
+	// True when request_revision is the change's agreed revision, the one in
+	// force, as get_build reports it. It stays true while a proposed revision
+	// waits and when refreshed provenance is adopted without changing
+	// request_revision. If adoption or confirmation changes the agreed
+	// request_revision, it becomes false; the assignment stays on the earlier
+	// revision until the user builds again.
 	InForce *bool `json:"in_force"`
 	// Where this assignment stands.
 	Progress *jsonTestWriterProgressTransport `json:"progress"`
@@ -14271,7 +14302,8 @@ func EncodeChangeBuild(in *ChangeBuild) ([]byte, error) {
 	var body *jsonChangeBuildTransport
 	{
 		body = &jsonChangeBuildTransport{
-			ChangeID: &in.ChangeID,
+			ChangeID:          &in.ChangeID,
+			DraftedBeforeDrop: &in.DraftedBeforeDrop,
 		}
 		var buildValue jsonBuildTransport
 		switch string(in.Build.Kind()) {
@@ -14324,7 +14356,8 @@ func ValidateChangeBuildValue(in *ChangeBuild) error {
 	var body *jsonChangeBuildTransport
 	{
 		body = &jsonChangeBuildTransport{
-			ChangeID: &in.ChangeID,
+			ChangeID:          &in.ChangeID,
+			DraftedBeforeDrop: &in.DraftedBeforeDrop,
 		}
 		var buildValue jsonBuildTransport
 		switch string(in.Build.Kind()) {
@@ -14381,7 +14414,8 @@ func DecodeChangeBuild(data []byte) (out *ChangeBuild, err error) {
 	}
 	{
 		out = &ChangeBuild{
-			ChangeID: *body.ChangeID,
+			ChangeID:          *body.ChangeID,
+			DraftedBeforeDrop: *body.DraftedBeforeDrop,
 		}
 		switch string(body.Build.Kind()) {
 		case "not_started":
@@ -28547,7 +28581,7 @@ func validateBuilderAssignmentJSONValue(path string, value any, description stri
 		case "in_force":
 			if err := validateAgentPolicyItemJSONValue3(
 				generatedJSONChildPath(path, key, false),
-				typed[key], "True when request_revision is the change's confirmed revision in force, as get_build reports it. It stays true while a revision the guide proposed waits beside the agreed one, and is false once the user has adopted a proposed revision or confirmed another revision: verify_change then refuses this revision, and the assignment stays as it is until the user builds again.",
+				typed[key], "True when request_revision is the change's agreed revision, the one in force, as get_build reports it. It stays true while a proposed revision waits and when refreshed provenance is adopted without changing request_revision. If adoption or confirmation changes the agreed request_revision, it becomes false; verify_change refuses this earlier revision, and the assignment stays as it is until the user builds again.",
 			); err != nil {
 				return err
 			}
@@ -29678,10 +29712,18 @@ func validateChangeBuildJSONValue(path string, value any, description string) er
 			); err != nil {
 				return err
 			}
+		case "drafted_before_drop":
+			if err := validateAgentPolicyItemJSONValue3(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "True only when the current agreed revision has saved design provenance from before the current actual drop: start_build would refuse it with drafted_before_drop. It becomes true after that drop and false once the user adopts a revision drafted after the drop, even if its request_revision is unchanged. A waiting proposal does not change this fact; ask the guide to refresh_story and revise_change from that refresh, then adopt the revision before building. False says only that this refusal does not apply, not that every other build check will pass; it is also false without an agreed revision or saved design provenance. start_build rechecks concurrent changes.",
+			); err != nil {
+				return err
+			}
 		default:
 			return unknownJSONFieldError(path, key, []string{
 				"build",
 				"change_id",
+				"drafted_before_drop",
 			})
 		}
 	}
@@ -29751,7 +29793,7 @@ func validateChangeBuildJSONValue3(path string, value any, description string) e
 		case "in_force":
 			if err := validateAgentPolicyItemJSONValue3(
 				generatedJSONChildPath(path, key, false),
-				typed[key], "True when request_revision is the change's agreed revision, the one in force. It stays true while a revision the guide proposed waits beside the agreed one, and turns false once the user adopts a proposed revision or confirms another revision: the assignments then stay as they are, for this earlier revision, until the user builds again.",
+				typed[key], "True when request_revision is the change's agreed revision, the one in force, as get_build reports it. It stays true while a proposed revision waits and when refreshed provenance is adopted without changing request_revision. If adoption or confirmation changes the agreed request_revision, it becomes false; the assignments stay on the earlier revision until the user builds again.",
 			); err != nil {
 				return err
 			}
@@ -34943,7 +34985,7 @@ func validateTestWriterAssignmentJSONValue(path string, value any, description s
 		case "in_force":
 			if err := validateAgentPolicyItemJSONValue3(
 				generatedJSONChildPath(path, key, false),
-				typed[key], "True when request_revision is the change's confirmed revision in force, as get_build reports it. It stays true while a revision the guide proposed waits beside the agreed one, and is false once the user has adopted a proposed revision or confirmed another revision: the assignment then stays for this earlier revision until the user builds again.",
+				typed[key], "True when request_revision is the change's agreed revision, the one in force, as get_build reports it. It stays true while a proposed revision waits and when refreshed provenance is adopted without changing request_revision. If adoption or confirmation changes the agreed request_revision, it becomes false; the assignment stays on the earlier revision until the user builds again.",
 			); err != nil {
 				return err
 			}
@@ -35195,7 +35237,7 @@ func validateTestWriterAssignmentItemJSONValue(path string, value any, descripti
 		case "in_force":
 			if err := validateAgentPolicyItemJSONValue3(
 				generatedJSONChildPath(path, key, false),
-				typed[key], "True when request_revision is the change's confirmed revision in force, as get_build reports it. It stays true while a revision the guide proposed waits beside the agreed one, and is false once the user has adopted a proposed revision or confirmed another revision: the assignment then stays for this earlier revision until the user builds again.",
+				typed[key], "True when request_revision is the change's agreed revision, the one in force, as get_build reports it. It stays true while a proposed revision waits and when refreshed provenance is adopted without changing request_revision. If adoption or confirmation changes the agreed request_revision, it becomes false; the assignment stays on the earlier revision until the user builds again.",
 			); err != nil {
 				return err
 			}

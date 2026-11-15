@@ -470,6 +470,9 @@ func ValidateGetBuildResultTransport(body *GetBuildResultTransport) (err error) 
 	if body.ChangeID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("change_id", "body"))
 	}
+	if body.DraftedBeforeDrop == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("drafted_before_drop", "body"))
+	}
 	if body.Build == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("build", "body"))
 	}

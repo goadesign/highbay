@@ -14,7 +14,7 @@ import (
 // TestViewsPageShowsTakingStates keeps commands bound to passed commit IDs and
 // lists only the dropped build's retained branches, including an empty list.
 func TestViewsPageShowsTakingStates(t *testing.T) {
-	for _, state := range []string{"building", "passed", "evaluator", "rewritten", "merged", "dropped", "empty", "merged_findings", "dropped_findings", "earlier_passed", "earlier_merged", "earlier_dropped", "earlier_configured"} {
+	for _, state := range []string{"building", "passed", "evaluator", "rewritten", "merged", "merged_configured", "dropped", "empty", "merged_findings", "dropped_findings", "earlier_passed", "earlier_merged", "earlier_dropped", "earlier_configured"} {
 		t.Run(state, func(t *testing.T) {
 			cp := newBuildControlPlane(t, Options{Team: &TeamBinding{
 				Owner: pageOwner, Service: &teamServiceFixture{snapshot: pageTeamSnapshot("working")},
@@ -45,7 +45,7 @@ const variants = {
   building: { state: "building" }, passed,
   evaluator: { ...passed, tests: { source: "evaluator" } },
   rewritten: { ...passed, base_in_branch: false },
-  merged: { state: "merged" },
+  merged: { state: "merged" }, merged_configured: { state: "merged" },
   dropped: { state: "dropped", kept_branches: ["surla/tests-7"] },
   empty: { state: "dropped", kept_branches: [] },
   merged_findings: { state: "merged" },
@@ -62,9 +62,9 @@ if (input.state !== "building") saved.test_writer.tests = { state: "accepted", c
   checked_at: saved.started_at, not_judged: input.notJudged };
 const closedFindings = input.state.endsWith("_findings");
 if (closedFindings) saved.test_writer.tests = { state: "needs_changes", checked_at: saved.started_at, finding_count: 1 };
-if (input.state === "earlier_configured") saved.test_writer.tests = { state: "not_used" };
+if (input.state === "earlier_configured" || input.state === "merged_configured") saved.test_writer.tests = { state: "not_used" };
 await control(origin, "reply", { key: "GET " + path, status: 200,
-  body: { change_id: "chg-taking", build: { ...saved, state: "started", taking: variants[input.state] } } });
+  body: { change_id: "chg-taking", drafted_before_drop: false, build: { ...saved, state: "started", taking: variants[input.state] } } });
 const page = await openPage(origin, { link: input.link });
 await until(() => page.$("#surla-build-taking") && !page.$("#surla-build-loading"), "taking state did not appear");
 const taking = page.text("#surla-build-taking");
@@ -96,7 +96,7 @@ if (["passed", "rewritten", "evaluator"].includes(input.state)) {
 }
 const open = ["building", "passed", "rewritten", "evaluator"].includes(input.state);
 expect(Boolean(page.$("#surla-build-drop")) === open, "Drop availability does not follow taking");
-for (const selector of ["#surla-build-builder", "#surla-build-test-writer", ...(input.state === "building" || closedFindings ? [] : ["#surla-build-not-judged"])]) {
+for (const selector of ["#surla-build-builder", "#surla-build-test-writer", ...(input.state === "building" || input.state === "merged_configured" || closedFindings ? [] : ["#surla-build-not-judged"])]) {
   expect(Boolean(page.$(selector)?.closest("#surla-build-details")) === (input.state !== "building"), "role facts did not follow the active-versus-saved disclosure");
 }
 expect(page.$("#surla-build-details").textContent.includes("No tests of this change’s Story were required."), "required-test facts are not in the saved disclosure");
@@ -107,10 +107,50 @@ expect(page.$$(".surla-build-actions").length === 1, "build actions are split in
 const state = variants[input.state].state;
 expect(page.text("#surla-build-taking-state") === state[0].toUpperCase() + state.slice(1), "the header badge does not describe the saved taking state");
 expect(Boolean(page.$(".surla-build-header .surla-build-actions")), "current build controls are not in the header");
-expect(Boolean(page.$("#surla-build-start-explanation")) === (state === "merged" || state === "dropped"), "the execution explanation must accompany each direct Build offer");
-if (state === "merged" || state === "dropped") {
+expect(Boolean(page.$("#surla-build-start-explanation")) === (state === "dropped"), "the execution explanation must accompany each direct Build offer");
+if (state === "dropped") {
   const action = page.$("#surla-build-start");
   expect(action && !action.disabled && action.getAttribute("aria-describedby").split(/\s+/).includes("surla-build-start-explanation") && page.text("#surla-build-start-explanation").includes("nothing confines them"), "direct Build lost its execution explanation");
+}
+if (state === "merged") {
+  expect(!page.$("#surla-build-start"), "current merged agreement still has a primary Build action");
+  expect(page.text("#surla-build-taking").includes("Build another change or refine this one"), "completion lost its next work guidance");
+  async function askReplay() {
+    await control(origin, "reply", { key: "GET " + path, status: 200,
+      body: { change_id: "chg-taking", drafted_before_drop: false, build: { ...saved, state: "started", taking: variants[input.state] } } });
+    page.$("#surla-build-again").click();
+  }
+  const replay = page.$("#surla-build-again");
+  expect(replay && !replay.disabled && !replay.classList.contains("surla-btn-primary"), "replay is missing or primary");
+  await askReplay();
+  await until(() => page.$("#surla-build-confirm"), "merged replay did not ask deliberately");
+  const question = page.text("#surla-build-question");
+  expect(question.includes("new build number") && question.includes("branch as it is now") && question.includes("same agreed revision") && question.includes("fresh unread") && question.includes("Earlier reports do not establish"), "replay lost its new build consequences");
+  expect(!question.includes("replaces this build"), "replay describes replacement of an open build");
+  expect(question.includes("configured tests") === (input.state === "merged_configured"), "replay test source wording is wrong");
+  expect(question.includes("nothing confines them"), "replay lost its execution explanation");
+  page.$("#surla-build-cancel").click();
+  await until(() => !page.$("#surla-build-question") && page.doc.activeElement?.id === "surla-build-again", "replay cancel lost focus");
+  expect(page.sent("POST", path).length === 0, "opening or cancelling replay started work");
+  await askReplay();
+  await until(() => page.$("#surla-build-confirm"), "second replay did not ask");
+  await control(origin, "reply", { key: "GET " + path, status: 200,
+    body: { change_id: "chg-taking", drafted_before_drop: true, build: { ...saved, state: "started", taking: variants[input.state] } } });
+  await control(origin, "act", { key: "resave-taking" });
+  await until(() => page.$("#surla-build-enabling-step") && !page.$("#surla-build-loading"), "owner admission change did not show recovery");
+  expect(!page.$("#surla-build-question") && !page.$("#surla-build-again") && !page.$("#surla-build-start"), "owner admission change retained consent or an offer");
+  expect(page.text("#surla-build-enabling-step").includes("proposal already waiting may predate"), "recovery promises that stale adoption is sufficient");
+  await control(origin, "reply", { key: "GET " + path, status: 200,
+    body: { change_id: "chg-taking", drafted_before_drop: false, build: { ...saved, state: "started", taking: variants[input.state] } } });
+  await control(origin, "act", { key: "resave-taking" });
+  await until(() => page.$("#surla-build-again") && !page.$("#surla-build-again").disabled, "fresh owner admission did not restore replay");
+  expect(!page.$("#surla-build-question"), "old consent returned after admission recovered");
+  await askReplay();
+  await until(() => page.$("#surla-build-confirm"), "fresh replay did not ask");
+  page.$("#surla-build-confirm").click();
+  await until(() => page.sent("POST", path).length === 1, "confirmed replay did not submit");
+  const request = page.sent("POST", path)[0].body;
+  expect(request.request_revision === saved.request_revision && !Object.hasOwn(request, "replaces"), "merged replay sent replacement or proposal identity");
 }
 if (closedFindings) {
   expect(page.text("#surla-build-findings").includes("1 finding") && page.$("#surla-build-findings").closest("#surla-build-details"), "closed build lost its historical finding count");
@@ -121,7 +161,7 @@ if (input.state === "building") {
   // A changed answer to the pre-question read must not create consent for it.
   await control(origin, "hold", { key: "GET " + path });
   await control(origin, "reply", { key: "GET " + path, status: 200,
-    body: { change_id: "chg-taking", build: { ...saved, state: "started", taking: passed } } });
+    body: { change_id: "chg-taking", drafted_before_drop: false, build: { ...saved, state: "started", taking: passed } } });
   page.$("#surla-build-again").click();
   await until(() => page.$("#surla-build-loading") && page.$("#surla-build-drop").disabled, "pending rebuild read did not exclude Drop");
   await control(origin, "release", { key: "GET " + path });
@@ -129,7 +169,7 @@ if (input.state === "building") {
   expect(!page.$("#surla-build-question") && page.sent("POST", path).length === 0, "changed read created consent or started work");
   // Restore the fixture, then change only taking while a question is visible.
   await control(origin, "reply", { key: "GET " + path, status: 200,
-    body: { change_id: "chg-taking", build: { ...saved, state: "started", taking: variants.building } } });
+    body: { change_id: "chg-taking", drafted_before_drop: false, build: { ...saved, state: "started", taking: variants.building } } });
   await control(origin, "act", { key: "resave-taking" });
   await until(() => page.$("#surla-build-taking")?.dataset.state === "building" && !page.$("#surla-build-loading"), "building fixture did not return");
   await control(origin, "reply", { key: "GET " + path, status: 503,
@@ -144,7 +184,7 @@ if (input.state === "building") {
   expect(page.$("#surla-build-drop").disabled, "rebuild question did not exclude Drop");
   const before = page.sent("GET", path).length;
   await control(origin, "reply", { key: "GET " + path, status: 200,
-    body: { change_id: "chg-taking", build: { ...saved, state: "started", taking: passed } } });
+    body: { change_id: "chg-taking", drafted_before_drop: false, build: { ...saved, state: "started", taking: passed } } });
   await control(origin, "act", { key: "resave-taking" });
   await until(() => page.sent("GET", path).length > before && page.$("#surla-build-taking")?.dataset.state === "passed", "new taking state did not arrive");
   expect(!page.$("#surla-build-question") && page.sent("POST", path).length === 0, "same-start state transition retained consent or started work");
@@ -163,7 +203,7 @@ if (input.state === "passed") {
   const replaceTaking = async (taking) => {
     const before = page.sent("GET", path).length;
     await control(origin, "reply", { key: "GET " + path, status: 200,
-      body: { change_id: "chg-taking", build: { ...saved, state: "started", taking } } });
+      body: { change_id: "chg-taking", drafted_before_drop: false, build: { ...saved, state: "started", taking } } });
     await control(origin, "act", { key: "resave-taking" });
     const commandCount = taking.state === "passed" ? (taking.tests.source === "written_tests" ? 2 : 1) : 0;
     await until(() => page.sent("GET", path).length > before && page.sent("GET", path).at(-1).status === 200 &&
@@ -186,7 +226,7 @@ if (input.state === "passed") {
   await replaceTaking(variants.merged);
   expect(page.doc.activeElement === field && field.value === "keep editor focus when commands vanish", "removing unfocused commands stole external editor focus");
 }
-expect(page.sent("POST", path).length === 0 && page.sent("POST", path + "/drop").length === 0, "reading taking changed the build");
+expect(page.sent("POST", path).length === (state === "merged" ? 1 : 0) && page.sent("POST", path + "/drop").length === 0, "taking actions wrote beyond the explicit replay confirmation");
 page.close();
 `)
 		})
@@ -230,7 +270,7 @@ const saved = { ...JSON.parse(input.build), taking: { state: "passed", run_id: "
   candidate_commit: "1".repeat(40), candidate_branch: "surla/build-7", tests: { source: "evaluator" }, base_in_branch: true } };
 await control(origin, "reply", { key: "POST " + path, status: 409,
   body: { name: "previous_change_open", message: "Merge or drop the open change.", change_id: "chg-passed-open", build: saved } });
-await control(origin, "reply", { key: "GET " + other, status: 200, body: { change_id: "chg-passed-open", build: { ...saved, state: "started" } } });
+await control(origin, "reply", { key: "GET " + other, status: 200, body: { change_id: "chg-passed-open", drafted_before_drop: false, build: { ...saved, state: "started" } } });
 const page = await openPage(origin, { link: input.link });
 await until(() => page.$("#surla-open-change-chg-passed-next"), "change list did not load");
 page.$("#surla-open-change-chg-passed-next").click();
@@ -245,7 +285,7 @@ page.$("#surla-build-drop").click();
 await until(() => page.$("#surla-build-drop-question"), "old passed blocker did not ask for Drop consent");
 const replacement = { ...saved, started_at: new Date(Date.parse(saved.started_at) + 1000).toISOString(), taking: { state: "building" } };
 await control(origin, "reply", { key: "GET " + other, status: 200,
-  body: { change_id: "chg-passed-open", build: { ...replacement, state: "started" } } });
+  body: { change_id: "chg-passed-open", drafted_before_drop: false, build: { ...replacement, state: "started" } } });
 await control(origin, "act", { key: "resave-next" });
 await until(() => !page.$("#surla-build-drop-question") && page.$("#surla-build-taking")?.dataset.state === "building", "a freshly observed different open start did not invalidate old consent");
 expect(page.$("#surla-build-start").disabled && !page.text("#surla-build-taking").includes("git merge"), "fresh replacement retained old merge commits or unblocked the selected Build");
@@ -253,9 +293,9 @@ expect(page.sent("POST", other + "/drop").length === 0, "fresh replacement reuse
 const field = page.$('textarea[data-example-id="check_01"][data-field="scenario"]');
 page.type(field, "keep this draft through blocker recovery");
 await control(origin, "reply", { key: "GET " + other, status: 200,
-  body: { change_id: "chg-passed-open", build: { ...saved, state: "started", taking: { state: "dropped", kept_branches: [] } } } });
+  body: { change_id: "chg-passed-open", drafted_before_drop: false, build: { ...saved, state: "started", taking: { state: "dropped", kept_branches: [] } } } });
 await control(origin, "act", { key: "drop-passed-open" });
-await until(() => !page.$("#surla-build-blocking-change") && page.$("#surla-build-start") && !page.$("#surla-build-start").disabled, "fresh closed blocker did not reenable Build");
+await until(() => !page.$("#surla-build-blocking-change") && page.$("#surla-build-enabling-step") && !page.$("#surla-build-start"), "fresh closed blocker did not expose the selected agreement’s post-drop recovery");
 expect(field === page.$('textarea[data-example-id="check_01"][data-field="scenario"]') && field.value === "keep this draft through blocker recovery", "blocker recovery replaced unsaved editor text");
 expect(page.sent("POST", path).length === 1, "a fresh read retried Build without consent");
 page.close();
@@ -410,9 +450,10 @@ await until(() => page.$("#surla-build-drop-confirm"), "replacement build did no
 page.$("#surla-build-drop-confirm").click();
 await until(() => page.sent("POST", dropPath)[1]?.status === 200 && !page.$("#surla-build-blocking-change"), "fresh consent did not drop the replacement");
 expect(page.sent("POST", dropPath)[1].body.started_at === refusal.build.started_at, "fresh Drop did not name the typed replacement start");
-await until(() => page.$("#surla-build-start") && !page.$("#surla-build-start").disabled, "selected change's Build did not recover");
-page.$("#surla-build-start").click();
-await until(() => page.text("#surla-build-action-error").includes("refresh_story") && page.text("#surla-build-action-error").includes("adopt the revision, then build"), "drafted_before_drop did not show the guide/revise/adopt recovery");
+await until(() => page.$("#surla-build-enabling-step") && !page.$("#surla-build-start"), "selected stale agreement did not show its enabling step");
+const step = page.text("#surla-build-enabling-step");
+expect(step.includes("refresh_story") && step.includes("revise_change") && step.includes("adopt that revision"), "owner admission fact lost refresh/revise/adopt recovery");
+expect(page.sent("POST", nextPath).length === 1, "post-drop recovery retried an inadmissible Build");
 page.close();
 `)
 }
@@ -433,7 +474,7 @@ func TestViewsPageUnfinishedRefusalRefreshesBeforeQuestion(t *testing.T) {
 	runPageScript(t, ps, map[string]any{"started": started.Build.StartedAt}, `
 const path = "/changes/chg-unfinished/build";
 await control(origin, "reply", { key: "GET " + path, status: 200,
-  body: { change_id: "chg-unfinished", build: { state: "not_started" } } });
+  body: { change_id: "chg-unfinished", drafted_before_drop: false, build: { state: "not_started" } } });
 const page = await openPage(origin, { link: input.link });
 await until(() => page.$("#surla-build-start") && !page.$("#surla-build-start").disabled, "stale absent observation did not offer first Build");
 page.$("#surla-build-start").click();

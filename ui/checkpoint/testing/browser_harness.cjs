@@ -559,7 +559,7 @@ async function phoneScenario(input, facts, views) {
 // takingScenario inspects both requested viewport classes in one browser run.
 // The Go fixture supplies typed presentation facts; this proves no worker ran.
 async function takingScenario(input, facts, views) {
-  const ready = await until(views, "document.querySelector('#surla-build-taking[data-state=" + input.taking_state + "]') !== null");
+  const ready = await until(views, "document.querySelector('#surla-build-taking[data-state=" + (input.taking_state === "replay" ? "merged" : input.taking_state) + "]') !== null");
   if (ready.timed_out) {
     const state = await evaluate(views, "({ state: document.getElementById('surla-checkpoint-root')?.dataset.state, text: document.body.innerText.slice(0, 6000) })");
     throw new Error("taking presentation did not load: " + JSON.stringify(state) + "; responses: " +
@@ -571,7 +571,7 @@ async function takingScenario(input, facts, views) {
       width, height, deviceScaleFactor: 1, mobile: width < 600,
     }, views.sessionId);
     await evaluate(views, "new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))");
-    const trigger = input.taking_state === "passed" ? "surla-build-drop" : input.taking_state === "building" ? "surla-build-again" : null;
+    const trigger = input.taking_state === "passed" ? "surla-build-drop" : ["building", "replay"].includes(input.taking_state) ? "surla-build-again" : null;
     let opened = { timed_out: false };
     if (trigger !== null) {
       await evaluate(views, "document.getElementById('" + trigger + "').focus(), true");
@@ -592,8 +592,9 @@ async function takingScenario(input, facts, views) {
           return style.whiteSpace === "pre" && ["auto", "scroll"].includes(style.overflowX) &&
             node.tabIndex === 0 && document.activeElement === node && node.getAttribute("role") === "region" && node.getAttribute("aria-label");
         }),
-        explanation: document.getElementById("surla-build-start-explanation")?.textContent.includes("nothing confines them") === true &&
-          document.getElementById("surla-build-start")?.getAttribute("aria-describedby")?.split(/\s+/).includes("surla-build-start-explanation") === true,
+        explanation: document.getElementById("surla-build-confirm-explanation")?.textContent.includes("nothing confines them") === true ||
+          (document.getElementById("surla-build-start-explanation")?.textContent.includes("nothing confines them") === true &&
+          document.getElementById("surla-build-start")?.getAttribute("aria-describedby")?.split(/\s+/).includes("surla-build-start-explanation") === true),
         no_start: document.getElementById("surla-build-start") === null,
         rewrite_warning: region.textContent.includes("commit where this build started") && region.textContent.includes("these merges bring that history back"),
         overflowing: [region, ...region.querySelectorAll("*")].filter((node) => {
@@ -604,7 +605,7 @@ async function takingScenario(input, facts, views) {
         }).map((node) => node.id || node.tagName),
       };
     }.toString() + ")()");
-    measured.drop_focused = !opened.timed_out;
+    measured.question_focused = !opened.timed_out;
     if (trigger !== null) await evaluate(views, "document.getElementById('" + (input.taking_state === "passed" ? "surla-build-drop-question" : "surla-build-question") + "').focus(), true");
     const capture = await views.dt.send("Page.captureScreenshot", { format: "png", captureBeyondViewport: true }, views.sessionId);
     measured.screenshot = require("node:path").join(input.capture_directory, input.taking_state + "-" + name + ".png");
@@ -614,7 +615,7 @@ async function takingScenario(input, facts, views) {
       await views.dt.send("Input.dispatchKeyEvent", { type: "keyUp", key: "Escape", code: "Escape", windowsVirtualKeyCode: 27 }, views.sessionId);
       const question = input.taking_state === "passed" ? "surla-build-drop-question" : "surla-build-question";
       const canceled = await until(views, "document.getElementById('" + question + "') === null && document.activeElement?.id === '" + trigger + "'");
-      measured.drop_cancelled = !canceled.timed_out;
+      measured.question_cancelled = !canceled.timed_out;
     }
     facts.taking.push(measured);
   }

@@ -1528,7 +1528,18 @@ start. Findings contain no absolute path.
 ### `get_build`
 
 `GET /changes/{change_id}/build`. **Output:** `ChangeBuild` (`change_id`,
-`build`).
+`drafted_before_drop`, `build`).
+
+`drafted_before_drop` reports one precise admission condition for the current
+agreed revision: its saved design provenance predates the current actual drop,
+so `start_build` would refuse it with that error. It stays true while a
+proposal waits, including a refreshed proposal, and becomes false once the
+user adopts a revision drafted after the drop, even if `request_revision`
+stays the same. To recover, the guide calls `refresh_story` and `revise_change`
+from that refresh, then the user adopts the revision. It is false without an
+agreed revision or saved provenance. False does not guarantee the other start
+checks will pass; `start_build` rechecks concurrent changes. `drop_build`
+returns the same required fact in its `ChangeBuild` result.
 
 `build.state` is `not_started` when the change has no usable build, otherwise
 `started` with:
@@ -1536,7 +1547,7 @@ start. Findings contain no absolute path.
 | Field | Meaning |
 | --- | --- |
 | `request_revision`, `started_at` | The revision built and when. |
-| `in_force` | `true` while that revision is the agreed one, including while a proposed revision waits; `false` once the user adopts or confirms another revision. The build is not redone by itself. |
+| `in_force` | `true` while that revision is the agreed one, including while a proposed revision waits; `false` when adoption or confirmation changes the agreed `request_revision`. Adopting refreshed provenance with unchanged content can keep it `true`. The build is not redone by itself. |
 | `required_test_count` | Finished flows in the saved Story; `0` means no test was required. It counts entries; it does not judge what the tests assert. |
 | `builder.read` | Whether the builder read its assignment. |
 | `test_writer` | `read`, `report` (0 until the first report, one more with each) and `tests`. |
@@ -1878,7 +1889,15 @@ revision has no build, it offers one start button: **Build this change**
 before any build, **Build current agreed revision** when the saved build is of
 an earlier revision, and **Build agreed revision** in either case while a
 proposed revision waits. Once the agreed revision is built, it offers **Build
-again…** instead, which asks first. Next to each control that sends a start,
+again…** instead, which asks first. A merged build of the current agreement
+keeps completion guidance and offers **Build again…** as a secondary action;
+confirmation starts a new numbered build from the branch as it is now, with
+fresh assignments for the same agreement. Earlier reports do not establish
+that the new build passed. A merged build of an earlier agreement keeps the
+primary **Build current agreed revision** action. When `drafted_before_drop`
+is true, the page instead explains refresh, revision and adoption before
+building; a proposal already waiting may predate the drop. Next to each
+control that sends a start,
 it explains which agents start: the builder and, unless the project uses
 configured tests, a test writer. It also says that, from Build on, the tests
 and the builder's code run on this machine as ordinary programs, with your

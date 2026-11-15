@@ -567,6 +567,8 @@ export function bootstrapViewsPage() {
   // of selected card.
   let buildChangeId: string | null = null;
   let buildSnapshot: ChangeBuild["build"] | null = null;
+  // The owner reports this narrow admission fact with each guarded build read.
+  let buildDraftedBeforeDrop: boolean | null = null;
   let buildReadError: string | null = null;
   let buildStartError: string | null = null;
   let buildReadAgain = false;
@@ -575,7 +577,7 @@ export function bootstrapViewsPage() {
   // A validated refusal may describe another change, whose build cannot be
   // obtained from the selected card's get_build result.
   let openBuildRefusal: OpenBuildRefusal | null = null;
-  let buildConfirmationRead: ((build: ChangeBuild["build"] | null) => void) | null = null;
+  let buildConfirmationRead: ((build: ChangeBuild | null) => void) | null = null;
   // Findings belong to one build/report/verdict, rather than only a change ID.
   let buildFindings: TestFindings | null = null;
   let findingsBasis: string | null = null;
@@ -1474,6 +1476,7 @@ export function bootstrapViewsPage() {
     if (buildChangeId !== changeId) {
       buildChangeId = changeId;
       buildSnapshot = null;
+      buildDraftedBeforeDrop = null;
       buildReadError = null;
       buildStartReceipt = null;
       buildStartError = null;
@@ -1502,6 +1505,7 @@ export function bootstrapViewsPage() {
           } else {
             const before = buildSnapshot;
             buildSnapshot = result.build;
+            buildDraftedBeforeDrop = result.drafted_before_drop;
             buildReadError = null;
             const replaced = before?.state === "started"
               ? result.build.state !== "started" || before.started_at !== result.build.started_at
@@ -1521,7 +1525,7 @@ export function bootstrapViewsPage() {
             readBlockingBuild();
             const ready = buildConfirmationRead;
             buildConfirmationRead = null;
-            ready?.(result.build);
+            ready?.(result);
           }
         }
         done();
@@ -1641,7 +1645,7 @@ export function bootstrapViewsPage() {
 
   // prepareBuildConfirmation reads the saved build before the control asks
   // the user to replace it. A failed or invalidated read cannot ask.
-  function prepareBuildConfirmation(ready: (build: ChangeBuild["build"] | null) => void) {
+  function prepareBuildConfirmation(ready: (build: ChangeBuild | null) => void) {
     if (activeEditor === null || sessionState !== "active") return;
     buildConfirmationRead = ready;
     readBuild(activeEditor.card.change_id);
@@ -1655,6 +1659,7 @@ export function bootstrapViewsPage() {
       openBuildRefusal = body;
       if (body.change_id === buildChangeId) {
         buildSnapshot = { ...body.build, state: "started" };
+        buildDraftedBeforeDrop = null;
         buildReadError = null;
       }
     }
@@ -1667,7 +1672,7 @@ export function bootstrapViewsPage() {
     if (ed === null || sessionState !== "active" || editorBusy ||
         ed.card.status !== "confirmed" || ed.incomingCard !== null ||
         buildChangeId !== ed.card.change_id || buildSnapshot === null ||
-        buildReadError !== null || hasPending("start_build", ed.card.change_id) ||
+        buildReadError !== null || buildDraftedBeforeDrop !== false || hasPending("start_build", ed.card.change_id) ||
         (openBuildRefusal !== null && openBuildRefusal.change_id !== ed.card.change_id)) return;
     const changeId = ed.card.change_id;
     const revision = ed.card.request_revision;
@@ -1712,6 +1717,7 @@ export function bootstrapViewsPage() {
           return;
         }
         buildSnapshot = { ...result.build, state: "started" };
+        buildDraftedBeforeDrop = null;
         buildReadError = null;
         buildStartReceipt = { at: begun, team: result.team };
         followBuildFindings();
@@ -1752,7 +1758,10 @@ export function bootstrapViewsPage() {
         if (sessionState !== "active" || activeEditor?.card.change_id !== selected) return;
         buildGeneration++;
         openBuildRefusal = null;
-        if (result.change_id === buildChangeId) buildSnapshot = result.build;
+        if (result.change_id === buildChangeId) {
+          buildSnapshot = result.build;
+          buildDraftedBeforeDrop = result.drafted_before_drop;
+        }
         statusEl.textContent = "The build was dropped. Ask the guide to refresh its draft before revising; adopt the revision, then build.";
         readBuild(selected);
         refreshOpenCard(selected);
@@ -2343,6 +2352,7 @@ export function bootstrapViewsPage() {
               currentRevision={changeList?.changes.find((item) => item.change_id === ed.card.change_id)?.request_revision ??
                 ed.incomingCard?.request_revision ?? ed.card.request_revision}
               build={buildChangeId === ed.card.change_id ? buildSnapshot : null}
+              draftedBeforeDrop={buildChangeId === ed.card.change_id ? buildDraftedBeforeDrop : null}
               loading={hasPending("get_build", ed.card.change_id)}
               error={buildReadError}
               actionError={buildStartError}

@@ -435,6 +435,7 @@ paths:
                         $ref: '#/definitions/ChangeBuild'
                         required:
                             - change_id
+                            - drafted_before_drop
                             - build
                 "403":
                     description: 'forbidden: The authenticated caller may not perform this operation or does not own the resource.'
@@ -615,6 +616,7 @@ paths:
                         $ref: '#/definitions/ChangeBuild'
                         required:
                             - change_id
+                            - drafted_before_drop
                             - build
                 "403":
                     description: 'forbidden: The authenticated caller may not perform this operation or does not own the resource.'
@@ -3418,7 +3420,7 @@ definitions:
                 example: false
             in_force:
                 type: boolean
-                description: 'True when request_revision is the change''s confirmed revision in force, as get_build reports it. It stays true while a revision the guide proposed waits beside the agreed one, and is false once the user has adopted a proposed revision or confirmed another revision: verify_change then refuses this revision, and the assignment stays as it is until the user builds again.'
+                description: True when request_revision is the change's agreed revision, the one in force, as get_build reports it. It stays true while a proposed revision waits and when refreshed provenance is adopted without changing request_revision. If adoption or confirmation changes the agreed request_revision, it becomes false; verify_change refuses this earlier revision, and the assignment stays as it is until the user builds again.
                 example: true
             read:
                 type: boolean
@@ -4129,7 +4131,7 @@ definitions:
                             $ref: '#/definitions/BuilderProgress'
                         in_force:
                             type: boolean
-                            description: 'True when request_revision is the change''s agreed revision, the one in force. It stays true while a revision the guide proposed waits beside the agreed one, and turns false once the user adopts a proposed revision or confirms another revision: the assignments then stay as they are, for this earlier revision, until the user builds again.'
+                            description: True when request_revision is the change's agreed revision, the one in force, as get_build reports it. It stays true while a proposed revision waits and when refreshed provenance is adopted without changing request_revision. If adoption or confirmation changes the agreed request_revision, it becomes false; the assignments stay on the earlier revision until the user builds again.
                             example: false
                         request_revision:
                             type: string
@@ -4278,6 +4280,10 @@ definitions:
                 type: string
                 description: Change Card identifier.
                 example: Dolor quidem expedita optio ea.
+            drafted_before_drop:
+                type: boolean
+                description: 'True only when the current agreed revision has saved design provenance from before the current actual drop: start_build would refuse it with drafted_before_drop. It becomes true after that drop and false once the user adopts a revision drafted after the drop, even if its request_revision is unchanged. A waiting proposal does not change this fact; ask the guide to refresh_story and revise_change from that refresh, then adopt the revision before building. False says only that this refusal does not apply, not that every other build check will pass; it is also false without an agreed revision or saved design provenance. start_build rechecks concurrent changes.'
+                example: true
         description: A change's build as get_build reports it.
         example:
             build:
@@ -4298,8 +4304,10 @@ definitions:
                         finding_count: 5254885262627643994
                         state: needs_changes
             change_id: Dolor quidem expedita optio ea.
+            drafted_before_drop: true
         required:
             - change_id
+            - drafted_before_drop
             - build
     ChangeCardResult:
         title: ChangeCardResult
@@ -10525,7 +10533,7 @@ definitions:
                 $ref: '#/definitions/BuilderProgress'
             in_force:
                 type: boolean
-                description: 'True when request_revision is the change''s agreed revision, the one in force. It stays true while a revision the guide proposed waits beside the agreed one, and turns false once the user adopts a proposed revision or confirms another revision: the assignments then stay as they are, for this earlier revision, until the user builds again.'
+                description: True when request_revision is the change's agreed revision, the one in force, as get_build reports it. It stays true while a proposed revision waits and when refreshed provenance is adopted without changing request_revision. If adoption or confirmation changes the agreed request_revision, it becomes false; the assignments stay on the earlier revision until the user builds again.
                 example: true
             request_revision:
                 type: string
@@ -20504,7 +20512,7 @@ definitions:
                     - Sed ipsum assumenda assumenda vero porro.
             in_force:
                 type: boolean
-                description: 'True when request_revision is the change''s confirmed revision in force, as get_build reports it. It stays true while a revision the guide proposed waits beside the agreed one, and is false once the user has adopted a proposed revision or confirmed another revision: the assignment then stays for this earlier revision until the user builds again.'
+                description: True when request_revision is the change's agreed revision, the one in force, as get_build reports it. It stays true while a proposed revision waits and when refreshed provenance is adopted without changing request_revision. If adoption or confirmation changes the agreed request_revision, it becomes false; the assignment stays on the earlier revision until the user builds again.
                 example: false
             preserved_behaviors:
                 type: array
@@ -22819,7 +22827,7 @@ definitions:
                 example: Veniam ex reiciendis.
             in_force:
                 type: boolean
-                description: 'True when request_revision is the change''s confirmed revision in force, as get_build reports it. It stays true while a revision the guide proposed waits beside the agreed one, and is false once the user has adopted a proposed revision or confirmed another revision: the assignment then stays for this earlier revision until the user builds again.'
+                description: True when request_revision is the change's agreed revision, the one in force, as get_build reports it. It stays true while a proposed revision waits and when refreshed provenance is adopted without changing request_revision. If adoption or confirmation changes the agreed request_revision, it becomes false; the assignment stays on the earlier revision until the user builds again.
                 example: true
             progress:
                 $ref: '#/definitions/TestWriterProgress'

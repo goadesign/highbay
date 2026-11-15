@@ -589,7 +589,7 @@ revision a build, a run or an approval belongs to.
 | --- | --- | --- |
 | The guide revises a confirmed change | The agreed revision stays in force with its answers, build, runs and approval. The page shows the proposed revision beside it, under "Waiting for you". Refining the agreed revision is blocked until you adopt or decline. | Nothing until you decide. |
 | You decline the proposed revision | Everything, exactly as it was. | Nothing. |
-| You adopt the proposed revision (answer its questions, then **Adopt this revision**) | Earlier runs stay readable for their revision. | The adopted revision has another `request_revision` and no approval. The build is marked **Earlier revision** and the builder's `verify_change` for the old revision is refused: build again. |
+| You adopt the proposed revision (answer its questions, then **Adopt this revision**) | Earlier runs stay readable for their revision. | When the agreed content changes, the adopted revision has another `request_revision` and no approval. The build is marked **Earlier revision** and the builder's `verify_change` for the old revision is refused: build again. Adopting refreshed provenance with unchanged content can keep the same digest. |
 | You change answers or examples of the agreed revision (**Refine Confirmed Answers & Examples**) | A submit with no change keeps everything. | A change gives another `request_revision`, drops the approval, and needs a build of that revision. |
 | You build the same revision again (**Build again…**, which asks first) | The agreed revision and any live target already running. | Both assignments become unread, the test writer's work returns to Assigned without report or verdict, and its tests must be reported, checked and accepted again before verification or a new live target. |
 | The test writer reports again | The build. | Its earlier verdict is cleared; Surla checks the report again. |
@@ -606,5 +606,21 @@ running. With stored verification settings it says instead that a build of the c
 updates the builder's assignment and that verification keeps using those
 settings.
 
-Building a revision you have just adopted or confirmed does not ask first.
+After a build of the current agreement is merged, the page keeps the completed
+result and suggests building another change or refining this one. The secondary
+**Build again…** asks before starting a new build number from your branch as
+it is now, with fresh unread assignments for the same agreement. Earlier
+reports remain readable but do not establish that this new build passed. With
+written tests, the test writer must report and have its tests accepted again;
+with configured tests, only the builder is assigned. If the merged build is
+for an earlier agreement, **Build current agreed revision** remains the primary
+next step.
+
+After dropping a build, the page asks the guide to refresh its draft and
+propose a revision from that refresh, then asks you to adopt that revision
+before building. A proposal already waiting can predate the drop; adopting
+that proposal alone may not enable Build. A fresh adoption can enable Build
+even when the agreement's content and revision digest stay the same.
+
+Building a changed revision you have just adopted or confirmed does not ask first.
 Each assignment stays as it was, for its revision, until you build again.

@@ -141,6 +141,18 @@ When the user presses **Build this change** on the views page, `start_build`:
 
 The work under the turn has one five-minute limit; starting the agents has its own 45-second limit. Accepted work belongs to the server and survives the page closing. A build started with only the builder stays usable while stored verification settings supply its tests; when those settings are removed, the user builds again.
 
+The control plane derives `ChangeBuild.drafted_before_drop` from the agreed
+revision's saved design provenance and the current actual drop. One predicate
+serves build admission before preparation and before save, `get_build`,
+`drop_build` and the build rendering included in change-list versions. The
+fact describes only this refusal, not overall start eligibility; no private
+provenance generation leaves the owner and no new persisted value is added.
+The page uses that fact for recovery guidance and includes it in the identity
+of any pending Build question. A merged build of the current agreement has a
+secondary replay question; confirmation starts a new number from current
+project HEAD with fresh assignments, rather than reusing the merged build's
+number or passed result.
+
 The views page keeps one waiting read (`wait_for_changes`) open. Its answer is a version of the change list that changes whenever a card, a change's latest verification run, a build as `get_build` shows it, the team, the Story evaluation or the live target changes, and the page then reads again. The page sends a build or a window action only when the user acts.
 
 ### The test writer's working copy and the report checker
