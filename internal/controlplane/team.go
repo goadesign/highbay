@@ -18,9 +18,11 @@ import (
 type (
 	// Team is the project server's sole in-memory team owner. Authorization belongs
 	// to the control plane's generated endpoint policy, never these internal calls.
-	// Supervise returns nil when either of its owning lifetimes ends; a non-nil
-	// error means unexpected failure and permits a bounded retry.
+	// BindAssignments installs the owner's read-only assignment reader before the
+	// server listens. Supervise returns nil when either of its owning lifetimes
+	// ends; a non-nil error means unexpected failure and permits a bounded retry.
 	Team interface {
+		BindAssignments(AssignmentReader)
 		ReadTeam(context.Context) (*gensurla.TeamSnapshot, error)
 		ShowPane(context.Context, string) error
 		StartAgents(context.Context) (*gensurla.ProjectTeam, error)
@@ -50,16 +52,41 @@ type (
 		Owner   string
 		Service Team
 	}
+	// TeamAssignments reports which worker roles currently have work on the open
+	// build and which unread assignment generations they owe. Unread holds a role
+	// only while that role has work and has not read its current assignment.
+	TeamAssignments struct {
+		// BuilderHasWork reports whether the builder currently has work on the open build.
+		BuilderHasWork bool
+		// TestWriterHasWork reports whether the test writer currently has work on the open build.
+		TestWriterHasWork bool
+		// Unread holds the owed assignment generation for each role with work that has not read it.
+		Unread []AssignmentGeneration
+	}
 	// AssignmentGeneration names one currently owed read. Generation is opaque to
 	// the team owner and contains no work text, identifiers or findings.
 	AssignmentGeneration struct {
 		Role       string
 		Generation string
 	}
-	// AssignmentReader returns only the bound owner's unread assignment generations.
-	// An error means unknown, not an empty owed set. Reading never marks work read.
-	AssignmentReader func(context.Context) ([]AssignmentGeneration, error)
+	// AssignmentReader returns the bound owner's current worker work and unread
+	// assignment generations. An error means unknown, neither no_work nor an
+	// empty owed set. Reading never marks work read.
+	AssignmentReader func(context.Context) (TeamAssignments, error)
 )
+
+// HasWork reports whether the named worker role ("builder" or "test_writer")
+// currently has work on the open build.
+func (a TeamAssignments) HasWork(role string) bool {
+	switch role {
+	case "builder":
+		return a.BuilderHasWork
+	case "test_writer":
+		return a.TestWriterHasWork
+	default:
+		return false
+	}
+}
 
 // GetTeam reads only the project owner's current snapshot and creates no team.
 func (c *ControlPlane) GetTeam(ctx context.Context) (*gensurla.TeamSnapshot, error) {
@@ -96,6 +123,22 @@ func (c *ControlPlane) StartTeamAgents(ctx context.Context) (*gensurla.ProjectTe
 	return result, err
 }
 
+// assignmentGeneration returns the hex SHA-256 of identity's JSON form.
+func assignmentGeneration(identity any) (string, error) {
+	raw, err := json.Marshal(identity)
+	if err != nil {
+		return "", err
+	}
+	sum := sha256.Sum256(raw)
+	return hex.EncodeToString(sum[:]), nil
+}
+
+// duplicateTeamSpacesStep owns the recovery shared by user starts and saved builds.
+// Surla cannot select among matching spaces, so the duplicates must be closed first.
+func duplicateTeamSpacesStep() string {
+	return "Close the duplicate Herdr spaces, then start the agents."
+}
+
 // buildFolders seals the builder-only case to this package.
 func (BuilderOnly) buildFolders() {}
 
@@ -116,11 +159,14 @@ func (c *ControlPlane) ownedTeam(ctx context.Context) (Team, error) {
 	return c.team.Service, nil
 }
 
-// startTeamSupervisor admits the one lifetime worker only after all stores and fields are ready.
+// startTeamSupervisor binds the assignment reader synchronously before New
+// returns (and before the server listens) and admits the one lifetime worker
+// only after all stores and fields are ready.
 func (c *ControlPlane) startTeamSupervisor() {
 	if c.team == nil {
 		return
 	}
+	c.team.Service.BindAssignments(c.assignmentGenerations)
 	c.teamWorker.Go(c.superviseTeam)
 }
 
@@ -147,62 +193,61 @@ func (c *ControlPlane) superviseTeam() {
 }
 
 // assignmentGenerations deliberately uses the store owner's nonmutating read,
-// including builds of earlier revisions. A generation names the version of an
-// assignment a role owes a read of: its build (change, revision and start)
-// and what the role's assignment shows of the verdicts. The builder's adds the
-// accepted commit; the test writer's adds the report number and the verdict's
-// time. So every verdict gives the test writer a new generation, and an
-// acceptance gives both roles one, as it marks both assignments unread.
-func (c *ControlPlane) assignmentGenerations(ctx context.Context) ([]AssignmentGeneration, error) {
+// including builds of earlier revisions. It reports which worker roles
+// currently have work on the open build and, for each role with work that has
+// not read its current assignment, the generation owed: its build (change,
+// revision and start) and what the role's assignment shows of the verdicts.
+// The builder's adds the accepted commit; the test writer's adds the report
+// number and the verdict's time. Every non-accepting verdict gives the test
+// writer a new generation, while an acceptance ends the test writer's work on
+// that build and gives the builder a new unread generation while no run of the
+// open build has passed.
+func (c *ControlPlane) assignmentGenerations(ctx context.Context) (TeamAssignments, error) {
 	if err := ctx.Err(); err != nil {
-		return nil, err
+		return TeamAssignments{}, err
 	}
 	builds, err := c.ownedBuilds(c.team.Owner)
 	if err != nil {
-		return nil, err
+		return TeamAssignments{}, err
 	}
-	owed := make([]AssignmentGeneration, 0, 2*len(builds))
+	result := TeamAssignments{
+		Unread: make([]AssignmentGeneration, 0, 2*len(builds)),
+	}
 	for _, build := range builds {
 		saved := build.file
-		if !saved.Builder.Read {
-			generation, err := assignmentGeneration(struct {
-				Change, Revision string
-				Started          time.Time
-				Accepted         string
-			}{saved.ChangeID, saved.RequestRevision, saved.StartedAt, saved.TestWriter.Commit})
-			if err != nil {
-				return nil, err
-			}
-			owed = append(owed, AssignmentGeneration{Role: "builder", Generation: generation})
+		builderWork, err := c.builderHasWork(c.team.Owner, build)
+		if err != nil {
+			return TeamAssignments{}, err
 		}
-		if !build.storedEvaluator && !saved.TestWriter.Read {
-			generation, err := assignmentGeneration(struct {
-				Change, Revision string
-				Started          time.Time
-				Report           int
-				Checked          time.Time
-			}{saved.ChangeID, saved.RequestRevision, saved.StartedAt, saved.ReportNumber, saved.TestWriter.CheckedAt})
-			if err != nil {
-				return nil, err
+		if builderWork {
+			result.BuilderHasWork = true
+			if !saved.Builder.Read {
+				generation, err := assignmentGeneration(struct {
+					Change, Revision string
+					Started          time.Time
+					Accepted         string
+				}{saved.ChangeID, saved.RequestRevision, saved.StartedAt, saved.TestWriter.Commit})
+				if err != nil {
+					return TeamAssignments{}, err
+				}
+				result.Unread = append(result.Unread, AssignmentGeneration{Role: "builder", Generation: generation})
 			}
-			owed = append(owed, AssignmentGeneration{Role: "test_writer", Generation: generation})
+		}
+		if testWriterHasWork(build) {
+			result.TestWriterHasWork = true
+			if !saved.TestWriter.Read {
+				generation, err := assignmentGeneration(struct {
+					Change, Revision string
+					Started          time.Time
+					Report           int
+					Checked          time.Time
+				}{saved.ChangeID, saved.RequestRevision, saved.StartedAt, saved.ReportNumber, saved.TestWriter.CheckedAt})
+				if err != nil {
+					return TeamAssignments{}, err
+				}
+				result.Unread = append(result.Unread, AssignmentGeneration{Role: "test_writer", Generation: generation})
+			}
 		}
 	}
-	return owed, nil
-}
-
-// assignmentGeneration returns the hex SHA-256 of identity's JSON form.
-func assignmentGeneration(identity any) (string, error) {
-	raw, err := json.Marshal(identity)
-	if err != nil {
-		return "", err
-	}
-	sum := sha256.Sum256(raw)
-	return hex.EncodeToString(sum[:]), nil
-}
-
-// duplicateTeamSpacesStep owns the recovery shared by user starts and saved builds.
-// Surla cannot select among matching spaces, so the duplicates must be closed first.
-func duplicateTeamSpacesStep() string {
-	return "Close the duplicate Herdr spaces, then start the agents."
+	return result, nil
 }

@@ -303,6 +303,9 @@ func (f *promotionTeamFixture) RegisterBuildRoles(context.Context, controlplane.
 	return nil
 }
 
+// BindAssignments accepts the control plane's assignment reader before supervision starts.
+func (f *promotionTeamFixture) BindAssignments(controlplane.AssignmentReader) {}
+
 // Supervise ends with its owning control plane and starts no background worker.
 func (f *promotionTeamFixture) Supervise(ctx context.Context, _ controlplane.AssignmentReader) error {
 	<-ctx.Done()

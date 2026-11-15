@@ -14,6 +14,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/codes"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 	"go.opentelemetry.io/otel/trace"
@@ -437,4 +438,157 @@ func TestTeamResultNextStep(t *testing.T) {
 			assert.Equal(t, team.Step, userTeam.Step, "the user operation must carry the owner's step unchanged")
 		})
 	}
+}
+
+// TestEnsureTeamCountsOnlyGuideAndRolesWithWork checks that EnsureTeam counts
+// only the guide and roles with work toward missing, while an unbound or
+// failing assignment read records a bounded span error and counts every listed
+// role when not running. It also checks that controlplane.New binds the
+// project server's reader synchronously before EnsureTeam runs.
+func TestEnsureTeamCountsOnlyGuideAndRolesWithWork(t *testing.T) {
+	state := testState(t)
+	deps := fixtureTeamDependencies(state)
+	host := deps.Host.(*teamFixture)
+	server, err := NewServer(state, func() {}, deps)
+	require.NoError(t, err)
+
+	builderDir := filepath.Join(state.Record.Directory, ".surla-builder")
+	writerDir := filepath.Join(state.Record.Directory, ".surla-tests")
+	require.NoError(t, os.MkdirAll(builderDir, 0o755))
+	require.NoError(t, os.MkdirAll(writerDir, 0o755))
+	require.NoError(t, server.RegisterBuildRoles(t.Context(), controlplane.BuilderAndTestWriter{
+		BuilderFolder: builderDir, TestWriterFolder: writerDir,
+	}))
+
+	recorder := tracetest.NewSpanRecorder()
+	provider := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(recorder))
+	previous := otel.GetTracerProvider()
+	otel.SetTracerProvider(provider)
+	defer otel.SetTracerProvider(previous)
+	defer func() { assert.NoError(t, provider.Shutdown(context.Background())) }()
+
+	ensureSpans := func() []sdktrace.ReadOnlySpan {
+		var out []sdktrace.ReadOnlySpan
+		for _, s := range recorder.Ended() {
+			if s.Name() == "surla.project.ensure_team" {
+				out = append(out, s)
+			}
+		}
+		return out
+	}
+
+	// 1. Unbound reader: counts every listed role when not running and records
+	// errAssignmentsUnavailable on the span.
+	first, err := server.EnsureTeam(teamContext(state))
+	require.NoError(t, err)
+	require.Len(t, first.Roles, 3)
+	assert.Equal(t, "opened", first.Dialog)
+	spans := ensureSpans()
+	require.Len(t, spans, 1)
+	assert.Equal(t, codes.Error, spans[0].Status().Code)
+	assert.Equal(t, "team assignments could not be read", spans[0].Status().Description)
+
+	liveTerminal := func(handle string) TeamTerminal {
+		return TeamTerminal{
+			State: "live",
+			Labels: map[string]string{
+				"chorus.project": state.Record.Directory,
+				"herdr.space":    first.Space,
+				"herdr.tab":      "tab",
+				"chorus.handle":  handle,
+			},
+			Foreground: &TeamForeground{Argv: []string{"codex"}},
+		}
+	}
+	guideHandle := first.Roles[0].Handle
+	builderHandle := first.Roles[1].Handle
+	writerHandle := first.Roles[2].Handle
+
+	// 2. Guide running, neither worker role has work (e.g. a dropped or passed
+	// build): no dialog is opened even though builder and test_writer are not
+	// running.
+	var current controlplane.TeamAssignments
+	var readErr error
+	server.BindAssignments(func(context.Context) (controlplane.TeamAssignments, error) {
+		return current, readErr
+	})
+	host.terminals = []TeamTerminal{liveTerminal(guideHandle)}
+	host.calls = nil
+	res, err := server.EnsureTeam(teamContext(state))
+	require.NoError(t, err)
+	assert.Equal(t, "not_needed", res.Dialog)
+	assert.NotContains(t, host.calls, "open")
+	spans = ensureSpans()
+	require.Len(t, spans, 2)
+	assert.Equal(t, codes.Unset, spans[1].Status().Code)
+
+	// 3. Guide not running while neither worker role has work: the guide alone
+	// still counts as missing and opens the dialog.
+	host.terminals = nil
+	res, err = server.EnsureTeam(teamContext(state))
+	require.NoError(t, err)
+	assert.Equal(t, "opened", res.Dialog)
+
+	// 4. Builder has work, test_writer does not: missing while builder is not
+	// running; not_needed once guide and builder are running (with test_writer
+	// still stopped).
+	current = controlplane.TeamAssignments{BuilderHasWork: true, TestWriterHasWork: false}
+	host.terminals = []TeamTerminal{liveTerminal(guideHandle)}
+	res, err = server.EnsureTeam(teamContext(state))
+	require.NoError(t, err)
+	assert.Equal(t, "opened", res.Dialog)
+
+	host.terminals = []TeamTerminal{liveTerminal(guideHandle), liveTerminal(builderHandle)}
+	res, err = server.EnsureTeam(teamContext(state))
+	require.NoError(t, err)
+	assert.Equal(t, "not_needed", res.Dialog)
+
+	// 5. Test writer has work and is not running: opens the dialog.
+	current = controlplane.TeamAssignments{BuilderHasWork: false, TestWriterHasWork: true}
+	res, err = server.EnsureTeam(teamContext(state))
+	require.NoError(t, err)
+	assert.Equal(t, "opened", res.Dialog)
+
+	host.terminals = []TeamTerminal{liveTerminal(guideHandle), liveTerminal(writerHandle)}
+	res, err = server.EnsureTeam(teamContext(state))
+	require.NoError(t, err)
+	assert.Equal(t, "not_needed", res.Dialog)
+
+	// 6. A failed assignment read records the bounded error on the span without
+	// leaking the underlying error text, and counts every listed role.
+	readErr = fmt.Errorf("/private/secret/path: read failed")
+	beforeSpans := len(ensureSpans())
+	res, err = server.EnsureTeam(teamContext(state))
+	require.NoError(t, err)
+	assert.Equal(t, "opened", res.Dialog, "builder is not running and a failed read counts every role")
+	spans = ensureSpans()
+	require.Len(t, spans, beforeSpans+1)
+	failedSpan := spans[len(spans)-1]
+	assert.Equal(t, codes.Error, failedSpan.Status().Code)
+	assert.Equal(t, "team assignments could not be read", failedSpan.Status().Description)
+	require.NotEmpty(t, failedSpan.Events())
+	for _, ev := range failedSpan.Events() {
+		for _, attr := range ev.Attributes {
+			assert.NotContains(t, attr.Value.AsString(), "/private/secret/path")
+		}
+	}
+
+	// 7. A fresh project.NewServer bound through controlplane.New has its
+	// assignment reader bound synchronously before EnsureTeam runs.
+	freshState := testState(t)
+	freshDeps := fixtureTeamDependencies(freshState)
+	freshServer, err := NewServer(freshState, func() {}, freshDeps)
+	require.NoError(t, err)
+	cp, err := controlplane.New(controlplane.Options{
+		CardsDir: t.TempDir(),
+		Team:     &controlplane.TeamBinding{Owner: freshState.Record.Owner, Service: freshServer},
+	})
+	require.NoError(t, err)
+	t.Cleanup(func() { assert.NoError(t, cp.Close()) })
+	beforeFresh := len(ensureSpans())
+	_, err = freshServer.EnsureTeam(teamContext(freshState))
+	require.NoError(t, err)
+	spans = ensureSpans()
+	require.Len(t, spans, beforeFresh+1)
+	assert.Equal(t, codes.Unset, spans[len(spans)-1].Status().Code)
 }

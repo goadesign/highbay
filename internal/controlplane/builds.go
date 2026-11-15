@@ -24,11 +24,14 @@ import (
 )
 
 type (
-	// heldBuild is a saved build together with whether it is for its change's
-	// revision in force, as every read of a build or an assignment reports.
+	// heldBuild is a saved build together with its change card and whether it
+	// is for its change's revision in force, as every read of a build or an
+	// assignment reports.
 	heldBuild struct {
 		// file is the saved build.
 		file buildFile
+		// record is the saved Change Card for file.ChangeID.
+		record storedChangeCard
 		// inForce is buildInForce for file and its change's card.
 		inForce bool
 		// storedEvaluator is true when projectTestSource answers that the
@@ -130,8 +133,8 @@ func (c *ControlPlane) GetTestFindings(ctx context.Context, p *gensurla.GetTestF
 	}, nil
 }
 
-// ListBuilderAssignments returns the builder's assignment of every build of
-// the caller's changes, most recently started first. It records nothing.
+// ListBuilderAssignments returns the open build's builder assignment while the
+// builder has work on it, or an empty list otherwise. It records nothing.
 func (c *ControlPlane) ListBuilderAssignments(ctx context.Context) (*gensurla.BuilderAssignmentList, error) {
 	principal, ok := PrincipalFromContext(ctx)
 	if !ok {
@@ -143,8 +146,18 @@ func (c *ControlPlane) ListBuilderAssignments(ctx context.Context) (*gensurla.Bu
 	if err != nil {
 		return nil, err
 	}
-	items := make([]*gensurla.BuilderAssignment, len(builds))
-	if len(builds) > 0 {
+	active := make([]heldBuild, 0, len(builds))
+	for _, held := range builds {
+		hasWork, err := c.builderHasWork(principal.ID, held)
+		if err != nil {
+			return nil, err
+		}
+		if hasWork {
+			active = append(active, held)
+		}
+	}
+	items := make([]*gensurla.BuilderAssignment, len(active))
+	if len(active) > 0 {
 		work, cancel := context.WithTimeout(ctx, layoutReadTimeout)
 		defer cancel()
 		_, folder, copyRoot, err := builderCopyFolder(work, c.activeWorkspaceDir)
@@ -155,15 +168,15 @@ func (c *ControlPlane) ListBuilderAssignments(ctx context.Context) (*gensurla.Bu
 		if err != nil {
 			return nil, err
 		}
-		for i, held := range builds {
+		for i, held := range active {
 			items[i] = builderAssignmentResult(held, folder, goworkOff)
 		}
 	}
 	return &gensurla.BuilderAssignmentList{Assignments: items}, nil
 }
 
-// ListTestWriterAssignments returns the test writer's assignment of every
-// build of the caller's changes, most recently started first. It records
+// ListTestWriterAssignments returns the open build's test-writer assignment
+// while the test writer has work on it, or an empty list otherwise. It records
 // nothing.
 func (c *ControlPlane) ListTestWriterAssignments(ctx context.Context) (*gensurla.TestWriterAssignmentList, error) {
 	principal, ok := PrincipalFromContext(ctx)
@@ -176,7 +189,7 @@ func (c *ControlPlane) ListTestWriterAssignments(ctx context.Context) (*gensurla
 	}
 	items := make([]*gensurla.TestWriterAssignmentItem, 0, len(builds))
 	for _, held := range builds {
-		if held.file.Roles == buildRolesBuilderAndTestWriter {
+		if testWriterHasWork(held) {
 			items = append(items, testWriterAssignmentItem(held))
 		}
 	}
@@ -191,7 +204,7 @@ func (c *ControlPlane) changeBuild(ctx context.Context, record storedChangeCard,
 	if !found || saved.ChangeID != changeID || !c.usableBuild(saved) {
 		return &gensurla.ChangeBuild{ChangeID: changeID, Build: gensurla.NewBuildNotStarted(&gensurla.BuildNotStarted{})}, nil
 	}
-	held := heldBuild{file: saved, inForce: buildInForce(saved, record), storedEvaluator: c.storedEvaluator()}
+	held := heldBuild{file: saved, record: record, inForce: buildInForce(saved, record), storedEvaluator: c.storedEvaluator()}
 	build, err := c.startedBuild(ctx, record.owner, held)
 	if err != nil {
 		return nil, err
@@ -304,6 +317,14 @@ func writtenTests(held heldBuild) gensurla.WrittenTests {
 	}
 }
 
+// testWriterHasWork reports whether held needs the test writer: only when the
+// build uses Surla's test writer and its tests are not yet accepted.
+func testWriterHasWork(held heldBuild) bool {
+	return !held.storedEvaluator &&
+		held.file.Roles == buildRolesBuilderAndTestWriter &&
+		held.file.TestWriter.State != testsAccepted
+}
+
 // acceptedTests renders the test writer's saved acceptance, which every
 // reader sees the same way, with the sentence saying what Surla did not
 // judge.
@@ -393,7 +414,7 @@ func (c *ControlPlane) ownedBuild(principal Principal, changeID string) (heldBui
 	if hasProvenance && buildDropped(provenance, saved) {
 		return heldBuild{}, gensurla.MakeNotFound(fmt.Errorf("The user dropped change %s: stop work on it; make no more edits or commits for it. The user starts builds on the views page.", saved.ChangeID))
 	}
-	return heldBuild{file: saved, inForce: buildInForce(saved, record), storedEvaluator: c.storedEvaluator()}, nil
+	return heldBuild{file: saved, record: record, inForce: buildInForce(saved, record), storedEvaluator: c.storedEvaluator()}, nil
 }
 
 // ownedBuilds returns only the project's one usable build when owner owns its
@@ -422,7 +443,7 @@ func (c *ControlPlane) ownedBuilds(owner string) ([]heldBuild, error) {
 	if record.owner != owner || !c.usableBuild(saved) {
 		return nil, nil
 	}
-	return []heldBuild{{file: saved, inForce: buildInForce(saved, record), storedEvaluator: c.storedEvaluator()}}, nil
+	return []heldBuild{{file: saved, record: record, inForce: buildInForce(saved, record), storedEvaluator: c.storedEvaluator()}}, nil
 }
 
 // usableBuild is the single predicate for every build read and consumer. A build
@@ -444,6 +465,23 @@ func (c *ControlPlane) newestPassedBuild(owner string, saved buildFile) (*verify
 		return nil, err
 	}
 	return &runs[0], nil
+}
+
+// builderHasWork reports whether held needs the builder: while no verification
+// of this start's change and revision accepted at or after StartedAt has
+// passed with inputs that are still current (verificationInputsCurrent). A
+// failed run read returns an error rather than reporting no work.
+func (c *ControlPlane) builderHasWork(owner string, held heldBuild) (bool, error) {
+	runs, err := c.eligibleBuildRuns(owner, held.file)
+	if err != nil {
+		return false, err
+	}
+	for _, run := range runs {
+		if c.verificationInputsCurrent(held.record, held.file, true, run.Request.Plan) {
+			return false, nil
+		}
+	}
+	return true, nil
 }
 
 // startedBuild renders current run and branch facts outside the card lock.

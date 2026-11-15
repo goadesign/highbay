@@ -11,6 +11,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/goadesign/surla/internal/controlplane"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel"
@@ -27,6 +28,9 @@ func TestTeamWrittenRosterClosedContract(t *testing.T) {
 	host := deps.Host.(*teamFixture)
 	server, err := NewServer(state, func() {}, deps)
 	require.NoError(t, err)
+	server.BindAssignments(func(context.Context) (controlplane.TeamAssignments, error) {
+		return controlplane.TeamAssignments{}, nil
+	})
 	team, err := server.EnsureTeam(teamContext(state))
 	require.NoError(t, err)
 	raw, err := os.ReadFile(filepath.Join(deps.RosterDirectory, team.Space+".json"))
@@ -135,6 +139,9 @@ func TestSavedSpaceWinsNameMatches(t *testing.T) {
 	host.spaces = []TeamSpace{{ID: "candidate1", Name: state.Record.Team, Folder: state.Record.Directory}, {ID: "candidate2", Name: state.Record.Team, Folder: state.Record.Directory}, {ID: "saved", Name: "renamed by user", Folder: "/different", Tabs: []TeamTab{{ID: "tab", Terminals: []TeamPane{{Terminal: "terminal"}}}}}}
 	server, err := NewServer(state, func() {}, deps)
 	require.NoError(t, err)
+	server.BindAssignments(func(context.Context) (controlplane.TeamAssignments, error) {
+		return controlplane.TeamAssignments{}, nil
+	})
 	team, err := server.EnsureTeam(teamContext(state))
 	require.NoError(t, err)
 	assert.Equal(t, "saved", team.Space)
@@ -210,6 +217,9 @@ func TestTeamSpansReportBoundedOutcomes(t *testing.T) {
 	host := deps.Host.(*teamFixture)
 	server, err := NewServer(state, func() {}, deps)
 	require.NoError(t, err)
+	server.BindAssignments(func(context.Context) (controlplane.TeamAssignments, error) {
+		return controlplane.TeamAssignments{}, nil
+	})
 	team, err := server.EnsureTeam(teamContext(state))
 	require.NoError(t, err)
 	host.overlays = []string{"chorus-launcher"}
