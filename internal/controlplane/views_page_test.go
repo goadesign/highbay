@@ -317,6 +317,41 @@ func TestViewsPageApprovesAPassedResult(t *testing.T) {
 	guide := WithPrincipal(context.Background(), Principal{ID: pageOwner, CallerID: "guide", Kind: CallerGuide})
 	user := WithPrincipal(context.Background(), Principal{ID: pageOwner, CallerID: pageUserID, Kind: CallerUser})
 
+	t.Run("approves after merging", func(t *testing.T) {
+		target := &pageTarget{artifacts: spec.Artifacts}
+		cp := pageControlPlane(t, buildFixtureOptions(t, Options{ResolvePromotionTarget: target.resolve}))
+		card := buildableChange(t, cp, "chg-merged-approve")
+		saveStoredBuildFixture(t, cp, card)
+		commit := commitBuilderCandidateFixture(t, cp, card)
+		read, err := cp.GetBuild(user, &gensurla.GetBuildPayload{ChangeID: card.ChangeID})
+		require.NoError(t, err)
+		build, ok := read.Build.AsStarted()
+		require.True(t, ok)
+		encoded, err := gensurla.EncodeStartedBuild(build)
+		require.NoError(t, err)
+		report := passingReport(t, card.RequestRevision, commit, spec)
+		target.update(func(p *pageTarget) { p.report = report })
+		svc := newPageVerifications(cp)
+		run := passedRun(card, "abcdefabcdefabcdefabcdefabcdefab", commit, report.Digest)
+		run.InputsCurrent = true
+		svc.set(run)
+		svc.list(card.ChangeID, run.RunID)
+		ps := startPageServer(t, svc)
+		runPageScript(t, ps, map[string]any{"build": string(encoded)}, `
+await control(origin, "reply", { key: "GET /changes/chg-merged-approve/build", status: 200,
+  body: { change_id: "chg-merged-approve", build: { ...JSON.parse(input.build), state: "started", taking: { state: "merged" } } } });
+const page = await openPage(origin, { link: input.link });
+await until(() => page.$("#surla-build-taking")?.dataset.state === "merged", "the merged state did not appear");
+expect(!page.text("#surla-build-taking").includes("git merge") && !page.$("#surla-build-drop"), "a merged build still offers taking actions");
+page.$("#surla-nav-cp4").click();
+await until(() => page.$("#surla-cp5-approve") && !page.$("#surla-cp5-approve").disabled, "merging hid approval of the still-current passed report");
+page.$("#surla-cp5-approve").click();
+await until(() => page.$("#surla-cp5-approval"), "approval after merging was not recorded");
+expect(page.sent("POST", "/changes/approve").length === 1, "approval after merging sent more than one write");
+page.close();
+`)
+	})
+
 	t.Run("approves", func(t *testing.T) {
 		target := &pageTarget{artifacts: spec.Artifacts}
 		cp := pageControlPlane(t, buildFixtureOptions(t, Options{ResolvePromotionTarget: target.resolve}))
@@ -419,7 +454,7 @@ await until(() => page.$("#surla-cp5-approve") && !page.$("#surla-cp5-approve").
 page.$("#surla-cp5-approve").click();
 await until(() => page.$("#surla-cp5-approval"), "the recorded approval is not shown");
 const approval = page.text("#surla-cp5-approval");
-expect(approval.includes("Builder's commit:") && approval.includes(input.candidate) && approval.includes("Tests' commit:") && approval.includes("orders_acceptance @ " + input.suiteCommit) && approval.includes(" — merge commit " + input.suiteCommit + " (on branch surla/tests)."), "written-tests approval did not show both commits and the merge sentence: " + approval);
+expect(approval.includes("Builder's commit:") && approval.includes(input.candidate) && approval.includes("Tests' commit:") && approval.includes("orders_acceptance @ " + input.suiteCommit) && approval.includes("This saved result names the builder’s commit") && !approval.includes("on branch surla/tests)."), "written-tests approval did not keep its own commits or invented a historical branch: " + approval);
 const reads = page.sent("GET", "/changes/chg-written-approve").length;
 await control(origin, "act", { key: "accept-new-tests" });
 await until(() => page.sent("GET", "/changes/chg-written-approve").length > reads && !page.$("#surla-cp5-approval"), "accepting another tests commit did not automatically hide the approval and merge sentence without clicking refresh");

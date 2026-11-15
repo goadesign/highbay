@@ -9,7 +9,9 @@ import {
   VerificationNotCompleted,
   VerificationScenario,
   VerificationStatusResult,
+  StartedBuild,
 } from "../types";
+import { SavedResultCommits } from "./build";
 import { Alert, Badge, Button, Card } from "./shadcn";
 
 // VerificationViewProps supplies the active verification state, last loaded
@@ -17,6 +19,7 @@ import { Alert, Badge, Button, Card } from "./shadcn";
 export interface VerificationViewProps {
   // changeId is the Change Card whose verification runs are being viewed.
   changeId: string;
+  build: StartedBuild | null;
   // run is the currently selected VerificationStatusResult snapshot, or null
   // when loading, empty, or failed before any run was selected.
   run: VerificationStatusResult | null;
@@ -50,6 +53,8 @@ export interface VerificationViewProps {
   onOpenChangeCard: () => void;
   // onReturnToChangeCard switches the view back to the already-loaded Change Card.
   onReturnToChangeCard: () => void;
+  // onFocusedControlRemoved returns focus to this view's stable heading.
+  onFocusedControlRemoved: () => void;
 }
 
 // scenarioOutcomeLabels translates the evaluator's outcomes without treating
@@ -102,6 +107,7 @@ function localStartTime(acceptedAt: string): string {
 // verdict; a failed status or list read preserves already received snapshots.
 export function VerificationView({
   changeId,
+  build,
   run,
   inputsKnown,
   listedRuns,
@@ -117,6 +123,7 @@ export function VerificationView({
   onSelectRun,
   onOpenChangeCard,
   onReturnToChangeCard,
+  onFocusedControlRemoved,
 }: VerificationViewProps) {
   const effectiveChangeId = run ? run.change_id : changeId;
   const sameCardLoaded = loadedCard !== null && loadedCard.change_id === effectiveChangeId;
@@ -411,6 +418,14 @@ export function VerificationView({
 
       <details className="surla-details" id="surla-cp4-details">
         <summary>Candidate and run details</summary>
+        {state.type === "completed" && state.value.report.passed ? <SavedResultCommits
+          changeId={run.change_id}
+          candidateCommit={run.candidate_commit}
+          testsCommit={testSource.source === "written_tests" ? run.suite_commit : null}
+          build={inputsKnown ? build : null}
+          run={run}
+          onFocusedControlRemoved={onFocusedControlRemoved}
+        /> : null}
         <dl className="surla-verification-details">
           <dt>Candidate commit</dt><dd><code>{run.candidate_commit}</code></dd>
           <dt>Change Card revision</dt><dd><code>{run.request_revision}</code></dd>

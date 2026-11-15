@@ -1,0 +1,128 @@
+[
+  {
+    "name": "clone-candidate",
+    "stage": "checkout",
+    "file": "clone-candidate.stderr",
+    "exit": 7,
+    "summary": "Checking out the candidate commit failed."
+  },
+  {
+    "name": "clone-suite",
+    "stage": "checkout",
+    "file": "clone-suite.stderr",
+    "exit": 7,
+    "summary": "Checking out the evaluator suite failed."
+  },
+  {
+    "name": "checkout-candidate",
+    "stage": "checkout",
+    "file": "checkout-candidate.stderr",
+    "exit": 7,
+    "summary": "Checking out the candidate commit failed."
+  },
+  {
+    "name": "checkout-suite",
+    "stage": "checkout",
+    "file": "checkout-suite.stderr",
+    "exit": 7,
+    "summary": "Checking out the evaluator suite failed."
+  },
+  {
+    "name": "head-candidate",
+    "stage": "checkout",
+    "file": "head-candidate.stderr",
+    "exit": 7,
+    "summary": "Checking out the candidate commit failed."
+  },
+  {
+    "name": "head-suite",
+    "stage": "checkout",
+    "file": "head-suite.stderr",
+    "exit": 7,
+    "summary": "Checking out the evaluator suite failed."
+  },
+  {
+    "name": "head-mismatch-candidate",
+    "stage": "checkout",
+    "file": "head-candidate.stdout",
+    "exit": 0,
+    "summary": "Checking out the candidate commit failed."
+  },
+  {
+    "name": "head-mismatch-suite",
+    "stage": "checkout",
+    "file": "head-suite.stdout",
+    "exit": 0,
+    "summary": "Checking out the evaluator suite failed."
+  },
+  {
+    "name": "go-env-candidate",
+    "stage": "build",
+    "file": "go-env-candidate.stderr",
+    "exit": 7,
+    "summary": "The candidate did not build."
+  },
+  {
+    "name": "go-env-suite",
+    "stage": "build",
+    "file": "go-env-suite.stderr",
+    "exit": 7,
+    "summary": "The evaluator suite did not build."
+  },
+  {
+    "name": "go-env-malformed-candidate",
+    "stage": "build",
+    "file": "go-env-candidate.stdout",
+    "exit": 0,
+    "summary": "The candidate did not build."
+  },
+  {
+    "name": "go-env-malformed-suite",
+    "stage": "build",
+    "file": "go-env-suite.stdout",
+    "exit": 0,
+    "summary": "The evaluator suite did not build."
+  },
+  {
+    "name": "describe",
+    "stage": "describe",
+    "file": "describe.stderr",
+    "exit": 7,
+    "summary": "The evaluator suite did not describe its scenarios."
+  },
+  {
+    "name": "declaration",
+    "stage": "describe",
+    "file": "describe.stdout",
+    "exit": 0,
+    "summary": "The evaluator suite did not describe its scenarios."
+  },
+  {
+    "name": "report-missing-zero",
+    "stage": "suite",
+    "file": "suite.stderr",
+    "exit": 0,
+    "summary": "The evaluator suite ended without a report."
+  },
+  {
+    "name": "report-missing-failed",
+    "stage": "suite",
+    "file": "suite.stderr",
+    "exit": 7,
+    "summary": "The evaluator suite ended without a report."
+  },
+  {
+    "name": "report-malformed-zero",
+    "stage": "suite",
+    "file": "suite.stdout",
+    "exit": 0,
+    "summary": "The evaluator suite ended without a report."
+  },
+  {
+    "name": "report-malformed-failed",
+    "stage": "suite",
+    "file": "suite.stdout",
+    "exit": 7,
+    "summary": "The evaluator suite ended without a report."
+  }
+]

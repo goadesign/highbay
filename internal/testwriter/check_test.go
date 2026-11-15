@@ -41,8 +41,8 @@ var refundStories = []designeval.StorySummary{{
 	},
 }}
 
-// fixture caches the fixture project, which takes a generation and
-// a go mod tidy to build. Tests clone it.
+// fixture holds the prepared project files. Preparation generates and tidies
+// the module and warms the checker's build cache; tests clone the files.
 var fixture struct {
 	mu sync.Mutex
 	// files is the project's tree keyed by slash path, nil until built.
@@ -464,6 +464,42 @@ func TestCheckLimitsTheBuildAndTheListing(t *testing.T) {
 			assert.Contains(t, v.Findings[0].Message, tc.wantWords)
 		})
 	}
+	t.Run("completed build cache survives a timeout", func(t *testing.T) {
+		c := *testChecker
+		c.workDir = t.TempDir()
+		c.buildLimit, c.listLimit = limit, limit
+		c.list = sleepThenList(0, complete)
+		var home string
+		c.build = func(ctx context.Context, spec candidate.BuildSpec, _ func(*exec.Cmd) error) error {
+			home = spec.WorkDir
+			cache := filepath.Join(home, "gocache")
+			if err := os.MkdirAll(cache, 0o700); err != nil {
+				return err
+			}
+			if err := os.WriteFile(filepath.Join(cache, "completed-entry"), []byte("completed"), 0o600); err != nil {
+				return err
+			}
+			<-ctx.Done()
+			return ctx.Err()
+		}
+		v, err := c.Check(t.Context(), wc, fixtureSuite, branch, start, refundStories)
+		require.NoError(t, err)
+		require.Len(t, v.Findings, 1)
+		assert.Equal(t, FindingBuild, v.Findings[0].Kind)
+		assert.Contains(t, v.Findings[0].Message, "did not finish building within 500ms")
+		c.build = func(_ context.Context, spec candidate.BuildSpec, _ func(*exec.Cmd) error) error {
+			assert.Equal(t, home, spec.WorkDir)
+			content, err := os.ReadFile(filepath.Join(spec.WorkDir, "gocache", "completed-entry"))
+			if err != nil {
+				return err
+			}
+			assert.Equal(t, "completed", string(content))
+			return os.WriteFile(spec.Out, []byte("stand-in program"), 0o700)
+		}
+		v, err = c.Check(t.Context(), wc, fixtureSuite, branch, start, refundStories)
+		require.NoError(t, err)
+		assert.True(t, v.Accepted(), "%+v", v.Findings)
+	})
 }
 
 // generatedSuite is the fixture's generated suite file, relative to its
@@ -488,7 +524,8 @@ const publishedSurla = "v0.0.0-20261115014514-02c792da3ded"
 // under eval/, as a test writer would start from: generated without a Story,
 // so with the generated program, and with an acceptance package providing the
 // five names the program calls. The module requires publishedSurla for the
-// suite contract the program uses.
+// suite contract the program uses. The first preparation also builds the
+// valid program in testChecker's build home to prepare its compiler cache.
 func fixtureProject(t *testing.T) map[string]string {
 	t.Helper()
 	fixture.mu.Lock()
@@ -507,8 +544,32 @@ func fixtureProject(t *testing.T) map[string]string {
 		}
 		module["go.mod"] = strings.Replace(module["go.mod"], "require (",
 			"require (\n\tgithub.com/goadesign/surla "+publishedSurla, 1)
+		module = testmodule.Tidy(t, module)
+		// Compile the valid baseline once in the checker's own build home.
+		// Only the compiler's normal cache survives; the source and binary do not.
+		tmp := t.TempDir()
+		moduleDir := filepath.Join(tmp, "module")
+		writeFiles(t, moduleDir, module)
+		tc, err := resolveToolchain(t.Context(), tmp)
+		require.NoError(t, err)
+		home := filepath.Join(testChecker.workDir, "build-home")
+		require.NoError(t, os.MkdirAll(home, 0o700))
+		log := filepath.Join(tmp, "build.log")
+		ctx, cancel := context.WithTimeout(t.Context(), 10*time.Minute)
+		var keep bool
+		err = candidate.BuildModule(ctx, candidate.BuildSpec{
+			SourceDir: tmp, ModuleDir: moduleDir, Package: fixtureSuite.Command,
+			Out: filepath.Join(tmp, "suite"), GOROOT: tc.goroot, ModCache: tc.modCache,
+			WorkDir: home, LogFile: log,
+		}, runInGroup(&keep))
+		cancel()
+		if err != nil {
+			output, readErr := os.ReadFile(log)
+			t.Fatalf("warm fixture build: %v; build log: %s (read error: %v)", err, output, readErr)
+		}
+		require.NoError(t, os.RemoveAll(tmp))
 		files := map[string]string{"README.md": "shop\n"}
-		for p, content := range testmodule.Tidy(t, module) {
+		for p, content := range module {
 			files["eval/"+p] = content
 		}
 		fixture.files = files

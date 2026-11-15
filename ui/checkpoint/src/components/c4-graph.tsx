@@ -262,8 +262,8 @@ export function ArchitecturePreviewView({
           ) : null}
         </div>
         <p id="surla-cp2-session-note">
-          Session preview for this candidate design snapshot (not saved on the server; re-run
-          preview_architecture after editing design/*.go).
+          Architecture of the agreed revision’s saved design. Draft edits appear here only after
+          the guide proposes a revision and you adopt it.
         </p>
         <p id="surla-cp2-scope-note">
           This preview shows what the design declares. It does not

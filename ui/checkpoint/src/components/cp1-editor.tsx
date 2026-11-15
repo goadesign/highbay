@@ -16,12 +16,18 @@ import {
   surlaDecisionLibrary,
   validateCompletedOpenUI,
 } from "../openui/library";
-import { ChangeCardResult, ExampleItem } from "../types";
+import { ChangeCardResult, ExampleItem, StartedBuild, VerificationStatusResult } from "../types";
+import { SavedResultCommits } from "./build";
 import { Alert, Badge, Button, Card } from "./shadcn";
 import { countsPhrase, storyCounts } from "./story";
 
 export interface CP1EditorProps {
   card: ChangeCardResult;
+  build: StartedBuild | null;
+  approvalRun: VerificationStatusResult | null;
+  unverifiedApprovalRun: VerificationStatusResult | null;
+  approvalRunsLoading: boolean;
+  approvalRunsError: string | null;
   // buildSection leads a confirmed card so the current work appears first.
   buildSection: React.ReactNode;
   // buildRevisionNotice explains the effect of changing the agreed revision.
@@ -50,6 +56,8 @@ export interface CP1EditorProps {
   onLoadVerifications: () => void;
   // onOpenStory shows the Story stage for this change.
   onOpenStory: () => void;
+  // onFocusedControlRemoved returns focus to the stable editor region.
+  onFocusedControlRemoved: () => void;
 }
 
 interface FieldTextareaProps {
@@ -136,6 +144,11 @@ function FieldTextarea({
 // workspace (when present), and the canonical shadcn/ui CP1 inspector.
 export function CP1EditorView({
   card,
+  build,
+  approvalRun,
+  unverifiedApprovalRun,
+  approvalRunsLoading,
+  approvalRunsError,
   buildSection,
   buildRevisionNotice,
   proposalWaiting,
@@ -154,6 +167,7 @@ export function CP1EditorView({
   onLoadLatestCard,
   onLoadVerifications,
   onOpenStory,
+  onFocusedControlRemoved,
 }: CP1EditorProps) {
   const ambiguities = Array.isArray(card.ambiguities) ? card.ambiguities : [];
   const stories = card.stories ?? [];
@@ -341,13 +355,11 @@ export function CP1EditorView({
             <strong>Verified artifacts: </strong>
             <code>{String(artifactNames.length)}</code>
           </p>
-          {card.approval.test_source.source === "written_tests" ? (
-            <p>
-              {card.approval.test_source.notice + " — merge commit "}
-              <code>{card.approval.suite_commit}</code>
-              {" (on branch surla/tests)."}
-            </p>
-          ) : null}
+          {approvalRunsLoading ? <p role="status">Reading saved verification runs to identify this approval’s build…</p> : null}
+          {approvalRunsError !== null ? <p role="status">Could not read this approval’s verification history. {approvalRunsError} Its current build membership is unknown.</p> : null}
+          <SavedResultCommits changeId={card.change_id} candidateCommit={card.approval.candidate_commit}
+            testsCommit={card.approval.test_source.source === "written_tests" ? card.approval.suite_commit : null}
+            build={build} run={approvalRun} onFocusedControlRemoved={onFocusedControlRemoved} />
           <details className="surla-details" id="surla-cp5-approval-details">
             <summary>Verified inputs and digests</summary>
             <p>
@@ -418,13 +430,11 @@ export function CP1EditorView({
             <strong>Recorded artifacts: </strong>
             <code>{String(unverifiedArtifactNames.length)}</code>
           </p>
-          {card.unverified_approval.approval.test_source.source === "written_tests" ? (
-            <p>
-              {card.unverified_approval.approval.test_source.notice + " — merge commit "}
-              <code>{card.unverified_approval.approval.suite_commit}</code>
-              {" (on branch surla/tests)."}
-            </p>
-          ) : null}
+          {approvalRunsLoading ? <p role="status">Reading saved verification runs to identify this approval’s build…</p> : null}
+          {approvalRunsError !== null ? <p role="status">Could not read this approval’s verification history. {approvalRunsError} Its current build membership is unknown.</p> : null}
+          <SavedResultCommits changeId={card.change_id} candidateCommit={card.unverified_approval.approval.candidate_commit}
+            testsCommit={card.unverified_approval.approval.test_source.source === "written_tests" ? card.unverified_approval.approval.suite_commit : null}
+            build={build} run={unverifiedApprovalRun} onFocusedControlRemoved={onFocusedControlRemoved} />
           <details className="surla-details" id="surla-cp5-unverified-approval-details">
             <summary>Recorded inputs and digests</summary>
             <p>

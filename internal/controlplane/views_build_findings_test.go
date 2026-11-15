@@ -80,7 +80,7 @@ expect(JSON.parse(answers[1].answer).started_at === current.started_at, "the sho
 await control(origin, "act", { key: "make-builder-copy" });
 const read = await api(origin, "GET", "/assignments/builder/chg", undefined, input.builder);
 expect(read.status === 200, "the builder could not read its assignment");
-await until(() => page.text("#surla-build-builder").includes("Assignment read."), "the assignment read did not refresh Build");
+await until(() => page.text("#surla-build-builder").includes("assignment read"), "the assignment read did not refresh Build");
 expect(page.sent("GET", findingsPath).length === 2, "an unchanged verdict was read again after an assignment change");
 page.close();
 `)
