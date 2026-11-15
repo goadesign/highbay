@@ -2044,8 +2044,11 @@ checks are:
   these jobs saves and restores its own Go build and module cache key,
   qualified by operating system, architecture, Go version and root dependency
   files. The two Linux groups keep separate owner keys, and the macOS platform
-  subset has its own key. Pushes to `main`, `team-start` and `builder-copy` run
-  all five jobs with the same three-minute package alarm and
+  subset has its own key. The module-matrix jobs use a 12-minute backstop to
+  finish cold checks and post-run cache saves, with the same three-minute
+  package alarms, race detection and vet checks.
+  Pushes to `main`, `team-start` and `builder-copy` run all five jobs with the
+  same three-minute package alarm and
   save missing caches after success, making them available to pull requests
   targeting those branches. Each job targets five minutes with an exact
   cache hit; cold durations are recorded separately. On a miss, its job
