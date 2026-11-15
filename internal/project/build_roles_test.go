@@ -339,7 +339,8 @@ func TestFirstMessagesKeepTheRolesInTheirOwnedFolders(t *testing.T) {
 		}},
 		{"builder", []string{
 			"Read each new assignment with get_builder_assignment before any other work",
-			"Then run git status: a file it lists was left by earlier work, so do not commit it and tell the user.",
+			"Then run git status: implementation files you authored or generated for this build are expected current work.",
+			"If you find unexpected files or work from an earlier build, stop and tell the user before carrying it forward.",
 			"it writes the agreed design into design/ and regenerates gen/; never edit either",
 			"When your assignment's gowork_off is true",
 			"Never merge, cherry-pick or copy files from another surla/ branch",
@@ -362,9 +363,7 @@ func TestFirstMessagesKeepTheRolesInTheirOwnedFolders(t *testing.T) {
 			if tc.role == "guide" {
 				return
 			}
-			if tc.role == "test_writer" {
-				assert.NotContains(t, message, "a file it lists was left by earlier work")
-			}
+			assert.NotContains(t, message, "a file it lists was left by earlier work")
 			for _, text := range []string{
 				"An empty list means no build needs you: say so and stop.",
 				"When a Surla call says a build was dropped or a new one started, stop",
