@@ -251,6 +251,51 @@ func TestPrepareBuildFetchesModulesWhateverGitEnvironmentItInherits(t *testing.T
 	assert.Equal(t, before, filesUnder(t, decoy), "the inherited repository is untouched")
 }
 
+// TestPrepareBuildDownloadsWhatTheModulesGoWorkNeeds downloads, as a
+// verification does before its build, the modules of a module whose go.work,
+// in the module's own folder, also uses a nested module that requires a
+// dependency the outer module does not. The offline build applies that go.work
+// (candidate.GoWork), so the download must too, even though the user's own
+// environment says GOWORK=off: the dependency is in the module cache
+// afterwards.
+func TestPrepareBuildDownloadsWhatTheModulesGoWorkNeeds(t *testing.T) {
+	dep, moduleDir := t.TempDir(), t.TempDir()
+	git(t, dep, "init", "--quiet")
+	require.NoError(t, os.WriteFile(filepath.Join(dep, "go.mod"), []byte("module example.invalid/dep.git\n\ngo 1.21\n"), 0o600))
+	require.NoError(t, os.WriteFile(filepath.Join(dep, "dep.go"), []byte("package dep\n"), 0o600))
+	git(t, dep, "add", ".")
+	git(t, dep, "-c", "user.name=t", "-c", "user.email=t@example.com", "commit", "--quiet", "-m", "dep")
+	git(t, dep, "tag", "v1.0.0")
+	for name, content := range map[string]string{
+		"go.mod":     "module example.invalid/main\n\ngo 1.21\n",
+		"go.work":    "go 1.21\n\nuse (\n\t.\n\t./lib\n)\n",
+		"lib/go.mod": "module example.invalid/lib\n\ngo 1.21\n\nrequire example.invalid/dep.git v1.0.0\n",
+		"lib/lib.go": "package lib\n\nimport _ \"example.invalid/dep.git\"\n",
+	} {
+		path := filepath.Join(moduleDir, filepath.FromSlash(name))
+		require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o700))
+		require.NoError(t, os.WriteFile(path, []byte(content), 0o600))
+	}
+	modCache := filepath.Join(t.TempDir(), "modcache")
+	t.Setenv("GOPROXY", "direct")
+	t.Setenv("GOSUMDB", "off")
+	t.Setenv("GOTOOLCHAIN", "local")
+	// -modcacherw lets the test's folder cleanup remove the module cache.
+	t.Setenv("GOFLAGS", "-mod=mod -modcacherw")
+	t.Setenv("GOMODCACHE", modCache)
+	t.Setenv("GOWORK", "off")
+	t.Setenv("GIT_CONFIG_COUNT", "1")
+	t.Setenv("GIT_CONFIG_KEY_0", "url.file://"+dep+".insteadOf")
+	t.Setenv("GIT_CONFIG_VALUE_0", "https://example.invalid/dep")
+	t.Setenv("GIT_ALLOW_PROTOCOL", "https:file")
+
+	r := &runner{evidenceDir: t.TempDir()}
+	_, err := r.prepareBuild(t.Context(), "candidate", moduleDir, moduleDir, t.TempDir())
+	require.NoError(t, err)
+	assert.DirExists(t, filepath.Join(modCache, "example.invalid", "dep.git@v1.0.0"),
+		"the download fetched the dependency the module's go.work needs")
+}
+
 // TestRunClonesARemoteRepositoryThroughTheUsersGitSettings runs a
 // verification whose plan names a remote repository URL that only the user's
 // own Git settings in the environment can reach: here they map it onto a
