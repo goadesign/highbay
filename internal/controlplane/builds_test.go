@@ -599,7 +599,7 @@ func TestBuildOperationsFollowTheRoleTable(t *testing.T) {
 	t.Cleanup(srv.Close)
 	revision := `{"request_revision":"` + card.RequestRevision + `"}`
 
-	notStarted := `{"change_id":"chg","build":{"state":"not_started"}}`
+	notStarted := `{"change_id":"chg","drafted_before_drop":false,"build":{"state":"not_started"}}`
 	readStatus, readBody := httpCall(t, srv.URL, "user", http.MethodGet, "/changes/chg/build", "")
 	require.Equal(t, http.StatusOK, readStatus, "a never-built change is a value, not an error: "+readBody)
 	assert.JSONEq(t, notStarted, readBody)

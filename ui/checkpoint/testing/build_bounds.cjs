@@ -63,7 +63,7 @@ const saved = { request_revision: "revision", started_at: "2026-11-13T00:00:00Z"
   required_test_count: 0, builder: { read: false }, test_writer: { read: false, report: 0, tests: { state: "assigned" } } };
 for (const op of ["get_build", "start_build"]) {
   const answer = (build) => op === "get_build"
-    ? { change_id: "chg", build: { state: "started", ...build } }
+    ? { change_id: "chg", drafted_before_drop: false, build: { state: "started", ...build } }
     : { build, team: { state: "window_busy", step: "Close the open dialog." } };
   for (const value of [-1, 0, 1]) {
     assert.equal(types.ROUTES[op].decode(answer({ ...saved, required_test_count: value })), value >= 0, op + " count=" + value);

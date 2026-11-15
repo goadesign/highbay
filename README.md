@@ -115,12 +115,16 @@ assignment unread for 90 seconds is named as waiting for you, and the page says
 what to tell it.
 
 You can go back at any point: adopt a revised change, build again, or the test
-writer reports again after findings. Adopting a revised change gives it a new
+writer reports again after findings. Adopting changed content gives it a new
 `request_revision`, which starts without an approval, and verification then
 needs a build of that revision: before you adopt, the page says that the
 existing build stays on the earlier revision. Building again replaces the
 build and requires the tests to be reported, judged and accepted again before
-verification or a new live target.
+verification or a new live target. After merging the current agreement, build
+another change or refine this one when there is more to do. **Build again…**
+remains available as a secondary action: it asks before starting a new build
+number from your branch as it is now, for the same agreement, with fresh
+assignments. Earlier reports do not establish that the new build passed.
 
 Two limits hold. All agents run as you on one machine, so they are separated
 by job, not walled off from each other. Surla runs the code the agents write

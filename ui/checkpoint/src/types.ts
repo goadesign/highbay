@@ -82,6 +82,7 @@ export interface C4EdgeItem {
 export interface ChangeBuild {
   build: ({ "state": "not_started" } | { "builder": BuilderProgress; "in_force": boolean; "request_revision": string; "required_test_count": number; "started_at": string; "state": "started"; "taking": ({ "state": "building" } | { "base_in_branch": boolean; "candidate_branch": string; "candidate_commit": string; "run_id": string; "state": "passed"; "tests": ({ "source": "evaluator" } | { "branch": string; "commit": string; "source": "written_tests" }) } | { "state": "merged" } | { "kept_branches": string[]; "state": "dropped" }); "test_writer": TestWriterProgress });
   change_id: string;
+  drafted_before_drop: boolean;
 }
 
 export interface ChangeCardResult {
@@ -1141,6 +1142,7 @@ const SCHEMA_DEFS: Record<string, JSONSchemaNode> = {
     "type": "object",
     "required": [
       "change_id",
+      "drafted_before_drop",
       "build"
     ],
     "properties": {
@@ -1340,6 +1342,9 @@ const SCHEMA_DEFS: Record<string, JSONSchemaNode> = {
       },
       "change_id": {
         "type": "string"
+      },
+      "drafted_before_drop": {
+        "type": "boolean"
       }
     },
     "additionalProperties": false

@@ -91,14 +91,18 @@ func (c *ControlPlane) GetBuild(ctx context.Context, p *gensurla.GetBuildPayload
 	record, err := c.ownedCard(principal, p.ChangeID)
 	var saved buildFile
 	var found bool
+	var provenance madeFromRecord
 	if err == nil {
 		saved, found, err = c.cards.loadOpenBuild()
+	}
+	if err == nil {
+		provenance, _, err = c.cards.loadMadeFrom()
 	}
 	c.mu.RUnlock()
 	if err != nil {
 		return nil, err
 	}
-	return c.changeBuild(ctx, record, saved, found)
+	return c.changeBuild(ctx, record, saved, found, draftedBeforeDrop(record, provenance))
 }
 
 // GetTestFindings returns, for the owner's page, the text of the findings of
@@ -197,19 +201,28 @@ func (c *ControlPlane) ListTestWriterAssignments(ctx context.Context) (*gensurla
 }
 
 // changeBuild reads and renders record's usable build without changing it.
-// The caller has authorized access to record. Git and run reads happen after
-// the card lock is released.
-func (c *ControlPlane) changeBuild(ctx context.Context, record storedChangeCard, saved buildFile, found bool) (*gensurla.ChangeBuild, error) {
+// The caller has authorized access to record and captured draftPredatesDrop
+// from that record and the same locked provenance read. Git and run reads
+// happen after the card lock is released.
+func (c *ControlPlane) changeBuild(
+	ctx context.Context, record storedChangeCard, saved buildFile, found, draftPredatesDrop bool,
+) (*gensurla.ChangeBuild, error) {
 	changeID := record.card.ChangeID
 	if !found || saved.ChangeID != changeID || !c.usableBuild(saved) {
-		return &gensurla.ChangeBuild{ChangeID: changeID, Build: gensurla.NewBuildNotStarted(&gensurla.BuildNotStarted{})}, nil
+		return &gensurla.ChangeBuild{
+			ChangeID: changeID, DraftedBeforeDrop: draftPredatesDrop,
+			Build: gensurla.NewBuildNotStarted(&gensurla.BuildNotStarted{}),
+		}, nil
 	}
 	held := heldBuild{file: saved, record: record, inForce: buildInForce(saved, record), storedEvaluator: c.storedEvaluator()}
 	build, err := c.startedBuild(ctx, record.owner, held)
 	if err != nil {
 		return nil, err
 	}
-	return &gensurla.ChangeBuild{ChangeID: changeID, Build: gensurla.NewBuildStarted(build)}, nil
+	return &gensurla.ChangeBuild{
+		ChangeID: changeID, DraftedBeforeDrop: draftPredatesDrop,
+		Build: gensurla.NewBuildStarted(build),
+	}, nil
 }
 
 // buildInForce reports whether saved is a build of record's agreed revision

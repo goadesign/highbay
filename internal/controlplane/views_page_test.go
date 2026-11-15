@@ -339,7 +339,7 @@ func TestViewsPageApprovesAPassedResult(t *testing.T) {
 		ps := startPageServer(t, svc)
 		runPageScript(t, ps, map[string]any{"build": string(encoded)}, `
 await control(origin, "reply", { key: "GET /changes/chg-merged-approve/build", status: 200,
-  body: { change_id: "chg-merged-approve", build: { ...JSON.parse(input.build), state: "started", taking: { state: "merged" } } } });
+  body: { change_id: "chg-merged-approve", drafted_before_drop: false, build: { ...JSON.parse(input.build), state: "started", taking: { state: "merged" } } } });
 const page = await openPage(origin, { link: input.link });
 await until(() => page.$("#surla-build-taking")?.dataset.state === "merged", "the merged state did not appear");
 expect(!page.text("#surla-build-taking").includes("git merge") && !page.$("#surla-build-drop"), "a merged build still offers taking actions");

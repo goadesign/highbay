@@ -109,17 +109,18 @@ type (
 
 	// takingViewFacts contains browser layout and keyboard evidence only.
 	takingViewFacts struct {
-		Width          int      `json:"width"`
-		DocumentWidth  int      `json:"document_width"`
-		Commands       []string `json:"commands"`
-		CommandsUsable bool     `json:"commands_usable"`
-		Explanation    bool     `json:"explanation"`
-		NoStart        bool     `json:"no_start"`
-		RewriteWarning bool     `json:"rewrite_warning"`
-		DropFocused    bool     `json:"drop_focused"`
-		DropCancelled  bool     `json:"drop_cancelled"`
-		Overflowing    []string `json:"overflowing"`
-		Screenshot     string   `json:"screenshot"`
+		Width             int      `json:"width"`
+		DocumentWidth     int      `json:"document_width"`
+		Commands          []string `json:"commands"`
+		CommandsUsable    bool     `json:"commands_usable"`
+		Explanation       bool     `json:"explanation"`
+		NoStart           bool     `json:"no_start"`
+		EnablingStep      bool     `json:"enabling_step"`
+		RewriteWarning    bool     `json:"rewrite_warning"`
+		QuestionFocused   bool     `json:"question_focused"`
+		QuestionCancelled bool     `json:"question_cancelled"`
+		Overflowing       []string `json:"overflowing"`
+		Screenshot        string   `json:"screenshot"`
 	}
 
 	// viewsFacts is what the views page showed, sent, stored and reported.
