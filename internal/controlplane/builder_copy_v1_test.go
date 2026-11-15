@@ -3,7 +3,9 @@
 package controlplane
 
 import (
+	"context"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -25,11 +27,13 @@ func TestBuilderCopyV1VerifyEntry(t *testing.T) {
 			profile = "stored evaluator"
 		}
 		t.Run(profile, func(t *testing.T) {
-			for _, scenario := range []string{"valid", "base", "off branch", "copy off branch", "unknown commit", "unread", "no build", "dropped", "foreign work", "copy busy"} {
+			for _, scenario := range []string{"valid", "base", "off branch", "copy off branch", "index lock", "unknown commit", "unread", "no build", "dropped", "foreign work", "copy busy"} {
 				t.Run(scenario, func(t *testing.T) {
 					cp, card, build, candidate, builder := builderCopyV1Fixture(t, stored)
 					workspace := cp.currentWorkspaceDir()
 					want := ""
+					var lock string
+					var beforeLock []byte
 					switch scenario {
 					case "base":
 						candidate, want = build.Base, "holds no builder work"
@@ -40,6 +44,11 @@ func TestBuilderCopyV1VerifyEntry(t *testing.T) {
 						want = "is not on surla/build-1"
 					case "copy off branch":
 						productionBuildGit(t, builder, "checkout", "-q", "-b", "agent-work")
+						want = "A worker's working copy is not on its build's own branch"
+					case "index lock":
+						lock = filepath.Join(productionBuildGit(t, builder, "rev-parse", "--absolute-git-dir"), "index.lock")
+						require.NoError(t, os.WriteFile(lock, nil, 0o600))
+						beforeLock = readBuildFile(t, cp, card.ChangeID)
 						want = "A worker's working copy is not on its build's own branch"
 					case "unread":
 						build.Builder.Read = false
@@ -53,7 +62,7 @@ func TestBuilderCopyV1VerifyEntry(t *testing.T) {
 							ChangeID: card.ChangeID, StartedAt: build.StartedAt.Format(time.RFC3339Nano),
 						})
 						require.NoError(t, err)
-						want = "no build"
+						want = "The user dropped change " + card.ChangeID
 					case "foreign work":
 						productionBuildGit(t, workspace, "checkout", "-q", "-b", "surla/build-2", build.Base)
 						writeWorkspaceFiles(t, workspace, map[string]string{"foreign.go": "package shop\n"})
@@ -81,6 +90,19 @@ func TestBuilderCopyV1VerifyEntry(t *testing.T) {
 						require.ErrorAs(t, err, &refusal)
 						assert.Contains(t, refusal.Message, "Your working copy is on branch 'agent-work'")
 					}
+					if scenario == "index lock" {
+						var refusal *gensurla.CopyOffBranch
+						require.ErrorAs(t, err, &refusal)
+						assert.Equal(t, "none", refusal.Operation)
+						require.NotNil(t, refusal.Branch)
+						assert.Equal(t, "surla/build-1", *refusal.Branch)
+						assert.Contains(t, refusal.Message, "Git's index lock (")
+						assert.Contains(t, refusal.Message, lock)
+						assert.Equal(t, beforeLock, readBuildFile(t, cp, card.ChangeID), "a locked copy changes no build state")
+					}
+					if scenario == "dropped" {
+						assertRefusalSays(t, err, "no_build", "stop work on it; make no more edits or commits for it")
+					}
 					if scenario == "foreign work" {
 						assert.ErrorContains(t, err, "Make surla/build-1 and your working copy hold neither")
 						assert.ErrorContains(t, err, "Make your own work again as a new commit on surla/build-1")
@@ -91,8 +113,72 @@ func TestBuilderCopyV1VerifyEntry(t *testing.T) {
 						require.NoError(t, readErr)
 						assert.Empty(t, entries, "refused input must not start a run")
 					}
+					if scenario == "index lock" {
+						require.NoError(t, os.Remove(lock))
+						started, err := cp.VerifyChange(asCaller("alice@example.com", CallerBuilder), &gensurla.VerifyChangePayload{
+							ChangeID: card.ChangeID, RequestRevision: card.RequestRevision, CandidateCommit: candidate,
+						})
+						require.NoError(t, err)
+						assert.Equal(t, candidate, started.CandidateCommit)
+					}
 				})
 			}
+		})
+	}
+}
+
+// TestBuilderCopyV1HoldsTurnThroughPreflight pauses real read-only Git at the
+// readiness and candidate-history boundaries. A concurrent assignment read
+// must refuse immediately, and verification must release the turn on success.
+func TestBuilderCopyV1HoldsTurnThroughPreflight(t *testing.T) {
+	for _, phase := range []struct{ name, argument string }{
+		{name: "readiness", argument: "--show-prefix"},
+		{name: "candidate history", argument: "for-each-ref"},
+	} {
+		t.Run(phase.name, func(t *testing.T) {
+			cp, card, _, candidate, _ := builderCopyV1Fixture(t, true)
+			realGit, err := exec.LookPath("git")
+			require.NoError(t, err)
+			// Reuse the FIFO gate as a read-only Git synchronization point;
+			// this test starts no check helper or candidate program.
+			gate := newPublishGate(t)
+			bin := t.TempDir()
+			script := "#!/bin/sh\nfor arg do\n" +
+				"if [ \"$arg\" = \"$SURLA_V1_PAUSE_ARGUMENT\" ] && mkdir \"$SURLA_V1_GIT_GATE/claimed\" 2>/dev/null; then\n" +
+				"exec 3<> \"$SURLA_V1_GIT_GATE/release\"\n: > \"$SURLA_V1_GIT_GATE/in-write\"\n" +
+				"dd bs=1 count=1 <&3 >/dev/null 2>&1\nexec 3>&-\nfi\ndone\n" +
+				"exec \"$SURLA_V1_REAL_GIT\" \"$@\"\n"
+			require.NoError(t, os.WriteFile(filepath.Join(bin, "git"), []byte(script), 0o700))
+			t.Setenv("SURLA_V1_PAUSE_ARGUMENT", phase.argument)
+			t.Setenv("SURLA_V1_GIT_GATE", gate.dir)
+			t.Setenv("SURLA_V1_REAL_GIT", realGit)
+			t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+			ctx, cancel := context.WithTimeout(asCaller("alice@example.com", CallerBuilder), 10*time.Second)
+			defer cancel()
+			defer func() { assert.NoError(t, gate.release()) }()
+			finished := make(chan error, 1)
+			go func() {
+				_, err := cp.VerifyChange(ctx, &gensurla.VerifyChangePayload{
+					ChangeID: card.ChangeID, RequestRevision: card.RequestRevision, CandidateCommit: candidate,
+				})
+				finished <- err
+			}()
+			select {
+			case <-gate.held:
+			case <-ctx.Done():
+				t.Fatal("verification did not reach the Git preflight boundary")
+			}
+			assert.Len(t, cp.builderCopyTurn, 1)
+			_, err = cp.GetBuilderAssignment(ctx, &gensurla.GetBuilderAssignmentPayload{ChangeID: card.ChangeID})
+			assertRefusalSays(t, err, "working_copy_busy", "call get_builder_assignment again")
+			require.NoError(t, gate.release())
+			select {
+			case err := <-finished:
+				require.NoError(t, err)
+			case <-ctx.Done():
+				t.Fatal("verification did not finish after releasing Git")
+			}
+			assert.Empty(t, cp.builderCopyTurn)
 		})
 	}
 }
@@ -166,6 +252,9 @@ func TestBuilderCopyV1ApprovalRechecksReportCommit(t *testing.T) {
 						assert.NoError(t, err)
 					} else {
 						assert.Error(t, err)
+						if scenario == "dropped build" {
+							assertRefusalSays(t, err, "no_build", "stop work on it; make no more edits or commits for it")
+						}
 						if scenario == "reset branch" || scenario == "deleted branch" {
 							assert.ErrorContains(t, err, "Ask the builder")
 							assert.ErrorContains(t, err, "call verify_change again; then approve that run")

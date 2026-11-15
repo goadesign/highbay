@@ -272,7 +272,7 @@ func (c *ControlPlane) verificationBuild(
 	if _, none := c.verifier.(noVerification); none {
 		return heldBuild{}, gensurla.MakeNotImplemented(errVerificationUnavailable)
 	}
-	held, err := c.ownedBuild(principal, changeID)
+	held, err := c.workerOwnedBuild(principal, changeID)
 	var missing *goa.ServiceError
 	if errors.As(err, &missing) && missing.Name == "not_found" {
 		return heldBuild{}, refuseNoBuild(changeID, revision, buildFile{}, false)
