@@ -281,13 +281,13 @@ func TestVerifyChangeRefusesWhatItCannotRunWithItsStep(t *testing.T) {
 			name: "candidate modifies hand-written file in test module", build: accepted, tests: repo.tests, candidate: repo.modifiedTestFile,
 			refusal: "conflict",
 			reason:  "candidate commit " + repo.modifiedTestFile + " changes hand-written files in the test module services/shop/eval since base commit " + repo.tests + " (services/shop/eval/acceptance/hooks.go); tests in services/shop/eval belong to the test writer, not the builder",
-			step:    "restore services/shop/eval to base commit " + repo.tests + " (git restore --source=" + repo.tests + " --staged --worktree -- ':(top,literal)services/shop/eval/acceptance/hooks.go'), commit, and call verify_change or start_live_target again",
+			step:    "restore these files to their versions or absence in commit " + repo.tests + ", commit, and call verify_change or start_live_target again",
 		},
 		{
 			name: "candidate adds hand-written file in test module", build: accepted, tests: repo.tests, candidate: repo.addedTestFile,
 			refusal: "conflict",
 			reason:  "candidate commit " + repo.addedTestFile + " changes hand-written files in the test module services/shop/eval since base commit " + repo.tests + " (services/shop/eval/acceptance/helper.go); tests in services/shop/eval belong to the test writer, not the builder",
-			step:    "restore services/shop/eval to base commit " + repo.tests + " (git rm -f -- ':(top,literal)services/shop/eval/acceptance/helper.go'), commit, and call verify_change or start_live_target again",
+			step:    "restore these files to their versions or absence in commit " + repo.tests + ", commit, and call verify_change or start_live_target again",
 		},
 		{
 			name: "candidate shares no history with accepted tests", build: accepted, tests: repo.tests, candidate: repo.orphanCandidate,
@@ -376,12 +376,23 @@ func TestVerifyChangeRefusesWhatItCannotRunWithItsStep(t *testing.T) {
 				`{"change_id":"chg","request_revision":"`+card.RequestRevision+`","candidate_commit":"`+candidate+`"}`)
 			assert.Contains(t, failure, reason, "through the MCP tool")
 			assert.Contains(t, failure, step, "through the MCP tool")
+			if tc.candidate == repo.modifiedTestFile || tc.candidate == repo.addedTestFile {
+				assert.NotContains(t, refused.Message, "git restore")
+				assert.NotContains(t, refused.Message, "git rm")
+				assert.NotContains(t, failure, "git restore")
+				assert.NotContains(t, failure, "git rm")
+			}
 			runs, err := verifyrun.List(runsDir, "alice@example.com", "chg")
 			require.NoError(t, err)
 			assert.Empty(t, runs, "no run is accepted")
 
 			_, err = cp.StartLiveTarget(builder, &gensurla.StartLiveTargetPayload{ChangeID: "chg", CandidateCommit: candidate})
 			assertRefusalSays(t, err, tc.refusal, tc.reason)
+			if tc.candidate == repo.modifiedTestFile || tc.candidate == repo.addedTestFile {
+				assert.ErrorContains(t, err, tc.step)
+				assert.NotContains(t, err.Error(), "git restore")
+				assert.NotContains(t, err.Error(), "git rm")
+			}
 			assert.Nil(t, cp.owned, "no live copy is started")
 		})
 	}
@@ -609,9 +620,8 @@ func TestTestWriterReadsOnlyTheRunsOfAnAssignedChange(t *testing.T) {
 //   - on the next change after the user takes the builder's merge, .surla-tests
 //     joins the new numbered branch at M1. A builder commit that edits, adds,
 //     deletes, or replaces hand-written files with a symlink in <testModule>
-//     is refused against M1, and running the refusal message's exact recovery
-//     command from the project folder (services/shop) restores <testModule> so
-//     verify_change succeeds;
+//     is refused against M1. Restoring the named files to their versions or
+//     absence in M1 from the nested project folder lets verify_change succeed;
 //   - squashing the builder branch history after tests were accepted is
 //     refused by rule 13 before selecting the verification layout.
 func TestVerifyChangeTestModuleGuardAcrossRegenerationMergeAndNextChange(t *testing.T) {
@@ -826,32 +836,35 @@ func TestVerifyChangeTestModuleGuardAcrossRegenerationMergeAndNextChange(t *test
 	_, err = cp.VerifyChange(builder, &gensurla.VerifyChangePayload{
 		ChangeID: "chg-2", RequestRevision: card2.RequestRevision, CandidateCommit: badCommit,
 	})
-	wantCmd := "git restore --source=" + m1 + " --staged --worktree -- ':(top,literal)services/shop/eval/acceptance/hooks.go' ':(top,literal)services/shop/eval/acceptance/story_test.go' && " +
-		"git rm -f -- ':(top,literal)services/shop/eval/acceptance/helper.go'"
 	assertRefusalSays(t, err, "conflict",
 		"candidate commit "+badCommit+" changes hand-written files in the test module services/shop/eval since base commit "+m1+
 			" (services/shop/eval/acceptance/helper.go, services/shop/eval/acceptance/hooks.go, services/shop/eval/acceptance/story_test.go);"+
 			" tests in services/shop/eval belong to the test writer, not the builder:"+
-			" restore services/shop/eval to base commit "+m1+" ("+wantCmd+"), commit, and call verify_change or start_live_target again")
+			" restore these files to their versions or absence in commit "+m1+", commit, and call verify_change or start_live_target again")
+	assert.NotContains(t, err.Error(), "git restore")
+	assert.NotContains(t, err.Error(), "git rm")
 
-	// Execute the refusal's exact recovery command from the builder's nested
-	// project folder services/shop, commit, and verify again.
-	cmd := exec.Command("sh", "-c", wantCmd)
-	cmd.Dir = builderProject
-	out, runErr := cmd.CombinedOutput()
-	require.NoError(t, runErr, string(out))
+	// Meet the refusal's goal for exactly the named files from the builder's
+	// nested project folder, without changing its other service work.
+	gitForLayoutTest(t, builderProject, "restore", "--source="+m1, "--staged", "--worktree", "--",
+		":(top,literal)services/shop/eval/acceptance/helper.go",
+		":(top,literal)services/shop/eval/acceptance/hooks.go",
+		":(top,literal)services/shop/eval/acceptance/story_test.go")
 	gitForLayoutTest(t, builderProject, "commit", "-q", "-m", "restore eval")
 	fixedCommit := strings.TrimSpace(gitForLayoutTest(t, builderProject, "rev-parse", "HEAD"))
 
 	run, err = cp.VerifyChange(builder, &gensurla.VerifyChangePayload{
 		ChangeID: "chg-2", RequestRevision: card2.RequestRevision, CandidateCommit: fixedCommit,
 	})
-	require.NoError(t, err, "verify_change must succeed after running the refusal's recovery command from the project folder")
+	require.NoError(t, err, "verify_change must succeed after meeting the refusal's recovery goal from the project folder")
 	assert.Equal(t, fixedCommit, run.CandidateCommit)
 	assert.Equal(t, t2, run.SuiteCommit)
+	serviceWork, err := os.ReadFile(filepath.Join(builderProject, "cmd", "shop", "refund.go"))
+	require.NoError(t, err)
+	assert.Contains(t, string(serviceWork), "Director approval.", "recovery preserves the builder's own service work")
 
-	// Deleting a hand-written file in eval/ is also refused and restored by
-	// the refusal's recovery command.
+	// Deleting a hand-written file in eval/ is also refused. Restoring the
+	// named file's base version meets the same recovery goal.
 	require.NoError(t, os.Remove(hooksPath))
 	gitForLayoutTest(t, builderProject, "add", "-A")
 	gitForLayoutTest(t, builderProject, "commit", "-q", "-m", "delete hooks.go")
@@ -859,13 +872,10 @@ func TestVerifyChangeTestModuleGuardAcrossRegenerationMergeAndNextChange(t *test
 	_, err = cp.VerifyChange(builder, &gensurla.VerifyChangePayload{
 		ChangeID: "chg-2", RequestRevision: card2.RequestRevision, CandidateCommit: deletedCommit,
 	})
-	wantRestoreDeleted := "git restore --source=" + m1 + " --staged --worktree -- ':(top,literal)services/shop/eval/acceptance/hooks.go'"
 	assertRefusalSays(t, err, "conflict",
-		"restore services/shop/eval to base commit "+m1+" ("+wantRestoreDeleted+"), commit, and call verify_change or start_live_target again")
-	cmd = exec.Command("sh", "-c", wantRestoreDeleted)
-	cmd.Dir = builderProject
-	out, runErr = cmd.CombinedOutput()
-	require.NoError(t, runErr, string(out))
+		"restore these files to their versions or absence in commit "+m1+", commit, and call verify_change or start_live_target again")
+	gitForLayoutTest(t, builderProject, "restore", "--source="+m1, "--staged", "--worktree", "--",
+		":(top,literal)services/shop/eval/acceptance/hooks.go")
 	gitForLayoutTest(t, builderProject, "commit", "-q", "-m", "restore deleted hooks.go")
 	restoredDeletedCommit := strings.TrimSpace(gitForLayoutTest(t, builderProject, "rev-parse", "HEAD"))
 	_, err = cp.VerifyChange(builder, &gensurla.VerifyChangePayload{
@@ -937,20 +947,29 @@ func TestVerifyChangeTestModuleFileLimitBelowAtAndAbove(t *testing.T) {
 				assert.Contains(t, refusal.Message, " (and 1 more));")
 			}
 
-			extractCmd := func(msg string) string {
-				marker := "restore services/shop/eval to base commit " + repo.tests + " ("
-				idx := strings.Index(msg, marker)
-				require.NotEqual(t, -1, idx, msg)
-				rest := msg[idx+len(marker):]
-				end := strings.Index(rest, "), commit, and call verify_change or start_live_target again")
-				require.NotEqual(t, -1, end, msg)
-				return rest[:end]
+			assert.Contains(t, refusal.Message, "restore these files to their versions or absence in commit "+repo.tests)
+			assert.NotContains(t, refusal.Message, "git restore")
+			assert.NotContains(t, refusal.Message, "git rm")
+			// Recover only the named first twenty files. For 21, hooks.go
+			// sorts last and remains for the next refusal and recovery round.
+			var shown []string
+			for i := 1; i < count; i++ {
+				shown = append(shown, "services/shop/eval/acceptance/added_"+
+					string(rune('0'+i/10))+string(rune('0'+i%10))+".go")
 			}
-
-			cmd1 := exec.Command("sh", "-c", extractCmd(refusal.Message))
-			cmd1.Dir = builderProject
-			out, runErr := cmd1.CombinedOutput()
-			require.NoError(t, runErr, string(out))
+			if count <= maxChangedTestFiles {
+				shown = append(shown, "services/shop/eval/acceptance/hooks.go")
+			}
+			wantNames := strings.Join(shown, ", ")
+			if count > maxChangedTestFiles {
+				wantNames += " (and 1 more)"
+			}
+			assert.Contains(t, refusal.Message, "("+wantNames+");")
+			args := []string{"restore", "--source=" + repo.tests, "--staged", "--worktree", "--"}
+			for _, file := range shown {
+				args = append(args, ":(top,literal)"+file)
+			}
+			gitForLayoutTest(t, builderProject, args...)
 			gitForLayoutTest(t, builderProject, "commit", "-q", "-m", "round 1 restore")
 			afterRound1 := strings.TrimSpace(gitForLayoutTest(t, builderProject, "rev-parse", "HEAD"))
 
@@ -972,10 +991,9 @@ func TestVerifyChangeTestModuleFileLimitBelowAtAndAbove(t *testing.T) {
 			assert.Contains(t, refusal.Message, "(services/shop/eval/acceptance/hooks.go);")
 			assert.NotContains(t, refusal.Message, " more)")
 
-			cmd2 := exec.Command("sh", "-c", extractCmd(refusal.Message))
-			cmd2.Dir = builderProject
-			out, runErr = cmd2.CombinedOutput()
-			require.NoError(t, runErr, string(out))
+			assert.Contains(t, refusal.Message, "restore these files to their versions or absence in commit "+repo.tests)
+			gitForLayoutTest(t, builderProject, "restore", "--source="+repo.tests, "--staged", "--worktree", "--",
+				":(top,literal)services/shop/eval/acceptance/hooks.go")
 			gitForLayoutTest(t, builderProject, "commit", "-q", "-m", "round 2 restore")
 			afterRound2 := strings.TrimSpace(gitForLayoutTest(t, builderProject, "rev-parse", "HEAD"))
 

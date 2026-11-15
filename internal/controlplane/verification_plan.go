@@ -20,7 +20,6 @@ import (
 
 	gensurla "github.com/goadesign/surla/gen/surla"
 	"github.com/goadesign/surla/internal/scaffold"
-	"github.com/goadesign/surla/internal/shquote"
 	"github.com/goadesign/surla/internal/testwriter"
 	"github.com/goadesign/surla/internal/verify"
 )
@@ -104,7 +103,7 @@ type (
 		testModule string
 		// changed lists the hand-written files under testModule that differ
 		// between baseCommit and commit, for refusedTestModuleChanged.
-		changed []changedGitFile
+		changed []string
 		// actor is who changes that commit, for refusedMissingTests and
 		// refusedNoLayout.
 		actor layoutActor
@@ -183,40 +182,22 @@ func (r *layoutRefusal) Error() string {
 			" build the change again from the project's current commit, then read the new assignments and verify again", r.commit, r.testsCommit)
 	case refusedTestModuleChanged:
 		shown := r.changed[:min(len(r.changed), maxChangedTestFiles)]
-		names := make([]string, len(shown))
-		var restore, remove []string
-		for i, c := range shown {
-			names[i] = c.path
-			spec := shquote.Quote(":(top,literal)" + c.path)
-			if c.added {
-				remove = append(remove, spec)
-			} else {
-				restore = append(restore, spec)
-			}
-		}
-		list := strings.Join(names, ", ")
+		list := strings.Join(shown, ", ")
 		if rest := len(r.changed) - len(shown); rest > 0 {
 			list = fmt.Sprintf("%s (and %d more)", list, rest)
-		}
-		var cmds []string
-		if len(restore) > 0 {
-			cmds = append(cmds, fmt.Sprintf("git restore --source=%s --staged --worktree -- %s", r.baseCommit, strings.Join(restore, " ")))
-		}
-		if len(remove) > 0 {
-			cmds = append(cmds, fmt.Sprintf("git rm -f -- %s", strings.Join(remove, " ")))
 		}
 		renameNote := ""
 		testGoMod := path.Join(r.testModule, "go.mod")
 		for _, c := range r.changed {
-			if c.path == testGoMod {
+			if c == testGoMod {
 				renameNote = "; renaming the service module is the user's to do on their own branch between changes, not during a build"
 				break
 			}
 		}
 		return fmt.Sprintf("candidate commit %s changes hand-written files in the test module %s since base commit %s (%s);"+
 			" tests in %s belong to the test writer, not the builder%s:"+
-			" restore %s to base commit %s (%s), commit, and call verify_change or start_live_target again",
-			r.commit, r.testModule, r.baseCommit, list, r.testModule, renameNote, r.testModule, r.baseCommit, strings.Join(cmds, " && "))
+			" restore these files to their versions or absence in commit %s, commit, and call verify_change or start_live_target again",
+			r.commit, r.testModule, r.baseCommit, list, r.testModule, renameNote, r.baseCommit)
 	}
 	step := "the builder commits the layout surla init makes and verifies again"
 	if r.actor == testWriterActs {
