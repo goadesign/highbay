@@ -40,7 +40,7 @@ jobs:
     name: Go (${{ matrix.module }})
     if: github.event_name == 'push' || github.event_name == 'pull_request'
     runs-on: macos-latest
-    # Keep the backstop while hosted cold/warm runs establish the five-minute target.
+    # Keep the backstop; exact-cache-hit runs target five minutes. Record cold runs too.
     timeout-minutes: 10
     strategy:
       fail-fast: false
@@ -69,6 +69,7 @@ jobs:
           echo "modules=$(go env GOMODCACHE)" >> "$GITHUB_OUTPUT"
       - name: Restore the remaining root packages' Go caches
         if: matrix.module == '.'
+        id: restored-go-cache
         # Only Go (.) saves this owner key. Other short and full jobs can
         # populate different build closures, so they cannot win this cache.
         uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
@@ -77,18 +78,10 @@ jobs:
             ${{ steps.go-cache.outputs.build }}
             ${{ steps.go-cache.outputs.modules }}
           key: short-root-remaining-${{ runner.os }}-${{ runner.arch }}-go-${{ steps.go.outputs.go-version }}-${{ hashFiles('go.mod', 'go.sum') }}
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
-        if: matrix.module == '.'
-        with:
-          node-version: 26.0.0
-          cache: npm
-          cache-dependency-path: ui/checkpoint/package-lock.json
-      - name: Install the views page's test packages
-        # The views page tests in internal/controlplane and internal/project
-        # run the built page in jsdom; install it once before both binaries.
-        if: matrix.module == '.'
+      - name: Explain a dependency cache miss
+        if: matrix.module == '.' && steps.restored-go-cache.outputs.cache-hit != 'true'
         run: |
-          npm ci --prefix ui/checkpoint --no-audit --no-fund </dev/null
+          echo "dependency cache miss: this run compiles all dependencies" >> "$GITHUB_STEP_SUMMARY"
       - name: Vet and short race tests
         # Full vet checks share the race build with tests instead of compiling
         # a separate plain build. JSON retains individual test durations.
@@ -126,6 +119,7 @@ jobs:
           echo "build=$(go env GOCACHE)" >> "$GITHUB_OUTPUT"
           echo "modules=$(go env GOMODCACHE)" >> "$GITHUB_OUTPUT"
       - name: Restore the page packages' Go caches
+        id: restored-go-cache
         # Only Go (., page tests) saves this key, including the browser vet closure.
         uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
         with:
@@ -133,6 +127,10 @@ jobs:
             ${{ steps.go-cache.outputs.build }}
             ${{ steps.go-cache.outputs.modules }}
           key: short-root-pages-${{ runner.os }}-${{ runner.arch }}-go-${{ steps.go.outputs.go-version }}-${{ hashFiles('go.mod', 'go.sum') }}
+      - name: Explain a dependency cache miss
+        if: steps.restored-go-cache.outputs.cache-hit != 'true'
+        run: |
+          echo "dependency cache miss: this run compiles all dependencies" >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 26.0.0
@@ -170,6 +168,7 @@ jobs:
           echo "build=$(go env GOCACHE)" >> "$GITHUB_OUTPUT"
           echo "modules=$(go env GOMODCACHE)" >> "$GITHUB_OUTPUT"
       - name: Restore the control plane's Go caches
+        id: restored-go-cache
         # Only Go (., control plane) saves this key. It includes the native
         # fake Docker build as well as the race-instrumented test closure.
         uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
@@ -178,6 +177,10 @@ jobs:
             ${{ steps.go-cache.outputs.build }}
             ${{ steps.go-cache.outputs.modules }}
           key: short-root-controlplane-${{ runner.os }}-${{ runner.arch }}-go-${{ steps.go.outputs.go-version }}-${{ hashFiles('go.mod', 'go.sum') }}
+      - name: Explain a dependency cache miss
+        if: steps.restored-go-cache.outputs.cache-hit != 'true'
+        run: |
+          echo "dependency cache miss: this run compiles all dependencies" >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 26.0.0
@@ -191,8 +194,8 @@ jobs:
         run: |
           go test -race -vet=all -short -timeout 3m -json -skip "$ROOT_PAGE_TESTS" ./internal/controlplane </dev/null
 
-  # Every job of a push or pull request is meant to finish within five
-  # minutes. The Linux checks are therefore separate jobs that run side by
+  # Warm short jobs target five minutes; cache misses are reported separately.
+  # The Linux checks are separate jobs that run side by
   # side: one build-and-vet job per build tag, and one job for the tests.
   linux-build:
     name: Go (Linux, build ${{ matrix.tag || 'without tags' }})

@@ -2021,6 +2021,13 @@ checks are:
   these jobs saves and restores its own Go build and module cache key,
   qualified by operating system, architecture, Go version and root dependency
   files; one job's narrower build cannot become another job's saved cache.
+  Pushes to `main`, `team-start` and `builder-copy` run all three jobs and
+  save missing caches after success, making them available to pull requests
+  targeting those branches. Each job targets five minutes with an exact
+  cache hit; cold durations are recorded separately. On a miss, its job
+  summary says `dependency cache miss: this run compiles all dependencies`.
+  Dependency or toolchain changes, or cache expiry or eviction, can cause a
+  miss; a base-branch push does not guarantee a hit for every pull request.
 - A Linux build and vet of the root module, once without build tags and once
   with each of `e2e`, `scaffold`, `herdr`, `browser` and `docker`, and the
   Linux short tests (including `verify/candidate` in the Linux Landlock +
