@@ -18,7 +18,7 @@ import (
 
 func TestCompareReportsEvaluatedDeclarationsHelperChangesAndGoModDirectives(t *testing.T) {
 	if testing.Short() {
-		t.Skip("runs the sandboxed Go toolchain; the full suite (go test without -short) covers it")
+		t.Skip("runs the Go toolchain; the full suite (go test without -short) covers it")
 	}
 	ctx := context.Background()
 	oldDesign := `package design
@@ -142,7 +142,7 @@ exclude example.com/legacy v1.1.0
 
 func TestCompareDetectsTransportMappingsProtobufTagsMCPAnnotationsBoundedResultsAndPerConsumerCards(t *testing.T) {
 	if testing.Short() {
-		t.Skip("runs the sandboxed Go toolchain; the full suite (go test without -short) covers it")
+		t.Skip("runs the Go toolchain; the full suite (go test without -short) covers it")
 	}
 	ctx := context.Background()
 	oldDesign := `package design
@@ -379,7 +379,7 @@ var _ = Service("orders", func() {
 
 func TestCompareMultiFileDirectorySiblingPackagesModelPrimitivesLookupAndTotalRequired(t *testing.T) {
 	if testing.Short() {
-		t.Skip("runs the sandboxed Go toolchain; the full suite (go test without -short) covers it")
+		t.Skip("runs the Go toolchain; the full suite (go test without -short) covers it")
 	}
 	ctx := context.Background()
 

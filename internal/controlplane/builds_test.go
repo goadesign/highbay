@@ -120,7 +120,7 @@ func TestBuildingAgainReplacesTheBuildAndClearsReads(t *testing.T) {
 	assert.Equal(t, &gensurla.BuilderAssignment{
 		ChangeID: "chg", RequestRevision: first.RequestRevision, InForce: true, Read: true,
 		WrittenTests:  gensurla.NewWrittenTestsNotYetAccepted(&gensurla.TestsNotYetAccepted{}),
-		WorkingFolder: cp.activeWorkspaceDir, GoworkOff: true,
+		WorkingFolder: filepath.Join(cp.activeWorkspaceDir, testwriter.BuilderRole.Folder), GoworkOff: true,
 	}, full)
 	build := mustStartedBuild(t, cp, user, "chg")
 	assert.True(t, build.Builder.Read, "reading in full records the builder's read")
@@ -183,6 +183,18 @@ func TestBuildingAgainReplacesTheBuildAndClearsReads(t *testing.T) {
 // checks that each reports the same in_force as the build read.
 func TestAssignmentsSayWhetherTheirBuildIsInForce(t *testing.T) {
 	cp := newBuildControlPlane(t, Options{})
+	checked := make(chan struct{}, 2)
+	copy := &buildCopyFixture{
+		folder: fixtureTestWriterFolder(t, cp),
+		check: func(context.Context, []designeval.StorySummary) (testwriter.Verdict, error) {
+			return testwriter.Verdict{}, nil
+		},
+		record: func(context.Context, testwriter.Verdict, string) (string, error) {
+			checked <- struct{}{}
+			return strings.Repeat("a", 40), nil
+		},
+	}
+	cp.buildCopyFactory = func(context.Context, string, scaffold.Layout) (buildCopy, error) { return copy, nil }
 	user := asCaller("alice@example.com", CallerUser)
 	builder := asCaller("alice@example.com", CallerBuilder)
 	tests := asCaller("alice@example.com", CallerTestWriter)
@@ -226,6 +238,10 @@ func TestAssignmentsSayWhetherTheirBuildIsInForce(t *testing.T) {
 			if err != nil {
 				return false, err
 			}
+			<-checked
+			// Wait for the report checker to release workingCopyTurn after record.
+			cp.workingCopyTurn <- struct{}{}
+			<-cp.workingCopyTurn
 			return item.InForce, nil
 		}},
 	}
@@ -266,11 +282,10 @@ func TestStartBuildChecksTheChangeAgainAfterPreparing(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			cp := newBuildControlPlane(t, Options{})
 			copy := &buildCopyFixture{folder: fixtureTestWriterFolder(t, cp)}
-			cp.buildCopyFactory = func(context.Context, string, scaffold.Layout) (buildCopy, error) { return copy, nil }
 			card := saveBuildStoryCard(t, cp, "chg", StatusConfirmed, refundStory("Refund over the limit"))
-			copy.refresh = func(context.Context) (testwriter.RefreshResult, error) {
+			cp.buildCopyFactory = func(context.Context, string, scaffold.Layout) (buildCopy, error) {
 				saveBuildStoryCard(t, cp, "chg", tc.status, refundStory("Refund over the new limit"))
-				return testwriter.RefreshResult{State: testwriter.RefreshAtProjectCommit, Commit: strings.Repeat("c", 40)}, nil
+				return copy, nil
 			}
 			_, err := cp.StartBuild(asCaller("alice@example.com", CallerUser), &gensurla.StartBuildPayload{ChangeID: "chg", RequestRevision: card.RequestRevision})
 			assertRefused(t, err, "conflict")
@@ -335,6 +350,8 @@ func TestReportForAnotherRevisionIsRefused(t *testing.T) {
 	card := buildableChange(t, cp, "chg")
 	buildableChange(t, cp, "unbuilt")
 	_, err := cp.StartBuild(user, &gensurla.StartBuildPayload{ChangeID: "chg", RequestRevision: card.RequestRevision})
+	require.NoError(t, err)
+	_, err = cp.GetTestWriterAssignment(tests, &gensurla.GetTestWriterAssignmentPayload{ChangeID: "chg"})
 	require.NoError(t, err)
 	before := readBuildFile(t, cp, "chg")
 	cases := []struct {
@@ -522,6 +539,7 @@ func TestBuildFileIsDecodedStrictly(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			cp := newControlPlane(t, Options{WorkspaceDir: workspace})
+			cp.buildCopyFactory = producer.buildCopyFactory
 			require.NoError(t, os.WriteFile(cp.cards.path(card.ChangeID), cardJSON, 0o600))
 			var file map[string]any
 			require.NoError(t, json.Unmarshal(baseline, &file))

@@ -73,7 +73,7 @@ func runVerifyRun(args []string) error {
 	}
 }
 
-// runVerify builds the candidate commit in the OS sandbox and runs the
+// runVerify builds the candidate commit and runs the
 // evaluator suite commit against it, through the same supervised processes
 // verify_change uses. -work-dir keeps its meaning: it receives the clones,
 // the built binaries (candidate-bin/<name>) and the evidence, and is left in

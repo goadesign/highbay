@@ -30,7 +30,7 @@ const path = "/changes/chg/build";
 const page = await openPage(origin, { link: input.link });
 await until(() => page.$("#surla-build-start") && !page.$("#surla-build-start").disabled, "first Build action did not become available");
 expect(page.sent("POST", path).length === 0, "opening the card started a build");
-expect(page.text("#surla-build-start-explanation").includes("If this project needs a test writer") && page.text("#surla-build-start-explanation").includes("on this machine with your permissions: read them before you approve"), "pre-send explanation must name the conditional writer and explain how to review host-run tests");
+expect(page.text("#surla-build-start-explanation").includes("If this project needs a test writer") && page.text("#surla-build-start-explanation").includes("From Build on, the tests and the builder’s code run on this machine as ordinary programs, with your access to files and the network; nothing confines them. Approval decides only what merges."), "pre-send explanation must name the conditional writer and say that from Build on the tests and the builder's code run unconfined, before any approval");
 expect(page.text("#surla-build-start-explanation").includes("accepted tests to check the builder’s work and to start live targets"), "the first Build explanation must name the accepted tests' live-target role");
 await control(origin, "hold", { key: "POST " + path });
 await until(() => page.$("#surla-build-start") && !page.$("#surla-build-start").disabled, "Build did not become ready after the gate was installed");

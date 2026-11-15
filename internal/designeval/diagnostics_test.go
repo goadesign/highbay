@@ -15,7 +15,7 @@ import (
 	"github.com/goadesign/surla/internal/testmodule"
 )
 
-// TestFailedOnModuleNamesTheModulePhases checks every phase runSandboxed sets
+// TestFailedOnModuleNamesTheModulePhases checks every phase runProgram sets
 // and the failures outside it: only checking, resolving, compiling and
 // evaluating the module's own files count, whatever the underlying cause. Of
 // those, only the phase that loads the module's dependencies is one
@@ -41,7 +41,7 @@ func TestFailedOnModuleNamesTheModulePhases(t *testing.T) {
 		{name: "evaluating the design", err: &phaseError{phase: phaseEvaluateDSL, err: cause}, want: true},
 		{name: "preparing the compiler", err: &phaseError{phase: "preparing the design compiler", err: cause}},
 		{name: "preparing the temporary files", err: &phaseError{phase: "preparing the temporary compiler files", err: cause}},
-		{name: "starting the sandboxed generator", err: &phaseError{phase: "starting the sandboxed design generator", err: cause}},
+		{name: "starting the design generator", err: &phaseError{phase: "starting the design generator", err: cause}},
 		{name: "reading the generated output", err: &phaseError{phase: "reading the generated output", err: cause}},
 		{name: "removing the temporary files", err: &phaseError{phase: "removing the temporary compiler files", err: cause}},
 		{name: "a closed evaluator", err: errEvaluatorClosed},
@@ -51,7 +51,7 @@ func TestFailedOnModuleNamesTheModulePhases(t *testing.T) {
 		},
 		{
 			name: "a build that would not stop while compiling the design",
-			err:  errors.Join(&stuckBuildError{err: cause}, &phaseError{phase: phaseCompile, err: cause}),
+			err:  errors.Join(&stuckGroupError{err: cause}, &phaseError{phase: phaseCompile, err: cause}),
 		},
 		{name: "wrapped by a caller", err: fmt.Errorf("generate: %w", &phaseError{phase: phaseCompile, err: cause}), want: true},
 	} {
@@ -63,7 +63,7 @@ func TestFailedOnModuleNamesTheModulePhases(t *testing.T) {
 }
 
 // TestGenerationDiagnosticReportsFactsWithoutBlamingSource verifies phase and
-// sandbox-output reporting without inferring a source cause from an exit code.
+// command-output reporting without inferring a source cause from an exit code.
 // Errors from module commands retain raw private output only for CLI/traces.
 func TestGenerationDiagnosticReportsFactsWithoutBlamingSource(t *testing.T) {
 	cause := errors.New("exit status 1")
@@ -73,9 +73,9 @@ func TestGenerationDiagnosticReportsFactsWithoutBlamingSource(t *testing.T) {
 		err  error
 		want string
 	}{
-		{name: "compiler source error", err: &phaseError{phase: "compiling the design", err: &buildError{err: &sandboxOutputError{err: cause, output: "design/design.go:7:9: undefined: Missing", paths: paths}}}, want: "undefined: Missing"},
-		{name: "compiler storage error", err: &phaseError{phase: "compiling the design", err: &buildError{err: &sandboxOutputError{err: cause, output: "failed to initialize build cache at /operator/compiler/gocache: not a directory", paths: paths}}}, want: "failed to initialize build cache at <compiler>/gocache"},
-		{name: "DSL error", err: &phaseError{phase: "evaluating the design and generating files", err: &sandboxOutputError{err: cause, output: "service orders: method get_order: result type is invalid", paths: paths}}, want: "result type is invalid"},
+		{name: "compiler source error", err: &phaseError{phase: "compiling the design", err: &buildError{err: &commandOutputError{err: cause, output: "design/design.go:7:9: undefined: Missing", paths: paths}}}, want: "undefined: Missing"},
+		{name: "compiler storage error", err: &phaseError{phase: "compiling the design", err: &buildError{err: &commandOutputError{err: cause, output: "failed to initialize build cache at /operator/compiler/gocache: not a directory", paths: paths}}}, want: "failed to initialize build cache at <compiler>/gocache"},
+		{name: "DSL error", err: &phaseError{phase: "evaluating the design and generating files", err: &commandOutputError{err: cause, output: "service orders: method get_order: result type is invalid", paths: paths}}, want: "result type is invalid"},
 		{name: "module command", err: &phaseError{phase: "loading the design module dependencies", err: fmt.Errorf("private proxy https://private:credential@private-proxy.example: %w", cause)}, want: "loading the design module dependencies"},
 		{name: "file setup", err: &phaseError{phase: "preparing the temporary compiler files", err: &os.PathError{Op: "mkdir", Path: "/operator/run", Err: os.ErrPermission}}, want: "preparing the temporary compiler files"},
 		{name: "before admission", err: errors.New("create private /operator/run failed"), want: "starting the design compiler"},
@@ -90,7 +90,7 @@ func TestGenerationDiagnosticReportsFactsWithoutBlamingSource(t *testing.T) {
 			assert.NotContains(t, diagnostic, "Correct the design")
 		})
 	}
-	original := &sandboxOutputError{err: cause, output: "raw /operator/run/output", paths: paths}
+	original := &commandOutputError{err: cause, output: "raw /operator/run/output", paths: paths}
 	wrapped := &phaseError{phase: "compiling the design", err: errors.Join(original, os.ErrPermission)}
 	assert.Equal(t, cause.Error()+" (raw /operator/run/output)", original.Error())
 	assert.Equal(t, errors.Join(original, os.ErrPermission).Error(), wrapped.Error())
@@ -114,7 +114,7 @@ func TestGenerationDiagnosticMapsExactEscapedPaths(t *testing.T) {
 				fmt.Fprintf(&output, "%s\n%q\n%s/file.go\n%q\n", dir, dir, dir, dir+"/file.go")
 			}
 			raw := output.String()
-			failure := &sandboxOutputError{err: errors.New("exit status 1"), output: raw, paths: paths}
+			failure := &commandOutputError{err: errors.New("exit status 1"), output: raw, paths: paths}
 			diagnostic := GenerationDiagnostic(failure)
 			assert.NotContains(t, diagnostic, "/operator/")
 			assert.NotContains(t, diagnostic, special)
@@ -162,10 +162,10 @@ func TestGenerationDiagnosticPreservesSnapshotValidationDetail(t *testing.T) {
 }
 
 // TestGenerationUsesPhysicalOperatorPaths observes the exact facts supplied to
-// a real sandboxed Go build, despite relative and symlinked owner settings.
+// a real Go build, despite relative and symlinked owner settings.
 func TestGenerationUsesPhysicalOperatorPaths(t *testing.T) {
 	if testing.Short() {
-		t.Skip("runs the sandboxed Go toolchain; the full suite (go test without -short) covers it")
+		t.Skip("runs the Go toolchain; the full suite (go test without -short) covers it")
 	}
 	files := testmodule.Snapshot(t, "", minimalDesign)
 	toolchain, err := resolveToolchainEnv(t.Context())
@@ -188,7 +188,7 @@ func TestGenerationUsesPhysicalOperatorPaths(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(work, "gocache"), []byte("a file prevents cache setup\n"), 0o600))
 	_, err = ev.Generate(t.Context(), files)
 	require.ErrorContains(t, err, "failed to initialize build cache")
-	var output *sandboxOutputError
+	var output *commandOutputError
 	require.ErrorAs(t, err, &output)
 	assert.Equal(t, toolchain.goroot, output.paths.goroot)
 	assert.Equal(t, modCache, output.paths.modCache)

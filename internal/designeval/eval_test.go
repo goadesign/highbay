@@ -1,14 +1,14 @@
-// Package designeval tests sandboxed Goa/Goa-AI design evaluation and JSON
-// Schema extraction.
+// Package designeval tests Goa/Goa-AI design evaluation and JSON Schema
+// extraction.
 package designeval
 
 import (
-	"context"
-	"fmt"
+	"errors"
 	"os"
-	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
+	"syscall"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -17,33 +17,9 @@ import (
 	"github.com/goadesign/surla/internal/testmodule"
 )
 
-func TestEvaluateEnforcesSandboxOnDesignInitAndBuildsJSONSchemas(t *testing.T) {
-	if testing.Short() {
-		t.Skip("runs the sandboxed Go toolchain; the full suite (go test without -short) covers it")
-	}
-	ctx := context.Background()
-
-	// Create a secret file outside the evaluator's sandbox state directory.
-	secretDir := t.TempDir()
-	secretFile := filepath.Join(secretDir, "evaluator-secret.txt")
-	if err := os.WriteFile(secretFile, []byte("top-secret-holdout-data"), 0o600); err != nil {
-		t.Fatalf("write secret file: %v", err)
-	}
-
-	// Hostile design whose init() attempts to read secretFile and fail if allowed.
-	hostileDesign := `package custom_pkg
-
-import (
-	"os"
-	. "goa.design/goa/v3/dsl"
-)
-
-func init() {
-	if _, err := os.ReadFile(` + "`" + secretFile + "`" + `); err == nil {
-		panic("sandbox violation: candidate design init() read protected secret file!")
-	}
-}
-
+// ordersDSL declares the orders API and its get_order method, the design
+// both tests here evaluate after their own init.
+const ordersDSL = `
 var _ = API("orders", func() {
 	HTTP(func() {
 		Path("/api/v1")
@@ -69,33 +45,17 @@ var _ = Service("orders", func() {
 	})
 })
 `
-	res, err := testEvaluator.Evaluate(ctx, testmodule.Snapshot(t, "", hostileDesign))
-	if err != nil {
-		t.Fatalf("Evaluate failed on sandboxed design: %v", err)
-	}
-	if res.SystemName != "orders" {
-		t.Fatalf("expected SystemName orders, got %q", res.SystemName)
-	}
-	methodSig := res.Declarations["Service:orders/Method:get_order"]
-	if res.Declarations["Generated:gen/http/orders/server/paths.go"] == "" {
-		t.Fatal("expected the actual generated HTTP path source to be compared")
-	}
-	if !strings.Contains(methodSig, `"minLength":3`) {
-		t.Fatalf("expected JSON Schema minLength:3 in method payload schema, got %q", methodSig)
-	}
-}
 
-// TestSandboxedExit71AppendsConditionalRecoveryGuidance verifies that Evaluate
-// and Generate preserve the observed error and append conditional recovery
-// guidance when a non-canceled sandboxed command exits with status 71, while
-// leaving ordinary compiler errors and canceled runs unchanged.
-func TestSandboxedExit71AppendsConditionalRecoveryGuidance(t *testing.T) {
+// TestEvaluateRunsTheDesignWithItsOwnEnvironmentAndBuildsJSONSchemas evaluates
+// a design whose init panics when it sees a variable set in this test's own
+// environment: the evaluation succeeds, because the design program gets only
+// the environment Surla gives it, and the method's payload schema is built.
+func TestEvaluateRunsTheDesignWithItsOwnEnvironmentAndBuildsJSONSchemas(t *testing.T) {
 	if testing.Short() {
-		t.Skip("runs the sandboxed Go toolchain; the full suite (go test without -short) covers it")
+		t.Skip("runs the Go toolchain; the full suite (go test without -short) covers it")
 	}
-	ctx := t.Context()
-
-	exit71Design := `package design
+	t.Setenv("SURLA_DESIGNEVAL_TEST_SECRET", "must not reach the design")
+	design := `package custom_pkg
 
 import (
 	"os"
@@ -103,36 +63,56 @@ import (
 )
 
 func init() {
-	os.Exit(71)
+	if os.Getenv("SURLA_DESIGNEVAL_TEST_SECRET") != "" {
+		panic("the design program inherited the evaluator's environment")
+	}
+}
+` + ordersDSL
+	res, err := testEvaluator.Evaluate(t.Context(), testmodule.Snapshot(t, "", design))
+	require.NoError(t, err)
+	assert.Equal(t, "orders", res.SystemName)
+	assert.NotEmpty(t, res.Declarations["Generated:gen/http/orders/server/paths.go"],
+		"the actual generated HTTP path source is compared")
+	assert.Contains(t, res.Declarations["Service:orders/Method:get_order"], `"minLength":3`)
 }
 
-var _ = API("orders", func() {})
-`
-	snap := testmodule.Snapshot(t, "", exit71Design)
-	_, err := testEvaluator.Evaluate(ctx, snap)
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "exit status 71")
-	assert.Contains(t, err.Error(), exit71Guidance)
+// TestEvaluateStopsTheProcessesADesignStarts evaluates a design whose init
+// starts a long-running child and records its process ID: once Evaluate
+// returns, the child no longer exists, because the design program runs in its
+// own process group, which the evaluation stops.
+func TestEvaluateStopsTheProcessesADesignStarts(t *testing.T) {
+	if testing.Short() {
+		t.Skip("runs the Go toolchain; the full suite (go test without -short) covers it")
+	}
+	pidFile := filepath.Join(t.TempDir(), "child.pid")
+	design := `package design
 
-	_, err = testEvaluator.Generate(ctx, snap)
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "exit status 71")
-	assert.Contains(t, err.Error(), exit71Guidance)
+import (
+	"os"
+	"os/exec"
+	"strconv"
 
-	// Ordinary compiler failures do not append exit-71 guidance.
-	brokenSnap := testmodule.Snapshot(t, "", minimalDesign+"\nvar _ = undefinedInDesign\n")
-	_, err = testEvaluator.Evaluate(ctx, brokenSnap)
-	require.Error(t, err)
-	assert.NotContains(t, err.Error(), exit71Guidance)
+	. "goa.design/goa/v3/dsl"
+)
 
-	// Direct check of build exit-71 and canceled-context handling in withExit71Guidance.
-	exit71CmdErr := exec.Command("sh", "-c", "exit 71").Run()
-	require.Error(t, exit71CmdErr)
-	wrapped := withExit71Guidance(ctx, fmt.Errorf("compile Goa design: %w", exit71CmdErr))
-	assert.Contains(t, wrapped.Error(), exit71Guidance)
-
-	canceledCtx, cancel := context.WithCancel(ctx)
-	cancel()
-	canceledWrapped := withExit71Guidance(canceledCtx, fmt.Errorf("compile Goa design: %w", exit71CmdErr))
-	assert.NotContains(t, canceledWrapped.Error(), exit71Guidance, "a canceled build keeps its error without exit-71 guidance")
+func init() {
+	child := exec.Command("/bin/sleep", "300")
+	if err := child.Start(); err != nil {
+		panic(err)
+	}
+	if err := os.WriteFile(` + strconv.Quote(pidFile) + `, []byte(strconv.Itoa(child.Process.Pid)), 0o600); err != nil {
+		panic(err)
+	}
+}
+` + ordersDSL
+	_, err := testEvaluator.Evaluate(t.Context(), testmodule.Snapshot(t, "", design))
+	require.NoError(t, err)
+	raw, err := os.ReadFile(pidFile)
+	require.NoError(t, err, "the design's init ran")
+	pid, err := strconv.Atoi(strings.TrimSpace(string(raw)))
+	require.NoError(t, err)
+	assert.ErrorIs(t, syscall.Kill(pid, 0), syscall.ESRCH, "the design's child was stopped with its group")
+	if !errors.Is(syscall.Kill(pid, 0), syscall.ESRCH) {
+		assert.NoError(t, syscall.Kill(pid, syscall.SIGKILL))
+	}
 }

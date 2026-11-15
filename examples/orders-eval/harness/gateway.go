@@ -48,8 +48,6 @@ type (
 	modelGateway struct {
 		// addr is the gateway's loopback gRPC address.
 		addr string
-		// port is the gateway's TCP port, granted to the candidate.
-		port int
 		// server is the gRPC server hosting the gateway.
 		server *grpc.Server
 		// served is closed once the gRPC server stopped serving.
@@ -73,7 +71,7 @@ const gatewayStopTimeout = 10 * time.Second
 
 // startGateway serves the evaluator's scripted model through a goa-ai model
 // gateway on a loopback port. Every call passes through the meter, which runs
-// in the evaluator process outside the candidate's sandbox.
+// in the evaluator process.
 func startGateway() (*modelGateway, error) {
 	m := &meter{}
 	gw, err := gateway.NewServer(
@@ -89,7 +87,7 @@ func startGateway() (*modelGateway, error) {
 		return nil, fmt.Errorf("listen for model gateway: %w", err)
 	}
 	g := &modelGateway{
-		addr: ln.Addr().String(), port: ln.Addr().(*net.TCPAddr).Port,
+		addr:   ln.Addr().String(),
 		server: grpc.NewServer(), served: make(chan struct{}), meter: m,
 	}
 	gateway.RegisterGRPCServer(g.server, gw)

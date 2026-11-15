@@ -1,0 +1,71 @@
+package acceptance
+
+import (
+	"context"
+	"errors"
+	"slices"
+	"strings"
+	"testing"
+	"time"
+)
+
+// must fails the test now when err is not nil.
+func must(t *testing.T, err error, what string) {
+	t.Helper()
+	if err != nil {
+		t.Fatalf("%s: %v", what, err)
+	}
+}
+
+func TestTheCandidateEnvironmentHoldsOnlyTheLiveKey(t *testing.T) {
+	if got := liveEnv("k"); !slices.Equal(got, []string{"SURLA_LIVE_TARGET_KEY=k"}) {
+		t.Errorf("the [[.Name]]'s environment is %q; provider keys must never reach it", got)
+	}
+	if got := liveEnv(""); got != nil {
+		t.Errorf("with no key the environment is %q, want nothing", got)
+	}
+}
+
+func TestLiveTargetDeliversDoneOnlyAfterCleanup(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cleaned := make(chan struct{})
+	target := liveTarget(ctx, "127.0.0.1:1", make(chan struct{}), func() error {
+		time.Sleep(50 * time.Millisecond)
+		close(cleaned)
+		return nil
+	})
+	cancel()
+	must(t, <-target.Done, "stop")
+	select {
+	case <-cleaned:
+	default:
+		t.Fatal("Done was delivered before cleanup finished")
+	}
+}
+
+func TestLiveTargetTreatsACanceledStopAsRequested(t *testing.T) {
+	for range 50 {
+		ctx, cancel := context.WithCancel(context.Background())
+		exited := make(chan struct{})
+		close(exited)
+		cancel()
+		target := liveTarget(ctx, "127.0.0.1:1", exited, func() error { return nil })
+		if err := <-target.Done; err != nil {
+			t.Fatalf("a requested stop reported %v; the [[.Name]] exiting because of it is not a failure", err)
+		}
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	exited := make(chan struct{})
+	close(exited)
+	target := liveTarget(ctx, "127.0.0.1:1", exited, func() error { return errors.New("state kept") })
+	if err := <-target.Done; err == nil || !strings.Contains(err.Error(), "state kept") {
+		t.Errorf("Done is %v, want the real cleanup error", err)
+	}
+	exited = make(chan struct{})
+	close(exited)
+	target = liveTarget(context.Background(), "127.0.0.1:1", exited, func() error { return nil })
+	if err := <-target.Done; err == nil || !strings.Contains(err.Error(), "exited") {
+		t.Errorf("Done is %v, want the [[.Name]]'s own exit reported", err)
+	}
+}

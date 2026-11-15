@@ -17,7 +17,7 @@ import (
 // with same-named containers and an outgoing component relationship.
 func TestModelRelationshipsUseResolvedScopedIdentities(t *testing.T) {
 	if testing.Short() {
-		t.Skip("runs the sandboxed Go toolchain; the full suite (go test without -short) covers it")
+		t.Skip("runs the Go toolchain; the full suite (go test without -short) covers it")
 	}
 	var previous Result
 	for _, destination := range []string{"First/API", "Second/API"} {

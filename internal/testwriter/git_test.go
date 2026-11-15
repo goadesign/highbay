@@ -40,7 +40,8 @@ func TestSnapshotAndRecordUseTheProjectsRepository(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			repo, markers := newProject(t, map[string]string{"eval/go.mod": "module example.com/shop/eval\n"})
-			wc, err := OpenWorkingCopy(t.Context(), repo)
+			branch := TestsRole.Branch(1)
+			wc, err := MakeCopy(t.Context(), repo, TestsRole, branch, "HEAD")
 			require.NoError(t, err)
 			writeFiles(t, wc.Dir(), map[string]string{
 				".gitattributes":       authorsAttributes,
@@ -55,15 +56,16 @@ func TestSnapshotAndRecordUseTheProjectsRepository(t *testing.T) {
 			tree, err := writeTree(t.Context(), wc, index, src)
 			require.NoError(t, err)
 			assert.NoFileExists(t, marker, "no program named inside the copy runs while snapshotting")
-			commit, err := Record(t.Context(), Verdict{copy: wc, tree: tree}, "Add the accepted tests")
+			commit, err := Record(t.Context(), Verdict{copy: wc, tree: tree}, branch, "Add the accepted tests")
 			require.NoError(t, err)
 
 			assert.NoFileExists(t, marker, "no program named inside the copy runs while recording")
 			assert.Equal(t, snapshotFiles(t, src), commitFiles(t, repo, commit),
 				"the commit holds exactly the files the check compiles")
 			assert.Contains(t, commitFiles(t, repo, commit), "eval/refund_test.txt")
-			again, err := OpenWorkingCopy(t.Context(), repo)
+			again, ok, err := OpenCopy(t.Context(), repo, TestsRole)
 			require.NoError(t, err, "the copy is found through the project's repository")
+			require.True(t, ok)
 			assert.Equal(t, wc, again)
 			assert.Empty(t, ranHooks(t, markers))
 		})
@@ -106,11 +108,12 @@ func pointCopysGitInside(t *testing.T, dir, marker string) {
 // the snapshot was never compiled and is not recorded either.
 func TestRecordHoldsEveryCompiledFile(t *testing.T) {
 	t.Parallel()
+	branch := TestsRole.Branch(1)
 	for _, ignored := range []string{"gen/", "AGENTS_QUICKSTART.md", "helper.go"} {
 		t.Run(ignored, func(t *testing.T) {
 			t.Parallel()
 			repo, _ := newProject(t, map[string]string{"eval/go.mod": "module example.com/shop/eval\n"})
-			wc, err := OpenWorkingCopy(t.Context(), repo)
+			wc, err := MakeCopy(t.Context(), repo, TestsRole, branch, "HEAD")
 			require.NoError(t, err)
 			writeFiles(t, wc.Dir(), map[string]string{
 				".gitignore":     ignored + "\n",
@@ -125,7 +128,7 @@ func TestRecordHoldsEveryCompiledFile(t *testing.T) {
 			})
 			tree, err := writeTree(t.Context(), wc, index, src)
 			require.NoError(t, err)
-			commit, err := Record(t.Context(), Verdict{copy: wc, tree: tree}, "Add the accepted tests")
+			commit, err := Record(t.Context(), Verdict{copy: wc, tree: tree}, branch, "Add the accepted tests")
 			require.NoError(t, err)
 
 			compiled := snapshotFiles(t, src)

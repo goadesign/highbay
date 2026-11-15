@@ -33,7 +33,6 @@ import (
 	"github.com/goadesign/surla/internal/project"
 	"github.com/goadesign/surla/internal/testwriter"
 	"github.com/goadesign/surla/internal/verify"
-	"github.com/goadesign/surla/verify/candidate"
 )
 
 type (
@@ -119,7 +118,7 @@ func (h *Hooks) PricesScone(ctx context.Context) (eval.Result, error) {
 	// journeyCheckWait bounds one check of the test writer's report, from the
 	// report to the verdict. The control plane gives the whole check 15
 	// minutes (checkLimit in internal/controlplane), within which its
-	// sandboxed build has 10 minutes and its listing 60 seconds, and reaches
+	// build has 10 minutes and its listing 60 seconds, and reaches
 	// could_not_run itself at that limit; one more minute lets that verdict
 	// arrive before this wait ends. The verification run's wait is
 	// journeyOwnerWait, the server's own run limit plus its stop path.
@@ -156,7 +155,7 @@ var (
 // requires is sent back with the compiler's finding naming it; the report
 // with the hook is accepted and recorded on the tests branch, and the
 // builder's assignment names that commit; the builder's commit passes those
-// tests in a sandboxed run that says where the tests came from and that the
+// tests in a run that says where the tests came from and that the
 // test writer may read, and the change list shows it as current; the user
 // approves that run on the page without promotion settings, and the approval
 // names the builder's commit and the tests' commit; and a later acceptance of
@@ -164,9 +163,6 @@ var (
 // current, hides its approval, and refuses approving it again. Each step
 // stops the journey when it fails, because every later step builds on it.
 func TestWholeJourneyThroughTheProjectServer(t *testing.T) {
-	if err := candidate.CheckSandbox(); err != nil {
-		t.Skipf("the journey builds the starter and its tests in the candidate sandbox: %v", err)
-	}
 	j := newWholeJourney(t)
 	for _, step := range []struct {
 		name string
@@ -423,9 +419,13 @@ func (j *wholeJourney) startBuild(t *testing.T) {
 		handles[role.Role] = role.Handle
 	}
 
+	buildCopyDir := filepath.Join(j.dir, testwriter.BuilderRole.Folder)
+	assert.Equal(t, j.projectCommit, strings.TrimSpace(runTestGit(t, buildCopyDir, "rev-parse", "HEAD")))
+	assert.Equal(t, testwriter.BuilderRole.Branch(1),
+		strings.TrimSpace(runTestGit(t, buildCopyDir, "symbolic-ref", "--short", "HEAD")))
 	copyDir := filepath.Join(j.dir, testwriter.Folder)
 	assert.Equal(t, j.projectCommit, strings.TrimSpace(runTestGit(t, copyDir, "rev-parse", "HEAD")))
-	assert.Equal(t, testwriter.Branch,
+	assert.Equal(t, testwriter.TestsRole.Branch(1),
 		strings.TrimSpace(runTestGit(t, copyDir, "symbolic-ref", "--short", "HEAD")))
 
 	roster := j.roster(t)
@@ -444,7 +444,7 @@ func (j *wholeJourney) startBuild(t *testing.T) {
 
 	var folder string
 	j.builder, folder = j.scriptedAgent(t, "builder")
-	assert.Equal(t, j.dir, folder, "the builder works in the project")
+	assert.Equal(t, buildCopyDir, folder, "the builder works in its own copy")
 	j.testWriter, j.testsFolder = j.scriptedAgent(t, "test_writer")
 	require.Equal(t, copyDir, j.testsFolder, "the test writer works in its own copy")
 

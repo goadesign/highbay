@@ -119,15 +119,17 @@ func TestPublishRecordsWarningsWithoutFailing(t *testing.T) {
 // by a death during a report's preparation, it does not stop Check, which
 // accepts the complete copy, and the tree it accepts does not hold it.
 func TestALeftoverStagingFolderFailsNeitherPrepareNorCheck(t *testing.T) {
-	skipWithoutSandbox(t)
+	skipInShortMode(t)
 	repo, _ := newProject(t, fixtureProject(t))
-	wc, err := OpenWorkingCopy(t.Context(), repo)
+	base := runGit(t, repo, "rev-parse", "HEAD")
+	branch := TestsRole.Branch(1)
+	wc, err := MakeCopy(t.Context(), repo, TestsRole, branch, "HEAD")
 	require.NoError(t, err)
 	module := filepath.Join(wc.Project(), "eval")
 	stage := map[string]string{leftoverStage + "/gen/evals/shop_acceptance/suite.go": "package half\n"}
 	writeFiles(t, module, stage)
 
-	_, err = testChecker.Prepare(t.Context(), wc, fixtureSuite, refundStories)
+	_, err = testChecker.Prepare(t.Context(), wc, fixtureSuite, branch, base, refundStories)
 	require.NoError(t, err, "a staging folder left by an interrupted publication does not fail the preparation")
 	assert.NoDirExists(t, filepath.Join(module, leftoverStage), "the preparation removed it")
 	suiteGo, err := os.ReadFile(filepath.Join(module, generatedSuite))
@@ -136,20 +138,20 @@ func TestALeftoverStagingFolderFailsNeitherPrepareNorCheck(t *testing.T) {
 
 	writeFiles(t, module, stage)
 	writeFiles(t, module, map[string]string{
-		"acceptance/acceptance.go": fixtureAcceptance(quietInit(filepath.Join(t.TempDir(), "unused")), "RefundOverLimit", "StoreCreditWithinLimit"),
+		"acceptance/acceptance.go": fixtureAcceptance(quietInit, "RefundOverLimit", "StoreCreditWithinLimit"),
 	})
 	c := *testChecker
 	c.build = func(_ context.Context, spec candidate.BuildSpec, _ func(*exec.Cmd) error) error {
 		return os.WriteFile(spec.Out, []byte("stand-in program"), 0o700)
 	}
-	c.list = func(context.Context, candidate.Artifact, candidate.Spec, int) ([]byte, error) {
+	c.list = func(context.Context, candidate.Artifact, candidate.Spec, int, func(*exec.Cmd) error) ([]byte, error) {
 		d := suite.Declaration{ID: "shop_acceptance", Environment: "scripted-model"}
 		for _, id := range []string{"prices_tea", "refund_over_limit", "store_credit_within_limit"} {
 			d.Scenarios = append(d.Scenarios, suite.DeclaredScenario{ID: id, Tags: []string{}})
 		}
 		return json.Marshal(d)
 	}
-	v, err := c.Check(t.Context(), wc, fixtureSuite, refundStories)
+	v, err := c.Check(t.Context(), wc, fixtureSuite, branch, base, refundStories)
 	require.NoError(t, err, "a staging folder in the copy does not stop the check")
 	require.True(t, v.Accepted(), "%+v", v.Findings)
 	assert.NotContains(t, runGit(t, repo, "ls-tree", "-r", "--name-only", v.tree), leftoverStage,
@@ -168,14 +170,14 @@ func TestALinkWithAStagingFoldersNameIsTheAuthorsFinding(t *testing.T) {
 		files["eval/"+p] = content
 	}
 	repo, _ := newProject(t, files)
-	wc, err := OpenWorkingCopy(t.Context(), repo)
+	wc, err := MakeCopy(t.Context(), repo, TestsRole, TestsRole.Branch(1), "HEAD")
 	require.NoError(t, err)
 	outside := t.TempDir()
 	writeFiles(t, outside, map[string]string{"gen/theirs.go": "theirs\n", "keep.txt": "keep\n"})
 	link := filepath.Join(wc.Project(), "eval", leftoverStage)
 	require.NoError(t, os.Symlink(outside, link))
 
-	_, err = testChecker.Prepare(t.Context(), wc, Suite{Module: "eval", Command: "./cmd/shop-evals"}, nil)
+	_, err = testChecker.Prepare(t.Context(), wc, Suite{Module: "eval", Command: "./cmd/shop-evals"}, TestsRole.Branch(1), "HEAD", nil)
 	var author *AuthorError
 	require.ErrorAs(t, err, &author, "a link the author placed is the author's to fix")
 	assert.Equal(t, FindingGeneration, author.Finding.Kind)

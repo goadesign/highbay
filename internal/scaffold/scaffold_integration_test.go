@@ -31,7 +31,7 @@ func TestInitBuildsForNamesThatCollideWithTemplatesOrGo(t *testing.T) {
 }
 
 // TestInitCreatesAProjectWhoseSuitePasses creates real projects with the
-// published Surla version (it needs the network and, for the sandbox, macOS),
+// published Surla version (it needs the network and macOS or Linux),
 // builds the service and its evaluator suite, and runs the suite against the
 // service: every scenario must pass, including the one the starter's Story
 // table requires for its finished flow, through the method the starter ships
@@ -110,10 +110,11 @@ func TestInitCreatesAProjectWhoseSuitePasses(t *testing.T) {
 				out, err := exec.CommandContext(t.Context(), "git", append([]string{"-C", dir}, args...)...).CombinedOutput()
 				require.NoError(t, err, "git %v: %s", args, out)
 			}
-			wc, err := testwriter.OpenWorkingCopy(t.Context(), dir)
+			wc, err := testwriter.MakeCopy(t.Context(), dir, testwriter.TestsRole, testwriter.TestsRole.Branch(1), "HEAD")
 			require.NoError(t, err)
 			prepared, err := testwriter.NewChecker(ev, t.TempDir()).Prepare(t.Context(), wc,
-				testwriter.Suite{Module: SuiteDir, Command: designeval.SuiteCommandPackage(name)}, evaluated.Stories)
+				testwriter.Suite{Module: SuiteDir, Command: designeval.SuiteCommandPackage(name)},
+				testwriter.TestsRole.Branch(1), "HEAD", evaluated.Stories)
 			require.NoError(t, err)
 			assert.Equal(t, required, prepared)
 			status := exec.CommandContext(t.Context(), "git", "-C", wc.Dir(), "status", "--porcelain", "--untracked-files=all")

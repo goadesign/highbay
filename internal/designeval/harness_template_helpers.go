@@ -1,5 +1,5 @@
 // Package designeval holds the standalone Goa/Goa-AI/Model evaluator helper
-// functions compiled and executed inside verify/candidate.Exec's sandbox.
+// functions compiled and run with verify/candidate.Run.
 package designeval
 
 const (

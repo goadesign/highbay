@@ -18,7 +18,6 @@ import (
 	"github.com/goadesign/surla/internal/designeval"
 	"github.com/goadesign/surla/internal/scaffold"
 	"github.com/goadesign/surla/internal/testwriter"
-	"github.com/goadesign/surla/verify/candidate"
 )
 
 type (
@@ -32,8 +31,9 @@ type (
 	// and is bounded by limit. Its last step (confirm that the build still
 	// answers to the report checked, record accepted tests, save the
 	// verdict) holds reportMu, so a report cannot fall between the
-	// confirmation and the commit. When ctx ends, the sandboxed steps end
-	// with it and nothing is saved: the build stays reported, and the next
+	// confirmation and the commit. When ctx ends, the steps that run the
+	// author's code end with it and nothing is saved: the build stays
+	// reported, and the next
 	// run judges it.
 	reportChecker struct {
 		// cp owns the builds, the turn, reportMu, reportWake and the copy.
@@ -105,13 +105,22 @@ const (
 	// lasting one forever.
 	maxRetriesAfterFailure = 3
 
-	// stepOpenCopy, stepSandbox, stepNoCommonBase, stepLimit and stepFailure
+	// recordLockRetries is how many times a judgment repeats Record alone when
+	// it fails because of index.lock: Git's own commands hold that lock for
+	// milliseconds to seconds, whereas a lock still there after these retries
+	// is a stale lock.
+	recordLockRetries = 5
+	// recordLockRetryPause bounds the wait between Record attempts on
+	// index.lock: 500 ms lets a running Git command finish without holding
+	// reportMu and the working-copy turn for more than a few seconds across
+	// recordLockRetries attempts.
+	recordLockRetryPause = 500 * time.Millisecond
+
+	// stepOpenCopy, stepNoCommonBase, stepLimit and stepFailure
 	// are the user's steps of a check that could not run, one per cause; each
 	// fits the design's 512 characters.
 	stepOpenCopy = "Build the change again: starting a build opens the test writer's working copy " +
 		"and names the step when it cannot."
-	stepSandbox = "Fix the sandbox problem the reason names (or run surla from a terminal that is not itself sandboxed), " +
-		"then ask the test writer to report again."
 	stepNoCommonBase = "Delete the test writer's working copy and branch, then build the change again: " +
 		"in the project folder run git worktree remove .surla-tests and git branch -D surla/tests."
 	stepLimit = "Check that git and Go module downloads work in the project folder, " +
@@ -267,7 +276,8 @@ func (r *reportChecker) judge(ctx context.Context, changeID string) {
 	deadline := time.Now().Add(r.limit)
 	checkCtx, cancel := context.WithDeadline(ctx, deadline)
 	defer cancel()
-	copy, v, err := r.check(checkCtx, saved.Stories)
+	branch := testwriter.TestsRole.Branch(saved.Number)
+	copy, v, err := r.check(checkCtx, branch, saved.Base, saved.Stories)
 	if ctx.Err() != nil {
 		span.AddEvent("stopped before a verdict; the build stays reported")
 		return
@@ -289,7 +299,7 @@ func (r *reportChecker) judge(ctx context.Context, changeID string) {
 			return
 		}
 		message := fmt.Sprintf("Add the tests Surla accepted for change %s, report %d", id.changeID, id.report)
-		commit, err := copy.Record(checkCtx, v, message)
+		commit, err := r.recordAccepted(checkCtx, copy, v, branch, message)
 		switch {
 		case ctx.Err() != nil:
 			span.AddEvent("stopped before the tests were recorded; the build stays reported")
@@ -324,16 +334,16 @@ func (r *reportChecker) judge(ctx context.Context, changeID string) {
 // that the author caused an *testwriter.AuthorError; any other error says
 // nothing about the author's work.
 func (r *reportChecker) check(
-	ctx context.Context, stories []designeval.StorySummary,
+	ctx context.Context, branch, base string, stories []designeval.StorySummary,
 ) (buildCopy, testwriter.Verdict, error) {
 	copy, err := r.cp.openReportCopy(ctx)
 	if err != nil {
 		return nil, testwriter.Verdict{}, &openCopyError{err: err}
 	}
-	if err := copy.Prepare(ctx, stories); err != nil {
+	if err := copy.Prepare(ctx, branch, base, stories); err != nil {
 		return nil, testwriter.Verdict{}, err
 	}
-	v, err := copy.Check(ctx, stories)
+	v, err := copy.Check(ctx, branch, base, stories)
 	return copy, v, err
 }
 
@@ -362,6 +372,30 @@ func (r *reportChecker) answersTo(id reportIdentity) (bool, error) {
 		return false, err
 	}
 	return found && reportIdentityOf(saved) == id, nil
+}
+
+// recordAccepted records v on branch with message, repeating Record alone up to
+// recordLockRetries times when it fails because of index.lock, waiting at most
+// recordLockRetryPause between attempts while checkCtx is live. Any other
+// error, or checkCtx ending, stops immediately.
+func (r *reportChecker) recordAccepted(
+	checkCtx context.Context, copy buildCopy, v testwriter.Verdict, branch, message string,
+) (string, error) {
+	pause := min(r.retry, recordLockRetryPause)
+	for attempt := 0; ; attempt++ {
+		commit, err := copy.Record(checkCtx, v, branch, message)
+		var lockErr *testwriter.IndexLockError
+		if err == nil || !errors.As(err, &lockErr) || attempt >= recordLockRetries || checkCtx.Err() != nil {
+			return commit, err
+		}
+		timer := time.NewTimer(pause)
+		select {
+		case <-checkCtx.Done():
+			timer.Stop()
+			return "", checkCtx.Err()
+		case <-timer.C:
+		}
+	}
 }
 
 // saveVerdict saves verdict on id's build, with its time, when the build
@@ -484,21 +518,24 @@ func (r *reportChecker) verdictOf(v testwriter.Verdict, err error, deadline time
 func (r *reportChecker) couldNotRun(err error, deadline time.Time, failed string) testWriterAssignment {
 	var reason, step string
 	var open *openCopyError
+	var lockErr *testwriter.IndexLockError
 	switch {
 	case !time.Now().Before(deadline):
 		reason, step = fmt.Sprintf("Checking the tests did not finish within %s, "+
 			"though building the test program and listing its tests each have their own shorter limit.", limitWords(r.limit)), stepLimit
 	case errors.As(err, &open):
 		reason, step = "Surla could not open the test writer's working copy: "+err.Error(), stepOpenCopy
-	case errors.Is(err, candidate.ErrIsolationUnavailable):
-		reason, step = "Surla's sandbox could not start: "+err.Error(), stepSandbox
-	case errors.Is(err, testwriter.ErrNoCommonBase):
-		reason, step = "Surla cannot tell which files the test writer changed: "+err.Error(), stepNoCommonBase
 	case errors.Is(err, testwriter.ErrWriteGenerated):
 		reason = "Surla could not write the required tests into the test writer's working copy or its snapshot: " + err.Error()
 		step = stepWriteCopy + ", then ask the test writer to report again."
 	case errors.Is(err, testwriter.ErrDependencies):
 		reason, step = failed+": "+err.Error(), stepDependencies+", then ask the test writer to report again."
+	case errors.As(err, &lockErr):
+		reason = failed + ": Git's index is locked."
+		step = fmt.Sprintf(
+			"If no Git command is running in the test writer's working copy, delete %s; then ask the test writer to report again.",
+			lockErr.Path,
+		)
 	default:
 		reason, step = failed+": "+err.Error(), stepFailure
 	}
