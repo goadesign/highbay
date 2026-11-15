@@ -181,7 +181,9 @@ func TestGenOnAFreshStarterChangesNothingAndKeepsModulesApart(t *testing.T) {
 	require.NoError(t, os.WriteFile(commentPath, append(source, []byte("\n// Builder-only comment; evaluator behavior stays unchanged.\n")...), 0o644))
 	candidateCommit := trustedSuiteCommit(t, dir)
 	require.NotEqual(t, initialized.Commit, candidateCommit)
+	phaseStart = time.Now()
 	assertVerifyRefusedWithoutBuild(t, ctx, client, opts.RunsDir, "operator@example.com", "unbuilt", candidateCommit)
+	t.Logf("initial refresh and refused verification: %s", time.Since(phaseStart))
 
 	// The operator stores verification and promotion after initialization; a
 	// server restart adopts them.
