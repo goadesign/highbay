@@ -340,6 +340,7 @@ func builderCopyV1Fixture(t *testing.T, stored bool) (
 	builder := filepath.Join(workspace, testwriter.BuilderRole.Folder)
 	productionBuildGit(t, workspace, "worktree", "add", "-q", "-b", "surla/build-1", builder, build.Base)
 	productionBuildGit(t, workspace, "branch", "surla/tests-1", build.Base)
+	writeBuilderDesignFixture(t, builder, build.DesignSource)
 	writeWorkspaceFiles(t, builder, map[string]string{"implementation.go": "package shop\n"})
 	candidate := commitAllForLayoutTest(t, builder)
 	return cp, card, build, candidate, builder

@@ -18,11 +18,12 @@ func commitBuilderCandidateFixture(
 	t *testing.T, cp *ControlPlane, card *gensurla.ChangeCardResult,
 ) string {
 	t.Helper()
-	folder := readBuilderFixture(t, cp, card)
-	writeWorkspaceFiles(t, folder, map[string]string{
+	assignment := readBuilderFixture(t, cp, card)
+	writeBuilderDesignFixture(t, assignment.WorkingFolder, assignment.DesignSource)
+	writeWorkspaceFiles(t, assignment.WorkingFolder, map[string]string{
 		"builder_work.txt": "Implement the agreed change.\n",
 	})
-	return commitAllForLayoutTest(t, folder)
+	return commitAllForLayoutTest(t, assignment.WorkingFolder)
 }
 
 // readBuilderCandidateFixture places a test's authored immutable candidate on
@@ -32,14 +33,26 @@ func readBuilderCandidateFixture(
 	t *testing.T, cp *ControlPlane, card *gensurla.ChangeCardResult, candidate string,
 ) string {
 	t.Helper()
-	folder := readBuilderFixture(t, cp, card)
-	gitForLayoutTest(t, folder, "reset", "--hard", candidate)
-	return folder
+	assignment := readBuilderFixture(t, cp, card)
+	gitForLayoutTest(t, assignment.WorkingFolder, "reset", "--hard", candidate)
+	return assignment.WorkingFolder
+}
+
+// writeBuilderDesignFixture authors the assignment's exact saved files in a
+// candidate fixture. It runs no generator and leaves excluded files alone.
+func writeBuilderDesignFixture(t *testing.T, folder, source string) {
+	t.Helper()
+	files, err := decodeDesignSource(source)
+	require.NoError(t, err)
+	require.NotEmpty(t, files)
+	writeWorkspaceFiles(t, folder, files)
 }
 
 // readBuilderFixture opens the build's real builder copy and reads its
 // assignment through the owner, without changing tests or making a candidate.
-func readBuilderFixture(t *testing.T, cp *ControlPlane, card *gensurla.ChangeCardResult) string {
+func readBuilderFixture(
+	t *testing.T, cp *ControlPlane, card *gensurla.ChangeCardResult,
+) *gensurla.BuilderAssignment {
 	t.Helper()
 	cp.mu.RLock()
 	build, found, err := cp.cards.loadOpenBuild()
@@ -58,5 +71,5 @@ func readBuilderFixture(t *testing.T, cp *ControlPlane, card *gensurla.ChangeCar
 	require.NoError(t, err)
 	require.True(t, assignment.Read)
 	require.Equal(t, copy.Project(), assignment.WorkingFolder)
-	return copy.Project()
+	return assignment
 }

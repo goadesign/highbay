@@ -107,6 +107,9 @@ func (c *ControlPlane) VerifyChange(ctx context.Context, p *gensurla.VerifyChang
 		if err == nil {
 			err = candidateBuildRefusal(p.CandidateCommit, held.file.Base, testwriter.BuilderRole.Branch(held.file.Number), check)
 		}
+		if err == nil {
+			err = checkCandidateDesign(ctx, c.activeWorkspaceDir, held.file, p.CandidateCommit)
+		}
 	}
 	c.workspaceMu.RUnlock()
 	if err != nil {

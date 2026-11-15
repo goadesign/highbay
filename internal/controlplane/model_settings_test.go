@@ -532,7 +532,7 @@ func TestStoredEvaluatorRunsReceiveEveryHeldProviderSnapshot(t *testing.T) {
 func TestWrittenTestRunsReceiveNoProviderSettings(t *testing.T) {
 	isolateProviderFamilies(t)
 	root := realTempDir(t)
-	repo := newLayoutRepo(t, filepath.Join(root, "repo"))
+	repo := newLayoutStoryRepo(t, filepath.Join(root, "repo"), refundStory("Refund over the limit waits"))
 	gitForLayoutTest(t, repo.workspace, "checkout", "-q", "--detach", repo.tests)
 	runsDir := filepath.Join(root, "runs")
 	report := t.TempDir()

@@ -20,6 +20,7 @@ import (
 	goa "goa.design/goa/v3/pkg"
 
 	gensurla "github.com/goadesign/surla/gen/surla"
+	"github.com/goadesign/surla/internal/designeval"
 	"github.com/goadesign/surla/internal/testwriter"
 	"github.com/goadesign/surla/internal/verify"
 	"github.com/goadesign/surla/internal/verifyrun"
@@ -203,7 +204,7 @@ func TestVerificationAndLiveTargetsUseTheAcceptedTests(t *testing.T) {
 // candidate history through rule 13 before selecting the layout.
 func TestVerifyChangeRefusesWhatItCannotRunWithItsStep(t *testing.T) {
 	root := realTempDir(t)
-	repo := newLayoutRepo(t, filepath.Join(root, "repo"))
+	repo := newLayoutStoryRepo(t, filepath.Join(root, "repo"), refundStory("Refund over the limit waits"))
 	plain := filepath.Join(root, "plain", "shop")
 	writeStarterAt(t, plain, "example.com/shop")
 	unknown := strings.Repeat("e", 40)
@@ -392,7 +393,7 @@ func TestVerifyChangeRefusesWhatItCannotRunWithItsStep(t *testing.T) {
 // run's own work folder).
 func TestANewAcceptanceChangesOnlyTheTestsCommit(t *testing.T) {
 	root := realTempDir(t)
-	repo := newLayoutRepo(t, filepath.Join(root, "repo"))
+	repo := newLayoutStoryRepo(t, filepath.Join(root, "repo"), refundStory("Refund over the limit waits"))
 	gitForLayoutTest(t, repo.workspace, "checkout", "-q", "--detach", repo.tests)
 	runsDir := filepath.Join(root, "runs")
 	cp := newBuildControlPlane(t, Options{
@@ -433,7 +434,7 @@ func TestANewAcceptanceChangesOnlyTheTestsCommit(t *testing.T) {
 // and starts no run.
 func TestVerifyChangeSaysWhoActsUntilTheTestsAreAccepted(t *testing.T) {
 	root := realTempDir(t)
-	repo := newLayoutRepo(t, filepath.Join(root, "repo"))
+	repo := newLayoutStoryRepo(t, filepath.Join(root, "repo"), refundStory("Refund over the limit waits"))
 	cases := []struct {
 		name string
 		tw   testWriterAssignment
@@ -487,7 +488,7 @@ func TestVerifyChangeSaysWhoActsUntilTheTestsAreAccepted(t *testing.T) {
 // text written for its reader: the builder's ends with the builder's own step,
 // and the user's names the builder and instructs no agent.
 func TestTestsNotAcceptedIsWordedForEachReader(t *testing.T) {
-	repo := newLayoutRepo(t, filepath.Join(realTempDir(t), "repo"))
+	repo := newLayoutStoryRepo(t, filepath.Join(realTempDir(t), "repo"), refundStory("Refund over the limit waits"))
 	gitForLayoutTest(t, repo.workspace, "checkout", "-q", "--detach", repo.tests)
 	cp := newBuildControlPlane(t, Options{
 		WorkspaceDir:    repo.workspace,
@@ -531,7 +532,7 @@ func TestTestsNotAcceptedIsWordedForEachReader(t *testing.T) {
 // evaluator, which has no test writer.
 func TestTestWriterReadsOnlyTheRunsOfAnAssignedChange(t *testing.T) {
 	root := realTempDir(t)
-	repo := newLayoutRepo(t, filepath.Join(root, "repo"))
+	repo := newLayoutStoryRepo(t, filepath.Join(root, "repo"), refundStory("Refund over the limit waits"))
 	cases := []struct {
 		name    string
 		stored  bool
@@ -616,7 +617,7 @@ func TestTestWriterReadsOnlyTheRunsOfAnAssignedChange(t *testing.T) {
 func TestVerifyChangeTestModuleGuardAcrossRegenerationMergeAndNextChange(t *testing.T) {
 	root := realTempDir(t)
 	repoDir := filepath.Join(root, "repo")
-	repo := newLayoutRepo(t, repoDir)
+	repo := newLayoutStoryRepo(t, repoDir, refundStory("Refund over the limit waits"))
 	runsDir := filepath.Join(root, "runs")
 	cp := newBuildControlPlane(t, Options{
 		CardsDir:        filepath.Join(root, "cards"),
@@ -761,23 +762,46 @@ func TestVerifyChangeTestModuleGuardAcrossRegenerationMergeAndNextChange(t *test
 	// numbered branches, and the test writer commits T2 there.
 	card2 := saveBuildStoryCard(t, cp, "chg-2", StatusConfirmed, refundStory("Refund over the limit waits for a director"))
 	// The first build has no passed run in this fixture. Drop it before the
-	// second change and explicitly supply the refreshed revision's start.
+	// second change and refresh its revision from the new draft generation.
 	current, err := cp.GetBuild(user, &gensurla.GetBuildPayload{ChangeID: "chg-1"})
 	require.NoError(t, err)
 	open, ok := current.Build.AsStarted()
 	require.True(t, ok)
 	_, err = cp.DropBuild(user, &gensurla.DropBuildPayload{ChangeID: "chg-1", StartedAt: open.StartedAt})
 	require.NoError(t, err)
-	provenance, found, err := cp.cards.loadMadeFrom()
+	// Refresh and adopt the same change through its owners after Drop starts
+	// a new draft generation. The snapshot keeps the new folder's real base.
+	record := loadMetadataRecord(t, cp, card2.ChangeID)
+	readDraftForTest(t, cp)
+	writeBuilderDesignFixture(t, filepath.Join(repo.workspace, draftFolderName), record.designSource)
+	opID := seedStoryRefreshForTest(t, cp, "alice@example.com", storyRefreshStateSucceeded, record.stories, "")
+	require.Empty(t, card2.Ambiguities)
+	examples := make([]*gensurla.CP1RevisionAnalysisExample, 0, len(card2.Examples))
+	for _, example := range card2.Examples {
+		examples = append(examples, &gensurla.CP1RevisionAnalysisExample{
+			PriorID: &example.ID, Scenario: example.Scenario, InputSummary: example.InputSummary,
+			ExpectedOutcome: example.ExpectedOutcome, VerificationKind: example.VerificationKind,
+		})
+	}
+	revised, err := cp.ReviseChange(asCaller("alice@example.com", CallerGuide), &gensurla.ReviseChangePayload{
+		ChangeID: card2.ChangeID, RequestRevision: card2.RequestRevision, Prompt: card2.Prompt,
+		StoryRefreshOpID: &opID, Analysis: &gensurla.CP1RevisionAnalysis{
+			Summary: card2.Summary, Ambiguities: []*gensurla.CP1AnalysisAmbiguity{},
+			Examples: examples, RemovedExampleIds: []string{}, PreservedBehaviors: card2.PreservedBehaviors,
+		},
+	})
 	require.NoError(t, err)
-	require.True(t, found)
-	record := loadMetadataRecord(t, cp, "chg-2")
-	record.madeFrom.Start = provenance.Start
-	record.madeFrom.Entries = nil
-	saveMetadataRecord(t, cp, record)
+	require.NotNil(t, revised.Proposed)
+	card2, err = cp.ConfirmIntent(user, &gensurla.ConfirmIntentPayload{
+		ChangeID: card2.ChangeID, RequestRevision: revised.Proposed.RequestRevision,
+		Answers: map[string]string{}, Examples: revised.Proposed.Examples,
+	})
+	require.NoError(t, err)
+	record = loadMetadataRecord(t, cp, card2.ChangeID)
 	_, err = cp.StartBuild(user, &gensurla.StartBuildPayload{ChangeID: "chg-2", RequestRevision: card2.RequestRevision})
 	require.NoError(t, err)
 	builderProject = readBuilderCandidateFixture(t, cp, card2, m1)
+	writeBuilderDesignFixture(t, builderProject, record.designSource)
 	testsWorktree = readTests(card2)
 	assert.Equal(t, m1, strings.TrimSpace(gitForLayoutTest(t, testsWorktree, "rev-parse", "HEAD")),
 		"the new marking read joins the tests copy to the second build's base")
@@ -873,7 +897,7 @@ func TestVerifyChangeTestModuleFileLimitBelowAtAndAbove(t *testing.T) {
 		t.Run(strings.Join([]string{"files", string(rune('0'+count/10)) + string(rune('0'+count%10))}, "_"), func(t *testing.T) {
 			root := realTempDir(t)
 			repoDir := filepath.Join(root, "repo")
-			repo := newLayoutRepo(t, repoDir)
+			repo := newLayoutStoryRepo(t, repoDir, refundStory("Refund over the limit waits"))
 			cp := newBuildControlPlane(t, Options{
 				WorkspaceDir:    repo.workspace,
 				RunsDir:         filepath.Join(root, "runs"),
@@ -974,9 +998,18 @@ func cloneLayoutRepo(t *testing.T, source layoutRepo) layoutRepo {
 	return source
 }
 
-// newLayoutRepo creates a git repository at dir holding the shop project in
-// services/shop and commits it in each state layoutRepo names.
+// newLayoutRepo authors the graph with the no-Story design used by
+// buildableChange, including live-policy fixtures that never verify a candidate.
 func newLayoutRepo(t *testing.T, dir string) layoutRepo {
+	t.Helper()
+	return newLayoutStoryRepo(t, dir, nil)
+}
+
+// newLayoutStoryRepo authors the matching saved design before any immutable
+// graph IDs exist, then commits the test-module states layoutRepo names.
+func newLayoutStoryRepo(
+	t *testing.T, dir string, stories []designeval.StorySummary,
+) layoutRepo {
 	t.Helper()
 	workspace := filepath.Join(dir, "services", "shop")
 	require.NoError(t, os.MkdirAll(workspace, 0o755))
@@ -994,6 +1027,7 @@ func newLayoutRepo(t *testing.T, dir string) layoutRepo {
 	repo.workspace = workspace
 	repo.noEntry = commit(func() {
 		writeTree(t, workspace, shopLayout)
+		writeTree(t, workspace, map[string]string{"design/build_fixture.go": buildStorySource(t, stories)})
 		remove("eval/gen")()
 	})
 	repo.tests = commit(func() { writeTree(t, workspace, shopLayout) })
@@ -1013,6 +1047,7 @@ func newLayoutRepo(t *testing.T, dir string) layoutRepo {
 	gitForLayoutTest(t, dir, "rm", "-rf", "-q", ".")
 	repo.orphanCandidate = commit(func() {
 		writeTree(t, workspace, shopLayout)
+		writeTree(t, workspace, map[string]string{"design/build_fixture.go": buildStorySource(t, stories)})
 		writeTree(t, workspace, map[string]string{"cmd/shop/refund.go": "package main\n"})
 	})
 	gitForLayoutTest(t, dir, "checkout", "-q", "-B", "main", repo.candidate)

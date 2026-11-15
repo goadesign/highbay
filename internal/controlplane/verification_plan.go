@@ -320,6 +320,51 @@ func (c *ControlPlane) checkCandidateBuildCommit(
 	return testwriter.CheckBuildCommit(work, workspace, candidate, branches[0], saved.Base, branches, recorded)
 }
 
+// checkCandidateDesign admits the candidate's canonical agreed design only
+// when its merge base with the current project belongs to this build's own
+// immutable provenance. Only VerifyChange uses this execution-entry policy.
+func checkCandidateDesign(
+	ctx context.Context, workspace string, saved buildFile, candidate string,
+) error {
+	expected, err := decodeDesignSource(saved.DesignSource)
+	if err != nil {
+		return err
+	}
+	if len(expected) == 0 {
+		return gensurla.MakeConflict(errors.New("The open build records no agreed design. Ask the guide to propose a revision from its draft, adopt it, then build."))
+	}
+	work, cancel := context.WithTimeout(ctx, layoutReadTimeout)
+	defer cancel()
+	repo, prefix, project, err := currentProjectCommit(work, workspace)
+	if err != nil {
+		return err
+	}
+	if project == "" {
+		return gensurla.MakeConflict(errors.New("The project has no current Git commit. Commit the project, then build the change again and read its new assignment."))
+	}
+	actual, err := committedDesignAt(work, workspace, repo, prefix, candidate)
+	if err != nil {
+		return err
+	}
+	var changed []string
+	for _, file := range designPaths(nil, expected, actual) {
+		if expected[file] != actual[file] {
+			changed = append(changed, testwriter.ShownName(file))
+		}
+	}
+	if len(changed) > 0 {
+		return gensurla.MakeConflict(fmt.Errorf("candidate commit %s differs from this build's agreed design in %s: call generate_code, commit the agreed design, and call verify_change again", candidate, strings.Join(changed, ", ")))
+	}
+	base, found, err := mergeBaseCommit(work, repo, candidate, project)
+	if err != nil {
+		return err
+	}
+	if !found {
+		return gensurla.MakeConflict(fmt.Errorf("candidate commit %s shares no history with the project's current commit %s: ask the user to build the change again from that commit, then read the new assignment and make the change again", candidate, project))
+	}
+	return checkDesignBase(work, workspace, base, &saved.MadeFrom)
+}
+
 // candidateBuildRefusal gives the builder the branch and working-copy repair
 // goal, including uncommitted file changes retained by a soft reset.
 func candidateBuildRefusal(candidate, base, branch string, check testwriter.CommitCheck) error {
