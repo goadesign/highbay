@@ -4,7 +4,6 @@ package main
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
 	"io"
 	"maps"
@@ -36,6 +35,11 @@ import (
 // starterSurlaVersion is a published Surla version the starter's evaluator
 // module requires, as the scaffold tests use.
 const starterSurlaVersion = "v0.0.0-20261115014514-02c792da3ded"
+
+// starterInitWait bounds the init_project call that creates the starter. The
+// server sets no limit of its own on that call: it generates, builds, tests
+// and commits the starter for as long as the caller waits.
+const starterInitWait = 10 * time.Minute
 
 // headerCommand matches the command line Goa writes in generated file
 // headers, which names the program that generated them.
@@ -110,11 +114,9 @@ func TestGenOnAFreshStarterChangesNothingAndKeepsModulesApart(t *testing.T) {
 		ModulePath: "example.com/shop",
 	})
 	require.NoError(t, err)
-	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Minute)
-	defer cancel()
 	call := &genmcpsurla.ToolsCallPayload{Name: "init_project", Arguments: args}
 	phaseStart := time.Now()
-	result, err := client.ToolsCall(ctx, call)
+	result, err := client.ToolsCall(stepContext(t, starterInitWait), call)
 	t.Logf("init_project: %s", time.Since(phaseStart))
 	require.NoError(t, err)
 	complete, ok := result.Outcome.AsComplete()
@@ -131,7 +133,7 @@ func TestGenOnAFreshStarterChangesNothingAndKeepsModulesApart(t *testing.T) {
 	assert.Equal(t, "example.com/shop", initialized.ModulePath)
 	assert.Equal(t, "shop", initialized.ServiceName)
 	assert.Regexp(t, "^([0-9a-f]{40}|[0-9a-f]{64})$", initialized.Commit)
-	headCmd := exec.CommandContext(ctx, "git", "-C", dir, "rev-parse", "--verify", "HEAD^{commit}")
+	headCmd := exec.CommandContext(stepContext(t, journeyQuickWait), "git", "-C", dir, "rev-parse", "--verify", "HEAD^{commit}")
 	headOut, err := headCmd.CombinedOutput()
 	require.NoError(t, err, string(headOut))
 	assert.Equal(t, initialized.Commit, strings.TrimSpace(string(headOut)))
@@ -142,7 +144,7 @@ func TestGenOnAFreshStarterChangesNothingAndKeepsModulesApart(t *testing.T) {
 
 	// A second call must observe the first call's active workspace without
 	// restarting the server or running another starter build.
-	result, err = client.ToolsCall(ctx, call)
+	result, err = client.ToolsCall(stepContext(t, journeyQuickWait), call)
 	require.NoError(t, err)
 	complete, ok = result.Outcome.AsComplete()
 	require.True(t, ok)
@@ -182,7 +184,7 @@ func TestGenOnAFreshStarterChangesNothingAndKeepsModulesApart(t *testing.T) {
 	candidateCommit := trustedSuiteCommit(t, dir)
 	require.NotEqual(t, initialized.Commit, candidateCommit)
 	phaseStart = time.Now()
-	assertVerifyRefusedWithoutBuild(t, ctx, client, opts.RunsDir, "operator@example.com", "unbuilt", candidateCommit)
+	assertVerifyRefusedWithoutBuild(t, client, opts.RunsDir, "operator@example.com", "unbuilt", candidateCommit)
 	t.Logf("initial refresh and refused verification: %s", time.Since(phaseStart))
 
 	// The operator stores verification and promotion after initialization; a
@@ -220,7 +222,7 @@ func TestGenOnAFreshStarterChangesNothingAndKeepsModulesApart(t *testing.T) {
 		goahttp.RequestEncoder, goahttp.ResponseDecoder, false)
 	user := &gensurla.Client{StartBuildEndpoint: userTransport.StartBuild()}
 	// The control-plane owner reloads the actual initialized child from workspace.json.
-	result, err = client.ToolsCall(ctx, call)
+	result, err = client.ToolsCall(stepContext(t, journeyQuickWait), call)
 	require.NoError(t, err)
 	complete, ok = result.Outcome.AsComplete()
 	require.True(t, ok)
