@@ -113,7 +113,18 @@ func TestViewsPageShowsTheGuidesSucceededStory(t *testing.T) {
   await until(() => page.$("#surla-story-draft") && page.$("#surla-story-draft").dataset.state === "none", "the Story stage did not open");
   const started = await api(origin, "POST", "/workspace/story/refresh", undefined, input.guide);
   expect(started.status === 200 && started.body.state === "running", "the guide could not start an evaluation: " + JSON.stringify(started));
+  try {
   await until(() => page.$("#surla-story-draft").dataset.state === "running", "the user's page did not show the running evaluation without a reload", 15000);
+  } catch (err) {
+    let current;
+    try {
+      current = await api(origin, "GET", "/workspace/story/refresh", undefined, input.guide);
+    } catch (readErr) {
+      current = { readError: String(readErr) };
+    }
+    const draft = page.$("#surla-story-draft");
+    throw new Error(String(err) + "; refresh read: " + JSON.stringify(current) + "; last draft state: " + draft?.dataset.state + "; draft: " + draft?.textContent);
+  }
   try {
     await until(() => ["succeeded", "failed"].includes(page.$("#surla-story-draft")?.dataset.state), "the evaluation did not finish", input.refreshWaitMs);
   } catch (err) {
