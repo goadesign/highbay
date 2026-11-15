@@ -228,7 +228,9 @@ func assertTrustedSuiteJourney(t *testing.T, client *genmcpsurla.Client, user *g
 	t.Helper()
 	setupCtx, cancelSetup := context.WithTimeout(t.Context(), journeyOwnerWait)
 	defer cancelSetup()
+	phaseStart := time.Now()
 	refresh := trustedSuiteRefresh(t, setupCtx, client)
+	t.Logf("refresh: %s", time.Since(phaseStart))
 	args, err := gensurla.EncodeProposeChangePayload(&gensurla.ProposeChangePayload{
 		ChangeID: changeID, Prompt: "Keep answering price questions.", StoryRefreshOpID: refresh.OpID,
 		Analysis: &gensurla.CP1Analysis{
@@ -260,9 +262,11 @@ func assertTrustedSuiteJourney(t *testing.T, client *genmcpsurla.Client, user *g
 	card, err := gensurla.DecodeChangeCardResult(trustedSuiteCall(t, setupCtx, client, "confirm_intent", args))
 	require.NoError(t, err)
 	require.Equal(t, controlplane.StatusConfirmed, card.Status)
+	phaseStart = time.Now()
 	startedBuild, err := user.StartBuild(setupCtx, &gensurla.StartBuildPayload{
 		ChangeID: changeID, RequestRevision: card.RequestRevision,
 	})
+	t.Logf("start build: %s", time.Since(phaseStart))
 	require.NoError(t, err)
 	assert.Equal(t, card.RequestRevision, startedBuild.Build.RequestRevision)
 	args, err = gensurlatools.MarshalGetBuilderAssignmentPayload(&gensurlatools.GetBuilderAssignmentPayload{ChangeID: changeID})
@@ -292,7 +296,9 @@ func assertTrustedSuiteJourney(t *testing.T, client *genmcpsurla.Client, user *g
 		ChangeID: card.ChangeID, CandidateCommit: candidateCommit,
 	})
 	require.NoError(t, err)
+	phaseStart = time.Now()
 	started, err := gensurla.DecodeLiveTargetResult(trustedSuiteCall(t, liveCtx, client, "start_live_target", args))
+	t.Logf("start live target: %s", time.Since(phaseStart))
 	require.NoError(t, err)
 	assert.Equal(t, candidateCommit, started.CandidateCommit)
 	assert.NotEmpty(t, started.URL)
@@ -307,7 +313,9 @@ func assertTrustedSuiteJourney(t *testing.T, client *genmcpsurla.Client, user *g
 	assert.Equal(t, suiteCommit, live.Plan.SuiteCommit)
 	stopCtx, cancelStop := context.WithTimeout(t.Context(), 45*time.Second)
 	defer cancelStop()
+	phaseStart = time.Now()
 	stopped, err := gensurla.DecodeStopLiveTargetResult(trustedSuiteCall(t, stopCtx, client, "stop_live_target", []byte(`{}`)))
+	t.Logf("stop live target: %s", time.Since(phaseStart))
 	require.NoError(t, err)
 	assert.True(t, stopped.Stopped)
 	liveDirs, err = verifyrun.LeftoverLiveDirs(filepath.Join(cardsDir, "live"))
@@ -320,7 +328,9 @@ func assertTrustedSuiteJourney(t *testing.T, client *genmcpsurla.Client, user *g
 	require.NoError(t, err)
 	previewCtx, cancelPreview := context.WithTimeout(t.Context(), journeyOwnerWait)
 	defer cancelPreview()
+	phaseStart = time.Now()
 	preview, err := gensurla.DecodeArchitecturePreviewResult(trustedSuiteCall(t, previewCtx, client, "preview_architecture", args))
+	t.Logf("preview architecture: %s", time.Since(phaseStart))
 	require.NoError(t, err)
 	assert.Equal(t, card.RequestRevision, preview.RequestRevision)
 	assert.NotEmpty(t, preview.Containers, "the starter's design declares its service")
@@ -332,6 +342,7 @@ func assertTrustedSuiteJourney(t *testing.T, client *genmcpsurla.Client, user *g
 	// evaluation above must not consume the run's observation budget.
 	verificationCtx, cancelVerification := context.WithTimeout(t.Context(), journeyOwnerWait)
 	defer cancelVerification()
+	phaseStart = time.Now()
 	run, err := gensurla.DecodeVerificationStatusResult(trustedSuiteCall(t, verificationCtx, client, "verify_change", args))
 	require.NoError(t, err)
 	require.NotEmpty(t, run.RunID)
@@ -368,6 +379,7 @@ func assertTrustedSuiteJourney(t *testing.T, client *genmcpsurla.Client, user *g
 		run, err = gensurla.DecodeVerificationStatusResult(trustedSuiteCall(t, verificationCtx, client, "get_verification", args))
 		require.NoError(t, err)
 	}
+	t.Logf("verify change: %s", time.Since(phaseStart))
 	require.NotNil(t, done.Report)
 	require.True(t, done.Report.Passed, "starter's scripted evaluator must pass")
 	req, saved, err := verifyrun.Read(runsDir, run.RunID)
