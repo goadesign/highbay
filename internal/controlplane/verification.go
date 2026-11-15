@@ -53,10 +53,10 @@ var errVerificationUnavailable = errors.New("verification is not configured on t
 // VerifyChange starts Checkpoint 4 verification of a candidate commit for the
 // caller's confirmed Change Card revision and returns at once with the run in
 // the running state. The caller must own the card, the card must be
-// confirmed, and request_revision must be its current revision; then
-// verificationPlan chooses what runs and refuses what cannot (no build, tests
-// not accepted, no test layout, no common history with the accepted tests, or
-// hand-written changes in the test module). The run is accepted into its own
+// confirmed, and request_revision must be its current revision. Both test
+// sources require the current open build, its read builder assignment and a
+// candidate belonging to that build; verificationPlan then chooses the tests
+// and checks the committed test layout. The run is accepted into its own
 // directory under the runs folder and carried out by processes that outlive
 // this call and this server (see verifyrun).
 func (c *ControlPlane) VerifyChange(ctx context.Context, p *gensurla.VerifyChangePayload) (*gensurla.VerificationStatusResult, error) {
@@ -68,6 +68,34 @@ func (c *ControlPlane) VerifyChange(ctx context.Context, p *gensurla.VerifyChang
 		return nil, gensurla.MakeNotImplemented(errVerificationUnavailable)
 	}
 	if err := c.verifiableCard(principal, p.ChangeID, p.RequestRevision); err != nil {
+		return nil, err
+	}
+	// The caller owns the copy turn through readiness, candidate preflight and
+	// acceptance. Verification never joins a copy or marks an assignment read.
+	select {
+	case c.builderCopyTurn <- struct{}{}:
+	default:
+		return nil, gensurla.MakeWorkingCopyBusy(errors.New("Surla is using the builder's working copy; call verify_change again when that operation has ended."))
+	}
+	defer func() { <-c.builderCopyTurn }()
+	c.mu.RLock()
+	held, err := c.verificationBuild(principal, p.ChangeID, p.RequestRevision)
+	c.mu.RUnlock()
+	if err != nil {
+		return nil, err
+	}
+	c.workspaceMu.RLock()
+	ready, err := c.builderCopyReady(ctx, c.activeWorkspaceDir, "verify_change")
+	if err == nil && (ready.build.file.ChangeID != held.file.ChangeID ||
+		ready.build.file.RequestRevision != held.file.RequestRevision ||
+		!ready.build.file.StartedAt.Equal(held.file.StartedAt)) {
+		err = gensurla.MakeConflict(errors.New("the open build changed while preparing verification: read get_builder_assignment and verify again"))
+	}
+	if err == nil {
+		err = c.checkCandidateBuildCommit(ctx, c.activeWorkspaceDir, held.file, p.CandidateCommit)
+	}
+	c.workspaceMu.RUnlock()
+	if err != nil {
 		return nil, err
 	}
 	verCfg, err := c.verificationPlan(ctx, principal, p.ChangeID, p.RequestRevision, p.CandidateCommit)
@@ -93,6 +121,16 @@ func (c *ControlPlane) VerifyChange(ctx context.Context, p *gensurla.VerifyChang
 		trace.WithAttributes(attribute.String("surla.change_id", p.ChangeID)))
 	defer span.End()
 	c.mu.RLock()
+	currentBuild, buildErr := c.verificationBuild(principal, p.ChangeID, p.RequestRevision)
+	if buildErr != nil {
+		c.mu.RUnlock()
+		return nil, buildErr
+	}
+	if currentBuild.file.Number != held.file.Number ||
+		!currentBuild.file.StartedAt.Equal(held.file.StartedAt) {
+		c.mu.RUnlock()
+		return nil, gensurla.MakeConflict(errors.New("the open build changed while preparing verification: read get_builder_assignment and verify again"))
+	}
 	inputsCurrent, err := c.currentVerificationInputs(principal, p.ChangeID, plan)
 	c.mu.RUnlock()
 	if err != nil {

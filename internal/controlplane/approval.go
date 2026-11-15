@@ -20,7 +20,8 @@ import (
 )
 
 // ApproveMerge records Checkpoint 5 approval of the caller's confirmed Change
-// Card revision. It chooses the tests' commit for the revision through
+// Card revision. Both test sources require the current owned open build. It
+// chooses the tests' commit for the revision through
 // testsChoice (returning no_build or tests_not_accepted when written tests are
 // not ready), loads the verification report by digest (from the bound
 // PromotionTarget when promotion settings are configured, or from the
@@ -32,7 +33,7 @@ import (
 // When no PromotionTarget is bound, no release folder or staged binaries are
 // required and Artifacts is recorded as empty.
 // The approval is saved on a copy of the card only if the card still has the
-// same request_revision and testsChoice still returns the same tests' commit
+// same request_revision and open build and testsChoice still returns the same tests' commit
 // after those calls, so a confirm_intent or a new test acceptance meanwhile is
 // never approved with the old report; a revise_change only proposes a revision
 // and leaves the card's revision as it was. It returns the approved card with
@@ -57,10 +58,14 @@ func (c *ControlPlane) ApproveMerge(
 		testsCommit string
 		source      verify.TestsSource
 		choiceErr   error
+		build       heldBuild
 	)
 	if err == nil && exists && record.owner == principal.ID &&
 		record.card.Status == StatusConfirmed && record.card.RequestRevision == p.RequestRevision {
-		testsCommit, source, choiceErr = c.testsChoice(principal, p.ChangeID, p.RequestRevision)
+		build, choiceErr = c.verificationBuild(principal, p.ChangeID, p.RequestRevision)
+		if choiceErr == nil {
+			testsCommit, source, choiceErr = c.testsChoice(principal, p.ChangeID, p.RequestRevision)
+		}
 	}
 	c.mu.RUnlock()
 	if err != nil {
@@ -164,6 +169,11 @@ func (c *ControlPlane) ApproveMerge(
 		}
 		return nil, err
 	}
+	// A passed report names an immutable candidate, which must still belong
+	// to this open build after all unlocked report and artifact reads.
+	if err := c.checkCandidateBuildCommit(ctx, c.currentWorkspaceDir(), build.file, report.Binding.CandidateCommit); err != nil {
+		return nil, err
+	}
 
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -188,6 +198,14 @@ func (c *ControlPlane) ApproveMerge(
 			p.RequestRevision,
 			record.card.RequestRevision,
 		))
+	}
+	nowBuild, err := c.verificationBuild(principal, p.ChangeID, p.RequestRevision)
+	if err != nil {
+		return nil, err
+	}
+	if nowBuild.file.Number != build.file.Number ||
+		!nowBuild.file.StartedAt.Equal(build.file.StartedAt) {
+		return nil, gensurla.MakeConflict(errors.New("the open build changed while approving: verify the current build, then approve its run"))
 	}
 	nowCommit, nowSource, err := c.testsChoice(principal, p.ChangeID, p.RequestRevision)
 	if err != nil || nowCommit != testsCommit {
