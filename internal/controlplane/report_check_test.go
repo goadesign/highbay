@@ -577,11 +577,11 @@ func TestAReportIsJudgedThroughTheProductionCopy(t *testing.T) {
 	assert.Empty(t, productionBuildGit(t, testsDir, "status", "--porcelain", "--untracked-files=all"))
 }
 
-// TestTheWholeCheckLimit judges with a shortened limit and stand-in checks
-// that sleep without watching their context: just below the limit the copy
-// is accepted; at and just above it the check could not run, naming the limit
-// and the user's step. A check that ends with its context at the limit could
-// not run either, while findings given at the limit stand.
+// TestTheWholeCheckLimit accepts an immediate check within the normal limit,
+// without requiring the fixture and recording to fit in a timing margin.
+// Stand-in checks at and above a shortened limit could not run, naming the
+// limit and the user's step. A check that ends with its context at the limit
+// could not run either, while findings given at the limit stand.
 func TestTheWholeCheckLimit(t *testing.T) {
 	const limit = 500 * time.Millisecond
 	sleepThen := func(d time.Duration, v testwriter.Verdict) func(context.Context, int) (testwriter.Verdict, error) {
@@ -592,24 +592,25 @@ func TestTheWholeCheckLimit(t *testing.T) {
 	}
 	cases := []struct {
 		name  string
+		limit time.Duration
 		check func(context.Context, int) (testwriter.Verdict, error)
 		want  gensurla.TestsKind
 	}{
-		{name: "just below", check: sleepThen(limit-200*time.Millisecond, testwriter.Verdict{}), want: gensurla.TestsKindAccepted},
-		{name: "at", check: sleepThen(limit, testwriter.Verdict{}), want: gensurla.TestsKindCouldNotRun},
-		{name: "just above", check: sleepThen(limit+200*time.Millisecond, testwriter.Verdict{}), want: gensurla.TestsKindCouldNotRun},
-		{name: "ended with its context", check: func(ctx context.Context, int2 int) (testwriter.Verdict, error) {
+		{name: "below", limit: checkLimit, check: accepting, want: gensurla.TestsKindAccepted},
+		{name: "at", limit: limit, check: sleepThen(limit, testwriter.Verdict{}), want: gensurla.TestsKindCouldNotRun},
+		{name: "just above", limit: limit, check: sleepThen(limit+200*time.Millisecond, testwriter.Verdict{}), want: gensurla.TestsKindCouldNotRun},
+		{name: "ended with its context", limit: limit, check: func(ctx context.Context, int2 int) (testwriter.Verdict, error) {
 			<-ctx.Done()
 			return testwriter.Verdict{}, ctx.Err()
 		}, want: gensurla.TestsKindCouldNotRun},
-		{name: "findings at the limit", check: sleepThen(limit, needsChanges("The suite command did not finish building within 10 minutes.")),
+		{name: "findings at the limit", limit: limit, check: sleepThen(limit, needsChanges("The suite command did not finish building within 10 minutes.")),
 			want: gensurla.TestsKindNeedsChanges},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			cp, revision := newReportFixture(t, Options{}, &standInCopy{check: tc.check})
 			readBothAssignments(t, cp)
-			cp.reports.limit = limit
+			cp.reports.limit = tc.limit
 			reportTests(t, cp, revision)
 			build := waitForTests(t, cp, tc.want)
 			if failed, ok := build.TestWriter.Tests.AsCouldNotRun(); ok {
