@@ -40,7 +40,7 @@ func TestBuilderCopyV1VerifyEntry(t *testing.T) {
 						want = "is not on surla/build-1"
 					case "copy off branch":
 						productionBuildGit(t, builder, "checkout", "-q", "-b", "agent-work")
-						want = "Your working copy is on branch"
+						want = "A worker's working copy is not on its build's own branch"
 					case "unread":
 						build.Builder.Read = false
 						require.NoError(t, cp.cards.saveOpenBuild(build))
@@ -79,6 +79,7 @@ func TestBuilderCopyV1VerifyEntry(t *testing.T) {
 					if scenario == "copy off branch" {
 						var refusal *gensurla.CopyOffBranch
 						require.ErrorAs(t, err, &refusal)
+						assert.Contains(t, refusal.Message, "Your working copy is on branch 'agent-work'")
 					}
 					if scenario == "foreign work" {
 						assert.ErrorContains(t, err, "Make surla/build-1 and your working copy hold neither")
