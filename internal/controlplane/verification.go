@@ -71,6 +71,9 @@ func (c *ControlPlane) VerifyChange(ctx context.Context, p *gensurla.VerifyChang
 	if err := c.verifiableCard(principal, p.ChangeID, p.RequestRevision); err != nil {
 		return nil, err
 	}
+	_, span := c.tracer("surla/controlplane").Start(ctx, "surla.controlplane.start_verification",
+		trace.WithAttributes(attribute.String("surla.change_id", p.ChangeID)))
+	defer span.End()
 	// The caller owns the copy turn through readiness, candidate preflight and
 	// acceptance. Verification never joins a copy or marks an assignment read.
 	select {
@@ -83,7 +86,7 @@ func (c *ControlPlane) VerifyChange(ctx context.Context, p *gensurla.VerifyChang
 	held, err := c.verificationBuild(principal, p.ChangeID, p.RequestRevision)
 	c.mu.RUnlock()
 	if err != nil {
-		return nil, err
+		return nil, verificationStartInputError(span, p.ChangeID, err)
 	}
 	c.workspaceMu.RLock()
 	ready, err := c.builderCopyReady(ctx, c.activeWorkspaceDir, "verify_change")
@@ -101,7 +104,7 @@ func (c *ControlPlane) VerifyChange(ctx context.Context, p *gensurla.VerifyChang
 	}
 	c.workspaceMu.RUnlock()
 	if err != nil {
-		return nil, err
+		return nil, verificationStartInputError(span, p.ChangeID, err)
 	}
 	verCfg, err := c.verificationPlan(ctx, principal, p.ChangeID, p.RequestRevision, p.CandidateCommit)
 	if err != nil {
@@ -122,14 +125,11 @@ func (c *ControlPlane) VerifyChange(ctx context.Context, p *gensurla.VerifyChang
 	}
 	// Observe the selected inputs before accepting work. A later edit can
 	// invalidate this observation, but no failed read can hide an accepted run.
-	_, span := c.tracer("surla/controlplane").Start(ctx, "surla.controlplane.start_verification",
-		trace.WithAttributes(attribute.String("surla.change_id", p.ChangeID)))
-	defer span.End()
 	c.mu.RLock()
 	currentBuild, buildErr := c.verificationBuild(principal, p.ChangeID, p.RequestRevision)
 	if buildErr != nil {
 		c.mu.RUnlock()
-		return nil, buildErr
+		return nil, verificationStartInputError(span, p.ChangeID, buildErr)
 	}
 	if currentBuild.file.Number != held.file.Number ||
 		!currentBuild.file.StartedAt.Equal(held.file.StartedAt) {
@@ -139,9 +139,7 @@ func (c *ControlPlane) VerifyChange(ctx context.Context, p *gensurla.VerifyChang
 	inputsCurrent, err := c.currentVerificationInputs(principal, p.ChangeID, plan)
 	c.mu.RUnlock()
 	if err != nil {
-		span.RecordError(err)
-		span.SetStatus(codes.Error, "read verification inputs")
-		return nil, fmt.Errorf("start verification for %q: saved verification inputs could not be read", p.ChangeID)
+		return nil, verificationStartInputError(span, p.ChangeID, err)
 	}
 	// Only the operator's stored evaluator receives provider settings, every
 	// held provider's, snapshotted now: later hand-overs affect later runs.
@@ -155,6 +153,18 @@ func (c *ControlPlane) VerifyChange(ctx context.Context, p *gensurla.VerifyChang
 		return nil, fmt.Errorf("start verification: %w", err)
 	}
 	return statusResult(req, verifyrun.State{Kind: verifyrun.StateRunning}, inputsCurrent, nil), nil
+}
+
+// verificationStartInputError preserves declared refusals and keeps raw input
+// read failures on the operation span, outside the builder's public response.
+func verificationStartInputError(span trace.Span, changeID string, err error) error {
+	var refusal goa.GoaErrorNamer
+	if errors.As(err, &refusal) {
+		return err
+	}
+	span.RecordError(err)
+	span.SetStatus(codes.Error, "read verification inputs")
+	return fmt.Errorf("start verification for %q: saved verification inputs could not be read", changeID)
 }
 
 // verifiableCard checks, under the read lock, that principal owns the card

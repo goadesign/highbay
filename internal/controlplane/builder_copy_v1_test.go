@@ -25,7 +25,7 @@ func TestBuilderCopyV1VerifyEntry(t *testing.T) {
 			profile = "stored evaluator"
 		}
 		t.Run(profile, func(t *testing.T) {
-			for _, scenario := range []string{"valid", "base", "off branch", "unknown commit", "unread", "no build", "dropped", "foreign work", "copy busy"} {
+			for _, scenario := range []string{"valid", "base", "off branch", "copy off branch", "unknown commit", "unread", "no build", "dropped", "foreign work", "copy busy"} {
 				t.Run(scenario, func(t *testing.T) {
 					cp, card, build, candidate, builder := builderCopyV1Fixture(t, stored)
 					workspace := cp.currentWorkspaceDir()
@@ -38,6 +38,9 @@ func TestBuilderCopyV1VerifyEntry(t *testing.T) {
 					case "off branch":
 						productionBuildGit(t, builder, "reset", "--hard", build.Base)
 						want = "is not on surla/build-1"
+					case "copy off branch":
+						productionBuildGit(t, builder, "checkout", "-q", "-b", "agent-work")
+						want = "Your working copy is on branch"
 					case "unread":
 						build.Builder.Read = false
 						require.NoError(t, cp.cards.saveOpenBuild(build))
@@ -73,6 +76,10 @@ func TestBuilderCopyV1VerifyEntry(t *testing.T) {
 					}
 					require.Error(t, err)
 					assert.Contains(t, strings.ToLower(err.Error()), strings.ToLower(want))
+					if scenario == "copy off branch" {
+						var refusal *gensurla.CopyOffBranch
+						require.ErrorAs(t, err, &refusal)
+					}
 					if scenario == "foreign work" {
 						assert.ErrorContains(t, err, "Make surla/build-1 and your working copy hold neither")
 						assert.ErrorContains(t, err, "Make your own work again as a new commit on surla/build-1")

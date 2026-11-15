@@ -264,10 +264,14 @@ func (c *ControlPlane) verificationPlan(
 
 // verificationBuild requires the current owned, undropped build at the entry
 // to verification or approval, including stored-evaluator projects. Callers
-// hold c.mu; historical reads and live starts keep their own selection rules.
+// hold c.mu. Missing verification configuration is refused before classifying
+// build roles; historical reads and live starts keep their own selection rules.
 func (c *ControlPlane) verificationBuild(
 	principal Principal, changeID, revision string,
 ) (heldBuild, error) {
+	if _, none := c.verifier.(noVerification); none {
+		return heldBuild{}, gensurla.MakeNotImplemented(errVerificationUnavailable)
+	}
 	held, err := c.ownedBuild(principal, changeID)
 	var missing *goa.ServiceError
 	if errors.As(err, &missing) && missing.Name == "not_found" {
