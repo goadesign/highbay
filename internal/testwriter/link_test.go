@@ -5,7 +5,6 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
-	"runtime"
 	"testing"
 	"time"
 
@@ -160,9 +159,6 @@ func TestPrepareSeparatesFailuresTheAuthorCannotFix(t *testing.T) {
 // module; Prepare still returns a plain error, not an *AuthorError, because
 // the context ended.
 func TestPrepareGivesAPlainErrorWhenTheCallerStopsDuringAModulePhase(t *testing.T) {
-	if runtime.GOOS != "darwin" && runtime.GOOS != "linux" {
-		t.Skip("Prepare refuses before generating where the sandbox does not exist")
-	}
 	repo, _ := newProject(t, map[string]string{
 		"eval/go.mod":           "module example.com/shop/eval\n\ngo 1.24\n",
 		"eval/go.sum":           "",

@@ -31,7 +31,7 @@ func TestInitBuildsForNamesThatCollideWithTemplatesOrGo(t *testing.T) {
 }
 
 // TestInitCreatesAProjectWhoseSuitePasses creates real projects with the
-// published Surla version (it needs the network and, for the sandbox, macOS),
+// published Surla version (it needs the network and macOS or Linux),
 // builds the service and its evaluator suite, and runs the suite against the
 // service: every scenario must pass, including the one the starter's Story
 // table requires for its finished flow, through the method the starter ships

@@ -1,6 +1,6 @@
 // This file implements bound-workspace Story refresh operations: refresh_story
 // reads the active workspace's Go module snapshot, starts or reuses an
-// in-memory sandboxed evaluation per project owner and workspace identity,
+// in-memory evaluation per project owner and workspace identity,
 // and get_story_refresh reads the current operation state. Every caller acts
 // for the owner, so the user, the guide and the builder share one operation.
 package controlplane
@@ -74,11 +74,11 @@ const (
 	// storyRefreshStateNone reports that no Story refresh has run yet for the
 	// owner and bound workspace in this server process.
 	storyRefreshStateNone = "none"
-	// storyRefreshStateRunning reports that sandboxed Story evaluation is in progress.
+	// storyRefreshStateRunning reports that Story evaluation is in progress.
 	storyRefreshStateRunning = "running"
-	// storyRefreshStateSucceeded reports that sandboxed Story evaluation completed.
+	// storyRefreshStateSucceeded reports that Story evaluation completed.
 	storyRefreshStateSucceeded = "succeeded"
-	// storyRefreshStateFailed reports that sandboxed Story evaluation failed or timed out.
+	// storyRefreshStateFailed reports that Story evaluation failed or timed out.
 	storyRefreshStateFailed = "failed"
 	// defaultStoryRefreshTimeout bounds one Story refresh operation in the
 	// control plane, sized for a cold module download and compilation.
@@ -216,7 +216,7 @@ func (c *ControlPlane) storyEvaluation(owner string) storyEvaluationVersion {
 	return storyEvaluationVersion{OpID: op.id, State: op.state, SnapshotDigest: op.snapshotDigest}
 }
 
-// runStoryRefresh executes one sandboxed design evaluation for op on a
+// runStoryRefresh executes one design evaluation for op on a
 // server-owned context and publishes its result only if the server is still
 // running and op is still the current operation for key.
 func (c *ControlPlane) runStoryRefresh(

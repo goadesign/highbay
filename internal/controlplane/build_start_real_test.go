@@ -1,4 +1,4 @@
-// This file drives StartBuild through the production Git, sandbox and generation owners.
+// This file drives StartBuild through the production Git and generation owners.
 package controlplane
 
 import (
@@ -13,7 +13,6 @@ import (
 	gensurla "github.com/goadesign/surla/gen/surla"
 	"github.com/goadesign/surla/internal/testmodule"
 	"github.com/goadesign/surla/internal/testwriter"
-	"github.com/goadesign/surla/verify/candidate"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -33,9 +32,6 @@ var _ = Service("shop", func() {
 // one copy across starts, correct project subfolder, clean original repository,
 // and an actionable generation finding. Only the external team is replaced.
 func TestStartBuildUsesTheProductionCopy(t *testing.T) {
-	if err := candidate.CheckSandbox(); err != nil {
-		t.Skipf("production build-start probe requires the candidate sandbox: %v", err)
-	}
 	for _, subdir := range []string{".", "services/shop"} {
 		t.Run(subdir, func(t *testing.T) {
 			eval := map[string]string{
@@ -86,10 +82,7 @@ func TestStartBuildUsesTheProductionCopy(t *testing.T) {
 // command's exit error does not wrap DeadlineExceeded.
 func TestStartBuildNamesARealGenerationLimit(t *testing.T) {
 	if testing.Short() {
-		t.Skip("runs a real sandboxed generation to its injected one-second deadline")
-	}
-	if err := candidate.CheckSandbox(); err != nil {
-		t.Skipf("real generation-limit proof requires the candidate sandbox: %v", err)
+		t.Skip("runs a real generation to its injected one-second deadline")
 	}
 	// The design imports Goa-AI's evaluation DSL, as a test module's does, so
 	// its module keeps the Goa-AI requirement the Story table's imports need.

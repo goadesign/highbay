@@ -7,16 +7,16 @@
 // merges.
 //
 // Nothing here trusts the copy's author. Its files are compiled and run only
-// in the verify/candidate sandbox (macOS sandbox-exec or Linux Landlock and
-// Seccomp-BPF): where the sandbox is unavailable, Prepare and Check fail with
-// candidate.ErrIsolationUnavailable before any of the author's code runs. No
-// file inside the working copy can make git run a
-// program: git is always pointed at the copy's repository through the folder
-// the project's repository keeps for it, never through the copy's own .git,
-// and it runs with hooks and the file system monitor disabled. A program the
-// project's or the user's own git configuration names, such as a filter
-// driver, still runs, as it would for the user. Files are read and written in
-// the copy only through real folders, never through a symbolic link.
+// through verify/candidate, from a private snapshot and with an explicit
+// environment, as ordinary processes of the user: they can read and write the
+// user's files and use the network. No file inside the working copy can make
+// git run a program: git is always pointed at the copy's repository through
+// the folder the project's repository keeps for it, never through the copy's
+// own .git, and it runs with hooks and the file system monitor disabled. A
+// program the project's or the user's own git configuration names, such as a
+// filter driver, still runs, as it would for the user. Files are read and
+// written in the copy only through real folders, never through a symbolic
+// link.
 package testwriter
 
 import (

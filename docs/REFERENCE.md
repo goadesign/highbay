@@ -43,9 +43,9 @@ an operation, who may call it, what it returns and how it refuses.
 
 | Need | Why | How to get it |
 | --- | --- | --- |
-| **macOS or Linux (Landlock ABI v4+, Linux 6.7+)** | Surla builds agent-written code, and runs the application it builds, only inside its operating-system sandbox (macOS `sandbox-exec`, or Linux Landlock and Seccomp-BPF; inside a Linux container, pass `--cap-add SYS_PTRACE` or `--security-opt seccomp=unconfined`). The test writer's accepted test program runs on this machine outside the sandbox with your access to files and the network. Verification gives it only `PATH` and `TMPDIR`; a live target also gives it a target key and a model gateway, without provider settings (see [`verify_change`](#verify_change) and [`start_live_target`](#start_live_target)). With stored verification settings, the operator's evaluator runs outside the sandbox and receives provider settings. Running as you, these programs can still read keys your other programs hold. `check_project` runs the project's tests in Linux containers (see **Docker** below). Where the sandbox is unavailable, every sandboxed step refuses with `candidate isolation is unavailable on this platform`, and a build start without stored verification settings refuses with `sandbox_unavailable`, including the specific prerequisite failure and remedy when reported by the host. | — |
+| **macOS or Linux** | Surla runs the code the agents write (the design at each refresh, candidate builds, the candidate service, test listing, and the test program) as ordinary processes with your file and network access. Verification gives the test writer's accepted test program only `PATH` and `TMPDIR`; a live target also gives it a target key and a model gateway, without provider settings (see [`verify_change`](#verify_change) and [`start_live_target`](#start_live_target)). With stored verification settings, the operator's evaluator receives provider settings. Running as you, these programs can still read keys your other programs hold. `check_project` runs the project's tests in Linux containers (see **Docker** below). | — |
 
-| **Go 1.27.3 or later** | `surla` is a Go program, and the project's checks use Go. Surla runs Goa inside its sandbox with each module's own versions, so no `goa` binary is needed. | [go.dev/dl](https://go.dev/dl/) |
+| **Go 1.27.3 or later** | `surla` is a Go program, and the project's checks use Go. Surla runs Goa with each module's own versions, so no `goa` binary is needed. | [go.dev/dl](https://go.dev/dl/) |
 | **Surla** | The command itself. | `go install github.com/goadesign/surla/cmd/surla@latest` |
 | **Herdr core** (`herdr-core` and `hc`) | The server and every agent run in Herdr terminals. | `curl -fsSL https://releases.herdr.dev/core/install.sh \| sh` ([herdr.dev/core](https://herdr.dev/core/)) |
 | **Herdr app** (`herdr-app`) | The window that shows the team's panes. | `curl -fsSL https://releases.herdr.dev/app/install.sh \| sh` ([herdr.dev](https://herdr.dev/)) |
@@ -69,16 +69,6 @@ and says `Install Git 2.45 or newer and run surla again.` Missing Git has its
 own refusal. No project state, server, window or agent starts on these
 refusals. Git builds with the capability backported are accepted regardless
 of their version label.
-
-**The sandbox and restricted shells.** When a sandboxed command exits with
-status 71, Surla keeps the error and adds: `The sandboxed command exited with
-status 71. If Surla is running inside a restricted coding-agent shell, its
-sandbox may have been blocked; run Surla from an unrestricted host shell.` This
-happens when `surla preview`, `surla gen` or `surla init` run inside an agent's
-own sandbox. Run them from your own shell, or let the agent call the matching
-operation (`preview_architecture`, `generate_code`, `init_project`) on the
-server, which runs in its own Herdr terminal. Surla never retries outside its
-sandbox.
 
 ---
 
@@ -300,8 +290,8 @@ The roles are a separation of duties, not isolation from a malicious agent.
 
 Creates a starter project in `<dir>`: a Goa and Goa-AI service with an agent
 and a `goa.design/model` architecture, and a test module in `<dir>/eval`. It
-resolves dependencies, generates each module's code inside Surla's sandbox
-with the generator [`surla gen`](#surla-gen) uses, runs `go vet ./...` and
+resolves dependencies, generates each module's code with the generator
+[`surla gen`](#surla-gen) uses, runs `go vet ./...` and
 `go test ./...` in both modules, and prints the commands that make the first
 commit and start `surla` in the project. It builds the project in protected
 temporary storage on the destination's file system and moves it to `<dir>` in
@@ -396,7 +386,7 @@ Approval never merges or deploys.
 
 Reads a design module into a snapshot (`go.mod`, `go.sum` and non-test `.go`
 files, never following symlinks; run `go mod tidy` first if `go.sum` is
-missing), evaluates it inside the sandbox, and prints the architecture as
+missing), evaluates it, and prints the architecture as
 indented JSON to standard output: `system_name`, `declarations`, C4
 `containers` and `edges`, `agent_policies`, `tools`, and `stories` when the
 design declares Stories. Then it writes one
@@ -421,7 +411,7 @@ summary. It gives no compatibility verdict.
 
 ### `surla gen`
 
-Regenerates a design module's `gen/` from its `design/` inside the sandbox and
+Regenerates a design module's `gen/` from its `design/` and
 replaces `gen/` in one atomic rename, so `gen/` is never missing or
 half-written. Generated subfolders the design does not produce disappear,
 and top-level files in `gen/` that Surla did not generate are kept. On success
@@ -445,8 +435,8 @@ Generation needs `goa.design/goa/v3` `v3.35.1-0.20261103205041-35e789e8f9b1`
 or later; with an older Goa the build fails and the error names the Goa
 version in use. The named-section rewrite of `AGENTS_QUICKSTART.md` needs
 `goa.design/goa-ai` `v0.90.1-0.20261110011046-f32bd628f2bf` or later. A design
-with gRPC transports is refused, because protoc cannot run in the sandbox;
-generate it with the module's own `go run goa.design/goa/v3/cmd/goa gen`.
+with gRPC transports is refused, because `surla gen` runs Goa's generator
+without protoc; generate it with the module's own `go run goa.design/goa/v3/cmd/goa gen`.
 `generate_code` writes the same files. A Surla test module's Story table,
 `design/story_tests.go`, is a source file of its design, so regenerating the
 module keeps the tests the table requires (see
@@ -456,7 +446,7 @@ module keeps the tests the table requires (see
 
 An operator tool that checks a commit without a server. It clones the
 committed application and evaluator into a private work folder, builds the
-application's binaries and the evaluator's program inside the sandbox, runs
+application's binaries and the evaluator's program, runs
 the evaluator, writes the full report to `<report-dir>/<digest>.json`, and
 prints the builder view of the report (hidden scenarios shown only as
 `holdout-N`) to standard output. Then it writes one summary line to standard
@@ -518,7 +508,7 @@ func main() {
    store with [`candidate.Pin`](../verify/candidate/candidate.go), runs the
    scenarios, and prints a `goa.design/goa-ai/eval.Report`. Each scenario
    starts the application with
-   [`candidate.Exec`](../verify/candidate/candidate.go) inside the sandbox and
+   [`candidate.Exec`](../verify/candidate/candidate.go) and
    attaches the evidence of every binary it used, such as
    `pinned["orders"].Evidence("orders")`, which `surla verify` compares with the
    digest it measured; missing or different evidence makes the scenario a
@@ -870,7 +860,7 @@ stays exactly as saved.
 `diagnostic`, `message`).
 
 Reads the project's Go module (`go.mod`, `go.sum` and non-test `.go` files),
-computes its `snapshot_digest`, and starts, or reuses, a sandboxed evaluation
+computes its `snapshot_digest`, and starts, or reuses, an evaluation
 of its Stories. It answers at once with `state` `running` or `succeeded`.
 There is one current evaluation per project, kept in memory only: refreshing
 unchanged files returns it, and refreshing changed files, or after a failure,
@@ -930,7 +920,7 @@ MCP `progressToken`, it reports each phase.
 `warnings`).
 
 The builder's generation: compiles the edited design of the application, or
-of `eval/` with `{"target":"eval"}` outside a build that runs with a test writer (during such a build, without stored verification settings, `eval/`, `eval/design/` included, belongs to the test writer, and Surla regenerates `eval/gen/` at build start and on each report), in the sandbox and replaces that
+of `eval/` with `{"target":"eval"}` outside a build that runs with a test writer (during such a build, without stored verification settings, `eval/`, `eval/design/` included, belongs to the test writer, and Surla regenerates `eval/gen/` at build start and on each report), and replaces that
 module's `gen/` exactly as [`surla gen`](#surla-gen) does. It compiles only;
 call [`check_project`](#check_project) to build and test before committing.
 An error means `gen/` was not replaced; a warning means it was.
@@ -1007,7 +997,7 @@ end. Each operation keeps at most 64 MiB; `dropped_bytes` counts the rest.
 `POST /changes/preview`. **Input:** `change_id`, `request_revision`.
 **Output:** `ArchitecturePreviewResult`.
 
-For a confirmed change, evaluates the project's design in the sandbox and
+For a confirmed change, evaluates the project's design and
 returns the C4 `containers` and `edges`, `agent_policies`, and `tools` with
 their `input_binding`. It reports what the design declares; it does not
 compare it with the change. A tool's `requires_confirmation` shows a design
@@ -1048,8 +1038,8 @@ With stored verification settings, the named evaluator starts the target and
 needs no build or accepted tests; the change must still be owned and confirmed.
 `url` is the application's loopback address.
 
-The test program runs on this computer outside the candidate sandbox, with
-your access to files and the network; the application runs inside it. For
+The test program and the application run on this computer as ordinary
+processes, with your access to files and the network. For
 written tests, Surla gives the program no provider setting. With a direct
 provider, the executor serves the selected model through a loopback gateway;
 with a chosen gateway, the program uses that gateway. The operator's stored
@@ -1183,8 +1173,7 @@ Surla preserves that SDK precedence rather than parsing those values itself.
 Choose a base URL whose endpoint you control. If a held base URL names a
 loopback port where nothing listens, another local process can bind that port
 before the next provider request and receive its credentials. The live test
-program, or a sandboxed service whose network rules allow that bind, can do
-this too.
+program and the application it starts can do this too.
 
 An absent provider keeps what the server holds for it. A present one replaces
 everything held for it and must include its key, so an empty map is refused.
@@ -1236,8 +1225,8 @@ Which tests run depends on the project:
 | No stored verification settings | The tests Surla accepted for the user's build of this revision, at their tests commit (`get_build` shows `tests.state == "accepted"`). The run builds the application's programs from `candidate_commit` and the test program `eval/gen/cmd/<service>-evals` from the tests commit, both read from Git, never from working files. Both commits need the layout `surla init` makes: `go.mod`, `eval/go.mod` for `<module>/eval`, `cmd/<service>` in the candidate and the generated test program in the tests commit. |
 | Stored verification settings | The evaluator the settings name, at their `suite_commit`. No build is needed. |
 
-Tests a separate agent wrote run outside Surla's sandbox, which isolates only
-the application's builds and processes. Their program therefore starts with
+Tests a separate agent wrote run, like the application, as ordinary processes
+with your file and network access. Their program starts with
 only `PATH` and `TMPDIR` (a folder inside the run directory): no model key
 and no other variable of the server. An evaluator named in stored
 verification settings runs with the server's environment, plus every held
@@ -1449,7 +1438,6 @@ next build reuses it.
 | `copy_folder_in_use` | 409 | Move the project's `.surla-tests` entry, which is not Surla's working copy, out of the project. |
 | `tests_branch_in_use` | 409 | Another working copy holds `surla/tests`; the message names it and the step. |
 | `working_copy_busy` | 409 | Build again when the current start or check has ended. |
-| `sandbox_unavailable` | 501 | Use a system with Surla's candidate sandbox (macOS or Linux with Landlock ABI v4+); when the host reports a specific prerequisite failure, the message includes its cause and remedy. |
 | `not_implemented` | 501 | The server has no team; start the project with `surla`. |
 | `unavailable` | 503 | The server is stopping or the start ran out of time; build again. |
 
@@ -1458,8 +1446,7 @@ next build reuses it.
 Surla, not the test writer, decides whether the tests count. Each
 [`report_tests_finished`](#report_tests_finished) raises the build's report
 number and wakes the server's report checker, which judges the working copy
-against the build's saved Story without running any of its code outside the
-sandbox:
+against the build's saved Story:
 
 1. It writes the required tests into the copy again from the Story. Like a
    build start, it first removes any `.surla-gen-*` staging folder that a
@@ -1469,9 +1456,11 @@ sandbox:
 2. It checks that only files inside the test module changed since the copy's
    base, regenerates the generated folder in a private snapshot, downloads
    the module's dependencies, builds the test program
-   `./gen/cmd/<name>-evals` in the build sandbox (10 minutes), and lists its
-   scenarios in the application sandbox (60 seconds). The whole judgment has
-   15 minutes.
+   `./gen/cmd/<name>-evals` (10 minutes), and lists its
+   scenarios (60 seconds). The build and the listing run as ordinary
+   processes with your file and network access, each in its own process
+   group that the check stops; a process that starts its own session leaves
+   its group and keeps running. The whole judgment has 15 minutes.
 3. Its verdict replaces `reported` and marks the test writer's assignment
    unread:
    - `needs_changes`, with findings, such as a missing hook method, a file
@@ -1593,7 +1582,7 @@ as it is: Surla writes it from the agreed Story at the build start and again
 at each report. Because the required tests are part of the module's design,
 regenerating the module with `surla gen -dir eval` keeps them. After changing
 the test module's design, the test writer reports, and Surla generates the
-module again; from a shell that is not sandboxed it can also run
+module again; it can also run
 `surla gen -dir eval` in `working_folder` first. Reading an assignment marks
 it read.
 
@@ -1795,12 +1784,9 @@ the target declares the same method in its own Goa design and implements it:
   `LiveThroughGateway` function uses the model gateway, keeping provider
   settings out of the test program's and application's environments. Its
   `Live` function still serves a direct provider when an operator stores that module as the
-  evaluator; that is the stored-evaluator profile above. It passes a literal
-  loopback gateway address, such as `127.0.0.1:9090`, to the application
-  directly, and reaches any other gateway, including `localhost`, through a
-  forwarder it owns, because the
-  application's sandbox allows only loopback connections and resolves no
-  names.
+  evaluator; that is the stored-evaluator profile above. It passes the
+  gateway address it is given, such as `127.0.0.1:9090` or `localhost:9090`,
+  to the application.
 - [`examples/orders`](../examples/orders/README.md) implements it in its
   `prompts` service and replaces `orders.refund.system`; its evaluator's
   `Live` function uses a scripted model and needs no provider key.
@@ -1869,9 +1855,10 @@ an earlier revision, and **Build agreed revision** in either case while a
 proposed revision waits. Once the agreed revision is built, it offers **Build
 again…** instead, which asks first. Next to each control that sends a start,
 it explains which agents start: the builder and, unless the project uses
-configured tests, a test writer. It also says that Surla runs the tests on
-this machine with your permissions and asks you to read them before
-approving. It refuses to start from an
+configured tests, a test writer. It also says that, from Build on, the tests
+and the builder's code run on this machine as ordinary programs, with your
+access to files and the network, that nothing confines them, and that
+approval decides only what merges. It refuses to start from an
 unconfirmed change (`Confirm the change before building it.`) or an older
 revision, and builds the agreed revision even while the editor holds unsaved
 edits. It shows when the build started, the required test count, whether
@@ -2002,7 +1989,7 @@ effects, manager approval, worker recovery and token budgets.
 
 [`examples/orders-eval`](../examples/orders-eval/), the evaluator: its
 [acceptance tests](../examples/orders-eval/acceptance/acceptance_test.go)
-boot the application in the sandbox against
+boot the application against
 [commerce and payment simulators](../examples/orders-eval/sim/) and a
 [scripted model](../examples/orders-eval/scriptedmodel/), and run five
 scenarios (`store_credit_within_limit`, `card_refund_needs_manager`,
@@ -2042,8 +2029,7 @@ checks are:
   avoids recompiling unchanged code.
 - A Linux build and vet of the root module, once without build tags and once
   with each of `e2e`, `scaffold`, `herdr`, `browser` and `docker`, and the
-  Linux short tests (including `verify/candidate` in the Linux Landlock +
-  Seccomp-BPF sandbox).
+  Linux short tests.
 - Formatting, generated-code and views page type checks.
 
 To run the short tests locally, run `go test -race -short ./...` in each
@@ -2059,9 +2045,10 @@ tests.
 All full suites run nightly at 07:17 UTC and on a manual **Run workflow**
 request (`CI=true gh workflow run ci.yml --ref <branch> </dev/null`). This adds
 the other modules' complete tests and the verifier, generation, starter and
-orders acceptance suites as parallel jobs. A passing short run does not prove the
-sandboxed paths; changes to candidate execution or starter generation need
-the full suite. On macOS, with the Temporal CLI for the first three:
+orders acceptance suites as parallel jobs. A passing short run does not prove
+paths that build and run agent-written code; changes to candidate execution
+or starter generation need the full suite. On macOS, with the Temporal CLI
+for the first three:
 
 ```bash
 (cd examples/orders-eval && go test -race -tags e2e ./acceptance)
@@ -2107,19 +2094,19 @@ go test -race -count=1 -tags browser ./internal/project
 │   ├── testwriter/              # The test writer's working copy, the check of its tests, and their commit
 │   ├── verify/                  # Verification runs, the builder view of reports, and approval checks
 │   ├── verifyrun/               # Supervised verification and live-target processes and run directories
-│   ├── designeval/              # Sandboxed design evaluation and the C4 extractor
+│   ├── designeval/              # Design evaluation and the C4 extractor
 │   ├── diff/                    # Structural design and dependency diff
 │   ├── goldenpath/              # The Golden Path playbook and decision component catalog
 │   ├── scaffold/                # The surla init starter and its templates
 │   ├── traceview/               # The saved operation diagnostics
 │   ├── genpublish/              # Atomic replacement of generated folders
 │   ├── targetprompt/            # Generated client of the live target prompt contract
-│   ├── procgroup/               # Process groups for sandboxed children
+│   ├── procgroup/               # Process groups for the commands Surla starts
 │   ├── abspath/, renameat/, shquote/   # Path resolution, atomic renames, shell quoting
 │   └── testmodule/              # Go module fixtures for tests
 ├── story/                       # The Story language, a separate Go module
 ├── ui/checkpoint/               # Views page source; build.mjs writes checkpoint.html, its types and the decision catalog
 └── verify/
-    ├── candidate/               # The macOS and Linux sandbox for building and running agent-written code
+    ├── candidate/               # Builds and runs agent-written code: pinning, environment, process groups
     └── suite/                   # The evaluator suite command contract (suite.Main)
 ```

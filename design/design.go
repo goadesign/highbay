@@ -921,7 +921,7 @@ var _ = Service("surla", func() {
 	})
 
 	Method("verify_change", func() {
-		Description("Start Checkpoint 4 verification of a candidate commit for the owner's confirmed Change Card revision and return its run_id at once. With verification settings stored with surla verification set, the run uses the operator's evaluator and needs no build. Otherwise the user's build of that revision must exist and Surla must have accepted its tests: the run builds the candidate's programs from the candidate commit and runs the generated entry point of the tests at the accepted commit. The server builds the commit in Surla's sandbox and runs the tests in a separate process that keeps running when the caller disconnects or the server restarts; get_verification reads its state. Only the builder view of the report is ever returned, with where its tests came from.")
+		Description("Start Checkpoint 4 verification of a candidate commit for the owner's confirmed Change Card revision and return its run_id at once. With verification settings stored with surla verification set, the run uses the operator's evaluator and needs no build. Otherwise the user's build of that revision must exist and Surla must have accepted its tests: the run builds the candidate's programs from the candidate commit and runs the generated entry point of the tests at the accepted commit. The server builds the commit and runs the tests in a separate process that keeps running when the caller disconnects or the server restarts; the builds, the tests and the programs they start run as ordinary processes with the user's file and network access. get_verification reads its state. Only the builder view of the report is ever returned, with where its tests came from.")
 		Payload(VerifyChangePayload)
 		Result(VerificationStatusResult)
 		Error("not_found", ErrorResult, "No Change Card exists with this change_id.")
@@ -1059,7 +1059,7 @@ var _ = Service("surla", func() {
 	})
 
 	Method("generate_code", func() {
-		Description("Read the active workspace's application module, or its public local eval/ module when target is eval, compile that module's edited Goa design in Surla's sandbox, and atomically replace its gen/ directory. Preserve top-level user files and their permissions and leave go.mod and go.sum unchanged. Return the written paths and warnings; a warning after gen/ publication still means generation succeeded. The tool compiles the design only; it does not build the application or run tests. Fix a rejected design and call again on the same running server.")
+		Description("Read the active workspace's application module, or its public local eval/ module when target is eval, compile and run that module's edited Goa design as an ordinary process with the user's file and network access, and atomically replace its gen/ directory. Preserve top-level user files and their permissions and leave go.mod and go.sum unchanged. Return the written paths and warnings; a warning after gen/ publication still means generation succeeded. The tool compiles the design only; it does not build the application or run tests. Fix a rejected design and call again on the same running server.")
 		Payload(GenerateCodePayload)
 		Result(GenerateCodeResult)
 		Error("unprocessable", ErrorResult, "The selected local module is absent, replaced, or invalid; correct its local files and call again.")

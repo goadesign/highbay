@@ -20,7 +20,7 @@ import (
 )
 
 // GenerateCode reads the selected local module from the verified active
-// workspace, compiles its design in the sandbox, and publishes the generated
+// workspace, compiles and runs its design to generate code, and publishes the generated
 // files. It holds the workspace lock and root handles through publication and
 // cleanup, so initialization and Close cannot finish while it still writes.
 // An error means gen/ was not replaced; after replacement, auxiliary failures
@@ -103,7 +103,7 @@ func (c *ControlPlane) GenerateCode(
 	if _, ok := files["go.mod"]; !ok {
 		return nil, gensurla.MakeUnprocessable(fmt.Errorf("the local %s module has no go.mod; create or restore it before generating code", target))
 	}
-	if err := reportProgress(genCtx, 1, 3, "Compiling the design and generating code in the sandbox"); err != nil {
+	if err := reportProgress(genCtx, 1, 3, "Compiling the design and generating code"); err != nil {
 		return nil, failGenerateFault(span, "could not report code-generation progress; call again", err)
 	}
 	generated, err := c.evaluator.Generate(genCtx, files)

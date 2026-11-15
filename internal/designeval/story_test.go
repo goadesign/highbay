@@ -1,4 +1,4 @@
-// Package designeval tests sandboxed evaluation of portable Story declarations
+// Package designeval tests the evaluation of portable Story declarations
 // alongside Goa designs and in Story-only modules.
 package designeval
 
@@ -47,7 +47,7 @@ func TestEvaluateProgramSpecializesStoryLoading(t *testing.T) {
 
 func TestEvaluateObservesStoryOnlyAndCombinedDesigns(t *testing.T) {
 	if testing.Short() {
-		t.Skip("runs the sandboxed Go toolchain; the full suite (go test without -short) covers it")
+		t.Skip("runs the Go toolchain; the full suite (go test without -short) covers it")
 	}
 	ctx := t.Context()
 
@@ -399,7 +399,7 @@ var _ = m.Design("Architecture", "Model-only system", func() {
 
 func TestEvaluateRejectsInvalidStoryDeclarations(t *testing.T) {
 	if testing.Short() {
-		t.Skip("runs the sandboxed Go toolchain; the full suite (go test without -short) covers it")
+		t.Skip("runs the Go toolchain; the full suite (go test without -short) covers it")
 	}
 	ctx := t.Context()
 

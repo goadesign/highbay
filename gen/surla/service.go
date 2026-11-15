@@ -146,10 +146,11 @@ type Service interface {
 	// revision must exist and Surla must have accepted its tests: the run builds
 	// the candidate's programs from the candidate commit and runs the generated
 	// entry point of the tests at the accepted commit. The server builds the
-	// commit in Surla's sandbox and runs the tests in a separate process that
-	// keeps running when the caller disconnects or the server restarts;
-	// get_verification reads its state. Only the builder view of the report is
-	// ever returned, with where its tests came from.
+	// commit and runs the tests in a separate process that keeps running when the
+	// caller disconnects or the server restarts; the builds, the tests and the
+	// programs they start run as ordinary processes with the user's file and
+	// network access. get_verification reads its state. Only the builder view of
+	// the report is ever returned, with where its tests came from.
 	VerifyChange(context.Context, *VerifyChangePayload) (res *VerificationStatusResult, err error)
 	// Return the current state of a verification run to the owner who started it:
 	// running, completed with the builder view of its report, or not completed
@@ -233,13 +234,14 @@ type Service interface {
 	// generation/tests, initial commit creation, and publication start.
 	InitProject(context.Context, *InitProjectPayload) (res *InitProjectResult, err error)
 	// Read the active workspace's application module, or its public local eval/
-	// module when target is eval, compile that module's edited Goa design in
-	// Surla's sandbox, and atomically replace its gen/ directory. Preserve
-	// top-level user files and their permissions and leave go.mod and go.sum
-	// unchanged. Return the written paths and warnings; a warning after gen/
-	// publication still means generation succeeded. The tool compiles the design
-	// only; it does not build the application or run tests. Fix a rejected design
-	// and call again on the same running server.
+	// module when target is eval, compile and run that module's edited Goa design
+	// as an ordinary process with the user's file and network access, and
+	// atomically replace its gen/ directory. Preserve top-level user files and
+	// their permissions and leave go.mod and go.sum unchanged. Return the written
+	// paths and warnings; a warning after gen/ publication still means generation
+	// succeeded. The tool compiles the design only; it does not build the
+	// application or run tests. Fix a rejected design and call again on the same
+	// running server.
 	GenerateCode(context.Context, *GenerateCodePayload) (res *GenerateCodeResult, err error)
 	// Copy the active workspace's live files (uncommitted edits included) into a
 	// protected per-operation copy and run go test ./... for every Go module in it
@@ -278,11 +280,11 @@ type Service interface {
 	// snapshot_digest, and start or reuse the project owner's in-memory Story
 	// refresh operation for that workspace, which every caller acting for the
 	// owner reads. Return promptly with the operation's op_id, state, and
-	// snapshot_digest while sandboxed evaluation continues on a server-owned
-	// context that survives client disconnects. Refreshing an unchanged snapshot
-	// whose current operation is running or succeeded returns that operation
-	// without starting another evaluation; refreshing a changed snapshot or a
-	// failed operation cancels and replaces the prior operation.
+	// snapshot_digest while evaluation continues on a server-owned context that
+	// survives client disconnects. Refreshing an unchanged snapshot whose current
+	// operation is running or succeeded returns that operation without starting
+	// another evaluation; refreshing a changed snapshot or a failed operation
+	// cancels and replaces the prior operation.
 	RefreshStory(context.Context) (res *StoryRefreshResult, err error)
 	// Return the project owner's current in-memory Story refresh operation for the
 	// bound workspace, the same one for every caller acting for the owner: op_id,
@@ -2206,11 +2208,6 @@ func MakeTestsBranchInUse(err error) *goa.ServiceError {
 // MakeWorkingCopyBusy builds a goa.ServiceError from an error.
 func MakeWorkingCopyBusy(err error) *goa.ServiceError {
 	return goa.NewServiceError(err, "working_copy_busy", false, false, false)
-}
-
-// MakeSandboxUnavailable builds a goa.ServiceError from an error.
-func MakeSandboxUnavailable(err error) *goa.ServiceError {
-	return goa.NewServiceError(err, "sandbox_unavailable", false, false, false)
 }
 
 // agentPolicyItemIntTransport stores JSON fields until they have been validated.

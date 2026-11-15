@@ -4,4 +4,4 @@ package controlplane
 
 // viewsPageScriptSource is the Content-Security-Policy source that allows the
 // views page's one inline script: the SHA-256 digest of its exact text.
-const viewsPageScriptSource = "'sha256-n7Un5W7kQB7f+Smzux2YNwWdl6VJRRK+VOR3zS4qS+E='"
+const viewsPageScriptSource = "'sha256-UajpAQyMI6gzs+ehAbvsaDvs/xpEutNdlv3vOguiSQE='"

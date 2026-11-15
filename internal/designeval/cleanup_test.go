@@ -11,11 +11,11 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestReleaseTempKeepsTheDirectoryOnlyForAStuckBuild checks the evaluation's
+// TestReleaseTempKeepsTheDirectoryOnlyForAStuckGroup checks the evaluation's
 // temporary directory: removed, with a read-only artifact store inside, after
 // a success or an ordinary failure; kept and named in the error when the
-// build's processes may still use it.
-func TestReleaseTempKeepsTheDirectoryOnlyForAStuckBuild(t *testing.T) {
+// processes of its build or design program may still use it.
+func TestReleaseTempKeepsTheDirectoryOnlyForAStuckGroup(t *testing.T) {
 	errBuild := errors.New("exit status 2")
 	errStop := errors.New("process group 42 still has processes after 10s")
 	cases := []struct {
@@ -25,7 +25,7 @@ func TestReleaseTempKeepsTheDirectoryOnlyForAStuckBuild(t *testing.T) {
 	}{
 		{"success", nil, false},
 		{"ordinary failure", errBuild, false},
-		{"stuck build", errors.Join(&stuckBuildError{err: errStop}, errBuild), true},
+		{"stuck group", errors.Join(&stuckGroupError{err: errStop}, errBuild), true},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -47,22 +47,23 @@ func TestReleaseTempKeepsTheDirectoryOnlyForAStuckBuild(t *testing.T) {
 			assert.ErrorContains(t, err, tmpDir)
 			assert.ErrorIs(t, err, errStop, "the stop failure is kept")
 			assert.ErrorIs(t, err, errBuild, "the build's own error is kept")
-			var stuck *stuckBuildError
+			var stuck *stuckGroupError
 			assert.ErrorAs(t, err, &stuck)
 		})
 	}
 }
 
-// TestRunBuildReportsTheBuildsOwnResult checks that a build whose process
-// group empties reports exactly the command's result, never a stuck build.
-func TestRunBuildReportsTheBuildsOwnResult(t *testing.T) {
-	assert.NoError(t, runBuild(exec.CommandContext(t.Context(), "true")))
+// TestRunInGroupReportsTheCommandsOwnResult checks that a command whose
+// process group empties reports exactly the command's result, never a stuck
+// group.
+func TestRunInGroupReportsTheCommandsOwnResult(t *testing.T) {
+	assert.NoError(t, runInGroup(exec.CommandContext(t.Context(), "true")))
 
-	err := runBuild(exec.CommandContext(t.Context(), "sh", "-c", "exit 3"))
+	err := runInGroup(exec.CommandContext(t.Context(), "sh", "-c", "exit 3"))
 	var exit *exec.ExitError
 	require.ErrorAs(t, err, &exit)
 	assert.Equal(t, 3, exit.ExitCode())
-	var stuck *stuckBuildError
+	var stuck *stuckGroupError
 	assert.False(t, errors.As(err, &stuck))
 }
 

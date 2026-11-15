@@ -171,7 +171,7 @@ func TestTestProgramSectionNamesTheFiveNames(t *testing.T) {
 // incomplete model settings with the messages the starter's own program gave.
 func TestGeneratedProgramRunsTheStarterSuite(t *testing.T) {
 	if testing.Short() {
-		t.Skip("runs the sandboxed Go toolchain; the full suite (go test without -short) covers it")
+		t.Skip("runs the Go toolchain; the full suite (go test without -short) covers it")
 	}
 	evalInput, fullTree, _ := starterEvalModule(t)
 	stories := []StorySummary{{Name: "Refunds", Flows: []StoryFlow{{Key: "refund-over-limit", Title: "A refund over the limit.", Complete: true}}}}
@@ -237,7 +237,7 @@ func (h *Hooks) RefundOverLimit(ctx context.Context) (eval.Result, error) {
 // same module gets its program (TestGeneratedProgramRunsTheStarterSuite).
 func TestAModuleOnlyAtTheLayoutsPathGetsNoProgram(t *testing.T) {
 	if testing.Short() {
-		t.Skip("runs the sandboxed Go toolchain; the full suite (go test without -short) covers it")
+		t.Skip("runs the Go toolchain; the full suite (go test without -short) covers it")
 	}
 	evalInput, _, _ := starterEvalModule(t)
 	without := maps.Clone(evalInput)

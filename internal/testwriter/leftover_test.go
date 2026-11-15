@@ -119,7 +119,7 @@ func TestPublishRecordsWarningsWithoutFailing(t *testing.T) {
 // by a death during a report's preparation, it does not stop Check, which
 // accepts the complete copy, and the tree it accepts does not hold it.
 func TestALeftoverStagingFolderFailsNeitherPrepareNorCheck(t *testing.T) {
-	skipWithoutSandbox(t)
+	skipInShortMode(t)
 	repo, _ := newProject(t, fixtureProject(t))
 	wc, err := OpenWorkingCopy(t.Context(), repo)
 	require.NoError(t, err)
@@ -136,13 +136,13 @@ func TestALeftoverStagingFolderFailsNeitherPrepareNorCheck(t *testing.T) {
 
 	writeFiles(t, module, stage)
 	writeFiles(t, module, map[string]string{
-		"acceptance/acceptance.go": fixtureAcceptance(quietInit(filepath.Join(t.TempDir(), "unused")), "RefundOverLimit", "StoreCreditWithinLimit"),
+		"acceptance/acceptance.go": fixtureAcceptance(quietInit, "RefundOverLimit", "StoreCreditWithinLimit"),
 	})
 	c := *testChecker
 	c.build = func(_ context.Context, spec candidate.BuildSpec, _ func(*exec.Cmd) error) error {
 		return os.WriteFile(spec.Out, []byte("stand-in program"), 0o700)
 	}
-	c.list = func(context.Context, candidate.Artifact, candidate.Spec, int) ([]byte, error) {
+	c.list = func(context.Context, candidate.Artifact, candidate.Spec, int, func(*exec.Cmd) error) ([]byte, error) {
 		d := suite.Declaration{ID: "shop_acceptance", Environment: "scripted-model"}
 		for _, id := range []string{"prices_tea", "refund_over_limit", "store_credit_within_limit"} {
 			d.Scenarios = append(d.Scenarios, suite.DeclaredScenario{ID: id, Tags: []string{}})

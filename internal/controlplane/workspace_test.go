@@ -40,7 +40,7 @@ type (
 
 const (
 	// testSurlaVersion is a canonical Surla module pseudo-version used in workspace unit tests.
-	testSurlaVersion = "v0.0.0-20261110163737-d9beac313142"
+	testSurlaVersion = "v0.0.0-20261115014514-02c792da3ded"
 	// fakeInitialCommit is the synthetic initial Git commit hash returned by fakeInitRunner.
 	fakeInitialCommit = "1111111111111111111111111111111111111111"
 )

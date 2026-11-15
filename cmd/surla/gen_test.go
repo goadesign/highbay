@@ -38,7 +38,7 @@ var _ = Service("orders", func() {
 
 func TestGenPublishesGenAndLeavesNothingBehind(t *testing.T) {
 	if testing.Short() {
-		t.Skip("runs the sandboxed Go toolchain; the full suite (go test without -short) covers it")
+		t.Skip("runs the Go toolchain; the full suite (go test without -short) covers it")
 	}
 	tmp := t.TempDir()
 	t.Setenv("TMPDIR", tmp)
@@ -63,7 +63,7 @@ func TestGenPublishesGenAndLeavesNothingBehind(t *testing.T) {
 
 func TestGenRefusesAGoaWithoutCompleteSourcesAndChangesNothing(t *testing.T) {
 	if testing.Short() {
-		t.Skip("runs the sandboxed Go toolchain; the full suite (go test without -short) covers it")
+		t.Skip("runs the Go toolchain; the full suite (go test without -short) covers it")
 	}
 	tmp := t.TempDir()
 	t.Setenv("TMPDIR", tmp)

@@ -4,7 +4,6 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"testing"
 
@@ -16,14 +15,10 @@ import (
 // candidate or suite build returns a build-stage error whose private Err
 // carries the end of the compiler's output and names the build log Prepare
 // kept under WorkDir/evidence, while the Summary that builders see stays free
-// of paths and compiler output. It runs real sandboxed builds, so it needs
-// macOS or Linux.
+// of paths and compiler output. It runs real Go builds.
 func TestPrepareNamesTheBuildLogOnlyInThePrivateError(t *testing.T) {
 	if testing.Short() {
-		t.Skip("runs the sandboxed Go toolchain; the full suite (go test without -short) covers it")
-	}
-	if runtime.GOOS != "darwin" && runtime.GOOS != "linux" {
-		t.Skip("the build sandbox is implemented on macOS and Linux")
+		t.Skip("runs the Go toolchain; the full suite (go test without -short) covers it")
 	}
 	const (
 		goodMain = "package main\n\nfunc main() {}\n"

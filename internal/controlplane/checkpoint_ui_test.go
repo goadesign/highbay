@@ -205,7 +205,7 @@ page.close();
 // unconfirmed card shows the server's own refusal.
 func TestCheckpointUIArchitecturePreviewOfTheBoundDesign(t *testing.T) {
 	if testing.Short() {
-		t.Skip("runs the sandboxed Go toolchain; the full suite (go test without -short) covers it")
+		t.Skip("runs the Go toolchain; the full suite (go test without -short) covers it")
 	}
 	workspace := t.TempDir()
 	writeWorkspaceFiles(t, workspace, testmodule.Snapshot(t, "", architectureTestDesign))

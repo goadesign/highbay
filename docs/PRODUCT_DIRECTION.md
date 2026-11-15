@@ -128,7 +128,7 @@ this step.
 
 The timeline's source, called the Story, is written in a Go domain-specific
 language (DSL) and versioned in the platform's repository. Surla evaluates
-that source in an operating-system sandbox and, for each finished flow,
+that source and, for each finished flow,
 generates a test scenario and the hook method the test writer implements
 for it; it writes no stub. This generation lives in Surla and must remain
 easy to move if it later needs its own home.

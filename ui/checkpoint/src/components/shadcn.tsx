@@ -1,5 +1,5 @@
 // Package shadcn provides accessible, composable shadcn/ui React components
-// tailored for the sandboxed Surla Architecture Workspace.
+// tailored for the Surla Architecture Workspace.
 
 import React from "react";
 
