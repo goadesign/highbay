@@ -34,8 +34,8 @@ env:
   TEMPORAL_CLI_SHA256: 561ac68bdb6c16c8e8cbbd49f12578218ff1776007c3f3ae0d0196c8c9a73e79
   TEMPORAL_CLI_LINUX_AMD64_SHA256: e2f548af84e820b7d71f25fc6461a4e6a1ab7cdb6a80fde3c375641b0772375b
   # Root short coverage has four owners: pages in controlplane/project,
-  # two complementary controlplane groups, and all other tested packages.
-  # The run/skip predicates give every test exactly one owner.
+  # two complementary Linux controlplane groups, and other tested packages.
+  # A small macOS job additionally executes the platform-specific CP roots.
   ROOT_PAGE_TESTS: '^Test(ViewsPage|Checkpoint)'
   ROOT_CONTROLPLANE_FIRST_TESTS: '^Test[A-L]'
 
@@ -165,14 +165,44 @@ jobs:
   controlplane:
     name: Go (., control plane, ${{ matrix.partition }})
     if: github.event_name == 'push' || github.event_name == 'pull_request'
-    runs-on: macos-latest
+    runs-on: ${{ matrix.os }}
     timeout-minutes: 10
     strategy:
       fail-fast: false
       matrix:
-        partition: [A-L, remaining]
+        include:
+          - partition: A-L
+            os: ubuntu-latest
+          - partition: remaining
+            os: ubuntu-latest
+          - partition: macOS-platform
+            os: macos-latest
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - name: Check the macOS platform test names
+        if: matrix.partition == 'macOS-platform'
+        id: platform-tests
+        env:
+          TEST_NAMES: |-
+            TestAFailedStopKeepsTheOwnerAndStartsNoOtherTarget
+            TestAStartThatFailsBeforeReadyAndCannotBeCleanedUpKeepsItsOwner
+            TestGetLiveTargetShowsATargetNotConfirmedStopped
+            TestCopyGrantExcludesProtectedDirectoryAliases
+            TestCopyEntryDecidesProtectedAliasWhenItOpensTheEntry
+            TestCheckBindingAcceptsOtherSpellingsThroughTheStartupPipeline
+            TestNewRejectsAliasedWorkspaceStorage
+            TestInitProjectAcceptsAnotherSpellingOfTheWorkspace
+            TestOpenEntryHandlesRegularFileDirectorySymlinkAndFIFO
+        run: |
+          pattern=
+          while IFS= read -r test_name; do
+            if ! git grep -q -E "^func ${test_name}\\(" -- 'internal/controlplane/*_test.go'; then
+              echo "Missing macOS platform test: $test_name" >&2
+              exit 1
+            fi
+            pattern="${pattern:+$pattern|}$test_name"
+          done <<< "$TEST_NAMES"
+          echo "pattern=^($pattern)$" >> "$GITHUB_OUTPUT"
       - uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
         id: go
         with:
@@ -185,8 +215,8 @@ jobs:
           echo "modules=$(go env GOMODCACHE)" >> "$GITHUB_OUTPUT"
       - name: Restore the control plane's Go caches
         id: restored-go-cache
-        # Each half owns its key, including its runtime helper build closure.
-        # One half's narrower cache cannot replace the other half's cache.
+        # Each partition owns its key, including its runtime helper builds.
+        # OS and architecture keep the Linux and macOS objects separate.
         uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
         with:
           path: |
@@ -209,6 +239,7 @@ jobs:
       - name: Vet and short race tests (control plane without page tests)
         env:
           CONTROLPLANE_PARTITION: ${{ matrix.partition }}
+          PLATFORM_TEST_PATTERN: ${{ steps.platform-tests.outputs.pattern }}
         run: |
           test_count=()
           if [ "$GITHUB_EVENT_NAME" = push ]; then
@@ -221,6 +252,8 @@ jobs:
             # seeds also retain an owner without extending an alphabet range.
             run=.
             skip="$skip|$ROOT_CONTROLPLANE_FIRST_TESTS"
+          elif [ "$CONTROLPLANE_PARTITION" = macOS-platform ]; then
+            run=$PLATFORM_TEST_PATTERN
           fi
           go test -race -vet=all -short -timeout 3m -json "${test_count[@]}" -run "$run" -skip "$skip" ./internal/controlplane </dev/null
 
