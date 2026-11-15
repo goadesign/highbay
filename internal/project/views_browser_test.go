@@ -331,9 +331,6 @@ type (
 )
 
 const (
-	// storyDeadline bounds the guide's Story evaluation, which compiles the
-	// workspace's design with the Go toolchain.
-	storyDeadline = 3 * time.Minute
 	// longStoryFlow is the key of the Story flow whose row of steps is wider
 	// than the page.
 	longStoryFlow = "audited-refund"
@@ -844,15 +841,17 @@ func evaluateStory(t *testing.T, origin, guide string) string {
 	t.Helper()
 	started := storyRefreshCall(t, origin, guide, http.MethodPost)
 	require.Equal(t, "running", started.State, "the guide could not start a Story evaluation")
-	deadline := time.Now().Add(storyDeadline)
+	deadline := time.Now().Add(storyRefreshWait)
 	for {
 		current := storyRefreshCall(t, origin, guide, http.MethodGet)
 		require.Equal(t, started.OpID, current.OpID, "the guide reads another evaluation")
-		if current.State != "running" {
+		if current.State == "succeeded" || current.State == "failed" {
 			require.Equal(t, "succeeded", current.State, "the Story evaluation: %s", current.Diagnostic)
 			return current.OpID
 		}
-		require.True(t, time.Now().Before(deadline), "the Story evaluation did not end within %s", storyDeadline)
+		require.True(t, time.Now().Before(deadline),
+			"the Story evaluation did not end within %s; last state: %s; operation: %s; diagnostic: %s",
+			storyRefreshWait, current.State, current.OpID, current.Diagnostic)
 		time.Sleep(250 * time.Millisecond)
 	}
 }
