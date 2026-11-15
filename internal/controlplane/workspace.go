@@ -16,6 +16,7 @@ import (
 	"regexp"
 	"strings"
 	"syscall"
+	"time"
 
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/codes"
@@ -505,7 +506,11 @@ func encodeDesignSource(designFiles map[string]string) (string, error) {
 // verifier, and validates separation from wsRoot and its enclosing Git
 // working tree before any directory is created. The runs directory it returns
 // is opts.RunsDir, or the stored evaluator's when opts.RunsDir is empty.
-func normalizeAndValidateStartupPaths(opts Options, wsRoot string) (string, string, verifier, []string, error) {
+func normalizeAndValidateStartupPaths(
+	opts Options,
+	wsRoot string,
+	withTimeout func(context.Context, time.Duration) (context.Context, context.CancelFunc),
+) (string, string, verifier, []string, error) {
 	var runsDir string
 	if opts.RunsDir != "" {
 		physRuns, err := abspath.EvalMissing(opts.RunsDir)
@@ -529,11 +534,11 @@ func normalizeAndValidateStartupPaths(opts Options, wsRoot string) (string, stri
 	if stored, ok := verif.(storedVerification); ok && runsDir == "" {
 		runsDir = stored.cfg.RunsDir
 	}
-	gitCtx, cancel := context.WithTimeout(contextBackgroundForCleanup(), workspaceGitTimeout)
+	gitCtx, cancel := withTimeout(contextBackgroundForCleanup(), verify.WorkspaceGitTimeout)
 	protectedDirs, err := verify.WorkspaceBoundaryRoots(gitCtx, wsRoot)
 	cancel()
 	if err != nil {
-		return "", "", nil, nil, err
+		return "", "", nil, nil, fmt.Errorf("%w; check that Git can read the workspace, then start Surla again", err)
 	}
 	if err := validateStartupSeparation(opts.CardsDir, runsDir, initStageDir, verifierRuns(verif), protectedDirs...); err != nil {
 		return "", "", nil, nil, err

@@ -192,6 +192,13 @@ server's record. A new project saves a free port that no other project of
 this account saved, running or not, and keeps it. No caller chooses an
 identity, address, token or storage path.
 
+Before starting the server or accepting `surla verification set` or
+`surla promotion set`, Surla asks Git for the project's enclosing working tree
+so private files stay outside it. Each read has a 30-second allowance. A read
+that times out stops the operation, names `git rev-parse --show-toplevel`, and
+asks you to check that Git can read the workspace before retrying the command.
+A folder without a Git repository remains a valid project folder.
+
 `surla` finds that folder from the shell where it runs and starts the server
 with it. The server never looks the folder up itself, because Herdr starts it
 with the environment of the Herdr core, not the environment of your shell.
