@@ -384,7 +384,8 @@ await until(() => page.$("#surla-build-blocking-change") && page.$("#surla-build
 const refusalText = "Build did not start: change chg-open has an open build. Nothing of it has passed its check yet: let its builder finish, or drop it.";
 expect(page.text("#surla-build-action-error") === refusalText, "the refusal lost the other build's state and next step");
 expect(!page.text("#surla-checkpoint-status").includes("Build did not start") && page.text("#surla-build-blocking-change").split(refusalText).length === 2, "the same refusal is repeated outside its card alert");
-expect(page.$("#surla-build-start").disabled && page.$("#surla-build-start").getAttribute("aria-describedby") === "surla-build-action-error", "the blocked Build action lacks its disabled reason");
+const describedBy = page.$("#surla-build-start").getAttribute("aria-describedby").split(/\s+/);
+expect(page.$("#surla-build-start").disabled && describedBy.includes("surla-build-action-error") && describedBy.includes("surla-build-start-explanation"), "the blocked Build action lacks its disabled reason or execution explanation");
 expect(page.text("#surla-build-drop") === "Drop chg-open’s build…" && page.text("#surla-build-open-blocking-change") === "Open change chg-open", "other-change recovery does not identify its subject");
 await until(() => page.sent("GET", "/changes/chg-open/build").some((reply) => reply.status === 200), "initial exact-other observation did not settle");
 await control(origin, "hold", { key: "GET /changes/chg-open/build" });
