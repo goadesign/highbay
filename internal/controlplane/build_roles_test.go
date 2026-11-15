@@ -29,6 +29,9 @@ func TestBuilderOnlyBuildRequiresStoredSettings(t *testing.T) {
 			assert.Equal(t, gensurla.TestsKindNotUsed,
 				mustStartedBuild(t, cp, asCaller("alice@example.com", CallerUser), "chg").TestWriter.Tests.Kind())
 			assert.NotContains(t, string(readBuildFile(t, cp, "chg")), "working_folder")
+			if roles == buildRolesBuilderAndTestWriter {
+				makeBuildFixtureBuilderCopy(t, cp)
+			}
 			require.NoError(t, cp.Close())
 
 			opts.Verification = nil

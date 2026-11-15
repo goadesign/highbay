@@ -162,7 +162,6 @@ func TestStartBuildPreSaveInspectRefusals(t *testing.T) {
 			cp := newControlPlane(t, Options{
 				WorkspaceDir: project, Team: &TeamBinding{Owner: "alice@example.com", Service: f},
 			})
-
 			card := buildableChange(t, cp, "chg")
 			var firstStartedAt string
 			if tc.startFirst {
@@ -400,6 +399,5 @@ func reviewProject(t *testing.T, opts Options) (string, string, *ControlPlane, *
 	opts.WorkspaceDir = project
 	opts.Team = &TeamBinding{Owner: "alice@example.com", Service: f}
 	cp := newControlPlane(t, opts)
-
 	return repo, project, cp, &registered
 }

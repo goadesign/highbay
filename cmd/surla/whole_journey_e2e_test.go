@@ -49,6 +49,9 @@ type (
 		workspace string
 		// dir is the project folder, as the server stores it: symlink-free.
 		dir string
+		// builderFolder is the working folder returned by the builder's
+		// assignment, where generation and authored candidate commits belong.
+		builderFolder string
 		// projectCommit is the starter's first commit, where the build's
 		// working copy for the test writer starts.
 		projectCommit string
@@ -329,10 +332,15 @@ func (j *wholeJourney) serveProject(t *testing.T) {
 // the user confirm the proposal on the page, which makes the confirmed
 // revision the change's agreed one.
 func (j *wholeJourney) proposeAndConfirm(t *testing.T) {
+	seedCtx, seedCancel := context.WithTimeout(t.Context(), journeyStepWait)
+	seed := trustedSuiteRefresh(t, seedCtx, j.guide)
+	seedCancel()
+	require.NotEmpty(t, seed.DraftFolder)
+	require.NotEqual(t, j.dir, seed.DraftFolder)
+	replaceOnce(t, filepath.Join(seed.DraftFolder, "design", "story.go"),
+		journeyCookieFlow, journeyCookieFlow+journeySconeFlow)
 	ctx, cancel := context.WithTimeout(t.Context(), journeyStepWait)
 	defer cancel()
-	replaceOnce(t, filepath.Join(j.dir, "design", "story.go"),
-		journeyCookieFlow, journeyCookieFlow+journeySconeFlow)
 	refresh, err := gensurla.DecodeStoryRefreshResult(
 		trustedSuiteCall(t, ctx, j.guide, "refresh_story", []byte(`{}`)))
 	require.NoError(t, err)
@@ -454,6 +462,8 @@ func (j *wholeJourney) startBuild(t *testing.T) {
 	require.Len(t, listed.Assignments, 1)
 	assert.Equal(t, journeyChangeID, listed.Assignments[0].ChangeID)
 	built := j.readBuilderAssignment(t, ctx)
+	j.builderFolder = built.WorkingFolder
+	require.Equal(t, buildCopyDir, j.builderFolder)
 	assert.Equal(t, j.confirmed, built.RequestRevision)
 	assert.True(t, built.InForce)
 	assert.True(t, built.Read)
@@ -490,14 +500,24 @@ func (j *wholeJourney) refuseEarlierReport(t *testing.T) {
 		"a refused report changes nothing")
 }
 
-// refuseUnacceptedVerification has the builder verify the starter's commit
-// for the agreed revision before the test writer reported: the refusal names
+// refuseUnacceptedVerification has the builder generate and commit the agreed
+// design in its copy before the test writer reported: the refusal names
 // the tests' state and the test writer's step, and starts no run.
 func (j *wholeJourney) refuseUnacceptedVerification(t *testing.T) {
+	genCtx, genCancel := context.WithTimeout(t.Context(), 3*time.Minute)
+	generated, err := gensurla.DecodeGenerateCodeResult(
+		trustedSuiteCall(t, genCtx, j.builder, "generate_code", []byte(`{}`)))
+	genCancel()
+	require.NoError(t, err)
+	args := append([]string{"add", "--", "design", "gen"}, generated.FilesWritten...)
+	runTestGit(t, j.builderFolder, args...)
+	runTestGit(t, j.builderFolder, "commit", "-qm", "Generate the agreed scone design")
+	commit := strings.TrimSpace(runTestGit(t, j.builderFolder, "rev-parse", "HEAD"))
+	require.NotEqual(t, j.projectCommit, commit)
 	ctx, cancel := context.WithTimeout(t.Context(), time.Minute)
 	defer cancel()
 	refused := journeyRefusal(t, ctx, j.builder, "verify_change",
-		journeyVerifyArgs(t, j.confirmed, j.projectCommit))
+		journeyVerifyArgs(t, j.confirmed, commit))
 	assert.Contains(t, refused, "the tests of this build are not accepted; their state is assigned")
 	assert.Contains(t, refused, "the test writer writes the required tests and reports them finished")
 	assert.Empty(t, listRuns(t, ctx, j.builder), "a refused verification starts no run")
@@ -610,8 +630,8 @@ func (j *wholeJourney) acceptTests(t *testing.T) {
 	j.testsCommit = accepted.Commit
 }
 
-// verifyAcceptedTests has the builder price scones, commit the change with
-// the guide's Story edit, which the project folder still holds uncommitted,
+// verifyAcceptedTests has the builder price scones in its assigned copy and
+// commit the implementation beside the agreed design Surla already generated,
 // and verify that commit for the agreed revision, then follows the run until it
 // finishes. The run passes every scenario of the accepted tests and says
 // where they came from; the test writer reads it, a caller the policy does
@@ -620,11 +640,15 @@ func (j *wholeJourney) acceptTests(t *testing.T) {
 func (j *wholeJourney) verifyAcceptedTests(t *testing.T) {
 	ctx, cancel := context.WithTimeout(t.Context(), journeyOwnerWait)
 	defer cancel()
-	replaceOnce(t, filepath.Join(j.dir, "internal", "service", "service.go"),
+	replaceOnce(t, filepath.Join(j.builderFolder, "internal", "service", "service.go"),
 		journeyCookiePrice, journeyCookiePrice+"\t\"scone\":  275,\n")
-	runTestGit(t, j.dir, "add", "design/story.go", "internal/service/service.go")
-	runTestGit(t, j.dir, "commit", "-q", "-m", "Price scones at $2.75")
-	commit := strings.TrimSpace(runTestGit(t, j.dir, "rev-parse", "HEAD"))
+	runTestGit(t, j.builderFolder, "add", "internal/service/service.go")
+	runTestGit(t, j.builderFolder, "commit", "-q", "-m", "Price scones at $2.75")
+	commit := strings.TrimSpace(runTestGit(t, j.builderFolder, "rev-parse", "HEAD"))
+	assert.Equal(t, j.projectCommit, strings.TrimSpace(runTestGit(t, j.dir, "rev-parse", "HEAD")),
+		"the builder never moves the user's project branch")
+	assert.Empty(t, runTestGit(t, j.dir, "diff", "--", "design/story.go", "internal/service/service.go"),
+		"guide and builder work leave the user's source unchanged")
 
 	run, err := gensurla.DecodeVerificationStatusResult(trustedSuiteCall(t, ctx, j.builder, "verify_change",
 		journeyVerifyArgs(t, j.confirmed, commit)))

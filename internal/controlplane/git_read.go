@@ -29,15 +29,6 @@ type (
 		overflow bool
 	}
 
-	// changedGitFile is a committed path under the test module that a
-	// candidate commit added, changed or deleted since its base commit.
-	changedGitFile struct {
-		// path is the slash-separated path from the repository root.
-		path string
-		// added reports that the base commit does not have path.
-		added bool
-	}
-
 	// gitEntryKind is what a committed path is.
 	gitEntryKind int
 )
@@ -149,10 +140,10 @@ func mergeBaseCommit(ctx context.Context, repoRoot, a, b string) (base string, f
 // excluded because generate_code(target: "eval") rewrites them from the design.
 func changedTestModuleFiles(
 	ctx context.Context, repoRoot, baseCommit, candidateCommit, testModule string,
-) ([]changedGitFile, error) {
+) ([]string, error) {
 	out, err := runGitRead(
 		ctx, repoRoot,
-		"diff-tree", "-r", "-z", "--name-status", "--no-renames",
+		"diff-tree", "-r", "-z", "--name-only", "--no-renames",
 		baseCommit, candidateCommit, "--", testModule,
 	)
 	if err != nil {
@@ -162,16 +153,12 @@ func changedTestModuleFiles(
 	if len(fields) == 1 && fields[0] == "" {
 		return nil, nil
 	}
-	if len(fields)%2 != 0 {
-		return nil, fmt.Errorf("git diff-tree printed an odd number of fields (%d)", len(fields))
-	}
-	var changed []changedGitFile
-	for i := 0; i < len(fields); i += 2 {
-		status, p := fields[i], fields[i+1]
+	var changed []string
+	for _, p := range fields {
 		if isGeneratedTestModuleFile(testModule, p) {
 			continue
 		}
-		changed = append(changed, changedGitFile{path: p, added: status == "A"})
+		changed = append(changed, p)
 	}
 	return changed, nil
 }

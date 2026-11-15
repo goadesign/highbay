@@ -33,7 +33,7 @@ func TestCheckpointUIRefreshesApprovalWithoutDiscardingEdits(t *testing.T) {
 	})
 	require.NoError(t, err)
 	saveStoredBuildFixture(t, cp, confirmed)
-	commit := strings.Repeat("1", 40)
+	commit := commitBuilderCandidateFixture(t, cp, confirmed)
 	report := passingReport(t, confirmed.RequestRevision, commit, spec)
 	target.update(func(p *pageTarget) { p.report = report })
 	_, err = cp.ApproveMerge(user, &gensurla.ApproveMergePayload{

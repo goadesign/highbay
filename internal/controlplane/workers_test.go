@@ -242,7 +242,7 @@ func TestWorkerRefusalsCoverUnreadMissingAndOffBranch(t *testing.T) {
 	assert.Equal(t, repo, ready.repo)
 	assert.Equal(t, builderDir, ready.copyRoot)
 	assert.Equal(t, builderDir, ready.folder)
-	assert.True(t, ready.goworkOff)
+	assert.Equal(t, "off", ready.goWork)
 
 	// Q8: An index.lock while .surla-build is on its build branch with no
 	// operation in progress refuses builderCopyReady with the lock step.

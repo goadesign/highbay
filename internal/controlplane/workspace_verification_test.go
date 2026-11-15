@@ -20,6 +20,8 @@ import (
 	goa "goa.design/goa/v3/pkg"
 
 	gensurla "github.com/goadesign/surla/gen/surla"
+	"github.com/goadesign/surla/internal/designeval"
+	"github.com/goadesign/surla/internal/testwriter"
 	"github.com/goadesign/surla/internal/verify"
 	"github.com/goadesign/surla/internal/verifyrun"
 )
@@ -79,6 +81,7 @@ func TestVerificationAndLiveTargetsUseTheAcceptedTests(t *testing.T) {
 	gitForLayoutTest(t, filepath.Dir(filepath.Dir(repo.workspace)), "add", "services/shop/eval/gen/cmd/shop-evals/main.go")
 	gitForLayoutTest(t, filepath.Dir(filepath.Dir(repo.workspace)), "commit", "-q", "-m", "Regenerate candidate test entry point")
 	repo.candidate = strings.TrimSpace(gitForLayoutTest(t, filepath.Dir(filepath.Dir(repo.workspace)), "rev-parse", "HEAD"))
+	gitForLayoutTest(t, repo.workspace, "checkout", "-q", "--detach", repo.tests)
 	runsDir := filepath.Join(root, "ops", "runs")
 	options := func() Options {
 		return Options{
@@ -118,6 +121,7 @@ func TestVerificationAndLiveTargetsUseTheAcceptedTests(t *testing.T) {
 	assertRefusalSays(t, err, "no_build", "change \"chg\" has no build with a test writer")
 	_, err = first.StartBuild(user, &gensurla.StartBuildPayload{ChangeID: "chg", RequestRevision: card.RequestRevision})
 	require.NoError(t, err)
+	readBuilderCandidateFixture(t, first, card, repo.candidate)
 	_, err = first.VerifyChange(builder, verifyPayload)
 	assertRefusalSays(t, err, "tests_not_accepted", "the tests of this build are not accepted; their state is assigned")
 	_, err = first.StartLiveTarget(builder, livePayload)
@@ -196,10 +200,11 @@ func TestVerificationAndLiveTargetsUseTheAcceptedTests(t *testing.T) {
 // any run starts: called directly, over HTTP (409, the refusal's name, a
 // message that ends with its step) and through the MCP tool as the builder,
 // whose result is an error holding the reason and the step. The live-target
-// entry point uses the same plan refusals and accepts no rejected plan.
+// entry point retains layout refusals; verification rejects unrelated
+// candidate history through rule 13 before selecting the layout.
 func TestVerifyChangeRefusesWhatItCannotRunWithItsStep(t *testing.T) {
 	root := realTempDir(t)
-	repo := newLayoutRepo(t, filepath.Join(root, "repo"))
+	repo := newLayoutStoryRepo(t, filepath.Join(root, "repo"), refundStory("Refund over the limit waits"))
 	plain := filepath.Join(root, "plain", "shop")
 	writeStarterAt(t, plain, "example.com/shop")
 	unknown := strings.Repeat("e", 40)
@@ -276,23 +281,25 @@ func TestVerifyChangeRefusesWhatItCannotRunWithItsStep(t *testing.T) {
 			name: "candidate modifies hand-written file in test module", build: accepted, tests: repo.tests, candidate: repo.modifiedTestFile,
 			refusal: "conflict",
 			reason:  "candidate commit " + repo.modifiedTestFile + " changes hand-written files in the test module services/shop/eval since base commit " + repo.tests + " (services/shop/eval/acceptance/hooks.go); tests in services/shop/eval belong to the test writer, not the builder",
-			step:    "restore services/shop/eval to base commit " + repo.tests + " (git restore --source=" + repo.tests + " --staged --worktree -- ':(top,literal)services/shop/eval/acceptance/hooks.go'), commit, and call verify_change or start_live_target again",
+			step:    "restore these files to their versions or absence in commit " + repo.tests + ", commit, and call verify_change or start_live_target again",
 		},
 		{
 			name: "candidate adds hand-written file in test module", build: accepted, tests: repo.tests, candidate: repo.addedTestFile,
 			refusal: "conflict",
 			reason:  "candidate commit " + repo.addedTestFile + " changes hand-written files in the test module services/shop/eval since base commit " + repo.tests + " (services/shop/eval/acceptance/helper.go); tests in services/shop/eval belong to the test writer, not the builder",
-			step:    "restore services/shop/eval to base commit " + repo.tests + " (git rm -f -- ':(top,literal)services/shop/eval/acceptance/helper.go'), commit, and call verify_change or start_live_target again",
+			step:    "restore these files to their versions or absence in commit " + repo.tests + ", commit, and call verify_change or start_live_target again",
 		},
 		{
 			name: "candidate shares no history with accepted tests", build: accepted, tests: repo.tests, candidate: repo.orphanCandidate,
 			refusal: "conflict",
 			reason:  "candidate commit " + repo.orphanCandidate + " shares no history with the accepted tests' commit " + repo.tests,
-			step:    "ask the user: " + stepNoCommonBase,
+			step:    "build the change again from the project's current commit, then read the new assignments and verify again",
 		},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
+			repo := cloneLayoutRepo(t, repo)
+			gitForLayoutTest(t, repo.workspace, "checkout", "-q", "--detach", repo.tests)
 			workspace := repo.workspace
 			if tc.workspace != "" {
 				workspace = tc.workspace
@@ -323,6 +330,17 @@ func TestVerifyChangeRefusesWhatItCannotRunWithItsStep(t *testing.T) {
 			if tc.build == accepted {
 				acceptTests(t, cp, "chg", tc.tests)
 			}
+			candidate := tc.candidate
+			if tc.build == assigned || tc.build == accepted {
+				switch {
+				case tc.workspace == plain:
+					candidate = commitBuilderCandidateFixture(t, cp, card)
+				case candidate == unknown:
+					readBuilderCandidateFixture(t, cp, card, repo.candidate)
+				default:
+					readBuilderCandidateFixture(t, cp, card, candidate)
+				}
+			}
 			if tc.otherRev {
 				card = saveBuildStoryCard(t, cp, "chg", StatusConfirmed, refundStory("Refund over the limit waits for a manager"))
 			}
@@ -332,10 +350,18 @@ func TestVerifyChangeRefusesWhatItCannotRunWithItsStep(t *testing.T) {
 				require.NoError(t, os.Rename(filepath.Join(plain, ".git"), filepath.Join(root, "plain-git-metadata")))
 			}
 			srv := roleServer(t, cp)
-			body := `{"request_revision":"` + card.RequestRevision + `","candidate_commit":"` + tc.candidate + `"}`
+			body := `{"request_revision":"` + card.RequestRevision + `","candidate_commit":"` + candidate + `"}`
+			refusal, reason, step := tc.refusal, tc.reason, tc.step
+			if candidate == repo.orphanCandidate {
+				// Verification owns rule 13 before layout selection. Live starts
+				// retain the layout owner's no-common-history refusal below.
+				refusal = "build_branch_mismatch"
+				reason = "candidate commit " + candidate + " does not descend from this build's base " + repo.tests
+				step = "make your own work again from that build's base."
+			}
 
-			_, err = cp.VerifyChange(builder, &gensurla.VerifyChangePayload{ChangeID: "chg", RequestRevision: card.RequestRevision, CandidateCommit: tc.candidate})
-			assertRefusalSays(t, err, tc.refusal, tc.reason)
+			_, err = cp.VerifyChange(builder, &gensurla.VerifyChangePayload{ChangeID: "chg", RequestRevision: card.RequestRevision, CandidateCommit: candidate})
+			assertRefusalSays(t, err, refusal, reason)
 			status, raw := httpCall(t, srv.URL, "builder", http.MethodPost, "/changes/chg/verifications", body)
 			assert.Equal(t, http.StatusConflict, status, raw)
 			var refused struct {
@@ -343,19 +369,30 @@ func TestVerifyChangeRefusesWhatItCannotRunWithItsStep(t *testing.T) {
 				Message string `json:"message"`
 			}
 			require.NoError(t, json.Unmarshal([]byte(raw), &refused), raw)
-			assert.Equal(t, tc.refusal, refused.Name, "over HTTP")
-			assert.Contains(t, refused.Message, tc.reason, "over HTTP")
-			assert.True(t, strings.HasSuffix(refused.Message, tc.step), "over HTTP the message ends with its step: %s", refused.Message)
+			assert.Equal(t, refusal, refused.Name, "over HTTP")
+			assert.Contains(t, refused.Message, reason, "over HTTP")
+			assert.True(t, strings.HasSuffix(refused.Message, step), "over HTTP the message ends with its step: %s", refused.Message)
 			failure, _ := mcpToolCall(t, srv.URL, "builder", "verify_change",
-				`{"change_id":"chg","request_revision":"`+card.RequestRevision+`","candidate_commit":"`+tc.candidate+`"}`)
-			assert.Contains(t, failure, tc.reason, "through the MCP tool")
-			assert.Contains(t, failure, tc.step, "through the MCP tool")
+				`{"change_id":"chg","request_revision":"`+card.RequestRevision+`","candidate_commit":"`+candidate+`"}`)
+			assert.Contains(t, failure, reason, "through the MCP tool")
+			assert.Contains(t, failure, step, "through the MCP tool")
+			if tc.candidate == repo.modifiedTestFile || tc.candidate == repo.addedTestFile {
+				assert.NotContains(t, refused.Message, "git restore")
+				assert.NotContains(t, refused.Message, "git rm")
+				assert.NotContains(t, failure, "git restore")
+				assert.NotContains(t, failure, "git rm")
+			}
 			runs, err := verifyrun.List(runsDir, "alice@example.com", "chg")
 			require.NoError(t, err)
 			assert.Empty(t, runs, "no run is accepted")
 
-			_, err = cp.StartLiveTarget(builder, &gensurla.StartLiveTargetPayload{ChangeID: "chg", CandidateCommit: tc.candidate})
+			_, err = cp.StartLiveTarget(builder, &gensurla.StartLiveTargetPayload{ChangeID: "chg", CandidateCommit: candidate})
 			assertRefusalSays(t, err, tc.refusal, tc.reason)
+			if tc.candidate == repo.modifiedTestFile || tc.candidate == repo.addedTestFile {
+				assert.ErrorContains(t, err, tc.step)
+				assert.NotContains(t, err.Error(), "git restore")
+				assert.NotContains(t, err.Error(), "git rm")
+			}
 			assert.Nil(t, cp.owned, "no live copy is started")
 		})
 	}
@@ -367,7 +404,8 @@ func TestVerifyChangeRefusesWhatItCannotRunWithItsStep(t *testing.T) {
 // run's own work folder).
 func TestANewAcceptanceChangesOnlyTheTestsCommit(t *testing.T) {
 	root := realTempDir(t)
-	repo := newLayoutRepo(t, filepath.Join(root, "repo"))
+	repo := newLayoutStoryRepo(t, filepath.Join(root, "repo"), refundStory("Refund over the limit waits"))
+	gitForLayoutTest(t, repo.workspace, "checkout", "-q", "--detach", repo.tests)
 	runsDir := filepath.Join(root, "runs")
 	cp := newBuildControlPlane(t, Options{
 		WorkspaceDir:    repo.workspace,
@@ -378,6 +416,7 @@ func TestANewAcceptanceChangesOnlyTheTestsCommit(t *testing.T) {
 	card := saveBuildStoryCard(t, cp, "chg", StatusConfirmed, refundStory("Refund over the limit waits"))
 	_, err := cp.StartBuild(asCaller("alice@example.com", CallerUser), &gensurla.StartBuildPayload{ChangeID: "chg", RequestRevision: card.RequestRevision})
 	require.NoError(t, err)
+	readBuilderCandidateFixture(t, cp, card, repo.candidate)
 	// verifyAfterAccepting accepts the tests at commit, verifies the
 	// candidate and returns the saved plan.
 	verifyAfterAccepting := func(commit string) verify.Plan {
@@ -406,7 +445,7 @@ func TestANewAcceptanceChangesOnlyTheTestsCommit(t *testing.T) {
 // and starts no run.
 func TestVerifyChangeSaysWhoActsUntilTheTestsAreAccepted(t *testing.T) {
 	root := realTempDir(t)
-	repo := newLayoutRepo(t, filepath.Join(root, "repo"))
+	repo := newLayoutStoryRepo(t, filepath.Join(root, "repo"), refundStory("Refund over the limit waits"))
 	cases := []struct {
 		name string
 		tw   testWriterAssignment
@@ -430,6 +469,8 @@ func TestVerifyChangeSaysWhoActsUntilTheTestsAreAccepted(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
+			repo := cloneLayoutRepo(t, repo)
+			gitForLayoutTest(t, repo.workspace, "checkout", "-q", "--detach", repo.tests)
 			runsDir := filepath.Join(realTempDir(t), "runs")
 			cp := newBuildControlPlane(t, Options{
 				WorkspaceDir:    repo.workspace,
@@ -441,6 +482,7 @@ func TestVerifyChangeSaysWhoActsUntilTheTestsAreAccepted(t *testing.T) {
 			_, err := cp.StartBuild(asCaller("alice@example.com", CallerUser), &gensurla.StartBuildPayload{ChangeID: "chg", RequestRevision: card.RequestRevision})
 			require.NoError(t, err)
 			saveTestWriter(t, cp, "chg", tc.tw)
+			readBuilderCandidateFixture(t, cp, card, repo.candidate)
 
 			_, err = cp.VerifyChange(asCaller("alice@example.com", CallerBuilder), &gensurla.VerifyChangePayload{
 				ChangeID: "chg", RequestRevision: card.RequestRevision, CandidateCommit: repo.candidate,
@@ -457,7 +499,8 @@ func TestVerifyChangeSaysWhoActsUntilTheTestsAreAccepted(t *testing.T) {
 // text written for its reader: the builder's ends with the builder's own step,
 // and the user's names the builder and instructs no agent.
 func TestTestsNotAcceptedIsWordedForEachReader(t *testing.T) {
-	repo := newLayoutRepo(t, filepath.Join(realTempDir(t), "repo"))
+	repo := newLayoutStoryRepo(t, filepath.Join(realTempDir(t), "repo"), refundStory("Refund over the limit waits"))
+	gitForLayoutTest(t, repo.workspace, "checkout", "-q", "--detach", repo.tests)
 	cp := newBuildControlPlane(t, Options{
 		WorkspaceDir:    repo.workspace,
 		RunsDir:         filepath.Join(realTempDir(t), "runs"),
@@ -468,6 +511,7 @@ func TestTestsNotAcceptedIsWordedForEachReader(t *testing.T) {
 	_, err := cp.StartBuild(asCaller("alice@example.com", CallerUser), &gensurla.StartBuildPayload{ChangeID: "chg", RequestRevision: card.RequestRevision})
 	require.NoError(t, err)
 	saveTestWriter(t, cp, "chg", testWriterAssignment{State: testsReported, Findings: []string{}})
+	readBuilderCandidateFixture(t, cp, card, repo.candidate)
 
 	_, verifyErr := cp.VerifyChange(asCaller("alice@example.com", CallerBuilder), &gensurla.VerifyChangePayload{
 		ChangeID: "chg", RequestRevision: card.RequestRevision, CandidateCommit: repo.candidate,
@@ -499,7 +543,7 @@ func TestTestsNotAcceptedIsWordedForEachReader(t *testing.T) {
 // evaluator, which has no test writer.
 func TestTestWriterReadsOnlyTheRunsOfAnAssignedChange(t *testing.T) {
 	root := realTempDir(t)
-	repo := newLayoutRepo(t, filepath.Join(root, "repo"))
+	repo := newLayoutStoryRepo(t, filepath.Join(root, "repo"), refundStory("Refund over the limit waits"))
 	cases := []struct {
 		name    string
 		stored  bool
@@ -514,6 +558,8 @@ func TestTestWriterReadsOnlyTheRunsOfAnAssignedChange(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
+			repo := cloneLayoutRepo(t, repo)
+			gitForLayoutTest(t, repo.workspace, "checkout", "-q", "--detach", repo.tests)
 			runsDir := filepath.Join(realTempDir(t), "runs")
 			opts := Options{WorkspaceDir: repo.workspace, RunsDir: runsDir, SurlaVersion: testSurlaVersion}
 			exit := []string{"/bin/sh", "-c", "exit 0", "sh"}
@@ -540,6 +586,9 @@ func TestTestWriterReadsOnlyTheRunsOfAnAssignedChange(t *testing.T) {
 			if !tc.stored && tc.build {
 				acceptTests(t, cp, "chg", repo.tests)
 			}
+			if tc.build {
+				readBuilderCandidateFixture(t, cp, card, repo.candidate)
+			}
 			runID := startRunFor(t, cp, tc.stored || tc.build, card, repo, runsDir)
 
 			read, getErr := cp.GetVerification(testWriter, &gensurla.GetVerificationPayload{RunID: runID})
@@ -565,21 +614,20 @@ func TestTestWriterReadsOnlyTheRunsOfAnAssignedChange(t *testing.T) {
 //   - regenerating <testModule>/gen/... and <testModule>/AGENTS_QUICKSTART.md
 //     is allowed, whereas a sibling path starting with "gen" outside gen/
 //     (<testModule>/genx/notgen.go) is refused;
-//   - merging surla/tests into the project branch (or committing on top of
+//   - merging the numbered tests branch into the builder branch (or committing on top of
 //     that merge) is allowed when hand-written files in <testModule> match
-//     surla/tests, and refused when a merge commit tampers with <testModule>;
-//   - on the next change after merging surla/tests, .surla-tests is
-//     fast-forwarded to the merged commit M1, a builder commit that edits, adds,
+//     the accepted tests, and refused when a merge commit tampers with <testModule>;
+//   - on the next change after the user takes the builder's merge, .surla-tests
+//     joins the new numbered branch at M1. A builder commit that edits, adds,
 //     deletes, or replaces hand-written files with a symlink in <testModule>
-//     is refused against M1, and running the refusal message's exact recovery
-//     command from the project folder (services/shop) restores <testModule> so
-//     verify_change succeeds;
-//   - squashing the project branch history after tests were accepted refuses
-//     with stepNoCommonBase addressed to the user.
+//     is refused against M1. Restoring the named files to their versions or
+//     absence in M1 from the nested project folder lets verify_change succeed;
+//   - squashing the builder branch history after tests were accepted is
+//     refused by rule 13 before selecting the verification layout.
 func TestVerifyChangeTestModuleGuardAcrossRegenerationMergeAndNextChange(t *testing.T) {
 	root := realTempDir(t)
 	repoDir := filepath.Join(root, "repo")
-	repo := newLayoutRepo(t, repoDir)
+	repo := newLayoutStoryRepo(t, repoDir, refundStory("Refund over the limit waits"))
 	runsDir := filepath.Join(root, "runs")
 	cp := newBuildControlPlane(t, Options{
 		CardsDir:        filepath.Join(root, "cards"),
@@ -590,42 +638,60 @@ func TestVerifyChangeTestModuleGuardAcrossRegenerationMergeAndNextChange(t *test
 	})
 	user := asCaller("alice@example.com", CallerUser)
 	builder := asCaller("alice@example.com", CallerBuilder)
-	commitInMain := func(files map[string]string) string {
-		writeTree(t, repo.workspace, files)
-		gitForLayoutTest(t, repoDir, "add", "-A")
-		gitForLayoutTest(t, repoDir, "commit", "-q", "-m", "builder")
-		return strings.TrimSpace(gitForLayoutTest(t, repoDir, "rev-parse", "HEAD"))
+	var builderProject string
+	commitInBuilder := func(files map[string]string) string {
+		writeTree(t, builderProject, files)
+		gitForLayoutTest(t, builderProject, "add", "-A")
+		gitForLayoutTest(t, builderProject, "commit", "-q", "-m", "builder")
+		return strings.TrimSpace(gitForLayoutTest(t, builderProject, "rev-parse", "HEAD"))
 	}
 
 	// Stored verification still uses the operator's evaluator and permits
 	// candidate changes to the test module. The refusal table above covers
 	// written-test live targets, which share verification's accepted-test guard.
 	storedRunsDir := filepath.Join(root, "stored-runs")
-	storedPlan := layoutPlan(repo, "", repo.tests)
+	storedRepo := cloneLayoutRepo(t, repo)
+	storedPlan := layoutPlan(storedRepo, "", storedRepo.tests)
 	storedPlan.ReportDir = realTempDir(t)
 	storedCP := newBuildControlPlane(t, Options{
-		WorkspaceDir: repo.workspace,
+		WorkspaceDir: storedRepo.workspace,
 		RunsDir:      storedRunsDir,
 		SurlaVersion: testSurlaVersion,
 		Verification: &VerificationConfig{RunsDir: storedRunsDir, Plan: storedPlan, Command: []string{"/bin/sh", "-c", "exit 0", "sh"}, Timeout: time.Hour},
 	})
 	storedCard := saveBuildStoryCard(t, storedCP, "chg-stored", StatusConfirmed, refundStory("Refund over the limit waits"))
 	saveStoredBuildFixture(t, storedCP, storedCard)
+	readBuilderCandidateFixture(t, storedCP, storedCard, storedRepo.modifiedTestFile)
 	storedRun, err := storedCP.VerifyChange(builder, &gensurla.VerifyChangePayload{
-		ChangeID: "chg-stored", RequestRevision: storedCard.RequestRevision, CandidateCommit: repo.modifiedTestFile,
+		ChangeID: "chg-stored", RequestRevision: storedCard.RequestRevision, CandidateCommit: storedRepo.modifiedTestFile,
 	})
 	require.NoError(t, err, "stored verification is not guarded by starterPlanAt")
-	assert.Equal(t, repo.modifiedTestFile, storedRun.CandidateCommit)
+	assert.Equal(t, storedRepo.modifiedTestFile, storedRun.CandidateCommit)
 
-	// Change 1 starts from repo.candidate; the test writer commits T1 on
-	// surla/tests in the linked worktree .surla-tests.
-	excludeFile := filepath.Join(repoDir, ".git", "info", "exclude")
-	require.NoError(t, os.WriteFile(excludeFile, []byte("/.surla-tests/\n"), 0o600))
-	gitForLayoutTest(t, repoDir, "worktree", "add", "-q", "-B", "surla/tests", filepath.Join(repoDir, ".surla-tests"), repo.candidate)
+	// Change 1 starts from repo.candidate; both workers use this build's
+	// numbered branches in their owner-created linked copies.
 	card1 := saveBuildStoryCard(t, cp, "chg-1", StatusConfirmed, refundStory("Refund over the limit waits"))
 	_, err = cp.StartBuild(user, &gensurla.StartBuildPayload{ChangeID: "chg-1", RequestRevision: card1.RequestRevision})
 	require.NoError(t, err)
-	testsWorktree := filepath.Join(repoDir, ".surla-tests", "services", "shop")
+	builderProject = readBuilderCandidateFixture(t, cp, card1, repo.candidate)
+	// A marking test-writer read joins its numbered branch. The established
+	// buildCopyFixture owns preparation here, so no generator runs.
+	readTests := func(card *gensurla.ChangeCardResult) string {
+		cp.mu.RLock()
+		build, found, err := cp.cards.loadOpenBuild()
+		cp.mu.RUnlock()
+		require.NoError(t, err)
+		require.True(t, found)
+		copy, err := testwriter.MakeCopy(t.Context(), repo.workspace, testwriter.TestsRole,
+			testwriter.TestsRole.Branch(build.Number), build.Base)
+		require.NoError(t, err)
+		assignment, err := cp.GetTestWriterAssignment(asCaller("alice@example.com", CallerTestWriter),
+			&gensurla.GetTestWriterAssignmentPayload{ChangeID: card.ChangeID})
+		require.NoError(t, err)
+		require.Equal(t, copy.Project(), assignment.WorkingFolder)
+		return assignment.WorkingFolder
+	}
+	testsWorktree := readTests(card1)
 	writeTree(t, testsWorktree, map[string]string{
 		"eval/acceptance/story_test.go": "package acceptance\n\n// Story 1 tests.\n",
 	})
@@ -636,7 +702,7 @@ func TestVerifyChangeTestModuleGuardAcrossRegenerationMergeAndNextChange(t *test
 
 	// 1. Regenerated files under eval/gen/ and eval/AGENTS_QUICKSTART.md are
 	// allowed, whereas a sibling path eval/genx/notgen.go is refused.
-	regenCommit := commitInMain(map[string]string{
+	regenCommit := commitInBuilder(map[string]string{
 		"cmd/shop/refund.go":              "package main\n\n// Refund v1.\n",
 		"eval/AGENTS_QUICKSTART.md":       "# Quickstart\n",
 		"eval/gen/cmd/shop-evals/main.go": "package main\n\n// Regenerated.\nfunc main() {}\n",
@@ -648,7 +714,7 @@ func TestVerifyChangeTestModuleGuardAcrossRegenerationMergeAndNextChange(t *test
 	assert.Equal(t, regenCommit, run.CandidateCommit)
 	assert.Equal(t, t1, run.SuiteCommit)
 
-	genxCommit := commitInMain(map[string]string{
+	genxCommit := commitInBuilder(map[string]string{
 		"eval/genx/notgen.go": "package genx\n",
 	})
 	_, err = cp.VerifyChange(builder, &gensurla.VerifyChangePayload{
@@ -657,34 +723,34 @@ func TestVerifyChangeTestModuleGuardAcrossRegenerationMergeAndNextChange(t *test
 	assertRefusalSays(t, err, "conflict",
 		"candidate commit "+genxCommit+" changes hand-written files in the test module services/shop/eval since base commit "+repo.candidate+
 			" (services/shop/eval/genx/notgen.go)")
-	gitForLayoutTest(t, repoDir, "reset", "-q", "--hard", regenCommit)
+	gitForLayoutTest(t, builderProject, "reset", "-q", "--hard", regenCommit)
 
-	// 2. Merging surla/tests (T1) into main is allowed when eval/ matches T1,
+	// 2. Merging this build's tests (T1) into its builder branch is allowed when eval/ matches T1,
 	// and refused when a merge commit tampers with eval/ relative to T1.
-	gitForLayoutTest(t, repoDir, "merge", "-q", "--no-ff", "--no-commit", t1)
-	writeTree(t, repo.workspace, map[string]string{
+	gitForLayoutTest(t, builderProject, "merge", "-q", "--no-ff", "--no-commit", t1)
+	writeTree(t, builderProject, map[string]string{
 		"eval/acceptance/hooks.go": "package acceptance\n\n// Tampered during merge.\n",
 	})
-	gitForLayoutTest(t, repoDir, "add", "-A")
-	gitForLayoutTest(t, repoDir, "commit", "-q", "-m", "tampered merge")
-	tamperedMerge := strings.TrimSpace(gitForLayoutTest(t, repoDir, "rev-parse", "HEAD"))
+	gitForLayoutTest(t, builderProject, "add", "-A")
+	gitForLayoutTest(t, builderProject, "commit", "-q", "-m", "tampered merge")
+	tamperedMerge := strings.TrimSpace(gitForLayoutTest(t, builderProject, "rev-parse", "HEAD"))
 	_, err = cp.VerifyChange(builder, &gensurla.VerifyChangePayload{
 		ChangeID: "chg-1", RequestRevision: card1.RequestRevision, CandidateCommit: tamperedMerge,
 	})
 	assertRefusalSays(t, err, "conflict",
 		"candidate commit "+tamperedMerge+" changes hand-written files in the test module services/shop/eval since base commit "+t1+
 			" (services/shop/eval/acceptance/hooks.go)")
-	gitForLayoutTest(t, repoDir, "reset", "-q", "--hard", regenCommit)
+	gitForLayoutTest(t, builderProject, "reset", "-q", "--hard", regenCommit)
 
-	gitForLayoutTest(t, repoDir, "merge", "-q", "--no-ff", "-m", "merge surla/tests", t1)
-	m1 := strings.TrimSpace(gitForLayoutTest(t, repoDir, "rev-parse", "HEAD"))
+	gitForLayoutTest(t, builderProject, "merge", "-q", "--no-ff", "-m", "merge surla/tests", t1)
+	m1 := strings.TrimSpace(gitForLayoutTest(t, builderProject, "rev-parse", "HEAD"))
 	run, err = cp.VerifyChange(builder, &gensurla.VerifyChangePayload{
 		ChangeID: "chg-1", RequestRevision: card1.RequestRevision, CandidateCommit: m1,
 	})
 	require.NoError(t, err, "merge commit of surla/tests must be allowed")
 	assert.Equal(t, m1, run.CandidateCommit)
 
-	afterMerge := commitInMain(map[string]string{
+	afterMerge := commitInBuilder(map[string]string{
 		"cmd/shop/refund.go": "package main\n\n// Post-merge service edit.\n",
 	})
 	run, err = cp.VerifyChange(builder, &gensurla.VerifyChangePayload{
@@ -693,30 +759,62 @@ func TestVerifyChangeTestModuleGuardAcrossRegenerationMergeAndNextChange(t *test
 	require.NoError(t, err, "service commit on top of merged surla/tests must be allowed")
 	assert.Equal(t, afterMerge, run.CandidateCommit)
 
-	// Reset main back to M1 as the clean post-Change-1 state.
-	gitForLayoutTest(t, repoDir, "reset", "-q", "--hard", m1)
+	// The user takes M1 into the project before starting the next change.
+	// A candidate already merged by the user remains verifiable.
+	gitForLayoutTest(t, builderProject, "reset", "-q", "--hard", m1)
+	gitForLayoutTest(t, repo.workspace, "merge", "-q", "--ff-only", m1)
+	_, err = cp.VerifyChange(builder, &gensurla.VerifyChangePayload{
+		ChangeID: "chg-1", RequestRevision: card1.RequestRevision, CandidateCommit: m1,
+	})
+	require.NoError(t, err, "the user taking the candidate must not invalidate its verification")
 
-	// 3. Change 2 starts from M1; .surla-tests is fast-forwarded to M1,
-	// and the test writer commits T2 on surla/tests.
+	// 3. Change 2 starts from M1; marking reads join both copies to its
+	// numbered branches, and the test writer commits T2 there.
 	card2 := saveBuildStoryCard(t, cp, "chg-2", StatusConfirmed, refundStory("Refund over the limit waits for a director"))
 	// The first build has no passed run in this fixture. Drop it before the
-	// second change and explicitly supply the refreshed revision's start.
+	// second change and refresh its revision from the new draft generation.
 	current, err := cp.GetBuild(user, &gensurla.GetBuildPayload{ChangeID: "chg-1"})
 	require.NoError(t, err)
 	open, ok := current.Build.AsStarted()
 	require.True(t, ok)
 	_, err = cp.DropBuild(user, &gensurla.DropBuildPayload{ChangeID: "chg-1", StartedAt: open.StartedAt})
 	require.NoError(t, err)
-	provenance, found, err := cp.cards.loadMadeFrom()
+	// Refresh and adopt the same change through its owners after Drop starts
+	// a new draft generation. The snapshot keeps the new folder's real base.
+	record := loadMetadataRecord(t, cp, card2.ChangeID)
+	readDraftForTest(t, cp)
+	writeBuilderDesignFixture(t, filepath.Join(repo.workspace, draftFolderName), record.designSource)
+	opID := seedStoryRefreshForTest(t, cp, "alice@example.com", storyRefreshStateSucceeded, record.stories, "")
+	require.Empty(t, card2.Ambiguities)
+	examples := make([]*gensurla.CP1RevisionAnalysisExample, 0, len(card2.Examples))
+	for _, example := range card2.Examples {
+		examples = append(examples, &gensurla.CP1RevisionAnalysisExample{
+			PriorID: &example.ID, Scenario: example.Scenario, InputSummary: example.InputSummary,
+			ExpectedOutcome: example.ExpectedOutcome, VerificationKind: example.VerificationKind,
+		})
+	}
+	revised, err := cp.ReviseChange(asCaller("alice@example.com", CallerGuide), &gensurla.ReviseChangePayload{
+		ChangeID: card2.ChangeID, RequestRevision: card2.RequestRevision, Prompt: card2.Prompt,
+		StoryRefreshOpID: &opID, Analysis: &gensurla.CP1RevisionAnalysis{
+			Summary: card2.Summary, Ambiguities: []*gensurla.CP1AnalysisAmbiguity{},
+			Examples: examples, RemovedExampleIds: []string{}, PreservedBehaviors: card2.PreservedBehaviors,
+		},
+	})
 	require.NoError(t, err)
-	require.True(t, found)
-	record := loadMetadataRecord(t, cp, "chg-2")
-	record.madeFrom.Start = provenance.Start
-	record.madeFrom.Entries = nil
-	saveMetadataRecord(t, cp, record)
+	require.NotNil(t, revised.ProposedRevision)
+	card2, err = cp.ConfirmIntent(user, &gensurla.ConfirmIntentPayload{
+		ChangeID: card2.ChangeID, RequestRevision: revised.ProposedRevision.RequestRevision,
+		Answers: map[string]string{}, Examples: revised.ProposedRevision.Examples,
+	})
+	require.NoError(t, err)
+	record = loadMetadataRecord(t, cp, card2.ChangeID)
 	_, err = cp.StartBuild(user, &gensurla.StartBuildPayload{ChangeID: "chg-2", RequestRevision: card2.RequestRevision})
 	require.NoError(t, err)
-	gitForLayoutTest(t, testsWorktree, "merge", "-q", "--ff-only", m1)
+	builderProject = readBuilderCandidateFixture(t, cp, card2, m1)
+	writeBuilderDesignFixture(t, builderProject, record.designSource)
+	testsWorktree = readTests(card2)
+	assert.Equal(t, m1, strings.TrimSpace(gitForLayoutTest(t, testsWorktree, "rev-parse", "HEAD")),
+		"the new marking read joins the tests copy to the second build's base")
 	writeTree(t, testsWorktree, map[string]string{
 		"eval/acceptance/story_test.go": "package acceptance\n\n// Story 2 tests.\n",
 	})
@@ -727,10 +825,10 @@ func TestVerifyChangeTestModuleGuardAcrossRegenerationMergeAndNextChange(t *test
 
 	// Builder commits service code + accidental hand-written edits in eval/
 	// (modified story_test.go, added helper.go, and deleted/symlinked hooks.go).
-	hooksPath := filepath.Join(repo.workspace, "eval", "acceptance", "hooks.go")
+	hooksPath := filepath.Join(builderProject, "eval", "acceptance", "hooks.go")
 	require.NoError(t, os.Remove(hooksPath))
 	require.NoError(t, os.Symlink("../../go.mod", hooksPath))
-	badCommit := commitInMain(map[string]string{
+	badCommit := commitInBuilder(map[string]string{
 		"cmd/shop/refund.go":            "package main\n\n// Director approval.\n",
 		"eval/acceptance/story_test.go": "package acceptance\n\n// Builder tampered with story_test.go.\n",
 		"eval/acceptance/helper.go":     "package acceptance\n\n// Builder added helper.go.\n",
@@ -738,67 +836,66 @@ func TestVerifyChangeTestModuleGuardAcrossRegenerationMergeAndNextChange(t *test
 	_, err = cp.VerifyChange(builder, &gensurla.VerifyChangePayload{
 		ChangeID: "chg-2", RequestRevision: card2.RequestRevision, CandidateCommit: badCommit,
 	})
-	wantCmd := "git restore --source=" + m1 + " --staged --worktree -- ':(top,literal)services/shop/eval/acceptance/hooks.go' ':(top,literal)services/shop/eval/acceptance/story_test.go' && " +
-		"git rm -f -- ':(top,literal)services/shop/eval/acceptance/helper.go'"
 	assertRefusalSays(t, err, "conflict",
 		"candidate commit "+badCommit+" changes hand-written files in the test module services/shop/eval since base commit "+m1+
 			" (services/shop/eval/acceptance/helper.go, services/shop/eval/acceptance/hooks.go, services/shop/eval/acceptance/story_test.go);"+
 			" tests in services/shop/eval belong to the test writer, not the builder:"+
-			" restore services/shop/eval to base commit "+m1+" ("+wantCmd+"), commit, and call verify_change or start_live_target again")
+			" restore these files to their versions or absence in commit "+m1+", commit, and call verify_change or start_live_target again")
+	assert.NotContains(t, err.Error(), "git restore")
+	assert.NotContains(t, err.Error(), "git rm")
 
-	// Execute the refusal message's exact recovery command from repo.workspace
-	// (the nested project folder services/shop), commit, and verify again.
-	cmd := exec.Command("sh", "-c", wantCmd)
-	cmd.Dir = repo.workspace
-	out, runErr := cmd.CombinedOutput()
-	require.NoError(t, runErr, string(out))
-	gitForLayoutTest(t, repo.workspace, "commit", "-q", "-m", "restore eval")
-	fixedCommit := strings.TrimSpace(gitForLayoutTest(t, repo.workspace, "rev-parse", "HEAD"))
+	// Meet the refusal's goal for exactly the named files from the builder's
+	// nested project folder, without changing its other service work.
+	gitForLayoutTest(t, builderProject, "restore", "--source="+m1, "--staged", "--worktree", "--",
+		":(top,literal)services/shop/eval/acceptance/helper.go",
+		":(top,literal)services/shop/eval/acceptance/hooks.go",
+		":(top,literal)services/shop/eval/acceptance/story_test.go")
+	gitForLayoutTest(t, builderProject, "commit", "-q", "-m", "restore eval")
+	fixedCommit := strings.TrimSpace(gitForLayoutTest(t, builderProject, "rev-parse", "HEAD"))
 
 	run, err = cp.VerifyChange(builder, &gensurla.VerifyChangePayload{
 		ChangeID: "chg-2", RequestRevision: card2.RequestRevision, CandidateCommit: fixedCommit,
 	})
-	require.NoError(t, err, "verify_change must succeed after running the refusal's recovery command from the project folder")
+	require.NoError(t, err, "verify_change must succeed after meeting the refusal's recovery goal from the project folder")
 	assert.Equal(t, fixedCommit, run.CandidateCommit)
 	assert.Equal(t, t2, run.SuiteCommit)
+	serviceWork, err := os.ReadFile(filepath.Join(builderProject, "cmd", "shop", "refund.go"))
+	require.NoError(t, err)
+	assert.Contains(t, string(serviceWork), "Director approval.", "recovery preserves the builder's own service work")
 
-	// Deleting a hand-written file in eval/ is also refused and restored by
-	// the refusal's recovery command.
+	// Deleting a hand-written file in eval/ is also refused. Restoring the
+	// named file's base version meets the same recovery goal.
 	require.NoError(t, os.Remove(hooksPath))
-	gitForLayoutTest(t, repoDir, "add", "-A")
-	gitForLayoutTest(t, repoDir, "commit", "-q", "-m", "delete hooks.go")
-	deletedCommit := strings.TrimSpace(gitForLayoutTest(t, repoDir, "rev-parse", "HEAD"))
+	gitForLayoutTest(t, builderProject, "add", "-A")
+	gitForLayoutTest(t, builderProject, "commit", "-q", "-m", "delete hooks.go")
+	deletedCommit := strings.TrimSpace(gitForLayoutTest(t, builderProject, "rev-parse", "HEAD"))
 	_, err = cp.VerifyChange(builder, &gensurla.VerifyChangePayload{
 		ChangeID: "chg-2", RequestRevision: card2.RequestRevision, CandidateCommit: deletedCommit,
 	})
-	wantRestoreDeleted := "git restore --source=" + m1 + " --staged --worktree -- ':(top,literal)services/shop/eval/acceptance/hooks.go'"
 	assertRefusalSays(t, err, "conflict",
-		"restore services/shop/eval to base commit "+m1+" ("+wantRestoreDeleted+"), commit, and call verify_change or start_live_target again")
-	cmd = exec.Command("sh", "-c", wantRestoreDeleted)
-	cmd.Dir = repo.workspace
-	out, runErr = cmd.CombinedOutput()
-	require.NoError(t, runErr, string(out))
-	gitForLayoutTest(t, repo.workspace, "commit", "-q", "-m", "restore deleted hooks.go")
-	restoredDeletedCommit := strings.TrimSpace(gitForLayoutTest(t, repo.workspace, "rev-parse", "HEAD"))
+		"restore these files to their versions or absence in commit "+m1+", commit, and call verify_change or start_live_target again")
+	gitForLayoutTest(t, builderProject, "restore", "--source="+m1, "--staged", "--worktree", "--",
+		":(top,literal)services/shop/eval/acceptance/hooks.go")
+	gitForLayoutTest(t, builderProject, "commit", "-q", "-m", "restore deleted hooks.go")
+	restoredDeletedCommit := strings.TrimSpace(gitForLayoutTest(t, builderProject, "rev-parse", "HEAD"))
 	_, err = cp.VerifyChange(builder, &gensurla.VerifyChangePayload{
 		ChangeID: "chg-2", RequestRevision: card2.RequestRevision, CandidateCommit: restoredDeletedCommit,
 	})
 	require.NoError(t, err)
 
-	// 4. Squashing the project branch history into a new root commit after T2
-	// was accepted leaves main with no common ancestor with T2; verify_change
-	// refuses with stepNoCommonBase addressed to the user.
-	squashedTree := strings.TrimSpace(gitForLayoutTest(t, repoDir, "rev-parse", "HEAD^{tree}"))
-	squashedRoot := strings.TrimSpace(gitForLayoutTest(t, repoDir, "commit-tree", squashedTree, "-m", "squashed main"))
-	gitForLayoutTest(t, repoDir, "reset", "-q", "--hard", squashedRoot)
-	squashedCandidate := commitInMain(map[string]string{
+	// 4. Squashing the builder branch into a new root after T2 was accepted
+	// leaves it outside this build's base; rule 13 refuses before layout reads.
+	squashedTree := strings.TrimSpace(gitForLayoutTest(t, builderProject, "rev-parse", "HEAD^{tree}"))
+	squashedRoot := strings.TrimSpace(gitForLayoutTest(t, builderProject, "commit-tree", squashedTree, "-m", "squashed main"))
+	gitForLayoutTest(t, builderProject, "reset", "-q", "--hard", squashedRoot)
+	squashedCandidate := commitInBuilder(map[string]string{
 		"cmd/shop/refund.go": "package main\n\n// Commit on squashed main.\n",
 	})
 	_, err = cp.VerifyChange(builder, &gensurla.VerifyChangePayload{
 		ChangeID: "chg-2", RequestRevision: card2.RequestRevision, CandidateCommit: squashedCandidate,
 	})
-	assertRefusalSays(t, err, "conflict",
-		"candidate commit "+squashedCandidate+" shares no history with the accepted tests' commit "+t2+"; ask the user: "+stepNoCommonBase)
+	assertRefusalSays(t, err, "build_branch_mismatch",
+		"candidate commit "+squashedCandidate+" does not descend from this build's base "+m1)
 }
 
 // TestVerifyChangeTestModuleFileLimitBelowAtAndAbove verifies
@@ -810,7 +907,7 @@ func TestVerifyChangeTestModuleFileLimitBelowAtAndAbove(t *testing.T) {
 		t.Run(strings.Join([]string{"files", string(rune('0'+count/10)) + string(rune('0'+count%10))}, "_"), func(t *testing.T) {
 			root := realTempDir(t)
 			repoDir := filepath.Join(root, "repo")
-			repo := newLayoutRepo(t, repoDir)
+			repo := newLayoutStoryRepo(t, repoDir, refundStory("Refund over the limit waits"))
 			cp := newBuildControlPlane(t, Options{
 				WorkspaceDir:    repo.workspace,
 				RunsDir:         filepath.Join(root, "runs"),
@@ -823,6 +920,7 @@ func TestVerifyChangeTestModuleFileLimitBelowAtAndAbove(t *testing.T) {
 			_, err := cp.StartBuild(user, &gensurla.StartBuildPayload{ChangeID: "chg", RequestRevision: card.RequestRevision})
 			require.NoError(t, err)
 			acceptTests(t, cp, "chg", repo.tests)
+			builderProject := readBuilderCandidateFixture(t, cp, card, repo.candidate)
 
 			files := map[string]string{
 				"eval/acceptance/hooks.go": "package acceptance\n\n// Modified existing file (sorts after added_XX.go).\n",
@@ -831,10 +929,10 @@ func TestVerifyChangeTestModuleFileLimitBelowAtAndAbove(t *testing.T) {
 				name := filepath.Join("eval", "acceptance", "added_"+string(rune('0'+i/10))+string(rune('0'+i%10))+".go")
 				files[filepath.ToSlash(name)] = "package acceptance\n"
 			}
-			writeTree(t, repo.workspace, files)
-			gitForLayoutTest(t, repoDir, "add", "-A")
-			gitForLayoutTest(t, repoDir, "commit", "-q", "-m", "touch test files")
-			badCommit := strings.TrimSpace(gitForLayoutTest(t, repoDir, "rev-parse", "HEAD"))
+			writeTree(t, builderProject, files)
+			gitForLayoutTest(t, builderProject, "add", "-A")
+			gitForLayoutTest(t, builderProject, "commit", "-q", "-m", "touch test files")
+			badCommit := strings.TrimSpace(gitForLayoutTest(t, builderProject, "rev-parse", "HEAD"))
 
 			_, err = cp.VerifyChange(builder, &gensurla.VerifyChangePayload{
 				ChangeID: "chg", RequestRevision: card.RequestRevision, CandidateCommit: badCommit,
@@ -849,22 +947,31 @@ func TestVerifyChangeTestModuleFileLimitBelowAtAndAbove(t *testing.T) {
 				assert.Contains(t, refusal.Message, " (and 1 more));")
 			}
 
-			extractCmd := func(msg string) string {
-				marker := "restore services/shop/eval to base commit " + repo.tests + " ("
-				idx := strings.Index(msg, marker)
-				require.NotEqual(t, -1, idx, msg)
-				rest := msg[idx+len(marker):]
-				end := strings.Index(rest, "), commit, and call verify_change or start_live_target again")
-				require.NotEqual(t, -1, end, msg)
-				return rest[:end]
+			assert.Contains(t, refusal.Message, "restore these files to their versions or absence in commit "+repo.tests)
+			assert.NotContains(t, refusal.Message, "git restore")
+			assert.NotContains(t, refusal.Message, "git rm")
+			// Recover only the named first twenty files. For 21, hooks.go
+			// sorts last and remains for the next refusal and recovery round.
+			var shown []string
+			for i := 1; i < count; i++ {
+				shown = append(shown, "services/shop/eval/acceptance/added_"+
+					string(rune('0'+i/10))+string(rune('0'+i%10))+".go")
 			}
-
-			cmd1 := exec.Command("sh", "-c", extractCmd(refusal.Message))
-			cmd1.Dir = repo.workspace
-			out, runErr := cmd1.CombinedOutput()
-			require.NoError(t, runErr, string(out))
-			gitForLayoutTest(t, repo.workspace, "commit", "-q", "-m", "round 1 restore")
-			afterRound1 := strings.TrimSpace(gitForLayoutTest(t, repo.workspace, "rev-parse", "HEAD"))
+			if count <= maxChangedTestFiles {
+				shown = append(shown, "services/shop/eval/acceptance/hooks.go")
+			}
+			wantNames := strings.Join(shown, ", ")
+			if count > maxChangedTestFiles {
+				wantNames += " (and 1 more)"
+			}
+			assert.Contains(t, refusal.Message, "("+wantNames+");")
+			args := []string{"restore", "--source=" + repo.tests, "--staged", "--worktree", "--"}
+			for _, file := range shown {
+				args = append(args, ":(top,literal)"+file)
+			}
+			gitForLayoutTest(t, builderProject, args...)
+			gitForLayoutTest(t, builderProject, "commit", "-q", "-m", "round 1 restore")
+			afterRound1 := strings.TrimSpace(gitForLayoutTest(t, builderProject, "rev-parse", "HEAD"))
 
 			if count <= 20 {
 				run, err := cp.VerifyChange(builder, &gensurla.VerifyChangePayload{
@@ -884,12 +991,11 @@ func TestVerifyChangeTestModuleFileLimitBelowAtAndAbove(t *testing.T) {
 			assert.Contains(t, refusal.Message, "(services/shop/eval/acceptance/hooks.go);")
 			assert.NotContains(t, refusal.Message, " more)")
 
-			cmd2 := exec.Command("sh", "-c", extractCmd(refusal.Message))
-			cmd2.Dir = repo.workspace
-			out, runErr = cmd2.CombinedOutput()
-			require.NoError(t, runErr, string(out))
-			gitForLayoutTest(t, repo.workspace, "commit", "-q", "-m", "round 2 restore")
-			afterRound2 := strings.TrimSpace(gitForLayoutTest(t, repo.workspace, "rev-parse", "HEAD"))
+			assert.Contains(t, refusal.Message, "restore these files to their versions or absence in commit "+repo.tests)
+			gitForLayoutTest(t, builderProject, "restore", "--source="+repo.tests, "--staged", "--worktree", "--",
+				":(top,literal)services/shop/eval/acceptance/hooks.go")
+			gitForLayoutTest(t, builderProject, "commit", "-q", "-m", "round 2 restore")
+			afterRound2 := strings.TrimSpace(gitForLayoutTest(t, builderProject, "rev-parse", "HEAD"))
 
 			run, err := cp.VerifyChange(builder, &gensurla.VerifyChangePayload{
 				ChangeID: "chg", RequestRevision: card.RequestRevision, CandidateCommit: afterRound2,
@@ -900,9 +1006,28 @@ func TestVerifyChangeTestModuleFileLimitBelowAtAndAbove(t *testing.T) {
 	}
 }
 
-// newLayoutRepo creates a git repository at dir holding the shop project in
-// services/shop and commits it in each state layoutRepo names.
+// cloneLayoutRepo isolates a scenario's numbered build refs while retaining
+// its authored commits, so one table case never supplies another's foreign work.
+func cloneLayoutRepo(t *testing.T, source layoutRepo) layoutRepo {
+	t.Helper()
+	root := realTempDir(t)
+	gitForLayoutTest(t, root, "clone", "-q", filepath.Dir(filepath.Dir(source.workspace)), filepath.Join(root, "repo"))
+	source.workspace = filepath.Join(root, "repo", "services", "shop")
+	return source
+}
+
+// newLayoutRepo authors the graph with the no-Story design used by
+// buildableChange, including live-policy fixtures that never verify a candidate.
 func newLayoutRepo(t *testing.T, dir string) layoutRepo {
+	t.Helper()
+	return newLayoutStoryRepo(t, dir, nil)
+}
+
+// newLayoutStoryRepo authors the matching saved design before any immutable
+// graph IDs exist, then commits the test-module states layoutRepo names.
+func newLayoutStoryRepo(
+	t *testing.T, dir string, stories []designeval.StorySummary,
+) layoutRepo {
 	t.Helper()
 	workspace := filepath.Join(dir, "services", "shop")
 	require.NoError(t, os.MkdirAll(workspace, 0o755))
@@ -920,6 +1045,7 @@ func newLayoutRepo(t *testing.T, dir string) layoutRepo {
 	repo.workspace = workspace
 	repo.noEntry = commit(func() {
 		writeTree(t, workspace, shopLayout)
+		writeTree(t, workspace, map[string]string{"design/build_fixture.go": buildStorySource(t, stories)})
 		remove("eval/gen")()
 	})
 	repo.tests = commit(func() { writeTree(t, workspace, shopLayout) })
@@ -939,6 +1065,7 @@ func newLayoutRepo(t *testing.T, dir string) layoutRepo {
 	gitForLayoutTest(t, dir, "rm", "-rf", "-q", ".")
 	repo.orphanCandidate = commit(func() {
 		writeTree(t, workspace, shopLayout)
+		writeTree(t, workspace, map[string]string{"design/build_fixture.go": buildStorySource(t, stories)})
 		writeTree(t, workspace, map[string]string{"cmd/shop/refund.go": "package main\n"})
 	})
 	gitForLayoutTest(t, dir, "checkout", "-q", "-B", "main", repo.candidate)

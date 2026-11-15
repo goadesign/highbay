@@ -114,7 +114,7 @@ func TestTheStoryTableIsSurlas(t *testing.T) {
 				return
 			}
 			require.True(t, v.Accepted(), "%+v", v.Findings)
-			commit, err := Record(t.Context(), v, branch, "Add the accepted tests")
+			commit, err := Record(t.Context(), v, branch, runGit(t, repo, "rev-parse", branch), "Add the accepted tests")
 			require.NoError(t, err)
 			assert.Equal(t, strings.TrimSpace(string(want)), runGit(t, repo, "show", commit+":eval/"+designeval.StoryTestsPath),
 				"the commit holds Surla's table, not the author's")
@@ -130,7 +130,7 @@ func TestTheStoryTableIsSurlas(t *testing.T) {
 		v, err := testChecker.Check(t.Context(), wc, fixtureSuite, branch, base, refundStories)
 		require.NoError(t, err)
 		require.True(t, v.Accepted(), "%+v", v.Findings)
-		_, err = Record(t.Context(), v, branch, "Add the accepted tests")
+		_, err = Record(t.Context(), v, branch, runGit(t, repo, "rev-parse", branch), "Add the accepted tests")
 		require.NoError(t, err)
 		assert.Empty(t, runGit(t, wc.Dir(), "status", "--porcelain", "--untracked-files=all"), "the copy holds what was recorded")
 	})

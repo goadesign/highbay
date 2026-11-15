@@ -8,6 +8,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 	"unicode/utf8"
 
@@ -116,13 +117,11 @@ const (
 	// recordLockRetries attempts.
 	recordLockRetryPause = 500 * time.Millisecond
 
-	// stepOpenCopy, stepNoCommonBase, stepLimit and stepFailure
+	// stepOpenCopy, stepLimit and stepFailure
 	// are the user's steps of a check that could not run, one per cause; each
 	// fits the design's 512 characters.
 	stepOpenCopy = "Build the change again: starting a build opens the test writer's working copy " +
 		"and names the step when it cannot."
-	stepNoCommonBase = "Delete the test writer's working copy and branch, then build the change again: " +
-		"in the project folder run git worktree remove .surla-tests and git branch -D surla/tests."
 	stepLimit = "Check that git and Go module downloads work in the project folder, " +
 		"then ask the test writer to report again."
 	stepFailure = "Make sure the project's git repository works (git status in the project folder) " +
@@ -224,6 +223,14 @@ func (r *reportChecker) reported(ctx context.Context) []string {
 	if !found || !r.cp.usableBuild(saved) || saved.TestWriter.State != testsReported {
 		return nil
 	}
+	provenance, hasProvenance, err := r.cp.cards.loadMadeFrom()
+	if err != nil {
+		r.recordReadFailure(ctx, err)
+		return nil
+	}
+	if hasProvenance && buildDropped(provenance, saved) {
+		return nil
+	}
 	return []string{saved.ChangeID}
 }
 
@@ -256,12 +263,18 @@ func (r *reportChecker) judge(ctx context.Context, changeID string) {
 	// Phase 2: read the build.
 	r.cp.mu.RLock()
 	saved, found, err := r.cp.cards.loadOpenBuild()
+	var provenance madeFromRecord
+	var hasProvenance bool
+	if err == nil && found {
+		provenance, hasProvenance, err = r.cp.cards.loadMadeFrom()
+	}
 	r.cp.mu.RUnlock()
 	if err != nil {
 		r.recordReadFailure(ctx, err)
 		return
 	}
-	if !found || saved.ChangeID != changeID || !r.cp.usableBuild(saved) || saved.TestWriter.State != testsReported {
+	if !found || saved.ChangeID != changeID || !r.cp.usableBuild(saved) || saved.TestWriter.State != testsReported ||
+		hasProvenance && buildDropped(provenance, saved) {
 		return
 	}
 	id := reportIdentityOf(saved)
@@ -283,31 +296,57 @@ func (r *reportChecker) judge(ctx context.Context, changeID string) {
 		return
 	}
 	verdict := r.verdictOf(v, err, deadline)
+	failure := err
 
 	// Phase 4: confirm, record and save.
 	r.cp.reportMu.Lock()
 	defer r.cp.reportMu.Unlock()
 	if verdict.State == testsAccepted {
-		current, err := r.answersTo(id)
-		if err != nil {
-			recordJudgeFailure(span, err, "confirm build")
-			r.retryLater(span, id)
-			return
-		}
-		if !current {
-			span.AddEvent(replacedEvent)
-			return
-		}
-		message := fmt.Sprintf("Add the tests Surla accepted for change %s, report %d", id.changeID, id.report)
-		commit, err := r.recordAccepted(checkCtx, copy, v, branch, message)
-		switch {
-		case ctx.Err() != nil:
+		checkedTip, tipVerdict, tipErr := r.checkReportedTestsTip(checkCtx, saved)
+		if ctx.Err() != nil {
 			span.AddEvent("stopped before the tests were recorded; the build stays reported")
 			return
-		case err != nil:
-			verdict = r.couldNotRun(err, deadline, "Surla could not record the accepted tests")
+		}
+		switch {
+		case tipErr != nil:
+			failure = tipErr
+			verdict = r.couldNotRun(tipErr, deadline, "Surla could not read the tests branch before recording")
+		case !tipVerdict.Accepted():
+			verdict = r.verdictOf(tipVerdict, nil, deadline)
 		default:
-			verdict.Commit = commit
+			message := fmt.Sprintf("Add the tests Surla accepted for change %s, report %d", id.changeID, id.report)
+			commit, current, confirmErr, recordErr := r.recordAccepted(checkCtx, id, copy, v, branch, checkedTip, message)
+			if confirmErr != nil {
+				recordJudgeFailure(span, confirmErr, "confirm build")
+				r.retryLater(span, id)
+				return
+			}
+			switch {
+			case ctx.Err() != nil:
+				span.AddEvent("stopped before a verdict; the build stays reported")
+				return
+			case !current:
+				span.AddEvent(replacedEvent)
+				return
+			case recordErr != nil:
+				failure = recordErr
+				var author *testwriter.AuthorError
+				if commit != "" {
+					// A published commit is a durable fact even if the check's
+					// deadline elapsed before its index could be published.
+					verdict = testWriterAssignment{State: testsCouldNotRun,
+						Reason: boundReason(testwriter.WithoutAbsolutePaths(fmt.Sprintf(
+							"Tests were recorded as commit %s, but Surla could not finish recording: %v", commit, recordErr))),
+						Step: stepFailure,
+					}
+				} else if errors.As(recordErr, &author) {
+					verdict = r.verdictOf(testwriter.Verdict{}, recordErr, deadline)
+				} else {
+					verdict = r.couldNotRun(recordErr, deadline, "Surla could not record the accepted tests")
+				}
+			default:
+				verdict.Commit = commit
+			}
 		}
 	}
 	saved, current, err := r.saveVerdict(id, verdict)
@@ -323,7 +362,10 @@ func (r *reportChecker) judge(ctx context.Context, changeID string) {
 	}
 	span.SetAttributes(attribute.String("surla.tests_state", saved.TestWriter.State))
 	if saved.TestWriter.State == testsCouldNotRun {
-		span.RecordError(errors.New(saved.TestWriter.Reason))
+		if failure == nil {
+			failure = errors.New(saved.TestWriter.Reason)
+		}
+		span.RecordError(failure)
 		span.SetStatus(codes.Error, "the check could not run")
 	}
 }
@@ -361,38 +403,109 @@ func (c *ControlPlane) openReportCopy(ctx context.Context) (buildCopy, error) {
 	return c.openBuildCopy(ctx, workspace, layout)
 }
 
+// checkReportedTestsTip checks the actual tests copy and its branch tip before
+// recording. The caller holds workingCopyTurn; this gate never joins a copy,
+// marks a read, or rejects tests at B. Only the caller records accepted work.
+func (r *reportChecker) checkReportedTestsTip(
+	ctx context.Context, saved buildFile,
+) (string, testwriter.Verdict, error) {
+	work, cancel := context.WithTimeout(ctx, layoutReadTimeout)
+	defer cancel()
+	r.cp.workspaceMu.RLock()
+	defer r.cp.workspaceMu.RUnlock()
+	workspace := r.cp.activeWorkspaceDir
+	copy, found, err := testwriter.OpenCopy(work, workspace, testwriter.TestsRole)
+	if err != nil {
+		return "", testwriter.Verdict{}, &openCopyError{err: err}
+	}
+	if !found {
+		return "", testwriter.Verdict{}, &openCopyError{err: errors.New("the test writer's working copy does not exist")}
+	}
+	facts, err := copy.Facts(work)
+	if err != nil {
+		return "", testwriter.Verdict{}, err
+	}
+	branch := testwriter.TestsRole.Branch(saved.Number)
+	if facts.Detached || facts.Branch != branch || facts.Operation != "none" {
+		refusal := copyOffBranchRefusal(testwriter.TestsRole, saved.ChangeID, saved.Number, true, facts, "report_tests_finished")
+		return "", testwriter.Verdict{Findings: []testwriter.Finding{{
+			Kind: testwriter.FindingWorkingCopy, Message: testwriter.WithoutAbsolutePaths(refusal.Message),
+		}}}, nil
+	}
+	// On-branch index.lock is left to Record's existing typed retry. Read the
+	// exact ref in the project repository, never the copy's authored .git.
+	out, err := runGitRead(work, workspace, "rev-parse", "--verify", "--quiet", "refs/heads/"+branch+"^{commit}")
+	if err != nil {
+		return "", testwriter.Verdict{}, err
+	}
+	tip := strings.TrimSpace(string(out))
+	check, err := r.cp.checkBuildCommit(work, workspace, saved, tip, branch)
+	if err != nil {
+		return "", testwriter.Verdict{}, err
+	}
+	var reasons []string
+	if !check.OnBranch {
+		reasons = append(reasons, fmt.Sprintf("tests commit %s is not on %s", tip, branch))
+	}
+	if !check.FromBase {
+		reasons = append(reasons, fmt.Sprintf("tests commit %s does not descend from this build's base %s", tip, saved.Base))
+	}
+	reasons = append(reasons, foreignBuildWorkReasons(check.Foreign)...)
+	if len(reasons) > 0 {
+		message := fmt.Sprintf("%s. Make %s and your working copy hold neither the other builds' commits nor their changes to the named files. Make your own tests again on %s from base %s, uncommitted (Surla commits what it accepts), then report again.", strings.Join(reasons, "; "), branch, branch, saved.Base)
+		return "", testwriter.Verdict{Findings: []testwriter.Finding{{
+			Kind: testwriter.FindingWorkingCopy, Message: testwriter.WithoutAbsolutePaths(message),
+		}}}, nil
+	}
+	return tip, testwriter.Verdict{}, nil
+}
+
 // answersTo reports whether id's build still answers to id, before accepted
-// tests are recorded for it. Callers hold reportMu, so no report can change
-// the answer until they save.
+// tests are recorded for it. Callers hold c.mu; the checker also holds
+// reportMu through its bounded Record attempt so reports and Drop cannot
+// cross publication.
 func (r *reportChecker) answersTo(id reportIdentity) (bool, error) {
-	r.cp.mu.RLock()
-	defer r.cp.mu.RUnlock()
 	saved, found, err := r.cp.cards.loadOpenBuild()
+	if err != nil || !found || reportIdentityOf(saved) != id {
+		return false, err
+	}
+	provenance, hasProvenance, err := r.cp.cards.loadMadeFrom()
 	if err != nil {
 		return false, err
 	}
-	return found && reportIdentityOf(saved) == id, nil
+	return !hasProvenance || !buildDropped(provenance, saved), nil
 }
 
 // recordAccepted records v on branch with message, repeating Record alone up to
 // recordLockRetries times when it fails because of index.lock, waiting at most
 // recordLockRetryPause between attempts while checkCtx is live. Any other
-// error, or checkCtx ending, stops immediately.
+// error, or checkCtx ending, stops immediately. Confirmation read failures
+// return separately so the existing bounded judgment retry remains unchanged.
 func (r *reportChecker) recordAccepted(
-	checkCtx context.Context, copy buildCopy, v testwriter.Verdict, branch, message string,
-) (string, error) {
+	checkCtx context.Context, id reportIdentity, copy buildCopy, v testwriter.Verdict,
+	branch, checkedTip, message string,
+) (commit string, current bool, confirmErr, recordErr error) {
 	pause := min(r.retry, recordLockRetryPause)
 	for attempt := 0; ; attempt++ {
-		commit, err := copy.Record(checkCtx, v, branch, message)
+		// Drop shares c.mu with publication, but never waits for a whole
+		// check or retry sequence. Each attempt uses the same L1-checked tip.
+		r.cp.mu.Lock()
+		current, confirmErr = r.answersTo(id)
+		if confirmErr != nil || !current {
+			r.cp.mu.Unlock()
+			return "", current, confirmErr, nil
+		}
+		commit, recordErr = copy.Record(checkCtx, v, branch, checkedTip, message)
+		r.cp.mu.Unlock()
 		var lockErr *testwriter.IndexLockError
-		if err == nil || !errors.As(err, &lockErr) || attempt >= recordLockRetries || checkCtx.Err() != nil {
-			return commit, err
+		if commit != "" || recordErr == nil || !errors.As(recordErr, &lockErr) || attempt >= recordLockRetries || checkCtx.Err() != nil {
+			return commit, true, nil, recordErr
 		}
 		timer := time.NewTimer(pause)
 		select {
 		case <-checkCtx.Done():
 			timer.Stop()
-			return "", checkCtx.Err()
+			return "", true, nil, checkCtx.Err()
 		case <-timer.C:
 		}
 	}
@@ -401,14 +514,21 @@ func (r *reportChecker) recordAccepted(
 // saveVerdict saves verdict on id's build, with its time, when the build
 // still answers to id, and marks the test writer's assignment unread, and the
 // builder's too for an acceptance. It returns the saved build, or false and
-// saves nothing when a newer report or build replaced id. Callers hold
-// reportMu.
+// saves nothing when a newer report/build replaced id or the user dropped
+// that start. Callers hold reportMu.
 func (r *reportChecker) saveVerdict(id reportIdentity, verdict testWriterAssignment) (buildFile, bool, error) {
 	r.cp.mu.Lock()
 	defer r.cp.mu.Unlock()
 	saved, found, err := r.cp.cards.loadOpenBuild()
 	if err != nil || !found || reportIdentityOf(saved) != id {
 		return buildFile{}, false, err
+	}
+	provenance, hasProvenance, err := r.cp.cards.loadMadeFrom()
+	if err != nil {
+		return buildFile{}, false, err
+	}
+	if hasProvenance && buildDropped(provenance, saved) {
+		return buildFile{}, false, nil
 	}
 	verdict.CheckedAt = r.now().UTC()
 	saved.TestWriter = verdict
