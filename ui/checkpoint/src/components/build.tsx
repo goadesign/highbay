@@ -42,6 +42,7 @@ export interface BuildSectionProps {
   onBuild: (replaces?: ReplacedBuild) => void;
   onDrop: (build: ReplacedBuild) => void;
   onOpenTeam: () => void;
+  onOpenChange: (changeId: string) => void;
   onReviewCheck: () => void;
 }
 
@@ -73,6 +74,7 @@ export function BuildSectionView({
   onPrepareBuild,
   onDrop,
   onOpenTeam,
+  onOpenChange,
   onReviewCheck,
 }: BuildSectionProps) {
   const saved = build !== null && build.state === "started" ? build : null;
@@ -83,7 +85,9 @@ export function BuildSectionView({
     (!current || saved.request_revision === card.request_revision);
   const confirmed = card.status === "confirmed";
   const eligible = confirmed && displayedCurrent && build !== null && error === null;
-  const blocked = disabled || starting || dropping || loading || !eligible;
+  const blockingBuild = openBuildRefusal !== null && openBuildRefusal.change_id !== card.change_id
+    ? openBuildRefusal : null;
+  const blocked = disabled || starting || dropping || loading || !eligible || blockingBuild !== null;
   const otherPrimary = !confirmed || !displayedCurrent || dirty || card.proposed_revision !== undefined;
   const report = check?.state.type === "completed" ? check.state.value.report : null;
   const matchedCheck = checkKnown && check?.inputs_current === true &&
@@ -95,7 +99,7 @@ export function BuildSectionView({
   // identity binds the question to the exact subject and start it described.
   const identity = JSON.stringify([card.change_id, card.request_revision, saved?.started_at ?? null]);
   const [questionIdentity, setQuestionIdentity] = useState<string | null>(null);
-  const confirming = questionIdentity === identity && requiresConfirmation && eligible && !disabled && !starting && !dropping;
+  const confirming = questionIdentity === identity && requiresConfirmation && eligible && !disabled && !starting && !dropping && blockingBuild === null;
   const headingRef = useRef<HTMLHeadingElement>(null);
   const triggerRef = useRef<HTMLSpanElement>(null);
   const questionRef = useRef<HTMLDivElement | null>(null);
@@ -220,6 +224,68 @@ export function BuildSectionView({
       ? "Build starts the builder and the test writer. Surla uses the test writer’s accepted tests to check the builder’s work and to start live targets. From Build on, the tests and the builder’s code run on this machine as ordinary programs, with your access to files and the network; nothing confines them. Approval decides only what merges."
       : "Build starts the builder. If this project needs a test writer, it starts that writer too. Surla uses that writer’s accepted tests to check the builder’s work and to start live targets. From Build on, the tests and the builder’s code run on this machine as ordinary programs, with your access to files and the network; nothing confines them. Approval decides only what merges.";
 
+  const roleFacts = saved !== null ? <>
+    <p>{saved.required_test_count === 0
+      ? "No tests of this change’s Story were required."
+      : saved.required_test_count + " required Story " + (saved.required_test_count === 1 ? "test." : "tests.")}</p>
+    <p id="surla-build-builder">Builder: {saved.builder.read
+      ? "Assignment read."
+      : saved.test_writer.tests.state === "accepted"
+        ? "Assignment unread: accepted tests are ready for it to read."
+        : "Assignment unread: it has not read this build’s instructions yet."}</p>
+    <TestWriterFacts build={saved} findingTexts={findingTexts} loading={findingsLoading}
+      error={findingsError} disabled={disabled || starting} onRead={onReadFindings} />
+  </> : null;
+  const progress = <>
+    {saved !== null && saved.taking.state !== "building" ? <BuildProgress build={saved} /> :
+      check !== null && !sentBack ? (
+        <p id="surla-build-state" data-inputs-current={checkKnown ? String(check.inputs_current) : "unknown"}>
+          {!checkKnown
+            ? "A saved check is available. Its current agreement and tests have not been confirmed."
+            : !matchedCheck
+            ? "The saved check used an earlier agreement or test selection. The builder checks the current agreement and tests again; then you can approve."
+            : check.state.type === "running"
+            ? "Surla is checking the builder’s code. Your next decision is approval after the check passes."
+            : report?.passed
+            ? recordedCheck
+              ? "The check passed and your approval is recorded."
+              : `The check passed: ${report.counts.passed} of ${report.counts.required} scenarios. ${approvalAvailable ? "Review the result and approve it." : "Review the result; approval is unavailable on this server."}`
+            : check.state.type === "not_completed"
+            ? "The check could not finish. The builder reads the result and addresses its next step."
+            : "The check did not pass. The builder reviews the result before asking for another check."}
+          {" Check started "}<time dateTime={check.accepted_at}>{localBuildTime(check.accepted_at)}</time>.
+        </p>
+      ) : saved !== null ? <BuildProgress build={saved} /> :
+        build?.state === "not_started" ? <p id="surla-build-state">Not built yet.</p> : null}
+    {saved?.taking.state === "building" ? <>
+      {roleFacts}
+      <p>No verification of change {card.change_id} has passed, so there is nothing to merge yet. Let the builder finish, or drop it.</p>
+    </> : null}
+  </>;
+  const actions = <>
+    {showDirect ? <span ref={triggerRef}>
+      <Button id="surla-build-start" variant={otherPrimary || sentBack || reviewPrimary ? "default" : "primary"}
+        disabled={blocked || confirming} aria-describedby={blockingBuild !== null ? "surla-build-action-error" : undefined}
+        onClick={requiresConfirmation ? ask : start}>{directLabel}</Button>
+    </span> : null}
+    {check !== null ? <Button id="surla-build-review-check" variant={reviewPrimary ? "primary" : "default"}
+      disabled={disabled || starting} onClick={onReviewCheck}>
+      {reviewPrimary ? "Review and approve" : "Review saved check"}
+    </Button> : null}
+    <Button id="surla-build-view-team" disabled={disabled || starting} onClick={onOpenTeam}>View team</Button>
+    {current && open && confirmed && displayedCurrent ? <span ref={triggerRef}>
+      <Button id="surla-build-again" disabled={blocked || confirming}
+        aria-describedby={blockingBuild !== null ? "surla-build-action-error" : undefined}
+        onClick={ask}>Build again…</Button>
+    </span> : null}
+    {blockingBuild !== null ? <Button id="surla-build-open-blocking-change" disabled={disabled || starting}
+      onClick={() => onOpenChange(blockingBuild.change_id)}>Open change {blockingBuild.change_id}</Button> : null}
+  </>;
+  const explanation = showDirect ? <p id="surla-build-start-explanation">{startExplanation}</p> :
+    current && open && confirmed && displayedCurrent ? <p className="surla-muted" id="surla-build-start-explanation">
+      From Build on, the tests and the builder’s code run on this machine as ordinary programs, with your access to files and the network; nothing confines them. Approval decides only what merges.
+    </p> : null;
+
   return (
     <Card
       id="surla-build-section"
@@ -258,64 +324,35 @@ export function BuildSectionView({
         <p>This change’s build has not been read.</p>
       ) : null}
       {build !== null && error !== null ? <p>Last-read build facts; they could not be refreshed.</p> : null}
-      {actionError !== null ? (
+      {actionError !== null && blockingBuild === null ? (
         <Alert id="surla-build-action-error" variant="destructive" role="alert">{actionError}</Alert>
       ) : null}
-      {openBuildRefusal !== null && openBuildRefusal.change_id !== card.change_id ? (
+      {blockingBuild !== null ? (
         <section id="surla-build-blocking-change" aria-label="Open build blocking this change">
-          <p>{openBuildRefusal.message}</p>
-          <BuildTakingView changeId={openBuildRefusal.change_id} build={openBuildRefusal.build}
+          <BuildTakingView changeId={blockingBuild.change_id} build={blockingBuild.build}
             disabled={disabled || starting} dropping={dropping} onDrop={onDrop}
-            onFocusedControlRemoved={takingFocusRemoved} />
+            onFocusedControlRemoved={takingFocusRemoved} actions={actions}
+            dropLabel={"Drop " + blockingBuild.change_id + "’s build…"}
+            progress={<Alert id="surla-build-action-error" variant="destructive" role="alert">
+              {blockingBuild.name === "previous_change_open"
+                ? <>Build did not start: change {blockingBuild.change_id} has an open build. {blockingBuild.build.taking.state === "building"
+                  ? "Nothing of it has passed its check yet: let its builder finish, or drop it."
+                  : blockingBuild.build.taking.state === "passed"
+                    ? "Its builder’s commit passed the accepted tests: merge it, or drop it."
+                    : "Review its current state before building this change."}</>
+                : actionError ?? blockingBuild.message}
+            </Alert>}>{explanation}</BuildTakingView>
         </section>
       ) : null}
-      {check !== null && !sentBack && (saved === null || open) ? (
-        <p id="surla-build-state" data-inputs-current={checkKnown ? String(check.inputs_current) : "unknown"}>
-          {!checkKnown
-            ? "A saved check is available. Its current agreement and tests have not been confirmed."
-            : !matchedCheck
-            ? "The saved check used an earlier agreement or test selection. The builder checks the current agreement and tests again; then you can approve."
-            : check.state.type === "running"
-            ? "Surla is checking the builder’s code. Your next decision is approval after the check passes."
-            : report?.passed
-            ? recordedCheck
-              ? "The check passed and your approval is recorded."
-              : `The check passed: ${report.counts.passed} of ${report.counts.required} scenarios. ${approvalAvailable ? "Review the result and approve it." : "Review the result; approval is unavailable on this server."}`
-            : check.state.type === "not_completed"
-            ? "The check could not finish. The builder reads the result and addresses its next step."
-            : "The check did not pass. The builder reviews the result before asking for another check."}
-          {" Check started "}<time dateTime={check.accepted_at}>{localBuildTime(check.accepted_at)}</time>.
-        </p>
-      ) : build?.state === "not_started" ? <p id="surla-build-state">Not built yet.</p> : null}
       {checkError !== null ? <p id="surla-build-check-error">Could not refresh the saved check. {checkError}</p> : null}
-      {saved !== null && open ? (
-        <>
-          {check === null || sentBack ? <BuildProgress build={saved} /> : null}
-          <p>
-            {saved.required_test_count === 0
-              ? "No tests of this change’s Story were required."
-              : saved.required_test_count + " required Story " + (saved.required_test_count === 1 ? "test." : "tests.")}
-          </p>
-          <p id="surla-build-builder">
-            Builder: {saved.builder.read
-              ? "Assignment read."
-              : saved.test_writer.tests.state === "accepted"
-                ? "Assignment unread: accepted tests are ready for it to read."
-                : "Assignment unread: it has not read this build’s instructions yet."}
-          </p>
-          <TestWriterFacts
-            build={saved}
-            findingTexts={findingTexts}
-            loading={findingsLoading}
-            error={findingsError}
-            disabled={disabled || starting}
-            onRead={onReadFindings}
-          />
-        </>
-      ) : null}
-      {saved !== null && (openBuildRefusal === null || openBuildRefusal.change_id === card.change_id) ? <BuildTakingView changeId={card.change_id} build={saved}
+      {saved !== null && blockingBuild === null ? <BuildTakingView changeId={card.change_id} build={saved}
         disabled={disabled || starting || error !== null} dropping={dropping} onDrop={onDrop}
-        onFocusedControlRemoved={takingFocusRemoved} /> : null}
+        onFocusedControlRemoved={takingFocusRemoved} progress={progress} actions={actions} dropLabel="Drop…">
+        {explanation}
+      </BuildTakingView> : null}
+      {saved === null && blockingBuild === null ? <>
+        {progress}{explanation}<div className="surla-field-row surla-build-actions">{actions}</div>
+      </> : null}
       {!confirmed ? <p>Confirm the change before building it.</p> : !displayedCurrent ? (
         <p>A newer agreed revision is available. Review it before starting a build.</p>
       ) : dirty ? (
@@ -326,41 +363,6 @@ export function BuildSectionView({
           Starting build… This can take a few minutes and continues if you close the page.
         </p>
       ) : null}
-      {showDirect ? <p id="surla-build-start-explanation">{startExplanation}</p> : null}
-      <div className="surla-field-row">
-        {showDirect ? (
-          <span ref={triggerRef}>
-            <Button
-              id="surla-build-start"
-              variant={otherPrimary || sentBack || reviewPrimary ? "default" : "primary"}
-              disabled={blocked || confirming}
-              onClick={requiresConfirmation ? ask : start}
-            >{directLabel}</Button>
-          </span>
-        ) : null}
-        {check !== null ? (
-          <Button
-            id="surla-build-review-check"
-            variant={reviewPrimary ? "primary" : "default"}
-            disabled={disabled || starting}
-            onClick={onReviewCheck}
-          >{reviewPrimary ? "Review and approve" : "Review saved check"}</Button>
-        ) : null}
-        <Button
-          id="surla-build-view-team"
-          disabled={disabled || starting}
-          onClick={onOpenTeam}
-        >View team</Button>
-        {current && open && confirmed && displayedCurrent ? (
-          <span ref={triggerRef}>
-            <Button
-              id="surla-build-again"
-              disabled={blocked || confirming}
-              onClick={ask}
-            >Build again…</Button>
-          </span>
-        ) : null}
-      </div>
       {confirming ? (
         <div
           id="surla-build-question"
@@ -392,7 +394,7 @@ export function BuildSectionView({
           </Alert>
         </div>
       ) : null}
-      <BuildDetails card={card} build={saved} />
+      <BuildDetails card={card} build={saved}>{saved !== null && saved.taking.state !== "building" ? roleFacts : null}</BuildDetails>
       {startReceipt !== null ? <StartReceipts receipt={startReceipt} /> : null}
     </Card>
   );
@@ -400,13 +402,17 @@ export function BuildSectionView({
 
 // BuildTakingView renders only owner-reported taking facts. Its separate Drop
 // question binds consent to the exact change/start and vanishes on invalidation.
-export function BuildTakingView({ changeId, build, disabled, dropping, onDrop, onFocusedControlRemoved }: {
+export function BuildTakingView({ changeId, build, disabled, dropping, onDrop, onFocusedControlRemoved, progress, actions, dropLabel, children }: {
   changeId: string;
   build: StartedBuild;
   disabled: boolean;
   dropping: boolean;
   onDrop: (build: ReplacedBuild) => void;
   onFocusedControlRemoved: () => void;
+  progress: React.ReactNode;
+  actions: React.ReactNode;
+  dropLabel: string;
+  children: React.ReactNode;
 }) {
   const taking = build.taking;
   const open = taking.state === "building" || taking.state === "passed";
@@ -458,18 +464,20 @@ export function BuildTakingView({ changeId, build, disabled, dropping, onDrop, o
   }
   return (
     <div id="surla-build-taking" data-state={taking.state} ref={attachTaking} tabIndex={-1}>
-      {taking.state === "building" ? <p>No verification of change {changeId} has passed, so there is nothing to merge yet. Let the builder finish, or drop it.</p> : null}
+      {progress}
       {taking.state === "passed" ? <BuildMergeInstructions taking={taking}
         candidateCommit={taking.candidate_commit}
         testsCommit={taking.tests.source === "written_tests" ? taking.tests.commit : null} /> : null}
-      {taking.state === "merged" ? <p>Merged into your branch. Another change can be built. No role has work on this build.</p> : null}
+      {taking.state === "merged" ? <p>It is in your branch. Another change can be built. No role has work on this build.</p> : null}
       {taking.state === "dropped" ? <>
-        <p>{taking.kept_branches.length === 0 ? "Dropped. Nothing was committed for it." : "Dropped. Its work stays on:"}</p>
         {taking.kept_branches.length > 0 ? <ul>{taking.kept_branches.map((branch) => <li key={branch}><code>{branch}</code> — <code>git log {branch}</code> shows it.</li>)}</ul> : null}
         <p>Surla builds nothing on it. No role has work on this build. Another change can be built.</p>
       </> : null}
-      {open ? <span ref={trigger}><Button id="surla-build-drop" disabled={disabled || dropping || confirming}
-        onClick={() => setQuestion(identity)}>Drop…</Button></span> : null}
+      {children}
+      <div className="surla-field-row surla-build-actions">{actions}
+        {open ? <span ref={trigger}><Button id="surla-build-drop" disabled={disabled || dropping || confirming}
+          onClick={() => setQuestion(identity)}>{dropLabel}</Button></span> : null}
+      </div>
       {dropping ? <p role="status">Dropping build…</p> : null}
       {confirming ? <div id="surla-build-drop-question" role="group" aria-label={"Drop change " + changeId + "?"}
         tabIndex={-1} ref={attach} onKeyDown={(event) => {
@@ -485,7 +493,7 @@ export function BuildTakingView({ changeId, build, disabled, dropping, onDrop, o
               setQuestion(null);
               onDrop({ change_id: changeId, started_at: build.started_at });
             }}>Drop change</Button>
-            <Button id="surla-build-drop-cancel" onClick={cancel}>Keep building</Button>
+            <Button id="surla-build-drop-cancel" onClick={cancel}>{taking.state === "passed" ? "Keep this build" : "Keep building"}</Button>
           </div>
         </Alert>
       </div> : null}
@@ -501,10 +509,13 @@ export function BuildMergeInstructions({ taking, candidateCommit, testsCommit }:
   testsCommit: string | null;
 }) {
   return <div className="surla-build-merge">
-    <p>To take this change, run in the project folder:</p>
+    <h4>To take this change, run in the project folder:</h4>
     <ol>
-      <li><code>git merge {candidateCommit}</code> — the builder’s commit, verified on <code>{taking.candidate_branch}</code>.</li>
-      {testsCommit !== null && taking.tests.source === "written_tests" ? <li><code>git merge {testsCommit}</code> — then the tests’ commit, verified on <code>{taking.tests.branch}</code>.</li> : null}
+      <li><pre tabIndex={0} aria-label="Merge the builder’s commit"><code>git merge {candidateCommit}</code></pre>
+        <p>The builder’s commit, verified on <code>{taking.candidate_branch}</code>.</p></li>
+      {testsCommit !== null && taking.tests.source === "written_tests" ? <li>
+        <pre tabIndex={0} aria-label="Merge the tests’ commit"><code>git merge {testsCommit}</code></pre>
+        <p>Then the tests’ commit, verified on <code>{taking.tests.branch}</code>.</p></li> : null}
     </ol>
     <p>Build another change once you have, or drop this one. Surla does not merge or deploy anything.</p>
     {!taking.base_in_branch ? <Alert variant="warning">
@@ -552,6 +563,12 @@ export function SavedResultCommits({ changeId, candidateCommit, testsCommit, bui
 // BuildProgress describes the saved step without treating a read as proof of
 // work, or an earlier revision's tests as progress on the current agreement.
 function BuildProgress({ build }: { build: StartedBuild }) {
+  switch (build.taking.state) {
+    case "passed": return <p id="surla-build-state">Passed: the builder’s commit passed the accepted tests.</p>;
+    case "merged": return <p id="surla-build-state">Merged.</p>;
+    case "dropped": return <p id="surla-build-state">{build.taking.kept_branches.length === 0
+      ? "Dropped. Nothing was committed for it." : "Dropped. Its work stays on:"}</p>;
+  }
   const tests = build.test_writer.tests;
   if (!build.in_force) {
     return <p id="surla-build-state">Earlier build, started <time dateTime={build.started_at}>{localBuildTime(build.started_at)}</time>. The agreed revision has changed.</p>;
@@ -660,11 +677,12 @@ function TestWriterFacts({ build, findingTexts, loading, error, disabled, onRead
 
 // BuildDetails places exact revision, report and verdict evidence behind the
 // existing native disclosure, without relabeling acceptance as verification.
-function BuildDetails({ card, build }: { card: ChangeCardResult; build: StartedBuild | null }) {
+function BuildDetails({ card, build, children }: { card: ChangeCardResult; build: StartedBuild | null; children: React.ReactNode }) {
   const tests = build?.test_writer.tests;
   return (
     <details id="surla-build-details" className="surla-details">
       <summary>Build details</summary>
+      {children}
       <p>Agreed revision: <code>{card.request_revision}</code></p>
       {build !== null ? (
         <>

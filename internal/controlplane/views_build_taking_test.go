@@ -41,12 +41,18 @@ const variants = {
   dropped: { state: "dropped", kept_branches: ["surla/tests-7"] },
   empty: { state: "dropped", kept_branches: [] },
 };
+const saved = JSON.parse(input.build);
+if (input.state !== "building") saved.test_writer.tests = { state: "accepted", commit: tests,
+  checked_at: saved.started_at, not_judged: "The assertions were not judged." };
 await control(origin, "reply", { key: "GET " + path, status: 200,
-  body: { change_id: "chg-taking", build: { ...JSON.parse(input.build), state: "started", taking: variants[input.state] } } });
+  body: { change_id: "chg-taking", build: { ...saved, state: "started", taking: variants[input.state] } } });
 const page = await openPage(origin, { link: input.link });
 await until(() => page.$("#surla-build-taking") && !page.$("#surla-build-loading"), "taking state did not appear");
 const taking = page.text("#surla-build-taking");
 if (["passed", "rewritten", "evaluator"].includes(input.state)) {
+  expect(page.text("#surla-build-state") === "Passed: the builder’s commit passed the accepted tests.", "passed build still describes future building or checking");
+  expect(page.$("#surla-build-state").nextElementSibling?.classList.contains("surla-build-merge"), "merge instructions are not immediately below the passed state");
+  expect(!taking.includes("builder finishes") && !taking.includes("after the check passes"), "passed build retains a stale next step");
   const commands = page.$$("#surla-build-taking ol code").map((node) => node.textContent);
   expect(commands[0] === "git merge " + candidate && commands[1] === "surla/build-7", "candidate command used a branch tip or lost its verified branch");
   if (input.state === "evaluator") expect(commands.length === 2 && !taking.includes(tests), "stored evaluator offered a tests merge");
@@ -56,18 +62,125 @@ if (["passed", "rewritten", "evaluator"].includes(input.state)) {
 } else {
   expect(!taking.includes("git merge"), "an unpassed or closed build offers merge commands");
   if (input.state === "building") expect(taking.includes("nothing to merge yet"), "building omitted the next step");
-  if (input.state === "merged") expect(taking.includes("Merged into your branch") && taking.includes("No role has work"), "merged state is unclear");
+  if (input.state === "merged") expect(page.text("#surla-build-state") === "Merged." && taking.includes("No role has work"), "merged state is unclear");
   if (input.state === "dropped") expect(taking.includes("surla/tests-7") && !taking.includes("surla/build-7") && taking.includes("git log surla/tests-7"), "dropped state invented a retained branch");
   if (input.state === "empty") expect(taking.includes("Nothing was committed for it") && !taking.includes("surla/"), "empty dropped state invented work");
 }
 const open = ["building", "passed", "rewritten", "evaluator"].includes(input.state);
 expect(Boolean(page.$("#surla-build-drop")) === open, "Drop availability does not follow taking");
-if (!open) expect(!page.$("#surla-build-builder") && !page.$("#surla-build-test-writer"), "closed build still assigns work");
+for (const selector of ["#surla-build-builder", "#surla-build-test-writer", ...(input.state === "building" ? [] : ["#surla-build-not-judged"])]) {
+  expect(Boolean(page.$(selector)?.closest("#surla-build-details")) === (input.state !== "building"), "role facts did not follow the active-versus-saved disclosure");
+}
+expect(page.$("#surla-build-details").textContent.includes("No tests of this change’s Story were required.") === (input.state !== "building"), "required-test facts are not in the saved disclosure");
+expect(!page.$("#surla-build-details").open, "secondary build facts expanded by default");
+const buttons = page.$$(".surla-build-actions button");
+expect(buttons.length > 0 && (!open || buttons.at(-1).id === "surla-build-drop"), "Drop is not last in the single action row");
+expect(page.$$(".surla-build-actions").length === 1, "build actions are split into separate rows");
+if (open) {
+  page.$("#surla-build-drop").click();
+  await until(() => page.$("#surla-build-drop-cancel"), "Drop did not ask");
+  expect(page.text("#surla-build-drop-cancel") === (input.state === "building" ? "Keep building" : "Keep this build"), "Drop cancel assumes passed work is still building");
+  page.$("#surla-build-drop-cancel").click();
+  await until(() => !page.$("#surla-build-drop-question"), "Drop cancel did not close");
+  expect(page.doc.activeElement === page.$("#surla-build-drop"), "Drop cancel lost trigger focus");
+}
 expect(page.sent("POST", path).length === 0 && page.sent("POST", path + "/drop").length === 0, "reading taking changed the build");
 page.close();
 `)
 		})
 	}
+}
+
+// TestViewsPagePassedBlockerClearsOnlyAfterItsOwnFreshRead checks that a
+// selected change's absent build cannot clear another change's open pass.
+func TestViewsPagePassedBlockerClearsOnlyAfterItsOwnFreshRead(t *testing.T) {
+	cp := newBuildControlPlane(t, Options{Team: &TeamBinding{
+		Owner: pageOwner, Service: &teamServiceFixture{snapshot: pageTeamSnapshot("working")},
+	}})
+	cp.changesWait, cp.changesPoll = 400*time.Millisecond, 20*time.Millisecond
+	card := buildableChange(t, cp, "chg-passed-open")
+	buildableChange(t, cp, "chg-passed-next")
+	user := asCaller(pageOwner, CallerUser)
+	started, err := cp.StartBuild(user, &gensurla.StartBuildPayload{
+		ChangeID: card.ChangeID, RequestRevision: card.RequestRevision,
+	})
+	require.NoError(t, err)
+	encoded, err := gensurla.EncodeStartedBuild(started.Build)
+	require.NoError(t, err)
+	ps := startPageServer(t, cp)
+	ps.act("drop-passed-open", func() {
+		_, err := cp.DropBuild(user, &gensurla.DropBuildPayload{
+			ChangeID: card.ChangeID, StartedAt: started.Build.StartedAt,
+		})
+		require.NoError(t, err)
+	})
+	runPageScript(t, ps, map[string]any{"build": string(encoded)}, `
+const path = "/changes/chg-passed-next/build", other = "/changes/chg-passed-open/build";
+const saved = { ...JSON.parse(input.build), state: "started", taking: { state: "passed", run_id: "passed-open",
+  candidate_commit: "1".repeat(40), candidate_branch: "surla/build-7", tests: { source: "evaluator" }, base_in_branch: true } };
+await control(origin, "reply", { key: "POST " + path, status: 409,
+  body: { name: "previous_change_open", message: "Merge or drop the open change.", change_id: "chg-passed-open", build: saved } });
+await control(origin, "reply", { key: "GET " + other, status: 200, body: { change_id: "chg-passed-open", build: saved } });
+const page = await openPage(origin, { link: input.link });
+await until(() => page.$("#surla-open-change-chg-passed-next"), "change list did not load");
+page.$("#surla-open-change-chg-passed-next").click();
+await until(() => page.$("#surla-build-start") && !page.$("#surla-build-start").disabled, "next change did not offer Build");
+page.$("#surla-build-start").click();
+await until(() => page.$("#surla-build-blocking-change") && page.sent("GET", other).length > 0 && !page.$("#surla-build-loading"), "blocker was not read by its exact change ID");
+const message = page.text("#surla-build-action-error");
+expect(message.includes("chg-passed-open has an open build") && message.includes("commit passed the accepted tests") && !message.includes("Nothing of it has passed"), "passed blocker was described as unpassed");
+expect(page.$("#surla-build-start").disabled && page.text("#surla-build-taking").includes("git merge " + "1".repeat(40)), "selected not_started observation cleared the passed blocker");
+expect(!page.text("#surla-checkpoint-status").includes("Build did not start"), "blocker was duplicated in global status");
+const field = page.$('textarea[data-example-id="check_01"][data-field="scenario"]');
+page.type(field, "keep this draft through blocker recovery");
+await control(origin, "reply", { key: "GET " + other, status: 200,
+  body: { change_id: "chg-passed-open", build: { ...saved, taking: { state: "dropped", kept_branches: [] } } } });
+await control(origin, "act", { key: "drop-passed-open" });
+await until(() => !page.$("#surla-build-blocking-change") && page.$("#surla-build-start") && !page.$("#surla-build-start").disabled, "fresh closed blocker did not reenable Build");
+expect(field === page.$('textarea[data-example-id="check_01"][data-field="scenario"]') && field.value === "keep this draft through blocker recovery", "blocker recovery replaced unsaved editor text");
+expect(page.sent("POST", path).length === 1, "a fresh read retried Build without consent");
+page.close();
+`)
+}
+
+// TestViewsPageOpenBlockingChangePreservesDraftChoices exercises the new
+// navigation through the existing preserved-text recovery boundary.
+func TestViewsPageOpenBlockingChangePreservesDraftChoices(t *testing.T) {
+	cp := newBuildControlPlane(t, Options{Team: &TeamBinding{
+		Owner: pageOwner, Service: &teamServiceFixture{snapshot: pageTeamSnapshot("working")},
+	}})
+	cp.changesWait, cp.changesPoll = 400*time.Millisecond, 20*time.Millisecond
+	open := buildableChange(t, cp, "chg-nav-open")
+	next := buildableChange(t, cp, "chg-nav-next")
+	_, err := cp.StartBuild(asCaller(pageOwner, CallerUser), &gensurla.StartBuildPayload{
+		ChangeID: open.ChangeID, RequestRevision: open.RequestRevision,
+	})
+	require.NoError(t, err)
+	encoded, err := gensurla.EncodeChangeCardResult(next)
+	require.NoError(t, err)
+	ps := startPageServer(t, cp)
+	runPageScript(t, ps, map[string]any{"card": string(encoded)}, `
+const card = { ...JSON.parse(input.card), proposed_revision: {
+  request_revision: "f".repeat(64), summary: "A proposed revision", prompt: "Choose the next result.",
+  ambiguities: [{ id: "q-review", question: "Which result?", options: ["keep", "replace"] }],
+  examples: [], preserved_behaviors: [], changed_design_files: [],
+} };
+await control(origin, "reply", { key: "GET /changes/chg-nav-next", status: 200, body: card });
+const page = await openPage(origin, { link: input.link });
+await until(() => page.$("#surla-open-change-chg-nav-next"), "change list did not load");
+page.$("#surla-open-change-chg-nav-next").click();
+await until(() => page.$("#surla-build-start") && !page.$("#surla-build-start").disabled && page.$("#surla-proposal"), "proposed change did not open");
+page.$('#surla-proposal [data-question-id="q-review"] [data-option="keep"]').click();
+page.type(page.$('textarea[data-example-id="check_01"][data-field="scenario"]'), "keep my local scenario");
+page.$("#surla-build-start").click();
+await until(() => page.$("#surla-build-open-blocking-change"), "other-change recovery action did not appear");
+page.$("#surla-build-open-blocking-change").click();
+await until(() => page.$("#surla-cp1-editor")?.dataset.changeId === "chg-nav-open", "open-blocking-change action did not show its subject");
+const preserved = page.text("#surla-preserved-draft");
+expect(preserved.includes("keep my local scenario") && preserved.includes("[Proposed " + "f".repeat(64) + "] q-review (Which result?)=keep"), "opening the blocker lost unsent draft text or proposal choices");
+expect(page.sent("POST", "/changes/confirm").length === 0 && page.sent("POST", "/changes/chg-nav-open/build/drop").length === 0, "navigation adopted a proposal or dropped work");
+page.close();
+`)
 }
 
 // TestViewsPageDropRequiresExactConsentAndPersists exercises the owner write,
@@ -150,7 +263,11 @@ page.$("#surla-open-change-chg-next").click();
 await until(() => page.$("#surla-build-start") && !page.$("#surla-build-start").disabled, "next change did not offer Build");
 page.$("#surla-build-start").click();
 await until(() => page.$("#surla-build-blocking-change") && page.$("#surla-build-drop") && !page.$("#surla-build-drop").disabled, "typed previous_change_open did not offer the other change's Drop");
-expect(page.text("#surla-build-blocking-change").includes("chg-open") && page.text("#surla-build-blocking-change").includes("nothing to merge yet"), "the refusal lost the other build's facts");
+const refusalText = "Build did not start: change chg-open has an open build. Nothing of it has passed its check yet: let its builder finish, or drop it.";
+expect(page.text("#surla-build-action-error") === refusalText, "the refusal lost the other build's state and next step");
+expect(!page.text("#surla-checkpoint-status").includes("Build did not start") && page.text("#surla-build-blocking-change").split(refusalText).length === 2, "the same refusal is repeated outside its card alert");
+expect(page.$("#surla-build-start").disabled && page.$("#surla-build-start").getAttribute("aria-describedby") === "surla-build-action-error", "the blocked Build action lacks its disabled reason");
+expect(page.text("#surla-build-drop") === "Drop chg-open’s build…" && page.text("#surla-build-open-blocking-change") === "Open change chg-open", "other-change recovery does not identify its subject");
 page.$("#surla-build-drop").click();
 await until(() => page.$("#surla-build-drop-confirm"), "other build's Drop did not ask");
 await control(origin, "act", { key: "replace-open" });

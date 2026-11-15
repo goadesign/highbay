@@ -1503,7 +1503,7 @@ export function bootstrapViewsPage() {
               refreshVerificationObservations(changeId);
             }
             followBuildFindings();
-            if (result.build.state === "started" && openBuildRefusal?.change_id !== changeId) openBuildRefusal = null;
+            readBlockingBuild();
             const ready = buildConfirmationRead;
             buildConfirmationRead = null;
             ready?.(result.build);
@@ -1519,6 +1519,29 @@ export function bootstrapViewsPage() {
         done();
       }
     );
+  }
+
+  // readBlockingBuild follows the known blocking change through the existing
+  // build-read chain. A read of the selected change alone cannot clear it.
+  // A different open start never silently retargets the user's Drop consent.
+  function readBlockingBuild() {
+    const refused = openBuildRefusal;
+    if (refused === null || refused.change_id === activeEditor?.card.change_id ||
+        sessionState !== "active" || hasPending("get_build", refused.change_id)) return;
+    const selected = activeEditor?.card.change_id;
+    callServer("get_build", { change_id: refused.change_id }, refused.change_id,
+      (result) => {
+        if (sessionState !== "active" || activeEditor?.card.change_id !== selected ||
+            openBuildRefusal !== refused || result.change_id !== refused.change_id) return;
+        if (result.build.state !== "started" ||
+            (result.build.taking.state !== "building" && result.build.taking.state !== "passed")) {
+          openBuildRefusal = null;
+          buildStartError = null;
+        } else if (result.build.started_at === refused.build.started_at) {
+          openBuildRefusal = { ...refused, build: result.build };
+        }
+      },
+      () => { /* Keep the last owner-reported blocker until a successful read. */ });
   }
 
   // currentFindingsBasis names the exact saved verdict whose text is useful.
@@ -1627,7 +1650,8 @@ export function bootstrapViewsPage() {
     if (ed === null || sessionState !== "active" || editorBusy ||
         ed.card.status !== "confirmed" || ed.incomingCard !== null ||
         buildChangeId !== ed.card.change_id || buildSnapshot === null ||
-        buildReadError !== null || hasPending("start_build", ed.card.change_id)) return;
+        buildReadError !== null || hasPending("start_build", ed.card.change_id) ||
+        (openBuildRefusal !== null && openBuildRefusal.change_id !== ed.card.change_id)) return;
     const changeId = ed.card.change_id;
     const revision = ed.card.request_revision;
     if (buildSnapshot.state === "started" && buildSnapshot.in_force &&
@@ -1685,7 +1709,8 @@ export function bootstrapViewsPage() {
           buildStartError = (failure.kind === "server"
             ? "Build did not start. " : "Could not confirm whether the build started. ") + message;
           retainOpenBuild(failure);
-          statusEl.textContent = buildStartError;
+          statusEl.textContent = openBuildRefusal !== null && openBuildRefusal.change_id !== changeId
+            ? "" : buildStartError;
           readBuild(changeId);
         }
       }
@@ -1721,7 +1746,8 @@ export function bootstrapViewsPage() {
         if (sessionState !== "active" || activeEditor?.card.change_id !== selected) return;
         buildStartError = "Could not drop the build. " + message;
         retainOpenBuild(failure);
-        statusEl.textContent = buildStartError;
+        statusEl.textContent = openBuildRefusal !== null && openBuildRefusal.change_id !== selected
+          ? "" : buildStartError;
         readBuild(selected);
       });
   }
@@ -2323,6 +2349,7 @@ export function bootstrapViewsPage() {
               onPrepareBuild={prepareBuildConfirmation}
               onDrop={dropBuild}
               onOpenTeam={openTeam}
+              onOpenChange={openChange}
               onReviewCheck={() => { if (latestCheck !== null) reviewSavedCheck(latestCheck); }}
             />
           }
@@ -2973,7 +3000,22 @@ export function bootstrapViewsPage() {
         ) {
           return;
         }
-        const preserved = activeEditor ? snapshotUnsavedDraft(activeEditor) : null;
+        let preserved = activeEditor ? snapshotUnsavedDraft(activeEditor) : null;
+        // Different-card navigation keeps unsent proposal choices as existing
+        // preserved text. Adoption does not run this navigation-only capture.
+        if (activeEditor !== null && activeEditor.card.change_id !== loadedCard.change_id) {
+          const proposal = activeEditor.card.proposed_revision;
+          const lines: string[] = [];
+          if (proposal !== undefined) for (const question of proposal.ambiguities ?? []) {
+            const answer = activeEditor.proposalAnswers[question.id];
+            if (answer !== undefined) lines.push("[Proposed " + proposal.request_revision + "] " +
+              question.id + " (" + question.question + ")=" + answer);
+          }
+          if (lines.length > 0) preserved = {
+            fromRevision: preserved?.fromRevision ?? activeEditor.card.request_revision,
+            lines: [...(preserved?.lines ?? []), ...lines],
+          };
+        }
         const prior = nextPriorCard(activeEditor, loadedCard);
         if (activeEditor) {
           activeEditor = {

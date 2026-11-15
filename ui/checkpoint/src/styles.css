@@ -726,3 +726,13 @@ summary { cursor: pointer; font-weight: 500; user-select: none; }
 }
 .surla-live-prompts { margin: 0.4rem 0; padding-inline-start: 1.2rem; }
 .surla-live-prompts > li { margin-block: 0.25rem; }
+
+/* The Build decision uses the existing prose measure instead of an empty
+   full-width card. At phone width the card uses the available inline space. */
+#surla-build-section { max-inline-size: calc(75ch + 2.2rem); }
+.surla-build-actions { margin-block: 0.75rem; }
+.surla-build-merge ol { padding-inline-start: 1.25rem; }
+.surla-build-merge li { min-inline-size: 0; margin-block-end: 0.75rem; }
+.surla-build-merge pre { margin-block: 0.4rem 0.25rem; white-space: pre; overflow-wrap: normal; }
+.surla-build-merge pre code { padding: 0; background: transparent; white-space: pre; overflow-wrap: normal; word-break: normal; }
+.surla-build-merge li p { font-size: 0.875rem; color: var(--muted-foreground); }
