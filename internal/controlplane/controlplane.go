@@ -451,6 +451,15 @@ func PrincipalFromContext(ctx context.Context) (Principal, bool) {
 // creates the directory when missing and holds its lock until Close; it fails
 // when CardsDir is empty or another process holds the lock.
 func New(opts Options) (*ControlPlane, error) {
+	return newWithWorkspaceGitTimeout(opts, context.WithTimeout)
+}
+
+// newWithWorkspaceGitTimeout preserves New's construction and cleanup while
+// allowing deterministic tests to shorten only its workspace Git deadline.
+func newWithWorkspaceGitTimeout(
+	opts Options,
+	withTimeout func(context.Context, time.Duration) (context.Context, context.CancelFunc),
+) (*ControlPlane, error) {
 	cleanupFailedNew := func() error {
 		var evalErr error
 		if opts.Evaluator != nil {
@@ -479,7 +488,7 @@ func New(opts Options) (*ControlPlane, error) {
 		err := errors.New("WrittenTestRuns requires WorkspaceDir, whose repository holds the commits it verifies")
 		return nil, errors.Join(err, cleanupFailedNew())
 	}
-	runsDir, initStageDir, verif, protectedDirs, err := normalizeAndValidateStartupPaths(opts, wsRoot)
+	runsDir, initStageDir, verif, protectedDirs, err := normalizeAndValidateStartupPaths(opts, wsRoot, withTimeout)
 	if err != nil {
 		return nil, errors.Join(err, cleanupFailedNew())
 	}

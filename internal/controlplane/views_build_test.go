@@ -77,6 +77,75 @@ page.close();
 `)
 }
 
+// TestViewsPageRebuildEscapeDuringRefresh holds a real page build read while
+// Escape closes its question. Completing that read must restore the trigger
+// or its stable heading without taking focus back from the user's editor.
+func TestViewsPageRebuildEscapeDuringRefresh(t *testing.T) {
+	for _, after := range []string{"ready", "editor", "read failed", "build replaced"} {
+		t.Run(after, func(t *testing.T) {
+			f := &teamServiceFixture{snapshot: pageTeamSnapshot("working")}
+			cp := newBuildControlPlane(t, Options{Team: &TeamBinding{Owner: pageOwner, Service: f}})
+			cp.changesWait = 400 * time.Millisecond
+			cp.changesPoll = 20 * time.Millisecond
+			card := buildableChange(t, cp, "chg")
+			start := func() {
+				_, err := startBuildAgain(t, cp, asCaller(pageOwner, CallerUser), card.ChangeID, card.RequestRevision)
+				require.NoError(t, err)
+			}
+			start()
+			ps := startPageServer(t, cp)
+			ps.act("refresh-team", func() {
+				f.mu.Lock()
+				defer f.mu.Unlock()
+				f.snapshot = pageTeamSnapshot("needs_you")
+			})
+			ps.act("replace-build", start)
+
+			runPageScript(t, ps, map[string]any{"after": after}, `
+const path = "/changes/chg/build";
+const page = await openPage(origin, { link: input.link });
+await until(() => page.$("#surla-build-again") && !page.$("#surla-build-again").disabled, "the initial rebuild control did not become ready");
+const edited = page.$('textarea[data-example-id="check_01"][data-field="scenario"]');
+page.type(edited, "keep this unsaved example");
+page.$("#surla-build-again").click();
+await until(() => page.$("#surla-build-confirm"), "rebuild confirmation did not open");
+page.$("#surla-build-confirm").focus();
+if (input.after === "editor") edited.focus();
+await control(origin, "hold", { key: "GET " + path });
+await control(origin, "act", { key: "refresh-team" });
+await until(() => page.$("#surla-build-loading") && page.$("#surla-build-again").disabled && page.$("#surla-build-confirm"), "the held refresh did not disable the trigger beside the open question");
+if (input.after === "editor") {
+  expect(page.doc.activeElement === edited, "the refresh took focus into the open question");
+  page.$("#surla-build-confirm").focus();
+}
+page.$("#surla-build-confirm").dispatchEvent(new page.win.KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+await until(() => !page.$("#surla-build-confirm"), "Escape did not cancel during the refresh");
+expect(page.sent("POST", path).length === 0, "Escape sent a build request");
+if (input.after === "editor") {
+  edited.focus();
+} else if (input.after === "read failed") {
+  await control(origin, "reply", { key: "GET " + path, status: 500,
+    body: { name: "fault", id: "read-failed", message: "Build read failed.", fault: true, temporary: false, timeout: false } });
+} else if (input.after === "build replaced") {
+  await control(origin, "act", { key: "replace-build" });
+}
+await control(origin, "release", { key: "GET " + path });
+await until(() => !page.$("#surla-build-loading"), "the released build read did not finish");
+if (input.after === "ready") {
+  await until(() => page.doc.activeElement === page.$("#surla-build-again") && !page.$("#surla-build-again").disabled, "Escape lost focus when the rebuild trigger became enabled");
+} else if (input.after === "editor") {
+  expect(page.doc.activeElement === edited, "the finished refresh took focus from the editor");
+} else {
+  expect(page.doc.activeElement === page.$("#surla-build-title"), "the unavailable or replaced trigger did not leave focus on the stable Build heading");
+}
+expect(edited.value === "keep this unsaved example", "the refresh discarded the edited example");
+expect(!page.$("#surla-build-confirm") && page.sent("POST", path).length === 0, "the refresh reopened or submitted the cancelled question");
+page.close();
+`)
+		})
+	}
+}
+
 // TestViewsPageBuildRetainsARefusalBesideItsSavedFacts keeps the owner's step
 // visible after a successful recovery read and another Team status update.
 func TestViewsPageBuildRetainsARefusalBesideItsSavedFacts(t *testing.T) {

@@ -32,6 +32,10 @@ type (
 )
 
 const (
+	// WorkspaceGitTimeout is the allowance for resolving the protected workspace
+	// roots at project startup and before storing project settings. It does not
+	// bound other Git operations, such as checking an initialized project's HEAD.
+	WorkspaceGitTimeout = 30 * time.Second
 	// gitQueryMaxStdout bounds stdout for a read-only git repository query.
 	gitQueryMaxStdout = 1 << 20
 	// gitQueryMaxStderr bounds stderr for a read-only git repository query.
@@ -110,6 +114,12 @@ func EnclosingWorktreeRoot(ctx context.Context, dir string) (string, error) {
 		return "", fmt.Errorf("git rev-parse in %s printed more output than allowed", existingDir)
 	}
 	if runErr != nil {
+		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+			return "", fmt.Errorf("git rev-parse --show-toplevel in %s timed out: %w", existingDir, errors.Join(runErr, ctx.Err()))
+		}
+		if ctx.Err() != nil {
+			return "", fmt.Errorf("git rev-parse --show-toplevel in %s: %w", existingDir, errors.Join(runErr, ctx.Err()))
+		}
 		if strings.Contains(stderrStr, "not a git repository (or any ") ||
 			strings.Contains(stderrStr, "this operation must be run in a work tree") {
 			return "", nil

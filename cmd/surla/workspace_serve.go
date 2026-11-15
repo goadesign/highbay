@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"strings"
 	"syscall"
+	"time"
 
 	"golang.org/x/sys/unix"
 
@@ -75,10 +76,19 @@ const (
 // verifies: with the evaluator in the project's stored verification settings,
 // or, when none are stored, with the tests accepted for each change's build.
 func configureProjectWorkspace(state *project.State) (workspaceServeConfig, error) {
+	return configureProjectWorkspaceWithTimeout(state, context.WithTimeout)
+}
+
+// configureProjectWorkspaceWithTimeout injects only the workspace Git deadline
+// factory, so startup admission can be exercised without waiting its allowance.
+func configureProjectWorkspaceWithTimeout(
+	state *project.State,
+	withTimeout func(context.Context, time.Duration) (context.Context, context.CancelFunc),
+) (workspaceServeConfig, error) {
 	initial := state.Record.Directory
-	protected, err := workspaceProtectedDirs(initial)
+	protected, err := workspaceProtectedDirs(initial, withTimeout)
 	if err != nil {
-		return workspaceServeConfig{}, err
+		return workspaceServeConfig{}, fmt.Errorf("%w; check that Git can read the workspace, then run surla again", err)
 	}
 	for _, name := range []string{"cards", "runs", "reports", "designeval-work"} {
 		if err := markOperatorPrivateDir(filepath.Join(state.Dir, name)); err != nil {
@@ -268,8 +278,11 @@ func withinAnyDir(dir string, dirs []string) (bool, error) {
 
 // workspaceProtectedDirs returns the deduplicated physical paths of
 // initialWorkspaceRoot and its enclosing Git working tree root.
-func workspaceProtectedDirs(initialWorkspaceRoot string) ([]string, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), gitReadTimeout)
+func workspaceProtectedDirs(
+	initialWorkspaceRoot string,
+	withTimeout func(context.Context, time.Duration) (context.Context, context.CancelFunc),
+) ([]string, error) {
+	ctx, cancel := withTimeout(context.Background(), verify.WorkspaceGitTimeout)
 	defer cancel()
 	return verify.WorkspaceBoundaryRoots(ctx, initialWorkspaceRoot)
 }
