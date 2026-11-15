@@ -486,7 +486,10 @@ func TestCheckLimitsTheBuildAndTheListing(t *testing.T) {
 		require.NoError(t, err)
 		require.Len(t, v.Findings, 1)
 		assert.Equal(t, FindingBuild, v.Findings[0].Kind)
-		assert.Contains(t, v.Findings[0].Message, "did not finish building within 500ms")
+		assert.Equal(t, "The test program did not finish building within 500ms. "+
+			"Report again: the retained build cache can reuse compilation that completed. "+
+			"If it still does not finish, make the test module build faster, for example with fewer or smaller dependencies.",
+			v.Findings[0].Message)
 		c.build = func(_ context.Context, spec candidate.BuildSpec, _ func(*exec.Cmd) error) error {
 			assert.Equal(t, home, spec.WorkDir)
 			content, err := os.ReadFile(filepath.Join(spec.WorkDir, "gocache", "completed-entry"))

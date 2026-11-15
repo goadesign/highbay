@@ -1024,7 +1024,8 @@ func (c *Checker) listScenarios(
 	})
 	if reached && !*keep {
 		return nil, finding(FindingBuild, fmt.Sprintf("The test program did not finish building within %s. "+
-			"Make the test module build faster, for example with fewer or smaller dependencies, then report again.",
+			"Report again: the retained build cache can reuse compilation that completed. "+
+			"If it still does not finish, make the test module build faster, for example with fewer or smaller dependencies.",
 			limitText(c.buildLimit))), nil
 	}
 	if err != nil {
