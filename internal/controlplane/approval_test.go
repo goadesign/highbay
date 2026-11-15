@@ -105,7 +105,7 @@ type (
 func TestApproveMergeRecordsApprovalOnlyForTheCheckedRevision(t *testing.T) {
 	aliceCtx := WithPrincipal(context.Background(), Principal{ID: "alice@example.com", CallerID: "alice@example.com", Kind: CallerUser})
 	bobCtx := WithPrincipal(context.Background(), Principal{ID: "bob@example.com", CallerID: "bob@example.com", Kind: CallerUser})
-	const commit = "0123456789abcdef0123456789abcdef01234567"
+	var commit string
 	analysis := &gensurla.CP1Analysis{
 		Summary:     "Refunds up to $50 are instant.",
 		Ambiguities: []*gensurla.CP1AnalysisAmbiguity{},
@@ -136,6 +136,7 @@ func TestApproveMergeRecordsApprovalOnlyForTheCheckedRevision(t *testing.T) {
 		card = mustConfirmNoop(t, cp, aliceCtx, card)
 		saveStoredBuildFixture(t, cp, card)
 		require.Equal(t, StatusConfirmed, card.Status)
+		commit = commitBuilderCandidateFixture(t, cp, card)
 		target.report = passingReport(t, card.RequestRevision, commit, spec)
 		return cp, target, card
 	}
@@ -194,6 +195,7 @@ func TestApproveMergeRecordsApprovalOnlyForTheCheckedRevision(t *testing.T) {
 		card = attachBuildSnapshot(t, cp, card.ChangeID)
 		card = mustConfirmNoop(t, cp, aliceCtx, card)
 		saveStoredBuildFixture(t, cp, card)
+		commit = commitBuilderCandidateFixture(t, cp, card)
 		report := passingReport(t, card.RequestRevision, commit, spec)
 		writeReportFile(t, cfg.Plan.ReportDir, report)
 
@@ -518,9 +520,8 @@ func TestApproveMergeRecordsApprovalOnlyForTheCheckedRevision(t *testing.T) {
 // refused with no_build or tests_not_accepted.
 func TestApproveMergeChecksTheChosenTestsCommit(t *testing.T) {
 	const (
-		candidate = "0123456789abcdef0123456789abcdef01234567"
-		commitT   = "1111111111111111111111111111111111111111"
-		commitU   = "2222222222222222222222222222222222222222"
+		commitT = "1111111111111111111111111111111111111111"
+		commitU = "2222222222222222222222222222222222222222"
 	)
 	artifacts := map[string]string{"shop": strings.Repeat("a", 64)}
 
@@ -660,6 +661,12 @@ func TestApproveMergeChecksTheChosenTestsCommit(t *testing.T) {
 				if tc.tw != nil {
 					saveTestWriter(t, cp, "chg", *tc.tw)
 				}
+				// The no-build rejection never reads a candidate; every execution
+				// with a build uses authored work on its numbered builder branch.
+				candidate := strings.Repeat("f", 40)
+				if tc.stored || tc.startBuild {
+					candidate = commitBuilderCandidateFixture(t, cp, card)
+				}
 				spec := reportSpec{
 					SuiteID: "shop_acceptance", SuiteCommit: tc.reportCommit,
 					Environment: "written-env", Artifacts: maps.Clone(artifacts),
@@ -732,9 +739,8 @@ func TestSavedApprovalStaysValidOnlyWhileChosenTestsMatch(t *testing.T) {
 	t.Cleanup(func() { otel.SetTracerProvider(prevProvider) })
 
 	const (
-		candidate = "0123456789abcdef0123456789abcdef01234567"
-		commitT   = "1111111111111111111111111111111111111111"
-		commitU   = "2222222222222222222222222222222222222222"
+		commitT = "1111111111111111111111111111111111111111"
+		commitU = "2222222222222222222222222222222222222222"
 	)
 	artifacts := map[string]string{"shop": strings.Repeat("a", 64)}
 	target := &promotionTargetStub{artifacts: maps.Clone(artifacts)}
@@ -750,6 +756,7 @@ func TestSavedApprovalStaysValidOnlyWhileChosenTestsMatch(t *testing.T) {
 	_, err := cp.StartBuild(user, &gensurla.StartBuildPayload{ChangeID: "chg", RequestRevision: card.RequestRevision})
 	require.NoError(t, err)
 	acceptTests(t, cp, "chg", commitT)
+	candidate := commitBuilderCandidateFixture(t, cp, card)
 
 	spec := reportSpec{SuiteID: "shop_acceptance", SuiteCommit: commitT, Environment: "sim", Artifacts: maps.Clone(artifacts)}
 	target.report = passingReport(t, card.RequestRevision, candidate, spec)
@@ -799,9 +806,8 @@ func TestSavedApprovalStaysValidOnlyWhileChosenTestsMatch(t *testing.T) {
 // approving: approve again") and saves nothing.
 func TestApproveMergeRejectsAcceptanceChangedDuringReportLoad(t *testing.T) {
 	const (
-		candidate = "0123456789abcdef0123456789abcdef01234567"
-		commitT   = "1111111111111111111111111111111111111111"
-		commitU   = "2222222222222222222222222222222222222222"
+		commitT = "1111111111111111111111111111111111111111"
+		commitU = "2222222222222222222222222222222222222222"
 	)
 	artifacts := map[string]string{"shop": strings.Repeat("a", 64)}
 	target := &promotionTargetStub{
@@ -821,6 +827,7 @@ func TestApproveMergeRejectsAcceptanceChangedDuringReportLoad(t *testing.T) {
 	_, err := cp.StartBuild(user, &gensurla.StartBuildPayload{ChangeID: "chg", RequestRevision: card.RequestRevision})
 	require.NoError(t, err)
 	acceptTests(t, cp, "chg", commitT)
+	candidate := commitBuilderCandidateFixture(t, cp, card)
 	target.report = passingReport(t, card.RequestRevision, candidate, reportSpec{
 		SuiteID: "shop_acceptance", SuiteCommit: commitT, Environment: "sim", Artifacts: maps.Clone(artifacts),
 	})
@@ -858,7 +865,6 @@ func TestCurrentCardAllFiveApprovalStatesAndSpanRecording(t *testing.T) {
 	t.Cleanup(func() { otel.SetTracerProvider(prevProvider) })
 
 	aliceCtx := WithPrincipal(context.Background(), Principal{ID: "alice@example.com", CallerID: "alice@example.com", Kind: CallerUser})
-	const commit = "0123456789abcdef0123456789abcdef01234567"
 	const secretHostPath = "/var/lib/surla/secret-releases/0123456789abcdef0123456789abcdef01234567/orders"
 
 	analysis := &gensurla.CP1Analysis{
@@ -979,6 +985,7 @@ func TestCurrentCardAllFiveApprovalStatesAndSpanRecording(t *testing.T) {
 	}
 
 	// State 2: current approval.
+	commit := commitBuilderCandidateFixture(t, cp, card)
 	target.report = passingReport(t, card.RequestRevision, commit, spec)
 	approved, err := cp.ApproveMerge(aliceCtx, &gensurla.ApproveMergePayload{
 		ChangeID: "chg", RequestRevision: card.RequestRevision, CandidateCommit: commit, ReportDigest: target.report.Digest,

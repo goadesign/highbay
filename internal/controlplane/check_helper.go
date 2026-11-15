@@ -317,22 +317,38 @@ func newCheckHelperError(err error) *checkHelperError {
 	return e
 }
 
-// runCheckHelper runs tool for the active workspace in a new check helper:
-// it binds the workspace's live grant, creates and locks the operation
-// directory, starts the helper, and returns its result. The helper's error
-// result is returned as the caller-facing error. Binding failures are the
-// errors they were before helpers existed (not_implemented, unprocessable).
+// runCheckHelper runs tool for the open build's builder copy. The workspace
+// lifetime gate and builder turn cover readiness, binding, the helper's whole
+// execution and cleanup, so assignment reads cannot move a copy still in use.
+// The helper receives held grant/workspace descriptors and returns its named
+// service error unchanged. Source copying and manifest publication stay in the
+// builder's copy rather than the user's project.
 func (c *ControlPlane) runCheckHelper(ctx context.Context, tool string) (res checkHelperResult, retErr error) {
-	wsDir, dev, ino := c.currentWorkspaceTarget()
+	c.workspaceMu.RLock()
+	defer c.workspaceMu.RUnlock()
+	wsDir := c.activeWorkspaceDir
 	if wsDir == "" {
 		return checkHelperResult{}, gensurla.MakeNotImplemented(errors.New("no workspace directory is bound to this control plane"))
 	}
-	_, wsRoot, err := openModuleRootWithIdentity(wsDir, dev, ino)
+	if err := ctx.Err(); err != nil {
+		return checkHelperResult{}, err
+	}
+	select {
+	case c.builderCopyTurn <- struct{}{}:
+	default:
+		return checkHelperResult{}, gensurla.MakeWorkingCopyBusy(fmt.Errorf("The builder's working copy is in use; call %s again when the current operation finishes.", tool))
+	}
+	defer func() { <-c.builderCopyTurn }()
+	ready, err := c.builderCopyReady(ctx, wsDir, tool)
+	if err != nil {
+		return checkHelperResult{}, err
+	}
+	_, project, err := openModuleRootWithIdentity(wsDir, c.boundWorkspaceDev, c.boundWorkspaceIno)
 	if err != nil {
 		return checkHelperResult{}, err
 	}
 	op := &checkOperation{id: newOperationID(), grantFD: -1, workspaceFD: -1}
-	if err := errors.Join(op.openLive(wsRoot, c.protectedDirs), wsRoot.Close()); err != nil {
+	if err := errors.Join(op.openBuilderLive(project, ready), project.Close()); err != nil {
 		return checkHelperResult{}, errors.Join(err, op.closeLive())
 	}
 	// The helper receives its own copies of the held directories.
@@ -358,6 +374,42 @@ func (c *ControlPlane) runCheckHelper(ctx context.Context, tool string) (res che
 	}
 	propagation.TraceContext{}.Inject(ctx, propagation.MapCarrier(spec.TraceContext))
 	return c.startCheckHelper(ctx, spec, lock, op)
+}
+
+// openBuilderLive holds the builder copy as grant and its module as workspace.
+// Both are reached from the identity-verified project without following links;
+// later copying and manifest publication use these descriptors, never a path
+// that could have been replaced after readiness.
+func (op *checkOperation) openBuilderLive(project *os.Root, ready builderReadyCopy) (retErr error) {
+	_, grant, err := openBuildGenerationRoot(project, ready.copyRoot)
+	if err != nil {
+		return gensurla.MakeUnprocessable(fmt.Errorf("open the builder's working copy: %w", err))
+	}
+	defer func() { retErr = errors.Join(retErr, grant.Close()) }()
+	held, err := grant.Open(".")
+	if err != nil {
+		return err
+	}
+	op.grantFD, err = unix.Openat(int(held.Fd()), ".", openDirFlags, 0)
+	if err := errors.Join(err, held.Close()); err != nil {
+		return err
+	}
+	rel, err := filepath.Rel(ready.copyRoot, ready.folder)
+	if err != nil || !filepath.IsLocal(rel) {
+		return gensurla.MakeUnprocessable(errors.New("the builder's module is outside its working copy"))
+	}
+	op.workspaceRel = filepath.ToSlash(rel)
+	op.workspaceFD, err = openDirAt(op.grantFD, op.workspaceRel)
+	if err != nil {
+		return gensurla.MakeUnprocessable(fmt.Errorf("open the builder's module: %w", err))
+	}
+	var st unix.Stat_t
+	if err := unix.Fstat(op.workspaceFD, &st); err != nil {
+		return err
+	}
+	op.workspaceID = fileID{dev: uint64(st.Dev), ino: st.Ino}
+	op.grantRoot, err = abspath.FDPath(op.grantFD)
+	return err
 }
 
 // startCheckHelper starts the helper for spec, handing it lock and copies

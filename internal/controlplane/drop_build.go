@@ -53,15 +53,6 @@ func (c *ControlPlane) DropBuild(ctx context.Context, p *gensurla.DropBuildPaylo
 	if err != nil {
 		return nil, err
 	}
-	tips, err := buildBranchTips(work, repo, saved.Number)
-	if err != nil {
-		return nil, err
-	}
-	branches, err := keptBuildBranches(work, repo, saved.Base, tips)
-	if err != nil {
-		return nil, err
-	}
-
 	c.draftMu.Lock()
 	c.mu.Lock()
 	record, err := c.ownedCard(principal, p.ChangeID)
@@ -100,6 +91,21 @@ func (c *ControlPlane) DropBuild(ctx context.Context, p *gensurla.DropBuildPaylo
 		c.mu.Unlock()
 		c.draftMu.Unlock()
 		return nil, gensurla.MakeConflict(errors.New("This build was already dropped."))
+	}
+	// Record shares c.mu for publication. Capture its actual numbered tips
+	// here, once, so no accepted commit can fall between this snapshot and
+	// the durable Drop that retains it after a ref is moved or deleted.
+	tips, err := buildBranchTips(work, repo, current.Number)
+	if err != nil {
+		c.mu.Unlock()
+		c.draftMu.Unlock()
+		return nil, err
+	}
+	branches, err := keptBuildBranches(work, repo, current.Base, tips)
+	if err != nil {
+		c.mu.Unlock()
+		c.draftMu.Unlock()
+		return nil, err
 	}
 	// A legacy or freshly evaluated revision can precede the first saved list.
 	// Its generation still has to precede the new drop generation.

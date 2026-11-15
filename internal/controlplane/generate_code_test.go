@@ -3,7 +3,6 @@
 package controlplane
 
 import (
-	"context"
 	"io/fs"
 	"maps"
 	"net/http"
@@ -15,7 +14,6 @@ import (
 	"strconv"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -58,9 +56,14 @@ func TestGenerateCodeHTTPMCPAndIteration(t *testing.T) {
 		"gen/stale/old.go": "old\n", "gen/NOTES.md": "mine\n",
 	})
 	require.NoError(t, os.Chmod(filepath.Join(workspace, "gen/NOTES.md"), 0o600))
-	writeGenerationFiles(t, filepath.Join(workspace, "eval"), snapshot)
+	evalSnapshot := maps.Clone(snapshot)
+	evalSnapshot["go.mod"] = strings.Replace(snapshot["go.mod"], "module example.com/design", "module example.com/design/eval", 1)
+	writeGenerationFiles(t, filepath.Join(workspace, "eval"), evalSnapshot)
 	writeGenerationFiles(t, filepath.Join(workspace, "eval"), map[string]string{"gen/stale/old.go": "eval old\n"})
-	evalBefore := generationFiles(t, workspace, "eval")
+	projectDesign := generationFiles(t, workspace, "design")
+	projectGen := generationFiles(t, workspace, "gen")
+	projectEval := generationFiles(t, workspace, "eval")
+	commitGenerationProject(t, workspace)
 	privateCards := filepath.Join(t.TempDir(), "operator\"slash\\storage")
 	privateEval := filepath.Join(t.TempDir(), "physical\"compiler\\storage")
 	require.NoError(t, os.Mkdir(privateEval, 0o700))
@@ -68,8 +71,15 @@ func TestGenerateCodeHTTPMCPAndIteration(t *testing.T) {
 	require.NoError(t, os.Symlink(privateEval, "operator-link"))
 	cp := newControlPlane(t, Options{
 		WorkspaceDir: workspace, CardsDir: privateCards,
+		Team:      &TeamBinding{Owner: "developer@example.com", Service: &teamServiceFixture{}},
 		Evaluator: designeval.NewEvaluatorInDir(filepath.Join("operator-link", "work")),
 	})
+	card, assignment := generationNativeBuild(t, cp)
+	working := assignment.WorkingFolder
+	// Git records executable bits, not a private file's permission mask.
+	// Exercise publication's mode preservation in the builder's live copy.
+	require.NoError(t, os.Chmod(filepath.Join(working, "gen/NOTES.md"), 0o600))
+	evalBefore := generationFiles(t, working, "eval")
 	srv := httptest.NewServer(NewHTTPHandler(cp, workflowAuthenticator(map[string]Principal{
 		"generation-token": {ID: "developer@example.com"},
 	})))
@@ -82,35 +92,13 @@ func TestGenerateCodeHTTPMCPAndIteration(t *testing.T) {
 	mcpTransport := genmcpclient.NewClient(origin.Scheme, origin.Host, doer, goahttp.RequestEncoder, goahttp.ResponseDecoder, false)
 	mcpClient := &genmcpsurla.Client{ToolsCallEndpoint: mcpTransport.ToolsCall(), ToolsListEndpoint: mcpTransport.ToolsList()}
 
-	// Each request owns its deadline; fixture preparation and earlier requests
-	// cannot consume the budget needed to exercise a later recovery.
-	generateHTTP := func(payload *gensurla.GenerateCodePayload) (*gensurla.GenerateCodeResult, error) {
-		ctx, cancel := context.WithTimeout(t.Context(), 3*time.Minute)
-		defer cancel()
-		return httpClient.GenerateCode(ctx, payload)
-	}
-	callMCP := func(payload *genmcpsurla.ToolsCallPayload) (*genmcpsurla.ToolsCallResult, error) {
-		ctx, cancel := context.WithTimeout(t.Context(), 3*time.Minute)
-		defer cancel()
-		return mcpClient.ToolsCall(ctx, payload)
-	}
-	generateDirect := func(payload *gensurla.GenerateCodePayload) (*gensurla.GenerateCodeResult, error) {
-		ctx, cancel := context.WithTimeout(t.Context(), 3*time.Minute)
-		defer cancel()
-		return cp.GenerateCode(WithPrincipal(ctx, Principal{
-			ID: "developer@example.com", CallerID: "developer@example.com", Kind: CallerUser,
-		}), payload)
-	}
-
-	listCtx, cancelList := context.WithTimeout(t.Context(), 30*time.Second)
-	tools, err := mcpClient.ToolsList(listCtx, &genmcpsurla.ToolsListPayload{})
-	cancelList()
+	tools, err := mcpClient.ToolsList(t.Context(), &genmcpsurla.ToolsListPayload{})
 	require.NoError(t, err)
 	index := slices.IndexFunc(tools.Tools, func(tool *genmcpsurla.ToolInfo) bool { return tool.Name == "generate_code" })
 	require.NotEqual(t, -1, index)
 	args, err := gensurla.EncodeGenerateCodePayload(&gensurla.GenerateCodePayload{})
 	require.NoError(t, err)
-	call, err := callMCP(&genmcpsurla.ToolsCallPayload{Name: "generate_code", Arguments: args})
+	call, err := mcpClient.ToolsCall(generationRequest(t), &genmcpsurla.ToolsCallPayload{Name: "generate_code", Arguments: args})
 	require.NoError(t, err)
 	complete, ok := call.Outcome.AsComplete()
 	require.True(t, ok)
@@ -121,27 +109,30 @@ func TestGenerateCodeHTTPMCPAndIteration(t *testing.T) {
 	assert.Empty(t, first.Warnings)
 	physicalEvalParent, err := filepath.EvalSymlinks(filepath.Join(privateEval, "work"))
 	require.NoError(t, err)
-	generated := generationFiles(t, workspace, "gen")
+	generated := generationFiles(t, working, "gen")
 	assert.NotContains(t, generated, "gen/stale/old.go")
 	assert.Equal(t, "mine\n", generated["gen/NOTES.md"])
 	delete(generated, "gen/NOTES.md")
 	assert.Equal(t, slices.Sorted(maps.Keys(generated)), first.FilesWritten)
-	info, err := os.Stat(filepath.Join(workspace, "gen/NOTES.md"))
+	info, err := os.Stat(filepath.Join(working, "gen/NOTES.md"))
 	require.NoError(t, err)
 	assert.Equal(t, os.FileMode(0o600), info.Mode().Perm())
-	assert.Equal(t, evalBefore, generationFiles(t, workspace, "eval"))
+	assert.Equal(t, evalBefore, generationFiles(t, working, "eval"))
 	for _, name := range []string{"go.mod", "go.sum"} {
-		content, err := os.ReadFile(filepath.Join(workspace, name))
+		content, err := os.ReadFile(filepath.Join(working, name))
 		require.NoError(t, err)
 		assert.Equal(t, snapshot[name], string(content))
 	}
 
-	// Editing the same workspace regenerates immediately through the same
-	// server. No source upload, commit, model, or verification config is used.
+	// The guide changes the draft; refresh, revision adoption and another
+	// Build make that design authoritative on this same running server.
 	updated := strings.Replace(generationDesign, `Service("orders", func() {`, `Service("orders", func() { Description("edited on the running server")`, 1)
-	writeGenerationFiles(t, workspace, map[string]string{"design/design.go": updated})
+	working = generationNativeRevision(t, cp, card, updated).WorkingFolder
 	candidate := "candidate"
-	second, err := generateDirect(&gensurla.GenerateCodePayload{Target: &candidate})
+	second, err := cp.GenerateCode(
+		WithPrincipal(generationRequest(t), Principal{ID: "developer@example.com", CallerID: "developer@example.com", Kind: CallerBuilder}),
+		&gensurla.GenerateCodePayload{Target: &candidate},
+	)
 	require.NoError(t, err)
 	require.NoError(t, gensurla.ValidateGenerateCodeResultValue(second))
 	assert.Empty(t, second.Warnings)
@@ -151,14 +142,14 @@ func TestGenerateCodeHTTPMCPAndIteration(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, second, decoded, "direct results satisfy the same required collection contract as HTTP/MCP")
 	assert.Equal(t, first.FilesWritten, second.FilesWritten)
-	assert.Contains(t, generationFiles(t, workspace, "gen")["gen/orders/service.go"], "edited on the running server")
-	assert.Equal(t, evalBefore, generationFiles(t, workspace, "eval"))
-	candidateBeforeEval := generationFiles(t, workspace, "gen")
+	assert.Contains(t, generationFiles(t, working, "gen")["gen/orders/service.go"], "edited on the running server")
+	assert.Equal(t, evalBefore, generationFiles(t, working, "eval"))
+	candidateBeforeEval := generationFiles(t, working, "gen")
 
 	eval := "eval"
 	args, err = gensurla.EncodeGenerateCodePayload(&gensurla.GenerateCodePayload{Target: &eval})
 	require.NoError(t, err)
-	call, err = callMCP(&genmcpsurla.ToolsCallPayload{Name: "generate_code", Arguments: args})
+	call, err = mcpClient.ToolsCall(generationRequest(t), &genmcpsurla.ToolsCallPayload{Name: "generate_code", Arguments: args})
 	require.NoError(t, err)
 	complete, ok = call.Outcome.AsComplete()
 	require.True(t, ok)
@@ -166,18 +157,20 @@ func TestGenerateCodeHTTPMCPAndIteration(t *testing.T) {
 	evalResult, err := gensurla.DecodeGenerateCodeResult(complete.StructuredContent)
 	require.NoError(t, err)
 	assert.Equal(t, "eval", evalResult.Target)
-	evalGenerated := generationFiles(t, filepath.Join(workspace, "eval"), "gen")
+	evalGenerated := generationFiles(t, filepath.Join(working, "eval"), "gen")
 	assert.Equal(t, slices.Sorted(maps.Keys(evalGenerated)), evalResult.FilesWritten)
 	assert.NotContains(t, evalGenerated, "gen/stale/old.go")
-	assert.Equal(t, candidateBeforeEval, generationFiles(t, workspace, "gen"))
+	assert.Equal(t, candidateBeforeEval, generationFiles(t, working, "gen"))
 	for _, name := range []string{"go.mod", "go.sum"} {
-		content, err := os.ReadFile(filepath.Join(workspace, "eval", name))
+		content, err := os.ReadFile(filepath.Join(working, "eval", name))
 		require.NoError(t, err)
-		assert.Equal(t, snapshot[name], string(content))
+		assert.Equal(t, evalSnapshot[name], string(content))
 	}
+	evalBeforeFailure := generationFiles(t, filepath.Join(working, "eval"), "gen")
 
-	// Snapshot validation uses only caller-supplied files. Its exact remedies
-	// remain visible, and restoring those files allows same-server generation.
+	// The builder owns eval/design: malformed snapshots and compiler failures
+	// are refused there without publishing either module. Candidate design is
+	// instead always restored from the agreed revision before compilation.
 	for _, failure := range []struct {
 		name   string
 		files  map[string]string
@@ -187,33 +180,34 @@ func TestGenerateCodeHTTPMCPAndIteration(t *testing.T) {
 		{name: "missing go.sum", remove: []string{"go.sum"}, want: "design snapshot has no go.sum"},
 		{name: "malformed go.mod", files: map[string]string{"go.mod": "module (\n"}, want: "parse snapshot go.mod"},
 		{name: "no design source", remove: []string{"design/design.go"}, want: "design snapshot has no design/*.go file"},
-		{name: "local replacement", files: map[string]string{"go.mod": snapshot["go.mod"] + "\nreplace example.com/local => ./local-dependency\n"}, want: "only versioned replacements are supported"},
+		{name: "local replacement", files: map[string]string{"go.mod": evalSnapshot["go.mod"] + "\nreplace example.com/local => ./local-dependency\n"}, want: "only versioned replacements are supported"},
 	} {
 		t.Run(failure.name, func(t *testing.T) {
-			writeGenerationFiles(t, workspace, failure.files)
+			writeGenerationFiles(t, filepath.Join(working, "eval"), failure.files)
 			for _, name := range failure.remove {
-				require.NoError(t, os.Remove(filepath.Join(workspace, name)))
+				require.NoError(t, os.Remove(filepath.Join(working, "eval", name)))
 			}
-			_, err := callMCP(&genmcpsurla.ToolsCallPayload{Name: "generate_code", Arguments: []byte(`{}`)})
+			_, err := mcpClient.ToolsCall(generationRequest(t), &genmcpsurla.ToolsCallPayload{Name: "generate_code", Arguments: args})
 			require.Error(t, err)
 			assert.ErrorContains(t, err, failure.want)
 			if failure.name == "missing go.sum" {
 				assert.ErrorContains(t, err, "go mod tidy")
 			}
 			assert.NotContains(t, err.Error(), physicalEvalParent)
-			assert.Equal(t, candidateBeforeEval, generationFiles(t, workspace, "gen"))
-			writeGenerationFiles(t, workspace, map[string]string{
-				"go.mod": snapshot["go.mod"], "go.sum": snapshot["go.sum"], "design/design.go": updated,
+			assert.Equal(t, candidateBeforeEval, generationFiles(t, working, "gen"))
+			assert.Equal(t, evalBeforeFailure, generationFiles(t, filepath.Join(working, "eval"), "gen"))
+			writeGenerationFiles(t, filepath.Join(working, "eval"), map[string]string{
+				"go.mod": evalSnapshot["go.mod"], "go.sum": evalSnapshot["go.sum"], "design/design.go": generationDesign,
 			})
-			_, err = generateHTTP(&gensurla.GenerateCodePayload{})
+			_, err = httpClient.GenerateCode(generationRequest(t), &gensurla.GenerateCodePayload{Target: &eval})
 			require.NoError(t, err)
 		})
 	}
 
 	// A compiler rejection identifies the builder's broken source without
 	// returning the operator-owned compiler workspace or log locations.
-	writeGenerationFiles(t, workspace, map[string]string{"design/design.go": updated + "\nvar _ = MissingSourceSymbol\n"})
-	_, err = generateHTTP(&gensurla.GenerateCodePayload{})
+	writeGenerationFiles(t, filepath.Join(working, "eval"), map[string]string{"design/design.go": generationDesign + "\nvar _ = MissingSourceSymbol\n"})
+	_, err = httpClient.GenerateCode(generationRequest(t), &gensurla.GenerateCodePayload{Target: &eval})
 	require.Error(t, err)
 	var httpFailure *goahttp.ClientError
 	require.ErrorAs(t, err, &httpFailure)
@@ -222,7 +216,8 @@ func TestGenerateCodeHTTPMCPAndIteration(t *testing.T) {
 	assert.ErrorContains(t, err, "call generate_code again")
 	assert.NotContains(t, err.Error(), cp.cards.dir)
 	assert.NotContains(t, err.Error(), "surla-designeval-")
-	assert.Equal(t, candidateBeforeEval, generationFiles(t, workspace, "gen"))
+	assert.Equal(t, candidateBeforeEval, generationFiles(t, working, "gen"))
+	assert.Equal(t, evalBeforeFailure, generationFiles(t, filepath.Join(working, "eval"), "gen"))
 
 	// Both designs compile as Go but fail inside the generator.
 	// Their explanations must survive the MCP protocol-error path, followed
@@ -242,8 +237,8 @@ func TestGenerateCodeHTTPMCPAndIteration(t *testing.T) {
 		},
 	} {
 		t.Run(failure.name, func(t *testing.T) {
-			writeGenerationFiles(t, workspace, map[string]string{"design/design.go": failure.design})
-			_, err := callMCP(&genmcpsurla.ToolsCallPayload{Name: "generate_code", Arguments: []byte(`{}`)})
+			writeGenerationFiles(t, filepath.Join(working, "eval"), map[string]string{"design/design.go": failure.design})
+			_, err := mcpClient.ToolsCall(generationRequest(t), &genmcpsurla.ToolsCallPayload{Name: "generate_code", Arguments: args})
 			require.Error(t, err, "a failed generation uses the MCP protocol-error path")
 			assert.ErrorContains(t, err, "evaluating the design and generating files")
 			assert.ErrorContains(t, err, failure.want)
@@ -251,9 +246,10 @@ func TestGenerateCodeHTTPMCPAndIteration(t *testing.T) {
 			assert.NotContains(t, err.Error(), filepath.Base(privateCards))
 			quotedBase := strconv.Quote(filepath.Base(privateCards))
 			assert.NotContains(t, err.Error(), quotedBase[1:len(quotedBase)-1])
-			assert.Equal(t, candidateBeforeEval, generationFiles(t, workspace, "gen"))
-			writeGenerationFiles(t, workspace, map[string]string{"design/design.go": updated})
-			result, err := generateHTTP(&gensurla.GenerateCodePayload{})
+			assert.Equal(t, candidateBeforeEval, generationFiles(t, working, "gen"))
+			assert.Equal(t, evalBeforeFailure, generationFiles(t, filepath.Join(working, "eval"), "gen"))
+			writeGenerationFiles(t, filepath.Join(working, "eval"), map[string]string{"design/design.go": generationDesign})
+			result, err := httpClient.GenerateCode(generationRequest(t), &gensurla.GenerateCodePayload{Target: &eval})
 			require.NoError(t, err)
 			assert.Equal(t, first.FilesWritten, result.FilesWritten)
 		})
@@ -274,7 +270,7 @@ func TestGenerateCodeHTTPMCPAndIteration(t *testing.T) {
 	require.True(t, info.IsDir())
 	require.NoError(t, os.Rename(cache, cache+"-saved"))
 	require.NoError(t, os.WriteFile(cache, []byte("cache directory replaced by a file\n"), 0o600))
-	_, cacheErr := generateHTTP(&gensurla.GenerateCodePayload{})
+	_, cacheErr := httpClient.GenerateCode(generationRequest(t), &gensurla.GenerateCodePayload{})
 	require.NoError(t, os.Remove(cache))
 	require.NoError(t, os.Rename(cache+"-saved", cache))
 	require.Error(t, cacheErr)
@@ -290,14 +286,22 @@ func TestGenerateCodeHTTPMCPAndIteration(t *testing.T) {
 	assert.NotContains(t, cacheErr.Error(), quotedCards[1:len(quotedCards)-1])
 	quotedEval := strconv.Quote(physicalEvalParent)
 	assert.NotContains(t, cacheErr.Error(), quotedEval[1:len(quotedEval)-1])
-	assert.Equal(t, candidateBeforeEval, generationFiles(t, workspace, "gen"))
-	_, err = generateHTTP(&gensurla.GenerateCodePayload{})
+	assert.Equal(t, candidateBeforeEval, generationFiles(t, working, "gen"))
+	_, err = httpClient.GenerateCode(generationRequest(t), &gensurla.GenerateCodePayload{})
 	require.NoError(t, err)
 
 	require.NoError(t, cp.Close())
-	_, err = generateDirect(&gensurla.GenerateCodePayload{})
+	_, err = cp.GenerateCode(WithPrincipal(generationRequest(t), Principal{ID: "developer@example.com", CallerID: "developer@example.com", Kind: CallerBuilder}), &gensurla.GenerateCodePayload{})
 	require.Error(t, err)
-	assert.Equal(t, candidateBeforeEval, generationFiles(t, workspace, "gen"), "a closed server never publishes")
+	assert.Equal(t, candidateBeforeEval, generationFiles(t, working, "gen"), "a closed server never publishes")
+	assert.Equal(t, projectDesign, generationFiles(t, workspace, "design"))
+	assert.Equal(t, projectGen, generationFiles(t, workspace, "gen"))
+	assert.Equal(t, projectEval, generationFiles(t, workspace, "eval"))
+	for _, name := range []string{"go.mod", "go.sum"} {
+		content, readErr := os.ReadFile(filepath.Join(workspace, name))
+		require.NoError(t, readErr)
+		assert.Equal(t, snapshot[name], string(content))
+	}
 }
 
 // TestGenerateCodeRejectsUnavailableModules verifies trust failures before a
@@ -305,28 +309,30 @@ func TestGenerateCodeHTTPMCPAndIteration(t *testing.T) {
 func TestGenerateCodeRejectsUnavailableModules(t *testing.T) {
 	for _, name := range []string{"missing module", "replaced workspace", "symlink eval", "missing eval", "eval without go.mod"} {
 		t.Run(name, func(t *testing.T) {
-			workspace := filepath.Join(t.TempDir(), "module")
-			require.NoError(t, os.Mkdir(workspace, 0o755))
-			cp := newControlPlane(t, Options{WorkspaceDir: workspace})
+			workspace, cp, _, assignment := buildGenerationFixture(t, ".")
+			working := assignment.WorkingFolder
+			require.NoError(t, os.RemoveAll(filepath.Join(working, "eval")))
 			payload := &gensurla.GenerateCodePayload{}
 			switch name {
+			case "missing module":
+				require.NoError(t, os.Remove(filepath.Join(working, "go.mod")))
 			case "replaced workspace":
 				require.NoError(t, os.Rename(workspace, workspace+"-old"))
 				require.NoError(t, os.Mkdir(workspace, 0o755))
 			case "symlink eval":
-				require.NoError(t, os.Symlink(t.TempDir(), filepath.Join(workspace, "eval")))
+				require.NoError(t, os.Symlink(t.TempDir(), filepath.Join(working, "eval")))
 				fallthrough
 			case "missing eval", "eval without go.mod":
 				eval := "eval"
 				payload.Target = &eval
 				if name == "eval without go.mod" {
-					require.NoError(t, os.Mkdir(filepath.Join(workspace, "eval"), 0o755))
+					require.NoError(t, os.Mkdir(filepath.Join(working, "eval"), 0o755))
 				}
 			}
-			_, err := cp.GenerateCode(WithPrincipal(t.Context(), Principal{ID: "developer@example.com", CallerID: "developer@example.com", Kind: CallerUser}), payload)
+			_, err := cp.GenerateCode(asCaller("alice@example.com", CallerBuilder), payload)
 			require.Error(t, err)
 			assert.Equal(t, "unprocessable", goaErrorName(err))
-			matches, err := filepath.Glob(filepath.Join(workspace, "gen"))
+			matches, err := filepath.Glob(filepath.Join(working, "gen"))
 			require.NoError(t, err)
 			assert.Empty(t, matches)
 		})

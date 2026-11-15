@@ -22,6 +22,7 @@ func TestViewsPageBuildRequiresASeparateRebuildConfirmation(t *testing.T) {
 	card := buildableChange(t, cp, "chg")
 	ps := startPageServer(t, cp)
 	ps.act("builder-read", func() {
+		makeBuildFixtureBuilderCopy(t, cp)
 		_, err := cp.GetBuilderAssignment(asCaller(pageOwner, CallerBuilder), &gensurla.GetBuilderAssignmentPayload{ChangeID: "chg"})
 		require.NoError(t, err)
 	})

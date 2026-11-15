@@ -22,6 +22,7 @@ import (
 	"github.com/goadesign/surla/internal/designversion"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.opentelemetry.io/otel/trace"
 	goa "goa.design/goa/v3/pkg"
 )
 
@@ -419,52 +420,55 @@ func TestMissingDraftRestoresTheLatestEligibleRevision(t *testing.T) {
 	for _, state := range []string{"confirmed", "waiting", "declined"} {
 		t.Run(state, func(t *testing.T) {
 			project := t.TempDir()
-			writeWorkspaceFiles(t, project, validWorkspaceStub("package design\nvar A = 1\n"))
+			writeWorkspaceFiles(t, project, validWorkspaceStub("package design\nvar A=1\n"))
 			cp := newControlPlane(t, Options{WorkspaceDir: project})
-			user := asCaller("alice@example.com", CallerUser)
 			readDraftForTest(t, cp)
-			card := saveDraftSourceCardFixture(t, cp, "chg", map[string]string{"design/design.go": "package design\n\nvar A = 1\n"})
-			card, err := cp.ConfirmIntent(user, &gensurla.ConfirmIntentPayload{
-				ChangeID: card.ChangeID, RequestRevision: card.RequestRevision,
-				Answers: map[string]string{}, Examples: card.Examples,
-			})
+			saveCompleteRemakeCard(t, cp, "chg")
+			user := asCaller("alice@example.com", CallerUser)
+			record := loadMetadataRecord(t, cp, "chg")
+			card, err := cp.ConfirmIntent(user, &gensurla.ConfirmIntentPayload{ChangeID: "chg", RequestRevision: record.card.RequestRevision, Answers: map[string]string{}, Examples: record.card.Examples})
 			require.NoError(t, err)
 			if state != "confirmed" {
-				record := loadMetadataRecord(t, cp, "chg")
-				proposed := *record.card
-				proposed.Status, proposed.ConfirmedBy, proposed.Approval = StatusNeedsConfirmation, nil, nil
-				proposed.Prompt, proposed.Summary = "Keep refunds bounded with review", "Keep refunds bounded with review"
-				source, err := encodeDesignSource(map[string]string{"design/design.go": "package design\n\nvar A = 2\n"})
+				writeWorkspaceFiles(t, filepath.Join(project, draftFolderName), map[string]string{"design/design.go": "package design\nvar A=2\n"})
+				files, provenance := readDraftForTest(t, cp)
+				source, err := designSourceFromModuleSnapshot(files)
 				require.NoError(t, err)
-				proposed.RequestRevision, err = computeCanonicalRevision(&proposed, record.owner, source)
+				selected := refreshedSnapshot{designSource: source, goMod: files["go.mod"], architecture: &savedArchitecture{DesignDigest: strings.Repeat("a", 64)}, madeFrom: cloneMadeFromSnapshot(&provenance)}
+				cp.draftMu.Lock()
+				cp.mu.Lock()
+				err = cp.recordRefreshedSnapshot(trace.SpanFromContext(t.Context()), selected)
+				cp.mu.Unlock()
+				cp.draftMu.Unlock()
 				require.NoError(t, err)
-				record.proposed = &storedRevision{card: &proposed, designSource: source}
+				record = loadMetadataRecord(t, cp, "chg")
+				proposal := *record.card
+				proposal.Status = StatusNeedsConfirmation
+				proposal.ConfirmedBy = nil
+				proposal.Approval = nil
+				proposal.Prompt = "Keep refunds bounded with review"
+				proposal.RequestRevision, err = computeCanonicalRevision(&proposal, record.owner, source)
+				require.NoError(t, err)
+				record.proposed = &storedRevision{card: &proposal, designSource: source, architecture: selected.architecture, goMod: selected.goMod, madeFrom: selected.madeFrom}
 				saveMetadataRecord(t, cp, record)
-				card, err = cp.GetChange(user, &gensurla.GetChangePayload{ChangeID: "chg"})
-				require.NoError(t, err)
 				if state == "declined" {
-					_, err = cp.DeclineRevision(user, &gensurla.DeclineRevisionPayload{
-						ChangeID: card.ChangeID, RequestRevision: card.ProposedRevision.RequestRevision,
-					})
+					_, err = cp.DeclineRevision(user, &gensurla.DeclineRevisionPayload{ChangeID: "chg", RequestRevision: proposal.RequestRevision})
 					require.NoError(t, err)
 				}
 			}
+			record = loadMetadataRecord(t, cp, "chg")
+			expected := record.latest()
+			require.NotNil(t, expected.madeFrom)
 			cp.draftMu.Lock()
 			list, _, err := cp.cards.loadMadeFrom()
 			require.NoError(t, err)
 			list.Write++
-			outside := map[string]string{"design/design.go": "package design\n\nvar A = 2\n"}
-			version, err := cp.enterDraftVersion(&list, "design/design.go", outside)
+			version, err := cp.enterDraftVersion(&list, "design/design.go", map[string]string{"design/design.go": "package design\n\nvar A = 3\n"})
 			require.NoError(t, err)
-			list.Taken["design/design.go"] = madeFromVersion{Version: version, Entered: list.Write}
-			list.Pending = &pendingDraftWrite{
-				File: "design/design.go", OutsideVersion: version, Before: version, Result: version,
-			}
+			list.Taken["design/design.go"] = madeFromTake{Version: version, Entered: list.Write}
+			list.Pending = &pendingDraftWrite{File: "design/design.go", OutsideVersion: version, Before: version, Result: version}
 			require.NoError(t, cp.cards.saveMadeFrom(list))
 			cp.draftMu.Unlock()
 			require.NoError(t, os.RemoveAll(filepath.Join(project, draftFolderName)))
-			// The saved design must be selected without parsing the project's
-			// unrelated newer broken design. Module files still come from it.
 			writeWorkspaceFiles(t, project, map[string]string{"design/design.go": "not Go", "go.sum": "new sum\n"})
 			got, provenance := readDraftForTest(t, cp)
 			want := "package design\n\nvar A = 1\n"
@@ -474,18 +478,42 @@ func TestMissingDraftRestoresTheLatestEligibleRevision(t *testing.T) {
 			assert.Equal(t, want, got["design/design.go"])
 			assert.Equal(t, "new sum\n", got["go.sum"])
 			assert.Equal(t, list.Start, provenance.Start)
-			assert.Equal(t, list.Entries, provenance.Entries)
+			assert.Equal(t, expected.madeFrom.Entries, provenance.Entries, "remake restores exact immutable revision history, not later takes")
 			restored, _, err := cp.cards.loadMadeFrom()
 			require.NoError(t, err)
-			entered := uint64(1)
-			if state == "waiting" {
-				entered = 2
-			}
-			assert.Equal(t, madeFromVersion{Version: designversion.Digest(want), Entered: entered},
-				restored.Taken["design/design.go"])
+			assert.Greater(t, restored.Write, list.Write)
 			assert.Nil(t, restored.Pending)
+			at, found := enteredVersion(expected.madeFrom.Entries["design/design.go"], designversion.Digest(want))
+			require.True(t, found)
+			assert.Equal(t, madeFromTake{Version: designversion.Digest(want), Entered: at}, restored.Taken["design/design.go"])
+			assert.Equal(t, card.RequestRevision, record.card.RequestRevision)
 		})
 	}
+}
+
+// saveCompleteRemakeCard authors storage metadata from the real draft/list
+// owners. It is a recovery fixture, not a native evaluator-producer claim.
+func saveCompleteRemakeCard(t *testing.T, cp *ControlPlane, id string) {
+	t.Helper()
+	files, provenance := readDraftForTest(t, cp)
+	source, err := designSourceFromModuleSnapshot(files)
+	require.NoError(t, err)
+	selected := refreshedSnapshot{designSource: source, goMod: files["go.mod"], architecture: &savedArchitecture{DesignDigest: strings.Repeat("a", 64)}, madeFrom: cloneMadeFromSnapshot(&provenance)}
+	cp.draftMu.Lock()
+	cp.mu.Lock()
+	err = cp.recordRefreshedSnapshot(trace.SpanFromContext(t.Context()), selected)
+	cp.mu.Unlock()
+	cp.draftMu.Unlock()
+	require.NoError(t, err)
+	saveProposedCardFixture(t, cp, "alice@example.com", id, "Keep refunds bounded", refundAnalysis("Keep refunds bounded"))
+	record := loadMetadataRecord(t, cp, id)
+	record.designSource = source
+	record.architecture = selected.architecture
+	record.goMod = selected.goMod
+	record.madeFrom = selected.madeFrom
+	record.card.RequestRevision, err = computeCanonicalRevision(record.card, record.owner, source)
+	require.NoError(t, err)
+	saveMetadataRecord(t, cp, record)
 }
 
 // TestOlderDraftMarkerRemakesFromProject proves a new drop generation ignores
@@ -510,7 +538,9 @@ func TestOlderDraftMarkerRemakesFromProject(t *testing.T) {
 	writeWorkspaceFiles(t, project, map[string]string{"design/design.go": "package design\nvar A = 3\n"})
 	got, provenance := readDraftForTest(t, cp)
 	assert.Equal(t, "package design\n\nvar A = 3\n", got["design/design.go"])
-	assert.Equal(t, list.Start, provenance.Start)
+	expectedStart := list.Start
+	expectedStart.FolderVersions = map[string]string{"design/design.go": designversion.Digest(got["design/design.go"])}
+	assert.Equal(t, expectedStart, provenance.Start, "the new generation captures its original folder on first materialization")
 	marker, err := os.ReadFile(filepath.Join(project, draftFolderName, ".gitignore"))
 	require.NoError(t, err)
 	assert.Equal(t, "# surla draft 2\n*\n", string(marker))
@@ -613,9 +643,12 @@ func TestDroppedUnmarkedDraftPublicationRecoversAtEveryStop(t *testing.T) {
 					defer cp.draftMu.Unlock()
 					list.Write++
 					list.Entries = map[string][]madeFromVersion{}
+					// A real list save at this boundary has already captured
+					// the complete original folder for the new generation.
+					list.Start.FolderVersions = map[string]string{"design/design.go": designversion.Digest(next["design/design.go"])}
 					version, err := cp.enterDraftVersion(&list, "design/design.go", draftDesignFiles(next))
 					require.NoError(t, err)
-					list.Taken = map[string]madeFromVersion{
+					list.Taken = map[string]madeFromTake{
 						"design/design.go": {Version: version, Entered: list.Write},
 					}
 					require.NoError(t, cp.cards.saveMadeFrom(list))
@@ -630,7 +663,9 @@ func TestDroppedUnmarkedDraftPublicationRecoversAtEveryStop(t *testing.T) {
 			reopened := newControlPlane(t, opts)
 			got, provenance := readDraftForTest(t, reopened)
 			assert.Equal(t, next, got)
-			assert.Equal(t, list.Start, provenance.Start)
+			expectedStart := list.Start
+			expectedStart.FolderVersions = map[string]string{"design/design.go": designversion.Digest(next["design/design.go"])}
+			assert.Equal(t, expectedStart, provenance.Start)
 			assert.NotEmpty(t, provenance.Entries)
 			marker, err := os.ReadFile(filepath.Join(project, draftFolderName, ".gitignore"))
 			require.NoError(t, err)

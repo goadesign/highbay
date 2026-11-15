@@ -5,12 +5,10 @@ package controlplane
 import (
 	"context"
 	"errors"
-	"fmt"
-	"io/fs"
-	"os"
 	"path/filepath"
 
 	"github.com/goadesign/surla/internal/testwriter"
+	"github.com/goadesign/surla/verify/candidate"
 )
 
 // builderCopyFolder resolves the project repository root, the builder's
@@ -40,19 +38,9 @@ func builderWorkingFolder(folder, root string) (string, bool, error) {
 	if folder == "" {
 		return "", false, errors.New("no builder working folder is bound")
 	}
-	for dir := folder; ; dir = filepath.Dir(dir) {
-		_, err := os.Stat(filepath.Join(dir, "go.work"))
-		if err == nil {
-			return folder, false, nil
-		}
-		if !errors.Is(err, fs.ErrNotExist) {
-			return "", false, fmt.Errorf("read builder Go workspace: %w", err)
-		}
-		if dir == root {
-			return folder, true, nil
-		}
-		if filepath.Dir(dir) == dir {
-			return "", false, errors.New("builder folder is outside the accepted source root")
-		}
+	goWork, err := candidate.GoWork(root, folder)
+	if err != nil {
+		return "", false, err
 	}
+	return folder, goWork == "off", nil
 }

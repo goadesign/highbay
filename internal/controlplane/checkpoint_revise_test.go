@@ -166,7 +166,7 @@ func TestCheckpointUIApprovalStates(t *testing.T) {
 	confirm("chg-unapproved")
 	approved := confirm("chg-approved")
 	saveStoredBuildFixture(t, cp, approved)
-	const commit = "2222222222222222222222222222222222222222"
+	commit := commitBuilderCandidateFixture(t, cp, approved)
 	report := passingReport(t, approved.RequestRevision, commit, spec)
 	target.update(func(p *pageTarget) { p.report = report })
 	_, err := cp.ApproveMerge(user, &gensurla.ApproveMergePayload{

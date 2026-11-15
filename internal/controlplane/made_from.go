@@ -40,7 +40,7 @@ type (
 		Entries map[string][]madeFromVersion `json:"entries"`
 		// Taken records the outside version each file most recently incorporated;
 		// its Entered is the take time, not a later revision re-entry time.
-		Taken map[string]madeFromVersion `json:"taken"`
+		Taken map[string]madeFromTake `json:"taken"`
 		// Pending describes the single file write interrupted between list saves.
 		Pending *pendingDraftWrite `json:"pending,omitempty"`
 	}
@@ -51,6 +51,9 @@ type (
 		Write uint64 `json:"write"`
 		// ProjectCommit is the starting project commit, or empty before its first commit.
 		ProjectCommit string `json:"project_commit"`
+		// FolderVersions is the immutable original project-folder design. A
+		// missing path denotes absence; re-entry cannot change this identity.
+		FolderVersions map[string]string `json:"folder_versions"`
 		// Dropped names the build whose drop began this generation, when applicable.
 		Dropped *droppedBuild `json:"dropped,omitempty"`
 	}
@@ -75,6 +78,15 @@ type (
 		Entered uint64 `json:"entered"`
 	}
 
+	// madeFromTake binds an incorporated outside version to the project history
+	// observed then; later merges are compared with this commit, never a new HEAD.
+	madeFromTake struct {
+		Version string `json:"version"`
+		Entered uint64 `json:"entered"`
+		// ProjectCommit is empty only when the project had no commit at the take.
+		ProjectCommit string `json:"project_commit"`
+	}
+
 	// pendingDraftWrite lets a stopped update distinguish before, result and later edits.
 	pendingDraftWrite struct {
 		// File is the design-relative path whose replacement was prepared.
@@ -85,6 +97,8 @@ type (
 		Before string `json:"before"`
 		// Result is the prepared replacement version, or none after a deletion.
 		Result string `json:"result"`
+		// ProjectCommit preserves the original outside history across recovery.
+		ProjectCommit string `json:"project_commit"`
 	}
 )
 
@@ -125,6 +139,11 @@ func validateMadeFromSnapshot(saved madeFromSnapshot) error {
 	}
 	if saved.Start.ProjectCommit != "" && !commitIDPattern.MatchString(saved.Start.ProjectCommit) {
 		return errors.New("design provenance has an invalid starting project commit")
+	}
+	for file, version := range saved.Start.FolderVersions {
+		if !validProvenancePath(file) || !validDesignVersion(version) {
+			return errors.New("design provenance has an invalid original folder version")
+		}
 	}
 	if dropped := saved.Start.Dropped; dropped != nil {
 		if dropped.ChangeID == "" || dropped.StartedAt.IsZero() || dropped.Number < 1 {
@@ -171,7 +190,9 @@ func validateMadeFromRecord(saved madeFromRecord) error {
 	}
 	for file, taken := range saved.Taken {
 		if !validProvenancePath(file) || !validDesignVersion(taken.Version) ||
-			taken.Entered < saved.Start.Write || taken.Entered > saved.Write {
+			taken.Entered < saved.Start.Write || taken.Entered > saved.Write ||
+			(taken.ProjectCommit != "" && !commitIDPattern.MatchString(taken.ProjectCommit)) ||
+			(taken.ProjectCommit == "" && saved.Start.ProjectCommit != "") {
 			return fmt.Errorf("design provenance has an invalid taken version for %q", file)
 		}
 		found := false
@@ -184,7 +205,9 @@ func validateMadeFromRecord(saved madeFromRecord) error {
 	}
 	if pending := saved.Pending; pending != nil {
 		if !validProvenancePath(pending.File) || !validDesignVersion(pending.OutsideVersion) ||
-			!validDesignVersion(pending.Before) || !validDesignVersion(pending.Result) {
+			!validDesignVersion(pending.Before) || !validDesignVersion(pending.Result) ||
+			(pending.ProjectCommit != "" && !commitIDPattern.MatchString(pending.ProjectCommit)) ||
+			(pending.ProjectCommit == "" && saved.Start.ProjectCommit != "") {
 			return errors.New("design provenance has an invalid pending draft write")
 		}
 	}

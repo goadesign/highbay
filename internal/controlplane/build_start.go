@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os/exec"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"time"
 
@@ -146,8 +147,18 @@ func (c *ControlPlane) StartBuild(
 			return nil, err
 		}
 	}
+	reuseBase := openFound && openProgress.Taking.Kind() != gensurla.BuildTakingKindMerged && openProgress.Taking.Kind() != gensurla.BuildTakingKindDropped
+	if reuseBase {
+		base = open.Base
+	}
+	// Check exactly the immutable provenance and base this build will save,
+	// before assigning a number or touching either working copy.
+	checkedHistory := cloneMadeFromSnapshot(record.madeFrom)
+	if err := checkDesignBase(work, workspace, base, checkedHistory); err != nil {
+		return nil, recordBuildError(span, err, "check the design base")
+	}
 	number := 0
-	if openFound && openProgress.Taking.Kind() != gensurla.BuildTakingKindMerged && openProgress.Taking.Kind() != gensurla.BuildTakingKindDropped {
+	if reuseBase {
 		number, base = open.Number, open.Base
 	} else {
 		last := 0
@@ -204,6 +215,9 @@ func (c *ControlPlane) StartBuild(
 	record, err = c.buildableCard(principal, p.ChangeID, p.RequestRevision)
 	if err == nil {
 		err = work.Err()
+	}
+	if err == nil && !reflect.DeepEqual(record.madeFrom, checkedHistory) {
+		err = gensurla.MakeConflict(errors.New("The agreed revision's saved design provenance changed while this build was being prepared. Read the change and build again."))
 	}
 	if err != nil {
 		c.mu.Unlock()

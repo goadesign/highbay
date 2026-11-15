@@ -133,8 +133,9 @@ func TestCheckNamesFilesChangedOutsideTheTestModule(t *testing.T) {
 			assert.Contains(t, fmt.Sprint(named), p+" is changed outside the test module eval")
 		}
 		assert.NotContains(t, fmt.Sprint(named), "eval/hooks.go")
-		assert.Contains(t, named[0], "If you never changed it, the project's history was rewritten",
-			"a finding also explains a file the test writer never touched")
+		assert.Contains(t, named[0], "make it match its version in commit "+base,
+			"the goal still applies to a file the test writer never touched")
+		assert.NotContains(t, fmt.Sprint(named), "delete the project's")
 		assertNoAbsolutePath(t, v.Findings)
 	})
 	t.Run("a replace ref", func(t *testing.T) {
@@ -178,9 +179,9 @@ func TestCheckNamesFilesChangedOutsideTheTestModule(t *testing.T) {
 // the test module in each way the test writer can, some of them committed in
 // the copy, where restoring a file from the copy's own HEAD brings back the
 // committed change. Each finding names the copy's base commit and the step
-// that undoes its change: the command to run for a file the base has, and to
-// delete one it does not have. Following each step, from the project's
-// folder inside the copy, leaves no change outside the module.
+// that undoes its change as a goal, without a Git command or deletion recipe.
+// Satisfying each goal from the project's folder inside the copy leaves no
+// change outside the module.
 func TestTheOutsideModuleFindingNamesTheCommitToRestoreTo(t *testing.T) {
 	t.Parallel()
 	suite := Suite{Module: "eval", Command: "./gen/cmd/shop-evals"}
@@ -217,12 +218,13 @@ func TestTheOutsideModuleFindingNamesTheCommitToRestoreTo(t *testing.T) {
 		inBase, known := restored[name]
 		require.True(t, known, f.Message)
 		if !inBase {
-			assert.Contains(t, f.Message, "does not have this file: delete it")
+			assert.Contains(t, f.Message, "has no such file: make your working copy match that absence")
 			require.NoError(t, os.Remove(filepath.Join(wc.Dir(), filepath.FromSlash(name))))
 			continue
 		}
 		command := "git restore --source=" + base + " --staged --worktree -- " + shquote.Quote(":(top,literal)"+name)
-		assert.Contains(t, f.Message, command, "the finding gives the command that restores the file")
+		assert.Contains(t, f.Message, "make it match its version in commit "+base)
+		assert.NotContains(t, f.Message, "git restore", "the agent chooses how to satisfy the goal")
 		step := exec.CommandContext(t.Context(), "sh", "-c", command)
 		step.Dir = wc.Project()
 		out, err := step.CombinedOutput()
@@ -239,7 +241,8 @@ func TestTheOutsideModuleFindingNamesTheCommitToRestoreTo(t *testing.T) {
 // TestCheckStopsWhenTheHistoryIsReplaced replaces the project's history with
 // an unrelated one after the build's base B: Check measures against B rather
 // than the project's current HEAD, so it finds no change outside the test
-// module and returns no ErrNoCommonBase. Also verifies FindingWorkingCopy when
+// module without treating unrelated project history as a failure. It also
+// verifies FindingWorkingCopy when
 // the copy is off its build branch or has a Git operation in progress.
 func TestCheckStopsWhenTheHistoryIsReplaced(t *testing.T) {
 	t.Parallel()
