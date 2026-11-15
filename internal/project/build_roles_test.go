@@ -307,7 +307,7 @@ func TestTheTestWriterMayRegenerateItsTestModule(t *testing.T) {
 	for _, sentence := range []string{
 		"Surla writes eval/design/story_tests.go, which declares the required tests, from the agreed Story",
 		"leave that file as it is",
-		"report to have it generated again or, when your shell is not sandboxed, run surla gen -dir eval in the working folder first",
+		"report to have it generated again or run surla gen -dir eval in the working folder first",
 		"regenerating keeps the required tests",
 	} {
 		assert.Contains(t, message, sentence)

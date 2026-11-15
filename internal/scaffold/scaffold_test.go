@@ -24,14 +24,14 @@ import (
 )
 
 // published is a Surla version that exists on the module proxy.
-const published = "v0.0.0-20261110163737-d9beac313142"
+const published = "v0.0.0-20261115014514-02c792da3ded"
 
 func TestValidVersionAcceptsOnlyExactVersions(t *testing.T) {
 	for v, want := range map[string]bool{
 		"v1.2.3":     true,
 		"v1.2.3-pre": true,
 		published:    true,
-		"v0.0.0-20261110163737-d9beac313142+dirty": false,
+		"v0.0.0-20261115014514-02c792da3ded+dirty": false,
 		"latest":  false,
 		"main":    false,
 		"8ec6e09": false,
@@ -293,7 +293,7 @@ func TestInitWritesTheProjectWithTheServiceName(t *testing.T) {
 	assert.Equal(t, []string{"design/design.go", "design/model.go", "design/story.go", "go.mod", "go.sum"}, slices.Sorted(maps.Keys(gen.inputs[0])))
 	assert.Contains(t, gen.inputs[0]["go.mod"], "module example.com/bakery\n")
 	assert.Equal(t, []string{
-		"acceptance/acceptance.go", "acceptance/forwarder.go", "acceptance/forwarder_test.go", "design/design.go",
+		"acceptance/acceptance.go", "acceptance/acceptance_test.go", "design/design.go",
 		"design/story_tests.go", "go.mod", "go.sum",
 	}, slices.Sorted(maps.Keys(gen.inputs[1])), "the test module is generated with its acceptance package and Story table")
 	assert.Contains(t, gen.inputs[1]["go.mod"], "module example.com/bakery/eval\n")
@@ -763,7 +763,7 @@ func fakeGo(dir string, args []string) error {
 	return nil
 }
 
-// fakeGenerator stands in for Surla's sandboxed generator.
+// fakeGenerator stands in for Surla's generator.
 type fakeGenerator struct {
 	// pkgs are the service packages each Generate returns a service.go for.
 	pkgs []string

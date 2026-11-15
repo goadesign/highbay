@@ -1,5 +1,5 @@
 // These checks exercise tool cards through the actual compiler catalog and the
-// same sandboxed evaluator that serves architecture previews.
+// same evaluator that serves architecture previews.
 package designeval
 
 import (
@@ -16,7 +16,7 @@ import (
 // declared choices without guessing which binder the application will install.
 func TestToolCardsPreserveCompiledInputChoices(t *testing.T) {
 	if testing.Short() {
-		t.Skip("runs the sandboxed Go toolchain; the full suite (go test without -short) covers it")
+		t.Skip("runs the Go toolchain; the full suite (go test without -short) covers it")
 	}
 	files := testmodule.Snapshot(t, "", `package design
 import (

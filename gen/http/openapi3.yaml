@@ -3582,31 +3582,18 @@ paths:
                                 temporary: false
                                 timeout: false
                 "501":
-                    description: |-
-                        not_implemented: Start this project with surla to bind the team; nothing was saved.
-
-                        sandbox_unavailable: This system has no candidate sandbox; nothing was saved. When the host reports a specific sandbox prerequisite failure, the message includes its cause and remedy before: Start this project on a system with Surla's candidate sandbox, then build again.
+                    description: 'not_implemented: Start this project with surla to bind the team; nothing was saved.'
                     content:
                         application/vnd.goa.error:
                             schema:
                                 $ref: '#/components/schemas/Error'
-                            examples:
-                                not_implemented:
-                                    value:
-                                        fault: false
-                                        id: 123abc
-                                        message: parameter 'p' must be an integer
-                                        name: not_implemented
-                                        temporary: false
-                                        timeout: false
-                                sandbox_unavailable:
-                                    value:
-                                        fault: false
-                                        id: 123abc
-                                        message: parameter 'p' must be an integer
-                                        name: sandbox_unavailable
-                                        temporary: false
-                                        timeout: false
+                            example:
+                                fault: false
+                                id: 123abc
+                                message: parameter 'p' must be an integer
+                                name: not_implemented
+                                temporary: false
+                                timeout: false
                 "503":
                     description: 'unavailable: The server is stopping or the start''s time limit ended before saving; call again on a running server. Nothing was saved.'
                     content:
@@ -4112,7 +4099,7 @@ paths:
             tags:
                 - surla
             summary: verify_change surla
-            description: 'Start Checkpoint 4 verification of a candidate commit for the owner''s confirmed Change Card revision and return its run_id at once. The change''s build must be the project''s open build, not dropped, and the builder''s working copy must have joined it. Before any run Surla checks, with git in the project''s repository: the candidate is on the build''s branch surla/build-<n>, descends from the build''s base and is not that base, and holds no commit of another build''s branch that the base lacks; its design/ files, read by the design walk in gofmt form, are the build''s design source version for version; and every design version at its merge base with the project''s commit is one the revision was made from. With verification settings stored with surla verification set, the run uses the operator''s evaluator. Otherwise Surla must have accepted the build''s tests: the run builds the candidate''s programs from the candidate commit and runs the generated entry point of the tests at the accepted commit. The server builds the commit in Surla''s sandbox and runs the tests in a separate process that keeps running when the caller disconnects or the server restarts; get_verification reads its state. Only the builder view of the report is ever returned, with where its tests came from. A candidate the user already merged still verifies.'
+            description: 'Start Checkpoint 4 verification of a candidate commit for the owner''s confirmed Change Card revision and return its run_id at once. The change''s build must be the project''s open build, not dropped, and the builder''s working copy must have joined it. Before any run Surla checks, with git in the project''s repository: the candidate is on the build''s branch surla/build-<n>, descends from the build''s base and is not that base, and holds no commit of another build''s branch that the base lacks; its design/ files, read by the design walk in gofmt form, are the build''s design source version for version; and every design version at its merge base with the project''s commit is one the revision was made from. With verification settings stored with surla verification set, the run uses the operator''s evaluator. Otherwise Surla must have accepted the build''s tests: the run builds the candidate''s programs from the candidate commit and runs the generated entry point of the tests at the accepted commit. The server builds the commit and runs the tests in a separate process that keeps running when the caller disconnects or the server restarts; the builds, the tests and the programs they start run as ordinary processes with the user''s file and network access. get_verification reads its state. Only the builder view of the report is ever returned, with where its tests came from. A candidate the user already merged still verifies.'
             operationId: surla#verify_change
             parameters:
                 - name: change_id
@@ -15271,7 +15258,7 @@ paths:
             tags:
                 - surla
             summary: generate_code surla
-            description: 'Write the open build''s agreed design into the builder''s working folder and regenerate its code. Surla replaces, creates or removes the Go files under the builder''s design/ so that design/ holds exactly the build''s design source (never a test file or testdata; a linked design/ is refused), then compares each module the design imports with the go.mod the revision was made from: when the builder''s go.mod lacks a module or requires an older version, the call names go get <module>@<version> and go mod tidy, prefixed GOWORK=off when the assignment''s gowork_off is true, writes design/ and generates nothing until they are run. A differing replace directive for a module the design imports is also named, including the saved replacement line or the fact that none was saved, so the builder corrects go.mod before calling again. Otherwise it compiles the design in Surla''s sandbox and atomically replaces gen/, preserving top-level user files and leaving go.mod and go.sum unchanged. With target eval it regenerates the working folder''s eval/ module from its own design. Return the written paths and warnings; a warning after gen/ publication still means generation succeeded. It compiles the design only; it does not build the application or run tests.'
+            description: 'Write the open build''s agreed design into the builder''s working folder and regenerate its code. Surla replaces, creates or removes the Go files under the builder''s design/ so that design/ holds exactly the build''s design source (never a test file or testdata; a linked design/ is refused), then compares each module the design imports with the go.mod the revision was made from: when the builder''s go.mod lacks a module or requires an older version, the call names go get <module>@<version> and go mod tidy, prefixed GOWORK=off when the assignment''s gowork_off is true, writes design/ and generates nothing until they are run. A differing replace directive for a module the design imports is also named, including the saved replacement line or the fact that none was saved, so the builder corrects go.mod before calling again. Otherwise it compiles and runs the design as an ordinary process with the user''s file and network access and atomically replaces gen/, preserving top-level user files and leaving go.mod and go.sum unchanged. With target eval it regenerates the working folder''s eval/ module from its own design. Return the written paths and warnings; a warning after gen/ publication still means generation succeeded. It compiles the design only; it does not build the application or run tests.'
             operationId: surla#generate_code
             requestBody:
                 description: Request body for generate_code.
@@ -16635,7 +16622,7 @@ paths:
             tags:
                 - surla
             summary: refresh_story surla
-            description: 'Read the guide''s draft, .surla-draft in the project folder: its go.mod, go.sum and the Go files under design/ in gofmt form, never the rest of the project. When the draft is missing, Surla makes it first, from the newest design a Change Card holds whose versions are all on the draft''s made-from list, with the project''s go.mod and go.sum, or else from the project folder; after the user dropped a build, it makes the draft again from the project folder and says so in message until a revision is saved. Compute the canonical snapshot_digest and start or reuse the project owner''s in-memory Story refresh operation, which every caller acting for the owner reads; it is reused only while the draft and its made-from list are unchanged. Return promptly with op_id, state, snapshot_digest and draft_folder while sandboxed evaluation continues on a server-owned context that survives client disconnects. A succeeded operation keeps the design, Stories, architecture, the draft''s go.mod and the made-from list it read; propose_change and revise_change save them with the revision. A design file Go cannot parse, or one that imports a package of the project outside design/, is refused with its file and line.'
+            description: 'Read the guide''s draft, .surla-draft in the project folder: its go.mod, go.sum and the Go files under design/ in gofmt form, never the rest of the project. When the draft is missing, Surla makes it first, from the newest design a Change Card holds whose versions are all on the draft''s made-from list, with the project''s go.mod and go.sum, or else from the project folder; after the user dropped a build, it makes the draft again from the project folder and says so in message until a revision is saved. Compute the canonical snapshot_digest and start or reuse the project owner''s in-memory Story refresh operation, which every caller acting for the owner reads; it is reused only while the draft and its made-from list are unchanged. Return promptly with op_id, state, snapshot_digest and draft_folder while evaluation continues on a server-owned context that survives client disconnects. A succeeded operation keeps the design, Stories, architecture, the draft''s go.mod and the made-from list it read; propose_change and revise_change save them with the revision. A design file Go cannot parse, or one that imports a package of the project outside design/, is refused with its file and line.'
             operationId: surla#refresh_story
             responses:
                 "200":
@@ -25380,7 +25367,7 @@ components:
                                   summary: Nihil sunt ea molestiae voluptate aut.
                               title: Mollitia rerum nihil consectetur excepturi aspernatur.
                           name: Et minima.
-            description: 'Current Story refresh operation of the project''s owner for the guide''s draft: the user, the guide and the builder all act for the owner, so they read the same one. state is none when no refresh has run yet in this server process for the guide''s draft; running while sandboxed evaluation is in progress; succeeded with the evaluated stories (empty when the design does not load the Story module); or failed with a safe diagnostic.'
+            description: 'Current Story refresh operation of the project''s owner for the guide''s draft: the user, the guide and the builder all act for the owner, so they read the same one. state is none when no refresh has run yet in this server process for the guide''s draft; running while evaluation is in progress; succeeded with the evaluated stories (empty when the design does not load the Story module); or failed with a safe diagnostic.'
             example:
                 diagnostic: Distinctio voluptas qui voluptatibus corporis et quia.
                 draft_folder: Ullam veritatis optio possimus doloremque accusamus sed.
@@ -28014,7 +28001,7 @@ components:
                     type: string
                     description: 'Folder to write the tests in: your own working copy of the project, .surla-tests, on the build''s branch surla/tests-<n>. Do not commit there: Surla commits what it accepts.'
                     example: Ut voluptatum vel totam.
-            description: 'The test writer''s assignment for one build: write the required tests for the Story as agreed at the built revision, in the test module (eval/) of the working folder, and make them hold the service to the user''s confirmed answers, confirmation examples and preserved behaviors of that revision, which the assignment carries exactly as confirmed. Surla writes eval/design/story_tests.go, which declares the required tests, from the agreed Story and generates the module at each read that marks the assignment read and again at each report; the test writer leaves that file as it is. After changing the module''s design, the test writer reports to have it generated again or, from a shell that is not sandboxed, runs surla gen -dir eval in the working folder first; regenerating keeps the required tests. go build ./... in eval/ checks the work before a report, and Surla''s check of each report is the judge.'
+            description: 'The test writer''s assignment for one build: write the required tests for the Story as agreed at the built revision, in the test module (eval/) of the working folder, and make them hold the service to the user''s confirmed answers, confirmation examples and preserved behaviors of that revision, which the assignment carries exactly as confirmed. Surla writes eval/design/story_tests.go, which declares the required tests, from the agreed Story and generates the module at each read that marks the assignment read and again at each report; the test writer leaves that file as it is. After changing the module''s design, the test writer reports to have it generated again or runs surla gen -dir eval in the working folder first; regenerating keeps the required tests. go build ./... in eval/ checks the work before a report, and Surla''s check of each report is the judge.'
             example:
                 answers:
                     - answer: Ipsum repellendus adipisci.

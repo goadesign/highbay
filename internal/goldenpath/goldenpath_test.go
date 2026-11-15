@@ -45,7 +45,7 @@ func TestPlaybookLeavesConfirmationToTheUser(t *testing.T) {
 
 // TestPlaybookRegeneratesWithSurlaGenAndKeepsTheGRPCRoute verifies that the
 // playbook's executable regeneration step, which the surla://golden-path
-// resource carries, names the sandboxed surla gen, and that the module-pinned
+// resource carries, names surla gen, and that the module-pinned
 // goa gen route remains for gRPC designs surla gen refuses.
 func TestPlaybookRegeneratesWithSurlaGenAndKeepsTheGRPCRoute(t *testing.T) {
 	t.Parallel()

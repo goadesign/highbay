@@ -78,7 +78,7 @@ func main() {
 // TestRunGivesWrittenTestsOnlyTheirRunsEnvironment runs a whole verification
 // of a commit with the layout `surla init` makes, whose test program sits at
 // the generated entry point (./gen/cmd/shop-evals in eval). Run checks the
-// commit out, builds the candidate and the test program in Surla's sandbox,
+// commit out, builds the candidate and the test program,
 // describes and runs the program, and assembles the report. From a server
 // environment holding a variable of its own and a provider key, written
 // tests see neither, so the run passes; the operator's evaluator sees both,

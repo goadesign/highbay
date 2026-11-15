@@ -44,7 +44,7 @@ excuse things a real user cannot see.
   from, or runs its product's code itself (`goa gen`, `go build`, `go run`,
   `go test`). Surla's own commands, including `surla init` on its starter
   templates, are allowed. It does those steps only through Surla's commands,
-  which use Surla's sandbox, even where the docs show the direct command.
+  even where the docs show the direct command.
   Never hint such a step. A participant who needs one has found a missing
   capability, not made a wrong turn.
 
@@ -116,7 +116,7 @@ one gets the step where it happened, what the participant did or said
   not say or only links to.
 - **Missing capability:** the participant needed a step that compiles,
   generates code from, or runs its product's code, such as `goa gen` after a
-  design change, and Surla offers no way to do it in its sandbox. If that
+  design change, and Surla offers no command to do it. If that
   blocks the goal, decide `stop_for_bug`.
 - **Positive:** something that worked well and should be kept.
 

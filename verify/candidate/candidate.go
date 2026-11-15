@@ -1,16 +1,17 @@
-// Package candidate is the only place Surla executes candidate code. Exec
-// starts one digest-pinned candidate binary as a single sandboxed process: it
-// sees only its explicit environment, reads and writes only its own state
-// directory (plus the system libraries needed to load), connects only to the
-// loopback ports it was assigned, listens only on its assigned port, and cannot
-// create child processes. Output runs one such process to completion and
-// returns its standard output apart from its diagnostics. When the platform
-// cannot enforce that sandbox, Exec and Output fail with
-// ErrIsolationUnavailable and never run the candidate unsandboxed.
+// Package candidate builds and runs the code Surla's coding agents write.
+// Build and BuildTest compile a module offline to a staging path and publish
+// the result as a regular file. Pin copies a binary into a read-only,
+// digest-named store, and Exec, Run and Output start only a pinned binary
+// whose bytes still match its digest, with an explicit environment and its own
+// state directory as working directory, HOME and TMPDIR.
 //
-// Callers such as an evaluator suite keep their own process lifecycle (start,
-// kill, restart); the sandbox applies only to the started process, never to the
-// trusted caller.
+// These are ordinary processes of the user who runs Surla: they can read and
+// write the user's files, use the network and start children; nothing here
+// confines them. The caller decides which process group owns them: Build,
+// BuildTest, Run and Output run the prepared command with the caller's run
+// function, and Exec starts it in the caller's own process group. A process
+// that starts its own session or process group leaves that group, and no
+// caller's cleanup stops it.
 package candidate
 
 import (
@@ -24,7 +25,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"syscall"
 
@@ -47,25 +47,19 @@ type (
 	Spec struct {
 		// Args are the command-line arguments after the binary name.
 		Args []string
-		// Env is the complete environment as KEY=VALUE entries; nothing is
-		// inherited from the caller.
+		// Env is the complete environment as KEY=VALUE entries, after HOME
+		// and TMPDIR; nothing is inherited from the caller.
 		Env []string
-		// StateDir is the only directory the process may read and write. It
-		// must exist and is also the process's HOME and TMPDIR.
+		// StateDir is the process's working directory, HOME and TMPDIR. It
+		// must exist.
 		StateDir string
-		// ConnectPorts are the loopback TCP ports the process may connect to.
-		ConnectPorts []int
-		// ListenPort is the loopback TCP port the process may listen on, or
-		// zero when it must not listen.
-		ListenPort int
 		// LogFile receives the process's diagnostics: its combined stdout and
-		// stderr under Exec, only its stderr under Output. It is owned by the
-		// caller and must lie outside StateDir so the candidate cannot rewrite
-		// its own diagnostics. Exec and Output create or truncate it.
+		// stderr under Exec and Run, only its stderr under Output. It is owned
+		// by the caller; Exec, Run and Output create or truncate it.
 		LogFile string
 	}
 
-	// Process is a running sandboxed candidate process. Its output goes to
+	// Process is a candidate process Exec started. Its output goes to
 	// the caller's log file; the verifier keeps none of it in memory.
 	Process struct {
 		// cmd is the started command.
@@ -78,26 +72,25 @@ type (
 		waitErr error
 	}
 
-	// BuildSpec describes one sandboxed compile of candidate source.
+	// BuildSpec describes one offline compile of candidate source.
 	BuildSpec struct {
-		// SourceDir is the declared source tree the build may read, such as the
-		// candidate module or a whole checkout whose modules replace each other.
-		// Besides SourceDir, the build can read only GOROOT, ModCache, WorkDir,
-		// and system libraries; a symbolic link or local replace directive that
-		// resolves anywhere else is denied.
+		// SourceDir is the caller's source root, such as the candidate module
+		// or a whole checkout whose modules replace each other. A go.work file
+		// in ModuleDir, in SourceDir or in a folder between them applies to
+		// the build; one above SourceDir does not (GoWork).
 		SourceDir string
-		// ModuleDir is the directory of the module being built. It must resolve
-		// inside SourceDir.
+		// ModuleDir is the directory of the module being built. It must
+		// resolve inside SourceDir.
 		ModuleDir string
 		// Package is the package to build, relative to ModuleDir, such as
 		// "./cmd/orders".
 		Package string
 		// Out is the output binary path; its directory must exist.
 		Out string
-		// GOROOT is the resolved Go toolchain root the build runs with. Its bin
-		// and tool binaries are the only programs the build may execute.
+		// GOROOT is the resolved Go toolchain root the build runs with.
 		GOROOT string
-		// ModCache is the already populated module cache, read-only.
+		// ModCache is the already populated module cache; the build
+		// downloads nothing into it.
 		ModCache string
 		// WorkDir is a private writable directory for TMPDIR, GOCACHE, and the
 		// staged output binary.
@@ -128,10 +121,6 @@ type (
 )
 
 var (
-	// ErrIsolationUnavailable reports that this platform cannot enforce the
-	// candidate sandbox, so the candidate must not run.
-	ErrIsolationUnavailable = errors.New("candidate isolation is unavailable on this platform")
-
 	// ErrDigestMismatch reports that the binary on disk is not the pinned artifact.
 	ErrDigestMismatch = errors.New("candidate binary does not match its pinned digest")
 
@@ -139,13 +128,6 @@ var (
 	// limit its Output caller set; the output read so far is discarded.
 	ErrOutputTooLarge = errors.New("candidate standard output exceeds its limit")
 )
-
-// CheckSandbox reports whether this host can enforce the candidate and build
-// sandboxes used by both Build and Exec. A failure wraps
-// ErrIsolationUnavailable; callers must not run candidate code without isolation.
-func CheckSandbox() error {
-	return checkSandbox()
-}
 
 // Pin copies the binary at src into store, the verifier's own artifact
 // directory, as <store>/<sha256>/<name> with read-only permissions, and returns
@@ -238,41 +220,73 @@ func (a Artifact) Evidence(name string) eval.Artifact {
 	return eval.Artifact{Name: "candidate:" + name, URI: "sha256:" + a.digest}
 }
 
-// Exec verifies the artifact's digest and starts it in the sandbox described by
-// spec. Relative paths resolve from the caller's working directory before the
-// candidate changes into its state directory. The process is killed when ctx ends.
+// Exec verifies the artifact's digest and starts it as described by spec, in
+// the caller's process group, and returns at once. Relative paths resolve from
+// the caller's working directory before the candidate changes into its state
+// directory. The process is killed when ctx ends. Processes it starts stay in
+// the caller's process group: a caller that must stop them owns that group, as
+// a verification run's supervisor does.
 func Exec(ctx context.Context, a Artifact, spec Spec) (*Process, error) {
-	return start(ctx, a, spec, nil)
-}
-
-// Output runs the artifact to completion in the same sandbox as Exec and
-// returns what it printed on standard output, so the caller reads a program's
-// answer exactly instead of picking it out of a log: spec.LogFile receives
-// only standard error. Standard output may hold at most maxBytes; one byte
-// more stops the read and fails with ErrOutputTooLarge, which the candidate
-// sees as a closed pipe. A candidate that exits unsuccessfully returns its
-// standard output with the exit error, which wraps an *exec.ExitError. Every
-// Exec admission error, including ErrIsolationUnavailable, is returned before
-// the candidate starts. The process is killed when ctx ends.
-//
-// Output suits short programs whose answer fits in memory, such as an
-// evaluator suite's --describe.
-func Output(ctx context.Context, a Artifact, spec Spec, maxBytes int) ([]byte, error) {
-	out := &limitedBuffer{limit: maxBytes}
-	p, err := start(ctx, a, spec, out)
+	cmd, logFile, err := prepare(ctx, a, spec)
 	if err != nil {
 		return nil, err
 	}
-	waitErr := p.Wait()
+	cmd.Stdout, cmd.Stderr = logFile, logFile
+	if err := cmd.Start(); err != nil {
+		return nil, errors.Join(fmt.Errorf("start candidate %s: %w", a.path, err), logFile.Close())
+	}
+	p := &Process{cmd: cmd, logFile: logFile.Name(), done: make(chan struct{})}
+	go func() {
+		p.waitErr = errors.Join(cmd.Wait(), logFile.Close())
+		close(p.done)
+	}()
+	return p, nil
+}
+
+// Run runs the artifact to completion as described by spec, with its standard
+// output and standard error in spec.LogFile, and returns its exit error. It
+// admits the artifact as Exec does and returns every admission error before
+// the candidate starts. run runs the prepared command: the caller decides which
+// process group owns it and the processes it starts, as for Build. A caller
+// without an owning group passes a runner that gives the command its own group
+// and stops it.
+func Run(ctx context.Context, a Artifact, spec Spec, run func(*exec.Cmd) error) error {
+	cmd, logFile, err := prepare(ctx, a, spec)
+	if err != nil {
+		return err
+	}
+	cmd.Stdout, cmd.Stderr = logFile, logFile
+	return errors.Join(run(cmd), logFile.Close())
+}
+
+// Output runs the artifact to completion like Run and returns what it printed
+// on standard output, so the caller reads a program's answer exactly instead
+// of picking it out of a log: spec.LogFile receives only standard error.
+// Standard output may hold at most maxBytes; one byte more stops the read and
+// fails with ErrOutputTooLarge, which the candidate sees as a closed pipe. A
+// candidate that exits unsuccessfully returns its standard output with the
+// exit error, which wraps an *exec.ExitError. Every admission error is returned
+// before the candidate starts. run runs the prepared command, as for Run.
+//
+// Output suits short programs whose answer fits in memory, such as an
+// evaluator suite's --describe.
+func Output(ctx context.Context, a Artifact, spec Spec, maxBytes int, run func(*exec.Cmd) error) ([]byte, error) {
+	cmd, logFile, err := prepare(ctx, a, spec)
+	if err != nil {
+		return nil, err
+	}
+	out := &limitedBuffer{limit: maxBytes}
+	cmd.Stdout, cmd.Stderr = out, logFile
+	runErr := errors.Join(run(cmd), logFile.Close())
 	if out.overflow {
 		return nil, fmt.Errorf("%w of %d bytes", ErrOutputTooLarge, maxBytes)
 	}
-	return out.buf.Bytes(), waitErr
+	return out.buf.Bytes(), runErr
 }
 
 // ExcerptFile returns at most maxBytes from the end of the log file at path,
-// such as a Spec.LogFile after Exec or Output, and whether earlier output was
-// left out. It reads only those bytes, however large the file is, so a
+// such as a Spec.LogFile after Exec, Run or Output, and whether earlier output
+// was left out. It reads only those bytes, however large the file is, so a
 // candidate that writes without limit to its log cannot make the caller hold
 // it in memory.
 func ExcerptFile(path string, maxBytes int64) (string, bool, error) {
@@ -293,24 +307,21 @@ func ExcerptFile(path string, maxBytes int64) (string, bool, error) {
 	return string(b), startOffset > 0, nil
 }
 
-// Build compiles source in the build sandbox. The Go toolchain may start its
-// own compiler, assembler and linker, but the build can read only SourceDir,
-// the toolchain, the read-only module cache, its own work directory, and system
-// libraries; write only its work directory; and use no network. Directives in
-// candidate source, such as an assembly #include of an outside file, and links
-// or replace directives that leave SourceDir are denied by the operating
-// system. Build compiles to a fresh staging path inside WorkDir and publishes
-// the verified regular file to spec.Out outside the sandbox, so the jailed
-// toolchain cannot read or overwrite sibling files in spec.Out's directory. It
-// fails with ErrIsolationUnavailable where the sandbox cannot be enforced.
+// Build compiles source offline. The Go toolchain may start its own compiler,
+// assembler and linker. The fixed environment (buildEnv) keeps the build from
+// downloading anything, switching toolchains, using cgo, reading the user's Go
+// settings or applying a go.work file above SourceDir. The build is an
+// ordinary process of the user: a directive in candidate source, such as an
+// assembly #include of an outside file, a link or a replace directive that
+// leaves the module, reads whatever the user can read. Build compiles to a
+// fresh staging path inside WorkDir and publishes the verified regular file to
+// spec.Out, so, while WorkDir holds no link into spec.Out's directory, the
+// toolchain never writes there and only a regular file is published there.
 //
-// Besides SourceDir, the build trusts GOROOT and ModCache as fixed inputs: the
-// selected toolchain, and module versions verified against their checksums
-// when they were downloaded. A source file linked into either reads bytes the
-// build could already read by importing that toolchain package or module
-// version, so such a link grants nothing beyond that trust. Build does not
-// check that WorkDir is fresh: a caller that relies on it holding only this
-// build's cache and staged output must create it empty.
+// Build trusts GOROOT and ModCache as fixed inputs: the selected toolchain, and
+// module versions verified against their checksums when they were downloaded.
+// Build does not check that WorkDir is fresh: a caller that relies on it
+// holding only this build's cache and staged output must create it empty.
 //
 // run runs the prepared build command to completion. The caller decides which
 // process group owns the compiler, assembler and linker the build starts: a
@@ -329,16 +340,16 @@ func Build(ctx context.Context, spec BuildSpec, run func(*exec.Cmd) error) error
 	defer os.RemoveAll(stageDir)
 	stageOut := filepath.Join(stageDir, filepath.Base(b.spec.Out))
 	if err := b.goRun(ctx, run, stageOut, "build", "-trimpath"); err != nil {
-		return fmt.Errorf("sandboxed build of %s: %w", spec.Package, err)
+		return fmt.Errorf("build of %s: %w", spec.Package, err)
 	}
 	if err := publishStagedOutput(stageOut, b.spec.Out); err != nil {
-		return fmt.Errorf("sandboxed build of %s: %w", spec.Package, err)
+		return fmt.Errorf("build of %s: %w", spec.Package, err)
 	}
 	return nil
 }
 
 // BuildTest compiles the tests of one candidate package into a single test
-// binary at spec.Out, in the same build sandbox, environment and process-group
+// binary at spec.Out, with the same environment, staging and process-group
 // contract as Build. It runs `go test -c -trimpath -vet=off`, so go vet
 // findings do not fail it, and a compile error in the package or its tests
 // fails it with the toolchain output in spec.LogFile. Test-only imports must
@@ -357,12 +368,11 @@ func Build(ctx context.Context, spec BuildSpec, run func(*exec.Cmd) error) error
 // package without _test.go files is not an error: BuildTest returns false and a
 // nil error and writes no test binary.
 //
-// The caller runs the result only as a candidate: pin it with Pin and start
-// it with Exec, passing test flags such as -test.run and -test.timeout in
-// Spec.Args. Exec's sandbox forbids child processes, network access beyond
-// the assigned loopback ports, and file access outside Spec.StateDir beyond
-// what Exec documents, so a test that needs any of them fails inside the
-// sandbox instead of escaping it.
+// The caller runs the result as a candidate: pin it with Pin and start it
+// with Exec, Run or Output, passing test flags such as -test.run and
+// -test.timeout in Spec.Args. The test binary is an ordinary process of the
+// user: a test may start child processes, use the network and read the user's
+// files.
 func BuildTest(ctx context.Context, spec BuildSpec, run func(*exec.Cmd) error) (bool, error) {
 	if pkg := spec.Package; (pkg != "." && !strings.HasPrefix(pkg, "./")) || !filepath.IsLocal(pkg) || strings.Contains(pkg, "...") {
 		return false, fmt.Errorf("test build package %q is not one package path", spec.Package)
@@ -392,64 +402,36 @@ func BuildTest(ctx context.Context, spec BuildSpec, run func(*exec.Cmd) error) (
 	defer os.RemoveAll(stageDir)
 	stageOut := filepath.Join(stageDir, filepath.Base(out))
 	if err := b.goRun(ctx, run, stageOut, "test", "-c", "-trimpath", "-vet=off"); err != nil {
-		return false, fmt.Errorf("sandboxed test build of %s: %w", spec.Package, err)
+		return false, fmt.Errorf("test build of %s: %w", spec.Package, err)
 	}
 	return publishStagedTestBinary(stageOut, out)
 }
 
-// BuildProfile renders the macOS build sandbox profile. Paths must be absolute
-// and free of symlinks.
-func BuildProfile(sourceDir, goroot, modCache, workDir string) string {
-	var b strings.Builder
-	b.WriteString("(version 1)\n(deny default)\n(allow process-fork)\n(allow sysctl-read)\n(allow signal (target self))\n")
-	fmt.Fprintf(&b, "(allow process-exec (subpath %s))\n", quote(goroot))
-	fmt.Fprintf(&b, "(allow file-read* (literal \"/\") (subpath \"/usr/lib\") (subpath \"/System\") (subpath \"/private/var/db/dyld\") "+
-		"(literal \"/dev/null\") (literal \"/dev/urandom\") (literal \"/dev/random\") "+
-		"(subpath %s) (subpath %s) (subpath %s) (subpath %s))\n",
-		quote(sourceDir), quote(goroot), quote(modCache), quote(workDir))
-	fmt.Fprintf(&b, "(allow file-write* (subpath %s) (literal \"/dev/null\"))\n", quote(workDir))
-	b.WriteString("(allow file-read-metadata (literal \"/var\") (literal \"/tmp\") (literal \"/etc\")")
-	for _, root := range []string{sourceDir, goroot, modCache, workDir} {
-		for dir := filepath.Dir(root); dir != "/"; dir = filepath.Dir(dir) {
-			fmt.Fprintf(&b, " (literal %s)", quote(dir))
-		}
+// GoWork returns the GOWORK value Build and BuildTest give the build of the
+// module at moduleDir from the source root sourceDir: the go.work file the go
+// command finds searching upward from moduleDir when it lies in moduleDir, in
+// sourceDir or in a folder between them, and "off" otherwise, so a go.work
+// above the source root never applies. A caller that downloads the module's
+// dependencies before the offline build gives the download this value, so
+// both select the same modules. moduleDir must resolve inside sourceDir.
+func GoWork(sourceDir, moduleDir string) (string, error) {
+	src, err := abspath.Eval(sourceDir)
+	if err != nil {
+		return "", fmt.Errorf("resolve source directory: %w", err)
 	}
-	b.WriteString(")\n")
-	return b.String()
+	mod, err := abspath.Eval(moduleDir)
+	if err != nil {
+		return "", fmt.Errorf("resolve module directory: %w", err)
+	}
+	if err := checkInside(src, mod); err != nil {
+		return "", err
+	}
+	return workFile(src, mod), nil
 }
 
-// Profile renders the macOS sandbox profile for one candidate process. Paths
-// must be absolute and already free of symlinks.
-func Profile(binary, stateDir string, connectPorts []int, listenPort int) string {
-	var b strings.Builder
-	b.WriteString("(version 1)\n(deny default)\n")
-	fmt.Fprintf(&b, "(allow process-exec (literal %s))\n", quote(binary))
-	// The standard macOS top-level symlinks must be resolvable so callers can
-	// use /var/... and /tmp/... paths; this reveals only that they exist.
-	b.WriteString("(allow sysctl-read)\n(allow file-read-metadata (literal \"/var\") (literal \"/tmp\") (literal \"/etc\")")
-	// Libraries such as SQLite stat every directory on the path to their
-	// files; the state directory's ancestors are visible as metadata only.
-	for dir := filepath.Dir(stateDir); dir != "/"; dir = filepath.Dir(dir) {
-		fmt.Fprintf(&b, " (literal %s)", quote(dir))
-	}
-	b.WriteString(")\n")
-	fmt.Fprintf(&b, "(allow file-read* (literal \"/\") (literal %s) (subpath \"/usr/lib\") (subpath \"/System\") "+
-		"(subpath \"/private/var/db/dyld\") (subpath %s) (literal \"/dev/null\") (literal \"/dev/urandom\") (literal \"/dev/random\"))\n",
-		quote(binary), quote(stateDir))
-	fmt.Fprintf(&b, "(allow file-write* (subpath %s) (literal \"/dev/null\"))\n", quote(stateDir))
-	for _, port := range connectPorts {
-		fmt.Fprintf(&b, "(allow network-outbound (remote ip \"localhost:%d\"))\n", port)
-	}
-	if listenPort != 0 {
-		fmt.Fprintf(&b, "(allow network-bind (local ip \"localhost:%d\"))\n", listenPort)
-		fmt.Fprintf(&b, "(allow network-inbound (local ip \"localhost:%d\"))\n", listenPort)
-	}
-	return b.String()
-}
-
-// Kill sends SIGKILL to the candidate process and waits for it to exit. The
-// sandbox forbids child processes, so the started PID is the whole process
-// tree.
+// Kill sends SIGKILL to the started process and waits for it to exit.
+// Processes it started are not killed: they stay in the caller's process
+// group, which the caller stops.
 func (p *Process) Kill() error {
 	select {
 	case <-p.done:
@@ -490,56 +472,44 @@ func (b *limitedBuffer) Write(p []byte) (int, error) {
 	return b.buf.Write(p)
 }
 
-// start verifies the artifact and starts it in the sandbox described by spec.
-// stdout receives standard output when non-nil; otherwise standard output joins
-// standard error in spec.LogFile.
-func start(ctx context.Context, a Artifact, spec Spec, stdout io.Writer) (*Process, error) {
-	if err := CheckSandbox(); err != nil {
-		return nil, err
-	}
+// prepare verifies the artifact, resolves spec's state directory and log file,
+// opens the log, and returns the command that runs the artifact with spec's
+// arguments, its state directory as working directory, and HOME, TMPDIR and
+// spec.Env as its whole environment. The caller wires the command's output,
+// starts or runs it, and closes the log.
+func prepare(ctx context.Context, a Artifact, spec Spec) (*exec.Cmd, *os.File, error) {
 	if a.path == "" {
-		return nil, errors.New("artifact was not pinned")
+		return nil, nil, errors.New("artifact was not pinned")
 	}
 	digest, err := fileDigest(a.path)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	if digest != a.digest {
-		return nil, fmt.Errorf("%w: %s is %s, pinned %s", ErrDigestMismatch, a.path, digest, a.digest)
+		return nil, nil, fmt.Errorf("%w: %s is %s, pinned %s", ErrDigestMismatch, a.path, digest, a.digest)
 	}
 	stateDir, err := abspath.Eval(spec.StateDir)
 	if err != nil {
-		return nil, fmt.Errorf("resolve state directory: %w", err)
+		return nil, nil, fmt.Errorf("resolve state directory: %w", err)
 	}
-	binary := a.path
 	logPath, err := abspath.EvalMissing(spec.LogFile)
 	if err != nil {
-		return nil, fmt.Errorf("resolve log file %q: %w", spec.LogFile, err)
+		return nil, nil, fmt.Errorf("resolve log file %q: %w", spec.LogFile, err)
 	}
-	inside, err := abspath.Within(stateDir, logPath)
-	if err != nil {
-		return nil, fmt.Errorf("check log file outside candidate state directory: %w", err)
-	}
-	if inside {
-		return nil, fmt.Errorf("log file %s must lie outside the candidate state directory", logPath)
-	}
-	spec.StateDir = stateDir
-	spec.LogFile = logPath
 	logFile, err := os.OpenFile(logPath, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o600)
 	if err != nil {
-		return nil, fmt.Errorf("open log file: %w", err)
+		return nil, nil, fmt.Errorf("open log file: %w", err)
 	}
-	return startProcess(ctx, binary, spec, logFile, stdout)
+	cmd := exec.CommandContext(ctx, a.path, spec.Args...)
+	cmd.Dir = stateDir
+	cmd.Env = append([]string{"HOME=" + stateDir, "TMPDIR=" + stateDir}, spec.Env...)
+	return cmd, logFile, nil
 }
 
-// resolveBuild checks that the build sandbox is available and resolves every
-// directory in spec to its symlink-free path, placing Out in the resolved
-// output directory. The sandbox rules use those resolved paths, so the
-// toolchain sees the same paths the sandbox allows.
+// resolveBuild resolves every directory in spec to its symlink-free path and
+// places Out in the resolved output directory, so the build, its log and its
+// diagnostics name physical paths.
 func resolveBuild(spec BuildSpec) (resolvedBuild, error) {
-	if err := CheckSandbox(); err != nil {
-		return resolvedBuild{}, err
-	}
 	paths := map[string]*string{
 		"source": &spec.SourceDir, "module": &spec.ModuleDir, "goroot": &spec.GOROOT,
 		"modcache": &spec.ModCache, "work": &spec.WorkDir,
@@ -551,9 +521,8 @@ func resolveBuild(spec BuildSpec) (resolvedBuild, error) {
 		}
 		*p = resolved
 	}
-	if rel, err := filepath.Rel(spec.SourceDir, spec.ModuleDir); err != nil || !filepath.IsLocal(rel) {
-		return resolvedBuild{}, fmt.Errorf("module directory %s is outside source directory %s",
-			spec.ModuleDir, spec.SourceDir)
+	if err := checkInside(spec.SourceDir, spec.ModuleDir); err != nil {
+		return resolvedBuild{}, err
 	}
 	if spec.Out == "" {
 		return resolvedBuild{}, fmt.Errorf("resolve output directory: %w", os.ErrNotExist)
@@ -565,9 +534,6 @@ func resolveBuild(spec BuildSpec) (resolvedBuild, error) {
 	outDir, err := abspath.Eval(filepath.Dir(absOut))
 	if err != nil {
 		return resolvedBuild{}, fmt.Errorf("resolve output directory: %w", err)
-	}
-	if err := ensureGOROOTCanary(spec.GOROOT); err != nil {
-		return resolvedBuild{}, err
 	}
 	spec.Out = filepath.Join(outDir, filepath.Base(absOut))
 	return resolvedBuild{spec: spec}, nil
@@ -642,15 +608,17 @@ func publishStagedOutputAllowMissing(stagedOut, outPath string, allowMissing boo
 	return true, nil
 }
 
-// goRun runs `go <args> -o <outPath> <Package>` from ModuleDir in the build
-// sandbox, which may write only WorkDir, with the toolchain's output in
-// LogFile. It returns run's error unwrapped, an "open build log" error when
-// LogFile cannot be opened, or an error when opening LogFile resolves to the
-// same file as spec.Out. The fixed environment keeps the build offline
-// (GOPROXY=off), on the selected toolchain (GOTOOLCHAIN=local), unable to
-// change go.mod (-mod=readonly), and free of cgo, with TMPDIR and GOCACHE
-// inside WorkDir and no HOME, so os.UserConfigDir leaves Go telemetry disabled
-// without starting its detached child process.
+// goRun runs `go <args> -o <outPath> <Package>` from ModuleDir with the
+// toolchain's output in LogFile. It returns run's error unwrapped, an "open
+// build log" error when LogFile cannot be opened, or an error when opening
+// LogFile resolves to the same file as spec.Out. The fixed environment keeps
+// the build offline (GOPROXY=off), on the selected toolchain (GOTOOLCHAIN=local),
+// unable to change go.mod (-mod=readonly), with cgo off as Surla's builds have
+// always had it (turning it on would link C code into binaries that never had
+// it), with only a go.work file inside the source root (GoWork), with TMPDIR
+// and GOCACHE inside WorkDir and no HOME, so os.UserConfigDir leaves Go
+// telemetry disabled without starting its detached child process. A build gets
+// -buildvcs=false, so it never runs git and stamps no version-control facts.
 func (b resolvedBuild) goRun(
 	ctx context.Context,
 	run func(*exec.Cmd) error,
@@ -677,10 +645,19 @@ func (b resolvedBuild) goRun(
 		}
 		return aliasErr
 	}
-	return b.runGoBuild(ctx, run, logFile, outPath, args...)
+	goArgs := append([]string{}, args...)
+	if args[0] == "build" {
+		goArgs = append(goArgs, "-buildvcs=false")
+	}
+	goArgs = append(goArgs, "-o", outPath, spec.Package)
+	cmd := exec.CommandContext(ctx, filepath.Join(spec.GOROOT, "bin", "go"), goArgs...)
+	cmd.Dir = spec.ModuleDir
+	cmd.Env = b.buildEnv()
+	cmd.Stdout, cmd.Stderr = logFile, logFile
+	return run(cmd)
 }
 
-// buildEnv returns the fixed environment for a sandboxed Go build.
+// buildEnv returns the fixed environment of every Go build.
 func (b resolvedBuild) buildEnv() []string {
 	spec := b.spec
 	return []string{
@@ -690,10 +667,36 @@ func (b resolvedBuild) buildEnv() []string {
 		"GOCACHE=" + filepath.Join(spec.WorkDir, "gocache"),
 		"GOMODCACHE=" + spec.ModCache,
 		"GOTOOLCHAIN=local",
+		"GOWORK=" + workFile(spec.SourceDir, spec.ModuleDir),
 		"GOFLAGS=-mod=readonly",
 		"GOPROXY=off",
 		"GONOSUMDB=*",
 		"CGO_ENABLED=0",
+	}
+}
+
+// checkInside returns an error unless the resolved moduleDir is sourceDir or
+// lies inside it.
+func checkInside(sourceDir, moduleDir string) error {
+	if rel, err := filepath.Rel(sourceDir, moduleDir); err != nil || !filepath.IsLocal(rel) {
+		return fmt.Errorf("module directory %s is outside source directory %s", moduleDir, sourceDir)
+	}
+	return nil
+}
+
+// workFile returns the go.work file the go command would find searching upward
+// from the resolved moduleDir, stopping after the resolved sourceDir, which
+// contains it, or "off" when that search finds none. Like the go command, it
+// takes only a go.work that exists and is not a directory.
+func workFile(sourceDir, moduleDir string) string {
+	for dir := moduleDir; ; dir = filepath.Dir(dir) {
+		path := filepath.Join(dir, "go.work")
+		if info, err := os.Stat(path); err == nil && !info.IsDir() {
+			return path
+		}
+		if dir == sourceDir || filepath.Dir(dir) == dir {
+			return "off"
+		}
 	}
 }
 
@@ -713,16 +716,11 @@ func fileDigest(path string) (string, error) {
 
 // resolvedArtifact returns the Artifact for a pinned copy with an absolute,
 // symlink-free path, so a caller changing directories cannot change the binary
-// the sandbox permits or the process executes.
+// the process executes.
 func resolvedArtifact(path, digest string) (Artifact, error) {
 	resolved, err := abspath.Eval(path)
 	if err != nil {
 		return Artifact{}, fmt.Errorf("resolve pinned copy: %w", err)
 	}
 	return Artifact{path: resolved, digest: digest}, nil
-}
-
-// quote renders s as a sandbox profile string literal.
-func quote(s string) string {
-	return strconv.Quote(s)
 }

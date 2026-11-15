@@ -525,6 +525,9 @@ func TestCloseEndsAStartInProgressAndRefusesLaterStarts(t *testing.T) {
 }
 
 func TestAFailedStopKeepsTheOwnerAndStartsNoOtherTarget(t *testing.T) {
+	if runtime.GOOS != "darwin" {
+		t.Skip("making a stop fail needs macOS's chflags")
+	}
 	tmp := t.TempDir()
 	t.Setenv("TMPDIR", tmp)
 	self, err := os.Executable()
@@ -536,6 +539,17 @@ func TestAFailedStopKeepsTheOwnerAndStartsNoOtherTarget(t *testing.T) {
 		Live:         &LiveConfig{Command: []string{self}, Env: append(os.Environ(), liveTargetModeEnv+"=serve")},
 	})
 	require.NoError(t, err)
+	t.Cleanup(func() {
+		matches, globErr := filepath.Glob(filepath.Join(LiveRoot(cardsDir), "live-*", "tmp", "immutable"))
+		assert.NoError(t, globErr)
+		for _, pinned := range matches {
+			assert.NoError(t, exec.Command("chflags", "nouchg", pinned).Run())
+		}
+		if closeErr := cp.Close(); closeErr != nil {
+			t.Logf("close retained target during cleanup: %v", closeErr)
+		}
+		assert.NoError(t, os.RemoveAll(cardsDir))
+	})
 	seedLiveChange(t, cp)
 	alice := WithPrincipal(context.Background(), Principal{ID: "alice@example.com", CallerID: "alice@example.com", Kind: CallerUser})
 	_, err = cp.StartLiveTarget(alice, &gensurla.StartLiveTargetPayload{ChangeID: liveTestChangeID, CandidateCommit: strings.Repeat("a", 40)})
@@ -547,10 +561,6 @@ func TestAFailedStopKeepsTheOwnerAndStartsNoOtherTarget(t *testing.T) {
 	pinned := filepath.Join(lt.proc.Dir(), "tmp", "immutable")
 	require.NoError(t, os.WriteFile(pinned, []byte("x"), 0o600))
 	require.NoError(t, exec.Command("chflags", "uchg", pinned).Run())
-	t.Cleanup(func() {
-		require.NoError(t, exec.Command("chflags", "nouchg", pinned).Run())
-		require.NoError(t, os.RemoveAll(cardsDir))
-	})
 
 	_, err = cp.StopLiveTarget(alice)
 	assert.Equal(t, "live_target_stop_failed", goaErrorName(err))
@@ -768,6 +778,9 @@ func TestToolsListWarnsThatStartingDiscardsTheRunningTargetsDrafts(t *testing.T)
 }
 
 func TestAStartThatFailsBeforeReadyAndCannotBeCleanedUpKeepsItsOwner(t *testing.T) {
+	if runtime.GOOS != "darwin" {
+		t.Skip("making a stop fail needs macOS's chflags")
+	}
 	self, err := os.Executable()
 	require.NoError(t, err)
 	cardsDir := t.TempDir()
@@ -779,10 +792,14 @@ func TestAStartThatFailsBeforeReadyAndCannotBeCleanedUpKeepsItsOwner(t *testing.
 	require.NoError(t, err)
 	t.Cleanup(func() {
 		matches, err := filepath.Glob(filepath.Join(LiveRoot(cardsDir), "live-*", "tmp", "immutable"))
-		require.NoError(t, err)
+		assert.NoError(t, err)
 		for _, m := range matches {
-			require.NoError(t, exec.Command("chflags", "nouchg", m).Run())
+			assert.NoError(t, exec.Command("chflags", "nouchg", m).Run())
 		}
+		if closeErr := cp.Close(); closeErr != nil {
+			t.Logf("close retained target during cleanup: %v", closeErr)
+		}
+		assert.NoError(t, os.RemoveAll(cardsDir))
 	})
 	seedLiveChange(t, cp)
 	alice := WithPrincipal(context.Background(), Principal{ID: "alice@example.com", CallerID: "alice@example.com", Kind: CallerUser})

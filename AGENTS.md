@@ -1,7 +1,7 @@
 # Surla Agent Guide
 
 Surla is a Goa and goa-ai control plane that takes a feature request through
-intent (CP1), architecture preview (CP2), live prompt drafts (CP3), sandboxed
+intent (CP1), architecture preview (CP2), live prompt drafts (CP3),
 verification (CP4), and promotion checks (CP5). Make the smallest correct
 change: strong contracts, clear ownership, and less code. Delete code when
 every caller still gets the behavior it needs.
@@ -340,9 +340,14 @@ Stop if that context is unavailable or contradicts the code.
 - **Keep holdouts hidden.** Builder-facing output goes through
   `Report.ForBuilders()`; never expose holdout scenario names, checks, or
   logs to a coding agent.
-- **Treat candidate code as untrusted.** Build and run a candidate only
-  through `verify/candidate`, which jails each process in an OS sandbox.
-  Never run candidate binaries or its test suite outside it.
+- **Run agent-written code through its owners.** Build and start candidate
+  binaries only through `verify/candidate` (digest-pinned, explicit
+  environment, own state folder), inside a process group an operation owns
+  and stops: verification and live targets use `internal/verifyrun`'s
+  supervised group; any other caller passes a runner that gives the command
+  its own group. A process that starts its own session leaves the group and
+  is not stopped. These are ordinary processes with the user's file and
+  network access; never describe them as confined.
 
 ## 5. Code
 
