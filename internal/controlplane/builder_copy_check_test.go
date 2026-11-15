@@ -235,8 +235,10 @@ func TestBuilderCopyCheckReleasesAfterLaunchFailure(t *testing.T) {
 // TestBuilderCopyCheckBusyHTTPMCP proves the generated HTTP error contract and
 // MCP tool result preserve the busy-copy refusal before any helper starts.
 func TestBuilderCopyCheckBusyHTTPMCP(t *testing.T) {
-	_, cp, _, _ := buildGenerationFixture(t, ".")
+	_, cp, _, assignment := buildGenerationFixture(t, ".")
 	configureBuilderCopyCheck(t, cp)
+	design, err := os.ReadFile(filepath.Join(assignment.WorkingFolder, "design", "design.go"))
+	require.NoError(t, err)
 	var launches atomic.Int64
 	cp.checkHelper = func() *exec.Cmd {
 		launches.Add(1)
@@ -256,6 +258,7 @@ func TestBuilderCopyCheckBusyHTTPMCP(t *testing.T) {
 		doer, goahttp.RequestEncoder, goahttp.ResponseDecoder, false)
 	client := &gensurla.Client{
 		CheckProjectEndpoint: httpTransport.CheckProject(), UpdateDependenciesEndpoint: httpTransport.UpdateDependencies(),
+		GenerateCodeEndpoint: httpTransport.GenerateCode(),
 	}
 	mcpTransport := genmcpclient.NewClient(origin.Scheme, origin.Host,
 		doer, goahttp.RequestEncoder, goahttp.ResponseDecoder, false)
@@ -263,6 +266,7 @@ func TestBuilderCopyCheckBusyHTTPMCP(t *testing.T) {
 	for _, tool := range []struct{ name, route string }{
 		{checkToolProject, "/workspace/check"},
 		{checkToolDependencies, "/workspace/dependencies"},
+		{"generate_code", "/workspace/generate"},
 	} {
 		t.Run(tool.name, func(t *testing.T) {
 			request := httptest.NewRequest(http.MethodPost, tool.route, nil)
@@ -275,10 +279,13 @@ func TestBuilderCopyCheckBusyHTTPMCP(t *testing.T) {
 			assert.Equal(t, "working_copy_busy", body.Name)
 			assert.Contains(t, body.Message, "call "+tool.name+" again")
 			var err error
-			if tool.name == checkToolProject {
+			switch tool.name {
+			case checkToolProject:
 				_, err = client.CheckProject(t.Context())
-			} else {
+			case checkToolDependencies:
 				_, err = client.UpdateDependencies(t.Context())
+			case "generate_code":
+				_, err = client.GenerateCode(t.Context(), &gensurla.GenerateCodePayload{})
 			}
 			assertServiceError(t, err, "working_copy_busy")
 			result, err := mcpClient.ToolsCall(t.Context(), &genmcpsurla.ToolsCallPayload{
@@ -296,6 +303,9 @@ func TestBuilderCopyCheckBusyHTTPMCP(t *testing.T) {
 	}
 	assert.Zero(t, launches.Load())
 	assert.Len(t, cp.builderCopyTurn, 1)
+	after, err := os.ReadFile(filepath.Join(assignment.WorkingFolder, "design", "design.go"))
+	require.NoError(t, err)
+	assert.Equal(t, design, after)
 }
 
 // configureBuilderCopyCheck adds the production helper configuration to the

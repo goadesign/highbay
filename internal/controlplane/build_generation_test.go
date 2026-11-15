@@ -126,6 +126,8 @@ func TestBuildGenerationRefusesBeforeWriting(t *testing.T) {
 				var refusal *gensurla.CopyOffBranch
 				require.ErrorAs(t, err, &refusal)
 				assert.Equal(t, "copy_off_branch", refusal.Name)
+			case "busy":
+				assertServiceError(t, err, "working_copy_busy")
 			default:
 				assertServiceError(t, err, "conflict")
 			}

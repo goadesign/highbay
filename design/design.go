@@ -1152,6 +1152,7 @@ var _ = Service("surla", func() {
 
 // builderCopyRefusals declares a builder tool's open-build and working-copy refusals.
 func builderCopyRefusals() {
+	Error("working_copy_busy", ErrorResult, "The builder's working copy is in use by another operation; call this tool again after that operation finishes. Nothing was changed.")
 	Error("no_build", ErrorResult, "No build is open, or the user dropped it: stop work on it and make no more edits or commits for it. The user starts builds on the views page.")
 	Error("assignment_unread", ErrorResult, "A build started after your last read of your assignment: stop your current work, then call get_builder_assignment for its change.")
 	Error("copy_off_branch", CopyOffBranch, "Your working copy is not on the build's branch: the message states its branch, the build's branch and what is uncommitted, and the goal. Put your work there with git, commit it, and call again.")
@@ -1160,6 +1161,7 @@ func builderCopyRefusals() {
 
 // builderCopyRefusalResponses maps the builder working-copy refusals to HTTP.
 func builderCopyRefusalResponses() {
+	Response("working_copy_busy", StatusConflict)
 	Response("no_build", StatusConflict)
 	Response("assignment_unread", StatusConflict)
 	Response("copy_off_branch", StatusConflict)

@@ -64,7 +64,7 @@ func (c *ControlPlane) GenerateCode(
 	select {
 	case c.builderCopyTurn <- struct{}{}:
 	default:
-		return nil, gensurla.MakeConflict(errors.New("The builder's working copy is in use; call generate_code again when the current operation finishes."))
+		return nil, gensurla.MakeWorkingCopyBusy(errors.New("The builder's working copy is in use; call generate_code again when the current operation finishes."))
 	}
 	defer func() { <-c.builderCopyTurn }()
 	_, project, err := openModuleRootWithIdentity(
