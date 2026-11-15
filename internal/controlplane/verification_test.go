@@ -13,11 +13,31 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/codes"
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
+	"goa.design/goa-ai/eval"
 
 	gensurla "github.com/goadesign/surla/gen/surla"
 	"github.com/goadesign/surla/internal/verify"
 	"github.com/goadesign/surla/internal/verifyrun"
 )
+
+// artifactTextFixture is a control plane that saves its operation history,
+// with one completed run whose scenarios each failed the artifact check
+// because of text planted in their record of the binaries they ran.
+type artifactTextFixture struct {
+	// cp is the control plane; alice owns its confirmed card "chg".
+	cp *ControlPlane
+	// cfg names the runs and report folders the run was saved in.
+	cfg *VerificationConfig
+	// runID is the completed run.
+	runID string
+	// report is the full report saved for the run.
+	report verify.Report
+}
+
+// plantedArtifactText stands for text a test program could put in a
+// scenario's artifact name or digest, such as a holdout scenario's name.
+const plantedArtifactText = "FAKE_HOLDOUT_refund_over_limit_417"
 
 func TestVerifyChangeAcceptsOnlyTheOwnersCurrentConfirmedRevision(t *testing.T) {
 	alice := WithPrincipal(context.Background(), Principal{ID: "alice@example.com", CallerID: "alice@example.com", Kind: CallerUser})
@@ -134,6 +154,16 @@ func TestGetVerificationReadsTheRunFromDiskInEveryState(t *testing.T) {
 		wire, err := json.Marshal(res)
 		require.NoError(t, err)
 		assert.NotContains(t, string(wire), `"h"`)
+	})
+
+	t.Run("a failed artifact check reaches the builder as a fixed sentence only", func(t *testing.T) {
+		fx := newArtifactTextFixture(t)
+		res, err := fx.cp.GetVerification(asCaller("alice@example.com", CallerBuilder), &gensurla.GetVerificationPayload{RunID: fx.runID})
+		require.NoError(t, err)
+		completed, ok := res.State.AsCompleted()
+		require.True(t, ok)
+		assertArtifactCheckSentences(t, completed.Report)
+		assertArtifactTextStaysInSavedReport(t, fx, res, "surla.controlplane.get_verification")
 	})
 
 	t.Run("not completed returns where it stopped", func(t *testing.T) {
@@ -362,6 +392,17 @@ func TestListVerifications(t *testing.T) {
 		assert.Empty(t, completed.Report.Scenarios[1].Checks)
 	})
 
+	t.Run("a failed artifact check reaches the builder as a fixed sentence only", func(t *testing.T) {
+		fx := newArtifactTextFixture(t)
+		res, err := fx.cp.ListVerifications(asCaller("alice@example.com", CallerBuilder), &gensurla.ListVerificationsPayload{ChangeID: "chg"})
+		require.NoError(t, err)
+		require.Len(t, res.Runs, 1)
+		completed, ok := res.Runs[0].State.AsCompleted()
+		require.True(t, ok)
+		assertArtifactCheckSentences(t, completed.Report)
+		assertArtifactTextStaysInSavedReport(t, fx, res, "surla.controlplane.list_verifications")
+	})
+
 	t.Run("corrupt published request.json records raw error on span and returns safe public error", func(t *testing.T) {
 		recorder.reset()
 		corruptID := "30000000000000000000000000000003"
@@ -396,6 +437,16 @@ func verificationSetupForSource(
 	t *testing.T, stored bool,
 ) (*ControlPlane, *gensurla.ChangeCardResult, *VerificationConfig) {
 	t.Helper()
+	cfg := verificationConfig(t)
+	cp, card := verificationSetupWithOptions(t, verificationSourceOptions(cfg, stored))
+	return cp, card, cfg
+}
+
+// verificationSetupWithOptions returns a control plane built from opts, which
+// name the verification source, and its confirmed card "chg" owned by alice
+// with a stored open build.
+func verificationSetupWithOptions(t *testing.T, opts Options) (*ControlPlane, *gensurla.ChangeCardResult) {
+	t.Helper()
 	analysis := &gensurla.CP1Analysis{
 		Summary:     "Refunds up to $50 are instant.",
 		Ambiguities: []*gensurla.CP1AnalysisAmbiguity{},
@@ -405,14 +456,126 @@ func verificationSetupForSource(
 		}},
 		PreservedBehaviors: []string{},
 	}
-	cfg := verificationConfig(t)
-	cp := newControlPlane(t, buildFixtureOptions(t, verificationSourceOptions(cfg, stored)))
+	cp := newControlPlane(t, buildFixtureOptions(t, opts))
 	card := saveProposedCardFixture(t, cp, "alice@example.com", "chg", "Refunds up to $50 are instant.", analysis)
 	card = attachBuildSnapshot(t, cp, card.ChangeID)
 	card = mustConfirmNoop(t, cp, WithPrincipal(t.Context(), Principal{ID: "alice@example.com", CallerID: "alice@example.com", Kind: CallerUser}), card)
 	require.Equal(t, StatusConfirmed, card.Status)
 	saveStoredBuildFixture(t, cp, card)
-	return cp, card, cfg
+	return cp, card
+}
+
+// newArtifactTextFixture saves one completed run of alice's change "chg" on a
+// control plane that records its operations. Its report declares three repair
+// scenarios and one holdout; each scenario's record of the binaries it ran
+// carries plantedArtifactText where the artifact check quotes it: "a" in an
+// artifact name without a digest, "b" in a digest, "c" in a name recorded
+// twice, and the holdout in a digest.
+func newArtifactTextFixture(t *testing.T) artifactTextFixture {
+	t.Helper()
+	cfg := verificationConfig(t)
+	provider := sdktrace.NewTracerProvider()
+	t.Cleanup(func() { assert.NoError(t, provider.Shutdown(context.Background())) })
+	opts := verificationSourceOptions(cfg, true)
+	opts.TracerProvider = provider
+	cp, card := verificationSetupWithOptions(t, opts)
+
+	commit := strings.Repeat("a", 40)
+	ran := func(id string, artifacts ...eval.Artifact) eval.ScenarioReport {
+		return eval.ScenarioReport{ID: id, StartedAt: time.Now(), Passed: true,
+			Result: &eval.Result{Checks: []eval.Check{{Name: "check", Passed: true}}, Artifacts: artifacts}}
+	}
+	twice := eval.Artifact{Name: "candidate:" + plantedArtifactText + "_twice", URI: "sha256:d2"}
+	report, err := verify.Assemble(
+		verify.Binding{
+			CandidateCommit: commit, RequestRevision: card.RequestRevision, SuiteID: "orders_acceptance",
+			SuiteCommit: cfg.Plan.SuiteCommit, Artifacts: map[string]string{"orders": "d1"}, Environment: "sim",
+		},
+		verify.Suite{ID: "orders_acceptance", Environment: "sim", Scenarios: []verify.Scenario{
+			{ID: "a"}, {ID: "b"}, {ID: "c"}, {ID: "h", Holdout: true},
+		}},
+		eval.Report{SuiteID: "orders_acceptance", Scenarios: []eval.ScenarioReport{
+			ran("a", eval.Artifact{Name: "candidate:" + plantedArtifactText + "_name", URI: "md5:d1"}),
+			ran("b", eval.Artifact{Name: "candidate:orders", URI: "sha256:" + plantedArtifactText + "_digest"}),
+			ran("c", eval.Artifact{Name: "candidate:orders", URI: "sha256:d1"}, twice, twice),
+			ran("h", eval.Artifact{Name: "candidate:orders", URI: "sha256:" + plantedArtifactText + "_holdout"}),
+		}}, 0)
+	require.NoError(t, err)
+	writeReportFile(t, cfg.Plan.ReportDir, report)
+
+	runID := verifyrun.NewRunID()
+	dir := filepath.Join(cfg.RunsDir, runID)
+	require.NoError(t, os.MkdirAll(dir, 0o700))
+	plan := cfg.Plan
+	plan.CandidateCommit, plan.RequestRevision, plan.Tests = commit, card.RequestRevision, verify.TestsEvaluator
+	req, err := json.Marshal(verifyrun.Request{RunID: runID, Owner: "alice@example.com", ChangeID: "chg",
+		AcceptedAt: time.Date(2026, 10, 31, 12, 0, 0, 0, time.UTC), Plan: plan})
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "request.json"), req, 0o600))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "lock"), nil, 0o600))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "result.json"), []byte(`{"kind":"report","report_digest":"`+report.Digest+`"}`), 0o600))
+	return artifactTextFixture{cp: cp, cfg: cfg, runID: runID, report: report}
+}
+
+// assertArtifactCheckSentences checks the builder view of the fixture's
+// report: every scenario could not be evaluated, each repair scenario
+// carries Surla's sentence about its record of binaries, and the holdout
+// carries nothing.
+func assertArtifactCheckSentences(t *testing.T, report *gensurla.BuilderVerificationReport) {
+	t.Helper()
+	require.Len(t, report.Scenarios, 4)
+	for i, id := range []string{"a", "b", "c"} {
+		scenario := report.Scenarios[i]
+		assert.Equal(t, id, scenario.ID)
+		assert.Equal(t, "harness_error", scenario.Outcome)
+		if assert.NotNil(t, scenario.Error, id) {
+			assert.Contains(t, *scenario.Error, "does not match what Surla built", id)
+			assert.Contains(t, *scenario.Error, "report_digest", id)
+		}
+	}
+	assert.Equal(t, &gensurla.VerificationScenario{ID: "holdout-1", Outcome: "harness_error"}, report.Scenarios[3])
+}
+
+// assertArtifactTextStaysInSavedReport checks every place the fixture's
+// planted text could have reached after a read that returned result and
+// recorded the operation span: it is absent from the marshalled result and
+// from every file in the cards folder, including the saved operation
+// history, and in the runs folder; in the report folder only the saved
+// report holds it, in all four places it was planted.
+func assertArtifactTextStaysInSavedReport(t *testing.T, fx artifactTextFixture, result any, span string) {
+	t.Helper()
+	wire, err := json.Marshal(result)
+	require.NoError(t, err)
+	assert.NotContains(t, string(wire), plantedArtifactText)
+	assert.NotContains(t, string(wire), "candidate:")
+
+	history, err := os.ReadFile(filepath.Join(fx.cp.cards.dir, "traces.jsonl"))
+	require.NoError(t, err, "the read was saved in the operation history")
+	assert.Contains(t, string(history), span)
+
+	var holders []string
+	for _, folder := range []string{fx.cp.cards.dir, fx.cfg.RunsDir, fx.cfg.Plan.ReportDir} {
+		require.NoError(t, filepath.WalkDir(folder, func(name string, entry os.DirEntry, err error) error {
+			if err != nil || entry.IsDir() {
+				return err
+			}
+			data, err := os.ReadFile(name)
+			if err != nil {
+				return err
+			}
+			if strings.Contains(string(data), plantedArtifactText) {
+				holders = append(holders, name)
+			}
+			return nil
+		}))
+	}
+	saved := filepath.Join(fx.cfg.Plan.ReportDir, fx.report.Digest+".json")
+	assert.Equal(t, []string{saved}, holders, "only the saved report holds the planted text")
+	data, err := os.ReadFile(saved)
+	require.NoError(t, err)
+	for _, place := range []string{"_name", "_digest", "_twice", "_holdout"} {
+		assert.Contains(t, string(data), plantedArtifactText+place)
+	}
 }
 
 // verificationConfig returns a verification configuration whose runs are
