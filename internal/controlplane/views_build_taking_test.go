@@ -14,7 +14,7 @@ import (
 // TestViewsPageShowsTakingStates keeps commands bound to passed commit IDs and
 // lists only the dropped build's retained branches, including an empty list.
 func TestViewsPageShowsTakingStates(t *testing.T) {
-	for _, state := range []string{"building", "passed", "evaluator", "rewritten", "merged", "dropped", "empty", "merged_findings", "dropped_findings", "earlier_passed", "earlier_merged", "earlier_dropped"} {
+	for _, state := range []string{"building", "passed", "evaluator", "rewritten", "merged", "dropped", "empty", "merged_findings", "dropped_findings", "earlier_passed", "earlier_merged", "earlier_dropped", "earlier_configured"} {
 		t.Run(state, func(t *testing.T) {
 			cp := newBuildControlPlane(t, Options{Team: &TeamBinding{
 				Owner: pageOwner, Service: &teamServiceFixture{snapshot: pageTeamSnapshot("working")},
@@ -51,7 +51,7 @@ const variants = {
   merged_findings: { state: "merged" },
   dropped_findings: { state: "dropped", kept_branches: [] },
   earlier_passed: passed, earlier_merged: { state: "merged" },
-  earlier_dropped: { state: "dropped", kept_branches: [] },
+  earlier_dropped: { state: "dropped", kept_branches: [] }, earlier_configured: { state: "merged" },
 };
 const saved = JSON.parse(input.build);
 if (input.state.startsWith("earlier_")) {
@@ -62,6 +62,7 @@ if (input.state !== "building") saved.test_writer.tests = { state: "accepted", c
   checked_at: saved.started_at, not_judged: input.notJudged };
 const closedFindings = input.state.endsWith("_findings");
 if (closedFindings) saved.test_writer.tests = { state: "needs_changes", checked_at: saved.started_at, finding_count: 1 };
+if (input.state === "earlier_configured") saved.test_writer.tests = { state: "not_used" };
 await control(origin, "reply", { key: "GET " + path, status: 200,
   body: { change_id: "chg-taking", build: { ...saved, state: "started", taking: variants[input.state] } } });
 const page = await openPage(origin, { link: input.link });
@@ -71,6 +72,7 @@ if (input.state.startsWith("earlier_")) {
   const action = page.$("#surla-build-start");
   expect(action && !action.disabled && action.getAttribute("aria-describedby").includes("surla-build-start-explanation"), "earlier closed/passed build lost its direct explained Build offer");
   expect(page.text("#surla-build-start-explanation").includes("nothing confines them"), "earlier Build offer lost execution explanation");
+  if (input.state === "earlier_configured") expect(page.text("#surla-build-start-explanation").includes("From Build on, those tests and the builder’s code run on this machine as ordinary programs, with your access to files and the network; nothing confines them. Approval decides only what merges."), "configured tests lost their execution wording");
   expect(page.sent("POST", path).length === 0, "reading an earlier build started work");
   page.close();
   return;
