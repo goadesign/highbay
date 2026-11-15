@@ -193,10 +193,11 @@ func IsCommitID(commit string) bool {
 // committed link or replace directive that leaves the checkout reads the
 // user's files; the suite's module may replace sibling modules in its own
 // checkout. Run refuses a WorkDir that already has contents. The suite is
-// checked out only after the candidate is built. Command output goes to
-// files under WorkDir/evidence with bounded error excerpts, except workspace
-// settings and dependency loading: their output may contain operator secrets
-// and is never retained.
+// checked out only after the candidate is built. Workspace settings and
+// workspace package-loading output are discarded because they may contain
+// operator secrets. Standalone module downloads keep private evidence files,
+// but errors only name those files, never quote their output. Other commands
+// keep evidence with bounded error excerpts.
 //
 // Run starts its builds, the suite and the candidates the suite runs in the
 // caller's process group and does not stop processes they leave behind: its
@@ -566,6 +567,26 @@ func (r *runner) run(ctx context.Context, label, dir string, env []string, name 
 	return nil
 }
 
+// downloadModule keeps standalone dependency diagnostics private. Go may
+// print a proxy's username/path or an invalid GOFLAGS value, so only the fixed
+// operation, typed process error and private filename leave this owner.
+func (r *runner) downloadModule(ctx context.Context, label, dir string, env []string) error {
+	name := "go-mod-download-" + label
+	stdout, stderr, err := r.outputs(name)
+	if err != nil {
+		return err
+	}
+	defer stdout.Close()
+	defer stderr.Close()
+	cmd := exec.CommandContext(ctx, "go", "mod", "download")
+	cmd.Dir, cmd.Env = dir, env
+	cmd.Stdout, cmd.Stderr = stdout, stderr
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("%s: %w; diagnostic output is private in %s", name, err, stderr.Name())
+	}
+	return nil
+}
+
 // outputs creates the evidence files for one command.
 func (r *runner) outputs(label string) (*os.File, *os.File, error) {
 	stdout, err := os.Create(filepath.Join(r.evidenceDir, label+".stdout"))
@@ -606,13 +627,16 @@ func (r *runner) prepareBuild(
 // https://go.dev/ref/mod#go-mod-download. Loading the configured packages with
 // -deps instead fetches their compile dependencies, without unrelated packages
 // or tests: https://pkg.go.dev/cmd/go@go1.27.3#hdr-List_packages_or_modules.
+// This parses sources reached through local replacements, including outside
+// the checkout, where module download only read go.mod. It compiles or executes
+// no checked-out code.
 func (r *runner) prepareGoBuild(
 	ctx context.Context, label, moduleDir, workDir, goWork string, packages []string,
 ) (buildToolchain, error) {
 	var toolchain buildToolchain
 	if goWork == "off" {
 		env := append(gitenv.WithoutRedirects(os.Environ()), "GOWORK=off")
-		if err := r.run(ctx, "go-mod-download-"+label, moduleDir, env, "go", "mod", "download"); err != nil {
+		if err := r.downloadModule(ctx, label, moduleDir, env); err != nil {
 			return buildToolchain{}, fmt.Errorf("download %s modules: %w", label, err)
 		}
 		if err := r.run(ctx, "go-env-"+label, moduleDir, env, "go", "env", "GOROOT", "GOMODCACHE"); err != nil {

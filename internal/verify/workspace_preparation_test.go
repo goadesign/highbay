@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"io/fs"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -166,4 +167,53 @@ func TestWorkspacePreparationLoadsOnlyTheConfiguredCompileClosure(t *testing.T) 
 	entries, err := os.ReadDir(toolchain.modCache)
 	require.NoError(t, err)
 	assert.Empty(t, entries, "no remote module is needed by this local workspace target")
+}
+
+// TestModuleDownloadKeepsDiagnosticsPrivate retains standalone/written download
+// evidence while returning only a static failure, status and private filename.
+func TestModuleDownloadKeepsDiagnosticsPrivate(t *testing.T) {
+	const user = "FAKE_PROXY_USER_300"
+	const path = "FAKE_PROXY_PATH_300"
+	const flag = "-FAKE_INVALID_GOFLAGS_300"
+	for _, label := range []string{"candidate", "suite"} {
+		for _, problem := range []string{"proxy", "flags"} {
+			t.Run(label+"/"+problem, func(t *testing.T) {
+				module, fake := t.TempDir(), t.TempDir()
+				require.NoError(t, os.WriteFile(filepath.Join(module, "go.mod"), []byte("module example.invalid/app\ngo 1.27.3\nrequire example.invalid/missing v1.0.0\n"), 0o600))
+				proxy := "http://" + user + ":fake-password@proxy.example.invalid/" + path
+				diagnostic := "go: refusing to pass credentials to insecure URL: " + proxy + "/example.invalid/missing/@v/v1.0.0.mod"
+				flags := ""
+				if problem == "flags" {
+					flags = flag
+					diagnostic = "go: parsing $GOFLAGS: unknown flag " + flag
+				}
+				script := "#!/bin/sh\nset -eu\n[ \"$*\" = 'mod download' ]; [ \"$GOWORK\" = off ]; " +
+					"[ \"$GOPROXY\" = " + shquote.Quote(proxy) + " ]; [ \"$GOFLAGS\" = " + shquote.Quote(flags) + " ]\n" +
+					"printf '%s\\n' " + shquote.Quote(diagnostic) + "; printf '%s\\n' " + shquote.Quote(diagnostic) + " >&2\nexit 7\n"
+				require.NoError(t, os.WriteFile(filepath.Join(fake, "go"), []byte(script), 0o700))
+				t.Setenv("PATH", fake+string(os.PathListSeparator)+os.Getenv("PATH"))
+				t.Setenv("GOPROXY", proxy)
+				t.Setenv("GOFLAGS", flags)
+				r := &runner{evidenceDir: t.TempDir()}
+				_, err := r.prepareGoBuild(t.Context(), label, module, t.TempDir(), "off", []string{"."})
+				require.Error(t, err)
+				assert.ErrorContains(t, err, "download "+label+" modules")
+				assert.ErrorContains(t, err, "exit status 7")
+				private := filepath.Join(r.evidenceDir, "go-mod-download-"+label+".stderr")
+				assert.EqualError(t, err, "download "+label+" modules: go-mod-download-"+label+": exit status 7; diagnostic output is private in "+private)
+				var process *exec.ExitError
+				require.ErrorAs(t, err, &process)
+				assert.Equal(t, 7, process.ExitCode())
+				assert.Empty(t, process.Stderr, "typed error carries no private output")
+				for _, marker := range []string{user, path, flag} {
+					assert.NotContains(t, err.Error(), marker)
+				}
+				for _, suffix := range []string{"stdout", "stderr"} {
+					data, readErr := os.ReadFile(filepath.Join(r.evidenceDir, "go-mod-download-"+label+"."+suffix))
+					require.NoError(t, readErr)
+					assert.Equal(t, diagnostic+"\n", string(data), "the user's diagnostic evidence remains available")
+				}
+			})
+		}
+	}
 }

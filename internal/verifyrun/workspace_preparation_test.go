@@ -132,3 +132,106 @@ func TestWorkspacePreparationKeepsSecretsOutOfSavedRuns(t *testing.T) {
 		})
 	}
 }
+
+// TestModuleDownloadKeepsSavedFailuresPrivate exercises real saved-result and
+// executor-log consumers for standalone candidate and fixed-off written suites.
+// Only the user's specific private download evidence retains fake diagnostics.
+func TestModuleDownloadKeepsSavedFailuresPrivate(t *testing.T) {
+	const user = "FAKE_PROXY_USER_301"
+	const path = "FAKE_PROXY_PATH_301"
+	const flag = "-FAKE_INVALID_GOFLAGS_301"
+	for _, target := range []string{"standalone", "written"} {
+		for _, problem := range []string{"proxy", "flags"} {
+			t.Run(target+"/"+problem, func(t *testing.T) {
+				repo := t.TempDir()
+				files := map[string]string{"app/go.mod": "module example.invalid/app\ngo 1.27.3\nrequire example.invalid/missing v1.0.0\n", "app/main.go": "package main\nfunc main() {}\n",
+					"eval/go.mod": "module example.invalid/eval\ngo 1.27.3\nrequire example.invalid/missing v1.0.0\n", "eval/main.go": "package main\nfunc main() {}\n"}
+				if target == "written" {
+					files["go.work"] = "go 1.27.3\nuse (\n ./app\n ./eval\n)\n"
+				}
+				for name, content := range files {
+					name = filepath.Join(repo, name)
+					require.NoError(t, os.MkdirAll(filepath.Dir(name), 0o700))
+					require.NoError(t, os.WriteFile(name, []byte(content), 0o600))
+				}
+				for _, args := range [][]string{{"init", "-q"}, {"add", "--all"}, {"-c", "user.name=t", "-c", "user.email=t@example.com", "-c", "commit.gpgsign=false", "-c", "core.hooksPath=/dev/null", "commit", "-qm", "Save module fixture"}} {
+					output, err := exec.Command("git", append([]string{"-C", repo}, args...)...).CombinedOutput()
+					require.NoError(t, err, "%s", output)
+				}
+				head, err := exec.Command("git", "-C", repo, "rev-parse", "HEAD").Output()
+				require.NoError(t, err)
+				fake := t.TempDir()
+				goroot, cache := filepath.Join(fake, "goroot"), filepath.Join(fake, "cache")
+				require.NoError(t, os.MkdirAll(filepath.Join(goroot, "bin"), 0o700))
+				require.NoError(t, os.Mkdir(cache, 0o700))
+				proxy := "http://" + user + ":fake-password@proxy.example.invalid/" + path
+				flags := ""
+				diagnostic := "go: refusing to pass credentials to insecure URL: " + proxy + "/example.invalid/missing/@v/v1.0.0.mod"
+				if problem == "flags" {
+					flags = flag
+					diagnostic = "go: parsing $GOFLAGS: unknown flag " + flag
+				}
+				settings, err := json.Marshal(map[string]string{"GOROOT": goroot, "GOMODCACHE": cache, "GOPROXY": proxy, "GOAUTH": "off"})
+				require.NoError(t, err)
+				script := "#!/bin/sh\nset -eu\ncase \"$1\" in\n" +
+					"env) [ \"$2\" = -json ]; printf '%s\\n' " + shquote.Quote(string(settings)) + " ;;\nlist) exit 0 ;;\n" +
+					"build) [ \"$GOPROXY\" = off ]; [ \"$GOFLAGS\" = -mod=readonly ]; out=''; while [ \"$#\" -gt 0 ]; do if [ \"$1\" = -o ]; then shift; out=$1; fi; shift; done; printf 'placeholder, never executed' > \"$out\" ;;\n" +
+					"mod) [ \"$*\" = 'mod download' ]; [ \"$GOWORK\" = off ]; [ \"$GOPROXY\" = " + shquote.Quote(proxy) + " ]; [ \"$GOFLAGS\" = " + shquote.Quote(flags) + " ]; " +
+					"printf '%s\\n' " + shquote.Quote(diagnostic) + "; printf '%s\\n' " + shquote.Quote(diagnostic) + " >&2; exit 7 ;;\n*) exit 9 ;;\nesac\n"
+				require.NoError(t, os.WriteFile(filepath.Join(goroot, "bin", "go"), []byte(script), 0o700))
+				t.Setenv("PATH", filepath.Join(goroot, "bin")+string(os.PathListSeparator)+os.Getenv("PATH"))
+				t.Setenv("GOPROXY", proxy)
+				t.Setenv("GOFLAGS", flags)
+				t.Setenv(fakeModeEnv, "workspace-preparation")
+				root, reports := t.TempDir(), t.TempDir()
+				runID := NewRunID()
+				_, err = Start(root, Request{RunID: runID, Owner: "alice", ChangeID: "chg", AcceptedAt: time.Now().UTC(), Timeout: 20 * time.Second,
+					Plan: verify.Plan{CandidateRepo: repo, CandidateCommit: strings.TrimSpace(string(head)), CandidateModule: "app", Binaries: map[string]string{"app": "."},
+						SuiteRepo: repo, SuiteCommit: strings.TrimSpace(string(head)), SuiteModule: "eval", SuiteCommand: ".", RequestRevision: "rev-1",
+						WorkDir: filepath.Join(root, runID, "work"), ReportDir: reports, Tests: verify.TestsWritten},
+				}, []string{os.Args[0]}, nil)
+				require.NoError(t, err)
+				require.NoError(t, Wait(root, runID))
+				_, state, err := Read(root, runID)
+				require.NoError(t, err)
+				require.Equal(t, StateNotCompleted, state.Kind)
+				assert.Equal(t, FailureExecution, state.Result.Failure)
+				assert.Equal(t, string(verify.StageBuild), state.Result.Stage)
+				label, summary := "candidate", "The candidate did not build."
+				if target == "written" {
+					label, summary = "suite", "The evaluator suite did not build."
+				}
+				assert.Equal(t, summary, state.Result.Summary)
+				base := filepath.Join(root, runID, "work", "evidence", "go-mod-download-"+label)
+				log, err := os.ReadFile(filepath.Join(root, runID, "executor.log"))
+				require.NoError(t, err)
+				assert.Contains(t, string(log), "exit status 7")
+				assert.Contains(t, string(log), "diagnostic output is private in "+base+".stderr")
+				for _, folder := range []string{root, reports} {
+					require.NoError(t, filepath.WalkDir(folder, func(name string, entry fs.DirEntry, err error) error {
+						if err != nil || entry.IsDir() {
+							return err
+						}
+						data, err := os.ReadFile(name)
+						if !assert.NoError(t, err) {
+							return err
+						}
+						if name == base+".stdout" || name == base+".stderr" {
+							assert.Equal(t, diagnostic+"\n", string(data), "the only permitted private diagnostic files")
+						} else {
+							for _, marker := range []string{user, path, flag} {
+								assert.NotContains(t, string(data), marker, name)
+							}
+						}
+						return nil
+					}))
+				}
+				public, err := json.Marshal(state.Report.ForBuilders())
+				require.NoError(t, err)
+				for _, marker := range []string{user, path, flag} {
+					assert.NotContains(t, string(public), marker)
+				}
+			})
+		}
+	}
+}
