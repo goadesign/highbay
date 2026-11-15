@@ -1512,8 +1512,10 @@ export function bootstrapViewsPage() {
             if (before === null || JSON.stringify(before) !== JSON.stringify(result.build)) {
               verificationGeneration++;
               if (before !== null) refreshOpenCard(changeId);
-              refreshVerificationObservations(changeId);
             }
+            // An unchanged build still settles the dependency that held
+            // approval history back while this read was pending.
+            refreshVerificationObservations(changeId);
             followBuildFindings();
             readBlockingBuild();
             const ready = buildConfirmationRead;
