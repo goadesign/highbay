@@ -5,6 +5,9 @@ import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from
 import type { ChangeBuild, ChangeCardResult, OpenBuildRefusal, ReplacedBuild, StartBuildResult, StartedBuild, VerificationStatusResult } from "../types";
 import { Alert, Badge, Button, Card } from "./shadcn";
 
+// BuildQuestion binds a read or confirmation to the owner observation it describes.
+type BuildQuestion = { kind: "reading" | "rebuild" | "drop"; identity: string };
+
 // BuildStartReceipt records one start's team answer, rather than current health.
 // A later Start agents action supersedes this receipt.
 export interface BuildStartReceipt {
@@ -38,7 +41,7 @@ export interface BuildSectionProps {
   approvalAvailable: boolean;
   onRefresh: () => void;
   onReadFindings: () => void;
-  onPrepareBuild: (ready: (build: ChangeBuild["build"]) => void) => void;
+  onPrepareBuild: (ready: (build: ChangeBuild["build"] | null) => void) => void;
   onBuild: (replaces?: ReplacedBuild) => void;
   onDrop: (build: ReplacedBuild) => void;
   onOpenTeam: () => void;
@@ -97,9 +100,16 @@ export function BuildSectionView({
   const reviewPrimary = open && approvalAvailable && !otherPrimary && !sentBack && matchedCheck &&
     report?.passed === true && !recordedCheck;
   // identity binds the question to the exact subject and start it described.
-  const identity = JSON.stringify([card.change_id, card.request_revision, saved?.started_at ?? null]);
-  const [questionIdentity, setQuestionIdentity] = useState<string | null>(null);
-  const confirming = questionIdentity === identity && requiresConfirmation && eligible && !disabled && !starting && !dropping && blockingBuild === null;
+  const identity = JSON.stringify([card.change_id, card.request_revision, saved?.request_revision ?? null, saved?.started_at ?? null, saved?.taking.state ?? null]);
+  const [question, setQuestion] = useState<BuildQuestion | null>(null);
+  const confirming = question?.kind === "rebuild" && question.identity === identity && requiresConfirmation && eligible && !disabled && !starting && !dropping && blockingBuild === null;
+  const questionBusy = question !== null;
+  const dropTarget = blockingBuild?.build ?? saved;
+  const dropChange = blockingBuild?.change_id ?? card.change_id;
+  const dropIdentity = dropTarget === null ? null : JSON.stringify([
+    card.change_id, card.request_revision, dropChange, dropTarget.request_revision,
+    dropTarget.started_at, dropTarget.taking.state,
+  ]);
   const headingRef = useRef<HTMLHeadingElement>(null);
   const triggerRef = useRef<HTMLSpanElement>(null);
   const questionRef = useRef<HTMLDivElement | null>(null);
@@ -112,6 +122,7 @@ export function BuildSectionView({
   const takingFocusRemoved = useCallback(() => { removedTakingFocus.current = true; }, []);
   // sent prevents a second click before the page's pending state is rendered.
   const sent = useRef(false);
+  const reading = useRef(false);
 
   // attachQuestion observes focus before removal, following the Live control
   // pattern. Refreshes never pull focus away from an editor outside this row.
@@ -172,10 +183,13 @@ export function BuildSectionView({
   // Once invalidated, the old question cannot return when a session/revision
   // becomes eligible again. An outstanding request owns the submission latch.
   useEffect(() => {
-    if (!confirming && questionIdentity !== null) {
-      setQuestionIdentity(null);
+    if (question === null) { reading.current = false; return; }
+    if (disabled || starting || dropping || (question.kind !== "drop" &&
+        (question.identity !== identity || !eligible || blockingBuild !== null)) ||
+        (question.kind === "drop" && question.identity !== dropIdentity)) {
+      setQuestion(null);
     }
-  }, [confirming, questionIdentity]);
+  }, [question, identity, dropIdentity, eligible, disabled, starting, dropping, blockingBuild]);
   useEffect(() => {
     if (!starting) {
       sent.current = false;
@@ -185,7 +199,7 @@ export function BuildSectionView({
   // cancel sends nothing and restores the separate question trigger.
   function cancel() {
     returnFocus.current = identity;
-    setQuestionIdentity(null);
+    setQuestion(null);
   }
 
   // start is called only by the direct first/earlier action or final confirm.
@@ -194,7 +208,7 @@ export function BuildSectionView({
       return;
     }
     sent.current = true;
-    setQuestionIdentity(null);
+    setQuestion(null);
     onBuild(saved?.taking.state === "building"
       ? { change_id: card.change_id, started_at: saved.started_at }
       : undefined);
@@ -202,11 +216,20 @@ export function BuildSectionView({
 
   // ask reads the owner again before describing the build that will be replaced.
   function ask() {
-    if (blocked) return;
+    if (blocked || questionBusy || reading.current) return;
+    reading.current = true;
+    setQuestion({ kind: "reading", identity });
     onPrepareBuild((fresh) => {
-      setQuestionIdentity(JSON.stringify([
-        card.change_id, card.request_revision, fresh.state === "started" ? fresh.started_at : null,
-      ]));
+      if (fresh === null) {
+        setQuestion((previous) => previous?.kind === "reading" && previous.identity === identity ? null : previous);
+        return;
+      }
+      const freshIdentity = JSON.stringify([
+        card.change_id, card.request_revision, fresh.state === "started" ? fresh.request_revision : null,
+        fresh.state === "started" ? fresh.started_at : null, fresh.state === "started" ? fresh.taking.state : null,
+      ]);
+      setQuestion((previous) => previous?.kind === "reading" && previous.identity === identity
+        ? freshIdentity === identity ? { kind: "rebuild", identity } : null : previous);
     });
   }
 
@@ -218,11 +241,14 @@ export function BuildSectionView({
     ? "Build agreed revision"
     : saved !== null ? "Build current agreed revision" : "Build this change";
   const showDirect = (!current || !open) && confirmed && displayedCurrent && build !== null;
-  const startExplanation = saved?.test_writer.tests.state === "not_used"
-    ? "Build starts the builder. This project uses its configured tests. From Build on, those tests and the builder’s code run on this machine as ordinary programs, with your access to files and the network; nothing confines them. Approval decides only what merges."
+  const executionExplanation = saved?.test_writer.tests.state === "not_used"
+    ? "From Build on, those tests and the builder’s code run on this machine as ordinary programs, with your access to files and the network; nothing confines them. Approval decides only what merges."
+    : "From Build on, the tests and the builder’s code run on this machine as ordinary programs, with your access to files and the network; nothing confines them. Approval decides only what merges.";
+  const startExplanation = (saved?.test_writer.tests.state === "not_used"
+    ? "Build starts the builder. This project uses its configured tests. "
     : saved !== null
-      ? "Build starts the builder and the test writer. Surla uses the test writer’s accepted tests to check the builder’s work and to start live targets. From Build on, the tests and the builder’s code run on this machine as ordinary programs, with your access to files and the network; nothing confines them. Approval decides only what merges."
-      : "Build starts the builder. If this project needs a test writer, it starts that writer too. Surla uses that writer’s accepted tests to check the builder’s work and to start live targets. From Build on, the tests and the builder’s code run on this machine as ordinary programs, with your access to files and the network; nothing confines them. Approval decides only what merges.";
+      ? "Build starts the builder and the test writer. Surla uses the test writer’s accepted tests to check the builder’s work and to start live targets. "
+      : "Build starts the builder. If this project needs a test writer, it starts that writer too. Surla uses that writer’s accepted tests to check the builder’s work and to start live targets. ") + executionExplanation;
 
   const roleFacts = saved !== null ? <ul className="surla-build-roles">
     <li id="surla-build-builder">Builder: {saved.builder.read
@@ -258,7 +284,7 @@ export function BuildSectionView({
   </>;
   const primaryBuild = showDirect ? <span ref={triggerRef}>
       <Button id="surla-build-start" variant={otherPrimary || sentBack || reviewPrimary ? "default" : "primary"}
-        disabled={blocked || confirming} aria-describedby={blockingBuild !== null ? "surla-build-action-error" : undefined}
+        disabled={blocked || questionBusy} aria-describedby={blockingBuild !== null ? "surla-build-start-explanation surla-build-action-error" : "surla-build-start-explanation"}
         onClick={requiresConfirmation ? ask : start}>{directLabel}</Button>
     </span> : null;
   const actions = <>
@@ -269,15 +295,15 @@ export function BuildSectionView({
     </Button> : null}
     <Button id="surla-build-view-team" disabled={disabled || starting} onClick={onOpenTeam}>View team</Button>
     {current && open && confirmed && displayedCurrent ? <span ref={triggerRef}>
-      <Button id="surla-build-again" disabled={blocked || confirming}
+      <Button id="surla-build-again" disabled={blocked || questionBusy}
         aria-describedby={blockingBuild !== null ? "surla-build-action-error" : undefined}
         onClick={ask}>Build again…</Button>
     </span> : null}
     {blockingBuild !== null ? <Button id="surla-build-open-blocking-change" disabled={disabled || starting}
       onClick={() => onOpenChange(blockingBuild.change_id)}>Open change {blockingBuild.change_id}</Button> : null}
   </>;
-  const explanation = showDirect && (saved === null || saved.taking.state === "dropped")
-    ? <p id="surla-build-start-explanation">{startExplanation}</p> : null;
+  const explanation = showDirect
+    ? <p id="surla-build-start-explanation">{saved === null ? startExplanation : executionExplanation}</p> : null;
   const header = <>
     <h3 id="surla-build-title" tabIndex={-1} ref={headingRef}>Build</h3>
     {saved !== null ? <div className="surla-build-badges">
@@ -319,6 +345,7 @@ export function BuildSectionView({
         <section id="surla-build-blocking-change" aria-label="Open build blocking this change">
           <BuildTakingView changeId={blockingBuild.change_id} build={blockingBuild.build}
             disabled={disabled || starting} dropping={dropping} onDrop={onDrop}
+            question={question} setQuestion={setQuestion} questionBusy={questionBusy} identity={dropIdentity}
             onFocusedControlRemoved={takingFocusRemoved} actions={actions} header={null}
             dropLabel={"Drop " + blockingBuild.change_id + "’s build…"}
             progress={<Alert id="surla-build-action-error" variant="destructive" role="alert">
@@ -335,6 +362,7 @@ export function BuildSectionView({
       ) : null}
       {saved !== null && blockingBuild === null ? <BuildTakingView changeId={card.change_id} build={saved}
         disabled={disabled || starting || error !== null} dropping={dropping} onDrop={onDrop}
+        question={question} setQuestion={setQuestion} questionBusy={questionBusy} identity={dropIdentity}
         onFocusedControlRemoved={takingFocusRemoved} progress={<>{observations}{progress}</>}
         actions={actions} header={header} dropLabel="Drop…">
         {explanation}{showDirect ? <div className="surla-field-row">{primaryBuild}</div> : null}
@@ -366,7 +394,7 @@ export function BuildSectionView({
             }
           }}
         >
-          <Alert variant="warning">
+          <Alert>
             <p id="surla-build-question-title"><strong>{current
               ? "Build the agreed revision again?"
               : "Replace the earlier build with the agreed revision?"}</strong></p>
@@ -389,9 +417,9 @@ export function BuildSectionView({
   );
 }
 
-// BuildTakingView renders only owner-reported taking facts. Its separate Drop
-// question binds consent to the exact change/start and vanishes on invalidation.
-export function BuildTakingView({ changeId, build, disabled, dropping, onDrop, onFocusedControlRemoved, progress, actions, header, dropLabel, children }: {
+// BuildTakingView renders owner-reported taking facts and the section-owned
+// Drop question, which binds consent to the exact observed build.
+export function BuildTakingView({ changeId, build, disabled, dropping, onDrop, onFocusedControlRemoved, progress, actions, header, dropLabel, children, question, setQuestion, questionBusy, identity }: {
   changeId: string;
   build: StartedBuild;
   disabled: boolean;
@@ -403,12 +431,14 @@ export function BuildTakingView({ changeId, build, disabled, dropping, onDrop, o
   header: React.ReactNode;
   dropLabel: string;
   children: React.ReactNode;
+  question: BuildQuestion | null;
+  setQuestion: React.Dispatch<React.SetStateAction<BuildQuestion | null>>;
+  questionBusy: boolean;
+  identity: string | null;
 }) {
   const taking = build.taking;
   const open = taking.state === "building" || taking.state === "passed";
-  const identity = JSON.stringify([changeId, build.started_at, taking.state]);
-  const [question, setQuestion] = useState<string | null>(null);
-  const confirming = question === identity && open && !disabled && !dropping;
+  const confirming = question?.kind === "drop" && question.identity === identity && open && !disabled && !dropping;
   const trigger = useRef<HTMLSpanElement>(null);
   const heading = useRef<HTMLDivElement>(null);
   const questionNode = useRef<HTMLDivElement | null>(null);
@@ -445,16 +475,16 @@ export function BuildTakingView({ changeId, build, disabled, dropping, onDrop, o
     }
   }, [confirming, identity]);
   useEffect(() => {
-    if (!confirming && question !== null) setQuestion(null);
-  }, [confirming, question]);
+    if (!confirming && question?.kind === "drop") setQuestion(null);
+  }, [confirming, question, setQuestion]);
   useEffect(() => { if (!dropping) sent.current = false; }, [dropping, identity]);
   function cancel() {
     canceled.current = true;
     setQuestion(null);
   }
   const actionRow = <div className="surla-field-row surla-build-actions">{actions}
-    {open ? <span ref={trigger}><Button id="surla-build-drop" disabled={disabled || dropping || confirming}
-      onClick={() => setQuestion(identity)}>{dropLabel}</Button></span> : null}
+    {open ? <span ref={trigger}><Button id="surla-build-drop" disabled={disabled || dropping || questionBusy}
+      onClick={() => { if (identity !== null) setQuestion({ kind: "drop", identity }); }}>{dropLabel}</Button></span> : null}
   </div>;
   return (
     <div id="surla-build-taking" data-state={taking.state} ref={attachTaking} tabIndex={-1}>
@@ -476,13 +506,14 @@ export function BuildTakingView({ changeId, build, disabled, dropping, onDrop, o
         tabIndex={-1} ref={attach} onKeyDown={(event) => {
           if (event.key === "Escape") { event.preventDefault(); cancel(); }
         }}>
-        <Alert variant="warning">
+        <Alert>
           <p><strong>Drop change {changeId}?</strong></p>
           <p>Surla will not build on it. Its commits stay on this build’s branches, your branch is unchanged, and the guide’s draft starts again from your branch; edits it has not proposed are lost.</p>
           <div className="surla-field-row">
             <Button id="surla-build-drop-confirm" disabled={disabled || dropping} onClick={() => {
               if (sent.current || !confirming) return;
               sent.current = true;
+              onFocusedControlRemoved();
               setQuestion(null);
               onDrop({ change_id: changeId, started_at: build.started_at });
             }}>Drop change</Button>
@@ -513,10 +544,10 @@ export function BuildMergeInstructions({ taking, candidateCommit, testsCommit, o
   return <div className="surla-build-merge">
     <h4>To take this change, run in the project folder:</h4>
     <ol>
-      <li><pre ref={attachCommands} tabIndex={0} aria-label="Merge the builder’s commit"><code>git merge {candidateCommit}</code></pre>
+      <li><pre ref={attachCommands} tabIndex={0} role="region" aria-label="Merge the builder’s commit"><code>git merge {candidateCommit}</code></pre>
         <p>The builder’s commit, verified on <code>{taking.candidate_branch}</code>.</p></li>
       {testsCommit !== null && taking.tests.source === "written_tests" ? <li>
-        <pre ref={attachCommands} tabIndex={0} aria-label="Merge the tests’ commit"><code>git merge {testsCommit}</code></pre>
+        <pre ref={attachCommands} tabIndex={0} role="region" aria-label="Merge the tests’ commit"><code>git merge {testsCommit}</code></pre>
         <p>Then the tests’ commit, verified on <code>{taking.tests.branch}</code>.</p></li> : null}
     </ol>
     <p>Build another change once you have, or drop this one. Surla does not merge or deploy anything.</p>

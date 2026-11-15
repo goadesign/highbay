@@ -563,7 +563,7 @@ page.close();
 			})
 			require.NoError(t, err)
 		})
-		runPageScript(t, ps, nil, viewsPageScriptHelpers+`
+		runPageScript(t, ps, map[string]any{"revision": confirmed.RequestRevision}, viewsPageScriptHelpers+`
 const page = await openPage(origin, { link: input.link });
 await until(() => page.$("#surla-cp1-editor").dataset.changeId === "chg-stale", "the change did not open");
 page.$("#surla-nav-cp4").click();

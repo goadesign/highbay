@@ -84,8 +84,11 @@ type (
 		// lastEvent bounds one handle's stream, independently of other active roles.
 		lastEvent time.Time
 		// owed maps each unread generation to whether a reminder was attempted for it.
-		owed            map[string]bool
+		owed map[string]bool
+		// assignmentKnown reports that the last assignment read succeeded.
 		assignmentKnown bool
+		// hasWork reports that the role currently has work on the open build.
+		hasWork bool
 		// watchKnown reports that the last Chorus view read succeeded.
 		watchKnown, held bool
 		absentSince      time.Time
@@ -172,16 +175,21 @@ func (o *teamSupervisor) syncSelection(selection TeamSelection) bool {
 	return true
 }
 
-// assignments replaces known owed sets only after a complete owner read succeeded.
+// assignments replaces known work and owed sets only after a complete owner read succeeded.
 func (o *teamSupervisor) assignments(ctx context.Context, read controlplane.AssignmentReader) {
-	owed, err := read(ctx)
+	assignments, err := read(ctx)
 	for _, role := range o.roles {
 		role.assignmentKnown = err == nil || role.role.Role == "guide"
 		if err != nil {
 			continue
 		}
+		role.hasWork = assignments.HasWork(role.role.Role)
+		if !role.hasWork {
+			role.owed = map[string]bool{}
+			continue
+		}
 		current := map[string]bool{}
-		for _, item := range owed {
+		for _, item := range assignments.Unread {
 			if item.Role == role.role.Role {
 				current[item.Generation] = role.owed[item.Generation]
 			}
@@ -361,9 +369,13 @@ func (o *teamSupervisor) expireStream(now time.Time) bool {
 func (role *supervisedRole) value(now time.Time, allReady bool, shell string) gensurla.TeamRoleState {
 	value := gensurla.TeamRoleState{Role: role.role.Role, Handle: role.role.Handle, State: "unknown", Attention: "none", Watcher: "unknown", Assignment: "unknown"}
 	if role.assignmentKnown {
-		value.Assignment = "nothing_owed"
-		if len(role.owed) > 0 {
+		switch {
+		case !role.hasWork:
+			value.Assignment = "no_work"
+		case len(role.owed) > 0:
 			value.Assignment = "unread"
+		default:
+			value.Assignment = "nothing_owed"
 		}
 	}
 	if role.role.Role == "guide" {

@@ -33,6 +33,7 @@ func TestTeamWatcherHeldOutageIsUnknown(t *testing.T) {
 func TestTeamReadPublishedFacts(t *testing.T) {
 	o, f, now := newSupervisionFixture(t)
 	for _, tc := range []struct{ state, attention, watcher, assignment string }{
+		{"waiting", "none", "gone", "no_work"},
 		{"waiting", "none", "gone", "unread"},
 		{"needs_you", "auth", "held", "nothing_owed"},
 		{"unknown", "none", "unknown", "unknown"},
@@ -48,6 +49,7 @@ func TestTeamReadPublishedFacts(t *testing.T) {
 		role.watchKnown, role.held = tc.watcher != "unknown", tc.watcher == "held"
 		role.absentSince = now.Add(-teamWatcherGrace)
 		role.assignmentKnown = tc.assignment != "unknown"
+		role.hasWork = tc.assignment != "no_work"
 		role.owed = map[string]bool{}
 		if tc.assignment == "unread" {
 			role.owed["one"] = false
@@ -68,7 +70,7 @@ func TestTeamReadPublishedFacts(t *testing.T) {
 }
 
 // TestTeamAssignmentSetProjection consumes the owner reader's permitted sets.
-// A registered unused test writer owes nothing even when terminal facts are
+// A registered unused test writer has no_work even when terminal facts are
 // independently unknown; ordinary projects still expose its unread assignment.
 func TestTeamAssignmentSetProjection(t *testing.T) {
 	for _, unused := range []bool{false, true} {
@@ -77,12 +79,16 @@ func TestTeamAssignmentSetProjection(t *testing.T) {
 			_, err := registerTestAgent(o.server, "tests-example", "test_writer", o.server.state.Record.Directory)
 			require.NoError(t, err)
 			o.syncSelection(o.server.teamSelection())
-			o.assignments(t.Context(), func(context.Context) ([]controlplane.AssignmentGeneration, error) {
+			o.assignments(t.Context(), func(context.Context) (controlplane.TeamAssignments, error) {
 				owed := []controlplane.AssignmentGeneration{{Role: "builder", Generation: "one"}}
 				if !unused {
 					owed = append(owed, controlplane.AssignmentGeneration{Role: "test_writer", Generation: "one"})
 				}
-				return owed, nil
+				return controlplane.TeamAssignments{
+					BuilderHasWork:    true,
+					TestWriterHasWork: !unused,
+					Unread:            owed,
+				}, nil
 			})
 			o.publish(t.Context(), now, false)
 			snapshot, err := o.server.ReadTeam(t.Context())
@@ -95,7 +101,7 @@ func TestTeamAssignmentSetProjection(t *testing.T) {
 			assert.Equal(t, "tests-example", writer.Handle)
 			assert.Equal(t, "unknown", writer.State)
 			if unused {
-				assert.Equal(t, "nothing_owed", writer.Assignment)
+				assert.Equal(t, "no_work", writer.Assignment)
 			} else {
 				assert.Equal(t, "unread", writer.Assignment)
 			}
@@ -352,12 +358,12 @@ func TestTeamAssignmentScanCadence(t *testing.T) {
 	defer cancel()
 	done := make(chan error, 1)
 	go func() {
-		done <- o.server.Supervise(ctx, func(ctx context.Context) ([]controlplane.AssignmentGeneration, error) {
+		done <- o.server.Supervise(ctx, func(ctx context.Context) (controlplane.TeamAssignments, error) {
 			select {
 			case reads <- struct{}{}:
 			case <-ctx.Done():
 			}
-			return nil, nil
+			return controlplane.TeamAssignments{}, nil
 		})
 	}()
 	waitRead := func() {
@@ -416,7 +422,9 @@ func TestTeamStalledReaderDrains(t *testing.T) {
 	defer cancel()
 	done := make(chan error, 1)
 	go func() {
-		done <- o.server.Supervise(ctx, func(context.Context) ([]controlplane.AssignmentGeneration, error) { return nil, nil })
+		done <- o.server.Supervise(ctx, func(context.Context) (controlplane.TeamAssignments, error) {
+			return controlplane.TeamAssignments{}, nil
+		})
 	}()
 	select {
 	case <-started:

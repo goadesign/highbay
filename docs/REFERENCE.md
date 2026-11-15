@@ -2035,7 +2035,15 @@ checks are:
   The other modules run on macOS. The root module's short tests run in five
   jobs. **Go (., page tests)** runs only `internal/controlplane` and
   `internal/project` on macOS, selecting `TestViewsPage…` and
-  `TestCheckpoint…`. **Go (., control plane, A-L)** runs non-page tests whose
+  `TestCheckpoint…` in two sequential commands. Both commands name both
+  packages: the first selects `^Test(Checkpoint|ViewsPage[A-L])`, and the
+  second selects every remaining page test by applying the full page pattern
+  and skipping the first group. Each command gives each package its own
+  three-minute alarm, so smaller groups replace the whole page suite's
+  aggregate alarm. The page job keeps its ten-minute backstop and one cache
+  owner; the commands reuse setup and the build cache. This split preserves
+  the total test work and does not guarantee a faster job.
+  **Go (., control plane, A-L)** runs non-page tests whose
   names start with `TestA` through `TestL`, on Linux.
   **Go (., control plane, remaining)** runs every other non-page test,
   including examples and fuzz seeds, also on Linux. **Go (.)** runs on macOS,
@@ -2101,7 +2109,12 @@ go test -race -count=1 -timeout 40m -tags=e2e,docker -run '^TestCheckProjectRepa
 All full suites run nightly at 07:17 UTC and on a manual **Run workflow**
 request (`CI=true gh workflow run ci.yml --ref <branch> </dev/null`). This adds
 the other modules' complete tests and the verifier, generation, starter and
-orders acceptance suites as parallel jobs. A passing short run does not prove
+orders acceptance suites as parallel jobs. **Full / generation** uses a
+60-minute package alarm and a 70-minute job backstop for the suite's project
+compilations on slow runners, including cold builds. The job limit also
+covers setup and downloads. These are execution bounds, not measured
+completion times or a reduction in compilation work.
+A passing short run does not prove
 paths that build and run agent-written code; changes to candidate execution
 or starter generation need the full suite. On macOS, with the Temporal CLI
 for the first three:

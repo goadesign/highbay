@@ -56,6 +56,8 @@ type (
 		Phone bool `json:"phone,omitempty"`
 		// Taking selects the focused passed-build layout and consent scenario.
 		Taking bool `json:"taking,omitempty"`
+		// TakingState selects the saved presentation state.
+		TakingState string `json:"taking_state,omitempty"`
 		// CaptureDirectory receives the requested private viewport screenshots.
 		CaptureDirectory string `json:"capture_directory,omitempty"`
 		// Origin is the project server's origin.
@@ -110,6 +112,9 @@ type (
 		Width          int      `json:"width"`
 		DocumentWidth  int      `json:"document_width"`
 		Commands       []string `json:"commands"`
+		CommandsUsable bool     `json:"commands_usable"`
+		Explanation    bool     `json:"explanation"`
+		NoStart        bool     `json:"no_start"`
 		RewriteWarning bool     `json:"rewrite_warning"`
 		DropFocused    bool     `json:"drop_focused"`
 		DropCancelled  bool     `json:"drop_cancelled"`

@@ -805,39 +805,44 @@ func TestAcceptedTestsCarryTheContractsSentence(t *testing.T) {
 
 // TestVerdictsGiveSupervisionNewGenerations reads both assignments, then
 // saves verdicts: findings owe the test writer a read of a new generation and
-// leave the builder's read; an acceptance owes both roles a read, each of a
-// generation it never had.
+// leave the builder's read; an acceptance finishes the test writer's work and
+// owes the builder a read of a generation it never had.
 func TestVerdictsGiveSupervisionNewGenerations(t *testing.T) {
 	answers := []testwriter.Verdict{needsChanges("RefundOverLimit is not implemented"), {}}
 	tests := &standInCopy{check: func(_ context.Context, call int) (testwriter.Verdict, error) { return answers[call-1], nil }}
 	cp, revision := newReportFixture(t, Options{}, tests)
 	unread, err := cp.assignmentGenerations(t.Context())
 	require.NoError(t, err)
-	require.Len(t, unread, 2)
+	assert.True(t, unread.BuilderHasWork)
+	assert.True(t, unread.TestWriterHasWork)
+	require.Len(t, unread.Unread, 2)
 	readBothAssignments(t, cp)
 	owed, err := cp.assignmentGenerations(t.Context())
 	require.NoError(t, err)
-	assert.Empty(t, owed)
+	assert.True(t, owed.BuilderHasWork)
+	assert.True(t, owed.TestWriterHasWork)
+	assert.Empty(t, owed.Unread)
 
 	reportTests(t, cp, revision)
 	waitForTests(t, cp, gensurla.TestsKindNeedsChanges)
 	afterFindings, err := cp.assignmentGenerations(t.Context())
 	require.NoError(t, err)
-	require.Len(t, afterFindings, 1)
-	assert.Equal(t, "test_writer", afterFindings[0].Role)
-	assert.NotEqual(t, unread[1].Generation, afterFindings[0].Generation)
+	assert.True(t, afterFindings.BuilderHasWork)
+	assert.True(t, afterFindings.TestWriterHasWork)
+	require.Len(t, afterFindings.Unread, 1)
+	assert.Equal(t, "test_writer", afterFindings.Unread[0].Role)
+	assert.NotEqual(t, unread.Unread[1].Generation, afterFindings.Unread[0].Generation)
 
 	readBothAssignments(t, cp)
 	reportTests(t, cp, revision)
 	waitForTests(t, cp, gensurla.TestsKindAccepted)
 	afterAcceptance, err := cp.assignmentGenerations(t.Context())
 	require.NoError(t, err)
-	require.Len(t, afterAcceptance, 2)
-	for i, role := range []string{"builder", "test_writer"} {
-		assert.Equal(t, role, afterAcceptance[i].Role)
-		assert.NotEqual(t, unread[i].Generation, afterAcceptance[i].Generation, role)
-	}
-	assert.NotEqual(t, afterFindings[0].Generation, afterAcceptance[1].Generation)
+	assert.True(t, afterAcceptance.BuilderHasWork)
+	assert.False(t, afterAcceptance.TestWriterHasWork)
+	require.Len(t, afterAcceptance.Unread, 1)
+	assert.Equal(t, "builder", afterAcceptance.Unread[0].Role)
+	assert.NotEqual(t, unread.Unread[0].Generation, afterAcceptance.Unread[0].Generation)
 }
 
 // TestARecordWithAnOnBranchLockRetriesOnlyRecord verifies that when an

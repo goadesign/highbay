@@ -12,6 +12,7 @@ import (
 	"time"
 
 	genproject "github.com/goadesign/surla/gen/project"
+	"github.com/goadesign/surla/internal/controlplane"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
@@ -79,6 +80,8 @@ type (
 	teamOperation struct {
 		sync.Mutex
 		dependencies TeamDependencies
+		// assignments reads which worker roles currently have work on the open build.
+		assignments controlplane.AssignmentReader
 		// withTimeout privately injects the accepted-operation deadline; nil uses context.WithTimeout.
 		withTimeout func(context.Context, time.Duration) (context.Context, context.CancelFunc)
 		// observationMu protects only the small public snapshot, never external replies.
@@ -119,9 +122,23 @@ type (
 // is independent of a build's working-copy and generation phase.
 const teamStartTimeout = 45 * time.Second
 
-// errRoleFolder marks a roster failure caused by a role's working folder rather
-// than the project's private state, so the team failure names that folder's step.
-var errRoleFolder = errors.New("role working folder cannot be used")
+var (
+	// errRoleFolder marks a roster failure caused by a role's working folder rather
+	// than the project's private state, so the team failure names that folder's step.
+	errRoleFolder = errors.New("role working folder cannot be used")
+	// errAssignmentsUnavailable is the fixed bounded error recorded when ensureTeam
+	// cannot read which worker roles currently have work on the open build.
+	errAssignmentsUnavailable = errors.New("team assignments could not be read")
+)
+
+// BindAssignments installs the control plane's read-only assignment reader
+// before the server listens so EnsureTeam and StartAgents know which worker
+// roles currently have work on the open build.
+func (s *Server) BindAssignments(assignments controlplane.AssignmentReader) {
+	s.team.Lock()
+	defer s.team.Unlock()
+	s.team.assignments = assignments
+}
 
 // EnsureTeam accepts management authority once, then completes bounded server-owned work.
 // A disconnected caller can repeat the operation; saved identity and space adoption avoid duplication.
@@ -287,12 +304,20 @@ func (s *Server) ensureTeam(ctx context.Context) (result *genproject.ProjectTeam
 	for _, role := range roster.Roles {
 		listed[role.Handle] = true
 	}
+	assignments, assignmentsErr := s.readAssignments(ctx)
+	if assignmentsErr != nil {
+		span := trace.SpanFromContext(ctx)
+		span.RecordError(assignmentsErr)
+		span.SetStatus(codes.Error, assignmentsErr.Error())
+	}
 	result = &genproject.ProjectTeam{Team: team, Space: space.ID, Dialog: "not_needed", Roles: make([]*genproject.ProjectTeamRole, 0, len(roles))}
 	missing := false
 	for _, role := range roles {
 		running := runningHandles[role.Handle]
-		result.Roles = append(result.Roles, &genproject.ProjectTeamRole{Role: agents[role.Handle].Role, Handle: role.Handle, Running: running})
-		if listed[role.Handle] && !running {
+		roleName := agents[role.Handle].Role
+		result.Roles = append(result.Roles, &genproject.ProjectTeamRole{Role: roleName, Handle: role.Handle, Running: running})
+		needed := roleName == "guide" || assignmentsErr != nil || assignments.HasWork(roleName)
+		if listed[role.Handle] && needed && !running {
 			missing = true
 		}
 	}
@@ -311,6 +336,19 @@ func (s *Server) ensureTeam(ctx context.Context) (result *genproject.ProjectTeam
 	}
 	result.Dialog = "opened"
 	return result, nil
+}
+
+// readAssignments calls the bound assignment reader, treating an unbound reader
+// and a failed read identically so ensureTeam counts every listed role.
+func (s *Server) readAssignments(ctx context.Context) (controlplane.TeamAssignments, error) {
+	if s.team.assignments == nil {
+		return controlplane.TeamAssignments{}, errAssignmentsUnavailable
+	}
+	assignments, err := s.team.assignments(ctx)
+	if err != nil {
+		return controlplane.TeamAssignments{}, errAssignmentsUnavailable
+	}
+	return assignments, nil
 }
 
 // registeredTeamRoles derives current launcher text from each saved role and folder.

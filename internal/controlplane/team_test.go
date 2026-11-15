@@ -16,6 +16,8 @@ import (
 
 	genproject "github.com/goadesign/surla/gen/project"
 	gensurla "github.com/goadesign/surla/gen/surla"
+	"github.com/goadesign/surla/internal/verify"
+	"github.com/goadesign/surla/internal/verifyrun"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
@@ -27,6 +29,7 @@ type teamServiceFixture struct {
 	mu        sync.Mutex
 	snapshot  gensurla.TeamSnapshot
 	calls     []string
+	bound     AssignmentReader
 	supervise func(context.Context, AssignmentReader) error
 	// Registration and start hooks observe the real start boundary without a window.
 	register func(context.Context, BuildFolders) error
@@ -72,6 +75,13 @@ func (f *teamServiceFixture) RegisterBuildRoles(ctx context.Context, folders Bui
 		return register(ctx, folders)
 	}
 	return nil
+}
+
+// BindAssignments records the assignment reader before supervision starts.
+func (f *teamServiceFixture) BindAssignments(read AssignmentReader) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.bound = read
 }
 
 // Supervise is a bounded stand-in that ends when its owner does.
@@ -240,9 +250,11 @@ func TestTeamAssignmentGenerations(t *testing.T) {
 	cp = newBuildControlPlane(t, opts)
 	first, err := cp.assignmentGenerations(t.Context())
 	require.NoError(t, err)
-	require.Len(t, first, 2)
-	assert.Equal(t, "builder", first[0].Role)
-	assert.Len(t, first[0].Generation, 64)
+	assert.True(t, first.BuilderHasWork)
+	assert.True(t, first.TestWriterHasWork)
+	require.Len(t, first.Unread, 2)
+	assert.Equal(t, "builder", first.Unread[0].Role)
+	assert.Len(t, first.Unread[0].Generation, 64)
 	second, err := cp.assignmentGenerations(t.Context())
 	require.NoError(t, err)
 	assert.Equal(t, first, second)
@@ -268,8 +280,10 @@ func TestTeamAssignmentGenerations(t *testing.T) {
 	require.NoError(t, err)
 	owed, err := cp.assignmentGenerations(t.Context())
 	require.NoError(t, err)
-	require.Len(t, owed, 1)
-	assert.Equal(t, "test_writer", owed[0].Role)
+	assert.True(t, owed.BuilderHasWork, "reading an assignment leaves the builder with work until a run passes")
+	assert.True(t, owed.TestWriterHasWork)
+	require.Len(t, owed.Unread, 1)
+	assert.Equal(t, "test_writer", owed.Unread[0].Role)
 	// Owner read errors remain errors, rather than an empty successful owed set.
 	name := filepath.Join(cp.cards.dir, openBuildRecordFile)
 	original, err := os.ReadFile(name)
@@ -309,8 +323,10 @@ func TestTeamAssignmentGenerationsMatchBuildWork(t *testing.T) {
 			assert.Equal(t, wantTests, build.TestWriter.Tests.Kind())
 			owed, err := cp.assignmentGenerations(t.Context())
 			require.NoError(t, err)
-			roles := make([]string, 0, len(owed))
-			for _, item := range owed {
+			assert.True(t, owed.BuilderHasWork)
+			assert.Equal(t, !stored, owed.TestWriterHasWork)
+			roles := make([]string, 0, len(owed.Unread))
+			for _, item := range owed.Unread {
 				roles = append(roles, item.Role)
 			}
 			assert.Equal(t, wantRoles, roles)
@@ -324,11 +340,13 @@ func TestTeamAssignmentGenerationsMatchBuildWork(t *testing.T) {
 			require.NoError(t, err)
 			remaining, err := cp.assignmentGenerations(t.Context())
 			require.NoError(t, err)
+			assert.True(t, remaining.BuilderHasWork)
+			assert.Equal(t, !stored, remaining.TestWriterHasWork)
 			if stored {
-				assert.Empty(t, remaining)
+				assert.Empty(t, remaining.Unread)
 			} else {
-				require.Len(t, remaining, 1)
-				assert.Equal(t, "test_writer", remaining[0].Role)
+				require.Len(t, remaining.Unread, 1)
+				assert.Equal(t, "test_writer", remaining.Unread[0].Role)
 			}
 		})
 	}
@@ -452,4 +470,419 @@ func TestTeamWaitingVersionAndHistory(t *testing.T) {
 	}
 	assert.Contains(t, names, waitForChangesSpan)
 	assert.Contains(t, names, "surla.request.wait_for_changes")
+}
+
+// TestTeamBindAssignmentsBeforeSupervise proves that controlplane.New binds
+// its assignment reader synchronously before starting the background
+// supervision worker, so a team request arriving before Supervise runs still
+// reads the control plane's assignments.
+func TestTeamBindAssignmentsBeforeSupervise(t *testing.T) {
+	superviseGate := make(chan struct{})
+	f := &teamServiceFixture{}
+	f.supervise = func(ctx context.Context, _ AssignmentReader) error {
+		<-superviseGate
+		f.mu.Lock()
+		f.calls = append(f.calls, "supervise")
+		f.mu.Unlock()
+		<-ctx.Done()
+		return nil
+	}
+	cp, err := New(Options{CardsDir: t.TempDir(), Team: &TeamBinding{Owner: "alice@example.com", Service: f}})
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		close(superviseGate)
+		assert.NoError(t, cp.Close())
+	})
+
+	f.mu.Lock()
+	bound := f.bound
+	calls := append([]string(nil), f.calls...)
+	f.mu.Unlock()
+	require.NotNil(t, bound, "BindAssignments must run synchronously before New returns")
+	assert.Empty(t, calls, "BindAssignments must not wait for Supervise")
+	got, err := bound(t.Context())
+	require.NoError(t, err)
+	assert.False(t, got.BuilderHasWork)
+	assert.False(t, got.TestWriterHasWork)
+	assert.Empty(t, got.Unread)
+}
+
+// TestWhoHasWorkAndAssignmentLists checks who has work across no build, a
+// dropped build, every test-writer state, builder verification runs (before
+// start, another change or revision, failed, not completed, passed, and
+// unreadable), approval with and without promotion settings, building again,
+// and a written-tests build read while stored verification settings are
+// configured. List operations and Unread hold only roles with work, while
+// single assignment reads by change_id stay readable after acceptance or a
+// passed run.
+func TestWhoHasWorkAndAssignmentLists(t *testing.T) {
+	runsDir := t.TempDir()
+	reportDir := t.TempDir()
+	cp := newBuildControlPlane(t, Options{
+		RunsDir: runsDir,
+		WrittenTestRuns: &WrittenTestRuns{
+			ReportDir: reportDir,
+			Command:   []string{"/bin/sh", "-c", "exit 0", "sh"},
+			Timeout:   time.Hour,
+		},
+	})
+	commit := productionBuildGit(t, cp.activeWorkspaceDir, "rev-parse", "HEAD")
+	suiteCommit := commit
+	user := asCaller("alice@example.com", CallerUser)
+	builder := asCaller("alice@example.com", CallerBuilder)
+	writer := asCaller("alice@example.com", CallerTestWriter)
+
+	// 1. Before any build starts, neither role has work.
+	none, err := cp.assignmentGenerations(t.Context())
+	require.NoError(t, err)
+	assert.False(t, none.BuilderHasWork)
+	assert.False(t, none.TestWriterHasWork)
+	assert.False(t, none.HasWork("builder"))
+	assert.False(t, none.HasWork("test_writer"))
+	assert.False(t, none.HasWork("guide"))
+	assert.Empty(t, none.Unread)
+	bList, err := cp.ListBuilderAssignments(builder)
+	require.NoError(t, err)
+	assert.Empty(t, bList.Assignments)
+	wList, err := cp.ListTestWriterAssignments(writer)
+	require.NoError(t, err)
+	assert.Empty(t, wList.Assignments)
+
+	// 2. Starting a build gives both roles work; dropping it clears both and
+	// refuses single reads with not_found.
+	dropCard := buildableChange(t, cp, "dropped-chg")
+	droppedStart, err := cp.StartBuild(user, &gensurla.StartBuildPayload{
+		ChangeID: dropCard.ChangeID, RequestRevision: dropCard.RequestRevision,
+	})
+	require.NoError(t, err)
+	active, err := cp.assignmentGenerations(t.Context())
+	require.NoError(t, err)
+	assert.True(t, active.BuilderHasWork)
+	assert.True(t, active.TestWriterHasWork)
+	require.Len(t, active.Unread, 2)
+
+	_, err = cp.DropBuild(user, &gensurla.DropBuildPayload{
+		ChangeID: dropCard.ChangeID, StartedAt: droppedStart.Build.StartedAt,
+	})
+	require.NoError(t, err)
+	afterDrop, err := cp.assignmentGenerations(t.Context())
+	require.NoError(t, err)
+	assert.False(t, afterDrop.BuilderHasWork)
+	assert.False(t, afterDrop.TestWriterHasWork)
+	assert.Empty(t, afterDrop.Unread)
+	bList, err = cp.ListBuilderAssignments(builder)
+	require.NoError(t, err)
+	assert.Empty(t, bList.Assignments)
+	wList, err = cp.ListTestWriterAssignments(writer)
+	require.NoError(t, err)
+	assert.Empty(t, wList.Assignments)
+	_, err = cp.GetBuilderAssignment(builder, &gensurla.GetBuilderAssignmentPayload{ChangeID: dropCard.ChangeID})
+	assertRefused(t, err, "no_build")
+	_, err = cp.GetTestWriterAssignment(writer, &gensurla.GetTestWriterAssignmentPayload{ChangeID: dropCard.ChangeID})
+	assertRefused(t, err, "no_build")
+
+	// 3. Start a new build after the drop and check every test-writer state:
+	// assigned, reported, needs_changes, and could_not_run all count as work;
+	// accepted does not.
+	card := buildableChange(t, cp, "chg")
+	provenance, found, err := cp.cards.loadMadeFrom()
+	require.NoError(t, err)
+	require.True(t, found)
+	meta := loadMetadataRecord(t, cp, "chg")
+	meta.madeFrom.Start = provenance.Start
+	meta.madeFrom.Entries = nil
+	saveMetadataRecord(t, cp, meta)
+	started, err := cp.StartBuild(user, &gensurla.StartBuildPayload{
+		ChangeID: card.ChangeID, RequestRevision: card.RequestRevision,
+	})
+	require.NoError(t, err)
+	makeBuildFixtureBuilderCopy(t, cp)
+	startedAt, err := time.Parse(time.RFC3339Nano, started.Build.StartedAt)
+	require.NoError(t, err)
+
+	// Reading the test writer's assignment clears Unread for test_writer while
+	// keeping TestWriterHasWork and ListTestWriterAssignments non-empty.
+	_, err = cp.GetTestWriterAssignment(writer, &gensurla.GetTestWriterAssignmentPayload{ChangeID: "chg"})
+	require.NoError(t, err)
+	afterWriterRead, err := cp.assignmentGenerations(t.Context())
+	require.NoError(t, err)
+	assert.True(t, afterWriterRead.TestWriterHasWork)
+	require.Len(t, afterWriterRead.Unread, 1)
+	assert.Equal(t, "builder", afterWriterRead.Unread[0].Role)
+	wList, err = cp.ListTestWriterAssignments(writer)
+	require.NoError(t, err)
+	require.Len(t, wList.Assignments, 1)
+
+	checkedAt := startedAt.Add(time.Second).UTC()
+	for _, tc := range []struct {
+		name string
+		tw   testWriterAssignment
+		work bool
+	}{
+		{
+			name: "assigned",
+			tw:   testWriterAssignment{State: testsAssigned, Read: false},
+			work: true,
+		},
+		{
+			name: "reported",
+			tw:   testWriterAssignment{State: testsReported, Read: true},
+			work: true,
+		},
+		{
+			name: "needs_changes",
+			tw:   testWriterAssignment{State: testsNeedChanges, Read: false, Findings: []string{"missing hook"}, CheckedAt: checkedAt},
+			work: true,
+		},
+		{
+			name: "could_not_run",
+			tw:   testWriterAssignment{State: testsCouldNotRun, Read: false, Reason: "git failed", Step: stepFailure, CheckedAt: checkedAt},
+			work: true,
+		},
+		{
+			name: "accepted",
+			tw:   testWriterAssignment{State: testsAccepted, Read: false, Findings: []string{}, Commit: suiteCommit, CheckedAt: checkedAt},
+			work: false,
+		},
+	} {
+		t.Run("test_writer_"+tc.name, func(t *testing.T) {
+			saveTestWriter(t, cp, "chg", tc.tw)
+			got, err := cp.assignmentGenerations(t.Context())
+			require.NoError(t, err)
+			assert.Equal(t, tc.work, got.TestWriterHasWork)
+			assert.Equal(t, tc.work, got.HasWork("test_writer"))
+			var unreadRoles []string
+			for _, item := range got.Unread {
+				unreadRoles = append(unreadRoles, item.Role)
+			}
+			if tc.work && !tc.tw.Read {
+				assert.Contains(t, unreadRoles, "test_writer")
+			} else {
+				assert.NotContains(t, unreadRoles, "test_writer")
+			}
+			listed, err := cp.ListTestWriterAssignments(writer)
+			require.NoError(t, err)
+			if tc.work {
+				require.Len(t, listed.Assignments, 1)
+				assert.Equal(t, "chg", listed.Assignments[0].ChangeID)
+			} else {
+				assert.Empty(t, listed.Assignments)
+			}
+			full, err := cp.GetTestWriterAssignment(writer, &gensurla.GetTestWriterAssignmentPayload{ChangeID: "chg"})
+			require.NoError(t, err, "single read by change_id stays readable in %s", tc.name)
+			assert.Equal(t, "chg", full.ChangeID)
+		})
+	}
+
+	// Leave tests accepted and mark the builder's assignment read first, then
+	// check that reading leaves the builder with work until a verification run
+	// of the open build passes.
+	acceptTests(t, cp, "chg", suiteCommit)
+	_, err = cp.GetBuilderAssignment(builder, &gensurla.GetBuilderAssignmentPayload{ChangeID: "chg"})
+	require.NoError(t, err)
+	builderTree := productionBuildGit(t, cp.activeWorkspaceDir, "write-tree")
+	commit = productionBuildGit(
+		t, cp.activeWorkspaceDir, "commit-tree", "--no-gpg-sign", builderTree, "-p", suiteCommit, "-m", "Builder candidate",
+	)
+	productionBuildGit(t, cp.activeWorkspaceDir, "update-ref", "refs/heads/surla/build-2", commit)
+	afterBuilderRead, err := cp.assignmentGenerations(t.Context())
+	require.NoError(t, err)
+	assert.True(t, afterBuilderRead.BuilderHasWork)
+	assert.False(t, afterBuilderRead.TestWriterHasWork)
+	assert.Empty(t, afterBuilderRead.Unread)
+	bList, err = cp.ListBuilderAssignments(builder)
+	require.NoError(t, err)
+	require.Len(t, bList.Assignments, 1)
+
+	spec := reportSpec{
+		SuiteID: "shop_acceptance", SuiteCommit: suiteCommit, Environment: "sim",
+		Artifacts: map[string]string{"shop": strings.Repeat("a", 64)},
+	}
+	saveRun := func(changeID, revision string, acceptedAt time.Time, resultJSON string) string {
+		runID := verifyrun.NewRunID()
+		dir := filepath.Join(runsDir, runID)
+		require.NoError(t, os.MkdirAll(dir, 0o700))
+		plan := verify.Plan{
+			CandidateRepo: "/repos/candidate", CandidateCommit: commit, CandidateModule: ".",
+			Binaries:  map[string]string{"shop": "./cmd/shop"},
+			SuiteRepo: "/repos/suite", SuiteCommit: suiteCommit, SuiteModule: "eval",
+			SuiteCommand: "./gen/cmd/shop-evals", RequestRevision: revision,
+			ReportDir: reportDir, WorkDir: filepath.Join(dir, "work"), Tests: verify.TestsWritten,
+		}
+		raw, err := json.Marshal(verifyrun.Request{
+			RunID: runID, Owner: "alice@example.com", ChangeID: changeID,
+			AcceptedAt: acceptedAt.UTC(), Timeout: time.Hour, Plan: plan,
+		})
+		require.NoError(t, err)
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "request.json"), raw, 0o600))
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "lock"), nil, 0o600))
+		if resultJSON != "" {
+			require.NoError(t, os.WriteFile(filepath.Join(dir, "result.json"), []byte(resultJSON), 0o600))
+		}
+		return runID
+	}
+
+	passBefore := passingReport(t, card.RequestRevision, commit, spec)
+	writeReportFile(t, reportDir, passBefore)
+	// A passing run accepted before StartedAt does not finish the open build.
+	saveRun("chg", card.RequestRevision, startedAt.Add(-time.Second), `{"kind":"report","report_digest":"`+passBefore.Digest+`"}`)
+	// A passing run for another change does not finish the open build.
+	saveRun("other", card.RequestRevision, startedAt.Add(time.Millisecond), `{"kind":"report","report_digest":"`+passBefore.Digest+`"}`)
+	// A passing run for another revision does not finish the open build.
+	otherRev := strings.Repeat("e", 64)
+	passOtherRev := passingReport(t, otherRev, commit, spec)
+	writeReportFile(t, reportDir, passOtherRev)
+	saveRun("chg", otherRev, startedAt.Add(2*time.Millisecond), `{"kind":"report","report_digest":"`+passOtherRev.Digest+`"}`)
+	// A failed report and an execution_failed run for the open build still leave the builder with work.
+	failRep := failingReport(t, card.RequestRevision, commit, spec)
+	writeReportFile(t, reportDir, failRep)
+	saveRun("chg", card.RequestRevision, startedAt.Add(3*time.Millisecond), `{"kind":"report","report_digest":"`+failRep.Digest+`"}`)
+	saveRun("chg", card.RequestRevision, startedAt.Add(4*time.Millisecond), `{"kind":"no_report","failure":"execution_failed","stage":"build","summary":"build failed"}`)
+
+	stillWorking, err := cp.assignmentGenerations(t.Context())
+	require.NoError(t, err)
+	assert.True(t, stillWorking.BuilderHasWork, "runs before StartedAt, for another change/revision, or failed leave the builder with work")
+	bList, err = cp.ListBuilderAssignments(builder)
+	require.NoError(t, err)
+	require.Len(t, bList.Assignments, 1)
+
+	// Mark the builder's assignment unread on disk, then record a passing run
+	// accepted at/after StartedAt: the builder now has no work, its list is
+	// empty, Unread omits it even though Read is false, and GetBuilderAssignment
+	// by change_id stays readable.
+	editBuildFile(t, cp, "chg", func(f map[string]any) map[string]any {
+		f["builder"].(map[string]any)["read"] = false
+		return f
+	})
+	saveRun("chg", card.RequestRevision, startedAt.Add(5*time.Millisecond), `{"kind":"report","report_digest":"`+passBefore.Digest+`"}`)
+
+	afterPass, err := cp.assignmentGenerations(t.Context())
+	require.NoError(t, err)
+	assert.False(t, afterPass.BuilderHasWork)
+	assert.False(t, afterPass.TestWriterHasWork)
+	assert.Empty(t, afterPass.Unread, "a role without work is never in Unread")
+	bList, err = cp.ListBuilderAssignments(builder)
+	require.NoError(t, err)
+	assert.Empty(t, bList.Assignments)
+	bFull, err := cp.GetBuilderAssignment(builder, &gensurla.GetBuilderAssignmentPayload{ChangeID: "chg"})
+	require.NoError(t, err, "GetBuilderAssignment by change_id stays readable after a passed run")
+	assert.Equal(t, "chg", bFull.ChangeID)
+	assert.Equal(t, card.RequestRevision, bFull.RequestRevision)
+	assert.True(t, bFull.Read)
+
+	// Approval changes nothing with or without promotion settings.
+	_, err = cp.ApproveMerge(user, &gensurla.ApproveMergePayload{
+		ChangeID: "chg", RequestRevision: card.RequestRevision, CandidateCommit: commit, ReportDigest: passBefore.Digest,
+	})
+	require.NoError(t, err)
+	cp.promotionTarget = &promotionTargetStub{report: passBefore, artifacts: spec.Artifacts}
+	afterApproval, err := cp.assignmentGenerations(t.Context())
+	require.NoError(t, err)
+	assert.False(t, afterApproval.BuilderHasWork)
+	assert.False(t, afterApproval.TestWriterHasWork)
+	cp.promotionTarget = nil
+
+	// Accepting later tests after a pass makes the earlier pass's inputs no
+	// longer current (InputsCurrent=false): the builder has work again, its
+	// assignment is listed and unread again, and Unread carries its new
+	// generation; then a pass on the new inputs restores no_work.
+	tree := productionBuildGit(t, cp.activeWorkspaceDir, "write-tree")
+	laterSuiteCommit := productionBuildGit(
+		t, cp.activeWorkspaceDir, "commit-tree", "--no-gpg-sign", tree, "-p", commit, "-m", "Accept later tests",
+	)
+	require.NotEqual(t, suiteCommit, laterSuiteCommit)
+	saveTestWriter(t, cp, "chg", testWriterAssignment{
+		State: testsAccepted, Read: true, Findings: []string{}, Commit: laterSuiteCommit, CheckedAt: checkedAt.Add(time.Second),
+	})
+	editBuildFile(t, cp, "chg", func(f map[string]any) map[string]any {
+		f["builder"].(map[string]any)["read"] = false
+		return f
+	})
+	afterLaterTests, err := cp.assignmentGenerations(t.Context())
+	require.NoError(t, err)
+	assert.True(t, afterLaterTests.BuilderHasWork, "earlier pass ran older tests, so builder has work again")
+	assert.False(t, afterLaterTests.TestWriterHasWork)
+	require.Len(t, afterLaterTests.Unread, 1)
+	assert.Equal(t, "builder", afterLaterTests.Unread[0].Role)
+	bList, err = cp.ListBuilderAssignments(builder)
+	require.NoError(t, err)
+	require.Len(t, bList.Assignments, 1)
+	assert.False(t, bList.Assignments[0].Read)
+	acceptedView, ok := bList.Assignments[0].WrittenTests.AsAccepted()
+	require.True(t, ok)
+	assert.Equal(t, laterSuiteCommit, acceptedView.Commit)
+
+	suiteCommit = laterSuiteCommit
+	laterSpec := spec
+	laterSpec.SuiteCommit = laterSuiteCommit
+	passLaterTests := passingReport(t, card.RequestRevision, commit, laterSpec)
+	writeReportFile(t, reportDir, passLaterTests)
+	saveRun("chg", card.RequestRevision, startedAt.Add(6*time.Millisecond), `{"kind":"report","report_digest":"`+passLaterTests.Digest+`"}`)
+	afterSecondPass, err := cp.assignmentGenerations(t.Context())
+	require.NoError(t, err)
+	assert.False(t, afterSecondPass.BuilderHasWork, "a pass on the newly accepted tests finishes the builder's work")
+	assert.False(t, afterSecondPass.TestWriterHasWork)
+	assert.Empty(t, afterSecondPass.Unread)
+	bList, err = cp.ListBuilderAssignments(builder)
+	require.NoError(t, err)
+	assert.Empty(t, bList.Assignments)
+
+	// Building again starts a new build after the passed run's AcceptedAt,
+	// giving both roles work and unread assignments again (even while the card
+	// still holds its saved approval).
+	time.Sleep(15 * time.Millisecond)
+	rebuilt, err := startBuildAgain(t, cp, user, "chg", card.RequestRevision)
+	require.NoError(t, err)
+	assert.False(t, rebuilt.Build.Builder.Read)
+	assert.False(t, rebuilt.Build.TestWriter.Read)
+	afterRebuild, err := cp.assignmentGenerations(t.Context())
+	require.NoError(t, err)
+	assert.True(t, afterRebuild.BuilderHasWork)
+	assert.True(t, afterRebuild.TestWriterHasWork)
+	require.Len(t, afterRebuild.Unread, 2)
+	bList, err = cp.ListBuilderAssignments(builder)
+	require.NoError(t, err)
+	require.Len(t, bList.Assignments, 1)
+	wList, err = cp.ListTestWriterAssignments(writer)
+	require.NoError(t, err)
+	require.Len(t, wList.Assignments, 1)
+
+	// Reading that written-tests build while stored verification settings are
+	// configured never gives the test writer work in either the team read or
+	// list_test_writer_assignments.
+	cardsDir := cp.cards.dir
+	workspaceDir := cp.activeWorkspaceDir
+	require.NoError(t, cp.Close())
+	configured := newControlPlane(t, Options{
+		CardsDir:     cardsDir,
+		WorkspaceDir: workspaceDir,
+		RunsDir:      runsDir,
+		Verification: &VerificationConfig{RunsDir: runsDir},
+		Team:         &TeamBinding{Owner: "alice@example.com", Service: &teamServiceFixture{}},
+	})
+	configuredTeam, err := configured.assignmentGenerations(t.Context())
+	require.NoError(t, err)
+	assert.True(t, configuredTeam.BuilderHasWork)
+	assert.False(t, configuredTeam.TestWriterHasWork)
+	assert.True(t, configuredTeam.HasWork("builder"))
+	assert.False(t, configuredTeam.HasWork("test_writer"))
+	require.Len(t, configuredTeam.Unread, 1)
+	assert.Equal(t, "builder", configuredTeam.Unread[0].Role)
+	bList, err = configured.ListBuilderAssignments(builder)
+	require.NoError(t, err)
+	require.Len(t, bList.Assignments, 1)
+	assert.Equal(t, gensurla.WrittenTestsKindNotUsed, bList.Assignments[0].WrittenTests.Kind())
+	wList, err = configured.ListTestWriterAssignments(writer)
+	require.NoError(t, err)
+	assert.Empty(t, wList.Assignments)
+
+	// An unreadable run record makes both ListBuilderAssignments and
+	// assignmentGenerations fail rather than reporting no work.
+	corruptDir := filepath.Join(runsDir, verifyrun.NewRunID())
+	require.NoError(t, os.MkdirAll(corruptDir, 0o700))
+	require.NoError(t, os.WriteFile(filepath.Join(corruptDir, "request.json"), []byte("{"), 0o600))
+	_, err = configured.ListBuilderAssignments(builder)
+	assert.Error(t, err)
+	_, err = configured.assignmentGenerations(t.Context())
+	assert.Error(t, err)
 }
