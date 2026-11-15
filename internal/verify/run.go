@@ -195,9 +195,10 @@ func IsCommitID(commit string) bool {
 // checkout. Run refuses a WorkDir that already has contents. The suite is
 // checked out only after the candidate is built. Workspace settings and
 // workspace package-loading output are discarded because they may contain
-// operator secrets. Standalone module downloads keep private evidence files,
-// but errors only name those files, never quote their output. Other commands
-// keep evidence with bounded error excerpts.
+// operator secrets. Checkout, dependency, toolchain and evaluator diagnostics
+// stay in private evidence files; outward errors name those files without
+// quoting their output.
+// Compiler failures retain bounded build-output excerpts.
 //
 // Run starts its builds, the suite and the candidates the suite runs in the
 // caller's process group and does not stop processes they leave behind: its
@@ -483,7 +484,8 @@ func (r *runner) checkout(ctx context.Context, label, repo, commit, dir string) 
 		return fmt.Errorf("read %s head: %w", label, err)
 	}
 	if got := strings.TrimSpace(string(head)); got != commit {
-		return fmt.Errorf("check out %s: HEAD is %s, want %s", label, got, commit)
+		return fmt.Errorf("check out %s: HEAD does not match the requested commit; diagnostic output is private in %s",
+			label, filepath.Join(r.evidenceDir, "head-"+label+".stdout"))
 	}
 	return nil
 }
@@ -496,7 +498,8 @@ func (r *runner) describe(ctx context.Context, env []string, suiteBin string) (S
 	}
 	var d suite.Declaration
 	if err := decodeFile(filepath.Join(r.evidenceDir, "describe.stdout"), &d); err != nil {
-		return Suite{}, fmt.Errorf("decode suite declaration: %w", err)
+		return Suite{}, fmt.Errorf("decode suite declaration: malformed output; diagnostic output is private in %s",
+			filepath.Join(r.evidenceDir, "describe.stdout"))
 	}
 	s := Suite{ID: d.ID, Environment: d.Environment}
 	for _, sc := range d.Scenarios {
@@ -543,13 +546,20 @@ func (r *runner) runSuite(ctx context.Context, env []string, suiteBin string, ar
 		exit = -1
 	}
 	if decodeErr != nil {
-		return eval.Report{}, 0, fmt.Errorf("suite ended (%v) without a decodable report: %w%s", runErr, decodeErr, r.excerpt("suite"))
+		if runErr != nil {
+			return eval.Report{}, 0, fmt.Errorf("suite ended without a decodable report: %w; diagnostic output is private in %s and %s",
+				runErr, stdout.Name(), stderr.Name())
+		}
+		return eval.Report{}, 0, fmt.Errorf("suite ended without a decodable report: malformed output; diagnostic output is private in %s and %s",
+			stdout.Name(), stderr.Name())
 	}
 	return report, exit, nil
 }
 
 // run runs one command with its stdout and stderr in evidence files named by
-// label. env, when non-nil, replaces the inherited environment.
+// label. Only the fixed operation, wrapped process cause and evidence filename
+// leave this owner: child output may contain operator credentials. env, when
+// non-nil, replaces the inherited environment.
 func (r *runner) run(ctx context.Context, label, dir string, env []string, name string, args ...string) error {
 	stdout, stderr, err := r.outputs(label)
 	if err != nil {
@@ -562,27 +572,7 @@ func (r *runner) run(ctx context.Context, label, dir string, env []string, name 
 	cmd.Env = env
 	cmd.Stdout, cmd.Stderr = stdout, stderr
 	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("%s: %w%s", label, err, r.excerpt(label))
-	}
-	return nil
-}
-
-// downloadModule keeps standalone dependency diagnostics private. Go may
-// print a proxy's username/path or an invalid GOFLAGS value, so only the fixed
-// operation, typed process error and private filename leave this owner.
-func (r *runner) downloadModule(ctx context.Context, label, dir string, env []string) error {
-	name := "go-mod-download-" + label
-	stdout, stderr, err := r.outputs(name)
-	if err != nil {
-		return err
-	}
-	defer stdout.Close()
-	defer stderr.Close()
-	cmd := exec.CommandContext(ctx, "go", "mod", "download")
-	cmd.Dir, cmd.Env = dir, env
-	cmd.Stdout, cmd.Stderr = stdout, stderr
-	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("%s: %w; diagnostic output is private in %s", name, err, stderr.Name())
+		return fmt.Errorf("%s: %w; diagnostic output is private in %s", label, err, stderr.Name())
 	}
 	return nil
 }
@@ -599,12 +589,6 @@ func (r *runner) outputs(label string) (*os.File, *os.File, error) {
 		return nil, nil, fmt.Errorf("create evidence file: %w", err)
 	}
 	return stdout, stderr, nil
-}
-
-// excerpt returns the end of a command's stderr for an error message, noting
-// truncation and where the full output is.
-func (r *runner) excerpt(label string) string {
-	return excerptFile(filepath.Join(r.evidenceDir, label+".stderr"), "stderr")
 }
 
 // prepareBuild selects the checkout's workspace and prepares exactly packages,
@@ -636,7 +620,7 @@ func (r *runner) prepareGoBuild(
 	var toolchain buildToolchain
 	if goWork == "off" {
 		env := append(gitenv.WithoutRedirects(os.Environ()), "GOWORK=off")
-		if err := r.downloadModule(ctx, label, moduleDir, env); err != nil {
+		if err := r.run(ctx, "go-mod-download-"+label, moduleDir, env, "go", "mod", "download"); err != nil {
 			return buildToolchain{}, fmt.Errorf("download %s modules: %w", label, err)
 		}
 		if err := r.run(ctx, "go-env-"+label, moduleDir, env, "go", "env", "GOROOT", "GOMODCACHE"); err != nil {
@@ -648,7 +632,8 @@ func (r *runner) prepareGoBuild(
 		}
 		lines := strings.Fields(string(out))
 		if len(lines) != 2 {
-			return buildToolchain{}, fmt.Errorf("unexpected go env output %q", out)
+			return buildToolchain{}, fmt.Errorf("resolve %s toolchain: malformed Go settings output; diagnostic output is private in %s",
+				label, filepath.Join(r.evidenceDir, "go-env-"+label+".stdout"))
 		}
 		toolchain.goroot, toolchain.modCache = lines[0], lines[1]
 	} else {

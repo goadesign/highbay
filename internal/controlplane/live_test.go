@@ -122,8 +122,12 @@ func (f *fakeTarget) APIKeyAuth(ctx context.Context, key string, _ *security.API
 	return ctx, nil
 }
 
-// fakeLivePrepare returns this test binary as the suite.
-func fakeLivePrepare(ctx context.Context, _ verify.Plan) (verify.Prepared, error) {
+// fakeLivePrepare normally returns this test binary as the suite. The process
+// diagnostic fixture uses the real preparation owner to reach its live consumer.
+func fakeLivePrepare(ctx context.Context, plan verify.Plan) (verify.Prepared, error) {
+	if os.Getenv(liveTargetModeEnv) == "process-diagnostics" {
+		return verify.Prepare(ctx, plan)
+	}
 	if os.Getenv(liveTargetModeEnv) == "prepare-hangs" {
 		fmt.Fprintln(os.Stderr, "preparing: downloading modules")
 		<-ctx.Done()
