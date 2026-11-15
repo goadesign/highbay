@@ -106,9 +106,14 @@ page.type(edited, "keep this unsaved example");
 page.$("#surla-build-again").click();
 await until(() => page.$("#surla-build-confirm"), "rebuild confirmation did not open");
 page.$("#surla-build-confirm").focus();
+if (input.after === "editor") edited.focus();
 await control(origin, "hold", { key: "GET " + path });
 await control(origin, "act", { key: "refresh-team" });
 await until(() => page.$("#surla-build-loading") && page.$("#surla-build-again").disabled && page.$("#surla-build-confirm"), "the held refresh did not disable the trigger beside the open question");
+if (input.after === "editor") {
+  expect(page.doc.activeElement === edited, "the refresh took focus into the open question");
+  page.$("#surla-build-confirm").focus();
+}
 page.$("#surla-build-confirm").dispatchEvent(new page.win.KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
 await until(() => !page.$("#surla-build-confirm"), "Escape did not cancel during the refresh");
 expect(page.sent("POST", path).length === 0, "Escape sent a build request");
