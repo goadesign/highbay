@@ -111,6 +111,11 @@ func TestProcessDiagnosticsStayPrivate(t *testing.T) {
 	for _, tc := range processDiagnosticCases(t) {
 		t.Run(tc.Name, func(t *testing.T) {
 			plan := processDiagnosticPlan(t, tc.Name)
+			// Written suites select standalone preparation directly, including
+			// when an evaluator would retain its checkout's workspace.
+			if tc.Name == "go-env-suite" || tc.Name == "go-env-malformed-suite" {
+				plan.Tests = TestsWritten
+			}
 			report, err := Run(t.Context(), plan, os.Environ())
 			var stage *StageError
 			require.ErrorAs(t, err, &stage)

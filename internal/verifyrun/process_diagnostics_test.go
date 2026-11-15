@@ -113,6 +113,11 @@ func TestProcessDiagnosticsStayPrivateInSavedRuns(t *testing.T) {
 	for _, tc := range processDiagnosticCases(t) {
 		t.Run(tc.Name, func(t *testing.T) {
 			plan := processDiagnosticPlan(t, tc.Name)
+			// Written suites select standalone preparation directly, including
+			// when an evaluator would retain its checkout's workspace.
+			if tc.Name == "go-env-suite" || tc.Name == "go-env-malformed-suite" {
+				plan.Tests = verify.TestsWritten
+			}
 			t.Setenv(fakeModeEnv, "workspace-preparation")
 			root, runID := t.TempDir(), NewRunID()
 			_, err := Start(root, Request{RunID: runID, Owner: "alice", ChangeID: "chg", AcceptedAt: time.Now().UTC(), Timeout: 20 * time.Second, Plan: plan}, []string{os.Args[0]}, nil)
