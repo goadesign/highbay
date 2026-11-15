@@ -22,8 +22,8 @@ import (
 func TestVerifyChangeAcceptsOnlyTheOwnersCurrentConfirmedRevision(t *testing.T) {
 	alice := WithPrincipal(context.Background(), Principal{ID: "alice@example.com", CallerID: "alice@example.com", Kind: CallerUser})
 	bob := WithPrincipal(context.Background(), Principal{ID: "bob@example.com", CallerID: "bob@example.com", Kind: CallerUser})
-	commit := strings.Repeat("a", 40)
 	cp, card, cfg := verificationSetup(t)
+	commit := commitBuilderCandidateFixture(t, cp, card)
 
 	start := func(ctx context.Context, revision string) (*gensurla.VerificationStatusResult, error) {
 		return cp.VerifyChange(ctx, &gensurla.VerifyChangePayload{ChangeID: "chg", RequestRevision: revision, CandidateCommit: commit})
