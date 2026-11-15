@@ -127,11 +127,11 @@ func TestViewsPagePassedBlockerClearsOnlyAfterItsOwnFreshRead(t *testing.T) {
 	})
 	runPageScript(t, ps, map[string]any{"build": string(encoded)}, `
 const path = "/changes/chg-passed-next/build", other = "/changes/chg-passed-open/build";
-const saved = { ...JSON.parse(input.build), state: "started", taking: { state: "passed", run_id: "passed-open",
+const saved = { ...JSON.parse(input.build), taking: { state: "passed", run_id: "passed-open",
   candidate_commit: "1".repeat(40), candidate_branch: "surla/build-7", tests: { source: "evaluator" }, base_in_branch: true } };
 await control(origin, "reply", { key: "POST " + path, status: 409,
   body: { name: "previous_change_open", message: "Merge or drop the open change.", change_id: "chg-passed-open", build: saved } });
-await control(origin, "reply", { key: "GET " + other, status: 200, body: { change_id: "chg-passed-open", build: saved } });
+await control(origin, "reply", { key: "GET " + other, status: 200, body: { change_id: "chg-passed-open", build: { ...saved, state: "started" } } });
 const page = await openPage(origin, { link: input.link });
 await until(() => page.$("#surla-open-change-chg-passed-next"), "change list did not load");
 page.$("#surla-open-change-chg-passed-next").click();
@@ -146,7 +146,7 @@ page.$("#surla-build-drop").click();
 await until(() => page.$("#surla-build-drop-question"), "old passed blocker did not ask for Drop consent");
 const replacement = { ...saved, started_at: new Date(Date.parse(saved.started_at) + 1000).toISOString(), taking: { state: "building" } };
 await control(origin, "reply", { key: "GET " + other, status: 200,
-  body: { change_id: "chg-passed-open", build: replacement } });
+  body: { change_id: "chg-passed-open", build: { ...replacement, state: "started" } } });
 await control(origin, "act", { key: "resave-next" });
 await until(() => !page.$("#surla-build-drop-question") && page.$("#surla-build-taking")?.dataset.state === "building", "a freshly observed different open start did not invalidate old consent");
 expect(page.$("#surla-build-start").disabled && !page.text("#surla-build-taking").includes("git merge"), "fresh replacement retained old merge commits or unblocked the selected Build");
@@ -154,7 +154,7 @@ expect(page.sent("POST", other + "/drop").length === 0, "fresh replacement reuse
 const field = page.$('textarea[data-example-id="check_01"][data-field="scenario"]');
 page.type(field, "keep this draft through blocker recovery");
 await control(origin, "reply", { key: "GET " + other, status: 200,
-  body: { change_id: "chg-passed-open", build: { ...saved, taking: { state: "dropped", kept_branches: [] } } } });
+  body: { change_id: "chg-passed-open", build: { ...saved, state: "started", taking: { state: "dropped", kept_branches: [] } } } });
 await control(origin, "act", { key: "drop-passed-open" });
 await until(() => !page.$("#surla-build-blocking-change") && page.$("#surla-build-start") && !page.$("#surla-build-start").disabled, "fresh closed blocker did not reenable Build");
 expect(field === page.$('textarea[data-example-id="check_01"][data-field="scenario"]') && field.value === "keep this draft through blocker recovery", "blocker recovery replaced unsaved editor text");
