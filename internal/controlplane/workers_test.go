@@ -7,10 +7,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"net/http/httptest"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 	"time"
 
@@ -103,8 +101,7 @@ func TestAssignmentReadJoinsCopyToBuild(t *testing.T) {
 	assert.True(t, bAssign2.Read)
 	assert.Equal(t, "surla/build-2", productionBuildGit(t, builderDir, "symbolic-ref", "--short", "HEAD"))
 	assert.Equal(t, b2, productionBuildGit(t, builderDir, "rev-parse", "HEAD"))
-	assert.Equal(t, "Left uncommitted when change c2 started",
-		productionBuildGit(t, repo, "log", "-1", "--format=%s", "surla/build-1"))
+	assert.Equal(t, "Left uncommitted when change c2 started", productionBuildGit(t, repo, "log", "-1", "--format=%s", "surla/build-1"))
 
 	twAssign2, err := cp.GetTestWriterAssignment(writer, &gensurla.GetTestWriterAssignmentPayload{ChangeID: "c2"})
 	require.NoError(t, err)
@@ -112,61 +109,89 @@ func TestAssignmentReadJoinsCopyToBuild(t *testing.T) {
 	assert.Equal(t, 2, prepCount, "marking read of build 2 prepares gen/")
 	assert.Equal(t, "surla/tests-2", productionBuildGit(t, testsDir, "symbolic-ref", "--short", "HEAD"))
 	assert.Equal(t, b2, productionBuildGit(t, testsDir, "rev-parse", "HEAD"))
-	assert.Equal(t, "Left uncommitted when change c2 started",
-		productionBuildGit(t, repo, "log", "-1", "--format=%s", "surla/tests-1"))
+	assert.Equal(t, "Left uncommitted when change c2 started", productionBuildGit(t, repo, "log", "-1", "--format=%s", "surla/tests-1"))
 }
 
-// TestAssignmentReadRefusesBusyAndDroppedBuilds verifies nonblocking copy-turn
-// refusals, concurrent-modification refusals during Join, and dropped-build
-// refusals before and after Join.
+// TestAssignmentReadRefusesBusyAndDroppedBuilds drives assignment_unread,
+// working_copy_busy, working_folder_missing, and no_build (a dropped build)
+// from get_builder_assignment, get_test_writer_assignment, and
+// report_tests_finished over HTTP (409 Conflict with the refusal's name and
+// message) and MCP, and pins B2's stop text on builderCopyReady and GetTestFindings.
 func TestAssignmentReadRefusesBusyAndDroppedBuilds(t *testing.T) {
 	_, project, cp, _ := reviewProject(t, Options{})
 	user := asCaller("alice@example.com", CallerUser)
 	builder := asCaller("alice@example.com", CallerBuilder)
 	writer := asCaller("alice@example.com", CallerTestWriter)
-
 	c1 := buildableChange(t, cp, "c1")
-	started, err := cp.StartBuild(user, &gensurla.StartBuildPayload{
-		ChangeID: "c1", RequestRevision: c1.RequestRevision,
-	})
+	started, err := cp.StartBuild(user, &gensurla.StartBuildPayload{ChangeID: "c1", RequestRevision: c1.RequestRevision})
 	require.NoError(t, err)
-
-	// Holding builderCopyTurn refuses GetBuilderAssignment without waiting.
-	cp.builderCopyTurn <- struct{}{}
-	_, err = cp.GetBuilderAssignment(builder, &gensurla.GetBuilderAssignmentPayload{ChangeID: "c1"})
-	<-cp.builderCopyTurn
-	assertRefused(t, err, "working_copy_busy")
-	assert.EqualError(t, err, "Surla is starting a build in your working folder; call get_builder_assignment again.")
-
-	// Holding workingCopyTurn refuses GetTestWriterAssignment without waiting.
-	cp.workingCopyTurn <- struct{}{}
-	_, err = cp.GetTestWriterAssignment(writer, &gensurla.GetTestWriterAssignmentPayload{ChangeID: "c1"})
-	<-cp.workingCopyTurn
-	assertRefused(t, err, "working_copy_busy")
-	assert.EqualError(t, err, "Surla is checking the tests in your working folder; call get_test_writer_assignment again when the check has ended.")
-
-	// Dropping the build refuses GetBuilderAssignment, GetTestWriterAssignment,
-	// ReportTestsFinished, and builderCopyReady with no_build.
-	_, err = cp.DropBuild(user, &gensurla.DropBuildPayload{ChangeID: "c1", StartedAt: started.Build.StartedAt})
-	require.NoError(t, err)
+	srv := roleServer(t, cp)
+	builderDir := filepath.Join(project, testwriter.BuilderRole.Folder)
+	testsDir := filepath.Join(project, testwriter.TestsRole.Folder)
+	reportBody := fmt.Sprintf(`{"request_revision":%q}`, c1.RequestRevision)
+	reportArgs := fmt.Sprintf(`{"change_id":"c1","request_revision":%q}`, c1.RequestRevision)
 	const wantDropMsg = "The user dropped change c1: stop work on it; make no more edits or commits for it. The user starts builds on the views page."
 
-	_, err = cp.GetBuilderAssignment(builder, &gensurla.GetBuilderAssignmentPayload{ChangeID: "c1"})
-	assertRefused(t, err, "no_build")
-	assert.EqualError(t, err, wantDropMsg)
-
-	_, err = cp.GetTestWriterAssignment(writer, &gensurla.GetTestWriterAssignmentPayload{ChangeID: "c1"})
-	assertRefused(t, err, "no_build")
-	assert.EqualError(t, err, wantDropMsg)
-
-	_, err = cp.ReportTestsFinished(writer, &gensurla.ReportTestsFinishedPayload{
-		ChangeID: "c1", RequestRevision: c1.RequestRevision,
-	})
-	assertRefused(t, err, "no_build")
-	assert.EqualError(t, err, wantDropMsg)
-
+	for _, tc := range []struct {
+		name, token, method, path, body, tool, args, wantName, wantMsg string
+		before, after                                                  func()
+	}{
+		{"assignment_unread report", "tests", http.MethodPost, "/assignments/test-writer/c1/finished", reportBody, "report_tests_finished", reportArgs,
+			"assignment_unread", "Change c1's build started after your last read: stop your current work, then call get_test_writer_assignment for c1.", nil, nil},
+		{"working_copy_busy builder", "builder", http.MethodGet, "/assignments/builder/c1", "", "get_builder_assignment", `{"change_id":"c1"}`,
+			"working_copy_busy", "Surla is starting a build in your working folder; call get_builder_assignment again.",
+			func() { cp.builderCopyTurn <- struct{}{} }, func() { <-cp.builderCopyTurn }},
+		{"working_copy_busy tests", "tests", http.MethodGet, "/assignments/test-writer/c1", "", "get_test_writer_assignment", `{"change_id":"c1"}`,
+			"working_copy_busy", "Surla is checking the tests in your working folder; call get_test_writer_assignment again when the check has ended.",
+			func() { cp.workingCopyTurn <- struct{}{} }, func() { <-cp.workingCopyTurn }},
+		{"working_folder_missing builder", "builder", http.MethodGet, "/assignments/builder/c1", "", "get_builder_assignment", `{"change_id":"c1"}`,
+			"working_folder_missing", "The builder's folder " + shquote.Quote(builderDir) + " is missing: ask the user to build this change again on the views page.",
+			func() {
+				cp.buildCopyFactory = func(context.Context, string, scaffold.Layout) (buildCopy, error) {
+					return &buildCopyFixture{folder: testsDir}, nil
+				}
+				_, err := cp.GetTestWriterAssignment(writer, &gensurla.GetTestWriterAssignmentPayload{ChangeID: "c1"})
+				require.NoError(t, err)
+				cp.buildCopyFactory = nil
+				require.NoError(t, os.RemoveAll(builderDir))
+				require.NoError(t, os.RemoveAll(testsDir))
+			}, nil},
+		{"working_folder_missing tests", "tests", http.MethodGet, "/assignments/test-writer/c1", "", "get_test_writer_assignment", `{"change_id":"c1"}`,
+			"working_folder_missing", "The test writer's folder " + shquote.Quote(testsDir) + " is missing: ask the user to build this change again on the views page.", nil, nil},
+		{"working_folder_missing report", "tests", http.MethodPost, "/assignments/test-writer/c1/finished", reportBody, "report_tests_finished", reportArgs,
+			"working_folder_missing", "The test writer's folder " + shquote.Quote(testsDir) + " is missing: ask the user to build this change again on the views page.", nil, nil},
+		{"no_build builder", "builder", http.MethodGet, "/assignments/builder/c1", "", "get_builder_assignment", `{"change_id":"c1"}`,
+			"no_build", wantDropMsg, func() {
+				_, err := cp.DropBuild(user, &gensurla.DropBuildPayload{ChangeID: "c1", StartedAt: started.Build.StartedAt})
+				require.NoError(t, err)
+			}, nil},
+		{"no_build tests", "tests", http.MethodGet, "/assignments/test-writer/c1", "", "get_test_writer_assignment", `{"change_id":"c1"}`,
+			"no_build", wantDropMsg, nil, nil},
+		{"no_build report", "tests", http.MethodPost, "/assignments/test-writer/c1/finished", reportBody, "report_tests_finished", reportArgs,
+			"no_build", wantDropMsg, nil, nil},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if tc.before != nil {
+				tc.before()
+			}
+			if tc.after != nil {
+				defer tc.after()
+			}
+			status, raw := httpCall(t, srv.URL, tc.token, tc.method, tc.path, tc.body)
+			assert.Equal(t, http.StatusConflict, status)
+			var got struct{ Name, Message string }
+			require.NoError(t, json.Unmarshal([]byte(raw), &got))
+			assert.Equal(t, tc.wantName, got.Name)
+			assert.Equal(t, tc.wantMsg, got.Message)
+			mcpErr, _ := mcpToolCall(t, srv.URL, tc.token, tc.tool, tc.args)
+			assert.Equal(t, tc.wantMsg, mcpErr)
+		})
+	}
 	_, err = cp.builderCopyReady(builder, project, "verify_change")
 	assertRefused(t, err, "no_build")
+	assert.EqualError(t, err, wantDropMsg)
+	_, err = cp.GetTestFindings(user, &gensurla.GetTestFindingsPayload{ChangeID: "c1"})
+	assertRefused(t, err, "not_found")
 	assert.EqualError(t, err, wantDropMsg)
 }
 
@@ -185,11 +210,8 @@ func TestWorkerRefusalsCoverUnreadMissingAndOffBranch(t *testing.T) {
 	assertRefused(t, err, "no_build")
 	assert.EqualError(t, err, "No build is open: the user starts builds on the views page.")
 
-	// Start build 1 for "c1".
 	c1 := buildableChange(t, cp, "c1")
-	started1, err := cp.StartBuild(user, &gensurla.StartBuildPayload{
-		ChangeID: "c1", RequestRevision: c1.RequestRevision,
-	})
+	started1, err := cp.StartBuild(user, &gensurla.StartBuildPayload{ChangeID: "c1", RequestRevision: c1.RequestRevision})
 	require.NoError(t, err)
 	cp.buildCopyFactory = func(context.Context, string, scaffold.Layout) (buildCopy, error) {
 		return &buildCopyFixture{folder: filepath.Join(project, testwriter.TestsRole.Folder)}, nil
@@ -200,10 +222,7 @@ func TestWorkerRefusalsCoverUnreadMissingAndOffBranch(t *testing.T) {
 	_, err = cp.builderCopyReady(builder, project, "generate_code")
 	assertRefused(t, err, "assignment_unread")
 	assert.EqualError(t, err, "Change c1's build started after your last read: stop your current work, then call get_builder_assignment for c1.")
-
-	_, err = cp.ReportTestsFinished(writer, &gensurla.ReportTestsFinishedPayload{
-		ChangeID: "c1", RequestRevision: c1.RequestRevision,
-	})
+	_, err = cp.ReportTestsFinished(writer, &gensurla.ReportTestsFinishedPayload{ChangeID: "c1", RequestRevision: c1.RequestRevision})
 	assertRefused(t, err, "assignment_unread")
 	assert.EqualError(t, err, "Change c1's build started after your last read: stop your current work, then call get_test_writer_assignment for c1.")
 
@@ -249,9 +268,7 @@ func TestWorkerRefusalsCoverUnreadMissingAndOffBranch(t *testing.T) {
 	lockFile := filepath.Join(testsGitDir, "index.lock")
 	require.NoError(t, os.WriteFile(lockFile, nil, 0o600))
 	beforeLockBuild := readBuildFile(t, cp, "c1")
-	_, err = cp.ReportTestsFinished(writer, &gensurla.ReportTestsFinishedPayload{
-		ChangeID: "c1", RequestRevision: c1.RequestRevision,
-	})
+	_, err = cp.ReportTestsFinished(writer, &gensurla.ReportTestsFinishedPayload{ChangeID: "c1", RequestRevision: c1.RequestRevision})
 	var lockRefusal *gensurla.CopyOffBranch
 	require.ErrorAs(t, err, &lockRefusal)
 	require.NotNil(t, lockRefusal.Branch)
@@ -268,7 +285,6 @@ func TestWorkerRefusalsCoverUnreadMissingAndOffBranch(t *testing.T) {
 	runGitForTest(t, builderDir, "switch", "--quiet", "-c", "experiment")
 	require.NoError(t, os.WriteFile(filepath.Join(builderDir, "a.go"), []byte("package a\n"), 0o600))
 	require.NoError(t, os.WriteFile(filepath.Join(builderDir, "b.go"), []byte("package b\n"), 0o600))
-
 	_, err = cp.builderCopyReady(builder, project, "verify_change")
 	var offBranch *gensurla.CopyOffBranch
 	require.ErrorAs(t, err, &offBranch)
@@ -280,19 +296,13 @@ func TestWorkerRefusalsCoverUnreadMissingAndOffBranch(t *testing.T) {
 	assert.Equal(t, "none", offBranch.Operation)
 	assert.Equal(t, []string{"a.go", "b.go"}, offBranch.Uncommitted)
 	assert.Equal(t, 2, offBranch.UncommittedCount)
-	assert.Equal(t,
-		"Your working copy is on branch 'experiment'; change c1 is built on surla/build-1. Uncommitted (2): a.go, b.go. Put your work on surla/build-1, commit it, and call verify_change again.",
-		offBranch.Message,
-	)
+	assert.Equal(t, "Your working copy is on branch 'experiment'; change c1 is built on surla/build-1. Uncommitted (2): a.go, b.go. Put your work on surla/build-1, commit it, and call verify_change again.", offBranch.Message)
 
 	// Switch tests copy to detached HEAD with 1 uncommitted file; ReportTestsFinished
 	// refuses with CopyOffBranch where Branch is nil and BuildBranch is "surla/tests-1".
 	runGitForTest(t, testsDir, "switch", "--quiet", "--detach", "HEAD")
 	require.NoError(t, os.WriteFile(filepath.Join(testsDir, "eval", "t_test.go"), []byte("package eval\n"), 0o600))
-
-	_, err = cp.ReportTestsFinished(writer, &gensurla.ReportTestsFinishedPayload{
-		ChangeID: "c1", RequestRevision: c1.RequestRevision,
-	})
+	_, err = cp.ReportTestsFinished(writer, &gensurla.ReportTestsFinishedPayload{ChangeID: "c1", RequestRevision: c1.RequestRevision})
 	offBranch = nil
 	require.ErrorAs(t, err, &offBranch)
 	assert.Nil(t, offBranch.Branch, "detached HEAD has no Branch")
@@ -300,15 +310,10 @@ func TestWorkerRefusalsCoverUnreadMissingAndOffBranch(t *testing.T) {
 	assert.Equal(t, "surla/tests-1", *offBranch.BuildBranch)
 	assert.Equal(t, []string{"eval/t_test.go"}, offBranch.Uncommitted)
 	assert.Equal(t, 1, offBranch.UncommittedCount)
-	assert.Equal(t,
-		"Your working copy has a detached HEAD (not on any branch); change c1 is built on surla/tests-1. Uncommitted (1): eval/t_test.go. Put your test files on surla/tests-1, uncommitted (Surla commits what it accepts), and call report_tests_finished again.",
-		offBranch.Message,
-	)
+	assert.Equal(t, "Your working copy has a detached HEAD (not on any branch); change c1 is built on surla/tests-1. Uncommitted (1): eval/t_test.go. Put your test files on surla/tests-1, uncommitted (Surla commits what it accepts), and call report_tests_finished again.", offBranch.Message)
 
 	// 4. Before a join on build 2 (BuildBranch == nil): drop build 1, start build 2
-	// for "c2". Both copies are off earlier build branches with uncommitted files
-	// ('experiment' for builder, detached HEAD for test writer), so Join refuses
-	// with BuildBranch == nil.
+	// for "c2". Both copies are off earlier build branches with uncommitted files.
 	_, err = cp.DropBuild(user, &gensurla.DropBuildPayload{ChangeID: "c1", StartedAt: started1.Build.StartedAt})
 	require.NoError(t, err)
 	c2 := freshBuildableAfterDrop(t, cp, "c2")
@@ -321,48 +326,26 @@ func TestWorkerRefusalsCoverUnreadMissingAndOffBranch(t *testing.T) {
 	require.NotNil(t, offBranch.Branch)
 	assert.Equal(t, "experiment", *offBranch.Branch)
 	assert.Nil(t, offBranch.BuildBranch, "BuildBranch is absent before the copy joined the build")
-	assert.Equal(t,
-		"Your working copy is on branch 'experiment'. Uncommitted (2): a.go, b.go. Surla puts it on change c2's new branch surla/build-2 only when nothing is uncommitted, or when it is on an earlier surla/build branch, where Surla commits what is left. Commit your work on a branch of your own, not one of the user's, then call get_builder_assignment again.",
-		offBranch.Message,
-	)
+	assert.Equal(t, "Your working copy is on branch 'experiment'. Uncommitted (2): a.go, b.go. Surla puts it on change c2's new branch surla/build-2 only when nothing is uncommitted, or when it is on an earlier surla/build branch, where Surla commits what is left. Commit your work on a branch of your own, not one of the user's, then call get_builder_assignment again.", offBranch.Message)
 
 	_, err = cp.GetTestWriterAssignment(writer, &gensurla.GetTestWriterAssignmentPayload{ChangeID: "c2"})
 	offBranch = nil
 	require.ErrorAs(t, err, &offBranch)
 	assert.Nil(t, offBranch.Branch)
 	assert.Nil(t, offBranch.BuildBranch, "BuildBranch is absent before the copy joined the build")
-	assert.Equal(t,
-		"Your working copy has a detached HEAD (not on any branch). Uncommitted (1): eval/t_test.go. Surla puts it on change c2's new branch surla/tests-2 only when nothing is uncommitted, or when it is on an earlier surla/tests branch, where Surla commits what is left. Return your copy to an earlier surla/tests branch with your files, where Surla commits them, or remove them; then call get_test_writer_assignment again.",
-		offBranch.Message,
-	)
+	assert.Equal(t, "Your working copy has a detached HEAD (not on any branch). Uncommitted (1): eval/t_test.go. Surla puts it on change c2's new branch surla/tests-2 only when nothing is uncommitted, or when it is on an earlier surla/tests branch, where Surla commits what is left. Return your copy to an earlier surla/tests branch with your files, where Surla commits them, or remove them; then call get_test_writer_assignment again.", offBranch.Message)
 
-	// 5. Missing copy folders -> working_folder_missing.
-	require.NoError(t, os.RemoveAll(builderDir))
-	require.NoError(t, os.RemoveAll(testsDir))
-	_, err = cp.GetBuilderAssignment(builder, &gensurla.GetBuilderAssignmentPayload{ChangeID: "c2"})
-	assertRefused(t, err, "working_folder_missing")
-	assert.EqualError(t, err, "The builder's folder "+shquote.Quote(builderDir)+" is missing: ask the user to build this change again on the views page.")
-	_, err = cp.GetTestWriterAssignment(writer, &gensurla.GetTestWriterAssignmentPayload{ChangeID: "c2"})
-	assertRefused(t, err, "working_folder_missing")
-	assert.EqualError(t, err, "The test writer's folder "+shquote.Quote(testsDir)+" is missing: ask the user to build this change again on the views page.")
-
-	// 6. copyOffBranchRefusal covers in-progress Git operations, index.lock,
+	// 5. copyOffBranchRefusal covers in-progress Git operations, index.lock,
 	// truncated uncommitted lists, and unprintable branch names.
 	builderCherryPick := copyOffBranchRefusal(testwriter.BuilderRole, "c2", 2, true, testwriter.CopyFacts{
 		Branch: "surla/build-2", Operation: "cherry_pick", IndexLock: ".surla-build/.git/index.lock",
 		Uncommitted: []string{"a.go", "b.go"}, UncommittedCount: 5,
 	}, "verify_change")
-	assert.Equal(t,
-		"Your working copy is on surla/build-2 for change c2. A cherry-pick is in progress in your working copy: finish or abort it. Git's index lock ('.surla-build/.git/index.lock') exists in your working copy: wait for the running git command to finish, or remove '.surla-build/.git/index.lock' if no git process is running. Uncommitted (5, first 2): a.go, b.go. Put your work on surla/build-2, commit it, and call verify_change again.",
-		builderCherryPick.Message,
-	)
+	assert.Equal(t, "Your working copy is on surla/build-2 for change c2. A cherry-pick is in progress in your working copy: finish or abort it. Git's index lock ('.surla-build/.git/index.lock') exists in your working copy: wait for the running git command to finish, or remove '.surla-build/.git/index.lock' if no git process is running. Uncommitted (5, first 2): a.go, b.go. Put your work on surla/build-2, commit it, and call verify_change again.", builderCherryPick.Message)
 	testsUnprintable := copyOffBranchRefusal(testwriter.TestsRole, "c2", 2, false, testwriter.CopyFacts{
 		Branch: "a name that is not shown", Operation: "merge",
 	}, "get_test_writer_assignment")
-	assert.Equal(t,
-		"Your working copy is on branch a name that is not shown. A merge is in progress in your working copy: abort it. Uncommitted: none. Surla puts it on change c2's new branch surla/tests-2 only when nothing is uncommitted, or when it is on an earlier surla/tests branch, where Surla commits what is left. Return your copy to an earlier surla/tests branch with your files, where Surla commits them, or remove them; then call get_test_writer_assignment again.",
-		testsUnprintable.Message,
-	)
+	assert.Equal(t, "Your working copy is on branch a name that is not shown. A merge is in progress in your working copy: abort it. Uncommitted: none. Surla puts it on change c2's new branch surla/tests-2 only when nothing is uncommitted, or when it is on an earlier surla/tests branch, where Surla commits what is left. Return your copy to an earlier surla/tests branch with your files, where Surla commits them, or remove them; then call get_test_writer_assignment again.", testsUnprintable.Message)
 }
 
 // TestBuilderWorkingFolderIsolatesOuterGoWork verifies that an untracked
@@ -374,14 +357,10 @@ func TestBuilderWorkingFolderIsolatesOuterGoWork(t *testing.T) {
 		_, project, cp, _ := reviewProject(t, Options{})
 		require.NoError(t, os.WriteFile(filepath.Join(project, "go.work"), []byte("go 1.27.3\nuse .\n"), 0o600))
 		card := buildableChange(t, cp, "chg")
-		_, err := cp.StartBuild(asCaller("alice@example.com", CallerUser), &gensurla.StartBuildPayload{
-			ChangeID: "chg", RequestRevision: card.RequestRevision,
-		})
+		_, err := cp.StartBuild(asCaller("alice@example.com", CallerUser), &gensurla.StartBuildPayload{ChangeID: "chg", RequestRevision: card.RequestRevision})
 		require.NoError(t, err)
-
 		builderDir := filepath.Join(project, testwriter.BuilderRole.Folder)
 		assert.NoFileExists(t, filepath.Join(builderDir, "go.work"))
-
 		assign, err := cp.GetBuilderAssignment(asCaller("alice@example.com", CallerBuilder), &gensurla.GetBuilderAssignmentPayload{ChangeID: "chg"})
 		require.NoError(t, err)
 		assert.Equal(t, builderDir, assign.WorkingFolder)
@@ -393,16 +372,11 @@ func TestBuilderWorkingFolderIsolatesOuterGoWork(t *testing.T) {
 		require.NoError(t, os.WriteFile(filepath.Join(project, "go.work"), []byte("go 1.27.3\nuse .\n"), 0o600))
 		runGitForTest(t, repo, "add", "go.work")
 		runGitForTest(t, repo, "commit", "--quiet", "-m", "Commit go.work")
-
 		card := buildableChange(t, cp, "chg")
-		_, err := cp.StartBuild(asCaller("alice@example.com", CallerUser), &gensurla.StartBuildPayload{
-			ChangeID: "chg", RequestRevision: card.RequestRevision,
-		})
+		_, err := cp.StartBuild(asCaller("alice@example.com", CallerUser), &gensurla.StartBuildPayload{ChangeID: "chg", RequestRevision: card.RequestRevision})
 		require.NoError(t, err)
-
 		builderDir := filepath.Join(project, testwriter.BuilderRole.Folder)
 		assert.FileExists(t, filepath.Join(builderDir, "go.work"))
-
 		assign, err := cp.GetBuilderAssignment(asCaller("alice@example.com", CallerBuilder), &gensurla.GetBuilderAssignmentPayload{ChangeID: "chg"})
 		require.NoError(t, err)
 		assert.Equal(t, builderDir, assign.WorkingFolder)
@@ -554,21 +528,12 @@ func TestAssignmentReadEditedDuringJoinAndStoppedBeforeOrAfterSwitch(t *testing.
 	assert.True(t, twAssign3.Progress.Read)
 	assert.True(t, preparedOnRetry)
 
-	// 3. Typed CopyOffBranch over HTTP (409 Conflict with structured JSON fields).
+	// 3. Typed CopyOffBranch over HTTP (409 Conflict with structured JSON fields) and MCP.
 	runGitForTest(t, testsDir, "switch", "--quiet", "-c", "agent-tests")
 	require.NoError(t, os.WriteFile(filepath.Join(testsDir, "eval", "http_test.go"), []byte("package eval\n"), 0o600))
-	handler := NewHTTPHandler(cp, func(*http.Request) (Principal, error) {
-		return Principal{ID: "alice@example.com", Kind: CallerTestWriter}, nil
-	})
-	req := httptest.NewRequest(
-		http.MethodPost, "/assignments/test-writer/c3/finished",
-		strings.NewReader(fmt.Sprintf(`{"request_revision":%q}`, c3.RequestRevision)),
-	)
-	req.Header.Set("Content-Type", "application/json")
-	rec := httptest.NewRecorder()
-	handler.ServeHTTP(rec, req)
-	assert.Equal(t, http.StatusConflict, rec.Code)
-
+	srv := roleServer(t, cp)
+	status, raw := httpCall(t, srv.URL, "tests", http.MethodPost, "/assignments/test-writer/c3/finished", fmt.Sprintf(`{"request_revision":%q}`, c3.RequestRevision))
+	assert.Equal(t, http.StatusConflict, status)
 	var body struct {
 		Name, Message, Operation string
 		Branch                   *string  `json:"branch"`
@@ -576,7 +541,7 @@ func TestAssignmentReadEditedDuringJoinAndStoppedBeforeOrAfterSwitch(t *testing.
 		Uncommitted              []string `json:"uncommitted"`
 		UncommittedCount         int      `json:"uncommitted_count"`
 	}
-	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &body))
+	require.NoError(t, json.Unmarshal([]byte(raw), &body))
 	assert.Equal(t, "copy_off_branch", body.Name)
 	require.NotNil(t, body.Branch)
 	assert.Equal(t, "agent-tests", *body.Branch)
@@ -586,14 +551,11 @@ func TestAssignmentReadEditedDuringJoinAndStoppedBeforeOrAfterSwitch(t *testing.
 	assert.Equal(t, []string{"eval/http_test.go"}, body.Uncommitted)
 	assert.Equal(t, 1, body.UncommittedCount)
 	assert.Contains(t, body.Message, "Your working copy is on branch 'agent-tests'; change c3 is built on surla/tests-3.")
-
-	// 4. Operation in progress (MERGE_HEAD) refused at a real read over HTTP and MCP,
-	// plus MCP refusal for report_tests_finished.
-	srv := roleServer(t, cp)
 	mcpErr, _ := mcpToolCall(t, srv.URL, "tests", "report_tests_finished", fmt.Sprintf(`{"change_id":"c3","request_revision":%q}`, c3.RequestRevision))
 	assert.Contains(t, mcpErr, "Your working copy is on branch 'agent-tests'; change c3 is built on surla/tests-3.")
 	assert.Contains(t, mcpErr, "call report_tests_finished again.")
 
+	// 4. Operation in progress (MERGE_HEAD) refused at a real read over HTTP and MCP.
 	runGitForTest(t, testsDir, "switch", "--quiet", "surla/tests-3")
 	require.NoError(t, os.Remove(filepath.Join(testsDir, "eval", "http_test.go")))
 	bGitDir := productionBuildGit(t, builderDir, "rev-parse", "--path-format=absolute", "--git-dir")
@@ -632,7 +594,9 @@ func TestAssignmentReadEditedDuringJoinAndStoppedBeforeOrAfterSwitch(t *testing.
 
 // TestReviewN1N2: build 1 read by both; drop; build X; drop X before any read
 // (N1) or after only the builder read it (N2); build Y is number 3 and each
-// copy joins from its last branch, saving uncommitted files on the last branch.
+// copy joins from its last branch, saving uncommitted files on the last branch,
+// and in N1 a subsequent build 4 read only by the builder followed by build 5
+// joins from surla/build-4 and surla/tests-3 to surla/*-5.
 func TestReviewN1N2(t *testing.T) {
 	for _, builderReadsX := range []bool{false, true} {
 		name := "N1 no read of X"
@@ -669,35 +633,75 @@ func TestReviewN1N2(t *testing.T) {
 			cx := freshBuildableAfterDrop(t, cp, "cx")
 			bx, err := cp.StartBuild(user, &gensurla.StartBuildPayload{ChangeID: "cx", RequestRevision: cx.RequestRevision})
 			require.NoError(t, err)
+			assert.Equal(t, 2, mustOpenBuildFile(t, cp).Number)
+			wantBuilderBranchBeforeY := "surla/build-1"
 			if builderReadsX {
 				_, err = cp.GetBuilderAssignment(builder, &gensurla.GetBuilderAssignmentPayload{ChangeID: "cx"})
 				require.NoError(t, err)
 				require.NoError(t, os.WriteFile(filepath.Join(builderDir, "left2.go"), []byte("package shop\n"), 0o600))
+				wantBuilderBranchBeforeY = "surla/build-2"
 			}
 			_, err = cp.DropBuild(user, &gensurla.DropBuildPayload{ChangeID: "cx", StartedAt: bx.Build.StartedAt})
 			require.NoError(t, err)
 
 			cy := freshBuildableAfterDrop(t, cp, "cy")
-			_, err = cp.StartBuild(user, &gensurla.StartBuildPayload{ChangeID: "cy", RequestRevision: cy.RequestRevision})
+			by, err := cp.StartBuild(user, &gensurla.StartBuildPayload{ChangeID: "cy", RequestRevision: cy.RequestRevision})
 			require.NoError(t, err)
 			assert.Equal(t, 3, mustOpenBuildFile(t, cp).Number)
 			_, err = cp.builderCopyReady(builder, project, "verify_change")
 			assertRefused(t, err, "assignment_unread")
+			assert.Equal(t, wantBuilderBranchBeforeY, productionBuildGit(t, builderDir, "symbolic-ref", "--short", "HEAD"))
 			_, err = cp.ReportTestsFinished(writer, &gensurla.ReportTestsFinishedPayload{ChangeID: "cy", RequestRevision: cy.RequestRevision})
 			assertRefused(t, err, "assignment_unread")
+			assert.Equal(t, "surla/tests-1", productionBuildGit(t, testsDir, "symbolic-ref", "--short", "HEAD"))
 
 			_, err = cp.GetBuilderAssignment(builder, &gensurla.GetBuilderAssignmentPayload{ChangeID: "cy"})
 			require.NoError(t, err)
 			cp.buildCopyFactory = fixture
 			_, err = cp.GetTestWriterAssignment(writer, &gensurla.GetTestWriterAssignmentPayload{ChangeID: "cy"})
 			require.NoError(t, err)
+			cp.buildCopyFactory = nil
 			for _, role := range []testwriter.Role{testwriter.BuilderRole, testwriter.TestsRole} {
 				dir := filepath.Join(project, role.Folder)
 				assert.Equal(t, role.Branch(3), productionBuildGit(t, dir, "symbolic-ref", "--short", "HEAD"))
 			}
 			assert.False(t, copyBranchExists(t.Context(), repo, "surla/tests-2"))
-			assert.Equal(t, "Left uncommitted when change cy started",
-				productionBuildGit(t, repo, "log", "-1", "--format=%s", "surla/tests-1"))
+			assert.Equal(t, "Left uncommitted when change cy started", productionBuildGit(t, repo, "log", "-1", "--format=%s", "surla/tests-1"))
+			if !builderReadsX {
+				assert.False(t, copyBranchExists(t.Context(), repo, "surla/build-2"))
+				assert.Equal(t, "Left uncommitted when change cy started", productionBuildGit(t, repo, "log", "-1", "--format=%s", "surla/build-1"))
+				require.NoError(t, os.WriteFile(filepath.Join(testsDir, "eval", "n2_test.go"), []byte("package eval\n"), 0o600))
+				_, err = cp.DropBuild(user, &gensurla.DropBuildPayload{ChangeID: "cy", StartedAt: by.Build.StartedAt})
+				require.NoError(t, err)
+				cx2 := freshBuildableAfterDrop(t, cp, "cx2")
+				bx2, err := cp.StartBuild(user, &gensurla.StartBuildPayload{ChangeID: "cx2", RequestRevision: cx2.RequestRevision})
+				require.NoError(t, err)
+				assert.Equal(t, 4, mustOpenBuildFile(t, cp).Number)
+				_, err = cp.GetBuilderAssignment(builder, &gensurla.GetBuilderAssignmentPayload{ChangeID: "cx2"})
+				require.NoError(t, err)
+				assert.Equal(t, "surla/build-4", productionBuildGit(t, builderDir, "symbolic-ref", "--short", "HEAD"))
+				assert.Equal(t, "surla/tests-3", productionBuildGit(t, testsDir, "symbolic-ref", "--short", "HEAD"))
+				require.NoError(t, os.WriteFile(filepath.Join(builderDir, "n2.go"), []byte("package shop\n"), 0o600))
+				_, err = cp.DropBuild(user, &gensurla.DropBuildPayload{ChangeID: "cx2", StartedAt: bx2.Build.StartedAt})
+				require.NoError(t, err)
+				cy2 := freshBuildableAfterDrop(t, cp, "cy2")
+				_, err = cp.StartBuild(user, &gensurla.StartBuildPayload{ChangeID: "cy2", RequestRevision: cy2.RequestRevision})
+				require.NoError(t, err)
+				assert.Equal(t, 5, mustOpenBuildFile(t, cp).Number)
+				_, err = cp.GetBuilderAssignment(builder, &gensurla.GetBuilderAssignmentPayload{ChangeID: "cy2"})
+				require.NoError(t, err)
+				cp.buildCopyFactory = fixture
+				_, err = cp.GetTestWriterAssignment(writer, &gensurla.GetTestWriterAssignmentPayload{ChangeID: "cy2"})
+				require.NoError(t, err)
+				assert.Equal(t, "surla/build-5", productionBuildGit(t, builderDir, "symbolic-ref", "--short", "HEAD"))
+				assert.Equal(t, "surla/tests-5", productionBuildGit(t, testsDir, "symbolic-ref", "--short", "HEAD"))
+				assert.False(t, copyBranchExists(t.Context(), repo, "surla/tests-4"))
+				assert.Equal(t, "Left uncommitted when change cy2 started", productionBuildGit(t, repo, "log", "-1", "--format=%s", "surla/build-4"))
+				assert.Equal(t, "Left uncommitted when change cy2 started", productionBuildGit(t, repo, "log", "-1", "--format=%s", "surla/tests-3"))
+			} else {
+				assert.Equal(t, "Left uncommitted when change cx started", productionBuildGit(t, repo, "log", "-1", "--format=%s", "surla/build-1"))
+				assert.Equal(t, "Left uncommitted when change cy started", productionBuildGit(t, repo, "log", "-1", "--format=%s", "surla/build-2"))
+			}
 		})
 	}
 }
@@ -953,13 +957,8 @@ func mustOpenBuildFile(t *testing.T, cp *ControlPlane) buildFile {
 func armJoinPauseFilter(t *testing.T, repo, copyDir string) (string, string) {
 	t.Helper()
 	syncDir := t.TempDir()
-	enteredFile := filepath.Join(syncDir, "entered")
-	releaseFile := filepath.Join(syncDir, "release")
-	filterCmd := fmt.Sprintf(
-		"touch %s; while ! test -f %s; do sleep 0.01; done; cat",
-		shquote.Quote(enteredFile),
-		shquote.Quote(releaseFile),
-	)
+	enteredFile, releaseFile := filepath.Join(syncDir, "entered"), filepath.Join(syncDir, "release")
+	filterCmd := fmt.Sprintf("touch %s; while ! test -f %s; do sleep 0.01; done; cat", shquote.Quote(enteredFile), shquote.Quote(releaseFile))
 	runGitForTest(t, repo, "config", "filter.pausejoin.clean", filterCmd)
 	require.NoError(t, os.WriteFile(filepath.Join(copyDir, ".gitattributes"), []byte("pause.txt filter=pausejoin\n"), 0o600))
 	require.NoError(t, os.WriteFile(filepath.Join(copyDir, "pause.txt"), []byte(syncDir+"\n"), 0o600))

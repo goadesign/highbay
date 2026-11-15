@@ -73,6 +73,9 @@ func TestDropBuildPersistsAndRejectsRepeatedDrop(t *testing.T) {
 	assignments, err := cp.ListBuilderAssignments(user)
 	require.NoError(t, err)
 	assert.Empty(t, assignments.Assignments)
+	_, err = cp.GetTestFindings(user, &gensurla.GetTestFindingsPayload{ChangeID: "x"})
+	assertRefused(t, err, "not_found")
+	assert.EqualError(t, err, "The user dropped change x: stop work on it; make no more edits or commits for it. The user starts builds on the views page.")
 }
 
 // TestDropRefusesStalePageKeepsTheOpenBuild ensures a stale identity never
