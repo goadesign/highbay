@@ -65,11 +65,11 @@ func (c *ControlPlane) UpdateDependencies(ctx context.Context) (res *gensurla.Up
 	}
 	ctx, span := c.tracer("surla/controlplane").Start(ctx, "surla.controlplane.update_dependencies")
 	if err := c.admitCheckOperation(); err != nil {
-		endCheckSpan(span, err)
+		endCheckRequestSpan(span, err)
 		return nil, err
 	}
 	defer func() {
-		endCheckSpan(span, retErr)
+		endCheckRequestSpan(span, retErr)
 		c.checkOps.Done()
 	}()
 	ctx, cancel := c.checkDeadline(ctx)

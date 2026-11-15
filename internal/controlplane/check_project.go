@@ -131,11 +131,11 @@ func (c *ControlPlane) CheckProject(ctx context.Context) (res *gensurla.CheckPro
 	}
 	ctx, span := c.tracer("surla/controlplane").Start(ctx, "surla.controlplane.check_project")
 	if err := c.admitCheckOperation(); err != nil {
-		endCheckSpan(span, err)
+		endCheckRequestSpan(span, err)
 		return nil, err
 	}
 	defer func() {
-		endCheckSpan(span, retErr)
+		endCheckRequestSpan(span, retErr)
 		c.checkOps.Done()
 	}()
 	ctx, cancel := c.checkDeadline(ctx)
@@ -731,6 +731,16 @@ func clipText(s string, n int) string {
 		k--
 	}
 	return s[:k] + more
+}
+
+// endCheckRequestSpan keeps expected worker refusals on the request's normal
+// outcome path. Internal helper and cleanup spans still record actual errors.
+func endCheckRequestSpan(span trace.Span, err error) {
+	if expectedRequestRefusal(err) {
+		span.End()
+		return
+	}
+	endCheckSpan(span, err)
 }
 
 // endCheckSpan records a failed operation's error with error status and

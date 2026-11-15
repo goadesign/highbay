@@ -25,6 +25,9 @@ import (
 	"github.com/goadesign/surla/verify/candidate"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.opentelemetry.io/otel/codes"
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
+	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 	goahttp "goa.design/goa/v3/http"
 )
 
@@ -308,6 +311,71 @@ func TestBuilderCopyCheckBusyHTTPMCP(t *testing.T) {
 	after, err := os.ReadFile(filepath.Join(assignment.WorkingFolder, "design", "design.go"))
 	require.NoError(t, err)
 	assert.Equal(t, design, after)
+}
+
+// TestBuilderCopyCheckSpanOutcomes preserves expected worker refusals as
+// outcomes, while an actual helper launch failure remains an error span.
+func TestBuilderCopyCheckSpanOutcomes(t *testing.T) {
+	for _, state := range []string{"busy", "unread", "dropped", "off branch", "helper failed"} {
+		t.Run(state, func(t *testing.T) {
+			exporter := tracetest.NewInMemoryExporter()
+			provider := sdktrace.NewTracerProvider(sdktrace.WithSyncer(exporter))
+			t.Cleanup(func() { assert.NoError(t, provider.Shutdown(context.Background())) })
+			cp := newControlPlane(t, Options{
+				WorkspaceDir: newShopModule(t, nil), TracerProvider: provider,
+				Checker: candidate.NewContainerRunner(), CheckHelper: testCheckHelper(t), CheckTimeout: time.Minute,
+			})
+			working := readCheckBuilderFixture(t, cp)
+			switch state {
+			case "busy":
+				cp.builderCopyTurn <- struct{}{}
+				defer func() { <-cp.builderCopyTurn }()
+			case "unread":
+				cp.mu.Lock()
+				build, found, err := cp.cards.loadOpenBuild()
+				require.NoError(t, err)
+				require.True(t, found)
+				build.Builder.Read = false
+				require.NoError(t, cp.cards.saveOpenBuild(build))
+				cp.mu.Unlock()
+			case "dropped":
+				build, found, err := cp.cards.loadOpenBuild()
+				require.NoError(t, err)
+				require.True(t, found)
+				_, err = cp.DropBuild(asCaller("alice@example.com", CallerUser), &gensurla.DropBuildPayload{
+					ChangeID: build.ChangeID, StartedAt: build.StartedAt.UTC().Format(time.RFC3339Nano),
+				})
+				require.NoError(t, err)
+			case "off branch":
+				runGitForTest(t, working, "switch", "--quiet", "--detach")
+			case "helper failed":
+				cp.checkHelper = func() *exec.Cmd { return exec.Command(filepath.Join(t.TempDir(), "missing-helper")) }
+			}
+			_, checkErr := cp.CheckProject(asCaller("alice@example.com", CallerBuilder))
+			_, updateErr := cp.UpdateDependencies(asCaller("alice@example.com", CallerBuilder))
+			require.Error(t, checkErr)
+			require.Error(t, updateErr)
+			spans := slices.DeleteFunc(exporter.GetSpans(), func(span tracetest.SpanStub) bool {
+				return span.Name != "surla.controlplane.check_project" && span.Name != "surla.controlplane.update_dependencies"
+			})
+			require.Len(t, spans, 2)
+			for _, span := range spans {
+				var exceptions int
+				for _, event := range span.Events {
+					if event.Name == "exception" {
+						exceptions++
+					}
+				}
+				if state == "helper failed" {
+					assert.Equal(t, codes.Error, span.Status.Code)
+					assert.Equal(t, 1, exceptions)
+				} else {
+					assert.Equal(t, codes.Unset, span.Status.Code)
+					assert.Zero(t, exceptions)
+				}
+			}
+		})
+	}
 }
 
 // configureBuilderCopyCheck adds the production helper configuration to the
