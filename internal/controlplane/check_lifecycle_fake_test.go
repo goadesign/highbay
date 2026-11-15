@@ -135,23 +135,75 @@ func main() {
 }
 `
 
-// installFakeDocker compiles fakeDockerSource into t.TempDir and prepends it to PATH.
+var (
+	// fakeDockerOnce builds the immutable executable only for tests that use it.
+	fakeDockerOnce sync.Once
+	// fakeDockerBinary outlives the preparing test's temporary build directory.
+	fakeDockerBinary []byte
+	// fakeDockerOwner identifies the test whose diagnostics own build failure.
+	fakeDockerOwner string
+)
+
+// TestFakeDockerCopiesKeepIndependentContexts proves each installed executable
+// uses its own endpoint and survives cleanup of the first install's directory.
+func TestFakeDockerCopiesKeepIndependentContexts(t *testing.T) {
+	var previousBin string
+	for _, name := range []string{"first", "after first cleanup"} {
+		t.Run(name, func(t *testing.T) {
+			if previousBin != "" {
+				assert.NoFileExists(t, previousBin)
+				// A second installation must not need the Go compiler again.
+				t.Setenv("PATH", "")
+			}
+			bin := installFakeDocker(t)
+			assert.NotEqual(t, previousBin, bin)
+			daemon := newFakeDockerDaemon(t)
+			require.NoError(t, os.WriteFile(filepath.Join(filepath.Dir(bin), "context_endpoint.txt"),
+				[]byte(daemon.serverURL+"\n"), 0o600))
+			cmd := exec.CommandContext(t.Context(), "docker", "context", "inspect")
+			out, err := cmd.CombinedOutput()
+			require.NoError(t, err, "%s", out)
+			assert.Equal(t, daemon.hostURI+"\n", string(out))
+			assert.EqualValues(t, 1, daemon.contextInspects.Load())
+			previousBin = bin
+		})
+	}
+}
+
+// installFakeDocker copies the shared native executable into each test's own
+// bin directory and prepends it to PATH. Endpoint files and daemons stay local.
 func installFakeDocker(t *testing.T) string {
 	t.Helper()
-	root := realTempDir(t)
-	srcDir, binDir := filepath.Join(root, "src"), filepath.Join(root, "bin")
+	fakeDockerOnce.Do(func() {
+		fakeDockerOwner = t.Name()
+		fakeDockerBinary = buildFakeDocker(t)
+	})
+	require.NotEmpty(t, fakeDockerBinary, "fake Docker preparation failed in %s; see that test's diagnostics", fakeDockerOwner)
+	binDir := filepath.Join(realTempDir(t), "bin")
+	require.NoError(t, os.MkdirAll(binDir, 0o700))
+	dockerBin := filepath.Join(binDir, "docker")
+	require.NoError(t, os.WriteFile(dockerBin, fakeDockerBinary, 0o700))
+	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
+	return dockerBin
+}
+
+// buildFakeDocker compiles once under the requesting test's context and temp
+// lifetime. Only immutable bytes survive, so later callers own no shared files.
+func buildFakeDocker(t *testing.T) []byte {
+	t.Helper()
+	srcDir := realTempDir(t)
 	writeTree(t, srcDir, map[string]string{
 		"go.mod":  "module example.com/fakedocker\n\ngo 1.24\n",
 		"main.go": fakeDockerSource,
 	})
-	require.NoError(t, os.MkdirAll(binDir, 0o700))
-	dockerBin := filepath.Join(binDir, "docker")
+	dockerBin := filepath.Join(srcDir, "docker")
 	cmd := exec.CommandContext(t.Context(), "go", "build", "-o", dockerBin, ".")
 	cmd.Dir, cmd.Env = srcDir, append(os.Environ(), "GOWORK=off")
 	out, err := cmd.CombinedOutput()
 	require.NoErrorf(t, err, "build fake docker: %s", string(out))
-	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
-	return dockerBin
+	binary, err := os.ReadFile(dockerBin)
+	require.NoError(t, err)
+	return binary
 }
 
 // newFakeDockerDaemon starts an in-process fakeDockerDaemon backed by httptest.Server.

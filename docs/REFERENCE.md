@@ -2013,10 +2013,14 @@ checks are:
 
 - Vet and short race tests of each Go module on macOS: the root,
   [`story`](../story/README.md), `examples/orders` and `examples/orders-eval`.
-  The root module's tests run in two jobs so that each stays short:
-  **Go (., page tests)** runs the views page's tests (those named
-  `TestViewsPage…` and `TestCheckpoint…`) and **Go (.)** runs all the others,
-  so every test runs in exactly one of the two.
+  The root module's short tests run in three jobs. **Go (., page tests)**
+  runs only `internal/controlplane` and `internal/project`, selecting
+  `TestViewsPage…` and `TestCheckpoint…`. **Go (., control plane)** runs the
+  control plane's other short tests. **Go (.)** derives every other package
+  with tests and skips page tests, so each current test runs once. Each of
+  these jobs saves and restores its own Go build and module cache key,
+  qualified by operating system, architecture, Go version and root dependency
+  files; one job's narrower build cannot become another job's saved cache.
 - A Linux build and vet of the root module, once without build tags and once
   with each of `e2e`, `scaffold`, `herdr`, `browser` and `docker`, and the
   Linux short tests (including `verify/candidate` in the Linux Landlock +
