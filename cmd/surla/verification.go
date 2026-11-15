@@ -43,11 +43,6 @@ type verificationFile struct {
 // starter README.
 const defaultProjectVerifyTimeout = 30 * time.Minute
 
-// gitReadTimeout bounds the read-only git query the project server makes at
-// startup to find the workspace's enclosing working tree, so an unresponsive
-// repository stops startup with an error.
-const gitReadTimeout = 30 * time.Second
-
 // runVerifyRun runs one internal role started by verifyrun: `surla verify-run
 // supervise <dir>` or `surla verify-run execute <dir>` for a verification run
 // (verifyrun.Start), or `surla verify-run live <dir>` for a CP3 live target
