@@ -575,7 +575,7 @@ export function bootstrapViewsPage() {
   // A validated refusal may describe another change, whose build cannot be
   // obtained from the selected card's get_build result.
   let openBuildRefusal: OpenBuildRefusal | null = null;
-  let buildConfirmationRead: ((build: ChangeBuild["build"]) => void) | null = null;
+  let buildConfirmationRead: ((build: ChangeBuild["build"] | null) => void) | null = null;
   // Findings belong to one build/report/verdict, rather than only a change ID.
   let buildFindings: TestFindings | null = null;
   let findingsBasis: string | null = null;
@@ -1389,12 +1389,13 @@ export function bootstrapViewsPage() {
         }
         done();
       },
-      (message) => {
+      (message, failure) => {
         if (sessionState !== "active") return;
         const firstFailure = teamReadError === null;
         teamReadError = message;
         if (firstFailure) {
-          statusEl.textContent = "Could not refresh the project team. " + message + " Open Team to retry.";
+          statusEl.textContent = failure.kind === "server" && failure.body?.name === "not_implemented"
+            ? message : "Could not read the project team. Open Team to see the error and retry.";
         }
         done();
       }
@@ -1528,7 +1529,9 @@ export function bootstrapViewsPage() {
       (message) => {
         if (relevant() && generation === buildGeneration) {
           buildReadError = message;
+          const ready = buildConfirmationRead;
           buildConfirmationRead = null;
+          ready?.(null);
         }
         done();
       }
@@ -1638,7 +1641,7 @@ export function bootstrapViewsPage() {
 
   // prepareBuildConfirmation reads the saved build before the control asks
   // the user to replace it. A failed or invalidated read cannot ask.
-  function prepareBuildConfirmation(ready: (build: ChangeBuild["build"]) => void) {
+  function prepareBuildConfirmation(ready: (build: ChangeBuild["build"] | null) => void) {
     if (activeEditor === null || sessionState !== "active") return;
     buildConfirmationRead = ready;
     readBuild(activeEditor.card.change_id);

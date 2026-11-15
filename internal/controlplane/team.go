@@ -107,7 +107,7 @@ func (BuilderAndTestWriter) buildFolders() {}
 // already belong to the fixed project owner and perform no repeated authorization.
 func (c *ControlPlane) ownedTeam(ctx context.Context) (Team, error) {
 	if c.team == nil {
-		return nil, gensurla.MakeNotImplemented(errors.New("start this project with surla to use its team"))
+		return nil, gensurla.MakeNotImplemented(errors.New("Start this project with surla to use its team."))
 	}
 	principal, ok := PrincipalFromContext(ctx)
 	if !ok || principal.ID != c.team.Owner {

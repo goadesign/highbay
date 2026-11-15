@@ -14,7 +14,7 @@ import (
 // TestViewsPageShowsTakingStates keeps commands bound to passed commit IDs and
 // lists only the dropped build's retained branches, including an empty list.
 func TestViewsPageShowsTakingStates(t *testing.T) {
-	for _, state := range []string{"building", "passed", "evaluator", "rewritten", "merged", "dropped", "empty", "merged_findings", "dropped_findings"} {
+	for _, state := range []string{"building", "passed", "evaluator", "rewritten", "merged", "dropped", "empty", "merged_findings", "dropped_findings", "earlier_passed", "earlier_merged", "earlier_dropped"} {
 		t.Run(state, func(t *testing.T) {
 			cp := newBuildControlPlane(t, Options{Team: &TeamBinding{
 				Owner: pageOwner, Service: &teamServiceFixture{snapshot: pageTeamSnapshot("working")},
@@ -50,8 +50,14 @@ const variants = {
   empty: { state: "dropped", kept_branches: [] },
   merged_findings: { state: "merged" },
   dropped_findings: { state: "dropped", kept_branches: [] },
+  earlier_passed: passed, earlier_merged: { state: "merged" },
+  earlier_dropped: { state: "dropped", kept_branches: [] },
 };
 const saved = JSON.parse(input.build);
+if (input.state.startsWith("earlier_")) {
+  saved.in_force = false;
+  saved.request_revision = "0".repeat(saved.request_revision.length);
+}
 if (input.state !== "building") saved.test_writer.tests = { state: "accepted", commit: tests,
   checked_at: saved.started_at, not_judged: input.notJudged };
 const closedFindings = input.state.endsWith("_findings");
@@ -61,6 +67,14 @@ await control(origin, "reply", { key: "GET " + path, status: 200,
 const page = await openPage(origin, { link: input.link });
 await until(() => page.$("#surla-build-taking") && !page.$("#surla-build-loading"), "taking state did not appear");
 const taking = page.text("#surla-build-taking");
+if (input.state.startsWith("earlier_")) {
+  const action = page.$("#surla-build-start");
+  expect(action && !action.disabled && action.getAttribute("aria-describedby").includes("surla-build-start-explanation"), "earlier closed/passed build lost its direct explained Build offer");
+  expect(page.text("#surla-build-start-explanation").includes("nothing confines them"), "earlier Build offer lost execution explanation");
+  expect(page.sent("POST", path).length === 0, "reading an earlier build started work");
+  page.close();
+  return;
+}
 if (["passed", "rewritten", "evaluator"].includes(input.state)) {
   expect(page.text("#surla-build-state") === "The builder’s commit passed the accepted tests.", "passed build still describes future building or checking");
   expect(page.$("#surla-build-state").nextElementSibling?.classList.contains("surla-build-merge"), "merge instructions are not immediately below the passed state");
@@ -91,11 +105,47 @@ expect(page.$$(".surla-build-actions").length === 1, "build actions are split in
 const state = variants[input.state].state;
 expect(page.text("#surla-build-taking-state") === state[0].toUpperCase() + state.slice(1), "the header badge does not describe the saved taking state");
 expect(Boolean(page.$(".surla-build-header .surla-build-actions")), "current build controls are not in the header");
-expect(Boolean(page.$("#surla-build-start-explanation")) === (state === "dropped"), "the execution warning appears outside the agreed Build-offer states");
+expect(Boolean(page.$("#surla-build-start-explanation")) === (state === "merged"), "the execution explanation must accompany each direct Build offer");
+if (state === "dropped") expect(!page.$("#surla-build-start") && page.text("#surla-build-section").includes("adopt the revision, then build"), "current dropped build offered a doomed restart");
+if (state === "merged") expect(page.$("#surla-build-start").getAttribute("aria-describedby").includes("surla-build-start-explanation"), "direct Build did not describe execution");
 if (closedFindings) {
   expect(page.text("#surla-build-findings").includes("1 finding") && page.$("#surla-build-findings").closest("#surla-build-details"), "closed build lost its historical finding count");
   expect(!page.$("#surla-build-findings button") && page.$("#surla-build-findings").getAttribute("aria-busy") === "false", "closed build exposes active findings controls or loading");
   expect(page.sent("GET", path + "/findings").length === 0, "closed historical facts read active findings");
+}
+if (input.state === "building") {
+  // A changed answer to the pre-question read must not create consent for it.
+  await control(origin, "hold", { key: "GET " + path });
+  await control(origin, "reply", { key: "GET " + path, status: 200,
+    body: { change_id: "chg-taking", build: { ...saved, state: "started", taking: passed } } });
+  page.$("#surla-build-again").click();
+  await until(() => page.$("#surla-build-loading") && page.$("#surla-build-drop").disabled, "pending rebuild read did not exclude Drop");
+  await control(origin, "release", { key: "GET " + path });
+  await until(() => page.$("#surla-build-taking")?.dataset.state === "passed" && !page.$("#surla-build-loading"), "changed read did not settle");
+  expect(!page.$("#surla-build-question") && page.sent("POST", path).length === 0, "changed read created consent or started work");
+  // Restore the fixture, then change only taking while a question is visible.
+  await control(origin, "reply", { key: "GET " + path, status: 200,
+    body: { change_id: "chg-taking", build: { ...saved, state: "started", taking: variants.building } } });
+  await control(origin, "act", { key: "resave-taking" });
+  await until(() => page.$("#surla-build-taking")?.dataset.state === "building" && !page.$("#surla-build-loading"), "building fixture did not return");
+  await control(origin, "reply", { key: "GET " + path, status: 503,
+    body: { name: "unavailable", id: "build-read", message: "Build owner unavailable.", temporary: true, timeout: false, fault: false } });
+  page.$("#surla-build-again").click();
+  await until(() => page.$("#surla-build-error"), "failed pre-question read did not show its error");
+  expect(!page.$("#surla-build-question") && page.sent("POST", path).length === 0, "failed read created consent or started work");
+  page.$("#surla-build-refresh").click();
+  await until(() => !page.$("#surla-build-error") && page.$("#surla-build-drop") && !page.$("#surla-build-drop").disabled, "retry did not release the other action");
+  page.$("#surla-build-again").click();
+  await until(() => page.$("#surla-build-confirm"), "rebuild question did not open");
+  expect(page.$("#surla-build-drop").disabled, "rebuild question did not exclude Drop");
+  const before = page.sent("GET", path).length;
+  await control(origin, "reply", { key: "GET " + path, status: 200,
+    body: { change_id: "chg-taking", build: { ...saved, state: "started", taking: passed } } });
+  await control(origin, "act", { key: "resave-taking" });
+  await until(() => page.sent("GET", path).length > before && page.$("#surla-build-taking")?.dataset.state === "passed", "new taking state did not arrive");
+  expect(!page.$("#surla-build-question") && page.sent("POST", path).length === 0, "same-start state transition retained consent or started work");
+  page.close();
+  return;
 }
 if (open) {
   page.$("#surla-build-drop").click();
@@ -277,6 +327,7 @@ page.$("#surla-build-drop-confirm").dispatchEvent(new page.win.KeyboardEvent("ke
 await until(() => !page.$("#surla-build-drop-question") && page.doc.activeElement === page.$("#surla-build-drop"), "Escape did not restore the Drop trigger");
 page.$("#surla-build-drop").click();
 await until(() => page.$("#surla-build-drop-cancel"), "Drop did not reopen");
+expect(page.$("#surla-build-again").disabled, "Drop question did not exclude rebuild");
 page.$("#surla-build-drop-cancel").click();
 await until(() => !page.$("#surla-build-drop-question") && !page.$("#surla-build-drop").disabled, "Cancel did not restore Drop");
 expect(page.sent("POST", path).length === 0, "cancelling Drop sent a write");
@@ -388,7 +439,7 @@ const reads = page.sent("GET", path).length;
 await control(origin, "hold", { key: "GET " + path });
 page.$("#surla-build-again").click();
 await until(() => page.sent("GET", path).length > reads && page.$("#surla-build-loading"), "rebuild did not read its owner before asking");
-expect(!page.$("#surla-build-confirm") && page.sent("POST", path).length === 1, "rebuild asked or wrote before the fresh owner answer");
+expect(!page.$("#surla-build-confirm") && page.$("#surla-build-drop").disabled && page.sent("POST", path).length === 1, "rebuild read did not exclude Drop or wrote before the fresh owner answer");
 await control(origin, "release", { key: "GET " + path });
 await until(() => page.$("#surla-build-confirm") && !page.$("#surla-build-confirm").disabled, "fresh owner answer did not ask for explicit consent");
 page.$("#surla-build-confirm").click();
@@ -436,7 +487,7 @@ await control(origin, "hold", { key: "POST " + drop });
 page.$("#surla-build-drop").click();
 await until(() => page.$("#surla-build-drop-confirm"), "Drop did not ask");
 page.$("#surla-build-drop-confirm").click();
-await until(() => page.sent("POST", drop).length === 1 && page.doc.activeElement === page.$("#surla-build-taking"), "pending Drop did not retain a local focus target");
+await until(() => page.sent("POST", drop).length === 1 && page.doc.activeElement === page.$("#surla-build-title"), "pending Drop did not focus the Build heading");
 await control(origin, "act", { key: "other-build" });
 await control(origin, "release", { key: "POST " + drop });
 await until(() => page.sent("POST", drop)[0].status === 409 && page.$("#surla-build-blocking-change"), "stale Drop did not name the other build");

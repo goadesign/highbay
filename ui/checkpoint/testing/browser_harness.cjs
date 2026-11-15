@@ -559,7 +559,7 @@ async function phoneScenario(input, facts, views) {
 // takingScenario inspects both requested viewport classes in one browser run.
 // The Go fixture supplies typed presentation facts; this proves no worker ran.
 async function takingScenario(input, facts, views) {
-  const ready = await until(views, "document.querySelector('#surla-build-taking[data-state=passed]') !== null");
+  const ready = await until(views, "document.querySelector('#surla-build-taking[data-state=" + input.taking_state + "]') !== null");
   if (ready.timed_out) {
     const state = await evaluate(views, "({ state: document.getElementById('surla-checkpoint-root')?.dataset.state, text: document.body.innerText.slice(0, 6000) })");
     throw new Error("taking presentation did not load: " + JSON.stringify(state) + "; responses: " +
@@ -571,16 +571,29 @@ async function takingScenario(input, facts, views) {
       width, height, deviceScaleFactor: 1, mobile: width < 600,
     }, views.sessionId);
     await evaluate(views, "new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))");
-    await evaluate(views, "document.getElementById('surla-build-drop').focus(), true");
-    await views.dt.send("Input.dispatchKeyEvent", { type: "keyDown", key: "Enter", code: "Enter", windowsVirtualKeyCode: 13, text: "\r", unmodifiedText: "\r" }, views.sessionId);
-    await views.dt.send("Input.dispatchKeyEvent", { type: "keyUp", key: "Enter", code: "Enter", windowsVirtualKeyCode: 13 }, views.sessionId);
-    const opened = await until(views, "document.getElementById('surla-build-drop-question')?.contains(document.activeElement)");
+    const trigger = input.taking_state === "passed" ? "surla-build-drop" : input.taking_state === "building" ? "surla-build-again" : null;
+    let opened = { timed_out: false };
+    if (trigger !== null) {
+      await evaluate(views, "document.getElementById('" + trigger + "').focus(), true");
+      await views.dt.send("Input.dispatchKeyEvent", { type: "keyDown", key: "Enter", code: "Enter", windowsVirtualKeyCode: 13, text: "\r", unmodifiedText: "\r" }, views.sessionId);
+      await views.dt.send("Input.dispatchKeyEvent", { type: "keyUp", key: "Enter", code: "Enter", windowsVirtualKeyCode: 13 }, views.sessionId);
+      const question = input.taking_state === "passed" ? "surla-build-drop-question" : "surla-build-question";
+      opened = await until(views, "document.getElementById('" + question + "')?.contains(document.activeElement)");
+    }
     const measured = await evaluate(views, "(" + function measure() {
       const region = document.getElementById("surla-build-taking");
       return {
         width: document.documentElement.clientWidth,
         document_width: document.documentElement.scrollWidth,
         commands: Array.from(region.querySelectorAll(".surla-build-merge pre"), (node) => node.textContent),
+        commands_usable: Array.from(region.querySelectorAll(".surla-build-merge pre")).every((node) => {
+          const style = getComputedStyle(node);
+          node.focus();
+          return style.whiteSpace === "pre" && ["auto", "scroll"].includes(style.overflowX) &&
+            node.tabIndex === 0 && document.activeElement === node && node.getAttribute("role") === "region" && node.getAttribute("aria-label");
+        }),
+        explanation: document.getElementById("surla-build-start-explanation")?.textContent.includes("nothing confines them") === true,
+        no_start: document.getElementById("surla-build-start") === null,
         rewrite_warning: region.textContent.includes("commit where this build started") && region.textContent.includes("these merges bring that history back"),
         overflowing: [region, ...region.querySelectorAll("*")].filter((node) => {
           // Exact command lines intentionally scroll inside their focusable pre.
@@ -591,13 +604,17 @@ async function takingScenario(input, facts, views) {
       };
     }.toString() + ")()");
     measured.drop_focused = !opened.timed_out;
+    if (trigger !== null) await evaluate(views, "document.getElementById('" + (input.taking_state === "passed" ? "surla-build-drop-question" : "surla-build-question") + "').focus(), true");
     const capture = await views.dt.send("Page.captureScreenshot", { format: "png", captureBeyondViewport: true }, views.sessionId);
-    measured.screenshot = require("node:path").join(input.capture_directory, name + ".png");
+    measured.screenshot = require("node:path").join(input.capture_directory, input.taking_state + "-" + name + ".png");
     fs.writeFileSync(measured.screenshot, Buffer.from(capture.data, "base64"));
-    await views.dt.send("Input.dispatchKeyEvent", { type: "keyDown", key: "Escape", code: "Escape", windowsVirtualKeyCode: 27 }, views.sessionId);
-    await views.dt.send("Input.dispatchKeyEvent", { type: "keyUp", key: "Escape", code: "Escape", windowsVirtualKeyCode: 27 }, views.sessionId);
-    const canceled = await until(views, "document.getElementById('surla-build-drop-question') === null && document.activeElement?.id === 'surla-build-drop'");
-    measured.drop_cancelled = !canceled.timed_out;
+    if (trigger !== null) {
+      await views.dt.send("Input.dispatchKeyEvent", { type: "keyDown", key: "Escape", code: "Escape", windowsVirtualKeyCode: 27 }, views.sessionId);
+      await views.dt.send("Input.dispatchKeyEvent", { type: "keyUp", key: "Escape", code: "Escape", windowsVirtualKeyCode: 27 }, views.sessionId);
+      const question = input.taking_state === "passed" ? "surla-build-drop-question" : "surla-build-question";
+      const canceled = await until(views, "document.getElementById('" + question + "') === null && document.activeElement?.id === '" + trigger + "'");
+      measured.drop_cancelled = !canceled.timed_out;
+    }
     facts.taking.push(measured);
   }
 }
@@ -633,6 +650,7 @@ async function main(input, facts) {
 
     if (input.taking) {
       await takingScenario(input, facts, views);
+      await dt.send("Target.closeTarget", { targetId: views.targetId });
       return;
     }
     if (input.phone) {
