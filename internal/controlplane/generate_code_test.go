@@ -51,8 +51,6 @@ func TestGenerateCodeHTTPMCPAndIteration(t *testing.T) {
 	if testing.Short() {
 		t.Skip("runs the Go toolchain; the full suite (go test without -short) covers it")
 	}
-	ctx, cancel := context.WithTimeout(t.Context(), 3*time.Minute)
-	defer cancel()
 	workspace := t.TempDir()
 	snapshot := testmodule.Snapshot(t, "", generationDesign)
 	writeGenerationFiles(t, workspace, snapshot)
@@ -84,13 +82,35 @@ func TestGenerateCodeHTTPMCPAndIteration(t *testing.T) {
 	mcpTransport := genmcpclient.NewClient(origin.Scheme, origin.Host, doer, goahttp.RequestEncoder, goahttp.ResponseDecoder, false)
 	mcpClient := &genmcpsurla.Client{ToolsCallEndpoint: mcpTransport.ToolsCall(), ToolsListEndpoint: mcpTransport.ToolsList()}
 
-	tools, err := mcpClient.ToolsList(ctx, &genmcpsurla.ToolsListPayload{})
+	// Each request owns its deadline; fixture preparation and earlier requests
+	// cannot consume the budget needed to exercise a later recovery.
+	generateHTTP := func(payload *gensurla.GenerateCodePayload) (*gensurla.GenerateCodeResult, error) {
+		ctx, cancel := context.WithTimeout(t.Context(), 3*time.Minute)
+		defer cancel()
+		return httpClient.GenerateCode(ctx, payload)
+	}
+	callMCP := func(payload *genmcpsurla.ToolsCallPayload) (*genmcpsurla.ToolsCallResult, error) {
+		ctx, cancel := context.WithTimeout(t.Context(), 3*time.Minute)
+		defer cancel()
+		return mcpClient.ToolsCall(ctx, payload)
+	}
+	generateDirect := func(payload *gensurla.GenerateCodePayload) (*gensurla.GenerateCodeResult, error) {
+		ctx, cancel := context.WithTimeout(t.Context(), 3*time.Minute)
+		defer cancel()
+		return cp.GenerateCode(WithPrincipal(ctx, Principal{
+			ID: "developer@example.com", CallerID: "developer@example.com", Kind: CallerUser,
+		}), payload)
+	}
+
+	listCtx, cancelList := context.WithTimeout(t.Context(), 30*time.Second)
+	tools, err := mcpClient.ToolsList(listCtx, &genmcpsurla.ToolsListPayload{})
+	cancelList()
 	require.NoError(t, err)
 	index := slices.IndexFunc(tools.Tools, func(tool *genmcpsurla.ToolInfo) bool { return tool.Name == "generate_code" })
 	require.NotEqual(t, -1, index)
 	args, err := gensurla.EncodeGenerateCodePayload(&gensurla.GenerateCodePayload{})
 	require.NoError(t, err)
-	call, err := mcpClient.ToolsCall(ctx, &genmcpsurla.ToolsCallPayload{Name: "generate_code", Arguments: args})
+	call, err := callMCP(&genmcpsurla.ToolsCallPayload{Name: "generate_code", Arguments: args})
 	require.NoError(t, err)
 	complete, ok := call.Outcome.AsComplete()
 	require.True(t, ok)
@@ -121,10 +141,7 @@ func TestGenerateCodeHTTPMCPAndIteration(t *testing.T) {
 	updated := strings.Replace(generationDesign, `Service("orders", func() {`, `Service("orders", func() { Description("edited on the running server")`, 1)
 	writeGenerationFiles(t, workspace, map[string]string{"design/design.go": updated})
 	candidate := "candidate"
-	second, err := cp.GenerateCode(
-		WithPrincipal(ctx, Principal{ID: "developer@example.com", CallerID: "developer@example.com", Kind: CallerUser}),
-		&gensurla.GenerateCodePayload{Target: &candidate},
-	)
+	second, err := generateDirect(&gensurla.GenerateCodePayload{Target: &candidate})
 	require.NoError(t, err)
 	require.NoError(t, gensurla.ValidateGenerateCodeResultValue(second))
 	assert.Empty(t, second.Warnings)
@@ -141,7 +158,7 @@ func TestGenerateCodeHTTPMCPAndIteration(t *testing.T) {
 	eval := "eval"
 	args, err = gensurla.EncodeGenerateCodePayload(&gensurla.GenerateCodePayload{Target: &eval})
 	require.NoError(t, err)
-	call, err = mcpClient.ToolsCall(ctx, &genmcpsurla.ToolsCallPayload{Name: "generate_code", Arguments: args})
+	call, err = callMCP(&genmcpsurla.ToolsCallPayload{Name: "generate_code", Arguments: args})
 	require.NoError(t, err)
 	complete, ok = call.Outcome.AsComplete()
 	require.True(t, ok)
@@ -177,7 +194,7 @@ func TestGenerateCodeHTTPMCPAndIteration(t *testing.T) {
 			for _, name := range failure.remove {
 				require.NoError(t, os.Remove(filepath.Join(workspace, name)))
 			}
-			_, err := mcpClient.ToolsCall(ctx, &genmcpsurla.ToolsCallPayload{Name: "generate_code", Arguments: []byte(`{}`)})
+			_, err := callMCP(&genmcpsurla.ToolsCallPayload{Name: "generate_code", Arguments: []byte(`{}`)})
 			require.Error(t, err)
 			assert.ErrorContains(t, err, failure.want)
 			if failure.name == "missing go.sum" {
@@ -188,7 +205,7 @@ func TestGenerateCodeHTTPMCPAndIteration(t *testing.T) {
 			writeGenerationFiles(t, workspace, map[string]string{
 				"go.mod": snapshot["go.mod"], "go.sum": snapshot["go.sum"], "design/design.go": updated,
 			})
-			_, err = httpClient.GenerateCode(ctx, &gensurla.GenerateCodePayload{})
+			_, err = generateHTTP(&gensurla.GenerateCodePayload{})
 			require.NoError(t, err)
 		})
 	}
@@ -196,7 +213,7 @@ func TestGenerateCodeHTTPMCPAndIteration(t *testing.T) {
 	// A compiler rejection identifies the builder's broken source without
 	// returning the operator-owned compiler workspace or log locations.
 	writeGenerationFiles(t, workspace, map[string]string{"design/design.go": updated + "\nvar _ = MissingSourceSymbol\n"})
-	_, err = httpClient.GenerateCode(ctx, &gensurla.GenerateCodePayload{})
+	_, err = generateHTTP(&gensurla.GenerateCodePayload{})
 	require.Error(t, err)
 	var httpFailure *goahttp.ClientError
 	require.ErrorAs(t, err, &httpFailure)
@@ -226,7 +243,7 @@ func TestGenerateCodeHTTPMCPAndIteration(t *testing.T) {
 	} {
 		t.Run(failure.name, func(t *testing.T) {
 			writeGenerationFiles(t, workspace, map[string]string{"design/design.go": failure.design})
-			_, err := mcpClient.ToolsCall(ctx, &genmcpsurla.ToolsCallPayload{Name: "generate_code", Arguments: []byte(`{}`)})
+			_, err := callMCP(&genmcpsurla.ToolsCallPayload{Name: "generate_code", Arguments: []byte(`{}`)})
 			require.Error(t, err, "a failed generation uses the MCP protocol-error path")
 			assert.ErrorContains(t, err, "evaluating the design and generating files")
 			assert.ErrorContains(t, err, failure.want)
@@ -236,7 +253,7 @@ func TestGenerateCodeHTTPMCPAndIteration(t *testing.T) {
 			assert.NotContains(t, err.Error(), quotedBase[1:len(quotedBase)-1])
 			assert.Equal(t, candidateBeforeEval, generationFiles(t, workspace, "gen"))
 			writeGenerationFiles(t, workspace, map[string]string{"design/design.go": updated})
-			result, err := httpClient.GenerateCode(ctx, &gensurla.GenerateCodePayload{})
+			result, err := generateHTTP(&gensurla.GenerateCodePayload{})
 			require.NoError(t, err)
 			assert.Equal(t, first.FilesWritten, result.FilesWritten)
 		})
@@ -257,7 +274,7 @@ func TestGenerateCodeHTTPMCPAndIteration(t *testing.T) {
 	require.True(t, info.IsDir())
 	require.NoError(t, os.Rename(cache, cache+"-saved"))
 	require.NoError(t, os.WriteFile(cache, []byte("cache directory replaced by a file\n"), 0o600))
-	_, cacheErr := httpClient.GenerateCode(ctx, &gensurla.GenerateCodePayload{})
+	_, cacheErr := generateHTTP(&gensurla.GenerateCodePayload{})
 	require.NoError(t, os.Remove(cache))
 	require.NoError(t, os.Rename(cache+"-saved", cache))
 	require.Error(t, cacheErr)
@@ -274,11 +291,11 @@ func TestGenerateCodeHTTPMCPAndIteration(t *testing.T) {
 	quotedEval := strconv.Quote(physicalEvalParent)
 	assert.NotContains(t, cacheErr.Error(), quotedEval[1:len(quotedEval)-1])
 	assert.Equal(t, candidateBeforeEval, generationFiles(t, workspace, "gen"))
-	_, err = httpClient.GenerateCode(ctx, &gensurla.GenerateCodePayload{})
+	_, err = generateHTTP(&gensurla.GenerateCodePayload{})
 	require.NoError(t, err)
 
 	require.NoError(t, cp.Close())
-	_, err = cp.GenerateCode(WithPrincipal(ctx, Principal{ID: "developer@example.com", CallerID: "developer@example.com", Kind: CallerUser}), &gensurla.GenerateCodePayload{})
+	_, err = generateDirect(&gensurla.GenerateCodePayload{})
 	require.Error(t, err)
 	assert.Equal(t, candidateBeforeEval, generationFiles(t, workspace, "gen"), "a closed server never publishes")
 }

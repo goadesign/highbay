@@ -760,10 +760,14 @@ func TestAdoptStoryRefreshRejectionsLeaveCardStorageUnchanged(t *testing.T) {
 				cp := newControlPlane(t, Options{WorkspaceDir: wsDir})
 				card := mustPropose(t, cp, aliceCtx, "chg-existing", "Refunds up to $50 are instant.", refundAnalysis("Refunds up to $50 are instant."))
 				opID := seedStoryRefreshForTest(t, cp, "alice@example.com", storyRefreshStateSucceeded, sampleAdoptedStories(), "")
-				require.NoError(t, os.RemoveAll(wsDir))
+				_, oldDev, oldIno, err := openWorkspaceRootAndStat(wsDir)
+				require.NoError(t, err)
+				// Keep the original inode allocated while the replacement exists.
+				require.NoError(t, os.Rename(wsDir, wsDir+"-original"))
 				writeWorkspaceFiles(t, wsDir, validWorkspaceStub("package design\n"))
 				cleanWS, dev, ino, err := openWorkspaceRootAndStat(wsDir)
 				require.NoError(t, err)
+				require.True(t, oldDev != dev || oldIno != ino, "replacement has a distinct device/inode identity")
 				cp.workspaceMu.Lock()
 				cp.activeWorkspaceDir, cp.boundWorkspaceDev, cp.boundWorkspaceIno = cleanWS, dev, ino
 				cp.workspaceMu.Unlock()

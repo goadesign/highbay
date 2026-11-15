@@ -51,7 +51,7 @@ an operation, who may call it, what it returns and how it refuses.
 | **Herdr app** (`herdr-app`) | The window that shows the team's panes. | `curl -fsSL https://releases.herdr.dev/app/install.sh \| sh` ([herdr.dev](https://herdr.dev/)) |
 | **Chorus v0.11.0 or later** | Agent messaging and the Chorus dialog. | `curl -fsSL https://raw.githubusercontent.com/goadesign/chorus/main/scripts/install.sh \| sh`; update with `chorus update -yes` |
 | **A coding agent** that the Chorus dialog can start | An agent app plays each role: the user picks one per role in the Chorus dialog. | — |
-| **Git**, with a name and address | Without stored verification settings, builds, live targets and verification need the project in a Git repository with a first commit, and Surla records accepted tests as commits under your Git identity. | `git config --global user.name …` and `user.email …` |
+| **Git 2.45 or newer**, with a name and address | Startup requires support for `--no-lazy-fetch`, so Surla's Git reads do not download missing objects. Without stored verification settings, builds, live targets and verification need the project in a Git repository with a first commit, and Surla records accepted tests as commits under your Git identity. | Install Git 2.45 or newer on `PATH`; `git config --global user.name …` and `user.email …` configure its identity. |
 | **Docker** (Docker Desktop, or another local engine on a `unix://` socket) | `check_project` and `update_dependencies` run Go in Linux containers. The first check pulls `golang:1.27.3`. | [docker.com](https://www.docker.com/) |
 | **Temporal CLI** | Only to run the Orders evaluator, which starts a local Temporal server for its scenarios: when Surla verifies the Orders project or starts a live target of it, when `surla verify` runs that evaluator, and in the full-suite tests that run it (the `examples/orders` acceptance suite and the `e2e` tests of `./internal/verify` and `./cmd/surla`). | `brew install temporal` |
 
@@ -62,7 +62,13 @@ it says instead `<program> is installed in <folder>, which is not on PATH;
 add <folder> to PATH, then run surla again`. It then checks that Chorus is
 v0.11.0 or later (`chorus update -yes` updates it), that `hc` is on the path
 or in `~/.local/bin`, and that the browser opener (`open`) is on the path. A
-missing opener is named without an install command.
+missing opener is named without an install command. Surla then probes the Git
+on `PATH` with `git --no-lazy-fetch version`, without reading a repository.
+If that option is unknown, startup names the installed `git --version` line
+and says `Install Git 2.45 or newer and run surla again.` Missing Git has its
+own refusal. No project state, server, window or agent starts on these
+refusals. Git builds with the capability backported are accepted regardless
+of their version label.
 
 ---
 
@@ -154,7 +160,8 @@ is to its right, and the test writer's below the builder's. Starting again
 reuses the guide and the saved space. If the space was closed, the server
 adopts the one local space that matches its team name and folder, or creates
 one; when several match, it refuses with their count, and the user closes the
-duplicates. Team preparation needs no Git.
+duplicates. Team preparation needs no Git repository; startup still requires
+the Git executable and capability listed under [Prerequisites](#prerequisites).
 
 <a id="idle-shell"></a>
 
@@ -2012,12 +2019,20 @@ checks are:
 To run the short tests locally, run `go test -race -short ./...` in each
 module.
 
-The full suite runs nightly at 07:17 UTC and on a manual **Run workflow**
-request (`CI=true gh workflow run ci.yml --ref <branch> </dev/null`). It runs
-each module's complete tests and the verifier, generation, starter and orders
-acceptance suites as parallel jobs. A passing short run does not prove the
-paths that build and run agent-written code; changes to candidate execution or starter generation need
-the full suite. On macOS, with the Temporal CLI for the first three:
+The root module's full tests also run on pushes to `main`, `team-start` and
+`builder-copy`, on both macOS and Linux. Each operating system has separate
+jobs for the control plane's page tests, its other tests, the design evaluator,
+and the remaining root packages. The page partition uses the same test-name
+pattern as the short checks; the remaining packages still run their own page
+tests.
+
+All full suites run nightly at 07:17 UTC and on a manual **Run workflow**
+request (`CI=true gh workflow run ci.yml --ref <branch> </dev/null`). This adds
+the other modules' complete tests and the verifier, generation, starter and
+orders acceptance suites as parallel jobs. A passing short run does not prove
+paths that build and run agent-written code; changes to candidate execution
+or starter generation need the full suite. On macOS, with the Temporal CLI
+for the first three:
 
 ```bash
 (cd examples/orders-eval && go test -race -tags e2e ./acceptance)
@@ -2041,7 +2056,7 @@ go test -race -count=1 -tags browser ./internal/project
 
 ```text
 .
-├── .github/workflows/ci.yml     # Short checks on pull requests and pushes; full suites nightly or on request
+├── .github/workflows/ci.yml     # Short PR checks, full root tests on integration pushes, all suites nightly or on request
 ├── cmd/surla/                   # The surla command: project start and stop, settings, init, preview, diff, gen, verify, approve
 ├── design/                      # Goa design of the server's contract
 │   ├── design.go                # Change Cards, checks, live target, verification, approval
