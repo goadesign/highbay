@@ -1,5 +1,5 @@
 # Pushes run the short Go suites and generated-code checks in parallel.
-# Nightly and manually requested runs keep every sandbox and native journey.
+# Nightly and manually requested runs keep every native journey.
 # All model calls use scripted providers; these jobs need no model credentials.
 # Real Docker coverage requires the separate e2e,docker tags and a local engine.
 name: CI
@@ -182,7 +182,7 @@ jobs:
           cache-dependency-path: |
             go.sum
             go.mod
-      - name: Vet and short race tests (including Linux candidate sandbox)
+      - name: Vet and short race tests
         # Only packages with tests are listed. The others, the generated
         # packages among them, have nothing to run, and compiling them and
         # their large dependencies with the race detector took much of this
@@ -307,7 +307,7 @@ jobs:
             job_timeout: 45
           - suite: journey
             module: .
-            # One change through the project server, its team, a sandboxed
+            # One change through the project server, its team, a
             # verification run and approval: about 2.5 to 4 minutes on a
             # developer machine with -race, several times that on this runner.
             # Its package alarm outlasts the test's own 32-minute wait for a
