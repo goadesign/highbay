@@ -1523,7 +1523,7 @@ export function bootstrapViewsPage() {
 
   // readBlockingBuild follows the known blocking change through the existing
   // build-read chain. A read of the selected change alone cannot clear it.
-  // A different open start never silently retargets the user's Drop consent.
+  // A different open start invalidates the existing question's exact identity.
   function readBlockingBuild() {
     const refused = openBuildRefusal;
     if (refused === null || refused.change_id === activeEditor?.card.change_id ||
@@ -1537,7 +1537,7 @@ export function bootstrapViewsPage() {
             (result.build.taking.state !== "building" && result.build.taking.state !== "passed")) {
           openBuildRefusal = null;
           buildStartError = null;
-        } else if (result.build.started_at === refused.build.started_at) {
+        } else {
           openBuildRefusal = { ...refused, build: result.build };
         }
       },
