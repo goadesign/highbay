@@ -12,6 +12,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"golang.org/x/mod/modfile"
 
 	"github.com/goadesign/surla/internal/testmodule"
 )
@@ -55,30 +56,43 @@ func succeededStoryFixture(t *testing.T) map[string]string {
 	return files
 }
 
-// prepareOfflineStoryFixture completes this exact graph from cached bytes.
+// prepareOfflineStoryFixture checks this exact graph from cached bytes.
 // Its error names missing fixture inputs instead of a remote setup timeout.
 func prepareOfflineStoryFixture(ctx context.Context, dir string) error {
-	cmd := exec.CommandContext(ctx, "go", "mod", "tidy")
-	cmd.Dir = dir
-	cmd.Env = append(os.Environ(), "GOWORK=off", "GOTOOLCHAIN=local", "GOFLAGS=-mod=mod",
-		"GOENV=off", "GOPROXY=off", "GOSUMDB=off", "GONOPROXY=none")
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		return fmt.Errorf("fixture input incomplete: prepare offline Story module from the root module cache: %w\n%s", err, output)
+	for _, args := range [][]string{
+		{"list", "-mod=readonly", "-deps", "./design/..."},
+		{"list", "-mod=readonly", "-m", "all"},
+	} {
+		cmd := exec.CommandContext(ctx, "go", args...)
+		cmd.Dir = dir
+		cmd.Env = append(os.Environ(), "GOWORK=off", "GOTOOLCHAIN=local", "GOFLAGS=",
+			"GOENV=off", "GOPROXY=off", "GOSUMDB=off", "GONOPROXY=none")
+		output, err := cmd.CombinedOutput()
+		if err != nil {
+			return fmt.Errorf("fixture input incomplete: prepare offline Story module from the root module cache: %w\n%s", err, output)
+		}
 	}
 	return nil
 }
 
 // succeededStoryInput keeps the original pinned requirements and exact design.
-// The root sum supplies checksums without importing unrelated requirements.
+// The committed module pair supplies its checksums without unrelated requirements.
 func succeededStoryInput(t *testing.T) map[string]string {
 	t.Helper()
-	seed, err := os.ReadFile(filepath.Join("..", "..", "go.sum"))
+	profilePath := filepath.Join("testdata", "story-fixture", "go.mod")
+	profile, err := os.ReadFile(profilePath)
+	require.NoError(t, err)
+	module, err := modfile.Parse(profilePath, profile, nil)
+	require.NoError(t, err)
+	require.Len(t, module.Require, 2, "fixture input incomplete: retain the Story and Goa profile")
+	for _, dependency := range module.Require {
+		require.Equal(t, testmodule.SurlaVersion(t, dependency.Mod.Path), dependency.Mod.Version,
+			"fixture input incomplete: update the prepared Story profile after changing root requirements")
+	}
+	seed, err := os.ReadFile(filepath.Join("testdata", "story-fixture", "go.sum"))
 	require.NoError(t, err)
 	files := map[string]string{
-		"go.mod": "module example.com/story-design\n\ngo 1.27.3\n\nrequire (\n" +
-			"\tgithub.com/goadesign/surla/story v0.0.0-20261111183703-4568fcf5bb85\n" +
-			"\tgoa.design/goa/v3 " + testmodule.SurlaVersion(t, "goa.design/goa/v3") + "\n)\n",
+		"go.mod": string(profile),
 		"design/design.go": `package design
 
 import . "github.com/goadesign/surla/story/dsl"

@@ -2049,6 +2049,19 @@ and the remaining root packages. The page partition uses the same test-name
 pattern as the short checks; the remaining packages still run their own page
 tests.
 
+Before the remaining-root suite, CI downloads the root module requirements and
+both committed module profiles under `internal/project/testdata/story-fixture`
+and `internal/project/testdata/story-evaluator`. The Story success test then
+prepares and evaluates its input with proxy and checksum-server access disabled.
+Missing inputs fail with a fixture-input diagnostic. These profiles describe the
+fixed target and its evaluator, rather than copying unrelated root requirements.
+
+When changing the root's Story, Goa, Goa-AI, or Model versions, update the
+corresponding requirements in these profiles with `go mod edit -require`, then
+run `go mod download all` in each profile directory and commit the module files
+and checksums. The target's Story and Goa requirements are checked against the
+root; the real offline evaluation checks that the evaluator's inputs suffice.
+
 All full suites run nightly at 07:17 UTC and on a manual **Run workflow**
 request (`CI=true gh workflow run ci.yml --ref <branch> </dev/null`). This adds
 the other modules' complete tests and the verifier, generation, starter and
