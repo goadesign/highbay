@@ -257,6 +257,11 @@ func (c *ControlPlane) verificationBuild(
 	held, err := c.workerOwnedBuild(principal, changeID)
 	var missing *goa.ServiceError
 	if errors.As(err, &missing) && missing.Name == "not_found" {
+		if c.storedEvaluator() {
+			return heldBuild{}, gensurla.MakeNoBuild(fmt.Errorf(
+				"change %q has no build for revision %s: the user starts a build on the views page",
+				changeID, revision))
+		}
 		return heldBuild{}, refuseNoBuild(changeID, revision, buildFile{}, false)
 	}
 	if err != nil {
