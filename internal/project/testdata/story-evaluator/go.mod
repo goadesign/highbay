@@ -3,7 +3,8 @@ module surla.local/designeval
 go 1.27.3
 
 require (
-	example.com/design v0.0.0-00010101000000-000000000000
+	example.com/story-design v0.0.0-00010101000000-000000000000
+	github.com/goadesign/surla/story v0.0.0-20261111183703-4568fcf5bb85
 	goa.design/goa-ai v0.90.1-0.20261111075239-0114fb9d40d3
 	goa.design/goa/v3 v3.35.1-0.20261103205041-35e789e8f9b1
 	goa.design/model v1.16.11-0.20261030164016-5e17c2e932fb
@@ -45,4 +46,4 @@ require (
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
 
-replace example.com/design => ../goa-goaai-dsl
+replace example.com/story-design => ../story-fixture

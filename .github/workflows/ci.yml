@@ -357,7 +357,12 @@ jobs:
         run: |
           GOWORK=off go mod download </dev/null
           GOWORK=off go -C internal/testmodule/testdata/goa-goaai-dsl mod download all </dev/null
-          GOWORK=off go -C internal/testmodule/testdata/goa-goaai-evaluator mod download all </dev/null
+      - name: Prefetch the fixed Story fixture's module inputs
+        if: matrix.suite == 'remaining'
+        run: |
+          GOWORK=off go mod download </dev/null
+          GOWORK=off go -C internal/project/testdata/story-fixture mod download all </dev/null
+          GOWORK=off go -C internal/project/testdata/story-evaluator mod download all </dev/null
       - name: Run the full root partition
         env:
           ROOT_SUITE: ${{ matrix.suite }}
