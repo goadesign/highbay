@@ -160,7 +160,10 @@ func TestFakeDockerCopiesKeepIndependentContexts(t *testing.T) {
 			daemon := newFakeDockerDaemon(t)
 			require.NoError(t, os.WriteFile(filepath.Join(filepath.Dir(bin), "context_endpoint.txt"),
 				[]byte(daemon.serverURL+"\n"), 0o600))
-			cmd := exec.CommandContext(t.Context(), "docker", "context", "inspect")
+			resolved, err := exec.LookPath("docker")
+			require.NoError(t, err)
+			assert.Equal(t, bin, resolved)
+			cmd := exec.CommandContext(t.Context(), resolved, "context", "inspect")
 			out, err := cmd.CombinedOutput()
 			require.NoError(t, err, "%s", out)
 			assert.Equal(t, daemon.hostURI+"\n", string(out))
