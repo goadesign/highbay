@@ -559,7 +559,8 @@ async function phoneScenario(input, facts, views) {
 // takingScenario inspects both requested viewport classes in one browser run.
 // The Go fixture supplies typed presentation facts; this proves no worker ran.
 async function takingScenario(input, facts, views) {
-  const ready = await until(views, "document.querySelector('#surla-build-taking[data-state=" + (input.taking_state === "replay" ? "merged" : input.taking_state) + "]') !== null");
+  const takingState = input.taking_state === "replay" ? "merged" : input.taking_state === "dropped_stale" ? "dropped" : input.taking_state;
+  const ready = await until(views, "document.querySelector('#surla-build-taking[data-state=" + takingState + "]') !== null");
   if (ready.timed_out) {
     const state = await evaluate(views, "({ state: document.getElementById('surla-checkpoint-root')?.dataset.state, text: document.body.innerText.slice(0, 6000) })");
     throw new Error("taking presentation did not load: " + JSON.stringify(state) + "; responses: " +
@@ -581,7 +582,7 @@ async function takingScenario(input, facts, views) {
       opened = await until(views, "document.getElementById('" + question + "')?.contains(document.activeElement)");
     }
     const measured = await evaluate(views, "(" + function measure() {
-      const region = document.getElementById("surla-build-taking");
+      const region = document.getElementById("surla-build-section");
       return {
         width: document.documentElement.clientWidth,
         document_width: document.documentElement.scrollWidth,
@@ -596,6 +597,7 @@ async function takingScenario(input, facts, views) {
           (document.getElementById("surla-build-start-explanation")?.textContent.includes("nothing confines them") === true &&
           document.getElementById("surla-build-start")?.getAttribute("aria-describedby")?.split(/\s+/).includes("surla-build-start-explanation") === true),
         no_start: document.getElementById("surla-build-start") === null,
+        enabling_step: document.getElementById("surla-build-enabling-step")?.textContent.includes("This agreement was drafted before a build was dropped") === true && document.getElementById("surla-build-again") === null,
         rewrite_warning: region.textContent.includes("commit where this build started") && region.textContent.includes("these merges bring that history back"),
         overflowing: [region, ...region.querySelectorAll("*")].filter((node) => {
           // Exact command lines intentionally scroll inside their focusable pre.

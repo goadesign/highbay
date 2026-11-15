@@ -115,6 +115,7 @@ type (
 		CommandsUsable    bool     `json:"commands_usable"`
 		Explanation       bool     `json:"explanation"`
 		NoStart           bool     `json:"no_start"`
+		EnablingStep      bool     `json:"enabling_step"`
 		RewriteWarning    bool     `json:"rewrite_warning"`
 		QuestionFocused   bool     `json:"question_focused"`
 		QuestionCancelled bool     `json:"question_cancelled"`

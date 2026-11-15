@@ -188,16 +188,16 @@ func (c *ControlPlane) ListTestWriterAssignments(ctx context.Context) (*gensurla
 }
 
 // changeBuild reads and renders record's usable build without changing it.
-// The caller has authorized access to record and captured draftedBeforeDrop
+// The caller has authorized access to record and captured draftPredatesDrop
 // from that record and the same locked provenance read. Git and run reads
 // happen after the card lock is released.
 func (c *ControlPlane) changeBuild(
-	ctx context.Context, record storedChangeCard, saved buildFile, found, draftedBeforeDrop bool,
+	ctx context.Context, record storedChangeCard, saved buildFile, found, draftPredatesDrop bool,
 ) (*gensurla.ChangeBuild, error) {
 	changeID := record.card.ChangeID
 	if !found || saved.ChangeID != changeID || !c.usableBuild(saved) {
 		return &gensurla.ChangeBuild{
-			ChangeID: changeID, DraftedBeforeDrop: draftedBeforeDrop,
+			ChangeID: changeID, DraftedBeforeDrop: draftPredatesDrop,
 			Build: gensurla.NewBuildNotStarted(&gensurla.BuildNotStarted{}),
 		}, nil
 	}
@@ -207,7 +207,7 @@ func (c *ControlPlane) changeBuild(
 		return nil, err
 	}
 	return &gensurla.ChangeBuild{
-		ChangeID: changeID, DraftedBeforeDrop: draftedBeforeDrop,
+		ChangeID: changeID, DraftedBeforeDrop: draftPredatesDrop,
 		Build: gensurla.NewBuildStarted(build),
 	}, nil
 }

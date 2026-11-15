@@ -110,14 +110,14 @@ func TestBuildTakingAtDesktopAndPhoneWidth(t *testing.T) {
 	started, ok := service.build.Build.AsStarted()
 	require.True(t, ok)
 	passed := started.Taking
-	for _, state := range []string{"passed", "building", "dropped", "merged", "replay"} {
+	for _, state := range []string{"passed", "building", "dropped", "merged", "replay", "dropped_stale"} {
 		fixture := *started
 		switch state {
 		case "passed":
 			fixture.Taking = passed
 		case "building":
 			fixture.Taking = gensurla.NewBuildTakingBuilding(&gensurla.BuildBuilding{})
-		case "dropped":
+		case "dropped", "dropped_stale":
 			fixture.Taking = gensurla.NewBuildTakingDropped(&gensurla.BuildDropped{KeptBranches: []string{}})
 		case "merged", "replay":
 			fixture.InForce = state == "replay"
@@ -127,7 +127,10 @@ func TestBuildTakingAtDesktopAndPhoneWidth(t *testing.T) {
 			fixture.Taking = gensurla.NewBuildTakingMerged(&gensurla.BuildMerged{})
 		}
 		service.mu.Lock()
-		service.build = &gensurla.ChangeBuild{ChangeID: card.ChangeID, Build: gensurla.NewBuildStarted(&fixture)}
+		service.build = &gensurla.ChangeBuild{
+			ChangeID: card.ChangeID, DraftedBeforeDrop: state == "dropped_stale",
+			Build: gensurla.NewBuildStarted(&fixture),
+		}
 		service.mu.Unlock()
 		link, err := vp.link()
 		require.NoError(t, err)
@@ -152,9 +155,10 @@ func TestBuildTakingAtDesktopAndPhoneWidth(t *testing.T) {
 			if state == "dropped" {
 				assert.False(t, view.NoStart)
 			}
-			if state == "replay" {
+			if state == "replay" || state == "dropped_stale" {
 				assert.True(t, view.NoStart)
 			}
+			assert.Equal(t, state == "dropped_stale", view.EnablingStep)
 			if state == "merged" || state == "dropped" || state == "replay" {
 				assert.True(t, view.Explanation)
 			}

@@ -982,15 +982,16 @@ type StartBuildResponseBody struct {
 type DropBuildResponseBody struct {
 	// Change Card identifier.
 	ChangeID string `form:"change_id" json:"change_id" xml:"change_id"`
-	// True only when the current agreed revision has saved design provenance from
-	// before the current actual drop: start_build would refuse it with
-	// drafted_before_drop. It becomes true after that drop and false once the user
-	// adopts a revision drafted after the drop, even if its request_revision is
-	// unchanged. A waiting proposal does not change this fact; ask the guide to
+	// True only when the current agreed revision’s saved record of how its design
+	// was drafted predates the current actual drop: start_build would refuse it
+	// with drafted_before_drop. It becomes true after that drop and false once the
+	// user adopts a revision drafted after the drop, even if its request_revision
+	// is unchanged. A waiting proposal does not change this fact; ask the guide to
 	// refresh_story and revise_change from that refresh, then adopt the revision
 	// before building. False says only that this refusal does not apply, not that
 	// every other build check will pass; it is also false without an agreed
-	// revision or saved design provenance. start_build rechecks concurrent changes.
+	// revision or saved record of its draft. start_build rechecks concurrent
+	// changes.
 	DraftedBeforeDrop bool `form:"drafted_before_drop" json:"drafted_before_drop" xml:"drafted_before_drop"`
 	// not_started when the change has no usable build for the current test source;
 	// start a new build on the views page. Otherwise started with the usable build.
@@ -1002,15 +1003,16 @@ type DropBuildResponseBody struct {
 type GetBuildResponseBody struct {
 	// Change Card identifier.
 	ChangeID string `form:"change_id" json:"change_id" xml:"change_id"`
-	// True only when the current agreed revision has saved design provenance from
-	// before the current actual drop: start_build would refuse it with
-	// drafted_before_drop. It becomes true after that drop and false once the user
-	// adopts a revision drafted after the drop, even if its request_revision is
-	// unchanged. A waiting proposal does not change this fact; ask the guide to
+	// True only when the current agreed revision’s saved record of how its design
+	// was drafted predates the current actual drop: start_build would refuse it
+	// with drafted_before_drop. It becomes true after that drop and false once the
+	// user adopts a revision drafted after the drop, even if its request_revision
+	// is unchanged. A waiting proposal does not change this fact; ask the guide to
 	// refresh_story and revise_change from that refresh, then adopt the revision
 	// before building. False says only that this refusal does not apply, not that
 	// every other build check will pass; it is also false without an agreed
-	// revision or saved design provenance. start_build rechecks concurrent changes.
+	// revision or saved record of its draft. start_build rechecks concurrent
+	// changes.
 	DraftedBeforeDrop bool `form:"drafted_before_drop" json:"drafted_before_drop" xml:"drafted_before_drop"`
 	// not_started when the change has no usable build for the current test source;
 	// start a new build on the views page. Otherwise started with the usable build.
@@ -1052,7 +1054,7 @@ type GetBuilderAssignmentResponseBody struct {
 	RequestRevision string `form:"request_revision" json:"request_revision" xml:"request_revision"`
 	// True when request_revision is the change's agreed revision, the one in
 	// force, as get_build reports it. It stays true while a proposed revision
-	// waits and when refreshed provenance is adopted without changing
+	// waits and when a refreshed draft is adopted without changing
 	// request_revision. If adoption or confirmation changes the agreed
 	// request_revision, it becomes false; verify_change refuses this earlier
 	// revision, and the assignment stays as it is until the user builds again.
@@ -1090,7 +1092,7 @@ type GetTestWriterAssignmentResponseBody struct {
 	RequestRevision string `form:"request_revision" json:"request_revision" xml:"request_revision"`
 	// True when request_revision is the change's agreed revision, the one in
 	// force, as get_build reports it. It stays true while a proposed revision
-	// waits and when refreshed provenance is adopted without changing
+	// waits and when a refreshed draft is adopted without changing
 	// request_revision. If adoption or confirmation changes the agreed
 	// request_revision, it becomes false; the assignment stays on the earlier
 	// revision until the user builds again.
@@ -1138,7 +1140,7 @@ type ReportTestsFinishedResponseBody struct {
 	RequestRevision string `form:"request_revision" json:"request_revision" xml:"request_revision"`
 	// True when request_revision is the change's agreed revision, the one in
 	// force, as get_build reports it. It stays true while a proposed revision
-	// waits and when refreshed provenance is adopted without changing
+	// waits and when a refreshed draft is adopted without changing
 	// request_revision. If adoption or confirmation changes the agreed
 	// request_revision, it becomes false; the assignment stays on the earlier
 	// revision until the user builds again.
@@ -5088,7 +5090,7 @@ type StartedBuildResponseBody struct {
 	StartedAt string `form:"started_at" json:"started_at" xml:"started_at"`
 	// True when request_revision is the change's agreed revision, the one in
 	// force, as get_build reports it. It stays true while a proposed revision
-	// waits and when refreshed provenance is adopted without changing
+	// waits and when a refreshed draft is adopted without changing
 	// request_revision. If adoption or confirmation changes the agreed
 	// request_revision, it becomes false; the assignments stay on the earlier
 	// revision until the user builds again.
@@ -5266,7 +5268,7 @@ type BuilderAssignmentResponseBody struct {
 	RequestRevision string `form:"request_revision" json:"request_revision" xml:"request_revision"`
 	// True when request_revision is the change's agreed revision, the one in
 	// force, as get_build reports it. It stays true while a proposed revision
-	// waits and when refreshed provenance is adopted without changing
+	// waits and when a refreshed draft is adopted without changing
 	// request_revision. If adoption or confirmation changes the agreed
 	// request_revision, it becomes false; verify_change refuses this earlier
 	// revision, and the assignment stays as it is until the user builds again.
@@ -5302,7 +5304,7 @@ type TestWriterAssignmentItemResponseBody struct {
 	RequestRevision string `form:"request_revision" json:"request_revision" xml:"request_revision"`
 	// True when request_revision is the change's agreed revision, the one in
 	// force, as get_build reports it. It stays true while a proposed revision
-	// waits and when refreshed provenance is adopted without changing
+	// waits and when a refreshed draft is adopted without changing
 	// request_revision. If adoption or confirmation changes the agreed
 	// request_revision, it becomes false; the assignment stays on the earlier
 	// revision until the user builds again.

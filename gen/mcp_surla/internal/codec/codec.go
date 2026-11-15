@@ -2646,7 +2646,7 @@ type GetBuildResultStartedBuildTransport struct {
 	StartedAt *string `json:"started_at"`
 	// True when request_revision is the change's agreed revision, the one in
 	// force, as get_build reports it. It stays true while a proposed revision
-	// waits and when refreshed provenance is adopted without changing
+	// waits and when a refreshed draft is adopted without changing
 	// request_revision. If adoption or confirmation changes the agreed
 	// request_revision, it becomes false; the assignments stay on the earlier
 	// revision until the user builds again.
@@ -2964,15 +2964,16 @@ func ValidateGetBuildResultTestsReportedTransport(value *GetBuildResultTestsRepo
 type GetBuildResultTransport struct {
 	// Change Card identifier.
 	ChangeID *string `json:"change_id"`
-	// True only when the current agreed revision has saved design provenance from
-	// before the current actual drop: start_build would refuse it with
-	// drafted_before_drop. It becomes true after that drop and false once the user
-	// adopts a revision drafted after the drop, even if its request_revision is
-	// unchanged. A waiting proposal does not change this fact; ask the guide to
+	// True only when the current agreed revision’s saved record of how its design
+	// was drafted predates the current actual drop: start_build would refuse it
+	// with drafted_before_drop. It becomes true after that drop and false once the
+	// user adopts a revision drafted after the drop, even if its request_revision
+	// is unchanged. A waiting proposal does not change this fact; ask the guide to
 	// refresh_story and revise_change from that refresh, then adopt the revision
 	// before building. False says only that this refusal does not apply, not that
 	// every other build check will pass; it is also false without an agreed
-	// revision or saved design provenance. start_build rechecks concurrent changes.
+	// revision or saved record of its draft. start_build rechecks concurrent
+	// changes.
 	DraftedBeforeDrop *bool `json:"drafted_before_drop"`
 	// not_started when the change has no usable build for the current test source;
 	// start a new build on the views page. Otherwise started with the usable build.
@@ -3108,7 +3109,7 @@ type GetBuilderAssignmentResultTransport struct {
 	RequestRevision *string `json:"request_revision"`
 	// True when request_revision is the change's agreed revision, the one in
 	// force, as get_build reports it. It stays true while a proposed revision
-	// waits and when refreshed provenance is adopted without changing
+	// waits and when a refreshed draft is adopted without changing
 	// request_revision. If adoption or confirmation changes the agreed
 	// request_revision, it becomes false; verify_change refuses this earlier
 	// revision, and the assignment stays as it is until the user builds again.
@@ -4896,7 +4897,7 @@ type GetTestWriterAssignmentResultTransport struct {
 	RequestRevision *string `json:"request_revision"`
 	// True when request_revision is the change's agreed revision, the one in
 	// force, as get_build reports it. It stays true while a proposed revision
-	// waits and when refreshed provenance is adopted without changing
+	// waits and when a refreshed draft is adopted without changing
 	// request_revision. If adoption or confirmation changes the agreed
 	// request_revision, it becomes false; the assignment stays on the earlier
 	// revision until the user builds again.
@@ -5499,7 +5500,7 @@ type ListBuilderAssignmentsResultBuilderAssignmentTransport struct {
 	RequestRevision *string `json:"request_revision"`
 	// True when request_revision is the change's agreed revision, the one in
 	// force, as get_build reports it. It stays true while a proposed revision
-	// waits and when refreshed provenance is adopted without changing
+	// waits and when a refreshed draft is adopted without changing
 	// request_revision. If adoption or confirmation changes the agreed
 	// request_revision, it becomes false; verify_change refuses this earlier
 	// revision, and the assignment stays as it is until the user builds again.
@@ -5796,7 +5797,7 @@ type ListTestWriterAssignmentsResultTestWriterAssignmentItemTransport struct {
 	RequestRevision *string `json:"request_revision"`
 	// True when request_revision is the change's agreed revision, the one in
 	// force, as get_build reports it. It stays true while a proposed revision
-	// waits and when refreshed provenance is adopted without changing
+	// waits and when a refreshed draft is adopted without changing
 	// request_revision. If adoption or confirmation changes the agreed
 	// request_revision, it becomes false; the assignment stays on the earlier
 	// revision until the user builds again.
@@ -8449,7 +8450,7 @@ type ReportTestsFinishedResultTransport struct {
 	RequestRevision *string `json:"request_revision"`
 	// True when request_revision is the change's agreed revision, the one in
 	// force, as get_build reports it. It stays true while a proposed revision
-	// waits and when refreshed provenance is adopted without changing
+	// waits and when a refreshed draft is adopted without changing
 	// request_revision. If adoption or confirmation changes the agreed
 	// request_revision, it becomes false; the assignment stays on the earlier
 	// revision until the user builds again.

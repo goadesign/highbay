@@ -375,8 +375,8 @@ export function BuildSectionView({
         {observations}{progress}{explanation}<div className="surla-field-row surla-build-actions">{actions}</div>
       </> : null}
       {draftedBeforeDrop === true ? <p id="surla-build-enabling-step">
-        To build this change again, ask the guide to refresh its draft with <code>refresh_story</code>
-        {" and propose a revision from that refresh with "}<code>revise_change</code>, then adopt that revision.
+        This agreement was drafted before a build was dropped; ask the guide to refresh its draft with <code>refresh_story</code>
+        {" and propose a revision from that refresh with "}<code>revise_change</code>, then adopt that revision before building.
         {" A proposal already waiting may predate the drop; adopting it alone may not enable Build."}
       </p> : null}
       {!confirmed ? <p>Confirm the change before building it.</p> : !displayedCurrent ? (

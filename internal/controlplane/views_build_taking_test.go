@@ -72,6 +72,11 @@ if (input.state.startsWith("earlier_")) {
   const action = page.$("#surla-build-start");
   expect(action && !action.disabled && action.getAttribute("aria-describedby").includes("surla-build-start-explanation"), "earlier closed/passed build lost its direct explained Build offer");
   expect(page.text("#surla-build-start-explanation").includes("nothing confines them"), "earlier Build offer lost execution explanation");
+  if (input.state === "earlier_merged") {
+    expect(action.textContent === "Build current agreed revision" && action.classList.contains("surla-btn-primary"), "earlier merged build lost the primary current-agreement action");
+    expect(!page.$("#surla-build-again"), "earlier merged build offers replay instead of the new agreement");
+    expect(taking.includes("It is in your branch. Build the current agreed revision to implement the new agreement. No role has work on this build."), "earlier merged completion lost its new-agreement guidance");
+  }
   if (input.state === "earlier_configured") expect(page.text("#surla-build-start-explanation").includes("From Build on, those tests and the builder’s code run on this machine as ordinary programs, with your access to files and the network; nothing confines them. Approval decides only what merges."), "configured tests lost their execution wording");
   expect(page.sent("POST", path).length === 0, "reading an earlier build started work");
   page.close();
@@ -128,7 +133,10 @@ if (state === "merged") {
   expect(question.includes("new build number") && question.includes("branch as it is now") && question.includes("same agreed revision") && question.includes("fresh unread") && question.includes("Earlier reports do not establish"), "replay lost its new build consequences");
   expect(!question.includes("replaces this build"), "replay describes replacement of an open build");
   expect(question.includes("configured tests") === (input.state === "merged_configured"), "replay test source wording is wrong");
-  expect(question.includes("nothing confines them"), "replay lost its execution explanation");
+  const execution = input.state === "merged_configured"
+    ? "From Build on, those tests and the builder’s code run on this machine as ordinary programs, with your access to files and the network; nothing confines them. Approval decides only what merges."
+    : "From Build on, the tests and the builder’s code run on this machine as ordinary programs, with your access to files and the network; nothing confines them. Approval decides only what merges.";
+  expect(page.text("#surla-build-confirm-explanation").includes(execution), "replay lost its full execution explanation for this test source");
   page.$("#surla-build-cancel").click();
   await until(() => !page.$("#surla-build-question") && page.doc.activeElement?.id === "surla-build-again", "replay cancel lost focus");
   expect(page.sent("POST", path).length === 0, "opening or cancelling replay started work");
@@ -296,6 +304,7 @@ await control(origin, "reply", { key: "GET " + other, status: 200,
   body: { change_id: "chg-passed-open", drafted_before_drop: false, build: { ...saved, state: "started", taking: { state: "dropped", kept_branches: [] } } } });
 await control(origin, "act", { key: "drop-passed-open" });
 await until(() => !page.$("#surla-build-blocking-change") && page.$("#surla-build-enabling-step") && !page.$("#surla-build-start"), "fresh closed blocker did not expose the selected agreement’s post-drop recovery");
+expect(page.text("#surla-build-enabling-step").includes("This agreement was drafted before a build was dropped") && !page.text("#surla-build-enabling-step").includes("this change again"), "never-built agreement recovery assumes an earlier build of this change");
 expect(field === page.$('textarea[data-example-id="check_01"][data-field="scenario"]') && field.value === "keep this draft through blocker recovery", "blocker recovery replaced unsaved editor text");
 expect(page.sent("POST", path).length === 1, "a fresh read retried Build without consent");
 page.close();
@@ -385,12 +394,17 @@ const body = page.sent("POST", path)[0].body;
 expect(body.started_at === input.started && Object.keys(body).length === 1, "Drop did not send the exact saved start; change_id belongs in its generated route");
 await control(origin, "release", { key: "POST " + path });
 await until(() => page.$("#surla-build-taking")?.dataset.state === "dropped" && !page.$("#surla-build-loading"), "owner did not show the durable dropped state");
+const dropped = JSON.parse(page.sent("POST", path)[0].answer);
+expect(dropped.drafted_before_drop === true && dropped.build.in_force === true && dropped.build.taking.state === "dropped", "real Drop did not report a stale agreed build");
+expect(page.$("#surla-build-enabling-step") && !page.$("#surla-build-start") && !page.$("#surla-build-again"), "dropped agreed revision with stale draft still offers Build instead of its enabling step");
+expect(page.text("#surla-build-enabling-step").includes("This agreement was drafted before a build was dropped"), "own-drop recovery does not explain the agreed draft");
 expect(!page.$("#surla-build-drop") && !page.$("#surla-build-drop-question"), "closed build still offers Drop");
 expect(field === page.$('textarea[data-example-id="check_01"][data-field="scenario"]') && field.value === "keep my unsaved scenario", "Drop lost unsaved editor state");
 expect(page.sent("POST", path).length === 1, "Drop submitted twice");
 page.close();
 const again = await openPage(origin, { link: input.link + "-2" });
-await until(() => again.$("#surla-build-taking")?.dataset.state === "dropped", "a new page did not read the saved drop");
+await until(() => again.$("#surla-build-taking")?.dataset.state === "dropped" && !again.$("#surla-build-loading"), "a new page did not read the saved drop");
+expect(again.$("#surla-build-enabling-step") && !again.$("#surla-build-start") && !again.$("#surla-build-again"), "a new page lost the saved dropped agreement’s enabling step");
 again.close();
 `)
 }

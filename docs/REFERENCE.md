@@ -1531,14 +1531,14 @@ start. Findings contain no absolute path.
 `drafted_before_drop`, `build`).
 
 `drafted_before_drop` reports one precise admission condition for the current
-agreed revision: its saved design provenance predates the current actual drop,
-so `start_build` would refuse it with that error. It stays true while a
+agreed revision: its saved record of how the design was drafted predates the
+current actual drop, so `start_build` would refuse it with that error. It stays true while a
 proposal waits, including a refreshed proposal, and becomes false once the
 user adopts a revision drafted after the drop, even if `request_revision`
 stays the same. To recover, the guide calls `refresh_story` and `revise_change`
 from that refresh, then the user adopts the revision. It is false without an
-agreed revision or saved provenance. False does not guarantee the other start
-checks will pass; `start_build` rechecks concurrent changes. `drop_build`
+agreed revision or saved record of its draft. False does not guarantee the
+other start checks will pass; `start_build` rechecks concurrent changes. `drop_build`
 returns the same required fact in its `ChangeBuild` result.
 
 `build.state` is `not_started` when the change has no usable build, otherwise
@@ -1547,7 +1547,7 @@ returns the same required fact in its `ChangeBuild` result.
 | Field | Meaning |
 | --- | --- |
 | `request_revision`, `started_at` | The revision built and when. |
-| `in_force` | `true` while that revision is the agreed one, including while a proposed revision waits; `false` when adoption or confirmation changes the agreed `request_revision`. Adopting refreshed provenance with unchanged content can keep it `true`. The build is not redone by itself. |
+| `in_force` | `true` while that revision is the agreed one, including while a proposed revision waits; `false` when adoption or confirmation changes the agreed `request_revision`. Adopting a refreshed draft with unchanged content can keep it `true`. The build is not redone by itself. |
 | `required_test_count` | Finished flows in the saved Story; `0` means no test was required. It counts entries; it does not judge what the tests assert. |
 | `builder.read` | Whether the builder read its assignment. |
 | `test_writer` | `read`, `report` (0 until the first report, one more with each) and `tests`. |
