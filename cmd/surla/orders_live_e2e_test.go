@@ -105,7 +105,9 @@ func TestOrdersLiveCopyAppliesADraftThroughTheProjectServer(t *testing.T) {
 	refused := ordersDraftRefusal(t, ctx, client, ordersSystemPrompt, "Answer in one sentence.")
 	assert.Contains(t, refused, "start_live_target", "with no live copy, the refusal names the step that enables drafts")
 
+	phaseStart := time.Now()
 	refresh := trustedSuiteRefresh(t, ctx, client)
+	t.Logf("refresh: %s", time.Since(phaseStart))
 	args, err := gensurla.EncodeProposeChangePayload(&gensurla.ProposeChangePayload{
 		ChangeID: "orders-refund-wording", Prompt: "Answer refund questions in one sentence.", StoryRefreshOpID: refresh.OpID,
 		Analysis: &gensurla.CP1Analysis{
@@ -133,7 +135,9 @@ func TestOrdersLiveCopyAppliesADraftThroughTheProjectServer(t *testing.T) {
 		ChangeID: card.ChangeID, CandidateCommit: head,
 	})
 	require.NoError(t, err)
+	phaseStart = time.Now()
 	started, err := gensurla.DecodeLiveTargetResult(trustedSuiteCall(t, ctx, client, "start_live_target", args))
+	t.Logf("start live target: %s", time.Since(phaseStart))
 	require.NoError(t, err)
 	assert.Equal(t, head, started.CandidateCommit)
 	require.NotEmpty(t, started.URL)
@@ -143,7 +147,9 @@ func TestOrdersLiveCopyAppliesADraftThroughTheProjectServer(t *testing.T) {
 		TargetKind: controlplane.TargetKindPromptTemplate, PromptID: new(ordersSystemPrompt), NewContent: text,
 	})
 	require.NoError(t, err)
+	phaseStart = time.Now()
 	drafted, err := gensurla.DecodeDraftOverrideResult(trustedSuiteCall(t, ctx, client, "draft_override", args))
+	t.Logf("draft override: %s", time.Since(phaseStart))
 	require.NoError(t, err)
 	assert.True(t, drafted.AppliedInStore)
 	assert.False(t, drafted.RequiresRebuild)
@@ -159,7 +165,9 @@ func TestOrdersLiveCopyAppliesADraftThroughTheProjectServer(t *testing.T) {
 	assert.Equal(t, http.StatusUnauthorized, ordersPromptStatus(t, ctx, started.URL, "not-the-minted-key"),
 		"the copy changes prompts only for the key Surla minted")
 
+	phaseStart = time.Now()
 	stopped, err := gensurla.DecodeStopLiveTargetResult(trustedSuiteCall(t, ctx, client, "stop_live_target", []byte(`{}`)))
+	t.Logf("stop live target: %s", time.Since(phaseStart))
 	require.NoError(t, err)
 	assert.True(t, stopped.Stopped)
 	liveDirs, err := verifyrun.LeftoverLiveDirs(controlplane.LiveRoot(opts.CardsDir))
