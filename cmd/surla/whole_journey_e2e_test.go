@@ -132,11 +132,18 @@ func (h *Hooks) PricesScone(ctx context.Context) (eval.Result, error) {
 	// prices scones.
 	journeyCookiePrice = `	"cookie": 125,
 `
-	// journeyStepWait bounds a Story evaluation or a build start. The control
-	// plane allows 5 minutes of work, followed by up to 20 seconds of evaluator
-	// cleanup and, for a build, 45 seconds for the team's window phase. The
-	// remaining time lets the owner report its result before this wait ends.
+	// journeyStepWait bounds a Story evaluation, a build start, or the test
+	// writer's first read of a build, which prepares the required tests. The
+	// control plane allows each 5 minutes of work (defaultStoryRefreshTimeout,
+	// defaultBuildStartTimeout), followed by up to 20 seconds of evaluator
+	// cleanup and, for a build start, 45 seconds for the team's window phase
+	// (teamStartTimeout). The remaining time lets the owner report its result
+	// before this wait ends.
 	journeyStepWait = 7 * time.Minute
+	// journeyGenerateWait bounds one generate_code call. The server sets no
+	// limit of its own on it, so this is the journey's: generous for a slow
+	// machine, and short enough that a hung generation fails under its name.
+	journeyGenerateWait = 3 * time.Minute
 	// journeyCheckWait bounds one check of the test writer's report, from the
 	// report to the verdict. The control plane gives the whole check 15
 	// minutes (checkLimit in internal/controlplane), within which its
@@ -400,9 +407,7 @@ func (j *wholeJourney) proposeAndConfirm(t *testing.T) {
 // git status, and the test writer's first read, not the start, writes the
 // required tests into its copy.
 func (j *wholeJourney) startBuild(t *testing.T) {
-	ctx, cancel := context.WithTimeout(t.Context(), journeyStepWait)
-	defer cancel()
-	started, err := j.user.StartBuild(ctx, &gensurla.StartBuildPayload{
+	started, err := j.user.StartBuild(stepContext(t, journeyStepWait), &gensurla.StartBuildPayload{
 		ChangeID: journeyChangeID, RequestRevision: j.confirmed,
 	})
 	require.NoError(t, err)
@@ -450,6 +455,9 @@ func (j *wholeJourney) startBuild(t *testing.T) {
 	j.testWriter, j.testsFolder = j.scriptedAgent(t, "test_writer")
 	require.Equal(t, copyDir, j.testsFolder, "the test writer works in its own copy")
 
+	// The start has ended: the lists and the builder's read, whose copy is
+	// already on build 1's branch, are quick reads with their own wait.
+	ctx := stepContext(t, journeyQuickWait)
 	listed, err := gensurla.DecodeBuilderAssignmentList(
 		trustedSuiteCall(t, ctx, j.builder, "list_builder_assignments", []byte(`{}`)))
 	require.NoError(t, err)
@@ -479,7 +487,9 @@ func (j *wholeJourney) startBuild(t *testing.T) {
 	)
 	assert.NotContains(t, journeyFile(t, table), sconeRow, "the start writes no required test into the copy")
 	assert.NotContains(t, journeyFile(t, suite), sconeHook, "the start generates nothing in the copy")
-	assignment := j.readTestWriterAssignment(t, ctx, journeyChangeID)
+	// The first read prepares the required tests under the server's own
+	// build-start limit, so it waits as long as a start does.
+	assignment := j.readTestWriterAssignment(t, stepContext(t, journeyStepWait), journeyChangeID)
 	assert.Contains(t, journeyFile(t, table), sconeRow,
 		"the test writer's first read writes the Story's required tests into its copy")
 	assert.Contains(t, journeyFile(t, suite), sconeHook,
@@ -532,14 +542,13 @@ func (j *wholeJourney) refuseUnacceptedVerification(t *testing.T) {
 // has, only the test writer and the user read their text, and the tests
 // branch stays where the build started it.
 func (j *wholeJourney) sendBackOutsideChange(t *testing.T) {
-	ctx, cancel := context.WithTimeout(t.Context(), journeyCheckWait)
-	defer cancel()
 	readme := filepath.Join(j.testsFolder, "README.md")
 	raw, err := os.ReadFile(readme)
 	require.NoError(t, err)
 	require.NoError(t, os.WriteFile(readme, append(raw, "\nThe test writer's notes.\n"...), 0o644))
 
-	build := j.reportTests(t, ctx, journeyChangeID, j.confirmed, 1)
+	build := j.reportTests(t, stepContext(t, journeyCheckWait), journeyChangeID, j.confirmed, 1)
+	ctx := stepContext(t, journeyQuickWait)
 	needs, ok := build.TestWriter.Tests.AsNeedsChanges()
 	require.True(t, ok, "the report is sent back: %s", build.TestWriter.Tests.Kind())
 	assert.Equal(t, 1, needs.FindingCount, "one file changed outside the test module")
@@ -583,11 +592,10 @@ func (j *wholeJourney) sendBackOutsideChange(t *testing.T) {
 // report back with the compiler's finding naming it, for the test writer and
 // the user; the tests branch stays where the build started it.
 func (j *wholeJourney) sendBackMissingHook(t *testing.T) {
-	ctx, cancel := context.WithTimeout(t.Context(), journeyCheckWait)
-	defer cancel()
 	runTestGit(t, j.testsFolder, "checkout", "--", "README.md")
 
-	build := j.reportTests(t, ctx, journeyChangeID, j.confirmed, 2)
+	build := j.reportTests(t, stepContext(t, journeyCheckWait), journeyChangeID, j.confirmed, 2)
+	ctx := stepContext(t, journeyQuickWait)
 	needs, ok := build.TestWriter.Tests.AsNeedsChanges()
 	require.True(t, ok, "a test program without the hook is sent back: %s", build.TestWriter.Tests.Kind())
 	assert.Equal(t, 1, needs.FindingCount, "the build is the one step that failed")
@@ -607,12 +615,11 @@ func (j *wholeJourney) sendBackMissingHook(t *testing.T) {
 // report again. Surla accepts the tests and records them on the tests branch,
 // and the builder's assignment, unread again, names that commit.
 func (j *wholeJourney) acceptTests(t *testing.T) {
-	ctx, cancel := context.WithTimeout(t.Context(), journeyCheckWait)
-	defer cancel()
 	replaceOnce(t, filepath.Join(j.testsFolder, "eval", "acceptance", "acceptance.go"),
 		journeyCookieHook, journeyCookieHook+journeySconeHook)
 
-	build := j.reportTests(t, ctx, journeyChangeID, j.confirmed, 3)
+	build := j.reportTests(t, stepContext(t, journeyCheckWait), journeyChangeID, j.confirmed, 3)
+	ctx := stepContext(t, journeyQuickWait)
 	accepted, ok := build.TestWriter.Tests.AsAccepted()
 	require.True(t, ok, "the tests are accepted: %s", build.TestWriter.Tests.Kind())
 	require.Regexp(t, "^[0-9a-f]{40}$", accepted.Commit)
@@ -645,8 +652,6 @@ func (j *wholeJourney) acceptTests(t *testing.T) {
 // passed with the two commits to merge and the branches they were verified
 // on, and the builder has no assignment left to work on.
 func (j *wholeJourney) verifyAcceptedTests(t *testing.T) {
-	ctx, cancel := context.WithTimeout(t.Context(), journeyOwnerWait)
-	defer cancel()
 	replaceOnce(t, filepath.Join(j.builderFolder, "internal", "service", "service.go"),
 		journeyCookiePrice, journeyCookiePrice+journeySconePrice)
 	commit := journeyCommitAll(t, j.builderFolder, "Price scones at $2.75")
@@ -655,7 +660,8 @@ func (j *wholeJourney) verifyAcceptedTests(t *testing.T) {
 	assert.Empty(t, runTestGit(t, j.dir, "diff", "--", "design/story.go", "internal/service/service.go"),
 		"guide and builder work leave the user's source unchanged")
 
-	run := j.passRun(t, ctx, commit, j.testsCommit)
+	run := j.passRun(t, stepContext(t, journeyOwnerWait), commit, j.testsCommit)
+	ctx := stepContext(t, journeyQuickWait)
 	args, err := gensurla.EncodeGetVerificationPayload(&gensurla.GetVerificationPayload{RunID: run.RunID})
 	require.NoError(t, err)
 	read, err := gensurla.DecodeVerificationStatusResult(
@@ -734,14 +740,13 @@ func (j *wholeJourney) approvePassedRun(t *testing.T) {
 // longer shows the approval of the earlier tests, and approving that run
 // again is refused with the builder's step.
 func (j *wholeJourney) acceptLaterTests(t *testing.T) {
-	ctx, cancel := context.WithTimeout(t.Context(), journeyCheckWait)
-	defer cancel()
 	replaceOnce(t, filepath.Join(j.testsFolder, "eval", "acceptance", "acceptance.go"),
 		"// PricesScone is the test the Story's finished flow prices-scone requires.\n",
 		"// PricesScone is the test the Story's finished flow prices-scone requires:\n"+
 			"// the helper answers a scone's price from the catalog.\n")
 
-	build := j.reportTests(t, ctx, journeyChangeID, j.confirmed, 4)
+	build := j.reportTests(t, stepContext(t, journeyCheckWait), journeyChangeID, j.confirmed, 4)
+	ctx := stepContext(t, journeyQuickWait)
 	accepted, ok := build.TestWriter.Tests.AsAccepted()
 	require.True(t, ok, "the changed tests are accepted: %s", build.TestWriter.Tests.Kind())
 	assert.NotEqual(t, j.testsCommit, accepted.Commit, "Surla records the changed tests anew")

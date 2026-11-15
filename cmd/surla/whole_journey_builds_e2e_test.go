@@ -8,14 +8,12 @@
 package main
 
 import (
-	"context"
 	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -139,8 +137,7 @@ var (
 // the user approves the new run. From here the journey's passed run and tests
 // commit are the ones this approval names.
 func (j *wholeJourney) verifyLaterTests(t *testing.T) {
-	ctx, cancel := context.WithTimeout(t.Context(), journeyOwnerWait)
-	defer cancel()
+	ctx := stepContext(t, journeyQuickWait)
 	work := j.builderWork(t, ctx)
 	require.Len(t, work, 1, "a pass with tests no longer selected leaves the builder its assignment")
 	assert.Equal(t, journeyChangeID, work[0].ChangeID)
@@ -150,8 +147,9 @@ func (j *wholeJourney) verifyLaterTests(t *testing.T) {
 	assert.Equal(t, later.Commit, j.testsBranch(t, 1))
 
 	earlier := j.passed
-	run := j.passRun(t, ctx, earlier.CandidateCommit, later.Commit)
+	run := j.passRun(t, stepContext(t, journeyOwnerWait), earlier.CandidateCommit, later.Commit)
 	assert.NotEqual(t, earlier.RunID, run.RunID, "verifying again starts a new run")
+	ctx = stepContext(t, journeyQuickWait)
 	for who, latest := range j.latestVerifications(t, ctx, journeyChangeID) {
 		assert.Equal(t, &gensurla.LatestVerificationItem{RunID: run.RunID, State: "passed", InputsCurrent: true},
 			latest, "the %s sees the new run passed, for the tests selected now", who)
@@ -170,8 +168,8 @@ func (j *wholeJourney) verifyLaterTests(t *testing.T) {
 // verified on. The second change has no build, and build 1 is as it was.
 func (j *wholeJourney) refuseSecondBuild(t *testing.T) {
 	_, j.muffin = j.agreeChange(t, journeyMuffinProposal)
-	ctx := stepContext(t, journeyQuickWait)
-	_, err := j.user.StartBuild(ctx, &gensurla.StartBuildPayload{
+	// The call is a build start whatever it answers, so it waits as one does.
+	_, err := j.user.StartBuild(stepContext(t, journeyStepWait), &gensurla.StartBuildPayload{
 		ChangeID: journeyMuffinChangeID, RequestRevision: j.muffin,
 	})
 	var refused *gensurla.OpenBuildRefusal
@@ -187,6 +185,7 @@ func (j *wholeJourney) refuseSecondBuild(t *testing.T) {
 	assert.Equal(t, j.passedTaking(), refused.Build.Taking,
 		"the refusal gives the passed run's commits to merge and their branches")
 
+	ctx := stepContext(t, journeyQuickWait)
 	second, err := j.user.GetBuild(ctx, &gensurla.GetBuildPayload{ChangeID: journeyMuffinChangeID})
 	require.NoError(t, err)
 	assert.Equal(t, gensurla.BuildKindNotStarted, second.Build.Kind(), "a refused start saves no build")
@@ -203,8 +202,8 @@ func (j *wholeJourney) refuseSecondBuild(t *testing.T) {
 // history; neither worker has work left, and the project's git status is
 // empty.
 func (j *wholeJourney) mergePassedRun(t *testing.T) {
-	ctx := stepContext(t, journeyQuickWait)
-	page, err := j.user.GetBuild(ctx, &gensurla.GetBuildPayload{ChangeID: journeyChangeID})
+	page, err := j.user.GetBuild(stepContext(t, journeyQuickWait),
+		&gensurla.GetBuildPayload{ChangeID: journeyChangeID})
 	require.NoError(t, err)
 	started, ok := page.Build.AsStarted()
 	require.True(t, ok)
@@ -225,6 +224,7 @@ func (j *wholeJourney) mergePassedRun(t *testing.T) {
 	assert.Contains(t, journeyFile(t, filepath.Join(j.dir, "design", "story.go")), journeySconeFlow,
 		"the merge brings the agreed design into the project folder")
 
+	ctx := stepContext(t, journeyQuickWait)
 	for who, build := range j.buildReads(t, ctx, journeyChangeID) {
 		assert.Equal(t, gensurla.NewBuildTakingMerged(&gensurla.BuildMerged{}), build.Taking,
 			"the %s reads the build merged from the user's own git", who)
@@ -291,15 +291,16 @@ func (j *wholeJourney) dropSecondBuild(t *testing.T) {
 	}
 	require.Equal(t, left, journeyCopyState(t, j.builderFolder))
 
-	ctx := stepContext(t, journeyQuickWait)
-	page, err := j.user.GetBuild(ctx, &gensurla.GetBuildPayload{ChangeID: journeyMuffinChangeID})
+	page, err := j.user.GetBuild(stepContext(t, journeyQuickWait),
+		&gensurla.GetBuildPayload{ChangeID: journeyMuffinChangeID})
 	require.NoError(t, err)
 	shown, ok := page.Build.AsStarted()
 	require.True(t, ok)
-	dropped, err := j.user.DropBuild(ctx, &gensurla.DropBuildPayload{
+	dropped, err := j.user.DropBuild(stepContext(t, journeyQuickWait), &gensurla.DropBuildPayload{
 		ChangeID: journeyMuffinChangeID, StartedAt: shown.StartedAt,
 	})
 	require.NoError(t, err)
+	ctx := stepContext(t, journeyQuickWait)
 	assert.Equal(t, journeyMuffinChangeID, dropped.ChangeID)
 	assert.True(t, dropped.DraftedBeforeDrop, "the dropped change's revision was drafted before the drop")
 	build, ok := dropped.Build.AsStarted()
@@ -317,9 +318,11 @@ func (j *wholeJourney) dropSecondBuild(t *testing.T) {
 	assert.Equal(t, journeyLeftoverNotes, journeyFile(t, notes))
 	assert.Contains(t, journeyFile(t, service), journeyMuffinPrice)
 
-	refused := journeyRefusal(t, ctx, j.builder, "generate_code", []byte(`{}`))
+	// The call is a generation whatever it answers, so it waits as one does.
+	refused := journeyRefusal(t, stepContext(t, journeyGenerateWait), j.builder, "generate_code", []byte(`{}`))
 	assert.Contains(t, refused, fmt.Sprintf(journeyDroppedText, journeyMuffinChangeID))
 	assert.Equal(t, left, journeyCopyState(t, j.builderFolder), "a refused generation writes nothing")
+	ctx = stepContext(t, journeyQuickWait)
 	assert.Empty(t, j.builderWork(t, ctx), "a dropped build leaves the builder no work")
 	assert.Empty(t, j.testWriterWork(t, ctx), "a dropped build leaves the test writer no work")
 
@@ -401,9 +404,7 @@ func (j *wholeJourney) buildThirdChange(t *testing.T) {
 func (j *wholeJourney) agreeChange(t *testing.T, p journeyProposal) (proposedRevision, agreed string) {
 	t.Helper()
 	replaceOnce(t, filepath.Join(j.draftFolder, "design", "story.go"), p.after, p.after+p.flow)
-	ctx, cancel := context.WithTimeout(t.Context(), journeyStepWait)
-	defer cancel()
-	refresh := trustedSuiteRefresh(t, ctx, j.guide)
+	refresh := trustedSuiteRefresh(t, stepContext(t, journeyStepWait), j.guide)
 	require.Len(t, refresh.Stories, 1)
 	assert.Equal(t, "Prices", refresh.Stories[0].Name, "the guide extends the Story the starter ships")
 	require.Len(t, refresh.Stories[0].Flows, len(p.flows))
@@ -428,6 +429,9 @@ func (j *wholeJourney) agreeChange(t *testing.T, p journeyProposal) (proposedRev
 		},
 	})
 	require.NoError(t, err)
+	// The evaluation has ended: the proposal and the confirmation save and
+	// read stored state, with their own wait.
+	ctx := stepContext(t, journeyQuickWait)
 	proposed, err := gensurla.DecodeChangeCardResult(
 		trustedSuiteCall(t, ctx, j.guide, "propose_change", args))
 	require.NoError(t, err)
@@ -531,7 +535,7 @@ func (j *wholeJourney) joinBuild(
 func (j *wholeJourney) generateAndCommit(t *testing.T, message string) string {
 	t.Helper()
 	generated, err := gensurla.DecodeGenerateCodeResult(
-		trustedSuiteCall(t, stepContext(t, 3*time.Minute), j.builder, "generate_code", []byte(`{}`)))
+		trustedSuiteCall(t, stepContext(t, journeyGenerateWait), j.builder, "generate_code", []byte(`{}`)))
 	require.NoError(t, err)
 	assert.NotEmpty(t, generated.FilesWritten, "generation writes the agreed design's code")
 	return journeyCommitAll(t, j.builderFolder, message)
