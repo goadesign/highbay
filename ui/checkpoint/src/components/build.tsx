@@ -91,7 +91,9 @@ export function BuildSectionView({
   const triggerRef = useRef<HTMLSpanElement>(null);
   const questionRef = useRef<HTMLDivElement | null>(null);
   const removedFocus = useRef(false);
-  const returnFocus = useRef(false);
+  // A cancelled question owns its focus return only while its subject and
+  // the user's focus stay here; a pending read may temporarily block it.
+  const returnFocus = useRef<string | null>(null);
   // sent prevents a second click before the page's pending state is rendered.
   const sent = useRef(false);
 
@@ -112,15 +114,35 @@ export function BuildSectionView({
     if (confirming) {
       removedFocus.current = false;
       questionRef.current?.focus();
-    } else if (returnFocus.current) {
-      returnFocus.current = false;
-      removedFocus.current = false;
-      triggerRef.current?.querySelector("button")?.focus();
-    } else if (removedFocus.current) {
+    } else if (removedFocus.current && returnFocus.current === null) {
       removedFocus.current = false;
       headingRef.current?.focus();
     }
   }, [confirming, identity]);
+
+  // A refresh may disable the trigger when Escape removes the question.
+  // Keep focus on the heading until that same trigger is usable; a later
+  // render must not reclaim focus the user deliberately moved elsewhere.
+  useLayoutEffect(() => {
+    const cancelled = returnFocus.current;
+    if (cancelled === null || confirming) return;
+    const ownsFocus = removedFocus.current || document.activeElement === headingRef.current;
+    removedFocus.current = false;
+    if (!ownsFocus) {
+      returnFocus.current = null;
+      return;
+    }
+    const trigger = triggerRef.current?.querySelector("button") ?? null;
+    if (cancelled !== identity || trigger === null || !eligible) {
+      returnFocus.current = null;
+      headingRef.current?.focus();
+    } else if (!trigger.disabled) {
+      returnFocus.current = null;
+      trigger.focus();
+    } else {
+      headingRef.current?.focus();
+    }
+  });
 
   // Once invalidated, the old question cannot return when a session/revision
   // becomes eligible again. An outstanding request owns the submission latch.
@@ -137,7 +159,7 @@ export function BuildSectionView({
 
   // cancel sends nothing and restores the separate question trigger.
   function cancel() {
-    returnFocus.current = true;
+    returnFocus.current = identity;
     setQuestionIdentity(null);
   }
 
