@@ -3,7 +3,7 @@
 package controlplane
 
 import (
-	"encoding/json"
+	"fmt"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -85,16 +85,15 @@ func TestBuilderCopyV1CandidateBase(t *testing.T) {
 				name = "revert"
 			}
 			t.Run(profile+"/"+name, func(t *testing.T) {
-				cp, card, build, _, builder := builderCopyV1Fixture(t, stored)
+				cp, card, build, builder := builderDesignBaseFixture(t, stored)
 				workspace := cp.currentWorkspaceDir()
-				readDraftForTest(t, cp)
-				file := "design/build_fixture.go"
-				writeWorkspaceFiles(t, workspace, map[string]string{file: "package design\nvar Outside = true\n"})
-				project := commitAllForLayoutTest(t, workspace)
+				file := updateDesignFile
+				outside := "package design\nvar A = 3\n"
 				if revert {
-					require.NoError(t, os.Remove(filepath.Join(workspace, file)))
-					project = commitAllForLayoutTest(t, workspace)
+					outside = "package design\nvar A = 0\n"
 				}
+				writeWorkspaceFiles(t, workspace, map[string]string{file: outside})
+				project := commitAllForLayoutTest(t, workspace)
 				// Keep C valid for the agreed design while giving it the outside
 				// project commit as an ancestor, and therefore its merge base.
 				productionBuildGit(t, builder, "reset", "--hard", project)
@@ -118,6 +117,46 @@ func TestBuilderCopyV1CandidateBase(t *testing.T) {
 	}
 }
 
+// builderDesignBaseFixture lists A=0 and then A=1 through the draft owner
+// before creating the immutable build of A=2. A later revert to A=0 must not
+// replace the newer listed version, even though both texts occur in history.
+func builderDesignBaseFixture(
+	t *testing.T, stored bool,
+) (*ControlPlane, *gensurla.ChangeCardResult, buildFile, string) {
+	t.Helper()
+	cfg := verificationConfig(t)
+	cp := newBuildControlPlane(t, Options{Verification: cfg})
+	if !stored {
+		cp.verifier = writtenTestVerification{runs: cfg}
+	}
+	workspace := cp.currentWorkspaceDir()
+	writeStarterAt(t, workspace, "example.com/shop")
+	writeWorkspaceFiles(t, workspace, map[string]string{updateDesignFile: "package design\nvar A = 0\n"})
+	commitAllForLayoutTest(t, workspace)
+	readDraftForTest(t, cp)
+	writeWorkspaceFiles(t, workspace, map[string]string{updateDesignFile: "package design\nvar A = 1\n"})
+	commitAllForLayoutTest(t, workspace)
+	guide := asCaller("alice@example.com", CallerGuide)
+	_, err := cp.UpdateDraft(guide)
+	require.NoError(t, err)
+	writeWorkspaceFiles(t, filepath.Join(workspace, draftFolderName), map[string]string{updateDesignFile: "package design\nvar A = 2\n"})
+	opID := seedStoryRefreshForTest(t, cp, "alice@example.com", storyRefreshStateSucceeded, nil, "")
+	card, err := cp.ProposeChange(guide, &gensurla.ProposeChangePayload{
+		ChangeID: "chg", Prompt: "Keep refunds bounded", Analysis: refundAnalysis("Keep refunds bounded"), StoryRefreshOpID: &opID,
+	})
+	require.NoError(t, err)
+	user := asCaller("alice@example.com", CallerUser)
+	card = mustConfirmNoop(t, cp, user, card)
+	_, err = cp.StartBuild(user, &gensurla.StartBuildPayload{ChangeID: card.ChangeID, RequestRevision: card.RequestRevision})
+	require.NoError(t, err)
+	assignment, build := readBuilderFixture(t, cp, card)
+	productionBuildGit(t, workspace, "branch", "surla/tests-1", build.Base)
+	if !stored {
+		acceptTests(t, cp, card.ChangeID, build.Base)
+	}
+	return cp, card, build, assignment.WorkingFolder
+}
+
 // assertVerifyDesignTransportRefusal checks the declared HTTP/MCP refusal and
 // proves all three entry calls left the run store and open build untouched.
 func assertVerifyDesignTransportRefusal(
@@ -125,11 +164,12 @@ func assertVerifyDesignTransportRefusal(
 ) {
 	t.Helper()
 	before := readBuildFile(t, cp, payload.ChangeID)
-	raw, err := json.Marshal(payload)
+	raw, err := gensurla.EncodeVerifyChangePayload(payload)
 	require.NoError(t, err)
 	server := roleServer(t, cp)
+	bodyInput := fmt.Sprintf(`{"request_revision":%q,"candidate_commit":%q}`, payload.RequestRevision, payload.CandidateCommit)
 	status, body := httpCall(t, server.URL, "builder", http.MethodPost,
-		"/changes/"+payload.ChangeID+"/verifications", string(raw))
+		"/changes/"+payload.ChangeID+"/verifications", bodyInput)
 	assert.Equal(t, http.StatusConflict, status)
 	assert.Equal(t, `"`+name+`"`, jsonAt(t, []byte(body), "name"))
 	assert.Contains(t, body, file)
