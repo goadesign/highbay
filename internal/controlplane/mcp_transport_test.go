@@ -57,7 +57,7 @@ func (w *failingResponse) Write([]byte) (int, error) {
 }
 
 // TestMCPDisconnectSurvives verifies the real server survives a client
-// disconnect while the progress stream is active and retains the parent link.
+// disconnect while the progress stream is active.
 func TestMCPDisconnectSurvives(t *testing.T) {
 	recorder := tracetest.NewSpanRecorder()
 	provider := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(recorder))
@@ -100,25 +100,25 @@ func TestMCPDisconnectSurvives(t *testing.T) {
 		t.Fatal("request did not finish")
 	}
 	spans := recorder.Ended()
-	var request, parent sdktrace.ReadOnlySpan
+	var failure, parent sdktrace.ReadOnlySpan
 	for _, span := range spans {
-		if span.Name() == "surla.mcp.request" {
-			request = span
+		if span.Name() == "surla.mcp.transport_error" {
+			failure = span
 		}
 		if span.Name() == "parent" {
 			parent = span
 		}
 	}
-	require.NotNil(t, request)
 	require.NotNil(t, parent)
-	assert.Equal(t, parent.SpanContext().SpanID(), request.Parent().SpanID())
 	assert.NotEqual(t, codes.Error, parent.Status().Code)
 	// Cancellation and the final socket write race. Check a reported failure
 	// when one occurs; the controlled writer below proves the error path.
-	if request.Status().Code == codes.Error {
-		assert.Equal(t, "MCP transport failure", request.Status().Description)
-		require.NotEmpty(t, request.Events())
-		assert.Equal(t, "exception", request.Events()[0].Name)
+	if failure != nil {
+		assert.Equal(t, parent.SpanContext().SpanID(), failure.Parent().SpanID())
+		assert.Equal(t, codes.Error, failure.Status().Code)
+		assert.Equal(t, "MCP transport failure", failure.Status().Description)
+		require.NotEmpty(t, failure.Events())
+		assert.Equal(t, "exception", failure.Events()[0].Name)
 	}
 
 	// A separate request remains usable after the disconnected stream.
@@ -182,13 +182,13 @@ func TestMCPGuardFailures(t *testing.T) {
 	}
 	var spans []sdktrace.ReadOnlySpan
 	for _, span := range recorder.Ended() {
-		if span.Name() == "surla.mcp.transport_error" || span.Name() == "surla.mcp.request" {
+		if span.Name() == "surla.mcp.transport_error" {
 			spans = append(spans, span)
 		}
 	}
 	require.Len(t, spans, 5)
 	for _, span := range spans {
-		assert.Contains(t, []string{"surla.mcp.transport_error", "surla.mcp.request"}, span.Name())
+		assert.Equal(t, "surla.mcp.transport_error", span.Name())
 		assert.Equal(t, codes.Error, span.Status().Code)
 		assert.Equal(t, "MCP transport failure", span.Status().Description)
 		assert.NotContains(t, fmt.Sprint(span.Attributes()), "private-body-sentinel")
@@ -212,17 +212,8 @@ func TestMCPGuardFailures(t *testing.T) {
 			assert.Equal(t, tc.code, response.Code)
 			assert.Contains(t, response.Body.String(), tc.contains)
 			newSpans := recorder.Ended()[before:]
-			if tc.name == "accepted refusal" {
-				var accepted bool
-				for _, span := range newSpans {
-					accepted = accepted || span.Name() == "surla.mcp.request"
-				}
-				assert.True(t, accepted, "refusal reached accepted request handler")
-			}
 			for _, span := range newSpans {
-				if span.Name() == "surla.mcp.request" || span.Name() == "surla.mcp.transport_error" {
-					assert.NotEqual(t, codes.Error, span.Status().Code)
-				}
+				assert.NotEqual(t, "surla.mcp.transport_error", span.Name())
 			}
 		})
 	}

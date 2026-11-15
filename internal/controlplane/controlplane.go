@@ -60,9 +60,6 @@ type (
 	// principalContextKey is the context key storing the authenticated Principal.
 	principalContextKey struct{}
 
-	// mcpRequestSpanKey identifies the span owned by the MCP request middleware.
-	mcpRequestSpanKey struct{}
-
 	// PromotionTarget is the promotion owner's view of a candidate being
 	// promoted at Checkpoint 5. The project server binds it from the stored
 	// promotion settings; approve_merge never takes these facts from its
@@ -611,24 +608,13 @@ func NewHTTPHandler(svc gensurla.Service, auth RequestAuthenticator) http.Handle
 		goahttp.RequestDecoder,
 		goahttp.ResponseEncoder,
 		func(ctx context.Context, _ http.ResponseWriter, err error) {
-			span, ok := ctx.Value(mcpRequestSpanKey{}).(trace.Span)
-			if !ok {
-				_, span = recorder.Start(ctx, "surla.mcp.transport_error")
-				defer span.End()
-			}
+			_, span := recorder.Start(ctx, "surla.mcp.transport_error")
+			defer span.End()
 			span.SetAttributes(attribute.String("error.classification", "mcp_transport"))
 			span.RecordError(err)
 			span.SetStatus(codes.Error, "MCP transport failure")
 		},
 	)
-	mcpServer.Use(func(next http.Handler) http.Handler {
-		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			ctx, span := recorder.Start(r.Context(), "surla.mcp.request")
-			defer span.End()
-			ctx = context.WithValue(ctx, mcpRequestSpanKey{}, span)
-			next.ServeHTTP(w, r.WithContext(ctx))
-		})
-	})
 	genmcpsurla.Mount(mux, mcpServer)
 
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

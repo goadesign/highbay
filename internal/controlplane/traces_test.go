@@ -750,6 +750,32 @@ func TestHistoryLeavesOutOnlyTheUsersSuccessfulReads(t *testing.T) {
 	}
 }
 
+// TestMCPTransportFailureAppearsInHistory verifies that actual transport
+// failures are saved for the authenticated caller, including user sessions.
+func TestMCPTransportFailureAppearsInHistory(t *testing.T) {
+	for _, kind := range []CallerKind{CallerUser, CallerBuilder} {
+		t.Run(string(kind), func(t *testing.T) {
+			provider := sdktrace.NewTracerProvider()
+			t.Cleanup(func() { assert.NoError(t, provider.Shutdown(context.Background())) })
+			cp := newControlPlane(t, Options{TracerProvider: provider})
+			principal := Principal{ID: "owner", CallerID: "session", Kind: kind}
+			handler := NewHTTPHandler(cp, func(*http.Request) (Principal, error) { return principal, nil })
+			request := mcpTransportRequest(t, t.Context(), "/mcp", "")
+			request.Body = failingBody{readErr: errors.New("private-history-sentinel")}
+			handler.ServeHTTP(httptest.NewRecorder(), request)
+
+			page, err := cp.ListTraces(WithPrincipal(t.Context(), principal), &gensurla.ListTracesPayload{Status: "all", Limit: 20})
+			require.NoError(t, err)
+			require.Len(t, page.Spans, 1)
+			span := page.Spans[0]
+			assert.Equal(t, "surla.mcp.transport_error", span.Name)
+			assert.Equal(t, "error", span.Status)
+			assert.Equal(t, map[string]string{"surla.caller_id": "session", "surla.caller_kind": string(kind)}, span.Attributes)
+			assert.NotContains(t, span.Summary, "private-history-sentinel")
+		})
+	}
+}
+
 // TestUserGETRoutesOnlyRead checks the fact the history's rule for the user's
 // reads rests on, instead of trusting it: every GET route of the generated
 // HTTP server that the operation table allows to the user's session leaves the
