@@ -109,6 +109,13 @@ func (s *standInCopy) checked() int {
 	return s.checks
 }
 
+// recordCalls returns the number of Record calls so far.
+func (s *standInCopy) recordCalls() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.records
+}
+
 // recorded returns Record's commit messages so far.
 func (s *standInCopy) recorded() []string {
 	s.mu.Lock()
@@ -829,6 +836,150 @@ func TestVerdictsGiveSupervisionNewGenerations(t *testing.T) {
 		assert.NotEqual(t, unread[i].Generation, afterAcceptance[i].Generation, role)
 	}
 	assert.NotEqual(t, afterFindings[0].Generation, afterAcceptance[1].Generation)
+}
+
+// TestARecordWithAnOnBranchLockRetriesOnlyRecord verifies that when an
+// index.lock is planted while the report checker waits for workingCopyTurn:
+//   - if the lock is removed during Record's retries, Check ran once, Record
+//     succeeded on retry, and the build ends in accepted with one commit on
+//     surla/tests-1;
+//   - if the lock stays across all retries, Check ran once, Record retried
+//     recordLockRetries times, the branch tip stays unmoved, and the build ends
+//     in could_not_run naming the lock file in Step;
+//   - if Record fails for any non-lock reason, Record is attempted only once.
+func TestARecordWithAnOnBranchLockRetriesOnlyRecord(t *testing.T) {
+	t.Run("lock removed during retries ends accepted with one commit", func(t *testing.T) {
+		repo, project, cp, _ := reviewProject(t, Options{})
+		cp.reports.retry = 20 * time.Millisecond
+		c1 := buildableChange(t, cp, "chg")
+		_, err := cp.StartBuild(asCaller("alice@example.com", CallerUser), &gensurla.StartBuildPayload{
+			ChangeID: "chg", RequestRevision: c1.RequestRevision,
+		})
+		require.NoError(t, err)
+		testsDir := filepath.Join(project, testwriter.TestsRole.Folder)
+		testsGitDir := productionBuildGit(t, testsDir, "rev-parse", "--path-format=absolute", "--git-dir")
+		lockFile := filepath.Join(testsGitDir, "index.lock")
+
+		var standIn *standInCopy
+		cp.buildCopyFactory = func(context.Context, string, scaffold.Layout) (buildCopy, error) {
+			return standIn, nil
+		}
+		standIn = &standInCopy{}
+		readBothAssignments(t, cp)
+
+		tip := productionBuildGit(t, repo, "rev-parse", "surla/tests-1")
+		require.NoError(t, os.WriteFile(filepath.Join(testsDir, "eval", "accepted_test.go"), []byte("package eval\n"), 0o600))
+		runGitForTest(t, testsDir, "add", "eval/accepted_test.go")
+		tree := productionBuildGit(t, testsDir, "write-tree")
+
+		standIn = &standInCopy{
+			check: accepting,
+			record: func(ctx context.Context, call int) (string, error) {
+				commit := productionBuildGit(t, testsDir, "commit-tree", "--no-gpg-sign", tree, "-p", tip, "-m", "Add accepted tests")
+				_, err := runGitRead(ctx, testsDir, "--git-dir="+testsGitDir, "--work-tree="+testsDir, "read-tree", commit)
+				if err != nil {
+					if call == 1 {
+						require.NoError(t, os.Remove(lockFile))
+					}
+					return "", &testwriter.IndexLockError{Path: lockFile, Err: err}
+				}
+				runGitForTest(t, testsDir, "update-ref", "refs/heads/surla/tests-1", commit, tip)
+				return commit, nil
+			},
+		}
+
+		// Hold workingCopyTurn so ReportTestsFinished passes the door before the
+		// lock is planted while the checker waits for the turn.
+		cp.workingCopyTurn <- struct{}{}
+		reportTests(t, cp, c1.RequestRevision)
+		require.NoError(t, os.WriteFile(lockFile, []byte("transient\n"), 0o600))
+		<-cp.workingCopyTurn
+
+		build := waitForTests(t, cp, gensurla.TestsKindAccepted)
+		assert.Equal(t, 1, standIn.checked(), "Check must not be rerun when Record retries on index.lock")
+		assert.Equal(t, 2, standIn.recordCalls(), "Record succeeded on the second attempt after the lock cleared")
+		head := productionBuildGit(t, repo, "rev-parse", "surla/tests-1")
+		assert.NotEqual(t, tip, head)
+		assert.Equal(t, tip, productionBuildGit(t, repo, "rev-parse", head+"^"), "exactly one commit recorded on surla/tests-1")
+		accepted, ok := build.TestWriter.Tests.AsAccepted()
+		require.True(t, ok)
+		assert.Equal(t, head, accepted.Commit)
+	})
+
+	t.Run("stale lock ends in could_not_run naming the lock file with branch unmoved", func(t *testing.T) {
+		repo, project, cp, _ := reviewProject(t, Options{})
+		cp.reports.retry = 20 * time.Millisecond
+		c1 := buildableChange(t, cp, "chg")
+		_, err := cp.StartBuild(asCaller("alice@example.com", CallerUser), &gensurla.StartBuildPayload{
+			ChangeID: "chg", RequestRevision: c1.RequestRevision,
+		})
+		require.NoError(t, err)
+		testsDir := filepath.Join(project, testwriter.TestsRole.Folder)
+		testsGitDir := productionBuildGit(t, testsDir, "rev-parse", "--path-format=absolute", "--git-dir")
+		lockFile := filepath.Join(testsGitDir, "index.lock")
+
+		var standIn *standInCopy
+		cp.buildCopyFactory = func(context.Context, string, scaffold.Layout) (buildCopy, error) {
+			return standIn, nil
+		}
+		standIn = &standInCopy{}
+		readBothAssignments(t, cp)
+
+		tip := productionBuildGit(t, repo, "rev-parse", "surla/tests-1")
+		require.NoError(t, os.WriteFile(filepath.Join(testsDir, "eval", "accepted_test.go"), []byte("package eval\n"), 0o600))
+		runGitForTest(t, testsDir, "add", "eval/accepted_test.go")
+		tree := productionBuildGit(t, testsDir, "write-tree")
+		standIn = &standInCopy{
+			check: accepting,
+			record: func(ctx context.Context, _ int) (string, error) {
+				commit := productionBuildGit(t, testsDir, "commit-tree", "--no-gpg-sign", tree, "-p", tip, "-m", "Add accepted tests")
+				_, err := runGitRead(ctx, testsDir, "--git-dir="+testsGitDir, "--work-tree="+testsDir, "read-tree", commit)
+				if err != nil {
+					return "", &testwriter.IndexLockError{Path: lockFile, Err: err}
+				}
+				return commit, nil
+			},
+		}
+
+		cp.workingCopyTurn <- struct{}{}
+		reportTests(t, cp, c1.RequestRevision)
+		require.NoError(t, os.WriteFile(lockFile, []byte("stale\n"), 0o600))
+		<-cp.workingCopyTurn
+
+		build := waitForTests(t, cp, gensurla.TestsKindCouldNotRun)
+		require.NoError(t, os.Remove(lockFile))
+		assert.Equal(t, 1, standIn.checked(), "Check ran once")
+		assert.Equal(t, 1+recordLockRetries, standIn.recordCalls(), "Record retried recordLockRetries times")
+		assert.Equal(t, tip, productionBuildGit(t, repo, "rev-parse", "surla/tests-1"), "branch tip stays unmoved")
+		failed, ok := build.TestWriter.Tests.AsCouldNotRun()
+		require.True(t, ok)
+		assert.Equal(t, "Surla could not record the accepted tests: Git's index is locked.", failed.Reason)
+		assert.Equal(t,
+			fmt.Sprintf("If no Git command is running in the test writer's working copy, delete %s; then ask the test writer to report again.", lockFile),
+			failed.Step,
+		)
+	})
+
+	t.Run("non-lock Record failure is attempted once", func(t *testing.T) {
+		tests := &standInCopy{
+			check: accepting,
+			record: func(context.Context, int) (string, error) {
+				return "", errors.New("git update-ref: cannot lock ref")
+			},
+		}
+		cp, revision := newReportFixture(t, Options{}, tests)
+		cp.reports.retry = 20 * time.Millisecond
+		readBothAssignments(t, cp)
+		reportTests(t, cp, revision)
+
+		build := waitForTests(t, cp, gensurla.TestsKindCouldNotRun)
+		assert.Equal(t, 1, tests.checked())
+		assert.Equal(t, 1, tests.recordCalls(), "non-lock Record failure must not be retried")
+		failed, ok := build.TestWriter.Tests.AsCouldNotRun()
+		require.True(t, ok)
+		assert.Contains(t, failed.Reason, "Surla could not record the accepted tests")
+		assert.Equal(t, stepFailure, failed.Step)
+	})
 }
 
 // newReportFixture returns a control plane with options opts and a bound

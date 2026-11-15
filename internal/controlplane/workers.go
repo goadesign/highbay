@@ -278,7 +278,7 @@ func (c *ControlPlane) GetTestWriterAssignment(
 	if !held.file.StartedAt.Equal(owned.file.StartedAt) {
 		c.mu.Unlock()
 		return nil, recordBuildError(span, gensurla.MakeWorkingCopyBusy(errors.New(
-			"Surla is checking the tests in your working folder; call get_test_writer_assignment again when the check has ended.",
+			"A new build started while Surla was moving your working copy; call get_test_writer_assignment again.",
 		)), "load build")
 	}
 	if held.file.Roles != buildRolesBuilderAndTestWriter {

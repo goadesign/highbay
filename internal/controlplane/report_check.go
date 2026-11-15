@@ -105,6 +105,12 @@ const (
 	// lasting one forever.
 	maxRetriesAfterFailure = 3
 
+	// recordLockRetries is how many times a judgment repeats Record alone when
+	// it fails because of index.lock: Git's own commands hold that lock for
+	// milliseconds to seconds, whereas a lock still there after these retries
+	// is a stale lock.
+	recordLockRetries = 5
+
 	// stepOpenCopy, stepSandbox, stepNoCommonBase, stepLimit and stepFailure
 	// are the user's steps of a check that could not run, one per cause; each
 	// fits the design's 512 characters.
@@ -290,7 +296,7 @@ func (r *reportChecker) judge(ctx context.Context, changeID string) {
 			return
 		}
 		message := fmt.Sprintf("Add the tests Surla accepted for change %s, report %d", id.changeID, id.report)
-		commit, err := copy.Record(checkCtx, v, branch, message)
+		commit, err := r.recordAccepted(checkCtx, copy, v, branch, message)
 		switch {
 		case ctx.Err() != nil:
 			span.AddEvent("stopped before the tests were recorded; the build stays reported")
@@ -363,6 +369,29 @@ func (r *reportChecker) answersTo(id reportIdentity) (bool, error) {
 		return false, err
 	}
 	return found && reportIdentityOf(saved) == id, nil
+}
+
+// recordAccepted records v on branch with message, repeating Record alone up to
+// recordLockRetries times when it fails because of index.lock. Any other error,
+// or checkCtx ending, stops immediately.
+func (r *reportChecker) recordAccepted(
+	checkCtx context.Context, copy buildCopy, v testwriter.Verdict, branch, message string,
+) (string, error) {
+	pause := min(r.retry, 500*time.Millisecond)
+	for attempt := 0; ; attempt++ {
+		commit, err := copy.Record(checkCtx, v, branch, message)
+		var lockErr *testwriter.IndexLockError
+		if err == nil || !errors.As(err, &lockErr) || attempt >= recordLockRetries || checkCtx.Err() != nil {
+			return commit, err
+		}
+		timer := time.NewTimer(pause)
+		select {
+		case <-checkCtx.Done():
+			timer.Stop()
+			return "", checkCtx.Err()
+		case <-timer.C:
+		}
+	}
 }
 
 // saveVerdict saves verdict on id's build, with its time, when the build
@@ -485,6 +514,7 @@ func (r *reportChecker) verdictOf(v testwriter.Verdict, err error, deadline time
 func (r *reportChecker) couldNotRun(err error, deadline time.Time, failed string) testWriterAssignment {
 	var reason, step string
 	var open *openCopyError
+	var lockErr *testwriter.IndexLockError
 	switch {
 	case !time.Now().Before(deadline):
 		reason, step = fmt.Sprintf("Checking the tests did not finish within %s, "+
@@ -498,6 +528,12 @@ func (r *reportChecker) couldNotRun(err error, deadline time.Time, failed string
 		step = stepWriteCopy + ", then ask the test writer to report again."
 	case errors.Is(err, testwriter.ErrDependencies):
 		reason, step = failed+": "+err.Error(), stepDependencies+", then ask the test writer to report again."
+	case errors.As(err, &lockErr):
+		reason = failed + ": Git's index is locked."
+		step = fmt.Sprintf(
+			"If no Git command is running in the test writer's working copy, delete %s; then ask the test writer to report again.",
+			lockErr.Path,
+		)
 	default:
 		reason, step = failed+": "+err.Error(), stepFailure
 	}
