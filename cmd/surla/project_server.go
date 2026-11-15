@@ -966,7 +966,7 @@ func preflightProjectStart(findHerdr func() (string, error)) error {
 	if _, err := projectBrowserProgram(); err != nil {
 		return err
 	}
-	return nil
+	return preflightProjectGit()
 }
 
 // projectBrowserProgram resolves the required platform opener without exposing a link.

@@ -51,7 +51,7 @@ an operation, who may call it, what it returns and how it refuses.
 | **Herdr app** (`herdr-app`) | The window that shows the team's panes. | `curl -fsSL https://releases.herdr.dev/app/install.sh \| sh` ([herdr.dev](https://herdr.dev/)) |
 | **Chorus v0.11.0 or later** | Agent messaging and the Chorus dialog. | `curl -fsSL https://raw.githubusercontent.com/goadesign/chorus/main/scripts/install.sh \| sh`; update with `chorus update -yes` |
 | **A coding agent** that the Chorus dialog can start | An agent app plays each role: the user picks one per role in the Chorus dialog. | — |
-| **Git**, with a name and address | Without stored verification settings, builds, live targets and verification need the project in a Git repository with a first commit, and Surla records accepted tests as commits under your Git identity. | `git config --global user.name …` and `user.email …` |
+| **Git 2.45 or newer**, with a name and address | Startup requires support for `--no-lazy-fetch`, so Surla's Git reads do not download missing objects. Without stored verification settings, builds, live targets and verification need the project in a Git repository with a first commit, and Surla records accepted tests as commits under your Git identity. | Install Git 2.45 or newer on `PATH`; `git config --global user.name …` and `user.email …` configure its identity. |
 | **Docker** (Docker Desktop, or another local engine on a `unix://` socket) | `check_project` and `update_dependencies` run Go in Linux containers. The first check pulls `golang:1.27.3`. | [docker.com](https://www.docker.com/) |
 | **Temporal CLI** | Only to run the Orders evaluator, which starts a local Temporal server for its scenarios: when Surla verifies the Orders project or starts a live target of it, when `surla verify` runs that evaluator, and in the full-suite tests that run it (the `examples/orders` acceptance suite and the `e2e` tests of `./internal/verify` and `./cmd/surla`). | `brew install temporal` |
 
@@ -62,7 +62,13 @@ it says instead `<program> is installed in <folder>, which is not on PATH;
 add <folder> to PATH, then run surla again`. It then checks that Chorus is
 v0.11.0 or later (`chorus update -yes` updates it), that `hc` is on the path
 or in `~/.local/bin`, and that the browser opener (`open`) is on the path. A
-missing opener is named without an install command.
+missing opener is named without an install command. Surla then probes the Git
+on `PATH` with `git --no-lazy-fetch version`, without reading a repository.
+If that option is unknown, startup names the installed `git --version` line
+and says `Install Git 2.45 or newer and run surla again.` Missing Git has its
+own refusal. No project state, server, window or agent starts on these
+refusals. Git builds with the capability backported are accepted regardless
+of their version label.
 
 **The sandbox and restricted shells.** When a sandboxed command exits with
 status 71, Surla keeps the error and adds: `The sandboxed command exited with
@@ -164,7 +170,8 @@ is to its right, and the test writer's below the builder's. Starting again
 reuses the guide and the saved space. If the space was closed, the server
 adopts the one local space that matches its team name and folder, or creates
 one; when several match, it refuses with their count, and the user closes the
-duplicates. Team preparation needs no Git.
+duplicates. Team preparation needs no Git repository; startup still requires
+the Git executable and capability listed under [Prerequisites](#prerequisites).
 
 <a id="idle-shell"></a>
 
