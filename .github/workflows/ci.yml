@@ -301,6 +301,7 @@ jobs:
           cache-dependency-path: ui/checkpoint/package-lock.json
       - name: Check production concurrency ownership
         run: |
+          bash .github/scripts/go-test_test.sh </dev/null
           go run ./.github/scripts/racecheck </dev/null
           go test -count=1 ./.github/scripts/racecheck </dev/null
       - name: Check formatting

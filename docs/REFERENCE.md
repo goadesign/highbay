@@ -2439,6 +2439,10 @@ checks are:
 
   Race instrumentation follows
   [the production concurrency owners](../.github/race-packages.txt).
+  The wrapper uses Go's active `TestGoFiles` and `XTestGoFiles` metadata to
+  instrument listed packages with tests. A listed package without tests still
+  builds and vets in the plain group; adding its first test automatically
+  selects race instrumentation. The cold producer uses the same selection.
   [The syntax check](../.github/scripts/racecheck/main.go) rejects handwritten
   production goroutines, synchronization imports or channel operations outside
   that list, and rejects listed owners that no longer contain them. It checks
