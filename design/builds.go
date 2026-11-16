@@ -127,7 +127,7 @@ var BuildPassed = Type("BuildPassed", func() {
 
 // BuildMerged says the user took the open build.
 var BuildMerged = Type("BuildMerged", func() {
-	Description("The branch checked out in the project folder holds both commits of a passed run of this build, by merge or by a squash commit that holds every file they changed as they have it. This build no longer blocks starting another build; start_build's other checks still apply.")
+	Description("The branch checked out in the project folder holds the commits of one passed run of this build: the builder's and, for written tests, the tests'. Each is held by merge or by a squash commit that holds every file it changed as that commit has it. This build no longer blocks starting another build; start_build's other checks still apply.")
 })
 
 // BuildDropped says the user dropped the open build.
@@ -146,7 +146,7 @@ var StartedBuild = Type("StartedBuild", func() {
 	Attribute("builder", BuilderProgress, "The builder's assignment.")
 	Attribute("test_writer", TestWriterProgress, "The test writer's assignment.")
 	Attribute("required_test_count", Int, "Number of finished flows in the agreed Story. Zero means no test of this change's Story was required.", func() { Minimum(0) })
-	OneOf("taking", "Whether the user has taken this build: building until a verification of it passes; passed with the commits to merge; merged once the branch checked out in the project folder holds both commits of one passed run; dropped once the user dropped it. A project has one open build, and another change is built only once it is merged or dropped.", func() {
+	OneOf("taking", "Whether the user has taken this build: building until a verification of it passes; passed with the commits to merge; merged once the branch checked out in the project folder holds the commits of one passed run, the builder's and, for written tests, the tests'; dropped once the user dropped it. A project has one open build, and another change is built only once it is merged or dropped.", func() {
 		Meta("oneof:json:flatten")
 		Meta("oneof:type:field", "state")
 		TypeName("BuildTaking")

@@ -5131,9 +5131,10 @@ type StartedBuildResponseBody struct {
 	RequiredTestCount int `form:"required_test_count" json:"required_test_count" xml:"required_test_count"`
 	// Whether the user has taken this build: building until a verification of it
 	// passes; passed with the commits to merge; merged once the branch checked out
-	// in the project folder holds both commits of one passed run; dropped once the
-	// user dropped it. A project has one open build, and another change is built
-	// only once it is merged or dropped.
+	// in the project folder holds the commits of one passed run, the builder's
+	// and, for written tests, the tests'; dropped once the user dropped it. A
+	// project has one open build, and another change is built only once it is
+	// merged or dropped.
 	Taking BuildTakingResponseBody `form:"taking" json:"taking" xml:"taking"`
 }
 

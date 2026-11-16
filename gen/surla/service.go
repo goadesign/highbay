@@ -657,9 +657,10 @@ type BuildDropped struct {
 	KeptBranches []string
 }
 
-// The branch checked out in the project folder holds both commits of a passed
-// run of this build, by merge or by a squash commit that holds every file they
-// changed as they have it. This build no longer blocks starting another build;
+// The branch checked out in the project folder holds the commits of one passed
+// run of this build: the builder's and, for written tests, the tests'. Each is
+// held by merge or by a squash commit that holds every file it changed as that
+// commit has it. This build no longer blocks starting another build;
 // start_build's other checks still apply.
 type BuildMerged struct {
 }
@@ -1787,9 +1788,10 @@ type StartedBuild struct {
 	RequiredTestCount int
 	// Whether the user has taken this build: building until a verification of it
 	// passes; passed with the commits to merge; merged once the branch checked out
-	// in the project folder holds both commits of one passed run; dropped once the
-	// user dropped it. A project has one open build, and another change is built
-	// only once it is merged or dropped.
+	// in the project folder holds the commits of one passed run, the builder's
+	// and, for written tests, the tests'; dropped once the user dropped it. A
+	// project has one open build, and another change is built only once it is
+	// merged or dropped.
 	Taking BuildTaking
 }
 
@@ -5907,9 +5909,10 @@ type jsonStartedBuildTransport struct {
 	RequiredTestCount *changeBuildIntTransport `json:"required_test_count"`
 	// Whether the user has taken this build: building until a verification of it
 	// passes; passed with the commits to merge; merged once the branch checked out
-	// in the project folder holds both commits of one passed run; dropped once the
-	// user dropped it. A project has one open build, and another change is built
-	// only once it is merged or dropped.
+	// in the project folder holds the commits of one passed run, the builder's
+	// and, for written tests, the tests'; dropped once the user dropped it. A
+	// project has one open build, and another change is built only once it is
+	// merged or dropped.
 	Taking *jsonBuildTakingTransport `json:"taking"`
 }
 
@@ -29893,7 +29896,7 @@ func validateChangeBuildJSONValue3(path string, value any, description string) e
 		case "taking":
 			if err := validateChangeBuildJSONValue4(
 				generatedJSONChildPath(path, key, false),
-				typed[key], "Whether the user has taken this build: building until a verification of it passes; passed with the commits to merge; merged once the branch checked out in the project folder holds both commits of one passed run; dropped once the user dropped it. A project has one open build, and another change is built only once it is merged or dropped.",
+				typed[key], "Whether the user has taken this build: building until a verification of it passes; passed with the commits to merge; merged once the branch checked out in the project folder holds the commits of one passed run, the builder's and, for written tests, the tests'; dropped once the user dropped it. A project has one open build, and another change is built only once it is merged or dropped.",
 			); err != nil {
 				return err
 			}
