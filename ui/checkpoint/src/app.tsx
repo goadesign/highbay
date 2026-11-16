@@ -22,7 +22,7 @@ import { ProposedRevisionView } from "./components/proposal";
 import { ApproveResultControl } from "./components/cp5-approve";
 import { SessionEndedNotice, SignedOutReason, SignedOutView } from "./components/session";
 import { StoryStageView } from "./components/story";
-import { GlobalTeamAttention, TeamStageProps, TeamStageView, teamAttentionText } from "./components/team";
+import { GlobalTeamAttention, TeamFactsError, TeamStageProps, TeamStageView, teamAttentionText } from "./components/team";
 import { LiveTargetStageView, ModelDraft, ServerAnswer, describeApplied } from "./components/live-target";
 import { Alert, Button, Card } from "./components/shadcn";
 import { TraceDrawer, TraceFilter } from "./components/trace-drawer";
@@ -558,7 +558,9 @@ export function bootstrapViewsPage() {
   // teamSnapshot is shared by the Team stage and notices on every stage.
   // Failed reads retain facts, visibly labeled as last read.
   let teamSnapshot: TeamSnapshot | null = null;
-  let teamReadError: string | null = null;
+  // teamReadError keeps the last failed read's message and whether the server
+  // refused because no team is bound, which is an instruction, not a fault.
+  let teamReadError: TeamFactsError | null = null;
   let teamReadAgain = false;
   let teamStartReceipt: TeamStageProps["startReceipt"] = null;
   let teamActionError: string | null = null;
@@ -1394,9 +1396,10 @@ export function bootstrapViewsPage() {
       (message, failure) => {
         if (sessionState !== "active") return;
         const firstFailure = teamReadError === null;
-        teamReadError = message;
+        const unbound = failure.kind === "server" && failure.body?.name === "not_implemented";
+        teamReadError = { kind: unbound ? "team_unbound" : "read_failed", message };
         if (firstFailure) {
-          statusEl.textContent = failure.kind === "server" && failure.body?.name === "not_implemented"
+          statusEl.textContent = unbound
             ? message : "Could not read the project team. Open Team to see the error and retry.";
         }
         done();
@@ -1406,10 +1409,10 @@ export function bootstrapViewsPage() {
 
   // teamFactsError distinguishes retained observations from currently followed
   // facts when the read, the update chain or the session is unavailable.
-  function teamFactsError(): string | null {
+  function teamFactsError(): TeamFactsError | null {
     if (teamReadError !== null) return teamReadError;
-    if (sessionState !== "active") return "The session ended; these are last-read facts.";
-    if (waitTroubleShown) return "Updates are unavailable; these are last-read facts.";
+    if (sessionState !== "active") return { kind: "not_followed", message: "The session ended; these are last-read facts." };
+    if (waitTroubleShown) return { kind: "not_followed", message: "Updates are unavailable; these are last-read facts." };
     return null;
   }
 

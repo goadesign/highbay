@@ -510,7 +510,7 @@ export function BuildTakingView({ changeId, build, disabled, dropping, onDrop, o
       {taking.state === "merged" ? <p>It is in your branch. {build.in_force ? "Build another change or refine this one when there is more to do." : "Build the current agreed revision to implement the new agreement."} No role has work on this build.</p> : null}
       {taking.state === "dropped" ? <>
         {taking.kept_branches.length > 0 ? <ul>{taking.kept_branches.map((branch) => <li key={branch}><code>{branch}</code> — <code>git log {branch}</code> shows it.</li>)}</ul> : null}
-        <p>Surla builds nothing on it. No role has work on this build. Another change can be built.</p>
+        <p>Surla builds nothing on it, and it no longer blocks another build. No role has work on this build.</p>
       </> : null}
       {children}
       {header === null ? actionRow : null}

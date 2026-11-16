@@ -16,7 +16,7 @@ Each has its own credential, so the server always knows who is calling.
 | --- | --- | --- |
 | You, the user | The person who runs `surla` in the project folder. You act on the page in your browser. | The only one who confirms a change, starts a build and approves a result. |
 | The guide | The coding agent you talk to about what should change. | Writing the Story (described below) and proposing the change. Surla checks the proposal's shape, not whether it is right: you judge that when you confirm it. |
-| The builder | The coding agent that writes the application's code in the project folder. | Nothing on its word: its work counts only when Surla verifies a commit of it. |
+| The builder | The coding agent that writes the application's code, in its own working copy of the project (`.surla-build`). | Nothing on its word: its work counts only when Surla verifies a commit of it. |
 | The test writer | The coding agent that writes the tests for a build, in its own working copy of the project. | Nothing on its word: its tests count only when Surla's check accepts them. |
 | The server | The project's Surla server. `surla` starts one for each project folder. It keeps the record of what was agreed, built, accepted and approved, and it runs every check. | Deciding, from the files the agents produce, whether work is done. |
 | The page | A page in your browser that the server serves; the reference calls it the views page. It talks to the server as you. | Carrying your decisions. No agent has your identity. |
@@ -59,7 +59,7 @@ published as the resource `surla://golden-path`.
 
 | Caller | Connects through | What it may do |
 | --- | --- | --- |
-| You | The page | Confirm a change, adopt or decline a proposed revision, start a build, approve a result, choose the model live targets use, stop a live target, start the agents and bring a pane forward. You read everything the page shows. |
+| You | The page | Confirm a change, adopt or decline a proposed revision, start or drop a build, approve a result, choose the model live targets use, stop a live target, start the agents and bring a pane forward. You read everything the page shows. |
 | The guide | Its `surla` MCP connection | Create a starter project, have the Story evaluated, and propose and revise changes. It reads the changes, builds and verification runs. |
 | The builder | Its `surla` MCP connection | Read its assignments, generate code, check the project, update its dependencies, run a live target and send prompt drafts to it, and ask the server to verify a commit. It reads the changes, builds and verification runs. |
 | The test writer | Its `surla` MCP connection | Read its test assignments and report its tests finished. It reads the build, and the verification runs of the changes it has an assignment for. |
@@ -88,7 +88,7 @@ flowchart TD
     F --> I["The builder writes the code, commits and asks Surla to verify"]
     I --> J
     J --> K["You approve the result on the page"]
-    K --> L["You merge the tests commit into your branch, which already holds the builder's commit"]
+    K --> L["In the project folder, you merge the builder's commit and then the tests' commit into your branch"]
 ```
 
 Tool descriptions and the server's terminal name these steps by checkpoint:
@@ -102,7 +102,8 @@ Tool descriptions and the server's terminal name these steps by checkpoint:
 | `CP5` | [Approving and merging](#approving-and-merging) |
 
 Surla deploys nothing and merges nothing. The journey ends with you merging
-the tests.
+the builder's commit and then the tests' commit into your branch in the project
+folder.
 
 ## Starting: `surla`, the team and the page
 
@@ -151,7 +152,7 @@ always there; the others appear once you open a change.
 | View | What it is for |
 | --- | --- |
 | Changes | The project's Change Cards, most recently saved first, each with its latest saved verification run. |
-| Team | Each role's pane state, its Chorus watcher (the agent's background wait for messages) and whether it read its assignment, with **Start agents** and an action per role that brings its pane forward, such as **Show guide pane**. |
+| Team | Each role's pane state, its Chorus watcher (the agent's background wait for messages) and its assignment status, with **Start agents** and an action per role that brings its pane forward, such as **Show guide pane**. |
 | Story | The Story of the change shown, and the guide's latest Story draft. |
 | Live target | The running copy of your application that the builder tries prompts on, and the model connection it uses. |
 | Decisions & Approval | The Change Card: its questions, your answers, confirmation, a proposed revision, the build and the recorded approval. |
@@ -169,29 +170,36 @@ You type your request in the guide's pane, for example "Customers can get a
 refund on an order. Under $50 it is store credit at once; above that a
 manager approves it."
 
-1. **The guide writes the Story.** It edits the Story in the project's design
-   and calls `refresh_story`, which returns at once while the server
-   evaluates the design. `get_story_refresh` then returns the
-   Story the server found: actors, finished and draft flows, steps and open
-   questions. The Story view shows that draft while the guide works. Where
-   the Story starts from depends on the project:
+1. **The guide writes the Story.** It calls `refresh_story`, which makes the
+   guide's `.surla-draft` copy in the project folder when needed, returns that
+   `draft_folder` at once, and evaluates its design (`go.mod`, `go.sum` and
+   `design/`). The guide edits the Story and design only in `.surla-draft`
+   (never in the project folder) and calls `refresh_story` again to evaluate
+   its edits. Before drafting a new change, or when a design file changed in the
+   project folder outside Surla, the guide calls `update_draft` to bring the
+   project folder's design changes into `.surla-draft` (fixing any file listed
+   in `to_correct` and calling `update_draft` again until none remains) before
+   calling `refresh_story`. `get_story_refresh` then returns the Story the
+   server found: actors, finished and draft flows, steps and open questions. The
+   Story view shows that draft while the guide works. Where the Story starts
+   from depends on the project:
    - A starter project already has a Story, in `design/story.go`, with one
      finished flow, `prices-cookie`, and the test that flow requires. The
-     guide adds your flows to that file.
+     guide adds your flows to `design/story.go` in `.surla-draft`.
    - In a folder with no service, the guide first creates the starter
      project with `init_project`: a folder inside the project folder holding
      the service, its Story, its test module in `eval/` and a first commit.
-     The server then works in that starter folder, and so do the builder and
-     the test writer's working copy.
+     The server then works in that starter folder, and so do the builder's and
+     the test writer's working copies (`.surla-build` and `.surla-tests`).
    - In a project made another way, the design can import the Story language
-     only when the project's `go.mod` requires its module. When it does not,
+     only when the draft's `go.mod` requires its module. When it does not,
      the failed evaluation names the step: in the folder that holds that
      `go.mod`, run `go get github.com/goadesign/surla/story@<version>`, at the
      version Surla's own `go.mod` requires, commit `go.mod` and `go.sum`, then
      try again.
 2. **The guide proposes the change.** It calls `propose_change` with your
-   request, its analysis and, to include the Story, the Story refresh it
-   made. Surla runs no model for this step. It checks the analysis's shape,
+   request, its analysis and the Story refresh it made, which a project with a
+   `go.mod` requires. Surla runs no model for this step. It checks the analysis's shape,
    assigns the IDs of its questions and examples, and saves it as a Change
    Card in the project's private state folder, where it waits for you. The
    card appears in the Changes view by itself.
@@ -228,9 +236,12 @@ revision**; see [Going back](#going-back).
 
 ## Previewing the architecture
 
-The Architecture view asks the server for `preview_architecture` on the
-confirmed card. The server evaluates the project's design in a separate
-process, with no model and no tokens, and shows what the design declares: its
+The Architecture view asks the server for
+`preview_architecture` on the confirmed card. The server returns the
+architecture that the guide's Story refresh evaluated for the agreed revision
+and that was saved with it; it reads and evaluates no file, so a later edit of
+the draft or of the project does not change it. It shows what the design
+declares: its
 containers and the calls between them, each agent's time and tool-call
 limits, and each tool's schemas, including whether a tool declares a
 design-time `Confirmation` gate.
@@ -263,21 +274,35 @@ The reference gives the exact contract of
 ### What a build adds
 
 1. **The server checks first.** It refuses the start, and saves nothing, when
+   another change's open build is not yet merged or dropped
+   (`previous_change_open`), when rebuilding an unfinished open build without
+   confirming replacement (`unfinished_build_open`), when the revision was
+   drafted before a drop (`drafted_before_drop`) or a design file at the
+   project's commit was changed outside Surla (`design_changed_outside`), when
    the card is not confirmed or the revision is not the agreed one, or when
-   the project lacks what a build with a test writer needs: a Git repository
-   with at least one commit, the test module `surla init` makes (`eval/` in
-   the project folder), a Git name and address, a `.surla-tests` folder and a
-   `surla/tests` branch that nothing else uses, and no other build start or test check in progress. Each refusal says
-   what is missing and the step to take; the reference lists them under
+   the project lacks a Git repository with at least one commit, a Git name and
+   address, the test module `surla init` makes (`eval/` in the project folder,
+   unless verification settings are stored), `.surla-build` and `.surla-tests`
+   folders and `surla/build-<n>` and `surla/tests-<n>` branches that nothing
+   else uses, or when another build start, an assignment read, one of the
+   builder's tool calls or a test check is in progress. Each refusal says what
+   is missing and the step to take; the reference lists them under
    [`start_build`](REFERENCE.md#start_build).
-2. **The server opens the test writer's working copy** (described below) and
-   saves the build: the agreed revision, its Story and its design, and the
-   answers, examples and preserved behaviors you confirmed for it.
+2. **The server saves the open build and creates any missing working copies**
+   (`.surla-build` on `surla/build-<n>`, and `.surla-tests` on `surla/tests-<n>`
+   when written tests are used) at the build's base commit, leaving existing
+   copies where they are. The saved build records the build's number `n` and
+   base commit, the agreed revision, its Story and its design, and the answers,
+   examples and preserved behaviors you confirmed for it.
 3. **It registers the builder and the test writer**, each with its own
-   credential and folder. The builder works in the project folder; the test
-   writer works in its working copy.
-4. **It writes the required tests.** For each finished flow of the Story, the
-   server generates one required test into the working copy's test module.
+   credential and working copy. The builder works in `.surla-build`; the test
+   writer works in `.surla-tests`.
+4. **Each worker's first assignment read joins its copy and prepares the
+   required tests.** When the builder or the test writer first reads its
+   assignment for a new build, Surla joins its working copy to `surla/build-<n>`
+   or `surla/tests-<n>` at the build's base commit. For each finished flow of
+   the Story, `get_test_writer_assignment` generates one required test into the
+   working copy's test module when marking an assigned build's assignment read.
    Draft flows require none. The Build section shows the count, for example
    "3 required Story tests."
 5. **It brings up the team.** The Chorus dialog opens with rows for the
@@ -287,33 +312,39 @@ The reference gives the exact contract of
    message.
 
 The work belongs to the server. Closing the page does not stop it, and the
-page says the start can take a few minutes. Opening the working copy and
-writing the tests have a five-minute limit, and bringing up the team its own
-45-second limit. Trouble with the Herdr window after the build is saved
+page says the start can take a few minutes. Saving the build and making the
+working copies have a five-minute limit, bringing up the team has its own
+45-second limit, and writing the required tests when the test writer's
+assignment is marked read has its own five-minute limit. Trouble with the
+Herdr window after the build is saved
 leaves the build and the roles in place; press **Start agents** in the Team
 view when the window is free.
 
 With stored verification settings, the project verifies with the evaluator
-those settings name. Building then adds only the builder, uses no working
-copy, and the Build section shows the test writer as "Not used — stored
-verification settings". See
+those settings name. Building then adds only the builder in its `.surla-build`
+working copy (it uses no `.surla-tests` working copy), and the Build section
+shows `Test writer: not needed; this project uses its configured tests`. See
 [`surla verification`](REFERENCE.md#surla-verification-and-surla-promotion).
 
 ### What appears in the project folder
 
 | What | Where | Why |
 | --- | --- | --- |
-| The test writer's working copy | `.surla-tests/` inside the project folder | A linked Git working copy (`git worktree`) of the whole repository, where the test writer writes its tests. |
-| The tests branch | `surla/tests` | The branch checked out in the working copy. Surla reserves the name; it starts at the project's commit, and Surla commits the accepted tests on it. |
-| Two lines in the repository's local exclude file | A comment and `.surla-tests/` in `.git/info/exclude` | Keeps the working copy out of `git status`. No tracked file of the project changes. |
+| The builder's working copy | `.surla-build/` inside the project folder | A linked Git working copy (`git worktree`) of the repository, where the builder writes and commits the application's code. |
+| The builder's branch | `surla/build-<n>` | The numbered branch for build `n` checked out in `.surla-build`, starting at the build's base commit. |
+| The test writer's working copy | `.surla-tests/` inside the project folder | A linked Git working copy (`git worktree`) of the repository, where the test writer writes its tests. |
+| The tests branch | `surla/tests-<n>` | The numbered branch for build `n` checked out in `.surla-tests`, starting at the build's base commit, where Surla commits the accepted tests. |
+| Three lines in the repository's local exclude file | `# Surla's working copies.`, `.surla-build/` and `.surla-tests/` in `.git/info/exclude` | Keeps the working copies out of `git status`. No tracked file of the project changes. |
 
-The `.surla` prefix makes the builder's `check_project` skip the folder.
-
-When you build again, the server brings a clean working copy to the project's
-commit only when your branch already contains `surla/tests`. Otherwise it
-keeps the copy as it is and the page records why: the tests are not merged
-("Merge the tests branch into the project's branch, then build again"), or
-the copy holds uncommitted work.
+Starting a build creates any missing working copy at the build's base commit
+and leaves existing copies where they are. When the builder or the test writer
+first reads its assignment for a new numbered build, Surla switches its copy
+to `surla/build-<n>` or `surla/tests-<n>` at the build's base commit: if the
+copy is on an earlier build branch of that role (`surla/build-<k>` or
+`surla/tests-<k>`), Surla first commits any uncommitted files left there onto
+that earlier branch with the message `Left uncommitted when change <id>
+started`; if uncommitted work sits on another branch or a Git operation is in
+progress, the read is refused with `copy_off_branch`.
 
 ### The test writer writes the tests
 
@@ -325,8 +356,9 @@ assignment is how its tests learn what you agreed, and they must hold the
 service to it as well as to the Story's flows. It writes the tests inside the
 test module, `eval/` in its working copy, and changes nothing outside it.
 Surla declares the required tests in that module's Story table,
-`eval/design/story_tests.go`, which it writes at the start and again at each
-report; the test writer leaves that file as it is, and regenerating the
+`eval/design/story_tests.go`, which it writes when `get_test_writer_assignment`
+marks an assigned build's assignment read and again at each report; the test
+writer leaves that file as it is, and regenerating the
 module keeps the required tests. After changing the module's design, the
 test writer reports to have it generated again or runs
 `surla gen -dir eval` in its working copy first. It checks
@@ -344,9 +376,10 @@ report, the server checks the working copy without trusting its author (the
 reference gives the check's limits under
 [judging reports](REFERENCE.md#judging-reports)):
 
-1. It compares the copy's files with the last commit that `surla/tests` and
-   the project's branch share, so the test writer's own commits count too.
-   Any changed file outside the test module is a finding.
+1. It checks that `.surla-tests` is on `surla/tests-<n>` with no Git operation
+   in progress, and compares the copy's files with the build's base commit, so
+   the test writer's own commits on `surla/tests-<n>` count too. Any changed
+   file outside the test module is a finding.
 2. It writes the required tests again from the Story saved with the build, so
    the test writer cannot change what is required.
 3. It builds the generated test program, `gen/cmd/<name>-evals` in the test
@@ -356,7 +389,9 @@ reference gives the check's limits under
    the named tests, it declares. A required scenario that is missing is a
    finding, and so is a scenario tagged `holdout`, the tag that hides a
    scenario from what the server returns (see
-   [hidden scenarios](#verifying-the-builders-commit)).
+   [hidden scenarios](#verifying-the-builders-commit)). Before recording an
+   acceptance, Surla also checks that the tip of `surla/tests-<n>` descends
+   from the build's base commit without commits from other builds' branches.
 
 The build and the listing run as ordinary processes with your file and network
 access, each in its own process group that the check stops. A process that
@@ -367,9 +402,9 @@ unread, so it reads it again.
 
 | Verdict on the page | What happened | Who acts |
 | --- | --- | --- |
-| Needs changes | Surla found problems. The page shows their number; **Read findings** shows their text. | The test writer reads them in its assignment, fixes them and reports again. |
-| Accepted | Surla committed exactly the checked files on `surla/tests`, with your Git identity and the message `Add the tests Surla accepted for change <id>, report <n>`. The build details show that commit. The builder's assignment is marked unread too. | The builder can verify or start a live target with the chosen model. |
-| Could not run | The check stopped for a cause the test writer cannot fix, such as a time limit, Git trouble, or dependencies that cannot be downloaded where Surla runs. The page shows the reason and your step. | You take the step; it says whether the test writer then reports again or you build again. |
+| Needs changes | Surla found problems, including when building the test program hits the 10-minute limit (`The test program did not finish building within 10 minutes. Report again: the retained build cache can reuse compilation that completed. If it still does not finish, make the test module build faster, for example with fewer or smaller dependencies.`) or listing hits the 60-second limit. The page shows their number; **Read findings** shows their text. | The test writer reads them in its assignment, fixes them and reports again. |
+| Accepted | Surla committed exactly the checked files on `surla/tests-<n>`, with your Git identity and the message `Add the tests Surla accepted for change <id>, report <n>`. The build details show that commit. The builder's assignment is marked unread too. | The builder can verify or start a live target with the chosen model. |
+| Could not run | The check stopped for a cause the test writer cannot fix, such as the 15-minute whole-check time limit, Git trouble, or dependencies that cannot be downloaded where Surla runs. The page shows the reason and your step. | You take the step; it says whether the test writer then reports again or you build again. |
 
 An acceptance always carries the same sentence, which the page shows: "Surla
 checked that these tests build into the generated test program and declare
@@ -446,15 +481,25 @@ test writer: the builder leaves `eval/` untouched, `check_project` and
 (`design/story.go`) or the test module's contract needs to change, the builder
 asks you so the guide can draft and you can confirm a revision.
 
-The builder commits its code and calls `verify_change` with the change, the
-revision from its assignment and its commit. Without stored verification
-settings, the server refuses before running anything when the revision has no
-build (`no_build`), when the build's tests are not accepted
-(`tests_not_accepted`, naming the test writer's state), when a commit lacks
-the test layout (`no_test_layout`), when the candidate commit shares no
-history with the accepted tests' commit (`conflict`, naming the user's step:
-delete the test writer's working copy and branch, then build the change again),
-or when the candidate commit changes hand-written files in
+The builder commits its code in `.surla-build` on `surla/build-<n>` and calls
+`verify_change` with the change, the revision from its assignment and its
+commit. The server refuses before running anything when the revision has no
+open, undropped build (`no_build`), when the builder's assignment is unread or
+`.surla-build` is missing or not on `surla/build-<n>` (`assignment_unread`,
+`working_folder_missing`, `copy_off_branch`), when the candidate commit is not
+on `surla/build-<n>`, does not descend from the build's base, is the base
+itself, or holds commits from another build's branch (`build_branch_mismatch`),
+when a design file at the candidate's merge base with the project's commit was
+changed outside Surla (`design_changed_outside`), or when Surla is using the
+builder's working copy, the candidate commit's `design/` differs from the
+build's agreed design, or the candidate commit shares no history with the
+project's commit (`conflict`). Without stored verification settings, it also
+refuses when the build's tests are not accepted (`tests_not_accepted`, naming
+the test writer's state), when a commit lacks the test layout
+(`no_test_layout`), when the candidate commit shares no history with the
+accepted tests' commit (`conflict`, naming the user's step: build the change
+again from the project's current commit, then read the new assignments and
+verify again), or when the candidate commit changes hand-written files in
 `eval/` (`conflict`, naming the changed files and the `git restore` / `git rm`
 step, and noting on `eval/go.mod` edits that renaming the service module is
 yours to do on your own branch between changes). Each refusal names who acts
@@ -514,8 +559,9 @@ file access, so while a run executes they could read the evaluator's files on
 this machine. The test writer's tests cannot be
 hidden, because Surla's check refuses the tag.
 
-With stored verification settings, a run uses the evaluator those settings
-name and needs no build. Outside the journey, the
+With stored verification settings, a verification run uses the evaluator those
+settings name and still requires the change's open, undropped build for the
+builder's working copy and branch. Outside the journey, the
 [`surla verify`](REFERENCE.md#surla-verify) command runs one verification from
 the command line.
 
@@ -528,20 +574,26 @@ with the tests accepted for that revision, and records the approval on the
 Change Card: the builder's commit, the tests commit and the report. Approval
 merges and deploys nothing.
 
-The approval names two commits: the builder's commit that the run verified,
-and the tests commit that Surla accepted for the revision. The recorded
-approval lists them under **Verified inputs and digests** as **Builder's
-commit** and **Tests' commit**. The builder commits in the project folder,
-so its commit is already on the branch checked out there. For the test
-writer's tests you merge the tests commit, which is on `surla/tests`, into
-that branch: the page follows the server's notice with "merge commit <tests
-commit> (on branch surla/tests)". With stored verification settings the tests
-commit is the evaluator's, and there is nothing to merge. Approval is
-refused when the run used other tests than the ones accepted for the
-revision; the builder then verifies again and you approve that run. A
-recorded approval stays shown only while the same tests commit is the
-accepted one: after another report or another build, it reappears only if
-Surla accepts that same commit again.
+The approval names two commits: the builder's commit that the run verified (on
+`surla/build-<n>`), and the tests commit that Surla accepted for the revision
+(on `surla/tests-<n>`, or the evaluator's commit with stored verification
+settings). The recorded approval lists them under **Verified inputs and
+digests** as **Builder's commit** and **Tests' commit**. Because the builder
+commits in `.surla-build` rather than in the project folder, while the open
+build shows **Passed** the page gives you the `git merge <commit>` commands to
+run in the project folder under **To take this change, run in the project
+folder:** first `git merge <candidate_commit>` (verified on `surla/build-<n>`),
+and then, for the test writer's tests, `git merge <tests_commit>` (verified on
+`surla/tests-<n>`); with stored verification settings, the tests commit is the
+evaluator's and only `git merge <candidate_commit>` is shown. Once the branch
+checked out in the project folder holds those commits, the build shows
+**Merged**. Before drafting the next change, the guide calls `update_draft` (and
+then `refresh_story`) so `.surla-draft` brings in the design changes merged into
+the project folder. Approval is refused when the run used other tests than the ones
+accepted for the revision; the builder then verifies again and you approve that
+run. A recorded approval stays shown only while the same tests commit is the
+accepted one: after another report or another build, it reappears only if Surla
+accepts that same commit again.
 
 Approval needs no settings. A project can store promotion settings with
 `surla promotion set <file>`: a release folder, where your own release step
@@ -570,19 +622,23 @@ per role that waits for you, for example "Builder needs you: permission",
 with a **Show builder pane** action that brings that pane forward. You answer
 in the pane.
 
-When the builder or the test writer has an assignment it has not read, the
-server sends that agent one fixed Chorus direct message asking it to read its
-assignments; nothing is typed into its pane. An agent that stays idle with the
-assignment unread for 90 seconds needs you too, for example "Builder needs
-you: idle with an unread assignment. Show its pane and tell it to read its
-assignments and to keep its Chorus watcher running."
+While the builder or the test writer has work on the open build and has an
+assignment it has not read, the server sends that agent one fixed Chorus direct
+message asking it to read its assignments; nothing is typed into its pane. An
+agent that stays idle with that unread assignment for 90 seconds needs you too,
+for example "Builder needs you: idle with an unread assignment. Show its pane
+and tell it to read its assignments and to keep its Chorus watcher running."
 
 The Team view shows each role's pane state (Not started, Starting, Working,
 Waiting, Needs you, Ended, Error or Status unknown), whether its Chorus
-watcher is held, and whether it owes an assignment read. **Start agents**
-opens the Chorus dialog for roles that are not running. What the server cannot
-observe stays "unknown"; it never guesses. Surla never types into an agent's
-pane. See [team supervision](REFERENCE.md#team-supervision).
+watcher is held, and its assignment status (No assignments for the guide, and
+Assignment unread, No unread assignment, No work now—when the open build needs
+nothing from that role—or Assignment status unknown for a worker role). **Start
+agents** opens the Chorus dialog when the guide, or a worker role that has work
+on the open build (or any listed role when the server cannot read who has work),
+is not running. What the server cannot observe stays
+"unknown"; it never guesses. Surla never types into an agent's pane. See
+[team supervision](REFERENCE.md#team-supervision).
 
 ## Going back
 
@@ -595,9 +651,13 @@ revision a build, a run or an approval belongs to.
 | You decline the proposed revision | Everything, exactly as it was. | Nothing. |
 | You adopt the proposed revision (answer its questions, then **Adopt this revision**) | Earlier runs stay readable for their revision. | When the agreed content changes, the adopted revision has another `request_revision` and no approval. The build is marked **Earlier revision** and the builder's `verify_change` for the old revision is refused: build again. Adopting a refreshed draft with unchanged content can keep the same digest. |
 | You change answers or examples of the agreed revision (**Refine Confirmed Answers & Examples**) | A submit with no change keeps everything. | A change gives another `request_revision`, drops the approval, and needs a build of that revision. |
-| You build the same revision again (**Build again…**, which asks first) | The agreed revision and any live target already running. | Both assignments become unread, the test writer's work returns to Assigned without report or verdict, and its tests must be reported, checked and accepted again before verification or a new live target. |
+| You build the same revision again while its open build is **Building** or **Passed** (**Build again…**, which asks **Build the agreed revision again?** with **Build again** and **Cancel**) | The agreed revision, the build's number `n` and base commit, and any live target already running. | Both assignments become unread, the test writer's work returns to Assigned without report or verdict, and its tests must be reported, checked and accepted again before verification or a new live target. |
+| You build the same revision again after its open build is **Merged** (secondary **Build again…**, which asks **Build the agreed revision again?** with **Build again** and **Cancel**) | The agreed revision, commits you already merged, and any live target already running. | Starts a new numbered build from your branch as it is now, with fresh unread assignments for the same agreement; earlier reports remain readable but do not establish that the new build passed, and written tests must be reported, checked and accepted again before verification or a new live target. |
+| You build a newly confirmed or adopted revision of the same change while its earlier open build is **Building** (**Build current agreed revision**, or **Build agreed revision** while a proposed revision waits; asks **Replace the earlier build with the agreed revision?** and sends `replaces`) | The build's number `n` and base commit, and any live target already running. | Both assignments become unread for the new revision, the test writer's work returns to Assigned without report or verdict, and its tests must be reported, checked and accepted again before verification or a new live target. |
+| You drop an open build (**Drop…** on the change's build, or **Drop `<change_id>`’s build…** when another change's open build blocks starting a build, then **Drop change**) | Any commits already on `surla/build-<n>` and `surla/tests-<n>`. | The build becomes **Dropped**, worker tools stop with `no_build`, and the next `refresh_story` remakes `.surla-draft` from the project folder. A revision drafted before the drop has `drafted_before_drop: true` (the page shows the recovery step instead of a Build button, and `start_build` refuses with `drafted_before_drop`): the guide refreshes the Story and revises the change, and you adopt the revision. Building it (**Build current agreed revision**, or **Build agreed revision** while a proposed revision waits), or building another change drafted after the drop, then starts a new numbered build from the project folder's current commit without asking first. |
 | The test writer reports again | The build. | Its earlier verdict is cleared; Surla checks the report again. |
-| Surla says the tests branch and the project share no history | Commits you already merged. | Run `git worktree remove .surla-tests` and `git branch -D surla/tests` in the project folder, then build again. |
+| Surla says the candidate commit shares no history with the accepted tests' commit | Commits you already merged. | The refusal names the step: build the change again, then the workers read the new assignments and the builder verifies again. |
+| Surla says the candidate commit shares no history with the project's commit | Commits you already merged. | The refusal names the step: drop the build (**Drop…**), have the guide refresh its draft and revise the change, adopt the revision, build it, and have the builder read the new assignment and make the change again. |
 
 When the agreed revision has a build, the page says what adopting or refining
 does to it, above **Adopt this revision** and, once you have edited an answer
@@ -629,6 +689,10 @@ enable Build. A fresh adoption can enable Build even when the agreement's
 content and revision digest stay the same.
 
 For a changed agreed revision, the page asks before replacing an earlier build
-that is still building. After any required refresh and adoption, a first build
-or a build following a passed, merged or dropped build starts without that
-question. Each assignment stays as it was, for its revision, until you build again.
+that is still building (sending `replaces`). After any required refresh and
+adoption, a first build starts without a question, and so does any build that
+follows a dropped build. For a changed agreed revision, a build that follows a
+passed or merged build of the earlier revision also starts without one.
+Building the same agreed revision again asks first while its build is building,
+passed or merged. Each assignment stays as it was, for its revision, until you
+build again or drop the build.

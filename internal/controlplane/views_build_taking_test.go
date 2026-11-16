@@ -114,6 +114,7 @@ expect(page.text("#surla-build-taking-state") === state[0].toUpperCase() + state
 expect(Boolean(page.$(".surla-build-header .surla-build-actions")), "current build controls are not in the header");
 expect(Boolean(page.$("#surla-build-start-explanation")) === (state === "dropped"), "the execution explanation must accompany each direct Build offer");
 if (state === "dropped") {
+  expect(taking.includes("Surla builds nothing on it, and it no longer blocks another build. No role has work on this build.") && !taking.includes("Another change can be built"), "dropped build lost its own facts or predicts that another build is accepted");
   const action = page.$("#surla-build-start");
   expect(action && !action.disabled && action.getAttribute("aria-describedby").split(/\s+/).includes("surla-build-start-explanation") && page.text("#surla-build-start-explanation").includes("nothing confines them"), "direct Build lost its execution explanation");
 }
@@ -398,6 +399,8 @@ const dropped = JSON.parse(page.sent("POST", path)[0].answer);
 expect(dropped.drafted_before_drop === true && dropped.build.in_force === true && dropped.build.taking.state === "dropped", "real Drop did not report a stale agreed build");
 expect(page.$("#surla-build-enabling-step") && !page.$("#surla-build-start") && !page.$("#surla-build-again"), "dropped agreed revision with stale draft still offers Build instead of its enabling step");
 expect(page.text("#surla-build-enabling-step").includes("This agreement was drafted before a build was dropped"), "own-drop recovery does not explain the agreed draft");
+expect(page.text("#surla-build-taking").includes("Surla builds nothing on it, and it no longer blocks another build.") && !page.text("#surla-build-section").includes("Another change can be built"), "a dropped build whose agreement the server would refuse still promises another build");
+expect(page.$("#surla-build-taking").nextElementSibling === page.$("#surla-build-enabling-step"), "the enabling step does not directly follow the dropped build's facts");
 expect(!page.$("#surla-build-drop") && !page.$("#surla-build-drop-question"), "closed build still offers Drop");
 expect(field === page.$('textarea[data-example-id="check_01"][data-field="scenario"]') && field.value === "keep my unsaved scenario", "Drop lost unsaved editor state");
 expect(page.sent("POST", path).length === 1, "Drop submitted twice");
