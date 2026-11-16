@@ -87,7 +87,6 @@ func TestServeEntryRemovesProviderFamiliesAndKeepsHerdrsCopy(t *testing.T) {
 
 	opts, err := serveOptions(os.Environ())
 	require.NoError(t, err)
-	closeServeOptions(t, opts)
 	check := opts.CheckHelper()
 	check.Path, check.Args = "/bin/sh", []string{"/bin/sh", "-c", presenceScript, "check-run"}
 	require.NoError(t, check.Run())

@@ -87,8 +87,10 @@ func TestGenOnAFreshStarterChangesNothingAndKeepsModulesApart(t *testing.T) {
 	provider := &scriptedModelProvider{}
 	gatewayAddr := startModelGateway(t, provider)
 	workspace := t.TempDir()
+	buildCache := testmodule.CompilerCache(t)
 	opts, err := serveOptions(os.Environ(), workspace)
 	require.NoError(t, err)
+	opts.BuildCacheDir = buildCache
 	// A test executable has no released module version in its build info.
 	opts.SurlaVersion = starterSurlaVersion
 	opts.Team = &controlplane.TeamBinding{Owner: "operator@example.com", Service: &promotionTeamFixture{}}
@@ -204,6 +206,7 @@ func TestGenOnAFreshStarterChangesNothingAndKeepsModulesApart(t *testing.T) {
 	require.NoError(t, cp.Close())
 	opts, err = serveOptions(os.Environ(), dir)
 	require.NoError(t, err)
+	opts.BuildCacheDir = buildCache
 	assert.Equal(t, state.CardsDir(), opts.CardsDir)
 	opts.SurlaVersion = starterSurlaVersion
 	opts.Team = &controlplane.TeamBinding{Owner: "operator@example.com", Service: &promotionTeamFixture{}}

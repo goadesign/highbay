@@ -25,9 +25,11 @@ Each has its own credential, so the server always knows who is calling.
 
 Surla runs the code the agents write (the design at each refresh, the
 builder's programs and the test writer's tests) as ordinary processes on this
-machine, with your file and network access. Live starts and verifications keep
-compiled Go packages for the project; each operation still builds its outputs
-and runs its tests. Code running as you can change retained compiler inputs
+machine, with your file and network access. Through the project server, Story
+refreshes, starter initialization, test-report checks, live starts and verifications
+share the project's compiled Go packages. Each operation still builds its outputs and
+runs its checks; a cache hit is never a passed check. Code running as you can
+change retained compiler inputs
 and affect later results. See [project storage and cache trust](REFERENCE.md#project-state-folder)
 for lifetime and cleanup.
 

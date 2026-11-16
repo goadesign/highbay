@@ -12,6 +12,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/goadesign/surla/internal/testmodule"
 )
 
 // TestRunVerifiesTheOrdersReference runs the whole verifier against this
@@ -40,7 +42,7 @@ func TestRunVerifiesTheOrdersReference(t *testing.T) {
 		WorkDir:         filepath.Join(work, "work"),
 		ReportDir:       filepath.Join(work, "reports"),
 		Tests:           TestsEvaluator,
-	}, os.Environ(), t.TempDir())
+	}, os.Environ(), testmodule.CompilerCache(t))
 	require.NoError(t, err)
 	for _, s := range report.Scenarios {
 		if s.Outcome != OutcomePassed && s.Detail != nil {

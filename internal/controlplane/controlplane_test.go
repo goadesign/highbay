@@ -846,6 +846,9 @@ func newControlPlane(t *testing.T, opts Options) *ControlPlane {
 	if opts.CardsDir == "" {
 		opts.CardsDir = t.TempDir()
 	}
+	if opts.BuildCacheDir == "" {
+		opts.BuildCacheDir = testmodule.CompilerCache(t)
+	}
 	cp, err := New(opts)
 	require.NoError(t, err)
 	t.Cleanup(func() { assert.NoError(t, cp.Close()) })

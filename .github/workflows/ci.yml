@@ -59,36 +59,14 @@ jobs:
         id: go
         with:
           go-version-file: ${{ matrix.module }}/go.mod
-          # Non-root modules retain setup-go's dependency-key ownership.
-          # The root's remaining-package closure has its own cache below.
-          cache: ${{ matrix.module != '.' }}
-          cache-dependency-path: |
-            ${{ matrix.module }}/go.sum
-            ${{ matrix.module }}/go.mod
-      - name: Locate the root job's Go caches
-        if: matrix.module == '.'
-        id: go-cache
-        run: |
-          echo "build=$(go env GOCACHE)" >> "$GITHUB_OUTPUT"
-          echo "modules=$(go env GOMODCACHE)" >> "$GITHUB_OUTPUT"
-      - name: Restore the remaining root packages' Go caches
-        if: matrix.module == '.'
-        id: restored-go-cache
-        # Only Go (.) saves this owner key. Other short and full jobs can
-        # populate different build closures, so they cannot win this cache.
-        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
+          cache: false
+      - uses: ./.github/actions/go-cache
+        id: compiler-cache
         with:
-          path: |
-            ${{ steps.go-cache.outputs.build }}
-            ${{ steps.go-cache.outputs.modules }}
-          key: short-root-remaining-${{ runner.os }}-${{ runner.arch }}-go-${{ steps.go.outputs.go-version }}-${{ hashFiles('go.mod', 'go.sum') }}
-      - name: Explain a dependency cache miss
-        if: matrix.module == '.' && steps.restored-go-cache.outputs.cache-hit != 'true'
-        run: |
-          echo "dependency cache miss: this run compiles all dependencies" >> "$GITHUB_STEP_SUMMARY"
-      - name: Vet and short race tests
-        # Full vet checks share the race build with tests instead of compiling
-        # a separate plain build. JSON retains individual test durations.
+          go-version: ${{ steps.go.outputs.go-version }}
+      - name: Vet and short tests with race coverage for concurrency owners
+        # Vet shares each package's selected build with its tests. JSON retains
+        # individual test durations; the declared concurrency owners use -race.
         # Root pages and the control plane have their own jobs. Enumerate
         # the other tested packages, retaining the page skip for project.
         # Linux's build-and-vet jobs still cover every package and build tag.
@@ -96,10 +74,7 @@ jobs:
           MODULE: ${{ matrix.module }}
           TESTED: '{{if or .TestGoFiles .XTestGoFiles}}{{.ImportPath}}{{end}}'
         run: |
-          test_count=()
-          if [ "$GITHUB_EVENT_NAME" = push ]; then
-            test_count=(-count=1)
-          fi
+          test_count=(-count=1)
           skip=
           packages=./...
           if [ "$MODULE" = . ]; then
@@ -107,7 +82,7 @@ jobs:
             packages=$(go list -f "$TESTED" ./... </dev/null)
             packages=$(printf '%s\n' "$packages" | grep -v '^github.com/goadesign/surla/internal/controlplane$')
           fi
-          go test -race -vet=all -short -timeout 3m -json "${test_count[@]}" -skip "$skip" $packages </dev/null
+          bash "$GITHUB_WORKSPACE/.github/scripts/go-test.sh" -vet=all -short -timeout 3m -json "${test_count[@]}" -skip "$skip" -- $packages </dev/null
 
   pages:
     name: Go (., page tests)
@@ -121,24 +96,10 @@ jobs:
         with:
           go-version-file: go.mod
           cache: false
-      - name: Locate the page job's Go caches
-        id: go-cache
-        run: |
-          echo "build=$(go env GOCACHE)" >> "$GITHUB_OUTPUT"
-          echo "modules=$(go env GOMODCACHE)" >> "$GITHUB_OUTPUT"
-      - name: Restore the page packages' Go caches
-        id: restored-go-cache
-        # Only Go (., page tests) saves this key, including the browser vet closure.
-        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
+      - uses: ./.github/actions/go-cache
+        id: compiler-cache
         with:
-          path: |
-            ${{ steps.go-cache.outputs.build }}
-            ${{ steps.go-cache.outputs.modules }}
-          key: short-root-pages-${{ runner.os }}-${{ runner.arch }}-go-${{ steps.go.outputs.go-version }}-${{ hashFiles('go.mod', 'go.sum') }}
-      - name: Explain a dependency cache miss
-        if: steps.restored-go-cache.outputs.cache-hit != 'true'
-        run: |
-          echo "dependency cache miss: this run compiles all dependencies" >> "$GITHUB_STEP_SUMMARY"
+          go-version: ${{ steps.go.outputs.go-version }}
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 26.0.0
@@ -151,10 +112,7 @@ jobs:
         # Only these packages declare tests matching ROOT_PAGE_TESTS.
         # Sequential complements give each smaller group its own package alarm.
         run: |
-          test_count=()
-          if [ "$GITHUB_EVENT_NAME" = push ]; then
-            test_count=(-count=1)
-          fi
+          test_count=(-count=1)
           first_page_tests='^Test(Checkpoint|ViewsPage[A-L])'
           go test -race -vet=all -short -timeout 3m -json "${test_count[@]}" \
             -run "$first_page_tests" ./internal/controlplane ./internal/project </dev/null
@@ -214,25 +172,10 @@ jobs:
         with:
           go-version-file: go.mod
           cache: false
-      - name: Locate the control plane's Go caches
-        id: go-cache
-        run: |
-          echo "build=$(go env GOCACHE)" >> "$GITHUB_OUTPUT"
-          echo "modules=$(go env GOMODCACHE)" >> "$GITHUB_OUTPUT"
-      - name: Restore the control plane's Go caches
-        id: restored-go-cache
-        # Each partition owns its key, including its runtime helper builds.
-        # OS and architecture keep the Linux and macOS objects separate.
-        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
+      - uses: ./.github/actions/go-cache
+        id: compiler-cache
         with:
-          path: |
-            ${{ steps.go-cache.outputs.build }}
-            ${{ steps.go-cache.outputs.modules }}
-          key: short-root-controlplane-${{ matrix.partition }}-${{ runner.os }}-${{ runner.arch }}-go-${{ steps.go.outputs.go-version }}-${{ hashFiles('go.mod', 'go.sum') }}
-      - name: Explain a dependency cache miss
-        if: steps.restored-go-cache.outputs.cache-hit != 'true'
-        run: |
-          echo "dependency cache miss: this run compiles all dependencies" >> "$GITHUB_STEP_SUMMARY"
+          go-version: ${{ steps.go.outputs.go-version }}
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 26.0.0
@@ -247,10 +190,7 @@ jobs:
           CONTROLPLANE_PARTITION: ${{ matrix.partition }}
           PLATFORM_TEST_PATTERN: ${{ steps.platform-tests.outputs.pattern }}
         run: |
-          test_count=()
-          if [ "$GITHUB_EVENT_NAME" = push ]; then
-            test_count=(-count=1)
-          fi
+          test_count=(-count=1)
           run=$ROOT_CONTROLPLANE_FIRST_TESTS
           skip=$ROOT_PAGE_TESTS
           if [ "$CONTROLPLANE_PARTITION" = remaining ]; then
@@ -278,11 +218,14 @@ jobs:
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
       - uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
+        id: go
         with:
           go-version-file: go.mod
-          cache-dependency-path: |
-            go.sum
-            go.mod
+          cache: false
+      - uses: ./.github/actions/go-cache
+        id: compiler-cache
+        with:
+          go-version: ${{ steps.go.outputs.go-version }}
       - name: Build and vet
         env:
           BUILD_TAG: ${{ matrix.tag }}
@@ -298,22 +241,22 @@ jobs:
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
       - uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
+        id: go
         with:
           go-version-file: go.mod
-          cache-dependency-path: |
-            go.sum
-            go.mod
+          cache: false
+      - uses: ./.github/actions/go-cache
+        id: compiler-cache
+        with:
+          go-version: ${{ steps.go.outputs.go-version }}
       - name: Vet and short race tests
         # Only packages with tests are listed. The others, the generated
         # packages among them, have nothing to run, and compiling them and
         # their large dependencies with the race detector took much of this
         # job; the build-and-vet jobs above compile and vet them for Linux.
         run: |
-          test_count=()
-          if [ "$GITHUB_EVENT_NAME" = push ]; then
-            test_count=(-count=1)
-          fi
-          go test -race -vet=all -short -timeout 3m -json "${test_count[@]}" \
+          test_count=(-count=1)
+          bash "$GITHUB_WORKSPACE/.github/scripts/go-test.sh" -vet=all -short -timeout 3m -json "${test_count[@]}" -- \
             ./cmd/surla \
             ./internal/abspath \
             ./internal/designeval \
@@ -343,20 +286,23 @@ jobs:
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
       - uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
+        id: go
         with:
           go-version-file: go.mod
-          # This job builds the generator and the views page, not the test
-          # binaries. The views page's lock file is hashed with go.sum only to
-          # give this job a cache name different from the root test job's.
-          cache-dependency-path: |
-            go.sum
-            go.mod
-            ui/checkpoint/package-lock.json
+          cache: false
+      - uses: ./.github/actions/go-cache
+        id: compiler-cache
+        with:
+          go-version: ${{ steps.go.outputs.go-version }}
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 26.0.0
           cache: npm
           cache-dependency-path: ui/checkpoint/package-lock.json
+      - name: Check production concurrency ownership
+        run: |
+          go run ./.github/scripts/racecheck </dev/null
+          go test -count=1 ./.github/scripts/racecheck </dev/null
       - name: Check formatting
         run: |
           unformatted=$(gofmt -l $(git ls-files '*.go'))
@@ -395,11 +341,21 @@ jobs:
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
       - uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
+        id: go
         with:
           go-version-file: go.mod
-          cache-dependency-path: |
-            go.sum
-            go.mod
+          cache: false
+      - uses: ./.github/actions/go-cache
+        id: compiler-cache
+        with:
+          go-version: ${{ steps.go.outputs.go-version }}
+          publish: ${{ matrix.suite == 'remaining' && github.event_name != 'pull_request' }}
+      - name: Prepare the complete native compiler closure on a cold producer
+        if: matrix.suite == 'remaining' && github.event_name != 'pull_request' && steps.compiler-cache.outputs.build-hit != 'true'
+        run: |
+          bash "$GITHUB_WORKSPACE/.github/scripts/go-test.sh" -count=1 -run '^$' -- ./... </dev/null
+          CGO_ENABLED=0 go build ./... </dev/null
+          go build -o "$RUNNER_TEMP/goa-cache-primer" goa.design/goa/v3/cmd/goa </dev/null
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         if: matrix.suite != 'designeval'
         with:
@@ -440,7 +396,7 @@ jobs:
               ;;
             remaining)
               packages=$(go list ./... </dev/null | grep -Ev '^github.com/goadesign/surla/internal/(controlplane|designeval)$')
-              go test -race -count=1 -timeout 20m -json $packages </dev/null
+              bash "$GITHUB_WORKSPACE/.github/scripts/go-test.sh" -count=1 -timeout 20m -json -- $packages </dev/null
               ;;
             *)
               echo "Unknown full root partition: $ROOT_SUITE" >&2
@@ -457,11 +413,14 @@ jobs:
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
       - uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
+        id: go
         with:
           go-version-file: go.mod
-          cache-dependency-path: |
-            go.sum
-            go.mod
+          cache: false
+      - uses: ./.github/actions/go-cache
+        id: compiler-cache
+        with:
+          go-version: ${{ steps.go.outputs.go-version }}
       - name: Check the Docker engine
         run: docker version
       - name: Run the dependency-repair journey
@@ -542,11 +501,14 @@ jobs:
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
       - uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
+        id: go
         with:
           go-version-file: ${{ matrix.module }}/go.mod
-          cache-dependency-path: |
-            ${{ matrix.module }}/go.sum
-            ${{ matrix.module }}/go.mod
+          cache: false
+      - uses: ./.github/actions/go-cache
+        id: compiler-cache
+        with:
+          go-version: ${{ steps.go.outputs.go-version }}
       - name: Install the Temporal CLI
         # The generation suite's Orders live-copy journey starts Temporal too.
         if: matrix.suite == 'verifier' || matrix.suite == 'verifier-linux' || matrix.suite == 'generation' || matrix.suite == 'orders-acceptance'
@@ -565,4 +527,20 @@ jobs:
           tar -xzf "$RUNNER_TEMP/$archive" -C "$RUNNER_TEMP/bin" temporal
           echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
       - name: Run the full suite
-        run: go test -race -count=1 -timeout ${{ matrix.test_timeout }} -json ${{ matrix.args }} </dev/null
+        env:
+          SUITE: ${{ matrix.suite }}
+        run: |
+          case "$SUITE" in
+            unit-*)
+              bash "$GITHUB_WORKSPACE/.github/scripts/go-test.sh" -count=1 -timeout ${{ matrix.test_timeout }} -json -- ${{ matrix.args }} </dev/null
+              ;;
+            verifier|verifier-linux)
+              # The verifier owns no production goroutines, sync or channels;
+              # its supervising and candidate packages retain race coverage.
+              go test -count=1 -timeout ${{ matrix.test_timeout }} -json ${{ matrix.args }} </dev/null
+              ;;
+            *)
+              # Preserve E2E race coverage until paired warm measurements exist.
+              go test -race -count=1 -timeout ${{ matrix.test_timeout }} -json ${{ matrix.args }} </dev/null
+              ;;
+          esac

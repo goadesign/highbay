@@ -199,8 +199,11 @@ requests, live records and verification plans contain no cache path.
 `verify.Prepare` passes it as `candidate.BuildSpec.BuildCacheDir` for candidate
 and test-program compilation; `WorkDir` keeps only operation-owned scratch and
 staging. The standalone `surla verify` composition root instead supplies a cache
-under its own work directory. Design evaluation and test checking keep their
-existing separate cache lifetimes.
+under its own work directory. The control-plane composition also supplies the
+project cache to its design evaluator, each fresh initialization generator and
+the test-report checker. Their scratch and outputs remain independently owned;
+closing an evaluator or removing check scratch never removes the project cache.
+Direct evaluator and checker constructors retain their private cache defaults.
 
 The project cache survives Stop, Close, restart and run pruning. Go maintains
 entries; canceled compiler scratch stays with the operation's cleanup owner.
@@ -208,6 +211,9 @@ Concurrent processes may share the cache on one machine using a local
 filesystem. The user may delete it while no operation is running; the next
 build recreates it. No cache entry skips checkout, output publication, digest
 measurement or test execution.
+A cache hit is never a passed check: refreshes still evaluate the design,
+initialization still generates and checks the starter, and report checking still
+builds and lists the test program against its required tests.
 
 Cache ownership provides no confinement. Go checks existence and recorded size
 when reading cached package files, not compiled contents against selected

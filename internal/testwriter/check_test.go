@@ -560,7 +560,7 @@ func fixtureProject(t *testing.T) map[string]string {
 		log := filepath.Join(tmp, "build.log")
 		ctx, cancel := context.WithTimeout(t.Context(), 10*time.Minute)
 		var keep bool
-		err = candidate.BuildModule(ctx, candidate.BuildSpec{BuildCacheDir: filepath.Join(home, "gocache"),
+		err = candidate.BuildModule(ctx, candidate.BuildSpec{BuildCacheDir: testChecker.buildCacheDir,
 			SourceDir: tmp, ModuleDir: moduleDir, Package: fixtureSuite.Command,
 			Out: filepath.Join(tmp, "suite"), GOROOT: tc.goroot, ModCache: tc.modCache,
 			WorkDir: home, LogFile: log,

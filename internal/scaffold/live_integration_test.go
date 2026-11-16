@@ -32,6 +32,7 @@ import (
 	"github.com/goadesign/surla/internal/designeval"
 	"github.com/goadesign/surla/internal/project"
 	"github.com/goadesign/surla/internal/scaffold"
+	"github.com/goadesign/surla/internal/testmodule"
 	"github.com/goadesign/surla/internal/testwriter"
 	"github.com/goadesign/surla/internal/verify"
 )
@@ -68,7 +69,10 @@ const published = "v0.0.0-20261115014514-02c792da3ded"
 // It needs the network and macOS or Linux.
 func TestStarterLiveTargetAppliesADraftToTheNextModelRequest(t *testing.T) {
 	seed := filepath.Join(t.TempDir(), "shop")
-	name, err := scaffold.Init(t.Context(), scaffold.Options{Dir: seed, WorkDir: t.TempDir(), Module: "example.com/shop", SurlaVersion: published}, scaffold.RunCommand, designeval.NewEvaluator())
+	buildCache := testmodule.CompilerCache(t)
+	generator, err := designeval.NewEvaluatorWithCache(t.TempDir(), buildCache)
+	require.NoError(t, err)
+	name, err := scaffold.Init(t.Context(), scaffold.Options{Dir: seed, WorkDir: t.TempDir(), Module: "example.com/shop", SurlaVersion: published}, scaffold.RunCommand, generator)
 	require.NoError(t, err)
 	commit := commitAll(t, seed)
 
@@ -96,7 +100,7 @@ func TestStarterLiveTargetAppliesADraftToTheNextModelRequest(t *testing.T) {
 			starterGit(t, dir, "config", "core.hooksPath", "/dev/null")
 			cardsDir, runsDir := t.TempDir(), t.TempDir()
 			team := starterTeam(t, dir)
-			cp, err := controlplane.New(controlplane.Options{BuildCacheDir: t.TempDir(),
+			cp, err := controlplane.New(controlplane.Options{BuildCacheDir: buildCache,
 				CardsDir: cardsDir, WorkspaceDir: dir,
 				Team: &controlplane.TeamBinding{Owner: "alice@example.com", Service: team},
 				Verification: &controlplane.VerificationConfig{

@@ -107,10 +107,11 @@ func TestGenerationDiagnosticMapsExactEscapedPaths(t *testing.T) {
 			parent := "/operator/" + special
 			paths := diagnosticPaths{
 				source: parent + "/run/build/target", temporary: parent + "/run",
-				work: parent + "/compiler", goroot: parent + "/toolchain", modCache: parent + "/modules",
+				work: parent + "/compiler", buildCache: parent + "/packages",
+				goroot: parent + "/toolchain", modCache: parent + "/modules",
 			}
 			var output strings.Builder
-			for _, dir := range []string{paths.source, paths.temporary, paths.work, paths.goroot, paths.modCache} {
+			for _, dir := range []string{paths.source, paths.temporary, paths.work, paths.buildCache, paths.goroot, paths.modCache} {
 				fmt.Fprintf(&output, "%s\n%q\n%s/file.go\n%q\n", dir, dir, dir, dir+"/file.go")
 			}
 			raw := output.String()
@@ -118,7 +119,7 @@ func TestGenerationDiagnosticMapsExactEscapedPaths(t *testing.T) {
 			diagnostic := GenerationDiagnostic(failure)
 			assert.NotContains(t, diagnostic, "/operator/")
 			assert.NotContains(t, diagnostic, special)
-			for _, label := range []string{"./file.go", "<generation>/file.go", "<compiler>/file.go", "<toolchain>/file.go", "<modules>/file.go"} {
+			for _, label := range []string{"./file.go", "<generation>/file.go", "<compiler>/file.go", "<build-cache>/file.go", "<toolchain>/file.go", "<modules>/file.go"} {
 				assert.Contains(t, diagnostic, label)
 			}
 			assert.Equal(t, "exit status 1 ("+raw+")", failure.Error(), "raw CLI/trace text is unchanged")

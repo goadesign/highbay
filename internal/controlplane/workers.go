@@ -313,7 +313,7 @@ func (c *ControlPlane) GetTestWriterAssignment(
 			if c.buildCopyFactory != nil || !hasCopy {
 				copy, prepErr = c.openBuildCopy(work, workspace, layout)
 			} else {
-				copy = c.newWriterBuildCopy(wc, layout)
+				copy, prepErr = c.newWriterBuildCopy(wc, layout)
 			}
 		}
 		if prepErr == nil {

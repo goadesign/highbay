@@ -20,10 +20,16 @@ import (
 // download and the default build ignore root and module workspaces. A new
 // unfetchable dependency still belongs to the author when base lists download.
 func TestWrittenCheckUsesStandaloneModulePolicy(t *testing.T) {
-	for _, badDependency := range []bool{false, true} {
+	for _, tc := range []struct {
+		badDependency, sharedCache bool
+	}{{}, {badDependency: true}, {sharedCache: true}} {
+		badDependency := tc.badDependency
 		name := "both workspaces ignored"
 		if badDependency {
 			name = "new dependency is the author's finding"
+		}
+		if tc.sharedCache {
+			name = "shared cache keeps standalone workspace policy"
 		}
 		t.Run(name, func(t *testing.T) {
 			const rootWork = "go 1.27.3\nuse ./app\n"
@@ -57,11 +63,15 @@ func TestWrittenCheckUsesStandaloneModulePolicy(t *testing.T) {
 				"env) printf '%s\\n%s\\n' " + shquote.Quote(goroot) + " " + shquote.Quote(cache) + ";;\n" +
 				"mod) if /usr/bin/grep -q example.invalid/unfetchable go.mod; then exit 2; fi ;;\n" +
 				"build) [ -f ../lib/lib.go ]; out=''; while [ \"$#\" -gt 0 ]; do if [ \"$1\" = '-o' ]; then shift; out=$1; fi; shift; done; " +
-				"[ -n \"$out\" ]; printf 'placeholder, never executed' > \"$out\" ;;\n*) exit 3 ;;\nesac\n"
+				"[ -n \"$out\" ]; printf 'placeholder, never executed' > \"$out\"; printf 'compiled' > \"$GOCACHE/cache-probe\" ;;\n*) exit 3 ;;\nesac\n"
 			require.NoError(t, os.WriteFile(filepath.Join(goroot, "bin", "go"), []byte(script), 0o700))
 			t.Setenv("PATH", filepath.Join(goroot, "bin")+string(os.PathListSeparator)+os.Getenv("PATH"))
 			t.Setenv("GOWORK", filepath.Join(repo, "go.work"))
 			checker := NewChecker(nil, t.TempDir())
+			if tc.sharedCache {
+				checker, err = NewCheckerWithCache(nil, checker.workDir, filepath.Join(t.TempDir(), "packages"))
+				require.NoError(t, err)
+			}
 			listed := false
 			checker.list = func(context.Context, candidate.Artifact, candidate.Spec, int, func(*exec.Cmd) error) ([]byte, error) {
 				listed = true
@@ -83,6 +93,15 @@ func TestWrittenCheckUsesStandaloneModulePolicy(t *testing.T) {
 				assert.Empty(t, findings)
 				require.Len(t, scenarios, 1)
 				assert.Equal(t, "prices_cookie", scenarios[0].ID)
+				cache := checker.buildCacheDir
+				if cache == "" {
+					cache = filepath.Join(checker.workDir, "build-home", "gocache")
+				}
+				assert.FileExists(t, filepath.Join(cache, "cache-probe"), "the compiler wrote in its selected cache")
+				if tc.sharedCache {
+					require.NoError(t, os.RemoveAll(checker.workDir))
+					assert.FileExists(t, filepath.Join(cache, "cache-probe"), "removing checker scratch preserves the shared cache")
+				}
 			}
 			data, err := os.ReadFile(calls)
 			require.NoError(t, err)

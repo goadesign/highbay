@@ -42,7 +42,6 @@ func TestServeOptionsDerivesLiveTargetsFromVerification(t *testing.T) {
 	require.NoError(t, runProjectSettings("verification", []string{"set", path}, io.Discard))
 	opts, err := serveOptions([]string{"PATH=/bin"})
 	require.NoError(t, err)
-	defer closeServeOptions(t, opts)
 	assert.Nil(t, opts.WrittenTestRuns, "stored verification settings leave no runs of written tests")
 	require.NotNil(t, opts.Live)
 	assert.Equal(t, opts.Verification.Command, opts.Live.Command)
@@ -75,7 +74,6 @@ func TestServeOptionsBindsTheCheckHelperOnEveryServePath(t *testing.T) {
 			}
 			opts, err := serveOptions(nil)
 			require.NoError(t, err)
-			defer closeServeOptions(t, opts)
 			require.NotNil(t, opts.Checker)
 			require.NotNil(t, opts.CheckHelper)
 			cmd := opts.CheckHelper()
@@ -93,7 +91,6 @@ func TestServeOptionsStartLiveTargetsWithoutAModel(t *testing.T) {
 	isolateServeWorkspace(t)
 	opts, err := serveOptions([]string{"PATH=/bin"})
 	require.NoError(t, err)
-	defer closeServeOptions(t, opts)
 	assert.Nil(t, opts.Verification)
 	assert.NotNil(t, opts.WrittenTestRuns)
 	require.NotNil(t, opts.Live)
