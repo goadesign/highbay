@@ -173,9 +173,10 @@ manager approves it."
    (never in the project folder) and calls `refresh_story` again to evaluate
    its edits. Before drafting a new change, or when a design file changed in the
    project folder outside Surla, the guide calls `update_draft` to bring the
-   project folder's design changes into `.surla-draft` (fixing any file listed
-   in `to_correct` and calling `update_draft` again until none remains) before
-   calling `refresh_story`. `get_story_refresh` then returns the Story the
+   project folder's design changes into `.surla-draft`. Each `to_correct` entry
+   names the folder holding the file: the guide corrects its draft, or tells
+   you what to correct in the project folder and waits. It calls `update_draft`
+   again until none remains, then `refresh_story`. `get_story_refresh` returns the Story the
    server found: actors, finished and draft flows, steps and open questions. The
    Story view shows that draft while the guide works. Where the Story starts
    from depends on the project:
