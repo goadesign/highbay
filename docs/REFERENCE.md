@@ -2406,17 +2406,21 @@ checks are:
   three-minute package alarms. Package groups and their platform coverage are
   unchanged by cache selection.
 
-  One **Full / root-remaining** job per operating system owns publication of
-  the module and compiler archives immediately after successful preparation,
-  before running tests. Other jobs only restore them. A missing module or
+  One **Full / compiler-inputs** job per operating system prepares and publishes
+  module and compiler archives without running tests. The full root partitions
+  wait for these producers, then restore their inputs; pull-request short checks
+  remain independent read-only consumers. A missing module or
   compiler archive triggers preparation of the declared race/plain compilation,
   CGO-free product dependencies and pinned Goa generator, then compiles Story,
   Orders and Orders Eval with their own dependency versions and plain/race
   selections, including the tagged acceptance tests. Only trusted non-pull-request
   runs publish missing archives. A later test failure or timeout does not
   invalidate these compiler inputs or prevent their reuse; checks still run
-  independently. The archive version changes when this declared closure changes;
-  an immutable archive cannot gain missing inputs after an exact hit.
+  in their existing jobs. Producers have a separate 20-minute backstop; the full
+  root jobs keep their 30-minute backstop and package alarms. Preparation and
+  tests no longer consume one shared job budget. These bounds are not measured
+  completion times. The archive version changes when this declared closure
+  changes; an immutable archive cannot gain missing inputs after an exact hit.
   No arbitrary first-finishing shard can save an incomplete common
   closure. Archive keys include the exact Go toolchain, operating system and
   architecture, module inputs, starter templates and published fixture versions;

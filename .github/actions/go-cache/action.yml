@@ -1,5 +1,5 @@
 name: Surla Go compiler inputs
-description: Restore compiler inputs with one full-root producer per platform.
+description: Restore compiler inputs with one native producer per platform.
 inputs:
   go-version:
     description: Exact toolchain selected by setup-go.
