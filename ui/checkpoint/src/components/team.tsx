@@ -12,10 +12,9 @@ type Role = TeamRoleState["role"];
 // failed read is named by the view in fixed words; the other messages are
 // complete sentences and stand alone.
 export interface TeamFactsError {
-  // kind is read_failed when a team read failed, team_unbound when the server
-  // has no team for this project and its message is the whole instruction,
-  // and not_followed when no read failed but the page stopped following.
-  kind: "read_failed" | "team_unbound" | "not_followed";
+  // readFailed adds the failed-read label. An unbound team's instruction or
+  // a notice that updates stopped is already a complete message.
+  readFailed: boolean;
   // message is the server's diagnostic or the page's reason, shown unchanged.
   message: string;
 }
@@ -158,8 +157,8 @@ export function TeamStageView({
         </div>
       </div>
       {error !== null ? (
-        <Alert id="surla-team-read-error" variant="destructive">
-          {error.kind === "read_failed" ? <strong>Could not read the project team. </strong> : null}
+        <Alert id="surla-team-read-error" variant="destructive" role="alert">
+          {error.readFailed ? <strong>Could not read the project team. </strong> : null}
           {error.message}
         </Alert>
       ) : null}

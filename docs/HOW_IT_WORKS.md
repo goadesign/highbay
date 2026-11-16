@@ -274,7 +274,7 @@ The reference gives the exact contract of
    (`previous_change_open`), when rebuilding an unfinished open build without
    confirming replacement (`unfinished_build_open`), when the revision was
    drafted before a drop (`drafted_before_drop`) or a design file at the
-   project's commit was changed outside Surla (`design_changed_outside`), when
+   build's base commit was changed outside Surla (`design_changed_outside`), when
    the card is not confirmed or the revision is not the agreed one, or when
    the project lacks a Git repository with at least one commit, a Git name and
    address, the test module `surla init` makes (`eval/` in the project folder,

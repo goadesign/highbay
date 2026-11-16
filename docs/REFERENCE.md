@@ -1599,7 +1599,7 @@ Every refusal below saves no build and registers no role.
 | `previous_change_open` | 409 | Another change's open build (`OpenBuildRefusal`: `name`, `message`, `change_id` and `build`, the open build as `get_build` reports it, with its `started_at` and `taking`) is still `building` or `passed`; merge or drop it first. |
 | `unfinished_build_open` | 409 | This change's open build (`OpenBuildRefusal`) is still `building`, and `replaces` was omitted or did not match its `change_id` and `started_at`. |
 | `drafted_before_drop` | 409 | The agreed revision was made from a draft before a build was dropped; the guide refreshes the Story and revises the change, and the user adopts the revision before building. |
-| `design_changed_outside` | 409 | A design file at the project's commit is not a version the agreed revision was made from: it was changed outside Surla. The message names the file and the commit. |
+| `design_changed_outside` | 409 | A design file at the build's base commit is not a version the agreed revision was made from: it was changed outside Surla. The message names the file and the commit. |
 | `unprocessable` | 422 | Two finished flows would have the same test name, or one has an empty name; the guide revises the Story. |
 | `not_repository` | 409 | Make the project folder a Git repository and commit its files. |
 | `no_commit` | 409 | Commit the project's files. |
