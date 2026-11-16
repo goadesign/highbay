@@ -3,6 +3,7 @@
 package designeval
 
 import (
+	"encoding/json"
 	"maps"
 	"os"
 	"path/filepath"
@@ -52,7 +53,14 @@ func TestEvaluateObservesStoryOnlyAndCombinedDesigns(t *testing.T) {
 	ctx := t.Context()
 
 	t.Run("story_only_with_helper_package_and_unfinished_drafts", func(t *testing.T) {
+		refundSource, err := os.ReadFile(filepath.Join("testdata", "refund_story.go.txt"))
+		require.NoError(t, err)
+		refundData, err := os.ReadFile(filepath.Join("testdata", "refund_story.json"))
+		require.NoError(t, err)
+		var refunds []StorySummary
+		require.NoError(t, json.Unmarshal(refundData, &refunds))
 		files := storySnapshot(t, preCompleteSourcesGoa, map[string]string{
+			"design/z_refunds.go": string(refundSource),
 			"storyhelpers/actors.go": `package storyhelpers
 
 import . "github.com/goadesign/surla/story/dsl"
@@ -308,6 +316,9 @@ var _ = Story("Carrier Settlements", func() {
 				},
 			},
 		}
+		// The consumer fixture shares its exact source and complete expected
+		// summaries with this existing real evaluation, without another build.
+		want = append(want, refunds...)
 		assert.Equal(t, want, res.Stories)
 	})
 

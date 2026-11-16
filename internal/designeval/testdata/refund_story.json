@@ -1,0 +1,69 @@
+[
+  {
+    "name": "Order Refunds",
+    "description": "Domain timeline for customer refund requests.",
+    "actors": [
+      {
+        "key": "customer",
+        "title": "Customer",
+        "description": "Places orders and requests refunds."
+      },
+      {
+        "key": "manager",
+        "title": "Support Manager"
+      }
+    ],
+    "flows": [
+      {
+        "key": "instant-refund",
+        "title": "Instant refund under the limit",
+        "description": "Refunds under $50 complete automatically.",
+        "complete": true,
+        "steps": [
+          {
+            "key": "request-refund",
+            "actor_key": "customer",
+            "summary": "Customer requests a $25 refund",
+            "kind": "start"
+          },
+          {
+            "key": "refund-paid",
+            "actor_key": "customer",
+            "summary": "Store credit is issued immediately",
+            "kind": "outcome"
+          }
+        ]
+      },
+      {
+        "key": "high-value-refund",
+        "title": "Refund over the limit",
+        "complete": false,
+        "steps": [
+          {
+            "key": "request-high-refund",
+            "actor_key": "customer",
+            "summary": "Customer requests a $120 refund",
+            "kind": "start",
+            "questions": [
+              {
+                "key": "limit-boundary",
+                "prompt": "Is $50.00 itself instant or manager-reviewed?",
+                "description": "Boundary rule at $50.00.",
+                "options": [
+                  "Instant at $50.00",
+                  "Manager review at $50.00"
+                ]
+              }
+            ]
+          },
+          {
+            "key": "review-refund",
+            "actor_key": "manager",
+            "summary": "Manager reviews the refund request",
+            "kind": "step"
+          }
+        ]
+      }
+    ]
+  }
+]
