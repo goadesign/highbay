@@ -2384,8 +2384,8 @@ checks are:
   second selects every remaining page test by applying the full page pattern
   and skipping the first group. Each command gives each package its own
   three-minute alarm, so smaller groups replace the whole page suite's
-  aggregate alarm. The page job keeps its ten-minute backstop and one cache
-  owner; the commands reuse setup and the build cache. This split preserves
+  aggregate alarm. The page job keeps its ten-minute backstop; its commands
+  share setup and the restored compiler cache. This split preserves
   the total test work and does not guarantee a faster job.
   **Go (., control plane, A-L)** runs non-page tests whose
   names start with `TestA` through `TestL`, on Linux.
@@ -2456,8 +2456,11 @@ engine. It executes the dependency-repair journey through one project server:
 the initialized builder copy passes, missing `go.sum` entries are repaired,
 and workspace-only checksums are repaired into `go.work.sum`, while the user's
 project stays unchanged. It uses `-tags=e2e,docker` and selects
-`TestCheckProjectRepairsDependenciesOnOneServer`; pull requests do not run it.
-The package alarm is 40 minutes and the job backstop is 50 minutes, including
+`TestCheckProjectRepairsDependenciesOnOneServer`. It then executes the container
+owner's `TestContainerEngineEndToEnd` and `TestLocalEngineContainerLifecycleFacts`
+with the same tags, covering real execution, isolation and cleanup. Pull requests
+do not run this job. The journey's package alarm is 40 minutes, the container
+owner's is 20 minutes, and the job backstop is 50 minutes, including
 cold compilation and downloads. These are execution bounds, not measured
 completion times. To run the journey locally with a running Docker engine:
 
@@ -2524,15 +2527,28 @@ go test -race -count=1 -tags e2e ./cmd/surla
 go test -race -count=1 -timeout 60m -tags scaffold ./internal/scaffold
 ```
 
-The views page's real-browser check runs only on request; CI compiles it but
-never runs it. It needs Chrome or Chromium and Node 22 or later; set
-`SURLA_TEST_BROWSER` to the browser when it is not in a standard place. It
-checks that the browser enforces the page's policy, that the session ends on
-reload and nothing is stored, that a long row of Story steps scrolls inside
-the Story view, and that the Live target view fits a 375-pixel-wide screen:
+The **Full / opt-in (Linux)** job runs the named native browser tests and the
+isolated Herdr server lifecycle nightly and on manual full runs. Short CI still
+compiles and vets both tagged profiles. The scheduled job requires hosted Chrome,
+Node 26 and digest-checked Herdr Core 0.1.21; missing tools fail setup.
+Its explicit browser roots cover page policy and sessions, phone layout, build
+and test review, keyboard access, and browser cleanup after its parent ends.
+They execute independently of ordinary project tests. The Herdr root, `TestHC`,
+runs the real headless Core and Surla server with isolated state and fixture
+window and team effects; it starts no coding agent or model. Each package command
+has a five-minute alarm and the job has a ten-minute backstop. These bounds are
+not measured completion times. The complete selected set is in
+[the workflow](../.github/workflows/ci.yml).
+The page-policy journey also checks that a session ends on reload, browser
+storage stays empty, long Story rows scroll within the Story view, and Live
+fits a 375-pixel-wide screen.
+
+Local native checks need Chrome or Chromium and Node 22 or later. Set
+`SURLA_TEST_BROWSER` when the browser is not installed in a standard place.
+For example, run the phone layout contract with:
 
 ```bash
-go test -race -count=1 -tags browser ./internal/project
+go test -race -count=1 -timeout 5m -tags browser -run '^TestTeamAndBuildAtPhoneWidth$' ./internal/project </dev/null
 ```
 
 ### Project layout

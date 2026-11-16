@@ -427,6 +427,65 @@ jobs:
         run: |
           git grep -q '^func TestCheckProjectRepairsDependenciesOnOneServer(' -- cmd/surla/check_journey_e2e_test.go
           go test -race -count=1 -timeout 40m -json -tags=e2e,docker -run '^TestCheckProjectRepairsDependenciesOnOneServer$' ./cmd/surla </dev/null
+      - name: Run the container owner's execution and lifecycle contracts
+        # These tagged roots exercise the real engine, not the check helper's
+        # stand-ins. The journey above ensures their pinned image is available.
+        run: |
+          go test -race -count=1 -timeout 20m -json -tags=e2e,docker \
+            -run '^(TestContainerEngineEndToEnd|TestLocalEngineContainerLifecycleFacts)$' ./verify/candidate </dev/null
+
+  opt-in:
+    name: Full / opt-in (Linux)
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    # Real browser and headless Herdr lifetimes need their native tools.
+    # Package alarms exclude setup; hosted timings stay visible.
+    timeout-minutes: 10
+    env:
+      BROWSER_TESTS: '^(TestViewsPageInARealBrowser|TestTeamAndBuildAtPhoneWidth|TestBuildTakingAtDesktopAndPhoneWidth|TestTestsReturnedAtDesktopAndPhoneWidth|TestApprovalFrameAndEvidenceAtDesktopAndPhoneWidth|TestRealBrowserEndsWithItsTest)$'
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
+        id: go
+        with:
+          go-version-file: go.mod
+          cache: false
+      - uses: ./.github/actions/go-cache
+        with:
+          go-version: ${{ steps.go.outputs.go-version }}
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 26.0.0
+      - name: Require the hosted browser
+        # A missing browser is setup failure, rather than skipped native proof.
+        run: |
+          google-chrome --version </dev/null
+          echo "SURLA_TEST_BROWSER=$(command -v google-chrome)" >> "$GITHUB_ENV"
+      - name: Install the pinned headless Herdr Core
+        run: |
+          herdr_archive="$RUNNER_TEMP/herdr-core-linux-x86_64.tar.gz"
+          herdr_bin="$RUNNER_TEMP/herdr-bin"
+          curl -fsSL --max-time 60 -o "$herdr_archive" \
+            https://releases.herdr.dev/core/0.1.21/herdr-core-linux-x86_64.tar.gz </dev/null
+          printf '%s  %s\n' '78424755c10a40dde38a0bdb55c20ac19706e9ae05ed68fc2acf1fcff0d941c1' "$herdr_archive" \
+            | sha256sum -c -
+          mkdir -p "$herdr_bin"
+          tar -xzf "$herdr_archive" -C "$herdr_bin" herdr-core
+          ln -s herdr-core "$herdr_bin/hc"
+          echo "$herdr_bin" >> "$GITHUB_PATH"
+      - name: Run the explicit native browser roots
+        # TestRealBrowserEndsWithItsTest invokes its child-only helper itself.
+        # The harness uses Node's built-in modules and needs no npm packages.
+        run: |
+          go test -race -count=1 -timeout 5m -json -tags browser \
+            -run "$BROWSER_TESTS" ./internal/project </dev/null
+      - name: Run the isolated Herdr server lifecycle
+        # Require setup explicitly so a missing executable cannot become a skip.
+        run: |
+          command -v hc
+          hc --version </dev/null
+          go test -race -count=1 -timeout 5m -json -tags herdr \
+            -run '^TestHC$' ./cmd/surla </dev/null
 
   full:
     name: Full / ${{ matrix.suite }}
