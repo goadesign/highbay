@@ -963,6 +963,50 @@ type (
 		// Where this assignment stands.
 		Progress *TestWriterProgressTransport `json:"progress"`
 	}
+	// ReviewVerificationPayloadTransport is the internal JSON transport type for ReviewVerificationPayload.
+	// It lives in the toolset-local http package and is used only for JSON
+	// decode + validation (missing-field detection) before transforming into
+	// the public tool type.
+	ReviewVerificationPayloadTransport struct {
+		// Verification run identifier returned by verify_change.
+		RunID *string `json:"run_id"`
+	}
+	// ReviewVerificationResultTransport is the internal JSON transport type for ReviewVerificationResult.
+	// It lives in the toolset-local http package and is used only for JSON
+	// decode + validation (missing-field detection) before transforming into
+	// the public tool type.
+	ReviewVerificationResultTransport struct {
+		// Immutable Story evidence and the owner's current approval observation.
+		Review *VerificationReviewTransport `json:"review"`
+		// Verification run identifier; get_verification takes it.
+		RunID *string `json:"run_id"`
+		// Change Card the run verifies.
+		ChangeID *string `json:"change_id"`
+		// Change Card revision the run verifies.
+		RequestRevision *string `json:"request_revision"`
+		// Candidate commit the run builds and verifies.
+		CandidateCommit *string `json:"candidate_commit"`
+		// Commit of the tests the run uses: the operator's evaluator, or the tests
+		// accepted for the change's build.
+		SuiteCommit *string `json:"suite_commit"`
+		// When the run was accepted.
+		AcceptedAt *string `json:"accepted_at"`
+		// Whether this run's agreed revision and selected tests match the current
+		// Change Card and the usable build or the stored verification settings. This
+		// observation does not establish the current candidate working tree,
+		// deployment or approval.
+		InputsCurrent *bool `json:"inputs_current"`
+		// Absolute folder containing the binaries built by this completed run.
+		// Returned only to the user when promotion settings are configured, so the
+		// user can publish these exact binaries before approval. Agents never receive
+		// this private path.
+		CandidateBinariesDir *string `json:"candidate_binaries_dir,omitempty"`
+		// Where the run's tests came from, recorded when the run started: evaluator,
+		// or written_tests with their commit and a notice.
+		TestSource *TestSource `json:"test_source"`
+		// Exactly one of running, completed or not_completed.
+		State *State `json:"state"`
+	}
 	// ReviseChangePayloadTransport is the internal JSON transport type for ReviseChangePayload.
 	// It lives in the toolset-local http package and is used only for JSON
 	// decode + validation (missing-field detection) before transforming into
@@ -1686,6 +1730,22 @@ type (
 		// source.
 		ChangedDesignFiles []string `json:"changed_design_files"`
 	}
+	// RecordedRunStoryTransport is the internal JSON transport type for RecordedRunStoryTransport.
+	// It lives in the toolset-local http package and is used only for JSON
+	// decode + validation (missing-field detection) before transforming into
+	// the public tool type.
+	RecordedRunStoryTransport struct {
+		// Number of the build this run was accepted for.
+		BuildNumber *int `json:"build_number"`
+		// Accepted build's saved start time.
+		BuildStartedAt *string `json:"build_started_at"`
+		// Stories as agreed for this run, in declaration order; empty when the
+		// agreement declares none.
+		Stories []*StorySummaryItemTransport `json:"stories"`
+		// The owner's exact required-test mapping for written tests, or the explicit
+		// absence of such a mapping for an operator evaluator.
+		Mapping *Mapping `json:"mapping"`
+	}
 	// RequiredTestTransport is the internal JSON transport type for RequiredTestTransport.
 	// It lives in the toolset-local http package and is used only for JSON
 	// decode + validation (missing-field detection) before transforming into
@@ -1699,6 +1759,40 @@ type (
 		Scenario *string `json:"scenario"`
 		// Hook method the test writer implements for the scenario.
 		Hook *string `json:"hook"`
+	}
+	// RunApprovalAvailableTransport is the internal JSON transport type for RunApprovalAvailableTransport.
+	// It lives in the toolset-local http package and is used only for JSON
+	// decode + validation (missing-field detection) before transforming into
+	// the public tool type.
+	RunApprovalAvailableTransport struct {
+	}
+	// RunApprovalBlockedTransport is the internal JSON transport type for RunApprovalBlockedTransport.
+	// It lives in the toolset-local http package and is used only for JSON
+	// decode + validation (missing-field detection) before transforming into
+	// the public tool type.
+	RunApprovalBlockedTransport struct {
+		// Owner's safe explanation and enabling step.
+		Reason *string `json:"reason"`
+	}
+	// RunEvaluatorMappingUnknownTransport is the internal JSON transport type for RunEvaluatorMappingUnknownTransport.
+	// It lives in the toolset-local http package and is used only for JSON
+	// decode + validation (missing-field detection) before transforming into
+	// the public tool type.
+	RunEvaluatorMappingUnknownTransport struct {
+	}
+	// RunStoryMappingTransport is the internal JSON transport type for RunStoryMappingTransport.
+	// It lives in the toolset-local http package and is used only for JSON
+	// decode + validation (missing-field detection) before transforming into
+	// the public tool type.
+	RunStoryMappingTransport struct {
+		// One test per finished flow, in declaration order.
+		RequiredTests []*RequiredTestTransport `json:"required_tests"`
+	}
+	// RunStoryNotRecordedTransport is the internal JSON transport type for RunStoryNotRecordedTransport.
+	// It lives in the toolset-local http package and is used only for JSON
+	// decode + validation (missing-field detection) before transforming into
+	// the public tool type.
+	RunStoryNotRecordedTransport struct {
 	}
 	// RunningLiveTargetTransport is the internal JSON transport type for RunningLiveTargetTransport.
 	// It lives in the toolset-local http package and is used only for JSON
@@ -2076,6 +2170,17 @@ type (
 		Stage *string `json:"stage"`
 		// Builder-safe description of what stopped the run; never command output.
 		Summary *string `json:"summary"`
+	}
+	// VerificationReviewTransport is the internal JSON transport type for VerificationReviewTransport.
+	// It lives in the toolset-local http package and is used only for JSON
+	// decode + validation (missing-field detection) before transforming into
+	// the public tool type.
+	VerificationReviewTransport struct {
+		// The run's immutable Story context, or the explicit fact it was not recorded.
+		StoryContext *StoryContext `json:"story_context"`
+		// The owner's current observation for this exact report, independent of
+		// inputs_current.
+		Approval *Approval `json:"approval"`
 	}
 	// VerificationRunningTransport is the internal JSON transport type for VerificationRunningTransport.
 	// It lives in the toolset-local http package and is used only for JSON

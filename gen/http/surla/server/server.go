@@ -61,6 +61,7 @@ type Server struct {
 	ListTestWriterAssignments http.Handler
 	GetTestWriterAssignment   http.Handler
 	ReportTestsFinished       http.Handler
+	ReviewVerification        http.Handler
 }
 
 // MountPoint holds information about the mounted endpoints.
@@ -132,6 +133,7 @@ func New(
 			{"ListTestWriterAssignments", "GET", "/assignments/test-writer"},
 			{"GetTestWriterAssignment", "GET", "/assignments/test-writer/{change_id}"},
 			{"ReportTestsFinished", "POST", "/assignments/test-writer/{change_id}/finished"},
+			{"ReviewVerification", "GET", "/verifications/{run_id}/review"},
 		},
 		GoldenPath:                NewGoldenPathHandler(e.GoldenPath, mux, decoder, encoder, errhandler, formatter),
 		ProposeChange:             NewProposeChangeHandler(e.ProposeChange, mux, decoder, encoder, errhandler, formatter),
@@ -175,6 +177,7 @@ func New(
 		ListTestWriterAssignments: NewListTestWriterAssignmentsHandler(e.ListTestWriterAssignments, mux, decoder, encoder, errhandler, formatter),
 		GetTestWriterAssignment:   NewGetTestWriterAssignmentHandler(e.GetTestWriterAssignment, mux, decoder, encoder, errhandler, formatter),
 		ReportTestsFinished:       NewReportTestsFinishedHandler(e.ReportTestsFinished, mux, decoder, encoder, errhandler, formatter),
+		ReviewVerification:        NewReviewVerificationHandler(e.ReviewVerification, mux, decoder, encoder, errhandler, formatter),
 	}
 }
 
@@ -225,6 +228,7 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.ListTestWriterAssignments = m(s.ListTestWriterAssignments)
 	s.GetTestWriterAssignment = m(s.GetTestWriterAssignment)
 	s.ReportTestsFinished = m(s.ReportTestsFinished)
+	s.ReviewVerification = m(s.ReviewVerification)
 }
 
 // MethodNames returns the methods served.
@@ -274,6 +278,7 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountListTestWriterAssignmentsHandler(mux, h.ListTestWriterAssignments)
 	MountGetTestWriterAssignmentHandler(mux, h.GetTestWriterAssignment)
 	MountReportTestsFinishedHandler(mux, h.ReportTestsFinished)
+	MountReviewVerificationHandler(mux, h.ReviewVerification)
 }
 
 // Mount configures the mux to serve the surla endpoints.
@@ -2388,6 +2393,59 @@ func NewReportTestsFinishedHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "report_tests_finished")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "surla")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountReviewVerificationHandler configures the mux to serve the "surla"
+// service "review_verification" endpoint.
+func MountReviewVerificationHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/verifications/{run_id}/review", f)
+}
+
+// NewReviewVerificationHandler creates a HTTP handler which loads the HTTP
+// request and calls the "surla" service "review_verification" endpoint.
+func NewReviewVerificationHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeReviewVerificationRequest(mux, decoder)
+		encodeResponse = EncodeReviewVerificationResponse(encoder)
+		encodeError    = EncodeReviewVerificationError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "review_verification")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "surla")
 		payload, err := decodeRequest(r)
 		if err != nil {

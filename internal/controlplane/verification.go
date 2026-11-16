@@ -137,6 +137,12 @@ func (c *ControlPlane) VerifyChange(ctx context.Context, p *gensurla.VerifyChang
 		AcceptedAt: time.Now().UTC(),
 		Timeout:    verCfg.Timeout,
 		Plan:       plan,
+		StoryContext: verifyrun.StoryContext{
+			State:          verifyrun.StoryRecorded,
+			BuildNumber:    held.file.Number,
+			BuildStartedAt: held.file.StartedAt,
+			Stories:        held.file.Stories,
+		},
 	}
 	// Observe the selected inputs before accepting work. A later edit can
 	// invalidate this observation, but no failed read can hide an accepted run.
@@ -226,54 +232,12 @@ func (c *ControlPlane) GetVerification(ctx context.Context, p *gensurla.GetVerif
 	if !ok {
 		return nil, errors.New("authenticated principal is required")
 	}
-	runsDir := c.runsDir
-	if runsDir == "" {
-		return nil, gensurla.MakeNotImplemented(errVerificationUnavailable)
-	}
-	_, span := c.tracer("surla/controlplane").Start(ctx, "surla.controlplane.get_verification",
+	ctx, span := c.tracer("surla/controlplane").Start(ctx, "surla.controlplane.get_verification",
 		trace.WithAttributes(attribute.String("surla.run_id", p.RunID)))
 	defer span.End()
-
-	c.mu.RLock()
-	req, state, err := verifyrun.Read(runsDir, p.RunID)
-	c.mu.RUnlock()
-	switch {
-	case req.Owner == "" && errors.Is(err, fs.ErrNotExist):
-		return nil, gensurla.MakeNotFound(fmt.Errorf("unknown run_id %q", p.RunID))
-	case req.Owner != principal.ID && req.Owner != "":
-		// Checked before any later read error, whose text may name
-		// evaluator paths.
-		return nil, gensurla.MakeForbidden(fmt.Errorf("principal %q is not the owner of run_id %q", principal.ID, p.RunID))
-	case err != nil:
-		span.RecordError(err)
-		span.SetStatus(codes.Error, "read verification run")
-		return nil, fmt.Errorf("read verification %q: saved verification record could not be read", p.RunID)
-	}
-	c.mu.RLock()
-	if principal.Kind == CallerTestWriter {
-		holds, err := c.testWriterHolds(principal, req.ChangeID)
-		if err != nil {
-			c.mu.RUnlock()
-			var refusal *goa.ServiceError
-			if errors.As(err, &refusal) {
-				return nil, err
-			}
-			span.RecordError(err)
-			span.SetStatus(codes.Error, "read verification assignment")
-			return nil, fmt.Errorf("read verification %q: saved verification inputs could not be read", p.RunID)
-		}
-		if !holds {
-			c.mu.RUnlock()
-			return nil, gensurla.MakeForbidden(fmt.Errorf(
-				"the test writer reads only the runs of a change it has an assignment for, and change %q has none", req.ChangeID))
-		}
-	}
-	inputsCurrent, err := c.currentVerificationInputs(principal, req.ChangeID, req.Plan)
-	c.mu.RUnlock()
+	req, state, inputsCurrent, err := c.readVerificationRun(principal, p.RunID, span)
 	if err != nil {
-		span.RecordError(err)
-		span.SetStatus(codes.Error, "read verification inputs")
-		return nil, fmt.Errorf("read verification %q: saved verification inputs could not be read", p.RunID)
+		return nil, err
 	}
 	showBinaries := false
 	if state.Kind == verifyrun.StateCompleted {
@@ -291,6 +255,60 @@ func (c *ControlPlane) GetVerification(ctx context.Context, p *gensurla.GetVerif
 		return nil, fmt.Errorf("read verification %q: saved binaries location could not be read", p.RunID)
 	}
 	return statusResult(req, state, inputsCurrent, binariesDir), nil
+}
+
+// readVerificationRun reads and authorizes one run once, preserving its full
+// report privately for owner checks while each caller chooses its safe result.
+func (c *ControlPlane) readVerificationRun(
+	principal Principal, runID string, span trace.Span,
+) (verifyrun.Request, verifyrun.State, bool, error) {
+	runsDir := c.runsDir
+	if runsDir == "" {
+		return verifyrun.Request{}, verifyrun.State{}, false, gensurla.MakeNotImplemented(errVerificationUnavailable)
+	}
+
+	c.mu.RLock()
+	req, state, err := verifyrun.Read(runsDir, runID)
+	c.mu.RUnlock()
+	switch {
+	case req.Owner == "" && errors.Is(err, fs.ErrNotExist):
+		return verifyrun.Request{}, verifyrun.State{}, false, gensurla.MakeNotFound(fmt.Errorf("unknown run_id %q", runID))
+	case req.Owner != principal.ID && req.Owner != "":
+		// Checked before any later read error, whose text may name
+		// evaluator paths.
+		return verifyrun.Request{}, verifyrun.State{}, false, gensurla.MakeForbidden(fmt.Errorf("principal %q is not the owner of run_id %q", principal.ID, runID))
+	case err != nil:
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "read verification run")
+		return verifyrun.Request{}, verifyrun.State{}, false, fmt.Errorf("read verification %q: saved verification record could not be read", runID)
+	}
+	c.mu.RLock()
+	if principal.Kind == CallerTestWriter {
+		holds, err := c.testWriterHolds(principal, req.ChangeID)
+		if err != nil {
+			c.mu.RUnlock()
+			var refusal *goa.ServiceError
+			if errors.As(err, &refusal) {
+				return verifyrun.Request{}, verifyrun.State{}, false, err
+			}
+			span.RecordError(err)
+			span.SetStatus(codes.Error, "read verification assignment")
+			return verifyrun.Request{}, verifyrun.State{}, false, fmt.Errorf("read verification %q: saved verification inputs could not be read", runID)
+		}
+		if !holds {
+			c.mu.RUnlock()
+			return verifyrun.Request{}, verifyrun.State{}, false, gensurla.MakeForbidden(fmt.Errorf(
+				"the test writer reads only the runs of a change it has an assignment for, and change %q has none", req.ChangeID))
+		}
+	}
+	inputsCurrent, err := c.currentVerificationInputs(principal, req.ChangeID, req.Plan)
+	c.mu.RUnlock()
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "read verification inputs")
+		return verifyrun.Request{}, verifyrun.State{}, false, fmt.Errorf("read verification %q: saved verification inputs could not be read", runID)
+	}
+	return req, state, inputsCurrent, nil
 }
 
 // ListVerifications returns all Checkpoint 4 verification runs started by the

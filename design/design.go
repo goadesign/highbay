@@ -1148,6 +1148,7 @@ var _ = Service("surla", func() {
 	teamMethods()
 	changeListMethods()
 	buildMethods()
+	verificationReviewMethod()
 })
 
 // builderCopyRefusals declares a builder tool's open-build and working-copy refusals.

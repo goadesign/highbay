@@ -57,10 +57,11 @@ type Client struct {
 	ListTestWriterAssignmentsEndpoint goa.Endpoint
 	GetTestWriterAssignmentEndpoint   goa.Endpoint
 	ReportTestsFinishedEndpoint       goa.Endpoint
+	ReviewVerificationEndpoint        goa.Endpoint
 }
 
 // NewClient initializes a "surla" service client given the endpoints.
-func NewClient(goldenPath, proposeChange, reviseChange, confirmIntent, getChange, declineRevision, previewArchitecture, draftOverride, startLiveTarget, stopLiveTarget, getLiveTarget, verifyChange, getVerification, listVerifications, approveMerge, diff, configureModel, getModelConnection, handOverModelSettings, initProject, generateCode, checkProject, updateDependencies, readCheckOutput, listTraces, refreshStory, getStoryRefresh, updateDraft, getTeam, showTeamPane, startTeamAgents, listChanges, waitForChanges, startBuild, dropBuild, getBuild, getTestFindings, listBuilderAssignments, getBuilderAssignment, listTestWriterAssignments, getTestWriterAssignment, reportTestsFinished goa.Endpoint) *Client {
+func NewClient(goldenPath, proposeChange, reviseChange, confirmIntent, getChange, declineRevision, previewArchitecture, draftOverride, startLiveTarget, stopLiveTarget, getLiveTarget, verifyChange, getVerification, listVerifications, approveMerge, diff, configureModel, getModelConnection, handOverModelSettings, initProject, generateCode, checkProject, updateDependencies, readCheckOutput, listTraces, refreshStory, getStoryRefresh, updateDraft, getTeam, showTeamPane, startTeamAgents, listChanges, waitForChanges, startBuild, dropBuild, getBuild, getTestFindings, listBuilderAssignments, getBuilderAssignment, listTestWriterAssignments, getTestWriterAssignment, reportTestsFinished, reviewVerification goa.Endpoint) *Client {
 	return &Client{
 		GoldenPathEndpoint:                goldenPath,
 		ProposeChangeEndpoint:             proposeChange,
@@ -104,6 +105,7 @@ func NewClient(goldenPath, proposeChange, reviseChange, confirmIntent, getChange
 		ListTestWriterAssignmentsEndpoint: listTestWriterAssignments,
 		GetTestWriterAssignmentEndpoint:   getTestWriterAssignment,
 		ReportTestsFinishedEndpoint:       reportTestsFinished,
+		ReviewVerificationEndpoint:        reviewVerification,
 	}
 }
 
@@ -800,4 +802,20 @@ func (c *Client) ReportTestsFinished(ctx context.Context, p *ReportTestsFinished
 		return
 	}
 	return ires.(*TestWriterAssignmentItem), nil
+}
+
+// ReviewVerification calls the "review_verification" endpoint of the "surla"
+// service.
+// ReviewVerification may return the following errors:
+//   - "not_found" (type *goa.ServiceError): The selected run does not exist.
+//   - "not_implemented" (type *goa.ServiceError): Verification is not configured.
+//   - "forbidden" (type *goa.ServiceError): The authenticated caller may not perform this operation or does not own the resource.
+//   - error: internal error
+func (c *Client) ReviewVerification(ctx context.Context, p *GetVerificationPayload) (res *VerificationReviewResult, err error) {
+	var ires any
+	ires, err = c.ReviewVerificationEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*VerificationReviewResult), nil
 }

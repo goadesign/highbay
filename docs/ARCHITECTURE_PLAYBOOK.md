@@ -164,6 +164,18 @@ The views page keeps one waiting read (`wait_for_changes`) open. Its answer is a
 
 One function, `testsChoice` in [`verification_plan.go`](../internal/controlplane/verification_plan.go), chooses which tests judge a change: the suite named in the stored verification settings, or the tests accepted for the change's build at its revision. Verification runs those tests, `approve_merge` requires the approved report to have run them, and a saved approval is shown only while they stay the same; `verificationPlan` builds a run's configuration from that choice. The builder names only the change, the revision and its commit.
 
+At acceptance, the control plane copies the open build's agreed Story and build
+identity into the immutable request owned by `internal/verifyrun`. This evidence
+survives later revisions and builds; runs without recorded context never borrow
+the current Story. The user-only `review_verification` read returns that snapshot
+and an approval observation without changing workflow state. Its required-test
+mapping comes from `designeval.StoryScenarios`, the same owner used by generation;
+operator-evaluator mapping remains explicitly unknown. The read and
+`approve_merge` share `readApprovalInputs`, `checkApprovalReport` and
+`recheckApproval`; the write holds the final lock through persistence. A readable
+run alone does not imply approval, and an observation grants no lease. Shared
+agent reads and history listing keep their existing builder-safe contracts.
+
 `internal/verifyrun` runs each verification in its run directory, one folder per run under the state folder's runs folder that holds the run's request, lock, result and logs. A supervisor process, started for the run, holds the run's lock for its whole life, so a run outlives the server that accepted it and its state is read back from the lock and the result file alone. `internal/verify` builds the candidate (the builder's commit under verification) and the test program, then runs the test program, which starts the candidate's programs; they all run as ordinary processes with the user's file and network access, in the run's one process group, which a process that starts its own session leaves.
 
 The control plane runs at most one live target for an owned, confirmed change. `start_live_target` names the change and the candidate commit. It uses `verificationPlan` too: without stored settings, the current build's accepted tests start the candidate's programs with `--live`; a stored evaluator needs no build. The card and plan are checked before waiting for another start, then checked again with the model snapshot under the start lock before the running target is stopped. A refusal preserves the current target and its prompt drafts.

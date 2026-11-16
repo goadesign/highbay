@@ -76,6 +76,8 @@ type (
 		// and suite configuration, the caller's candidate commit, the Change
 		// Card revision, and the run's own work directory.
 		Plan verify.Plan `json:"plan"`
+		// StoryContext is immutable agreement evidence, separate from the run plan.
+		StoryContext StoryContext `json:"story_context"`
 	}
 
 	// Result is the terminal outcome of a run, written once by its
@@ -225,6 +227,9 @@ func NewRunID() string {
 // req.Plan.WorkDir must name the run's work directory, and req.Plan.Tests
 // must name one of the declared test sources.
 func Start(root string, req Request, command []string, settings []modelsettings.Settings) (int, error) {
+	if err := req.StoryContext.check(); err != nil {
+		return 0, err
+	}
 	if !runIDPattern.MatchString(req.RunID) {
 		return 0, fmt.Errorf("run ID %q is not 32 lowercase hex characters", req.RunID)
 	}

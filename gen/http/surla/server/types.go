@@ -1149,6 +1149,41 @@ type ReportTestsFinishedResponseBody struct {
 	Progress *TestWriterProgressResponseBody `form:"progress" json:"progress" xml:"progress"`
 }
 
+// ReviewVerificationResponseBody is the type of the "surla" service
+// "review_verification" endpoint HTTP response body.
+type ReviewVerificationResponseBody struct {
+	// Immutable Story evidence and the owner's current approval observation.
+	Review *VerificationReviewResponseBody `form:"review" json:"review" xml:"review"`
+	// Verification run identifier; get_verification takes it.
+	RunID string `form:"run_id" json:"run_id" xml:"run_id"`
+	// Change Card the run verifies.
+	ChangeID string `form:"change_id" json:"change_id" xml:"change_id"`
+	// Change Card revision the run verifies.
+	RequestRevision string `form:"request_revision" json:"request_revision" xml:"request_revision"`
+	// Candidate commit the run builds and verifies.
+	CandidateCommit string `form:"candidate_commit" json:"candidate_commit" xml:"candidate_commit"`
+	// Commit of the tests the run uses: the operator's evaluator, or the tests
+	// accepted for the change's build.
+	SuiteCommit string `form:"suite_commit" json:"suite_commit" xml:"suite_commit"`
+	// When the run was accepted.
+	AcceptedAt string `form:"accepted_at" json:"accepted_at" xml:"accepted_at"`
+	// Whether this run's agreed revision and selected tests match the current
+	// Change Card and the usable build or the stored verification settings. This
+	// observation does not establish the current candidate working tree,
+	// deployment or approval.
+	InputsCurrent bool `form:"inputs_current" json:"inputs_current" xml:"inputs_current"`
+	// Absolute folder containing the binaries built by this completed run.
+	// Returned only to the user when promotion settings are configured, so the
+	// user can publish these exact binaries before approval. Agents never receive
+	// this private path.
+	CandidateBinariesDir *string `form:"candidate_binaries_dir,omitempty" json:"candidate_binaries_dir,omitempty" xml:"candidate_binaries_dir,omitempty"`
+	// Where the run's tests came from, recorded when the run started: evaluator,
+	// or written_tests with their commit and a notice.
+	TestSource TestSourceResponseBody `form:"test_source" json:"test_source" xml:"test_source"`
+	// Exactly one of running, completed or not_completed.
+	State StateResponseBody `form:"state" json:"state" xml:"state"`
+}
+
 // GoldenPathForbiddenResponseBody is the type of the "surla" service
 // "golden_path" endpoint HTTP response body for the "forbidden" error.
 type GoldenPathForbiddenResponseBody struct {
@@ -4493,6 +4528,61 @@ type ReportTestsFinishedForbiddenResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// ReviewVerificationNotFoundResponseBody is the type of the "surla" service
+// "review_verification" endpoint HTTP response body for the "not_found" error.
+type ReviewVerificationNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ReviewVerificationNotImplementedResponseBody is the type of the "surla"
+// service "review_verification" endpoint HTTP response body for the
+// "not_implemented" error.
+type ReviewVerificationNotImplementedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ReviewVerificationForbiddenResponseBody is the type of the "surla" service
+// "review_verification" endpoint HTTP response body for the "forbidden" error.
+type ReviewVerificationForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // AmbiguityQuestionResponseBody is used to define fields on response body
 // types.
 type AmbiguityQuestionResponseBody struct {
@@ -5335,6 +5425,58 @@ type ConfirmedAnswerResponseBody struct {
 	Answer string `form:"answer" json:"answer" xml:"answer"`
 }
 
+// VerificationReviewResponseBody is used to define fields on response body
+// types.
+type VerificationReviewResponseBody struct {
+	// The run's immutable Story context, or the explicit fact it was not recorded.
+	StoryContext StoryContextResponseBody `form:"story_context" json:"story_context" xml:"story_context"`
+	// The owner's current observation for this exact report, independent of
+	// inputs_current.
+	Approval ApprovalResponseBody `form:"approval" json:"approval" xml:"approval"`
+}
+
+// RecordedRunStoryResponseBody is used to define fields on response body types.
+type RecordedRunStoryResponseBody struct {
+	// Number of the build this run was accepted for.
+	BuildNumber int `form:"build_number" json:"build_number" xml:"build_number"`
+	// Accepted build's saved start time.
+	BuildStartedAt string `form:"build_started_at" json:"build_started_at" xml:"build_started_at"`
+	// Stories as agreed for this run, in declaration order; empty when the
+	// agreement declares none.
+	Stories []*StorySummaryItemResponseBody `form:"stories" json:"stories" xml:"stories"`
+	// The owner's exact required-test mapping for written tests, or the explicit
+	// absence of such a mapping for an operator evaluator.
+	Mapping MappingResponseBody `form:"mapping" json:"mapping" xml:"mapping"`
+}
+
+// RunStoryMappingResponseBody is used to define fields on response body types.
+type RunStoryMappingResponseBody struct {
+	// One test per finished flow, in declaration order.
+	RequiredTests []*RequiredTestResponseBody `form:"required_tests" json:"required_tests" xml:"required_tests"`
+}
+
+// RunEvaluatorMappingUnknownResponseBody is used to define fields on response
+// body types.
+type RunEvaluatorMappingUnknownResponseBody struct {
+}
+
+// RunStoryNotRecordedResponseBody is used to define fields on response body
+// types.
+type RunStoryNotRecordedResponseBody struct {
+}
+
+// RunApprovalAvailableResponseBody is used to define fields on response body
+// types.
+type RunApprovalAvailableResponseBody struct {
+}
+
+// RunApprovalBlockedResponseBody is used to define fields on response body
+// types.
+type RunApprovalBlockedResponseBody struct {
+	// Owner's safe explanation and enabling step.
+	Reason string `form:"reason" json:"reason" xml:"reason"`
+}
+
 // CP1AnalysisRequestBody is used to define fields on request body types.
 type CP1AnalysisRequestBody struct {
 	// Plain-English description of the requested behavior, including the details
@@ -5467,6 +5609,270 @@ type ReplacedBuildRequestBody struct {
 	// started_at of the open build the page showed, exactly as get_build reported
 	// it.
 	StartedAt *string `form:"started_at,omitempty" json:"started_at,omitempty" xml:"started_at,omitempty"`
+}
+
+// ApprovalResponseBody holds exactly one of its branch values.
+type ApprovalResponseBody struct {
+	kind       ApprovalResponseBodyKind
+	available  *RunApprovalAvailableResponseBody
+	blocked    *RunApprovalBlockedResponseBody
+	recorded   *ApprovalItemResponseBody
+	unverified *UnverifiedApprovalItemResponseBody
+}
+
+// ApprovalResponseBodyKind records which ApprovalResponseBody branch is selected.
+type ApprovalResponseBodyKind string
+
+const (
+	// ApprovalResponseBodyKindAvailable identifies the available branch.
+	ApprovalResponseBodyKindAvailable ApprovalResponseBodyKind = "available"
+	// ApprovalResponseBodyKindBlocked identifies the blocked branch.
+	ApprovalResponseBodyKindBlocked ApprovalResponseBodyKind = "blocked"
+	// ApprovalResponseBodyKindRecorded identifies the recorded branch.
+	ApprovalResponseBodyKindRecorded ApprovalResponseBodyKind = "recorded"
+	// ApprovalResponseBodyKindUnverified identifies the unverified branch.
+	ApprovalResponseBodyKindUnverified ApprovalResponseBodyKind = "unverified"
+)
+
+// Kind returns the selected branch.
+func (u ApprovalResponseBody) Kind() ApprovalResponseBodyKind {
+	return u.kind
+}
+
+// NewApprovalResponseBodyAvailable constructs ApprovalResponseBody with the available branch set.
+func NewApprovalResponseBodyAvailable(v *RunApprovalAvailableResponseBody) ApprovalResponseBody {
+	return ApprovalResponseBody{
+		kind:      ApprovalResponseBodyKindAvailable,
+		available: v,
+	}
+}
+
+// AsAvailable returns the value when the available branch is selected.
+func (u ApprovalResponseBody) AsAvailable() (_ *RunApprovalAvailableResponseBody, ok bool) {
+	if u.kind != ApprovalResponseBodyKindAvailable {
+		return
+	}
+	return u.available, true
+}
+
+// SetAvailable selects the available branch and stores v.
+func (u *ApprovalResponseBody) SetAvailable(v *RunApprovalAvailableResponseBody) {
+	*u = ApprovalResponseBody{
+		kind:      ApprovalResponseBodyKindAvailable,
+		available: v,
+	}
+}
+
+// NewApprovalResponseBodyBlocked constructs ApprovalResponseBody with the blocked branch set.
+func NewApprovalResponseBodyBlocked(v *RunApprovalBlockedResponseBody) ApprovalResponseBody {
+	return ApprovalResponseBody{
+		kind:    ApprovalResponseBodyKindBlocked,
+		blocked: v,
+	}
+}
+
+// AsBlocked returns the value when the blocked branch is selected.
+func (u ApprovalResponseBody) AsBlocked() (_ *RunApprovalBlockedResponseBody, ok bool) {
+	if u.kind != ApprovalResponseBodyKindBlocked {
+		return
+	}
+	return u.blocked, true
+}
+
+// SetBlocked selects the blocked branch and stores v.
+func (u *ApprovalResponseBody) SetBlocked(v *RunApprovalBlockedResponseBody) {
+	*u = ApprovalResponseBody{
+		kind:    ApprovalResponseBodyKindBlocked,
+		blocked: v,
+	}
+}
+
+// NewApprovalResponseBodyRecorded constructs ApprovalResponseBody with the recorded branch set.
+func NewApprovalResponseBodyRecorded(v *ApprovalItemResponseBody) ApprovalResponseBody {
+	return ApprovalResponseBody{
+		kind:     ApprovalResponseBodyKindRecorded,
+		recorded: v,
+	}
+}
+
+// AsRecorded returns the value when the recorded branch is selected.
+func (u ApprovalResponseBody) AsRecorded() (_ *ApprovalItemResponseBody, ok bool) {
+	if u.kind != ApprovalResponseBodyKindRecorded {
+		return
+	}
+	return u.recorded, true
+}
+
+// SetRecorded selects the recorded branch and stores v.
+func (u *ApprovalResponseBody) SetRecorded(v *ApprovalItemResponseBody) {
+	*u = ApprovalResponseBody{
+		kind:     ApprovalResponseBodyKindRecorded,
+		recorded: v,
+	}
+}
+
+// NewApprovalResponseBodyUnverified constructs ApprovalResponseBody with the unverified branch set.
+func NewApprovalResponseBodyUnverified(v *UnverifiedApprovalItemResponseBody) ApprovalResponseBody {
+	return ApprovalResponseBody{
+		kind:       ApprovalResponseBodyKindUnverified,
+		unverified: v,
+	}
+}
+
+// AsUnverified returns the value when the unverified branch is selected.
+func (u ApprovalResponseBody) AsUnverified() (_ *UnverifiedApprovalItemResponseBody, ok bool) {
+	if u.kind != ApprovalResponseBodyKindUnverified {
+		return
+	}
+	return u.unverified, true
+}
+
+// SetUnverified selects the unverified branch and stores v.
+func (u *ApprovalResponseBody) SetUnverified(v *UnverifiedApprovalItemResponseBody) {
+	*u = ApprovalResponseBody{
+		kind:       ApprovalResponseBodyKindUnverified,
+		unverified: v,
+	}
+}
+
+// Validate ensures exactly one valid branch is selected.
+func (u ApprovalResponseBody) Validate() error {
+	_, err := u.Value()
+	return err
+}
+
+// Value returns the selected branch value, or the same selection error as Validate.
+// Go templates can read this method directly; an invalid selection stops execution.
+func (u ApprovalResponseBody) Value() (any, error) {
+	switch u.kind {
+	case "":
+		return nil, goa.InvalidEnumValueError("state", "", []any{
+			string(ApprovalResponseBodyKindAvailable),
+			string(ApprovalResponseBodyKindBlocked),
+			string(ApprovalResponseBodyKindRecorded),
+			string(ApprovalResponseBodyKindUnverified),
+		})
+	case ApprovalResponseBodyKindAvailable:
+		if u.available == nil {
+			return nil, goa.MissingFieldError("value", "ApprovalResponseBody")
+		}
+		return u.available, nil
+	case ApprovalResponseBodyKindBlocked:
+		if u.blocked == nil {
+			return nil, goa.MissingFieldError("value", "ApprovalResponseBody")
+		}
+		return u.blocked, nil
+	case ApprovalResponseBodyKindRecorded:
+		if u.recorded == nil {
+			return nil, goa.MissingFieldError("value", "ApprovalResponseBody")
+		}
+		return u.recorded, nil
+	case ApprovalResponseBodyKindUnverified:
+		if u.unverified == nil {
+			return nil, goa.MissingFieldError("value", "ApprovalResponseBody")
+		}
+		return u.unverified, nil
+	default:
+		return nil, goa.InvalidEnumValueError("state", u.kind, []any{
+			string(ApprovalResponseBodyKindAvailable),
+			string(ApprovalResponseBodyKindBlocked),
+			string(ApprovalResponseBodyKindRecorded),
+			string(ApprovalResponseBodyKindUnverified),
+		})
+	}
+}
+
+// MarshalJSON writes the selected object branch beside its discriminator.
+func (u ApprovalResponseBody) MarshalJSON() ([]byte, error) {
+	value, err := u.Value()
+	if err != nil {
+		return nil, err
+	}
+	data, err := json.Marshal(value)
+	if err != nil {
+		return nil, err
+	}
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(data, &fields); err != nil {
+		return nil, err
+	}
+	if fields == nil {
+		return nil, goa.InvalidFieldTypeError("state", nil, "non-null JSON object")
+	}
+	if _, exists := fields["state"]; exists {
+		return nil, fmt.Errorf("ApprovalResponseBody branch already contains discriminator %q", "state")
+	}
+	tag, err := json.Marshal(string(u.kind))
+	if err != nil {
+		return nil, err
+	}
+	fields["state"] = tag
+	return json.Marshal(fields)
+}
+
+// UnmarshalJSON reads the discriminator and decodes its declared object branch.
+func (u *ApprovalResponseBody) UnmarshalJSON(data []byte) error {
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(data, &fields); err != nil {
+		return err
+	}
+	tag, exists := fields["state"]
+	if !exists {
+		return goa.MissingFieldError("state", "ApprovalResponseBody")
+	}
+	if bytes.Equal(bytes.TrimSpace(tag), []byte("null")) {
+		return goa.InvalidFieldTypeError("state", nil, "JSON string")
+	}
+	var raw struct {
+		Type  string
+		Value json.RawMessage
+	}
+	if err := json.Unmarshal(tag, &raw.Type); err != nil {
+		return err
+	}
+	delete(fields, "state")
+	value, err := json.Marshal(fields)
+	if err != nil {
+		return err
+	}
+	raw.Value = value
+	switch raw.Type {
+	case string(ApprovalResponseBodyKindAvailable):
+		var v *RunApprovalAvailableResponseBody
+		if err := json.Unmarshal(raw.Value, &v); err != nil {
+			return err
+		}
+		u.SetAvailable(v)
+	case string(ApprovalResponseBodyKindBlocked):
+		var v *RunApprovalBlockedResponseBody
+		if err := json.Unmarshal(raw.Value, &v); err != nil {
+			return err
+		}
+		u.SetBlocked(v)
+	case string(ApprovalResponseBodyKindRecorded):
+		var v *ApprovalItemResponseBody
+		if err := json.Unmarshal(raw.Value, &v); err != nil {
+			return err
+		}
+		u.SetRecorded(v)
+	case string(ApprovalResponseBodyKindUnverified):
+		var v *UnverifiedApprovalItemResponseBody
+		if err := json.Unmarshal(raw.Value, &v); err != nil {
+			return err
+		}
+		u.SetUnverified(v)
+	default:
+		if raw.Type == "" {
+			return goa.MissingFieldError("state", "ApprovalResponseBody")
+		}
+		return goa.InvalidEnumValueError("state", raw.Type, []any{
+			string(ApprovalResponseBodyKindAvailable),
+			string(ApprovalResponseBodyKindBlocked),
+			string(ApprovalResponseBodyKindRecorded),
+			string(ApprovalResponseBodyKindUnverified),
+		})
+	}
+	return nil
 }
 
 // ApprovalTestSourceResponseBody holds exactly one of its branch values.
@@ -6807,6 +7213,188 @@ func (u *LiveTargetResponseBody) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+// MappingResponseBody holds exactly one of its branch values.
+type MappingResponseBody struct {
+	kind                    MappingResponseBodyKind
+	mapped                  *RunStoryMappingResponseBody
+	notRecordedForEvaluator *RunEvaluatorMappingUnknownResponseBody
+}
+
+// MappingResponseBodyKind records which MappingResponseBody branch is selected.
+type MappingResponseBodyKind string
+
+const (
+	// MappingResponseBodyKindMapped identifies the mapped branch.
+	MappingResponseBodyKindMapped MappingResponseBodyKind = "mapped"
+	// MappingResponseBodyKindNotRecordedForEvaluator identifies the not_recorded_for_evaluator branch.
+	MappingResponseBodyKindNotRecordedForEvaluator MappingResponseBodyKind = "not_recorded_for_evaluator"
+)
+
+// Kind returns the selected branch.
+func (u MappingResponseBody) Kind() MappingResponseBodyKind {
+	return u.kind
+}
+
+// NewMappingResponseBodyMapped constructs MappingResponseBody with the mapped branch set.
+func NewMappingResponseBodyMapped(v *RunStoryMappingResponseBody) MappingResponseBody {
+	return MappingResponseBody{
+		kind:   MappingResponseBodyKindMapped,
+		mapped: v,
+	}
+}
+
+// AsMapped returns the value when the mapped branch is selected.
+func (u MappingResponseBody) AsMapped() (_ *RunStoryMappingResponseBody, ok bool) {
+	if u.kind != MappingResponseBodyKindMapped {
+		return
+	}
+	return u.mapped, true
+}
+
+// SetMapped selects the mapped branch and stores v.
+func (u *MappingResponseBody) SetMapped(v *RunStoryMappingResponseBody) {
+	*u = MappingResponseBody{
+		kind:   MappingResponseBodyKindMapped,
+		mapped: v,
+	}
+}
+
+// NewMappingResponseBodyNotRecordedForEvaluator constructs MappingResponseBody with the not_recorded_for_evaluator branch set.
+func NewMappingResponseBodyNotRecordedForEvaluator(v *RunEvaluatorMappingUnknownResponseBody) MappingResponseBody {
+	return MappingResponseBody{
+		kind:                    MappingResponseBodyKindNotRecordedForEvaluator,
+		notRecordedForEvaluator: v,
+	}
+}
+
+// AsNotRecordedForEvaluator returns the value when the not_recorded_for_evaluator branch is selected.
+func (u MappingResponseBody) AsNotRecordedForEvaluator() (_ *RunEvaluatorMappingUnknownResponseBody, ok bool) {
+	if u.kind != MappingResponseBodyKindNotRecordedForEvaluator {
+		return
+	}
+	return u.notRecordedForEvaluator, true
+}
+
+// SetNotRecordedForEvaluator selects the not_recorded_for_evaluator branch and stores v.
+func (u *MappingResponseBody) SetNotRecordedForEvaluator(v *RunEvaluatorMappingUnknownResponseBody) {
+	*u = MappingResponseBody{
+		kind:                    MappingResponseBodyKindNotRecordedForEvaluator,
+		notRecordedForEvaluator: v,
+	}
+}
+
+// Validate ensures exactly one valid branch is selected.
+func (u MappingResponseBody) Validate() error {
+	_, err := u.Value()
+	return err
+}
+
+// Value returns the selected branch value, or the same selection error as Validate.
+// Go templates can read this method directly; an invalid selection stops execution.
+func (u MappingResponseBody) Value() (any, error) {
+	switch u.kind {
+	case "":
+		return nil, goa.InvalidEnumValueError("state", "", []any{
+			string(MappingResponseBodyKindMapped),
+			string(MappingResponseBodyKindNotRecordedForEvaluator),
+		})
+	case MappingResponseBodyKindMapped:
+		if u.mapped == nil {
+			return nil, goa.MissingFieldError("value", "MappingResponseBody")
+		}
+		return u.mapped, nil
+	case MappingResponseBodyKindNotRecordedForEvaluator:
+		if u.notRecordedForEvaluator == nil {
+			return nil, goa.MissingFieldError("value", "MappingResponseBody")
+		}
+		return u.notRecordedForEvaluator, nil
+	default:
+		return nil, goa.InvalidEnumValueError("state", u.kind, []any{
+			string(MappingResponseBodyKindMapped),
+			string(MappingResponseBodyKindNotRecordedForEvaluator),
+		})
+	}
+}
+
+// MarshalJSON writes the selected object branch beside its discriminator.
+func (u MappingResponseBody) MarshalJSON() ([]byte, error) {
+	value, err := u.Value()
+	if err != nil {
+		return nil, err
+	}
+	data, err := json.Marshal(value)
+	if err != nil {
+		return nil, err
+	}
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(data, &fields); err != nil {
+		return nil, err
+	}
+	if fields == nil {
+		return nil, goa.InvalidFieldTypeError("state", nil, "non-null JSON object")
+	}
+	if _, exists := fields["state"]; exists {
+		return nil, fmt.Errorf("MappingResponseBody branch already contains discriminator %q", "state")
+	}
+	tag, err := json.Marshal(string(u.kind))
+	if err != nil {
+		return nil, err
+	}
+	fields["state"] = tag
+	return json.Marshal(fields)
+}
+
+// UnmarshalJSON reads the discriminator and decodes its declared object branch.
+func (u *MappingResponseBody) UnmarshalJSON(data []byte) error {
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(data, &fields); err != nil {
+		return err
+	}
+	tag, exists := fields["state"]
+	if !exists {
+		return goa.MissingFieldError("state", "MappingResponseBody")
+	}
+	if bytes.Equal(bytes.TrimSpace(tag), []byte("null")) {
+		return goa.InvalidFieldTypeError("state", nil, "JSON string")
+	}
+	var raw struct {
+		Type  string
+		Value json.RawMessage
+	}
+	if err := json.Unmarshal(tag, &raw.Type); err != nil {
+		return err
+	}
+	delete(fields, "state")
+	value, err := json.Marshal(fields)
+	if err != nil {
+		return err
+	}
+	raw.Value = value
+	switch raw.Type {
+	case string(MappingResponseBodyKindMapped):
+		var v *RunStoryMappingResponseBody
+		if err := json.Unmarshal(raw.Value, &v); err != nil {
+			return err
+		}
+		u.SetMapped(v)
+	case string(MappingResponseBodyKindNotRecordedForEvaluator):
+		var v *RunEvaluatorMappingUnknownResponseBody
+		if err := json.Unmarshal(raw.Value, &v); err != nil {
+			return err
+		}
+		u.SetNotRecordedForEvaluator(v)
+	default:
+		if raw.Type == "" {
+			return goa.MissingFieldError("state", "MappingResponseBody")
+		}
+		return goa.InvalidEnumValueError("state", raw.Type, []any{
+			string(MappingResponseBodyKindMapped),
+			string(MappingResponseBodyKindNotRecordedForEvaluator),
+		})
+	}
+	return nil
+}
+
 // StateResponseBody holds exactly one of its branch values.
 type StateResponseBody struct {
 	kind         StateResponseBodyKind
@@ -7001,6 +7589,188 @@ func (u *StateResponseBody) UnmarshalJSON(data []byte) error {
 			string(StateResponseBodyKindRunning),
 			string(StateResponseBodyKindCompleted),
 			string(StateResponseBodyKindNotCompleted),
+		})
+	}
+	return nil
+}
+
+// StoryContextResponseBody holds exactly one of its branch values.
+type StoryContextResponseBody struct {
+	kind        StoryContextResponseBodyKind
+	recorded    *RecordedRunStoryResponseBody
+	notRecorded *RunStoryNotRecordedResponseBody
+}
+
+// StoryContextResponseBodyKind records which StoryContextResponseBody branch is selected.
+type StoryContextResponseBodyKind string
+
+const (
+	// StoryContextResponseBodyKindRecorded identifies the recorded branch.
+	StoryContextResponseBodyKindRecorded StoryContextResponseBodyKind = "recorded"
+	// StoryContextResponseBodyKindNotRecorded identifies the not_recorded branch.
+	StoryContextResponseBodyKindNotRecorded StoryContextResponseBodyKind = "not_recorded"
+)
+
+// Kind returns the selected branch.
+func (u StoryContextResponseBody) Kind() StoryContextResponseBodyKind {
+	return u.kind
+}
+
+// NewStoryContextResponseBodyRecorded constructs StoryContextResponseBody with the recorded branch set.
+func NewStoryContextResponseBodyRecorded(v *RecordedRunStoryResponseBody) StoryContextResponseBody {
+	return StoryContextResponseBody{
+		kind:     StoryContextResponseBodyKindRecorded,
+		recorded: v,
+	}
+}
+
+// AsRecorded returns the value when the recorded branch is selected.
+func (u StoryContextResponseBody) AsRecorded() (_ *RecordedRunStoryResponseBody, ok bool) {
+	if u.kind != StoryContextResponseBodyKindRecorded {
+		return
+	}
+	return u.recorded, true
+}
+
+// SetRecorded selects the recorded branch and stores v.
+func (u *StoryContextResponseBody) SetRecorded(v *RecordedRunStoryResponseBody) {
+	*u = StoryContextResponseBody{
+		kind:     StoryContextResponseBodyKindRecorded,
+		recorded: v,
+	}
+}
+
+// NewStoryContextResponseBodyNotRecorded constructs StoryContextResponseBody with the not_recorded branch set.
+func NewStoryContextResponseBodyNotRecorded(v *RunStoryNotRecordedResponseBody) StoryContextResponseBody {
+	return StoryContextResponseBody{
+		kind:        StoryContextResponseBodyKindNotRecorded,
+		notRecorded: v,
+	}
+}
+
+// AsNotRecorded returns the value when the not_recorded branch is selected.
+func (u StoryContextResponseBody) AsNotRecorded() (_ *RunStoryNotRecordedResponseBody, ok bool) {
+	if u.kind != StoryContextResponseBodyKindNotRecorded {
+		return
+	}
+	return u.notRecorded, true
+}
+
+// SetNotRecorded selects the not_recorded branch and stores v.
+func (u *StoryContextResponseBody) SetNotRecorded(v *RunStoryNotRecordedResponseBody) {
+	*u = StoryContextResponseBody{
+		kind:        StoryContextResponseBodyKindNotRecorded,
+		notRecorded: v,
+	}
+}
+
+// Validate ensures exactly one valid branch is selected.
+func (u StoryContextResponseBody) Validate() error {
+	_, err := u.Value()
+	return err
+}
+
+// Value returns the selected branch value, or the same selection error as Validate.
+// Go templates can read this method directly; an invalid selection stops execution.
+func (u StoryContextResponseBody) Value() (any, error) {
+	switch u.kind {
+	case "":
+		return nil, goa.InvalidEnumValueError("state", "", []any{
+			string(StoryContextResponseBodyKindRecorded),
+			string(StoryContextResponseBodyKindNotRecorded),
+		})
+	case StoryContextResponseBodyKindRecorded:
+		if u.recorded == nil {
+			return nil, goa.MissingFieldError("value", "StoryContextResponseBody")
+		}
+		return u.recorded, nil
+	case StoryContextResponseBodyKindNotRecorded:
+		if u.notRecorded == nil {
+			return nil, goa.MissingFieldError("value", "StoryContextResponseBody")
+		}
+		return u.notRecorded, nil
+	default:
+		return nil, goa.InvalidEnumValueError("state", u.kind, []any{
+			string(StoryContextResponseBodyKindRecorded),
+			string(StoryContextResponseBodyKindNotRecorded),
+		})
+	}
+}
+
+// MarshalJSON writes the selected object branch beside its discriminator.
+func (u StoryContextResponseBody) MarshalJSON() ([]byte, error) {
+	value, err := u.Value()
+	if err != nil {
+		return nil, err
+	}
+	data, err := json.Marshal(value)
+	if err != nil {
+		return nil, err
+	}
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(data, &fields); err != nil {
+		return nil, err
+	}
+	if fields == nil {
+		return nil, goa.InvalidFieldTypeError("state", nil, "non-null JSON object")
+	}
+	if _, exists := fields["state"]; exists {
+		return nil, fmt.Errorf("StoryContextResponseBody branch already contains discriminator %q", "state")
+	}
+	tag, err := json.Marshal(string(u.kind))
+	if err != nil {
+		return nil, err
+	}
+	fields["state"] = tag
+	return json.Marshal(fields)
+}
+
+// UnmarshalJSON reads the discriminator and decodes its declared object branch.
+func (u *StoryContextResponseBody) UnmarshalJSON(data []byte) error {
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(data, &fields); err != nil {
+		return err
+	}
+	tag, exists := fields["state"]
+	if !exists {
+		return goa.MissingFieldError("state", "StoryContextResponseBody")
+	}
+	if bytes.Equal(bytes.TrimSpace(tag), []byte("null")) {
+		return goa.InvalidFieldTypeError("state", nil, "JSON string")
+	}
+	var raw struct {
+		Type  string
+		Value json.RawMessage
+	}
+	if err := json.Unmarshal(tag, &raw.Type); err != nil {
+		return err
+	}
+	delete(fields, "state")
+	value, err := json.Marshal(fields)
+	if err != nil {
+		return err
+	}
+	raw.Value = value
+	switch raw.Type {
+	case string(StoryContextResponseBodyKindRecorded):
+		var v *RecordedRunStoryResponseBody
+		if err := json.Unmarshal(raw.Value, &v); err != nil {
+			return err
+		}
+		u.SetRecorded(v)
+	case string(StoryContextResponseBodyKindNotRecorded):
+		var v *RunStoryNotRecordedResponseBody
+		if err := json.Unmarshal(raw.Value, &v); err != nil {
+			return err
+		}
+		u.SetNotRecorded(v)
+	default:
+		if raw.Type == "" {
+			return goa.MissingFieldError("state", "StoryContextResponseBody")
+		}
+		return goa.InvalidEnumValueError("state", raw.Type, []any{
+			string(StoryContextResponseBodyKindRecorded),
+			string(StoryContextResponseBodyKindNotRecorded),
 		})
 	}
 	return nil
@@ -9493,6 +10263,78 @@ func NewReportTestsFinishedResponseBody(res *surla.TestWriterAssignmentItem) *Re
 	}
 	if res.Progress != nil {
 		body.Progress = marshalSurlaTestWriterProgressToTestWriterProgressResponseBody(res.Progress)
+	}
+	return body
+}
+
+// NewReviewVerificationResponseBody builds the HTTP response body from the
+// result of the "review_verification" endpoint of the "surla" service.
+func NewReviewVerificationResponseBody(res *surla.VerificationReviewResult) *ReviewVerificationResponseBody {
+	body := &ReviewVerificationResponseBody{
+		RunID:                res.RunID,
+		ChangeID:             res.ChangeID,
+		RequestRevision:      res.RequestRevision,
+		CandidateCommit:      res.CandidateCommit,
+		SuiteCommit:          res.SuiteCommit,
+		AcceptedAt:           res.AcceptedAt,
+		InputsCurrent:        res.InputsCurrent,
+		CandidateBinariesDir: res.CandidateBinariesDir,
+	}
+	if res.Review != nil {
+		body.Review = marshalSurlaVerificationReviewToVerificationReviewResponseBody(res.Review)
+	}
+	if res.TestSource.Kind() != "" {
+		switch string(res.TestSource.Kind()) {
+		case "evaluator":
+			actual, _ := res.TestSource.AsEvaluator()
+			var obj *OperatorEvaluatorTestsResponseBody
+			if actual != nil {
+				obj = marshalSurlaOperatorEvaluatorTestsToOperatorEvaluatorTestsResponseBody(actual)
+			}
+			u := body.TestSource
+			u.SetEvaluator((*OperatorEvaluatorTestsResponseBody)(obj))
+			body.TestSource = u
+		case "written_tests":
+			actual, _ := res.TestSource.AsWrittenTests()
+			var obj *AgentWrittenTestsResponseBody
+			if actual != nil {
+				obj = marshalSurlaAgentWrittenTestsToAgentWrittenTestsResponseBody(actual)
+			}
+			u := body.TestSource
+			u.SetWrittenTests((*AgentWrittenTestsResponseBody)(obj))
+			body.TestSource = u
+		}
+	}
+	if res.State.Kind() != "" {
+		switch string(res.State.Kind()) {
+		case "running":
+			actual, _ := res.State.AsRunning()
+			var obj *VerificationRunningResponseBody
+			if actual != nil {
+				obj = marshalSurlaVerificationRunningToVerificationRunningResponseBody(actual)
+			}
+			u := body.State
+			u.SetRunning((*VerificationRunningResponseBody)(obj))
+			body.State = u
+		case "completed":
+			actual, _ := res.State.AsCompleted()
+			var obj *VerificationCompletedResponseBody
+			if actual != nil {
+				obj = marshalSurlaVerificationCompletedToVerificationCompletedResponseBody(actual)
+			}
+			u := body.State
+			u.SetCompleted((*VerificationCompletedResponseBody)(obj))
+			body.State = u
+		case "not_completed":
+			actual, _ := res.State.AsNotCompleted()
+			var obj *VerificationNotCompletedResponseBody
+			if actual != nil {
+				obj = marshalSurlaVerificationNotCompletedToVerificationNotCompletedResponseBody(actual)
+			}
+			u := body.State
+			u.SetNotCompleted((*VerificationNotCompletedResponseBody)(obj))
+			body.State = u
+		}
 	}
 	return body
 }
@@ -12107,6 +12949,49 @@ func NewReportTestsFinishedForbiddenResponseBody(res *goa.ServiceError) *ReportT
 	return body
 }
 
+// NewReviewVerificationNotFoundResponseBody builds the HTTP response body from
+// the result of the "review_verification" endpoint of the "surla" service.
+func NewReviewVerificationNotFoundResponseBody(res *goa.ServiceError) *ReviewVerificationNotFoundResponseBody {
+	body := &ReviewVerificationNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewReviewVerificationNotImplementedResponseBody builds the HTTP response
+// body from the result of the "review_verification" endpoint of the "surla"
+// service.
+func NewReviewVerificationNotImplementedResponseBody(res *goa.ServiceError) *ReviewVerificationNotImplementedResponseBody {
+	body := &ReviewVerificationNotImplementedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewReviewVerificationForbiddenResponseBody builds the HTTP response body
+// from the result of the "review_verification" endpoint of the "surla" service.
+func NewReviewVerificationForbiddenResponseBody(res *goa.ServiceError) *ReviewVerificationForbiddenResponseBody {
+	body := &ReviewVerificationForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewProposeChangePayload builds a surla service propose_change endpoint
 // payload.
 func NewProposeChangePayload(body *ProposeChangeRequestBody) *surla.ProposeChangePayload {
@@ -12421,6 +13306,15 @@ func NewReportTestsFinishedPayload(body *ReportTestsFinishedRequestBody, changeI
 		RequestRevision: *body.RequestRevision,
 	}
 	v.ChangeID = changeID
+
+	return v
+}
+
+// NewReviewVerificationGetVerificationPayload builds a surla service
+// review_verification endpoint payload.
+func NewReviewVerificationGetVerificationPayload(runID string) *surla.GetVerificationPayload {
+	v := &surla.GetVerificationPayload{}
+	v.RunID = runID
 
 	return v
 }

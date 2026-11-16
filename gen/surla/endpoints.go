@@ -57,6 +57,7 @@ type Endpoints struct {
 	ListTestWriterAssignments goa.Endpoint
 	GetTestWriterAssignment   goa.Endpoint
 	ReportTestsFinished       goa.Endpoint
+	ReviewVerification        goa.Endpoint
 }
 
 // NewEndpoints wraps the methods of the "surla" service with endpoints.
@@ -104,6 +105,7 @@ func NewEndpoints(s Service) *Endpoints {
 		ListTestWriterAssignments: NewListTestWriterAssignmentsEndpoint(s),
 		GetTestWriterAssignment:   NewGetTestWriterAssignmentEndpoint(s),
 		ReportTestsFinished:       NewReportTestsFinishedEndpoint(s),
+		ReviewVerification:        NewReviewVerificationEndpoint(s),
 	}
 }
 
@@ -151,6 +153,7 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.ListTestWriterAssignments = m(e.ListTestWriterAssignments)
 	e.GetTestWriterAssignment = m(e.GetTestWriterAssignment)
 	e.ReportTestsFinished = m(e.ReportTestsFinished)
+	e.ReviewVerification = m(e.ReviewVerification)
 }
 
 // NewGoldenPathEndpoint returns an endpoint function that calls the method
@@ -514,5 +517,14 @@ func NewReportTestsFinishedEndpoint(s Service) goa.Endpoint {
 	return func(ctx context.Context, req any) (any, error) {
 		p := req.(*ReportTestsFinishedPayload)
 		return s.ReportTestsFinished(ctx, p)
+	}
+}
+
+// NewReviewVerificationEndpoint returns an endpoint function that calls the
+// method "review_verification" of service "surla".
+func NewReviewVerificationEndpoint(s Service) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*GetVerificationPayload)
+		return s.ReviewVerification(ctx, p)
 	}
 }

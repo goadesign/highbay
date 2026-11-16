@@ -25,7 +25,7 @@ import (
 func UsageCommands() []string {
 	return []string{
 		"project (identity|ensure-team|stop|browser-link|exchange-browser-link)",
-		"surla (golden-path|propose-change|revise-change|confirm-intent|get-change|decline-revision|preview-architecture|draft-override|start-live-target|stop-live-target|get-live-target|verify-change|get-verification|list-verifications|approve-merge|diff|configure-model|get-model-connection|hand-over-model-settings|init-project|generate-code|check-project|update-dependencies|read-check-output|list-traces|refresh-story|get-story-refresh|update-draft|get-team|show-team-pane|start-team-agents|list-changes|wait-for-changes|start-build|drop-build|get-build|get-test-findings|list-builder-assignments|get-builder-assignment|list-test-writer-assignments|get-test-writer-assignment|report-tests-finished)",
+		"surla (golden-path|propose-change|revise-change|confirm-intent|get-change|decline-revision|preview-architecture|draft-override|start-live-target|stop-live-target|get-live-target|verify-change|get-verification|list-verifications|approve-merge|diff|configure-model|get-model-connection|hand-over-model-settings|init-project|generate-code|check-project|update-dependencies|read-check-output|list-traces|refresh-story|get-story-refresh|update-draft|get-team|show-team-pane|start-team-agents|list-changes|wait-for-changes|start-build|drop-build|get-build|get-test-findings|list-builder-assignments|get-builder-assignment|list-test-writer-assignments|get-test-writer-assignment|report-tests-finished|review-verification)",
 	}
 }
 
@@ -197,6 +197,9 @@ func ParseEndpoint(
 		surlaReportTestsFinishedFlags        = flag.NewFlagSet("report-tests-finished", flag.ExitOnError)
 		surlaReportTestsFinishedBodyFlag     = new(cliStringFlag)
 		surlaReportTestsFinishedChangeIDFlag = new(cliStringFlag)
+
+		surlaReviewVerificationFlags     = flag.NewFlagSet("review-verification", flag.ExitOnError)
+		surlaReviewVerificationRunIDFlag = new(cliStringFlag)
 	)
 	projectExchangeBrowserLinkFlags.Var(projectExchangeBrowserLinkBodyFlag, "body", "")
 	surlaProposeChangeFlags.Var(surlaProposeChangeBodyFlag, "body", "")
@@ -231,6 +234,7 @@ func ParseEndpoint(
 	surlaGetTestWriterAssignmentFlags.Var(surlaGetTestWriterAssignmentChangeIDFlag, "change-id", "Change Card identifier from list_test_writer_assignments.")
 	surlaReportTestsFinishedFlags.Var(surlaReportTestsFinishedBodyFlag, "body", "")
 	surlaReportTestsFinishedFlags.Var(surlaReportTestsFinishedChangeIDFlag, "change-id", "Change Card identifier from your test assignment.")
+	surlaReviewVerificationFlags.Var(surlaReviewVerificationRunIDFlag, "run-id", "Verification run identifier returned by verify_change.")
 
 	projectFlags.Usage = projectUsage
 	projectIdentityFlags.Usage = projectIdentityUsage
@@ -282,6 +286,7 @@ func ParseEndpoint(
 	surlaListTestWriterAssignmentsFlags.Usage = surlaListTestWriterAssignmentsUsage
 	surlaGetTestWriterAssignmentFlags.Usage = surlaGetTestWriterAssignmentUsage
 	surlaReportTestsFinishedFlags.Usage = surlaReportTestsFinishedUsage
+	surlaReviewVerificationFlags.Usage = surlaReviewVerificationUsage
 
 	if err := flag.CommandLine.Parse(os.Args[1:]); err != nil {
 		return nil, nil, err
@@ -464,6 +469,9 @@ func ParseEndpoint(
 			case "report-tests-finished":
 				epf = surlaReportTestsFinishedFlags
 
+			case "review-verification":
+				epf = surlaReviewVerificationFlags
+
 			}
 
 		}
@@ -616,6 +624,9 @@ func ParseEndpoint(
 			case "report-tests-finished":
 				endpoint = c.ReportTestsFinished()
 				data, err = surlac.BuildReportTestsFinishedPayload(surlaReportTestsFinishedBodyFlag.value, surlaReportTestsFinishedChangeIDFlag.value)
+			case "review-verification":
+				endpoint = c.ReviewVerification()
+				data, err = surlac.BuildReviewVerificationPayload(surlaReviewVerificationRunIDFlag.value)
 			}
 		}
 	}
@@ -769,6 +780,7 @@ func surlaUsage() {
 	fmt.Fprintln(os.Stderr, `    list-test-writer-assignments: List the test writer's assignment for the project's open build while that role has work; empty otherwise. Reading the list records nothing and moves no working copy.`)
 	fmt.Fprintln(os.Stderr, `    get-test-writer-assignment: Return the test writer's assignment for a change in full (the working folder, the design and Story as agreed at the built revision, the user's confirmed answers, confirmation examples and preserved behaviors of that revision, the tests it requires, and the state with the text of any findings) and record that the test writer read it at its revision. Later revisions do not change what the build saved. A new build of the change replaces the assignment, which then counts as unread, and so does each verdict of Surla's check. The first read of a new build joins your working copy to the build's branch, surla/tests-<n> at the build's base. A read that marks the assignment read also writes the required tests' generated folder into your copy. A copy with uncommitted work on an earlier tests build branch first gets that work committed there; a clean copy joins from any branch. Other uncommitted work or a Git operation is refused with copy_off_branch; nothing is marked read then.`)
 	fmt.Fprintln(os.Stderr, `    report-tests-finished: The test writer reports that its tests for a change at the build's revision are finished. Every report raises the build's report number by one and makes the state reported, from any state, clearing an earlier verdict, and returns at once. Surla then checks the tests in the working folder against the build's Story; its verdict, needs_changes, accepted or could_not_run, replaces reported in the test writer's assignment, which then counts as unread. A report for another revision, or in a project with stored verification settings, where no test writer is used, is refused and changes nothing.`)
+	fmt.Fprintln(os.Stderr, `    review-verification: Read one saved run for the authenticated user before approval: its existing builder-safe result, the Story recorded at acceptance and exact required-test mapping when known, and the owner's current approval observation. This read records no approval and changes no workflow state. Agents use get_verification instead.`)
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Additional help:")
 	fmt.Fprintf(os.Stderr, "    %s surla COMMAND --help\n", os.Args[0])
@@ -1511,4 +1523,22 @@ func surlaReportTestsFinishedUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "surla report-tests-finished --body '{\n      \"request_revision\": \"td\"\n   }' --change-id \"7\"")
+}
+
+func surlaReviewVerificationUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] surla review-verification", os.Args[0])
+	fmt.Fprint(os.Stderr, " -run-id STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Read one saved run for the authenticated user before approval: its existing builder-safe result, the Story recorded at acceptance and exact required-test mapping when known, and the owner's current approval observation. This read records no approval and changes no workflow state. Agents use get_verification instead.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -run-id STRING: Verification run identifier returned by verify_change.`)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "surla review-verification --run-id \"Sapiente quae quis reiciendis autem consectetur et.\"")
 }

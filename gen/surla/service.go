@@ -488,6 +488,12 @@ type Service interface {
 	// verification settings, where no test writer is used, is refused and changes
 	// nothing.
 	ReportTestsFinished(context.Context, *ReportTestsFinishedPayload) (res *TestWriterAssignmentItem, err error)
+	// Read one saved run for the authenticated user before approval: its existing
+	// builder-safe result, the Story recorded at acceptance and exact
+	// required-test mapping when known, and the owner's current approval
+	// observation. This read records no approval and changes no workflow state.
+	// Agents use get_verification instead.
+	ReviewVerification(context.Context, *GetVerificationPayload) (res *VerificationReviewResult, err error)
 }
 
 // APIName is the name of the API as defined in the design.
@@ -504,7 +510,7 @@ const ServiceName = "surla"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [42]string{"golden_path", "propose_change", "revise_change", "confirm_intent", "get_change", "decline_revision", "preview_architecture", "draft_override", "start_live_target", "stop_live_target", "get_live_target", "verify_change", "get_verification", "list_verifications", "approve_merge", "diff", "configure_model", "get_model_connection", "hand_over_model_settings", "init_project", "generate_code", "check_project", "update_dependencies", "read_check_output", "list_traces", "refresh_story", "get_story_refresh", "update_draft", "get_team", "show_team_pane", "start_team_agents", "list_changes", "wait_for_changes", "start_build", "drop_build", "get_build", "get_test_findings", "list_builder_assignments", "get_builder_assignment", "list_test_writer_assignments", "get_test_writer_assignment", "report_tests_finished"}
+var MethodNames = [43]string{"golden_path", "propose_change", "revise_change", "confirm_intent", "get_change", "decline_revision", "preview_architecture", "draft_override", "start_live_target", "stop_live_target", "get_live_target", "verify_change", "get_verification", "list_verifications", "approve_merge", "diff", "configure_model", "get_model_connection", "hand_over_model_settings", "init_project", "generate_code", "check_project", "update_dependencies", "read_check_output", "list_traces", "refresh_story", "get_story_refresh", "update_draft", "get_team", "show_team_pane", "start_team_agents", "list_changes", "wait_for_changes", "start_build", "drop_build", "get_build", "get_test_findings", "list_builder_assignments", "get_builder_assignment", "list_test_writer_assignments", "get_test_writer_assignment", "report_tests_finished", "review_verification"}
 
 // Evaluated Goa-AI cost, safety, history, and cache policy for a single agent.
 type AgentPolicyItem struct {
@@ -1627,6 +1633,21 @@ type ReadCheckOutputPayload struct {
 	Cursor *string
 }
 
+// The Story copied from this run's accepted build, independent of later
+// revisions or builds.
+type RecordedRunStory struct {
+	// Number of the build this run was accepted for.
+	BuildNumber int
+	// Accepted build's saved start time.
+	BuildStartedAt string
+	// Stories as agreed for this run, in declaration order; empty when the
+	// agreement declares none.
+	Stories []*StorySummaryItem
+	// The owner's exact required-test mapping for written tests, or the explicit
+	// absence of such a mapping for an operator evaluator.
+	Mapping Mapping
+}
+
 // The open build of this same change that the page showed the user when the
 // user agreed to build the change again before any verification of it passed.
 // A start whose replaces does not name the open build exactly was decided on a
@@ -1681,6 +1702,35 @@ type ReviseChangePayload struct {
 	// Your analysis of the revised prompt against the current card and the
 	// target's current design.
 	Analysis *CP1RevisionAnalysis
+}
+
+// The owner checked this run against current approval requirements.
+// approve_merge rechecks them and may refuse a later change; this read saves
+// nothing.
+type RunApprovalAvailable struct {
+}
+
+// Approval cannot currently be offered for this run.
+type RunApprovalBlocked struct {
+	// Owner's safe explanation and enabling step.
+	Reason string
+}
+
+// The operator evaluator has no recorded relation between its declared tests
+// and the Story flows. This does not prove the flows were untested.
+type RunEvaluatorMappingUnknown struct {
+}
+
+// Exact mapping produced by the same owner that generates Story tests;
+// unfinished flows require no test.
+type RunStoryMapping struct {
+	// One test per finished flow, in declaration order.
+	RequiredTests []*RequiredTest
+}
+
+// No Story context was recorded for this run. Never substitute the current
+// agreement's Story.
+type RunStoryNotRecorded struct {
 }
 
 // A running live target.
@@ -2250,6 +2300,51 @@ type VerificationNotCompleted struct {
 	Stage string
 	// Builder-safe description of what stopped the run; never command output.
 	Summary string
+}
+
+// The user's review of one selected run; no hidden scenario names, checks or
+// logs are exposed.
+type VerificationReview struct {
+	// The run's immutable Story context, or the explicit fact it was not recorded.
+	StoryContext StoryContext
+	// The owner's current observation for this exact report, independent of
+	// inputs_current.
+	Approval Approval
+}
+
+// VerificationReviewResult is the result type of the surla service
+// review_verification method.
+type VerificationReviewResult struct {
+	// Immutable Story evidence and the owner's current approval observation.
+	Review *VerificationReview
+	// Verification run identifier; get_verification takes it.
+	RunID string
+	// Change Card the run verifies.
+	ChangeID string
+	// Change Card revision the run verifies.
+	RequestRevision string
+	// Candidate commit the run builds and verifies.
+	CandidateCommit string
+	// Commit of the tests the run uses: the operator's evaluator, or the tests
+	// accepted for the change's build.
+	SuiteCommit string
+	// When the run was accepted.
+	AcceptedAt string
+	// Whether this run's agreed revision and selected tests match the current
+	// Change Card and the usable build or the stored verification settings. This
+	// observation does not establish the current candidate working tree,
+	// deployment or approval.
+	InputsCurrent bool
+	// Absolute folder containing the binaries built by this completed run.
+	// Returned only to the user when promotion settings are configured, so the
+	// user can publish these exact binaries before approval. Agents never receive
+	// this private path.
+	CandidateBinariesDir *string
+	// Where the run's tests came from, recorded when the run started: evaluator,
+	// or written_tests with their commit and a notice.
+	TestSource TestSource
+	// Exactly one of running, completed or not_completed.
+	State State
 }
 
 // The run is still building or evaluating the candidate.
@@ -5593,6 +5688,72 @@ func validatejsonReadCheckOutputPayloadTransport(value *jsonReadCheckOutputPaylo
 	return err
 }
 
+// jsonRecordedRunStoryTransport stores JSON fields until they have been validated.
+type jsonRecordedRunStoryTransport struct {
+	// Number of the build this run was accepted for.
+	BuildNumber *recordedRunStoryIntTransport `json:"build_number"`
+	// Accepted build's saved start time.
+	BuildStartedAt *string `json:"build_started_at"`
+	// Stories as agreed for this run, in declaration order; empty when the
+	// agreement declares none.
+	Stories []*jsonStorySummaryItemTransport `json:"stories"`
+	// The owner's exact required-test mapping for written tests, or the explicit
+	// absence of such a mapping for an operator evaluator.
+	Mapping *jsonMappingTransport `json:"mapping"`
+}
+
+// validatejsonRecordedRunStoryTransport checks decoded JSON before it becomes a service value.
+func validatejsonRecordedRunStoryTransport(value *jsonRecordedRunStoryTransport) (err error) {
+	if value == nil {
+		return goa.MissingFieldError("body", "JSON value")
+	}
+	if value.BuildNumber == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("build_number", "body"))
+	}
+	if value.BuildStartedAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("build_started_at", "body"))
+	}
+	if value.Stories == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("stories", "body"))
+	}
+	if value.Mapping == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("mapping", "body"))
+	}
+	if value.BuildNumber != nil {
+		if int(*value.BuildNumber) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.build_number", int(*value.BuildNumber), 1, true))
+		}
+	}
+	if value.BuildStartedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.build_started_at", *value.BuildStartedAt, goa.FormatDateTime))
+	}
+	for _, e := range value.Stories {
+		if e != nil {
+			if err2 := validatejsonStorySummaryItemTransport(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	if value.Mapping != nil {
+
+		if err2 := value.Mapping.Validate(); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		} else {
+			switch string(value.Mapping.Kind()) {
+			case "mapped":
+				actual, _ := value.Mapping.AsMapped()
+				if actual != nil {
+					if err2 := validatejsonRunStoryMappingTransport(actual); err2 != nil {
+						err = goa.MergeErrors(err, err2)
+					}
+				}
+			}
+		}
+
+	}
+	return err
+}
+
 // jsonReplacedBuildTransport stores JSON fields until they have been validated.
 type jsonReplacedBuildTransport struct {
 	// change_id of the open build the page showed.
@@ -5699,6 +5860,91 @@ func validatejsonReviseChangePayloadTransport(value *jsonReviseChangePayloadTran
 			err = goa.MergeErrors(err, err2)
 		}
 	}
+	return err
+}
+
+// jsonRunApprovalAvailableTransport stores JSON fields until they have been validated.
+type jsonRunApprovalAvailableTransport struct {
+}
+
+// validatejsonRunApprovalAvailableTransport checks decoded JSON before it becomes a service value.
+func validatejsonRunApprovalAvailableTransport(value *jsonRunApprovalAvailableTransport) (err error) {
+	if value == nil {
+		return goa.MissingFieldError("body", "JSON value")
+	}
+
+	return err
+}
+
+// jsonRunApprovalBlockedTransport stores JSON fields until they have been validated.
+type jsonRunApprovalBlockedTransport struct {
+	// Owner's safe explanation and enabling step.
+	Reason *string `json:"reason"`
+}
+
+// validatejsonRunApprovalBlockedTransport checks decoded JSON before it becomes a service value.
+func validatejsonRunApprovalBlockedTransport(value *jsonRunApprovalBlockedTransport) (err error) {
+	if value == nil {
+		return goa.MissingFieldError("body", "JSON value")
+	}
+	if value.Reason == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("reason", "body"))
+	}
+	if value.Reason != nil {
+		if utf8.RuneCountInString(*value.Reason) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.reason", *value.Reason, utf8.RuneCountInString(*value.Reason), 1, true))
+		}
+	}
+	return err
+}
+
+// jsonRunEvaluatorMappingUnknownTransport stores JSON fields until they have been validated.
+type jsonRunEvaluatorMappingUnknownTransport struct {
+}
+
+// validatejsonRunEvaluatorMappingUnknownTransport checks decoded JSON before it becomes a service value.
+func validatejsonRunEvaluatorMappingUnknownTransport(value *jsonRunEvaluatorMappingUnknownTransport) (err error) {
+	if value == nil {
+		return goa.MissingFieldError("body", "JSON value")
+	}
+
+	return err
+}
+
+// jsonRunStoryMappingTransport stores JSON fields until they have been validated.
+type jsonRunStoryMappingTransport struct {
+	// One test per finished flow, in declaration order.
+	RequiredTests []*jsonRequiredTestTransport `json:"required_tests"`
+}
+
+// validatejsonRunStoryMappingTransport checks decoded JSON before it becomes a service value.
+func validatejsonRunStoryMappingTransport(value *jsonRunStoryMappingTransport) (err error) {
+	if value == nil {
+		return goa.MissingFieldError("body", "JSON value")
+	}
+	if value.RequiredTests == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("required_tests", "body"))
+	}
+	for _, e := range value.RequiredTests {
+		if e != nil {
+			if err2 := validatejsonRequiredTestTransport(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	return err
+}
+
+// jsonRunStoryNotRecordedTransport stores JSON fields until they have been validated.
+type jsonRunStoryNotRecordedTransport struct {
+}
+
+// validatejsonRunStoryNotRecordedTransport checks decoded JSON before it becomes a service value.
+func validatejsonRunStoryNotRecordedTransport(value *jsonRunStoryNotRecordedTransport) (err error) {
+	if value == nil {
+		return goa.MissingFieldError("body", "JSON value")
+	}
+
 	return err
 }
 
@@ -7271,6 +7517,210 @@ func validatejsonVerificationNotCompletedTransport(value *jsonVerificationNotCom
 	return err
 }
 
+// jsonVerificationReviewResultTransport stores JSON fields until they have been validated.
+type jsonVerificationReviewResultTransport struct {
+	// Immutable Story evidence and the owner's current approval observation.
+	Review *jsonVerificationReviewTransport `json:"review"`
+	// Verification run identifier; get_verification takes it.
+	RunID *string `json:"run_id"`
+	// Change Card the run verifies.
+	ChangeID *string `json:"change_id"`
+	// Change Card revision the run verifies.
+	RequestRevision *string `json:"request_revision"`
+	// Candidate commit the run builds and verifies.
+	CandidateCommit *string `json:"candidate_commit"`
+	// Commit of the tests the run uses: the operator's evaluator, or the tests
+	// accepted for the change's build.
+	SuiteCommit *string `json:"suite_commit"`
+	// When the run was accepted.
+	AcceptedAt *string `json:"accepted_at"`
+	// Whether this run's agreed revision and selected tests match the current
+	// Change Card and the usable build or the stored verification settings. This
+	// observation does not establish the current candidate working tree,
+	// deployment or approval.
+	InputsCurrent *bool `json:"inputs_current"`
+	// Absolute folder containing the binaries built by this completed run.
+	// Returned only to the user when promotion settings are configured, so the
+	// user can publish these exact binaries before approval. Agents never receive
+	// this private path.
+	CandidateBinariesDir *string `json:"candidate_binaries_dir,omitempty"`
+	// Where the run's tests came from, recorded when the run started: evaluator,
+	// or written_tests with their commit and a notice.
+	TestSource *jsonTestSourceTransport `json:"test_source"`
+	// Exactly one of running, completed or not_completed.
+	State *jsonStateTransport `json:"state"`
+}
+
+// validatejsonVerificationReviewResultTransport checks decoded JSON before it becomes a service value.
+func validatejsonVerificationReviewResultTransport(value *jsonVerificationReviewResultTransport) (err error) {
+	if value == nil {
+		return goa.MissingFieldError("body", "JSON value")
+	}
+	if value.Review == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("review", "body"))
+	}
+	if value.RunID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("run_id", "body"))
+	}
+	if value.ChangeID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("change_id", "body"))
+	}
+	if value.RequestRevision == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("request_revision", "body"))
+	}
+	if value.CandidateCommit == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("candidate_commit", "body"))
+	}
+	if value.SuiteCommit == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("suite_commit", "body"))
+	}
+	if value.AcceptedAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("accepted_at", "body"))
+	}
+	if value.InputsCurrent == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("inputs_current", "body"))
+	}
+	if value.TestSource == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("test_source", "body"))
+	}
+	if value.State == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("state", "body"))
+	}
+	if value.Review != nil {
+		if err2 := validatejsonVerificationReviewTransport(value.Review); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	if value.AcceptedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.accepted_at", *value.AcceptedAt, goa.FormatDateTime))
+	}
+	if value.CandidateBinariesDir != nil {
+		if utf8.RuneCountInString(*value.CandidateBinariesDir) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.candidate_binaries_dir", *value.CandidateBinariesDir, utf8.RuneCountInString(*value.CandidateBinariesDir), 1, true))
+		}
+	}
+	if value.TestSource != nil {
+
+		if err2 := value.TestSource.Validate(); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		} else {
+			switch string(value.TestSource.Kind()) {
+			case "written_tests":
+				actual, _ := value.TestSource.AsWrittenTests()
+				if actual != nil {
+					if err2 := validatejsonAgentWrittenTestsTransport(actual); err2 != nil {
+						err = goa.MergeErrors(err, err2)
+					}
+				}
+			}
+		}
+
+	}
+	if value.State != nil {
+
+		if err2 := value.State.Validate(); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		} else {
+			switch string(value.State.Kind()) {
+			case "running":
+				actual, _ := value.State.AsRunning()
+				if actual != nil {
+					if err2 := validatejsonVerificationRunningTransport(actual); err2 != nil {
+						err = goa.MergeErrors(err, err2)
+					}
+				}
+			case "completed":
+				actual, _ := value.State.AsCompleted()
+				if actual != nil {
+					if err2 := validatejsonVerificationCompletedTransport(actual); err2 != nil {
+						err = goa.MergeErrors(err, err2)
+					}
+				}
+			case "not_completed":
+				actual, _ := value.State.AsNotCompleted()
+				if actual != nil {
+					if err2 := validatejsonVerificationNotCompletedTransport(actual); err2 != nil {
+						err = goa.MergeErrors(err, err2)
+					}
+				}
+			}
+		}
+
+	}
+	return err
+}
+
+// jsonVerificationReviewTransport stores JSON fields until they have been validated.
+type jsonVerificationReviewTransport struct {
+	// The run's immutable Story context, or the explicit fact it was not recorded.
+	StoryContext *jsonStoryContextTransport `json:"story_context"`
+	// The owner's current observation for this exact report, independent of
+	// inputs_current.
+	Approval *jsonApprovalTransport `json:"approval"`
+}
+
+// validatejsonVerificationReviewTransport checks decoded JSON before it becomes a service value.
+func validatejsonVerificationReviewTransport(value *jsonVerificationReviewTransport) (err error) {
+	if value == nil {
+		return goa.MissingFieldError("body", "JSON value")
+	}
+	if value.StoryContext == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("story_context", "body"))
+	}
+	if value.Approval == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("approval", "body"))
+	}
+	if value.StoryContext != nil {
+
+		if err2 := value.StoryContext.Validate(); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		} else {
+			switch string(value.StoryContext.Kind()) {
+			case "recorded":
+				actual, _ := value.StoryContext.AsRecorded()
+				if actual != nil {
+					if err2 := validatejsonRecordedRunStoryTransport(actual); err2 != nil {
+						err = goa.MergeErrors(err, err2)
+					}
+				}
+			}
+		}
+
+	}
+	if value.Approval != nil {
+
+		if err2 := value.Approval.Validate(); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		} else {
+			switch string(value.Approval.Kind()) {
+			case "blocked":
+				actual, _ := value.Approval.AsBlocked()
+				if actual != nil {
+					if err2 := validatejsonRunApprovalBlockedTransport(actual); err2 != nil {
+						err = goa.MergeErrors(err, err2)
+					}
+				}
+			case "recorded":
+				actual, _ := value.Approval.AsRecorded()
+				if actual != nil {
+					if err2 := validatejsonApprovalItemTransport(actual); err2 != nil {
+						err = goa.MergeErrors(err, err2)
+					}
+				}
+			case "unverified":
+				actual, _ := value.Approval.AsUnverified()
+				if actual != nil {
+					if err2 := validatejsonUnverifiedApprovalItemTransport(actual); err2 != nil {
+						err = goa.MergeErrors(err, err2)
+					}
+				}
+			}
+		}
+
+	}
+	return err
+}
+
 // jsonVerificationRunningTransport stores JSON fields until they have been validated.
 type jsonVerificationRunningTransport struct {
 	// When the run was accepted.
@@ -7499,6 +7949,26 @@ func (value *listTracesPayloadIntTransport) UnmarshalJSON(data []byte) error {
 
 // ValidatelistTracesPayloadIntTransport checks decoded JSON before it becomes a service value.
 func ValidatelistTracesPayloadIntTransport(value listTracesPayloadIntTransport) (err error) {
+
+	return err
+}
+
+// recordedRunStoryIntTransport stores JSON fields until they have been validated.
+type recordedRunStoryIntTransport int
+
+// UnmarshalJSON reads an exact whole JSON number and stores it within this type's
+// declared range. Decimal and exponent spellings do not change its value.
+func (value *recordedRunStoryIntTransport) UnmarshalJSON(data []byte) error {
+	number, err := rawjson.DecodeInteger[int](data)
+	if err != nil {
+		return fmt.Errorf("decode recordedRunStoryIntTransport integer: %w", err)
+	}
+	*value = recordedRunStoryIntTransport(number)
+	return nil
+}
+
+// ValidaterecordedRunStoryIntTransport checks decoded JSON before it becomes a service value.
+func ValidaterecordedRunStoryIntTransport(value recordedRunStoryIntTransport) (err error) {
 
 	return err
 }
@@ -8729,6 +9199,51 @@ func validateProposeChangePayloadOriginal(value *ProposeChangePayload) (err erro
 	return err
 }
 
+// validateRecordedRunStoryOriginal checks the original typed value before JSON conversion.
+func validateRecordedRunStoryOriginal(value *RecordedRunStory) (err error) {
+	if value.Stories == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("stories", "value"))
+	}
+	if value.Mapping.Kind() == "" {
+		err = goa.MergeErrors(err, goa.MissingFieldError("mapping", "value"))
+	}
+	if value.BuildNumber < 1 {
+		err = goa.MergeErrors(err, goa.InvalidRangeError("value.build_number", value.BuildNumber, 1, true))
+	}
+	err = goa.MergeErrors(err, goa.ValidateFormat("value.build_started_at", value.BuildStartedAt, goa.FormatDateTime))
+	for _, e := range value.Stories {
+		if e != nil {
+			if err2 := validateStorySummaryItemOriginal(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+
+	if err2 := value.Mapping.Validate(); err2 != nil {
+		err = goa.MergeErrors(err, err2)
+	} else {
+		switch string(value.Mapping.Kind()) {
+		case "mapped":
+			actual, _ := value.Mapping.AsMapped()
+			if actual != nil {
+				if err2 := validateRunStoryMappingOriginal(actual); err2 != nil {
+					err = goa.MergeErrors(err, err2)
+				}
+			}
+		}
+	}
+
+	return err
+}
+
+// validateRunStoryMappingOriginal checks the original typed value before JSON conversion.
+func validateRunStoryMappingOriginal(value *RunStoryMapping) (err error) {
+	if value.RequiredTests == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("required_tests", "value"))
+	}
+	return err
+}
+
 // validateReplacedBuildOriginal checks the original typed value before JSON conversion.
 func validateReplacedBuildOriginal(value *ReplacedBuild) (err error) {
 	if utf8.RuneCountInString(value.ChangeID) < 1 {
@@ -8747,6 +9262,14 @@ func validateReviseChangePayloadOriginal(value *ReviseChangePayload) (err error)
 		if err2 := validateCP1RevisionAnalysisOriginal(value.Analysis); err2 != nil {
 			err = goa.MergeErrors(err, err2)
 		}
+	}
+	return err
+}
+
+// validateRunApprovalBlockedOriginal checks the original typed value before JSON conversion.
+func validateRunApprovalBlockedOriginal(value *RunApprovalBlocked) (err error) {
+	if utf8.RuneCountInString(value.Reason) < 1 {
+		err = goa.MergeErrors(err, goa.InvalidLengthError("value.reason", value.Reason, utf8.RuneCountInString(value.Reason), 1, true))
 	}
 	return err
 }
@@ -9085,6 +9608,118 @@ func validateVerificationNotCompletedOriginal(value *VerificationNotCompleted) (
 	return err
 }
 
+// validateVerificationReviewOriginal checks the original typed value before JSON conversion.
+func validateVerificationReviewOriginal(value *VerificationReview) (err error) {
+	if value.StoryContext.Kind() == "" {
+		err = goa.MergeErrors(err, goa.MissingFieldError("story_context", "value"))
+	}
+	if value.Approval.Kind() == "" {
+		err = goa.MergeErrors(err, goa.MissingFieldError("approval", "value"))
+	}
+
+	if err2 := value.StoryContext.Validate(); err2 != nil {
+		err = goa.MergeErrors(err, err2)
+	} else {
+		switch string(value.StoryContext.Kind()) {
+		case "recorded":
+			actual, _ := value.StoryContext.AsRecorded()
+			if actual != nil {
+				if err2 := validateRecordedRunStoryOriginal(actual); err2 != nil {
+					err = goa.MergeErrors(err, err2)
+				}
+			}
+		}
+	}
+
+	if err2 := value.Approval.Validate(); err2 != nil {
+		err = goa.MergeErrors(err, err2)
+	} else {
+		switch string(value.Approval.Kind()) {
+		case "blocked":
+			actual, _ := value.Approval.AsBlocked()
+			if actual != nil {
+				if err2 := validateRunApprovalBlockedOriginal(actual); err2 != nil {
+					err = goa.MergeErrors(err, err2)
+				}
+			}
+		case "recorded":
+			actual, _ := value.Approval.AsRecorded()
+			if actual != nil {
+				if err2 := validateApprovalItemOriginal(actual); err2 != nil {
+					err = goa.MergeErrors(err, err2)
+				}
+			}
+		case "unverified":
+			actual, _ := value.Approval.AsUnverified()
+			if actual != nil {
+				if err2 := validateUnverifiedApprovalItemOriginal(actual); err2 != nil {
+					err = goa.MergeErrors(err, err2)
+				}
+			}
+		}
+	}
+
+	return err
+}
+
+// validateVerificationReviewResultOriginal checks the original typed value before JSON conversion.
+func validateVerificationReviewResultOriginal(value *VerificationReviewResult) (err error) {
+	if value.Review == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("review", "value"))
+	}
+	if value.TestSource.Kind() == "" {
+		err = goa.MergeErrors(err, goa.MissingFieldError("test_source", "value"))
+	}
+	if value.State.Kind() == "" {
+		err = goa.MergeErrors(err, goa.MissingFieldError("state", "value"))
+	}
+	if value.Review != nil {
+		if err2 := validateVerificationReviewOriginal(value.Review); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	err = goa.MergeErrors(err, goa.ValidateFormat("value.accepted_at", value.AcceptedAt, goa.FormatDateTime))
+	if value.CandidateBinariesDir != nil {
+		if utf8.RuneCountInString(*value.CandidateBinariesDir) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("value.candidate_binaries_dir", *value.CandidateBinariesDir, utf8.RuneCountInString(*value.CandidateBinariesDir), 1, true))
+		}
+	}
+
+	if err2 := value.TestSource.Validate(); err2 != nil {
+		err = goa.MergeErrors(err, err2)
+	}
+
+	if err2 := value.State.Validate(); err2 != nil {
+		err = goa.MergeErrors(err, err2)
+	} else {
+		switch string(value.State.Kind()) {
+		case "running":
+			actual, _ := value.State.AsRunning()
+			if actual != nil {
+				if err2 := validateVerificationRunningOriginal(actual); err2 != nil {
+					err = goa.MergeErrors(err, err2)
+				}
+			}
+		case "completed":
+			actual, _ := value.State.AsCompleted()
+			if actual != nil {
+				if err2 := validateVerificationCompletedOriginal(actual); err2 != nil {
+					err = goa.MergeErrors(err, err2)
+				}
+			}
+		case "not_completed":
+			actual, _ := value.State.AsNotCompleted()
+			if actual != nil {
+				if err2 := validateVerificationNotCompletedOriginal(actual); err2 != nil {
+					err = goa.MergeErrors(err, err2)
+				}
+			}
+		}
+	}
+
+	return err
+}
+
 // validateVerifyChangePayloadOriginal checks the original typed value before JSON conversion.
 func validateVerifyChangePayloadOriginal(value *VerifyChangePayload) (err error) {
 	err = goa.MergeErrors(err, goa.ValidatePattern("value.candidate_commit", value.CandidateCommit, "^([0-9a-f]{40}|[0-9a-f]{64})$"))
@@ -9252,6 +9887,245 @@ func (u *jsonApprovalTestSourceTransport) UnmarshalJSON(data []byte) error {
 		u.WrittenTests = value
 	default:
 		return goa.InvalidEnumValueError("source", raw.Type, []any{string(jsonApprovalTestSourceTransportKindEvaluator), string(jsonApprovalTestSourceTransportKindWrittenTests)})
+	}
+	return u.Validate()
+}
+
+// jsonApprovalTransport stores exactly one selected Goa OneOf branch.
+type jsonApprovalTransport struct {
+	kind       jsonApprovalTransportKind
+	Available  *jsonRunApprovalAvailableTransport
+	Blocked    *jsonRunApprovalBlockedTransport
+	Recorded   *jsonApprovalItemTransport
+	Unverified *jsonUnverifiedApprovalItemTransport
+}
+
+// jsonApprovalTransportKind identifies the selected branch of jsonApprovalTransport.
+type jsonApprovalTransportKind string
+
+const (
+	jsonApprovalTransportKindAvailable  jsonApprovalTransportKind = "available"
+	jsonApprovalTransportKindBlocked    jsonApprovalTransportKind = "blocked"
+	jsonApprovalTransportKindRecorded   jsonApprovalTransportKind = "recorded"
+	jsonApprovalTransportKindUnverified jsonApprovalTransportKind = "unverified"
+)
+
+// Kind returns the selected branch.
+func (u jsonApprovalTransport) Kind() jsonApprovalTransportKind {
+	return u.kind
+}
+
+// newjsonApprovalTransportAvailable creates jsonApprovalTransport with its available branch selected.
+func newjsonApprovalTransportAvailable(value *jsonRunApprovalAvailableTransport) jsonApprovalTransport {
+	return jsonApprovalTransport{kind: jsonApprovalTransportKindAvailable, Available: value}
+}
+
+// AsAvailable returns the available branch when it is selected.
+func (u jsonApprovalTransport) AsAvailable() (_ *jsonRunApprovalAvailableTransport, ok bool) {
+	if u.kind != jsonApprovalTransportKindAvailable {
+		return
+	}
+	return u.Available, true
+}
+
+// SetAvailable selects the available branch.
+func (u *jsonApprovalTransport) SetAvailable(value *jsonRunApprovalAvailableTransport) {
+	u.kind = jsonApprovalTransportKindAvailable
+	u.Available = value
+}
+
+// newjsonApprovalTransportBlocked creates jsonApprovalTransport with its blocked branch selected.
+func newjsonApprovalTransportBlocked(value *jsonRunApprovalBlockedTransport) jsonApprovalTransport {
+	return jsonApprovalTransport{kind: jsonApprovalTransportKindBlocked, Blocked: value}
+}
+
+// AsBlocked returns the blocked branch when it is selected.
+func (u jsonApprovalTransport) AsBlocked() (_ *jsonRunApprovalBlockedTransport, ok bool) {
+	if u.kind != jsonApprovalTransportKindBlocked {
+		return
+	}
+	return u.Blocked, true
+}
+
+// SetBlocked selects the blocked branch.
+func (u *jsonApprovalTransport) SetBlocked(value *jsonRunApprovalBlockedTransport) {
+	u.kind = jsonApprovalTransportKindBlocked
+	u.Blocked = value
+}
+
+// newjsonApprovalTransportRecorded creates jsonApprovalTransport with its recorded branch selected.
+func newjsonApprovalTransportRecorded(value *jsonApprovalItemTransport) jsonApprovalTransport {
+	return jsonApprovalTransport{kind: jsonApprovalTransportKindRecorded, Recorded: value}
+}
+
+// AsRecorded returns the recorded branch when it is selected.
+func (u jsonApprovalTransport) AsRecorded() (_ *jsonApprovalItemTransport, ok bool) {
+	if u.kind != jsonApprovalTransportKindRecorded {
+		return
+	}
+	return u.Recorded, true
+}
+
+// SetRecorded selects the recorded branch.
+func (u *jsonApprovalTransport) SetRecorded(value *jsonApprovalItemTransport) {
+	u.kind = jsonApprovalTransportKindRecorded
+	u.Recorded = value
+}
+
+// newjsonApprovalTransportUnverified creates jsonApprovalTransport with its unverified branch selected.
+func newjsonApprovalTransportUnverified(value *jsonUnverifiedApprovalItemTransport) jsonApprovalTransport {
+	return jsonApprovalTransport{kind: jsonApprovalTransportKindUnverified, Unverified: value}
+}
+
+// AsUnverified returns the unverified branch when it is selected.
+func (u jsonApprovalTransport) AsUnverified() (_ *jsonUnverifiedApprovalItemTransport, ok bool) {
+	if u.kind != jsonApprovalTransportKindUnverified {
+		return
+	}
+	return u.Unverified, true
+}
+
+// SetUnverified selects the unverified branch.
+func (u *jsonApprovalTransport) SetUnverified(value *jsonUnverifiedApprovalItemTransport) {
+	u.kind = jsonApprovalTransportKindUnverified
+	u.Unverified = value
+}
+
+// Validate checks that one complete branch is selected.
+func (u jsonApprovalTransport) Validate() error {
+	switch u.kind {
+	case jsonApprovalTransportKindAvailable:
+		if u.Available == nil {
+			return goa.MissingFieldError("value", "jsonApprovalTransport")
+		}
+		return nil
+	case jsonApprovalTransportKindBlocked:
+		if u.Blocked == nil {
+			return goa.MissingFieldError("value", "jsonApprovalTransport")
+		}
+		return nil
+	case jsonApprovalTransportKindRecorded:
+		if u.Recorded == nil {
+			return goa.MissingFieldError("value", "jsonApprovalTransport")
+		}
+		return nil
+	case jsonApprovalTransportKindUnverified:
+		if u.Unverified == nil {
+			return goa.MissingFieldError("value", "jsonApprovalTransport")
+		}
+		return nil
+	case "":
+		return goa.MissingFieldError("state", "jsonApprovalTransport")
+	default:
+		return goa.InvalidEnumValueError("state", u.kind, []any{string(jsonApprovalTransportKindAvailable), string(jsonApprovalTransportKindBlocked), string(jsonApprovalTransportKindRecorded), string(jsonApprovalTransportKindUnverified)})
+	}
+}
+
+// MarshalJSON writes the selected branch name and value.
+func (u jsonApprovalTransport) MarshalJSON() ([]byte, error) {
+	if err := u.Validate(); err != nil {
+		return nil, err
+	}
+	var value any
+	switch u.kind {
+	case jsonApprovalTransportKindAvailable:
+		value = u.Available
+	case jsonApprovalTransportKindBlocked:
+		value = u.Blocked
+	case jsonApprovalTransportKindRecorded:
+		value = u.Recorded
+	case jsonApprovalTransportKindUnverified:
+		value = u.Unverified
+	default:
+		return nil, fmt.Errorf("unexpected jsonApprovalTransport branch %q", u.kind)
+	}
+	data, err := json.Marshal(value)
+	if err != nil {
+		return nil, err
+	}
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(data, &fields); err != nil {
+		return nil, err
+	}
+	if fields == nil {
+		return nil, goa.InvalidFieldTypeError("state", nil, "non-null JSON object")
+	}
+	if _, exists := fields["state"]; exists {
+		return nil, fmt.Errorf("jsonApprovalTransport branch already contains discriminator %q", "state")
+	}
+	tag, err := json.Marshal(string(u.kind))
+	if err != nil {
+		return nil, err
+	}
+	fields["state"] = tag
+	return json.Marshal(fields)
+}
+
+// UnmarshalJSON reads one complete branch name and value.
+func (u *jsonApprovalTransport) UnmarshalJSON(data []byte) error {
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(data, &fields); err != nil {
+		return err
+	}
+	tag, exists := fields["state"]
+	if !exists {
+		return goa.MissingFieldError("state", "jsonApprovalTransport")
+	}
+	if bytes.Equal(bytes.TrimSpace(tag), []byte("null")) {
+		return goa.InvalidFieldTypeError("state", nil, "JSON string")
+	}
+	var raw struct {
+		Type  string
+		Value json.RawMessage
+	}
+	if err := json.Unmarshal(tag, &raw.Type); err != nil {
+		return err
+	}
+	delete(fields, "state")
+	value, err := json.Marshal(fields)
+	if err != nil {
+		return err
+	}
+	raw.Value = value
+	switch raw.Type {
+	case string(jsonApprovalTransportKindAvailable):
+		var value *jsonRunApprovalAvailableTransport
+		decoder := json.NewDecoder(bytes.NewReader(raw.Value))
+		decoder.DisallowUnknownFields()
+		if err := decoder.Decode(&value); err != nil {
+			return err
+		}
+		u.kind = jsonApprovalTransportKindAvailable
+		u.Available = value
+	case string(jsonApprovalTransportKindBlocked):
+		var value *jsonRunApprovalBlockedTransport
+		decoder := json.NewDecoder(bytes.NewReader(raw.Value))
+		decoder.DisallowUnknownFields()
+		if err := decoder.Decode(&value); err != nil {
+			return err
+		}
+		u.kind = jsonApprovalTransportKindBlocked
+		u.Blocked = value
+	case string(jsonApprovalTransportKindRecorded):
+		var value *jsonApprovalItemTransport
+		decoder := json.NewDecoder(bytes.NewReader(raw.Value))
+		decoder.DisallowUnknownFields()
+		if err := decoder.Decode(&value); err != nil {
+			return err
+		}
+		u.kind = jsonApprovalTransportKindRecorded
+		u.Recorded = value
+	case string(jsonApprovalTransportKindUnverified):
+		var value *jsonUnverifiedApprovalItemTransport
+		decoder := json.NewDecoder(bytes.NewReader(raw.Value))
+		decoder.DisallowUnknownFields()
+		if err := decoder.Decode(&value); err != nil {
+			return err
+		}
+		u.kind = jsonApprovalTransportKindUnverified
+		u.Unverified = value
+	default:
+		return goa.InvalidEnumValueError("state", raw.Type, []any{string(jsonApprovalTransportKindAvailable), string(jsonApprovalTransportKindBlocked), string(jsonApprovalTransportKindRecorded), string(jsonApprovalTransportKindUnverified)})
 	}
 	return u.Validate()
 }
@@ -10303,6 +11177,171 @@ func (u *jsonLiveTargetTransport) UnmarshalJSON(data []byte) error {
 	return u.Validate()
 }
 
+// jsonMappingTransport stores exactly one selected Goa OneOf branch.
+type jsonMappingTransport struct {
+	kind                    jsonMappingTransportKind
+	Mapped                  *jsonRunStoryMappingTransport
+	NotRecordedForEvaluator *jsonRunEvaluatorMappingUnknownTransport
+}
+
+// jsonMappingTransportKind identifies the selected branch of jsonMappingTransport.
+type jsonMappingTransportKind string
+
+const (
+	jsonMappingTransportKindMapped                  jsonMappingTransportKind = "mapped"
+	jsonMappingTransportKindNotRecordedForEvaluator jsonMappingTransportKind = "not_recorded_for_evaluator"
+)
+
+// Kind returns the selected branch.
+func (u jsonMappingTransport) Kind() jsonMappingTransportKind {
+	return u.kind
+}
+
+// newjsonMappingTransportMapped creates jsonMappingTransport with its mapped branch selected.
+func newjsonMappingTransportMapped(value *jsonRunStoryMappingTransport) jsonMappingTransport {
+	return jsonMappingTransport{kind: jsonMappingTransportKindMapped, Mapped: value}
+}
+
+// AsMapped returns the mapped branch when it is selected.
+func (u jsonMappingTransport) AsMapped() (_ *jsonRunStoryMappingTransport, ok bool) {
+	if u.kind != jsonMappingTransportKindMapped {
+		return
+	}
+	return u.Mapped, true
+}
+
+// SetMapped selects the mapped branch.
+func (u *jsonMappingTransport) SetMapped(value *jsonRunStoryMappingTransport) {
+	u.kind = jsonMappingTransportKindMapped
+	u.Mapped = value
+}
+
+// newjsonMappingTransportNotRecordedForEvaluator creates jsonMappingTransport with its not_recorded_for_evaluator branch selected.
+func newjsonMappingTransportNotRecordedForEvaluator(value *jsonRunEvaluatorMappingUnknownTransport) jsonMappingTransport {
+	return jsonMappingTransport{kind: jsonMappingTransportKindNotRecordedForEvaluator, NotRecordedForEvaluator: value}
+}
+
+// AsNotRecordedForEvaluator returns the not_recorded_for_evaluator branch when it is selected.
+func (u jsonMappingTransport) AsNotRecordedForEvaluator() (_ *jsonRunEvaluatorMappingUnknownTransport, ok bool) {
+	if u.kind != jsonMappingTransportKindNotRecordedForEvaluator {
+		return
+	}
+	return u.NotRecordedForEvaluator, true
+}
+
+// SetNotRecordedForEvaluator selects the not_recorded_for_evaluator branch.
+func (u *jsonMappingTransport) SetNotRecordedForEvaluator(value *jsonRunEvaluatorMappingUnknownTransport) {
+	u.kind = jsonMappingTransportKindNotRecordedForEvaluator
+	u.NotRecordedForEvaluator = value
+}
+
+// Validate checks that one complete branch is selected.
+func (u jsonMappingTransport) Validate() error {
+	switch u.kind {
+	case jsonMappingTransportKindMapped:
+		if u.Mapped == nil {
+			return goa.MissingFieldError("value", "jsonMappingTransport")
+		}
+		return nil
+	case jsonMappingTransportKindNotRecordedForEvaluator:
+		if u.NotRecordedForEvaluator == nil {
+			return goa.MissingFieldError("value", "jsonMappingTransport")
+		}
+		return nil
+	case "":
+		return goa.MissingFieldError("state", "jsonMappingTransport")
+	default:
+		return goa.InvalidEnumValueError("state", u.kind, []any{string(jsonMappingTransportKindMapped), string(jsonMappingTransportKindNotRecordedForEvaluator)})
+	}
+}
+
+// MarshalJSON writes the selected branch name and value.
+func (u jsonMappingTransport) MarshalJSON() ([]byte, error) {
+	if err := u.Validate(); err != nil {
+		return nil, err
+	}
+	var value any
+	switch u.kind {
+	case jsonMappingTransportKindMapped:
+		value = u.Mapped
+	case jsonMappingTransportKindNotRecordedForEvaluator:
+		value = u.NotRecordedForEvaluator
+	default:
+		return nil, fmt.Errorf("unexpected jsonMappingTransport branch %q", u.kind)
+	}
+	data, err := json.Marshal(value)
+	if err != nil {
+		return nil, err
+	}
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(data, &fields); err != nil {
+		return nil, err
+	}
+	if fields == nil {
+		return nil, goa.InvalidFieldTypeError("state", nil, "non-null JSON object")
+	}
+	if _, exists := fields["state"]; exists {
+		return nil, fmt.Errorf("jsonMappingTransport branch already contains discriminator %q", "state")
+	}
+	tag, err := json.Marshal(string(u.kind))
+	if err != nil {
+		return nil, err
+	}
+	fields["state"] = tag
+	return json.Marshal(fields)
+}
+
+// UnmarshalJSON reads one complete branch name and value.
+func (u *jsonMappingTransport) UnmarshalJSON(data []byte) error {
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(data, &fields); err != nil {
+		return err
+	}
+	tag, exists := fields["state"]
+	if !exists {
+		return goa.MissingFieldError("state", "jsonMappingTransport")
+	}
+	if bytes.Equal(bytes.TrimSpace(tag), []byte("null")) {
+		return goa.InvalidFieldTypeError("state", nil, "JSON string")
+	}
+	var raw struct {
+		Type  string
+		Value json.RawMessage
+	}
+	if err := json.Unmarshal(tag, &raw.Type); err != nil {
+		return err
+	}
+	delete(fields, "state")
+	value, err := json.Marshal(fields)
+	if err != nil {
+		return err
+	}
+	raw.Value = value
+	switch raw.Type {
+	case string(jsonMappingTransportKindMapped):
+		var value *jsonRunStoryMappingTransport
+		decoder := json.NewDecoder(bytes.NewReader(raw.Value))
+		decoder.DisallowUnknownFields()
+		if err := decoder.Decode(&value); err != nil {
+			return err
+		}
+		u.kind = jsonMappingTransportKindMapped
+		u.Mapped = value
+	case string(jsonMappingTransportKindNotRecordedForEvaluator):
+		var value *jsonRunEvaluatorMappingUnknownTransport
+		decoder := json.NewDecoder(bytes.NewReader(raw.Value))
+		decoder.DisallowUnknownFields()
+		if err := decoder.Decode(&value); err != nil {
+			return err
+		}
+		u.kind = jsonMappingTransportKindNotRecordedForEvaluator
+		u.NotRecordedForEvaluator = value
+	default:
+		return goa.InvalidEnumValueError("state", raw.Type, []any{string(jsonMappingTransportKindMapped), string(jsonMappingTransportKindNotRecordedForEvaluator)})
+	}
+	return u.Validate()
+}
+
 // jsonStateTransport stores exactly one selected Goa OneOf branch.
 type jsonStateTransport struct {
 	kind         jsonStateTransportKind
@@ -10485,6 +11524,171 @@ func (u *jsonStateTransport) UnmarshalJSON(data []byte) error {
 		u.NotCompleted = value
 	default:
 		return goa.InvalidEnumValueError("type", raw.Type, []any{string(jsonStateTransportKindRunning), string(jsonStateTransportKindCompleted), string(jsonStateTransportKindNotCompleted)})
+	}
+	return u.Validate()
+}
+
+// jsonStoryContextTransport stores exactly one selected Goa OneOf branch.
+type jsonStoryContextTransport struct {
+	kind        jsonStoryContextTransportKind
+	Recorded    *jsonRecordedRunStoryTransport
+	NotRecorded *jsonRunStoryNotRecordedTransport
+}
+
+// jsonStoryContextTransportKind identifies the selected branch of jsonStoryContextTransport.
+type jsonStoryContextTransportKind string
+
+const (
+	jsonStoryContextTransportKindRecorded    jsonStoryContextTransportKind = "recorded"
+	jsonStoryContextTransportKindNotRecorded jsonStoryContextTransportKind = "not_recorded"
+)
+
+// Kind returns the selected branch.
+func (u jsonStoryContextTransport) Kind() jsonStoryContextTransportKind {
+	return u.kind
+}
+
+// newjsonStoryContextTransportRecorded creates jsonStoryContextTransport with its recorded branch selected.
+func newjsonStoryContextTransportRecorded(value *jsonRecordedRunStoryTransport) jsonStoryContextTransport {
+	return jsonStoryContextTransport{kind: jsonStoryContextTransportKindRecorded, Recorded: value}
+}
+
+// AsRecorded returns the recorded branch when it is selected.
+func (u jsonStoryContextTransport) AsRecorded() (_ *jsonRecordedRunStoryTransport, ok bool) {
+	if u.kind != jsonStoryContextTransportKindRecorded {
+		return
+	}
+	return u.Recorded, true
+}
+
+// SetRecorded selects the recorded branch.
+func (u *jsonStoryContextTransport) SetRecorded(value *jsonRecordedRunStoryTransport) {
+	u.kind = jsonStoryContextTransportKindRecorded
+	u.Recorded = value
+}
+
+// newjsonStoryContextTransportNotRecorded creates jsonStoryContextTransport with its not_recorded branch selected.
+func newjsonStoryContextTransportNotRecorded(value *jsonRunStoryNotRecordedTransport) jsonStoryContextTransport {
+	return jsonStoryContextTransport{kind: jsonStoryContextTransportKindNotRecorded, NotRecorded: value}
+}
+
+// AsNotRecorded returns the not_recorded branch when it is selected.
+func (u jsonStoryContextTransport) AsNotRecorded() (_ *jsonRunStoryNotRecordedTransport, ok bool) {
+	if u.kind != jsonStoryContextTransportKindNotRecorded {
+		return
+	}
+	return u.NotRecorded, true
+}
+
+// SetNotRecorded selects the not_recorded branch.
+func (u *jsonStoryContextTransport) SetNotRecorded(value *jsonRunStoryNotRecordedTransport) {
+	u.kind = jsonStoryContextTransportKindNotRecorded
+	u.NotRecorded = value
+}
+
+// Validate checks that one complete branch is selected.
+func (u jsonStoryContextTransport) Validate() error {
+	switch u.kind {
+	case jsonStoryContextTransportKindRecorded:
+		if u.Recorded == nil {
+			return goa.MissingFieldError("value", "jsonStoryContextTransport")
+		}
+		return nil
+	case jsonStoryContextTransportKindNotRecorded:
+		if u.NotRecorded == nil {
+			return goa.MissingFieldError("value", "jsonStoryContextTransport")
+		}
+		return nil
+	case "":
+		return goa.MissingFieldError("state", "jsonStoryContextTransport")
+	default:
+		return goa.InvalidEnumValueError("state", u.kind, []any{string(jsonStoryContextTransportKindRecorded), string(jsonStoryContextTransportKindNotRecorded)})
+	}
+}
+
+// MarshalJSON writes the selected branch name and value.
+func (u jsonStoryContextTransport) MarshalJSON() ([]byte, error) {
+	if err := u.Validate(); err != nil {
+		return nil, err
+	}
+	var value any
+	switch u.kind {
+	case jsonStoryContextTransportKindRecorded:
+		value = u.Recorded
+	case jsonStoryContextTransportKindNotRecorded:
+		value = u.NotRecorded
+	default:
+		return nil, fmt.Errorf("unexpected jsonStoryContextTransport branch %q", u.kind)
+	}
+	data, err := json.Marshal(value)
+	if err != nil {
+		return nil, err
+	}
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(data, &fields); err != nil {
+		return nil, err
+	}
+	if fields == nil {
+		return nil, goa.InvalidFieldTypeError("state", nil, "non-null JSON object")
+	}
+	if _, exists := fields["state"]; exists {
+		return nil, fmt.Errorf("jsonStoryContextTransport branch already contains discriminator %q", "state")
+	}
+	tag, err := json.Marshal(string(u.kind))
+	if err != nil {
+		return nil, err
+	}
+	fields["state"] = tag
+	return json.Marshal(fields)
+}
+
+// UnmarshalJSON reads one complete branch name and value.
+func (u *jsonStoryContextTransport) UnmarshalJSON(data []byte) error {
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(data, &fields); err != nil {
+		return err
+	}
+	tag, exists := fields["state"]
+	if !exists {
+		return goa.MissingFieldError("state", "jsonStoryContextTransport")
+	}
+	if bytes.Equal(bytes.TrimSpace(tag), []byte("null")) {
+		return goa.InvalidFieldTypeError("state", nil, "JSON string")
+	}
+	var raw struct {
+		Type  string
+		Value json.RawMessage
+	}
+	if err := json.Unmarshal(tag, &raw.Type); err != nil {
+		return err
+	}
+	delete(fields, "state")
+	value, err := json.Marshal(fields)
+	if err != nil {
+		return err
+	}
+	raw.Value = value
+	switch raw.Type {
+	case string(jsonStoryContextTransportKindRecorded):
+		var value *jsonRecordedRunStoryTransport
+		decoder := json.NewDecoder(bytes.NewReader(raw.Value))
+		decoder.DisallowUnknownFields()
+		if err := decoder.Decode(&value); err != nil {
+			return err
+		}
+		u.kind = jsonStoryContextTransportKindRecorded
+		u.Recorded = value
+	case string(jsonStoryContextTransportKindNotRecorded):
+		var value *jsonRunStoryNotRecordedTransport
+		decoder := json.NewDecoder(bytes.NewReader(raw.Value))
+		decoder.DisallowUnknownFields()
+		if err := decoder.Decode(&value); err != nil {
+			return err
+		}
+		u.kind = jsonStoryContextTransportKindNotRecorded
+		u.NotRecorded = value
+	default:
+		return goa.InvalidEnumValueError("state", raw.Type, []any{string(jsonStoryContextTransportKindRecorded), string(jsonStoryContextTransportKindNotRecorded)})
 	}
 	return u.Validate()
 }
@@ -19628,6 +20832,182 @@ func DecodeReadCheckOutputPayload(data []byte) (out *ReadCheckOutputPayload, err
 	return out, nil
 }
 
+// EncodeRecordedRunStory turns a service value into JSON using the field names in the Goa design.
+func EncodeRecordedRunStory(in *RecordedRunStory) ([]byte, error) {
+	if err := checkRecordedRunStoryValue(in); err != nil {
+		return nil, fmt.Errorf("encode RecordedRunStory JSON: %w", err)
+	}
+	if err := validateRecordedRunStoryOriginal(in); err != nil {
+		return nil, fmt.Errorf("validate RecordedRunStory value: %w", err)
+	}
+	var body *jsonRecordedRunStoryTransport
+	{
+		body = &jsonRecordedRunStoryTransport{
+			BuildStartedAt: &in.BuildStartedAt,
+		}
+		buildNumber := recordedRunStoryIntTransport(in.BuildNumber)
+		body.BuildNumber = &buildNumber
+		body.Stories = make([]*jsonStorySummaryItemTransport, len(in.Stories))
+		for i, val := range in.Stories {
+			if val == nil {
+				body.Stories[i] = nil
+				continue
+			}
+			body.Stories[i] = encodeStorySummaryItemToStorySummaryItemTransport(val)
+		}
+		var mappingValue jsonMappingTransport
+		switch string(in.Mapping.Kind()) {
+		case "mapped":
+			actual, _ := in.Mapping.AsMapped()
+			var obj *jsonRunStoryMappingTransport
+			if actual != nil {
+				obj = encodeRunStoryMappingToRunStoryMappingTransport(actual)
+			}
+			u := mappingValue
+			u.SetMapped((*jsonRunStoryMappingTransport)(obj))
+			mappingValue = u
+		case "not_recorded_for_evaluator":
+			actual, _ := in.Mapping.AsNotRecordedForEvaluator()
+			var obj *jsonRunEvaluatorMappingUnknownTransport
+			if actual != nil {
+				obj = encodeRunEvaluatorMappingUnknownToRunEvaluatorMappingUnknownTransport(actual)
+			}
+			u := mappingValue
+			u.SetNotRecordedForEvaluator((*jsonRunEvaluatorMappingUnknownTransport)(obj))
+			mappingValue = u
+		}
+		body.Mapping = &mappingValue
+	}
+	if err := validatejsonRecordedRunStoryTransport(body); err != nil {
+		return nil, fmt.Errorf("validate RecordedRunStory JSON: %w", err)
+	}
+	data, err := json.Marshal(body)
+	if err != nil {
+		return nil, fmt.Errorf("encode RecordedRunStory JSON: %w", err)
+	}
+	return data, nil
+}
+
+// ValidateRecordedRunStoryValue checks the original Go fields against their declared constraints.
+// It returns validation errors without encoding the value as JSON.
+
+func ValidateRecordedRunStoryValue(in *RecordedRunStory) error {
+	if err := checkRecordedRunStoryValue(in); err != nil {
+		return fmt.Errorf("validate RecordedRunStory value: %w", err)
+	}
+	if err := validateRecordedRunStoryOriginal(in); err != nil {
+		return fmt.Errorf("validate RecordedRunStory value: %w", err)
+	}
+
+	if in == nil {
+		return goa.MissingFieldError("result", "RecordedRunStory")
+	}
+
+	var body *jsonRecordedRunStoryTransport
+	{
+		body = &jsonRecordedRunStoryTransport{
+			BuildStartedAt: &in.BuildStartedAt,
+		}
+		buildNumber := recordedRunStoryIntTransport(in.BuildNumber)
+		body.BuildNumber = &buildNumber
+		body.Stories = make([]*jsonStorySummaryItemTransport, len(in.Stories))
+		for i, val := range in.Stories {
+			if val == nil {
+				body.Stories[i] = nil
+				continue
+			}
+			body.Stories[i] = encodeStorySummaryItemToStorySummaryItemTransport(val)
+		}
+		var mappingValue jsonMappingTransport
+		switch string(in.Mapping.Kind()) {
+		case "mapped":
+			actual, _ := in.Mapping.AsMapped()
+			var obj *jsonRunStoryMappingTransport
+			if actual != nil {
+				obj = encodeRunStoryMappingToRunStoryMappingTransport(actual)
+			}
+			u := mappingValue
+			u.SetMapped((*jsonRunStoryMappingTransport)(obj))
+			mappingValue = u
+		case "not_recorded_for_evaluator":
+			actual, _ := in.Mapping.AsNotRecordedForEvaluator()
+			var obj *jsonRunEvaluatorMappingUnknownTransport
+			if actual != nil {
+				obj = encodeRunEvaluatorMappingUnknownToRunEvaluatorMappingUnknownTransport(actual)
+			}
+			u := mappingValue
+			u.SetNotRecordedForEvaluator((*jsonRunEvaluatorMappingUnknownTransport)(obj))
+			mappingValue = u
+		}
+		body.Mapping = &mappingValue
+	}
+	if err := validatejsonRecordedRunStoryTransport(body); err != nil {
+		return fmt.Errorf("validate RecordedRunStory value: %w", err)
+	}
+	return nil
+}
+
+// DecodeRecordedRunStory checks JSON field names from the Goa design and returns a service value.
+func DecodeRecordedRunStory(data []byte) (out *RecordedRunStory, err error) {
+	root, err := readStrictJSON(data)
+	if err != nil {
+		return out, fmt.Errorf("decode RecordedRunStory JSON: %w", err)
+	}
+	if err := validateRecordedRunStoryJSONValue("", root, ""); err != nil {
+		return out, fmt.Errorf("decode RecordedRunStory JSON: %w", err)
+	}
+	var body *jsonRecordedRunStoryTransport
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&body); err != nil {
+		return out, fmt.Errorf("decode RecordedRunStory JSON: %w", err)
+	}
+	if err := decoder.Decode(&struct{}{}); err != io.EOF {
+		if err == nil {
+			return out, fmt.Errorf("decode RecordedRunStory JSON: multiple JSON values")
+		}
+		return out, fmt.Errorf("decode RecordedRunStory JSON after first value: %w", err)
+	}
+	if err := validatejsonRecordedRunStoryTransport(body); err != nil {
+		return out, fmt.Errorf("validate RecordedRunStory JSON: %w", err)
+	}
+	{
+		out = &RecordedRunStory{
+			BuildNumber:    int(*body.BuildNumber),
+			BuildStartedAt: *body.BuildStartedAt,
+		}
+		out.Stories = make([]*StorySummaryItem, len(body.Stories))
+		for i, val := range body.Stories {
+			if val == nil {
+				out.Stories[i] = nil
+				continue
+			}
+			out.Stories[i] = decodeStorySummaryItemTransportToStorySummaryItem(val)
+		}
+		switch string(body.Mapping.Kind()) {
+		case "mapped":
+			actual, _ := body.Mapping.AsMapped()
+			var obj *RunStoryMapping
+			if actual != nil {
+				obj = decodeRunStoryMappingTransportToRunStoryMapping(actual)
+			}
+			u := out.Mapping
+			u.SetMapped((*RunStoryMapping)(obj))
+			out.Mapping = u
+		case "not_recorded_for_evaluator":
+			actual, _ := body.Mapping.AsNotRecordedForEvaluator()
+			var obj *RunEvaluatorMappingUnknown
+			if actual != nil {
+				obj = decodeRunEvaluatorMappingUnknownTransportToRunEvaluatorMappingUnknown(actual)
+			}
+			u := out.Mapping
+			u.SetNotRecordedForEvaluator((*RunEvaluatorMappingUnknown)(obj))
+			out.Mapping = u
+		}
+	}
+	return out, nil
+}
+
 // EncodeReplacedBuild turns a service value into JSON using the field names in the Goa design.
 func EncodeReplacedBuild(in *ReplacedBuild) ([]byte, error) {
 	if err := checkReplacedBuildValue(in); err != nil {
@@ -19771,7 +21151,7 @@ func DecodeRequiredTest(data []byte) (out *RequiredTest, err error) {
 	if err != nil {
 		return out, fmt.Errorf("decode RequiredTest JSON: %w", err)
 	}
-	if err := validateRequiredTestJSONValue("", root, ""); err != nil {
+	if err := validateRecordedRunStoryJSONValue5("", root, ""); err != nil {
 		return out, fmt.Errorf("decode RequiredTest JSON: %w", err)
 	}
 	var body *jsonRequiredTestTransport
@@ -19891,6 +21271,403 @@ func DecodeReviseChangePayload(data []byte) (out *ReviseChangePayload, err error
 			StoryRefreshOpID: body.StoryRefreshOpID,
 		}
 		out.Analysis = decodeCP1RevisionAnalysisTransportToCP1RevisionAnalysis(body.Analysis)
+	}
+	return out, nil
+}
+
+// EncodeRunApprovalAvailable turns a service value into JSON using the field names in the Goa design.
+func EncodeRunApprovalAvailable(in *RunApprovalAvailable) ([]byte, error) {
+	if err := checkRunApprovalAvailableValue(in); err != nil {
+		return nil, fmt.Errorf("encode RunApprovalAvailable JSON: %w", err)
+	}
+	var body *jsonRunApprovalAvailableTransport
+	{
+		body = &jsonRunApprovalAvailableTransport{}
+	}
+	if err := validatejsonRunApprovalAvailableTransport(body); err != nil {
+		return nil, fmt.Errorf("validate RunApprovalAvailable JSON: %w", err)
+	}
+	data, err := json.Marshal(body)
+	if err != nil {
+		return nil, fmt.Errorf("encode RunApprovalAvailable JSON: %w", err)
+	}
+	return data, nil
+}
+
+// ValidateRunApprovalAvailableValue checks the original Go fields against their declared constraints.
+// It returns validation errors without encoding the value as JSON.
+
+func ValidateRunApprovalAvailableValue(in *RunApprovalAvailable) error {
+	if err := checkRunApprovalAvailableValue(in); err != nil {
+		return fmt.Errorf("validate RunApprovalAvailable value: %w", err)
+	}
+
+	if in == nil {
+		return goa.MissingFieldError("result", "RunApprovalAvailable")
+	}
+
+	var body *jsonRunApprovalAvailableTransport
+	{
+		body = &jsonRunApprovalAvailableTransport{}
+	}
+	if err := validatejsonRunApprovalAvailableTransport(body); err != nil {
+		return fmt.Errorf("validate RunApprovalAvailable value: %w", err)
+	}
+	return nil
+}
+
+// DecodeRunApprovalAvailable checks JSON field names from the Goa design and returns a service value.
+func DecodeRunApprovalAvailable(data []byte) (out *RunApprovalAvailable, err error) {
+	root, err := readStrictJSON(data)
+	if err != nil {
+		return out, fmt.Errorf("decode RunApprovalAvailable JSON: %w", err)
+	}
+	if err := validateRunApprovalAvailableJSONValue("", root, ""); err != nil {
+		return out, fmt.Errorf("decode RunApprovalAvailable JSON: %w", err)
+	}
+	var body *jsonRunApprovalAvailableTransport
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&body); err != nil {
+		return out, fmt.Errorf("decode RunApprovalAvailable JSON: %w", err)
+	}
+	if err := decoder.Decode(&struct{}{}); err != io.EOF {
+		if err == nil {
+			return out, fmt.Errorf("decode RunApprovalAvailable JSON: multiple JSON values")
+		}
+		return out, fmt.Errorf("decode RunApprovalAvailable JSON after first value: %w", err)
+	}
+	if err := validatejsonRunApprovalAvailableTransport(body); err != nil {
+		return out, fmt.Errorf("validate RunApprovalAvailable JSON: %w", err)
+	}
+	{
+		out = &RunApprovalAvailable{}
+	}
+	return out, nil
+}
+
+// EncodeRunApprovalBlocked turns a service value into JSON using the field names in the Goa design.
+func EncodeRunApprovalBlocked(in *RunApprovalBlocked) ([]byte, error) {
+	if err := checkRunApprovalBlockedValue(in); err != nil {
+		return nil, fmt.Errorf("encode RunApprovalBlocked JSON: %w", err)
+	}
+	if err := validateRunApprovalBlockedOriginal(in); err != nil {
+		return nil, fmt.Errorf("validate RunApprovalBlocked value: %w", err)
+	}
+	var body *jsonRunApprovalBlockedTransport
+	{
+		body = &jsonRunApprovalBlockedTransport{
+			Reason: &in.Reason,
+		}
+	}
+	if err := validatejsonRunApprovalBlockedTransport(body); err != nil {
+		return nil, fmt.Errorf("validate RunApprovalBlocked JSON: %w", err)
+	}
+	data, err := json.Marshal(body)
+	if err != nil {
+		return nil, fmt.Errorf("encode RunApprovalBlocked JSON: %w", err)
+	}
+	return data, nil
+}
+
+// ValidateRunApprovalBlockedValue checks the original Go fields against their declared constraints.
+// It returns validation errors without encoding the value as JSON.
+
+func ValidateRunApprovalBlockedValue(in *RunApprovalBlocked) error {
+	if err := checkRunApprovalBlockedValue(in); err != nil {
+		return fmt.Errorf("validate RunApprovalBlocked value: %w", err)
+	}
+	if err := validateRunApprovalBlockedOriginal(in); err != nil {
+		return fmt.Errorf("validate RunApprovalBlocked value: %w", err)
+	}
+
+	if in == nil {
+		return goa.MissingFieldError("result", "RunApprovalBlocked")
+	}
+
+	var body *jsonRunApprovalBlockedTransport
+	{
+		body = &jsonRunApprovalBlockedTransport{
+			Reason: &in.Reason,
+		}
+	}
+	if err := validatejsonRunApprovalBlockedTransport(body); err != nil {
+		return fmt.Errorf("validate RunApprovalBlocked value: %w", err)
+	}
+	return nil
+}
+
+// DecodeRunApprovalBlocked checks JSON field names from the Goa design and returns a service value.
+func DecodeRunApprovalBlocked(data []byte) (out *RunApprovalBlocked, err error) {
+	root, err := readStrictJSON(data)
+	if err != nil {
+		return out, fmt.Errorf("decode RunApprovalBlocked JSON: %w", err)
+	}
+	if err := validateRunApprovalBlockedJSONValue("", root, ""); err != nil {
+		return out, fmt.Errorf("decode RunApprovalBlocked JSON: %w", err)
+	}
+	var body *jsonRunApprovalBlockedTransport
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&body); err != nil {
+		return out, fmt.Errorf("decode RunApprovalBlocked JSON: %w", err)
+	}
+	if err := decoder.Decode(&struct{}{}); err != io.EOF {
+		if err == nil {
+			return out, fmt.Errorf("decode RunApprovalBlocked JSON: multiple JSON values")
+		}
+		return out, fmt.Errorf("decode RunApprovalBlocked JSON after first value: %w", err)
+	}
+	if err := validatejsonRunApprovalBlockedTransport(body); err != nil {
+		return out, fmt.Errorf("validate RunApprovalBlocked JSON: %w", err)
+	}
+	{
+		out = &RunApprovalBlocked{
+			Reason: *body.Reason,
+		}
+	}
+	return out, nil
+}
+
+// EncodeRunEvaluatorMappingUnknown turns a service value into JSON using the field names in the Goa design.
+func EncodeRunEvaluatorMappingUnknown(in *RunEvaluatorMappingUnknown) ([]byte, error) {
+	if err := checkRunEvaluatorMappingUnknownValue(in); err != nil {
+		return nil, fmt.Errorf("encode RunEvaluatorMappingUnknown JSON: %w", err)
+	}
+	var body *jsonRunEvaluatorMappingUnknownTransport
+	{
+		body = &jsonRunEvaluatorMappingUnknownTransport{}
+	}
+	if err := validatejsonRunEvaluatorMappingUnknownTransport(body); err != nil {
+		return nil, fmt.Errorf("validate RunEvaluatorMappingUnknown JSON: %w", err)
+	}
+	data, err := json.Marshal(body)
+	if err != nil {
+		return nil, fmt.Errorf("encode RunEvaluatorMappingUnknown JSON: %w", err)
+	}
+	return data, nil
+}
+
+// ValidateRunEvaluatorMappingUnknownValue checks the original Go fields against their declared constraints.
+// It returns validation errors without encoding the value as JSON.
+
+func ValidateRunEvaluatorMappingUnknownValue(in *RunEvaluatorMappingUnknown) error {
+	if err := checkRunEvaluatorMappingUnknownValue(in); err != nil {
+		return fmt.Errorf("validate RunEvaluatorMappingUnknown value: %w", err)
+	}
+
+	if in == nil {
+		return goa.MissingFieldError("result", "RunEvaluatorMappingUnknown")
+	}
+
+	var body *jsonRunEvaluatorMappingUnknownTransport
+	{
+		body = &jsonRunEvaluatorMappingUnknownTransport{}
+	}
+	if err := validatejsonRunEvaluatorMappingUnknownTransport(body); err != nil {
+		return fmt.Errorf("validate RunEvaluatorMappingUnknown value: %w", err)
+	}
+	return nil
+}
+
+// DecodeRunEvaluatorMappingUnknown checks JSON field names from the Goa design and returns a service value.
+func DecodeRunEvaluatorMappingUnknown(data []byte) (out *RunEvaluatorMappingUnknown, err error) {
+	root, err := readStrictJSON(data)
+	if err != nil {
+		return out, fmt.Errorf("decode RunEvaluatorMappingUnknown JSON: %w", err)
+	}
+	if err := validateRecordedRunStoryJSONValue6("", root, ""); err != nil {
+		return out, fmt.Errorf("decode RunEvaluatorMappingUnknown JSON: %w", err)
+	}
+	var body *jsonRunEvaluatorMappingUnknownTransport
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&body); err != nil {
+		return out, fmt.Errorf("decode RunEvaluatorMappingUnknown JSON: %w", err)
+	}
+	if err := decoder.Decode(&struct{}{}); err != io.EOF {
+		if err == nil {
+			return out, fmt.Errorf("decode RunEvaluatorMappingUnknown JSON: multiple JSON values")
+		}
+		return out, fmt.Errorf("decode RunEvaluatorMappingUnknown JSON after first value: %w", err)
+	}
+	if err := validatejsonRunEvaluatorMappingUnknownTransport(body); err != nil {
+		return out, fmt.Errorf("validate RunEvaluatorMappingUnknown JSON: %w", err)
+	}
+	{
+		out = &RunEvaluatorMappingUnknown{}
+	}
+	return out, nil
+}
+
+// EncodeRunStoryMapping turns a service value into JSON using the field names in the Goa design.
+func EncodeRunStoryMapping(in *RunStoryMapping) ([]byte, error) {
+	if err := checkRunStoryMappingValue(in); err != nil {
+		return nil, fmt.Errorf("encode RunStoryMapping JSON: %w", err)
+	}
+	if err := validateRunStoryMappingOriginal(in); err != nil {
+		return nil, fmt.Errorf("validate RunStoryMapping value: %w", err)
+	}
+	var body *jsonRunStoryMappingTransport
+	{
+		body = &jsonRunStoryMappingTransport{}
+		body.RequiredTests = make([]*jsonRequiredTestTransport, len(in.RequiredTests))
+		for i, val := range in.RequiredTests {
+			if val == nil {
+				body.RequiredTests[i] = nil
+				continue
+			}
+			body.RequiredTests[i] = encodeRequiredTestToRequiredTestTransport(val)
+		}
+	}
+	if err := validatejsonRunStoryMappingTransport(body); err != nil {
+		return nil, fmt.Errorf("validate RunStoryMapping JSON: %w", err)
+	}
+	data, err := json.Marshal(body)
+	if err != nil {
+		return nil, fmt.Errorf("encode RunStoryMapping JSON: %w", err)
+	}
+	return data, nil
+}
+
+// ValidateRunStoryMappingValue checks the original Go fields against their declared constraints.
+// It returns validation errors without encoding the value as JSON.
+
+func ValidateRunStoryMappingValue(in *RunStoryMapping) error {
+	if err := checkRunStoryMappingValue(in); err != nil {
+		return fmt.Errorf("validate RunStoryMapping value: %w", err)
+	}
+	if err := validateRunStoryMappingOriginal(in); err != nil {
+		return fmt.Errorf("validate RunStoryMapping value: %w", err)
+	}
+
+	if in == nil {
+		return goa.MissingFieldError("result", "RunStoryMapping")
+	}
+
+	var body *jsonRunStoryMappingTransport
+	{
+		body = &jsonRunStoryMappingTransport{}
+		body.RequiredTests = make([]*jsonRequiredTestTransport, len(in.RequiredTests))
+		for i, val := range in.RequiredTests {
+			if val == nil {
+				body.RequiredTests[i] = nil
+				continue
+			}
+			body.RequiredTests[i] = encodeRequiredTestToRequiredTestTransport(val)
+		}
+	}
+	if err := validatejsonRunStoryMappingTransport(body); err != nil {
+		return fmt.Errorf("validate RunStoryMapping value: %w", err)
+	}
+	return nil
+}
+
+// DecodeRunStoryMapping checks JSON field names from the Goa design and returns a service value.
+func DecodeRunStoryMapping(data []byte) (out *RunStoryMapping, err error) {
+	root, err := readStrictJSON(data)
+	if err != nil {
+		return out, fmt.Errorf("decode RunStoryMapping JSON: %w", err)
+	}
+	if err := validateRecordedRunStoryJSONValue3("", root, ""); err != nil {
+		return out, fmt.Errorf("decode RunStoryMapping JSON: %w", err)
+	}
+	var body *jsonRunStoryMappingTransport
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&body); err != nil {
+		return out, fmt.Errorf("decode RunStoryMapping JSON: %w", err)
+	}
+	if err := decoder.Decode(&struct{}{}); err != io.EOF {
+		if err == nil {
+			return out, fmt.Errorf("decode RunStoryMapping JSON: multiple JSON values")
+		}
+		return out, fmt.Errorf("decode RunStoryMapping JSON after first value: %w", err)
+	}
+	if err := validatejsonRunStoryMappingTransport(body); err != nil {
+		return out, fmt.Errorf("validate RunStoryMapping JSON: %w", err)
+	}
+	{
+		out = &RunStoryMapping{}
+		out.RequiredTests = make([]*RequiredTest, len(body.RequiredTests))
+		for i, val := range body.RequiredTests {
+			if val == nil {
+				out.RequiredTests[i] = nil
+				continue
+			}
+			out.RequiredTests[i] = decodeRequiredTestTransportToRequiredTest(val)
+		}
+	}
+	return out, nil
+}
+
+// EncodeRunStoryNotRecorded turns a service value into JSON using the field names in the Goa design.
+func EncodeRunStoryNotRecorded(in *RunStoryNotRecorded) ([]byte, error) {
+	if err := checkRunStoryNotRecordedValue(in); err != nil {
+		return nil, fmt.Errorf("encode RunStoryNotRecorded JSON: %w", err)
+	}
+	var body *jsonRunStoryNotRecordedTransport
+	{
+		body = &jsonRunStoryNotRecordedTransport{}
+	}
+	if err := validatejsonRunStoryNotRecordedTransport(body); err != nil {
+		return nil, fmt.Errorf("validate RunStoryNotRecorded JSON: %w", err)
+	}
+	data, err := json.Marshal(body)
+	if err != nil {
+		return nil, fmt.Errorf("encode RunStoryNotRecorded JSON: %w", err)
+	}
+	return data, nil
+}
+
+// ValidateRunStoryNotRecordedValue checks the original Go fields against their declared constraints.
+// It returns validation errors without encoding the value as JSON.
+
+func ValidateRunStoryNotRecordedValue(in *RunStoryNotRecorded) error {
+	if err := checkRunStoryNotRecordedValue(in); err != nil {
+		return fmt.Errorf("validate RunStoryNotRecorded value: %w", err)
+	}
+
+	if in == nil {
+		return goa.MissingFieldError("result", "RunStoryNotRecorded")
+	}
+
+	var body *jsonRunStoryNotRecordedTransport
+	{
+		body = &jsonRunStoryNotRecordedTransport{}
+	}
+	if err := validatejsonRunStoryNotRecordedTransport(body); err != nil {
+		return fmt.Errorf("validate RunStoryNotRecorded value: %w", err)
+	}
+	return nil
+}
+
+// DecodeRunStoryNotRecorded checks JSON field names from the Goa design and returns a service value.
+func DecodeRunStoryNotRecorded(data []byte) (out *RunStoryNotRecorded, err error) {
+	root, err := readStrictJSON(data)
+	if err != nil {
+		return out, fmt.Errorf("decode RunStoryNotRecorded JSON: %w", err)
+	}
+	if err := validateRunStoryNotRecordedJSONValue("", root, ""); err != nil {
+		return out, fmt.Errorf("decode RunStoryNotRecorded JSON: %w", err)
+	}
+	var body *jsonRunStoryNotRecordedTransport
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&body); err != nil {
+		return out, fmt.Errorf("decode RunStoryNotRecorded JSON: %w", err)
+	}
+	if err := decoder.Decode(&struct{}{}); err != io.EOF {
+		if err == nil {
+			return out, fmt.Errorf("decode RunStoryNotRecorded JSON: multiple JSON values")
+		}
+		return out, fmt.Errorf("decode RunStoryNotRecorded JSON after first value: %w", err)
+	}
+	if err := validatejsonRunStoryNotRecordedTransport(body); err != nil {
+		return out, fmt.Errorf("validate RunStoryNotRecorded JSON: %w", err)
+	}
+	{
+		out = &RunStoryNotRecorded{}
 	}
 	return out, nil
 }
@@ -24028,6 +25805,527 @@ func DecodeVerificationNotCompleted(data []byte) (out *VerificationNotCompleted,
 	return out, nil
 }
 
+// EncodeVerificationReview turns a service value into JSON using the field names in the Goa design.
+func EncodeVerificationReview(in *VerificationReview) ([]byte, error) {
+	if err := checkVerificationReviewValue(in); err != nil {
+		return nil, fmt.Errorf("encode VerificationReview JSON: %w", err)
+	}
+	if err := validateVerificationReviewOriginal(in); err != nil {
+		return nil, fmt.Errorf("validate VerificationReview value: %w", err)
+	}
+	var body *jsonVerificationReviewTransport
+	{
+		body = &jsonVerificationReviewTransport{}
+		var storyContextValue jsonStoryContextTransport
+		switch string(in.StoryContext.Kind()) {
+		case "recorded":
+			actual, _ := in.StoryContext.AsRecorded()
+			var obj *jsonRecordedRunStoryTransport
+			if actual != nil {
+				obj = encodeRecordedRunStoryToRecordedRunStoryTransport(actual)
+			}
+			u := storyContextValue
+			u.SetRecorded((*jsonRecordedRunStoryTransport)(obj))
+			storyContextValue = u
+		case "not_recorded":
+			actual, _ := in.StoryContext.AsNotRecorded()
+			var obj *jsonRunStoryNotRecordedTransport
+			if actual != nil {
+				obj = encodeRunStoryNotRecordedToRunStoryNotRecordedTransport(actual)
+			}
+			u := storyContextValue
+			u.SetNotRecorded((*jsonRunStoryNotRecordedTransport)(obj))
+			storyContextValue = u
+		}
+		body.StoryContext = &storyContextValue
+		var approvalValue jsonApprovalTransport
+		switch string(in.Approval.Kind()) {
+		case "available":
+			actual, _ := in.Approval.AsAvailable()
+			var obj *jsonRunApprovalAvailableTransport
+			if actual != nil {
+				obj = encodeRunApprovalAvailableToRunApprovalAvailableTransport(actual)
+			}
+			u := approvalValue
+			u.SetAvailable((*jsonRunApprovalAvailableTransport)(obj))
+			approvalValue = u
+		case "blocked":
+			actual, _ := in.Approval.AsBlocked()
+			var obj *jsonRunApprovalBlockedTransport
+			if actual != nil {
+				obj = encodeRunApprovalBlockedToRunApprovalBlockedTransport(actual)
+			}
+			u := approvalValue
+			u.SetBlocked((*jsonRunApprovalBlockedTransport)(obj))
+			approvalValue = u
+		case "recorded":
+			actual, _ := in.Approval.AsRecorded()
+			var obj *jsonApprovalItemTransport
+			if actual != nil {
+				obj = encodeApprovalItemToApprovalItemTransport3(actual)
+			}
+			u := approvalValue
+			u.SetRecorded((*jsonApprovalItemTransport)(obj))
+			approvalValue = u
+		case "unverified":
+			actual, _ := in.Approval.AsUnverified()
+			var obj *jsonUnverifiedApprovalItemTransport
+			if actual != nil {
+				obj = encodeUnverifiedApprovalItemToUnverifiedApprovalItemTransport2(actual)
+			}
+			u := approvalValue
+			u.SetUnverified((*jsonUnverifiedApprovalItemTransport)(obj))
+			approvalValue = u
+		}
+		body.Approval = &approvalValue
+	}
+	if err := validatejsonVerificationReviewTransport(body); err != nil {
+		return nil, fmt.Errorf("validate VerificationReview JSON: %w", err)
+	}
+	data, err := json.Marshal(body)
+	if err != nil {
+		return nil, fmt.Errorf("encode VerificationReview JSON: %w", err)
+	}
+	return data, nil
+}
+
+// ValidateVerificationReviewValue checks the original Go fields against their declared constraints.
+// It returns validation errors without encoding the value as JSON.
+
+func ValidateVerificationReviewValue(in *VerificationReview) error {
+	if err := checkVerificationReviewValue(in); err != nil {
+		return fmt.Errorf("validate VerificationReview value: %w", err)
+	}
+	if err := validateVerificationReviewOriginal(in); err != nil {
+		return fmt.Errorf("validate VerificationReview value: %w", err)
+	}
+
+	if in == nil {
+		return goa.MissingFieldError("result", "VerificationReview")
+	}
+
+	var body *jsonVerificationReviewTransport
+	{
+		body = &jsonVerificationReviewTransport{}
+		var storyContextValue jsonStoryContextTransport
+		switch string(in.StoryContext.Kind()) {
+		case "recorded":
+			actual, _ := in.StoryContext.AsRecorded()
+			var obj *jsonRecordedRunStoryTransport
+			if actual != nil {
+				obj = encodeRecordedRunStoryToRecordedRunStoryTransport(actual)
+			}
+			u := storyContextValue
+			u.SetRecorded((*jsonRecordedRunStoryTransport)(obj))
+			storyContextValue = u
+		case "not_recorded":
+			actual, _ := in.StoryContext.AsNotRecorded()
+			var obj *jsonRunStoryNotRecordedTransport
+			if actual != nil {
+				obj = encodeRunStoryNotRecordedToRunStoryNotRecordedTransport(actual)
+			}
+			u := storyContextValue
+			u.SetNotRecorded((*jsonRunStoryNotRecordedTransport)(obj))
+			storyContextValue = u
+		}
+		body.StoryContext = &storyContextValue
+		var approvalValue jsonApprovalTransport
+		switch string(in.Approval.Kind()) {
+		case "available":
+			actual, _ := in.Approval.AsAvailable()
+			var obj *jsonRunApprovalAvailableTransport
+			if actual != nil {
+				obj = encodeRunApprovalAvailableToRunApprovalAvailableTransport(actual)
+			}
+			u := approvalValue
+			u.SetAvailable((*jsonRunApprovalAvailableTransport)(obj))
+			approvalValue = u
+		case "blocked":
+			actual, _ := in.Approval.AsBlocked()
+			var obj *jsonRunApprovalBlockedTransport
+			if actual != nil {
+				obj = encodeRunApprovalBlockedToRunApprovalBlockedTransport(actual)
+			}
+			u := approvalValue
+			u.SetBlocked((*jsonRunApprovalBlockedTransport)(obj))
+			approvalValue = u
+		case "recorded":
+			actual, _ := in.Approval.AsRecorded()
+			var obj *jsonApprovalItemTransport
+			if actual != nil {
+				obj = encodeApprovalItemToApprovalItemTransport3(actual)
+			}
+			u := approvalValue
+			u.SetRecorded((*jsonApprovalItemTransport)(obj))
+			approvalValue = u
+		case "unverified":
+			actual, _ := in.Approval.AsUnverified()
+			var obj *jsonUnverifiedApprovalItemTransport
+			if actual != nil {
+				obj = encodeUnverifiedApprovalItemToUnverifiedApprovalItemTransport2(actual)
+			}
+			u := approvalValue
+			u.SetUnverified((*jsonUnverifiedApprovalItemTransport)(obj))
+			approvalValue = u
+		}
+		body.Approval = &approvalValue
+	}
+	if err := validatejsonVerificationReviewTransport(body); err != nil {
+		return fmt.Errorf("validate VerificationReview value: %w", err)
+	}
+	return nil
+}
+
+// DecodeVerificationReview checks JSON field names from the Goa design and returns a service value.
+func DecodeVerificationReview(data []byte) (out *VerificationReview, err error) {
+	root, err := readStrictJSON(data)
+	if err != nil {
+		return out, fmt.Errorf("decode VerificationReview JSON: %w", err)
+	}
+	if err := validateVerificationReviewJSONValue("", root, ""); err != nil {
+		return out, fmt.Errorf("decode VerificationReview JSON: %w", err)
+	}
+	var body *jsonVerificationReviewTransport
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&body); err != nil {
+		return out, fmt.Errorf("decode VerificationReview JSON: %w", err)
+	}
+	if err := decoder.Decode(&struct{}{}); err != io.EOF {
+		if err == nil {
+			return out, fmt.Errorf("decode VerificationReview JSON: multiple JSON values")
+		}
+		return out, fmt.Errorf("decode VerificationReview JSON after first value: %w", err)
+	}
+	if err := validatejsonVerificationReviewTransport(body); err != nil {
+		return out, fmt.Errorf("validate VerificationReview JSON: %w", err)
+	}
+	{
+		out = &VerificationReview{}
+		switch string(body.StoryContext.Kind()) {
+		case "recorded":
+			actual, _ := body.StoryContext.AsRecorded()
+			var obj *RecordedRunStory
+			if actual != nil {
+				obj = decodeRecordedRunStoryTransportToRecordedRunStory(actual)
+			}
+			u := out.StoryContext
+			u.SetRecorded((*RecordedRunStory)(obj))
+			out.StoryContext = u
+		case "not_recorded":
+			actual, _ := body.StoryContext.AsNotRecorded()
+			var obj *RunStoryNotRecorded
+			if actual != nil {
+				obj = decodeRunStoryNotRecordedTransportToRunStoryNotRecorded(actual)
+			}
+			u := out.StoryContext
+			u.SetNotRecorded((*RunStoryNotRecorded)(obj))
+			out.StoryContext = u
+		}
+		switch string(body.Approval.Kind()) {
+		case "available":
+			actual, _ := body.Approval.AsAvailable()
+			var obj *RunApprovalAvailable
+			if actual != nil {
+				obj = decodeRunApprovalAvailableTransportToRunApprovalAvailable(actual)
+			}
+			u := out.Approval
+			u.SetAvailable((*RunApprovalAvailable)(obj))
+			out.Approval = u
+		case "blocked":
+			actual, _ := body.Approval.AsBlocked()
+			var obj *RunApprovalBlocked
+			if actual != nil {
+				obj = decodeRunApprovalBlockedTransportToRunApprovalBlocked(actual)
+			}
+			u := out.Approval
+			u.SetBlocked((*RunApprovalBlocked)(obj))
+			out.Approval = u
+		case "recorded":
+			actual, _ := body.Approval.AsRecorded()
+			var obj *ApprovalItem
+			if actual != nil {
+				obj = decodeApprovalItemTransportToApprovalItem(actual)
+			}
+			u := out.Approval
+			u.SetRecorded((*ApprovalItem)(obj))
+			out.Approval = u
+		case "unverified":
+			actual, _ := body.Approval.AsUnverified()
+			var obj *UnverifiedApprovalItem
+			if actual != nil {
+				obj = decodeUnverifiedApprovalItemTransportToUnverifiedApprovalItem(actual)
+			}
+			u := out.Approval
+			u.SetUnverified((*UnverifiedApprovalItem)(obj))
+			out.Approval = u
+		}
+	}
+	return out, nil
+}
+
+// EncodeVerificationReviewResult turns a service value into JSON using the field names in the Goa design.
+func EncodeVerificationReviewResult(in *VerificationReviewResult) ([]byte, error) {
+	if err := checkVerificationReviewResultValue(in); err != nil {
+		return nil, fmt.Errorf("encode VerificationReviewResult JSON: %w", err)
+	}
+	if err := validateVerificationReviewResultOriginal(in); err != nil {
+		return nil, fmt.Errorf("validate VerificationReviewResult value: %w", err)
+	}
+	var body *jsonVerificationReviewResultTransport
+	{
+		body = &jsonVerificationReviewResultTransport{
+			RunID:                &in.RunID,
+			ChangeID:             &in.ChangeID,
+			RequestRevision:      &in.RequestRevision,
+			CandidateCommit:      &in.CandidateCommit,
+			SuiteCommit:          &in.SuiteCommit,
+			AcceptedAt:           &in.AcceptedAt,
+			InputsCurrent:        &in.InputsCurrent,
+			CandidateBinariesDir: in.CandidateBinariesDir,
+		}
+		body.Review = encodeVerificationReviewToVerificationReviewTransport(in.Review)
+		var testSourceValue jsonTestSourceTransport
+		switch string(in.TestSource.Kind()) {
+		case "evaluator":
+			actual, _ := in.TestSource.AsEvaluator()
+			var obj *jsonOperatorEvaluatorTestsTransport
+			if actual != nil {
+				obj = encodeOperatorEvaluatorTestsToOperatorEvaluatorTestsTransport(actual)
+			}
+			u := testSourceValue
+			u.SetEvaluator((*jsonOperatorEvaluatorTestsTransport)(obj))
+			testSourceValue = u
+		case "written_tests":
+			actual, _ := in.TestSource.AsWrittenTests()
+			var obj *jsonAgentWrittenTestsTransport
+			if actual != nil {
+				obj = encodeAgentWrittenTestsToAgentWrittenTestsTransport(actual)
+			}
+			u := testSourceValue
+			u.SetWrittenTests((*jsonAgentWrittenTestsTransport)(obj))
+			testSourceValue = u
+		}
+		body.TestSource = &testSourceValue
+		var stateValue jsonStateTransport
+		switch string(in.State.Kind()) {
+		case "running":
+			actual, _ := in.State.AsRunning()
+			var obj *jsonVerificationRunningTransport
+			if actual != nil {
+				obj = encodeVerificationRunningToVerificationRunningTransport(actual)
+			}
+			u := stateValue
+			u.SetRunning((*jsonVerificationRunningTransport)(obj))
+			stateValue = u
+		case "completed":
+			actual, _ := in.State.AsCompleted()
+			var obj *jsonVerificationCompletedTransport
+			if actual != nil {
+				obj = encodeVerificationCompletedToVerificationCompletedTransport(actual)
+			}
+			u := stateValue
+			u.SetCompleted((*jsonVerificationCompletedTransport)(obj))
+			stateValue = u
+		case "not_completed":
+			actual, _ := in.State.AsNotCompleted()
+			var obj *jsonVerificationNotCompletedTransport
+			if actual != nil {
+				obj = encodeVerificationNotCompletedToVerificationNotCompletedTransport(actual)
+			}
+			u := stateValue
+			u.SetNotCompleted((*jsonVerificationNotCompletedTransport)(obj))
+			stateValue = u
+		}
+		body.State = &stateValue
+	}
+	if err := validatejsonVerificationReviewResultTransport(body); err != nil {
+		return nil, fmt.Errorf("validate VerificationReviewResult JSON: %w", err)
+	}
+	data, err := json.Marshal(body)
+	if err != nil {
+		return nil, fmt.Errorf("encode VerificationReviewResult JSON: %w", err)
+	}
+	return data, nil
+}
+
+// ValidateVerificationReviewResultValue checks the original Go fields against their declared constraints.
+// It returns validation errors without encoding the value as JSON.
+
+func ValidateVerificationReviewResultValue(in *VerificationReviewResult) error {
+	if err := checkVerificationReviewResultValue(in); err != nil {
+		return fmt.Errorf("validate VerificationReviewResult value: %w", err)
+	}
+	if err := validateVerificationReviewResultOriginal(in); err != nil {
+		return fmt.Errorf("validate VerificationReviewResult value: %w", err)
+	}
+
+	if in == nil {
+		return goa.MissingFieldError("result", "VerificationReviewResult")
+	}
+
+	var body *jsonVerificationReviewResultTransport
+	{
+		body = &jsonVerificationReviewResultTransport{
+			RunID:                &in.RunID,
+			ChangeID:             &in.ChangeID,
+			RequestRevision:      &in.RequestRevision,
+			CandidateCommit:      &in.CandidateCommit,
+			SuiteCommit:          &in.SuiteCommit,
+			AcceptedAt:           &in.AcceptedAt,
+			InputsCurrent:        &in.InputsCurrent,
+			CandidateBinariesDir: in.CandidateBinariesDir,
+		}
+		body.Review = encodeVerificationReviewToVerificationReviewTransport(in.Review)
+		var testSourceValue jsonTestSourceTransport
+		switch string(in.TestSource.Kind()) {
+		case "evaluator":
+			actual, _ := in.TestSource.AsEvaluator()
+			var obj *jsonOperatorEvaluatorTestsTransport
+			if actual != nil {
+				obj = encodeOperatorEvaluatorTestsToOperatorEvaluatorTestsTransport(actual)
+			}
+			u := testSourceValue
+			u.SetEvaluator((*jsonOperatorEvaluatorTestsTransport)(obj))
+			testSourceValue = u
+		case "written_tests":
+			actual, _ := in.TestSource.AsWrittenTests()
+			var obj *jsonAgentWrittenTestsTransport
+			if actual != nil {
+				obj = encodeAgentWrittenTestsToAgentWrittenTestsTransport(actual)
+			}
+			u := testSourceValue
+			u.SetWrittenTests((*jsonAgentWrittenTestsTransport)(obj))
+			testSourceValue = u
+		}
+		body.TestSource = &testSourceValue
+		var stateValue jsonStateTransport
+		switch string(in.State.Kind()) {
+		case "running":
+			actual, _ := in.State.AsRunning()
+			var obj *jsonVerificationRunningTransport
+			if actual != nil {
+				obj = encodeVerificationRunningToVerificationRunningTransport(actual)
+			}
+			u := stateValue
+			u.SetRunning((*jsonVerificationRunningTransport)(obj))
+			stateValue = u
+		case "completed":
+			actual, _ := in.State.AsCompleted()
+			var obj *jsonVerificationCompletedTransport
+			if actual != nil {
+				obj = encodeVerificationCompletedToVerificationCompletedTransport(actual)
+			}
+			u := stateValue
+			u.SetCompleted((*jsonVerificationCompletedTransport)(obj))
+			stateValue = u
+		case "not_completed":
+			actual, _ := in.State.AsNotCompleted()
+			var obj *jsonVerificationNotCompletedTransport
+			if actual != nil {
+				obj = encodeVerificationNotCompletedToVerificationNotCompletedTransport(actual)
+			}
+			u := stateValue
+			u.SetNotCompleted((*jsonVerificationNotCompletedTransport)(obj))
+			stateValue = u
+		}
+		body.State = &stateValue
+	}
+	if err := validatejsonVerificationReviewResultTransport(body); err != nil {
+		return fmt.Errorf("validate VerificationReviewResult value: %w", err)
+	}
+	return nil
+}
+
+// DecodeVerificationReviewResult checks JSON field names from the Goa design and returns a service value.
+func DecodeVerificationReviewResult(data []byte) (out *VerificationReviewResult, err error) {
+	root, err := readStrictJSON(data)
+	if err != nil {
+		return out, fmt.Errorf("decode VerificationReviewResult JSON: %w", err)
+	}
+	if err := validateVerificationReviewResultJSONValue("", root, ""); err != nil {
+		return out, fmt.Errorf("decode VerificationReviewResult JSON: %w", err)
+	}
+	var body *jsonVerificationReviewResultTransport
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&body); err != nil {
+		return out, fmt.Errorf("decode VerificationReviewResult JSON: %w", err)
+	}
+	if err := decoder.Decode(&struct{}{}); err != io.EOF {
+		if err == nil {
+			return out, fmt.Errorf("decode VerificationReviewResult JSON: multiple JSON values")
+		}
+		return out, fmt.Errorf("decode VerificationReviewResult JSON after first value: %w", err)
+	}
+	if err := validatejsonVerificationReviewResultTransport(body); err != nil {
+		return out, fmt.Errorf("validate VerificationReviewResult JSON: %w", err)
+	}
+	{
+		out = &VerificationReviewResult{
+			RunID:                *body.RunID,
+			ChangeID:             *body.ChangeID,
+			RequestRevision:      *body.RequestRevision,
+			CandidateCommit:      *body.CandidateCommit,
+			SuiteCommit:          *body.SuiteCommit,
+			AcceptedAt:           *body.AcceptedAt,
+			InputsCurrent:        *body.InputsCurrent,
+			CandidateBinariesDir: body.CandidateBinariesDir,
+		}
+		out.Review = decodeVerificationReviewTransportToVerificationReview(body.Review)
+		switch string(body.TestSource.Kind()) {
+		case "evaluator":
+			actual, _ := body.TestSource.AsEvaluator()
+			var obj *OperatorEvaluatorTests
+			if actual != nil {
+				obj = decodeOperatorEvaluatorTestsTransportToOperatorEvaluatorTests(actual)
+			}
+			u := out.TestSource
+			u.SetEvaluator((*OperatorEvaluatorTests)(obj))
+			out.TestSource = u
+		case "written_tests":
+			actual, _ := body.TestSource.AsWrittenTests()
+			var obj *AgentWrittenTests
+			if actual != nil {
+				obj = decodeAgentWrittenTestsTransportToAgentWrittenTests(actual)
+			}
+			u := out.TestSource
+			u.SetWrittenTests((*AgentWrittenTests)(obj))
+			out.TestSource = u
+		}
+		switch string(body.State.Kind()) {
+		case "running":
+			actual, _ := body.State.AsRunning()
+			var obj *VerificationRunning
+			if actual != nil {
+				obj = decodeVerificationRunningTransportToVerificationRunning(actual)
+			}
+			u := out.State
+			u.SetRunning((*VerificationRunning)(obj))
+			out.State = u
+		case "completed":
+			actual, _ := body.State.AsCompleted()
+			var obj *VerificationCompleted
+			if actual != nil {
+				obj = decodeVerificationCompletedTransportToVerificationCompleted(actual)
+			}
+			u := out.State
+			u.SetCompleted((*VerificationCompleted)(obj))
+			out.State = u
+		case "not_completed":
+			actual, _ := body.State.AsNotCompleted()
+			var obj *VerificationNotCompleted
+			if actual != nil {
+				obj = decodeVerificationNotCompletedTransportToVerificationNotCompleted(actual)
+			}
+			u := out.State
+			u.SetNotCompleted((*VerificationNotCompleted)(obj))
+			out.State = u
+		}
+	}
+	return out, nil
+}
+
 // EncodeVerificationRunning turns a service value into JSON using the field names in the Goa design.
 func EncodeVerificationRunning(in *VerificationRunning) ([]byte, error) {
 	if err := checkVerificationRunningValue(in); err != nil {
@@ -25156,6 +27454,43 @@ func decodeProposedRevisionItemTransportToProposedRevisionItem(v *jsonProposedRe
 	return res
 }
 
+func decodeRecordedRunStoryTransportToRecordedRunStory(v *jsonRecordedRunStoryTransport) *RecordedRunStory {
+	res := &RecordedRunStory{
+		BuildNumber:    int(*v.BuildNumber),
+		BuildStartedAt: *v.BuildStartedAt,
+	}
+	res.Stories = make([]*StorySummaryItem, len(v.Stories))
+	for i, val := range v.Stories {
+		if val == nil {
+			res.Stories[i] = nil
+			continue
+		}
+		res.Stories[i] = decodeStorySummaryItemTransportToStorySummaryItem(val)
+	}
+	switch string(v.Mapping.Kind()) {
+	case "mapped":
+		actual, _ := v.Mapping.AsMapped()
+		var obj *RunStoryMapping
+		if actual != nil {
+			obj = decodeRunStoryMappingTransportToRunStoryMapping(actual)
+		}
+		u := res.Mapping
+		u.SetMapped((*RunStoryMapping)(obj))
+		res.Mapping = u
+	case "not_recorded_for_evaluator":
+		actual, _ := v.Mapping.AsNotRecordedForEvaluator()
+		var obj *RunEvaluatorMappingUnknown
+		if actual != nil {
+			obj = decodeRunEvaluatorMappingUnknownTransportToRunEvaluatorMappingUnknown(actual)
+		}
+		u := res.Mapping
+		u.SetNotRecordedForEvaluator((*RunEvaluatorMappingUnknown)(obj))
+		res.Mapping = u
+	}
+
+	return res
+}
+
 func decodeRequiredTestTransportToRequiredTest(v *jsonRequiredTestTransport) *RequiredTest {
 	res := &RequiredTest{
 		Story:    *v.Story,
@@ -25163,6 +27498,46 @@ func decodeRequiredTestTransportToRequiredTest(v *jsonRequiredTestTransport) *Re
 		Scenario: *v.Scenario,
 		Hook:     *v.Hook,
 	}
+
+	return res
+}
+
+func decodeRunApprovalAvailableTransportToRunApprovalAvailable(v *jsonRunApprovalAvailableTransport) *RunApprovalAvailable {
+	res := &RunApprovalAvailable{}
+
+	return res
+}
+
+func decodeRunApprovalBlockedTransportToRunApprovalBlocked(v *jsonRunApprovalBlockedTransport) *RunApprovalBlocked {
+	res := &RunApprovalBlocked{
+		Reason: *v.Reason,
+	}
+
+	return res
+}
+
+func decodeRunEvaluatorMappingUnknownTransportToRunEvaluatorMappingUnknown(v *jsonRunEvaluatorMappingUnknownTransport) *RunEvaluatorMappingUnknown {
+	res := &RunEvaluatorMappingUnknown{}
+
+	return res
+}
+
+func decodeRunStoryMappingTransportToRunStoryMapping(v *jsonRunStoryMappingTransport) *RunStoryMapping {
+	res := &RunStoryMapping{}
+	res.RequiredTests = make([]*RequiredTest, len(v.RequiredTests))
+	for i, val := range v.RequiredTests {
+		if val == nil {
+			res.RequiredTests[i] = nil
+			continue
+		}
+		res.RequiredTests[i] = decodeRequiredTestTransportToRequiredTest(val)
+	}
+
+	return res
+}
+
+func decodeRunStoryNotRecordedTransportToRunStoryNotRecorded(v *jsonRunStoryNotRecordedTransport) *RunStoryNotRecorded {
+	res := &RunStoryNotRecorded{}
 
 	return res
 }
@@ -25596,6 +27971,70 @@ func decodeVerificationNotCompletedTransportToVerificationNotCompleted(v *jsonVe
 	return res
 }
 
+func decodeVerificationReviewTransportToVerificationReview(v *jsonVerificationReviewTransport) *VerificationReview {
+	res := &VerificationReview{}
+	switch string(v.StoryContext.Kind()) {
+	case "recorded":
+		actual, _ := v.StoryContext.AsRecorded()
+		var obj *RecordedRunStory
+		if actual != nil {
+			obj = decodeRecordedRunStoryTransportToRecordedRunStory(actual)
+		}
+		u := res.StoryContext
+		u.SetRecorded((*RecordedRunStory)(obj))
+		res.StoryContext = u
+	case "not_recorded":
+		actual, _ := v.StoryContext.AsNotRecorded()
+		var obj *RunStoryNotRecorded
+		if actual != nil {
+			obj = decodeRunStoryNotRecordedTransportToRunStoryNotRecorded(actual)
+		}
+		u := res.StoryContext
+		u.SetNotRecorded((*RunStoryNotRecorded)(obj))
+		res.StoryContext = u
+	}
+	switch string(v.Approval.Kind()) {
+	case "available":
+		actual, _ := v.Approval.AsAvailable()
+		var obj *RunApprovalAvailable
+		if actual != nil {
+			obj = decodeRunApprovalAvailableTransportToRunApprovalAvailable(actual)
+		}
+		u := res.Approval
+		u.SetAvailable((*RunApprovalAvailable)(obj))
+		res.Approval = u
+	case "blocked":
+		actual, _ := v.Approval.AsBlocked()
+		var obj *RunApprovalBlocked
+		if actual != nil {
+			obj = decodeRunApprovalBlockedTransportToRunApprovalBlocked(actual)
+		}
+		u := res.Approval
+		u.SetBlocked((*RunApprovalBlocked)(obj))
+		res.Approval = u
+	case "recorded":
+		actual, _ := v.Approval.AsRecorded()
+		var obj *ApprovalItem
+		if actual != nil {
+			obj = decodeApprovalItemTransportToApprovalItem(actual)
+		}
+		u := res.Approval
+		u.SetRecorded((*ApprovalItem)(obj))
+		res.Approval = u
+	case "unverified":
+		actual, _ := v.Approval.AsUnverified()
+		var obj *UnverifiedApprovalItem
+		if actual != nil {
+			obj = decodeUnverifiedApprovalItemTransportToUnverifiedApprovalItem(actual)
+		}
+		u := res.Approval
+		u.SetUnverified((*UnverifiedApprovalItem)(obj))
+		res.Approval = u
+	}
+
+	return res
+}
+
 func decodeVerificationRunningTransportToVerificationRunning(v *jsonVerificationRunningTransport) *VerificationRunning {
 	res := &VerificationRunning{
 		StartedAt: *v.StartedAt,
@@ -25774,6 +28213,49 @@ func encodeApprovalItemToApprovalItemTransport(v *ApprovalItem) *jsonApprovalIte
 }
 
 func encodeApprovalItemToApprovalItemTransport2(v *ApprovalItem) *jsonApprovalItemTransport {
+	res := &jsonApprovalItemTransport{
+		ApprovedBy:      &v.ApprovedBy,
+		ReportDigest:    &v.ReportDigest,
+		CandidateCommit: &v.CandidateCommit,
+		SuiteID:         &v.SuiteID,
+		SuiteCommit:     &v.SuiteCommit,
+		Environment:     &v.Environment,
+	}
+	scenarioCount := approvalItemIntTransport(v.ScenarioCount)
+	res.ScenarioCount = &scenarioCount
+	res.Artifacts = make(map[string]string, len(v.Artifacts))
+	for key, val := range v.Artifacts {
+		tk := key
+		tv := val
+		res.Artifacts[tk] = tv
+	}
+	var testSourceValue jsonApprovalTestSourceTransport
+	switch string(v.TestSource.Kind()) {
+	case "evaluator":
+		actual, _ := v.TestSource.AsEvaluator()
+		var obj *jsonOperatorEvaluatorTestsTransport
+		if actual != nil {
+			obj = encodeOperatorEvaluatorTestsToOperatorEvaluatorTestsTransport(actual)
+		}
+		u := testSourceValue
+		u.SetEvaluator((*jsonOperatorEvaluatorTestsTransport)(obj))
+		testSourceValue = u
+	case "written_tests":
+		actual, _ := v.TestSource.AsWrittenTests()
+		var obj *jsonAgentWrittenTestsTransport
+		if actual != nil {
+			obj = encodeAgentWrittenTestsToAgentWrittenTestsTransport(actual)
+		}
+		u := testSourceValue
+		u.SetWrittenTests((*jsonAgentWrittenTestsTransport)(obj))
+		testSourceValue = u
+	}
+	res.TestSource = &testSourceValue
+
+	return res
+}
+
+func encodeApprovalItemToApprovalItemTransport3(v *ApprovalItem) *jsonApprovalItemTransport {
 	res := &jsonApprovalItemTransport{
 		ApprovedBy:      &v.ApprovedBy,
 		ReportDigest:    &v.ReportDigest,
@@ -26342,6 +28824,46 @@ func encodeProposedRevisionItemToProposedRevisionItemTransport(v *ProposedRevisi
 	return res
 }
 
+func encodeRecordedRunStoryToRecordedRunStoryTransport(v *RecordedRunStory) *jsonRecordedRunStoryTransport {
+	res := &jsonRecordedRunStoryTransport{
+		BuildStartedAt: &v.BuildStartedAt,
+	}
+	buildNumber := recordedRunStoryIntTransport(v.BuildNumber)
+	res.BuildNumber = &buildNumber
+	res.Stories = make([]*jsonStorySummaryItemTransport, len(v.Stories))
+	for i, val := range v.Stories {
+		if val == nil {
+			res.Stories[i] = nil
+			continue
+		}
+		res.Stories[i] = encodeStorySummaryItemToStorySummaryItemTransport(val)
+	}
+	var mappingValue jsonMappingTransport
+	switch string(v.Mapping.Kind()) {
+	case "mapped":
+		actual, _ := v.Mapping.AsMapped()
+		var obj *jsonRunStoryMappingTransport
+		if actual != nil {
+			obj = encodeRunStoryMappingToRunStoryMappingTransport(actual)
+		}
+		u := mappingValue
+		u.SetMapped((*jsonRunStoryMappingTransport)(obj))
+		mappingValue = u
+	case "not_recorded_for_evaluator":
+		actual, _ := v.Mapping.AsNotRecordedForEvaluator()
+		var obj *jsonRunEvaluatorMappingUnknownTransport
+		if actual != nil {
+			obj = encodeRunEvaluatorMappingUnknownToRunEvaluatorMappingUnknownTransport(actual)
+		}
+		u := mappingValue
+		u.SetNotRecordedForEvaluator((*jsonRunEvaluatorMappingUnknownTransport)(obj))
+		mappingValue = u
+	}
+	res.Mapping = &mappingValue
+
+	return res
+}
+
 func encodeRequiredTestToRequiredTestTransport(v *RequiredTest) *jsonRequiredTestTransport {
 	res := &jsonRequiredTestTransport{
 		Story:    &v.Story,
@@ -26349,6 +28871,46 @@ func encodeRequiredTestToRequiredTestTransport(v *RequiredTest) *jsonRequiredTes
 		Scenario: &v.Scenario,
 		Hook:     &v.Hook,
 	}
+
+	return res
+}
+
+func encodeRunApprovalAvailableToRunApprovalAvailableTransport(v *RunApprovalAvailable) *jsonRunApprovalAvailableTransport {
+	res := &jsonRunApprovalAvailableTransport{}
+
+	return res
+}
+
+func encodeRunApprovalBlockedToRunApprovalBlockedTransport(v *RunApprovalBlocked) *jsonRunApprovalBlockedTransport {
+	res := &jsonRunApprovalBlockedTransport{
+		Reason: &v.Reason,
+	}
+
+	return res
+}
+
+func encodeRunEvaluatorMappingUnknownToRunEvaluatorMappingUnknownTransport(v *RunEvaluatorMappingUnknown) *jsonRunEvaluatorMappingUnknownTransport {
+	res := &jsonRunEvaluatorMappingUnknownTransport{}
+
+	return res
+}
+
+func encodeRunStoryMappingToRunStoryMappingTransport(v *RunStoryMapping) *jsonRunStoryMappingTransport {
+	res := &jsonRunStoryMappingTransport{}
+	res.RequiredTests = make([]*jsonRequiredTestTransport, len(v.RequiredTests))
+	for i, val := range v.RequiredTests {
+		if val == nil {
+			res.RequiredTests[i] = nil
+			continue
+		}
+		res.RequiredTests[i] = encodeRequiredTestToRequiredTestTransport(val)
+	}
+
+	return res
+}
+
+func encodeRunStoryNotRecordedToRunStoryNotRecordedTransport(v *RunStoryNotRecorded) *jsonRunStoryNotRecordedTransport {
+	res := &jsonRunStoryNotRecordedTransport{}
 
 	return res
 }
@@ -26933,6 +29495,15 @@ func encodeUnverifiedApprovalItemToUnverifiedApprovalItemTransport(v *Unverified
 	return res
 }
 
+func encodeUnverifiedApprovalItemToUnverifiedApprovalItemTransport2(v *UnverifiedApprovalItem) *jsonUnverifiedApprovalItemTransport {
+	res := &jsonUnverifiedApprovalItemTransport{
+		Reason: &v.Reason,
+	}
+	res.Approval = encodeApprovalItemToApprovalItemTransport2(v.Approval)
+
+	return res
+}
+
 func encodeVerificationCheckToVerificationCheckTransport(v *VerificationCheck) *jsonVerificationCheckTransport {
 	res := &jsonVerificationCheckTransport{
 		Name:       &v.Name,
@@ -26975,6 +29546,74 @@ func encodeVerificationNotCompletedToVerificationNotCompletedTransport(v *Verifi
 		Stage:   &v.Stage,
 		Summary: &v.Summary,
 	}
+
+	return res
+}
+
+func encodeVerificationReviewToVerificationReviewTransport(v *VerificationReview) *jsonVerificationReviewTransport {
+	res := &jsonVerificationReviewTransport{}
+	var storyContextValue jsonStoryContextTransport
+	switch string(v.StoryContext.Kind()) {
+	case "recorded":
+		actual, _ := v.StoryContext.AsRecorded()
+		var obj *jsonRecordedRunStoryTransport
+		if actual != nil {
+			obj = encodeRecordedRunStoryToRecordedRunStoryTransport(actual)
+		}
+		u := storyContextValue
+		u.SetRecorded((*jsonRecordedRunStoryTransport)(obj))
+		storyContextValue = u
+	case "not_recorded":
+		actual, _ := v.StoryContext.AsNotRecorded()
+		var obj *jsonRunStoryNotRecordedTransport
+		if actual != nil {
+			obj = encodeRunStoryNotRecordedToRunStoryNotRecordedTransport(actual)
+		}
+		u := storyContextValue
+		u.SetNotRecorded((*jsonRunStoryNotRecordedTransport)(obj))
+		storyContextValue = u
+	}
+	res.StoryContext = &storyContextValue
+	var approvalValue jsonApprovalTransport
+	switch string(v.Approval.Kind()) {
+	case "available":
+		actual, _ := v.Approval.AsAvailable()
+		var obj *jsonRunApprovalAvailableTransport
+		if actual != nil {
+			obj = encodeRunApprovalAvailableToRunApprovalAvailableTransport(actual)
+		}
+		u := approvalValue
+		u.SetAvailable((*jsonRunApprovalAvailableTransport)(obj))
+		approvalValue = u
+	case "blocked":
+		actual, _ := v.Approval.AsBlocked()
+		var obj *jsonRunApprovalBlockedTransport
+		if actual != nil {
+			obj = encodeRunApprovalBlockedToRunApprovalBlockedTransport(actual)
+		}
+		u := approvalValue
+		u.SetBlocked((*jsonRunApprovalBlockedTransport)(obj))
+		approvalValue = u
+	case "recorded":
+		actual, _ := v.Approval.AsRecorded()
+		var obj *jsonApprovalItemTransport
+		if actual != nil {
+			obj = encodeApprovalItemToApprovalItemTransport3(actual)
+		}
+		u := approvalValue
+		u.SetRecorded((*jsonApprovalItemTransport)(obj))
+		approvalValue = u
+	case "unverified":
+		actual, _ := v.Approval.AsUnverified()
+		var obj *jsonUnverifiedApprovalItemTransport
+		if actual != nil {
+			obj = encodeUnverifiedApprovalItemToUnverifiedApprovalItemTransport2(actual)
+		}
+		u := approvalValue
+		u.SetUnverified((*jsonUnverifiedApprovalItemTransport)(obj))
+		approvalValue = u
+	}
+	res.Approval = &approvalValue
 
 	return res
 }
@@ -34230,8 +36869,8 @@ func validateReadCheckOutputPayloadJSONValue(path string, value any, description
 	return nil
 }
 
-// validateReplacedBuildJSONValue checks one value whose JSON shape is fixed by the generated Goa type.
-func validateReplacedBuildJSONValue(path string, value any, description string) error {
+// validateRecordedRunStoryJSONValue checks one value whose JSON shape is fixed by the generated Goa type.
+func validateRecordedRunStoryJSONValue(path string, value any, description string) error {
 	field := path
 	if field == "" {
 		field = "$payload"
@@ -34250,32 +36889,144 @@ func validateReplacedBuildJSONValue(path string, value any, description string) 
 	sort.Strings(keys)
 	for _, key := range keys {
 		switch key {
-		case "change_id":
-			if err := validateAgentPolicyItemJSONValue2(
+		case "build_number":
+			if err := validateAgentPolicyItemJSONValue4(
 				generatedJSONChildPath(path, key, false),
-				typed[key], "change_id of the open build the page showed.",
+				typed[key], "Number of the build this run was accepted for.",
 			); err != nil {
 				return err
 			}
-		case "started_at":
+		case "build_started_at":
 			if err := validateAgentPolicyItemJSONValue2(
 				generatedJSONChildPath(path, key, false),
-				typed[key], "started_at of the open build the page showed, exactly as get_build reported it.",
+				typed[key], "Accepted build's saved start time.",
+			); err != nil {
+				return err
+			}
+		case "mapping":
+			if err := validateRecordedRunStoryJSONValue2(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "The owner's exact required-test mapping for written tests, or the explicit absence of such a mapping for an operator evaluator.",
+			); err != nil {
+				return err
+			}
+		case "stories":
+			if err := validateRecordedRunStoryJSONValue7(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Stories as agreed for this run, in declaration order; empty when the agreement declares none.",
 			); err != nil {
 				return err
 			}
 		default:
 			return unknownJSONFieldError(path, key, []string{
-				"change_id",
-				"started_at",
+				"build_number",
+				"build_started_at",
+				"mapping",
+				"stories",
 			})
 		}
 	}
 	return nil
 }
 
-// validateRequiredTestJSONValue checks one value whose JSON shape is fixed by the generated Goa type.
-func validateRequiredTestJSONValue(path string, value any, description string) error {
+// validateRecordedRunStoryJSONValue2 checks one value whose JSON shape is fixed by the generated Goa type.
+func validateRecordedRunStoryJSONValue2(path string, value any, description string) error {
+	field := path
+	if field == "" {
+		field = "$payload"
+	}
+	if value == nil {
+		return invalidGeneratedFieldTypeError(field, "object", "null", description)
+	}
+	typed, ok := value.(map[string]any)
+	if !ok {
+		return invalidGeneratedFieldTypeError(field, "object", decodedJSONType(value), description)
+	}
+	discriminator, ok := typed["state"].(string)
+	if !ok {
+		return fmt.Errorf("%s: missing or invalid union discriminator", field)
+	}
+	branch := make(map[string]any, len(typed)-1)
+	for key, item := range typed {
+		if key != "state" {
+			branch[key] = item
+		}
+	}
+	switch discriminator {
+	case "mapped":
+		return validateRecordedRunStoryJSONValue3(path, branch, "")
+	case "not_recorded_for_evaluator":
+		return validateRecordedRunStoryJSONValue6(path, branch, "")
+	default:
+		return fmt.Errorf("%s: unknown union discriminator %q", field, discriminator)
+	}
+}
+
+// validateRecordedRunStoryJSONValue3 checks one value whose JSON shape is fixed by the generated Goa type.
+func validateRecordedRunStoryJSONValue3(path string, value any, description string) error {
+	field := path
+	if field == "" {
+		field = "$payload"
+	}
+	if value == nil {
+		return invalidGeneratedFieldTypeError(field, "object", "null", description)
+	}
+	typed, ok := value.(map[string]any)
+	if !ok {
+		return invalidGeneratedFieldTypeError(field, "object", decodedJSONType(value), description)
+	}
+	keys := make([]string, 0, len(typed))
+	for key := range typed {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		switch key {
+		case "required_tests":
+			if err := validateRecordedRunStoryJSONValue4(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "One test per finished flow, in declaration order.",
+			); err != nil {
+				return err
+			}
+		default:
+			return unknownJSONFieldError(path, key, []string{
+				"required_tests",
+			})
+		}
+	}
+	return nil
+}
+
+// validateRecordedRunStoryJSONValue4 checks one value whose JSON shape is fixed by the generated Goa type.
+func validateRecordedRunStoryJSONValue4(path string, value any, description string) error {
+	field := path
+	if field == "" {
+		field = "$payload"
+	}
+	if value == nil {
+		return invalidGeneratedFieldTypeError(field, "array", "null", description)
+	}
+	typed, ok := value.([]any)
+	if !ok {
+		return invalidGeneratedFieldTypeError(field, "array", decodedJSONType(value), description)
+	}
+	for index, item := range typed {
+		if item == nil {
+			continue
+		}
+		if err := validateRecordedRunStoryJSONValue5(
+			generatedJSONChildPath(path, strconv.Itoa(index), true),
+			item, description,
+		); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// validateRecordedRunStoryJSONValue5 checks one value whose JSON shape is fixed by the generated Goa type.
+func validateRecordedRunStoryJSONValue5(path string, value any, description string) error {
 	field := path
 	if field == "" {
 		field = "$payload"
@@ -34328,6 +37079,104 @@ func validateRequiredTestJSONValue(path string, value any, description string) e
 				"hook",
 				"scenario",
 				"story",
+			})
+		}
+	}
+	return nil
+}
+
+// validateRecordedRunStoryJSONValue6 checks one value whose JSON shape is fixed by the generated Goa type.
+func validateRecordedRunStoryJSONValue6(path string, value any, description string) error {
+	field := path
+	if field == "" {
+		field = "$payload"
+	}
+	if value == nil {
+		return invalidGeneratedFieldTypeError(field, "object", "null", description)
+	}
+	typed, ok := value.(map[string]any)
+	if !ok {
+		return invalidGeneratedFieldTypeError(field, "object", decodedJSONType(value), description)
+	}
+	keys := make([]string, 0, len(typed))
+	for key := range typed {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		switch key {
+		default:
+			return unknownJSONFieldError(path, key, []string{})
+		}
+	}
+	return nil
+}
+
+// validateRecordedRunStoryJSONValue7 checks one value whose JSON shape is fixed by the generated Goa type.
+func validateRecordedRunStoryJSONValue7(path string, value any, description string) error {
+	field := path
+	if field == "" {
+		field = "$payload"
+	}
+	if value == nil {
+		return invalidGeneratedFieldTypeError(field, "array", "null", description)
+	}
+	typed, ok := value.([]any)
+	if !ok {
+		return invalidGeneratedFieldTypeError(field, "array", decodedJSONType(value), description)
+	}
+	for index, item := range typed {
+		if item == nil {
+			continue
+		}
+		if err := validateChangeCardResultJSONValue5(
+			generatedJSONChildPath(path, strconv.Itoa(index), true),
+			item, description,
+		); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// validateReplacedBuildJSONValue checks one value whose JSON shape is fixed by the generated Goa type.
+func validateReplacedBuildJSONValue(path string, value any, description string) error {
+	field := path
+	if field == "" {
+		field = "$payload"
+	}
+	if value == nil {
+		return invalidGeneratedFieldTypeError(field, "object", "null", description)
+	}
+	typed, ok := value.(map[string]any)
+	if !ok {
+		return invalidGeneratedFieldTypeError(field, "object", decodedJSONType(value), description)
+	}
+	keys := make([]string, 0, len(typed))
+	for key := range typed {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		switch key {
+		case "change_id":
+			if err := validateAgentPolicyItemJSONValue2(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "change_id of the open build the page showed.",
+			); err != nil {
+				return err
+			}
+		case "started_at":
+			if err := validateAgentPolicyItemJSONValue2(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "started_at of the open build the page showed, exactly as get_build reported it.",
+			); err != nil {
+				return err
+			}
+		default:
+			return unknownJSONFieldError(path, key, []string{
+				"change_id",
+				"started_at",
 			})
 		}
 	}
@@ -34397,6 +37246,96 @@ func validateReviseChangePayloadJSONValue(path string, value any, description st
 				"request_revision",
 				"story_refresh_op_id",
 			})
+		}
+	}
+	return nil
+}
+
+// validateRunApprovalAvailableJSONValue checks one value whose JSON shape is fixed by the generated Goa type.
+func validateRunApprovalAvailableJSONValue(path string, value any, description string) error {
+	field := path
+	if field == "" {
+		field = "$payload"
+	}
+	if value == nil {
+		return invalidGeneratedFieldTypeError(field, "object", "null", description)
+	}
+	typed, ok := value.(map[string]any)
+	if !ok {
+		return invalidGeneratedFieldTypeError(field, "object", decodedJSONType(value), description)
+	}
+	keys := make([]string, 0, len(typed))
+	for key := range typed {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		switch key {
+		default:
+			return unknownJSONFieldError(path, key, []string{})
+		}
+	}
+	return nil
+}
+
+// validateRunApprovalBlockedJSONValue checks one value whose JSON shape is fixed by the generated Goa type.
+func validateRunApprovalBlockedJSONValue(path string, value any, description string) error {
+	field := path
+	if field == "" {
+		field = "$payload"
+	}
+	if value == nil {
+		return invalidGeneratedFieldTypeError(field, "object", "null", description)
+	}
+	typed, ok := value.(map[string]any)
+	if !ok {
+		return invalidGeneratedFieldTypeError(field, "object", decodedJSONType(value), description)
+	}
+	keys := make([]string, 0, len(typed))
+	for key := range typed {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		switch key {
+		case "reason":
+			if err := validateAgentPolicyItemJSONValue2(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Owner's safe explanation and enabling step.",
+			); err != nil {
+				return err
+			}
+		default:
+			return unknownJSONFieldError(path, key, []string{
+				"reason",
+			})
+		}
+	}
+	return nil
+}
+
+// validateRunStoryNotRecordedJSONValue checks one value whose JSON shape is fixed by the generated Goa type.
+func validateRunStoryNotRecordedJSONValue(path string, value any, description string) error {
+	field := path
+	if field == "" {
+		field = "$payload"
+	}
+	if value == nil {
+		return invalidGeneratedFieldTypeError(field, "object", "null", description)
+	}
+	typed, ok := value.(map[string]any)
+	if !ok {
+		return invalidGeneratedFieldTypeError(field, "object", decodedJSONType(value), description)
+	}
+	keys := make([]string, 0, len(typed))
+	for key := range typed {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		switch key {
+		default:
+			return unknownJSONFieldError(path, key, []string{})
 		}
 	}
 	return nil
@@ -35172,7 +38111,7 @@ func validateTestWriterAssignmentJSONValue6(path string, value any, description 
 		if item == nil {
 			continue
 		}
-		if err := validateRequiredTestJSONValue(
+		if err := validateRecordedRunStoryJSONValue5(
 			generatedJSONChildPath(path, strconv.Itoa(index), true),
 			item, description,
 		); err != nil {
@@ -36020,6 +38959,236 @@ func validateVerificationListResultJSONValue7(path string, value any, descriptio
 	default:
 		return fmt.Errorf("%s: unknown union discriminator %q", field, discriminator)
 	}
+}
+
+// validateVerificationReviewJSONValue checks one value whose JSON shape is fixed by the generated Goa type.
+func validateVerificationReviewJSONValue(path string, value any, description string) error {
+	field := path
+	if field == "" {
+		field = "$payload"
+	}
+	if value == nil {
+		return invalidGeneratedFieldTypeError(field, "object", "null", description)
+	}
+	typed, ok := value.(map[string]any)
+	if !ok {
+		return invalidGeneratedFieldTypeError(field, "object", decodedJSONType(value), description)
+	}
+	keys := make([]string, 0, len(typed))
+	for key := range typed {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		switch key {
+		case "approval":
+			if err := validateVerificationReviewJSONValue2(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "The owner's current observation for this exact report, independent of inputs_current.",
+			); err != nil {
+				return err
+			}
+		case "story_context":
+			if err := validateVerificationReviewJSONValue3(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "The run's immutable Story context, or the explicit fact it was not recorded.",
+			); err != nil {
+				return err
+			}
+		default:
+			return unknownJSONFieldError(path, key, []string{
+				"approval",
+				"story_context",
+			})
+		}
+	}
+	return nil
+}
+
+// validateVerificationReviewJSONValue2 checks one value whose JSON shape is fixed by the generated Goa type.
+func validateVerificationReviewJSONValue2(path string, value any, description string) error {
+	field := path
+	if field == "" {
+		field = "$payload"
+	}
+	if value == nil {
+		return invalidGeneratedFieldTypeError(field, "object", "null", description)
+	}
+	typed, ok := value.(map[string]any)
+	if !ok {
+		return invalidGeneratedFieldTypeError(field, "object", decodedJSONType(value), description)
+	}
+	discriminator, ok := typed["state"].(string)
+	if !ok {
+		return fmt.Errorf("%s: missing or invalid union discriminator", field)
+	}
+	branch := make(map[string]any, len(typed)-1)
+	for key, item := range typed {
+		if key != "state" {
+			branch[key] = item
+		}
+	}
+	switch discriminator {
+	case "available":
+		return validateRunApprovalAvailableJSONValue(path, branch, "")
+	case "blocked":
+		return validateRunApprovalBlockedJSONValue(path, branch, "")
+	case "recorded":
+		return validateApprovalItemJSONValue(path, branch, "")
+	case "unverified":
+		return validateChangeCardResultJSONValue19(path, branch, "")
+	default:
+		return fmt.Errorf("%s: unknown union discriminator %q", field, discriminator)
+	}
+}
+
+// validateVerificationReviewJSONValue3 checks one value whose JSON shape is fixed by the generated Goa type.
+func validateVerificationReviewJSONValue3(path string, value any, description string) error {
+	field := path
+	if field == "" {
+		field = "$payload"
+	}
+	if value == nil {
+		return invalidGeneratedFieldTypeError(field, "object", "null", description)
+	}
+	typed, ok := value.(map[string]any)
+	if !ok {
+		return invalidGeneratedFieldTypeError(field, "object", decodedJSONType(value), description)
+	}
+	discriminator, ok := typed["state"].(string)
+	if !ok {
+		return fmt.Errorf("%s: missing or invalid union discriminator", field)
+	}
+	branch := make(map[string]any, len(typed)-1)
+	for key, item := range typed {
+		if key != "state" {
+			branch[key] = item
+		}
+	}
+	switch discriminator {
+	case "recorded":
+		return validateRecordedRunStoryJSONValue(path, branch, "")
+	case "not_recorded":
+		return validateRunStoryNotRecordedJSONValue(path, branch, "")
+	default:
+		return fmt.Errorf("%s: unknown union discriminator %q", field, discriminator)
+	}
+}
+
+// validateVerificationReviewResultJSONValue checks one value whose JSON shape is fixed by the generated Goa type.
+func validateVerificationReviewResultJSONValue(path string, value any, description string) error {
+	field := path
+	if field == "" {
+		field = "$payload"
+	}
+	if value == nil {
+		return invalidGeneratedFieldTypeError(field, "object", "null", description)
+	}
+	typed, ok := value.(map[string]any)
+	if !ok {
+		return invalidGeneratedFieldTypeError(field, "object", decodedJSONType(value), description)
+	}
+	keys := make([]string, 0, len(typed))
+	for key := range typed {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		switch key {
+		case "accepted_at":
+			if err := validateAgentPolicyItemJSONValue2(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "When the run was accepted.",
+			); err != nil {
+				return err
+			}
+		case "candidate_binaries_dir":
+			if err := validateAgentPolicyItemJSONValue2(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Absolute folder containing the binaries built by this completed run. Returned only to the user when promotion settings are configured, so the user can publish these exact binaries before approval. Agents never receive this private path.",
+			); err != nil {
+				return err
+			}
+		case "candidate_commit":
+			if err := validateAgentPolicyItemJSONValue2(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Candidate commit the run builds and verifies.",
+			); err != nil {
+				return err
+			}
+		case "change_id":
+			if err := validateAgentPolicyItemJSONValue2(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Change Card the run verifies.",
+			); err != nil {
+				return err
+			}
+		case "inputs_current":
+			if err := validateAgentPolicyItemJSONValue3(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Whether this run's agreed revision and selected tests match the current Change Card and the usable build or the stored verification settings. This observation does not establish the current candidate working tree, deployment or approval.",
+			); err != nil {
+				return err
+			}
+		case "request_revision":
+			if err := validateAgentPolicyItemJSONValue2(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Change Card revision the run verifies.",
+			); err != nil {
+				return err
+			}
+		case "review":
+			if err := validateVerificationReviewJSONValue(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Immutable Story evidence and the owner's current approval observation.",
+			); err != nil {
+				return err
+			}
+		case "run_id":
+			if err := validateAgentPolicyItemJSONValue2(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Verification run identifier; get_verification takes it.",
+			); err != nil {
+				return err
+			}
+		case "state":
+			if err := validateVerificationListResultJSONValue4(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Exactly one of running, completed or not_completed.",
+			); err != nil {
+				return err
+			}
+		case "suite_commit":
+			if err := validateAgentPolicyItemJSONValue2(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Commit of the tests the run uses: the operator's evaluator, or the tests accepted for the change's build.",
+			); err != nil {
+				return err
+			}
+		case "test_source":
+			if err := validateVerificationListResultJSONValue7(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Where the run's tests came from, recorded when the run started: evaluator, or written_tests with their commit and a notice.",
+			); err != nil {
+				return err
+			}
+		default:
+			return unknownJSONFieldError(path, key, []string{
+				"accepted_at",
+				"candidate_binaries_dir",
+				"candidate_commit",
+				"change_id",
+				"inputs_current",
+				"request_revision",
+				"review",
+				"run_id",
+				"state",
+				"suite_commit",
+				"test_source",
+			})
+		}
+	}
+	return nil
 }
 
 // validateVerifyChangePayloadJSONValue checks one value whose JSON shape is fixed by the generated Goa type.
@@ -40015,6 +43184,123 @@ func checkReadCheckOutputPayloadReadCheckOutputPayloadValue(in *ReadCheckOutputP
 	return nil
 }
 
+// checkRecordedRunStoryValue checks text and cycles before conversion.
+func checkRecordedRunStoryValue(in *RecordedRunStory) error {
+	if in == nil {
+		return fmt.Errorf("missing root value")
+	}
+	active := make(map[any]bool)
+	if err := checkRecordedRunStoryRecordedRunStoryValue(in, "$", active); err != nil {
+		return err
+	}
+	return nil
+}
+
+// checkRecordedRunStoryRecordedRunStoryValue checks one generated value on the active path.
+func checkRecordedRunStoryRecordedRunStoryValue(in *RecordedRunStory, field string, active map[any]bool) error {
+	if in == nil {
+		return nil
+	}
+	if active[in] {
+		return fmt.Errorf("%s: cyclic Go value", field)
+	}
+	active[in] = true
+	defer delete(active, in)
+	if in != nil {
+		if !utf8.ValidString(string(in.BuildStartedAt)) {
+			return fmt.Errorf("%s: invalid UTF-8", generatedJSONChildPath(field, "build_started_at", false))
+		}
+		for index1, item1 := range in.Stories {
+			_ = index1
+			_ = item1
+			if err := checkChangeCardResultStorySummaryItemValue(item1, generatedJSONChildPath(generatedJSONChildPath(field, "stories", false), strconv.Itoa(index1), true), active); err != nil {
+				return err
+			}
+		}
+		if branch1, ok := in.Mapping.AsMapped(); ok {
+			_ = branch1
+			if branch1 != nil {
+			}
+			if err := checkRecordedRunStoryRunStoryMappingValue(branch1, generatedJSONChildPath(field, "mapping", false), active); err != nil {
+				return err
+			}
+		}
+		if branch1, ok := in.Mapping.AsNotRecordedForEvaluator(); ok {
+			_ = branch1
+			if branch1 != nil {
+			}
+			if err := checkRecordedRunStoryRunEvaluatorMappingUnknownValue(branch1, generatedJSONChildPath(field, "mapping", false), active); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+// checkRecordedRunStoryRunStoryMappingValue checks one generated value on the active path.
+func checkRecordedRunStoryRunStoryMappingValue(in *RunStoryMapping, field string, active map[any]bool) error {
+	if in == nil {
+		return nil
+	}
+	if active[in] {
+		return fmt.Errorf("%s: cyclic Go value", field)
+	}
+	active[in] = true
+	defer delete(active, in)
+	if in != nil {
+		for index1, item1 := range in.RequiredTests {
+			_ = index1
+			_ = item1
+			if err := checkRecordedRunStoryRequiredTestValue(item1, generatedJSONChildPath(generatedJSONChildPath(field, "required_tests", false), strconv.Itoa(index1), true), active); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+// checkRecordedRunStoryRequiredTestValue checks one generated value on the active path.
+func checkRecordedRunStoryRequiredTestValue(in *RequiredTest, field string, active map[any]bool) error {
+	if in == nil {
+		return nil
+	}
+	if active[in] {
+		return fmt.Errorf("%s: cyclic Go value", field)
+	}
+	active[in] = true
+	defer delete(active, in)
+	if in != nil {
+		if !utf8.ValidString(string(in.Story)) {
+			return fmt.Errorf("%s: invalid UTF-8", generatedJSONChildPath(field, "story", false))
+		}
+		if !utf8.ValidString(string(in.FlowKey)) {
+			return fmt.Errorf("%s: invalid UTF-8", generatedJSONChildPath(field, "flow_key", false))
+		}
+		if !utf8.ValidString(string(in.Scenario)) {
+			return fmt.Errorf("%s: invalid UTF-8", generatedJSONChildPath(field, "scenario", false))
+		}
+		if !utf8.ValidString(string(in.Hook)) {
+			return fmt.Errorf("%s: invalid UTF-8", generatedJSONChildPath(field, "hook", false))
+		}
+	}
+	return nil
+}
+
+// checkRecordedRunStoryRunEvaluatorMappingUnknownValue checks one generated value on the active path.
+func checkRecordedRunStoryRunEvaluatorMappingUnknownValue(in *RunEvaluatorMappingUnknown, field string, active map[any]bool) error {
+	if in == nil {
+		return nil
+	}
+	if active[in] {
+		return fmt.Errorf("%s: cyclic Go value", field)
+	}
+	active[in] = true
+	defer delete(active, in)
+	if in != nil {
+	}
+	return nil
+}
+
 // checkReplacedBuildValue checks text and cycles before conversion.
 func checkReplacedBuildValue(in *ReplacedBuild) error {
 	if in == nil {
@@ -40054,35 +43340,8 @@ func checkRequiredTestValue(in *RequiredTest) error {
 		return fmt.Errorf("missing root value")
 	}
 	active := make(map[any]bool)
-	if err := checkRequiredTestRequiredTestValue(in, "$", active); err != nil {
+	if err := checkRecordedRunStoryRequiredTestValue(in, "$", active); err != nil {
 		return err
-	}
-	return nil
-}
-
-// checkRequiredTestRequiredTestValue checks one generated value on the active path.
-func checkRequiredTestRequiredTestValue(in *RequiredTest, field string, active map[any]bool) error {
-	if in == nil {
-		return nil
-	}
-	if active[in] {
-		return fmt.Errorf("%s: cyclic Go value", field)
-	}
-	active[in] = true
-	defer delete(active, in)
-	if in != nil {
-		if !utf8.ValidString(string(in.Story)) {
-			return fmt.Errorf("%s: invalid UTF-8", generatedJSONChildPath(field, "story", false))
-		}
-		if !utf8.ValidString(string(in.FlowKey)) {
-			return fmt.Errorf("%s: invalid UTF-8", generatedJSONChildPath(field, "flow_key", false))
-		}
-		if !utf8.ValidString(string(in.Scenario)) {
-			return fmt.Errorf("%s: invalid UTF-8", generatedJSONChildPath(field, "scenario", false))
-		}
-		if !utf8.ValidString(string(in.Hook)) {
-			return fmt.Errorf("%s: invalid UTF-8", generatedJSONChildPath(field, "hook", false))
-		}
 	}
 	return nil
 }
@@ -40127,6 +43386,114 @@ func checkReviseChangePayloadReviseChangePayloadValue(in *ReviseChangePayload, f
 		if err := checkCP1RevisionAnalysisCP1RevisionAnalysisValue(in.Analysis, generatedJSONChildPath(field, "analysis", false), active); err != nil {
 			return err
 		}
+	}
+	return nil
+}
+
+// checkRunApprovalAvailableValue checks text and cycles before conversion.
+func checkRunApprovalAvailableValue(in *RunApprovalAvailable) error {
+	if in == nil {
+		return fmt.Errorf("missing root value")
+	}
+	active := make(map[any]bool)
+	if err := checkRunApprovalAvailableRunApprovalAvailableValue(in, "$", active); err != nil {
+		return err
+	}
+	return nil
+}
+
+// checkRunApprovalAvailableRunApprovalAvailableValue checks one generated value on the active path.
+func checkRunApprovalAvailableRunApprovalAvailableValue(in *RunApprovalAvailable, field string, active map[any]bool) error {
+	if in == nil {
+		return nil
+	}
+	if active[in] {
+		return fmt.Errorf("%s: cyclic Go value", field)
+	}
+	active[in] = true
+	defer delete(active, in)
+	if in != nil {
+	}
+	return nil
+}
+
+// checkRunApprovalBlockedValue checks text and cycles before conversion.
+func checkRunApprovalBlockedValue(in *RunApprovalBlocked) error {
+	if in == nil {
+		return fmt.Errorf("missing root value")
+	}
+	active := make(map[any]bool)
+	if err := checkRunApprovalBlockedRunApprovalBlockedValue(in, "$", active); err != nil {
+		return err
+	}
+	return nil
+}
+
+// checkRunApprovalBlockedRunApprovalBlockedValue checks one generated value on the active path.
+func checkRunApprovalBlockedRunApprovalBlockedValue(in *RunApprovalBlocked, field string, active map[any]bool) error {
+	if in == nil {
+		return nil
+	}
+	if active[in] {
+		return fmt.Errorf("%s: cyclic Go value", field)
+	}
+	active[in] = true
+	defer delete(active, in)
+	if in != nil {
+		if !utf8.ValidString(string(in.Reason)) {
+			return fmt.Errorf("%s: invalid UTF-8", generatedJSONChildPath(field, "reason", false))
+		}
+	}
+	return nil
+}
+
+// checkRunEvaluatorMappingUnknownValue checks text and cycles before conversion.
+func checkRunEvaluatorMappingUnknownValue(in *RunEvaluatorMappingUnknown) error {
+	if in == nil {
+		return fmt.Errorf("missing root value")
+	}
+	active := make(map[any]bool)
+	if err := checkRecordedRunStoryRunEvaluatorMappingUnknownValue(in, "$", active); err != nil {
+		return err
+	}
+	return nil
+}
+
+// checkRunStoryMappingValue checks text and cycles before conversion.
+func checkRunStoryMappingValue(in *RunStoryMapping) error {
+	if in == nil {
+		return fmt.Errorf("missing root value")
+	}
+	active := make(map[any]bool)
+	if err := checkRecordedRunStoryRunStoryMappingValue(in, "$", active); err != nil {
+		return err
+	}
+	return nil
+}
+
+// checkRunStoryNotRecordedValue checks text and cycles before conversion.
+func checkRunStoryNotRecordedValue(in *RunStoryNotRecorded) error {
+	if in == nil {
+		return fmt.Errorf("missing root value")
+	}
+	active := make(map[any]bool)
+	if err := checkRunStoryNotRecordedRunStoryNotRecordedValue(in, "$", active); err != nil {
+		return err
+	}
+	return nil
+}
+
+// checkRunStoryNotRecordedRunStoryNotRecordedValue checks one generated value on the active path.
+func checkRunStoryNotRecordedRunStoryNotRecordedValue(in *RunStoryNotRecorded, field string, active map[any]bool) error {
+	if in == nil {
+		return nil
+	}
+	if active[in] {
+		return fmt.Errorf("%s: cyclic Go value", field)
+	}
+	active[in] = true
+	defer delete(active, in)
+	if in != nil {
 	}
 	return nil
 }
@@ -40581,7 +43948,7 @@ func checkTestWriterAssignmentTestWriterAssignmentValue(in *TestWriterAssignment
 		for index1, item1 := range in.RequiredTests {
 			_ = index1
 			_ = item1
-			if err := checkRequiredTestRequiredTestValue(item1, generatedJSONChildPath(generatedJSONChildPath(field, "required_tests", false), strconv.Itoa(index1), true), active); err != nil {
+			if err := checkRecordedRunStoryRequiredTestValue(item1, generatedJSONChildPath(generatedJSONChildPath(field, "required_tests", false), strconv.Itoa(index1), true), active); err != nil {
 				return err
 			}
 		}
@@ -41182,6 +44549,168 @@ func checkVerificationNotCompletedValue(in *VerificationNotCompleted) error {
 	active := make(map[any]bool)
 	if err := checkVerificationListResultVerificationNotCompletedValue(in, "$", active); err != nil {
 		return err
+	}
+	return nil
+}
+
+// checkVerificationReviewValue checks text and cycles before conversion.
+func checkVerificationReviewValue(in *VerificationReview) error {
+	if in == nil {
+		return fmt.Errorf("missing root value")
+	}
+	active := make(map[any]bool)
+	if err := checkVerificationReviewVerificationReviewValue(in, "$", active); err != nil {
+		return err
+	}
+	return nil
+}
+
+// checkVerificationReviewVerificationReviewValue checks one generated value on the active path.
+func checkVerificationReviewVerificationReviewValue(in *VerificationReview, field string, active map[any]bool) error {
+	if in == nil {
+		return nil
+	}
+	if active[in] {
+		return fmt.Errorf("%s: cyclic Go value", field)
+	}
+	active[in] = true
+	defer delete(active, in)
+	if in != nil {
+		if branch1, ok := in.StoryContext.AsRecorded(); ok {
+			_ = branch1
+			if branch1 != nil {
+			}
+			if err := checkRecordedRunStoryRecordedRunStoryValue(branch1, generatedJSONChildPath(field, "story_context", false), active); err != nil {
+				return err
+			}
+		}
+		if branch1, ok := in.StoryContext.AsNotRecorded(); ok {
+			_ = branch1
+			if branch1 != nil {
+			}
+			if err := checkRunStoryNotRecordedRunStoryNotRecordedValue(branch1, generatedJSONChildPath(field, "story_context", false), active); err != nil {
+				return err
+			}
+		}
+		if branch1, ok := in.Approval.AsAvailable(); ok {
+			_ = branch1
+			if branch1 != nil {
+			}
+			if err := checkRunApprovalAvailableRunApprovalAvailableValue(branch1, generatedJSONChildPath(field, "approval", false), active); err != nil {
+				return err
+			}
+		}
+		if branch1, ok := in.Approval.AsBlocked(); ok {
+			_ = branch1
+			if branch1 != nil {
+			}
+			if err := checkRunApprovalBlockedRunApprovalBlockedValue(branch1, generatedJSONChildPath(field, "approval", false), active); err != nil {
+				return err
+			}
+		}
+		if branch1, ok := in.Approval.AsRecorded(); ok {
+			_ = branch1
+			if branch1 != nil {
+			}
+			if err := checkApprovalItemApprovalItemValue(branch1, generatedJSONChildPath(field, "approval", false), active); err != nil {
+				return err
+			}
+		}
+		if branch1, ok := in.Approval.AsUnverified(); ok {
+			_ = branch1
+			if branch1 != nil {
+			}
+			if err := checkChangeCardResultUnverifiedApprovalItemValue(branch1, generatedJSONChildPath(field, "approval", false), active); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+// checkVerificationReviewResultValue checks text and cycles before conversion.
+func checkVerificationReviewResultValue(in *VerificationReviewResult) error {
+	if in == nil {
+		return fmt.Errorf("missing root value")
+	}
+	active := make(map[any]bool)
+	if err := checkVerificationReviewResultVerificationReviewResultValue(in, "$", active); err != nil {
+		return err
+	}
+	return nil
+}
+
+// checkVerificationReviewResultVerificationReviewResultValue checks one generated value on the active path.
+func checkVerificationReviewResultVerificationReviewResultValue(in *VerificationReviewResult, field string, active map[any]bool) error {
+	if in == nil {
+		return nil
+	}
+	if active[in] {
+		return fmt.Errorf("%s: cyclic Go value", field)
+	}
+	active[in] = true
+	defer delete(active, in)
+	if in != nil {
+		if err := checkVerificationReviewVerificationReviewValue(in.Review, generatedJSONChildPath(field, "review", false), active); err != nil {
+			return err
+		}
+		if !utf8.ValidString(string(in.RunID)) {
+			return fmt.Errorf("%s: invalid UTF-8", generatedJSONChildPath(field, "run_id", false))
+		}
+		if !utf8.ValidString(string(in.ChangeID)) {
+			return fmt.Errorf("%s: invalid UTF-8", generatedJSONChildPath(field, "change_id", false))
+		}
+		if !utf8.ValidString(string(in.RequestRevision)) {
+			return fmt.Errorf("%s: invalid UTF-8", generatedJSONChildPath(field, "request_revision", false))
+		}
+		if !utf8.ValidString(string(in.CandidateCommit)) {
+			return fmt.Errorf("%s: invalid UTF-8", generatedJSONChildPath(field, "candidate_commit", false))
+		}
+		if !utf8.ValidString(string(in.SuiteCommit)) {
+			return fmt.Errorf("%s: invalid UTF-8", generatedJSONChildPath(field, "suite_commit", false))
+		}
+		if !utf8.ValidString(string(in.AcceptedAt)) {
+			return fmt.Errorf("%s: invalid UTF-8", generatedJSONChildPath(field, "accepted_at", false))
+		}
+		if in.CandidateBinariesDir != nil {
+			if !utf8.ValidString(string(*in.CandidateBinariesDir)) {
+				return fmt.Errorf("%s: invalid UTF-8", generatedJSONChildPath(field, "candidate_binaries_dir", false))
+			}
+		}
+		if branch1, ok := in.TestSource.AsEvaluator(); ok {
+			_ = branch1
+			if branch1 != nil {
+			}
+			if err := checkApprovalItemOperatorEvaluatorTestsValue(branch1, generatedJSONChildPath(field, "test_source", false), active); err != nil {
+				return err
+			}
+		}
+		if branch1, ok := in.TestSource.AsWrittenTests(); ok {
+			_ = branch1
+			if branch1 != nil {
+			}
+			if err := checkAgentWrittenTestsAgentWrittenTestsValue(branch1, generatedJSONChildPath(field, "test_source", false), active); err != nil {
+				return err
+			}
+		}
+		if branch1, ok := in.State.AsRunning(); ok {
+			_ = branch1
+			if err := checkVerificationListResultVerificationRunningValue(branch1, generatedJSONChildPath(generatedJSONChildPath(field, "state", false), "value", false), active); err != nil {
+				return err
+			}
+		}
+		if branch1, ok := in.State.AsCompleted(); ok {
+			_ = branch1
+			if err := checkVerificationCompletedVerificationCompletedValue(branch1, generatedJSONChildPath(generatedJSONChildPath(field, "state", false), "value", false), active); err != nil {
+				return err
+			}
+		}
+		if branch1, ok := in.State.AsNotCompleted(); ok {
+			_ = branch1
+			if err := checkVerificationListResultVerificationNotCompletedValue(branch1, generatedJSONChildPath(generatedJSONChildPath(field, "state", false), "value", false), active); err != nil {
+				return err
+			}
+		}
 	}
 	return nil
 }

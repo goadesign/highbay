@@ -626,6 +626,7 @@ all act for that owner.
 | [`hand_over_model_settings`](#hand_over_model_settings) | | | | | ✓ | HTTP |
 | [`verify_change`](#verify_change) | | | ✓ | | | MCP tool and HTTP |
 | [`get_verification`](#get_verification) | ✓ | ✓ | ✓ | ✓ | | MCP tool and HTTP |
+| [`review_verification`](#review_verification) | ✓ | | | | | MCP tool and HTTP |
 | [`list_verifications`](#list_verifications) | ✓ | ✓ | ✓ | ✓ | | MCP tool and HTTP |
 | [`approve_merge`](#approve_merge) | ✓ | | | | | MCP tool and HTTP |
 | [`list_traces`](#list_traces) | ✓ | ✓ | ✓ | | | MCP tool and HTTP |
@@ -1425,6 +1426,28 @@ get and list observe it while reading current owned card and build records.
 An authorized historical get with no current owned card still returns the
 report with `inputs_current: false`. Unreadable current records fail the read
 instead of returning a false match.
+
+#### `review_verification`
+
+`GET /verifications/{run_id}/review`. **Output:** `VerificationReviewResult`.
+Only the user may call this read; agents use `get_verification`.
+
+Returns the same run status and builder-safe report fields as
+[`get_verification`](#get_verification), plus required `review`:
+
+| Field | Meaning |
+| --- | --- |
+| `story_context.state` | `recorded`, with the accepted build's number, start time and agreed `stories`; or `not_recorded` when the run has no saved Story context. A recorded empty Story remains `recorded`. Later revisions never replace this snapshot. |
+| Recorded context's `mapping.state` | `mapped`, with `required_tests` naming each finished flow's exact generated scenario and hook; or `not_recorded_for_evaluator`, because an operator evaluator records no relation between its tests and Story flows. Unknown mapping does not prove an untested flow. Draft flows remain in the Story and require no test. |
+| `approval.state` | `available`, `blocked` with the owner's `reason`, `recorded` with the current saved approval, or `unverified` with the saved approval and the reason its release artifacts could not be checked. |
+
+`available` observes the same approval requirements the write checks, including
+the current build, selected tests, report, candidate membership and configured
+release artifacts. It is not a reservation: `approve_merge` rechecks and may
+refuse a change that happens after the read. A failed observation withholds
+approval and explains recovery. Reading records no approval, merge or deployment
+and changes no assignment or build state. Run IDs and authorization are checked
+by the same owner as `get_verification`; unknown runs return `not_found` (`404`).
 
 #### `list_verifications`
 

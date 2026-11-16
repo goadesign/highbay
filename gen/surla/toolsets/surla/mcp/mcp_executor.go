@@ -75,6 +75,8 @@ func NewMCPExecutor(caller mcpruntime.Caller) runtime.ToolCallExecutor {
 			return runtime.ExecuteMCPTool(ctx, caller, call, "refresh_story", gensurla.SpecRefreshStory())
 		case gensurla.ReportTestsFinished:
 			return runtime.ExecuteMCPTool(ctx, caller, call, "report_tests_finished", gensurla.SpecReportTestsFinished())
+		case gensurla.ReviewVerification:
+			return runtime.ExecuteMCPTool(ctx, caller, call, "review_verification", gensurla.SpecReviewVerification())
 		case gensurla.ReviseChange:
 			return runtime.ExecuteMCPTool(ctx, caller, call, "revise_change", gensurla.SpecReviseChange())
 		case gensurla.StartLiveTarget:

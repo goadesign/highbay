@@ -20,6 +20,25 @@ import (
 	"github.com/goadesign/surla/internal/verifyrun"
 )
 
+// approvalInputs is the owned build/test selection before unlocked report work.
+type approvalInputs struct {
+	// target is the optional configured promotion owner.
+	target PromotionTarget
+	// build is the exact open build checked before external reads.
+	build heldBuild
+	// testsCommit and source are the selected tests, not caller choices.
+	testsCommit string
+	source      verify.TestsSource
+}
+
+// approvalChecks is the report/artifact observation to validate under the lock.
+type approvalChecks struct {
+	// artifacts are the staged artifacts saved on approval, empty without a target.
+	artifacts map[string]string
+	// candidateErr is deferred until the current build is rechecked.
+	candidateErr error
+}
+
 // ApproveMerge records Checkpoint 5 approval of the caller's confirmed Change
 // Card revision. Both test sources require the current owned open build. It
 // chooses the tests' commit for the revision through
@@ -48,9 +67,71 @@ func (c *ControlPlane) ApproveMerge(
 	if !ok {
 		return nil, errors.New("authenticated principal is required")
 	}
-	target, err := c.resolvePromotion(ctx)
+	inputs, err := c.readApprovalInputs(ctx, principal, p)
 	if err != nil {
 		return nil, err
+	}
+	target := inputs.target
+
+	// Report and artifact reads may be slow, so they run without holding c.mu.
+	// A card is never removed and never changes owner; its request_revision,
+	// confirmed status and chosen tests' commit are checked again under c.mu
+	// before the approval is written.
+	var report verify.Report
+	if target != nil {
+		report, err = target.LoadReport(ctx, p.ReportDigest)
+	} else {
+		runs := verifierRuns(c.verifier)
+		if runs == nil {
+			return nil, gensurla.MakeNotImplemented(errVerificationUnavailable)
+		}
+		report, err = verifyrun.LoadReport(runs.Plan.ReportDir, p.ReportDigest)
+	}
+	if err != nil {
+		return nil, fmt.Errorf("load verification report %s: %w", p.ReportDigest, err)
+	}
+	checked, err := c.checkApprovalReport(ctx, p, inputs, report)
+	if err != nil {
+		return nil, err
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	record, nowSource, err := c.recheckApproval(principal, p, inputs, checked)
+	if err != nil {
+		return nil, err
+	}
+
+	approved := *record.card
+	approved.Approval = &gensurla.ApprovalItem{
+		ApprovedBy:      principal.ID,
+		ReportDigest:    report.Digest,
+		CandidateCommit: p.CandidateCommit,
+		SuiteID:         report.Binding.SuiteID,
+		SuiteCommit:     inputs.testsCommit,
+		Environment:     report.Binding.Environment,
+		Artifacts:       checked.artifacts,
+		ScenarioCount:   report.Counts.Required,
+		TestSource:      approvalTestSource(nowSource, inputs.testsCommit),
+	}
+	record.card = &approved
+	if err := c.cards.save(record); err != nil {
+		return nil, err
+	}
+	result := approved
+	result.ProposedRevision, err = proposedRevisionItem(record)
+	if err != nil {
+		return nil, err
+	}
+	return &result, nil
+}
+
+// readApprovalInputs checks ownership and the agreed build/test selection once.
+func (c *ControlPlane) readApprovalInputs(
+	ctx context.Context, principal Principal, p *gensurla.ApproveMergePayload,
+) (approvalInputs, error) {
+	target, err := c.resolvePromotion(ctx)
+	if err != nil {
+		return approvalInputs{}, err
 	}
 
 	c.mu.RLock()
@@ -70,23 +151,23 @@ func (c *ControlPlane) ApproveMerge(
 	}
 	c.mu.RUnlock()
 	if err != nil {
-		return nil, err
+		return approvalInputs{}, err
 	}
 	if !exists {
-		return nil, gensurla.MakeNotFound(fmt.Errorf("unknown change_id %q", p.ChangeID))
+		return approvalInputs{}, gensurla.MakeNotFound(fmt.Errorf("unknown change_id %q", p.ChangeID))
 	}
 	if record.owner != principal.ID {
-		return nil, gensurla.MakeForbidden(fmt.Errorf("principal %q is not the owner of change_id %q", principal.ID, p.ChangeID))
+		return approvalInputs{}, gensurla.MakeForbidden(fmt.Errorf("principal %q is not the owner of change_id %q", principal.ID, p.ChangeID))
 	}
 	if record.card.Status != StatusConfirmed {
-		return nil, gensurla.MakeConflict(fmt.Errorf(
+		return approvalInputs{}, gensurla.MakeConflict(fmt.Errorf(
 			"change_id %q must be confirmed before approval (status %q)",
 			p.ChangeID,
 			record.card.Status,
 		))
 	}
 	if record.card.RequestRevision != p.RequestRevision {
-		return nil, gensurla.MakeConflict(fmt.Errorf(
+		return approvalInputs{}, gensurla.MakeConflict(fmt.Errorf(
 			"request_revision mismatch for %q: got %q, want %q",
 			p.ChangeID,
 			p.RequestRevision,
@@ -97,41 +178,34 @@ func (c *ControlPlane) ApproveMerge(
 	if errors.As(choiceErr, &notAccepted) {
 		// approve_merge's caller is the user, so the refusal names the builder
 		// and never instructs an agent.
-		return nil, refuseApprovalTestsNotAccepted(notAccepted.saved)
+		return approvalInputs{}, refuseApprovalTestsNotAccepted(notAccepted.saved)
 	}
 	if choiceErr != nil {
-		return nil, choiceErr
+		return approvalInputs{}, choiceErr
 	}
 
-	// Report and artifact reads may be slow, so they run without holding c.mu.
-	// A card is never removed and never changes owner; its request_revision,
-	// confirmed status and chosen tests' commit are checked again under c.mu
-	// before the approval is written.
-	var report verify.Report
-	if target != nil {
-		report, err = target.LoadReport(ctx, p.ReportDigest)
-	} else {
-		runs := verifierRuns(c.verifier)
-		if runs == nil {
-			return nil, gensurla.MakeNotImplemented(errVerificationUnavailable)
-		}
-		report, err = verifyrun.LoadReport(runs.Plan.ReportDir, p.ReportDigest)
-	}
-	if err != nil {
-		return nil, fmt.Errorf("load verification report %s: %w", p.ReportDigest, err)
-	}
+	return approvalInputs{target: target, build: build, testsCommit: testsCommit, source: source}, nil
+}
+
+// checkApprovalReport is the shared promotion and candidate preflight used by
+// review_verification and approve_merge before their locked rechecks.
+func (c *ControlPlane) checkApprovalReport(
+	ctx context.Context, p *gensurla.ApproveMergePayload, inputs approvalInputs, report verify.Report,
+) (approvalChecks, error) {
+	target, build, testsCommit, source := inputs.target, inputs.build, inputs.testsCommit, inputs.source
+
 	if report.Digest != p.ReportDigest {
-		return nil, fmt.Errorf("promotion target returned report %s for digest %s", report.Digest, p.ReportDigest)
+		return approvalChecks{}, fmt.Errorf("promotion target returned report %s for digest %s", report.Digest, p.ReportDigest)
 	}
 	if report.Binding.SuiteCommit != testsCommit {
 		if source == verify.TestsEvaluator {
-			return nil, gensurla.MakeUnprocessable(fmt.Errorf(
+			return approvalChecks{}, gensurla.MakeUnprocessable(fmt.Errorf(
 				"the report ran the tests at %s; this project's stored verification settings name the suite at %s: the builder verifies the candidate again; then approve that run",
 				report.Binding.SuiteCommit,
 				testsCommit,
 			))
 		}
-		return nil, gensurla.MakeUnprocessable(fmt.Errorf(
+		return approvalChecks{}, gensurla.MakeUnprocessable(fmt.Errorf(
 			"the report ran the tests at %s; the tests accepted for revision %s are at %s: the builder verifies the candidate again; then approve that run",
 			report.Binding.SuiteCommit,
 			p.RequestRevision,
@@ -143,7 +217,7 @@ func (c *ControlPlane) ApproveMerge(
 	if target != nil {
 		artifacts, err := target.CurrentArtifacts(ctx, p.CandidateCommit)
 		if err != nil {
-			return nil, gensurla.MakeUnprocessable(err)
+			return approvalChecks{}, gensurla.MakeUnprocessable(err)
 		}
 		expectedArtifacts = artifacts
 		if cloned := maps.Clone(artifacts); cloned != nil {
@@ -161,42 +235,50 @@ func (c *ControlPlane) ApproveMerge(
 	if err := verify.Approve(current, report); err != nil {
 		if errors.Is(err, verify.ErrStaleReport) {
 			if target != nil && !maps.Equal(expectedArtifacts, report.Binding.Artifacts) {
-				return nil, gensurla.MakeUnprocessable(fmt.Errorf(
+				return approvalChecks{}, gensurla.MakeUnprocessable(fmt.Errorf(
 					"%w: publish the binaries the run built, whose folder the run's Proof view shows, into the release folder that the promotion settings name, in a folder named after the commit, or remove the promotion settings",
 					err,
 				))
 			}
-			return nil, gensurla.MakeUnprocessable(err)
+			return approvalChecks{}, gensurla.MakeUnprocessable(err)
 		}
-		return nil, err
+		return approvalChecks{}, err
 	}
 	// A passed report names an immutable candidate, which must still belong
 	// to this open build after all unlocked report and artifact reads.
 	check, err := c.checkCandidateBuildCommit(ctx, c.currentWorkspaceDir(), build.file, report.Binding.CandidateCommit)
 	if err != nil {
-		return nil, err
+		return approvalChecks{}, err
 	}
 	candidateErr := approvalBuildRefusal(report.Binding.CandidateCommit, build.file.Base,
 		testwriter.BuilderRole.Branch(build.file.Number), check)
 
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	record, exists, err = c.cards.load(p.ChangeID)
+	return approvalChecks{artifacts: recordedArtifacts, candidateErr: candidateErr}, nil
+}
+
+// recheckApproval rejects changes during external reads. The caller holds c.mu;
+// approval writes keep that lock until persistence, while reviews only observe.
+func (c *ControlPlane) recheckApproval(
+	principal Principal, p *gensurla.ApproveMergePayload, inputs approvalInputs, checked approvalChecks,
+) (storedChangeCard, verify.TestsSource, error) {
+	build, testsCommit, candidateErr := inputs.build, inputs.testsCommit, checked.candidateErr
+
+	record, exists, err := c.cards.load(p.ChangeID)
 	if err != nil {
-		return nil, err
+		return storedChangeCard{}, "", err
 	}
 	if !exists {
-		return nil, gensurla.MakeNotFound(fmt.Errorf("change card %q is no longer saved", p.ChangeID))
+		return storedChangeCard{}, "", gensurla.MakeNotFound(fmt.Errorf("change card %q is no longer saved", p.ChangeID))
 	}
 	if record.card.Status != StatusConfirmed {
-		return nil, gensurla.MakeConflict(fmt.Errorf(
+		return storedChangeCard{}, "", gensurla.MakeConflict(fmt.Errorf(
 			"change_id %q must be confirmed before approval (status %q)",
 			p.ChangeID,
 			record.card.Status,
 		))
 	}
 	if record.card.RequestRevision != p.RequestRevision {
-		return nil, gensurla.MakeConflict(fmt.Errorf(
+		return storedChangeCard{}, "", gensurla.MakeConflict(fmt.Errorf(
 			"request_revision mismatch for %q: got %q, want %q",
 			p.ChangeID,
 			p.RequestRevision,
@@ -205,43 +287,22 @@ func (c *ControlPlane) ApproveMerge(
 	}
 	nowBuild, err := c.verificationBuild(principal, p.ChangeID, p.RequestRevision)
 	if err != nil {
-		return nil, err
+		return storedChangeCard{}, "", err
 	}
 	if nowBuild.file.Number != build.file.Number ||
 		!nowBuild.file.StartedAt.Equal(build.file.StartedAt) {
-		return nil, gensurla.MakeConflict(errors.New("the open build changed while approving: verify the current build, then approve its run"))
+		return storedChangeCard{}, "", gensurla.MakeConflict(errors.New("the open build changed while approving: verify the current build, then approve its run"))
 	}
 	// A drop can change the recorded branch tips while Git reads them. Its
 	// current stop instruction wins over a semantic refusal of the old build.
 	if candidateErr != nil {
-		return nil, candidateErr
+		return storedChangeCard{}, "", candidateErr
 	}
 	nowCommit, nowSource, err := c.testsChoice(principal, p.ChangeID, p.RequestRevision)
 	if err != nil || nowCommit != testsCommit {
-		return nil, gensurla.MakeConflict(errors.New("the accepted tests changed while approving: approve again"))
+		return storedChangeCard{}, "", gensurla.MakeConflict(errors.New("the accepted tests changed while approving: approve again"))
 	}
-	approved := *record.card
-	approved.Approval = &gensurla.ApprovalItem{
-		ApprovedBy:      principal.ID,
-		ReportDigest:    report.Digest,
-		CandidateCommit: p.CandidateCommit,
-		SuiteID:         report.Binding.SuiteID,
-		SuiteCommit:     testsCommit,
-		Environment:     report.Binding.Environment,
-		Artifacts:       recordedArtifacts,
-		ScenarioCount:   report.Counts.Required,
-		TestSource:      approvalTestSource(nowSource, testsCommit),
-	}
-	record.card = &approved
-	if err := c.cards.save(record); err != nil {
-		return nil, err
-	}
-	result := approved
-	result.ProposedRevision, err = proposedRevisionItem(record)
-	if err != nil {
-		return nil, err
-	}
-	return &result, nil
+	return record, nowSource, nil
 }
 
 // currentCard returns record.card as get_change, an unchanged confirm_intent,

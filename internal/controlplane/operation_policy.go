@@ -43,6 +43,7 @@ var operationRoles = map[string][]CallerKind{
 	"start_live_target": {CallerBuilder}, "stop_live_target": {CallerUser, CallerBuilder}, "draft_override": {CallerBuilder},
 	"get_live_target": {CallerUser, CallerBuilder}, "get_model_connection": {CallerUser},
 	"verify_change":        {CallerBuilder},
+	"review_verification":  {CallerUser},
 	"get_change":           {CallerUser, CallerGuide, CallerBuilder},
 	"preview_architecture": {CallerUser, CallerGuide, CallerBuilder},
 	"diff":                 {CallerUser, CallerGuide, CallerBuilder},
@@ -111,6 +112,7 @@ func applyOperationPolicy(e *gensurla.Endpoints, recorder trace.Tracer) {
 	e.GetLiveTarget = wrap("get_live_target", e.GetLiveTarget)
 	e.VerifyChange = wrap("verify_change", e.VerifyChange)
 	e.GetVerification = wrap("get_verification", e.GetVerification)
+	e.ReviewVerification = wrap("review_verification", e.ReviewVerification)
 	e.ListVerifications = wrap("list_verifications", e.ListVerifications)
 	e.ApproveMerge = wrap("approve_merge", e.ApproveMerge)
 	e.Diff = wrap("diff", e.Diff)
