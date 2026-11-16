@@ -710,7 +710,7 @@ func TestChangedSettingsReachTheNextLaunchOnly(t *testing.T) {
 	launch := `n=$(ls "$SURLA_TEST_PRESENCE_DIR" | wc -l | tr -d ' ')
 [ "$ANTHROPIC_API_KEY" = "$SURLA_TEST_FIRST_KEY" ] && first=yes || first=no
 printf 'FIRST_KEY=%s\nKEY_SET=%s\n' "$first" "${ANTHROPIC_API_KEY:+yes}" > "$SURLA_TEST_PRESENCE_DIR/launch-$n"
-exec "$0" "$1" "$2" "$3"`
+exec "$0" "$1" "$2" "$3" "$4"`
 	cp := newControlPlane(t, buildFixtureOptions(t, Options{BuildCacheDir: t.TempDir(),
 		Verification: &VerificationConfig{RunsDir: t.TempDir()},
 		Live: &LiveConfig{Command: []string{"/bin/sh", "-c", launch, self}, Env: append(os.Environ(), liveTargetModeEnv+"=serve"),
