@@ -907,7 +907,7 @@ func TestBuildRunsWithoutHomeOrTelemetry(t *testing.T) {
 	require.Error(t, Build(t.Context(), failSpec, (*exec.Cmd).Run))
 	logText, err := os.ReadFile(failSpec.LogFile)
 	require.NoError(t, err)
-	assert.Contains(t, string(logText), "failed to initialize build cache")
+	assert.Contains(t, string(logText), "create build cache directory")
 	assert.NoDirExists(t, filepath.Join(failSpec.WorkDir, "Library"))
 	require.NoError(t, os.RemoveAll(failSpec.WorkDir))
 

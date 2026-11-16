@@ -659,7 +659,7 @@ func TestLiveExecutorEndsItsWholeGroupOnATerminalEvent(t *testing.T) {
 			control, keep, err := os.Pipe()
 			require.NoError(t, err)
 			defer keep.Close()
-			cmd := exec.Command(self, "verify-run", "live", dir)
+			cmd := exec.Command(self, "verify-run", "live", dir, t.TempDir())
 			cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 			cmd.ExtraFiles = []*os.File{control}
 			cmd.Env = append(liveEnv(os.Environ()), "TMPDIR="+tmp, suite.LiveKeyEnv+"=secret-key")

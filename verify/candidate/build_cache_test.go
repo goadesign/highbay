@@ -5,7 +5,6 @@ package candidate
 import (
 	"context"
 	"crypto/sha256"
-	"errors"
 	"io/fs"
 	"os"
 	"os/exec"
@@ -66,7 +65,13 @@ func TestBuildSeparatesRetainedCacheFromScratch(t *testing.T) {
 	entries, err := os.ReadDir(work)
 	require.NoError(t, err)
 	assert.Empty(t, entries, "successful staging is cleaned from operation scratch")
-	assert.NoDirExists(t, cache, "the trusted runner stand-in does not create Go cache entries")
+	assert.DirExists(t, cache, "the build owner creates the cache before invoking the compiler")
+	info, err := os.Stat(cache)
+	require.NoError(t, err)
+	assert.Equal(t, os.FileMode(0o700), info.Mode().Perm())
+	entries, err = os.ReadDir(cache)
+	require.NoError(t, err)
+	assert.Empty(t, entries, "the trusted runner stand-in creates no Go cache entries")
 }
 
 // TestBuildCanceledCompilerLeavesSharedCacheUsable starts two real compilers
@@ -89,17 +94,21 @@ func TestBuildCanceledCompilerLeavesSharedCacheUsable(t *testing.T) {
 	defer cancel()
 	started, stop := make(chan struct{}), make(chan struct{})
 	done := make(chan error, 1)
+	cleanup := make(chan error, 1)
+	canceledGroup := make(chan int, 1)
 	go func() {
 		done <- Build(ctx, canceled, func(cmd *exec.Cmd) error {
 			cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 			if err := cmd.Start(); err != nil {
 				return err
 			}
+			canceledGroup <- cmd.Process.Pid
 			close(started)
 			<-stop
 			cancel()
 			waitErr := cmd.Wait()
-			return errors.Join(waitErr, procgroup.Stop(cmd.Process.Pid, 10*time.Second))
+			cleanup <- procgroup.Stop(cmd.Process.Pid, 10*time.Second)
+			return waitErr
 		})
 	}()
 	select {
@@ -120,6 +129,15 @@ func TestBuildCanceledCompilerLeavesSharedCacheUsable(t *testing.T) {
 	canceledErr := <-done
 	require.NoError(t, err, logText(survivor.LogFile))
 	require.Error(t, canceledErr)
+	require.NoError(t, <-cleanup, "cleanup errors cannot be mistaken for expected cancellation")
+	pgid := <-canceledGroup
+	assert.ErrorIs(t, syscall.Kill(-pgid, 0), syscall.ESRCH)
+	var exit *exec.ExitError
+	require.ErrorAs(t, canceledErr, &exit)
+	wait, ok := exit.ProcessState.Sys().(syscall.WaitStatus)
+	require.True(t, ok)
+	assert.Equal(t, syscall.SIGKILL, wait.Signal())
+	t.Logf("canceled compiler group %d is absent (ESRCH); command ended with SIGKILL", pgid)
 	residue, err := os.ReadDir(canceled.WorkDir)
 	require.NoError(t, err)
 	names := make([]string, 0, len(residue))

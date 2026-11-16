@@ -78,7 +78,16 @@ func TestMain(m *testing.M) {
 	if len(os.Args) == 5 && os.Args[1] == "check-host" {
 		os.Exit(checkHost(os.Args[2], os.Args[3], os.Args[4]))
 	}
-	if len(os.Args) == 5 && os.Args[1] == "verify-run" && os.Args[2] == "live" {
+	if len(os.Args) > 1 && os.Args[1] == "verify-run" {
+		// Refuse malformed helpers before m.Run can recursively launch tests.
+		if len(os.Args) != 5 || os.Args[2] != "live" {
+			fmt.Fprintln(os.Stderr, "verify-run needs live, a run directory and build cache directory")
+			os.Exit(1)
+		}
+		if err := os.WriteFile(filepath.Join(os.Args[3], "received-build-cache"), []byte(os.Args[4]), 0o600); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
 		if err := verifyrun.Live(os.Args[3], fakeLivePrepare, nil, os.Stdout, os.Stderr); err != nil {
 			fmt.Fprintln(os.Stderr, err)
 			os.Exit(1)

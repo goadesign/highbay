@@ -36,7 +36,7 @@ type VerificationConfig struct {
 	// directory per run, kept as evidence; the operator prunes it.
 	Plan verify.Plan
 	// Command is the argument list that runs this surla executable; runs
-	// start `<Command> verify-run supervise <dir>`.
+	// start `<Command> verify-run supervise <dir> <build-cache-dir>`.
 	Command []string
 	// Timeout is how long a run may take before it is stopped and recorded
 	// as interrupted.

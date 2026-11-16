@@ -213,7 +213,7 @@ func NewRunID() string {
 // Start accepts req under root and starts its supervisor, then returns the
 // supervisor's PID without waiting for the run. command is the argument list
 // that runs this program, such as the path of the surla executable; Start
-// appends "verify-run supervise <dir>". The supervisor gets this process's
+// appends "verify-run supervise <dir> <build-cache-dir>". The supervisor gets this process's
 // environment plus settings, the provider request settings the run's test
 // program may use; they pass to the executor only through the environment,
 // never an argument or request.json, so the run keeps this snapshot whatever
@@ -223,7 +223,7 @@ func NewRunID() string {
 // entry, so only the test program receives them, but its initial
 // environment block, which same-user processes can read, keeps them. The run directory must not exist,
 // req.Plan.WorkDir must name the run's work directory, and req.Plan.Tests
-// must name one of the declared test sources. buildCacheDir is required and
+// must name one of the declared test sources. buildCacheDir is required, absolute and
 // is relayed to the executor as an argument; it never enters saved requests
 // or the test program's arguments or environment.
 func Start(

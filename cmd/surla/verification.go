@@ -45,13 +45,17 @@ type verificationFile struct {
 const defaultProjectVerifyTimeout = 30 * time.Minute
 
 // runVerifyRun runs one internal role started by verifyrun: `surla verify-run
-// supervise <dir> <build-cache-dir>` or `surla verify-run execute <dir> <build-cache-dir>` for a verification run
-// (verifyrun.Start), or `surla verify-run live <dir> <build-cache-dir>` for a CP3 live target
+// supervise <dir> <build-cache-dir>` or `execute <dir> <build-cache-dir>`
+// for a verification run (verifyrun.Start), or `live <dir> <build-cache-dir>`
+// for a CP3 live target
 // (verifyrun.LaunchLive). Only verifyrun starts these; they are not listed in
 // the usage text.
 func runVerifyRun(args []string) error {
 	if len(args) != 3 || args[2] == "" {
 		return errors.New("verify-run takes a role (supervise, execute or live), a run directory and a build cache directory")
+	}
+	if !filepath.IsAbs(args[2]) {
+		return errors.New("verify-run build cache directory must be absolute")
 	}
 	self, err := selfCommand()
 	if err != nil {

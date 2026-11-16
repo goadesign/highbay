@@ -187,7 +187,7 @@ func TestGenerationUsesPhysicalOperatorPaths(t *testing.T) {
 	ev.finish(nil)
 	require.NoError(t, os.WriteFile(filepath.Join(work, "gocache"), []byte("a file prevents cache setup\n"), 0o600))
 	_, err = ev.Generate(t.Context(), files)
-	require.ErrorContains(t, err, "failed to initialize build cache")
+	require.ErrorContains(t, err, "create build cache directory")
 	var output *commandOutputError
 	require.ErrorAs(t, err, &output)
 	assert.Equal(t, toolchain.goroot, output.paths.goroot)

@@ -191,8 +191,9 @@ measurement or test execution.
 
 Cache ownership provides no confinement. Go checks existence and recorded size
 when reading cached package files, not compiled contents against selected
-source. Same-user code can plant a package or test program that a later build
-uses, so its report can bind a binary the selected source would not produce.
+source. Same-user code can plant a compiled package that a later build links into the
+candidate or test program, so its report can bind a binary the selected source
+would not produce.
 This joins the trusted module cache, toolchain, executable search path and
 Surla's files. Deleting the build cache forces recompilation but does not
 authenticate those other inputs.

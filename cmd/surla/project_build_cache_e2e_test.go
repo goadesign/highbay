@@ -47,16 +47,21 @@ import (
  "crypto/sha256"
  "encoding/hex"
  "encoding/json"
+ "fmt"
  "os"
  "os/exec"
  "os/signal"
+ "path/filepath"
  "strings"
  "syscall"
  "time"
 )
 
 func main() {
+ pgid, err := syscall.Getpgid(0)
+ if err != nil { panic(err) }
  if len(os.Args) > 1 && os.Args[1] == "--live" {
+  if err := os.WriteFile(filepath.Join(os.TempDir(),"cache-live-process"),[]byte(fmt.Sprintf("%d %d",os.Getpid(),pgid)),0600); err != nil { panic(err) }
   if err := json.NewEncoder(os.Stdout).Encode(map[string]string{"url": "http://127.0.0.1:4100"}); err != nil { panic(err) }
   ending := make(chan os.Signal, 1)
   signal.Notify(ending, syscall.SIGTERM)
@@ -90,7 +95,7 @@ func main() {
   "suite_id": "cache_fixture", "started_at": now, "duration": 0, "passed": passed,
   "scenarios": []any{map[string]any{
    "id": "runs", "started_at": now, "duration": 0, "passed": passed,
-   "result": map[string]any{"artifacts": artifacts},
+   "result": map[string]any{"artifacts": artifacts,"output": fmt.Sprintf("%d %d",os.Getpid(),pgid)},
   }},
  }
  if err := json.NewEncoder(os.Stdout).Encode(report); err != nil { panic(err) }
@@ -144,6 +149,9 @@ func TestProjectBuildCacheNativeLifecycle(t *testing.T) {
 			ctx, cancel := context.WithTimeout(t.Context(), 2*time.Minute)
 			defer cancel()
 			requireCacheLiveReady(t, live, ctx)
+			liveIdentity, err := os.ReadFile(filepath.Join(live.Dir(), "tmp", "cache-live-process"))
+			require.NoError(t, err)
+			livePID, liveGroup := cacheFixtureProcessIDs(t, string(liveIdentity))
 			liveWork := filepath.Join(live.Dir(), "work")
 			assertNoOperationCache(t, liveWork)
 			liveDigest := cacheDigest(t, filepath.Join(liveWork, "candidate-bin", "app"))
@@ -156,6 +164,7 @@ func TestProjectBuildCacheNativeLifecycle(t *testing.T) {
 			require.NotEmpty(t, first)
 			t.Logf("first native live build: %d retained cache files; metadata excluded: README, trim.txt, .surla-private", len(first))
 			require.NoError(t, live.Stop())
+			requireCacheFixtureProcessesGone(t, livePID, liveGroup)
 			report := runCacheVerification(t, opts, plan, cache, liveSuiteDigest)
 			assert.Equal(t, liveDigest, report.Binding.Artifacts["app"])
 			assert.Equal(t, first, cacheEntries(t, cache), "unchanged inputs reuse the retained entry set")
@@ -190,15 +199,19 @@ func TestProjectBuildCacheNativeLifecycle(t *testing.T) {
 			overlapCtx, overlapCancel := context.WithTimeout(t.Context(), 2*time.Minute)
 			defer overlapCancel()
 			requireCacheLiveReady(t, overlapLive, overlapCtx)
+			overlapIdentity, err := os.ReadFile(filepath.Join(overlapLive.Dir(), "tmp", "cache-live-process"))
+			require.NoError(t, err)
+			overlapPID, overlapGroup := cacheFixtureProcessIDs(t, string(overlapIdentity))
 			earlier := plan
 			earlier.CandidateCommit = commit
 			earlierID := startCacheVerification(t, reopened, earlier, cache)
 			changedID := startCacheVerification(t, reopened, plan, cache)
 			require.NoError(t, overlapLive.Stop())
+			requireCacheFixtureProcessesGone(t, overlapPID, overlapGroup)
 			assert.Equal(t, cold.Binding.Artifacts, waitCacheVerification(t, reopened, earlierID, cache, liveSuiteDigest).Binding.Artifacts)
 			assert.Equal(t, changedCold.Binding.Artifacts, waitCacheVerification(t, reopened, changedID, cache, liveSuiteDigest).Binding.Artifacts)
 			marker := filepath.Join(t.TempDir(), "candidate-started")
-			blockingSource := fmt.Sprintf("package main\nimport (\"os\";\"time\")\nfunc main(){if err:=os.WriteFile(%q,[]byte(\"started\"),0600);err!=nil{panic(err)};time.Sleep(time.Hour)}\n", marker)
+			blockingSource := fmt.Sprintf("package main\nimport (\"fmt\";\"os\";\"syscall\";\"time\")\nfunc main(){pgid,err:=syscall.Getpgid(0);if err!=nil{panic(err)};if err:=os.WriteFile(%q,[]byte(fmt.Sprintf(\"%%d %%d\",os.Getpid(),pgid)),0600);err!=nil{panic(err)};time.Sleep(time.Hour)}\n", marker)
 			require.NoError(t, os.WriteFile(filepath.Join(workspace, "main.go"), []byte(blockingSource), 0o600))
 			cacheGit(t, workspace, "add", "main.go")
 			cacheGit(t, workspace, "-c", "user.name=Surla Test", "-c", "user.email=test@example.com", "commit", "-qm", "Block one native verification")
@@ -208,6 +221,9 @@ func TestProjectBuildCacheNativeLifecycle(t *testing.T) {
 			blocked := startCacheVerification(t, reopened, blockedPlan, cache)
 			survivor := startCacheVerification(t, reopened, plan, cache)
 			require.Eventually(t, func() bool { _, err := os.Stat(marker); return err == nil }, 30*time.Second, 10*time.Millisecond, "the actual candidate must run before cancellation")
+			blockedIdentity, err := os.ReadFile(marker)
+			require.NoError(t, err)
+			blockedPID, blockedGroup := cacheFixtureProcessIDs(t, string(blockedIdentity))
 			server.stop()
 			require.NoError(t, syscall.Kill(blocked.supervisor, syscall.SIGTERM))
 			require.NoError(t, verifyrun.Wait(reopened.RunsDir, blocked.id))
@@ -215,6 +231,9 @@ func TestProjectBuildCacheNativeLifecycle(t *testing.T) {
 			require.NoError(t, err)
 			assert.Equal(t, verifyrun.StateNotCompleted, interrupted.Kind)
 			assert.Equal(t, verifyrun.FailureInterrupted, interrupted.Result.Failure)
+			assert.Equal(t, "The verification was canceled.", interrupted.Result.Summary)
+			assert.FileExists(t, filepath.Join(reopened.RunsDir, blocked.id, "result.json"), "the supervisor publishes its outcome only after its process group is empty")
+			requireCacheFixtureProcessesGone(t, blockedPID, blockedGroup)
 			assert.Equal(t, changedCold.Binding.Artifacts, waitCacheVerification(t, reopened, survivor, cache, liveSuiteDigest).Binding.Artifacts)
 			retained := cacheEntries(t, cache)
 			require.NoError(t, os.RemoveAll(filepath.Join(reopened.RunsDir, blocked.id)))
@@ -223,6 +242,13 @@ func TestProjectBuildCacheNativeLifecycle(t *testing.T) {
 			recreated := runCacheVerification(t, reopened, plan, cache, liveSuiteDigest)
 			assert.NotEmpty(t, cacheEntries(t, cache))
 			assert.Equal(t, changed.Binding.Artifacts, recreated.Binding.Artifacts)
+			cacheInfo, err := os.Stat(cache)
+			require.NoError(t, err)
+			assert.Equal(t, os.FileMode(0o700), cacheInfo.Mode().Perm())
+			_, err = projectServeOptions(state, os.Environ())
+			require.NoError(t, err, "recreated cache must satisfy the next startup's private directory contract")
+			afterDeletion := startSharedServerProcess(t, workspace, os.Getenv("SURLA_TEST_USER_CONFIG_DIR"))
+			afterDeletion.stop()
 			if source == verify.TestsEvaluator {
 				beforeStandalone := cacheEntries(t, cache)
 				for _, work := range []string{filepath.Join(t.TempDir(), "absolute-work"), "relative-work"} {
@@ -300,6 +326,10 @@ func waitCacheVerification(t *testing.T, opts controlplane.Options, run cacheRun
 		t.Fatalf("verification did not complete: %+v; log read: %v; %s", status, readErr, data)
 	}
 	require.True(t, status.Report.Passed)
+	require.Len(t, status.Report.Evidence.Scenarios, 1)
+	require.NotNil(t, status.Report.Evidence.Scenarios[0].Result)
+	suitePID, suiteGroup := cacheFixtureProcessIDs(t, status.Report.Evidence.Scenarios[0].Result.Output)
+	requireCacheFixtureProcessesGone(t, suitePID, suiteGroup)
 	suiteDigest := cacheDigest(t, filepath.Join(req.Plan.WorkDir, "suite-bin", "suite"))
 	assert.Equal(t, expectedSuiteDigest, suiteDigest, "every suite binary matches the initial cold live build")
 	t.Logf("native verification %s: candidate digests %v; suite digest %s", runID, status.Report.Binding.Artifacts, suiteDigest)
@@ -377,4 +407,27 @@ func requireCacheLiveReady(t *testing.T, live *verifyrun.LiveProcess, ctx contex
 		t.Logf("live executor detail: %s", failure.Detail)
 	}
 	require.NoError(t, err)
+}
+
+// cacheFixtureProcessIDs decodes OS facts written by the trusted test program;
+// positive IDs are required before the test probes either exact process/group.
+func cacheFixtureProcessIDs(t *testing.T, identity string) (int, int) {
+	t.Helper()
+	var pid, pgid int
+	count, err := fmt.Sscanf(identity, "%d %d", &pid, &pgid)
+	require.NoError(t, err)
+	require.Equal(t, 2, count)
+	require.Greater(t, pid, 0)
+	require.Greater(t, pgid, 0)
+	return pid, pgid
+}
+
+// requireCacheFixtureProcessesGone observes actual child and group absence,
+// independently of Go test's exit status or a report's passing verdict.
+func requireCacheFixtureProcessesGone(t *testing.T, pid, pgid int) {
+	t.Helper()
+	require.Eventually(t, func() bool {
+		return errors.Is(syscall.Kill(pid, 0), syscall.ESRCH) && errors.Is(syscall.Kill(-pgid, 0), syscall.ESRCH)
+	}, 10*time.Second, 20*time.Millisecond, "owned fixture PID %d / group %d remained active", pid, pgid)
+	t.Logf("owned fixture PID %d and process group %d are absent (ESRCH)", pid, pgid)
 }

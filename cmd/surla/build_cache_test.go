@@ -13,6 +13,7 @@ func TestVerifyRunRequiresBuildCacheArgument(t *testing.T) {
 		t.Run(role, func(t *testing.T) {
 			assert.ErrorContains(t, runVerifyRun([]string{role, t.TempDir()}), "build cache directory")
 			assert.ErrorContains(t, runVerifyRun([]string{role, t.TempDir(), ""}), "build cache directory")
+			assert.ErrorContains(t, runVerifyRun([]string{role, t.TempDir(), "relative-cache"}), "must be absolute")
 		})
 	}
 }

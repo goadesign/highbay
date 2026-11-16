@@ -100,7 +100,8 @@ type (
 		// WorkDir is an operation-owned writable directory for TMPDIR and the
 		// staged output binary. It is separate from retained package storage.
 		WorkDir string
-		// LogFile receives the build's output; it must lie outside ModuleDir.
+		// LogFile receives build output and cache-initialization failures; it
+		// must lie outside ModuleDir.
 		LogFile string
 	}
 
@@ -681,6 +682,13 @@ func (b resolvedBuild) goRun(
 			}
 		}
 		return aliasErr
+	}
+	// Surla owns the cache directory's private mode, including recreation
+	// after an idle deletion. Go owns only its entries and maintenance.
+	if err := os.MkdirAll(spec.BuildCacheDir, 0o700); err != nil {
+		cacheErr := fmt.Errorf("create build cache directory: %w", err)
+		_, logErr := fmt.Fprintln(logFile, cacheErr)
+		return errors.Join(cacheErr, logErr)
 	}
 	goArgs := append([]string{}, args...)
 	if args[0] == "build" {

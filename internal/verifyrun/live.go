@@ -188,7 +188,7 @@ func LeftoverLiveDirs(root string) ([]string, error) {
 // LaunchLive fails, no process was started and the directory it created is
 // removed. The allocated directory and child TMPDIR are absolute and
 // symlink-free, so preparation and suite processes can change directories
-// without changing them. buildCacheDir is required and passed only to the
+// without changing them. buildCacheDir is required, absolute and passed only to the
 // internal executor, independently of operation scratch and saved live records.
 func LaunchLive(
 	root string,

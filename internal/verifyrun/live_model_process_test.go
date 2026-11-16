@@ -204,7 +204,7 @@ func TestLiveExecutorDiesWithItsHostWhileReadingSettings(t *testing.T) {
 	input, inputWriter, err := os.Pipe()
 	require.NoError(t, err)
 	defer inputWriter.Close()
-	cmd := exec.Command(self, "verify-run", "live", t.TempDir())
+	cmd := exec.Command(self, "verify-run", "live", t.TempDir(), t.TempDir())
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	cmd.ExtraFiles = []*os.File{control}
 	cmd.Stdin = input

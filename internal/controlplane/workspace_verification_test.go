@@ -92,9 +92,9 @@ func TestVerificationAndLiveTargetsUseTheAcceptedTests(t *testing.T) {
 			SurlaVersion: testSurlaVersion,
 			WrittenTestRuns: &WrittenTestRuns{
 				ReportDir: filepath.Join(root, "ops", "reports"),
-				// The supervisor exits at once; only the saved request is
-				// under test.
-				Command: []string{"/bin/sh", "-c", "exit 0", "sh"},
+				// The supervisor records its cache argument and exits; this
+				// fixture checks admission/handoff, not compilation.
+				Command: []string{"/bin/sh", "-c", "printf '%s' \"$4\" > \"$3/received-build-cache\"", "sh"},
 				Timeout: time.Hour,
 			},
 			Live: &LiveConfig{
@@ -156,6 +156,9 @@ func TestVerificationAndLiveTargetsUseTheAcceptedTests(t *testing.T) {
 			require.Len(t, liveDirs, 1)
 			var live verifyrun.LiveRequest
 			readJSONFile(t, filepath.Join(liveDirs[0], "live.json"), &live)
+			liveCache, err := os.ReadFile(filepath.Join(liveDirs[0], "received-build-cache"))
+			require.NoError(t, err)
+			assert.Equal(t, cp.buildCacheDir, string(liveCache), "the control plane passes its own cache to the live child")
 			wantLive := layoutPlan(repo, repo.candidate, repo.tests)
 			assert.Empty(t, live.Plan.RequestRevision, "live requests do not persist a verification revision")
 			wantLive.WorkDir = filepath.Join(liveDirs[0], "work")
@@ -169,6 +172,10 @@ func TestVerificationAndLiveTargetsUseTheAcceptedTests(t *testing.T) {
 			assert.Equal(t, writtenTests, run.TestSource)
 			var req verifyrun.Request
 			readJSONFile(t, filepath.Join(runsDir, run.RunID, "request.json"), &req)
+			require.NoError(t, verifyrun.Wait(runsDir, run.RunID))
+			runCache, err := os.ReadFile(filepath.Join(runsDir, run.RunID, "received-build-cache"))
+			require.NoError(t, err)
+			assert.Equal(t, cp.buildCacheDir, string(runCache), "the control plane passes its own cache to the supervisor")
 			want := layoutPlan(repo, repo.candidate, repo.tests)
 			want.RequestRevision = card.RequestRevision
 			want.WorkDir = filepath.Join(runsDir, run.RunID, "work")

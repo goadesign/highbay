@@ -35,7 +35,12 @@ const (
 // TestMain lets the test binary act as `surla verify-run supervise|execute`
 // so the lifecycle runs in real processes.
 func TestMain(m *testing.M) {
-	if len(os.Args) == 5 && os.Args[1] == "verify-run" {
+	if len(os.Args) > 1 && os.Args[1] == "verify-run" {
+		// A malformed child invocation must never start the test suite again.
+		if len(os.Args) != 5 {
+			fmt.Fprintln(os.Stderr, "verify-run needs a role, run directory and build cache directory")
+			os.Exit(1)
+		}
 		os.Exit(helper(os.Args[2], os.Args[3]))
 	}
 	if len(os.Args) >= 2 && os.Args[1] == "--live" {
