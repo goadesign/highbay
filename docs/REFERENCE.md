@@ -2362,6 +2362,45 @@ completion times. To run the journey locally with a running Docker engine:
 go test -race -count=1 -timeout 40m -tags=e2e,docker -run '^TestCheckProjectRepairsDependenciesOnOneServer$' ./cmd/surla
 ```
 
+### Committed test module profiles
+
+CI downloads the root module requirements and these committed profiles before
+running their respective full-suite partitions:
+
+- `internal/project/testdata/story-fixture` pins the Story and Goa target graph
+  for the succeeded Story page test.
+- `internal/project/testdata/story-evaluator` pins the evaluator graph for that
+  Story target, with a relative replacement pointing to the target profile.
+- `internal/testmodule/testdata/goa-goaai-dsl` pins the target graph for a
+  design importing the Goa and Goa-AI DSLs, used by the architecture preview
+  test.
+- `internal/testmodule/testdata/goa-goaai-evaluator` pins the evaluator graph
+  for that target and replaces it with the adjacent target profile.
+
+Each test copies its target into a private workspace, checks the design and
+module list with fetching disabled, and runs the real evaluator. Missing inputs
+fail with a fixture-input diagnostic. These profiles describe the fixed graphs
+rather than copying unrelated root requirements.
+
+After changing the root Story, Goa, Goa-AI, or Model requirements, update the
+matching versions in the profiles and refresh their checksums. For example,
+with the root requirements currently in this repository, run:
+
+```sh
+GOWORK=off go -C internal/project/testdata/story-fixture mod edit -require=github.com/goadesign/surla/story@v0.0.0-20261111183703-4568fcf5bb85 -require=goa.design/goa/v3@v3.35.1-0.20261114184515-dee88e893eb3 </dev/null
+GOWORK=off go -C internal/project/testdata/story-evaluator mod edit -require=github.com/goadesign/surla/story@v0.0.0-20261111183703-4568fcf5bb85 -require=goa.design/goa/v3@v3.35.1-0.20261114184515-dee88e893eb3 -require=goa.design/goa-ai@v0.90.1-0.20261111075239-0114fb9d40d3 -require=goa.design/model@v1.16.11-0.20261030164016-5e17c2e932fb </dev/null
+GOWORK=off go -C internal/testmodule/testdata/goa-goaai-dsl mod edit -require=goa.design/goa/v3@v3.35.1-0.20261114184515-dee88e893eb3 -require=goa.design/goa-ai@v0.90.1-0.20261111075239-0114fb9d40d3 </dev/null
+GOWORK=off go -C internal/project/testdata/story-fixture mod download all </dev/null
+GOWORK=off go -C internal/project/testdata/story-evaluator mod download all </dev/null
+GOWORK=off go -C internal/testmodule/testdata/goa-goaai-evaluator mod edit -require=goa.design/goa/v3@v3.35.1-0.20261114184515-dee88e893eb3 -require=goa.design/goa-ai@v0.90.1-0.20261111075239-0114fb9d40d3 -require=goa.design/model@v1.16.11-0.20261030164016-5e17c2e932fb </dev/null
+GOWORK=off go -C internal/testmodule/testdata/goa-goaai-dsl mod download all </dev/null
+GOWORK=off go -C internal/testmodule/testdata/goa-goaai-evaluator mod download all </dev/null
+```
+
+Replace the versions above with the new root requirements and commit the
+updated module files and checksums. Run both tests with fetching disabled to
+check the actual evaluators against the updated inputs.
+
 All full suites run nightly at 07:17 UTC and on a manual **Run workflow**
 request (`CI=true gh workflow run ci.yml --ref <branch> </dev/null`). This adds
 the other modules' complete tests and the verifier, generation, starter and
