@@ -458,6 +458,7 @@ func policyHTTPRequests(card *gensurla.ChangeCardResult, propose, confirm string
 		{"get_model_connection", "GET", "/cp1/model", ""},
 		{"verify_change", "POST", "/changes/change/verifications", fmt.Sprintf(`{"request_revision":%q,"candidate_commit":%q}`, revision, commit)},
 		{"get_verification", "GET", "/verifications/run", ""},
+		{"review_verification", "GET", "/verifications/run/review", ""},
 		{"list_verifications", "GET", "/changes/change/verifications", ""},
 		{"approve_merge", "POST", "/changes/approve", fmt.Sprintf(`{"change_id":"change","request_revision":%q,"candidate_commit":%q,"report_digest":%q}`, revision, commit, strings.Repeat("b", 64))},
 		{"diff", "POST", "/diff", `{"old":{"files":{"go.mod":"module example.com/shop","go.sum":"","design/design.go":"package design"}},"new":{"files":{"go.mod":"module example.com/shop","go.sum":"","design/design.go":"package design"}}}`},

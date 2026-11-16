@@ -15,6 +15,270 @@ import (
 	goa "goa.design/goa/v3/pkg"
 )
 
+// Approval holds exactly one of its branch values.
+type Approval struct {
+	kind       ApprovalKind
+	available  *RunApprovalAvailableTransport
+	blocked    *RunApprovalBlockedTransport
+	recorded   *ApprovalItemTransport
+	unverified *UnverifiedApprovalItemTransport
+}
+
+// ApprovalKind records which Approval branch is selected.
+type ApprovalKind string
+
+const (
+	// ApprovalKindAvailable identifies the available branch.
+	ApprovalKindAvailable ApprovalKind = "available"
+	// ApprovalKindBlocked identifies the blocked branch.
+	ApprovalKindBlocked ApprovalKind = "blocked"
+	// ApprovalKindRecorded identifies the recorded branch.
+	ApprovalKindRecorded ApprovalKind = "recorded"
+	// ApprovalKindUnverified identifies the unverified branch.
+	ApprovalKindUnverified ApprovalKind = "unverified"
+)
+
+// Kind returns the selected branch.
+func (u Approval) Kind() ApprovalKind {
+	return u.kind
+}
+
+// NewApprovalAvailable constructs Approval with the available branch set.
+func NewApprovalAvailable(v *RunApprovalAvailableTransport) Approval {
+	return Approval{
+		kind:      ApprovalKindAvailable,
+		available: v,
+	}
+}
+
+// AsAvailable returns the value when the available branch is selected.
+func (u Approval) AsAvailable() (_ *RunApprovalAvailableTransport, ok bool) {
+	if u.kind != ApprovalKindAvailable {
+		return
+	}
+	return u.available, true
+}
+
+// SetAvailable selects the available branch and stores v.
+func (u *Approval) SetAvailable(v *RunApprovalAvailableTransport) {
+	*u = Approval{
+		kind:      ApprovalKindAvailable,
+		available: v,
+	}
+}
+
+// NewApprovalBlocked constructs Approval with the blocked branch set.
+func NewApprovalBlocked(v *RunApprovalBlockedTransport) Approval {
+	return Approval{
+		kind:    ApprovalKindBlocked,
+		blocked: v,
+	}
+}
+
+// AsBlocked returns the value when the blocked branch is selected.
+func (u Approval) AsBlocked() (_ *RunApprovalBlockedTransport, ok bool) {
+	if u.kind != ApprovalKindBlocked {
+		return
+	}
+	return u.blocked, true
+}
+
+// SetBlocked selects the blocked branch and stores v.
+func (u *Approval) SetBlocked(v *RunApprovalBlockedTransport) {
+	*u = Approval{
+		kind:    ApprovalKindBlocked,
+		blocked: v,
+	}
+}
+
+// NewApprovalRecorded constructs Approval with the recorded branch set.
+func NewApprovalRecorded(v *ApprovalItemTransport) Approval {
+	return Approval{
+		kind:     ApprovalKindRecorded,
+		recorded: v,
+	}
+}
+
+// AsRecorded returns the value when the recorded branch is selected.
+func (u Approval) AsRecorded() (_ *ApprovalItemTransport, ok bool) {
+	if u.kind != ApprovalKindRecorded {
+		return
+	}
+	return u.recorded, true
+}
+
+// SetRecorded selects the recorded branch and stores v.
+func (u *Approval) SetRecorded(v *ApprovalItemTransport) {
+	*u = Approval{
+		kind:     ApprovalKindRecorded,
+		recorded: v,
+	}
+}
+
+// NewApprovalUnverified constructs Approval with the unverified branch set.
+func NewApprovalUnverified(v *UnverifiedApprovalItemTransport) Approval {
+	return Approval{
+		kind:       ApprovalKindUnverified,
+		unverified: v,
+	}
+}
+
+// AsUnverified returns the value when the unverified branch is selected.
+func (u Approval) AsUnverified() (_ *UnverifiedApprovalItemTransport, ok bool) {
+	if u.kind != ApprovalKindUnverified {
+		return
+	}
+	return u.unverified, true
+}
+
+// SetUnverified selects the unverified branch and stores v.
+func (u *Approval) SetUnverified(v *UnverifiedApprovalItemTransport) {
+	*u = Approval{
+		kind:       ApprovalKindUnverified,
+		unverified: v,
+	}
+}
+
+// Validate ensures exactly one valid branch is selected.
+func (u Approval) Validate() error {
+	_, err := u.Value()
+	return err
+}
+
+// Value returns the selected branch value, or the same selection error as Validate.
+// Go templates can read this method directly; an invalid selection stops execution.
+func (u Approval) Value() (any, error) {
+	switch u.kind {
+	case "":
+		return nil, goa.InvalidEnumValueError("state", "", []any{
+			string(ApprovalKindAvailable),
+			string(ApprovalKindBlocked),
+			string(ApprovalKindRecorded),
+			string(ApprovalKindUnverified),
+		})
+	case ApprovalKindAvailable:
+		if u.available == nil {
+			return nil, goa.MissingFieldError("value", "Approval")
+		}
+		return u.available, nil
+	case ApprovalKindBlocked:
+		if u.blocked == nil {
+			return nil, goa.MissingFieldError("value", "Approval")
+		}
+		return u.blocked, nil
+	case ApprovalKindRecorded:
+		if u.recorded == nil {
+			return nil, goa.MissingFieldError("value", "Approval")
+		}
+		return u.recorded, nil
+	case ApprovalKindUnverified:
+		if u.unverified == nil {
+			return nil, goa.MissingFieldError("value", "Approval")
+		}
+		return u.unverified, nil
+	default:
+		return nil, goa.InvalidEnumValueError("state", u.kind, []any{
+			string(ApprovalKindAvailable),
+			string(ApprovalKindBlocked),
+			string(ApprovalKindRecorded),
+			string(ApprovalKindUnverified),
+		})
+	}
+}
+
+// MarshalJSON writes the selected object branch beside its discriminator.
+func (u Approval) MarshalJSON() ([]byte, error) {
+	value, err := u.Value()
+	if err != nil {
+		return nil, err
+	}
+	data, err := json.Marshal(value)
+	if err != nil {
+		return nil, err
+	}
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(data, &fields); err != nil {
+		return nil, err
+	}
+	if fields == nil {
+		return nil, goa.InvalidFieldTypeError("state", nil, "non-null JSON object")
+	}
+	if _, exists := fields["state"]; exists {
+		return nil, fmt.Errorf("Approval branch already contains discriminator %q", "state")
+	}
+	tag, err := json.Marshal(string(u.kind))
+	if err != nil {
+		return nil, err
+	}
+	fields["state"] = tag
+	return json.Marshal(fields)
+}
+
+// UnmarshalJSON reads the discriminator and decodes its declared object branch.
+func (u *Approval) UnmarshalJSON(data []byte) error {
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(data, &fields); err != nil {
+		return err
+	}
+	tag, exists := fields["state"]
+	if !exists {
+		return goa.MissingFieldError("state", "Approval")
+	}
+	if bytes.Equal(bytes.TrimSpace(tag), []byte("null")) {
+		return goa.InvalidFieldTypeError("state", nil, "JSON string")
+	}
+	var raw struct {
+		Type  string
+		Value json.RawMessage
+	}
+	if err := json.Unmarshal(tag, &raw.Type); err != nil {
+		return err
+	}
+	delete(fields, "state")
+	value, err := json.Marshal(fields)
+	if err != nil {
+		return err
+	}
+	raw.Value = value
+	switch raw.Type {
+	case string(ApprovalKindAvailable):
+		var v *RunApprovalAvailableTransport
+		if err := json.Unmarshal(raw.Value, &v); err != nil {
+			return err
+		}
+		u.SetAvailable(v)
+	case string(ApprovalKindBlocked):
+		var v *RunApprovalBlockedTransport
+		if err := json.Unmarshal(raw.Value, &v); err != nil {
+			return err
+		}
+		u.SetBlocked(v)
+	case string(ApprovalKindRecorded):
+		var v *ApprovalItemTransport
+		if err := json.Unmarshal(raw.Value, &v); err != nil {
+			return err
+		}
+		u.SetRecorded(v)
+	case string(ApprovalKindUnverified):
+		var v *UnverifiedApprovalItemTransport
+		if err := json.Unmarshal(raw.Value, &v); err != nil {
+			return err
+		}
+		u.SetUnverified(v)
+	default:
+		if raw.Type == "" {
+			return goa.MissingFieldError("state", "Approval")
+		}
+		return goa.InvalidEnumValueError("state", raw.Type, []any{
+			string(ApprovalKindAvailable),
+			string(ApprovalKindBlocked),
+			string(ApprovalKindRecorded),
+			string(ApprovalKindUnverified),
+		})
+	}
+	return nil
+}
+
 // ApprovalTestSource holds exactly one of its branch values.
 type ApprovalTestSource struct {
 	kind         ApprovalTestSourceKind
@@ -1130,6 +1394,188 @@ func (u *LiveTarget) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+// Mapping holds exactly one of its branch values.
+type Mapping struct {
+	kind                    MappingKind
+	mapped                  *RunStoryMappingTransport
+	notRecordedForEvaluator *RunEvaluatorMappingUnknownTransport
+}
+
+// MappingKind records which Mapping branch is selected.
+type MappingKind string
+
+const (
+	// MappingKindMapped identifies the mapped branch.
+	MappingKindMapped MappingKind = "mapped"
+	// MappingKindNotRecordedForEvaluator identifies the not_recorded_for_evaluator branch.
+	MappingKindNotRecordedForEvaluator MappingKind = "not_recorded_for_evaluator"
+)
+
+// Kind returns the selected branch.
+func (u Mapping) Kind() MappingKind {
+	return u.kind
+}
+
+// NewMappingMapped constructs Mapping with the mapped branch set.
+func NewMappingMapped(v *RunStoryMappingTransport) Mapping {
+	return Mapping{
+		kind:   MappingKindMapped,
+		mapped: v,
+	}
+}
+
+// AsMapped returns the value when the mapped branch is selected.
+func (u Mapping) AsMapped() (_ *RunStoryMappingTransport, ok bool) {
+	if u.kind != MappingKindMapped {
+		return
+	}
+	return u.mapped, true
+}
+
+// SetMapped selects the mapped branch and stores v.
+func (u *Mapping) SetMapped(v *RunStoryMappingTransport) {
+	*u = Mapping{
+		kind:   MappingKindMapped,
+		mapped: v,
+	}
+}
+
+// NewMappingNotRecordedForEvaluator constructs Mapping with the not_recorded_for_evaluator branch set.
+func NewMappingNotRecordedForEvaluator(v *RunEvaluatorMappingUnknownTransport) Mapping {
+	return Mapping{
+		kind:                    MappingKindNotRecordedForEvaluator,
+		notRecordedForEvaluator: v,
+	}
+}
+
+// AsNotRecordedForEvaluator returns the value when the not_recorded_for_evaluator branch is selected.
+func (u Mapping) AsNotRecordedForEvaluator() (_ *RunEvaluatorMappingUnknownTransport, ok bool) {
+	if u.kind != MappingKindNotRecordedForEvaluator {
+		return
+	}
+	return u.notRecordedForEvaluator, true
+}
+
+// SetNotRecordedForEvaluator selects the not_recorded_for_evaluator branch and stores v.
+func (u *Mapping) SetNotRecordedForEvaluator(v *RunEvaluatorMappingUnknownTransport) {
+	*u = Mapping{
+		kind:                    MappingKindNotRecordedForEvaluator,
+		notRecordedForEvaluator: v,
+	}
+}
+
+// Validate ensures exactly one valid branch is selected.
+func (u Mapping) Validate() error {
+	_, err := u.Value()
+	return err
+}
+
+// Value returns the selected branch value, or the same selection error as Validate.
+// Go templates can read this method directly; an invalid selection stops execution.
+func (u Mapping) Value() (any, error) {
+	switch u.kind {
+	case "":
+		return nil, goa.InvalidEnumValueError("state", "", []any{
+			string(MappingKindMapped),
+			string(MappingKindNotRecordedForEvaluator),
+		})
+	case MappingKindMapped:
+		if u.mapped == nil {
+			return nil, goa.MissingFieldError("value", "Mapping")
+		}
+		return u.mapped, nil
+	case MappingKindNotRecordedForEvaluator:
+		if u.notRecordedForEvaluator == nil {
+			return nil, goa.MissingFieldError("value", "Mapping")
+		}
+		return u.notRecordedForEvaluator, nil
+	default:
+		return nil, goa.InvalidEnumValueError("state", u.kind, []any{
+			string(MappingKindMapped),
+			string(MappingKindNotRecordedForEvaluator),
+		})
+	}
+}
+
+// MarshalJSON writes the selected object branch beside its discriminator.
+func (u Mapping) MarshalJSON() ([]byte, error) {
+	value, err := u.Value()
+	if err != nil {
+		return nil, err
+	}
+	data, err := json.Marshal(value)
+	if err != nil {
+		return nil, err
+	}
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(data, &fields); err != nil {
+		return nil, err
+	}
+	if fields == nil {
+		return nil, goa.InvalidFieldTypeError("state", nil, "non-null JSON object")
+	}
+	if _, exists := fields["state"]; exists {
+		return nil, fmt.Errorf("Mapping branch already contains discriminator %q", "state")
+	}
+	tag, err := json.Marshal(string(u.kind))
+	if err != nil {
+		return nil, err
+	}
+	fields["state"] = tag
+	return json.Marshal(fields)
+}
+
+// UnmarshalJSON reads the discriminator and decodes its declared object branch.
+func (u *Mapping) UnmarshalJSON(data []byte) error {
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(data, &fields); err != nil {
+		return err
+	}
+	tag, exists := fields["state"]
+	if !exists {
+		return goa.MissingFieldError("state", "Mapping")
+	}
+	if bytes.Equal(bytes.TrimSpace(tag), []byte("null")) {
+		return goa.InvalidFieldTypeError("state", nil, "JSON string")
+	}
+	var raw struct {
+		Type  string
+		Value json.RawMessage
+	}
+	if err := json.Unmarshal(tag, &raw.Type); err != nil {
+		return err
+	}
+	delete(fields, "state")
+	value, err := json.Marshal(fields)
+	if err != nil {
+		return err
+	}
+	raw.Value = value
+	switch raw.Type {
+	case string(MappingKindMapped):
+		var v *RunStoryMappingTransport
+		if err := json.Unmarshal(raw.Value, &v); err != nil {
+			return err
+		}
+		u.SetMapped(v)
+	case string(MappingKindNotRecordedForEvaluator):
+		var v *RunEvaluatorMappingUnknownTransport
+		if err := json.Unmarshal(raw.Value, &v); err != nil {
+			return err
+		}
+		u.SetNotRecordedForEvaluator(v)
+	default:
+		if raw.Type == "" {
+			return goa.MissingFieldError("state", "Mapping")
+		}
+		return goa.InvalidEnumValueError("state", raw.Type, []any{
+			string(MappingKindMapped),
+			string(MappingKindNotRecordedForEvaluator),
+		})
+	}
+	return nil
+}
+
 // State holds exactly one of its branch values.
 type State struct {
 	kind         StateKind
@@ -1324,6 +1770,188 @@ func (u *State) UnmarshalJSON(data []byte) error {
 			string(StateKindRunning),
 			string(StateKindCompleted),
 			string(StateKindNotCompleted),
+		})
+	}
+	return nil
+}
+
+// StoryContext holds exactly one of its branch values.
+type StoryContext struct {
+	kind        StoryContextKind
+	recorded    *RecordedRunStoryTransport
+	notRecorded *RunStoryNotRecordedTransport
+}
+
+// StoryContextKind records which StoryContext branch is selected.
+type StoryContextKind string
+
+const (
+	// StoryContextKindRecorded identifies the recorded branch.
+	StoryContextKindRecorded StoryContextKind = "recorded"
+	// StoryContextKindNotRecorded identifies the not_recorded branch.
+	StoryContextKindNotRecorded StoryContextKind = "not_recorded"
+)
+
+// Kind returns the selected branch.
+func (u StoryContext) Kind() StoryContextKind {
+	return u.kind
+}
+
+// NewStoryContextRecorded constructs StoryContext with the recorded branch set.
+func NewStoryContextRecorded(v *RecordedRunStoryTransport) StoryContext {
+	return StoryContext{
+		kind:     StoryContextKindRecorded,
+		recorded: v,
+	}
+}
+
+// AsRecorded returns the value when the recorded branch is selected.
+func (u StoryContext) AsRecorded() (_ *RecordedRunStoryTransport, ok bool) {
+	if u.kind != StoryContextKindRecorded {
+		return
+	}
+	return u.recorded, true
+}
+
+// SetRecorded selects the recorded branch and stores v.
+func (u *StoryContext) SetRecorded(v *RecordedRunStoryTransport) {
+	*u = StoryContext{
+		kind:     StoryContextKindRecorded,
+		recorded: v,
+	}
+}
+
+// NewStoryContextNotRecorded constructs StoryContext with the not_recorded branch set.
+func NewStoryContextNotRecorded(v *RunStoryNotRecordedTransport) StoryContext {
+	return StoryContext{
+		kind:        StoryContextKindNotRecorded,
+		notRecorded: v,
+	}
+}
+
+// AsNotRecorded returns the value when the not_recorded branch is selected.
+func (u StoryContext) AsNotRecorded() (_ *RunStoryNotRecordedTransport, ok bool) {
+	if u.kind != StoryContextKindNotRecorded {
+		return
+	}
+	return u.notRecorded, true
+}
+
+// SetNotRecorded selects the not_recorded branch and stores v.
+func (u *StoryContext) SetNotRecorded(v *RunStoryNotRecordedTransport) {
+	*u = StoryContext{
+		kind:        StoryContextKindNotRecorded,
+		notRecorded: v,
+	}
+}
+
+// Validate ensures exactly one valid branch is selected.
+func (u StoryContext) Validate() error {
+	_, err := u.Value()
+	return err
+}
+
+// Value returns the selected branch value, or the same selection error as Validate.
+// Go templates can read this method directly; an invalid selection stops execution.
+func (u StoryContext) Value() (any, error) {
+	switch u.kind {
+	case "":
+		return nil, goa.InvalidEnumValueError("state", "", []any{
+			string(StoryContextKindRecorded),
+			string(StoryContextKindNotRecorded),
+		})
+	case StoryContextKindRecorded:
+		if u.recorded == nil {
+			return nil, goa.MissingFieldError("value", "StoryContext")
+		}
+		return u.recorded, nil
+	case StoryContextKindNotRecorded:
+		if u.notRecorded == nil {
+			return nil, goa.MissingFieldError("value", "StoryContext")
+		}
+		return u.notRecorded, nil
+	default:
+		return nil, goa.InvalidEnumValueError("state", u.kind, []any{
+			string(StoryContextKindRecorded),
+			string(StoryContextKindNotRecorded),
+		})
+	}
+}
+
+// MarshalJSON writes the selected object branch beside its discriminator.
+func (u StoryContext) MarshalJSON() ([]byte, error) {
+	value, err := u.Value()
+	if err != nil {
+		return nil, err
+	}
+	data, err := json.Marshal(value)
+	if err != nil {
+		return nil, err
+	}
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(data, &fields); err != nil {
+		return nil, err
+	}
+	if fields == nil {
+		return nil, goa.InvalidFieldTypeError("state", nil, "non-null JSON object")
+	}
+	if _, exists := fields["state"]; exists {
+		return nil, fmt.Errorf("StoryContext branch already contains discriminator %q", "state")
+	}
+	tag, err := json.Marshal(string(u.kind))
+	if err != nil {
+		return nil, err
+	}
+	fields["state"] = tag
+	return json.Marshal(fields)
+}
+
+// UnmarshalJSON reads the discriminator and decodes its declared object branch.
+func (u *StoryContext) UnmarshalJSON(data []byte) error {
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(data, &fields); err != nil {
+		return err
+	}
+	tag, exists := fields["state"]
+	if !exists {
+		return goa.MissingFieldError("state", "StoryContext")
+	}
+	if bytes.Equal(bytes.TrimSpace(tag), []byte("null")) {
+		return goa.InvalidFieldTypeError("state", nil, "JSON string")
+	}
+	var raw struct {
+		Type  string
+		Value json.RawMessage
+	}
+	if err := json.Unmarshal(tag, &raw.Type); err != nil {
+		return err
+	}
+	delete(fields, "state")
+	value, err := json.Marshal(fields)
+	if err != nil {
+		return err
+	}
+	raw.Value = value
+	switch raw.Type {
+	case string(StoryContextKindRecorded):
+		var v *RecordedRunStoryTransport
+		if err := json.Unmarshal(raw.Value, &v); err != nil {
+			return err
+		}
+		u.SetRecorded(v)
+	case string(StoryContextKindNotRecorded):
+		var v *RunStoryNotRecordedTransport
+		if err := json.Unmarshal(raw.Value, &v); err != nil {
+			return err
+		}
+		u.SetNotRecorded(v)
+	default:
+		if raw.Type == "" {
+			return goa.MissingFieldError("state", "StoryContext")
+		}
+		return goa.InvalidEnumValueError("state", raw.Type, []any{
+			string(StoryContextKindRecorded),
+			string(StoryContextKindNotRecorded),
 		})
 	}
 	return nil

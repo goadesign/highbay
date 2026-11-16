@@ -48,6 +48,7 @@ const PAGE_OPERATIONS = [
   "surla#preview_architecture",
   "surla#list_verifications",
   "surla#get_verification",
+  "surla#review_verification",
   "surla#list_traces",
   "surla#get_live_target",
   "surla#stop_live_target",

@@ -807,6 +807,44 @@ type (
 		// Where this assignment stands.
 		Progress *TestWriterProgress
 	}
+	// ReviewVerificationPayload defines the JSON payload for the surla.review_verification tool.
+	ReviewVerificationPayload = struct {
+		// Verification run identifier returned by verify_change.
+		RunID string
+	}
+	// ReviewVerificationResult defines the JSON result for the surla.review_verification tool.
+	ReviewVerificationResult = struct {
+		// Immutable Story evidence and the owner's current approval observation.
+		Review *VerificationReview
+		// Verification run identifier; get_verification takes it.
+		RunID string
+		// Change Card the run verifies.
+		ChangeID string
+		// Change Card revision the run verifies.
+		RequestRevision string
+		// Candidate commit the run builds and verifies.
+		CandidateCommit string
+		// Commit of the tests the run uses: the operator's evaluator, or the tests
+		// accepted for the change's build.
+		SuiteCommit string
+		// When the run was accepted.
+		AcceptedAt string
+		// Whether this run's agreed revision and selected tests match the current
+		// Change Card and the usable build or the stored verification settings. This
+		// observation does not establish the current candidate working tree,
+		// deployment or approval.
+		InputsCurrent bool
+		// Absolute folder containing the binaries built by this completed run.
+		// Returned only to the user when promotion settings are configured, so the
+		// user can publish these exact binaries before approval. Agents never receive
+		// this private path.
+		CandidateBinariesDir *string
+		// Where the run's tests came from, recorded when the run started: evaluator,
+		// or written_tests with their commit and a notice.
+		TestSource TestSource
+		// Exactly one of running, completed or not_completed.
+		State State
+	}
 	// ReviseChangePayload defines the JSON payload for the surla.revise_change tool.
 	ReviseChangePayload = struct {
 		// Change identifier.
@@ -1404,6 +1442,19 @@ type (
 		// source.
 		ChangedDesignFiles []string
 	}
+	// RecordedRunStory is a nested type used by the generated JSON contract.
+	RecordedRunStory = struct {
+		// Number of the build this run was accepted for.
+		BuildNumber int
+		// Accepted build's saved start time.
+		BuildStartedAt string
+		// Stories as agreed for this run, in declaration order; empty when the
+		// agreement declares none.
+		Stories []*StorySummaryItem
+		// The owner's exact required-test mapping for written tests, or the explicit
+		// absence of such a mapping for an operator evaluator.
+		Mapping Mapping
+	}
 	// RequiredTest is a nested type used by the generated JSON contract.
 	RequiredTest = struct {
 		// Name of the Story the flow belongs to.
@@ -1414,6 +1465,25 @@ type (
 		Scenario string
 		// Hook method the test writer implements for the scenario.
 		Hook string
+	}
+	// RunApprovalAvailable is a nested type used by the generated JSON contract.
+	RunApprovalAvailable = struct {
+	}
+	// RunApprovalBlocked is a nested type used by the generated JSON contract.
+	RunApprovalBlocked = struct {
+		// Owner's safe explanation and enabling step.
+		Reason string
+	}
+	// RunEvaluatorMappingUnknown is a nested type used by the generated JSON contract.
+	RunEvaluatorMappingUnknown = struct {
+	}
+	// RunStoryMapping is a nested type used by the generated JSON contract.
+	RunStoryMapping = struct {
+		// One test per finished flow, in declaration order.
+		RequiredTests []*RequiredTest
+	}
+	// RunStoryNotRecorded is a nested type used by the generated JSON contract.
+	RunStoryNotRecorded = struct {
 	}
 	// RunningLiveTarget is a nested type used by the generated JSON contract.
 	RunningLiveTarget = struct {
@@ -1717,6 +1787,14 @@ type (
 		Stage string
 		// Builder-safe description of what stopped the run; never command output.
 		Summary string
+	}
+	// VerificationReview is a nested type used by the generated JSON contract.
+	VerificationReview = struct {
+		// The run's immutable Story context, or the explicit fact it was not recorded.
+		StoryContext StoryContext
+		// The owner's current observation for this exact report, independent of
+		// inputs_current.
+		Approval Approval
 	}
 	// VerificationRunning is a nested type used by the generated JSON contract.
 	VerificationRunning = struct {
