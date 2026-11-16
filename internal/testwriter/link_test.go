@@ -13,7 +13,6 @@ import (
 
 	"github.com/goadesign/surla/internal/designeval"
 	"github.com/goadesign/surla/internal/shquote"
-	"github.com/goadesign/surla/internal/testmodule"
 )
 
 // TestPrepareAndCheckRefuseALinkedFolder places a symbolic link, absolute and
@@ -26,10 +25,9 @@ import (
 // is byte-identical afterwards.
 func TestPrepareAndCheckRefuseALinkedFolder(t *testing.T) {
 	t.Parallel()
-	module := testmodule.Module(t, "example.com/shop/eval", "", map[string]string{"design/design.go": fixtureDesign})
-	files := map[string]string{}
-	for p, content := range module {
-		files["services/shop/eval/"+p] = content
+	files := map[string]string{
+		"services/shop/eval/go.mod":           "module example.com/shop/eval\n\ngo 1.24\n",
+		"services/shop/eval/design/design.go": "package design\n",
 	}
 	suite := Suite{Module: "eval", Command: "./cmd/shop-evals"}
 	cases := []struct {
@@ -121,10 +119,10 @@ func TestPrepareAndCheckRefuseALinkedFolder(t *testing.T) {
 // and the copy's generated folder is not written.
 func TestPrepareSeparatesFailuresTheAuthorCannotFix(t *testing.T) {
 	t.Parallel()
-	module := testmodule.Module(t, "example.com/shop/eval", "", map[string]string{"design/design.go": fixtureDesign})
-	files := map[string]string{}
-	for p, content := range module {
-		files["eval/"+p] = content
+	files := map[string]string{
+		"eval/go.mod":           "module example.com/shop/eval\n\ngo 1.24\n",
+		"eval/go.sum":           "",
+		"eval/design/design.go": "package design\n",
 	}
 	closed := designeval.NewEvaluatorInDir(t.TempDir())
 	require.NoError(t, closed.Close())

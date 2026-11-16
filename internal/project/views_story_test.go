@@ -13,7 +13,6 @@ import (
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 
 	"github.com/goadesign/surla/internal/controlplane"
-	"github.com/goadesign/surla/internal/testmodule"
 )
 
 // storyRefreshWait follows the control plane's five-minute Story refresh
@@ -97,30 +96,9 @@ func TestViewsPageShowsTheGuidesSucceededStory(t *testing.T) {
 		t.Skip("runs the Go toolchain; the full suite (go test without -short) covers it")
 	}
 	node := requireViewsPageTools(t)
-	ws := storyWorkspace(t, testmodule.Tidy(t, map[string]string{
-		"go.mod": "module example.com/story-design\n\ngo 1.27.3\n\nrequire (\n" +
-			"\tgithub.com/goadesign/surla/story v0.0.0-20261111183703-4568fcf5bb85\n" +
-			"\tgoa.design/goa/v3 " + testmodule.SurlaVersion(t, "goa.design/goa/v3") + "\n)\n",
-		"design/design.go": `package design
-
-import . "github.com/goadesign/surla/story/dsl"
-
-var _ = Story("Order Refunds", func() {
-	Actor("customer", "Customer")
-	Actor("manager", "Support Manager")
-
-	Flow("instant-refund", "Instant refund under the limit", func() {
-		StartsWith("request-refund", "customer", "Customer requests a $25 refund")
-		Outcome("refund-paid", "customer", "Store credit is issued immediately")
-	})
-
-	Flow("high-value-refund", "Refund over the limit", func() {
-		StartsWith("request-high-refund", "customer", "Customer requests a $120 refund")
-		Step("review-refund", "manager", "Manager reviews the refund request")
-	})
-})
-`,
-	}))
+	disableStoryFixtureFetching(t)
+	files := succeededStoryFixture(t)
+	ws := storyWorkspace(t, files)
 	vp := startViewsProject(t, controlplane.Options{WorkspaceDir: ws})
 	guide := vp.agent(t, "guide")
 	link, err := vp.link()
@@ -135,7 +113,18 @@ var _ = Story("Order Refunds", func() {
   await until(() => page.$("#surla-story-draft") && page.$("#surla-story-draft").dataset.state === "none", "the Story stage did not open");
   const started = await api(origin, "POST", "/workspace/story/refresh", undefined, input.guide);
   expect(started.status === 200 && started.body.state === "running", "the guide could not start an evaluation: " + JSON.stringify(started));
+  try {
   await until(() => page.$("#surla-story-draft").dataset.state === "running", "the user's page did not show the running evaluation without a reload", 15000);
+  } catch (err) {
+    let current;
+    try {
+      current = await api(origin, "GET", "/workspace/story/refresh", undefined, input.guide);
+    } catch (readErr) {
+      current = { readError: String(readErr) };
+    }
+    const draft = page.$("#surla-story-draft");
+    throw new Error(String(err) + "; refresh read: " + JSON.stringify(current) + "; last draft state: " + draft?.dataset.state + "; draft: " + draft?.textContent);
+  }
   try {
     await until(() => ["succeeded", "failed"].includes(page.$("#surla-story-draft")?.dataset.state), "the evaluation did not finish", input.refreshWaitMs);
   } catch (err) {
@@ -147,6 +136,11 @@ var _ = Story("Order Refunds", func() {
   expect(JSON.stringify(flows.map((f) => [f.dataset.flowKey, f.querySelector(".surla-story-mark").textContent])) === JSON.stringify([["instant-refund", "will be tested end to end"], ["high-value-refund", "draft: not tested"]]), "the guide's Story is not drawn: " + page.text("#surla-story-draft"));
   page.close();
 `, storyRefreshWait+time.Minute)
+	for name, want := range files {
+		got, err := os.ReadFile(filepath.Join(ws, filepath.FromSlash(name)))
+		require.NoError(t, err)
+		require.Equal(t, want, string(got), "evaluation preserves the prepared fixture input")
+	}
 }
 
 // storyWorkspace writes files into a new workspace directory and returns it.

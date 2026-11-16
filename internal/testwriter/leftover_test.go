@@ -13,7 +13,6 @@ import (
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 
-	"github.com/goadesign/surla/internal/testmodule"
 	"github.com/goadesign/surla/verify/candidate"
 	"github.com/goadesign/surla/verify/suite"
 )
@@ -165,9 +164,9 @@ func TestALeftoverStagingFolderFailsNeitherPrepareNorCheck(t *testing.T) {
 // link in the module is, as the author's finding naming it.
 func TestALinkWithAStagingFoldersNameIsTheAuthorsFinding(t *testing.T) {
 	t.Parallel()
-	files := map[string]string{}
-	for p, content := range testmodule.Module(t, "example.com/shop/eval", "", map[string]string{"design/design.go": fixtureDesign}) {
-		files["eval/"+p] = content
+	files := map[string]string{
+		"eval/go.mod":           "module example.com/shop/eval\n\ngo 1.24\n",
+		"eval/design/design.go": "package design\n",
 	}
 	repo, _ := newProject(t, files)
 	wc, err := MakeCopy(t.Context(), repo, TestsRole, TestsRole.Branch(1), "HEAD")
