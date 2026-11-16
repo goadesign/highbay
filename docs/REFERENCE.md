@@ -922,11 +922,11 @@ Pass a succeeded `op_id` as `story_refresh_op_id` to
 
 When a design file imports the Story language but the draft's `go.mod`
 does not require `github.com/goadesign/surla/story`, the `diagnostic` of the
-failed evaluation also names the step: in the folder that holds that
-`go.mod`, run `go get github.com/goadesign/surla/story@<version>`, with the
-version Surla's own `go.mod` requires, commit `go.mod` and `go.sum`, then try
-again. A project made by `surla init` or `init_project` already requires the
-module.
+failed evaluation also names the step: “`In the folder that holds that
+go.mod, run: go get github.com/goadesign/surla/story@<version>, then try
+again.`” The version is the one Surla's own `go.mod` requires. The guide runs
+the command in its draft, whose `go.mod` was evaluated. A project made by
+`surla init` or `init_project` already requires the module.
 
 #### `update_draft`
 

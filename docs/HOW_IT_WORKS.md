@@ -189,10 +189,10 @@ manager approves it."
      the test writer's working copies (`.surla-build` and `.surla-tests`).
    - In a project made another way, the design can import the Story language
      only when the draft's `go.mod` requires its module. When it does not,
-     the failed evaluation names the step: in the folder that holds that
-     `go.mod`, run `go get github.com/goadesign/surla/story@<version>`, at the
-     version Surla's own `go.mod` requires, commit `go.mod` and `go.sum`, then
-     try again.
+     the failed evaluation names the step: “`In the folder that holds that
+     go.mod, run: go get github.com/goadesign/surla/story@<version>, then try
+     again.`” The version is the one Surla's own `go.mod` requires. The guide
+     runs the command in its draft, whose `go.mod` was evaluated.
 2. **The guide proposes the change.** It calls `propose_change` with your
    request, its analysis and the Story refresh it made, which a project with a
    `go.mod` requires. Surla runs no model for this step. It checks the analysis's shape,
