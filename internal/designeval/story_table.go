@@ -20,8 +20,8 @@ import (
 )
 
 // StoryTestsPath is the module-relative path of a test module's Story table.
-// Surla writes it when a build starts and at each report of the test writer
-// (internal/testwriter), and surla init writes the starter's; the module's
+// Surla writes it when the test writer first reads its assignment and at each
+// report (internal/testwriter), and surla init writes the starter's; the module's
 // own generation then compiles it with the rest of design/.
 const StoryTestsPath = "design/story_tests.go"
 

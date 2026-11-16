@@ -25,7 +25,11 @@ Each has its own credential, so the server always knows who is calling.
 
 Surla runs the code the agents write (the design at each refresh, the
 builder's programs and the test writer's tests) as ordinary processes on this
-machine, with your file and network access.
+machine, with your file and network access. Live starts and verifications keep
+compiled Go packages for the project; each operation still builds its outputs
+and runs its tests. Code running as you can change retained compiler inputs
+and affect later results. See [project storage and cache trust](REFERENCE.md#project-state-folder)
+for lifetime and cleanup.
 
 Three more words appear on every step:
 
@@ -173,9 +177,10 @@ manager approves it."
    (never in the project folder) and calls `refresh_story` again to evaluate
    its edits. Before drafting a new change, or when a design file changed in the
    project folder outside Surla, the guide calls `update_draft` to bring the
-   project folder's design changes into `.surla-draft` (fixing any file listed
-   in `to_correct` and calling `update_draft` again until none remains) before
-   calling `refresh_story`. `get_story_refresh` then returns the Story the
+   project folder's design changes into `.surla-draft`. Each `to_correct` entry
+   names the folder holding the file: the guide corrects its draft, or tells
+   you what to correct in the project folder and waits. It calls `update_draft`
+   again until none remains, then `refresh_story`. `get_story_refresh` returns the Story the
    server found: actors, finished and draft flows, steps and open questions. The
    Story view shows that draft while the guide works. Where the Story starts
    from depends on the project:
@@ -189,10 +194,10 @@ manager approves it."
      the test writer's working copies (`.surla-build` and `.surla-tests`).
    - In a project made another way, the design can import the Story language
      only when the draft's `go.mod` requires its module. When it does not,
-     the failed evaluation names the step: in the folder that holds that
-     `go.mod`, run `go get github.com/goadesign/surla/story@<version>`, at the
-     version Surla's own `go.mod` requires, commit `go.mod` and `go.sum`, then
-     try again.
+     the failed evaluation names the step: “`In the folder that holds that
+     go.mod, run: go get github.com/goadesign/surla/story@<version>, then try
+     again.`” The version is the one Surla's own `go.mod` requires. The guide
+     runs the command in its draft, whose `go.mod` was evaluated.
 2. **The guide proposes the change.** It calls `propose_change` with your
    request, its analysis and the Story refresh it made, which a project with a
    `go.mod` requires. Surla runs no model for this step. It checks the analysis's shape,
@@ -274,7 +279,7 @@ The reference gives the exact contract of
    (`previous_change_open`), when rebuilding an unfinished open build without
    confirming replacement (`unfinished_build_open`), when the revision was
    drafted before a drop (`drafted_before_drop`) or a design file at the
-   project's commit was changed outside Surla (`design_changed_outside`), when
+   build's base commit was changed outside Surla (`design_changed_outside`), when
    the card is not confirmed or the revision is not the agreed one, or when
    the project lacks a Git repository with at least one commit, a Git name and
    address, the test module `surla init` makes (`eval/` in the project folder,

@@ -147,7 +147,7 @@ func TestNewAndInitProjectNormalizeSymlinkBeforeParentPaths(t *testing.T) {
 	require.ErrorContains(t, err, "must be outside workspace")
 
 	// 4. Verification.Plan.ReportDir = alias + "/../reports" is rejected at startup.
-	_, err = New(Options{
+	_, err = New(Options{BuildCacheDir: t.TempDir(),
 		CardsDir:     filepath.Join(root, "cards-ok-3"),
 		WorkspaceDir: wsDir,
 		SurlaVersion: testSurlaVersion,
@@ -243,7 +243,7 @@ func TestInitProjectEmitsMCPProgress(t *testing.T) {
 	require.NoError(t, os.MkdirAll(runsDir, 0o700))
 	require.NoError(t, os.MkdirAll(reportsDir, 0o700))
 
-	cp, err := New(Options{
+	cp, err := New(Options{BuildCacheDir: t.TempDir(),
 		CardsDir:     cardsDir,
 		WorkspaceDir: wsDir,
 		InitStageDir: stageDir,
@@ -384,7 +384,7 @@ func TestNewAndInitProjectPreserveSignificantPathWhitespace(t *testing.T) {
 		require.NoError(t, os.MkdirAll(ws, 0o755))
 		require.NoError(t, os.MkdirAll(stageWithSpace, 0o700))
 
-		cp, err := New(Options{
+		cp, err := New(Options{BuildCacheDir: t.TempDir(),
 			WorkspaceDir: ws,
 			CardsDir:     cardsWithSpace,
 			RunsDir:      runsWithSpace,
@@ -471,7 +471,7 @@ func TestNewProtectsMonorepoAndPreservesValidLayouts(t *testing.T) {
 	})
 	require.ErrorContains(t, err, "must be outside workspace")
 
-	_, err = New(Options{
+	_, err = New(Options{BuildCacheDir: t.TempDir(),
 		WorkspaceDir: wsDir,
 		CardsDir:     filepath.Join(root, "cards-ok-3"),
 		SurlaVersion: testSurlaVersion,
@@ -486,7 +486,7 @@ func TestNewProtectsMonorepoAndPreservesValidLayouts(t *testing.T) {
 	require.ErrorContains(t, err, "must be outside the workspace")
 
 	// 2. The report folder of runs of each change's accepted tests inside enclosing monorepo R is rejected.
-	_, err = New(Options{
+	_, err = New(Options{BuildCacheDir: t.TempDir(),
 		WorkspaceDir:    wsDir,
 		CardsDir:        filepath.Join(root, "cards-ok-4"),
 		RunsDir:         filepath.Join(root, "runs-ok-4"),
@@ -510,7 +510,7 @@ func TestNewProtectsMonorepoAndPreservesValidLayouts(t *testing.T) {
 	require.NoError(t, cpParent.Close())
 
 	// 4. Separate verification source repository B (e.g. read-only bare mirror) and no-WorkspaceDir embedding remain accepted.
-	cpSeparate, err := New(Options{
+	cpSeparate, err := New(Options{BuildCacheDir: t.TempDir(),
 		WorkspaceDir: wsDir,
 		CardsDir:     filepath.Join(root, "cards-sep"),
 		SurlaVersion: testSurlaVersion,
@@ -568,7 +568,7 @@ func TestInitProjectAcceptsAnotherSpellingOfTheWorkspace(t *testing.T) {
 		t.Skip("needs a case-insensitive volume")
 	}
 	runs := filepath.Join(root, "ops", "runs")
-	cp, err := New(Options{
+	cp, err := New(Options{BuildCacheDir: t.TempDir(),
 		WorkspaceDir: filepath.Join(root, "WS"),
 		CardsDir:     filepath.Join(root, "ops", "cards"),
 		RunsDir:      runs,

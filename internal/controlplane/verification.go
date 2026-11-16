@@ -36,7 +36,7 @@ type VerificationConfig struct {
 	// directory per run, kept as evidence; the operator prunes it.
 	Plan verify.Plan
 	// Command is the argument list that runs this surla executable; runs
-	// start `<Command> verify-run supervise <dir>`.
+	// start `<Command> verify-run supervise <dir> <build-cache-dir>`.
 	Command []string
 	// Timeout is how long a run may take before it is stopped and recorded
 	// as interrupted.
@@ -168,7 +168,7 @@ func (c *ControlPlane) VerifyChange(ctx context.Context, p *gensurla.VerifyChang
 	if plan.Tests == verify.TestsEvaluator {
 		settings = c.evaluatorSettings()
 	}
-	if _, err := verifyrun.Start(verCfg.RunsDir, req, verCfg.Command, settings); err != nil {
+	if _, err := verifyrun.Start(verCfg.RunsDir, req, verCfg.Command, settings, c.buildCacheDir); err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, "start verification run")
 		return nil, fmt.Errorf("start verification: %w", err)

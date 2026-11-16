@@ -124,7 +124,7 @@ func TestProcessDiagnosticsStayPrivateInSpans(t *testing.T) {
 			if tc.Name == "go-env-suite" || tc.Name == "go-env-malformed-suite" {
 				plan.Tests = verify.TestsWritten
 			}
-			_, err := verify.Run(t.Context(), plan, os.Environ())
+			_, err := verify.Run(t.Context(), plan, os.Environ(), t.TempDir())
 			var stage *verify.StageError
 			require.ErrorAs(t, err, &stage)
 			assert.Equal(t, tc.Stage, string(stage.Stage))
@@ -164,7 +164,7 @@ func TestProcessDiagnosticsStayPrivateInLiveEvents(t *testing.T) {
 			cards := t.TempDir()
 			commit := plan.CandidateCommit
 			plan.CandidateCommit, plan.RequestRevision, plan.WorkDir = "", "", ""
-			cp := newControlPlane(t, buildFixtureOptions(t, Options{
+			cp := newControlPlane(t, buildFixtureOptions(t, Options{BuildCacheDir: t.TempDir(),
 				CardsDir: cards, TracerProvider: provider,
 				Verification: &VerificationConfig{RunsDir: t.TempDir(), Plan: plan},
 				Live:         &LiveConfig{Command: []string{os.Args[0]}, Env: append(os.Environ(), liveTargetModeEnv+"=process-diagnostics"), StartTimeout: 20 * time.Second},

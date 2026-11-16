@@ -350,7 +350,7 @@ func TestStarterPlanRefusesUnusableRepositories(t *testing.T) {
 func planServer(t *testing.T, workspace string) *ControlPlane {
 	t.Helper()
 	ops := realTempDir(t)
-	return newControlPlane(t, Options{
+	return newControlPlane(t, Options{BuildCacheDir: t.TempDir(),
 		WorkspaceDir:    workspace,
 		RunsDir:         filepath.Join(ops, "runs"),
 		SurlaVersion:    testSurlaVersion,

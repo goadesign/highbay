@@ -255,7 +255,7 @@ func TestGenerateCodeHTTPMCPAndIteration(t *testing.T) {
 		})
 	}
 
-	// A real Go build cache setup failure also exits 1. It is reported as
+	// A real build cache setup failure is reported as
 	// an operation failure with safe details, without blaming source code.
 	// Preserve the valid cache so restoring it proves same-server recovery.
 	entries, err := os.ReadDir(physicalEvalParent)
@@ -277,7 +277,8 @@ func TestGenerateCodeHTTPMCPAndIteration(t *testing.T) {
 	require.ErrorAs(t, cacheErr, &httpFailure)
 	assert.True(t, httpFailure.Fault)
 	assert.ErrorContains(t, cacheErr, "failed while compiling the design")
-	assert.ErrorContains(t, cacheErr, "failed to initialize build cache")
+	assert.ErrorContains(t, cacheErr, "create build cache directory")
+	assert.ErrorContains(t, cacheErr, "not a directory")
 	assert.NotContains(t, cacheErr.Error(), "The design did not compile")
 	assert.NotContains(t, cacheErr.Error(), privateCards)
 	assert.NotContains(t, cacheErr.Error(), physicalEvalParent)

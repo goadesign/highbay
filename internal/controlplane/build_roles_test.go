@@ -18,7 +18,7 @@ import (
 func TestBuilderOnlyBuildRequiresStoredSettings(t *testing.T) {
 	for _, roles := range []string{buildRolesBuilderOnly, buildRolesBuilderAndTestWriter} {
 		t.Run(roles, func(t *testing.T) {
-			opts := Options{CardsDir: t.TempDir(), WorkspaceDir: t.TempDir(),
+			opts := Options{BuildCacheDir: t.TempDir(), CardsDir: t.TempDir(), WorkspaceDir: t.TempDir(),
 				Verification: &VerificationConfig{RunsDir: t.TempDir()},
 				Team:         &TeamBinding{Owner: "alice@example.com", Service: &teamServiceFixture{}},
 			}

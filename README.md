@@ -29,7 +29,10 @@ tests; Surla itself judges those tests and runs them against the code, which
 it builds and runs as ordinary processes on your machine, with your file and
 network access. You agree what is built
 and approve the result in your browser. Surla deploys nothing and merges
-nothing.
+nothing. Live starts and verification runs reuse the project's compiled Go
+packages while rebuilding outputs and running tests each time. The cache is a
+trusted compiler input that programs running as you can change; see
+[project storage and cache trust](docs/REFERENCE.md#project-state-folder).
 
 ## One change from start to finish
 

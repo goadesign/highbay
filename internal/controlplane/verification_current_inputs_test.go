@@ -27,7 +27,7 @@ import (
 // newest run is stale, and preserves test-writer access without accepted tests.
 func TestVerificationCurrentInputsFollowWrittenSelection(t *testing.T) {
 	runsDir := t.TempDir()
-	cp := newBuildControlPlane(t, Options{
+	cp := newBuildControlPlane(t, Options{BuildCacheDir: t.TempDir(),
 		RunsDir:         runsDir,
 		WrittenTestRuns: &WrittenTestRuns{ReportDir: t.TempDir(), Timeout: time.Minute},
 	})
@@ -133,7 +133,7 @@ func TestVerificationCurrentInputsUseFullStoredTuple(t *testing.T) {
 	cardsDir, runsDir := t.TempDir(), t.TempDir()
 	plan := verify.Plan{SuiteCommit: strings.Repeat("2", 40)}
 	opts := func(selected verify.Plan) Options {
-		return Options{CardsDir: cardsDir, Verification: &VerificationConfig{RunsDir: runsDir, Plan: selected}}
+		return Options{BuildCacheDir: t.TempDir(), CardsDir: cardsDir, Verification: &VerificationConfig{RunsDir: runsDir, Plan: selected}}
 	}
 	cp := newControlPlane(t, opts(plan))
 	card := confirmedChange(t, cp, "chg")
@@ -188,7 +188,7 @@ func TestVerificationCurrentInputsSafeFailures(t *testing.T) {
 			provider := sdktrace.NewTracerProvider(sdktrace.WithSyncer(exporter))
 			t.Cleanup(func() { assert.NoError(t, provider.Shutdown(context.Background())) })
 			cfg := verificationConfig(t)
-			cp := newBuildControlPlane(t, Options{
+			cp := newBuildControlPlane(t, Options{BuildCacheDir: t.TempDir(),
 				RunsDir: cfg.RunsDir, TracerProvider: provider,
 				WrittenTestRuns: &WrittenTestRuns{ReportDir: t.TempDir(), Timeout: time.Minute},
 			})
@@ -250,7 +250,7 @@ func TestVerificationCurrentInputsSafeFailures(t *testing.T) {
 // when the current card belongs to another principal; its build is never read.
 func TestVerificationCurrentInputsIgnoreForeignCard(t *testing.T) {
 	runsDir := t.TempDir()
-	cp := newBuildControlPlane(t, Options{
+	cp := newBuildControlPlane(t, Options{BuildCacheDir: t.TempDir(),
 		RunsDir:         runsDir,
 		WrittenTestRuns: &WrittenTestRuns{ReportDir: t.TempDir(), Timeout: time.Minute},
 	})
@@ -335,7 +335,7 @@ func editVerificationRequest(t *testing.T, runsDir, runID string, edit func(*ver
 // three user-facing readers while retaining the historical report.
 func TestDroppedWrittenBuildMakesVerificationInputsNonCurrent(t *testing.T) {
 	runs := t.TempDir()
-	cp := newBuildControlPlane(t, Options{RunsDir: runs, WrittenTestRuns: &WrittenTestRuns{ReportDir: t.TempDir(), Timeout: time.Minute}})
+	cp := newBuildControlPlane(t, Options{BuildCacheDir: t.TempDir(), RunsDir: runs, WrittenTestRuns: &WrittenTestRuns{ReportDir: t.TempDir(), Timeout: time.Minute}})
 	card := buildableChange(t, cp, "chg")
 	user := asCaller("alice@example.com", CallerUser)
 	runID := strings.Repeat("a", 32)

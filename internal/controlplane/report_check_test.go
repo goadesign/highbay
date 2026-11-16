@@ -710,7 +710,7 @@ func TestACheckThatCannotRunNamesTheUsersStep(t *testing.T) {
 // saying why, the findings read is refused, and the build, saved as
 // reported, is never judged.
 func TestStoredEvaluatorProjectsNeverJudge(t *testing.T) {
-	cp, revision := newReportFixture(t, Options{Verification: &VerificationConfig{RunsDir: t.TempDir()}}, &standInCopy{})
+	cp, revision := newReportFixture(t, Options{BuildCacheDir: t.TempDir(), Verification: &VerificationConfig{RunsDir: t.TempDir()}}, &standInCopy{})
 	tests := asCaller("alice@example.com", CallerTestWriter)
 	report := &gensurla.ReportTestsFinishedPayload{ChangeID: "chg", RequestRevision: revision}
 	before := readBuildFile(t, cp, "chg")

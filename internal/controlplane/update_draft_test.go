@@ -276,13 +276,21 @@ func TestPendingDraftRecoveryKeepsTheOriginalProjectCommit(t *testing.T) {
 // newDraftUpdateFixture commits the base before materializing the actual draft.
 func newDraftUpdateFixture(t *testing.T, base, initial, draft string) *draftUpdateFixture {
 	t.Helper()
+	return newDraftUpdateFixtureWith(t, Options{}, base, initial, draft)
+}
+
+// newDraftUpdateFixtureWith is newDraftUpdateFixture for a control plane made
+// with opts, whose WorkspaceDir it sets to the fixture's project folder.
+func newDraftUpdateFixtureWith(t *testing.T, opts Options, base, initial, draft string) *draftUpdateFixture {
+	t.Helper()
 	dir := t.TempDir()
 	writeWorkspaceFiles(t, dir, validWorkspaceStub(base))
 	gitForLayoutTest(t, dir, "init", "-q")
 	gitForLayoutTest(t, dir, "add", "go.mod", "go.sum", updateDesignFile)
 	gitForLayoutTest(t, dir, "-c", "user.name=Test", "-c", "user.email=test@example.com", "commit", "-qm", "Initial design")
 	writeWorkspaceFiles(t, dir, map[string]string{updateDesignFile: initial})
-	cp := newControlPlane(t, Options{WorkspaceDir: dir})
+	opts.WorkspaceDir = dir
+	cp := newControlPlane(t, opts)
 	readDraftForTest(t, cp)
 	f := &draftUpdateFixture{t: t, cp: cp, dir: dir, branch: strings.TrimSpace(gitForLayoutTest(t, dir, "symbolic-ref", "--short", "HEAD"))}
 	f.guide(draft)

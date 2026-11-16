@@ -4683,7 +4683,7 @@ var getBuildResultFields = []tools.FieldMetadata{
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("taking")},
 		JSONType:    "object",
-		Description: "Whether the user has taken this build: building until a verification of it passes; passed with the commits to merge; merged once the branch checked out in the project folder holds both commits of one passed run; dropped once the user dropped it. A project has one open build, and another change is built only once it is merged or dropped.",
+		Description: "Whether the user has taken this build: building until a verification of it passes; passed with the commits to merge; merged once the branch checked out in the project folder holds the commits of one passed run, the builder's and, for written tests, the tests'; dropped once the user dropped it. A project has one open build, and another change is built only once it is merged or dropped.",
 		Branches: []tools.UnionBranch{
 			tools.TaggedUnionBranch{
 				Discriminator: []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("state")},
@@ -4909,7 +4909,7 @@ var getBuildResultFields = []tools.FieldMetadata{
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("taking")},
 		JSONType:    "object",
-		Description: "The branch checked out in the project folder holds both commits of a passed run of this build, by merge or by a squash commit that holds every file they changed as they have it. Another change can be built.",
+		Description: "The branch checked out in the project folder holds the commits of one passed run of this build: the builder's and, for written tests, the tests'. Each is held by merge or by a squash commit that holds every file it changed as that commit has it. This build no longer blocks starting another build; start_build's other checks still apply.",
 		Branches: []tools.UnionBranch{
 			tools.TaggedUnionBranch{
 				Discriminator: []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("state")},
@@ -4924,7 +4924,7 @@ var getBuildResultFields = []tools.FieldMetadata{
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("taking")},
 		JSONType:    "object",
-		Description: "The user dropped this build with drop_build: Surla builds nothing on it, no role has work for it, and another change can be built.",
+		Description: "The user dropped this build with drop_build: Surla builds nothing on it, no role has work for it, and it no longer blocks starting another build. An agreement drafted before the drop still cannot be built: get_build's drafted_before_drop reports it for each change, and start_build refuses it with drafted_before_drop until the guide refreshes the draft and revises the change and the user adopts the revision.",
 		Branches: []tools.UnionBranch{
 			tools.TaggedUnionBranch{
 				Discriminator: []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("state")},
@@ -12683,7 +12683,7 @@ var updateDraftPayloadFields = []tools.FieldMetadata{
 var updateDraftResultFields = []tools.FieldMetadata{
 	{
 		JSONType:    "object",
-		Description: "What update_draft brought from the project folder into the guide's draft: design files the draft took as they are there, design files merged with the draft's own edits, and files to correct. The lists describe what this call applied and what remains to correct; empty lists do not prove that every outside design change is present.",
+		Description: "What update_draft brought from the project folder into the guide's draft: design files the draft took as they are there, design files merged with the draft's own edits, and files to correct, each with the folder that holds it. The lists describe what this call applied and what remains to correct; empty lists do not prove that every outside design change is present.",
 	},
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("draft_folder")},
@@ -12713,22 +12713,27 @@ var updateDraftResultFields = []tools.FieldMetadata{
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("to_correct")},
 		JSONType:    "array",
-		Description: "Files to correct in the draft before refreshing, in path order; empty when none.",
+		Description: "Files to correct before refreshing, each in the folder it names, in path order; empty when none.",
 	},
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("to_correct"), tools.DynamicField{}},
 		JSONType:    "object",
-		Description: "Files to correct in the draft before refreshing, in path order; empty when none.",
+		Description: "Files to correct before refreshing, each in the folder it names, in path order; empty when none.",
 	},
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("to_correct"), tools.DynamicField{}, tools.FixedField("path")},
 		JSONType:    "string",
-		Description: "Path relative to the draft folder, such as design/types.go or go.mod.",
+		Description: "Path relative to the folder that folder names, such as design/types.go or go.mod.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("to_correct"), tools.DynamicField{}, tools.FixedField("folder")},
+		JSONType:    "string",
+		Description: "Which folder holds the file to correct: draft_folder is the guide's draft, at the result's draft_folder; project_folder is the user's project folder, which holds the draft.",
 	},
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("to_correct"), tools.DynamicField{}, tools.FixedField("problem")},
 		JSONType:    "string",
-		Description: "What to correct: conflict markers where the draft and the project folder changed the same lines; a file removed on one side and changed on the other; a draft file Go cannot parse, with its line; or a module the project's go.mod requires at another version than the draft's, or that the draft's lacks, including differing replace directives.",
+		Description: "What to correct. In the draft: conflict markers where the draft and the project folder changed the same lines; a file removed on one side and changed on the other; a draft file Go cannot parse, with its line; a file whose project change Surla took without merging, or was writing when it stopped, to check that it holds the intended edits once; or a module the project's go.mod requires at another version than the draft's, or that the draft's lacks, including differing replace directives and a differing module path. In the project folder: a design file or go.mod there that cannot be parsed, with its line, or a go.mod that declares no module.",
 	},
 }
 var verifyChangePayloadFields = []tools.FieldMetadata{
@@ -26176,7 +26181,7 @@ func validateUpdateDraftResultJSONValue(path string, value any, description stri
 		case "to_correct":
 			if err := validateUpdateDraftResultRootToCorrectJSONValue(
 				generatedJSONChildPath(path, key, false),
-				typed[key], "Files to correct in the draft before refreshing, in path order; empty when none.",
+				typed[key], "Files to correct before refreshing, each in the folder it names, in path order; empty when none.",
 			); err != nil {
 				return err
 			}
@@ -26236,22 +26241,30 @@ func validateUpdateDraftResultDraftCorrectionTransportJSONValue(path string, val
 	sort.Strings(keys)
 	for _, key := range keys {
 		switch key {
+		case "folder":
+			if err := validateStringJSONValue(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Which folder holds the file to correct: draft_folder is the guide's draft, at the result's draft_folder; project_folder is the user's project folder, which holds the draft.",
+			); err != nil {
+				return err
+			}
 		case "path":
 			if err := validateStringJSONValue(
 				generatedJSONChildPath(path, key, false),
-				typed[key], "Path relative to the draft folder, such as design/types.go or go.mod.",
+				typed[key], "Path relative to the folder that folder names, such as design/types.go or go.mod.",
 			); err != nil {
 				return err
 			}
 		case "problem":
 			if err := validateStringJSONValue(
 				generatedJSONChildPath(path, key, false),
-				typed[key], "What to correct: conflict markers where the draft and the project folder changed the same lines; a file removed on one side and changed on the other; a draft file Go cannot parse, with its line; or a module the project's go.mod requires at another version than the draft's, or that the draft's lacks, including differing replace directives.",
+				typed[key], "What to correct. In the draft: conflict markers where the draft and the project folder changed the same lines; a file removed on one side and changed on the other; a draft file Go cannot parse, with its line; a file whose project change Surla took without merging, or was writing when it stopped, to check that it holds the intended edits once; or a module the project's go.mod requires at another version than the draft's, or that the draft's lacks, including differing replace directives and a differing module path. In the project folder: a design file or go.mod there that cannot be parsed, with its line, or a go.mod that declares no module.",
 			); err != nil {
 				return err
 			}
 		default:
 			return unknownJSONFieldError(path, key, []string{
+				"folder",
 				"path",
 				"problem",
 			})
@@ -26616,7 +26629,7 @@ func validateGetBuildResultStartedBuildTransportJSONValue(path string, value any
 		case "taking":
 			if err := validateGetBuildResultStartedBuildTransportTakingJSONValue(
 				generatedJSONChildPath(path, key, false),
-				typed[key], "Whether the user has taken this build: building until a verification of it passes; passed with the commits to merge; merged once the branch checked out in the project folder holds both commits of one passed run; dropped once the user dropped it. A project has one open build, and another change is built only once it is merged or dropped.",
+				typed[key], "Whether the user has taken this build: building until a verification of it passes; passed with the commits to merge; merged once the branch checked out in the project folder holds the commits of one passed run, the builder's and, for written tests, the tests'; dropped once the user dropped it. A project has one open build, and another change is built only once it is merged or dropped.",
 			); err != nil {
 				return err
 			}
@@ -30570,6 +30583,7 @@ func encodeCP1RevisionAnalysisExampleToCP1RevisionAnalysisExampleTransport(v *CP
 func decodeDraftCorrectionTransportToDraftCorrection(v *toolhttp.DraftCorrectionTransport) *DraftCorrection {
 	res := &DraftCorrection{
 		Path:    *v.Path,
+		Folder:  *v.Folder,
 		Problem: *v.Problem,
 	}
 
@@ -30578,6 +30592,7 @@ func decodeDraftCorrectionTransportToDraftCorrection(v *toolhttp.DraftCorrection
 func encodeDraftCorrectionToDraftCorrectionTransport(v *DraftCorrection) *toolhttp.DraftCorrectionTransport {
 	res := &toolhttp.DraftCorrectionTransport{
 		Path:    &v.Path,
+		Folder:  &v.Folder,
 		Problem: &v.Problem,
 	}
 

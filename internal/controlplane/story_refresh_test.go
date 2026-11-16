@@ -566,7 +566,7 @@ func TestStoryRefreshNamesTheStepThatRequiresTheStoryLanguage(t *testing.T) {
 		"The design imports the Story language, but its module's go.mod does not require it. "+
 		"In the folder that holds that go.mod, run: go get github.com/goadesign/surla/story@"+
 		testmodule.SurlaVersion(t, "github.com/goadesign/surla/story")+
-		", commit go.mod and go.sum, then try again.", *failed.Diagnostic)
+		", then try again.", *failed.Diagnostic)
 	assert.Equal(t, "Story refresh "+*started.OpID+" failed for workspace snapshot "+*started.SnapshotDigest+".", failed.Message)
 }
 

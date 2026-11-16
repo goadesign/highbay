@@ -96,7 +96,7 @@ func TestStarterLiveTargetAppliesADraftToTheNextModelRequest(t *testing.T) {
 			starterGit(t, dir, "config", "core.hooksPath", "/dev/null")
 			cardsDir, runsDir := t.TempDir(), t.TempDir()
 			team := starterTeam(t, dir)
-			cp, err := controlplane.New(controlplane.Options{
+			cp, err := controlplane.New(controlplane.Options{BuildCacheDir: t.TempDir(),
 				CardsDir: cardsDir, WorkspaceDir: dir,
 				Team: &controlplane.TeamBinding{Owner: "alice@example.com", Service: team},
 				Verification: &controlplane.VerificationConfig{

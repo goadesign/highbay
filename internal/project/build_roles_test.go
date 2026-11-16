@@ -335,6 +335,7 @@ func TestFirstMessagesKeepTheRolesInTheirOwnedFolders(t *testing.T) {
 			"call update_draft before each new change",
 			"Work only in the draft folder returned by update_draft or refresh_story",
 			"never edit the project folder or copy design files between it and the draft",
+			"when one is in the project folder, tell the user what to correct there and wait",
 			"run the same formatter in the draft, refresh and revise",
 		}},
 		{"builder", []string{

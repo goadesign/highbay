@@ -59,7 +59,7 @@ func ToolSchemas() []*genregistry.ToolSchema {
 		declarations.schema1981(),
 		declarations.schema1990(),
 		declarations.schema2001(),
-		declarations.schema2017(),
+		declarations.schema2018(),
 	}
 } // schema1 constructs one generated schema declaration.
 func (declarations registryDeclarations) schema1() *genregistry.ToolSchema {
@@ -10303,7 +10303,7 @@ func (declarations registryDeclarations) schema610() *genregistry.ToolSchema {
 		Description:            &registryText1,
 		PayloadSchema:          []byte("{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"additionalProperties\":false,\"properties\":{\"change_id\":{\"description\":\"Change Card identifier.\",\"minLength\":1,\"type\":\"string\"}},\"required\":[\"change_id\"],\"type\":\"object\"}"),
 		ExecutionPayloadSchema: []byte("{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"additionalProperties\":false,\"properties\":{\"change_id\":{\"description\":\"Change Card identifier.\",\"minLength\":1,\"type\":\"string\"}},\"required\":[\"change_id\"],\"type\":\"object\"}"),
-		ResultSchema:           []byte("{\"$defs\":{\"BuilderProgress\":{\"additionalProperties\":false,\"description\":\"The builder's assignment for one build. It exists from the moment the user starts the build; verification of the build's revision, not the assignment, judges the builder's work.\",\"properties\":{\"read\":{\"description\":\"True once the builder read this assignment in full with get_builder_assignment.\",\"type\":\"boolean\"}},\"required\":[\"read\"],\"title\":\"BuilderProgress\",\"type\":\"object\"},\"TestWriterProgress\":{\"additionalProperties\":false,\"description\":\"Where the test writer's assignment for one build stands.\",\"properties\":{\"read\":{\"description\":\"True once the test writer read this assignment in full with get_test_writer_assignment.\",\"type\":\"boolean\"},\"report\":{\"description\":\"Number of the test writer's latest report of this build: 0 until its first report, and one more with each report_tests_finished.\",\"format\":\"int64\",\"minimum\":0,\"type\":\"integer\"},\"tests\":{\"description\":\"The tests' state: not_used when the project has stored verification settings; otherwise assigned, reported, needs_changes with the number of Surla's findings, accepted with the commit Surla recorded, or could_not_run with the reason and the user's step. Each verdict carries the time Surla reached it.\",\"oneOf\":[{\"additionalProperties\":false,\"description\":\"No test writer is used: the project verifies with the evaluator stored with surla verification set. Every read of a build in such a project shows this, whatever the build recorded.\",\"properties\":{\"state\":{\"enum\":[\"not_used\"],\"type\":\"string\"}},\"required\":[\"state\"],\"type\":\"object\"},{\"additionalProperties\":false,\"description\":\"Surla assigned the tests for this build; the test writer has not reported them finished.\",\"properties\":{\"state\":{\"enum\":[\"assigned\"],\"type\":\"string\"}},\"required\":[\"state\"],\"type\":\"object\"},{\"additionalProperties\":false,\"description\":\"The test writer reported its tests finished at this build's revision. Surla checks them right after each report; its verdict replaces this state.\",\"properties\":{\"state\":{\"enum\":[\"reported\"],\"type\":\"string\"}},\"required\":[\"state\"],\"type\":\"object\"},{\"additionalProperties\":false,\"description\":\"Surla checked the reported tests and found problems the test writer must fix before reporting again, including a working copy that is off its build's branch or holds another build's work. Their text is in get_test_writer_assignment and, for the user, in get_test_findings.\",\"properties\":{\"checked_at\":{\"description\":\"When Surla's check reached this verdict.\",\"format\":\"date-time\",\"type\":\"string\"},\"finding_count\":{\"description\":\"Number of problems Surla found.\",\"format\":\"int64\",\"minimum\":1,\"type\":\"integer\"},\"state\":{\"enum\":[\"needs_changes\"],\"type\":\"string\"}},\"required\":[\"finding_count\",\"checked_at\",\"state\"],\"type\":\"object\"},{\"additionalProperties\":false,\"description\":\"Surla checked the reported tests and recorded them as a commit.\",\"properties\":{\"checked_at\":{\"description\":\"When Surla's check reached this verdict.\",\"format\":\"date-time\",\"type\":\"string\"},\"commit\":{\"description\":\"Full commit ID Surla recorded the accepted tests at (40 or 64 lowercase hex characters).\",\"pattern\":\"^([0-9a-f]{40}|[0-9a-f]{64})$\",\"type\":\"string\"},\"not_judged\":{\"description\":\"What Surla's check did not judge, always the same sentence.\",\"enum\":[\"Surla checked that these tests build into the generated test program and declare every required scenario; it did not judge what they assert.\"],\"type\":\"string\"},\"state\":{\"enum\":[\"accepted\"],\"type\":\"string\"}},\"required\":[\"commit\",\"checked_at\",\"not_judged\",\"state\"],\"type\":\"object\"},{\"additionalProperties\":false,\"description\":\"Surla's check of the reported tests could not run, for a cause the test writer cannot fix; the user's step makes it possible.\",\"properties\":{\"checked_at\":{\"description\":\"When Surla's check stopped.\",\"format\":\"date-time\",\"type\":\"string\"},\"reason\":{\"description\":\"Why the check could not run.\",\"maxLength\":1024,\"minLength\":1,\"type\":\"string\"},\"state\":{\"enum\":[\"could_not_run\"],\"type\":\"string\"},\"step\":{\"description\":\"What the user does so the check can run.\",\"maxLength\":512,\"minLength\":1,\"type\":\"string\"}},\"required\":[\"reason\",\"step\",\"checked_at\",\"state\"],\"type\":\"object\"}],\"type\":\"object\"}},\"required\":[\"tests\",\"read\",\"report\"],\"title\":\"TestWriterProgress\",\"type\":\"object\"}},\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"additionalProperties\":false,\"description\":\"A change's build as get_build reports it.\",\"properties\":{\"build\":{\"description\":\"not_started when the change has no usable build for the current test source; start a new build on the views page. Otherwise started with the usable build.\",\"oneOf\":[{\"additionalProperties\":false,\"description\":\"This change has no usable build: the project's open build is another change's or there is none, or its builder-only build lost the stored verification settings that supplied its tests. Start a new build on the views page.\",\"properties\":{\"state\":{\"enum\":[\"not_started\"],\"type\":\"string\"}},\"required\":[\"state\"],\"type\":\"object\"},{\"additionalProperties\":false,\"description\":\"The usable build the user started for a change, with the builder's assignment and the test writer's progress when one is used. A build started with only the builder remains usable while stored verification settings supply its tests.\",\"properties\":{\"builder\":{\"$ref\":\"#/$defs/BuilderProgress\",\"description\":\"The builder's assignment.\"},\"in_force\":{\"description\":\"True when request_revision is the change's agreed revision, the one in force, as get_build reports it. It stays true while a proposed revision waits and when a refreshed draft is adopted without changing request_revision. If adoption or confirmation changes the agreed request_revision, it becomes false; the assignments stay on the earlier revision until the user builds again.\",\"type\":\"boolean\"},\"request_revision\":{\"description\":\"Change Card revision the user built.\",\"type\":\"string\"},\"required_test_count\":{\"description\":\"Number of finished flows in the agreed Story. Zero means no test of this change's Story was required.\",\"format\":\"int64\",\"minimum\":0,\"type\":\"integer\"},\"started_at\":{\"description\":\"When the user started this build.\",\"format\":\"date-time\",\"type\":\"string\"},\"state\":{\"enum\":[\"started\"],\"type\":\"string\"},\"taking\":{\"description\":\"Whether the user has taken this build: building until a verification of it passes; passed with the commits to merge; merged once the branch checked out in the project folder holds both commits of one passed run; dropped once the user dropped it. A project has one open build, and another change is built only once it is merged or dropped.\",\"oneOf\":[{\"additionalProperties\":false,\"description\":\"No verification of this build has passed yet, so there is nothing to merge: the builder finishes it, or the user drops it.\",\"properties\":{\"state\":{\"enum\":[\"building\"],\"type\":\"string\"}},\"required\":[\"state\"],\"type\":\"object\"},{\"additionalProperties\":false,\"description\":\"A verification of this build passed and the user has not merged it: the commits of its newest passed run, which the user merges into the branch checked out in the project folder, the builder's first, then the tests'.\",\"properties\":{\"base_in_branch\":{\"description\":\"False when the branch checked out in the project folder no longer holds the commit this build started from, because its history was rewritten: merging these commits brings that history back, and dropping the build and building again starts from the branch as it is.\",\"type\":\"boolean\"},\"candidate_branch\":{\"description\":\"The build's builder branch, surla/build-\\u003cn\\u003e, where this commit was verified.\",\"type\":\"string\"},\"candidate_commit\":{\"description\":\"The builder's commit the run passed.\",\"pattern\":\"^([0-9a-f]{40}|[0-9a-f]{64})$\",\"type\":\"string\"},\"run_id\":{\"description\":\"The newest passed run; get_verification takes it.\",\"type\":\"string\"},\"state\":{\"enum\":[\"passed\"],\"type\":\"string\"},\"tests\":{\"description\":\"written_tests with the accepted tests' commit to merge after the builder's; evaluator when the project verifies with its stored evaluator, whose tests are not merged.\",\"oneOf\":[{\"additionalProperties\":false,\"description\":\"The run used the operator's evaluator: the one stored with surla verification set, or the one named on surla verify's command line.\",\"properties\":{\"source\":{\"enum\":[\"evaluator\"],\"type\":\"string\"}},\"required\":[\"source\"],\"type\":\"object\"},{\"additionalProperties\":false,\"description\":\"The accepted tests' commit a passed run used, which the user merges after the builder's commit, and the build's test-writer branch, where this commit was verified.\",\"properties\":{\"branch\":{\"description\":\"The build's test-writer branch, surla/tests-\\u003cn\\u003e, where this commit was verified.\",\"type\":\"string\"},\"commit\":{\"description\":\"Commit Surla recorded the accepted tests at.\",\"pattern\":\"^([0-9a-f]{40}|[0-9a-f]{64})$\",\"type\":\"string\"},\"source\":{\"enum\":[\"written_tests\"],\"type\":\"string\"}},\"required\":[\"commit\",\"branch\",\"source\"],\"type\":\"object\"}],\"type\":\"object\"}},\"required\":[\"run_id\",\"candidate_commit\",\"candidate_branch\",\"tests\",\"base_in_branch\",\"state\"],\"type\":\"object\"},{\"additionalProperties\":false,\"description\":\"The branch checked out in the project folder holds both commits of a passed run of this build, by merge or by a squash commit that holds every file they changed as they have it. Another change can be built.\",\"properties\":{\"state\":{\"enum\":[\"merged\"],\"type\":\"string\"}},\"required\":[\"state\"],\"type\":\"object\"},{\"additionalProperties\":false,\"description\":\"The user dropped this build with drop_build: Surla builds nothing on it, no role has work for it, and another change can be built.\",\"properties\":{\"kept_branches\":{\"description\":\"The build's own branches that exist and hold a commit made after the build's base, where its work stays (git log \\u003cbranch\\u003e shows it); empty when nothing was committed for it.\",\"items\":{\"type\":\"string\"},\"type\":\"array\"},\"state\":{\"enum\":[\"dropped\"],\"type\":\"string\"}},\"required\":[\"kept_branches\",\"state\"],\"type\":\"object\"}],\"type\":\"object\"},\"test_writer\":{\"$ref\":\"#/$defs/TestWriterProgress\",\"description\":\"The test writer's assignment.\"}},\"required\":[\"request_revision\",\"started_at\",\"in_force\",\"builder\",\"test_writer\",\"required_test_count\",\"taking\",\"state\"],\"type\":\"object\"}],\"type\":\"object\"},\"change_id\":{\"description\":\"Change Card identifier.\",\"type\":\"string\"},\"drafted_before_drop\":{\"description\":\"True only when the current agreed revision’s saved record of how its design was drafted predates the current actual drop: start_build would refuse it with drafted_before_drop. It becomes true after that drop and false once the user adopts a revision drafted after the drop, even if its request_revision is unchanged. A waiting proposal does not change this fact; ask the guide to refresh_story and revise_change from that refresh, then adopt the revision before building. False says only that this refusal does not apply, not that every other build check will pass; it is also false without an agreed revision or saved record of its draft. start_build rechecks concurrent changes.\",\"type\":\"boolean\"}},\"required\":[\"change_id\",\"drafted_before_drop\",\"build\"],\"type\":\"object\"}"),
+		ResultSchema:           []byte("{\"$defs\":{\"BuilderProgress\":{\"additionalProperties\":false,\"description\":\"The builder's assignment for one build. It exists from the moment the user starts the build; verification of the build's revision, not the assignment, judges the builder's work.\",\"properties\":{\"read\":{\"description\":\"True once the builder read this assignment in full with get_builder_assignment.\",\"type\":\"boolean\"}},\"required\":[\"read\"],\"title\":\"BuilderProgress\",\"type\":\"object\"},\"TestWriterProgress\":{\"additionalProperties\":false,\"description\":\"Where the test writer's assignment for one build stands.\",\"properties\":{\"read\":{\"description\":\"True once the test writer read this assignment in full with get_test_writer_assignment.\",\"type\":\"boolean\"},\"report\":{\"description\":\"Number of the test writer's latest report of this build: 0 until its first report, and one more with each report_tests_finished.\",\"format\":\"int64\",\"minimum\":0,\"type\":\"integer\"},\"tests\":{\"description\":\"The tests' state: not_used when the project has stored verification settings; otherwise assigned, reported, needs_changes with the number of Surla's findings, accepted with the commit Surla recorded, or could_not_run with the reason and the user's step. Each verdict carries the time Surla reached it.\",\"oneOf\":[{\"additionalProperties\":false,\"description\":\"No test writer is used: the project verifies with the evaluator stored with surla verification set. Every read of a build in such a project shows this, whatever the build recorded.\",\"properties\":{\"state\":{\"enum\":[\"not_used\"],\"type\":\"string\"}},\"required\":[\"state\"],\"type\":\"object\"},{\"additionalProperties\":false,\"description\":\"Surla assigned the tests for this build; the test writer has not reported them finished.\",\"properties\":{\"state\":{\"enum\":[\"assigned\"],\"type\":\"string\"}},\"required\":[\"state\"],\"type\":\"object\"},{\"additionalProperties\":false,\"description\":\"The test writer reported its tests finished at this build's revision. Surla checks them right after each report; its verdict replaces this state.\",\"properties\":{\"state\":{\"enum\":[\"reported\"],\"type\":\"string\"}},\"required\":[\"state\"],\"type\":\"object\"},{\"additionalProperties\":false,\"description\":\"Surla checked the reported tests and found problems the test writer must fix before reporting again, including a working copy that is off its build's branch or holds another build's work. Their text is in get_test_writer_assignment and, for the user, in get_test_findings.\",\"properties\":{\"checked_at\":{\"description\":\"When Surla's check reached this verdict.\",\"format\":\"date-time\",\"type\":\"string\"},\"finding_count\":{\"description\":\"Number of problems Surla found.\",\"format\":\"int64\",\"minimum\":1,\"type\":\"integer\"},\"state\":{\"enum\":[\"needs_changes\"],\"type\":\"string\"}},\"required\":[\"finding_count\",\"checked_at\",\"state\"],\"type\":\"object\"},{\"additionalProperties\":false,\"description\":\"Surla checked the reported tests and recorded them as a commit.\",\"properties\":{\"checked_at\":{\"description\":\"When Surla's check reached this verdict.\",\"format\":\"date-time\",\"type\":\"string\"},\"commit\":{\"description\":\"Full commit ID Surla recorded the accepted tests at (40 or 64 lowercase hex characters).\",\"pattern\":\"^([0-9a-f]{40}|[0-9a-f]{64})$\",\"type\":\"string\"},\"not_judged\":{\"description\":\"What Surla's check did not judge, always the same sentence.\",\"enum\":[\"Surla checked that these tests build into the generated test program and declare every required scenario; it did not judge what they assert.\"],\"type\":\"string\"},\"state\":{\"enum\":[\"accepted\"],\"type\":\"string\"}},\"required\":[\"commit\",\"checked_at\",\"not_judged\",\"state\"],\"type\":\"object\"},{\"additionalProperties\":false,\"description\":\"Surla's check of the reported tests could not run, for a cause the test writer cannot fix; the user's step makes it possible.\",\"properties\":{\"checked_at\":{\"description\":\"When Surla's check stopped.\",\"format\":\"date-time\",\"type\":\"string\"},\"reason\":{\"description\":\"Why the check could not run.\",\"maxLength\":1024,\"minLength\":1,\"type\":\"string\"},\"state\":{\"enum\":[\"could_not_run\"],\"type\":\"string\"},\"step\":{\"description\":\"What the user does so the check can run.\",\"maxLength\":512,\"minLength\":1,\"type\":\"string\"}},\"required\":[\"reason\",\"step\",\"checked_at\",\"state\"],\"type\":\"object\"}],\"type\":\"object\"}},\"required\":[\"tests\",\"read\",\"report\"],\"title\":\"TestWriterProgress\",\"type\":\"object\"}},\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"additionalProperties\":false,\"description\":\"A change's build as get_build reports it.\",\"properties\":{\"build\":{\"description\":\"not_started when the change has no usable build for the current test source; start a new build on the views page. Otherwise started with the usable build.\",\"oneOf\":[{\"additionalProperties\":false,\"description\":\"This change has no usable build: the project's open build is another change's or there is none, or its builder-only build lost the stored verification settings that supplied its tests. Start a new build on the views page.\",\"properties\":{\"state\":{\"enum\":[\"not_started\"],\"type\":\"string\"}},\"required\":[\"state\"],\"type\":\"object\"},{\"additionalProperties\":false,\"description\":\"The usable build the user started for a change, with the builder's assignment and the test writer's progress when one is used. A build started with only the builder remains usable while stored verification settings supply its tests.\",\"properties\":{\"builder\":{\"$ref\":\"#/$defs/BuilderProgress\",\"description\":\"The builder's assignment.\"},\"in_force\":{\"description\":\"True when request_revision is the change's agreed revision, the one in force, as get_build reports it. It stays true while a proposed revision waits and when a refreshed draft is adopted without changing request_revision. If adoption or confirmation changes the agreed request_revision, it becomes false; the assignments stay on the earlier revision until the user builds again.\",\"type\":\"boolean\"},\"request_revision\":{\"description\":\"Change Card revision the user built.\",\"type\":\"string\"},\"required_test_count\":{\"description\":\"Number of finished flows in the agreed Story. Zero means no test of this change's Story was required.\",\"format\":\"int64\",\"minimum\":0,\"type\":\"integer\"},\"started_at\":{\"description\":\"When the user started this build.\",\"format\":\"date-time\",\"type\":\"string\"},\"state\":{\"enum\":[\"started\"],\"type\":\"string\"},\"taking\":{\"description\":\"Whether the user has taken this build: building until a verification of it passes; passed with the commits to merge; merged once the branch checked out in the project folder holds the commits of one passed run, the builder's and, for written tests, the tests'; dropped once the user dropped it. A project has one open build, and another change is built only once it is merged or dropped.\",\"oneOf\":[{\"additionalProperties\":false,\"description\":\"No verification of this build has passed yet, so there is nothing to merge: the builder finishes it, or the user drops it.\",\"properties\":{\"state\":{\"enum\":[\"building\"],\"type\":\"string\"}},\"required\":[\"state\"],\"type\":\"object\"},{\"additionalProperties\":false,\"description\":\"A verification of this build passed and the user has not merged it: the commits of its newest passed run, which the user merges into the branch checked out in the project folder, the builder's first, then the tests'.\",\"properties\":{\"base_in_branch\":{\"description\":\"False when the branch checked out in the project folder no longer holds the commit this build started from, because its history was rewritten: merging these commits brings that history back, and dropping the build and building again starts from the branch as it is.\",\"type\":\"boolean\"},\"candidate_branch\":{\"description\":\"The build's builder branch, surla/build-\\u003cn\\u003e, where this commit was verified.\",\"type\":\"string\"},\"candidate_commit\":{\"description\":\"The builder's commit the run passed.\",\"pattern\":\"^([0-9a-f]{40}|[0-9a-f]{64})$\",\"type\":\"string\"},\"run_id\":{\"description\":\"The newest passed run; get_verification takes it.\",\"type\":\"string\"},\"state\":{\"enum\":[\"passed\"],\"type\":\"string\"},\"tests\":{\"description\":\"written_tests with the accepted tests' commit to merge after the builder's; evaluator when the project verifies with its stored evaluator, whose tests are not merged.\",\"oneOf\":[{\"additionalProperties\":false,\"description\":\"The run used the operator's evaluator: the one stored with surla verification set, or the one named on surla verify's command line.\",\"properties\":{\"source\":{\"enum\":[\"evaluator\"],\"type\":\"string\"}},\"required\":[\"source\"],\"type\":\"object\"},{\"additionalProperties\":false,\"description\":\"The accepted tests' commit a passed run used, which the user merges after the builder's commit, and the build's test-writer branch, where this commit was verified.\",\"properties\":{\"branch\":{\"description\":\"The build's test-writer branch, surla/tests-\\u003cn\\u003e, where this commit was verified.\",\"type\":\"string\"},\"commit\":{\"description\":\"Commit Surla recorded the accepted tests at.\",\"pattern\":\"^([0-9a-f]{40}|[0-9a-f]{64})$\",\"type\":\"string\"},\"source\":{\"enum\":[\"written_tests\"],\"type\":\"string\"}},\"required\":[\"commit\",\"branch\",\"source\"],\"type\":\"object\"}],\"type\":\"object\"}},\"required\":[\"run_id\",\"candidate_commit\",\"candidate_branch\",\"tests\",\"base_in_branch\",\"state\"],\"type\":\"object\"},{\"additionalProperties\":false,\"description\":\"The branch checked out in the project folder holds the commits of one passed run of this build: the builder's and, for written tests, the tests'. Each is held by merge or by a squash commit that holds every file it changed as that commit has it. This build no longer blocks starting another build; start_build's other checks still apply.\",\"properties\":{\"state\":{\"enum\":[\"merged\"],\"type\":\"string\"}},\"required\":[\"state\"],\"type\":\"object\"},{\"additionalProperties\":false,\"description\":\"The user dropped this build with drop_build: Surla builds nothing on it, no role has work for it, and it no longer blocks starting another build. An agreement drafted before the drop still cannot be built: get_build's drafted_before_drop reports it for each change, and start_build refuses it with drafted_before_drop until the guide refreshes the draft and revises the change and the user adopts the revision.\",\"properties\":{\"kept_branches\":{\"description\":\"The build's own branches that exist and hold a commit made after the build's base, where its work stays (git log \\u003cbranch\\u003e shows it); empty when nothing was committed for it.\",\"items\":{\"type\":\"string\"},\"type\":\"array\"},\"state\":{\"enum\":[\"dropped\"],\"type\":\"string\"}},\"required\":[\"kept_branches\",\"state\"],\"type\":\"object\"}],\"type\":\"object\"},\"test_writer\":{\"$ref\":\"#/$defs/TestWriterProgress\",\"description\":\"The test writer's assignment.\"}},\"required\":[\"request_revision\",\"started_at\",\"in_force\",\"builder\",\"test_writer\",\"required_test_count\",\"taking\",\"state\"],\"type\":\"object\"}],\"type\":\"object\"},\"change_id\":{\"description\":\"Change Card identifier.\",\"type\":\"string\"},\"drafted_before_drop\":{\"description\":\"True only when the current agreed revision’s saved record of how its design was drafted predates the current actual drop: start_build would refuse it with drafted_before_drop. It becomes true after that drop and false once the user adopts a revision drafted after the drop, even if its request_revision is unchanged. A waiting proposal does not change this fact; ask the guide to refresh_story and revise_change from that refresh, then adopt the revision before building. False says only that this refusal does not apply, not that every other build check will pass; it is also false without an agreed revision or saved record of its draft. start_build rechecks concurrent changes.\",\"type\":\"boolean\"}},\"required\":[\"change_id\",\"drafted_before_drop\",\"build\"],\"type\":\"object\"}"),
 		ConsumerContract: &genregistry.ConsumerContract{
 			Kind:  "service",
 			Title: "Get Build",
@@ -10367,7 +10367,7 @@ func (declarations registryDeclarations) metadata614() *genregistry.ToolTypeMeta
 	registryText1 := "GetBuildResult"
 	return &genregistry.ToolTypeMetadata{
 		Name:                     &registryText1,
-		SchemaWithoutRootExample: []byte("{\"$defs\":{\"BuilderProgress\":{\"additionalProperties\":false,\"description\":\"The builder's assignment for one build. It exists from the moment the user starts the build; verification of the build's revision, not the assignment, judges the builder's work.\",\"properties\":{\"read\":{\"description\":\"True once the builder read this assignment in full with get_builder_assignment.\",\"type\":\"boolean\"}},\"required\":[\"read\"],\"title\":\"BuilderProgress\",\"type\":\"object\"},\"TestWriterProgress\":{\"additionalProperties\":false,\"description\":\"Where the test writer's assignment for one build stands.\",\"properties\":{\"read\":{\"description\":\"True once the test writer read this assignment in full with get_test_writer_assignment.\",\"type\":\"boolean\"},\"report\":{\"description\":\"Number of the test writer's latest report of this build: 0 until its first report, and one more with each report_tests_finished.\",\"format\":\"int64\",\"minimum\":0,\"type\":\"integer\"},\"tests\":{\"description\":\"The tests' state: not_used when the project has stored verification settings; otherwise assigned, reported, needs_changes with the number of Surla's findings, accepted with the commit Surla recorded, or could_not_run with the reason and the user's step. Each verdict carries the time Surla reached it.\",\"oneOf\":[{\"additionalProperties\":false,\"description\":\"No test writer is used: the project verifies with the evaluator stored with surla verification set. Every read of a build in such a project shows this, whatever the build recorded.\",\"properties\":{\"state\":{\"enum\":[\"not_used\"],\"type\":\"string\"}},\"required\":[\"state\"],\"type\":\"object\"},{\"additionalProperties\":false,\"description\":\"Surla assigned the tests for this build; the test writer has not reported them finished.\",\"properties\":{\"state\":{\"enum\":[\"assigned\"],\"type\":\"string\"}},\"required\":[\"state\"],\"type\":\"object\"},{\"additionalProperties\":false,\"description\":\"The test writer reported its tests finished at this build's revision. Surla checks them right after each report; its verdict replaces this state.\",\"properties\":{\"state\":{\"enum\":[\"reported\"],\"type\":\"string\"}},\"required\":[\"state\"],\"type\":\"object\"},{\"additionalProperties\":false,\"description\":\"Surla checked the reported tests and found problems the test writer must fix before reporting again, including a working copy that is off its build's branch or holds another build's work. Their text is in get_test_writer_assignment and, for the user, in get_test_findings.\",\"properties\":{\"checked_at\":{\"description\":\"When Surla's check reached this verdict.\",\"format\":\"date-time\",\"type\":\"string\"},\"finding_count\":{\"description\":\"Number of problems Surla found.\",\"format\":\"int64\",\"minimum\":1,\"type\":\"integer\"},\"state\":{\"enum\":[\"needs_changes\"],\"type\":\"string\"}},\"required\":[\"finding_count\",\"checked_at\",\"state\"],\"type\":\"object\"},{\"additionalProperties\":false,\"description\":\"Surla checked the reported tests and recorded them as a commit.\",\"properties\":{\"checked_at\":{\"description\":\"When Surla's check reached this verdict.\",\"format\":\"date-time\",\"type\":\"string\"},\"commit\":{\"description\":\"Full commit ID Surla recorded the accepted tests at (40 or 64 lowercase hex characters).\",\"pattern\":\"^([0-9a-f]{40}|[0-9a-f]{64})$\",\"type\":\"string\"},\"not_judged\":{\"description\":\"What Surla's check did not judge, always the same sentence.\",\"enum\":[\"Surla checked that these tests build into the generated test program and declare every required scenario; it did not judge what they assert.\"],\"type\":\"string\"},\"state\":{\"enum\":[\"accepted\"],\"type\":\"string\"}},\"required\":[\"commit\",\"checked_at\",\"not_judged\",\"state\"],\"type\":\"object\"},{\"additionalProperties\":false,\"description\":\"Surla's check of the reported tests could not run, for a cause the test writer cannot fix; the user's step makes it possible.\",\"properties\":{\"checked_at\":{\"description\":\"When Surla's check stopped.\",\"format\":\"date-time\",\"type\":\"string\"},\"reason\":{\"description\":\"Why the check could not run.\",\"maxLength\":1024,\"minLength\":1,\"type\":\"string\"},\"state\":{\"enum\":[\"could_not_run\"],\"type\":\"string\"},\"step\":{\"description\":\"What the user does so the check can run.\",\"maxLength\":512,\"minLength\":1,\"type\":\"string\"}},\"required\":[\"reason\",\"step\",\"checked_at\",\"state\"],\"type\":\"object\"}],\"type\":\"object\"}},\"required\":[\"tests\",\"read\",\"report\"],\"title\":\"TestWriterProgress\",\"type\":\"object\"}},\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"additionalProperties\":false,\"description\":\"A change's build as get_build reports it.\",\"properties\":{\"build\":{\"description\":\"not_started when the change has no usable build for the current test source; start a new build on the views page. Otherwise started with the usable build.\",\"oneOf\":[{\"additionalProperties\":false,\"description\":\"This change has no usable build: the project's open build is another change's or there is none, or its builder-only build lost the stored verification settings that supplied its tests. Start a new build on the views page.\",\"properties\":{\"state\":{\"enum\":[\"not_started\"],\"type\":\"string\"}},\"required\":[\"state\"],\"type\":\"object\"},{\"additionalProperties\":false,\"description\":\"The usable build the user started for a change, with the builder's assignment and the test writer's progress when one is used. A build started with only the builder remains usable while stored verification settings supply its tests.\",\"properties\":{\"builder\":{\"$ref\":\"#/$defs/BuilderProgress\",\"description\":\"The builder's assignment.\"},\"in_force\":{\"description\":\"True when request_revision is the change's agreed revision, the one in force, as get_build reports it. It stays true while a proposed revision waits and when a refreshed draft is adopted without changing request_revision. If adoption or confirmation changes the agreed request_revision, it becomes false; the assignments stay on the earlier revision until the user builds again.\",\"type\":\"boolean\"},\"request_revision\":{\"description\":\"Change Card revision the user built.\",\"type\":\"string\"},\"required_test_count\":{\"description\":\"Number of finished flows in the agreed Story. Zero means no test of this change's Story was required.\",\"format\":\"int64\",\"minimum\":0,\"type\":\"integer\"},\"started_at\":{\"description\":\"When the user started this build.\",\"format\":\"date-time\",\"type\":\"string\"},\"state\":{\"enum\":[\"started\"],\"type\":\"string\"},\"taking\":{\"description\":\"Whether the user has taken this build: building until a verification of it passes; passed with the commits to merge; merged once the branch checked out in the project folder holds both commits of one passed run; dropped once the user dropped it. A project has one open build, and another change is built only once it is merged or dropped.\",\"oneOf\":[{\"additionalProperties\":false,\"description\":\"No verification of this build has passed yet, so there is nothing to merge: the builder finishes it, or the user drops it.\",\"properties\":{\"state\":{\"enum\":[\"building\"],\"type\":\"string\"}},\"required\":[\"state\"],\"type\":\"object\"},{\"additionalProperties\":false,\"description\":\"A verification of this build passed and the user has not merged it: the commits of its newest passed run, which the user merges into the branch checked out in the project folder, the builder's first, then the tests'.\",\"properties\":{\"base_in_branch\":{\"description\":\"False when the branch checked out in the project folder no longer holds the commit this build started from, because its history was rewritten: merging these commits brings that history back, and dropping the build and building again starts from the branch as it is.\",\"type\":\"boolean\"},\"candidate_branch\":{\"description\":\"The build's builder branch, surla/build-\\u003cn\\u003e, where this commit was verified.\",\"type\":\"string\"},\"candidate_commit\":{\"description\":\"The builder's commit the run passed.\",\"pattern\":\"^([0-9a-f]{40}|[0-9a-f]{64})$\",\"type\":\"string\"},\"run_id\":{\"description\":\"The newest passed run; get_verification takes it.\",\"type\":\"string\"},\"state\":{\"enum\":[\"passed\"],\"type\":\"string\"},\"tests\":{\"description\":\"written_tests with the accepted tests' commit to merge after the builder's; evaluator when the project verifies with its stored evaluator, whose tests are not merged.\",\"oneOf\":[{\"additionalProperties\":false,\"description\":\"The run used the operator's evaluator: the one stored with surla verification set, or the one named on surla verify's command line.\",\"properties\":{\"source\":{\"enum\":[\"evaluator\"],\"type\":\"string\"}},\"required\":[\"source\"],\"type\":\"object\"},{\"additionalProperties\":false,\"description\":\"The accepted tests' commit a passed run used, which the user merges after the builder's commit, and the build's test-writer branch, where this commit was verified.\",\"properties\":{\"branch\":{\"description\":\"The build's test-writer branch, surla/tests-\\u003cn\\u003e, where this commit was verified.\",\"type\":\"string\"},\"commit\":{\"description\":\"Commit Surla recorded the accepted tests at.\",\"pattern\":\"^([0-9a-f]{40}|[0-9a-f]{64})$\",\"type\":\"string\"},\"source\":{\"enum\":[\"written_tests\"],\"type\":\"string\"}},\"required\":[\"commit\",\"branch\",\"source\"],\"type\":\"object\"}],\"type\":\"object\"}},\"required\":[\"run_id\",\"candidate_commit\",\"candidate_branch\",\"tests\",\"base_in_branch\",\"state\"],\"type\":\"object\"},{\"additionalProperties\":false,\"description\":\"The branch checked out in the project folder holds both commits of a passed run of this build, by merge or by a squash commit that holds every file they changed as they have it. Another change can be built.\",\"properties\":{\"state\":{\"enum\":[\"merged\"],\"type\":\"string\"}},\"required\":[\"state\"],\"type\":\"object\"},{\"additionalProperties\":false,\"description\":\"The user dropped this build with drop_build: Surla builds nothing on it, no role has work for it, and another change can be built.\",\"properties\":{\"kept_branches\":{\"description\":\"The build's own branches that exist and hold a commit made after the build's base, where its work stays (git log \\u003cbranch\\u003e shows it); empty when nothing was committed for it.\",\"items\":{\"type\":\"string\"},\"type\":\"array\"},\"state\":{\"enum\":[\"dropped\"],\"type\":\"string\"}},\"required\":[\"kept_branches\",\"state\"],\"type\":\"object\"}],\"type\":\"object\"},\"test_writer\":{\"$ref\":\"#/$defs/TestWriterProgress\",\"description\":\"The test writer's assignment.\"}},\"required\":[\"request_revision\",\"started_at\",\"in_force\",\"builder\",\"test_writer\",\"required_test_count\",\"taking\",\"state\"],\"type\":\"object\"}],\"type\":\"object\"},\"change_id\":{\"description\":\"Change Card identifier.\",\"type\":\"string\"},\"drafted_before_drop\":{\"description\":\"True only when the current agreed revision’s saved record of how its design was drafted predates the current actual drop: start_build would refuse it with drafted_before_drop. It becomes true after that drop and false once the user adopts a revision drafted after the drop, even if its request_revision is unchanged. A waiting proposal does not change this fact; ask the guide to refresh_story and revise_change from that refresh, then adopt the revision before building. False says only that this refusal does not apply, not that every other build check will pass; it is also false without an agreed revision or saved record of its draft. start_build rechecks concurrent changes.\",\"type\":\"boolean\"}},\"required\":[\"change_id\",\"drafted_before_drop\",\"build\"],\"type\":\"object\"}"),
+		SchemaWithoutRootExample: []byte("{\"$defs\":{\"BuilderProgress\":{\"additionalProperties\":false,\"description\":\"The builder's assignment for one build. It exists from the moment the user starts the build; verification of the build's revision, not the assignment, judges the builder's work.\",\"properties\":{\"read\":{\"description\":\"True once the builder read this assignment in full with get_builder_assignment.\",\"type\":\"boolean\"}},\"required\":[\"read\"],\"title\":\"BuilderProgress\",\"type\":\"object\"},\"TestWriterProgress\":{\"additionalProperties\":false,\"description\":\"Where the test writer's assignment for one build stands.\",\"properties\":{\"read\":{\"description\":\"True once the test writer read this assignment in full with get_test_writer_assignment.\",\"type\":\"boolean\"},\"report\":{\"description\":\"Number of the test writer's latest report of this build: 0 until its first report, and one more with each report_tests_finished.\",\"format\":\"int64\",\"minimum\":0,\"type\":\"integer\"},\"tests\":{\"description\":\"The tests' state: not_used when the project has stored verification settings; otherwise assigned, reported, needs_changes with the number of Surla's findings, accepted with the commit Surla recorded, or could_not_run with the reason and the user's step. Each verdict carries the time Surla reached it.\",\"oneOf\":[{\"additionalProperties\":false,\"description\":\"No test writer is used: the project verifies with the evaluator stored with surla verification set. Every read of a build in such a project shows this, whatever the build recorded.\",\"properties\":{\"state\":{\"enum\":[\"not_used\"],\"type\":\"string\"}},\"required\":[\"state\"],\"type\":\"object\"},{\"additionalProperties\":false,\"description\":\"Surla assigned the tests for this build; the test writer has not reported them finished.\",\"properties\":{\"state\":{\"enum\":[\"assigned\"],\"type\":\"string\"}},\"required\":[\"state\"],\"type\":\"object\"},{\"additionalProperties\":false,\"description\":\"The test writer reported its tests finished at this build's revision. Surla checks them right after each report; its verdict replaces this state.\",\"properties\":{\"state\":{\"enum\":[\"reported\"],\"type\":\"string\"}},\"required\":[\"state\"],\"type\":\"object\"},{\"additionalProperties\":false,\"description\":\"Surla checked the reported tests and found problems the test writer must fix before reporting again, including a working copy that is off its build's branch or holds another build's work. Their text is in get_test_writer_assignment and, for the user, in get_test_findings.\",\"properties\":{\"checked_at\":{\"description\":\"When Surla's check reached this verdict.\",\"format\":\"date-time\",\"type\":\"string\"},\"finding_count\":{\"description\":\"Number of problems Surla found.\",\"format\":\"int64\",\"minimum\":1,\"type\":\"integer\"},\"state\":{\"enum\":[\"needs_changes\"],\"type\":\"string\"}},\"required\":[\"finding_count\",\"checked_at\",\"state\"],\"type\":\"object\"},{\"additionalProperties\":false,\"description\":\"Surla checked the reported tests and recorded them as a commit.\",\"properties\":{\"checked_at\":{\"description\":\"When Surla's check reached this verdict.\",\"format\":\"date-time\",\"type\":\"string\"},\"commit\":{\"description\":\"Full commit ID Surla recorded the accepted tests at (40 or 64 lowercase hex characters).\",\"pattern\":\"^([0-9a-f]{40}|[0-9a-f]{64})$\",\"type\":\"string\"},\"not_judged\":{\"description\":\"What Surla's check did not judge, always the same sentence.\",\"enum\":[\"Surla checked that these tests build into the generated test program and declare every required scenario; it did not judge what they assert.\"],\"type\":\"string\"},\"state\":{\"enum\":[\"accepted\"],\"type\":\"string\"}},\"required\":[\"commit\",\"checked_at\",\"not_judged\",\"state\"],\"type\":\"object\"},{\"additionalProperties\":false,\"description\":\"Surla's check of the reported tests could not run, for a cause the test writer cannot fix; the user's step makes it possible.\",\"properties\":{\"checked_at\":{\"description\":\"When Surla's check stopped.\",\"format\":\"date-time\",\"type\":\"string\"},\"reason\":{\"description\":\"Why the check could not run.\",\"maxLength\":1024,\"minLength\":1,\"type\":\"string\"},\"state\":{\"enum\":[\"could_not_run\"],\"type\":\"string\"},\"step\":{\"description\":\"What the user does so the check can run.\",\"maxLength\":512,\"minLength\":1,\"type\":\"string\"}},\"required\":[\"reason\",\"step\",\"checked_at\",\"state\"],\"type\":\"object\"}],\"type\":\"object\"}},\"required\":[\"tests\",\"read\",\"report\"],\"title\":\"TestWriterProgress\",\"type\":\"object\"}},\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"additionalProperties\":false,\"description\":\"A change's build as get_build reports it.\",\"properties\":{\"build\":{\"description\":\"not_started when the change has no usable build for the current test source; start a new build on the views page. Otherwise started with the usable build.\",\"oneOf\":[{\"additionalProperties\":false,\"description\":\"This change has no usable build: the project's open build is another change's or there is none, or its builder-only build lost the stored verification settings that supplied its tests. Start a new build on the views page.\",\"properties\":{\"state\":{\"enum\":[\"not_started\"],\"type\":\"string\"}},\"required\":[\"state\"],\"type\":\"object\"},{\"additionalProperties\":false,\"description\":\"The usable build the user started for a change, with the builder's assignment and the test writer's progress when one is used. A build started with only the builder remains usable while stored verification settings supply its tests.\",\"properties\":{\"builder\":{\"$ref\":\"#/$defs/BuilderProgress\",\"description\":\"The builder's assignment.\"},\"in_force\":{\"description\":\"True when request_revision is the change's agreed revision, the one in force, as get_build reports it. It stays true while a proposed revision waits and when a refreshed draft is adopted without changing request_revision. If adoption or confirmation changes the agreed request_revision, it becomes false; the assignments stay on the earlier revision until the user builds again.\",\"type\":\"boolean\"},\"request_revision\":{\"description\":\"Change Card revision the user built.\",\"type\":\"string\"},\"required_test_count\":{\"description\":\"Number of finished flows in the agreed Story. Zero means no test of this change's Story was required.\",\"format\":\"int64\",\"minimum\":0,\"type\":\"integer\"},\"started_at\":{\"description\":\"When the user started this build.\",\"format\":\"date-time\",\"type\":\"string\"},\"state\":{\"enum\":[\"started\"],\"type\":\"string\"},\"taking\":{\"description\":\"Whether the user has taken this build: building until a verification of it passes; passed with the commits to merge; merged once the branch checked out in the project folder holds the commits of one passed run, the builder's and, for written tests, the tests'; dropped once the user dropped it. A project has one open build, and another change is built only once it is merged or dropped.\",\"oneOf\":[{\"additionalProperties\":false,\"description\":\"No verification of this build has passed yet, so there is nothing to merge: the builder finishes it, or the user drops it.\",\"properties\":{\"state\":{\"enum\":[\"building\"],\"type\":\"string\"}},\"required\":[\"state\"],\"type\":\"object\"},{\"additionalProperties\":false,\"description\":\"A verification of this build passed and the user has not merged it: the commits of its newest passed run, which the user merges into the branch checked out in the project folder, the builder's first, then the tests'.\",\"properties\":{\"base_in_branch\":{\"description\":\"False when the branch checked out in the project folder no longer holds the commit this build started from, because its history was rewritten: merging these commits brings that history back, and dropping the build and building again starts from the branch as it is.\",\"type\":\"boolean\"},\"candidate_branch\":{\"description\":\"The build's builder branch, surla/build-\\u003cn\\u003e, where this commit was verified.\",\"type\":\"string\"},\"candidate_commit\":{\"description\":\"The builder's commit the run passed.\",\"pattern\":\"^([0-9a-f]{40}|[0-9a-f]{64})$\",\"type\":\"string\"},\"run_id\":{\"description\":\"The newest passed run; get_verification takes it.\",\"type\":\"string\"},\"state\":{\"enum\":[\"passed\"],\"type\":\"string\"},\"tests\":{\"description\":\"written_tests with the accepted tests' commit to merge after the builder's; evaluator when the project verifies with its stored evaluator, whose tests are not merged.\",\"oneOf\":[{\"additionalProperties\":false,\"description\":\"The run used the operator's evaluator: the one stored with surla verification set, or the one named on surla verify's command line.\",\"properties\":{\"source\":{\"enum\":[\"evaluator\"],\"type\":\"string\"}},\"required\":[\"source\"],\"type\":\"object\"},{\"additionalProperties\":false,\"description\":\"The accepted tests' commit a passed run used, which the user merges after the builder's commit, and the build's test-writer branch, where this commit was verified.\",\"properties\":{\"branch\":{\"description\":\"The build's test-writer branch, surla/tests-\\u003cn\\u003e, where this commit was verified.\",\"type\":\"string\"},\"commit\":{\"description\":\"Commit Surla recorded the accepted tests at.\",\"pattern\":\"^([0-9a-f]{40}|[0-9a-f]{64})$\",\"type\":\"string\"},\"source\":{\"enum\":[\"written_tests\"],\"type\":\"string\"}},\"required\":[\"commit\",\"branch\",\"source\"],\"type\":\"object\"}],\"type\":\"object\"}},\"required\":[\"run_id\",\"candidate_commit\",\"candidate_branch\",\"tests\",\"base_in_branch\",\"state\"],\"type\":\"object\"},{\"additionalProperties\":false,\"description\":\"The branch checked out in the project folder holds the commits of one passed run of this build: the builder's and, for written tests, the tests'. Each is held by merge or by a squash commit that holds every file it changed as that commit has it. This build no longer blocks starting another build; start_build's other checks still apply.\",\"properties\":{\"state\":{\"enum\":[\"merged\"],\"type\":\"string\"}},\"required\":[\"state\"],\"type\":\"object\"},{\"additionalProperties\":false,\"description\":\"The user dropped this build with drop_build: Surla builds nothing on it, no role has work for it, and it no longer blocks starting another build. An agreement drafted before the drop still cannot be built: get_build's drafted_before_drop reports it for each change, and start_build refuses it with drafted_before_drop until the guide refreshes the draft and revises the change and the user adopts the revision.\",\"properties\":{\"kept_branches\":{\"description\":\"The build's own branches that exist and hold a commit made after the build's base, where its work stays (git log \\u003cbranch\\u003e shows it); empty when nothing was committed for it.\",\"items\":{\"type\":\"string\"},\"type\":\"array\"},\"state\":{\"enum\":[\"dropped\"],\"type\":\"string\"}},\"required\":[\"kept_branches\",\"state\"],\"type\":\"object\"}],\"type\":\"object\"},\"test_writer\":{\"$ref\":\"#/$defs/TestWriterProgress\",\"description\":\"The test writer's assignment.\"}},\"required\":[\"request_revision\",\"started_at\",\"in_force\",\"builder\",\"test_writer\",\"required_test_count\",\"taking\",\"state\"],\"type\":\"object\"}],\"type\":\"object\"},\"change_id\":{\"description\":\"Change Card identifier.\",\"type\":\"string\"},\"drafted_before_drop\":{\"description\":\"True only when the current agreed revision’s saved record of how its design was drafted predates the current actual drop: start_build would refuse it with drafted_before_drop. It becomes true after that drop and false once the user adopts a revision drafted after the drop, even if its request_revision is unchanged. A waiting proposal does not change this fact; ask the guide to refresh_story and revise_change from that refresh, then adopt the revision before building. False says only that this refusal does not apply, not that every other build check will pass; it is also false without an agreed revision or saved record of its draft. start_build rechecks concurrent changes.\",\"type\":\"boolean\"}},\"required\":[\"change_id\",\"drafted_before_drop\",\"build\"],\"type\":\"object\"}"),
 		Fields: []*genregistry.ToolFieldMetadata{
 			declarations.field615(),
 			declarations.field616(),
@@ -11068,7 +11068,7 @@ func (registryDeclarations) field646() *genregistry.ToolFieldMetadata {
 // field647 constructs one generated field declaration.
 func (registryDeclarations) field647() *genregistry.ToolFieldMetadata {
 	registryText1 := "object"
-	registryText2 := "Whether the user has taken this build: building until a verification of it passes; passed with the commits to merge; merged once the branch checked out in the project folder holds both commits of one passed run; dropped once the user dropped it. A project has one open build, and another change is built only once it is merged or dropped."
+	registryText2 := "Whether the user has taken this build: building until a verification of it passes; passed with the commits to merge; merged once the branch checked out in the project folder holds the commits of one passed run, the builder's and, for written tests, the tests'; dropped once the user dropped it. A project has one open build, and another change is built only once it is merged or dropped."
 	return &genregistry.ToolFieldMetadata{
 		Path: []*genregistry.ToolFieldPathSegment{
 			{Segment: genregistry.NewToolFieldSegmentField("build")},
@@ -11394,7 +11394,7 @@ func (registryDeclarations) field660() *genregistry.ToolFieldMetadata {
 // field661 constructs one generated field declaration.
 func (registryDeclarations) field661() *genregistry.ToolFieldMetadata {
 	registryText1 := "object"
-	registryText2 := "The branch checked out in the project folder holds both commits of a passed run of this build, by merge or by a squash commit that holds every file they changed as they have it. Another change can be built."
+	registryText2 := "The branch checked out in the project folder holds the commits of one passed run of this build: the builder's and, for written tests, the tests'. Each is held by merge or by a squash commit that holds every file it changed as that commit has it. This build no longer blocks starting another build; start_build's other checks still apply."
 	return &genregistry.ToolFieldMetadata{
 		Path: []*genregistry.ToolFieldPathSegment{
 			{Segment: genregistry.NewToolFieldSegmentField("build")},
@@ -11416,7 +11416,7 @@ func (registryDeclarations) field661() *genregistry.ToolFieldMetadata {
 // field662 constructs one generated field declaration.
 func (registryDeclarations) field662() *genregistry.ToolFieldMetadata {
 	registryText1 := "object"
-	registryText2 := "The user dropped this build with drop_build: Surla builds nothing on it, no role has work for it, and another change can be built."
+	registryText2 := "The user dropped this build with drop_build: Surla builds nothing on it, no role has work for it, and it no longer blocks starting another build. An agreement drafted before the drop still cannot be built: get_build's drafted_before_drop reports it for each change, and start_build refuses it with drafted_before_drop until the guide refreshes the draft and revises the change and the user adopts the revision."
 	return &genregistry.ToolFieldMetadata{
 		Path: []*genregistry.ToolFieldPathSegment{
 			{Segment: genregistry.NewToolFieldSegmentField("build")},
@@ -34976,30 +34976,30 @@ func (registryDeclarations) field2000() *genregistry.ToolFieldMetadata {
 
 // schema2001 constructs one generated schema declaration.
 func (declarations registryDeclarations) schema2001() *genregistry.ToolSchema {
-	registryText1 := "Bring design changes made outside Surla, in the project folder, into your draft. Call it before drafting each new change and whenever you are told a design file changed. Takes no input. It returns the files it took, the files it merged with your edits, and files to correct: correct each in the draft and call update_draft again until none is listed, then call refresh_story."
+	registryText1 := "Bring design changes made outside Surla, in the project folder, into your draft. Call it before drafting each new change and whenever you are told a design file changed. Takes no input. It returns the files it took, the files it merged with your edits, and files to correct, each with the folder that holds it. Correct a file whose folder is draft_folder yourself, in your draft. For a file whose folder is project_folder, tell the user what to correct in the project folder and wait: never edit it. Call update_draft again until no file is listed, then call refresh_story. When it answers that the project or the draft changed while it prepared the update, it brought nothing: call update_draft again. When it answers that it could not read a file, the message names the file and says who corrects it."
 	return &genregistry.ToolSchema{
 		Name:                   "surla.update_draft",
 		Description:            &registryText1,
 		PayloadSchema:          []byte("{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"additionalProperties\":false,\"properties\":{},\"type\":\"object\"}"),
 		ExecutionPayloadSchema: []byte("{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"additionalProperties\":false,\"properties\":{},\"type\":\"object\"}"),
-		ResultSchema:           []byte("{\"$defs\":{\"DraftCorrection\":{\"additionalProperties\":false,\"description\":\"A file of the draft that update_draft could not bring forward from the project folder: the guide corrects it in the draft and calls update_draft again until none is listed, then refresh_story.\",\"properties\":{\"path\":{\"description\":\"Path relative to the draft folder, such as design/types.go or go.mod.\",\"type\":\"string\"},\"problem\":{\"description\":\"What to correct: conflict markers where the draft and the project folder changed the same lines; a file removed on one side and changed on the other; a draft file Go cannot parse, with its line; or a module the project's go.mod requires at another version than the draft's, or that the draft's lacks, including differing replace directives.\",\"type\":\"string\"}},\"required\":[\"path\",\"problem\"],\"title\":\"DraftCorrection\",\"type\":\"object\"}},\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"additionalProperties\":false,\"description\":\"What update_draft brought from the project folder into the guide's draft: design files the draft took as they are there, design files merged with the draft's own edits, and files to correct. The lists describe what this call applied and what remains to correct; empty lists do not prove that every outside design change is present.\",\"properties\":{\"draft_folder\":{\"description\":\"Absolute path of the guide's draft folder.\",\"type\":\"string\"},\"merged\":{\"description\":\"Design files where the project folder's change and the draft's edits merged without conflict, in path order.\",\"items\":{\"type\":\"string\"},\"type\":\"array\"},\"taken\":{\"description\":\"Design files the draft took from the project folder because it had not changed them, in path order.\",\"items\":{\"type\":\"string\"},\"type\":\"array\"},\"to_correct\":{\"description\":\"Files to correct in the draft before refreshing, in path order; empty when none.\",\"items\":{\"$ref\":\"#/$defs/DraftCorrection\"},\"type\":\"array\"}},\"required\":[\"draft_folder\",\"taken\",\"merged\",\"to_correct\"],\"type\":\"object\"}"),
+		ResultSchema:           []byte("{\"$defs\":{\"DraftCorrection\":{\"additionalProperties\":false,\"description\":\"A file to correct before update_draft can bring a change forward, and the folder that holds it. When folder is draft_folder, the guide corrects the file in its draft. When folder is project_folder, the file is the user's own, in the project folder: the guide tells the user what to correct there and waits, and never edits it. The guide calls update_draft again until none is listed, then refresh_story.\",\"properties\":{\"folder\":{\"description\":\"Which folder holds the file to correct: draft_folder is the guide's draft, at the result's draft_folder; project_folder is the user's project folder, which holds the draft.\",\"enum\":[\"draft_folder\",\"project_folder\"],\"type\":\"string\"},\"path\":{\"description\":\"Path relative to the folder that folder names, such as design/types.go or go.mod.\",\"type\":\"string\"},\"problem\":{\"description\":\"What to correct. In the draft: conflict markers where the draft and the project folder changed the same lines; a file removed on one side and changed on the other; a draft file Go cannot parse, with its line; a file whose project change Surla took without merging, or was writing when it stopped, to check that it holds the intended edits once; or a module the project's go.mod requires at another version than the draft's, or that the draft's lacks, including differing replace directives and a differing module path. In the project folder: a design file or go.mod there that cannot be parsed, with its line, or a go.mod that declares no module.\",\"type\":\"string\"}},\"required\":[\"path\",\"folder\",\"problem\"],\"title\":\"DraftCorrection\",\"type\":\"object\"}},\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"additionalProperties\":false,\"description\":\"What update_draft brought from the project folder into the guide's draft: design files the draft took as they are there, design files merged with the draft's own edits, and files to correct, each with the folder that holds it. The lists describe what this call applied and what remains to correct; empty lists do not prove that every outside design change is present.\",\"properties\":{\"draft_folder\":{\"description\":\"Absolute path of the guide's draft folder.\",\"type\":\"string\"},\"merged\":{\"description\":\"Design files where the project folder's change and the draft's edits merged without conflict, in path order.\",\"items\":{\"type\":\"string\"},\"type\":\"array\"},\"taken\":{\"description\":\"Design files the draft took from the project folder because it had not changed them, in path order.\",\"items\":{\"type\":\"string\"},\"type\":\"array\"},\"to_correct\":{\"description\":\"Files to correct before refreshing, each in the folder it names, in path order; empty when none.\",\"items\":{\"$ref\":\"#/$defs/DraftCorrection\"},\"type\":\"array\"}},\"required\":[\"draft_folder\",\"taken\",\"merged\",\"to_correct\"],\"type\":\"object\"}"),
 		ConsumerContract: &genregistry.ConsumerContract{
 			Kind:  "service",
 			Title: "Update Draft",
 			Search: &genregistry.ToolSearchDocument{
-				Length: 72,
-				Terms:  map[string]int{"a": 1, "again": 1, "and": 3, "are": 1, "before": 1, "bring": 1, "call": 3, "change": 1, "changed": 1, "changes": 1, "correct": 2, "design": 2, "draft": 5, "drafting": 1, "each": 2, "edits": 1, "file": 1, "files": 3, "folder": 1, "in": 2, "input": 1, "into": 1, "is": 1, "it": 4, "listed": 1, "made": 1, "merged": 1, "new": 1, "no": 1, "none": 1, "outside": 1, "project": 1, "refresh": 1, "returns": 1, "story": 1, "surla": 2, "takes": 1, "the": 4, "then": 1, "to": 1, "told": 1, "took": 1, "until": 1, "update": 3, "whenever": 1, "with": 1, "you": 1, "your": 2},
+				Length: 151,
+				Terms:  map[string]int{"a": 4, "again": 2, "and": 4, "answers": 2, "are": 1, "before": 1, "bring": 1, "brought": 1, "call": 4, "change": 1, "changed": 2, "changes": 1, "correct": 3, "corrects": 1, "could": 1, "design": 2, "draft": 8, "drafting": 1, "each": 2, "edit": 1, "edits": 1, "file": 6, "files": 3, "folder": 7, "for": 1, "holds": 1, "in": 3, "input": 1, "into": 1, "is": 3, "it": 12, "listed": 1, "made": 1, "merged": 1, "message": 1, "names": 1, "never": 1, "new": 1, "no": 2, "not": 1, "nothing": 1, "or": 1, "outside": 1, "prepared": 1, "project": 4, "read": 1, "refresh": 1, "returns": 1, "says": 1, "story": 1, "surla": 2, "takes": 1, "tell": 1, "that": 3, "the": 11, "then": 1, "to": 2, "told": 1, "took": 1, "until": 1, "update": 5, "user": 1, "wait": 1, "what": 1, "when": 2, "whenever": 1, "while": 1, "who": 1, "whose": 2, "with": 2, "you": 1, "your": 3, "yourself": 1},
 			},
 			RequiresUI: false,
 			TextOnly: &genregistry.TextOnlyToolContract{
 				ExecutionSchema: []byte("{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"additionalProperties\":false,\"properties\":{},\"type\":\"object\"}"),
-				Description:     "Bring design changes made outside Surla, in the project folder, into your draft. Call it before drafting each new change and whenever you are told a design file changed. Takes no input. It returns the files it took, the files it merged with your edits, and files to correct: correct each in the draft and call update_draft again until none is listed, then call refresh_story.",
+				Description:     "Bring design changes made outside Surla, in the project folder, into your draft. Call it before drafting each new change and whenever you are told a design file changed. Takes no input. It returns the files it took, the files it merged with your edits, and files to correct, each with the folder that holds it. Correct a file whose folder is draft_folder yourself, in your draft. For a file whose folder is project_folder, tell the user what to correct in the project folder and wait: never edit it. Call update_draft again until no file is listed, then call refresh_story. When it answers that the project or the draft changed while it prepared the update, it brought nothing: call update_draft again. When it answers that it could not read a file, the message names the file and says who corrects it.",
 				Search: &genregistry.ToolSearchDocument{
-					Length: 72,
-					Terms:  map[string]int{"a": 1, "again": 1, "and": 3, "are": 1, "before": 1, "bring": 1, "call": 3, "change": 1, "changed": 1, "changes": 1, "correct": 2, "design": 2, "draft": 5, "drafting": 1, "each": 2, "edits": 1, "file": 1, "files": 3, "folder": 1, "in": 2, "input": 1, "into": 1, "is": 1, "it": 4, "listed": 1, "made": 1, "merged": 1, "new": 1, "no": 1, "none": 1, "outside": 1, "project": 1, "refresh": 1, "returns": 1, "story": 1, "surla": 2, "takes": 1, "the": 4, "then": 1, "to": 1, "told": 1, "took": 1, "until": 1, "update": 3, "whenever": 1, "with": 1, "you": 1, "your": 2},
+					Length: 151,
+					Terms:  map[string]int{"a": 4, "again": 2, "and": 4, "answers": 2, "are": 1, "before": 1, "bring": 1, "brought": 1, "call": 4, "change": 1, "changed": 2, "changes": 1, "correct": 3, "corrects": 1, "could": 1, "design": 2, "draft": 8, "drafting": 1, "each": 2, "edit": 1, "edits": 1, "file": 6, "files": 3, "folder": 7, "for": 1, "holds": 1, "in": 3, "input": 1, "into": 1, "is": 3, "it": 12, "listed": 1, "made": 1, "merged": 1, "message": 1, "names": 1, "never": 1, "new": 1, "no": 2, "not": 1, "nothing": 1, "or": 1, "outside": 1, "prepared": 1, "project": 4, "read": 1, "refresh": 1, "returns": 1, "says": 1, "story": 1, "surla": 2, "takes": 1, "tell": 1, "that": 3, "the": 11, "then": 1, "to": 2, "told": 1, "took": 1, "until": 1, "update": 5, "user": 1, "wait": 1, "what": 1, "when": 2, "whenever": 1, "while": 1, "who": 1, "whose": 2, "with": 2, "you": 1, "your": 3, "yourself": 1},
 				},
 				PayloadSchema: []byte("{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"additionalProperties\":false,\"properties\":{},\"type\":\"object\"}"),
-				Payload:       declarations.metadata2015(),
+				Payload:       declarations.metadata2016(),
 			},
 			Payload: declarations.metadata2002(),
 			Result:  declarations.metadata2004(),
@@ -35032,7 +35032,7 @@ func (declarations registryDeclarations) metadata2004() *genregistry.ToolTypeMet
 	registryText1 := "UpdateDraftResult"
 	return &genregistry.ToolTypeMetadata{
 		Name:                     &registryText1,
-		SchemaWithoutRootExample: []byte("{\"$defs\":{\"DraftCorrection\":{\"additionalProperties\":false,\"description\":\"A file of the draft that update_draft could not bring forward from the project folder: the guide corrects it in the draft and calls update_draft again until none is listed, then refresh_story.\",\"properties\":{\"path\":{\"description\":\"Path relative to the draft folder, such as design/types.go or go.mod.\",\"type\":\"string\"},\"problem\":{\"description\":\"What to correct: conflict markers where the draft and the project folder changed the same lines; a file removed on one side and changed on the other; a draft file Go cannot parse, with its line; or a module the project's go.mod requires at another version than the draft's, or that the draft's lacks, including differing replace directives.\",\"type\":\"string\"}},\"required\":[\"path\",\"problem\"],\"title\":\"DraftCorrection\",\"type\":\"object\"}},\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"additionalProperties\":false,\"description\":\"What update_draft brought from the project folder into the guide's draft: design files the draft took as they are there, design files merged with the draft's own edits, and files to correct. The lists describe what this call applied and what remains to correct; empty lists do not prove that every outside design change is present.\",\"properties\":{\"draft_folder\":{\"description\":\"Absolute path of the guide's draft folder.\",\"type\":\"string\"},\"merged\":{\"description\":\"Design files where the project folder's change and the draft's edits merged without conflict, in path order.\",\"items\":{\"type\":\"string\"},\"type\":\"array\"},\"taken\":{\"description\":\"Design files the draft took from the project folder because it had not changed them, in path order.\",\"items\":{\"type\":\"string\"},\"type\":\"array\"},\"to_correct\":{\"description\":\"Files to correct in the draft before refreshing, in path order; empty when none.\",\"items\":{\"$ref\":\"#/$defs/DraftCorrection\"},\"type\":\"array\"}},\"required\":[\"draft_folder\",\"taken\",\"merged\",\"to_correct\"],\"type\":\"object\"}"),
+		SchemaWithoutRootExample: []byte("{\"$defs\":{\"DraftCorrection\":{\"additionalProperties\":false,\"description\":\"A file to correct before update_draft can bring a change forward, and the folder that holds it. When folder is draft_folder, the guide corrects the file in its draft. When folder is project_folder, the file is the user's own, in the project folder: the guide tells the user what to correct there and waits, and never edits it. The guide calls update_draft again until none is listed, then refresh_story.\",\"properties\":{\"folder\":{\"description\":\"Which folder holds the file to correct: draft_folder is the guide's draft, at the result's draft_folder; project_folder is the user's project folder, which holds the draft.\",\"enum\":[\"draft_folder\",\"project_folder\"],\"type\":\"string\"},\"path\":{\"description\":\"Path relative to the folder that folder names, such as design/types.go or go.mod.\",\"type\":\"string\"},\"problem\":{\"description\":\"What to correct. In the draft: conflict markers where the draft and the project folder changed the same lines; a file removed on one side and changed on the other; a draft file Go cannot parse, with its line; a file whose project change Surla took without merging, or was writing when it stopped, to check that it holds the intended edits once; or a module the project's go.mod requires at another version than the draft's, or that the draft's lacks, including differing replace directives and a differing module path. In the project folder: a design file or go.mod there that cannot be parsed, with its line, or a go.mod that declares no module.\",\"type\":\"string\"}},\"required\":[\"path\",\"folder\",\"problem\"],\"title\":\"DraftCorrection\",\"type\":\"object\"}},\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"additionalProperties\":false,\"description\":\"What update_draft brought from the project folder into the guide's draft: design files the draft took as they are there, design files merged with the draft's own edits, and files to correct, each with the folder that holds it. The lists describe what this call applied and what remains to correct; empty lists do not prove that every outside design change is present.\",\"properties\":{\"draft_folder\":{\"description\":\"Absolute path of the guide's draft folder.\",\"type\":\"string\"},\"merged\":{\"description\":\"Design files where the project folder's change and the draft's edits merged without conflict, in path order.\",\"items\":{\"type\":\"string\"},\"type\":\"array\"},\"taken\":{\"description\":\"Design files the draft took from the project folder because it had not changed them, in path order.\",\"items\":{\"type\":\"string\"},\"type\":\"array\"},\"to_correct\":{\"description\":\"Files to correct before refreshing, each in the folder it names, in path order; empty when none.\",\"items\":{\"$ref\":\"#/$defs/DraftCorrection\"},\"type\":\"array\"}},\"required\":[\"draft_folder\",\"taken\",\"merged\",\"to_correct\"],\"type\":\"object\"}"),
 		Fields: []*genregistry.ToolFieldMetadata{
 			declarations.field2005(),
 			declarations.field2006(),
@@ -35044,6 +35044,7 @@ func (declarations registryDeclarations) metadata2004() *genregistry.ToolTypeMet
 			declarations.field2012(),
 			declarations.field2013(),
 			declarations.field2014(),
+			declarations.field2015(),
 		},
 	}
 }
@@ -35051,7 +35052,7 @@ func (declarations registryDeclarations) metadata2004() *genregistry.ToolTypeMet
 // field2005 constructs one generated field declaration.
 func (registryDeclarations) field2005() *genregistry.ToolFieldMetadata {
 	registryText1 := "object"
-	registryText2 := "What update_draft brought from the project folder into the guide's draft: design files the draft took as they are there, design files merged with the draft's own edits, and files to correct. The lists describe what this call applied and what remains to correct; empty lists do not prove that every outside design change is present."
+	registryText2 := "What update_draft brought from the project folder into the guide's draft: design files the draft took as they are there, design files merged with the draft's own edits, and files to correct, each with the folder that holds it. The lists describe what this call applied and what remains to correct; empty lists do not prove that every outside design change is present."
 	return &genregistry.ToolFieldMetadata{
 		JSONType:    &registryText1,
 		Description: &registryText2,
@@ -35128,7 +35129,7 @@ func (registryDeclarations) field2010() *genregistry.ToolFieldMetadata {
 // field2011 constructs one generated field declaration.
 func (registryDeclarations) field2011() *genregistry.ToolFieldMetadata {
 	registryText1 := "array"
-	registryText2 := "Files to correct in the draft before refreshing, in path order; empty when none."
+	registryText2 := "Files to correct before refreshing, each in the folder it names, in path order; empty when none."
 	return &genregistry.ToolFieldMetadata{
 		Path: []*genregistry.ToolFieldPathSegment{
 			{Segment: genregistry.NewToolFieldSegmentField("to_correct")},
@@ -35141,7 +35142,7 @@ func (registryDeclarations) field2011() *genregistry.ToolFieldMetadata {
 // field2012 constructs one generated field declaration.
 func (registryDeclarations) field2012() *genregistry.ToolFieldMetadata {
 	registryText1 := "object"
-	registryText2 := "Files to correct in the draft before refreshing, in path order; empty when none."
+	registryText2 := "Files to correct before refreshing, each in the folder it names, in path order; empty when none."
 	return &genregistry.ToolFieldMetadata{
 		Path: []*genregistry.ToolFieldPathSegment{
 			{Segment: genregistry.NewToolFieldSegmentField("to_correct")},
@@ -35155,7 +35156,7 @@ func (registryDeclarations) field2012() *genregistry.ToolFieldMetadata {
 // field2013 constructs one generated field declaration.
 func (registryDeclarations) field2013() *genregistry.ToolFieldMetadata {
 	registryText1 := "string"
-	registryText2 := "Path relative to the draft folder, such as design/types.go or go.mod."
+	registryText2 := "Path relative to the folder that folder names, such as design/types.go or go.mod."
 	return &genregistry.ToolFieldMetadata{
 		Path: []*genregistry.ToolFieldPathSegment{
 			{Segment: genregistry.NewToolFieldSegmentField("to_correct")},
@@ -35170,7 +35171,22 @@ func (registryDeclarations) field2013() *genregistry.ToolFieldMetadata {
 // field2014 constructs one generated field declaration.
 func (registryDeclarations) field2014() *genregistry.ToolFieldMetadata {
 	registryText1 := "string"
-	registryText2 := "What to correct: conflict markers where the draft and the project folder changed the same lines; a file removed on one side and changed on the other; a draft file Go cannot parse, with its line; or a module the project's go.mod requires at another version than the draft's, or that the draft's lacks, including differing replace directives."
+	registryText2 := "Which folder holds the file to correct: draft_folder is the guide's draft, at the result's draft_folder; project_folder is the user's project folder, which holds the draft."
+	return &genregistry.ToolFieldMetadata{
+		Path: []*genregistry.ToolFieldPathSegment{
+			{Segment: genregistry.NewToolFieldSegmentField("to_correct")},
+			{Segment: genregistry.NewToolFieldSegmentElement(&genregistry.ToolCollectionElement{})},
+			{Segment: genregistry.NewToolFieldSegmentField("folder")},
+		},
+		JSONType:    &registryText1,
+		Description: &registryText2,
+	}
+}
+
+// field2015 constructs one generated field declaration.
+func (registryDeclarations) field2015() *genregistry.ToolFieldMetadata {
+	registryText1 := "string"
+	registryText2 := "What to correct. In the draft: conflict markers where the draft and the project folder changed the same lines; a file removed on one side and changed on the other; a draft file Go cannot parse, with its line; a file whose project change Surla took without merging, or was writing when it stopped, to check that it holds the intended edits once; or a module the project's go.mod requires at another version than the draft's, or that the draft's lacks, including differing replace directives and a differing module path. In the project folder: a design file or go.mod there that cannot be parsed, with its line, or a go.mod that declares no module."
 	return &genregistry.ToolFieldMetadata{
 		Path: []*genregistry.ToolFieldPathSegment{
 			{Segment: genregistry.NewToolFieldSegmentField("to_correct")},
@@ -35182,28 +35198,28 @@ func (registryDeclarations) field2014() *genregistry.ToolFieldMetadata {
 	}
 }
 
-// metadata2015 constructs one generated metadata declaration.
-func (declarations registryDeclarations) metadata2015() *genregistry.ToolTypeMetadata {
+// metadata2016 constructs one generated metadata declaration.
+func (declarations registryDeclarations) metadata2016() *genregistry.ToolTypeMetadata {
 	registryText1 := "UpdateDraftPayload"
 	return &genregistry.ToolTypeMetadata{
 		Name:                     &registryText1,
 		SchemaWithoutRootExample: []byte("{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"additionalProperties\":false,\"properties\":{},\"type\":\"object\"}"),
 		Fields: []*genregistry.ToolFieldMetadata{
-			declarations.field2016(),
+			declarations.field2017(),
 		},
 	}
 }
 
-// field2016 constructs one generated field declaration.
-func (registryDeclarations) field2016() *genregistry.ToolFieldMetadata {
+// field2017 constructs one generated field declaration.
+func (registryDeclarations) field2017() *genregistry.ToolFieldMetadata {
 	registryText1 := "object"
 	return &genregistry.ToolFieldMetadata{
 		JSONType: &registryText1,
 	}
 }
 
-// schema2017 constructs one generated schema declaration.
-func (declarations registryDeclarations) schema2017() *genregistry.ToolSchema {
+// schema2018 constructs one generated schema declaration.
+func (declarations registryDeclarations) schema2018() *genregistry.ToolSchema {
 	registryText1 := "Start CP4 verification of a candidate commit on your build's branch for the agreed revision; returns a run_id to read with get_verification. The candidate must be on your branch, descend from the build's base, hold no other build's work and carry exactly the agreed design generate_code wrote; without stored verification settings Surla must also have accepted the build's tests (your assignment says when). A refusal states what Surla found and the goal: put your work right with git and verify again."
 	return &genregistry.ToolSchema{
 		Name:                   "surla.verify_change",
@@ -35227,31 +35243,31 @@ func (declarations registryDeclarations) schema2017() *genregistry.ToolSchema {
 					Terms:  map[string]int{"a": 3, "accepted": 1, "again": 1, "agreed": 2, "also": 1, "and": 3, "assignment": 1, "base": 1, "be": 1, "branch": 2, "build": 4, "candidate": 2, "carry": 1, "change": 2, "code": 1, "commit": 1, "cp4": 1, "descend": 1, "design": 1, "exactly": 1, "for": 1, "found": 1, "from": 1, "generate": 1, "get": 1, "git": 1, "goal": 1, "have": 1, "hold": 1, "id": 1, "must": 2, "no": 1, "of": 1, "on": 2, "other": 1, "put": 1, "read": 1, "refusal": 1, "returns": 1, "revision": 1, "right": 1, "run": 1, "s": 4, "says": 1, "settings": 1, "start": 1, "states": 1, "stored": 1, "surla": 3, "tests": 1, "the": 6, "to": 1, "verification": 3, "verify": 3, "what": 1, "when": 1, "with": 2, "without": 1, "work": 2, "wrote": 1, "your": 4},
 				},
 				PayloadSchema: []byte("{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"additionalProperties\":false,\"description\":\"Names the confirmed Change Card revision and the candidate commit to verify. What is built and which tests run come from the project, never from the caller: the candidate commit's programs and the tests Surla accepted for the user's build of the revision or, with stored verification settings, the programs and evaluator suite those settings name.\",\"properties\":{\"candidate_commit\":{\"description\":\"Full commit ID of the candidate to build and verify (40 or 64 lowercase hex characters).\",\"pattern\":\"^([0-9a-f]{40}|[0-9a-f]{64})$\",\"type\":\"string\"},\"change_id\":{\"description\":\"Confirmed Change Card identifier.\",\"type\":\"string\"},\"request_revision\":{\"description\":\"Current request_revision of the confirmed Change Card.\",\"type\":\"string\"}},\"required\":[\"change_id\",\"request_revision\",\"candidate_commit\"],\"type\":\"object\"}"),
-				Payload:       declarations.metadata2070(),
+				Payload:       declarations.metadata2071(),
 			},
-			Payload: declarations.metadata2018(),
-			Result:  declarations.metadata2023(),
+			Payload: declarations.metadata2019(),
+			Result:  declarations.metadata2024(),
 		},
 	}
 }
 
-// metadata2018 constructs one generated metadata declaration.
-func (declarations registryDeclarations) metadata2018() *genregistry.ToolTypeMetadata {
+// metadata2019 constructs one generated metadata declaration.
+func (declarations registryDeclarations) metadata2019() *genregistry.ToolTypeMetadata {
 	registryText1 := "VerifyChangePayload"
 	return &genregistry.ToolTypeMetadata{
 		Name:                     &registryText1,
 		SchemaWithoutRootExample: []byte("{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"additionalProperties\":false,\"description\":\"Names the confirmed Change Card revision and the candidate commit to verify. What is built and which tests run come from the project, never from the caller: the candidate commit's programs and the tests Surla accepted for the user's build of the revision or, with stored verification settings, the programs and evaluator suite those settings name.\",\"properties\":{\"candidate_commit\":{\"description\":\"Full commit ID of the candidate to build and verify (40 or 64 lowercase hex characters).\",\"pattern\":\"^([0-9a-f]{40}|[0-9a-f]{64})$\",\"type\":\"string\"},\"change_id\":{\"description\":\"Confirmed Change Card identifier.\",\"type\":\"string\"},\"request_revision\":{\"description\":\"Current request_revision of the confirmed Change Card.\",\"type\":\"string\"}},\"required\":[\"change_id\",\"request_revision\",\"candidate_commit\"],\"type\":\"object\"}"),
 		Fields: []*genregistry.ToolFieldMetadata{
-			declarations.field2019(),
 			declarations.field2020(),
 			declarations.field2021(),
 			declarations.field2022(),
+			declarations.field2023(),
 		},
 	}
 }
 
-// field2019 constructs one generated field declaration.
-func (registryDeclarations) field2019() *genregistry.ToolFieldMetadata {
+// field2020 constructs one generated field declaration.
+func (registryDeclarations) field2020() *genregistry.ToolFieldMetadata {
 	registryText1 := "object"
 	registryText2 := "Names the confirmed Change Card revision and the candidate commit to verify. What is built and which tests run come from the project, never from the caller: the candidate commit's programs and the tests Surla accepted for the user's build of the revision or, with stored verification settings, the programs and evaluator suite those settings name."
 	return &genregistry.ToolFieldMetadata{
@@ -35260,8 +35276,8 @@ func (registryDeclarations) field2019() *genregistry.ToolFieldMetadata {
 	}
 }
 
-// field2020 constructs one generated field declaration.
-func (registryDeclarations) field2020() *genregistry.ToolFieldMetadata {
+// field2021 constructs one generated field declaration.
+func (registryDeclarations) field2021() *genregistry.ToolFieldMetadata {
 	registryText1 := "string"
 	registryText2 := "Confirmed Change Card identifier."
 	return &genregistry.ToolFieldMetadata{
@@ -35273,8 +35289,8 @@ func (registryDeclarations) field2020() *genregistry.ToolFieldMetadata {
 	}
 }
 
-// field2021 constructs one generated field declaration.
-func (registryDeclarations) field2021() *genregistry.ToolFieldMetadata {
+// field2022 constructs one generated field declaration.
+func (registryDeclarations) field2022() *genregistry.ToolFieldMetadata {
 	registryText1 := "string"
 	registryText2 := "Current request_revision of the confirmed Change Card."
 	return &genregistry.ToolFieldMetadata{
@@ -35286,8 +35302,8 @@ func (registryDeclarations) field2021() *genregistry.ToolFieldMetadata {
 	}
 }
 
-// field2022 constructs one generated field declaration.
-func (registryDeclarations) field2022() *genregistry.ToolFieldMetadata {
+// field2023 constructs one generated field declaration.
+func (registryDeclarations) field2023() *genregistry.ToolFieldMetadata {
 	registryText1 := "string"
 	registryText2 := "Full commit ID of the candidate to build and verify (40 or 64 lowercase hex characters)."
 	return &genregistry.ToolFieldMetadata{
@@ -35299,14 +35315,13 @@ func (registryDeclarations) field2022() *genregistry.ToolFieldMetadata {
 	}
 }
 
-// metadata2023 constructs one generated metadata declaration.
-func (declarations registryDeclarations) metadata2023() *genregistry.ToolTypeMetadata {
+// metadata2024 constructs one generated metadata declaration.
+func (declarations registryDeclarations) metadata2024() *genregistry.ToolTypeMetadata {
 	registryText1 := "VerifyChangeResult"
 	return &genregistry.ToolTypeMetadata{
 		Name:                     &registryText1,
 		SchemaWithoutRootExample: []byte("{\"$defs\":{\"BuilderVerificationReport\":{\"additionalProperties\":false,\"description\":\"The builder view of a Checkpoint 4 verification report: counts, verdict and repair scenario checks. Holdout details, evidence and logs stay with the evaluator.\",\"properties\":{\"counts\":{\"$ref\":\"#/$defs/VerificationCounts\",\"description\":\"Every declared scenario, counted by outcome.\"},\"passed\":{\"description\":\"The verdict: true only when every declared scenario passed and the suite ran cleanly.\",\"type\":\"boolean\"},\"report_digest\":{\"description\":\"SHA-256 digest of the full report the evaluator saved; approve_merge and surla approve take this digest.\",\"type\":\"string\"},\"scenarios\":{\"description\":\"Every declared scenario in declaration order.\",\"items\":{\"$ref\":\"#/$defs/VerificationScenario\"},\"type\":\"array\"},\"suite_failed\":{\"description\":\"Whether the evaluator suite itself failed or ended abnormally.\",\"type\":\"boolean\"}},\"required\":[\"report_digest\",\"counts\",\"passed\",\"suite_failed\",\"scenarios\"],\"title\":\"BuilderVerificationReport\",\"type\":\"object\"},\"VerificationCheck\":{\"additionalProperties\":false,\"description\":\"One deterministic check of a repair scenario.\",\"properties\":{\"diagnostic\":{\"description\":\"Why the check failed; empty when it passed.\",\"type\":\"string\"},\"name\":{\"description\":\"Check name.\",\"type\":\"string\"},\"passed\":{\"description\":\"Whether the check passed.\",\"type\":\"boolean\"}},\"required\":[\"name\",\"passed\"],\"title\":\"VerificationCheck\",\"type\":\"object\"},\"VerificationCompleted\":{\"additionalProperties\":false,\"description\":\"The run produced a verification report. Its verdict is report.passed.\",\"properties\":{\"environment\":{\"description\":\"Dependency profile the suite ran the candidate with, such as sim.\",\"type\":\"string\"},\"report\":{\"$ref\":\"#/$defs/BuilderVerificationReport\",\"description\":\"The builder view of the report.\"},\"suite_id\":{\"description\":\"Evaluator suite the report was produced by.\",\"type\":\"string\"}},\"required\":[\"suite_id\",\"environment\",\"report\"],\"title\":\"VerificationCompleted\",\"type\":\"object\"},\"VerificationCounts\":{\"additionalProperties\":false,\"description\":\"Every declared scenario, counted by outcome.\",\"properties\":{\"failed\":{\"description\":\"Scenarios whose checks failed.\",\"format\":\"int64\",\"type\":\"integer\"},\"harness_error\":{\"description\":\"Scenarios that could not be evaluated.\",\"format\":\"int64\",\"type\":\"integer\"},\"not_run\":{\"description\":\"Declared scenarios the suite did not report.\",\"format\":\"int64\",\"type\":\"integer\"},\"passed\":{\"description\":\"Scenarios that passed.\",\"format\":\"int64\",\"type\":\"integer\"},\"required\":{\"description\":\"Scenarios the suite declares.\",\"format\":\"int64\",\"type\":\"integer\"}},\"required\":[\"required\",\"passed\",\"failed\",\"not_run\",\"harness_error\"],\"title\":\"VerificationCounts\",\"type\":\"object\"},\"VerificationNotCompleted\":{\"additionalProperties\":false,\"description\":\"The run was accepted but did not complete: a step failed, or its processes ended or were canceled or timed out before it finished. The summary states where it stopped, without command output; full evidence, including any partial report saved while it was being stopped, stays with the evaluator.\",\"properties\":{\"kind\":{\"description\":\"execution_failed when a step failed; interrupted when the run's process ended before it finished.\",\"enum\":[\"execution_failed\",\"interrupted\"],\"type\":\"string\"},\"stage\":{\"description\":\"Where the run stopped.\",\"enum\":[\"checkout\",\"build\",\"describe\",\"suite\",\"report\",\"supervise\"],\"type\":\"string\"},\"summary\":{\"description\":\"Builder-safe description of what stopped the run; never command output.\",\"type\":\"string\"}},\"required\":[\"kind\",\"stage\",\"summary\"],\"title\":\"VerificationNotCompleted\",\"type\":\"object\"},\"VerificationRunning\":{\"additionalProperties\":false,\"description\":\"The run is still building or evaluating the candidate.\",\"properties\":{\"started_at\":{\"description\":\"When the run was accepted.\",\"format\":\"date-time\",\"type\":\"string\"}},\"required\":[\"started_at\"],\"title\":\"VerificationRunning\",\"type\":\"object\"},\"VerificationScenario\":{\"additionalProperties\":false,\"description\":\"One declared scenario as builders see it. Repair scenarios carry their name, checks and environment error; holdout scenarios appear only as holdout-\\u003cn\\u003e with their outcome.\",\"properties\":{\"checks\":{\"description\":\"The repair scenario's checks; empty for holdouts.\",\"items\":{\"$ref\":\"#/$defs/VerificationCheck\"},\"type\":\"array\"},\"error\":{\"description\":\"The repair scenario's environment error; empty for holdouts.\",\"type\":\"string\"},\"id\":{\"description\":\"Scenario name for a repair scenario, or holdout-\\u003cn\\u003e for a holdout.\",\"type\":\"string\"},\"outcome\":{\"description\":\"How the scenario ended.\",\"enum\":[\"passed\",\"failed\",\"not_run\",\"harness_error\"],\"type\":\"string\"}},\"required\":[\"id\",\"outcome\"],\"title\":\"VerificationScenario\",\"type\":\"object\"}},\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"additionalProperties\":false,\"description\":\"One Checkpoint 4 verification run of a candidate commit for a confirmed Change Card revision, and its current state. The run keeps the revision it was started for, so a later confirm_intent does not change it.\",\"properties\":{\"accepted_at\":{\"description\":\"When the run was accepted.\",\"format\":\"date-time\",\"type\":\"string\"},\"candidate_binaries_dir\":{\"description\":\"Absolute folder containing the binaries built by this completed run. Returned only to the user when promotion settings are configured, so the user can publish these exact binaries before approval. Agents never receive this private path.\",\"minLength\":1,\"type\":\"string\"},\"candidate_commit\":{\"description\":\"Candidate commit the run builds and verifies.\",\"type\":\"string\"},\"change_id\":{\"description\":\"Change Card the run verifies.\",\"type\":\"string\"},\"inputs_current\":{\"description\":\"Whether this run's agreed revision and selected tests match the current Change Card and the usable build or the stored verification settings. This observation does not establish the current candidate working tree, deployment or approval.\",\"type\":\"boolean\"},\"request_revision\":{\"description\":\"Change Card revision the run verifies.\",\"type\":\"string\"},\"run_id\":{\"description\":\"Verification run identifier; get_verification takes it.\",\"type\":\"string\"},\"state\":{\"description\":\"Exactly one of running, completed or not_completed.\",\"oneOf\":[{\"additionalProperties\":false,\"properties\":{\"type\":{\"enum\":[\"running\"],\"type\":\"string\"},\"value\":{\"$ref\":\"#/$defs/VerificationRunning\"}},\"required\":[\"type\",\"value\"],\"type\":\"object\"},{\"additionalProperties\":false,\"properties\":{\"type\":{\"enum\":[\"completed\"],\"type\":\"string\"},\"value\":{\"$ref\":\"#/$defs/VerificationCompleted\"}},\"required\":[\"type\",\"value\"],\"type\":\"object\"},{\"additionalProperties\":false,\"properties\":{\"type\":{\"enum\":[\"not_completed\"],\"type\":\"string\"},\"value\":{\"$ref\":\"#/$defs/VerificationNotCompleted\"}},\"required\":[\"type\",\"value\"],\"type\":\"object\"}],\"type\":\"object\"},\"suite_commit\":{\"description\":\"Commit of the tests the run uses: the operator's evaluator, or the tests accepted for the change's build.\",\"type\":\"string\"},\"test_source\":{\"description\":\"Where the run's tests came from, recorded when the run started: evaluator, or written_tests with their commit and a notice.\",\"oneOf\":[{\"additionalProperties\":false,\"description\":\"The run used the operator's evaluator: the one stored with surla verification set, or the one named on surla verify's command line.\",\"properties\":{\"source\":{\"enum\":[\"evaluator\"],\"type\":\"string\"}},\"required\":[\"source\"],\"type\":\"object\"},{\"additionalProperties\":false,\"description\":\"The run used the tests Surla accepted for the change's build, which a separate agent on this machine wrote.\",\"properties\":{\"commit\":{\"description\":\"Commit Surla recorded the accepted tests at; the same as suite_commit.\",\"type\":\"string\"},\"notice\":{\"description\":\"Always: These tests were written by a separate agent on this machine and are not isolated from the builder.\",\"type\":\"string\"},\"source\":{\"enum\":[\"written_tests\"],\"type\":\"string\"}},\"required\":[\"commit\",\"notice\",\"source\"],\"type\":\"object\"}],\"type\":\"object\"}},\"required\":[\"run_id\",\"change_id\",\"request_revision\",\"candidate_commit\",\"suite_commit\",\"accepted_at\",\"inputs_current\",\"test_source\",\"state\"],\"type\":\"object\"}"),
 		Fields: []*genregistry.ToolFieldMetadata{
-			declarations.field2024(),
 			declarations.field2025(),
 			declarations.field2026(),
 			declarations.field2027(),
@@ -35352,12 +35367,13 @@ func (declarations registryDeclarations) metadata2023() *genregistry.ToolTypeMet
 			declarations.field2067(),
 			declarations.field2068(),
 			declarations.field2069(),
+			declarations.field2070(),
 		},
 	}
 }
 
-// field2024 constructs one generated field declaration.
-func (registryDeclarations) field2024() *genregistry.ToolFieldMetadata {
+// field2025 constructs one generated field declaration.
+func (registryDeclarations) field2025() *genregistry.ToolFieldMetadata {
 	registryText1 := "object"
 	registryText2 := "One Checkpoint 4 verification run of a candidate commit for a confirmed Change Card revision, and its current state. The run keeps the revision it was started for, so a later confirm_intent does not change it."
 	return &genregistry.ToolFieldMetadata{
@@ -35366,8 +35382,8 @@ func (registryDeclarations) field2024() *genregistry.ToolFieldMetadata {
 	}
 }
 
-// field2025 constructs one generated field declaration.
-func (registryDeclarations) field2025() *genregistry.ToolFieldMetadata {
+// field2026 constructs one generated field declaration.
+func (registryDeclarations) field2026() *genregistry.ToolFieldMetadata {
 	registryText1 := "string"
 	registryText2 := "Verification run identifier; get_verification takes it."
 	return &genregistry.ToolFieldMetadata{
@@ -35379,8 +35395,8 @@ func (registryDeclarations) field2025() *genregistry.ToolFieldMetadata {
 	}
 }
 
-// field2026 constructs one generated field declaration.
-func (registryDeclarations) field2026() *genregistry.ToolFieldMetadata {
+// field2027 constructs one generated field declaration.
+func (registryDeclarations) field2027() *genregistry.ToolFieldMetadata {
 	registryText1 := "string"
 	registryText2 := "Change Card the run verifies."
 	return &genregistry.ToolFieldMetadata{
@@ -35392,8 +35408,8 @@ func (registryDeclarations) field2026() *genregistry.ToolFieldMetadata {
 	}
 }
 
-// field2027 constructs one generated field declaration.
-func (registryDeclarations) field2027() *genregistry.ToolFieldMetadata {
+// field2028 constructs one generated field declaration.
+func (registryDeclarations) field2028() *genregistry.ToolFieldMetadata {
 	registryText1 := "string"
 	registryText2 := "Change Card revision the run verifies."
 	return &genregistry.ToolFieldMetadata{
@@ -35405,8 +35421,8 @@ func (registryDeclarations) field2027() *genregistry.ToolFieldMetadata {
 	}
 }
 
-// field2028 constructs one generated field declaration.
-func (registryDeclarations) field2028() *genregistry.ToolFieldMetadata {
+// field2029 constructs one generated field declaration.
+func (registryDeclarations) field2029() *genregistry.ToolFieldMetadata {
 	registryText1 := "string"
 	registryText2 := "Candidate commit the run builds and verifies."
 	return &genregistry.ToolFieldMetadata{
@@ -35418,8 +35434,8 @@ func (registryDeclarations) field2028() *genregistry.ToolFieldMetadata {
 	}
 }
 
-// field2029 constructs one generated field declaration.
-func (registryDeclarations) field2029() *genregistry.ToolFieldMetadata {
+// field2030 constructs one generated field declaration.
+func (registryDeclarations) field2030() *genregistry.ToolFieldMetadata {
 	registryText1 := "string"
 	registryText2 := "Commit of the tests the run uses: the operator's evaluator, or the tests accepted for the change's build."
 	return &genregistry.ToolFieldMetadata{
@@ -35431,8 +35447,8 @@ func (registryDeclarations) field2029() *genregistry.ToolFieldMetadata {
 	}
 }
 
-// field2030 constructs one generated field declaration.
-func (registryDeclarations) field2030() *genregistry.ToolFieldMetadata {
+// field2031 constructs one generated field declaration.
+func (registryDeclarations) field2031() *genregistry.ToolFieldMetadata {
 	registryText1 := "string"
 	registryText2 := "When the run was accepted."
 	return &genregistry.ToolFieldMetadata{
@@ -35444,8 +35460,8 @@ func (registryDeclarations) field2030() *genregistry.ToolFieldMetadata {
 	}
 }
 
-// field2031 constructs one generated field declaration.
-func (registryDeclarations) field2031() *genregistry.ToolFieldMetadata {
+// field2032 constructs one generated field declaration.
+func (registryDeclarations) field2032() *genregistry.ToolFieldMetadata {
 	registryText1 := "boolean"
 	registryText2 := "Whether this run's agreed revision and selected tests match the current Change Card and the usable build or the stored verification settings. This observation does not establish the current candidate working tree, deployment or approval."
 	return &genregistry.ToolFieldMetadata{
@@ -35457,8 +35473,8 @@ func (registryDeclarations) field2031() *genregistry.ToolFieldMetadata {
 	}
 }
 
-// field2032 constructs one generated field declaration.
-func (registryDeclarations) field2032() *genregistry.ToolFieldMetadata {
+// field2033 constructs one generated field declaration.
+func (registryDeclarations) field2033() *genregistry.ToolFieldMetadata {
 	registryText1 := "string"
 	registryText2 := "Absolute folder containing the binaries built by this completed run. Returned only to the user when promotion settings are configured, so the user can publish these exact binaries before approval. Agents never receive this private path."
 	return &genregistry.ToolFieldMetadata{
@@ -35470,8 +35486,8 @@ func (registryDeclarations) field2032() *genregistry.ToolFieldMetadata {
 	}
 }
 
-// field2033 constructs one generated field declaration.
-func (registryDeclarations) field2033() *genregistry.ToolFieldMetadata {
+// field2034 constructs one generated field declaration.
+func (registryDeclarations) field2034() *genregistry.ToolFieldMetadata {
 	registryText1 := "object"
 	registryText2 := "Where the run's tests came from, recorded when the run started: evaluator, or written_tests with their commit and a notice."
 	return &genregistry.ToolFieldMetadata{
@@ -35483,8 +35499,8 @@ func (registryDeclarations) field2033() *genregistry.ToolFieldMetadata {
 	}
 }
 
-// field2034 constructs one generated field declaration.
-func (registryDeclarations) field2034() *genregistry.ToolFieldMetadata {
+// field2035 constructs one generated field declaration.
+func (registryDeclarations) field2035() *genregistry.ToolFieldMetadata {
 	registryText1 := "string"
 	return &genregistry.ToolFieldMetadata{
 		Path: []*genregistry.ToolFieldPathSegment{
@@ -35496,8 +35512,8 @@ func (registryDeclarations) field2034() *genregistry.ToolFieldMetadata {
 	}
 }
 
-// field2035 constructs one generated field declaration.
-func (registryDeclarations) field2035() *genregistry.ToolFieldMetadata {
+// field2036 constructs one generated field declaration.
+func (registryDeclarations) field2036() *genregistry.ToolFieldMetadata {
 	registryText1 := "object"
 	registryText2 := "The run used the operator's evaluator: the one stored with surla verification set, or the one named on surla verify's command line."
 	return &genregistry.ToolFieldMetadata{
@@ -35514,8 +35530,8 @@ func (registryDeclarations) field2035() *genregistry.ToolFieldMetadata {
 	}
 }
 
-// field2036 constructs one generated field declaration.
-func (registryDeclarations) field2036() *genregistry.ToolFieldMetadata {
+// field2037 constructs one generated field declaration.
+func (registryDeclarations) field2037() *genregistry.ToolFieldMetadata {
 	registryText1 := "object"
 	registryText2 := "The run used the tests Surla accepted for the change's build, which a separate agent on this machine wrote."
 	return &genregistry.ToolFieldMetadata{
@@ -35532,8 +35548,8 @@ func (registryDeclarations) field2036() *genregistry.ToolFieldMetadata {
 	}
 }
 
-// field2037 constructs one generated field declaration.
-func (registryDeclarations) field2037() *genregistry.ToolFieldMetadata {
+// field2038 constructs one generated field declaration.
+func (registryDeclarations) field2038() *genregistry.ToolFieldMetadata {
 	registryText1 := "string"
 	registryText2 := "Commit Surla recorded the accepted tests at; the same as suite_commit."
 	return &genregistry.ToolFieldMetadata{
@@ -35551,8 +35567,8 @@ func (registryDeclarations) field2037() *genregistry.ToolFieldMetadata {
 	}
 }
 
-// field2038 constructs one generated field declaration.
-func (registryDeclarations) field2038() *genregistry.ToolFieldMetadata {
+// field2039 constructs one generated field declaration.
+func (registryDeclarations) field2039() *genregistry.ToolFieldMetadata {
 	registryText1 := "string"
 	registryText2 := "Always: These tests were written by a separate agent on this machine and are not isolated from the builder."
 	return &genregistry.ToolFieldMetadata{
@@ -35570,8 +35586,8 @@ func (registryDeclarations) field2038() *genregistry.ToolFieldMetadata {
 	}
 }
 
-// field2039 constructs one generated field declaration.
-func (registryDeclarations) field2039() *genregistry.ToolFieldMetadata {
+// field2040 constructs one generated field declaration.
+func (registryDeclarations) field2040() *genregistry.ToolFieldMetadata {
 	registryText1 := "object"
 	registryText2 := "Exactly one of running, completed or not_completed."
 	return &genregistry.ToolFieldMetadata{
@@ -35583,8 +35599,8 @@ func (registryDeclarations) field2039() *genregistry.ToolFieldMetadata {
 	}
 }
 
-// field2040 constructs one generated field declaration.
-func (registryDeclarations) field2040() *genregistry.ToolFieldMetadata {
+// field2041 constructs one generated field declaration.
+func (registryDeclarations) field2041() *genregistry.ToolFieldMetadata {
 	registryText1 := "string"
 	return &genregistry.ToolFieldMetadata{
 		Path: []*genregistry.ToolFieldPathSegment{
@@ -35596,8 +35612,8 @@ func (registryDeclarations) field2040() *genregistry.ToolFieldMetadata {
 	}
 }
 
-// field2041 constructs one generated field declaration.
-func (registryDeclarations) field2041() *genregistry.ToolFieldMetadata {
+// field2042 constructs one generated field declaration.
+func (registryDeclarations) field2042() *genregistry.ToolFieldMetadata {
 	registryText1 := "object"
 	registryText2 := "The run is still building or evaluating the candidate."
 	return &genregistry.ToolFieldMetadata{
@@ -35615,8 +35631,8 @@ func (registryDeclarations) field2041() *genregistry.ToolFieldMetadata {
 	}
 }
 
-// field2042 constructs one generated field declaration.
-func (registryDeclarations) field2042() *genregistry.ToolFieldMetadata {
+// field2043 constructs one generated field declaration.
+func (registryDeclarations) field2043() *genregistry.ToolFieldMetadata {
 	registryText1 := "string"
 	registryText2 := "When the run was accepted."
 	return &genregistry.ToolFieldMetadata{
@@ -35635,8 +35651,8 @@ func (registryDeclarations) field2042() *genregistry.ToolFieldMetadata {
 	}
 }
 
-// field2043 constructs one generated field declaration.
-func (registryDeclarations) field2043() *genregistry.ToolFieldMetadata {
+// field2044 constructs one generated field declaration.
+func (registryDeclarations) field2044() *genregistry.ToolFieldMetadata {
 	registryText1 := "object"
 	registryText2 := "The run produced a verification report. Its verdict is report.passed."
 	return &genregistry.ToolFieldMetadata{
@@ -35654,8 +35670,8 @@ func (registryDeclarations) field2043() *genregistry.ToolFieldMetadata {
 	}
 }
 
-// field2044 constructs one generated field declaration.
-func (registryDeclarations) field2044() *genregistry.ToolFieldMetadata {
+// field2045 constructs one generated field declaration.
+func (registryDeclarations) field2045() *genregistry.ToolFieldMetadata {
 	registryText1 := "string"
 	registryText2 := "Evaluator suite the report was produced by."
 	return &genregistry.ToolFieldMetadata{
@@ -35674,8 +35690,8 @@ func (registryDeclarations) field2044() *genregistry.ToolFieldMetadata {
 	}
 }
 
-// field2045 constructs one generated field declaration.
-func (registryDeclarations) field2045() *genregistry.ToolFieldMetadata {
+// field2046 constructs one generated field declaration.
+func (registryDeclarations) field2046() *genregistry.ToolFieldMetadata {
 	registryText1 := "string"
 	registryText2 := "Dependency profile the suite ran the candidate with, such as sim."
 	return &genregistry.ToolFieldMetadata{
@@ -35694,8 +35710,8 @@ func (registryDeclarations) field2045() *genregistry.ToolFieldMetadata {
 	}
 }
 
-// field2046 constructs one generated field declaration.
-func (registryDeclarations) field2046() *genregistry.ToolFieldMetadata {
+// field2047 constructs one generated field declaration.
+func (registryDeclarations) field2047() *genregistry.ToolFieldMetadata {
 	registryText1 := "object"
 	registryText2 := "The builder view of the report."
 	return &genregistry.ToolFieldMetadata{
@@ -35714,8 +35730,8 @@ func (registryDeclarations) field2046() *genregistry.ToolFieldMetadata {
 	}
 }
 
-// field2047 constructs one generated field declaration.
-func (registryDeclarations) field2047() *genregistry.ToolFieldMetadata {
+// field2048 constructs one generated field declaration.
+func (registryDeclarations) field2048() *genregistry.ToolFieldMetadata {
 	registryText1 := "string"
 	registryText2 := "SHA-256 digest of the full report the evaluator saved; approve_merge and surla approve take this digest."
 	return &genregistry.ToolFieldMetadata{
@@ -35735,8 +35751,8 @@ func (registryDeclarations) field2047() *genregistry.ToolFieldMetadata {
 	}
 }
 
-// field2048 constructs one generated field declaration.
-func (registryDeclarations) field2048() *genregistry.ToolFieldMetadata {
+// field2049 constructs one generated field declaration.
+func (registryDeclarations) field2049() *genregistry.ToolFieldMetadata {
 	registryText1 := "object"
 	registryText2 := "Every declared scenario, counted by outcome."
 	return &genregistry.ToolFieldMetadata{
@@ -35756,8 +35772,8 @@ func (registryDeclarations) field2048() *genregistry.ToolFieldMetadata {
 	}
 }
 
-// field2049 constructs one generated field declaration.
-func (registryDeclarations) field2049() *genregistry.ToolFieldMetadata {
+// field2050 constructs one generated field declaration.
+func (registryDeclarations) field2050() *genregistry.ToolFieldMetadata {
 	registryText1 := "integer"
 	registryText2 := "Scenarios the suite declares."
 	return &genregistry.ToolFieldMetadata{
@@ -35778,8 +35794,8 @@ func (registryDeclarations) field2049() *genregistry.ToolFieldMetadata {
 	}
 }
 
-// field2050 constructs one generated field declaration.
-func (registryDeclarations) field2050() *genregistry.ToolFieldMetadata {
+// field2051 constructs one generated field declaration.
+func (registryDeclarations) field2051() *genregistry.ToolFieldMetadata {
 	registryText1 := "integer"
 	registryText2 := "Scenarios that passed."
 	return &genregistry.ToolFieldMetadata{
@@ -35800,8 +35816,8 @@ func (registryDeclarations) field2050() *genregistry.ToolFieldMetadata {
 	}
 }
 
-// field2051 constructs one generated field declaration.
-func (registryDeclarations) field2051() *genregistry.ToolFieldMetadata {
+// field2052 constructs one generated field declaration.
+func (registryDeclarations) field2052() *genregistry.ToolFieldMetadata {
 	registryText1 := "integer"
 	registryText2 := "Scenarios whose checks failed."
 	return &genregistry.ToolFieldMetadata{
@@ -35822,8 +35838,8 @@ func (registryDeclarations) field2051() *genregistry.ToolFieldMetadata {
 	}
 }
 
-// field2052 constructs one generated field declaration.
-func (registryDeclarations) field2052() *genregistry.ToolFieldMetadata {
+// field2053 constructs one generated field declaration.
+func (registryDeclarations) field2053() *genregistry.ToolFieldMetadata {
 	registryText1 := "integer"
 	registryText2 := "Declared scenarios the suite did not report."
 	return &genregistry.ToolFieldMetadata{
@@ -35844,8 +35860,8 @@ func (registryDeclarations) field2052() *genregistry.ToolFieldMetadata {
 	}
 }
 
-// field2053 constructs one generated field declaration.
-func (registryDeclarations) field2053() *genregistry.ToolFieldMetadata {
+// field2054 constructs one generated field declaration.
+func (registryDeclarations) field2054() *genregistry.ToolFieldMetadata {
 	registryText1 := "integer"
 	registryText2 := "Scenarios that could not be evaluated."
 	return &genregistry.ToolFieldMetadata{
@@ -35866,8 +35882,8 @@ func (registryDeclarations) field2053() *genregistry.ToolFieldMetadata {
 	}
 }
 
-// field2054 constructs one generated field declaration.
-func (registryDeclarations) field2054() *genregistry.ToolFieldMetadata {
+// field2055 constructs one generated field declaration.
+func (registryDeclarations) field2055() *genregistry.ToolFieldMetadata {
 	registryText1 := "boolean"
 	registryText2 := "The verdict: true only when every declared scenario passed and the suite ran cleanly."
 	return &genregistry.ToolFieldMetadata{
@@ -35887,8 +35903,8 @@ func (registryDeclarations) field2054() *genregistry.ToolFieldMetadata {
 	}
 }
 
-// field2055 constructs one generated field declaration.
-func (registryDeclarations) field2055() *genregistry.ToolFieldMetadata {
+// field2056 constructs one generated field declaration.
+func (registryDeclarations) field2056() *genregistry.ToolFieldMetadata {
 	registryText1 := "boolean"
 	registryText2 := "Whether the evaluator suite itself failed or ended abnormally."
 	return &genregistry.ToolFieldMetadata{
@@ -35908,8 +35924,8 @@ func (registryDeclarations) field2055() *genregistry.ToolFieldMetadata {
 	}
 }
 
-// field2056 constructs one generated field declaration.
-func (registryDeclarations) field2056() *genregistry.ToolFieldMetadata {
+// field2057 constructs one generated field declaration.
+func (registryDeclarations) field2057() *genregistry.ToolFieldMetadata {
 	registryText1 := "array"
 	registryText2 := "Every declared scenario in declaration order."
 	return &genregistry.ToolFieldMetadata{
@@ -35929,8 +35945,8 @@ func (registryDeclarations) field2056() *genregistry.ToolFieldMetadata {
 	}
 }
 
-// field2057 constructs one generated field declaration.
-func (registryDeclarations) field2057() *genregistry.ToolFieldMetadata {
+// field2058 constructs one generated field declaration.
+func (registryDeclarations) field2058() *genregistry.ToolFieldMetadata {
 	registryText1 := "object"
 	registryText2 := "Every declared scenario in declaration order."
 	return &genregistry.ToolFieldMetadata{
@@ -35951,8 +35967,8 @@ func (registryDeclarations) field2057() *genregistry.ToolFieldMetadata {
 	}
 }
 
-// field2058 constructs one generated field declaration.
-func (registryDeclarations) field2058() *genregistry.ToolFieldMetadata {
+// field2059 constructs one generated field declaration.
+func (registryDeclarations) field2059() *genregistry.ToolFieldMetadata {
 	registryText1 := "string"
 	registryText2 := "Scenario name for a repair scenario, or holdout-<n> for a holdout."
 	return &genregistry.ToolFieldMetadata{
@@ -35974,8 +35990,8 @@ func (registryDeclarations) field2058() *genregistry.ToolFieldMetadata {
 	}
 }
 
-// field2059 constructs one generated field declaration.
-func (registryDeclarations) field2059() *genregistry.ToolFieldMetadata {
+// field2060 constructs one generated field declaration.
+func (registryDeclarations) field2060() *genregistry.ToolFieldMetadata {
 	registryText1 := "string"
 	registryText2 := "How the scenario ended."
 	return &genregistry.ToolFieldMetadata{
@@ -35997,8 +36013,8 @@ func (registryDeclarations) field2059() *genregistry.ToolFieldMetadata {
 	}
 }
 
-// field2060 constructs one generated field declaration.
-func (registryDeclarations) field2060() *genregistry.ToolFieldMetadata {
+// field2061 constructs one generated field declaration.
+func (registryDeclarations) field2061() *genregistry.ToolFieldMetadata {
 	registryText1 := "array"
 	registryText2 := "The repair scenario's checks; empty for holdouts."
 	return &genregistry.ToolFieldMetadata{
@@ -36020,8 +36036,8 @@ func (registryDeclarations) field2060() *genregistry.ToolFieldMetadata {
 	}
 }
 
-// field2061 constructs one generated field declaration.
-func (registryDeclarations) field2061() *genregistry.ToolFieldMetadata {
+// field2062 constructs one generated field declaration.
+func (registryDeclarations) field2062() *genregistry.ToolFieldMetadata {
 	registryText1 := "object"
 	registryText2 := "The repair scenario's checks; empty for holdouts."
 	return &genregistry.ToolFieldMetadata{
@@ -36044,8 +36060,8 @@ func (registryDeclarations) field2061() *genregistry.ToolFieldMetadata {
 	}
 }
 
-// field2062 constructs one generated field declaration.
-func (registryDeclarations) field2062() *genregistry.ToolFieldMetadata {
+// field2063 constructs one generated field declaration.
+func (registryDeclarations) field2063() *genregistry.ToolFieldMetadata {
 	registryText1 := "string"
 	registryText2 := "Check name."
 	return &genregistry.ToolFieldMetadata{
@@ -36069,8 +36085,8 @@ func (registryDeclarations) field2062() *genregistry.ToolFieldMetadata {
 	}
 }
 
-// field2063 constructs one generated field declaration.
-func (registryDeclarations) field2063() *genregistry.ToolFieldMetadata {
+// field2064 constructs one generated field declaration.
+func (registryDeclarations) field2064() *genregistry.ToolFieldMetadata {
 	registryText1 := "boolean"
 	registryText2 := "Whether the check passed."
 	return &genregistry.ToolFieldMetadata{
@@ -36094,8 +36110,8 @@ func (registryDeclarations) field2063() *genregistry.ToolFieldMetadata {
 	}
 }
 
-// field2064 constructs one generated field declaration.
-func (registryDeclarations) field2064() *genregistry.ToolFieldMetadata {
+// field2065 constructs one generated field declaration.
+func (registryDeclarations) field2065() *genregistry.ToolFieldMetadata {
 	registryText1 := "string"
 	registryText2 := "Why the check failed; empty when it passed."
 	return &genregistry.ToolFieldMetadata{
@@ -36119,8 +36135,8 @@ func (registryDeclarations) field2064() *genregistry.ToolFieldMetadata {
 	}
 }
 
-// field2065 constructs one generated field declaration.
-func (registryDeclarations) field2065() *genregistry.ToolFieldMetadata {
+// field2066 constructs one generated field declaration.
+func (registryDeclarations) field2066() *genregistry.ToolFieldMetadata {
 	registryText1 := "string"
 	registryText2 := "The repair scenario's environment error; empty for holdouts."
 	return &genregistry.ToolFieldMetadata{
@@ -36142,8 +36158,8 @@ func (registryDeclarations) field2065() *genregistry.ToolFieldMetadata {
 	}
 }
 
-// field2066 constructs one generated field declaration.
-func (registryDeclarations) field2066() *genregistry.ToolFieldMetadata {
+// field2067 constructs one generated field declaration.
+func (registryDeclarations) field2067() *genregistry.ToolFieldMetadata {
 	registryText1 := "object"
 	registryText2 := "The run was accepted but did not complete: a step failed, or its processes ended or were canceled or timed out before it finished. The summary states where it stopped, without command output; full evidence, including any partial report saved while it was being stopped, stays with the evaluator."
 	return &genregistry.ToolFieldMetadata{
@@ -36161,8 +36177,8 @@ func (registryDeclarations) field2066() *genregistry.ToolFieldMetadata {
 	}
 }
 
-// field2067 constructs one generated field declaration.
-func (registryDeclarations) field2067() *genregistry.ToolFieldMetadata {
+// field2068 constructs one generated field declaration.
+func (registryDeclarations) field2068() *genregistry.ToolFieldMetadata {
 	registryText1 := "string"
 	registryText2 := "execution_failed when a step failed; interrupted when the run's process ended before it finished."
 	return &genregistry.ToolFieldMetadata{
@@ -36181,8 +36197,8 @@ func (registryDeclarations) field2067() *genregistry.ToolFieldMetadata {
 	}
 }
 
-// field2068 constructs one generated field declaration.
-func (registryDeclarations) field2068() *genregistry.ToolFieldMetadata {
+// field2069 constructs one generated field declaration.
+func (registryDeclarations) field2069() *genregistry.ToolFieldMetadata {
 	registryText1 := "string"
 	registryText2 := "Where the run stopped."
 	return &genregistry.ToolFieldMetadata{
@@ -36201,8 +36217,8 @@ func (registryDeclarations) field2068() *genregistry.ToolFieldMetadata {
 	}
 }
 
-// field2069 constructs one generated field declaration.
-func (registryDeclarations) field2069() *genregistry.ToolFieldMetadata {
+// field2070 constructs one generated field declaration.
+func (registryDeclarations) field2070() *genregistry.ToolFieldMetadata {
 	registryText1 := "string"
 	registryText2 := "Builder-safe description of what stopped the run; never command output."
 	return &genregistry.ToolFieldMetadata{
@@ -36221,23 +36237,23 @@ func (registryDeclarations) field2069() *genregistry.ToolFieldMetadata {
 	}
 }
 
-// metadata2070 constructs one generated metadata declaration.
-func (declarations registryDeclarations) metadata2070() *genregistry.ToolTypeMetadata {
+// metadata2071 constructs one generated metadata declaration.
+func (declarations registryDeclarations) metadata2071() *genregistry.ToolTypeMetadata {
 	registryText1 := "VerifyChangePayload"
 	return &genregistry.ToolTypeMetadata{
 		Name:                     &registryText1,
 		SchemaWithoutRootExample: []byte("{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"additionalProperties\":false,\"description\":\"Names the confirmed Change Card revision and the candidate commit to verify. What is built and which tests run come from the project, never from the caller: the candidate commit's programs and the tests Surla accepted for the user's build of the revision or, with stored verification settings, the programs and evaluator suite those settings name.\",\"properties\":{\"candidate_commit\":{\"description\":\"Full commit ID of the candidate to build and verify (40 or 64 lowercase hex characters).\",\"pattern\":\"^([0-9a-f]{40}|[0-9a-f]{64})$\",\"type\":\"string\"},\"change_id\":{\"description\":\"Confirmed Change Card identifier.\",\"type\":\"string\"},\"request_revision\":{\"description\":\"Current request_revision of the confirmed Change Card.\",\"type\":\"string\"}},\"required\":[\"change_id\",\"request_revision\",\"candidate_commit\"],\"type\":\"object\"}"),
 		Fields: []*genregistry.ToolFieldMetadata{
-			declarations.field2071(),
 			declarations.field2072(),
 			declarations.field2073(),
 			declarations.field2074(),
+			declarations.field2075(),
 		},
 	}
 }
 
-// field2071 constructs one generated field declaration.
-func (registryDeclarations) field2071() *genregistry.ToolFieldMetadata {
+// field2072 constructs one generated field declaration.
+func (registryDeclarations) field2072() *genregistry.ToolFieldMetadata {
 	registryText1 := "object"
 	registryText2 := "Names the confirmed Change Card revision and the candidate commit to verify. What is built and which tests run come from the project, never from the caller: the candidate commit's programs and the tests Surla accepted for the user's build of the revision or, with stored verification settings, the programs and evaluator suite those settings name."
 	return &genregistry.ToolFieldMetadata{
@@ -36246,8 +36262,8 @@ func (registryDeclarations) field2071() *genregistry.ToolFieldMetadata {
 	}
 }
 
-// field2072 constructs one generated field declaration.
-func (registryDeclarations) field2072() *genregistry.ToolFieldMetadata {
+// field2073 constructs one generated field declaration.
+func (registryDeclarations) field2073() *genregistry.ToolFieldMetadata {
 	registryText1 := "string"
 	registryText2 := "Confirmed Change Card identifier."
 	return &genregistry.ToolFieldMetadata{
@@ -36259,8 +36275,8 @@ func (registryDeclarations) field2072() *genregistry.ToolFieldMetadata {
 	}
 }
 
-// field2073 constructs one generated field declaration.
-func (registryDeclarations) field2073() *genregistry.ToolFieldMetadata {
+// field2074 constructs one generated field declaration.
+func (registryDeclarations) field2074() *genregistry.ToolFieldMetadata {
 	registryText1 := "string"
 	registryText2 := "Current request_revision of the confirmed Change Card."
 	return &genregistry.ToolFieldMetadata{
@@ -36272,8 +36288,8 @@ func (registryDeclarations) field2073() *genregistry.ToolFieldMetadata {
 	}
 }
 
-// field2074 constructs one generated field declaration.
-func (registryDeclarations) field2074() *genregistry.ToolFieldMetadata {
+// field2075 constructs one generated field declaration.
+func (registryDeclarations) field2075() *genregistry.ToolFieldMetadata {
 	registryText1 := "string"
 	registryText2 := "Full commit ID of the candidate to build and verify (40 or 64 lowercase hex characters)."
 	return &genregistry.ToolFieldMetadata{

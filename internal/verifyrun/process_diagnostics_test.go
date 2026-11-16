@@ -120,7 +120,7 @@ func TestProcessDiagnosticsStayPrivateInSavedRuns(t *testing.T) {
 			}
 			t.Setenv(fakeModeEnv, "workspace-preparation")
 			root, runID := t.TempDir(), NewRunID()
-			_, err := Start(root, Request{RunID: runID, Owner: "alice", ChangeID: "chg", AcceptedAt: time.Now().UTC(), Timeout: 20 * time.Second, Plan: plan}, []string{os.Args[0]}, nil)
+			_, err := Start(root, Request{RunID: runID, Owner: "alice", ChangeID: "chg", AcceptedAt: time.Now().UTC(), Timeout: 20 * time.Second, Plan: plan}, []string{os.Args[0]}, nil, t.TempDir())
 			require.NoError(t, err)
 			require.NoError(t, Wait(root, runID))
 			_, state, err := Read(root, runID)

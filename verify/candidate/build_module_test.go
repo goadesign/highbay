@@ -36,7 +36,7 @@ func TestBuildModuleWorkspacePolicy(t *testing.T) {
 				module, want = "app", filepath.Join(physical, "go.work")
 			}
 			out := filepath.Join(t.TempDir(), "artifact")
-			spec := BuildSpec{SourceDir: root, ModuleDir: filepath.Join(root, module), Package: ".",
+			spec := BuildSpec{BuildCacheDir: t.TempDir(), SourceDir: root, ModuleDir: filepath.Join(root, module), Package: ".",
 				Out: out, GOROOT: t.TempDir(), ModCache: t.TempDir(), WorkDir: t.TempDir(), LogFile: filepath.Join(t.TempDir(), "build.log")}
 			calls := 0
 			run := func(cmd *exec.Cmd) error {
@@ -85,7 +85,7 @@ func TestBuildModulePreservesValidationAndFailure(t *testing.T) {
 	root := writeModule(t, map[string]string{"eval/go.mod": "module example.invalid/eval\n"})
 	out := filepath.Join(t.TempDir(), "suite")
 	require.NoError(t, os.WriteFile(out, []byte("previous"), 0o600))
-	spec := BuildSpec{SourceDir: root, ModuleDir: filepath.Join(root, "eval"), Package: ".", Out: out,
+	spec := BuildSpec{BuildCacheDir: t.TempDir(), SourceDir: root, ModuleDir: filepath.Join(root, "eval"), Package: ".", Out: out,
 		GOROOT: t.TempDir(), ModCache: t.TempDir(), WorkDir: t.TempDir(), LogFile: filepath.Join(t.TempDir(), "build.log")}
 	cause := errors.New("compiler unavailable")
 	calls := 0

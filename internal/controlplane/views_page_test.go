@@ -415,7 +415,7 @@ again.close();
 
 	t.Run("written tests approval without promotion settings shows both commits and hides automatically when tests change", func(t *testing.T) {
 		reportDir := t.TempDir()
-		cp := newBuildControlPlane(t, Options{
+		cp := newBuildControlPlane(t, Options{BuildCacheDir: t.TempDir(),
 			WorkspaceDir:    t.TempDir(),
 			RunsDir:         t.TempDir(),
 			SurlaVersion:    testSurlaVersion,

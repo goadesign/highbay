@@ -190,7 +190,7 @@ var _ = Service("orders", func() {
 	gitCommitAll(t, project, "Create the release approval project")
 	cardsDir := t.TempDir()
 	team := &promotionTeamFixture{}
-	opts := controlplane.Options{
+	opts := controlplane.Options{BuildCacheDir: t.TempDir(),
 		CardsDir: cardsDir, WorkspaceDir: project,
 		Verification: &controlplane.VerificationConfig{Plan: verify.Plan{SuiteCommit: suiteCommit}},
 		Team:         &controlplane.TeamBinding{Owner: "alice@example.com", Service: team},
