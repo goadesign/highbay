@@ -25,16 +25,26 @@ func seedArchitectureRefreshForTest(
 	key := storyRefreshKey{
 		owner: principal.ID, workspaceDir: workspace, workspaceDev: device, workspaceIno: inode,
 	}
-	serviceID := "service:" + systemName
-	agentID := "agent:" + systemName + ".refund_agent"
 	cp.storyRefreshMu.Lock()
 	op := cp.storyRefreshes[key]
-	op.architecture = &savedArchitecture{
-		DesignDigest: op.snapshotDigest, SystemName: systemName,
+	op.architecture = architectureSnapshotForTest(op.snapshotDigest, systemName)
+	cp.storyRefreshMu.Unlock()
+	refreshed, err := cp.GetStoryRefresh(caller)
+	require.NoError(t, err)
+	return refreshed
+}
+
+// architectureSnapshotForTest supplies the saved consumer fixture. The retained
+// real evaluation journey compares every field against the exact design input.
+func architectureSnapshotForTest(digest, systemName string) *savedArchitecture {
+	serviceID := "service:" + systemName
+	agentID := "agent:" + systemName + ".refund_agent"
+	return &savedArchitecture{
+		DesignDigest: digest, SystemName: systemName,
 		Containers: []*gensurla.C4ContainerItem{
 			{ID: serviceID, Name: systemName, Kind: "service", Description: "Public Orders HTTP and MCP service"},
-			{ID: agentID, Name: "refund_agent", Kind: "agent", Description: "Executes durable order refund workflows"},
 			{ID: "toolset:refund_tools", Name: "refund_tools", Kind: "toolset", Description: "Order lookup and payment refund tools"},
+			{ID: agentID, Name: "refund_agent", Kind: "agent", Description: "Executes durable order refund workflows"},
 		},
 		Edges: []*gensurla.C4EdgeItem{
 			{FromID: serviceID, ToID: agentID, Protocol: "Goa-AI Agent Workflow"},
@@ -44,15 +54,11 @@ func seedArchitectureRefreshForTest(
 			AgentID: agentID, MaxExecutionSeconds: 120, MaxToolCalls: 6, MaxRecoveryTurns: 2,
 		}},
 		Tools: []*gensurla.ToolContractItem{{
-			ID: systemName + ".refund_agent/refund_tools.issue_refund", Toolset: "refund_agent.refund_tools",
+			ID: systemName + ".refund_agent/refund_tools.issue_refund", Toolset: systemName + ".refund_tools",
 			Name: "issue_refund", Description: "Issue a payment refund",
-			ArgsSchema:     `{"type":"object","properties":{"order_id":{"type":"string"}},"required":["order_id"]}`,
-			ReturnSchema:   `{"type":"object","properties":{"status":{"type":"string"}},"required":["status"]}`,
+			ArgsSchema:     "{\n          \"$schema\": \"https://json-schema.org/draft/2020-12/schema\",\n          \"additionalProperties\": false,\n          \"properties\": {\n            \"order_id\": {\n              \"type\": \"string\"\n            }\n          },\n          \"required\": [\n            \"order_id\"\n          ],\n          \"type\": \"object\"\n        }",
+			ReturnSchema:   "{\n          \"$schema\": \"https://json-schema.org/draft/2020-12/schema\",\n          \"additionalProperties\": false,\n          \"properties\": {\n            \"status\": {\n              \"type\": \"string\"\n            }\n          },\n          \"required\": [\n            \"status\"\n          ],\n          \"type\": \"object\"\n        }",
 			InjectedFields: []string{"tenant_id"}, RequiresConfirmation: true,
 		}},
 	}
-	cp.storyRefreshMu.Unlock()
-	refreshed, err := cp.GetStoryRefresh(caller)
-	require.NoError(t, err)
-	return refreshed
 }
