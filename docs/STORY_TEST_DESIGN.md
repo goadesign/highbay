@@ -77,8 +77,10 @@ from the project folder; the reference describes this under
 [`refresh_story`](REFERENCE.md#refresh_story). Before drafting a change, and
 when told that a design file changed in the project folder, the guide calls
 [`update_draft`](REFERENCE.md#update_draft), which brings design changes made
-outside Surla into the draft and lists the files the guide must correct. The
-guide then asks the server to evaluate the draft:
+outside Surla into the draft and lists files to correct, each with the folder
+that holds it. The guide corrects a file in its draft; for a file in the project
+folder, it tells the user what to correct and waits. It calls `update_draft`
+again until no file is listed, then asks the server to evaluate the draft:
 
 1. `refresh_story` reads the draft's `go.mod`, `go.sum` and the Go files
    under `design/`, never the rest of the project. It starts their evaluation

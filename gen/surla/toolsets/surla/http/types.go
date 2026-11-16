@@ -1122,8 +1122,8 @@ type (
 		// Design files where the project folder's change and the draft's edits merged
 		// without conflict, in path order.
 		Merged []string `json:"merged"`
-		// Files to correct in the draft before refreshing, in path order; empty when
-		// none.
+		// Files to correct before refreshing, each in the folder it names, in path
+		// order; empty when none.
 		ToCorrect []*DraftCorrectionTransport `json:"to_correct"`
 	}
 	// VerifyChangePayloadTransport is the internal JSON transport type for VerifyChangePayload.
@@ -1550,13 +1550,22 @@ type (
 	// decode + validation (missing-field detection) before transforming into
 	// the public tool type.
 	DraftCorrectionTransport struct {
-		// Path relative to the draft folder, such as design/types.go or go.mod.
+		// Path relative to the folder that folder names, such as design/types.go or
+		// go.mod.
 		Path *string `json:"path"`
-		// What to correct: conflict markers where the draft and the project folder
-		// changed the same lines; a file removed on one side and changed on the other;
-		// a draft file Go cannot parse, with its line; or a module the project's
-		// go.mod requires at another version than the draft's, or that the draft's
-		// lacks, including differing replace directives.
+		// Which folder holds the file to correct: draft_folder is the guide's draft,
+		// at the result's draft_folder; project_folder is the user's project folder,
+		// which holds the draft.
+		Folder *string `json:"folder"`
+		// What to correct. In the draft: conflict markers where the draft and the
+		// project folder changed the same lines; a file removed on one side and
+		// changed on the other; a draft file Go cannot parse, with its line; a file
+		// whose project change Surla took without merging, or was writing when it
+		// stopped, to check that it holds the intended edits once; or a module the
+		// project's go.mod requires at another version than the draft's, or that the
+		// draft's lacks, including differing replace directives and a differing module
+		// path. In the project folder: a design file or go.mod there that cannot be
+		// parsed, with its line, or a go.mod that declares no module.
 		Problem *string `json:"problem"`
 	}
 	// ExampleItemTransport is the internal JSON transport type for ExampleItemTransport.
@@ -1740,9 +1749,10 @@ type (
 		RequiredTestCount *int `json:"required_test_count"`
 		// Whether the user has taken this build: building until a verification of it
 		// passes; passed with the commits to merge; merged once the branch checked out
-		// in the project folder holds both commits of one passed run; dropped once the
-		// user dropped it. A project has one open build, and another change is built
-		// only once it is merged or dropped.
+		// in the project folder holds the commits of one passed run, the builder's
+		// and, for written tests, the tests'; dropped once the user dropped it. A
+		// project has one open build, and another change is built only once it is
+		// merged or dropped.
 		Taking *BuildTaking `json:"taking"`
 	}
 	// StoryActorItemTransport is the internal JSON transport type for StoryActorItemTransport.
