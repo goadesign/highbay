@@ -2252,7 +2252,7 @@ export function bootstrapViewsPage() {
         : review?.approval.state === "blocked"
         ? <Button onClick={() => focusResult("#surla-cp5-approve-blocked")}>Review requirements</Button>
         : review?.approval.state === "unverified" ? <span>Check current approval.</span> : <span>Read current requirements.</span>;
-    } else if (editorOpen && editorStage === "build" && activeEditor !== null) {
+    } else if (cp1Active && editorStage === "build" && activeEditor !== null) {
       const build = buildChangeId === activeEditor.card.change_id && buildSnapshot?.state === "started"
         ? buildSnapshot : null;
       if (buildReadError !== null) {
@@ -2270,7 +2270,10 @@ export function bootstrapViewsPage() {
           attention = "The verified commits are merged.";
           next = <span>Describe the next change when you are ready.</span>;
         } else if (tests.state === "needs_changes") {
-          attention = "Surla returned the tests for correction.";
+          const needs = teamFactsError() === null ? (teamSnapshot?.roles ?? []).filter((role) => role.state === "needs_you") : [];
+          attention = needs.length > 0 ? needs.map(teamAttentionText).join(". ")
+            : teamFactsError() !== null || teamSnapshot === null || teamSnapshot.roles.some((role) => role.state === "unknown" || role.state === "error")
+            ? "Team status unknown." : "Nothing now.";
           next = <span>The test writer corrects the tests and reports again.</span>;
         } else if (tests.state === "could_not_run") {
           attention = "The tests could not be checked.";
@@ -2839,7 +2842,8 @@ export function bootstrapViewsPage() {
     syncNavRegion();
     syncTraceRegion();
     syncOpenedCheckStatus();
-    statusEl.hidden = activeResult?.kind === "cp5-approval" && [
+    statusEl.hidden = (activeResult?.kind === "cp5-approval" ||
+      editorOpen && editorStage === "build" && (!activeResult || activeResult.kind === "cp1-incoming-card")) && [
       "Review the build and its next step. The agreed details stay available below.",
       "Review the saved check before approving it.",
       "Showing the saved verification result.",

@@ -127,6 +127,7 @@ type (
 		RequiredTests     int    `json:"required_tests"`
 		Next              string `json:"next"`
 		NextControls      int    `json:"next_controls"`
+		NextInline        bool   `json:"next_inline"`
 		FindingsVisible   bool   `json:"findings_visible"`
 		FindingsBounded   bool   `json:"findings_bounded"`
 		KeyboardReachable bool   `json:"keyboard_reachable"`

@@ -828,6 +828,7 @@ html { scroll-padding-block-start: calc(var(--surla-frame-height, 120px) + 16px)
 .surla-build-required-tests li { display: grid; gap: 4px; padding-block: 12px; border-block-end: 1px solid var(--border); overflow-wrap: anywhere; }
 .surla-build-finding-text { max-block-size: 20rem; overflow: auto; overflow-wrap: anywhere; }
 .surla-build-test-review .surla-details > summary { display: list-item; padding: 4px 0; }
+#surla-build-details > summary, #surla-agreement-details > summary { display: list-item; padding: 4px 0; }
 .surla-build-test-review :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 @media (max-width: 720px) {
   .surla-build-test-evidence { grid-template-columns: minmax(0, 1fr); gap: 16px; }
@@ -860,6 +861,12 @@ html { scroll-padding-block-start: calc(var(--surla-frame-height, 120px) + 16px)
   }
   .surla-frame-next dt { margin: 0; }
   .surla-frame-next dd { justify-content: flex-end; }
+  .surla-frame-next:not(:has(button)) {
+    position: static; padding: 0; border: 0; background: transparent;
+    grid-template-columns: minmax(0, 1fr); gap: 4px;
+  }
+  .surla-frame-next:not(:has(button)) dd { justify-content: flex-start; }
+  body:has(.surla-frame-next:not(:has(button))) { padding-block-end: 24px; }
   .surla-frame-action-binding { white-space: nowrap; }
   .surla-approval-binding { gap: 12px; }
   .surla-flow-evidence, .surla-flow-evidence tbody { display: block; }

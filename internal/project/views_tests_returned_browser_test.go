@@ -120,6 +120,7 @@ func TestTestsReturnedAtDesktopAndPhoneWidth(t *testing.T) {
 			assert.LessOrEqual(t, view.DocumentWidth, view.Width, state+"/"+view.Name)
 			assert.Equal(t, 2, view.RequiredTests, state)
 			assert.Zero(t, view.NextControls, state)
+			assert.True(t, view.NextInline, state)
 			assert.True(t, view.FindingsBounded, state)
 			assert.True(t, view.KeyboardReachable, state)
 			assert.True(t, view.FooterReserved, state)

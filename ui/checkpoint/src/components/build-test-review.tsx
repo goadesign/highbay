@@ -63,13 +63,14 @@ export function TestWriterFacts({ build, findingTexts, loading, error, disabled,
           <ul id="surla-build-required-tests" className="surla-build-required-tests">
             {build.required_tests.map((test) => <li key={test.scenario}>
               <strong>{test.story}</strong><span>Flow <code>{test.flow_key}</code></span>
-              <span>Scenario <code>{test.scenario}</code></span><span>Hook <code>{test.hook}</code></span>
+              <span>Scenario <code>{test.scenario}</code></span>
             </li>)}
           </ul>}
       </section>
       {tests.state === "needs_changes" ? <div id="surla-build-findings" ref={findings} aria-busy={open && loading}>
         <h5>What Surla told the test writer</h5>
-        <p>{findingCount} {findingCount === 1 ? "finding" : "findings"}</p>
+        {!open || loading || error !== null || findingTexts === null ?
+          <p>{findingCount} {findingCount === 1 ? "finding" : "findings"}</p> : null}
         {open && findingCount > 0 ? <>
           {loading ? <p role="status">Reading findings…</p> : null}
           {error !== null ? <Alert id="surla-build-findings-error" variant="destructive" role="alert">
@@ -80,7 +81,7 @@ export function TestWriterFacts({ build, findingTexts, loading, error, disabled,
               {error !== null ? "Retry findings read" : "Read findings"}
             </Button> : null}
           {!loading && error === null && findingTexts !== null ? <details className="surla-details" open>
-            <summary>Read {findingTexts.length} findings</summary>
+            <summary>{findingTexts.length} {findingTexts.length === 1 ? "finding" : "findings"}</summary>
             <div className="surla-build-finding-text" tabIndex={0} role="region" aria-label="Surla's findings">
               <ul>{findingTexts.map((text, index) => <li key={index}>{text}</li>)}</ul>
             </div>

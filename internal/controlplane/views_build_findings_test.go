@@ -19,7 +19,10 @@ import (
 // text for each start, using only the existing simulated-copy boundary.
 func pageGenerationFindings(t *testing.T) (*pageServer, *gensurla.ChangeCardResult) {
 	t.Helper()
-	team := &teamServiceFixture{snapshot: pageTeamSnapshot("working")}
+	snapshot := pageTeamSnapshot("working")
+	snapshot.Roles[1].Attention = "none"
+	snapshot.Roles[2].State, snapshot.Roles[2].Attention = "working", "none"
+	team := &teamServiceFixture{snapshot: snapshot}
 	cp := newBuildControlPlane(t, Options{Team: &TeamBinding{Owner: pageOwner, Service: team}})
 	cp.changesWait = 400 * time.Millisecond
 	cp.changesPoll = 20 * time.Millisecond
@@ -33,6 +36,13 @@ func pageGenerationFindings(t *testing.T) (*pageServer, *gensurla.ChangeCardResu
 	card := saveBuildStoryCard(t, cp, "chg", StatusConfirmed, refundStory("Refund over the limit"))
 	ps := startPageServer(t, cp)
 	ps.act("make-builder-copy", func() { makeBuildFixtureBuilderCopy(t, cp) })
+	ps.act("team-needs", func() {
+		team.mu.Lock()
+		defer team.mu.Unlock()
+		snapshot := pageTeamSnapshot("needs_you")
+		snapshot.Roles[2].State, snapshot.Roles[2].Attention = "needs_you", "permission"
+		team.snapshot = snapshot
+	})
 	return ps, card
 }
 
@@ -52,7 +62,10 @@ page.$("#surla-nav-build").click();
 await until(() => page.text("#surla-frame-next").includes("The test writer corrects the tests and reports again."), "Next did not name the writer's next step");
 const required = page.$("#surla-build-required-tests");
 expect(required && required.children.length === 1, "the saved build's single finished flow was not shown");
-expect(required.textContent.includes("Refunds") && required.textContent.includes("refund-over-limit") && required.textContent.includes("refund_over_limit") && required.textContent.includes("RefundOverLimit"), "required test identity was not preserved");
+expect(required.textContent.includes("Refunds") && required.textContent.includes("refund-over-limit") && required.textContent.includes("refund_over_limit"), "required test identity was not preserved");
+expect(!required.textContent.includes("RefundOverLimit") && page.text("#surla-build-details").includes("RefundOverLimit"), "the hook was not kept in build details");
+expect(page.text(".surla-frame-attention dd") === "Nothing now.", "a returned verdict alone requested user attention");
+expect(page.text("#surla-build-findings").split("1 finding").length === 2, "the finding count is repeated");
 expect(!required.textContent.includes("disputed-chargeback"), "an unfinished flow became a required test");
 expect(!page.$("#surla-frame-next button"), "the writer's correction became a user control");
 expect(page.$("#surla-build-findings .surla-build-finding-text").getAttribute("tabindex") === "0", "long findings are not keyboard reachable");
@@ -63,6 +76,15 @@ expect(assignment.status === 200, "the test writer could not read its own assign
 await until(() => page.text("#surla-build-test-writer").includes("assignment read; findings to address"), "the read observation did not update");
 expect(page.sent("GET", "/changes/chg/build/findings").length === reads, "an assignment read refetched an unchanged verdict");
 expect(!page.$("#surla-frame-next button"), "assignment read invented a user decision");
+await control(origin, "act", { key: "team-needs" });
+await until(() => page.text(".surla-frame-attention dd").includes("Builder needs you") && page.text(".surla-frame-attention dd").includes("Test writer needs you"), "the owner's two Team requests were not both shown");
+expect(!page.$("#surla-frame-next button"), "Team attention invented a verdict control");
+const draft = page.$('textarea[data-example-id="check_01"][data-field="scenario"]');
+expect(draft, "the agreement example editor was lost");
+page.type(draft, "Unsaved requirement while reviewing tests");
+page.$("#surla-nav-cp4").click();
+await until(() => page.$("#surla-frame-next button"), "Check navigation retained Build instructions");
+expect(page.$('textarea[data-example-id="check_01"][data-field="scenario"]').value === "Unsaved requirement while reviewing tests", "Check navigation discarded unsaved agreement edits");
 page.close();
 `)
 }

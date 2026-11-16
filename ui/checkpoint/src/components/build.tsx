@@ -624,7 +624,7 @@ function BuildProgress({ build }: { build: StartedBuild }) {
   }
   switch (tests.state) {
     case "needs_changes":
-      return <p id="surla-build-state">Sent back to the test writer. It fixes this and reports again; nothing is yours to do unless it asks you in its pane.</p>;
+      return null;
     case "accepted":
       return <p id="surla-build-state">Tests accepted. The builder finishes the code and asks Surla to check it. Your next decision: approve, after the check passes.</p>;
     case "reported":
@@ -663,6 +663,11 @@ function BuildDetails({ card, build, children }: { card: ChangeCardResult; build
         <>
           <p>Built revision: <code>{build.request_revision}</code></p>
           <p>Build started: <time dateTime={build.started_at}>{build.started_at}</time></p>
+          {build.required_tests.length > 0 ? <dl id="surla-build-test-hooks">
+            {build.required_tests.map((test) => <React.Fragment key={test.scenario}>
+              <dt>Scenario <code>{test.scenario}</code></dt><dd>Hook <code>{test.hook}</code></dd>
+            </React.Fragment>)}
+          </dl> : null}
           <p>{build.required_test_count === 0 ? "No tests of this change’s Story were required."
             : build.required_test_count + " required Story " + (build.required_test_count === 1 ? "test." : "tests.")}</p>
           {tests?.state !== "not_used" ? <p>Test report number: {build.test_writer.report}</p> : null}

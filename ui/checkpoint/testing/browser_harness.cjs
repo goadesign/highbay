@@ -694,7 +694,7 @@ async function approvalScenario(input, facts, views) {
         approve_enabled: action !== null && !action.disabled,
         focus_visible: action !== null && document.activeElement === action && style.outlineStyle !== "none" && parseFloat(style.outlineWidth) >= 2,
         commands: Array.from(stage.querySelectorAll(".surla-approval-basis .surla-build-merge pre"), (node) => node.textContent),
-        footer_reserved: !phone || padding >= footer.getBoundingClientRect().height,
+        footer_reserved: !phone || getComputedStyle(footer).position !== "fixed" || padding >= footer.getBoundingClientRect().height,
         overflowing: [stage, ...stage.querySelectorAll("*"), footer].filter((node) => {
           if (!node.getClientRects().length || node.closest("pre") || getComputedStyle(node).clipPath === "inset(50%)") return false;
           const box = node.getBoundingClientRect();
@@ -754,9 +754,10 @@ async function testReviewScenario(input, facts, views) {
       return { width: innerWidth, document_width: document.documentElement.scrollWidth,
         required_tests: document.querySelectorAll("#surla-build-required-tests > li").length,
         next: next?.innerText, next_controls: next?.querySelectorAll("button").length,
+        next_inline: getComputedStyle(next).position !== "fixed",
         findings_visible: region !== null && box.width > 0,
         findings_bounded: region === null || box.height <= parseFloat(getComputedStyle(document.documentElement).fontSize) * 20 + 1,
-        footer_reserved: !phone || getComputedStyle(next).position === "fixed" && parseFloat(getComputedStyle(document.body).paddingBottom) >= next.getBoundingClientRect().height };
+        footer_reserved: !phone || getComputedStyle(next).position !== "fixed" || parseFloat(getComputedStyle(document.body).paddingBottom) >= next.getBoundingClientRect().height };
     }.toString() + ")()");
     measured.keyboard_reachable = true;
     if (measured.findings_visible) {
