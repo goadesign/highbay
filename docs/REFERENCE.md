@@ -197,15 +197,19 @@ saves a free port that no other project of this account saved, running or not,
 and keeps it. No caller chooses an
 identity, address, token or storage path.
 
-Live starts and verifications share this project's compiled Go packages in
-`build-cache/`. Every operation still checks out the selected commits, builds
-new output binaries, measures their digests and runs its test program; a cache
-hit is not a passed verification. Scratch, staging, checkouts, outputs and
+Through the project server, Story evaluation and generation during refreshes
+and initialization,
+test-report checks, live starts and verifications share this project's compiled
+Go packages in `build-cache/`. Every operation still processes its current
+inputs and runs its checks; a cache hit is never a passed check. Live starts
+and verifications still check out the selected commits, build new output
+binaries and measure their digests, and verification runs its test program.
+Scratch, staging, checkouts, outputs and
 evidence stay in each operation's work directory; reports are published in
 the project's shared `reports/` folder. The cache survives Stop, server restart
 and pruning individual runs. Go maintains its cache entries. Use it on a local
 filesystem on one machine; sharing it across machines or a network filesystem
-is unsupported. When no live start or verification is running, you can delete
+is unsupported. When none of these compiler operations is running, you can delete
 `build-cache/`; the next operation recreates it and builds cold.
 
 The retained packages are trusted compiler inputs, like the Go module cache,
@@ -2370,7 +2374,7 @@ requests and on pushes to the branches its `push` trigger names: `main`, and
 an integration branch for as long as pull requests target one. The short
 checks are:
 
-- Vet and short race tests of each Go module: the root,
+- Vet and short tests of each Go module: the root,
   [`story`](../story/README.md), `examples/orders` and `examples/orders-eval`.
   The other modules run on macOS. The root module's short tests run in five
   jobs. **Go (., page tests)** runs only `internal/controlplane` and
@@ -2397,25 +2401,40 @@ checks are:
   through the page job. Full macOS execution remains in the root control-plane
   job on pushes to `main`, `team-start` and `builder-copy`, nightly runs and
   manual full runs, alongside the Linux full job. Each of
-  these jobs saves and restores its own Go build and module cache key,
-  qualified by operating system, architecture, Go version and root dependency
-  files. The two Linux groups keep separate owner keys, and the macOS platform
-  subset has its own key. The module-matrix jobs use a 12-minute backstop to
-  finish cold checks and post-run cache saves, with the same three-minute
-  package alarms, race detection and vet checks.
-  Pushes to `main`, `team-start` and `builder-copy` run all five jobs with the
-  same three-minute package alarm and
-  save missing caches after success, making them available to pull requests
-  targeting those branches. Each job targets five minutes with an exact
-  cache hit; cold durations are recorded separately. On a miss, its job
-  summary says `dependency cache miss: this run compiles all dependencies`.
-  Dependency or toolchain changes, or cache expiry or eviction, can cause a
-  miss; a base-branch push does not guarantee a hit for every pull request.
-  Pull-request short checks may reuse Go's cached test results for packages
-  whose inputs did not change. On pushes to those three branches, the short
-  checks use `-count=1` to execute their selected tests again. Full suites
-  also always use `-count=1`. These runs still reuse Go's build cache, which
-  avoids recompiling unchanged code.
+  these jobs restores the shared native compiler archives described below.
+  The module-matrix jobs retain a 12-minute cold-run backstop and the same
+  three-minute package alarms. Package groups and their platform coverage are
+  unchanged by cache selection.
+
+  One **Full / root-remaining** job per operating system owns publication of
+  the module and compiler archives after successful checks. Other jobs restore
+  them. A cold producer prepares the declared race/plain test compilation,
+  CGO-free product dependencies and pinned Goa generator before running its
+  full tests. No arbitrary first-finishing shard can save an incomplete common
+  closure. Archive keys include the exact Go toolchain, operating system and
+  architecture, module inputs, starter templates and published fixture versions;
+  compiler keys also include the hosted image version and race profile. Module
+  archives remain separate from compiled-package archives. Base-branch pushes
+  populate archives that pull requests can restore; private project state and
+  credentials are never cached.
+
+  Each job summary reports module and build archive hits separately. Missing
+  inputs, dependency/toolchain/template/image changes, expiry or eviction can
+  cause a cold or partial restore; those durations are reported separately.
+  Cache restoration never skips a check. Both pull-request short checks and
+  full suites use `-count=1`, while retaining Go's compiled-package cache.
+
+  Race instrumentation follows
+  [the production concurrency owners](../.github/race-packages.txt).
+  [The syntax check](../.github/scripts/racecheck/main.go) rejects handwritten
+  production goroutines, synchronization imports or channel operations outside
+  that list, and rejects listed owners that no longer contain them. It checks
+  platform-specific files too, excluding generated code, test programs and
+  fixtures. Other packages run without instrumentation. Generation, starter,
+  whole-journey and Docker e2e jobs retain `-race` until comparable warm
+  measurements justify a change. Verification's orchestration package has no
+  production concurrency; its supervisor, candidate and suite owners retain
+  race coverage.
 - A Linux build and vet of the root module, once without build tags and once
   with each of `e2e`, `scaffold`, `herdr`, `browser` and `docker`, and the
   Linux short tests.

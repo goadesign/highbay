@@ -197,7 +197,10 @@ func (c *ControlPlane) InitProject(
 	if err != nil {
 		return nil, failInitFault(span, "resolve cards directory failed", err)
 	}
-	gen := c.makeInitGenerator(filepath.Join(physCards, "designeval"))
+	gen, err := c.makeInitGenerator(filepath.Join(physCards, "designeval"))
+	if err != nil {
+		return nil, failInitFault(span, "prepare starter compiler failed", err)
+	}
 	run := c.initRunner
 	if run == nil {
 		run = scaffold.RunCommand
@@ -450,11 +453,14 @@ func (e foreignStagingError) Error() string {
 
 // makeInitGenerator returns a fresh scaffold.Generator for one `InitProject`
 // call without closing or sharing `c.evaluator`.
-func (c *ControlPlane) makeInitGenerator(defaultTempParent string) scaffold.Generator {
+func (c *ControlPlane) makeInitGenerator(defaultTempParent string) (scaffold.Generator, error) {
 	if c.newGenerator != nil {
-		return c.newGenerator()
+		return c.newGenerator(), nil
 	}
-	return designeval.NewEvaluatorInDir(defaultTempParent)
+	if c.buildCacheDir != "" {
+		return designeval.NewEvaluatorWithCache(defaultTempParent, c.buildCacheDir)
+	}
+	return designeval.NewEvaluatorInDir(defaultTempParent), nil
 }
 
 // validateInitDirName checks that name is a single direct child directory name

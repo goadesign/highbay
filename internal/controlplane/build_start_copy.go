@@ -50,17 +50,30 @@ func (c *ControlPlane) openBuildCopy(
 	if !ok {
 		return nil, errors.New("the test writer's working copy does not exist")
 	}
-	return c.newWriterBuildCopy(wc, layout), nil
+	return c.newWriterBuildCopy(wc, layout)
 }
 
 // newWriterBuildCopy binds an opened test-writer working copy to its checker
 // and suite layout.
-func (c *ControlPlane) newWriterBuildCopy(wc testwriter.WorkingCopy, layout scaffold.Layout) buildCopy {
+func (c *ControlPlane) newWriterBuildCopy(
+	wc testwriter.WorkingCopy, layout scaffold.Layout,
+) (buildCopy, error) {
+	workDir := filepath.Join(c.cards.dir, "test-writer")
+	var checker *testwriter.Checker
+	if c.buildCacheDir != "" {
+		var err error
+		checker, err = testwriter.NewCheckerWithCache(c.evaluator, workDir, c.buildCacheDir)
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		checker = testwriter.NewChecker(c.evaluator, workDir)
+	}
 	return writerBuildCopy{
 		copy:    wc,
-		checker: testwriter.NewChecker(c.evaluator, filepath.Join(c.cards.dir, "test-writer")),
+		checker: checker,
 		suite:   testwriter.Suite{Module: scaffold.SuiteDir, Command: layout.GeneratedSuiteCommand()},
-	}
+	}, nil
 }
 
 // Project returns the project inside the copy, including a repository subfolder.

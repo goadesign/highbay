@@ -32,8 +32,8 @@ type (
 		// initStageDir is the operator-owned staging parent directory for
 		// init_project.
 		initStageDir string
-		// evalWorkDir is the operator-owned temporary parent directory for
-		// designeval.Evaluator.
+		// evalWorkDir is protected temporary storage for reading the operator's
+		// Go proxy configuration before binding the project server.
 		evalWorkDir string
 		// buildCacheDir holds compiled packages retained across project operations.
 		buildCacheDir string

@@ -25,6 +25,7 @@ import (
 	genmcpsurla "github.com/goadesign/surla/gen/mcp_surla"
 	gensurla "github.com/goadesign/surla/gen/surla"
 	"github.com/goadesign/surla/internal/controlplane"
+	"github.com/goadesign/surla/internal/testmodule"
 	"github.com/goadesign/surla/internal/verify"
 	"github.com/goadesign/surla/internal/verifyrun"
 )
@@ -85,6 +86,7 @@ func TestOrdersLiveCopyAppliesADraftThroughTheProjectServer(t *testing.T) {
 
 	opts, err := serveOptions(os.Environ(), workspace)
 	require.NoError(t, err)
+	opts.BuildCacheDir = testmodule.CompilerCache(t)
 	cp, err := controlplane.New(opts)
 	require.NoError(t, err)
 	// Registered after the temporary directories, so it runs before they

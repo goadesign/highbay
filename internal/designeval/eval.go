@@ -148,10 +148,11 @@ type (
 
 	// Evaluator evaluates design snapshots for one owner, such as a
 	// ControlPlane or one `surla preview` or `surla diff` command. Its
-	// evaluations share one private build workspace (the evaluator build's
-	// TMPDIR and GOCACHE), so later evaluations reuse compiled
-	// dependencies. The workspace is created by the first admitted Evaluate,
-	// never by NewEvaluator, and Close removes it. Evaluate may be called
+	// evaluations share one private build workspace for compiler scratch. By
+	// default the package cache lives there too; NewEvaluatorWithCache instead
+	// selects retained storage supplied by the owner. The first admitted call
+	// creates the workspace; construction creates nothing. Close removes the
+	// workspace while preserving a supplied cache. Evaluate may be called
 	// concurrently. After Close, Evaluate fails and creates nothing. The owner
 	// must call Close; an unclosed Evaluator leaves its workspace behind.
 	Evaluator struct {
@@ -171,6 +172,10 @@ type (
 		mu sync.Mutex
 		// workDir is the shared build workspace, empty until first use.
 		workDir string
+		// buildCacheDir is an explicitly supplied compiler cache, or empty when
+		// the evaluator owns a private cache inside workDir. Close never removes
+		// an explicitly supplied cache.
+		buildCacheDir string
 		// tempParentDir is the owner's temporary storage parent; empty uses
 		// the host default for embedded callers without a workspace.
 		tempParentDir string
@@ -250,6 +255,26 @@ func NewEvaluatorInDir(tempParentDir string) *Evaluator {
 	return e
 }
 
+// NewEvaluatorWithCache returns an evaluator with temporary files under
+// tempParentDir and a separate, owner-retained Go package cache. The cache
+// must be an absolute path outside the evaluator's temporary files and its
+// callers' source folders. The owner supplies trusted compiler storage on a
+// local filesystem; it may be shared by concurrent builds. Construction creates
+// no files, and Close removes only this evaluator's scratch, never the cache.
+// An empty or unresolved cache path is rejected before any evaluation starts.
+func NewEvaluatorWithCache(tempParentDir, buildCacheDir string) (*Evaluator, error) {
+	if !filepath.IsAbs(buildCacheDir) {
+		return nil, errors.New("design compiler build cache directory must be absolute")
+	}
+	cache, err := abspath.EvalMissing(buildCacheDir)
+	if err != nil {
+		return nil, fmt.Errorf("resolve design compiler build cache directory: %w", err)
+	}
+	e := NewEvaluatorInDir(tempParentDir)
+	e.buildCacheDir = cache
+	return e, nil
+}
+
 // Evaluate evaluates the Goa/Goa-AI/Model/Story design in a module snapshot
 // and returns its declarations, C4 topology, agent policies, tool contracts,
 // and domain Stories. It runs until it finishes, ctx ends, or Close is called,
@@ -267,7 +292,7 @@ func (e *Evaluator) Evaluate(ctx context.Context, files map[string]string) (Resu
 	var res Result
 	err := e.admitted(ctx, func(ctx context.Context, workDir string) error {
 		var err error
-		res, err = evaluate(ctx, files, workDir)
+		res, err = evaluate(ctx, files, workDir, e.buildCacheDir)
 		return err
 	})
 	return res, err
@@ -292,7 +317,7 @@ func (e *Evaluator) Generate(ctx context.Context, files map[string]string) (map[
 	var out map[string][]byte
 	err := e.admitted(ctx, func(ctx context.Context, workDir string) error {
 		var err error
-		out, err = generate(ctx, files, workDir)
+		out, err = generate(ctx, files, workDir, e.buildCacheDir)
 		return err
 	})
 	return out, err
@@ -340,12 +365,14 @@ func (e *stuckGroupError) Unwrap() error {
 }
 
 // generate runs one generation in a temporary directory of its own, with
-// workDir as the build's shared TMPDIR and GOCACHE, and returns the generated
-// files keyed by module-relative path. The program learns from files whether
+// workDir as the build's TMPDIR and buildCacheDir as its package cache. It returns
+// generated files keyed by module-relative path. The program learns whether
 // the module has an acceptance package.
-func generate(ctx context.Context, files map[string]string, workDir string) (map[string][]byte, error) {
+func generate(
+	ctx context.Context, files map[string]string, workDir, buildCacheDir string,
+) (map[string][]byte, error) {
 	var out map[string][]byte
-	goa, err := runProgram(ctx, files, workDir,
+	goa, err := runProgram(ctx, files, workDir, buildCacheDir,
 		func(map[string]bool) map[string]string {
 			return generateProgram(HasAcceptancePackage(files))
 		},
@@ -477,10 +504,12 @@ func readSources(stateDir string) (_ map[string][]byte, err error) {
 }
 
 // evaluate runs one evaluation in a temporary directory of its own, with
-// workDir as the build's shared TMPDIR and GOCACHE.
-func evaluate(ctx context.Context, files map[string]string, workDir string) (Result, error) {
+// workDir as the build's TMPDIR and buildCacheDir as its package cache.
+func evaluate(
+	ctx context.Context, files map[string]string, workDir, buildCacheDir string,
+) (Result, error) {
 	var res Result
-	_, err := runProgram(ctx, files, workDir, evaluateProgram,
+	_, err := runProgram(ctx, files, workDir, buildCacheDir, evaluateProgram,
 		func(stateDir string) []string {
 			return []string{"-out", filepath.Join(stateDir, "evaluated.json")}
 		},
@@ -504,13 +533,17 @@ func evaluate(ctx context.Context, files map[string]string, workDir string) (Res
 // with candidate.Run and args(stateDir), each in its own process group
 // (runInGroup). collect then reads the program's output from stateDir.
 // Everything happens in a temporary directory of its own, with workDir as the
-// build's shared TMPDIR and GOCACHE; releaseTemp removes it, or keeps it after
-// a stuck build or program. It returns the Goa module the build selected, and
-// a *buildError when the program does not compile.
+// build's TMPDIR and buildCacheDir as its package cache. releaseTemp removes
+// scratch, or keeps it after a stuck build or program. It returns the selected
+// Goa module, and a *buildError when the program does not compile.
 func runProgram(
-	ctx context.Context, files map[string]string, workDir string, program harnessProgram,
+	ctx context.Context, files map[string]string, workDir, buildCacheDir string,
+	program harnessProgram,
 	args func(stateDir string) []string, collect func(stateDir string) error,
 ) (goa listedModule, err error) {
+	if buildCacheDir == "" {
+		buildCacheDir = filepath.Join(workDir, "gocache")
+	}
 	phase := phaseCheckFiles
 	defer func() {
 		if err != nil {
@@ -576,7 +609,7 @@ func runProgram(
 		return goa, fmt.Errorf("resolve compiler module cache: %w", err)
 	}
 	paths := diagnosticPaths{
-		source: filepath.Join(buildDir, "target"), temporary: tmpDir, work: workDir,
+		source: filepath.Join(buildDir, "target"), temporary: tmpDir, work: workDir, buildCache: buildCacheDir,
 		goroot: tc.goroot, modCache: tc.modCache,
 	}
 
@@ -591,7 +624,7 @@ func runProgram(
 		GOROOT:        tc.goroot,
 		ModCache:      tc.modCache,
 		WorkDir:       workDir,
-		BuildCacheDir: filepath.Join(workDir, "gocache"),
+		BuildCacheDir: buildCacheDir,
 		LogFile:       buildLog,
 	}, runInGroup); err != nil {
 		// A stuck build's processes may still be writing its log.
