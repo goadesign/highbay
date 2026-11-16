@@ -662,7 +662,8 @@ all act for that owner.
 | `browser_link` (`POST /project/browser-link`) | | | | | ✓ | HTTP |
 
 The user's browser session sends HTTP only, so the user-only MCP tools
-(`confirm_intent`, `decline_revision`, `configure_model`, `approve_merge`)
+(`confirm_intent`, `decline_revision`, `configure_model`, `review_verification`,
+`approve_merge`)
 appear in no agent's tool list. `surla` and `surla stop` call the management
 operations. The views page exchanges its single-use link with
 `POST /project/browser-session`, which needs no credential because the link
