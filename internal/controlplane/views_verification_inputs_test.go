@@ -18,7 +18,7 @@ import (
 // accessible with its own revision and the written-test notice.
 func TestViewsPageSeparatesRecordedRunsFromCurrentInputs(t *testing.T) {
 	runsDir := t.TempDir()
-	cp := newBuildControlPlane(t, Options{
+	cp := newBuildControlPlane(t, Options{BuildCacheDir: t.TempDir(),
 		RunsDir: runsDir, WrittenTestRuns: &WrittenTestRuns{ReportDir: t.TempDir(), Timeout: time.Minute},
 		Team: &TeamBinding{Owner: pageOwner, Service: &teamServiceFixture{}},
 	})

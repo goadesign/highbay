@@ -327,7 +327,7 @@ func TestStartBuildOwnerPrecedesTheTurn(t *testing.T) {
 // turns.
 func TestStartBuildStoredEvaluatorBypassesWriterPrerequisites(t *testing.T) {
 	f := &teamServiceFixture{}
-	cp := newBuildControlPlane(t, Options{
+	cp := newBuildControlPlane(t, Options{BuildCacheDir: t.TempDir(),
 		Verification: &VerificationConfig{RunsDir: t.TempDir()},
 		Team:         &TeamBinding{Owner: "alice@example.com", Service: f},
 	})

@@ -34,6 +34,7 @@ func TestViewsPageWarnsBeforeChangingABuiltRevision(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			opts := Options{Team: &TeamBinding{Owner: pageOwner, Service: &teamServiceFixture{}}}
 			if tc.stored {
+				opts.BuildCacheDir = t.TempDir()
 				opts.Verification = &VerificationConfig{RunsDir: t.TempDir()}
 			}
 			cp := newBuildControlPlane(t, opts)

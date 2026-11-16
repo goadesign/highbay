@@ -78,7 +78,16 @@ func TestMain(m *testing.M) {
 	if len(os.Args) == 5 && os.Args[1] == "check-host" {
 		os.Exit(checkHost(os.Args[2], os.Args[3], os.Args[4]))
 	}
-	if len(os.Args) == 4 && os.Args[1] == "verify-run" && os.Args[2] == "live" {
+	if len(os.Args) > 1 && os.Args[1] == "verify-run" {
+		// Refuse malformed helpers before m.Run can recursively launch tests.
+		if len(os.Args) != 5 || os.Args[2] != "live" {
+			fmt.Fprintln(os.Stderr, "verify-run needs live, a run directory and build cache directory")
+			os.Exit(1)
+		}
+		if err := os.WriteFile(filepath.Join(os.Args[3], "received-build-cache"), []byte(os.Args[4]), 0o600); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
 		if err := verifyrun.Live(os.Args[3], fakeLivePrepare, nil, os.Stdout, os.Stderr); err != nil {
 			fmt.Fprintln(os.Stderr, err)
 			os.Exit(1)
@@ -126,7 +135,7 @@ func (f *fakeTarget) APIKeyAuth(ctx context.Context, key string, _ *security.API
 // diagnostic fixture uses the real preparation owner to reach its live consumer.
 func fakeLivePrepare(ctx context.Context, plan verify.Plan) (verify.Prepared, error) {
 	if os.Getenv(liveTargetModeEnv) == "process-diagnostics" {
-		return verify.Prepare(ctx, plan)
+		return verify.Prepare(ctx, plan, os.Args[4])
 	}
 	if os.Getenv(liveTargetModeEnv) == "prepare-hangs" {
 		fmt.Fprintln(os.Stderr, "preparing: downloading modules")
@@ -227,7 +236,7 @@ func newLiveControlPlane(t *testing.T, mode string) (*ControlPlane, string) {
 	self, err := os.Executable()
 	require.NoError(t, err)
 	cardsDir := t.TempDir()
-	cp, err := New(buildFixtureOptions(t, Options{
+	cp, err := New(buildFixtureOptions(t, Options{BuildCacheDir: t.TempDir(),
 		CardsDir:     cardsDir,
 		Verification: &VerificationConfig{RunsDir: t.TempDir()},
 		Live: &LiveConfig{
@@ -469,7 +478,7 @@ func TestCloseStopsTheLiveTarget(t *testing.T) {
 	require.NoError(t, err)
 	cardsDir := t.TempDir()
 	root := LiveRoot(cardsDir)
-	cp, err := New(buildFixtureOptions(t, Options{
+	cp, err := New(buildFixtureOptions(t, Options{BuildCacheDir: t.TempDir(),
 		CardsDir:     cardsDir,
 		Verification: &VerificationConfig{RunsDir: t.TempDir()},
 		Live:         &LiveConfig{Command: []string{self}, Env: append(os.Environ(), liveTargetModeEnv+"=serve")},
@@ -495,7 +504,7 @@ func TestCloseEndsAStartInProgressAndRefusesLaterStarts(t *testing.T) {
 	self, err := os.Executable()
 	require.NoError(t, err)
 	cardsDir := t.TempDir()
-	cp, err := New(buildFixtureOptions(t, Options{
+	cp, err := New(buildFixtureOptions(t, Options{BuildCacheDir: t.TempDir(),
 		CardsDir:     cardsDir,
 		Verification: &VerificationConfig{RunsDir: t.TempDir()},
 		Live: &LiveConfig{Command: []string{self}, Env: append(os.Environ(), liveTargetModeEnv+"=prepare-hangs"),
@@ -540,7 +549,7 @@ func TestAFailedStopKeepsTheOwnerAndStartsNoOtherTarget(t *testing.T) {
 	self, err := os.Executable()
 	require.NoError(t, err)
 	cardsDir := t.TempDir()
-	cp, err := New(buildFixtureOptions(t, Options{
+	cp, err := New(buildFixtureOptions(t, Options{BuildCacheDir: t.TempDir(),
 		CardsDir:     cardsDir,
 		Verification: &VerificationConfig{RunsDir: t.TempDir()},
 		Live:         &LiveConfig{Command: []string{self}, Env: append(os.Environ(), liveTargetModeEnv+"=serve")},
@@ -791,7 +800,7 @@ func TestAStartThatFailsBeforeReadyAndCannotBeCleanedUpKeepsItsOwner(t *testing.
 	self, err := os.Executable()
 	require.NoError(t, err)
 	cardsDir := t.TempDir()
-	cp, err := New(buildFixtureOptions(t, Options{
+	cp, err := New(buildFixtureOptions(t, Options{BuildCacheDir: t.TempDir(),
 		CardsDir:     cardsDir,
 		Verification: &VerificationConfig{RunsDir: t.TempDir()},
 		Live:         &LiveConfig{Command: []string{self}, Env: append(os.Environ(), liveTargetModeEnv+"=fail-pinned")},
@@ -834,7 +843,7 @@ func TestAStartThatTimesOutSaysSo(t *testing.T) {
 	self, err := os.Executable()
 	require.NoError(t, err)
 	cardsDir := t.TempDir()
-	cp, err := New(buildFixtureOptions(t, Options{
+	cp, err := New(buildFixtureOptions(t, Options{BuildCacheDir: t.TempDir(),
 		CardsDir:     cardsDir,
 		Verification: &VerificationConfig{RunsDir: t.TempDir()},
 		Live: &LiveConfig{Command: []string{self}, Env: append(os.Environ(), liveTargetModeEnv+"=prepare-hangs"),
@@ -880,7 +889,7 @@ func TestGetLiveTargetFollowsEachTransition(t *testing.T) {
 	t.Cleanup(func() { assert.NoError(t, provider.Shutdown(context.Background())) })
 	self, err := os.Executable()
 	require.NoError(t, err)
-	cp := newControlPlane(t, buildFixtureOptions(t, Options{
+	cp := newControlPlane(t, buildFixtureOptions(t, Options{BuildCacheDir: t.TempDir(),
 		TracerProvider: provider,
 		Verification:   &VerificationConfig{RunsDir: t.TempDir()},
 		Live: &LiveConfig{
@@ -977,7 +986,7 @@ func TestGetLiveTargetFollowsEachTransition(t *testing.T) {
 func TestGetLiveTargetShowsAStartInProgressWithoutWaiting(t *testing.T) {
 	self, err := os.Executable()
 	require.NoError(t, err)
-	cp, err := New(buildFixtureOptions(t, Options{
+	cp, err := New(buildFixtureOptions(t, Options{BuildCacheDir: t.TempDir(),
 		CardsDir:     t.TempDir(),
 		Verification: &VerificationConfig{RunsDir: t.TempDir()},
 		Live: &LiveConfig{Command: []string{self}, Env: append(os.Environ(), liveTargetModeEnv+"=prepare-hangs"),
@@ -1023,7 +1032,7 @@ func TestGetLiveTargetShowsATargetNotConfirmedStopped(t *testing.T) {
 	self, err := os.Executable()
 	require.NoError(t, err)
 	cardsDir := t.TempDir()
-	cp, err := New(buildFixtureOptions(t, Options{
+	cp, err := New(buildFixtureOptions(t, Options{BuildCacheDir: t.TempDir(),
 		CardsDir:     cardsDir,
 		Verification: &VerificationConfig{RunsDir: t.TempDir()},
 		Live:         &LiveConfig{Command: []string{self}, Env: append(os.Environ(), liveTargetModeEnv+"=serve")},
@@ -1111,7 +1120,7 @@ func TestChangeListVersionFollowsTheLiveTarget(t *testing.T) {
 	t.Cleanup(func() { assert.NoError(t, provider.Shutdown(context.Background())) })
 	self, err := os.Executable()
 	require.NoError(t, err)
-	cp := newControlPlane(t, buildFixtureOptions(t, Options{
+	cp := newControlPlane(t, buildFixtureOptions(t, Options{BuildCacheDir: t.TempDir(),
 		TracerProvider: provider,
 		Verification:   &VerificationConfig{RunsDir: t.TempDir()},
 		Live: &LiveConfig{
@@ -1191,7 +1200,7 @@ func TestChangeListVersionFollowsTheLiveTarget(t *testing.T) {
 func TestStoredEvaluatorLiveTargetSurvivesDrop(t *testing.T) {
 	self, err := os.Executable()
 	require.NoError(t, err)
-	cp := newBuildControlPlane(t, Options{
+	cp := newBuildControlPlane(t, Options{BuildCacheDir: t.TempDir(),
 		Verification: &VerificationConfig{RunsDir: t.TempDir()},
 		Live:         &LiveConfig{Command: []string{self}, Env: append(os.Environ(), liveTargetModeEnv+"=serve"), StartTimeout: time.Minute},
 	})

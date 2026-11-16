@@ -234,7 +234,7 @@ func TestConfigureModelValidationTelemetryAndLiveEnv(t *testing.T) {
 		// live target, which gets only the handed-over snapshot.
 		t.Setenv("ANTHROPIC_API_KEY", "inherited-key-sentinel")
 		t.Setenv("ANTHROPIC_ADMIN_KEY", "inherited-admin-sentinel")
-		cp := newControlPlane(t, buildFixtureOptions(t, Options{
+		cp := newControlPlane(t, buildFixtureOptions(t, Options{BuildCacheDir: t.TempDir(),
 			CardsDir:     cardsDir,
 			Verification: &VerificationConfig{RunsDir: t.TempDir()},
 			Live: &LiveConfig{
@@ -243,7 +243,7 @@ func TestConfigureModelValidationTelemetryAndLiveEnv(t *testing.T) {
 					"-c",
 					`printf 'PROVIDER=%s\nNAME=%s\nGATEWAY=%s\nANTHROPIC_KEY=%s\nANTHROPIC_HANDED=%s\nANTHROPIC_BASE=%s\nANTHROPIC_ADMIN=%s\nOPENAI_KEY=%s\n' ` +
 						`"$SURLA_LIVE_MODEL_PROVIDER" "$SURLA_LIVE_MODEL_NAME" "$SURLA_LIVE_MODEL_GATEWAY" "${ANTHROPIC_API_KEY:+set}" ` +
-						`"$([ "$ANTHROPIC_API_KEY" = handed-key-sentinel ] && echo yes)" "${ANTHROPIC_BASE_URL:+set}" "${ANTHROPIC_ADMIN_KEY:+set}" "${OPENAI_API_KEY:+set}" > "$1" && exec "$0" "$2" "$3" "$4"`,
+						`"$([ "$ANTHROPIC_API_KEY" = handed-key-sentinel ] && echo yes)" "${ANTHROPIC_BASE_URL:+set}" "${ANTHROPIC_ADMIN_KEY:+set}" "${OPENAI_API_KEY:+set}" > "$1" && exec "$0" "$2" "$3" "$4" "$5"`,
 					self,
 					envFile,
 				},

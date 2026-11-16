@@ -460,7 +460,7 @@ func (s *selectedInputsListRead) ListVerifications(
 func selectedInputsFixture(t *testing.T) (*ControlPlane, *gensurla.ChangeCardResult, string) {
 	t.Helper()
 	runsDir := t.TempDir()
-	cp := newBuildControlPlane(t, Options{
+	cp := newBuildControlPlane(t, Options{BuildCacheDir: t.TempDir(),
 		RunsDir: runsDir, WrittenTestRuns: &WrittenTestRuns{ReportDir: t.TempDir(), Timeout: time.Minute},
 	})
 	cp.changesWait, cp.changesPoll = 400*time.Millisecond, 20*time.Millisecond

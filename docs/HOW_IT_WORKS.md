@@ -25,7 +25,11 @@ Each has its own credential, so the server always knows who is calling.
 
 Surla runs the code the agents write (the design at each refresh, the
 builder's programs and the test writer's tests) as ordinary processes on this
-machine, with your file and network access.
+machine, with your file and network access. Live starts and verifications keep
+compiled Go packages for the project; each operation still builds its outputs
+and runs its tests. Code running as you can change retained compiler inputs
+and affect later results. See [project storage and cache trust](REFERENCE.md#project-state-folder)
+for lifetime and cleanup.
 
 Three more words appear on every step:
 

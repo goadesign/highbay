@@ -3,6 +3,7 @@
 package controlplane
 
 import (
+	"path/filepath"
 	"testing"
 
 	gensurla "github.com/goadesign/surla/gen/surla"
@@ -78,9 +79,9 @@ func readBuilderFixture(
 // the report checker never races a later replacement of its verifier.
 func verificationSourceOptions(cfg *VerificationConfig, stored bool) Options {
 	if stored {
-		return Options{Verification: cfg}
+		return Options{BuildCacheDir: filepath.Join(cfg.RunsDir, "build-cache"), Verification: cfg}
 	}
-	return Options{RunsDir: cfg.RunsDir, WrittenTestRuns: &WrittenTestRuns{
+	return Options{BuildCacheDir: filepath.Join(cfg.RunsDir, "build-cache"), RunsDir: cfg.RunsDir, WrittenTestRuns: &WrittenTestRuns{
 		ReportDir: cfg.Plan.ReportDir, Command: cfg.Command, Timeout: cfg.Timeout,
 	}}
 }

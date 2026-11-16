@@ -41,7 +41,10 @@ func TestNewWorkspaceGitAdmission(t *testing.T) {
 				called = true
 				assert.Equal(t, 30*time.Second, allowance)
 				assert.Equal(t, verify.WorkspaceGitTimeout, allowance)
-				return context.WithTimeout(ctx, 100*time.Millisecond)
+				if outcome.timeout {
+					allowance = 100 * time.Millisecond
+				}
+				return context.WithTimeout(ctx, allowance)
 			}
 			cp, err := newWithWorkspaceGitTimeout(Options{
 				WorkspaceDir: workspace,

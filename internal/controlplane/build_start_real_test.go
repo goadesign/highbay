@@ -233,7 +233,7 @@ func init() { time.Sleep(30 * time.Second) }`, 1)
 // makes .surla-build on surla/build-1 through the production path, creates no
 // .surla-tests copy, and registers BuilderOnly.
 func TestStoredEvaluatorMakesTheBuilderCopy(t *testing.T) {
-	repo, project, cp, registered := reviewProject(t, Options{Verification: &VerificationConfig{RunsDir: t.TempDir()}})
+	repo, project, cp, registered := reviewProject(t, Options{BuildCacheDir: t.TempDir(), Verification: &VerificationConfig{RunsDir: t.TempDir()}})
 	card := buildableChange(t, cp, "chg")
 	result, err := cp.StartBuild(asCaller("alice@example.com", CallerUser), &gensurla.StartBuildPayload{
 		ChangeID: "chg", RequestRevision: card.RequestRevision,

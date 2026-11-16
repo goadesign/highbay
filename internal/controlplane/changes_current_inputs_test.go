@@ -24,7 +24,7 @@ import (
 // checker's durable result, rather than testing how that result is obtained.
 func TestListChangesCurrentInputsFollowAcceptedWrittenTests(t *testing.T) {
 	runsDir := t.TempDir()
-	cp := newBuildControlPlane(t, Options{
+	cp := newBuildControlPlane(t, Options{BuildCacheDir: t.TempDir(),
 		RunsDir:         runsDir,
 		WrittenTestRuns: &WrittenTestRuns{ReportDir: t.TempDir(), Timeout: time.Minute},
 	})
@@ -131,7 +131,7 @@ func TestListChangesCurrentInputsFollowAcceptedWrittenTests(t *testing.T) {
 func TestListChangesKeepsEarlierRevisionRuns(t *testing.T) {
 	runsDir := t.TempDir()
 	plan := verify.Plan{SuiteCommit: strings.Repeat("2", 40)}
-	cp := newControlPlane(t, buildFixtureOptions(t, Options{Verification: &VerificationConfig{RunsDir: runsDir, Plan: plan}}))
+	cp := newControlPlane(t, buildFixtureOptions(t, Options{BuildCacheDir: t.TempDir(), Verification: &VerificationConfig{RunsDir: runsDir, Plan: plan}}))
 	user := asCaller("alice@example.com", CallerUser)
 	first := buildableChange(t, cp, "chg")
 	saveStoredBuildFixture(t, cp, first)
@@ -184,7 +184,7 @@ func TestListChangesCurrentInputsFollowStoredSuite(t *testing.T) {
 	cardsDir, runsDir := t.TempDir(), t.TempDir()
 	plan := verify.Plan{SuiteCommit: strings.Repeat("2", 40)}
 	options := func(selected verify.Plan) Options {
-		return Options{CardsDir: cardsDir, Verification: &VerificationConfig{RunsDir: runsDir, Plan: selected}}
+		return Options{BuildCacheDir: t.TempDir(), CardsDir: cardsDir, Verification: &VerificationConfig{RunsDir: runsDir, Plan: selected}}
 	}
 	cp := newControlPlane(t, options(plan))
 	card := confirmedChange(t, cp, "chg")
@@ -245,7 +245,7 @@ func TestListChangesCurrentInputsFollowStoredSuite(t *testing.T) {
 	assert.False(t, list.Changes[0].LatestVerification.InputsCurrent)
 	require.NoError(t, withoutVerifier.Close())
 
-	written := newBuildControlPlane(t, Options{
+	written := newBuildControlPlane(t, Options{BuildCacheDir: t.TempDir(),
 		CardsDir: cardsDir, RunsDir: runsDir,
 		WrittenTestRuns: &WrittenTestRuns{ReportDir: t.TempDir(), Timeout: time.Minute},
 	})
@@ -258,7 +258,7 @@ func TestListChangesCurrentInputsFollowStoredSuite(t *testing.T) {
 // proposed revision cannot establish a match before the user agrees it.
 func TestListChangesUnconfirmedInputsAreNotCurrent(t *testing.T) {
 	runsDir := t.TempDir()
-	cp := newControlPlane(t, Options{Verification: &VerificationConfig{
+	cp := newControlPlane(t, Options{BuildCacheDir: t.TempDir(), Verification: &VerificationConfig{
 		RunsDir: runsDir, Plan: verify.Plan{SuiteCommit: strings.Repeat("2", 40)},
 	}})
 	guide := asCaller("alice@example.com", CallerGuide)

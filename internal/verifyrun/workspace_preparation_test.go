@@ -96,7 +96,7 @@ func TestWorkspacePreparationKeepsSecretsOutOfSavedRuns(t *testing.T) {
 				Plan: verify.Plan{CandidateRepo: repo, CandidateCommit: strings.TrimSpace(string(head)), CandidateModule: "app", Binaries: map[string]string{"app": "."},
 					SuiteRepo: repo, SuiteCommit: strings.TrimSpace(string(head)), SuiteModule: "eval", SuiteCommand: ".", RequestRevision: "rev-1",
 					WorkDir: filepath.Join(root, runID, "work"), ReportDir: reports, Tests: verify.TestsWritten},
-			}, []string{os.Args[0]}, nil)
+			}, []string{os.Args[0]}, nil, t.TempDir())
 			require.NoError(t, err)
 			require.NoError(t, Wait(root, runID))
 			_, state, err := Read(root, runID)
@@ -189,7 +189,7 @@ func TestModuleDownloadKeepsSavedFailuresPrivate(t *testing.T) {
 					Plan: verify.Plan{CandidateRepo: repo, CandidateCommit: strings.TrimSpace(string(head)), CandidateModule: "app", Binaries: map[string]string{"app": "."},
 						SuiteRepo: repo, SuiteCommit: strings.TrimSpace(string(head)), SuiteModule: "eval", SuiteCommand: ".", RequestRevision: "rev-1",
 						WorkDir: filepath.Join(root, runID, "work"), ReportDir: reports, Tests: verify.TestsWritten},
-				}, []string{os.Args[0]}, nil)
+				}, []string{os.Args[0]}, nil, t.TempDir())
 				require.NoError(t, err)
 				require.NoError(t, Wait(root, runID))
 				_, state, err := Read(root, runID)
