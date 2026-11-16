@@ -229,7 +229,13 @@ func startLiveWith(
 	command, env []string,
 	settings ...modelsettings.Settings,
 ) (*LiveProcess, error) {
-	p, err := LaunchLive(root, plan, key, command, env, settings, filepath.Join(root, "build-cache"))
+	// Like the composition root, supply an absolute cache independently of
+	// the live root's supported relative spelling.
+	cache, err := filepath.Abs(filepath.Join(root, "build-cache"))
+	if err != nil {
+		return nil, err
+	}
+	p, err := LaunchLive(root, plan, key, command, env, settings, cache)
 	if err != nil {
 		return nil, err
 	}

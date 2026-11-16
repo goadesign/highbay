@@ -238,6 +238,9 @@ func Start(
 	if buildCacheDir == "" {
 		return 0, errors.New("build cache directory is required")
 	}
+	if !filepath.IsAbs(buildCacheDir) {
+		return 0, errors.New("build cache directory must be absolute")
+	}
 	if err := req.StoryContext.check(); err != nil {
 		return 0, err
 	}

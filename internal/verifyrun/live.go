@@ -201,6 +201,9 @@ func LaunchLive(
 	if buildCacheDir == "" {
 		return nil, errors.New("build cache directory is required")
 	}
+	if !filepath.IsAbs(buildCacheDir) {
+		return nil, errors.New("build cache directory must be absolute")
+	}
 	if key == "" {
 		return nil, errors.New("live target key is required")
 	}
