@@ -20,6 +20,8 @@ outputs:
 runs:
   using: composite
   steps:
+    # v3 replaces immutable v2 archives whose producer omitted nested modules.
+    # Change this version when the declared producer closure changes.
     - name: Locate compiler storage and fixture versions
       id: paths
       shell: bash
@@ -31,9 +33,11 @@ runs:
         chmod 700 "$build"
         echo "build=$build" >> "$GITHUB_OUTPUT"
         echo "modules=$(go env GOMODCACHE)" >> "$GITHUB_OUTPUT"
-        # Native/cgo objects also depend on the hosted image's system inputs.
-        : "${ImageOS:?hosted runner image is required}" "${ImageVersion:?hosted runner image version is required}"
-        echo "image=$ImageOS-$ImageVersion" >> "$GITHUB_OUTPUT"
+        # This closure's native dependencies are Go's standard library and
+        # race runtime. ImageOS bounds the system ABI; Go keys compiler changes.
+        # Weekly image builds coexist and must be able to restore this family.
+        : "${ImageOS:?hosted runner image family is required}"
+        echo "image=$ImageOS" >> "$GITHUB_OUTPUT"
         # Hash version declarations rather than unrelated test assertions.
         versions=$(git grep -h -E '^const (published|publishedSurla|starterSurlaVersion) = ' -- \
           cmd/surla/gen_e2e_test.go internal/scaffold/scaffold_test.go \
@@ -48,28 +52,28 @@ runs:
       uses: actions/cache/restore@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
       with:
         path: ${{ steps.paths.outputs.modules }}
-        key: surla-go-v2-modules-${{ runner.os }}-${{ runner.arch }}-${{ inputs.go-version }}-${{ hashFiles('**/go.mod', '**/go.sum', 'internal/scaffold/templates/**') }}-${{ steps.paths.outputs.versions }}
+        key: surla-go-v3-modules-${{ runner.os }}-${{ runner.arch }}-${{ inputs.go-version }}-${{ hashFiles('**/go.mod', '**/go.sum', 'internal/scaffold/templates/**') }}-${{ steps.paths.outputs.versions }}
     - name: Own the module archive
       if: inputs.publish == 'true'
       id: module-owner
       uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
       with:
         path: ${{ steps.paths.outputs.modules }}
-        key: surla-go-v2-modules-${{ runner.os }}-${{ runner.arch }}-${{ inputs.go-version }}-${{ hashFiles('**/go.mod', '**/go.sum', 'internal/scaffold/templates/**') }}-${{ steps.paths.outputs.versions }}
+        key: surla-go-v3-modules-${{ runner.os }}-${{ runner.arch }}-${{ inputs.go-version }}-${{ hashFiles('**/go.mod', '**/go.sum', 'internal/scaffold/templates/**') }}-${{ steps.paths.outputs.versions }}
     - name: Restore compiled packages
       if: inputs.publish != 'true'
       id: build-reader
       uses: actions/cache/restore@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
       with:
         path: ${{ steps.paths.outputs.build }}
-        key: surla-go-v2-native-race-plain-${{ runner.os }}-${{ runner.arch }}-${{ steps.paths.outputs.image }}-${{ inputs.go-version }}-${{ hashFiles('**/go.mod', '**/go.sum', 'internal/scaffold/templates/**', '.github/race-packages.txt') }}-${{ steps.paths.outputs.versions }}
+        key: surla-go-v3-native-race-plain-${{ runner.os }}-${{ runner.arch }}-${{ steps.paths.outputs.image }}-${{ inputs.go-version }}-${{ hashFiles('**/go.mod', '**/go.sum', 'internal/scaffold/templates/**', '.github/race-packages.txt') }}-${{ steps.paths.outputs.versions }}
     - name: Own the compiled-package archive
       if: inputs.publish == 'true'
       id: build-owner
       uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
       with:
         path: ${{ steps.paths.outputs.build }}
-        key: surla-go-v2-native-race-plain-${{ runner.os }}-${{ runner.arch }}-${{ steps.paths.outputs.image }}-${{ inputs.go-version }}-${{ hashFiles('**/go.mod', '**/go.sum', 'internal/scaffold/templates/**', '.github/race-packages.txt') }}-${{ steps.paths.outputs.versions }}
+        key: surla-go-v3-native-race-plain-${{ runner.os }}-${{ runner.arch }}-${{ steps.paths.outputs.image }}-${{ inputs.go-version }}-${{ hashFiles('**/go.mod', '**/go.sum', 'internal/scaffold/templates/**', '.github/race-packages.txt') }}-${{ steps.paths.outputs.versions }}
     - name: Report compiler cache state
       shell: bash
       working-directory: ${{ github.workspace }}

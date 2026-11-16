@@ -356,6 +356,16 @@ jobs:
           bash "$GITHUB_WORKSPACE/.github/scripts/go-test.sh" -count=1 -run '^$' -- ./... </dev/null
           CGO_ENABLED=0 go build ./... </dev/null
           go build -o "$RUNNER_TEMP/goa-cache-primer" goa.design/goa/v3/cmd/goa </dev/null
+          # Nested modules select their own dependency versions and test
+          # profiles. Root ./... never visits these compilation closures.
+          for module in story examples/orders examples/orders-eval; do
+            (
+              cd "$module"
+              bash "$GITHUB_WORKSPACE/.github/scripts/go-test.sh" -vet=all -count=1 -run '^$' -- ./... </dev/null
+            )
+          done
+          # The scheduled acceptance owner adds files under its e2e tag.
+          go -C examples/orders-eval test -race -count=1 -run '^$' -tags=e2e ./acceptance </dev/null
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         if: matrix.suite != 'designeval'
         with:

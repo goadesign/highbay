@@ -2409,14 +2409,27 @@ checks are:
   One **Full / root-remaining** job per operating system owns publication of
   the module and compiler archives after successful checks. Other jobs restore
   them. A cold producer prepares the declared race/plain test compilation,
-  CGO-free product dependencies and pinned Goa generator before running its
-  full tests. No arbitrary first-finishing shard can save an incomplete common
+  CGO-free product dependencies and pinned Goa generator, then compiles Story,
+  Orders and Orders Eval with their own dependency versions and plain/race
+  selections, including the tagged acceptance tests, before running its full
+  tests. The archive version changes when this declared closure changes; an
+  immutable archive cannot gain missing inputs after an exact hit.
+  No arbitrary first-finishing shard can save an incomplete common
   closure. Archive keys include the exact Go toolchain, operating system and
   architecture, module inputs, starter templates and published fixture versions;
-  compiler keys also include the hosted image version and race profile. Module
+  compiler keys also include the hosted OS image family and race profile. Module
   archives remain separate from compiled-package archives. Base-branch pushes
   populate archives that pull requests can restore; private project state and
   credentials are never cached.
+
+  The producer's macOS and Linux dependency lists contain only standard-library
+  native inputs: `net`, `os/user`, `runtime/cgo` and the race runtime. Orders'
+  `modernc.org/sqlite` dependency is pure Go. Go's own action keys include the
+  Go toolchain, compiler options and C compiler identity. The archive uses the
+  OS image family (`ImageOS`), allowing concurrently served weekly image builds
+  with the same system ABI to share it. Go does not detect arbitrary external
+  C-library changes; adding such a dependency requires reviewing its native
+  profile and archive key before sharing compiled inputs across image builds.
 
   Each job summary reports module and build archive hits separately. Missing
   inputs, dependency/toolchain/template/image changes, expiry or eviction can
