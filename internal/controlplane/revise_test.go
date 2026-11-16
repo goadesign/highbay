@@ -166,7 +166,7 @@ func TestReviseChangeOverHTTPAndMCP(t *testing.T) {
 // exactly, because request_revision is a digest of that content alone.
 func TestReviseChangeSavesARevisionThatOnlyItsContentDetermines(t *testing.T) {
 	alice := WithPrincipal(context.Background(), Principal{ID: "alice@example.com", CallerID: "alice@example.com", Kind: CallerUser})
-	cp := newControlPlane(t, buildFixtureOptions(t, Options{Verification: verificationConfig(t)}))
+	cp := newControlPlane(t, buildFixtureOptions(t, Options{BuildCacheDir: t.TempDir(), Verification: verificationConfig(t)}))
 
 	// Revising a confirmed card with a recorded approval proposes a revision
 	// without one, and the approval stays on the confirmed revision.

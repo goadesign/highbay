@@ -539,7 +539,7 @@ paths:
 
                         drafted_before_drop: The agreed revision was drafted before the user dropped another change, so its design can hold that change's design; nothing was saved. The guide revises the change from its draft; the user adopts the revision, then builds.
 
-                        design_changed_outside: A design file at the project's commit is not a version the agreed revision was made from: it was changed outside Surla; nothing was saved. The message names the file and the commit. When the change is uncommitted, commit the design change in the project folder first; then the guide calls update_draft, refresh_story and revise_change, and the user adopts the revision and builds.
+                        design_changed_outside: A design file at the build's base commit is not a version the agreed revision was made from: it was changed outside Surla; nothing was saved. The message names the file and the commit. When the change is uncommitted, commit the design change in the project folder first; then the guide calls update_draft, refresh_story and revise_change, and the user adopts the revision and builds.
                     schema:
                         $ref: '#/definitions/SurlaStartBuildConflictResponseBody'
                     examples:
@@ -593,7 +593,7 @@ paths:
             tags:
                 - surla
             summary: drop_build surla
-            description: 'The user drops the project''s open build on the views page because the change will not be taken: Surla builds nothing on it, and another change can be built. The request names the build the page showed; a different open build (a second tab built or dropped meanwhile) is refused with its facts, and a build already dropped is refused. Drop writes one record, the start of the guide''s made-from list naming the dropped build, by one rename: its only write. It changes no working copy, branch, draft or file of the user''s: the build''s commits stay on its branches, and the guide''s next refresh_story makes the draft again from the project folder. From then on no role has work for the build, and the builder''s and the test writer''s tools tell them it was dropped. A merged build may be dropped too. The result is the dropped build as get_build reports it.'
+            description: 'The user drops the project''s open build on the views page because the change will not be taken: Surla builds nothing on it, and it no longer blocks starting another build. A change whose agreed revision was drafted before the drop is still refused with drafted_before_drop, which get_build''s drafted_before_drop reports, until the guide refreshes the draft and revises the change and the user adopts the revision. The request names the build the page showed; a different open build (a second tab built or dropped meanwhile) is refused with its facts, and a build already dropped is refused. Drop writes one record, the start of the guide''s made-from list naming the dropped build, by one rename: its only write. It changes no working copy, branch, draft or file of the user''s: the build''s commits stay on its branches, and the guide''s next refresh_story makes the draft again from the project folder. From then on no role has work for the build, and the builder''s and the test writer''s tools tell them it was dropped. A merged build may be dropped too. The result is the dropped build as get_build reports it.'
             operationId: surla#drop_build
             parameters:
                 - name: change_id
@@ -865,7 +865,7 @@ paths:
 
                         conflict: The Change Card is not confirmed or its request_revision does not match, the candidate commit is not in the project's repository, the project folder was replaced after the server started, the candidate's design/ files differ from the build's design source (the message names them; call generate_code, commit and verify again), or (without stored verification settings) the candidate changes hand-written files in the test module.
 
-                        no_build: No build of this change is open (the user built another change or none), the user dropped it, or (without stored verification settings) the open build is for another revision of the change. The message names what Surla found and the user's step.
+                        no_build: No build of this change is open (the user built another change or none), the user dropped it, or the open build is for another revision of the change. The message names what Surla found and the user's step.
 
                         tests_not_accepted: Without stored verification settings: Surla has not accepted the tests of the change's build. The message names the test writer's state and who acts, and ends with the step.
 
@@ -2645,7 +2645,7 @@ paths:
             tags:
                 - surla
             summary: update_draft surla
-            description: The guide brings design changes made outside Surla into its draft, before drafting a new change and when told a design file changed in the project folder. Under the draft's lock Surla compares each design file's draft and live versions over a recorded base. The history base is the latest recorded version present in the project's committed history since the draft's start, or the starting folder version when that history supplies none. The comparison base is whichever of that history base and the outside version the draft last took was recorded later; with no previous take, it is the history base. A live version equal to the comparison base brings nothing. If the project's committed history gained a recorded version since the last take, Surla takes and reports the live version without merging it. Otherwise an outside change is taken when the draft did not change that file, merged with git merge-file when both changed it, and listed to correct when both changed the same lines or one side removed what the other changed. A draft file Go cannot parse, and a module the project's go.mod requires at another version or with another replace directive than the draft's, are listed to correct; Surla does not merge go.mod. Surla records an interrupted update so a later call can finish it without merging its result again; if the guide changed the file in between, the file is listed to correct. An uncommitted revert to an older version may bring nothing; when a build reports design_changed_outside for an uncommitted design change, the user commits the change in the project folder, then asks the guide to call update_draft, refresh_story and revise_change. Otherwise call refresh_story after this update. Takes no input.
+            description: 'The guide brings design changes made outside Surla into its draft, before drafting a new change and when told a design file changed in the project folder. Under the draft''s lock Surla compares each design file''s draft and live versions over a recorded base. The history base is the latest recorded version present in the project''s committed history since the draft''s start, or the starting folder version when that history supplies none. The comparison base is whichever of that history base and the outside version the draft last took was recorded later; with no previous take, it is the history base. A live version equal to the comparison base brings nothing. If the project''s committed history gained a recorded version since the last take, Surla takes and reports the live version without merging it. Otherwise an outside change is taken when the draft did not change that file, merged with git merge-file when both changed it, and listed to correct when both changed the same lines or one side removed what the other changed. A draft file Go cannot parse, and a module the project''s go.mod requires at another version or with another replace directive than the draft''s, are listed to correct; Surla does not merge go.mod. Each listed file names the folder that holds it: the guide corrects a file of its draft, while a design file or go.mod of the project folder that cannot be parsed is the user''s to correct there and the guide never edits it. When the project''s commit, the draft, the project''s files or the draft''s made-from list change while Surla prepares the update, Surla brings nothing and answers conflict, and the guide calls update_draft again. Surla records an interrupted update so a later call can finish it without merging its result again; if the guide changed the file in between, the file is listed to correct. An uncommitted revert to an older version may bring nothing; when a build reports design_changed_outside for an uncommitted design change, the user commits the change in the project folder, then asks the guide to call update_draft, refresh_story and revise_change. Otherwise call refresh_story after this update. Takes no input.'
             operationId: surla#update_draft
             responses:
                 "200":
@@ -2669,8 +2669,20 @@ paths:
                             name: forbidden
                             temporary: false
                             timeout: false
+                "409":
+                    description: 'conflict: The project''s commit, the draft, the project''s go.mod, go.sum or design files, or the draft''s made-from list changed while Surla prepared the update. Surla brought no change into the draft; call update_draft again.'
+                    schema:
+                        $ref: '#/definitions/SurlaUpdateDraftConflictResponseBody'
+                    examples:
+                        application/vnd.goa.error:
+                            fault: false
+                            id: 123abc
+                            message: parameter 'p' must be an integer
+                            name: conflict
+                            temporary: false
+                            timeout: false
                 "422":
-                    description: 'unprocessable: The project folder holds no go.mod, so there is no draft (run init_project or create go.mod), or a file there could not be read; the message names it.'
+                    description: 'unprocessable: Surla could not read what the update needs; the message names the file or folder. The project folder holds no go.mod, so there is no draft (run init_project or create go.mod), or was replaced after startup; the draft is a link or a file rather than a folder, its .gitignore lacks Surla''s draft marker, or its made-from list is missing; the draft or its made-from list changed while Surla was first making the draft; the go.mod of the draft or of the project folder is missing, or a go.mod, go.sum or design file there is not a regular file, cannot be read or is not valid UTF-8; or a design file in the project''s current commit cannot be parsed as Go or is a link. The guide corrects a file of its draft and asks the user to correct one of the project folder or of its commit, then calls update_draft again.'
                     schema:
                         $ref: '#/definitions/SurlaUpdateDraftUnprocessableResponseBody'
                     examples:
@@ -4221,7 +4233,7 @@ definitions:
                                 - started
                         taking:
                             type: object
-                            description: 'Whether the user has taken this build: building until a verification of it passes; passed with the commits to merge; merged once the branch checked out in the project folder holds both commits of one passed run; dropped once the user dropped it. A project has one open build, and another change is built only once it is merged or dropped.'
+                            description: 'Whether the user has taken this build: building until a verification of it passes; passed with the commits to merge; merged once the branch checked out in the project folder holds the commits of one passed run, the builder''s and, for written tests, the tests''; dropped once the user dropped it. A project has one open build, and another change is built only once it is merged or dropped.'
                             example:
                                 base_in_branch: true
                                 candidate_branch: Nisi ea omnis facilis a error.
@@ -7035,20 +7047,29 @@ definitions:
         title: DraftCorrection
         type: object
         properties:
+            folder:
+                type: string
+                description: 'Which folder holds the file to correct: draft_folder is the guide''s draft, at the result''s draft_folder; project_folder is the user''s project folder, which holds the draft.'
+                example: project_folder
+                enum:
+                    - draft_folder
+                    - project_folder
             path:
                 type: string
-                description: Path relative to the draft folder, such as design/types.go or go.mod.
+                description: Path relative to the folder that folder names, such as design/types.go or go.mod.
                 example: Molestiae sunt veniam non.
             problem:
                 type: string
-                description: 'What to correct: conflict markers where the draft and the project folder changed the same lines; a file removed on one side and changed on the other; a draft file Go cannot parse, with its line; or a module the project''s go.mod requires at another version than the draft''s, or that the draft''s lacks, including differing replace directives.'
+                description: 'What to correct. In the draft: conflict markers where the draft and the project folder changed the same lines; a file removed on one side and changed on the other; a draft file Go cannot parse, with its line; a file whose project change Surla took without merging, or was writing when it stopped, to check that it holds the intended edits once; or a module the project''s go.mod requires at another version than the draft''s, or that the draft''s lacks, including differing replace directives and a differing module path. In the project folder: a design file or go.mod there that cannot be parsed, with its line, or a go.mod that declares no module.'
                 example: Cumque est.
-        description: 'A file of the draft that update_draft could not bring forward from the project folder: the guide corrects it in the draft and calls update_draft again until none is listed, then refresh_story.'
+        description: 'A file to correct before update_draft can bring a change forward, and the folder that holds it. When folder is draft_folder, the guide corrects the file in its draft. When folder is project_folder, the file is the user''s own, in the project folder: the guide tells the user what to correct there and waits, and never edits it. The guide calls update_draft again until none is listed, then refresh_story.'
         example:
+            folder: project_folder
             path: Molestiae sunt veniam non.
             problem: Cumque est.
         required:
             - path
+            - folder
             - problem
     DraftOverridePayload:
         title: DraftOverridePayload
@@ -7139,13 +7160,15 @@ definitions:
                 type: array
                 items:
                     $ref: '#/definitions/DraftCorrection'
-                description: Files to correct in the draft before refreshing, in path order; empty when none.
+                description: Files to correct before refreshing, each in the folder it names, in path order; empty when none.
                 example:
-                    - path: Molestiae sunt veniam non.
+                    - folder: project_folder
+                      path: Molestiae sunt veniam non.
                       problem: Cumque est.
-                    - path: Molestiae sunt veniam non.
+                    - folder: project_folder
+                      path: Molestiae sunt veniam non.
                       problem: Cumque est.
-        description: 'What update_draft brought from the project folder into the guide''s draft: design files the draft took as they are there, design files merged with the draft''s own edits, and files to correct. The lists describe what this call applied and what remains to correct; empty lists do not prove that every outside design change is present.'
+        description: 'What update_draft brought from the project folder into the guide''s draft: design files the draft took as they are there, design files merged with the draft''s own edits, and files to correct, each with the folder that holds it. The lists describe what this call applied and what remains to correct; empty lists do not prove that every outside design change is present.'
         example:
             draft_folder: Consequatur voluptatum pariatur.
             merged:
@@ -7158,9 +7181,11 @@ definitions:
                 - Debitis neque.
                 - Deleniti rem qui voluptatibus est deleniti animi.
             to_correct:
-                - path: Molestiae sunt veniam non.
+                - folder: project_folder
+                  path: Molestiae sunt veniam non.
                   problem: Cumque est.
-                - path: Molestiae sunt veniam non.
+                - folder: project_folder
+                  path: Molestiae sunt veniam non.
                   problem: Cumque est.
         required:
             - draft_folder
@@ -10619,7 +10644,7 @@ definitions:
                 format: date-time
             taking:
                 type: object
-                description: 'Whether the user has taken this build: building until a verification of it passes; passed with the commits to merge; merged once the branch checked out in the project folder holds both commits of one passed run; dropped once the user dropped it. A project has one open build, and another change is built only once it is merged or dropped.'
+                description: 'Whether the user has taken this build: building until a verification of it passes; passed with the commits to merge; merged once the branch checked out in the project folder holds the commits of one passed run, the builder''s and, for written tests, the tests''; dropped once the user dropped it. A project has one open build, and another change is built only once it is merged or dropped.'
                 example:
                     state: merged
                 anyOf:
@@ -19721,6 +19746,49 @@ definitions:
         description: Error response result type (default view)
         example:
             fault: true
+            id: 123abc
+            message: parameter 'p' must be an integer
+            name: bad_request
+            temporary: true
+            timeout: true
+        required:
+            - name
+            - id
+            - message
+            - temporary
+            - timeout
+            - fault
+    SurlaUpdateDraftConflictResponseBody:
+        title: 'Mediatype identifier: application/vnd.goa.error; view=default'
+        type: object
+        properties:
+            fault:
+                type: boolean
+                description: Is the error a server-side fault?
+                example: false
+            id:
+                type: string
+                description: ID is a unique identifier for this particular occurrence of the problem.
+                example: 123abc
+            message:
+                type: string
+                description: Message is a human-readable explanation specific to this occurrence of the problem.
+                example: parameter 'p' must be an integer
+            name:
+                type: string
+                description: Name is the name of this class of errors.
+                example: bad_request
+            temporary:
+                type: boolean
+                description: Is the error temporary?
+                example: true
+            timeout:
+                type: boolean
+                description: Is the error a timeout?
+                example: true
+        description: Error response result type (default view)
+        example:
+            fault: false
             id: 123abc
             message: parameter 'p' must be an integer
             name: bad_request

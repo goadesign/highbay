@@ -82,7 +82,7 @@ func ToolSchema(name tools.Ident) (*genregistry.ToolSchema, bool) {
 	case "surla.update_draft":
 		return declarations.schema2001(), true
 	case "surla.verify_change":
-		return declarations.schema2017(), true
+		return declarations.schema2018(), true
 	default:
 		return nil, false
 	}

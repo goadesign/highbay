@@ -102,7 +102,7 @@ func TestServeEntryRemovesProviderFamiliesAndKeepsHerdrsCopy(t *testing.T) {
 	_, err = verifyrun.Start(runs, verifyrun.Request{
 		RunID: runID, Owner: "operator", ChangeID: "chg", AcceptedAt: time.Now().UTC(), Timeout: time.Hour,
 		Plan: verify.Plan{WorkDir: filepath.Join(runs, runID, "work"), Tests: verify.TestsEvaluator},
-	}, []string{"/bin/sh", "-c", presenceScript, "supervise"}, []modelsettings.Settings{handed})
+	}, []string{"/bin/sh", "-c", presenceScript, "supervise"}, []modelsettings.Settings{handed}, t.TempDir())
 	require.NoError(t, err)
 	require.NoError(t, verifyrun.Wait(runs, runID))
 	assert.Equal(t, "ANTHROPIC_API_KEY=handed\nANTHROPIC_AUTH_TOKEN=\nANTHROPIC_BASE_URL=\nANTHROPIC_ADMIN_KEY=\nOPENAI_API_KEY=\nARGS_HOLD_SENTINEL=no\n",

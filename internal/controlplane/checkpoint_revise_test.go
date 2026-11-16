@@ -152,7 +152,7 @@ func TestCheckpointUIApprovalStates(t *testing.T) {
 	cfg := verificationConfig(t)
 	cfg.Plan.SuiteCommit = spec.SuiteCommit
 	target := &pageTarget{artifacts: spec.Artifacts}
-	cp := pageControlPlane(t, buildFixtureOptions(t, Options{Verification: cfg, ResolvePromotionTarget: target.resolve}))
+	cp := pageControlPlane(t, buildFixtureOptions(t, Options{BuildCacheDir: t.TempDir(), Verification: cfg, ResolvePromotionTarget: target.resolve}))
 	user := WithPrincipal(context.Background(), Principal{ID: pageOwner, CallerID: pageUserID, Kind: CallerUser})
 	confirm := func(changeID string) *gensurla.ChangeCardResult {
 		proposed := saveProposedCardFixture(t, cp, pageOwner, changeID, "Refunds over $50 require approval.", refundAnalysis("Refunds over $50 require approval."))

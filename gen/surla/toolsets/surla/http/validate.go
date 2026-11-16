@@ -2233,8 +2233,16 @@ func ValidateDraftCorrectionTransport(body *DraftCorrectionTransport) (err error
 	if body.Path == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("path", "body"))
 	}
+	if body.Folder == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("folder", "body"))
+	}
 	if body.Problem == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("problem", "body"))
+	}
+	if body.Folder != nil {
+		if !(*body.Folder == "draft_folder" || *body.Folder == "project_folder") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.folder", *body.Folder, []any{"draft_folder", "project_folder"}))
+		}
 	}
 	return
 }

@@ -50,7 +50,7 @@ type (
 	// live in <CardsDir>/live.
 	LiveConfig struct {
 		// Command is the argument list that runs this surla executable;
-		// targets start `<Command> verify-run live <dir>`.
+		// targets start `<Command> verify-run live <dir> <build-cache-dir>`.
 		Command []string
 		// Env is the environment live targets start from: the server's own
 		// environment. A launch removes from it every provider family and
@@ -125,7 +125,7 @@ type (
 		// A verification plan is also required before a target can start.
 		liveConfigured bool
 		// liveCommand is the argument list that runs this surla executable;
-		// targets start `<liveCommand> verify-run live <dir>`.
+		// targets start `<liveCommand> verify-run live <dir> <build-cache-dir>`.
 		liveCommand []string
 		// liveTimeout bounds how long building and starting a target may
 		// take.
@@ -256,7 +256,7 @@ func (c *ControlPlane) StartLiveTarget(ctx context.Context, p *gensurla.StartLiv
 		cmd = verCfg.Command
 	}
 	launchedAt := time.Now()
-	proc, err := verifyrun.LaunchLive(c.liveRoot, plan, key, cmd, env, settings)
+	proc, err := verifyrun.LaunchLive(c.liveRoot, plan, key, cmd, env, settings, c.buildCacheDir)
 	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, "live target did not launch")

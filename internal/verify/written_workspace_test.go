@@ -42,7 +42,7 @@ func TestPrepareWrittenSuiteBuildsAsAModule(t *testing.T) {
 	work := filepath.Join(t.TempDir(), "run")
 	plan := goWorkVerificationPlan(repo, commit, work)
 	plan.Tests = TestsWritten
-	prepared, err := Prepare(t.Context(), plan)
+	prepared, err := Prepare(t.Context(), plan, t.TempDir())
 	require.NoError(t, err)
 	assert.Len(t, prepared.Binding.Artifacts, 1)
 	physical, err := filepath.EvalSymlinks(work)

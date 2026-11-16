@@ -167,6 +167,7 @@ func pageControlPlane(t *testing.T, opts Options) *ControlPlane {
 	if opts.Verification == nil && opts.WrittenTestRuns == nil {
 		cfg := verificationConfig(t)
 		cfg.Plan.SuiteCommit = strings.Repeat("2", 40)
+		opts.BuildCacheDir = t.TempDir()
 		opts.Verification = cfg
 	}
 	cp := newControlPlane(t, opts)

@@ -564,8 +564,8 @@ export function bootstrapViewsPage() {
   // teamSnapshot is shared by the Team stage and notices on every stage.
   // Failed reads retain facts, visibly labeled as last read.
   let teamSnapshot: TeamSnapshot | null = null;
-  // teamReadError keeps the last failed read's message and whether the server
-  // refused because no team is bound, which is an instruction, not a fault.
+  // teamReadError keeps the last read error and whether its message needs
+  // the failed-read label; an unbound team's instruction stands alone.
   let teamReadError: TeamFactsError | null = null;
   let teamReadAgain = false;
   let teamStartReceipt: TeamStageProps["startReceipt"] = null;
@@ -1476,7 +1476,7 @@ export function bootstrapViewsPage() {
         if (sessionState !== "active") return;
         const firstFailure = teamReadError === null;
         const unbound = failure.kind === "server" && failure.body?.name === "not_implemented";
-        teamReadError = { kind: unbound ? "team_unbound" : "read_failed", message };
+        teamReadError = { readFailed: !unbound, message };
         if (firstFailure) {
           statusEl.textContent = unbound
             ? message : "Could not read the project team. Open Team to see the error and retry.";
@@ -1490,8 +1490,8 @@ export function bootstrapViewsPage() {
   // facts when the read, the update chain or the session is unavailable.
   function teamFactsError(): TeamFactsError | null {
     if (teamReadError !== null) return teamReadError;
-    if (sessionState !== "active") return { kind: "not_followed", message: "The session ended; these are last-read facts." };
-    if (waitTroubleShown) return { kind: "not_followed", message: "Updates are unavailable; these are last-read facts." };
+    if (sessionState !== "active") return { readFailed: false, message: "The session ended; these are last-read facts." };
+    if (waitTroubleShown) return { readFailed: false, message: "Updates are unavailable; these are last-read facts." };
     return null;
   }
 

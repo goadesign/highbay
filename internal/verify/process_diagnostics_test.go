@@ -116,7 +116,7 @@ func TestProcessDiagnosticsStayPrivate(t *testing.T) {
 			if tc.Name == "go-env-suite" || tc.Name == "go-env-malformed-suite" {
 				plan.Tests = TestsWritten
 			}
-			report, err := Run(t.Context(), plan, os.Environ())
+			report, err := Run(t.Context(), plan, os.Environ(), t.TempDir())
 			var stage *StageError
 			require.ErrorAs(t, err, &stage)
 			assert.Equal(t, Stage(tc.Stage), stage.Stage)
@@ -150,7 +150,7 @@ func TestProcessDiagnosticsPreserveReports(t *testing.T) {
 			t.Run(string(source)+"/"+mode, func(t *testing.T) {
 				plan := processDiagnosticPlan(t, mode)
 				plan.Tests = source
-				report, err := Run(t.Context(), plan, os.Environ())
+				report, err := Run(t.Context(), plan, os.Environ(), t.TempDir())
 				require.NoError(t, err)
 				assert.Equal(t, mode == "success", report.Passed)
 				assert.Len(t, report.Evidence.Scenarios, 1)

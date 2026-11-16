@@ -3994,6 +3994,7 @@ func (c *Client) BuildUpdateDraftRequest(ctx context.Context, v any) (*http.Requ
 // should be restored after having been read.
 // DecodeUpdateDraftResponse may return the following errors:
 //   - "unprocessable" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
 //   - "not_implemented" (type *goa.ServiceError): http.StatusNotImplemented
 //   - "unavailable" (type *goa.ServiceError): http.StatusServiceUnavailable
 //   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
@@ -4048,6 +4049,20 @@ func DecodeUpdateDraftResponse(decoder func(*http.Response) goahttp.Decoder, res
 				return nil, goahttp.ErrValidationError("surla", "update_draft", err)
 			}
 			return nil, NewUpdateDraftUnprocessable(&body)
+		case http.StatusConflict:
+			var (
+				body UpdateDraftConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("surla", "update_draft", err)
+			}
+			err = ValidateUpdateDraftConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("surla", "update_draft", err)
+			}
+			return nil, NewUpdateDraftConflict(&body)
 		case http.StatusNotImplemented:
 			var (
 				body UpdateDraftNotImplementedResponseBody
@@ -7286,6 +7301,7 @@ func unmarshalTraceSpanResponseBodyToSurlaTraceSpan(v *TraceSpanResponseBody) *s
 func unmarshalDraftCorrectionResponseBodyToSurlaDraftCorrection(v *DraftCorrectionResponseBody) *surla.DraftCorrection {
 	res := &surla.DraftCorrection{
 		Path:    *v.Path,
+		Folder:  *v.Folder,
 		Problem: *v.Problem,
 	}
 

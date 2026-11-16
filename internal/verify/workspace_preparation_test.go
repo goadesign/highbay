@@ -87,7 +87,7 @@ func TestWorkspacePreparationKeepsTargetsProfileAndSecrets(t *testing.T) {
 				plan.Binaries = nil
 			}
 			if mode == "lookup failure" || mode == "prefill failure" {
-				report, err := Run(t.Context(), plan, os.Environ())
+				report, err := Run(t.Context(), plan, os.Environ(), t.TempDir())
 				require.Error(t, err)
 				assert.NotContains(t, err.Error(), proxyMarker)
 				assert.NotContains(t, err.Error(), flagsMarker)
@@ -100,7 +100,7 @@ func TestWorkspacePreparationKeepsTargetsProfileAndSecrets(t *testing.T) {
 				assert.NotContains(t, string(encoded), proxyMarker)
 				assert.NotContains(t, string(encoded), flagsMarker)
 			} else {
-				prepared, err := Prepare(t.Context(), plan)
+				prepared, err := Prepare(t.Context(), plan, t.TempDir())
 				require.NoError(t, err)
 				assert.Len(t, prepared.Binding.Artifacts, len(plan.Binaries))
 				data, err := os.ReadFile(calls)

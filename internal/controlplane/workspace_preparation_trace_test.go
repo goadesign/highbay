@@ -50,7 +50,7 @@ func TestWorkspacePreparationFailuresKeepSecretsOutOfSpans(t *testing.T) {
 				CandidateRepo: repo, CandidateCommit: commit, CandidateModule: ".", Binaries: map[string]string{"app": "."},
 				SuiteRepo: repo, SuiteCommit: commit, SuiteModule: "eval", SuiteCommand: ".", Tests: verify.TestsWritten,
 				WorkDir: filepath.Join(t.TempDir(), "run"),
-			})
+			}, t.TempDir())
 			var stage *verify.StageError
 			require.ErrorAs(t, err, &stage)
 			assert.Equal(t, verify.StageBuild, stage.Stage)
@@ -121,7 +121,7 @@ func TestModuleDownloadKeepsDiagnosticsOutOfSpans(t *testing.T) {
 				t.Setenv("GOFLAGS", flags)
 				work := filepath.Join(t.TempDir(), "run")
 				_, err = verify.Prepare(t.Context(), verify.Plan{CandidateRepo: repo, CandidateCommit: commit, CandidateModule: ".", Binaries: map[string]string{"app": "."},
-					SuiteRepo: repo, SuiteCommit: commit, SuiteModule: "eval", SuiteCommand: ".", Tests: verify.TestsWritten, WorkDir: work})
+					SuiteRepo: repo, SuiteCommit: commit, SuiteModule: "eval", SuiteCommand: ".", Tests: verify.TestsWritten, WorkDir: work}, t.TempDir())
 				var stage *verify.StageError
 				require.ErrorAs(t, err, &stage)
 				assert.Equal(t, verify.StageBuild, stage.Stage)

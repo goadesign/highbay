@@ -167,7 +167,7 @@ func TestLiveSDKProvidersCrossTheProductionGateway(t *testing.T) {
 			require.NoError(t, err)
 			env := append(os.Environ(), verify.LiveModelProviderEnv+"="+family.Name, verify.LiveModelNameEnv+"=fixture-model")
 			process, err := verifyrun.LaunchLive(t.TempDir(), verify.Plan{Tests: verify.TestsWritten}, "pipeline-key",
-				[]string{self, "test-live-model-executor"}, env, []modelsettings.Settings{held})
+				[]string{self, "test-live-model-executor"}, env, []modelsettings.Settings{held}, t.TempDir())
 			require.NoError(t, err)
 			t.Cleanup(func() { assert.NoError(t, process.Stop()) })
 			ctx, cancel := context.WithTimeout(t.Context(), 45*time.Second)
@@ -201,7 +201,7 @@ func TestLiveSDKProvidersCrossTheProductionGateway(t *testing.T) {
 // global tracer is installed inside the actual executor before the production
 // constructor runs, so SDK telemetry is observed in the process that emits it.
 func runLiveModelPipelineExecutor(args []string) error {
-	if len(args) != 3 || args[0] != "verify-run" || args[1] != "live" {
+	if len(args) != 4 || args[0] != "verify-run" || args[1] != "live" {
 		return errors.New("invalid model pipeline executor arguments")
 	}
 	recorder := tracetest.NewSpanRecorder()

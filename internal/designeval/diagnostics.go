@@ -110,7 +110,7 @@ func GenerationDiagnostic(err error) string {
 	if errors.As(err, &story) {
 		message += "\nThe design imports the Story language, but its module's go.mod does not require it. " +
 			"In the folder that holds that go.mod, run: go get " + harnessStoryModule + "@" + story.version +
-			", commit go.mod and go.sum, then try again."
+			", then try again."
 	}
 	var output *commandOutputError
 	if errors.As(err, &output) && output.output != "" {

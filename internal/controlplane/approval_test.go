@@ -127,7 +127,7 @@ func TestApproveMergeRecordsApprovalOnlyForTheCheckedRevision(t *testing.T) {
 		cfg := verificationConfig(t)
 		cfg.Plan.SuiteCommit = spec.SuiteCommit
 		target := &promotionTargetStub{artifacts: maps.Clone(spec.Artifacts)}
-		cp := newControlPlane(t, buildFixtureOptions(t, Options{
+		cp := newControlPlane(t, buildFixtureOptions(t, Options{BuildCacheDir: t.TempDir(),
 			Verification:    cfg,
 			PromotionTarget: target,
 		}))
@@ -190,7 +190,7 @@ func TestApproveMergeRecordsApprovalOnlyForTheCheckedRevision(t *testing.T) {
 	t.Run("approval without promotion settings loads the report from the verifier and records empty artifacts", func(t *testing.T) {
 		cfg := verificationConfig(t)
 		cfg.Plan.SuiteCommit = spec.SuiteCommit
-		cp := newControlPlane(t, buildFixtureOptions(t, Options{Verification: cfg}))
+		cp := newControlPlane(t, buildFixtureOptions(t, Options{BuildCacheDir: t.TempDir(), Verification: cfg}))
 		card := saveProposedCardFixture(t, cp, "alice@example.com", "chg", "Refunds up to $50 are instant.", analysis)
 		card = attachBuildSnapshot(t, cp, card.ChangeID)
 		card = mustConfirmNoop(t, cp, aliceCtx, card)
@@ -427,7 +427,7 @@ func TestApproveMergeRecordsApprovalOnlyForTheCheckedRevision(t *testing.T) {
 		}
 		cfg := verificationConfig(t)
 		cfg.Plan.SuiteCommit = spec.SuiteCommit
-		cp := newControlPlane(t, buildFixtureOptions(t, Options{
+		cp := newControlPlane(t, buildFixtureOptions(t, Options{BuildCacheDir: t.TempDir(),
 			Verification:    cfg,
 			PromotionTarget: &promotionTargetStub{artifacts: maps.Clone(spec.Artifacts)},
 		}))
@@ -640,8 +640,10 @@ func TestApproveMergeChecksTheChosenTestsCommit(t *testing.T) {
 				if tc.stored {
 					cfg := verificationConfig(t)
 					cfg.Plan.SuiteCommit = commitT
+					opts.BuildCacheDir = t.TempDir()
 					opts.Verification = cfg
 				} else {
+					opts.BuildCacheDir = t.TempDir()
 					opts.WrittenTestRuns = &WrittenTestRuns{
 						ReportDir: t.TempDir(),
 						Command:   []string{"/bin/sh", "-c", "exit 0", "sh"},
@@ -744,7 +746,7 @@ func TestSavedApprovalStaysValidOnlyWhileChosenTestsMatch(t *testing.T) {
 	)
 	artifacts := map[string]string{"shop": strings.Repeat("a", 64)}
 	target := &promotionTargetStub{artifacts: maps.Clone(artifacts)}
-	cp := newBuildControlPlane(t, Options{
+	cp := newBuildControlPlane(t, Options{BuildCacheDir: t.TempDir(),
 		WorkspaceDir:    t.TempDir(),
 		RunsDir:         t.TempDir(),
 		SurlaVersion:    testSurlaVersion,
@@ -815,7 +817,7 @@ func TestApproveMergeRejectsAcceptanceChangedDuringReportLoad(t *testing.T) {
 		loading:   make(chan struct{}),
 		release:   make(chan struct{}),
 	}
-	cp := newBuildControlPlane(t, Options{
+	cp := newBuildControlPlane(t, Options{BuildCacheDir: t.TempDir(),
 		WorkspaceDir:    t.TempDir(),
 		RunsDir:         t.TempDir(),
 		SurlaVersion:    testSurlaVersion,
@@ -885,7 +887,7 @@ func TestCurrentCardAllFiveApprovalStatesAndSpanRecording(t *testing.T) {
 	cfg := verificationConfig(t)
 	cfg.Plan.SuiteCommit = spec.SuiteCommit
 	target := &promotionTargetStub{artifacts: maps.Clone(spec.Artifacts)}
-	cp := newControlPlane(t, buildFixtureOptions(t, Options{
+	cp := newControlPlane(t, buildFixtureOptions(t, Options{BuildCacheDir: t.TempDir(),
 		CardsDir:        cardsDir,
 		Verification:    cfg,
 		PromotionTarget: target,
@@ -1060,7 +1062,7 @@ func TestCurrentCardAllFiveApprovalStatesAndSpanRecording(t *testing.T) {
 	// without promotion settings, the saved approval remains valid while the
 	// chosen tests' commit still matches.
 	require.NoError(t, cp.Close())
-	cpNoTarget := newControlPlane(t, Options{
+	cpNoTarget := newControlPlane(t, Options{BuildCacheDir: t.TempDir(),
 		CardsDir:     cardsDir,
 		Verification: cfg,
 	})

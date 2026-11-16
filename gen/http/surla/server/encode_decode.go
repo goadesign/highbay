@@ -2899,6 +2899,19 @@ func EncodeUpdateDraftError(encoder func(context.Context, http.ResponseWriter) g
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusUnprocessableEntity)
 			return enc.Encode(body)
+		case "conflict":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewUpdateDraftConflictResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusConflict)
+			return enc.Encode(body)
 		case "not_implemented":
 			var res *goa.ServiceError
 			errors.As(v, &res)
@@ -5360,6 +5373,7 @@ func marshalSurlaTraceSpanToTraceSpanResponseBody(v *surla.TraceSpan) *TraceSpan
 func marshalSurlaDraftCorrectionToDraftCorrectionResponseBody(v *surla.DraftCorrection) *DraftCorrectionResponseBody {
 	res := &DraftCorrectionResponseBody{
 		Path:    v.Path,
+		Folder:  v.Folder,
 		Problem: v.Problem,
 	}
 

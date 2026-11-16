@@ -237,7 +237,8 @@ func TestReviewVerificationUsesCurrentApprovalReportStore(t *testing.T) {
 	current := *f.cfg
 	current.Plan.ReportDir = t.TempDir()
 	cp := newControlPlane(t, Options{
-		CardsDir: f.cp.cards.dir, WorkspaceDir: f.cp.currentWorkspaceDir(), Verification: &current,
+		CardsDir: f.cp.cards.dir, WorkspaceDir: f.cp.currentWorkspaceDir(),
+		BuildCacheDir: f.cp.buildCacheDir, Verification: &current,
 	})
 	user := asCaller("alice@example.com", CallerUser)
 	get := &gensurla.GetVerificationPayload{RunID: f.req.RunID}
@@ -315,7 +316,9 @@ func newReviewFixture(t *testing.T) reviewFixture {
 	t.Helper()
 	cfg := verificationConfig(t)
 	target := &promotionTargetStub{artifacts: map[string]string{"orders": "d1"}}
-	cp, card := verificationSetupWithOptions(t, Options{Verification: cfg, PromotionTarget: target})
+	cp, card := verificationSetupWithOptions(t, Options{
+		BuildCacheDir: t.TempDir(), Verification: cfg, PromotionTarget: target,
+	})
 	commit := commitBuilderCandidateFixture(t, cp, card)
 	report := passingReport(t, card.RequestRevision, commit, reportSpec{
 		SuiteID: "orders_acceptance", SuiteCommit: cfg.Plan.SuiteCommit, Environment: "sim", Artifacts: target.artifacts,

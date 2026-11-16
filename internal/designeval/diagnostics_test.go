@@ -74,7 +74,7 @@ func TestGenerationDiagnosticReportsFactsWithoutBlamingSource(t *testing.T) {
 		want string
 	}{
 		{name: "compiler source error", err: &phaseError{phase: "compiling the design", err: &buildError{err: &commandOutputError{err: cause, output: "design/design.go:7:9: undefined: Missing", paths: paths}}}, want: "undefined: Missing"},
-		{name: "compiler storage error", err: &phaseError{phase: "compiling the design", err: &buildError{err: &commandOutputError{err: cause, output: "failed to initialize build cache at /operator/compiler/gocache: not a directory", paths: paths}}}, want: "failed to initialize build cache at <compiler>/gocache"},
+		{name: "compiler storage error", err: &phaseError{phase: "compiling the design", err: &buildError{err: &commandOutputError{err: cause, output: "create build cache directory: mkdir /operator/compiler/gocache: not a directory", paths: paths}}}, want: "create build cache directory: mkdir <compiler>/gocache: not a directory"},
 		{name: "DSL error", err: &phaseError{phase: "evaluating the design and generating files", err: &commandOutputError{err: cause, output: "service orders: method get_order: result type is invalid", paths: paths}}, want: "result type is invalid"},
 		{name: "module command", err: &phaseError{phase: "loading the design module dependencies", err: fmt.Errorf("private proxy https://private:credential@private-proxy.example: %w", cause)}, want: "loading the design module dependencies"},
 		{name: "file setup", err: &phaseError{phase: "preparing the temporary compiler files", err: &os.PathError{Op: "mkdir", Path: "/operator/run", Err: os.ErrPermission}}, want: "preparing the temporary compiler files"},
@@ -187,7 +187,7 @@ func TestGenerationUsesPhysicalOperatorPaths(t *testing.T) {
 	ev.finish(nil)
 	require.NoError(t, os.WriteFile(filepath.Join(work, "gocache"), []byte("a file prevents cache setup\n"), 0o600))
 	_, err = ev.Generate(t.Context(), files)
-	require.ErrorContains(t, err, "failed to initialize build cache")
+	require.ErrorContains(t, err, "create build cache directory")
 	var output *commandOutputError
 	require.ErrorAs(t, err, &output)
 	assert.Equal(t, toolchain.goroot, output.paths.goroot)

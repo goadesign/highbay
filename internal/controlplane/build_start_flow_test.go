@@ -193,7 +193,7 @@ func TestAPreparationThatCouldNotRunSaysWhatFailed(t *testing.T) {
 		{
 			name:       "a failure no case names",
 			prepareErr: errors.New("private setup failure in /Users/someone/shop"),
-			wantReason: []string{"could not prepare the required tests", "server trace"},
+			wantReason: []string{"could not prepare the required tests", "server trace of the test writer's assignment read"},
 			notReason:  []string{"Code generation failed", "private setup failure", "/Users/someone"},
 			wantStep:   buildAgain,
 		},
@@ -327,7 +327,7 @@ func TestStartBuildOwnerPrecedesTheTurn(t *testing.T) {
 // turns.
 func TestStartBuildStoredEvaluatorBypassesWriterPrerequisites(t *testing.T) {
 	f := &teamServiceFixture{}
-	cp := newBuildControlPlane(t, Options{
+	cp := newBuildControlPlane(t, Options{BuildCacheDir: t.TempDir(),
 		Verification: &VerificationConfig{RunsDir: t.TempDir()},
 		Team:         &TeamBinding{Owner: "alice@example.com", Service: f},
 	})
@@ -508,7 +508,7 @@ func TestStartBuildDeadlineBoundaries(t *testing.T) {
 				}
 				assert.Equal(t, want, assignment.Progress.Tests.Kind())
 				if failure, ok := assignment.Progress.Tests.AsCouldNotRun(); ok {
-					assert.Equal(t, "The build-start time limit ended before the required tests could be prepared.", failure.Reason)
+					assert.Equal(t, "The time limit for reading the test writer's assignment ended before the required tests could be prepared.", failure.Reason)
 				}
 			})
 		})

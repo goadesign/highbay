@@ -179,6 +179,8 @@ shell* when both hold:
 A shell started with such a command flag counts as running. A live pane that
 reports no foreground program also counts as running.
 
+<a id="project-state-folder"></a>
+
 **The project and its state folder.** A project is a folder, with or without
 Git. Surla resolves symlinks in the path and uses the nearest project record
 in that folder or its parents, so running `surla` inside a project the guide
@@ -189,10 +191,31 @@ outside the folder, in
 the user's configuration folder (on macOS, `~/Library/Application Support`).
 It holds the owner's account identity, one saved `127.0.0.1` port, the Change
 Cards and builds (`cards/`), verification runs (`runs/`), reports
-(`reports/`), agent credentials (`agents/`), stored settings, and the running
-server's record. A new project saves a free port that no other project of
-this account saved, running or not, and keeps it. No caller chooses an
+(`reports/`), the Go build cache (`build-cache/`), agent credentials
+(`agents/`), stored settings, and the running server's record. A new project
+saves a free port that no other project of this account saved, running or not,
+and keeps it. No caller chooses an
 identity, address, token or storage path.
+
+Live starts and verifications share this project's compiled Go packages in
+`build-cache/`. Every operation still checks out the selected commits, builds
+new output binaries, measures their digests and runs its test program; a cache
+hit is not a passed verification. Scratch, staging, checkouts, outputs and
+evidence stay in each operation's work directory; reports are published in
+the project's shared `reports/` folder. The cache survives Stop, server restart
+and pruning individual runs. Go maintains its cache entries. Use it on a local
+filesystem on one machine; sharing it across machines or a network filesystem
+is unsupported. When no live start or verification is running, you can delete
+`build-cache/`; the next operation recreates it and builds cold.
+
+The retained packages are trusted compiler inputs, like the Go module cache,
+toolchain, executable search path and Surla's files. Go checks a cached file's
+existence and recorded size; it does not check compiled contents against the
+selected source. Code running as you can plant a compiled package that a later
+build links into the candidate or test program. Its report can bind a binary
+the selected source would not produce; the binary digest does not authenticate
+that correspondence. Deleting
+this cache forces recompilation but does not authenticate the other inputs.
 
 Before starting the server or accepting `surla verification set` or
 `surla promotion set`, Surla asks Git for the project's enclosing working tree
@@ -475,7 +498,7 @@ non-zero; a setup or build failure prints no report.
 | `-suite-module <dir>` | Evaluator module folder (default `.`). |
 | `-suite-command <package>` *(required)* | The evaluator program's package, such as `./cmd/orders_acceptance-evals`. |
 | `-request-revision <digest>` *(required)* | The `request_revision` recorded in the report. Without a Change Card, any label works if `surla approve` gets the same one. |
-| `-work-dir <path>` *(required)* | A missing or empty private folder that agents cannot read. |
+| `-work-dir <path>` *(required)* | A missing or empty operator-owned folder, kept separate from builders' working copies, for this operation's checkouts, scratch, outputs, evidence and Go build cache. Relative paths resolve from the caller's directory. |
 | `-report-dir <path>` *(required)* | Where the full report is written; keep it from the builder when scenarios are hidden. |
 | `-timeout <duration>` | Limit for the run (default `0`, no limit). A stopped run prints any partial report the evaluator saved and exits non-zero; a partial report can pass. |
 | `-builder-view` | Default `true`. `-builder-view=false` prints the full report and names hidden scenarios in the summary. Failures go to standard error in either view; do not show them to the builder. |
@@ -923,11 +946,11 @@ Pass a succeeded `op_id` as `story_refresh_op_id` to
 
 When a design file imports the Story language but the draft's `go.mod`
 does not require `github.com/goadesign/surla/story`, the `diagnostic` of the
-failed evaluation also names the step: in the folder that holds that
-`go.mod`, run `go get github.com/goadesign/surla/story@<version>`, with the
-version Surla's own `go.mod` requires, commit `go.mod` and `go.sum`, then try
-again. A project made by `surla init` or `init_project` already requires the
-module.
+failed evaluation also names the step: “`In the folder that holds that
+go.mod, run: go get github.com/goadesign/surla/story@<version>, then try
+again.`” The version is the one Surla's own `go.mod` requires. The guide runs
+the command in its draft, whose `go.mod` was evaluated. A project made by
+`surla init` or `init_project` already requires the module.
 
 #### `update_draft`
 
@@ -958,10 +981,12 @@ current in the recorded history, changes nothing. Otherwise, unless a
   changed the file and `git merge-file` merges them without conflict into valid
   Go, Surla writes the canonical Go result into `.surla-draft` and lists its
   path in `merged`.
-- When a file needs the guide's correction, it is listed in `to_correct`
-  (`path`, `problem`), in path order:
-  - the draft file cannot be parsed as Go (`<parse error>`), or the project
-    folder's file cannot be parsed as Go (`Project folder: <parse error>`);
+- When a file needs correction, it is listed in `to_correct`
+  (`path`, `folder`, `problem`), in path order. `path` is relative to the folder
+  that `folder` names: `draft_folder` for the guide's draft, or `project_folder`
+  for the user's project folder:
+  - the draft file cannot be parsed as Go, or the project folder's file cannot
+    be parsed as Go; `folder` identifies which file needs correction;
   - the project's committed history gained a recorded version from another line
     after the file was last taken, so Surla wrote the project folder's live file
     into `.surla-draft` without merging (`The project's history gained design
@@ -982,21 +1007,25 @@ current in the recorded history, changes nothing. Otherwise, unless a
     already holds its result, `update_draft` finishes the interrupted update and
     never brings that change in a second time;
   - `go.mod`, which Surla never merges or rewrites, cannot be parsed in the
-    project or draft, declares a different module path (`The project and draft
+    project or draft, the project's `go.mod` declares no module, the draft
+    declares a different module path (`The project and draft
     must declare the same module.`), lacks or differs on a version the project's
     `go.mod` requires (`The project requires <module> <version>; the draft
     requires <version>.`), or has different `replace` directives (`The project
     and draft go.mod have differing replace directives; correct the draft's
     replacements.`).
 
-The guide fixes each file in `to_correct` inside `draft_folder` and calls
-`update_draft` again until `to_correct` is empty, then calls
+The guide fixes entries whose `folder` is `draft_folder` inside the result's
+`draft_folder`. For an entry whose `folder` is `project_folder`, it tells the
+user what to correct there and waits; it never edits the project folder. It
+calls `update_draft` again until `to_correct` is empty, then calls
 [`refresh_story`](#refresh_story).
 
 | Refusal | When |
 | --- | --- |
-| `unprocessable` (`422`) | No project folder is bound (`start Surla from a project directory before updating its draft`); the project folder was replaced; `.surla-draft` is a link or a file rather than a folder, its `.gitignore` has no Surla draft marker, or its provenance is missing; or, when Surla must first make `.surla-draft`, the project folder has no `go.mod` or a file Surla reads there cannot be read, is not valid UTF-8 or cannot be parsed as Go. |
-| `conflict` | The project's commit, the draft, the project files or the design provenance changed while preparing the update (`The project's commit changed while preparing the draft update; call update_draft again.` or `The draft, project files or design provenance changed while preparing the update; call update_draft again.`). |
+| `unprocessable` (`422`) | The project folder was replaced; `.surla-draft` is a link or a file rather than a folder, its `.gitignore` has no Surla draft marker, or its provenance is missing; the draft or provenance changed while Surla first made the draft; the draft's or project folder's `go.mod` is missing, or a `go.mod`, `go.sum` or design file there is not regular, cannot be read or is not valid UTF-8; or a design file in the project's current commit cannot be parsed as Go or is a link or submodule. The message names the file or folder and who corrects it. The guide corrects its draft, or asks the user to correct the project file (and commit a correction to committed design), then calls again. |
+| `not_implemented` (`501`) | No project folder is bound: `no workspace directory is bound to this control plane; start Surla from a project directory`. |
+| `conflict` (`409`) | The project's commit, the draft, the project files or the design provenance changed while preparing the update (`The project's commit changed while preparing the draft update; call update_draft again.` or `The draft, project files or design provenance changed while preparing the update; call update_draft again.`). |
 | `unavailable` (`503`) | The server is stopping. |
 
 ### Project files and checks
@@ -1625,7 +1654,7 @@ Every refusal below saves no build and registers no role.
 | `previous_change_open` | 409 | Another change's open build (`OpenBuildRefusal`: `name`, `message`, `change_id` and `build`, the open build as `get_build` reports it, with its `started_at` and `taking`) is still `building` or `passed`; merge or drop it first. |
 | `unfinished_build_open` | 409 | This change's open build (`OpenBuildRefusal`) is still `building`, and `replaces` was omitted or did not match its `change_id` and `started_at`. |
 | `drafted_before_drop` | 409 | The agreed revision was made from a draft before a build was dropped; the guide refreshes the Story and revises the change, and the user adopts the revision before building. |
-| `design_changed_outside` | 409 | A design file at the project's commit is not a version the agreed revision was made from: it was changed outside Surla. The message names the file and the commit. |
+| `design_changed_outside` | 409 | A design file at the build's base commit is not a version the agreed revision was made from: it was changed outside Surla. The message names the file and the commit. |
 | `unprocessable` | 422 | Two finished flows would have the same test name, or one has an empty name; the guide revises the Story. |
 | `not_repository` | 409 | Make the project folder a Git repository and commit its files. |
 | `no_commit` | 409 | Commit the project's files. |
@@ -1650,7 +1679,11 @@ dropped too), records the branches (`surla/build-<n>` and
 `surla/tests-<n>`) that already hold commits beyond the build's base in
 `kept_branches`, stops worker tools on that build with `no_build`, and causes
 the next [`refresh_story`](#refresh_story) to remake `.surla-draft` from the
-project folder.
+project folder. The dropped build no longer blocks starting another build,
+but an agreement drafted before the drop still cannot be built. The guide
+refreshes the draft and revises the change, then the user adopts that revision;
+[`get_build`](#get_build) reports this condition as `drafted_before_drop`. Other
+start checks still apply.
 
 | Refusal | HTTP | Recovery |
 | --- | --- | --- |
@@ -1752,6 +1785,13 @@ returns the same required fact in its `ChangeBuild` result.
 | `required_test_count` | Finished flows in the saved Story; `0` means no test was required. It counts entries; it does not judge what the tests assert. |
 | `builder.read` | Whether the builder read its assignment. |
 | `test_writer` | `read`, `report` (0 until the first report, one more with each) and `tests`. |
+
+`taking.state` becomes `merged` when the project folder's checked-out branch
+holds the commits of one passed run: the builder's commit and, for written
+tests, the tests commit. Stored evaluator tests are never merged. Each commit
+counts when it is in the branch's history or a squash commit holds every file
+it changed as that commit has it. A merged build no longer blocks starting
+another build; `start_build` still applies its other checks.
 
 `tests.state` is `not_used` (stored verification settings), `assigned`,
 `reported`, `needs_changes` (`finding_count`, never the text), `accepted`

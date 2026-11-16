@@ -85,7 +85,7 @@ Each change is saved as a Change Card: the record of the request, its open quest
 
 ### The server and its state
 
-A project is one physical folder. `surla` looks for the nearest folder that has a project record and otherwise creates a new, empty project, so moving or renaming the folder starts a new project. Each project has one private state folder under the user's configuration folder, outside the project. It holds the project record (its ID, folder, owning operating-system account, port, team name and Herdr space, and each registered agent's role and working folder), one credential file per agent, the Change Card folder, verification runs and reports, and the stored verification and promotion settings. A new project saves a free loopback port that no other project of the account saved, and keeps it, because its agents' connections and the Chorus roster name that address. When `surla` cannot use a project's record, it names the project folder, the record's path and the repair; when it cannot use a state folder, it names that folder and the repair.
+A project is one physical folder. `surla` looks for the nearest folder that has a project record and otherwise creates a new, empty project, so moving or renaming the folder starts a new project. Each project has one private state folder under the user's configuration folder, outside the project. It holds the project record (its ID, folder, owning operating-system account, port, team name and Herdr space, and each registered agent's role and working folder), one credential file per agent, the Change Card folder, verification runs and reports, one retained Go build cache, and the stored verification and promotion settings. A new project saves a free loopback port that no other project of the account saved, and keeps it, because its agents' connections and the Chorus roster name that address. When `surla` cannot use a project's record, it names the project folder, the record's path and the repair; when it cannot use a state folder, it names that folder and the repair.
 
 When the user runs `surla`:
 
@@ -183,6 +183,32 @@ The control plane runs at most one live target for an owned, confirmed change. `
 `internal/verifyrun` owns the live executor's process group and temporary directory under the Change Card folder. For written tests with a direct provider, `LaunchLive` passes the held settings over standard input rather than in the executor's starting environment. After preparation, the executor constructs the provider and serves a loopback model gateway; the accepted test program gets the gateway address and target key, without provider settings. The SDK constructor belongs to the command composition root, while `internal/verifyrun` owns gateway and process lifetime. A chosen gateway passes through, and evaluators in stored verification settings keep their existing provider-settings path. Gateway answers preserve structured model error types with server-authored messages instead of provider error text; the pinned Anthropic SDK's API-key precedence remains unchanged. See [model provider settings](REFERENCE.md#model-provider-settings) for that setting's limits.
 
 Surla sends prompt drafts to a running target with a key minted for it. An unexpected executor ending unbinds drafts and stops the entire group. Only after confirmed cleanup does the control plane retain one in-memory `ended` value containing the commit, ready time, observed-end time and fixed recovery message, without the process, key, provider settings or draft map. Failed cleanup keeps the target owned and `not_confirmed_stopped`. Explicit successful Stop or an accepted replacement clears the observation, and restarting the server loses it. Closing the control plane stops the target and gateway; an open model stream never delays that cleanup.
+
+The project composition root supplies one required `BuildCacheDir` in
+`controlplane.Options` whenever either test source is configured. It lives
+beside runs and reports, outside the workspace, and travels as an explicit
+argument through the internal supervisor, executor and live roles. Saved
+requests, live records and verification plans contain no cache path.
+`verify.Prepare` passes it as `candidate.BuildSpec.BuildCacheDir` for candidate
+and test-program compilation; `WorkDir` keeps only operation-owned scratch and
+staging. The standalone `surla verify` composition root instead supplies a cache
+under its own work directory. Design evaluation and test checking keep their
+existing separate cache lifetimes.
+
+The project cache survives Stop, Close, restart and run pruning. Go maintains
+entries; canceled compiler scratch stays with the operation's cleanup owner.
+Concurrent processes may share the cache on one machine using a local
+filesystem. The user may delete it while no operation is running; the next
+build recreates it. No cache entry skips checkout, output publication, digest
+measurement or test execution.
+
+Cache ownership provides no confinement. Go checks existence and recorded size
+when reading cached package files, not compiled contents against selected
+source. Same-user code can plant a compiled package that a later build links
+into the candidate or test program, so its report can bind a binary the
+selected source would not produce. This joins the trusted module cache, toolchain, executable search path and
+Surla's files. Deleting the build cache forces recompilation but does not
+authenticate those other inputs.
 
 ### Operation diagnostics
 

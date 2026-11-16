@@ -93,10 +93,15 @@ type (
 		// ModCache is the already populated module cache; the build
 		// downloads nothing into it.
 		ModCache string
-		// WorkDir is a private writable directory for TMPDIR, GOCACHE, and the
-		// staged output binary.
+		// BuildCacheDir is the required Go build cache. It may be shared by
+		// concurrent builds on one machine using a local filesystem. Build
+		// creates it when missing; Go owns its entries and maintenance.
+		BuildCacheDir string
+		// WorkDir is an operation-owned writable directory for TMPDIR and the
+		// staged output binary. It is separate from retained package storage.
 		WorkDir string
-		// LogFile receives the build's output; it must lie outside ModuleDir.
+		// LogFile receives build output and cache-initialization failures; it
+		// must lie outside ModuleDir.
 		LogFile string
 	}
 
@@ -319,10 +324,13 @@ func ExcerptFile(path string, maxBytes int64) (string, bool, error) {
 // spec.Out, so, while WorkDir holds no link into spec.Out's directory, the
 // toolchain never writes there and only a regular file is published there.
 //
-// Build trusts GOROOT and ModCache as fixed inputs: the selected toolchain, and
-// module versions verified against their checksums when they were downloaded.
-// Build does not check that WorkDir is fresh: a caller that relies on it
-// holding only this build's cache and staged output must create it empty.
+// Build trusts GOROOT, ModCache and BuildCacheDir as compiler inputs. Go
+// checks cached package existence and recorded size, not correspondence to
+// selected source. Same-user code can plant a package that a later build links,
+// just as it can change the module cache, toolchain or executables. A measured
+// binary digest does not authenticate that source correspondence. Deleting the
+// build cache forces recompilation but does not authenticate the other inputs.
+// Build does not check that WorkDir is fresh; the caller owns its scratch lifetime.
 //
 // run runs the prepared build command to completion. The caller decides which
 // process group owns the compiler, assembler and linker the build starts: a
@@ -514,6 +522,14 @@ func prepare(ctx context.Context, a Artifact, spec Spec) (*exec.Cmd, *os.File, e
 // places Out in the resolved output directory, so the build, its log and its
 // diagnostics name physical paths.
 func resolveBuild(spec BuildSpec) (resolvedBuild, error) {
+	if spec.BuildCacheDir == "" {
+		return resolvedBuild{}, errors.New("build cache directory is required")
+	}
+	cache, err := abspath.EvalMissing(spec.BuildCacheDir)
+	if err != nil {
+		return resolvedBuild{}, fmt.Errorf("resolve build cache directory: %w", err)
+	}
+	spec.BuildCacheDir = cache
 	paths := map[string]*string{
 		"source": &spec.SourceDir, "module": &spec.ModuleDir, "goroot": &spec.GOROOT,
 		"modcache": &spec.ModCache, "work": &spec.WorkDir,
@@ -638,7 +654,7 @@ func (b resolvedBuild) build(ctx context.Context, goWork string, run func(*exec.
 // unable to change go.mod (-mod=readonly), with cgo off as Surla's builds have
 // always had it (turning it on would link C code into binaries that never had
 // it), with the entry-selected workspace or fixed off for BuildModule, and
-// with TMPDIR and GOCACHE inside WorkDir and no HOME, so os.UserConfigDir leaves Go
+// with TMPDIR in WorkDir, GOCACHE in BuildCacheDir and no HOME, so os.UserConfigDir leaves Go
 // telemetry disabled without starting its detached child process. A build gets
 // -buildvcs=false, so it never runs git and stamps no version-control facts.
 func (b resolvedBuild) goRun(
@@ -667,6 +683,13 @@ func (b resolvedBuild) goRun(
 		}
 		return aliasErr
 	}
+	// Surla owns the cache directory's private mode, including recreation
+	// after an idle deletion. Go owns only its entries and maintenance.
+	if err := os.MkdirAll(spec.BuildCacheDir, 0o700); err != nil {
+		cacheErr := fmt.Errorf("create build cache directory: %w", err)
+		_, logErr := fmt.Fprintln(logFile, cacheErr)
+		return errors.Join(cacheErr, logErr)
+	}
 	goArgs := append([]string{}, args...)
 	if args[0] == "build" {
 		goArgs = append(goArgs, "-buildvcs=false")
@@ -686,7 +709,7 @@ func (b resolvedBuild) buildEnv(goWork string) []string {
 		"PATH=" + filepath.Join(spec.GOROOT, "bin") + ":/usr/bin:/bin",
 		"TMPDIR=" + spec.WorkDir,
 		"GOROOT=" + spec.GOROOT,
-		"GOCACHE=" + filepath.Join(spec.WorkDir, "gocache"),
+		"GOCACHE=" + spec.BuildCacheDir,
 		"GOMODCACHE=" + spec.ModCache,
 		"GOTOOLCHAIN=local",
 		"GOWORK=" + goWork,

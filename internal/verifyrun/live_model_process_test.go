@@ -111,7 +111,7 @@ func TestLiveModelGatewayEndsWithItsExecutor(t *testing.T) {
 			require.NoError(t, err)
 			env := append(os.Environ(), verify.LiveModelProviderEnv+"=anthropic", verify.LiveModelNameEnv+"=fixture")
 			p, err := LaunchLive(t.TempDir(), verify.Plan{Tests: verify.TestsWritten}, "secret-key", []string{self}, env,
-				[]modelsettings.Settings{held})
+				[]modelsettings.Settings{held}, t.TempDir())
 			require.NoError(t, err)
 			t.Cleanup(func() { assert.NoError(t, p.Stop()) })
 			ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
@@ -204,7 +204,7 @@ func TestLiveExecutorDiesWithItsHostWhileReadingSettings(t *testing.T) {
 	input, inputWriter, err := os.Pipe()
 	require.NoError(t, err)
 	defer inputWriter.Close()
-	cmd := exec.Command(self, "verify-run", "live", t.TempDir())
+	cmd := exec.Command(self, "verify-run", "live", t.TempDir(), t.TempDir())
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	cmd.ExtraFiles = []*os.File{control}
 	cmd.Stdin = input

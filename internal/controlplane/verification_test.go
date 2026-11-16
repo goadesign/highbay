@@ -185,7 +185,7 @@ func TestGetVerificationReadsTheRunFromDiskInEveryState(t *testing.T) {
 
 	t.Run("a new control plane reads runs started by an earlier one", func(t *testing.T) {
 		runID := writeRun(t, `{"kind":"no_report","failure":"interrupted","stage":"supervise","summary":"The verification was canceled."}`)
-		restarted := newControlPlane(t, Options{Verification: cfg})
+		restarted := newControlPlane(t, Options{BuildCacheDir: t.TempDir(), Verification: cfg})
 		res, err := restarted.GetVerification(alice, &gensurla.GetVerificationPayload{RunID: runID})
 		require.NoError(t, err, "the run does not depend on the saved Change Card")
 		assert.Equal(t, "chg", res.ChangeID)
