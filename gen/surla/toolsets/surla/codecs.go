@@ -4867,7 +4867,7 @@ var getBuildResultFields = []tools.FieldMetadata{
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("taking")},
 		JSONType:    "object",
-		Description: "The branch checked out in the project folder holds both commits of a passed run of this build, by merge or by a squash commit that holds every file they changed as they have it. Another change can be built.",
+		Description: "The branch checked out in the project folder holds both commits of a passed run of this build, by merge or by a squash commit that holds every file they changed as they have it. This build no longer blocks starting another build; start_build's other checks still apply.",
 		Branches: []tools.UnionBranch{
 			tools.TaggedUnionBranch{
 				Discriminator: []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("state")},
@@ -4882,7 +4882,7 @@ var getBuildResultFields = []tools.FieldMetadata{
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("taking")},
 		JSONType:    "object",
-		Description: "The user dropped this build with drop_build: Surla builds nothing on it, no role has work for it, and another change can be built.",
+		Description: "The user dropped this build with drop_build: Surla builds nothing on it, no role has work for it, and it no longer blocks starting another build. An agreement drafted before the drop still cannot be built: get_build's drafted_before_drop reports it for each change, and start_build refuses it with drafted_before_drop until the guide refreshes the draft and revises the change and the user adopts the revision.",
 		Branches: []tools.UnionBranch{
 			tools.TaggedUnionBranch{
 				Discriminator: []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("state")},

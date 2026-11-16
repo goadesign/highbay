@@ -127,12 +127,12 @@ var BuildPassed = Type("BuildPassed", func() {
 
 // BuildMerged says the user took the open build.
 var BuildMerged = Type("BuildMerged", func() {
-	Description("The branch checked out in the project folder holds both commits of a passed run of this build, by merge or by a squash commit that holds every file they changed as they have it. Another change can be built.")
+	Description("The branch checked out in the project folder holds both commits of a passed run of this build, by merge or by a squash commit that holds every file they changed as they have it. This build no longer blocks starting another build; start_build's other checks still apply.")
 })
 
 // BuildDropped says the user dropped the open build.
 var BuildDropped = Type("BuildDropped", func() {
-	Description("The user dropped this build with drop_build: Surla builds nothing on it, no role has work for it, and another change can be built.")
+	Description("The user dropped this build with drop_build: Surla builds nothing on it, no role has work for it, and it no longer blocks starting another build. An agreement drafted before the drop still cannot be built: get_build's drafted_before_drop reports it for each change, and start_build refuses it with drafted_before_drop until the guide refreshes the draft and revises the change and the user adopts the revision.")
 	Attribute("kept_branches", ArrayOf(String), "The build's own branches that exist and hold a commit made after the build's base, where its work stays (git log <branch> shows it); empty when nothing was committed for it.")
 	Required("kept_branches")
 })
@@ -316,7 +316,7 @@ func buildMethods() {
 	})
 
 	Method("drop_build", func() {
-		Description("The user drops the project's open build on the views page because the change will not be taken: Surla builds nothing on it, and another change can be built. The request names the build the page showed; a different open build (a second tab built or dropped meanwhile) is refused with its facts, and a build already dropped is refused. Drop writes one record, the start of the guide's made-from list naming the dropped build, by one rename: its only write. It changes no working copy, branch, draft or file of the user's: the build's commits stay on its branches, and the guide's next refresh_story makes the draft again from the project folder. From then on no role has work for the build, and the builder's and the test writer's tools tell them it was dropped. A merged build may be dropped too. The result is the dropped build as get_build reports it.")
+		Description("The user drops the project's open build on the views page because the change will not be taken: Surla builds nothing on it, and it no longer blocks starting another build. A change whose agreed revision was drafted before the drop is still refused with drafted_before_drop, which get_build's drafted_before_drop reports, until the guide refreshes the draft and revises the change and the user adopts the revision. The request names the build the page showed; a different open build (a second tab built or dropped meanwhile) is refused with its facts, and a build already dropped is refused. Drop writes one record, the start of the guide's made-from list naming the dropped build, by one rename: its only write. It changes no working copy, branch, draft or file of the user's: the build's commits stay on its branches, and the guide's next refresh_story makes the draft again from the project folder. From then on no role has work for the build, and the builder's and the test writer's tools tell them it was dropped. A merged build may be dropped too. The result is the dropped build as get_build reports it.")
 		Payload(func() {
 			Attribute("change_id", String, "change_id of the open build the page showed.", func() { MinLength(1) })
 			Attribute("started_at", String, "started_at of the open build the page showed, exactly as get_build reported it.", func() { Format(FormatDateTime) })
