@@ -768,6 +768,9 @@ html { scroll-padding-block-start: calc(var(--surla-frame-height, 120px) + 16px)
 .surla-frame-slots dt { font-size: 12px; color: var(--muted-foreground); margin-block-end: 4px; }
 .surla-frame-slots dd { margin: 0; overflow-wrap: anywhere; }
 .surla-frame-next dd { display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: center; }
+#surla-frame-next .surla-btn-primary {
+  background-color: var(--primary); color: var(--primary-foreground); border-color: var(--primary);
+}
 .surla-frame-action-binding { font-size: 12px; color: var(--muted-foreground); }
 .surla-frame-context { padding: 0 12px 8px; font-size: 12px; }
 .surla-frame-context summary { color: var(--muted-foreground); cursor: pointer; }

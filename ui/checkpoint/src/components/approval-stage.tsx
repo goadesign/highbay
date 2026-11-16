@@ -85,7 +85,7 @@ export function ApprovalStage(props: ApprovalStageProps) {
       </div>
     </div>
     <dl className="surla-approval-binding">
-      <div><dt>Agreement</dt><dd><code>{run.request_revision.slice(0, 15)}</code></dd></div>
+      <div><dt>Agreement</dt><dd><code>{run.request_revision.slice(0, 12)}</code></dd></div>
       <div><dt>Builder’s commit</dt><dd><code>{run.candidate_commit.slice(0, 12)}</code></dd></div>
       <div><dt>Run</dt><dd><code>{run.run_id.slice(0, 12)}</code></dd></div>
     </dl>

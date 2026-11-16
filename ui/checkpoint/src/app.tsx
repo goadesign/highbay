@@ -422,7 +422,7 @@ function describeActiveResultSubject(
     return {
       role: "result",
       label,
-      stage: activeResult.kind === "cp5-approval" ? "Approval" : "Proof",
+      stage: activeResult.kind === "cp5-approval" ? "Approve" : "Check",
       changeId: displayedRun.change_id,
       requestRevision: displayedRun.request_revision,
       detail:
@@ -435,7 +435,7 @@ function describeActiveResultSubject(
   return {
     role: "result",
     label,
-    stage: activeResult.kind === "cp5-approval" ? "Approval" : "Proof",
+    stage: activeResult.kind === "cp5-approval" ? "Approve" : "Check",
     changeId: selectedVerificationChangeId || undefined,
     detail: "saved verification runs",
   };
@@ -1085,7 +1085,7 @@ export function bootstrapViewsPage() {
           (before === undefined
             ? "The guide proposed a new revision of this change."
             : "The guide replaced its proposed revision of this change.") +
-          " Adopt or decline it under Decisions & Approval; the agreed revision stays in force until then.";
+          " Adopt or decline it in Agree; the agreed revision stays in force until then.";
       }
       syncAllRegions();
       return;
@@ -2117,7 +2117,7 @@ export function bootstrapViewsPage() {
     }[] = [];
     tabs.push({
       id: "surla-nav-changes",
-      label: "Changes",
+      label: "Describe",
       active: activeResult?.kind === "changes",
       onClick: showChanges,
     });
@@ -2144,7 +2144,7 @@ export function bootstrapViewsPage() {
     if (activeEditor !== null) {
       tabs.push({
         id: "surla-nav-cp1",
-        label: "Decisions & Approval",
+        label: "Agree",
         active: cp1Active && editorStage === "agree",
         onClick: handleReturnToChangeCard,
       });
@@ -2162,7 +2162,7 @@ export function bootstrapViewsPage() {
     if (activeEditor !== null || selectedVerificationChangeId !== null) {
       tabs.push({
         id: "surla-nav-cp4",
-        label: "Proof",
+        label: "Check",
         active: activeResult?.kind === "cp4-verification",
         onClick: openProof,
       });
@@ -2183,7 +2183,7 @@ export function bootstrapViewsPage() {
       subjects.push({
         role: "editor",
         label: bothRegionsShown ? "Protected editor" : "Showing",
-        stage: "Decisions & Approval",
+        stage: editorStage === "build" ? "Build" : "Agree",
         changeId: activeEditor.card.change_id,
         requestRevision: activeEditor.card.request_revision,
         detail:
@@ -2232,10 +2232,6 @@ export function bootstrapViewsPage() {
 
     navEl.hidden = false;
     const journeyIds = new Set(["surla-nav-changes", "surla-nav-cp1", "surla-nav-build", "surla-nav-cp4", "surla-nav-cp5"]);
-    const journeyLabels: Record<string, string> = {
-      "surla-nav-changes": "Describe", "surla-nav-cp1": "Agree", "surla-nav-build": "Build",
-      "surla-nav-cp4": "Check", "surla-nav-cp5": "Approve",
-    };
     const run = resolveDisplayedVerificationRun();
     const review = displayedApprovalReview();
     const onApproval = activeResult?.kind === "cp5-approval";
@@ -2264,7 +2260,7 @@ export function bootstrapViewsPage() {
     flushSync(() => {
       navRoot.render(
         <WorkspaceFrame project={projectName ?? "Project"}
-          journey={tabs.filter((tab) => journeyIds.has(tab.id)).map((tab) => ({ ...tab, label: journeyLabels[tab.id] }))}
+          journey={tabs.filter((tab) => journeyIds.has(tab.id))}
           references={tabs.filter((tab) => !journeyIds.has(tab.id))}
           agreed={agreed} attention={attention} next={next}
           diagnosticsOpen={traceOpen} onToggleDiagnostics={() => {
@@ -2833,9 +2829,7 @@ export function bootstrapViewsPage() {
     } else if (run.state.type === "completed" && run.state.value.report.passed) {
       next = ed.card.approval?.report_digest === run.state.value.report.report_digest
         ? "The check passed and your approval is recorded."
-        : changeList?.approval_available === true && approvalUnavailable === null
-        ? "The check passed. Review the result and approve it."
-        : "The check passed. Review the result; approval is unavailable on this server.";
+        : "The check passed. Review the result.";
     } else {
       next = "The check needs the builder’s attention. Review its saved result.";
     }

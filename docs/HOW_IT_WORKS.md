@@ -256,9 +256,8 @@ Card, run `surla preview -dir <module>`.
 
 ## Building
 
-After confirming, you press **Build this change** at the top of Decisions &
-Approval. The saved agreement stays below the build under **Agreed:** and
-your request. Open **Agreement details** to review it or **Refine agreed
+After confirming, you press **Build this change** in Build. The saved
+agreement stays below the build under **Agreed:** and your request. Open **Agreement details** to review it or **Refine agreed
 answers and examples** to edit it. The build control explains which agents
 start and that, from Build on, the tests and the builder's code run on this
 machine as ordinary programs, with your access to files and the network;
@@ -414,7 +413,7 @@ tests check the right things is still yours to judge.
 When findings are sent back, the page names the test writer as the next
 actor. **Read findings** shows them under **What Surla told the test writer**;
 the test writer fixes them and reports again. After a matching check passes,
-**Review and approve** opens that exact saved result. An earlier check stays
+**Review result** opens that exact saved result. An earlier check stays
 readable, but the builder needs to verify the current revision and tests
 before you can approve.
 
@@ -533,7 +532,7 @@ run details** it shows the builder's commit as "Candidate commit" and the
 tests commit as "Accepted tests commit", or as "Evaluator commit" when the
 run used the evaluator that stored verification settings name.
 
-The Changes view shows each change's latest saved run, for example "Latest
+The Describe view shows each change's latest saved run, for example "Latest
 saved run: passed", and says under it whether that run counts for the change
 as it stands. "Matches the agreed revision and selected tests." means the run
 verified the agreed revision with the tests a run of that revision would
@@ -546,7 +545,7 @@ readable in the Check view.
 The opened change and the selected run also refresh this match when the
 agreement or selected tests change. While a read is pending or fails, the
 report and your unsaved edits stay visible, but approval waits for a fresh
-match. Proof shows **Check started** in your local time: it is the time the
+match. Check shows **Check started** in your local time: it is the time the
 server accepted the run, not a completion time. Details retain the exact
 recorded timestamp.
 
@@ -581,8 +580,9 @@ explains the enabling step. A read failure retains evidence and withholds
 approval until recovery. Approval stays on this stage after it is recorded.
 The server reloads the run's report and derives it again from its evidence,
 checks that it passed and that it verified the agreed revision with the tests
-accepted for that revision, and records the approval on the Change Card: the builder's commit, the tests commit and the report. Approval
-merges and deploys nothing.
+accepted for that revision, and records the approval on the Change Card:
+the builder's commit, the tests commit and the report. Approval merges and
+deploys nothing.
 
 The approval names two commits: the builder's commit that the run verified (on
 `surla/build-<n>`), and the tests commit that Surla accepted for the revision

@@ -135,6 +135,7 @@ func TestApprovalFrameAndEvidenceAtDesktopAndPhoneWidth(t *testing.T) {
 			assert.True(t, view.DraftVisible)
 			assert.True(t, view.FooterReserved)
 			assert.True(t, view.FlowLinesReadable)
+			assert.True(t, view.PrimaryAtRest)
 			if state == "current" {
 				assert.Equal(t, 1, view.ApproveCount)
 				assert.True(t, view.ApproveInNext)

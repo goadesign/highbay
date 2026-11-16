@@ -643,6 +643,24 @@ async function approvalScenario(input, facts, views) {
     await views.dt.send("Emulation.setDeviceMetricsOverride", { width, height, deviceScaleFactor: scale, mobile: width < 600 }, views.sessionId);
     await views.dt.send("Emulation.setEmulatedMedia", { features: [{ name: "prefers-color-scheme", value: name === "dark" ? "dark" : "light" }] }, views.sessionId);
     await evaluate(views, "window.scrollTo(0, 0), new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))");
+    const primaryAtRest = await evaluate(views, "(" + function measureRestingAction() {
+      const action = document.getElementById("surla-cp5-approve");
+      if (action === null) return true;
+      document.activeElement?.blur();
+      const probe = document.createElement("span");
+      probe.style.backgroundColor = "var(--primary)";
+      probe.style.color = "var(--primary-foreground)";
+      probe.style.display = "none";
+      document.body.append(probe);
+      const expected = getComputedStyle(probe), actual = getComputedStyle(action);
+      const matched = actual.backgroundColor === expected.backgroundColor && actual.color === expected.color;
+      probe.remove();
+      return matched;
+    }.toString() + ")()");
+    if (input.approval_state === "current") {
+      const resting = await views.dt.send("Page.captureScreenshot", { format: "png", captureBeyondViewport: false }, views.sessionId);
+      fs.writeFileSync(require("node:path").join(input.capture_directory, "current-" + name + "-resting.png"), Buffer.from(resting.data, "base64"));
+    }
     let reached = false;
     if (input.approval_state === "current") {
       await evaluate(views, "document.querySelector('.surla-skip-link').focus(), true");
@@ -680,6 +698,7 @@ async function approvalScenario(input, facts, views) {
       };
     }.toString() + ")()");
     measured.name = name;
+    measured.primary_at_rest = primaryAtRest;
     measured.keyboard_reached_action = reached;
     measured.flow_lines_readable = true;
     const capture = await views.dt.send("Page.captureScreenshot", { format: "png", captureBeyondViewport: true }, views.sessionId);

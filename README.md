@@ -92,7 +92,8 @@ to $50 get instant store credit; larger ones wait for a manager":
    view.
 8. **Approve and merge.** Open the run in **Approve** to review its recorded
    Story flows, test outcomes, excluded drafts and unknown coverage. When the
-   owner says approval is available, Next offers **Approve this result**. Surla checks that the run passed and ran the tests accepted
+   server says approval is available, Next offers **Approve this result**.
+   Surla checks that the run passed and ran the tests accepted
    for the agreed revision, then records the approval with the builder's
    commit, the tests commit and the report. While the build shows **Passed**,
    the recorded approval and the Build section on the page show both commits
@@ -352,9 +353,9 @@ See [`start_live_target`](docs/REFERENCE.md#start_live_target),
 The page lists the project's changes and shows each one's Story, questions,
 build, team, verification runs and approval, and updates itself without
 losing what you typed. The frame names Describe, Agree, Build, Check and
-Approve; the selected stage owns the one deciding action in Next. Its **Diagnostics** drawer shows safe summaries of what the
-agents and the server did. See the [views page](docs/REFERENCE.md#views-page)
-and [operation diagnostics](docs/REFERENCE.md#operation-diagnostics).
+Approve. The approval decision appears in Next. The **Diagnostics** drawer
+shows safe summaries of what the agents and the server did. See the
+[views page](docs/REFERENCE.md#views-page) and [operation diagnostics](docs/REFERENCE.md#operation-diagnostics).
 
 > **Why the name "Surla"?** Named after **Tambdi Surla** in Goa, home to the
 > carved basalt Mahadeva temple beside the Surla River. In Surla

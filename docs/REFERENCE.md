@@ -1523,8 +1523,8 @@ status, including `unset`, which does not prove success. `unprocessable`
 
 ## Builds and assignments
 
-**Input:** the user's start button in the Build section of the Decisions &
-Approval view, such as **Build this change** for a first build.
+**Input:** the user's start button in Build, such as **Build this change**
+for a first build.
 **Who acts:** the server saves the agreed revision's Story and design, with
 the answers, examples and preserved behaviors the user confirmed for it,
 creates any missing `.surla-build` and `.surla-tests` working copies, gives the
@@ -2172,7 +2172,7 @@ start, not as current health.
 
 When tests need changes, the test writer is the actor that fixes and reports
 them; **Read findings** opens **What Surla told the test writer**. A matching
-passed check gives the build **Review and approve**, opening that exact run.
+passed check gives the build **Review result**, opening that exact run.
 The selected run refreshes its input match when the agreement or build
 changes, including when it is older than the latest run. A stale, pending or
 unreadable match disables approval while keeping the saved report and any

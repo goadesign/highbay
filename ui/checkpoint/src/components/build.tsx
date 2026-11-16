@@ -276,7 +276,7 @@ export function BuildSectionView({
             : report?.passed
             ? recordedCheck
               ? "The check passed and your approval is recorded."
-              : `The check passed: ${report.counts.passed} of ${report.counts.required} scenarios. ${approvalAvailable ? "Review the result and approve it." : "Review the result; approval is unavailable on this server."}`
+              : `The check passed: ${report.counts.passed} of ${report.counts.required} scenarios. Review the result.`
             : check.state.type === "not_completed"
             ? "The check could not finish. The builder reads the result and addresses its next step."
             : "The check did not pass. The builder reviews the result before asking for another check."}
@@ -295,7 +295,7 @@ export function BuildSectionView({
     {blockingBuild !== null || saved === null ? primaryBuild : null}
     {check !== null ? <Button id="surla-build-review-check" variant={reviewPrimary ? "primary" : "default"}
       disabled={disabled || starting} onClick={onReviewCheck}>
-      {reviewPrimary ? "Review and approve" : "Review saved check"}
+      {reviewPrimary ? "Review result" : "Review saved check"}
     </Button> : null}
     <Button id="surla-build-view-team" disabled={disabled || starting} onClick={onOpenTeam}>View team</Button>
     {current && (open || replay) && draftedBeforeDrop === false && confirmed && displayedCurrent ? <span ref={triggerRef}>
