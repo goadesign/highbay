@@ -352,8 +352,14 @@ type Service interface {
 	// changed the same lines or one side removed what the other changed. A draft
 	// file Go cannot parse, and a module the project's go.mod requires at another
 	// version or with another replace directive than the draft's, are listed to
-	// correct; Surla does not merge go.mod. Surla records an interrupted update so
-	// a later call can finish it without merging its result again; if the guide
+	// correct; Surla does not merge go.mod. Each listed file names the folder that
+	// holds it: the guide corrects a file of its draft, while a design file or
+	// go.mod of the project folder that cannot be parsed is the user's to correct
+	// there and the guide never edits it. When the project's commit, the draft,
+	// the project's files or the draft's made-from list change while Surla
+	// prepares the update, Surla brings nothing and answers conflict, and the
+	// guide calls update_draft again. Surla records an interrupted update so a
+	// later call can finish it without merging its result again; if the guide
 	// changed the file in between, the file is listed to correct. An uncommitted
 	// revert to an older version may bring nothing; when a build reports
 	// design_changed_outside for an uncommitted design change, the user commits
@@ -1175,17 +1181,29 @@ type DiffResult struct {
 	Summary string
 }
 
-// A file of the draft that update_draft could not bring forward from the
-// project folder: the guide corrects it in the draft and calls update_draft
-// again until none is listed, then refresh_story.
+// A file to correct before update_draft can bring a change forward, and the
+// folder that holds it. When folder is draft_folder, the guide corrects the
+// file in its draft. When folder is project_folder, the file is the user's
+// own, in the project folder: the guide tells the user what to correct there
+// and waits, and never edits it. The guide calls update_draft again until none
+// is listed, then refresh_story.
 type DraftCorrection struct {
-	// Path relative to the draft folder, such as design/types.go or go.mod.
+	// Path relative to the folder that folder names, such as design/types.go or
+	// go.mod.
 	Path string
-	// What to correct: conflict markers where the draft and the project folder
-	// changed the same lines; a file removed on one side and changed on the other;
-	// a draft file Go cannot parse, with its line; or a module the project's
-	// go.mod requires at another version than the draft's, or that the draft's
-	// lacks, including differing replace directives.
+	// Which folder holds the file to correct: draft_folder is the guide's draft,
+	// at the result's draft_folder; project_folder is the user's project folder,
+	// which holds the draft.
+	Folder string
+	// What to correct. In the draft: conflict markers where the draft and the
+	// project folder changed the same lines; a file removed on one side and
+	// changed on the other; a draft file Go cannot parse, with its line; a file
+	// whose project change Surla took without merging, or was writing when it
+	// stopped, to check that it holds the intended edits once; or a module the
+	// project's go.mod requires at another version than the draft's, or that the
+	// draft's lacks, including differing replace directives and a differing module
+	// path. In the project folder: a design file or go.mod there that cannot be
+	// parsed, with its line, or a go.mod that declares no module.
 	Problem string
 }
 
@@ -1225,8 +1243,8 @@ type DraftUpdateResult struct {
 	// Design files where the project folder's change and the draft's edits merged
 	// without conflict, in path order.
 	Merged []string
-	// Files to correct in the draft before refreshing, in path order; empty when
-	// none.
+	// Files to correct before refreshing, each in the folder it names, in path
+	// order; empty when none.
 	ToCorrect []*DraftCorrection
 }
 
@@ -4424,13 +4442,22 @@ func validatejsonDiffResultTransport(value *jsonDiffResultTransport) (err error)
 
 // jsonDraftCorrectionTransport stores JSON fields until they have been validated.
 type jsonDraftCorrectionTransport struct {
-	// Path relative to the draft folder, such as design/types.go or go.mod.
+	// Path relative to the folder that folder names, such as design/types.go or
+	// go.mod.
 	Path *string `json:"path"`
-	// What to correct: conflict markers where the draft and the project folder
-	// changed the same lines; a file removed on one side and changed on the other;
-	// a draft file Go cannot parse, with its line; or a module the project's
-	// go.mod requires at another version than the draft's, or that the draft's
-	// lacks, including differing replace directives.
+	// Which folder holds the file to correct: draft_folder is the guide's draft,
+	// at the result's draft_folder; project_folder is the user's project folder,
+	// which holds the draft.
+	Folder *string `json:"folder"`
+	// What to correct. In the draft: conflict markers where the draft and the
+	// project folder changed the same lines; a file removed on one side and
+	// changed on the other; a draft file Go cannot parse, with its line; a file
+	// whose project change Surla took without merging, or was writing when it
+	// stopped, to check that it holds the intended edits once; or a module the
+	// project's go.mod requires at another version than the draft's, or that the
+	// draft's lacks, including differing replace directives and a differing module
+	// path. In the project folder: a design file or go.mod there that cannot be
+	// parsed, with its line, or a go.mod that declares no module.
 	Problem *string `json:"problem"`
 }
 
@@ -4442,8 +4469,16 @@ func validatejsonDraftCorrectionTransport(value *jsonDraftCorrectionTransport) (
 	if value.Path == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("path", "body"))
 	}
+	if value.Folder == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("folder", "body"))
+	}
 	if value.Problem == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("problem", "body"))
+	}
+	if value.Folder != nil {
+		if !(*value.Folder == "draft_folder" || *value.Folder == "project_folder") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.folder", *value.Folder, []any{"draft_folder", "project_folder"}))
+		}
 	}
 	return err
 }
@@ -4517,8 +4552,8 @@ type jsonDraftUpdateResultTransport struct {
 	// Design files where the project folder's change and the draft's edits merged
 	// without conflict, in path order.
 	Merged []string `json:"merged"`
-	// Files to correct in the draft before refreshing, in path order; empty when
-	// none.
+	// Files to correct before refreshing, each in the folder it names, in path
+	// order; empty when none.
 	ToCorrect []*jsonDraftCorrectionTransport `json:"to_correct"`
 }
 
@@ -8382,6 +8417,14 @@ func validateDiffResultOriginal(value *DiffResult) (err error) {
 	return err
 }
 
+// validateDraftCorrectionOriginal checks the original typed value before JSON conversion.
+func validateDraftCorrectionOriginal(value *DraftCorrection) (err error) {
+	if !(value.Folder == "draft_folder" || value.Folder == "project_folder") {
+		err = goa.MergeErrors(err, goa.InvalidEnumValueError("value.folder", value.Folder, []any{"draft_folder", "project_folder"}))
+	}
+	return err
+}
+
 // validateDraftOverridePayloadOriginal checks the original typed value before JSON conversion.
 func validateDraftOverridePayloadOriginal(value *DraftOverridePayload) (err error) {
 	if !(value.TargetKind == "prompt_template" || value.TargetKind == "compiled_rule") {
@@ -8400,6 +8443,13 @@ func validateDraftUpdateResultOriginal(value *DraftUpdateResult) (err error) {
 	}
 	if value.ToCorrect == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("to_correct", "value"))
+	}
+	for _, e := range value.ToCorrect {
+		if e != nil {
+			if err2 := validateDraftCorrectionOriginal(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
 	}
 	return err
 }
@@ -15979,10 +16029,14 @@ func EncodeDraftCorrection(in *DraftCorrection) ([]byte, error) {
 	if err := checkDraftCorrectionValue(in); err != nil {
 		return nil, fmt.Errorf("encode DraftCorrection JSON: %w", err)
 	}
+	if err := validateDraftCorrectionOriginal(in); err != nil {
+		return nil, fmt.Errorf("validate DraftCorrection value: %w", err)
+	}
 	var body *jsonDraftCorrectionTransport
 	{
 		body = &jsonDraftCorrectionTransport{
 			Path:    &in.Path,
+			Folder:  &in.Folder,
 			Problem: &in.Problem,
 		}
 	}
@@ -16003,6 +16057,9 @@ func ValidateDraftCorrectionValue(in *DraftCorrection) error {
 	if err := checkDraftCorrectionValue(in); err != nil {
 		return fmt.Errorf("validate DraftCorrection value: %w", err)
 	}
+	if err := validateDraftCorrectionOriginal(in); err != nil {
+		return fmt.Errorf("validate DraftCorrection value: %w", err)
+	}
 
 	if in == nil {
 		return goa.MissingFieldError("result", "DraftCorrection")
@@ -16012,6 +16069,7 @@ func ValidateDraftCorrectionValue(in *DraftCorrection) error {
 	{
 		body = &jsonDraftCorrectionTransport{
 			Path:    &in.Path,
+			Folder:  &in.Folder,
 			Problem: &in.Problem,
 		}
 	}
@@ -16048,6 +16106,7 @@ func DecodeDraftCorrection(data []byte) (out *DraftCorrection, err error) {
 	{
 		out = &DraftCorrection{
 			Path:    *body.Path,
+			Folder:  *body.Folder,
 			Problem: *body.Problem,
 		}
 	}
@@ -24976,6 +25035,7 @@ func decodeDesignSnapshotTransportToDesignSnapshot(v *jsonDesignSnapshotTranspor
 func decodeDraftCorrectionTransportToDraftCorrection(v *jsonDraftCorrectionTransport) *DraftCorrection {
 	res := &DraftCorrection{
 		Path:    *v.Path,
+		Folder:  *v.Folder,
 		Problem: *v.Problem,
 	}
 
@@ -26162,6 +26222,7 @@ func encodeDesignSnapshotToDesignSnapshotTransport2(v *DesignSnapshot) *jsonDesi
 func encodeDraftCorrectionToDraftCorrectionTransport(v *DraftCorrection) *jsonDraftCorrectionTransport {
 	res := &jsonDraftCorrectionTransport{
 		Path:    &v.Path,
+		Folder:  &v.Folder,
 		Problem: &v.Problem,
 	}
 
@@ -32331,22 +32392,30 @@ func validateDraftCorrectionJSONValue(path string, value any, description string
 	sort.Strings(keys)
 	for _, key := range keys {
 		switch key {
+		case "folder":
+			if err := validateAgentPolicyItemJSONValue2(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Which folder holds the file to correct: draft_folder is the guide's draft, at the result's draft_folder; project_folder is the user's project folder, which holds the draft.",
+			); err != nil {
+				return err
+			}
 		case "path":
 			if err := validateAgentPolicyItemJSONValue2(
 				generatedJSONChildPath(path, key, false),
-				typed[key], "Path relative to the draft folder, such as design/types.go or go.mod.",
+				typed[key], "Path relative to the folder that folder names, such as design/types.go or go.mod.",
 			); err != nil {
 				return err
 			}
 		case "problem":
 			if err := validateAgentPolicyItemJSONValue2(
 				generatedJSONChildPath(path, key, false),
-				typed[key], "What to correct: conflict markers where the draft and the project folder changed the same lines; a file removed on one side and changed on the other; a draft file Go cannot parse, with its line; or a module the project's go.mod requires at another version than the draft's, or that the draft's lacks, including differing replace directives.",
+				typed[key], "What to correct. In the draft: conflict markers where the draft and the project folder changed the same lines; a file removed on one side and changed on the other; a draft file Go cannot parse, with its line; a file whose project change Surla took without merging, or was writing when it stopped, to check that it holds the intended edits once; or a module the project's go.mod requires at another version than the draft's, or that the draft's lacks, including differing replace directives and a differing module path. In the project folder: a design file or go.mod there that cannot be parsed, with its line, or a go.mod that declares no module.",
 			); err != nil {
 				return err
 			}
 		default:
 			return unknownJSONFieldError(path, key, []string{
+				"folder",
 				"path",
 				"problem",
 			})
@@ -32511,7 +32580,7 @@ func validateDraftUpdateResultJSONValue(path string, value any, description stri
 		case "to_correct":
 			if err := validateDraftUpdateResultJSONValue4(
 				generatedJSONChildPath(path, key, false),
-				typed[key], "Files to correct in the draft before refreshing, in path order; empty when none.",
+				typed[key], "Files to correct before refreshing, each in the folder it names, in path order; empty when none.",
 			); err != nil {
 				return err
 			}
@@ -38739,6 +38808,9 @@ func checkDraftCorrectionDraftCorrectionValue(in *DraftCorrection, field string,
 	if in != nil {
 		if !utf8.ValidString(string(in.Path)) {
 			return fmt.Errorf("%s: invalid UTF-8", generatedJSONChildPath(field, "path", false))
+		}
+		if !utf8.ValidString(string(in.Folder)) {
+			return fmt.Errorf("%s: invalid UTF-8", generatedJSONChildPath(field, "folder", false))
 		}
 		if !utf8.ValidString(string(in.Problem)) {
 			return fmt.Errorf("%s: invalid UTF-8", generatedJSONChildPath(field, "problem", false))

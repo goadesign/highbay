@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"go/scanner"
 	"io/fs"
 	"maps"
 	"os"
@@ -32,6 +33,15 @@ type draftFileUpdate struct {
 	kind    string
 }
 
+const (
+	// correctInDraft is DraftCorrection.Folder for a file of the guide's
+	// draft, which the guide corrects itself.
+	correctInDraft = "draft_folder"
+	// correctInProject is DraftCorrection.Folder for a file of the user's
+	// project folder, which only the user corrects.
+	correctInProject = "project_folder"
+)
+
 // UpdateDraft brings the project folder's changes into the draft, preserving
 // merge conflicts for the guide. Evaluation remains a separate refresh action.
 func (c *ControlPlane) UpdateDraft(ctx context.Context) (*gensurla.DraftUpdateResult, error) {
@@ -40,17 +50,19 @@ func (c *ControlPlane) UpdateDraft(ctx context.Context) (*gensurla.DraftUpdateRe
 	}
 	wsDir, dev, ino := c.currentWorkspaceTarget()
 	if wsDir == "" {
-		return nil, gensurla.MakeUnprocessable(errors.New("start Surla from a project directory before updating its draft"))
+		return nil, gensurla.MakeNotImplemented(errors.New(
+			"no workspace directory is bound to this control plane; start Surla from a project directory",
+		))
 	}
 	ctx, span := c.tracer("surla/controlplane").Start(ctx, "surla.controlplane.update_draft")
 	defer span.End()
 	result := &gensurla.DraftUpdateResult{DraftFolder: filepath.Join(wsDir, draftFolderName), Taken: []string{}, Merged: []string{}, ToCorrect: []*gensurla.DraftCorrection{}}
 	err := c.withDraftSnapshot(ctx, wsDir, dev, ino, func(project, draft *os.Root, list madeFromRecord) error {
-		draftFiles, err := readDraftUpdateFiles(result.DraftFolder, draft)
+		draftFiles, err := readUpdateFolder(correctInDraft, result.DraftFolder, draft)
 		if err != nil {
 			return err
 		}
-		projectFiles, err := readDraftUpdateFiles(wsDir, project)
+		projectFiles, err := readUpdateFolder(correctInProject, wsDir, project)
 		if err != nil {
 			return err
 		}
@@ -94,13 +106,18 @@ func (c *ControlPlane) UpdateDraft(ctx context.Context) (*gensurla.DraftUpdateRe
 		}
 		same, err := draftStateMatches(project, info, marker, false)
 		if err != nil {
-			return err
+			// The draft folder or its marker stopped being readable while Git
+			// ran: the next call refuses the same state before reading it.
+			return gensurla.MakeUnprocessable(fmt.Errorf(
+				"draft %s could no longer be read while preparing the update: %w; restore it or move it aside, then call update_draft again",
+				result.DraftFolder, err,
+			))
 		}
-		nowDraft, err := readDraftUpdateFiles(result.DraftFolder, draft)
+		nowDraft, err := readUpdateFolder(correctInDraft, result.DraftFolder, draft)
 		if err != nil {
 			return err
 		}
-		nowProject, err := readDraftUpdateFiles(wsDir, project)
+		nowProject, err := readUpdateFolder(correctInProject, wsDir, project)
 		if err != nil {
 			return err
 		}
@@ -159,10 +176,10 @@ func (c *ControlPlane) planDraftUpdates(
 			}
 			update = *prepared
 			if problem != "" {
-				addDraftCorrection(result, file, problem)
+				addDraftCorrection(result, correctInDraft, file, problem)
 			}
 		} else if version != pending.Result {
-			addDraftCorrection(result, file, "Surla stopped while bringing the project folder's change into your draft, and the draft changed since: make sure it holds that change once.")
+			addDraftCorrection(result, correctInDraft, file, "Surla stopped while bringing the project folder's change into your draft, and the draft changed since: make sure it holds that change once.")
 			skip[file] = true
 		}
 		updates = append(updates, update)
@@ -174,7 +191,7 @@ func (c *ControlPlane) planDraftUpdates(
 	}
 	history, err := readDesignHistory(ctx, dir, head, madeFromSnapshot{Start: list.Start, Entries: list.Entries}, list.Taken)
 	if err != nil {
-		return nil, err
+		return nil, committedDesignRefusal(head, err)
 	}
 	for _, file := range designPaths(list.Entries, draftDesignFiles(design), draftDesignFiles(project)) {
 		if skip[file] {
@@ -183,7 +200,7 @@ func (c *ControlPlane) planDraftUpdates(
 		if text, found := design[file]; found {
 			canonical, err := designversion.Canonical(file, text)
 			if err != nil {
-				addDraftCorrection(result, file, err.Error())
+				addDraftCorrection(result, correctInDraft, file, err.Error())
 				continue
 			}
 			design[file] = canonical
@@ -193,7 +210,9 @@ func (c *ControlPlane) planDraftUpdates(
 		if text, found := project[file]; found {
 			canonical, err := designversion.Canonical(file, text)
 			if err != nil {
-				addDraftCorrection(result, file, "Project folder: "+err.Error())
+				// The draft holds nothing to correct here: the user's own
+				// file must parse before its change can be compared.
+				addDraftCorrection(result, correctInProject, file, err.Error())
 				continue
 			}
 			outside, outsideVersion = canonical, designversion.Digest(canonical)
@@ -206,7 +225,7 @@ func (c *ControlPlane) planDraftUpdates(
 			return nil, err
 		}
 		if problem != "" {
-			addDraftCorrection(result, file, problem)
+			addDraftCorrection(result, correctInDraft, file, problem)
 		}
 		if update == nil {
 			continue
@@ -403,6 +422,50 @@ func syncDraftUpdateParent(root *os.Root, file string) (retErr error) {
 	return fsyncDir(dir)
 }
 
+// readUpdateFolder reads the files update_draft compares in dir, the guide's
+// draft (correctInDraft) or the project folder (correctInProject). A file
+// there that is missing, not a regular file, unreadable or not valid UTF-8
+// is the declared unprocessable refusal, as it is when refresh_story reads
+// the draft: its message names the folder and the file, and says who
+// corrects it, because the guide never edits the project folder.
+func readUpdateFolder(folder, dir string, root *os.Root) (map[string]string, error) {
+	files, err := readDraftUpdateFiles(dir, root)
+	switch {
+	case err == nil:
+		return files, nil
+	case folder == correctInProject:
+		return nil, gensurla.MakeUnprocessable(fmt.Errorf(
+			"project folder %s: %w; ask the user to restore or correct it in the project folder, then call update_draft again", dir, err,
+		))
+	default:
+		return nil, gensurla.MakeUnprocessable(fmt.Errorf(
+			"draft %s: %w; restore or correct it in the draft, then call update_draft again", dir, err,
+		))
+	}
+}
+
+// committedDesignRefusal classifies a failed read of the design at commit,
+// the project's current commit. A design file there that Go cannot parse, or
+// that is a link or submodule, is the user's to correct and commit, so it is
+// the declared unprocessable refusal naming the file and the commit. Every
+// other failure (Git could not run or read the repository) is returned as it
+// is and stays a fault.
+func committedDesignRefusal(commit string, err error) error {
+	const next = "ask the user to correct it in the project folder and commit, then call update_draft again"
+	var syntax scanner.ErrorList
+	var source *committedDesignCanonicalError
+	switch {
+	case errors.As(err, &syntax) && errors.As(err, &source):
+		return gensurla.MakeUnprocessable(fmt.Errorf(
+			"%s in the project's commit %s cannot be parsed as Go: %w; %s", source.file, commit, err, next,
+		))
+	case errors.Is(err, errCommittedDesignNotRegular):
+		return gensurla.MakeUnprocessable(fmt.Errorf("the project's commit %s: %w; %s", commit, err, next))
+	default:
+		return err
+	}
+}
+
 // readDraftUpdateFiles reuses the canonical walk's safety without requiring Go
 // to parse: malformed draft files belong in the result's correction list.
 func readDraftUpdateFiles(dir string, root *os.Root) (map[string]string, error) {
@@ -459,31 +522,38 @@ func cloneDraftRecord(saved madeFromRecord) madeFromRecord {
 	return copy
 }
 
-// addDraftCorrection lists a file once even when recovery also found invalid Go.
-func addDraftCorrection(result *gensurla.DraftUpdateResult, file, problem string) {
+// addDraftCorrection lists a file once even when recovery also found invalid
+// Go. folder is correctInDraft or correctInProject: the folder holding the
+// file whose text has the problem, which decides who corrects it.
+func addDraftCorrection(result *gensurla.DraftUpdateResult, folder, file, problem string) {
 	for _, correction := range result.ToCorrect {
 		if correction.Path == file {
 			return
 		}
 	}
-	result.ToCorrect = append(result.ToCorrect, &gensurla.DraftCorrection{Path: file, Problem: problem})
+	result.ToCorrect = append(result.ToCorrect, &gensurla.DraftCorrection{Path: file, Folder: folder, Problem: problem})
 }
 
-// compareDraftModules names exact requirement/replacement differences; go.mod
-// remains the guide's to correct and is never merged or rewritten.
+// compareDraftModules names exact requirement/replacement differences. Surla
+// never merges or rewrites go.mod: the draft's is the guide's to correct, and
+// a project go.mod that cannot be parsed or declares no module is the user's.
 func compareDraftModules(project, draft string, result *gensurla.DraftUpdateResult) {
 	p, err := modfile.Parse("project go.mod", []byte(project), nil)
 	if err != nil {
-		addDraftCorrection(result, "go.mod", err.Error())
+		addDraftCorrection(result, correctInProject, "go.mod", err.Error())
+		return
+	}
+	if p.Module == nil {
+		addDraftCorrection(result, correctInProject, "go.mod", "The project's go.mod declares no module.")
 		return
 	}
 	d, err := modfile.Parse("draft go.mod", []byte(draft), nil)
 	if err != nil {
-		addDraftCorrection(result, "go.mod", err.Error())
+		addDraftCorrection(result, correctInDraft, "go.mod", err.Error())
 		return
 	}
-	if p.Module == nil || d.Module == nil || p.Module.Mod.Path != d.Module.Mod.Path {
-		addDraftCorrection(result, "go.mod", "The project and draft must declare the same module.")
+	if d.Module == nil || p.Module.Mod.Path != d.Module.Mod.Path {
+		addDraftCorrection(result, correctInDraft, "go.mod", "The project and draft must declare the same module.")
 		return
 	}
 	required := map[string]string{}
@@ -507,6 +577,6 @@ func compareDraftModules(project, draft string, result *gensurla.DraftUpdateResu
 		problems = append(problems, "The project and draft go.mod have differing replace directives; correct the draft's replacements.")
 	}
 	if len(problems) > 0 {
-		addDraftCorrection(result, "go.mod", strings.Join(problems, " "))
+		addDraftCorrection(result, correctInDraft, "go.mod", strings.Join(problems, " "))
 	}
 }

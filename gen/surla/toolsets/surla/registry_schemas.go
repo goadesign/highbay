@@ -58,7 +58,7 @@ func ToolSchemas() []*genregistry.ToolSchema {
 		declarations.schema1835(),
 		declarations.schema1844(),
 		declarations.schema1855(),
-		declarations.schema1871(),
+		declarations.schema1872(),
 	}
 } // schema1 constructs one generated schema declaration.
 func (declarations registryDeclarations) schema1() *genregistry.ToolSchema {
@@ -31793,30 +31793,30 @@ func (registryDeclarations) field1854() *genregistry.ToolFieldMetadata {
 
 // schema1855 constructs one generated schema declaration.
 func (declarations registryDeclarations) schema1855() *genregistry.ToolSchema {
-	registryText1 := "Bring design changes made outside Surla, in the project folder, into your draft. Call it before drafting each new change and whenever you are told a design file changed. Takes no input. It returns the files it took, the files it merged with your edits, and files to correct: correct each in the draft and call update_draft again until none is listed, then call refresh_story."
+	registryText1 := "Bring design changes made outside Surla, in the project folder, into your draft. Call it before drafting each new change and whenever you are told a design file changed. Takes no input. It returns the files it took, the files it merged with your edits, and files to correct, each with the folder that holds it. Correct a file whose folder is draft_folder yourself, in your draft. For a file whose folder is project_folder, tell the user what to correct in the project folder and wait: never edit it. Call update_draft again until no file is listed, then call refresh_story. When it answers that the project or the draft changed while it prepared the update, it brought nothing: call update_draft again. When it answers that it could not read a file, the message names the file and says who corrects it."
 	return &genregistry.ToolSchema{
 		Name:                   "surla.update_draft",
 		Description:            &registryText1,
 		PayloadSchema:          []byte("{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"additionalProperties\":false,\"properties\":{},\"type\":\"object\"}"),
 		ExecutionPayloadSchema: []byte("{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"additionalProperties\":false,\"properties\":{},\"type\":\"object\"}"),
-		ResultSchema:           []byte("{\"$defs\":{\"DraftCorrection\":{\"additionalProperties\":false,\"description\":\"A file of the draft that update_draft could not bring forward from the project folder: the guide corrects it in the draft and calls update_draft again until none is listed, then refresh_story.\",\"properties\":{\"path\":{\"description\":\"Path relative to the draft folder, such as design/types.go or go.mod.\",\"type\":\"string\"},\"problem\":{\"description\":\"What to correct: conflict markers where the draft and the project folder changed the same lines; a file removed on one side and changed on the other; a draft file Go cannot parse, with its line; or a module the project's go.mod requires at another version than the draft's, or that the draft's lacks, including differing replace directives.\",\"type\":\"string\"}},\"required\":[\"path\",\"problem\"],\"title\":\"DraftCorrection\",\"type\":\"object\"}},\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"additionalProperties\":false,\"description\":\"What update_draft brought from the project folder into the guide's draft: design files the draft took as they are there, design files merged with the draft's own edits, and files to correct. The lists describe what this call applied and what remains to correct; empty lists do not prove that every outside design change is present.\",\"properties\":{\"draft_folder\":{\"description\":\"Absolute path of the guide's draft folder.\",\"type\":\"string\"},\"merged\":{\"description\":\"Design files where the project folder's change and the draft's edits merged without conflict, in path order.\",\"items\":{\"type\":\"string\"},\"type\":\"array\"},\"taken\":{\"description\":\"Design files the draft took from the project folder because it had not changed them, in path order.\",\"items\":{\"type\":\"string\"},\"type\":\"array\"},\"to_correct\":{\"description\":\"Files to correct in the draft before refreshing, in path order; empty when none.\",\"items\":{\"$ref\":\"#/$defs/DraftCorrection\"},\"type\":\"array\"}},\"required\":[\"draft_folder\",\"taken\",\"merged\",\"to_correct\"],\"type\":\"object\"}"),
+		ResultSchema:           []byte("{\"$defs\":{\"DraftCorrection\":{\"additionalProperties\":false,\"description\":\"A file to correct before update_draft can bring a change forward, and the folder that holds it. When folder is draft_folder, the guide corrects the file in its draft. When folder is project_folder, the file is the user's own, in the project folder: the guide tells the user what to correct there and waits, and never edits it. The guide calls update_draft again until none is listed, then refresh_story.\",\"properties\":{\"folder\":{\"description\":\"Which folder holds the file to correct: draft_folder is the guide's draft, at the result's draft_folder; project_folder is the user's project folder, which holds the draft.\",\"enum\":[\"draft_folder\",\"project_folder\"],\"type\":\"string\"},\"path\":{\"description\":\"Path relative to the folder that folder names, such as design/types.go or go.mod.\",\"type\":\"string\"},\"problem\":{\"description\":\"What to correct. In the draft: conflict markers where the draft and the project folder changed the same lines; a file removed on one side and changed on the other; a draft file Go cannot parse, with its line; a file whose project change Surla took without merging, or was writing when it stopped, to check that it holds the intended edits once; or a module the project's go.mod requires at another version than the draft's, or that the draft's lacks, including differing replace directives and a differing module path. In the project folder: a design file or go.mod there that cannot be parsed, with its line, or a go.mod that declares no module.\",\"type\":\"string\"}},\"required\":[\"path\",\"folder\",\"problem\"],\"title\":\"DraftCorrection\",\"type\":\"object\"}},\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"additionalProperties\":false,\"description\":\"What update_draft brought from the project folder into the guide's draft: design files the draft took as they are there, design files merged with the draft's own edits, and files to correct, each with the folder that holds it. The lists describe what this call applied and what remains to correct; empty lists do not prove that every outside design change is present.\",\"properties\":{\"draft_folder\":{\"description\":\"Absolute path of the guide's draft folder.\",\"type\":\"string\"},\"merged\":{\"description\":\"Design files where the project folder's change and the draft's edits merged without conflict, in path order.\",\"items\":{\"type\":\"string\"},\"type\":\"array\"},\"taken\":{\"description\":\"Design files the draft took from the project folder because it had not changed them, in path order.\",\"items\":{\"type\":\"string\"},\"type\":\"array\"},\"to_correct\":{\"description\":\"Files to correct before refreshing, each in the folder it names, in path order; empty when none.\",\"items\":{\"$ref\":\"#/$defs/DraftCorrection\"},\"type\":\"array\"}},\"required\":[\"draft_folder\",\"taken\",\"merged\",\"to_correct\"],\"type\":\"object\"}"),
 		ConsumerContract: &genregistry.ConsumerContract{
 			Kind:  "service",
 			Title: "Update Draft",
 			Search: &genregistry.ToolSearchDocument{
-				Length: 72,
-				Terms:  map[string]int{"a": 1, "again": 1, "and": 3, "are": 1, "before": 1, "bring": 1, "call": 3, "change": 1, "changed": 1, "changes": 1, "correct": 2, "design": 2, "draft": 5, "drafting": 1, "each": 2, "edits": 1, "file": 1, "files": 3, "folder": 1, "in": 2, "input": 1, "into": 1, "is": 1, "it": 4, "listed": 1, "made": 1, "merged": 1, "new": 1, "no": 1, "none": 1, "outside": 1, "project": 1, "refresh": 1, "returns": 1, "story": 1, "surla": 2, "takes": 1, "the": 4, "then": 1, "to": 1, "told": 1, "took": 1, "until": 1, "update": 3, "whenever": 1, "with": 1, "you": 1, "your": 2},
+				Length: 151,
+				Terms:  map[string]int{"a": 4, "again": 2, "and": 4, "answers": 2, "are": 1, "before": 1, "bring": 1, "brought": 1, "call": 4, "change": 1, "changed": 2, "changes": 1, "correct": 3, "corrects": 1, "could": 1, "design": 2, "draft": 8, "drafting": 1, "each": 2, "edit": 1, "edits": 1, "file": 6, "files": 3, "folder": 7, "for": 1, "holds": 1, "in": 3, "input": 1, "into": 1, "is": 3, "it": 12, "listed": 1, "made": 1, "merged": 1, "message": 1, "names": 1, "never": 1, "new": 1, "no": 2, "not": 1, "nothing": 1, "or": 1, "outside": 1, "prepared": 1, "project": 4, "read": 1, "refresh": 1, "returns": 1, "says": 1, "story": 1, "surla": 2, "takes": 1, "tell": 1, "that": 3, "the": 11, "then": 1, "to": 2, "told": 1, "took": 1, "until": 1, "update": 5, "user": 1, "wait": 1, "what": 1, "when": 2, "whenever": 1, "while": 1, "who": 1, "whose": 2, "with": 2, "you": 1, "your": 3, "yourself": 1},
 			},
 			RequiresUI: false,
 			TextOnly: &genregistry.TextOnlyToolContract{
 				ExecutionSchema: []byte("{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"additionalProperties\":false,\"properties\":{},\"type\":\"object\"}"),
-				Description:     "Bring design changes made outside Surla, in the project folder, into your draft. Call it before drafting each new change and whenever you are told a design file changed. Takes no input. It returns the files it took, the files it merged with your edits, and files to correct: correct each in the draft and call update_draft again until none is listed, then call refresh_story.",
+				Description:     "Bring design changes made outside Surla, in the project folder, into your draft. Call it before drafting each new change and whenever you are told a design file changed. Takes no input. It returns the files it took, the files it merged with your edits, and files to correct, each with the folder that holds it. Correct a file whose folder is draft_folder yourself, in your draft. For a file whose folder is project_folder, tell the user what to correct in the project folder and wait: never edit it. Call update_draft again until no file is listed, then call refresh_story. When it answers that the project or the draft changed while it prepared the update, it brought nothing: call update_draft again. When it answers that it could not read a file, the message names the file and says who corrects it.",
 				Search: &genregistry.ToolSearchDocument{
-					Length: 72,
-					Terms:  map[string]int{"a": 1, "again": 1, "and": 3, "are": 1, "before": 1, "bring": 1, "call": 3, "change": 1, "changed": 1, "changes": 1, "correct": 2, "design": 2, "draft": 5, "drafting": 1, "each": 2, "edits": 1, "file": 1, "files": 3, "folder": 1, "in": 2, "input": 1, "into": 1, "is": 1, "it": 4, "listed": 1, "made": 1, "merged": 1, "new": 1, "no": 1, "none": 1, "outside": 1, "project": 1, "refresh": 1, "returns": 1, "story": 1, "surla": 2, "takes": 1, "the": 4, "then": 1, "to": 1, "told": 1, "took": 1, "until": 1, "update": 3, "whenever": 1, "with": 1, "you": 1, "your": 2},
+					Length: 151,
+					Terms:  map[string]int{"a": 4, "again": 2, "and": 4, "answers": 2, "are": 1, "before": 1, "bring": 1, "brought": 1, "call": 4, "change": 1, "changed": 2, "changes": 1, "correct": 3, "corrects": 1, "could": 1, "design": 2, "draft": 8, "drafting": 1, "each": 2, "edit": 1, "edits": 1, "file": 6, "files": 3, "folder": 7, "for": 1, "holds": 1, "in": 3, "input": 1, "into": 1, "is": 3, "it": 12, "listed": 1, "made": 1, "merged": 1, "message": 1, "names": 1, "never": 1, "new": 1, "no": 2, "not": 1, "nothing": 1, "or": 1, "outside": 1, "prepared": 1, "project": 4, "read": 1, "refresh": 1, "returns": 1, "says": 1, "story": 1, "surla": 2, "takes": 1, "tell": 1, "that": 3, "the": 11, "then": 1, "to": 2, "told": 1, "took": 1, "until": 1, "update": 5, "user": 1, "wait": 1, "what": 1, "when": 2, "whenever": 1, "while": 1, "who": 1, "whose": 2, "with": 2, "you": 1, "your": 3, "yourself": 1},
 				},
 				PayloadSchema: []byte("{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"additionalProperties\":false,\"properties\":{},\"type\":\"object\"}"),
-				Payload:       declarations.metadata1869(),
+				Payload:       declarations.metadata1870(),
 			},
 			Payload: declarations.metadata1856(),
 			Result:  declarations.metadata1858(),
@@ -31849,7 +31849,7 @@ func (declarations registryDeclarations) metadata1858() *genregistry.ToolTypeMet
 	registryText1 := "UpdateDraftResult"
 	return &genregistry.ToolTypeMetadata{
 		Name:                     &registryText1,
-		SchemaWithoutRootExample: []byte("{\"$defs\":{\"DraftCorrection\":{\"additionalProperties\":false,\"description\":\"A file of the draft that update_draft could not bring forward from the project folder: the guide corrects it in the draft and calls update_draft again until none is listed, then refresh_story.\",\"properties\":{\"path\":{\"description\":\"Path relative to the draft folder, such as design/types.go or go.mod.\",\"type\":\"string\"},\"problem\":{\"description\":\"What to correct: conflict markers where the draft and the project folder changed the same lines; a file removed on one side and changed on the other; a draft file Go cannot parse, with its line; or a module the project's go.mod requires at another version than the draft's, or that the draft's lacks, including differing replace directives.\",\"type\":\"string\"}},\"required\":[\"path\",\"problem\"],\"title\":\"DraftCorrection\",\"type\":\"object\"}},\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"additionalProperties\":false,\"description\":\"What update_draft brought from the project folder into the guide's draft: design files the draft took as they are there, design files merged with the draft's own edits, and files to correct. The lists describe what this call applied and what remains to correct; empty lists do not prove that every outside design change is present.\",\"properties\":{\"draft_folder\":{\"description\":\"Absolute path of the guide's draft folder.\",\"type\":\"string\"},\"merged\":{\"description\":\"Design files where the project folder's change and the draft's edits merged without conflict, in path order.\",\"items\":{\"type\":\"string\"},\"type\":\"array\"},\"taken\":{\"description\":\"Design files the draft took from the project folder because it had not changed them, in path order.\",\"items\":{\"type\":\"string\"},\"type\":\"array\"},\"to_correct\":{\"description\":\"Files to correct in the draft before refreshing, in path order; empty when none.\",\"items\":{\"$ref\":\"#/$defs/DraftCorrection\"},\"type\":\"array\"}},\"required\":[\"draft_folder\",\"taken\",\"merged\",\"to_correct\"],\"type\":\"object\"}"),
+		SchemaWithoutRootExample: []byte("{\"$defs\":{\"DraftCorrection\":{\"additionalProperties\":false,\"description\":\"A file to correct before update_draft can bring a change forward, and the folder that holds it. When folder is draft_folder, the guide corrects the file in its draft. When folder is project_folder, the file is the user's own, in the project folder: the guide tells the user what to correct there and waits, and never edits it. The guide calls update_draft again until none is listed, then refresh_story.\",\"properties\":{\"folder\":{\"description\":\"Which folder holds the file to correct: draft_folder is the guide's draft, at the result's draft_folder; project_folder is the user's project folder, which holds the draft.\",\"enum\":[\"draft_folder\",\"project_folder\"],\"type\":\"string\"},\"path\":{\"description\":\"Path relative to the folder that folder names, such as design/types.go or go.mod.\",\"type\":\"string\"},\"problem\":{\"description\":\"What to correct. In the draft: conflict markers where the draft and the project folder changed the same lines; a file removed on one side and changed on the other; a draft file Go cannot parse, with its line; a file whose project change Surla took without merging, or was writing when it stopped, to check that it holds the intended edits once; or a module the project's go.mod requires at another version than the draft's, or that the draft's lacks, including differing replace directives and a differing module path. In the project folder: a design file or go.mod there that cannot be parsed, with its line, or a go.mod that declares no module.\",\"type\":\"string\"}},\"required\":[\"path\",\"folder\",\"problem\"],\"title\":\"DraftCorrection\",\"type\":\"object\"}},\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"additionalProperties\":false,\"description\":\"What update_draft brought from the project folder into the guide's draft: design files the draft took as they are there, design files merged with the draft's own edits, and files to correct, each with the folder that holds it. The lists describe what this call applied and what remains to correct; empty lists do not prove that every outside design change is present.\",\"properties\":{\"draft_folder\":{\"description\":\"Absolute path of the guide's draft folder.\",\"type\":\"string\"},\"merged\":{\"description\":\"Design files where the project folder's change and the draft's edits merged without conflict, in path order.\",\"items\":{\"type\":\"string\"},\"type\":\"array\"},\"taken\":{\"description\":\"Design files the draft took from the project folder because it had not changed them, in path order.\",\"items\":{\"type\":\"string\"},\"type\":\"array\"},\"to_correct\":{\"description\":\"Files to correct before refreshing, each in the folder it names, in path order; empty when none.\",\"items\":{\"$ref\":\"#/$defs/DraftCorrection\"},\"type\":\"array\"}},\"required\":[\"draft_folder\",\"taken\",\"merged\",\"to_correct\"],\"type\":\"object\"}"),
 		Fields: []*genregistry.ToolFieldMetadata{
 			declarations.field1859(),
 			declarations.field1860(),
@@ -31861,6 +31861,7 @@ func (declarations registryDeclarations) metadata1858() *genregistry.ToolTypeMet
 			declarations.field1866(),
 			declarations.field1867(),
 			declarations.field1868(),
+			declarations.field1869(),
 		},
 	}
 }
@@ -31868,7 +31869,7 @@ func (declarations registryDeclarations) metadata1858() *genregistry.ToolTypeMet
 // field1859 constructs one generated field declaration.
 func (registryDeclarations) field1859() *genregistry.ToolFieldMetadata {
 	registryText1 := "object"
-	registryText2 := "What update_draft brought from the project folder into the guide's draft: design files the draft took as they are there, design files merged with the draft's own edits, and files to correct. The lists describe what this call applied and what remains to correct; empty lists do not prove that every outside design change is present."
+	registryText2 := "What update_draft brought from the project folder into the guide's draft: design files the draft took as they are there, design files merged with the draft's own edits, and files to correct, each with the folder that holds it. The lists describe what this call applied and what remains to correct; empty lists do not prove that every outside design change is present."
 	return &genregistry.ToolFieldMetadata{
 		JSONType:    &registryText1,
 		Description: &registryText2,
@@ -31945,7 +31946,7 @@ func (registryDeclarations) field1864() *genregistry.ToolFieldMetadata {
 // field1865 constructs one generated field declaration.
 func (registryDeclarations) field1865() *genregistry.ToolFieldMetadata {
 	registryText1 := "array"
-	registryText2 := "Files to correct in the draft before refreshing, in path order; empty when none."
+	registryText2 := "Files to correct before refreshing, each in the folder it names, in path order; empty when none."
 	return &genregistry.ToolFieldMetadata{
 		Path: []*genregistry.ToolFieldPathSegment{
 			{Segment: genregistry.NewToolFieldSegmentField("to_correct")},
@@ -31958,7 +31959,7 @@ func (registryDeclarations) field1865() *genregistry.ToolFieldMetadata {
 // field1866 constructs one generated field declaration.
 func (registryDeclarations) field1866() *genregistry.ToolFieldMetadata {
 	registryText1 := "object"
-	registryText2 := "Files to correct in the draft before refreshing, in path order; empty when none."
+	registryText2 := "Files to correct before refreshing, each in the folder it names, in path order; empty when none."
 	return &genregistry.ToolFieldMetadata{
 		Path: []*genregistry.ToolFieldPathSegment{
 			{Segment: genregistry.NewToolFieldSegmentField("to_correct")},
@@ -31972,7 +31973,7 @@ func (registryDeclarations) field1866() *genregistry.ToolFieldMetadata {
 // field1867 constructs one generated field declaration.
 func (registryDeclarations) field1867() *genregistry.ToolFieldMetadata {
 	registryText1 := "string"
-	registryText2 := "Path relative to the draft folder, such as design/types.go or go.mod."
+	registryText2 := "Path relative to the folder that folder names, such as design/types.go or go.mod."
 	return &genregistry.ToolFieldMetadata{
 		Path: []*genregistry.ToolFieldPathSegment{
 			{Segment: genregistry.NewToolFieldSegmentField("to_correct")},
@@ -31987,7 +31988,22 @@ func (registryDeclarations) field1867() *genregistry.ToolFieldMetadata {
 // field1868 constructs one generated field declaration.
 func (registryDeclarations) field1868() *genregistry.ToolFieldMetadata {
 	registryText1 := "string"
-	registryText2 := "What to correct: conflict markers where the draft and the project folder changed the same lines; a file removed on one side and changed on the other; a draft file Go cannot parse, with its line; or a module the project's go.mod requires at another version than the draft's, or that the draft's lacks, including differing replace directives."
+	registryText2 := "Which folder holds the file to correct: draft_folder is the guide's draft, at the result's draft_folder; project_folder is the user's project folder, which holds the draft."
+	return &genregistry.ToolFieldMetadata{
+		Path: []*genregistry.ToolFieldPathSegment{
+			{Segment: genregistry.NewToolFieldSegmentField("to_correct")},
+			{Segment: genregistry.NewToolFieldSegmentElement(&genregistry.ToolCollectionElement{})},
+			{Segment: genregistry.NewToolFieldSegmentField("folder")},
+		},
+		JSONType:    &registryText1,
+		Description: &registryText2,
+	}
+}
+
+// field1869 constructs one generated field declaration.
+func (registryDeclarations) field1869() *genregistry.ToolFieldMetadata {
+	registryText1 := "string"
+	registryText2 := "What to correct. In the draft: conflict markers where the draft and the project folder changed the same lines; a file removed on one side and changed on the other; a draft file Go cannot parse, with its line; a file whose project change Surla took without merging, or was writing when it stopped, to check that it holds the intended edits once; or a module the project's go.mod requires at another version than the draft's, or that the draft's lacks, including differing replace directives and a differing module path. In the project folder: a design file or go.mod there that cannot be parsed, with its line, or a go.mod that declares no module."
 	return &genregistry.ToolFieldMetadata{
 		Path: []*genregistry.ToolFieldPathSegment{
 			{Segment: genregistry.NewToolFieldSegmentField("to_correct")},
@@ -31999,28 +32015,28 @@ func (registryDeclarations) field1868() *genregistry.ToolFieldMetadata {
 	}
 }
 
-// metadata1869 constructs one generated metadata declaration.
-func (declarations registryDeclarations) metadata1869() *genregistry.ToolTypeMetadata {
+// metadata1870 constructs one generated metadata declaration.
+func (declarations registryDeclarations) metadata1870() *genregistry.ToolTypeMetadata {
 	registryText1 := "UpdateDraftPayload"
 	return &genregistry.ToolTypeMetadata{
 		Name:                     &registryText1,
 		SchemaWithoutRootExample: []byte("{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"additionalProperties\":false,\"properties\":{},\"type\":\"object\"}"),
 		Fields: []*genregistry.ToolFieldMetadata{
-			declarations.field1870(),
+			declarations.field1871(),
 		},
 	}
 }
 
-// field1870 constructs one generated field declaration.
-func (registryDeclarations) field1870() *genregistry.ToolFieldMetadata {
+// field1871 constructs one generated field declaration.
+func (registryDeclarations) field1871() *genregistry.ToolFieldMetadata {
 	registryText1 := "object"
 	return &genregistry.ToolFieldMetadata{
 		JSONType: &registryText1,
 	}
 }
 
-// schema1871 constructs one generated schema declaration.
-func (declarations registryDeclarations) schema1871() *genregistry.ToolSchema {
+// schema1872 constructs one generated schema declaration.
+func (declarations registryDeclarations) schema1872() *genregistry.ToolSchema {
 	registryText1 := "Start CP4 verification of a candidate commit on your build's branch for the agreed revision; returns a run_id to read with get_verification. The candidate must be on your branch, descend from the build's base, hold no other build's work and carry exactly the agreed design generate_code wrote; without stored verification settings Surla must also have accepted the build's tests (your assignment says when). A refusal states what Surla found and the goal: put your work right with git and verify again."
 	return &genregistry.ToolSchema{
 		Name:                   "surla.verify_change",
@@ -32044,31 +32060,31 @@ func (declarations registryDeclarations) schema1871() *genregistry.ToolSchema {
 					Terms:  map[string]int{"a": 3, "accepted": 1, "again": 1, "agreed": 2, "also": 1, "and": 3, "assignment": 1, "base": 1, "be": 1, "branch": 2, "build": 4, "candidate": 2, "carry": 1, "change": 2, "code": 1, "commit": 1, "cp4": 1, "descend": 1, "design": 1, "exactly": 1, "for": 1, "found": 1, "from": 1, "generate": 1, "get": 1, "git": 1, "goal": 1, "have": 1, "hold": 1, "id": 1, "must": 2, "no": 1, "of": 1, "on": 2, "other": 1, "put": 1, "read": 1, "refusal": 1, "returns": 1, "revision": 1, "right": 1, "run": 1, "s": 4, "says": 1, "settings": 1, "start": 1, "states": 1, "stored": 1, "surla": 3, "tests": 1, "the": 6, "to": 1, "verification": 3, "verify": 3, "what": 1, "when": 1, "with": 2, "without": 1, "work": 2, "wrote": 1, "your": 4},
 				},
 				PayloadSchema: []byte("{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"additionalProperties\":false,\"description\":\"Names the confirmed Change Card revision and the candidate commit to verify. What is built and which tests run come from the project, never from the caller: the candidate commit's programs and the tests Surla accepted for the user's build of the revision or, with stored verification settings, the programs and evaluator suite those settings name.\",\"properties\":{\"candidate_commit\":{\"description\":\"Full commit ID of the candidate to build and verify (40 or 64 lowercase hex characters).\",\"pattern\":\"^([0-9a-f]{40}|[0-9a-f]{64})$\",\"type\":\"string\"},\"change_id\":{\"description\":\"Confirmed Change Card identifier.\",\"type\":\"string\"},\"request_revision\":{\"description\":\"Current request_revision of the confirmed Change Card.\",\"type\":\"string\"}},\"required\":[\"change_id\",\"request_revision\",\"candidate_commit\"],\"type\":\"object\"}"),
-				Payload:       declarations.metadata1924(),
+				Payload:       declarations.metadata1925(),
 			},
-			Payload: declarations.metadata1872(),
-			Result:  declarations.metadata1877(),
+			Payload: declarations.metadata1873(),
+			Result:  declarations.metadata1878(),
 		},
 	}
 }
 
-// metadata1872 constructs one generated metadata declaration.
-func (declarations registryDeclarations) metadata1872() *genregistry.ToolTypeMetadata {
+// metadata1873 constructs one generated metadata declaration.
+func (declarations registryDeclarations) metadata1873() *genregistry.ToolTypeMetadata {
 	registryText1 := "VerifyChangePayload"
 	return &genregistry.ToolTypeMetadata{
 		Name:                     &registryText1,
 		SchemaWithoutRootExample: []byte("{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"additionalProperties\":false,\"description\":\"Names the confirmed Change Card revision and the candidate commit to verify. What is built and which tests run come from the project, never from the caller: the candidate commit's programs and the tests Surla accepted for the user's build of the revision or, with stored verification settings, the programs and evaluator suite those settings name.\",\"properties\":{\"candidate_commit\":{\"description\":\"Full commit ID of the candidate to build and verify (40 or 64 lowercase hex characters).\",\"pattern\":\"^([0-9a-f]{40}|[0-9a-f]{64})$\",\"type\":\"string\"},\"change_id\":{\"description\":\"Confirmed Change Card identifier.\",\"type\":\"string\"},\"request_revision\":{\"description\":\"Current request_revision of the confirmed Change Card.\",\"type\":\"string\"}},\"required\":[\"change_id\",\"request_revision\",\"candidate_commit\"],\"type\":\"object\"}"),
 		Fields: []*genregistry.ToolFieldMetadata{
-			declarations.field1873(),
 			declarations.field1874(),
 			declarations.field1875(),
 			declarations.field1876(),
+			declarations.field1877(),
 		},
 	}
 }
 
-// field1873 constructs one generated field declaration.
-func (registryDeclarations) field1873() *genregistry.ToolFieldMetadata {
+// field1874 constructs one generated field declaration.
+func (registryDeclarations) field1874() *genregistry.ToolFieldMetadata {
 	registryText1 := "object"
 	registryText2 := "Names the confirmed Change Card revision and the candidate commit to verify. What is built and which tests run come from the project, never from the caller: the candidate commit's programs and the tests Surla accepted for the user's build of the revision or, with stored verification settings, the programs and evaluator suite those settings name."
 	return &genregistry.ToolFieldMetadata{
@@ -32077,8 +32093,8 @@ func (registryDeclarations) field1873() *genregistry.ToolFieldMetadata {
 	}
 }
 
-// field1874 constructs one generated field declaration.
-func (registryDeclarations) field1874() *genregistry.ToolFieldMetadata {
+// field1875 constructs one generated field declaration.
+func (registryDeclarations) field1875() *genregistry.ToolFieldMetadata {
 	registryText1 := "string"
 	registryText2 := "Confirmed Change Card identifier."
 	return &genregistry.ToolFieldMetadata{
@@ -32090,8 +32106,8 @@ func (registryDeclarations) field1874() *genregistry.ToolFieldMetadata {
 	}
 }
 
-// field1875 constructs one generated field declaration.
-func (registryDeclarations) field1875() *genregistry.ToolFieldMetadata {
+// field1876 constructs one generated field declaration.
+func (registryDeclarations) field1876() *genregistry.ToolFieldMetadata {
 	registryText1 := "string"
 	registryText2 := "Current request_revision of the confirmed Change Card."
 	return &genregistry.ToolFieldMetadata{
@@ -32103,8 +32119,8 @@ func (registryDeclarations) field1875() *genregistry.ToolFieldMetadata {
 	}
 }
 
-// field1876 constructs one generated field declaration.
-func (registryDeclarations) field1876() *genregistry.ToolFieldMetadata {
+// field1877 constructs one generated field declaration.
+func (registryDeclarations) field1877() *genregistry.ToolFieldMetadata {
 	registryText1 := "string"
 	registryText2 := "Full commit ID of the candidate to build and verify (40 or 64 lowercase hex characters)."
 	return &genregistry.ToolFieldMetadata{
@@ -32116,14 +32132,13 @@ func (registryDeclarations) field1876() *genregistry.ToolFieldMetadata {
 	}
 }
 
-// metadata1877 constructs one generated metadata declaration.
-func (declarations registryDeclarations) metadata1877() *genregistry.ToolTypeMetadata {
+// metadata1878 constructs one generated metadata declaration.
+func (declarations registryDeclarations) metadata1878() *genregistry.ToolTypeMetadata {
 	registryText1 := "VerifyChangeResult"
 	return &genregistry.ToolTypeMetadata{
 		Name:                     &registryText1,
 		SchemaWithoutRootExample: []byte("{\"$defs\":{\"BuilderVerificationReport\":{\"additionalProperties\":false,\"description\":\"The builder view of a Checkpoint 4 verification report: counts, verdict and repair scenario checks. Holdout details, evidence and logs stay with the evaluator.\",\"properties\":{\"counts\":{\"$ref\":\"#/$defs/VerificationCounts\",\"description\":\"Every declared scenario, counted by outcome.\"},\"passed\":{\"description\":\"The verdict: true only when every declared scenario passed and the suite ran cleanly.\",\"type\":\"boolean\"},\"report_digest\":{\"description\":\"SHA-256 digest of the full report the evaluator saved; approve_merge and surla approve take this digest.\",\"type\":\"string\"},\"scenarios\":{\"description\":\"Every declared scenario in declaration order.\",\"items\":{\"$ref\":\"#/$defs/VerificationScenario\"},\"type\":\"array\"},\"suite_failed\":{\"description\":\"Whether the evaluator suite itself failed or ended abnormally.\",\"type\":\"boolean\"}},\"required\":[\"report_digest\",\"counts\",\"passed\",\"suite_failed\",\"scenarios\"],\"title\":\"BuilderVerificationReport\",\"type\":\"object\"},\"VerificationCheck\":{\"additionalProperties\":false,\"description\":\"One deterministic check of a repair scenario.\",\"properties\":{\"diagnostic\":{\"description\":\"Why the check failed; empty when it passed.\",\"type\":\"string\"},\"name\":{\"description\":\"Check name.\",\"type\":\"string\"},\"passed\":{\"description\":\"Whether the check passed.\",\"type\":\"boolean\"}},\"required\":[\"name\",\"passed\"],\"title\":\"VerificationCheck\",\"type\":\"object\"},\"VerificationCompleted\":{\"additionalProperties\":false,\"description\":\"The run produced a verification report. Its verdict is report.passed.\",\"properties\":{\"environment\":{\"description\":\"Dependency profile the suite ran the candidate with, such as sim.\",\"type\":\"string\"},\"report\":{\"$ref\":\"#/$defs/BuilderVerificationReport\",\"description\":\"The builder view of the report.\"},\"suite_id\":{\"description\":\"Evaluator suite the report was produced by.\",\"type\":\"string\"}},\"required\":[\"suite_id\",\"environment\",\"report\"],\"title\":\"VerificationCompleted\",\"type\":\"object\"},\"VerificationCounts\":{\"additionalProperties\":false,\"description\":\"Every declared scenario, counted by outcome.\",\"properties\":{\"failed\":{\"description\":\"Scenarios whose checks failed.\",\"format\":\"int64\",\"type\":\"integer\"},\"harness_error\":{\"description\":\"Scenarios that could not be evaluated.\",\"format\":\"int64\",\"type\":\"integer\"},\"not_run\":{\"description\":\"Declared scenarios the suite did not report.\",\"format\":\"int64\",\"type\":\"integer\"},\"passed\":{\"description\":\"Scenarios that passed.\",\"format\":\"int64\",\"type\":\"integer\"},\"required\":{\"description\":\"Scenarios the suite declares.\",\"format\":\"int64\",\"type\":\"integer\"}},\"required\":[\"required\",\"passed\",\"failed\",\"not_run\",\"harness_error\"],\"title\":\"VerificationCounts\",\"type\":\"object\"},\"VerificationNotCompleted\":{\"additionalProperties\":false,\"description\":\"The run was accepted but did not complete: a step failed, or its processes ended or were canceled or timed out before it finished. The summary states where it stopped, without command output; full evidence, including any partial report saved while it was being stopped, stays with the evaluator.\",\"properties\":{\"kind\":{\"description\":\"execution_failed when a step failed; interrupted when the run's process ended before it finished.\",\"enum\":[\"execution_failed\",\"interrupted\"],\"type\":\"string\"},\"stage\":{\"description\":\"Where the run stopped.\",\"enum\":[\"checkout\",\"build\",\"describe\",\"suite\",\"report\",\"supervise\"],\"type\":\"string\"},\"summary\":{\"description\":\"Builder-safe description of what stopped the run; never command output.\",\"type\":\"string\"}},\"required\":[\"kind\",\"stage\",\"summary\"],\"title\":\"VerificationNotCompleted\",\"type\":\"object\"},\"VerificationRunning\":{\"additionalProperties\":false,\"description\":\"The run is still building or evaluating the candidate.\",\"properties\":{\"started_at\":{\"description\":\"When the run was accepted.\",\"format\":\"date-time\",\"type\":\"string\"}},\"required\":[\"started_at\"],\"title\":\"VerificationRunning\",\"type\":\"object\"},\"VerificationScenario\":{\"additionalProperties\":false,\"description\":\"One declared scenario as builders see it. Repair scenarios carry their name, checks and environment error; holdout scenarios appear only as holdout-\\u003cn\\u003e with their outcome.\",\"properties\":{\"checks\":{\"description\":\"The repair scenario's checks; empty for holdouts.\",\"items\":{\"$ref\":\"#/$defs/VerificationCheck\"},\"type\":\"array\"},\"error\":{\"description\":\"The repair scenario's environment error; empty for holdouts.\",\"type\":\"string\"},\"id\":{\"description\":\"Scenario name for a repair scenario, or holdout-\\u003cn\\u003e for a holdout.\",\"type\":\"string\"},\"outcome\":{\"description\":\"How the scenario ended.\",\"enum\":[\"passed\",\"failed\",\"not_run\",\"harness_error\"],\"type\":\"string\"}},\"required\":[\"id\",\"outcome\"],\"title\":\"VerificationScenario\",\"type\":\"object\"}},\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"additionalProperties\":false,\"description\":\"One Checkpoint 4 verification run of a candidate commit for a confirmed Change Card revision, and its current state. The run keeps the revision it was started for, so a later confirm_intent does not change it.\",\"properties\":{\"accepted_at\":{\"description\":\"When the run was accepted.\",\"format\":\"date-time\",\"type\":\"string\"},\"candidate_binaries_dir\":{\"description\":\"Absolute folder containing the binaries built by this completed run. Returned only to the user when promotion settings are configured, so the user can publish these exact binaries before approval. Agents never receive this private path.\",\"minLength\":1,\"type\":\"string\"},\"candidate_commit\":{\"description\":\"Candidate commit the run builds and verifies.\",\"type\":\"string\"},\"change_id\":{\"description\":\"Change Card the run verifies.\",\"type\":\"string\"},\"inputs_current\":{\"description\":\"Whether this run's agreed revision and selected tests match the current Change Card and the usable build or the stored verification settings. This observation does not establish the current candidate working tree, deployment or approval.\",\"type\":\"boolean\"},\"request_revision\":{\"description\":\"Change Card revision the run verifies.\",\"type\":\"string\"},\"run_id\":{\"description\":\"Verification run identifier; get_verification takes it.\",\"type\":\"string\"},\"state\":{\"description\":\"Exactly one of running, completed or not_completed.\",\"oneOf\":[{\"additionalProperties\":false,\"properties\":{\"type\":{\"enum\":[\"running\"],\"type\":\"string\"},\"value\":{\"$ref\":\"#/$defs/VerificationRunning\"}},\"required\":[\"type\",\"value\"],\"type\":\"object\"},{\"additionalProperties\":false,\"properties\":{\"type\":{\"enum\":[\"completed\"],\"type\":\"string\"},\"value\":{\"$ref\":\"#/$defs/VerificationCompleted\"}},\"required\":[\"type\",\"value\"],\"type\":\"object\"},{\"additionalProperties\":false,\"properties\":{\"type\":{\"enum\":[\"not_completed\"],\"type\":\"string\"},\"value\":{\"$ref\":\"#/$defs/VerificationNotCompleted\"}},\"required\":[\"type\",\"value\"],\"type\":\"object\"}],\"type\":\"object\"},\"suite_commit\":{\"description\":\"Commit of the tests the run uses: the operator's evaluator, or the tests accepted for the change's build.\",\"type\":\"string\"},\"test_source\":{\"description\":\"Where the run's tests came from, recorded when the run started: evaluator, or written_tests with their commit and a notice.\",\"oneOf\":[{\"additionalProperties\":false,\"description\":\"The run used the operator's evaluator: the one stored with surla verification set, or the one named on surla verify's command line.\",\"properties\":{\"source\":{\"enum\":[\"evaluator\"],\"type\":\"string\"}},\"required\":[\"source\"],\"type\":\"object\"},{\"additionalProperties\":false,\"description\":\"The run used the tests Surla accepted for the change's build, which a separate agent on this machine wrote.\",\"properties\":{\"commit\":{\"description\":\"Commit Surla recorded the accepted tests at; the same as suite_commit.\",\"type\":\"string\"},\"notice\":{\"description\":\"Always: These tests were written by a separate agent on this machine and are not isolated from the builder.\",\"type\":\"string\"},\"source\":{\"enum\":[\"written_tests\"],\"type\":\"string\"}},\"required\":[\"commit\",\"notice\",\"source\"],\"type\":\"object\"}],\"type\":\"object\"}},\"required\":[\"run_id\",\"change_id\",\"request_revision\",\"candidate_commit\",\"suite_commit\",\"accepted_at\",\"inputs_current\",\"test_source\",\"state\"],\"type\":\"object\"}"),
 		Fields: []*genregistry.ToolFieldMetadata{
-			declarations.field1878(),
 			declarations.field1879(),
 			declarations.field1880(),
 			declarations.field1881(),
@@ -32169,12 +32184,13 @@ func (declarations registryDeclarations) metadata1877() *genregistry.ToolTypeMet
 			declarations.field1921(),
 			declarations.field1922(),
 			declarations.field1923(),
+			declarations.field1924(),
 		},
 	}
 }
 
-// field1878 constructs one generated field declaration.
-func (registryDeclarations) field1878() *genregistry.ToolFieldMetadata {
+// field1879 constructs one generated field declaration.
+func (registryDeclarations) field1879() *genregistry.ToolFieldMetadata {
 	registryText1 := "object"
 	registryText2 := "One Checkpoint 4 verification run of a candidate commit for a confirmed Change Card revision, and its current state. The run keeps the revision it was started for, so a later confirm_intent does not change it."
 	return &genregistry.ToolFieldMetadata{
@@ -32183,8 +32199,8 @@ func (registryDeclarations) field1878() *genregistry.ToolFieldMetadata {
 	}
 }
 
-// field1879 constructs one generated field declaration.
-func (registryDeclarations) field1879() *genregistry.ToolFieldMetadata {
+// field1880 constructs one generated field declaration.
+func (registryDeclarations) field1880() *genregistry.ToolFieldMetadata {
 	registryText1 := "string"
 	registryText2 := "Verification run identifier; get_verification takes it."
 	return &genregistry.ToolFieldMetadata{
@@ -32196,8 +32212,8 @@ func (registryDeclarations) field1879() *genregistry.ToolFieldMetadata {
 	}
 }
 
-// field1880 constructs one generated field declaration.
-func (registryDeclarations) field1880() *genregistry.ToolFieldMetadata {
+// field1881 constructs one generated field declaration.
+func (registryDeclarations) field1881() *genregistry.ToolFieldMetadata {
 	registryText1 := "string"
 	registryText2 := "Change Card the run verifies."
 	return &genregistry.ToolFieldMetadata{
@@ -32209,8 +32225,8 @@ func (registryDeclarations) field1880() *genregistry.ToolFieldMetadata {
 	}
 }
 
-// field1881 constructs one generated field declaration.
-func (registryDeclarations) field1881() *genregistry.ToolFieldMetadata {
+// field1882 constructs one generated field declaration.
+func (registryDeclarations) field1882() *genregistry.ToolFieldMetadata {
 	registryText1 := "string"
 	registryText2 := "Change Card revision the run verifies."
 	return &genregistry.ToolFieldMetadata{
@@ -32222,8 +32238,8 @@ func (registryDeclarations) field1881() *genregistry.ToolFieldMetadata {
 	}
 }
 
-// field1882 constructs one generated field declaration.
-func (registryDeclarations) field1882() *genregistry.ToolFieldMetadata {
+// field1883 constructs one generated field declaration.
+func (registryDeclarations) field1883() *genregistry.ToolFieldMetadata {
 	registryText1 := "string"
 	registryText2 := "Candidate commit the run builds and verifies."
 	return &genregistry.ToolFieldMetadata{
@@ -32235,8 +32251,8 @@ func (registryDeclarations) field1882() *genregistry.ToolFieldMetadata {
 	}
 }
 
-// field1883 constructs one generated field declaration.
-func (registryDeclarations) field1883() *genregistry.ToolFieldMetadata {
+// field1884 constructs one generated field declaration.
+func (registryDeclarations) field1884() *genregistry.ToolFieldMetadata {
 	registryText1 := "string"
 	registryText2 := "Commit of the tests the run uses: the operator's evaluator, or the tests accepted for the change's build."
 	return &genregistry.ToolFieldMetadata{
@@ -32248,8 +32264,8 @@ func (registryDeclarations) field1883() *genregistry.ToolFieldMetadata {
 	}
 }
 
-// field1884 constructs one generated field declaration.
-func (registryDeclarations) field1884() *genregistry.ToolFieldMetadata {
+// field1885 constructs one generated field declaration.
+func (registryDeclarations) field1885() *genregistry.ToolFieldMetadata {
 	registryText1 := "string"
 	registryText2 := "When the run was accepted."
 	return &genregistry.ToolFieldMetadata{
@@ -32261,8 +32277,8 @@ func (registryDeclarations) field1884() *genregistry.ToolFieldMetadata {
 	}
 }
 
-// field1885 constructs one generated field declaration.
-func (registryDeclarations) field1885() *genregistry.ToolFieldMetadata {
+// field1886 constructs one generated field declaration.
+func (registryDeclarations) field1886() *genregistry.ToolFieldMetadata {
 	registryText1 := "boolean"
 	registryText2 := "Whether this run's agreed revision and selected tests match the current Change Card and the usable build or the stored verification settings. This observation does not establish the current candidate working tree, deployment or approval."
 	return &genregistry.ToolFieldMetadata{
@@ -32274,8 +32290,8 @@ func (registryDeclarations) field1885() *genregistry.ToolFieldMetadata {
 	}
 }
 
-// field1886 constructs one generated field declaration.
-func (registryDeclarations) field1886() *genregistry.ToolFieldMetadata {
+// field1887 constructs one generated field declaration.
+func (registryDeclarations) field1887() *genregistry.ToolFieldMetadata {
 	registryText1 := "string"
 	registryText2 := "Absolute folder containing the binaries built by this completed run. Returned only to the user when promotion settings are configured, so the user can publish these exact binaries before approval. Agents never receive this private path."
 	return &genregistry.ToolFieldMetadata{
@@ -32287,8 +32303,8 @@ func (registryDeclarations) field1886() *genregistry.ToolFieldMetadata {
 	}
 }
 
-// field1887 constructs one generated field declaration.
-func (registryDeclarations) field1887() *genregistry.ToolFieldMetadata {
+// field1888 constructs one generated field declaration.
+func (registryDeclarations) field1888() *genregistry.ToolFieldMetadata {
 	registryText1 := "object"
 	registryText2 := "Where the run's tests came from, recorded when the run started: evaluator, or written_tests with their commit and a notice."
 	return &genregistry.ToolFieldMetadata{
@@ -32300,8 +32316,8 @@ func (registryDeclarations) field1887() *genregistry.ToolFieldMetadata {
 	}
 }
 
-// field1888 constructs one generated field declaration.
-func (registryDeclarations) field1888() *genregistry.ToolFieldMetadata {
+// field1889 constructs one generated field declaration.
+func (registryDeclarations) field1889() *genregistry.ToolFieldMetadata {
 	registryText1 := "string"
 	return &genregistry.ToolFieldMetadata{
 		Path: []*genregistry.ToolFieldPathSegment{
@@ -32313,8 +32329,8 @@ func (registryDeclarations) field1888() *genregistry.ToolFieldMetadata {
 	}
 }
 
-// field1889 constructs one generated field declaration.
-func (registryDeclarations) field1889() *genregistry.ToolFieldMetadata {
+// field1890 constructs one generated field declaration.
+func (registryDeclarations) field1890() *genregistry.ToolFieldMetadata {
 	registryText1 := "object"
 	registryText2 := "The run used the operator's evaluator: the one stored with surla verification set, or the one named on surla verify's command line."
 	return &genregistry.ToolFieldMetadata{
@@ -32331,8 +32347,8 @@ func (registryDeclarations) field1889() *genregistry.ToolFieldMetadata {
 	}
 }
 
-// field1890 constructs one generated field declaration.
-func (registryDeclarations) field1890() *genregistry.ToolFieldMetadata {
+// field1891 constructs one generated field declaration.
+func (registryDeclarations) field1891() *genregistry.ToolFieldMetadata {
 	registryText1 := "object"
 	registryText2 := "The run used the tests Surla accepted for the change's build, which a separate agent on this machine wrote."
 	return &genregistry.ToolFieldMetadata{
@@ -32349,8 +32365,8 @@ func (registryDeclarations) field1890() *genregistry.ToolFieldMetadata {
 	}
 }
 
-// field1891 constructs one generated field declaration.
-func (registryDeclarations) field1891() *genregistry.ToolFieldMetadata {
+// field1892 constructs one generated field declaration.
+func (registryDeclarations) field1892() *genregistry.ToolFieldMetadata {
 	registryText1 := "string"
 	registryText2 := "Commit Surla recorded the accepted tests at; the same as suite_commit."
 	return &genregistry.ToolFieldMetadata{
@@ -32368,8 +32384,8 @@ func (registryDeclarations) field1891() *genregistry.ToolFieldMetadata {
 	}
 }
 
-// field1892 constructs one generated field declaration.
-func (registryDeclarations) field1892() *genregistry.ToolFieldMetadata {
+// field1893 constructs one generated field declaration.
+func (registryDeclarations) field1893() *genregistry.ToolFieldMetadata {
 	registryText1 := "string"
 	registryText2 := "Always: These tests were written by a separate agent on this machine and are not isolated from the builder."
 	return &genregistry.ToolFieldMetadata{
@@ -32387,8 +32403,8 @@ func (registryDeclarations) field1892() *genregistry.ToolFieldMetadata {
 	}
 }
 
-// field1893 constructs one generated field declaration.
-func (registryDeclarations) field1893() *genregistry.ToolFieldMetadata {
+// field1894 constructs one generated field declaration.
+func (registryDeclarations) field1894() *genregistry.ToolFieldMetadata {
 	registryText1 := "object"
 	registryText2 := "Exactly one of running, completed or not_completed."
 	return &genregistry.ToolFieldMetadata{
@@ -32400,8 +32416,8 @@ func (registryDeclarations) field1893() *genregistry.ToolFieldMetadata {
 	}
 }
 
-// field1894 constructs one generated field declaration.
-func (registryDeclarations) field1894() *genregistry.ToolFieldMetadata {
+// field1895 constructs one generated field declaration.
+func (registryDeclarations) field1895() *genregistry.ToolFieldMetadata {
 	registryText1 := "string"
 	return &genregistry.ToolFieldMetadata{
 		Path: []*genregistry.ToolFieldPathSegment{
@@ -32413,8 +32429,8 @@ func (registryDeclarations) field1894() *genregistry.ToolFieldMetadata {
 	}
 }
 
-// field1895 constructs one generated field declaration.
-func (registryDeclarations) field1895() *genregistry.ToolFieldMetadata {
+// field1896 constructs one generated field declaration.
+func (registryDeclarations) field1896() *genregistry.ToolFieldMetadata {
 	registryText1 := "object"
 	registryText2 := "The run is still building or evaluating the candidate."
 	return &genregistry.ToolFieldMetadata{
@@ -32432,8 +32448,8 @@ func (registryDeclarations) field1895() *genregistry.ToolFieldMetadata {
 	}
 }
 
-// field1896 constructs one generated field declaration.
-func (registryDeclarations) field1896() *genregistry.ToolFieldMetadata {
+// field1897 constructs one generated field declaration.
+func (registryDeclarations) field1897() *genregistry.ToolFieldMetadata {
 	registryText1 := "string"
 	registryText2 := "When the run was accepted."
 	return &genregistry.ToolFieldMetadata{
@@ -32452,8 +32468,8 @@ func (registryDeclarations) field1896() *genregistry.ToolFieldMetadata {
 	}
 }
 
-// field1897 constructs one generated field declaration.
-func (registryDeclarations) field1897() *genregistry.ToolFieldMetadata {
+// field1898 constructs one generated field declaration.
+func (registryDeclarations) field1898() *genregistry.ToolFieldMetadata {
 	registryText1 := "object"
 	registryText2 := "The run produced a verification report. Its verdict is report.passed."
 	return &genregistry.ToolFieldMetadata{
@@ -32471,8 +32487,8 @@ func (registryDeclarations) field1897() *genregistry.ToolFieldMetadata {
 	}
 }
 
-// field1898 constructs one generated field declaration.
-func (registryDeclarations) field1898() *genregistry.ToolFieldMetadata {
+// field1899 constructs one generated field declaration.
+func (registryDeclarations) field1899() *genregistry.ToolFieldMetadata {
 	registryText1 := "string"
 	registryText2 := "Evaluator suite the report was produced by."
 	return &genregistry.ToolFieldMetadata{
@@ -32491,8 +32507,8 @@ func (registryDeclarations) field1898() *genregistry.ToolFieldMetadata {
 	}
 }
 
-// field1899 constructs one generated field declaration.
-func (registryDeclarations) field1899() *genregistry.ToolFieldMetadata {
+// field1900 constructs one generated field declaration.
+func (registryDeclarations) field1900() *genregistry.ToolFieldMetadata {
 	registryText1 := "string"
 	registryText2 := "Dependency profile the suite ran the candidate with, such as sim."
 	return &genregistry.ToolFieldMetadata{
@@ -32511,8 +32527,8 @@ func (registryDeclarations) field1899() *genregistry.ToolFieldMetadata {
 	}
 }
 
-// field1900 constructs one generated field declaration.
-func (registryDeclarations) field1900() *genregistry.ToolFieldMetadata {
+// field1901 constructs one generated field declaration.
+func (registryDeclarations) field1901() *genregistry.ToolFieldMetadata {
 	registryText1 := "object"
 	registryText2 := "The builder view of the report."
 	return &genregistry.ToolFieldMetadata{
@@ -32531,8 +32547,8 @@ func (registryDeclarations) field1900() *genregistry.ToolFieldMetadata {
 	}
 }
 
-// field1901 constructs one generated field declaration.
-func (registryDeclarations) field1901() *genregistry.ToolFieldMetadata {
+// field1902 constructs one generated field declaration.
+func (registryDeclarations) field1902() *genregistry.ToolFieldMetadata {
 	registryText1 := "string"
 	registryText2 := "SHA-256 digest of the full report the evaluator saved; approve_merge and surla approve take this digest."
 	return &genregistry.ToolFieldMetadata{
@@ -32552,8 +32568,8 @@ func (registryDeclarations) field1901() *genregistry.ToolFieldMetadata {
 	}
 }
 
-// field1902 constructs one generated field declaration.
-func (registryDeclarations) field1902() *genregistry.ToolFieldMetadata {
+// field1903 constructs one generated field declaration.
+func (registryDeclarations) field1903() *genregistry.ToolFieldMetadata {
 	registryText1 := "object"
 	registryText2 := "Every declared scenario, counted by outcome."
 	return &genregistry.ToolFieldMetadata{
@@ -32573,8 +32589,8 @@ func (registryDeclarations) field1902() *genregistry.ToolFieldMetadata {
 	}
 }
 
-// field1903 constructs one generated field declaration.
-func (registryDeclarations) field1903() *genregistry.ToolFieldMetadata {
+// field1904 constructs one generated field declaration.
+func (registryDeclarations) field1904() *genregistry.ToolFieldMetadata {
 	registryText1 := "integer"
 	registryText2 := "Scenarios the suite declares."
 	return &genregistry.ToolFieldMetadata{
@@ -32595,8 +32611,8 @@ func (registryDeclarations) field1903() *genregistry.ToolFieldMetadata {
 	}
 }
 
-// field1904 constructs one generated field declaration.
-func (registryDeclarations) field1904() *genregistry.ToolFieldMetadata {
+// field1905 constructs one generated field declaration.
+func (registryDeclarations) field1905() *genregistry.ToolFieldMetadata {
 	registryText1 := "integer"
 	registryText2 := "Scenarios that passed."
 	return &genregistry.ToolFieldMetadata{
@@ -32617,8 +32633,8 @@ func (registryDeclarations) field1904() *genregistry.ToolFieldMetadata {
 	}
 }
 
-// field1905 constructs one generated field declaration.
-func (registryDeclarations) field1905() *genregistry.ToolFieldMetadata {
+// field1906 constructs one generated field declaration.
+func (registryDeclarations) field1906() *genregistry.ToolFieldMetadata {
 	registryText1 := "integer"
 	registryText2 := "Scenarios whose checks failed."
 	return &genregistry.ToolFieldMetadata{
@@ -32639,8 +32655,8 @@ func (registryDeclarations) field1905() *genregistry.ToolFieldMetadata {
 	}
 }
 
-// field1906 constructs one generated field declaration.
-func (registryDeclarations) field1906() *genregistry.ToolFieldMetadata {
+// field1907 constructs one generated field declaration.
+func (registryDeclarations) field1907() *genregistry.ToolFieldMetadata {
 	registryText1 := "integer"
 	registryText2 := "Declared scenarios the suite did not report."
 	return &genregistry.ToolFieldMetadata{
@@ -32661,8 +32677,8 @@ func (registryDeclarations) field1906() *genregistry.ToolFieldMetadata {
 	}
 }
 
-// field1907 constructs one generated field declaration.
-func (registryDeclarations) field1907() *genregistry.ToolFieldMetadata {
+// field1908 constructs one generated field declaration.
+func (registryDeclarations) field1908() *genregistry.ToolFieldMetadata {
 	registryText1 := "integer"
 	registryText2 := "Scenarios that could not be evaluated."
 	return &genregistry.ToolFieldMetadata{
@@ -32683,8 +32699,8 @@ func (registryDeclarations) field1907() *genregistry.ToolFieldMetadata {
 	}
 }
 
-// field1908 constructs one generated field declaration.
-func (registryDeclarations) field1908() *genregistry.ToolFieldMetadata {
+// field1909 constructs one generated field declaration.
+func (registryDeclarations) field1909() *genregistry.ToolFieldMetadata {
 	registryText1 := "boolean"
 	registryText2 := "The verdict: true only when every declared scenario passed and the suite ran cleanly."
 	return &genregistry.ToolFieldMetadata{
@@ -32704,8 +32720,8 @@ func (registryDeclarations) field1908() *genregistry.ToolFieldMetadata {
 	}
 }
 
-// field1909 constructs one generated field declaration.
-func (registryDeclarations) field1909() *genregistry.ToolFieldMetadata {
+// field1910 constructs one generated field declaration.
+func (registryDeclarations) field1910() *genregistry.ToolFieldMetadata {
 	registryText1 := "boolean"
 	registryText2 := "Whether the evaluator suite itself failed or ended abnormally."
 	return &genregistry.ToolFieldMetadata{
@@ -32725,8 +32741,8 @@ func (registryDeclarations) field1909() *genregistry.ToolFieldMetadata {
 	}
 }
 
-// field1910 constructs one generated field declaration.
-func (registryDeclarations) field1910() *genregistry.ToolFieldMetadata {
+// field1911 constructs one generated field declaration.
+func (registryDeclarations) field1911() *genregistry.ToolFieldMetadata {
 	registryText1 := "array"
 	registryText2 := "Every declared scenario in declaration order."
 	return &genregistry.ToolFieldMetadata{
@@ -32746,8 +32762,8 @@ func (registryDeclarations) field1910() *genregistry.ToolFieldMetadata {
 	}
 }
 
-// field1911 constructs one generated field declaration.
-func (registryDeclarations) field1911() *genregistry.ToolFieldMetadata {
+// field1912 constructs one generated field declaration.
+func (registryDeclarations) field1912() *genregistry.ToolFieldMetadata {
 	registryText1 := "object"
 	registryText2 := "Every declared scenario in declaration order."
 	return &genregistry.ToolFieldMetadata{
@@ -32768,8 +32784,8 @@ func (registryDeclarations) field1911() *genregistry.ToolFieldMetadata {
 	}
 }
 
-// field1912 constructs one generated field declaration.
-func (registryDeclarations) field1912() *genregistry.ToolFieldMetadata {
+// field1913 constructs one generated field declaration.
+func (registryDeclarations) field1913() *genregistry.ToolFieldMetadata {
 	registryText1 := "string"
 	registryText2 := "Scenario name for a repair scenario, or holdout-<n> for a holdout."
 	return &genregistry.ToolFieldMetadata{
@@ -32791,8 +32807,8 @@ func (registryDeclarations) field1912() *genregistry.ToolFieldMetadata {
 	}
 }
 
-// field1913 constructs one generated field declaration.
-func (registryDeclarations) field1913() *genregistry.ToolFieldMetadata {
+// field1914 constructs one generated field declaration.
+func (registryDeclarations) field1914() *genregistry.ToolFieldMetadata {
 	registryText1 := "string"
 	registryText2 := "How the scenario ended."
 	return &genregistry.ToolFieldMetadata{
@@ -32814,8 +32830,8 @@ func (registryDeclarations) field1913() *genregistry.ToolFieldMetadata {
 	}
 }
 
-// field1914 constructs one generated field declaration.
-func (registryDeclarations) field1914() *genregistry.ToolFieldMetadata {
+// field1915 constructs one generated field declaration.
+func (registryDeclarations) field1915() *genregistry.ToolFieldMetadata {
 	registryText1 := "array"
 	registryText2 := "The repair scenario's checks; empty for holdouts."
 	return &genregistry.ToolFieldMetadata{
@@ -32837,8 +32853,8 @@ func (registryDeclarations) field1914() *genregistry.ToolFieldMetadata {
 	}
 }
 
-// field1915 constructs one generated field declaration.
-func (registryDeclarations) field1915() *genregistry.ToolFieldMetadata {
+// field1916 constructs one generated field declaration.
+func (registryDeclarations) field1916() *genregistry.ToolFieldMetadata {
 	registryText1 := "object"
 	registryText2 := "The repair scenario's checks; empty for holdouts."
 	return &genregistry.ToolFieldMetadata{
@@ -32861,8 +32877,8 @@ func (registryDeclarations) field1915() *genregistry.ToolFieldMetadata {
 	}
 }
 
-// field1916 constructs one generated field declaration.
-func (registryDeclarations) field1916() *genregistry.ToolFieldMetadata {
+// field1917 constructs one generated field declaration.
+func (registryDeclarations) field1917() *genregistry.ToolFieldMetadata {
 	registryText1 := "string"
 	registryText2 := "Check name."
 	return &genregistry.ToolFieldMetadata{
@@ -32886,8 +32902,8 @@ func (registryDeclarations) field1916() *genregistry.ToolFieldMetadata {
 	}
 }
 
-// field1917 constructs one generated field declaration.
-func (registryDeclarations) field1917() *genregistry.ToolFieldMetadata {
+// field1918 constructs one generated field declaration.
+func (registryDeclarations) field1918() *genregistry.ToolFieldMetadata {
 	registryText1 := "boolean"
 	registryText2 := "Whether the check passed."
 	return &genregistry.ToolFieldMetadata{
@@ -32911,8 +32927,8 @@ func (registryDeclarations) field1917() *genregistry.ToolFieldMetadata {
 	}
 }
 
-// field1918 constructs one generated field declaration.
-func (registryDeclarations) field1918() *genregistry.ToolFieldMetadata {
+// field1919 constructs one generated field declaration.
+func (registryDeclarations) field1919() *genregistry.ToolFieldMetadata {
 	registryText1 := "string"
 	registryText2 := "Why the check failed; empty when it passed."
 	return &genregistry.ToolFieldMetadata{
@@ -32936,8 +32952,8 @@ func (registryDeclarations) field1918() *genregistry.ToolFieldMetadata {
 	}
 }
 
-// field1919 constructs one generated field declaration.
-func (registryDeclarations) field1919() *genregistry.ToolFieldMetadata {
+// field1920 constructs one generated field declaration.
+func (registryDeclarations) field1920() *genregistry.ToolFieldMetadata {
 	registryText1 := "string"
 	registryText2 := "The repair scenario's environment error; empty for holdouts."
 	return &genregistry.ToolFieldMetadata{
@@ -32959,8 +32975,8 @@ func (registryDeclarations) field1919() *genregistry.ToolFieldMetadata {
 	}
 }
 
-// field1920 constructs one generated field declaration.
-func (registryDeclarations) field1920() *genregistry.ToolFieldMetadata {
+// field1921 constructs one generated field declaration.
+func (registryDeclarations) field1921() *genregistry.ToolFieldMetadata {
 	registryText1 := "object"
 	registryText2 := "The run was accepted but did not complete: a step failed, or its processes ended or were canceled or timed out before it finished. The summary states where it stopped, without command output; full evidence, including any partial report saved while it was being stopped, stays with the evaluator."
 	return &genregistry.ToolFieldMetadata{
@@ -32978,8 +32994,8 @@ func (registryDeclarations) field1920() *genregistry.ToolFieldMetadata {
 	}
 }
 
-// field1921 constructs one generated field declaration.
-func (registryDeclarations) field1921() *genregistry.ToolFieldMetadata {
+// field1922 constructs one generated field declaration.
+func (registryDeclarations) field1922() *genregistry.ToolFieldMetadata {
 	registryText1 := "string"
 	registryText2 := "execution_failed when a step failed; interrupted when the run's process ended before it finished."
 	return &genregistry.ToolFieldMetadata{
@@ -32998,8 +33014,8 @@ func (registryDeclarations) field1921() *genregistry.ToolFieldMetadata {
 	}
 }
 
-// field1922 constructs one generated field declaration.
-func (registryDeclarations) field1922() *genregistry.ToolFieldMetadata {
+// field1923 constructs one generated field declaration.
+func (registryDeclarations) field1923() *genregistry.ToolFieldMetadata {
 	registryText1 := "string"
 	registryText2 := "Where the run stopped."
 	return &genregistry.ToolFieldMetadata{
@@ -33018,8 +33034,8 @@ func (registryDeclarations) field1922() *genregistry.ToolFieldMetadata {
 	}
 }
 
-// field1923 constructs one generated field declaration.
-func (registryDeclarations) field1923() *genregistry.ToolFieldMetadata {
+// field1924 constructs one generated field declaration.
+func (registryDeclarations) field1924() *genregistry.ToolFieldMetadata {
 	registryText1 := "string"
 	registryText2 := "Builder-safe description of what stopped the run; never command output."
 	return &genregistry.ToolFieldMetadata{
@@ -33038,23 +33054,23 @@ func (registryDeclarations) field1923() *genregistry.ToolFieldMetadata {
 	}
 }
 
-// metadata1924 constructs one generated metadata declaration.
-func (declarations registryDeclarations) metadata1924() *genregistry.ToolTypeMetadata {
+// metadata1925 constructs one generated metadata declaration.
+func (declarations registryDeclarations) metadata1925() *genregistry.ToolTypeMetadata {
 	registryText1 := "VerifyChangePayload"
 	return &genregistry.ToolTypeMetadata{
 		Name:                     &registryText1,
 		SchemaWithoutRootExample: []byte("{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"additionalProperties\":false,\"description\":\"Names the confirmed Change Card revision and the candidate commit to verify. What is built and which tests run come from the project, never from the caller: the candidate commit's programs and the tests Surla accepted for the user's build of the revision or, with stored verification settings, the programs and evaluator suite those settings name.\",\"properties\":{\"candidate_commit\":{\"description\":\"Full commit ID of the candidate to build and verify (40 or 64 lowercase hex characters).\",\"pattern\":\"^([0-9a-f]{40}|[0-9a-f]{64})$\",\"type\":\"string\"},\"change_id\":{\"description\":\"Confirmed Change Card identifier.\",\"type\":\"string\"},\"request_revision\":{\"description\":\"Current request_revision of the confirmed Change Card.\",\"type\":\"string\"}},\"required\":[\"change_id\",\"request_revision\",\"candidate_commit\"],\"type\":\"object\"}"),
 		Fields: []*genregistry.ToolFieldMetadata{
-			declarations.field1925(),
 			declarations.field1926(),
 			declarations.field1927(),
 			declarations.field1928(),
+			declarations.field1929(),
 		},
 	}
 }
 
-// field1925 constructs one generated field declaration.
-func (registryDeclarations) field1925() *genregistry.ToolFieldMetadata {
+// field1926 constructs one generated field declaration.
+func (registryDeclarations) field1926() *genregistry.ToolFieldMetadata {
 	registryText1 := "object"
 	registryText2 := "Names the confirmed Change Card revision and the candidate commit to verify. What is built and which tests run come from the project, never from the caller: the candidate commit's programs and the tests Surla accepted for the user's build of the revision or, with stored verification settings, the programs and evaluator suite those settings name."
 	return &genregistry.ToolFieldMetadata{
@@ -33063,8 +33079,8 @@ func (registryDeclarations) field1925() *genregistry.ToolFieldMetadata {
 	}
 }
 
-// field1926 constructs one generated field declaration.
-func (registryDeclarations) field1926() *genregistry.ToolFieldMetadata {
+// field1927 constructs one generated field declaration.
+func (registryDeclarations) field1927() *genregistry.ToolFieldMetadata {
 	registryText1 := "string"
 	registryText2 := "Confirmed Change Card identifier."
 	return &genregistry.ToolFieldMetadata{
@@ -33076,8 +33092,8 @@ func (registryDeclarations) field1926() *genregistry.ToolFieldMetadata {
 	}
 }
 
-// field1927 constructs one generated field declaration.
-func (registryDeclarations) field1927() *genregistry.ToolFieldMetadata {
+// field1928 constructs one generated field declaration.
+func (registryDeclarations) field1928() *genregistry.ToolFieldMetadata {
 	registryText1 := "string"
 	registryText2 := "Current request_revision of the confirmed Change Card."
 	return &genregistry.ToolFieldMetadata{
@@ -33089,8 +33105,8 @@ func (registryDeclarations) field1927() *genregistry.ToolFieldMetadata {
 	}
 }
 
-// field1928 constructs one generated field declaration.
-func (registryDeclarations) field1928() *genregistry.ToolFieldMetadata {
+// field1929 constructs one generated field declaration.
+func (registryDeclarations) field1929() *genregistry.ToolFieldMetadata {
 	registryText1 := "string"
 	registryText2 := "Full commit ID of the candidate to build and verify (40 or 64 lowercase hex characters)."
 	return &genregistry.ToolFieldMetadata{
