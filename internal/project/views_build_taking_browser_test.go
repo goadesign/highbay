@@ -79,7 +79,8 @@ func TestBuildTakingAtDesktopAndPhoneWidth(t *testing.T) {
 			ChangeID: card.ChangeID,
 			Build: gensurla.NewBuildStarted(&gensurla.StartedBuild{
 				RequestRevision: card.RequestRevision, StartedAt: at, InForce: true,
-				Builder: &gensurla.BuilderProgress{Read: true},
+				RequiredTests: []*gensurla.RequiredTest{},
+				Builder:       &gensurla.BuilderProgress{Read: true},
 				TestWriter: &gensurla.TestWriterProgress{Read: true, Report: 1,
 					Tests: gensurla.NewTestsAccepted(&gensurla.TestsAccepted{
 						Commit: tests, CheckedAt: at,

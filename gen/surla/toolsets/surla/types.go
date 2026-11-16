@@ -1517,6 +1517,9 @@ type (
 		// Number of finished flows in the agreed Story. Zero means no test of this
 		// change's Story was required.
 		RequiredTestCount int
+		// Tests required by this build's saved Story, in declaration order; unfinished
+		// flows require none. Empty when no finished flow requires a test.
+		RequiredTests []*RequiredTest
 		// Whether the user has taken this build: building until a verification of it
 		// passes; passed with the commits to merge; merged once the branch checked out
 		// in the project folder holds the commits of one passed run, the builder's

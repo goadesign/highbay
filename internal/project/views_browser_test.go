@@ -62,6 +62,10 @@ type (
 		Approval bool `json:"approval,omitempty"`
 		// ApprovalState identifies the typed owner fixture shown in this batch.
 		ApprovalState string `json:"approval_state,omitempty"`
+		// TestReview selects the saved test-verdict layout scenario.
+		TestReview bool `json:"test_review,omitempty"`
+		// TestReviewState identifies the typed test-verdict fixture.
+		TestReviewState string `json:"test_review_state,omitempty"`
 		// CaptureDirectory receives the requested private viewport screenshots.
 		CaptureDirectory string `json:"capture_directory,omitempty"`
 		// Origin is the project server's origin.
@@ -109,8 +113,26 @@ type (
 		Taking []takingViewFacts `json:"taking"`
 		// Approval records viewport, evidence and keyboard facts for one owner state.
 		Approval []approvalViewFacts `json:"approval"`
+		// TestReview records required tests, findings and orientation at each width.
+		TestReview []testReviewViewFacts `json:"test_review"`
 		// Reload is the views page after a reload.
 		Reload reloadFacts `json:"reload"`
+	}
+
+	// testReviewViewFacts contains native layout and keyboard observations only.
+	testReviewViewFacts struct {
+		Name              string `json:"name"`
+		Width             int    `json:"width"`
+		DocumentWidth     int    `json:"document_width"`
+		RequiredTests     int    `json:"required_tests"`
+		Next              string `json:"next"`
+		NextControls      int    `json:"next_controls"`
+		NextInline        bool   `json:"next_inline"`
+		FindingsVisible   bool   `json:"findings_visible"`
+		FindingsBounded   bool   `json:"findings_bounded"`
+		KeyboardReachable bool   `json:"keyboard_reachable"`
+		FooterReserved    bool   `json:"footer_reserved"`
+		Screenshot        string `json:"screenshot"`
 	}
 
 	// approvalViewFacts records actual browser layout, never candidate execution.

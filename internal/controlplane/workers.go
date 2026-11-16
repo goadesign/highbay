@@ -18,7 +18,6 @@ import (
 	"go.opentelemetry.io/otel/trace"
 
 	gensurla "github.com/goadesign/surla/gen/surla"
-	"github.com/goadesign/surla/internal/designeval"
 	"github.com/goadesign/surla/internal/shquote"
 	"github.com/goadesign/surla/internal/testwriter"
 	"github.com/goadesign/surla/verify/candidate"
@@ -336,13 +335,9 @@ func (c *ControlPlane) GetTestWriterAssignment(
 		}
 	}
 
-	scenarios, _, err := designeval.StoryScenarios(held.file.Stories)
+	required, err := requiredStoryTests(held.file.Stories)
 	if err != nil {
 		return nil, fmt.Errorf("name the required tests of change %q: %w", held.file.ChangeID, err)
-	}
-	required := make([]*gensurla.RequiredTest, len(scenarios))
-	for i, s := range scenarios {
-		required[i] = &gensurla.RequiredTest{Story: s.Story, FlowKey: s.Key, Scenario: s.Scenario, Hook: s.Hook}
 	}
 	item := testWriterAssignmentItem(held)
 	findings := []string{}

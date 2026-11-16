@@ -329,6 +329,7 @@ func TestTestAssignmentKeepsTheStoryAgreedAtTheBuiltRevision(t *testing.T) {
 	assert.True(t, assignment.Progress.Read)
 	build := mustStartedBuild(t, cp, user, "chg")
 	assert.False(t, build.InForce, "a revision awaiting confirmation leaves the build for an earlier revision")
+	assert.Equal(t, assignment.RequiredTests, build.RequiredTests, "the build read retains the saved required tests after the card changes")
 }
 
 // TestStartBuildRefusesAStoryWhoseTestsCannotBeNamed refuses a Story with two
@@ -589,7 +590,7 @@ func TestBuildFileIsDecodedStrictly(t *testing.T) {
 // listed exactly for the callers the table allows.
 func TestBuildOperationsFollowTheRoleTable(t *testing.T) {
 	cp := newBuildControlPlane(t, Options{})
-	card := buildableChange(t, cp, "chg")
+	card := saveBuildStoryCard(t, cp, "chg", StatusConfirmed, refundStory("Refund over the limit"))
 	tokens := map[string]CallerKind{"user": CallerUser, "guide": CallerGuide, "builder": CallerBuilder, "tests": CallerTestWriter}
 	credentials := map[string]Principal{}
 	for token, kind := range tokens {
@@ -652,6 +653,18 @@ func TestBuildOperationsFollowTheRoleTable(t *testing.T) {
 				assert.Equal(t, http.StatusOK, status, op.name+": "+body)
 				assert.Empty(t, failure, op.name)
 				assert.Contains(t, string(result), `"chg"`, op.name)
+				if op.name == "get_build" {
+					for _, raw := range [][]byte{[]byte(body), result} {
+						read, err := gensurla.DecodeChangeBuild(raw)
+						require.NoError(t, err)
+						started, ok := read.Build.AsStarted()
+						require.True(t, ok)
+						assert.NotNil(t, started.RequiredTests, token)
+						assert.Equal(t, started.RequiredTestCount, len(started.RequiredTests), token)
+						assert.Equal(t, "refund_over_limit", started.RequiredTests[0].Scenario, token)
+					}
+					assert.Equal(t, before, readBuildFile(t, cp, "chg"), "build reads remain read-only for every caller")
+				}
 			}
 		})
 	}

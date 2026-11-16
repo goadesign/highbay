@@ -81,7 +81,8 @@ to $50 get instant store credit; larger ones wait for a manager":
    take its word for it: it writes the required tests into the copy again,
    checks that nothing changed outside the test module (the project's `eval/`
    folder), and builds and lists the test program. Problems go
-   back to the test writer as findings, which you can also read on the page.
+   back to the test writer as findings. Build shows them beside the saved
+   required tests; Next names the test writer’s next step.
    When the tests pass the check, Surla accepts them at one commit on
    `surla/tests-<n>`.
 7. **Code and verify.** Meanwhile the builder writes the code, builds and

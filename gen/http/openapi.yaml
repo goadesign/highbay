@@ -4184,6 +4184,23 @@ definitions:
                     in_force: true
                     request_revision: Facilis nam.
                     required_test_count: 3718558671237355663
+                    required_tests:
+                        - flow_key: Officia eligendi error accusamus.
+                          hook: Repellat facere.
+                          scenario: Corporis eos ad esse a fugiat cupiditate.
+                          story: Recusandae minima voluptatum.
+                        - flow_key: Officia eligendi error accusamus.
+                          hook: Repellat facere.
+                          scenario: Corporis eos ad esse a fugiat cupiditate.
+                          story: Recusandae minima voluptatum.
+                        - flow_key: Officia eligendi error accusamus.
+                          hook: Repellat facere.
+                          scenario: Corporis eos ad esse a fugiat cupiditate.
+                          story: Recusandae minima voluptatum.
+                        - flow_key: Officia eligendi error accusamus.
+                          hook: Repellat facere.
+                          scenario: Corporis eos ad esse a fugiat cupiditate.
+                          story: Recusandae minima voluptatum.
                     started_at: "2011-11-02T08:04:42Z"
                     state: started
                     taking:
@@ -4222,6 +4239,24 @@ definitions:
                             example: 1692722586442644519
                             format: int64
                             minimum: 0
+                        required_tests:
+                            type: array
+                            items:
+                                $ref: '#/definitions/RequiredTest'
+                            description: Tests required by this build's saved Story, in declaration order; unfinished flows require none. Empty when no finished flow requires a test.
+                            example:
+                                - flow_key: Officia eligendi error accusamus.
+                                  hook: Repellat facere.
+                                  scenario: Corporis eos ad esse a fugiat cupiditate.
+                                  story: Recusandae minima voluptatum.
+                                - flow_key: Officia eligendi error accusamus.
+                                  hook: Repellat facere.
+                                  scenario: Corporis eos ad esse a fugiat cupiditate.
+                                  story: Recusandae minima voluptatum.
+                                - flow_key: Officia eligendi error accusamus.
+                                  hook: Repellat facere.
+                                  scenario: Corporis eos ad esse a fugiat cupiditate.
+                                  story: Recusandae minima voluptatum.
                         started_at:
                             type: string
                             description: When the user started this build.
@@ -4353,6 +4388,7 @@ definitions:
                         - builder
                         - test_writer
                         - required_test_count
+                        - required_tests
                         - taking
                         - state
             change_id:
@@ -4371,6 +4407,23 @@ definitions:
                 in_force: true
                 request_revision: Facilis nam.
                 required_test_count: 3718558671237355663
+                required_tests:
+                    - flow_key: Officia eligendi error accusamus.
+                      hook: Repellat facere.
+                      scenario: Corporis eos ad esse a fugiat cupiditate.
+                      story: Recusandae minima voluptatum.
+                    - flow_key: Officia eligendi error accusamus.
+                      hook: Repellat facere.
+                      scenario: Corporis eos ad esse a fugiat cupiditate.
+                      story: Recusandae minima voluptatum.
+                    - flow_key: Officia eligendi error accusamus.
+                      hook: Repellat facere.
+                      scenario: Corporis eos ad esse a fugiat cupiditate.
+                      story: Recusandae minima voluptatum.
+                    - flow_key: Officia eligendi error accusamus.
+                      hook: Repellat facere.
+                      scenario: Corporis eos ad esse a fugiat cupiditate.
+                      story: Recusandae minima voluptatum.
                 started_at: "2011-11-02T08:04:42Z"
                 state: started
                 taking:
@@ -7804,6 +7857,23 @@ definitions:
                 in_force: true
                 request_revision: Facilis nam.
                 required_test_count: 3718558671237355663
+                required_tests:
+                    - flow_key: Officia eligendi error accusamus.
+                      hook: Repellat facere.
+                      scenario: Corporis eos ad esse a fugiat cupiditate.
+                      story: Recusandae minima voluptatum.
+                    - flow_key: Officia eligendi error accusamus.
+                      hook: Repellat facere.
+                      scenario: Corporis eos ad esse a fugiat cupiditate.
+                      story: Recusandae minima voluptatum.
+                    - flow_key: Officia eligendi error accusamus.
+                      hook: Repellat facere.
+                      scenario: Corporis eos ad esse a fugiat cupiditate.
+                      story: Recusandae minima voluptatum.
+                    - flow_key: Officia eligendi error accusamus.
+                      hook: Repellat facere.
+                      scenario: Corporis eos ad esse a fugiat cupiditate.
+                      story: Recusandae minima voluptatum.
                 started_at: "2011-11-02T08:04:42Z"
                 taking:
                     state: merged
@@ -10580,6 +10650,23 @@ definitions:
                 in_force: true
                 request_revision: Facilis nam.
                 required_test_count: 3718558671237355663
+                required_tests:
+                    - flow_key: Officia eligendi error accusamus.
+                      hook: Repellat facere.
+                      scenario: Corporis eos ad esse a fugiat cupiditate.
+                      story: Recusandae minima voluptatum.
+                    - flow_key: Officia eligendi error accusamus.
+                      hook: Repellat facere.
+                      scenario: Corporis eos ad esse a fugiat cupiditate.
+                      story: Recusandae minima voluptatum.
+                    - flow_key: Officia eligendi error accusamus.
+                      hook: Repellat facere.
+                      scenario: Corporis eos ad esse a fugiat cupiditate.
+                      story: Recusandae minima voluptatum.
+                    - flow_key: Officia eligendi error accusamus.
+                      hook: Repellat facere.
+                      scenario: Corporis eos ad esse a fugiat cupiditate.
+                      story: Recusandae minima voluptatum.
                 started_at: "2011-11-02T08:04:42Z"
                 taking:
                     state: merged
@@ -10637,6 +10724,28 @@ definitions:
                 example: 3718558671237355663
                 format: int64
                 minimum: 0
+            required_tests:
+                type: array
+                items:
+                    $ref: '#/definitions/RequiredTest'
+                description: Tests required by this build's saved Story, in declaration order; unfinished flows require none. Empty when no finished flow requires a test.
+                example:
+                    - flow_key: Officia eligendi error accusamus.
+                      hook: Repellat facere.
+                      scenario: Corporis eos ad esse a fugiat cupiditate.
+                      story: Recusandae minima voluptatum.
+                    - flow_key: Officia eligendi error accusamus.
+                      hook: Repellat facere.
+                      scenario: Corporis eos ad esse a fugiat cupiditate.
+                      story: Recusandae minima voluptatum.
+                    - flow_key: Officia eligendi error accusamus.
+                      hook: Repellat facere.
+                      scenario: Corporis eos ad esse a fugiat cupiditate.
+                      story: Recusandae minima voluptatum.
+                    - flow_key: Officia eligendi error accusamus.
+                      hook: Repellat facere.
+                      scenario: Corporis eos ad esse a fugiat cupiditate.
+                      story: Recusandae minima voluptatum.
             started_at:
                 type: string
                 description: When the user started this build.
@@ -10756,6 +10865,23 @@ definitions:
             in_force: true
             request_revision: Facilis nam.
             required_test_count: 3718558671237355663
+            required_tests:
+                - flow_key: Officia eligendi error accusamus.
+                  hook: Repellat facere.
+                  scenario: Corporis eos ad esse a fugiat cupiditate.
+                  story: Recusandae minima voluptatum.
+                - flow_key: Officia eligendi error accusamus.
+                  hook: Repellat facere.
+                  scenario: Corporis eos ad esse a fugiat cupiditate.
+                  story: Recusandae minima voluptatum.
+                - flow_key: Officia eligendi error accusamus.
+                  hook: Repellat facere.
+                  scenario: Corporis eos ad esse a fugiat cupiditate.
+                  story: Recusandae minima voluptatum.
+                - flow_key: Officia eligendi error accusamus.
+                  hook: Repellat facere.
+                  scenario: Corporis eos ad esse a fugiat cupiditate.
+                  story: Recusandae minima voluptatum.
             started_at: "2011-11-02T08:04:42Z"
             taking:
                 state: merged
@@ -10773,6 +10899,7 @@ definitions:
             - builder
             - test_writer
             - required_test_count
+            - required_tests
             - taking
     StopLiveTargetResult:
         title: StopLiveTargetResult

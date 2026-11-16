@@ -4,6 +4,7 @@
 import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { ChangeBuild, ChangeCardResult, OpenBuildRefusal, ReplacedBuild, StartBuildResult, StartedBuild, VerificationStatusResult } from "../types";
 import { Alert, Badge, Button, Card } from "./shadcn";
+import { TestWriterFacts } from "./build-test-review";
 
 // BuildQuestion binds a read or confirmation to the owner observation it describes.
 type BuildQuestion = { kind: "reading" | "rebuild" | "drop"; identity: string };
@@ -623,7 +624,7 @@ function BuildProgress({ build }: { build: StartedBuild }) {
   }
   switch (tests.state) {
     case "needs_changes":
-      return <p id="surla-build-state">Sent back to the test writer. It fixes this and reports again; nothing is yours to do unless it asks you in its pane.</p>;
+      return null;
     case "accepted":
       return <p id="surla-build-state">Tests accepted. The builder finishes the code and asks Surla to check it. Your next decision: approve, after the check passes.</p>;
     case "reported":
@@ -649,81 +650,6 @@ function localBuildTime(at: string) {
   });
 }
 
-// TestWriterFacts keeps assignment reads separate from declared test progress.
-// Findings text comes only from the page's independently correlated user read.
-function TestWriterFacts({ build, findingTexts, loading, error, disabled, onRead }: {
-  build: StartedBuild;
-  findingTexts: readonly string[] | null;
-  loading: boolean;
-  error: string | null;
-  disabled: boolean;
-  onRead: () => void;
-}) {
-  const tests = build.test_writer.tests;
-  const open = build.taking.state === "building" || build.taking.state === "passed";
-  let progress: string;
-  switch (tests.state) {
-    case "not_used": progress = "not needed; this project uses its configured tests"; break;
-    case "assigned": progress = build.test_writer.read
-      ? "assignment read, no tests reported yet"
-      : "assignment unread, no tests reported yet"; break;
-    case "reported": progress = build.test_writer.read
-      ? "assignment read; Surla is checking its reported tests"
-      : "assignment unread; its reported tests are being checked"; break;
-    case "needs_changes": progress = build.test_writer.read
-      ? "assignment read; findings to address"
-      : "assignment unread; new findings ready to read"; break;
-    case "accepted": progress = build.test_writer.read
-      ? "assignment read; accepted tests"
-      : "assignment unread; acceptance ready to read"; break;
-    case "could_not_run": progress = build.test_writer.read
-      ? "assignment read; check could not run"
-      : "assignment unread; reason ready to read"; break;
-  }
-  const findingCount = tests.state === "needs_changes" ? tests.finding_count : 0;
-  const items = findingTexts === null ? null : (
-    <ul className="surla-live-prompts">
-      {findingTexts.map((text, index) => <li key={index}>{text}</li>)}
-    </ul>
-  );
-  return (
-    <div id="surla-build-test-writer" data-state={tests.state}>
-      <p>Test writer: {progress}</p>
-      {tests.state === "could_not_run" ? <p>{tests.reason} {tests.step}</p> : null}
-      {tests.state === "accepted" ? <p id="surla-build-not-judged">{tests.not_judged}</p> : null}
-      {tests.state === "needs_changes" ? (
-        <div id="surla-build-findings" aria-busy={open && loading}>
-          <p><strong>What Surla told the test writer</strong></p>
-          <p>{findingCount} {findingCount === 1 ? "finding" : "findings"}</p>
-          {open && findingCount > 0 ? (
-            <>
-              {loading ? <p role="status">Reading findings…</p> : null}
-              {error !== null ? (
-                <Alert id="surla-build-findings-error" variant="destructive">
-                  Could not read findings. {error}
-                </Alert>
-              ) : null}
-              {!loading && (error !== null || findingTexts === null) ? (
-                <Button id="surla-build-findings-retry" disabled={disabled} onClick={onRead}>
-                  {error !== null ? "Retry findings read" : "Read findings"}
-                </Button>
-              ) : null}
-              {!loading && error === null && findingTexts !== null ? (
-                findingTexts.length > 3 ? (
-                  <details className="surla-details">
-                    <summary>Read {findingTexts.length} findings</summary>
-                    {items}
-                  </details>
-                ) : items
-              ) : null}
-            </>
-          ) : null}
-        </div>
-      ) : null}
-    </div>
-  );
-}
-
 // BuildDetails places exact revision, report and verdict evidence behind the
 // existing native disclosure, without relabeling acceptance as verification.
 function BuildDetails({ card, build, children }: { card: ChangeCardResult; build: StartedBuild | null; children: React.ReactNode }) {
@@ -737,6 +663,11 @@ function BuildDetails({ card, build, children }: { card: ChangeCardResult; build
         <>
           <p>Built revision: <code>{build.request_revision}</code></p>
           <p>Build started: <time dateTime={build.started_at}>{build.started_at}</time></p>
+          {build.required_tests.length > 0 ? <dl id="surla-build-test-hooks">
+            {build.required_tests.map((test) => <React.Fragment key={test.scenario}>
+              <dt>Scenario <code>{test.scenario}</code></dt><dd>Hook <code>{test.hook}</code></dd>
+            </React.Fragment>)}
+          </dl> : null}
           <p>{build.required_test_count === 0 ? "No tests of this change’s Story were required."
             : build.required_test_count + " required Story " + (build.required_test_count === 1 ? "test." : "tests.")}</p>
           {tests?.state !== "not_used" ? <p>Test report number: {build.test_writer.report}</p> : null}

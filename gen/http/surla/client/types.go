@@ -5219,6 +5219,9 @@ type StartedBuildResponseBody struct {
 	// Number of finished flows in the agreed Story. Zero means no test of this
 	// change's Story was required.
 	RequiredTestCount *int `form:"required_test_count,omitempty" json:"required_test_count,omitempty" xml:"required_test_count,omitempty"`
+	// Tests required by this build's saved Story, in declaration order; unfinished
+	// flows require none. Empty when no finished flow requires a test.
+	RequiredTests []*RequiredTestResponseBody `form:"required_tests,omitempty" json:"required_tests,omitempty" xml:"required_tests,omitempty"`
 	// Whether the user has taken this build: building until a verification of it
 	// passes; passed with the commits to merge; merged once the branch checked out
 	// in the project folder holds the commits of one passed run, the builder's
@@ -5291,6 +5294,18 @@ type TestsCouldNotRunResponseBody struct {
 	Step *string `form:"step,omitempty" json:"step,omitempty" xml:"step,omitempty"`
 	// When Surla's check stopped.
 	CheckedAt *string `form:"checked_at,omitempty" json:"checked_at,omitempty" xml:"checked_at,omitempty"`
+}
+
+// RequiredTestResponseBody is used to define fields on response body types.
+type RequiredTestResponseBody struct {
+	// Name of the Story the flow belongs to.
+	Story *string `form:"story,omitempty" json:"story,omitempty" xml:"story,omitempty"`
+	// Key of the finished flow.
+	FlowKey *string `form:"flow_key,omitempty" json:"flow_key,omitempty" xml:"flow_key,omitempty"`
+	// Scenario name the evaluation suite declares for the flow.
+	Scenario *string `form:"scenario,omitempty" json:"scenario,omitempty" xml:"scenario,omitempty"`
+	// Hook method the test writer implements for the scenario.
+	Hook *string `form:"hook,omitempty" json:"hook,omitempty" xml:"hook,omitempty"`
 }
 
 // BuildBuildingResponseBody is used to define fields on response body types.
@@ -5429,18 +5444,6 @@ type TestWriterAssignmentItemResponseBody struct {
 	InForce *bool `form:"in_force,omitempty" json:"in_force,omitempty" xml:"in_force,omitempty"`
 	// Where this assignment stands.
 	Progress *TestWriterProgressResponseBody `form:"progress,omitempty" json:"progress,omitempty" xml:"progress,omitempty"`
-}
-
-// RequiredTestResponseBody is used to define fields on response body types.
-type RequiredTestResponseBody struct {
-	// Name of the Story the flow belongs to.
-	Story *string `form:"story,omitempty" json:"story,omitempty" xml:"story,omitempty"`
-	// Key of the finished flow.
-	FlowKey *string `form:"flow_key,omitempty" json:"flow_key,omitempty" xml:"flow_key,omitempty"`
-	// Scenario name the evaluation suite declares for the flow.
-	Scenario *string `form:"scenario,omitempty" json:"scenario,omitempty" xml:"scenario,omitempty"`
-	// Hook method the test writer implements for the scenario.
-	Hook *string `form:"hook,omitempty" json:"hook,omitempty" xml:"hook,omitempty"`
 }
 
 // ConfirmedAnswerResponseBody is used to define fields on response body types.
@@ -21313,6 +21316,9 @@ func ValidateStartedBuildResponseBody(body *StartedBuildResponseBody) (err error
 	if body.RequiredTestCount == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("required_test_count", "body"))
 	}
+	if body.RequiredTests == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("required_tests", "body"))
+	}
 	if body.Taking == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("taking", "body"))
 	}
@@ -21332,6 +21338,13 @@ func ValidateStartedBuildResponseBody(body *StartedBuildResponseBody) (err error
 	if body.RequiredTestCount != nil {
 		if *body.RequiredTestCount < 0 {
 			err = goa.MergeErrors(err, goa.InvalidRangeError("body.required_test_count", *body.RequiredTestCount, 0, true))
+		}
+	}
+	for _, e := range body.RequiredTests {
+		if e != nil {
+			if err2 := validateRequiredTestResponseBody(e, "body.required_tests[*]"); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
 		}
 	}
 	if body.Taking != nil {
@@ -21382,6 +21395,9 @@ func validateStartedBuildResponseBody(body *StartedBuildResponseBody, path strin
 	if body.RequiredTestCount == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("required_test_count", path))
 	}
+	if body.RequiredTests == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("required_tests", path))
+	}
 	if body.Taking == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("taking", path))
 	}
@@ -21401,6 +21417,13 @@ func validateStartedBuildResponseBody(body *StartedBuildResponseBody, path strin
 	if body.RequiredTestCount != nil {
 		if *body.RequiredTestCount < 0 {
 			err = goa.MergeErrors(err, goa.InvalidRangeError(path+".required_test_count", *body.RequiredTestCount, 0, true))
+		}
+	}
+	for _, e := range body.RequiredTests {
+		if e != nil {
+			if err2 := validateRequiredTestResponseBody(e, path+".required_tests[*]"); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
 		}
 	}
 	if body.Taking != nil {
@@ -21706,6 +21729,41 @@ func validateTestsCouldNotRunResponseBody(body *TestsCouldNotRunResponseBody, pa
 	}
 	if body.CheckedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat(path+".checked_at", *body.CheckedAt, goa.FormatDateTime))
+	}
+	return
+}
+
+// ValidateRequiredTestResponseBody runs the validations defined on RequiredTest
+func ValidateRequiredTestResponseBody(body *RequiredTestResponseBody) (err error) {
+	if body.Story == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("story", "body"))
+	}
+	if body.FlowKey == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("flow_key", "body"))
+	}
+	if body.Scenario == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("scenario", "body"))
+	}
+	if body.Hook == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("hook", "body"))
+	}
+	return
+}
+
+// validateRequiredTestResponseBody checks RequiredTest and reports errors
+// using the path supplied by its caller
+func validateRequiredTestResponseBody(body *RequiredTestResponseBody, path string) (err error) {
+	if body.Story == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("story", path))
+	}
+	if body.FlowKey == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("flow_key", path))
+	}
+	if body.Scenario == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("scenario", path))
+	}
+	if body.Hook == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("hook", path))
 	}
 	return
 }
@@ -22173,41 +22231,6 @@ func validateTestWriterAssignmentItemResponseBody(body *TestWriterAssignmentItem
 		if err2 := validateTestWriterProgressResponseBody(body.Progress, path+".progress"); err2 != nil {
 			err = goa.MergeErrors(err, err2)
 		}
-	}
-	return
-}
-
-// ValidateRequiredTestResponseBody runs the validations defined on RequiredTest
-func ValidateRequiredTestResponseBody(body *RequiredTestResponseBody) (err error) {
-	if body.Story == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("story", "body"))
-	}
-	if body.FlowKey == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("flow_key", "body"))
-	}
-	if body.Scenario == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("scenario", "body"))
-	}
-	if body.Hook == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("hook", "body"))
-	}
-	return
-}
-
-// validateRequiredTestResponseBody checks RequiredTest and reports errors
-// using the path supplied by its caller
-func validateRequiredTestResponseBody(body *RequiredTestResponseBody, path string) (err error) {
-	if body.Story == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("story", path))
-	}
-	if body.FlowKey == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("flow_key", path))
-	}
-	if body.Scenario == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("scenario", path))
-	}
-	if body.Hook == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("hook", path))
 	}
 	return
 }

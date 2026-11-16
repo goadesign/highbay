@@ -2638,6 +2638,38 @@ func ValidateGetBuildResultOperatorEvaluatorTestsTransport(value *GetBuildResult
 	return err
 }
 
+// GetBuildResultRequiredTestTransport stores JSON fields until they have been validated.
+type GetBuildResultRequiredTestTransport struct {
+	// Name of the Story the flow belongs to.
+	Story *string `json:"story"`
+	// Key of the finished flow.
+	FlowKey *string `json:"flow_key"`
+	// Scenario name the evaluation suite declares for the flow.
+	Scenario *string `json:"scenario"`
+	// Hook method the test writer implements for the scenario.
+	Hook *string `json:"hook"`
+}
+
+// ValidateGetBuildResultRequiredTestTransport checks decoded JSON before it becomes a service value.
+func ValidateGetBuildResultRequiredTestTransport(value *GetBuildResultRequiredTestTransport) (err error) {
+	if value == nil {
+		return goa.MissingFieldError("body", "JSON value")
+	}
+	if value.Story == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("story", "body"))
+	}
+	if value.FlowKey == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("flow_key", "body"))
+	}
+	if value.Scenario == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("scenario", "body"))
+	}
+	if value.Hook == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("hook", "body"))
+	}
+	return err
+}
+
 // GetBuildResultStartedBuildTransport stores JSON fields until they have been validated.
 type GetBuildResultStartedBuildTransport struct {
 	// Change Card revision the user built.
@@ -2658,6 +2690,9 @@ type GetBuildResultStartedBuildTransport struct {
 	// Number of finished flows in the agreed Story. Zero means no test of this
 	// change's Story was required.
 	RequiredTestCount *int `json:"required_test_count"`
+	// Tests required by this build's saved Story, in declaration order; unfinished
+	// flows require none. Empty when no finished flow requires a test.
+	RequiredTests []*GetBuildResultRequiredTestTransport `json:"required_tests"`
 	// Whether the user has taken this build: building until a verification of it
 	// passes; passed with the commits to merge; merged once the branch checked out
 	// in the project folder holds the commits of one passed run, the builder's
@@ -2690,6 +2725,9 @@ func ValidateGetBuildResultStartedBuildTransport(value *GetBuildResultStartedBui
 	if value.RequiredTestCount == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("required_test_count", "body"))
 	}
+	if value.RequiredTests == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("required_tests", "body"))
+	}
 	if value.Taking == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("taking", "body"))
 	}
@@ -2709,6 +2747,13 @@ func ValidateGetBuildResultStartedBuildTransport(value *GetBuildResultStartedBui
 	if value.RequiredTestCount != nil {
 		if *value.RequiredTestCount < 0 {
 			err = goa.MergeErrors(err, goa.InvalidRangeError("body.required_test_count", *value.RequiredTestCount, 0, true))
+		}
+	}
+	for _, e := range value.RequiredTests {
+		if e != nil {
+			if err2 := ValidateGetBuildResultRequiredTestTransport(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
 		}
 	}
 	if value.Taking != nil {
@@ -18965,6 +19010,17 @@ func encodeRecordedRunStoryToReviewVerificationResultRecordedRunStoryTransport(v
 	return res
 }
 
+func encodeRequiredTestToGetBuildResultRequiredTestTransport(v *surla.RequiredTest) *GetBuildResultRequiredTestTransport {
+	res := &GetBuildResultRequiredTestTransport{
+		Story:    &v.Story,
+		FlowKey:  &v.FlowKey,
+		Scenario: &v.Scenario,
+		Hook:     &v.Hook,
+	}
+
+	return res
+}
+
 func encodeRequiredTestToGetTestWriterAssignmentResultRequiredTestTransport(v *surla.RequiredTest) *GetTestWriterAssignmentResultRequiredTestTransport {
 	res := &GetTestWriterAssignmentResultRequiredTestTransport{
 		Story:    &v.Story,
@@ -19054,6 +19110,14 @@ func encodeStartedBuildToGetBuildResultStartedBuildTransport(v *surla.StartedBui
 	}
 	res.Builder = encodeBuilderProgressToGetBuildResultBuilderProgressTransport(v.Builder)
 	res.TestWriter = encodeTestWriterProgressToGetBuildResultTestWriterProgressTransport(v.TestWriter)
+	res.RequiredTests = make([]*GetBuildResultRequiredTestTransport, len(v.RequiredTests))
+	for i, val := range v.RequiredTests {
+		if val == nil {
+			res.RequiredTests[i] = nil
+			continue
+		}
+		res.RequiredTests[i] = encodeRequiredTestToGetBuildResultRequiredTestTransport(val)
+	}
 	var takingValue GetBuildResultBuildTakingTransport
 	switch string(v.Taking.Kind()) {
 	case "building":

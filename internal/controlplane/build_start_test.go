@@ -141,6 +141,9 @@ func TestBuildTeamOutcomeGivesEachCauseItsStep(t *testing.T) {
 // TestStartedBuildDerivesRequiredTestCount reports finished flows from the saved
 // Story, including a build that requires no Story test, without a saved count.
 func TestStartedBuildDerivesRequiredTestCount(t *testing.T) {
+	receipts := refundStory("Refund with a receipt")
+	receipts[0].Name = "Receipts"
+	receipts[0].Flows[0].Key = "receipt-refund"
 	cases := []struct {
 		name    string
 		stories []designeval.StorySummary
@@ -149,17 +152,27 @@ func TestStartedBuildDerivesRequiredTestCount(t *testing.T) {
 		{name: "no Story"},
 		{name: "unfinished only", stories: []designeval.StorySummary{{Flows: []designeval.StoryFlow{{Key: "draft"}}}}},
 		{name: "finished and unfinished", stories: refundStory("Refund over the limit"), count: 1},
-		{name: "several Stories", stories: append(refundStory("Refund over the limit"), refundStory("Refund with a receipt")...), count: 2},
+		{name: "several Stories", stories: append(refundStory("Refund over the limit"), receipts...), count: 2},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			build := startedBuild(heldBuild{file: buildFile{
+			build, err := startedBuild(heldBuild{file: buildFile{
 				Stories: tc.stories, TestWriter: testWriterAssignment{State: testsAssigned},
 			}}, gensurla.NewBuildTakingBuilding(&gensurla.BuildBuilding{}))
+			require.NoError(t, err)
+			assert.NotNil(t, build.RequiredTests)
+			assert.Len(t, build.RequiredTests, tc.count)
+			if tc.count > 0 {
+				assert.Equal(t, &gensurla.RequiredTest{Story: "Refunds", FlowKey: "refund-over-limit", Scenario: "refund_over_limit", Hook: "RefundOverLimit"}, build.RequiredTests[0])
+			}
+			if tc.count == 2 {
+				assert.Equal(t, &gensurla.RequiredTest{Story: "Receipts", FlowKey: "receipt-refund", Scenario: "receipt_refund", Hook: "ReceiptRefund"}, build.RequiredTests[1])
+			}
 			assert.Equal(t, tc.count, build.RequiredTestCount)
 		})
 	}
 	raw, err := json.Marshal(buildFile{})
 	require.NoError(t, err)
 	assert.NotContains(t, string(raw), "required_test_count")
+	assert.NotContains(t, string(raw), "required_tests")
 }

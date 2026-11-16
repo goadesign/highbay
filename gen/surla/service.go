@@ -1836,6 +1836,9 @@ type StartedBuild struct {
 	// Number of finished flows in the agreed Story. Zero means no test of this
 	// change's Story was required.
 	RequiredTestCount int
+	// Tests required by this build's saved Story, in declaration order; unfinished
+	// flows require none. Empty when no finished flow requires a test.
+	RequiredTests []*RequiredTest
 	// Whether the user has taken this build: building until a verification of it
 	// passes; passed with the commits to merge; merged once the branch checked out
 	// in the project folder holds the commits of one passed run, the builder's
@@ -6153,6 +6156,9 @@ type jsonStartedBuildTransport struct {
 	// Number of finished flows in the agreed Story. Zero means no test of this
 	// change's Story was required.
 	RequiredTestCount *changeBuildIntTransport `json:"required_test_count"`
+	// Tests required by this build's saved Story, in declaration order; unfinished
+	// flows require none. Empty when no finished flow requires a test.
+	RequiredTests []*jsonRequiredTestTransport `json:"required_tests"`
 	// Whether the user has taken this build: building until a verification of it
 	// passes; passed with the commits to merge; merged once the branch checked out
 	// in the project folder holds the commits of one passed run, the builder's
@@ -6185,6 +6191,9 @@ func validatejsonStartedBuildTransport(value *jsonStartedBuildTransport) (err er
 	if value.RequiredTestCount == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("required_test_count", "body"))
 	}
+	if value.RequiredTests == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("required_tests", "body"))
+	}
 	if value.Taking == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("taking", "body"))
 	}
@@ -6204,6 +6213,13 @@ func validatejsonStartedBuildTransport(value *jsonStartedBuildTransport) (err er
 	if value.RequiredTestCount != nil {
 		if int(*value.RequiredTestCount) < 0 {
 			err = goa.MergeErrors(err, goa.InvalidRangeError("body.required_test_count", int(*value.RequiredTestCount), 0, true))
+		}
+	}
+	for _, e := range value.RequiredTests {
+		if e != nil {
+			if err2 := validatejsonRequiredTestTransport(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
 		}
 	}
 	if value.Taking != nil {
@@ -8472,6 +8488,9 @@ func validateStartedBuildOriginal(value *StartedBuild) (err error) {
 	}
 	if value.TestWriter == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("test_writer", "value"))
+	}
+	if value.RequiredTests == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("required_tests", "value"))
 	}
 	if value.Taking.Kind() == "" {
 		err = goa.MergeErrors(err, goa.MissingFieldError("taking", "value"))
@@ -21222,7 +21241,7 @@ func DecodeRequiredTest(data []byte) (out *RequiredTest, err error) {
 	if err != nil {
 		return out, fmt.Errorf("decode RequiredTest JSON: %w", err)
 	}
-	if err := validateRecordedRunStoryJSONValue5("", root, ""); err != nil {
+	if err := validateChangeBuildJSONValue7("", root, ""); err != nil {
 		return out, fmt.Errorf("decode RequiredTest JSON: %w", err)
 	}
 	var body *jsonRequiredTestTransport
@@ -21547,7 +21566,7 @@ func DecodeRunEvaluatorMappingUnknown(data []byte) (out *RunEvaluatorMappingUnkn
 	if err != nil {
 		return out, fmt.Errorf("decode RunEvaluatorMappingUnknown JSON: %w", err)
 	}
-	if err := validateRecordedRunStoryJSONValue6("", root, ""); err != nil {
+	if err := validateRecordedRunStoryJSONValue5("", root, ""); err != nil {
 		return out, fmt.Errorf("decode RunEvaluatorMappingUnknown JSON: %w", err)
 	}
 	var body *jsonRunEvaluatorMappingUnknownTransport
@@ -22159,6 +22178,14 @@ func EncodeStartedBuild(in *StartedBuild) ([]byte, error) {
 		body.RequiredTestCount = &requiredTestCount
 		body.Builder = encodeBuilderProgressToBuilderProgressTransport(in.Builder)
 		body.TestWriter = encodeTestWriterProgressToTestWriterProgressTransport(in.TestWriter)
+		body.RequiredTests = make([]*jsonRequiredTestTransport, len(in.RequiredTests))
+		for i, val := range in.RequiredTests {
+			if val == nil {
+				body.RequiredTests[i] = nil
+				continue
+			}
+			body.RequiredTests[i] = encodeRequiredTestToRequiredTestTransport(val)
+		}
 		var takingValue jsonBuildTakingTransport
 		switch string(in.Taking.Kind()) {
 		case "building":
@@ -22236,6 +22263,14 @@ func ValidateStartedBuildValue(in *StartedBuild) error {
 		body.RequiredTestCount = &requiredTestCount
 		body.Builder = encodeBuilderProgressToBuilderProgressTransport(in.Builder)
 		body.TestWriter = encodeTestWriterProgressToTestWriterProgressTransport(in.TestWriter)
+		body.RequiredTests = make([]*jsonRequiredTestTransport, len(in.RequiredTests))
+		for i, val := range in.RequiredTests {
+			if val == nil {
+				body.RequiredTests[i] = nil
+				continue
+			}
+			body.RequiredTests[i] = encodeRequiredTestToRequiredTestTransport(val)
+		}
 		var takingValue jsonBuildTakingTransport
 		switch string(in.Taking.Kind()) {
 		case "building":
@@ -22289,7 +22324,7 @@ func DecodeStartedBuild(data []byte) (out *StartedBuild, err error) {
 	if err != nil {
 		return out, fmt.Errorf("decode StartedBuild JSON: %w", err)
 	}
-	if err := validateChangeBuildJSONValue3("", root, ""); err != nil {
+	if err := validateChangeBuildJSONValue5("", root, ""); err != nil {
 		return out, fmt.Errorf("decode StartedBuild JSON: %w", err)
 	}
 	var body *jsonStartedBuildTransport
@@ -22316,6 +22351,14 @@ func DecodeStartedBuild(data []byte) (out *StartedBuild, err error) {
 		}
 		out.Builder = decodeBuilderProgressTransportToBuilderProgress(body.Builder)
 		out.TestWriter = decodeTestWriterProgressTransportToTestWriterProgress(body.TestWriter)
+		out.RequiredTests = make([]*RequiredTest, len(body.RequiredTests))
+		for i, val := range body.RequiredTests {
+			if val == nil {
+				out.RequiredTests[i] = nil
+				continue
+			}
+			out.RequiredTests[i] = decodeRequiredTestTransportToRequiredTest(val)
+		}
 		switch string(body.Taking.Kind()) {
 		case "building":
 			actual, _ := body.Taking.AsBuilding()
@@ -24039,7 +24082,7 @@ func DecodeTestWriterProgress(data []byte) (out *TestWriterProgress, err error) 
 	if err != nil {
 		return out, fmt.Errorf("decode TestWriterProgress JSON: %w", err)
 	}
-	if err := validateChangeBuildJSONValue5("", root, ""); err != nil {
+	if err := validateChangeBuildJSONValue9("", root, ""); err != nil {
 		return out, fmt.Errorf("decode TestWriterProgress JSON: %w", err)
 	}
 	var body *jsonTestWriterProgressTransport
@@ -24258,7 +24301,7 @@ func DecodeTestsAssigned(data []byte) (out *TestsAssigned, err error) {
 	if err != nil {
 		return out, fmt.Errorf("decode TestsAssigned JSON: %w", err)
 	}
-	if err := validateChangeBuildJSONValue7("", root, ""); err != nil {
+	if err := validateChangeBuildJSONValue11("", root, ""); err != nil {
 		return out, fmt.Errorf("decode TestsAssigned JSON: %w", err)
 	}
 	var body *jsonTestsAssignedTransport
@@ -24343,7 +24386,7 @@ func DecodeTestsCouldNotRun(data []byte) (out *TestsCouldNotRun, err error) {
 	if err != nil {
 		return out, fmt.Errorf("decode TestsCouldNotRun JSON: %w", err)
 	}
-	if err := validateChangeBuildJSONValue10("", root, ""); err != nil {
+	if err := validateChangeBuildJSONValue4("", root, ""); err != nil {
 		return out, fmt.Errorf("decode TestsCouldNotRun JSON: %w", err)
 	}
 	var body *jsonTestsCouldNotRunTransport
@@ -24432,7 +24475,7 @@ func DecodeTestsNeedChanges(data []byte) (out *TestsNeedChanges, err error) {
 	if err != nil {
 		return out, fmt.Errorf("decode TestsNeedChanges JSON: %w", err)
 	}
-	if err := validateChangeBuildJSONValue9("", root, ""); err != nil {
+	if err := validateChangeBuildJSONValue3("", root, ""); err != nil {
 		return out, fmt.Errorf("decode TestsNeedChanges JSON: %w", err)
 	}
 	var body *jsonTestsNeedChangesTransport
@@ -24648,7 +24691,7 @@ func DecodeTestsReported(data []byte) (out *TestsReported, err error) {
 	if err != nil {
 		return out, fmt.Errorf("decode TestsReported JSON: %w", err)
 	}
-	if err := validateChangeBuildJSONValue8("", root, ""); err != nil {
+	if err := validateChangeBuildJSONValue12("", root, ""); err != nil {
 		return out, fmt.Errorf("decode TestsReported JSON: %w", err)
 	}
 	var body *jsonTestsReportedTransport
@@ -27641,6 +27684,14 @@ func decodeStartedBuildTransportToStartedBuild(v *jsonStartedBuildTransport) *St
 	}
 	res.Builder = decodeBuilderProgressTransportToBuilderProgress(v.Builder)
 	res.TestWriter = decodeTestWriterProgressTransportToTestWriterProgress(v.TestWriter)
+	res.RequiredTests = make([]*RequiredTest, len(v.RequiredTests))
+	for i, val := range v.RequiredTests {
+		if val == nil {
+			res.RequiredTests[i] = nil
+			continue
+		}
+		res.RequiredTests[i] = decodeRequiredTestTransportToRequiredTest(val)
+	}
 	switch string(v.Taking.Kind()) {
 	case "building":
 		actual, _ := v.Taking.AsBuilding()
@@ -29016,6 +29067,14 @@ func encodeStartedBuildToStartedBuildTransport(v *StartedBuild) *jsonStartedBuil
 	res.RequiredTestCount = &requiredTestCount
 	res.Builder = encodeBuilderProgressToBuilderProgressTransport(v.Builder)
 	res.TestWriter = encodeTestWriterProgressToTestWriterProgressTransport(v.TestWriter)
+	res.RequiredTests = make([]*jsonRequiredTestTransport, len(v.RequiredTests))
+	for i, val := range v.RequiredTests {
+		if val == nil {
+			res.RequiredTests[i] = nil
+			continue
+		}
+		res.RequiredTests[i] = encodeRequiredTestToRequiredTestTransport(val)
+	}
 	var takingValue jsonBuildTakingTransport
 	switch string(v.Taking.Kind()) {
 	case "building":
@@ -29070,6 +29129,14 @@ func encodeStartedBuildToStartedBuildTransport2(v *StartedBuild) *jsonStartedBui
 	res.RequiredTestCount = &requiredTestCount
 	res.Builder = encodeBuilderProgressToBuilderProgressTransport(v.Builder)
 	res.TestWriter = encodeTestWriterProgressToTestWriterProgressTransport(v.TestWriter)
+	res.RequiredTests = make([]*jsonRequiredTestTransport, len(v.RequiredTests))
+	for i, val := range v.RequiredTests {
+		if val == nil {
+			res.RequiredTests[i] = nil
+			continue
+		}
+		res.RequiredTests[i] = encodeRequiredTestToRequiredTestTransport(val)
+	}
 	var takingValue jsonBuildTakingTransport
 	switch string(v.Taking.Kind()) {
 	case "building":
@@ -29124,6 +29191,14 @@ func encodeStartedBuildToStartedBuildTransport3(v *StartedBuild) *jsonStartedBui
 	res.RequiredTestCount = &requiredTestCount
 	res.Builder = encodeBuilderProgressToBuilderProgressTransport(v.Builder)
 	res.TestWriter = encodeTestWriterProgressToTestWriterProgressTransport(v.TestWriter)
+	res.RequiredTests = make([]*jsonRequiredTestTransport, len(v.RequiredTests))
+	for i, val := range v.RequiredTests {
+		if val == nil {
+			res.RequiredTests[i] = nil
+			continue
+		}
+		res.RequiredTests[i] = encodeRequiredTestToRequiredTestTransport(val)
+	}
 	var takingValue jsonBuildTakingTransport
 	switch string(v.Taking.Kind()) {
 	case "building":
@@ -32471,14 +32546,14 @@ func validateChangeBuildJSONValue2(path string, value any, description string) e
 	case "not_started":
 		return validateBuildNotStartedJSONValue(path, branch, "")
 	case "started":
-		return validateChangeBuildJSONValue3(path, branch, "")
+		return validateChangeBuildJSONValue5(path, branch, "")
 	default:
 		return fmt.Errorf("%s: unknown union discriminator %q", field, discriminator)
 	}
 }
 
-// validateChangeBuildJSONValue3 checks one value whose JSON shape is fixed by the generated Goa type.
-func validateChangeBuildJSONValue3(path string, value any, description string) error {
+// validateChangeBuildJSONValue5 checks one value whose JSON shape is fixed by the generated Goa type.
+func validateChangeBuildJSONValue5(path string, value any, description string) error {
 	field := path
 	if field == "" {
 		field = "$payload"
@@ -32525,6 +32600,13 @@ func validateChangeBuildJSONValue3(path string, value any, description string) e
 			); err != nil {
 				return err
 			}
+		case "required_tests":
+			if err := validateChangeBuildJSONValue6(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Tests required by this build's saved Story, in declaration order; unfinished flows require none. Empty when no finished flow requires a test.",
+			); err != nil {
+				return err
+			}
 		case "started_at":
 			if err := validateAgentPolicyItemJSONValue2(
 				generatedJSONChildPath(path, key, false),
@@ -32533,14 +32615,14 @@ func validateChangeBuildJSONValue3(path string, value any, description string) e
 				return err
 			}
 		case "taking":
-			if err := validateChangeBuildJSONValue4(
+			if err := validateChangeBuildJSONValue8(
 				generatedJSONChildPath(path, key, false),
 				typed[key], "Whether the user has taken this build: building until a verification of it passes; passed with the commits to merge; merged once the branch checked out in the project folder holds the commits of one passed run, the builder's and, for written tests, the tests'; dropped once the user dropped it. A project has one open build, and another change is built only once it is merged or dropped.",
 			); err != nil {
 				return err
 			}
 		case "test_writer":
-			if err := validateChangeBuildJSONValue5(
+			if err := validateChangeBuildJSONValue9(
 				generatedJSONChildPath(path, key, false),
 				typed[key], "The test writer's assignment.",
 			); err != nil {
@@ -32552,6 +32634,7 @@ func validateChangeBuildJSONValue3(path string, value any, description string) e
 				"in_force",
 				"request_revision",
 				"required_test_count",
+				"required_tests",
 				"started_at",
 				"taking",
 				"test_writer",
@@ -32561,8 +32644,95 @@ func validateChangeBuildJSONValue3(path string, value any, description string) e
 	return nil
 }
 
-// validateChangeBuildJSONValue4 checks one value whose JSON shape is fixed by the generated Goa type.
-func validateChangeBuildJSONValue4(path string, value any, description string) error {
+// validateChangeBuildJSONValue6 checks one value whose JSON shape is fixed by the generated Goa type.
+func validateChangeBuildJSONValue6(path string, value any, description string) error {
+	field := path
+	if field == "" {
+		field = "$payload"
+	}
+	if value == nil {
+		return invalidGeneratedFieldTypeError(field, "array", "null", description)
+	}
+	typed, ok := value.([]any)
+	if !ok {
+		return invalidGeneratedFieldTypeError(field, "array", decodedJSONType(value), description)
+	}
+	for index, item := range typed {
+		if item == nil {
+			continue
+		}
+		if err := validateChangeBuildJSONValue7(
+			generatedJSONChildPath(path, strconv.Itoa(index), true),
+			item, description,
+		); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// validateChangeBuildJSONValue7 checks one value whose JSON shape is fixed by the generated Goa type.
+func validateChangeBuildJSONValue7(path string, value any, description string) error {
+	field := path
+	if field == "" {
+		field = "$payload"
+	}
+	if value == nil {
+		return invalidGeneratedFieldTypeError(field, "object", "null", description)
+	}
+	typed, ok := value.(map[string]any)
+	if !ok {
+		return invalidGeneratedFieldTypeError(field, "object", decodedJSONType(value), description)
+	}
+	keys := make([]string, 0, len(typed))
+	for key := range typed {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		switch key {
+		case "flow_key":
+			if err := validateAgentPolicyItemJSONValue2(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Key of the finished flow.",
+			); err != nil {
+				return err
+			}
+		case "hook":
+			if err := validateAgentPolicyItemJSONValue2(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Hook method the test writer implements for the scenario.",
+			); err != nil {
+				return err
+			}
+		case "scenario":
+			if err := validateAgentPolicyItemJSONValue2(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Scenario name the evaluation suite declares for the flow.",
+			); err != nil {
+				return err
+			}
+		case "story":
+			if err := validateAgentPolicyItemJSONValue2(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Name of the Story the flow belongs to.",
+			); err != nil {
+				return err
+			}
+		default:
+			return unknownJSONFieldError(path, key, []string{
+				"flow_key",
+				"hook",
+				"scenario",
+				"story",
+			})
+		}
+	}
+	return nil
+}
+
+// validateChangeBuildJSONValue8 checks one value whose JSON shape is fixed by the generated Goa type.
+func validateChangeBuildJSONValue8(path string, value any, description string) error {
 	field := path
 	if field == "" {
 		field = "$payload"
@@ -32598,8 +32768,8 @@ func validateChangeBuildJSONValue4(path string, value any, description string) e
 	}
 }
 
-// validateChangeBuildJSONValue5 checks one value whose JSON shape is fixed by the generated Goa type.
-func validateChangeBuildJSONValue5(path string, value any, description string) error {
+// validateChangeBuildJSONValue9 checks one value whose JSON shape is fixed by the generated Goa type.
+func validateChangeBuildJSONValue9(path string, value any, description string) error {
 	field := path
 	if field == "" {
 		field = "$payload"
@@ -32633,7 +32803,7 @@ func validateChangeBuildJSONValue5(path string, value any, description string) e
 				return err
 			}
 		case "tests":
-			if err := validateChangeBuildJSONValue6(
+			if err := validateChangeBuildJSONValue10(
 				generatedJSONChildPath(path, key, false),
 				typed[key], "The tests' state: not_used when the project has stored verification settings; otherwise assigned, reported, needs_changes with the number of Surla's findings, accepted with the commit Surla recorded, or could_not_run with the reason and the user's step. Each verdict carries the time Surla reached it.",
 			); err != nil {
@@ -32650,8 +32820,8 @@ func validateChangeBuildJSONValue5(path string, value any, description string) e
 	return nil
 }
 
-// validateChangeBuildJSONValue6 checks one value whose JSON shape is fixed by the generated Goa type.
-func validateChangeBuildJSONValue6(path string, value any, description string) error {
+// validateChangeBuildJSONValue10 checks one value whose JSON shape is fixed by the generated Goa type.
+func validateChangeBuildJSONValue10(path string, value any, description string) error {
 	field := path
 	if field == "" {
 		field = "$payload"
@@ -32677,22 +32847,22 @@ func validateChangeBuildJSONValue6(path string, value any, description string) e
 	case "not_used":
 		return validateBuilderAssignmentJSONValue3(path, branch, "")
 	case "assigned":
-		return validateChangeBuildJSONValue7(path, branch, "")
+		return validateChangeBuildJSONValue11(path, branch, "")
 	case "reported":
-		return validateChangeBuildJSONValue8(path, branch, "")
+		return validateChangeBuildJSONValue12(path, branch, "")
 	case "needs_changes":
-		return validateChangeBuildJSONValue9(path, branch, "")
+		return validateChangeBuildJSONValue3(path, branch, "")
 	case "accepted":
 		return validateBuilderAssignmentJSONValue5(path, branch, "")
 	case "could_not_run":
-		return validateChangeBuildJSONValue10(path, branch, "")
+		return validateChangeBuildJSONValue4(path, branch, "")
 	default:
 		return fmt.Errorf("%s: unknown union discriminator %q", field, discriminator)
 	}
 }
 
-// validateChangeBuildJSONValue7 checks one value whose JSON shape is fixed by the generated Goa type.
-func validateChangeBuildJSONValue7(path string, value any, description string) error {
+// validateChangeBuildJSONValue11 checks one value whose JSON shape is fixed by the generated Goa type.
+func validateChangeBuildJSONValue11(path string, value any, description string) error {
 	field := path
 	if field == "" {
 		field = "$payload"
@@ -32718,8 +32888,8 @@ func validateChangeBuildJSONValue7(path string, value any, description string) e
 	return nil
 }
 
-// validateChangeBuildJSONValue8 checks one value whose JSON shape is fixed by the generated Goa type.
-func validateChangeBuildJSONValue8(path string, value any, description string) error {
+// validateChangeBuildJSONValue12 checks one value whose JSON shape is fixed by the generated Goa type.
+func validateChangeBuildJSONValue12(path string, value any, description string) error {
 	field := path
 	if field == "" {
 		field = "$payload"
@@ -32745,8 +32915,8 @@ func validateChangeBuildJSONValue8(path string, value any, description string) e
 	return nil
 }
 
-// validateChangeBuildJSONValue9 checks one value whose JSON shape is fixed by the generated Goa type.
-func validateChangeBuildJSONValue9(path string, value any, description string) error {
+// validateChangeBuildJSONValue3 checks one value whose JSON shape is fixed by the generated Goa type.
+func validateChangeBuildJSONValue3(path string, value any, description string) error {
 	field := path
 	if field == "" {
 		field = "$payload"
@@ -32789,8 +32959,8 @@ func validateChangeBuildJSONValue9(path string, value any, description string) e
 	return nil
 }
 
-// validateChangeBuildJSONValue10 checks one value whose JSON shape is fixed by the generated Goa type.
-func validateChangeBuildJSONValue10(path string, value any, description string) error {
+// validateChangeBuildJSONValue4 checks one value whose JSON shape is fixed by the generated Goa type.
+func validateChangeBuildJSONValue4(path string, value any, description string) error {
 	field := path
 	if field == "" {
 		field = "$payload"
@@ -36616,7 +36786,7 @@ func validateOpenBuildRefusalJSONValue(path string, value any, description strin
 	for _, key := range keys {
 		switch key {
 		case "build":
-			if err := validateChangeBuildJSONValue3(
+			if err := validateChangeBuildJSONValue5(
 				generatedJSONChildPath(path, key, false),
 				typed[key], "The open build as get_build reports it, with the commits to merge once a verification of it passed; drop_build takes its started_at.",
 			); err != nil {
@@ -36992,7 +37162,7 @@ func validateRecordedRunStoryJSONValue(path string, value any, description strin
 				return err
 			}
 		case "stories":
-			if err := validateRecordedRunStoryJSONValue7(
+			if err := validateRecordedRunStoryJSONValue6(
 				generatedJSONChildPath(path, key, false),
 				typed[key], "Stories as agreed for this run, in declaration order; empty when the agreement declares none.",
 			); err != nil {
@@ -37037,7 +37207,7 @@ func validateRecordedRunStoryJSONValue2(path string, value any, description stri
 	case "mapped":
 		return validateRecordedRunStoryJSONValue3(path, branch, "")
 	case "not_recorded_for_evaluator":
-		return validateRecordedRunStoryJSONValue6(path, branch, "")
+		return validateRecordedRunStoryJSONValue5(path, branch, "")
 	default:
 		return fmt.Errorf("%s: unknown union discriminator %q", field, discriminator)
 	}
@@ -37096,7 +37266,7 @@ func validateRecordedRunStoryJSONValue4(path string, value any, description stri
 		if item == nil {
 			continue
 		}
-		if err := validateRecordedRunStoryJSONValue5(
+		if err := validateChangeBuildJSONValue7(
 			generatedJSONChildPath(path, strconv.Itoa(index), true),
 			item, description,
 		); err != nil {
@@ -37126,66 +37296,6 @@ func validateRecordedRunStoryJSONValue5(path string, value any, description stri
 	sort.Strings(keys)
 	for _, key := range keys {
 		switch key {
-		case "flow_key":
-			if err := validateAgentPolicyItemJSONValue2(
-				generatedJSONChildPath(path, key, false),
-				typed[key], "Key of the finished flow.",
-			); err != nil {
-				return err
-			}
-		case "hook":
-			if err := validateAgentPolicyItemJSONValue2(
-				generatedJSONChildPath(path, key, false),
-				typed[key], "Hook method the test writer implements for the scenario.",
-			); err != nil {
-				return err
-			}
-		case "scenario":
-			if err := validateAgentPolicyItemJSONValue2(
-				generatedJSONChildPath(path, key, false),
-				typed[key], "Scenario name the evaluation suite declares for the flow.",
-			); err != nil {
-				return err
-			}
-		case "story":
-			if err := validateAgentPolicyItemJSONValue2(
-				generatedJSONChildPath(path, key, false),
-				typed[key], "Name of the Story the flow belongs to.",
-			); err != nil {
-				return err
-			}
-		default:
-			return unknownJSONFieldError(path, key, []string{
-				"flow_key",
-				"hook",
-				"scenario",
-				"story",
-			})
-		}
-	}
-	return nil
-}
-
-// validateRecordedRunStoryJSONValue6 checks one value whose JSON shape is fixed by the generated Goa type.
-func validateRecordedRunStoryJSONValue6(path string, value any, description string) error {
-	field := path
-	if field == "" {
-		field = "$payload"
-	}
-	if value == nil {
-		return invalidGeneratedFieldTypeError(field, "object", "null", description)
-	}
-	typed, ok := value.(map[string]any)
-	if !ok {
-		return invalidGeneratedFieldTypeError(field, "object", decodedJSONType(value), description)
-	}
-	keys := make([]string, 0, len(typed))
-	for key := range typed {
-		keys = append(keys, key)
-	}
-	sort.Strings(keys)
-	for _, key := range keys {
-		switch key {
 		default:
 			return unknownJSONFieldError(path, key, []string{})
 		}
@@ -37193,8 +37303,8 @@ func validateRecordedRunStoryJSONValue6(path string, value any, description stri
 	return nil
 }
 
-// validateRecordedRunStoryJSONValue7 checks one value whose JSON shape is fixed by the generated Goa type.
-func validateRecordedRunStoryJSONValue7(path string, value any, description string) error {
+// validateRecordedRunStoryJSONValue6 checks one value whose JSON shape is fixed by the generated Goa type.
+func validateRecordedRunStoryJSONValue6(path string, value any, description string) error {
 	field := path
 	if field == "" {
 		field = "$payload"
@@ -37443,7 +37553,7 @@ func validateStartBuildResultJSONValue(path string, value any, description strin
 	for _, key := range keys {
 		switch key {
 		case "build":
-			if err := validateChangeBuildJSONValue3(
+			if err := validateChangeBuildJSONValue5(
 				generatedJSONChildPath(path, key, false),
 				typed[key], "The build saved before Surla made any missing working copy and admitted the team.",
 			); err != nil {
@@ -38019,7 +38129,7 @@ func validateTestWriterAssignmentJSONValue(path string, value any, description s
 				return err
 			}
 		case "progress":
-			if err := validateChangeBuildJSONValue5(
+			if err := validateChangeBuildJSONValue9(
 				generatedJSONChildPath(path, key, false),
 				typed[key], "Where this assignment stands.",
 			); err != nil {
@@ -38192,7 +38302,7 @@ func validateTestWriterAssignmentJSONValue6(path string, value any, description 
 		if item == nil {
 			continue
 		}
-		if err := validateRecordedRunStoryJSONValue5(
+		if err := validateChangeBuildJSONValue7(
 			generatedJSONChildPath(path, strconv.Itoa(index), true),
 			item, description,
 		); err != nil {
@@ -38264,7 +38374,7 @@ func validateTestWriterAssignmentItemJSONValue(path string, value any, descripti
 				return err
 			}
 		case "progress":
-			if err := validateChangeBuildJSONValue5(
+			if err := validateChangeBuildJSONValue9(
 				generatedJSONChildPath(path, key, false),
 				typed[key], "Where this assignment stands.",
 			); err != nil {
@@ -40842,6 +40952,13 @@ func checkChangeBuildStartedBuildValue(in *StartedBuild, field string, active ma
 		if err := checkChangeBuildTestWriterProgressValue(in.TestWriter, generatedJSONChildPath(field, "test_writer", false), active); err != nil {
 			return err
 		}
+		for index1, item1 := range in.RequiredTests {
+			_ = index1
+			_ = item1
+			if err := checkChangeBuildRequiredTestValue(item1, generatedJSONChildPath(generatedJSONChildPath(field, "required_tests", false), strconv.Itoa(index1), true), active); err != nil {
+				return err
+			}
+		}
 		if branch1, ok := in.Taking.AsBuilding(); ok {
 			_ = branch1
 			if branch1 != nil {
@@ -41008,6 +41125,33 @@ func checkChangeBuildTestsCouldNotRunValue(in *TestsCouldNotRun, field string, a
 		}
 		if !utf8.ValidString(string(in.CheckedAt)) {
 			return fmt.Errorf("%s: invalid UTF-8", generatedJSONChildPath(field, "checked_at", false))
+		}
+	}
+	return nil
+}
+
+// checkChangeBuildRequiredTestValue checks one generated value on the active path.
+func checkChangeBuildRequiredTestValue(in *RequiredTest, field string, active map[any]bool) error {
+	if in == nil {
+		return nil
+	}
+	if active[in] {
+		return fmt.Errorf("%s: cyclic Go value", field)
+	}
+	active[in] = true
+	defer delete(active, in)
+	if in != nil {
+		if !utf8.ValidString(string(in.Story)) {
+			return fmt.Errorf("%s: invalid UTF-8", generatedJSONChildPath(field, "story", false))
+		}
+		if !utf8.ValidString(string(in.FlowKey)) {
+			return fmt.Errorf("%s: invalid UTF-8", generatedJSONChildPath(field, "flow_key", false))
+		}
+		if !utf8.ValidString(string(in.Scenario)) {
+			return fmt.Errorf("%s: invalid UTF-8", generatedJSONChildPath(field, "scenario", false))
+		}
+		if !utf8.ValidString(string(in.Hook)) {
+			return fmt.Errorf("%s: invalid UTF-8", generatedJSONChildPath(field, "hook", false))
 		}
 	}
 	return nil
@@ -43335,36 +43479,9 @@ func checkRecordedRunStoryRunStoryMappingValue(in *RunStoryMapping, field string
 		for index1, item1 := range in.RequiredTests {
 			_ = index1
 			_ = item1
-			if err := checkRecordedRunStoryRequiredTestValue(item1, generatedJSONChildPath(generatedJSONChildPath(field, "required_tests", false), strconv.Itoa(index1), true), active); err != nil {
+			if err := checkChangeBuildRequiredTestValue(item1, generatedJSONChildPath(generatedJSONChildPath(field, "required_tests", false), strconv.Itoa(index1), true), active); err != nil {
 				return err
 			}
-		}
-	}
-	return nil
-}
-
-// checkRecordedRunStoryRequiredTestValue checks one generated value on the active path.
-func checkRecordedRunStoryRequiredTestValue(in *RequiredTest, field string, active map[any]bool) error {
-	if in == nil {
-		return nil
-	}
-	if active[in] {
-		return fmt.Errorf("%s: cyclic Go value", field)
-	}
-	active[in] = true
-	defer delete(active, in)
-	if in != nil {
-		if !utf8.ValidString(string(in.Story)) {
-			return fmt.Errorf("%s: invalid UTF-8", generatedJSONChildPath(field, "story", false))
-		}
-		if !utf8.ValidString(string(in.FlowKey)) {
-			return fmt.Errorf("%s: invalid UTF-8", generatedJSONChildPath(field, "flow_key", false))
-		}
-		if !utf8.ValidString(string(in.Scenario)) {
-			return fmt.Errorf("%s: invalid UTF-8", generatedJSONChildPath(field, "scenario", false))
-		}
-		if !utf8.ValidString(string(in.Hook)) {
-			return fmt.Errorf("%s: invalid UTF-8", generatedJSONChildPath(field, "hook", false))
 		}
 	}
 	return nil
@@ -43424,7 +43541,7 @@ func checkRequiredTestValue(in *RequiredTest) error {
 		return fmt.Errorf("missing root value")
 	}
 	active := make(map[any]bool)
-	if err := checkRecordedRunStoryRequiredTestValue(in, "$", active); err != nil {
+	if err := checkChangeBuildRequiredTestValue(in, "$", active); err != nil {
 		return err
 	}
 	return nil
@@ -44032,7 +44149,7 @@ func checkTestWriterAssignmentTestWriterAssignmentValue(in *TestWriterAssignment
 		for index1, item1 := range in.RequiredTests {
 			_ = index1
 			_ = item1
-			if err := checkRecordedRunStoryRequiredTestValue(item1, generatedJSONChildPath(generatedJSONChildPath(field, "required_tests", false), strconv.Itoa(index1), true), active); err != nil {
+			if err := checkChangeBuildRequiredTestValue(item1, generatedJSONChildPath(generatedJSONChildPath(field, "required_tests", false), strconv.Itoa(index1), true), active); err != nil {
 				return err
 			}
 		}

@@ -18,6 +18,7 @@ import (
 	goa "goa.design/goa/v3/pkg"
 
 	gensurla "github.com/goadesign/surla/gen/surla"
+	"github.com/goadesign/surla/internal/designeval"
 	"github.com/goadesign/surla/internal/testwriter"
 	"github.com/goadesign/surla/internal/verify"
 	"github.com/goadesign/surla/internal/verifyrun"
@@ -232,15 +233,12 @@ func buildInForce(saved buildFile, record storedChangeCard) bool {
 	return saved.RequestRevision == record.agreedRevision()
 }
 
-// startedBuild converts a held build into its transport form.
-func startedBuild(held heldBuild, taking gensurla.BuildTaking) *gensurla.StartedBuild {
-	required := 0
-	for _, story := range held.file.Stories {
-		for _, flow := range story.Flows {
-			if flow.Complete {
-				required++
-			}
-		}
+// startedBuild converts a held build into its transport form, rejecting a
+// saved Story whose required tests cannot be named by the generator.
+func startedBuild(held heldBuild, taking gensurla.BuildTaking) (*gensurla.StartedBuild, error) {
+	required, err := requiredStoryTests(held.file.Stories)
+	if err != nil {
+		return nil, fmt.Errorf("name the required tests of change %q: %w", held.file.ChangeID, err)
 	}
 	return &gensurla.StartedBuild{
 		RequestRevision:   held.file.RequestRevision,
@@ -248,9 +246,27 @@ func startedBuild(held heldBuild, taking gensurla.BuildTaking) *gensurla.Started
 		InForce:           held.inForce,
 		Builder:           builderProgress(held.file.Builder),
 		TestWriter:        testWriterProgress(held),
-		RequiredTestCount: required,
+		RequiredTestCount: len(required),
+		RequiredTests:     required,
 		Taking:            taking,
+	}, nil
+}
+
+// requiredStoryTests shares the generator's mapping across build, assignment
+// and run-review reads, preserving declaration order and excluding drafts.
+func requiredStoryTests(stories []designeval.StorySummary) ([]*gensurla.RequiredTest, error) {
+	scenarios, _, err := designeval.StoryScenarios(stories)
+	if err != nil {
+		return nil, err
 	}
+	required := make([]*gensurla.RequiredTest, len(scenarios))
+	for i, scenario := range scenarios {
+		required[i] = &gensurla.RequiredTest{
+			Story: scenario.Story, FlowKey: scenario.Key,
+			Scenario: scenario.Scenario, Hook: scenario.Hook,
+		}
+	}
+	return required, nil
 }
 
 // builderAssignmentResult converts a held build into the builder's
@@ -528,14 +544,14 @@ func (c *ControlPlane) startedBuildAt(ctx context.Context, owner string, held he
 		if err != nil {
 			return nil, err
 		}
-		return startedBuild(held, gensurla.NewBuildTakingDropped(&gensurla.BuildDropped{KeptBranches: branches})), nil
+		return startedBuild(held, gensurla.NewBuildTakingDropped(&gensurla.BuildDropped{KeptBranches: branches}))
 	}
 	runs, err := c.eligibleBuildRuns(owner, held.file)
 	if err != nil {
 		return nil, err
 	}
 	if len(runs) == 0 {
-		return startedBuild(held, gensurla.NewBuildTakingBuilding(&gensurla.BuildBuilding{})), nil
+		return startedBuild(held, gensurla.NewBuildTakingBuilding(&gensurla.BuildBuilding{}))
 	}
 	work, cancel := context.WithTimeout(ctx, layoutReadTimeout)
 	defer cancel()
@@ -557,7 +573,7 @@ func (c *ControlPlane) startedBuildAt(ctx context.Context, owner string, held he
 			return nil, err
 		}
 		if merged {
-			return startedBuild(held, gensurla.NewBuildTakingMerged(&gensurla.BuildMerged{})), nil
+			return startedBuild(held, gensurla.NewBuildTakingMerged(&gensurla.BuildMerged{}))
 		}
 	}
 	run := runs[0]
@@ -576,7 +592,7 @@ func (c *ControlPlane) startedBuildAt(ctx context.Context, owner string, held he
 	return startedBuild(held, gensurla.NewBuildTakingPassed(&gensurla.BuildPassed{
 		RunID: run.Request.RunID, CandidateCommit: run.Request.Plan.CandidateCommit,
 		CandidateBranch: candidateBranch, Tests: tests, BaseInBranch: baseInBranch,
-	})), nil
+	}))
 }
 
 // buildCommitInHistory distinguishes a normal non-ancestor from a failed Git

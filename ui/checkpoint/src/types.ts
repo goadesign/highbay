@@ -80,7 +80,7 @@ export interface C4EdgeItem {
 }
 
 export interface ChangeBuild {
-  build: ({ "state": "not_started" } | { "builder": BuilderProgress; "in_force": boolean; "request_revision": string; "required_test_count": number; "started_at": string; "state": "started"; "taking": ({ "state": "building" } | { "base_in_branch": boolean; "candidate_branch": string; "candidate_commit": string; "run_id": string; "state": "passed"; "tests": ({ "source": "evaluator" } | { "branch": string; "commit": string; "source": "written_tests" }) } | { "state": "merged" } | { "kept_branches": string[]; "state": "dropped" }); "test_writer": TestWriterProgress });
+  build: ({ "state": "not_started" } | { "builder": BuilderProgress; "in_force": boolean; "request_revision": string; "required_test_count": number; "required_tests": RequiredTest[]; "started_at": string; "state": "started"; "taking": ({ "state": "building" } | { "base_in_branch": boolean; "candidate_branch": string; "candidate_commit": string; "run_id": string; "state": "passed"; "tests": ({ "source": "evaluator" } | { "branch": string; "commit": string; "source": "written_tests" }) } | { "state": "merged" } | { "kept_branches": string[]; "state": "dropped" }); "test_writer": TestWriterProgress });
   change_id: string;
   drafted_before_drop: boolean;
 }
@@ -262,6 +262,7 @@ export interface StartedBuild {
   in_force: boolean;
   request_revision: string;
   required_test_count: number;
+  required_tests: RequiredTest[];
   started_at: string;
   taking: ({ "state": "building" } | { "base_in_branch": boolean; "candidate_branch": string; "candidate_commit": string; "run_id": string; "state": "passed"; "tests": ({ "source": "evaluator" } | { "branch": string; "commit": string; "source": "written_tests" }) } | { "state": "merged" } | { "kept_branches": string[]; "state": "dropped" });
   test_writer: TestWriterProgress;
@@ -1213,6 +1214,7 @@ const SCHEMA_DEFS: Record<string, JSONSchemaNode> = {
               "builder",
               "test_writer",
               "required_test_count",
+              "required_tests",
               "taking",
               "state"
             ],
@@ -1229,6 +1231,12 @@ const SCHEMA_DEFS: Record<string, JSONSchemaNode> = {
               "required_test_count": {
                 "type": "integer",
                 "minimum": 0
+              },
+              "required_tests": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/$defs/RequiredTest"
+                }
               },
               "started_at": {
                 "type": "string",
@@ -2346,6 +2354,7 @@ const SCHEMA_DEFS: Record<string, JSONSchemaNode> = {
       "builder",
       "test_writer",
       "required_test_count",
+      "required_tests",
       "taking"
     ],
     "properties": {
@@ -2361,6 +2370,12 @@ const SCHEMA_DEFS: Record<string, JSONSchemaNode> = {
       "required_test_count": {
         "type": "integer",
         "minimum": 0
+      },
+      "required_tests": {
+        "type": "array",
+        "items": {
+          "$ref": "#/$defs/RequiredTest"
+        }
       },
       "started_at": {
         "type": "string",

@@ -2252,6 +2252,45 @@ export function bootstrapViewsPage() {
         : review?.approval.state === "blocked"
         ? <Button onClick={() => focusResult("#surla-cp5-approve-blocked")}>Review requirements</Button>
         : review?.approval.state === "unverified" ? <span>Check current approval.</span> : <span>Read current requirements.</span>;
+    } else if (cp1Active && editorStage === "build" && activeEditor !== null) {
+      const build = buildChangeId === activeEditor.card.change_id && buildSnapshot?.state === "started"
+        ? buildSnapshot : null;
+      if (buildReadError !== null) {
+        attention = "Current build facts could not be read.";
+        next = <span>Refresh Build below to read its current state.</span>;
+      } else if (build !== null) {
+        const tests = build.test_writer.tests;
+        if (!build.in_force) {
+          attention = "This build belongs to an earlier agreement.";
+          next = <span>Review the current agreement before deciding to build again.</span>;
+        } else if (build.taking.state === "dropped") {
+          attention = "This build was dropped.";
+          next = <span>The guide prepares a fresh revision before another build.</span>;
+        } else if (build.taking.state === "merged") {
+          attention = "The verified commits are merged.";
+          next = <span>Describe the next change when you are ready.</span>;
+        } else if (tests.state === "needs_changes") {
+          const needs = teamFactsError() === null ? (teamSnapshot?.roles ?? []).filter((role) => role.state === "needs_you") : [];
+          attention = needs.length > 0 ? needs.map(teamAttentionText).join(". ")
+            : teamFactsError() !== null || teamSnapshot === null || teamSnapshot.roles.some((role) => role.state === "unknown" || role.state === "error")
+            ? "Team status unknown." : "Nothing now.";
+          next = <span>The test writer corrects the tests and reports again.</span>;
+        } else if (tests.state === "could_not_run") {
+          attention = "The tests could not be checked.";
+          next = <span>{tests.step}</span>;
+        } else if (build.taking.state === "passed") {
+          attention = "A verification of this build passed.";
+          next = <span>Review the saved result below before approving it.</span>;
+        } else if (tests.state === "reported") {
+          attention = "Surla is checking the reported tests.";
+          next = <span>Wait for Surla's verdict.</span>;
+        } else {
+          attention = tests.state === "accepted" ? "The tests are accepted; application verification is still separate."
+            : "The build's assignments are ready.";
+          next = <span>{tests.state === "accepted" || tests.state === "not_used"
+            ? "The builder implements and verifies the change." : "The test writer prepares and reports the tests."}</span>;
+        }
+      }
     } else if (activeResult?.kind === "cp4-verification") {
       next = <Button variant="primary" onClick={openApproval}>Review result</Button>;
       attention = "Read the saved test evidence, then review the result for approval.";
@@ -2803,7 +2842,8 @@ export function bootstrapViewsPage() {
     syncNavRegion();
     syncTraceRegion();
     syncOpenedCheckStatus();
-    statusEl.hidden = activeResult?.kind === "cp5-approval" && [
+    statusEl.hidden = (activeResult?.kind === "cp5-approval" ||
+      editorOpen && editorStage === "build" && (!activeResult || activeResult.kind === "cp1-incoming-card")) && [
       "Review the build and its next step. The agreed details stay available below.",
       "Review the saved check before approving it.",
       "Showing the saved verification result.",

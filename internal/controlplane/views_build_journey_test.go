@@ -19,9 +19,11 @@ expect(page.text("#surla-build-builder").includes("assignment unread") && page.t
 const writer = await api(origin, "GET", "/assignments/test-writer/chg", undefined, input.testWriter);
 expect(writer.status === 200, "the test writer could not read its assignment");
 await until(() => page.text("#surla-build-findings").includes("Finding from build 1.") && !page.$("#surla-build-loading"), "the saved finding and build read did not settle");
-expect(page.text("#surla-build-state") === "Sent back to the test writer. It fixes this and reports again; nothing is yours to do unless it asks you in its pane.", "the state must identify who fixes the tests before showing findings");
+page.$("#surla-nav-build").click();
+await until(() => page.text("#surla-frame-next").includes("The test writer corrects the tests and reports again."), "Next did not identify who fixes the tests");
+expect(!page.$("#surla-build-state"), "the build card repeats the next-step instruction");
 const build = page.$("#surla-build-section");
-expect(build.querySelector("p") === page.$("#surla-build-state"), "the saved step must be the first build explanation");
+expect(page.text(".surla-frame-attention dd") === "Nothing now.", "the verdict invented a user task");
 expect(page.text("#surla-build-findings").startsWith("What Surla told the test writer"), "writer instructions must be clearly attributed");
 expect(build.querySelectorAll("button.surla-btn-primary").length === 0, "a sent-back test report has no primary user action");
 expect(page.text("#surla-build-builder").includes("assignment unread") && page.text("#surla-build-test-writer").includes("assignment read; findings to address"), "the marking read updates only the test writer's assignment");
