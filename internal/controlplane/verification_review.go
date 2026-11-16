@@ -165,12 +165,8 @@ func (c *ControlPlane) reviewRunApproval(
 	}
 	inputs, err := c.readApprovalInputs(ctx, principal, payload)
 	if err == nil {
-		report := state.Report
-		if inputs.target != nil {
-			// A configured target owns approval's report lookup. A readable local
-			// run alone does not prove that this target can supply the report.
-			report, err = inputs.target.LoadReport(ctx, payload.ReportDigest)
-		}
+		report, loadErr := c.loadApprovalReport(ctx, inputs.target, payload.ReportDigest)
+		err = loadErr
 		var checked approvalChecks
 		if err == nil {
 			checked, err = c.checkApprovalReport(ctx, payload, inputs, report)

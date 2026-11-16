@@ -71,24 +71,13 @@ func (c *ControlPlane) ApproveMerge(
 	if err != nil {
 		return nil, err
 	}
-	target := inputs.target
-
 	// Report and artifact reads may be slow, so they run without holding c.mu.
 	// A card is never removed and never changes owner; its request_revision,
 	// confirmed status and chosen tests' commit are checked again under c.mu
 	// before the approval is written.
-	var report verify.Report
-	if target != nil {
-		report, err = target.LoadReport(ctx, p.ReportDigest)
-	} else {
-		runs := verifierRuns(c.verifier)
-		if runs == nil {
-			return nil, gensurla.MakeNotImplemented(errVerificationUnavailable)
-		}
-		report, err = verifyrun.LoadReport(runs.Plan.ReportDir, p.ReportDigest)
-	}
+	report, err := c.loadApprovalReport(ctx, inputs.target, p.ReportDigest)
 	if err != nil {
-		return nil, fmt.Errorf("load verification report %s: %w", p.ReportDigest, err)
+		return nil, err
 	}
 	checked, err := c.checkApprovalReport(ctx, p, inputs, report)
 	if err != nil {
@@ -185,6 +174,29 @@ func (c *ControlPlane) readApprovalInputs(
 	}
 
 	return approvalInputs{target: target, build: build, testsCommit: testsCommit, source: source}, nil
+}
+
+// loadApprovalReport reads through the promotion owner's current report store.
+// Both the review offer and approval write use this lookup; a run's own saved
+// report remains historical evidence and cannot substitute for this owner read.
+func (c *ControlPlane) loadApprovalReport(
+	ctx context.Context, target PromotionTarget, digest string,
+) (verify.Report, error) {
+	var report verify.Report
+	var err error
+	if target != nil {
+		report, err = target.LoadReport(ctx, digest)
+	} else {
+		runs := verifierRuns(c.verifier)
+		if runs == nil {
+			return verify.Report{}, gensurla.MakeNotImplemented(errVerificationUnavailable)
+		}
+		report, err = verifyrun.LoadReport(runs.Plan.ReportDir, digest)
+	}
+	if err != nil {
+		return verify.Report{}, fmt.Errorf("load verification report %s: %w", digest, err)
+	}
+	return report, nil
 }
 
 // checkApprovalReport is the shared promotion and candidate preflight used by

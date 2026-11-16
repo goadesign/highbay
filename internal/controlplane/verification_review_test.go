@@ -4,6 +4,7 @@ package controlplane
 import (
 	"encoding/json"
 	"errors"
+	"io/fs"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -226,6 +227,48 @@ func TestReviewVerificationKeepsHistoricalStory(t *testing.T) {
 	require.NoError(t, err)
 	_, missing := got.Review.StoryContext.AsNotRecorded()
 	assert.True(t, missing)
+}
+
+// TestReviewVerificationUsesCurrentApprovalReportStore preserves historical
+// evidence across a restart while requiring the write owner's current lookup.
+func TestReviewVerificationUsesCurrentApprovalReportStore(t *testing.T) {
+	f := newReviewFixture(t)
+	require.NoError(t, f.cp.Close())
+	current := *f.cfg
+	current.Plan.ReportDir = t.TempDir()
+	cp := newControlPlane(t, Options{
+		CardsDir: f.cp.cards.dir, WorkspaceDir: f.cp.currentWorkspaceDir(), Verification: &current,
+	})
+	user := asCaller("alice@example.com", CallerUser)
+	get := &gensurla.GetVerificationPayload{RunID: f.req.RunID}
+	evidence, err := cp.GetVerification(user, get)
+	require.NoError(t, err, "the run's own saved report remains readable")
+	completed, ok := evidence.State.AsCompleted()
+	require.True(t, ok)
+	assert.Equal(t, f.report.Digest, completed.Report.ReportDigest)
+	reviewed, err := cp.ReviewVerification(user, get)
+	require.NoError(t, err)
+	assert.Equal(t, evidence.State, reviewed.State, "approval lookup must not replace historical evidence")
+	assert.Equal(t, gensurla.ApprovalKindBlocked, reviewed.Review.Approval.Kind())
+	_, err = cp.ApproveMerge(user, reviewApprovalPayload(f))
+	assert.ErrorIs(t, err, fs.ErrNotExist)
+	assert.ErrorContains(t, err, "load verification report "+f.report.Digest)
+	card, err := cp.GetChange(user, &gensurla.GetChangePayload{ChangeID: f.card.ChangeID})
+	require.NoError(t, err)
+	assert.Nil(t, card.Approval)
+
+	// Making that exact report available to the configured owner restores both
+	// operations; an older run is not globally disqualified by its saved folder.
+	raw, err := json.Marshal(f.report)
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(filepath.Join(current.Plan.ReportDir, f.report.Digest+".json"), raw, 0o600))
+	reviewed, err = cp.ReviewVerification(user, get)
+	require.NoError(t, err)
+	assert.Equal(t, gensurla.ApprovalKindAvailable, reviewed.Review.Approval.Kind())
+	approved, err := cp.ApproveMerge(user, reviewApprovalPayload(f))
+	require.NoError(t, err)
+	require.NotNil(t, approved.Approval)
+	assert.Equal(t, f.report.Digest, approved.Approval.ReportDigest)
 }
 
 // TestReviewVerificationDoesNotOfferFailedOrIncompleteRuns keeps a completed
