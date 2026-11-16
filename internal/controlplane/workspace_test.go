@@ -29,7 +29,6 @@ import (
 	gensurla "github.com/goadesign/surla/gen/surla"
 	"github.com/goadesign/surla/internal/abspath"
 	"github.com/goadesign/surla/internal/scaffold"
-	"github.com/goadesign/surla/internal/testmodule"
 )
 
 type (
@@ -878,21 +877,24 @@ func TestCloseDrainsAndCancelsInFlightInitProjectBeforeReleasingLocks(t *testing
 // a workspace-derived Change Card records the bound workspace's design/*.go
 // and records the updated files again on ReviseChange after the control plane
 // is reopened. The design source is saved and hashed into
-// request_revision; nothing interprets it.
+// request_revision; nothing interprets it. The authored evaluated snapshot
+// isolates this persistence contract from the compiler's extraction contract.
 func TestCP1WorkspaceDesignSourceProvenanceAcrossProposeReviseAndReopen(t *testing.T) {
-	if testing.Short() {
-		t.Skip("evaluates real module snapshots; the full suite covers this journey")
-	}
 	project := t.TempDir()
 	opts := Options{WorkspaceDir: project, CardsDir: t.TempDir()}
 	guide, user := asCaller("alice@example.com", CallerGuide), asCaller("alice@example.com", CallerUser)
 	designV1 := "// v1 workspace design\n" + architectureTestDesign
 	designV2 := "// v2 workspace design\n" + strings.ReplaceAll(architectureTestDesign, `"orders"`, `"shipping"`)
-	files := testmodule.Snapshot(t, "", designV1)
+	files := goaGoaAIDSLFixture(t, designV1)
 	writeWorkspaceFiles(t, project, files)
 	first := newControlPlane(t, opts)
-	card := mustProposeFromRefresh(t, first, guide, "chg-workspace-origin", "Route refunds under $50 automatically.", refundAnalysis("Route refunds under $50 automatically."))
-	card, err := first.ConfirmIntent(user, &gensurla.ConfirmIntentPayload{
+	refreshed := seedArchitectureRefreshForTest(t, first, guide, "orders")
+	card, err := first.ProposeChange(guide, &gensurla.ProposeChangePayload{
+		ChangeID: "chg-workspace-origin", Prompt: "Route refunds under $50 automatically.",
+		Analysis: refundAnalysis("Route refunds under $50 automatically."), StoryRefreshOpID: refreshed.OpID,
+	})
+	require.NoError(t, err)
+	card, err = first.ConfirmIntent(user, &gensurla.ConfirmIntentPayload{
 		ChangeID: card.ChangeID, RequestRevision: card.RequestRevision, Answers: map[string]string{}, Examples: card.Examples,
 	})
 	require.NoError(t, err)
@@ -919,6 +921,8 @@ func TestCP1WorkspaceDesignSourceProvenanceAcrossProposeReviseAndReopen(t *testi
 	preview, err := second.PreviewArchitecture(guide, &gensurla.PreviewArchitecturePayload{ChangeID: card.ChangeID, RequestRevision: card.RequestRevision})
 	require.NoError(t, err)
 	assert.Equal(t, "orders", preview.SystemName, "the confirmed revision stays previewable beside its proposal")
+	assert.Equal(t, card.RequestRevision, preview.RequestRevision)
+	assert.NotEmpty(t, preview.Containers)
 
 	// An explicit new refresh replaces the whole group. Project files remain
 	// broken, and edits after that refresh still cannot alter its adoption.
@@ -926,7 +930,7 @@ func TestCP1WorkspaceDesignSourceProvenanceAcrossProposeReviseAndReopen(t *testi
 	nextFiles["design/design.go"] = designV2
 	nextFiles["go.mod"] += "\n// evaluated second snapshot\n"
 	writeWorkspaceFiles(t, filepath.Join(project, draftFolderName), nextFiles)
-	refreshed := mustRefreshStory(t, second, guide)
+	refreshed = seedArchitectureRefreshForTest(t, second, guide, "shipping")
 	writeWorkspaceFiles(t, filepath.Join(project, draftFolderName), map[string]string{"design/design.go": "not Go"})
 	next := revisionPayload(card.ChangeID, kept.ProposedRevision.RequestRevision, "Route shipping refunds with review", kept.ProposedRevision.Examples[0].ID)
 	next.StoryRefreshOpID = refreshed.OpID
