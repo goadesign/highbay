@@ -64,11 +64,11 @@ type (
 		SuiteCommand string
 		// RequestRevision identifies the confirmed request being verified.
 		RequestRevision string
-		// WorkDir is a private directory for clones, builds and evidence. It
-		// must not be shared with the candidate's builder. It is required and
-		// must be missing or empty, so everything a build can read under it was
-		// written by this run; a relative path is made absolute against the
-		// current directory.
+		// WorkDir is a private directory for clones, build scratch, outputs and
+		// evidence. It must not be shared with the candidate's builder. It is
+		// required and must be missing or empty. Retained compiled packages are
+		// a separate trusted input supplied to Run or Prepare. A relative path
+		// is made absolute against the current directory.
 		WorkDir string
 		// ReportDir receives the report, named by its digest.
 		ReportDir string
@@ -132,7 +132,7 @@ type (
 		goroot string
 		// modCache is the module cache holding the candidate's dependencies.
 		modCache string
-		// workDir is the build's private TMPDIR and GOCACHE.
+		// workDir is the build's operation-owned TMPDIR and staging parent.
 		workDir string
 	}
 )
@@ -217,8 +217,8 @@ func IsCommitID(commit string) bool {
 // Otherwise the report keeps the suite's evidence and exit status: a suite
 // that ran and failed, or that exited abnormally after writing partial
 // results, yields a report that does not pass.
-func Run(ctx context.Context, p Plan, environ []string) (Report, error) {
-	prep, err := Prepare(ctx, p)
+func Run(ctx context.Context, p Plan, environ []string, buildCacheDir string) (Report, error) {
+	prep, err := Prepare(ctx, p, buildCacheDir)
 	if err != nil {
 		return Report{}, err
 	}
@@ -239,8 +239,14 @@ func CandidateBinariesDir(workDir string) string {
 // rules Run documents. Run calls it before describing and running the suite;
 // a live CP3 target calls it before starting the suite in --live mode, so
 // both build exactly the same way. The caller owns the process group, as for
-// Run. Every error is a *StageError.
-func Prepare(ctx context.Context, p Plan) (Prepared, error) {
+// Run. buildCacheDir is required and retains compiled packages independently
+// of WorkDir. It is a trusted compiler input: same-user code can change it
+// and affect a later binary or test program without changing the selected source.
+// Every error is a *StageError.
+func Prepare(ctx context.Context, p Plan, buildCacheDir string) (Prepared, error) {
+	if buildCacheDir == "" {
+		return Prepared{}, stageError(StageCheckout, summaryPlan, errors.New("build cache directory is required"))
+	}
 	for name, commit := range map[string]string{"candidate": p.CandidateCommit, "suite": p.SuiteCommit} {
 		if !IsCommitID(commit) {
 			return Prepared{}, stageError(StageCheckout, summaryPlan, fmt.Errorf("%s commit %q is not a full commit ID", name, commit))
@@ -317,7 +323,7 @@ func Prepare(ctx context.Context, p Plan) (Prepared, error) {
 		if err := candidate.Build(ctx, candidate.BuildSpec{
 			SourceDir: candidateDir, ModuleDir: moduleDir, Package: p.Binaries[name], Out: out,
 			GOROOT: toolchain.goroot, ModCache: toolchain.modCache, WorkDir: toolchain.workDir,
-			LogFile: logFile,
+			BuildCacheDir: buildCacheDir, LogFile: logFile,
 		}, (*exec.Cmd).Run); err != nil {
 			// The private error carries the end of the compiler's output and
 			// the log that holds all of it; the summary builders see does not.
@@ -363,7 +369,7 @@ func Prepare(ctx context.Context, p Plan) (Prepared, error) {
 	if err := buildSuite(ctx, candidate.BuildSpec{
 		SourceDir: suiteDir, ModuleDir: suiteModuleDir, Package: p.SuiteCommand, Out: suiteBin,
 		GOROOT: suiteToolchain.goroot, ModCache: suiteToolchain.modCache, WorkDir: suiteToolchain.workDir,
-		LogFile: suiteLog,
+		BuildCacheDir: buildCacheDir, LogFile: suiteLog,
 	}, (*exec.Cmd).Run); err != nil {
 		// As for the candidate: compiler output goes only into the private error.
 		return Prepared{}, stageError(StageBuild, summarySuiteBuild,

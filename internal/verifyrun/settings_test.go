@@ -100,7 +100,7 @@ func TestVerificationExecutorGivesSettingsOnlyToTheJudgingSuite(t *testing.T) {
 					CandidateCommit: strings.Repeat("a", 40), RequestRevision: "rev-1", SuiteCommit: strings.Repeat("b", 40),
 					ReportDir: reports, WorkDir: filepath.Join(root, runID, "work"), Tests: verify.TestsEvaluator,
 				},
-			}, []string{os.Args[0]}, tc.settings)
+			}, []string{os.Args[0]}, tc.settings, t.TempDir())
 			require.NoError(t, err)
 			require.NoError(t, Wait(root, runID))
 			_, state, err := Read(root, runID)
@@ -145,7 +145,7 @@ func TestLiveStartDetailProtectsHeldSettings(t *testing.T) {
 				"ANTHROPIC_API_KEY": "sentinel-leaked-key", "ANTHROPIC_AUTH_TOKEN": "sentinel-leaked-token", "ANTHROPIC_BASE_URL": tc.baseURL,
 			})
 			require.NoError(t, err)
-			p, err := LaunchLive(t.TempDir(), evaluatorPlan, "secret-key", []string{self}, os.Environ(), []modelsettings.Settings{anthropic})
+			p, err := LaunchLive(t.TempDir(), evaluatorPlan, "secret-key", []string{self}, os.Environ(), []modelsettings.Settings{anthropic}, t.TempDir())
 			require.NoError(t, err)
 			awaitErr := p.AwaitReady(t.Context())
 			written, readErr := os.ReadFile(filepath.Join(p.Dir(), "executor.log"))

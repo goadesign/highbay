@@ -188,7 +188,7 @@ func TestBuilderGoWorkBuildsOnlyWithInternalWorkspace(t *testing.T) {
 			cmd.Env = append(os.Environ(), "GOWORK="+selected, "GOPROXY=off", "GOTOOLCHAIN=local")
 			output, prepareErr := cmd.CombinedOutput()
 			work := t.TempDir()
-			buildErr := candidate.Build(t.Context(), candidate.BuildSpec{
+			buildErr := candidate.Build(t.Context(), candidate.BuildSpec{BuildCacheDir: filepath.Join(work, "gocache"),
 				SourceDir: root, ModuleDir: working, Package: ".", Out: filepath.Join(work, "app"),
 				GOROOT: runtime.GOROOT(), ModCache: t.TempDir(), WorkDir: work,
 				LogFile: filepath.Join(work, "build.log"),

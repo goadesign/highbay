@@ -25,6 +25,7 @@ import (
 	genmcpsurla "github.com/goadesign/surla/gen/jsonrpc/mcp_surla/server"
 	genmcpadapter "github.com/goadesign/surla/gen/mcp_surla"
 	gensurla "github.com/goadesign/surla/gen/surla"
+	"github.com/goadesign/surla/internal/abspath"
 	"github.com/goadesign/surla/internal/designeval"
 	"github.com/goadesign/surla/internal/diff"
 	"github.com/goadesign/surla/internal/goldenpath"
@@ -158,6 +159,10 @@ type (
 		// get_verification, list_verifications, and init_project when
 		// Verification is nil. WrittenTestRuns requires it.
 		RunsDir string
+		// BuildCacheDir is the required retained Go package cache when Verification
+		// or WrittenTestRuns is configured. It must lie outside the workspace.
+		// Concurrent operations share it on one machine using a local filesystem.
+		BuildCacheDir string
 		// WrittenTestRuns lets verify_change run, in RunsDir, the tests
 		// accepted for each change's build, in a project without a stored
 		// evaluator. start_live_target uses the same accepted tests, both
@@ -294,6 +299,8 @@ type (
 		// runsDir is the protected verification runs directory: RunsDir, or
 		// the stored evaluator's when RunsDir is empty.
 		runsDir string
+		// buildCacheDir is the project-owned package cache, independent of run cleanup.
+		buildCacheDir string
 		// evaluator evaluates designs for preview_architecture and diff. It
 		// creates its build workspace on the first evaluation, and Close
 		// removes it.
@@ -488,6 +495,16 @@ func newWithWorkspaceGitTimeout(
 		err := errors.New("WrittenTestRuns requires WorkspaceDir, whose repository holds the commits it verifies")
 		return nil, errors.Join(err, cleanupFailedNew())
 	}
+	if (opts.Verification != nil || opts.WrittenTestRuns != nil) && opts.BuildCacheDir == "" {
+		return nil, errors.Join(errors.New("Verification and WrittenTestRuns require BuildCacheDir"), cleanupFailedNew())
+	}
+	if opts.BuildCacheDir != "" {
+		var err error
+		opts.BuildCacheDir, err = abspath.EvalMissing(opts.BuildCacheDir)
+		if err != nil {
+			return nil, errors.Join(fmt.Errorf("resolve build cache directory: %w", err), cleanupFailedNew())
+		}
+	}
 	runsDir, initStageDir, verif, protectedDirs, err := normalizeAndValidateStartupPaths(opts, wsRoot, withTimeout)
 	if err != nil {
 		return nil, errors.Join(err, cleanupFailedNew())
@@ -518,6 +535,7 @@ func newWithWorkspaceGitTimeout(
 		resolvePromotionTarget: opts.ResolvePromotionTarget,
 		verifier:               verif,
 		runsDir:                runsDir,
+		buildCacheDir:          opts.BuildCacheDir,
 		evaluator:              eval,
 		initialWorkspaceRoot:   wsRoot,
 		protectedDirs:          protectedDirs,
@@ -543,7 +561,7 @@ func newWithWorkspaceGitTimeout(
 	if err := cp.restoreWorkspace(); err != nil {
 		return nil, errors.Join(err, cp.Close())
 	}
-	if err := validateStartupSeparation(cards.dir, runsDir, initStageDir, verifierRuns(verif), protectedDirs...); err != nil {
+	if err := validateStartupSeparation(cards.dir, runsDir, initStageDir, opts.BuildCacheDir, verifierRuns(verif), protectedDirs...); err != nil {
 		return nil, errors.Join(err, cp.Close())
 	}
 	if opts.Checker != nil {

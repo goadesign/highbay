@@ -1019,7 +1019,7 @@ func (c *Checker) listScenarios(
 	reached, err := withinLimit(ctx, time.Now, c.buildLimit, func(ctx context.Context) error {
 		return c.build(ctx, candidate.BuildSpec{
 			SourceDir: src, ModuleDir: moduleDir, Package: command, Out: bin,
-			GOROOT: tc.goroot, ModCache: modCache, WorkDir: buildHome, LogFile: buildLog,
+			GOROOT: tc.goroot, ModCache: modCache, WorkDir: buildHome, BuildCacheDir: filepath.Join(buildHome, "gocache"), LogFile: buildLog,
 		}, runInGroup(keep))
 	})
 	if reached && !*keep {

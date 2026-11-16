@@ -30,6 +30,7 @@ func TestMergedBuildReplayStartsFresh(t *testing.T) {
 			cfg := verificationConfig(t)
 			opts := Options{RunsDir: cfg.RunsDir}
 			if configured {
+				opts.BuildCacheDir = t.TempDir()
 				opts.Verification = cfg
 			}
 			repo, project, cp, registered := reviewProject(t, opts)

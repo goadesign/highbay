@@ -179,6 +179,8 @@ shell* when both hold:
 A shell started with such a command flag counts as running. A live pane that
 reports no foreground program also counts as running.
 
+<a id="project-state-folder"></a>
+
 **The project and its state folder.** A project is a folder, with or without
 Git. Surla resolves symlinks in the path and uses the nearest project record
 in that folder or its parents, so running `surla` inside a project the guide
@@ -189,10 +191,31 @@ outside the folder, in
 the user's configuration folder (on macOS, `~/Library/Application Support`).
 It holds the owner's account identity, one saved `127.0.0.1` port, the Change
 Cards and builds (`cards/`), verification runs (`runs/`), reports
-(`reports/`), agent credentials (`agents/`), stored settings, and the running
-server's record. A new project saves a free port that no other project of
-this account saved, running or not, and keeps it. No caller chooses an
+(`reports/`), the Go build cache (`build-cache/`), agent credentials
+(`agents/`), stored settings, and the running server's record. A new project
+saves a free port that no other project of this account saved, running or not,
+and keeps it. No caller chooses an
 identity, address, token or storage path.
+
+Live starts and verifications share this project's compiled Go packages in
+`build-cache/`. Every operation still checks out the selected commits, builds
+new output binaries, measures their digests and runs its test program; a cache
+hit is not a passed verification. Scratch, staging, checkouts, outputs and
+evidence stay in each operation's work directory; reports are published in
+the project's shared `reports/` folder. The cache survives Stop, server restart
+and pruning individual runs. Go maintains its cache entries. Use it on a local
+filesystem on one machine; sharing it across machines or a network filesystem
+is unsupported. When no live start or verification is running, you can delete
+`build-cache/`; the next operation recreates it and builds cold.
+
+The retained packages are trusted compiler inputs, like the Go module cache,
+toolchain, executable search path and Surla's files. Go checks a cached file's
+existence and recorded size; it does not check compiled contents against the
+selected source. Code running as you can plant a compiled package that a later
+build links into the candidate or test program. Its report can bind a binary
+the selected source would not produce; the binary digest does not authenticate
+that correspondence. Deleting
+this cache forces recompilation but does not authenticate the other inputs.
 
 Before starting the server or accepting `surla verification set` or
 `surla promotion set`, Surla asks Git for the project's enclosing working tree
@@ -475,7 +498,7 @@ non-zero; a setup or build failure prints no report.
 | `-suite-module <dir>` | Evaluator module folder (default `.`). |
 | `-suite-command <package>` *(required)* | The evaluator program's package, such as `./cmd/orders_acceptance-evals`. |
 | `-request-revision <digest>` *(required)* | The `request_revision` recorded in the report. Without a Change Card, any label works if `surla approve` gets the same one. |
-| `-work-dir <path>` *(required)* | A missing or empty private folder that agents cannot read. |
+| `-work-dir <path>` *(required)* | A missing or empty operator-owned folder, kept separate from builders' working copies, for this operation's checkouts, scratch, outputs, evidence and Go build cache. Relative paths resolve from the caller's directory. |
 | `-report-dir <path>` *(required)* | Where the full report is written; keep it from the builder when scenarios are hidden. |
 | `-timeout <duration>` | Limit for the run (default `0`, no limit). A stopped run prints any partial report the evaluator saved and exits non-zero; a partial report can pass. |
 | `-builder-view` | Default `true`. `-builder-view=false` prints the full report and names hidden scenarios in the summary. Failures go to standard error in either view; do not show them to the builder. |

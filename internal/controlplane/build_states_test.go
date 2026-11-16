@@ -75,6 +75,7 @@ func TestBuildStatesReadTheSameOnBothInterfaces(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			opts := Options{}
 			if tc.stored {
+				opts.BuildCacheDir = t.TempDir()
 				opts.Verification = &VerificationConfig{RunsDir: t.TempDir()}
 			}
 			cp := newBuildControlPlane(t, opts)
@@ -181,7 +182,7 @@ func TestStoredEvaluatorBuildsReadNotUsed(t *testing.T) {
 	}
 	for _, fields := range saved {
 		t.Run(fields["state"].(string), func(t *testing.T) {
-			stored := newBuildControlPlane(t, Options{Verification: &VerificationConfig{RunsDir: t.TempDir()}})
+			stored := newBuildControlPlane(t, Options{BuildCacheDir: t.TempDir(), Verification: &VerificationConfig{RunsDir: t.TempDir()}})
 			require.True(t, stored.storedEvaluator())
 			without := newBuildControlPlane(t, Options{})
 			for _, cp := range []*ControlPlane{stored, without} {
@@ -263,7 +264,7 @@ func TestStartBuildWithAStoredEvaluatorReturnsNotUsed(t *testing.T) {
 		tests gensurla.TestsKind
 	}{
 		{name: "stored evaluator", opts: func(t *testing.T) Options {
-			return Options{Verification: &VerificationConfig{RunsDir: t.TempDir()}}
+			return Options{BuildCacheDir: t.TempDir(), Verification: &VerificationConfig{RunsDir: t.TempDir()}}
 		}, tests: gensurla.TestsKindNotUsed},
 		{name: "no stored evaluator", opts: func(*testing.T) Options { return Options{} }, tests: gensurla.TestsKindAssigned},
 	}
