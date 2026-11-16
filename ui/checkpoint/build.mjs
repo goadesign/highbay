@@ -686,14 +686,11 @@ ${stylesCss}
   </style>
 </head>
 <body>
+  <a class="surla-skip-link" href="#surla-checkpoint-view">Skip to the current stage</a>
   <main id="surla-checkpoint-root" data-state="starting">
-    <header class="surla-workspace-header">
-      <h1>Surla Architecture Workspace</h1>
-      <p>Review and confirm this project's changes: domain decisions, architecture, verification proof, and promotion approvals.</p>
-    </header>
-    <p id="surla-checkpoint-status" role="status" aria-live="polite">Opening Surla...</p>
     <nav id="surla-checkpoint-nav" aria-label="Workspace stages" hidden></nav>
-    <section id="surla-checkpoint-view" aria-label="Workspace View"></section>
+    <p id="surla-checkpoint-status" role="status" aria-live="polite">Opening Surla...</p>
+    <section id="surla-checkpoint-view" aria-label="Workspace View" tabindex="-1"></section>
   </main>
   <script>${scriptText}</script>
 </body>

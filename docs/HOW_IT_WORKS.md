@@ -142,20 +142,24 @@ check works in an empty folder, before you make a Git repository.
    space with Surla's first message, which points it to the Golden Path and
    to the project's changes.
 
-The page has one view per task. Changes, Team, Story and Live target are
-always there; the others appear once you open a change.
+The frame names the journey Describe → Agree → Build → Check → Approve.
+Team, Story, Live target, Architecture and Diagnostics remain available as
+project references. Agreed, Needs you and Next keep the current context and
+decision visible; on a phone, Next moves to the bottom of the viewport.
 
 | View | What it is for |
 | --- | --- |
-| Changes | The project's Change Cards, most recently saved first, each with its latest saved verification run. |
+| Describe | The project's Change Cards, most recently saved first, each with its latest saved verification run. |
 | Team | Each role's pane state, its Chorus watcher (the agent's background wait for messages) and its assignment status, with **Start agents** and an action per role that brings its pane forward, such as **Show guide pane**. |
 | Story | The Story of the change shown, and the guide's latest Story draft. |
 | Live target | The running copy of your application that the builder tries prompts on, and the model connection it uses. |
-| Decisions & Approval | The Change Card: its questions, your answers, confirmation, a proposed revision, the build and the recorded approval. |
+| Agree | The Change Card: its questions, your answers, confirmation and a proposed revision. Unsaved edits stay available when you move to another stage. |
+| Build | The saved build and its next step, with agreement details available below. |
 | Architecture | The architecture preview of the confirmed card. |
-| Proof | The verification runs of the change and the action that approves a passed result. |
+| Check | The change’s saved verification runs and their test details. |
+| Approve | The selected run’s recorded Story, finished flows and required test outcomes, excluded drafts, unknown coverage, approval requirements and verified commits. The one **Approve this result** action appears in Next only when the owner says it is available. |
 
-A **Traces** drawer shows the server's [operation diagnostics](REFERENCE.md#operation-diagnostics).
+A **Diagnostics** drawer shows the server's [operation diagnostics](REFERENCE.md#operation-diagnostics).
 The [views page reference](REFERENCE.md#views-page) describes each view in
 full. `surla stop` stops the server in order; see
 [the `surla` command](REFERENCE.md#surla-serve).
@@ -198,8 +202,8 @@ manager approves it."
    `go.mod` requires. Surla runs no model for this step. It checks the analysis's shape,
    assigns the IDs of its questions and examples, and saves it as a Change
    Card in the project's private state folder, where it waits for you. The
-   card appears in the Changes view by itself.
-3. **You answer and confirm.** In Decisions & Approval you read the card,
+   card appears in the Describe view by itself.
+3. **You answer and confirm.** In Agree you read the card,
    answer each question and press **Confirm Intent & Lock Examples**. The
    server marks the card `confirmed`, records you as the one who confirmed
    it, and computes its `request_revision`. That revision is the **agreed
@@ -522,7 +526,7 @@ Every run records where its tests came from. For tests the test writer wrote,
 the run's result, as `verify_change`, `get_verification` and
 `list_verifications` return it, names the tests commit and carries this
 notice: "These tests were written by a separate agent on this machine and are
-not isolated from the builder." The Proof view lists the change's saved runs
+not isolated from the builder." The Check view lists the change's saved runs
 and shows the selected run's scenarios and outcome. For a run of the test
 writer's tests it shows that notice with the result. Under **Candidate and
 run details** it shows the builder's commit as "Candidate commit" and the
@@ -537,7 +541,7 @@ use: the tests accepted for the build of that revision or, with stored
 verification settings, the evaluator they name. Otherwise the line reads
 "Earlier inputs or no current test selection." and tells you to ask the
 builder for a run of the agreed revision. A run that does not match stays
-readable in the Proof view.
+readable in the Check view.
 
 The opened change and the selected run also refresh this match when the
 agreement or selected tests change. While a read is pending or fails, the
@@ -563,11 +567,21 @@ the command line.
 
 ## Approving and merging
 
-When a run passed, the Proof view offers **Approve this result**. Only you
-can approve. The server reloads the run's report and derives it again from
-its evidence, checks that it passed and that it verified the agreed revision
-with the tests accepted for that revision, and records the approval on the
-Change Card: the builder's commit, the tests commit and the report. Approval
+Open a saved result in Approve. It shows the Story recorded for that run,
+each finished flow’s required test and outcome, and draft flows excluded from
+the required tests. An operator evaluator may have no recorded flow mapping;
+that means coverage is unknown, even when its declared tests passed. Later
+Story edits never replace a run’s recorded context. Older runs without context
+say so. Passing declared tests does not establish behavior those tests do not
+express.
+
+Only you can approve. Next offers **Approve this result** when the owner’s
+current review says it is available. A blocked result keeps its evidence and
+explains the enabling step. A read failure retains evidence and withholds
+approval until recovery. Approval stays on this stage after it is recorded.
+The server reloads the run's report and derives it again from its evidence,
+checks that it passed and that it verified the agreed revision with the tests
+accepted for that revision, and records the approval on the Change Card: the builder's commit, the tests commit and the report. Approval
 merges and deploys nothing.
 
 The approval names two commits: the builder's commit that the run verified (on
@@ -576,8 +590,8 @@ The approval names two commits: the builder's commit that the run verified (on
 settings). The recorded approval lists them under **Verified inputs and
 digests** as **Builder's commit** and **Tests' commit**. Because the builder
 commits in `.surla-build` rather than in the project folder, while the open
-build shows **Passed** the page gives you the `git merge <commit>` commands to
-run in the project folder under **To take this change, run in the project
+build shows **Passed** for the current agreement the page gives you the
+`git merge <commit>` commands under **To take this change, run in the project
 folder:** first `git merge <candidate_commit>` (verified on `surla/build-<n>`),
 and then, for the test writer's tests, `git merge <tests_commit>` (verified on
 `surla/tests-<n>`); with stored verification settings, the tests commit is the
@@ -600,7 +614,7 @@ the binaries the run built. When one is missing or differs, approval is
 refused, and the refusal ends with your step: "publish the binaries the run
 built, whose folder the run's Proof view shows, into the release folder that
 the promotion settings name, in a folder named after the commit, or remove
-the promotion settings". For a completed run, the Proof view shows you its
+the promotion settings". For a completed run, the Check view shows you its
 actual binary folder under **Binaries built by this run**, as selectable
 code. Use that folder for the selected run; the approval error panel repeats
 it. Agents never receive this path. See

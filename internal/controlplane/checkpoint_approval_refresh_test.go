@@ -49,30 +49,33 @@ func TestCheckpointUIRefreshesApprovalWithoutDiscardingEdits(t *testing.T) {
 	})
 	runPageScript(t, ps, nil, `
 const page = await openPage(origin, { link: input.link });
-await until(() => page.$("#surla-cp5-approval"), "the recorded approval is not shown");
+await until(() => page.$("#surla-review-approval"), "the recorded approval summary is not shown");
 const field = () => page.$('textarea[data-field="expected_outcome"]');
 const reads = () => page.sent("GET", "/changes/approval-refresh");
 page.type(field(), "Keep this draft");
+page.$("#surla-review-approval").click();
+await until(() => page.$("#surla-cp5-approval"), "the saved approval did not open");
 const before = reads().length;
 page.$("#surla-cp5-refresh-approval").click();
 await until(() => reads().length === before + 1 && !page.$("#surla-cp5-refresh-approval").disabled, "checking the approval did not read the card once");
 expect(page.$("#surla-cp5-approval"), "matching inputs removed the approval");
-expect(field().value === "Keep this draft", "matching approval reset the draft");
+expect(!page.$("#surla-cp1-form-card"), "Approve did not open a full-width stage");
 expect(!page.doc.body.textContent.includes("Approved for promotion"), "recorded snapshot claims continuing authority");
 
 // A failed read is visible, keeps the record and the draft, and can be retried.
 await control(origin, "reply", { key: "GET /changes/approval-refresh", status: 500, body: { name: "fault", id: "x", message: "Target inputs are unavailable", temporary: false, timeout: false, fault: true } });
 page.$("#surla-cp5-refresh-approval").click();
-await until(() => page.$("#surla-confirm-feedback [role=alert]"), "the failed read is not visible");
-expect(page.text("#surla-confirm-feedback [role=alert]").includes("Target inputs are unavailable"), "the server's error is not shown");
+await until(() => page.$("#surla-cp5-read-error"), "the failed read is not visible");
+expect(page.text("#surla-cp5-read-error").includes("Target inputs are unavailable"), "the server's error is not shown");
 expect(page.$("#surla-cp5-approval"), "a failed read discarded the recorded check");
-expect(field().value === "Keep this draft", "a failed read erased the draft");
+expect(page.$("#surla-cp5-approval"), "a failed read erased the saved record");
 
 // After the target's inputs change, retrying removes the approval and keeps the draft.
 await control(origin, "act", { key: "inputs-changed" });
 const beforeRetry = reads().length;
-page.$("#surla-load-latest-card").click();
+page.$("#surla-cp5-refresh-approval").click();
 await until(() => reads().length === beforeRetry + 1 && !page.$("#surla-cp5-approval"), "retrying did not read the card and drop the stale approval");
+page.$("#surla-nav-cp1").click();
 expect(field().value === "Keep this draft", "the retried read erased the draft");
 await sleep(200);
 expect(reads().length === beforeRetry + 1, "the approval check looped");

@@ -21,6 +21,7 @@ import (
 
 	gensurla "github.com/goadesign/surla/gen/surla"
 	"github.com/goadesign/surla/internal/verify"
+	"github.com/goadesign/surla/internal/verifyrun"
 )
 
 type (
@@ -434,6 +435,64 @@ func (s *pageVerifications) GetVerification(
 		return nil, gensurla.MakeNotFound(errors.New("unknown run_id"))
 	}
 	return run, nil
+}
+
+// ReviewVerification exposes the fixture run through the new user contract.
+// Fixture runs have no recorded Story; admission still uses the real control
+// plane's approval owner and the full saved report rather than inputs_current.
+func (s *pageVerifications) ReviewVerification(
+	ctx context.Context, p *gensurla.GetVerificationPayload,
+) (*gensurla.VerificationReviewResult, error) {
+	if _, unavailable := s.verifier.(noVerification); unavailable {
+		return nil, gensurla.MakeNotImplemented(errVerificationUnavailable)
+	}
+	run, err := s.GetVerification(ctx, p)
+	if err != nil {
+		return nil, err
+	}
+	principal, ok := PrincipalFromContext(ctx)
+	if !ok {
+		return nil, errors.New("page review requires its authenticated user")
+	}
+	req := verifyrun.Request{RunID: run.RunID, Owner: principal.ID, ChangeID: run.ChangeID,
+		Plan: verify.Plan{CandidateCommit: run.CandidateCommit, RequestRevision: run.RequestRevision,
+			SuiteCommit: run.SuiteCommit, Tests: verify.TestsEvaluator}}
+	if _, written := run.TestSource.AsWrittenTests(); written {
+		req.Plan.Tests = verify.TestsWritten
+	}
+	state := verifyrun.State{Kind: verifyrun.StateRunning}
+	approval := blockedRunApproval("This fixture has no full saved report for approval.")
+	if completed, ok := run.State.AsCompleted(); ok {
+		target, err := s.resolvePromotion(ctx)
+		var report verify.Report
+		if err == nil && target != nil {
+			report, err = target.LoadReport(ctx, completed.Report.ReportDigest)
+		} else if err == nil {
+			if runs := verifierRuns(s.verifier); runs != nil {
+				report, err = verifyrun.LoadReport(runs.Plan.ReportDir, completed.Report.ReportDigest)
+			}
+		}
+		if err == nil && report.Digest == completed.Report.ReportDigest {
+			state = verifyrun.State{Kind: verifyrun.StateCompleted, Report: report}
+			approval, err = s.reviewRunApproval(ctx, principal, req, state)
+			if err != nil {
+				approval = blockedRunApproval(err.Error())
+			}
+		}
+	} else {
+		approval, err = s.reviewRunApproval(ctx, principal, req, state)
+		if err != nil {
+			return nil, err
+		}
+	}
+	return &gensurla.VerificationReviewResult{
+		RunID: run.RunID, ChangeID: run.ChangeID, RequestRevision: run.RequestRevision,
+		CandidateCommit: run.CandidateCommit, SuiteCommit: run.SuiteCommit,
+		AcceptedAt: run.AcceptedAt, InputsCurrent: run.InputsCurrent,
+		CandidateBinariesDir: run.CandidateBinariesDir, TestSource: run.TestSource, State: run.State,
+		Review: &gensurla.VerificationReview{Approval: approval,
+			StoryContext: gensurla.NewStoryContextNotRecorded(&gensurla.RunStoryNotRecorded{})},
+	}, nil
 }
 
 // ListVerifications returns the change's fixture runs, newest first.

@@ -19,7 +19,8 @@ import { CP1EditorView } from "./components/cp1-editor";
 import { BuildSectionView, BuildStartReceipt, runBelongsToBuild } from "./components/build";
 import { VerificationView } from "./components/cp4-verification";
 import { ProposedRevisionView } from "./components/proposal";
-import { ApproveResultControl } from "./components/cp5-approve";
+import { ApprovalStage } from "./components/approval-stage";
+import { WorkspaceFrame } from "./components/workspace-frame";
 import { SessionEndedNotice, SignedOutReason, SignedOutView } from "./components/session";
 import { StoryStageView } from "./components/story";
 import { GlobalTeamAttention, TeamFactsError, TeamStageProps, TeamStageView, teamAttentionText } from "./components/team";
@@ -51,6 +52,7 @@ import {
   TeamSnapshot,
   TestFindings,
   VerificationListResult,
+  VerificationReview,
   VerificationStatusResult,
   isPlainObject,
 } from "./types";
@@ -122,6 +124,7 @@ type ActiveResultState =
   | { kind: "team" }
   | { kind: "cp2-architecture-preview" }
   | { kind: "cp4-verification" }
+  | { kind: "cp5-approval" }
   | { kind: "cp1-incoming-card" };
 
 // SessionState is the page's session lifecycle: starting while the link is
@@ -419,7 +422,7 @@ function describeActiveResultSubject(
     return {
       role: "result",
       label,
-      stage: "Proof",
+      stage: activeResult.kind === "cp5-approval" ? "Approval" : "Proof",
       changeId: displayedRun.change_id,
       requestRevision: displayedRun.request_revision,
       detail:
@@ -432,7 +435,7 @@ function describeActiveResultSubject(
   return {
     role: "result",
     label,
-    stage: "Proof",
+    stage: activeResult.kind === "cp5-approval" ? "Approval" : "Proof",
     changeId: selectedVerificationChangeId || undefined,
     detail: "saved verification runs",
   };
@@ -516,6 +519,9 @@ export function bootstrapViewsPage() {
   // editorOpen tracks whether #surla-cp1-editor is mounted. Another stage
   // keeps activeEditor in memory while the editor is not shown.
   let editorOpen = false;
+  // editorStage tracks navigation intent while Agree and Build share the
+  // existing editor content during this first stage's rollout.
+  let editorStage: "agree" | "build" = "agree";
   let previewState: ArchitecturePreviewResult | null = null;
   const previewErrors = new Map<string, string>();
   // storyEvaluation is the owner's current Story evaluation as last read, or
@@ -597,6 +603,10 @@ export function bootstrapViewsPage() {
   const lastLoadedListByChangeId = new Map<string, string[]>();
   let selectedVerificationChangeId: string | null = null;
   let selectedRunId: string | null = null;
+  // Only the selected run retains a review; history keeps its compact statuses.
+  let selectedReview: {
+    runId: string; generation: number; order: number; review: VerificationReview;
+  } | null = null;
   const selectionTouchedDuringList = new Map<string, boolean>();
   const runRequestErrors = new Map<string, string>();
   const listRequestErrors = new Map<string, string>();
@@ -1137,7 +1147,13 @@ export function bootstrapViewsPage() {
         lastLoadedListByChangeId.set(changeId, loadedIds);
         listRequestErrors.delete(changeId);
         if (selectedVerificationChangeId === changeId && selectedRunId === null && loadedIds.length > 0) {
-          selectedRunId = loadedIds[0];
+          const card = activeEditor?.card;
+          const approval = card?.approval ?? card?.unverified_approval?.approval;
+          selectedRunId = activeResult?.kind === "cp5-approval" && card?.change_id === changeId && approval !== undefined
+            ? savedApprovalEvidenceRun(card, approval)?.run_id ?? null : loadedIds[0];
+        }
+        if (activeResult?.kind === "cp5-approval" && selectedVerificationChangeId === changeId && selectedRunId !== null) {
+          readApprovalReview(selectedRunId, changeId);
         }
       },
       (message) => {
@@ -1206,6 +1222,16 @@ export function bootstrapViewsPage() {
     return null;
   }
 
+  // savedApprovalEvidenceRun selects only an unambiguous recorded binding.
+  // This locates evidence; the owner's new review still decides admission.
+  function savedApprovalEvidenceRun(card: ChangeCardResult, approval: ApprovalItem): VerificationStatusResult | null {
+    const matches = Array.from(runsById.values()).filter((run) => run.change_id === card.change_id &&
+      run.request_revision === card.request_revision && run.candidate_commit === approval.candidate_commit &&
+      run.suite_commit === approval.suite_commit && run.test_source.source === approval.test_source.source &&
+      run.state.type === "completed" && run.state.value.report.report_digest === approval.report_digest);
+    return matches.length === 1 ? matches[0] : approvalRunFor(card, approval);
+  }
+
   // latestVerificationFor uses the run identity supplied by the change owner.
   function latestVerificationFor(changeId: string): VerificationStatusResult | null {
     const id = changeList?.changes.find((item) => item.change_id === changeId)?.latest_verification?.run_id;
@@ -1216,15 +1242,68 @@ export function bootstrapViewsPage() {
   function reviewSavedCheck(run: VerificationStatusResult) {
     selectedVerificationChangeId = run.change_id;
     selectedRunId = run.run_id;
-    editorOpen = shouldRetainEditor();
-    activeResult = { kind: "cp4-verification" };
-    rootEl.dataset.state = "cp4-verification";
+    editorOpen = false;
+    activeResult = { kind: "cp5-approval" };
+    rootEl.dataset.state = "cp5-approval";
     statusEl.textContent = "Review the saved check before approving it.";
     if (!lastLoadedListByChangeId.has(run.change_id)) refreshVerificationsInBackground(run.change_id);
-    if (!runInputsKnown(run)) readVerification(run.run_id, run.change_id);
+    readApprovalReview(run.run_id, run.change_id);
     syncAllRegions();
-    focusResult(run.state.type === "completed" && run.state.value.report.passed
-      ? "#surla-cp5-approve-title" : "#surla-cp4-title");
+    focusResult("#surla-cp5-title");
+  }
+
+  // openApproval preserves an explicitly selected run; otherwise it opens the
+  // change owner's current result. An empty stage names the required selection.
+  function openApproval() {
+    const selected = activeResult?.kind === "cp4-verification" || activeResult?.kind === "cp5-approval"
+      ? resolveDisplayedVerificationRun() : null;
+    const run = selected ?? (activeEditor !== null ? latestVerificationFor(activeEditor.card.change_id) : null);
+    if (run !== null) {
+      reviewSavedCheck(run);
+      return;
+    }
+    selectedRunId = null;
+    selectedVerificationChangeId = activeEditor?.card.change_id ?? null;
+    editorOpen = false;
+    activeResult = { kind: "cp5-approval" };
+    rootEl.dataset.state = "cp5-approval";
+    if (selectedVerificationChangeId !== null) refreshVerificationsInBackground(selectedVerificationChangeId);
+    syncAllRegions();
+    focusResult("#surla-cp5-title");
+  }
+
+  // openRecordedApproval retains the exact saved binding rather than choosing
+  // another run's approval by recency. The record stays visible without a run.
+  function openRecordedApproval() {
+    const card = activeEditor?.card;
+    if (card === undefined) return;
+    const approval = card.approval ?? card.unverified_approval?.approval;
+    const run = approval !== undefined ? savedApprovalEvidenceRun(card, approval) : null;
+    if (run !== null) { reviewSavedCheck(run); return; }
+    selectedVerificationChangeId = card.change_id;
+    selectedRunId = null;
+    editorOpen = false;
+    activeResult = { kind: "cp5-approval" };
+    rootEl.dataset.state = "cp5-approval";
+    if (!lastLoadedListByChangeId.has(card.change_id) && !listRequestErrors.has(card.change_id)) {
+      refreshVerificationsInBackground(card.change_id);
+    }
+    syncAllRegions();
+    focusResult("#surla-cp5-title");
+  }
+
+  // displayedApprovalReview never borrows another selected run's observation.
+  function displayedApprovalReview(): VerificationReview | null {
+    return selectedReview !== null && selectedReview.runId === selectedRunId ? selectedReview.review : null;
+  }
+
+  // approvalReviewFresh validates the observation's identity and transport
+  // freshness, not its admission predicates; only the server decides those.
+  function approvalReviewFresh(run: VerificationStatusResult): boolean {
+    return runInputsKnown(run) && !hasPending("review_verification", run.run_id) &&
+      selectedReview !== null && selectedReview.runId === run.run_id &&
+      selectedReview.generation === verificationGeneration &&
+      selectedReview.order >= (runObservationOrder.get(run.run_id) ?? -1);
   }
 
   // isViewingChangeResult reports whether the active result view currently
@@ -1233,7 +1312,7 @@ export function bootstrapViewsPage() {
     if (activeResult?.kind === "cp2-architecture-preview") {
       return activeEditor !== null && activeEditor.card.change_id === changeId;
     }
-    if (activeResult?.kind === "cp4-verification") {
+    if (activeResult?.kind === "cp4-verification" || activeResult?.kind === "cp5-approval") {
       const displayedRun = resolveDisplayedVerificationRun();
       const effectiveId = displayedRun
         ? displayedRun.change_id
@@ -1445,7 +1524,7 @@ export function bootstrapViewsPage() {
   // focusVerificationHeading keeps a removed result command in its own view.
   // Its stable identity avoids ref cleanup during unrelated renders.
   function focusVerificationHeading() {
-    focusResult("#surla-cp4-title");
+    focusResult(activeResult?.kind === "cp5-approval" ? "#surla-cp5-title" : "#surla-cp4-title");
   }
 
   // startTeamAgents is an explicit window request. Its dated receipt describes
@@ -2021,6 +2100,7 @@ export function bootstrapViewsPage() {
   // syncNavRegion renders the stage navigation bar for an active session
   // along with the displayed-subject context strip (#surla-workspace-context).
   function syncNavRegion() {
+    const approvalWasFocused = document.activeElement?.id === "surla-cp5-approve";
     if (sessionState === "starting" || sessionState === "signed-out") {
       navEl.hidden = true;
       flushSync(() => {
@@ -2065,8 +2145,12 @@ export function bootstrapViewsPage() {
       tabs.push({
         id: "surla-nav-cp1",
         label: "Decisions & Approval",
-        active: cp1Active,
+        active: cp1Active && editorStage === "agree",
         onClick: handleReturnToChangeCard,
+      });
+      tabs.push({
+        id: "surla-nav-build", label: "Build", active: cp1Active && editorStage === "build",
+        onClick: () => { showChangeEditor("build"); focusResult("#surla-build-title"); },
       });
       tabs.push({
         id: "surla-nav-cp2",
@@ -2082,6 +2166,10 @@ export function bootstrapViewsPage() {
         active: activeResult?.kind === "cp4-verification",
         onClick: openProof,
       });
+    }
+
+    if (activeEditor !== null || selectedVerificationChangeId !== null) {
+      tabs.push({ id: "surla-nav-cp5", label: "Approve", active: activeResult?.kind === "cp5-approval", onClick: openApproval });
     }
 
     const bothRegionsShown =
@@ -2143,23 +2231,49 @@ export function bootstrapViewsPage() {
     }
 
     navEl.hidden = false;
+    const journeyIds = new Set(["surla-nav-changes", "surla-nav-cp1", "surla-nav-build", "surla-nav-cp4", "surla-nav-cp5"]);
+    const journeyLabels: Record<string, string> = {
+      "surla-nav-changes": "Describe", "surla-nav-cp1": "Agree", "surla-nav-build": "Build",
+      "surla-nav-cp4": "Check", "surla-nav-cp5": "Approve",
+    };
+    const run = resolveDisplayedVerificationRun();
+    const review = displayedApprovalReview();
+    const onApproval = activeResult?.kind === "cp5-approval";
+    const fresh = run !== null && approvalReviewFresh(run);
+    let attention = "Review the current stage.";
+    let next: React.ReactNode = <span>Choose the step you need.</span>;
+    if (onApproval) {
+      attention = review?.approval.state === "blocked" ? "Approval unavailable."
+        : review?.approval.state === "unverified" ? "Saved approval needs checking." : review?.approval.state === "recorded"
+        ? "Your approval is recorded. Take the verified commits when you are ready."
+        : fresh ? "Decide whether this verified result may be promoted." : "Check the owner’s current approval requirements.";
+      next = review?.approval.state === "available" && run !== null
+        ? <><Button id="surla-cp5-approve" variant="primary" disabled={!fresh || editorBusy}
+          aria-describedby={!fresh ? "surla-cp5-observation-status" : undefined}
+          onClick={() => handleApprove(run)}>{editorBusy ? "Approving…" : "Approve this result"}</Button>
+          <span className="surla-frame-action-binding">Run {run.run_id.slice(0, 12)}</span></>
+        : review?.approval.state === "recorded" ? <span>Merge the verified commits shown below.</span>
+        : review?.approval.state === "blocked"
+        ? <Button onClick={() => focusResult("#surla-cp5-approve-blocked")}>Review requirements</Button>
+        : review?.approval.state === "unverified" ? <span>Check current approval.</span> : <span>Read current requirements.</span>;
+    } else if (activeResult?.kind === "cp4-verification") {
+      next = <Button variant="primary" onClick={openApproval}>Review result</Button>;
+      attention = "Read the saved test evidence, then review the result for approval.";
+    }
+    const agreed = activeEditor?.card.status === "confirmed" ? activeEditor.card.summary : "No confirmed agreement opened";
     flushSync(() => {
       navRoot.render(
-        <>
-          <div className="surla-nav-tabs">
-            {tabs.map((tab) => (
-              <Button
-                key={tab.id}
-                id={tab.id}
-                variant="pill"
-                aria-current={tab.active ? "page" : undefined}
-                onClick={tab.onClick}
-              >
-                {tab.label}
-              </Button>
-            ))}
-          </div>
-          {subjects.length >= 1 ? (
+        <WorkspaceFrame project={projectName ?? "Project"}
+          journey={tabs.filter((tab) => journeyIds.has(tab.id)).map((tab) => ({ ...tab, label: journeyLabels[tab.id] }))}
+          references={tabs.filter((tab) => !journeyIds.has(tab.id))}
+          agreed={agreed} attention={attention} next={next}
+          diagnosticsOpen={traceOpen} onToggleDiagnostics={() => {
+            traceOpen = !traceOpen;
+            if (traceOpen && tracePage === null) loadTracePage();
+            syncAllRegions();
+          }}
+          details={subjects.length >= 1 ? (
+
             <div
               id="surla-workspace-context"
               className="surla-workspace-context"
@@ -2199,9 +2313,12 @@ export function bootstrapViewsPage() {
               ))}
             </div>
           ) : null}
-        </>
+        />
       );
     });
+    if (approvalWasFocused && document.getElementById("surla-cp5-approve") === null) {
+      focusResult("#surla-cp5-title");
+    }
   }
 
   // projectTitle owns the tab's next-step contract using only page facts.
@@ -2342,11 +2459,6 @@ export function bootstrapViewsPage() {
         ) : null}
         <CP1EditorView
           card={ed.card}
-          build={knownTakingBuild(ed.card.change_id)}
-          approvalRun={ed.card.approval !== undefined ? approvalRunFor(ed.card, ed.card.approval) : null}
-          unverifiedApprovalRun={ed.card.unverified_approval !== undefined ? approvalRunFor(ed.card, ed.card.unverified_approval.approval) : null}
-          approvalRunsLoading={hasPending("list_verifications", ed.card.change_id)}
-          approvalRunsError={listRequestErrors.get(ed.card.change_id) ?? null}
           buildRevisionNotice={buildRevisionNotice}
           buildSection={
             <BuildSectionView
@@ -2419,12 +2531,48 @@ export function bootstrapViewsPage() {
           onLoadLatestCard={handleLoadLatestCard}
           onLoadVerifications={() => handleListVerifications(ed.card.change_id)}
           onOpenStory={openStory}
-          onFocusedControlRemoved={focusChangeDecisions}
+          onReviewApproval={openRecordedApproval}
         />
 
         </>
       );
     });
+  }
+
+  // verificationDetailsView is the single owner of raw report/history wiring,
+  // shown in Check or in the approval stage's explicit detail disclosure.
+  function verificationDetailsView(displayedRun: VerificationStatusResult | null, effectiveChangeId: string) {
+    const build = knownTakingBuild(effectiveChangeId);
+    const listedIds = lastLoadedListByChangeId.get(effectiveChangeId);
+    const listedRuns = listedIds !== undefined
+      ? listedIds.map((id) => runsById.get(id)).filter((r): r is VerificationStatusResult => Boolean(r))
+      : null;
+    const loadedCard = activeEditor ? activeEditor.card : null;
+    return (
+      <VerificationView
+        changeId={effectiveChangeId}
+        build={activeResult?.kind === "cp5-approval" && build?.in_force === false ? null : build}
+        run={displayedRun}
+        inputsKnown={displayedRun !== null && runInputsKnown(displayedRun)}
+        listedRuns={listedRuns}
+        loadedCard={loadedCard}
+        checking={displayedRun ? hasPending("get_verification", displayedRun.run_id) || hasPending("review_verification", displayedRun.run_id) : false}
+        loadingList={hasPending("list_verifications", effectiveChangeId)}
+        loadingCard={editorBusy || cardRefresh !== null}
+        requestError={displayedRun ? runRequestErrors.get(displayedRun.run_id) ?? null : null}
+        listError={listRequestErrors.get(effectiveChangeId) ?? null}
+        cardLoadError={effectiveChangeId ? cardLoadErrors.get(effectiveChangeId) ?? null : null}
+        onCheckStatus={handleCheckVerificationStatus}
+        onLoadVerifications={() => handleListVerifications(effectiveChangeId)}
+        onSelectRun={handleSelectVerificationRun}
+        onOpenChangeCard={() => {
+          if (activeEditor?.card.change_id === effectiveChangeId) handleLoadLatestCard();
+          else openChange(effectiveChangeId);
+        }}
+        onReturnToChangeCard={handleReturnToChangeCard}
+        onFocusedControlRemoved={focusVerificationHeading}
+      />
+    );
   }
 
   // syncResultRegion replaces only the stage view beside the editor.
@@ -2577,6 +2725,33 @@ export function bootstrapViewsPage() {
       });
       return;
     }
+    if (res.kind === "cp5-approval") {
+      const run = resolveDisplayedVerificationRun();
+      const recordCard = activeEditor?.card;
+      const recordApproval = recordCard?.approval ?? recordCard?.unverified_approval?.approval;
+      if (run !== null) {
+        resultRegionEl.dataset.runId = run.run_id;
+        resultRegionEl.dataset.changeId = run.change_id;
+        resultRegionEl.dataset.requestRevision = run.request_revision;
+      }
+      flushSync(() => resultRoot.render(<ApprovalStage
+        rawDetails={verificationDetailsView(run, selectedVerificationChangeId ?? "")}
+        run={run} review={displayedApprovalReview()} fresh={run !== null && approvalReviewFresh(run)}
+        loading={run !== null && hasPending("review_verification", run.run_id)} busy={editorBusy}
+        error={run !== null ? runRequestErrors.get(run.run_id) ?? null : cardLoadErrors.get(selectedVerificationChangeId ?? "") ?? null}
+        historyLoading={hasPending("list_verifications", selectedVerificationChangeId ?? "")}
+        historyError={listRequestErrors.get(selectedVerificationChangeId ?? "") ?? null}
+        approvalError={run !== null ? approveErrors.get(run.run_id) ?? null : null}
+        unavailableReason={approvalUnavailable}
+        build={run !== null ? knownTakingBuild(run.change_id) : null} unsaved={hasUnsavedEdits()}
+        savedRecord={recordCard !== undefined && recordCard.change_id === selectedVerificationChangeId && recordApproval !== undefined
+          ? { approval: recordApproval, requestRevision: recordCard.request_revision, reason: recordCard.unverified_approval?.reason ?? null } : null}
+        onRefresh={() => { if (run !== null) readApprovalReview(run.run_id, run.change_id); else handleLoadLatestCard(); }}
+        onOpenProof={openProof} onOpenAgreement={handleReturnToChangeCard}
+        onFocusedControlRemoved={focusVerificationHeading}
+      />));
+      return;
+    }
     if (res.kind === "cp4-verification") {
       const changeId = selectedVerificationChangeId || "";
       const displayedRun = resolveDisplayedVerificationRun();
@@ -2588,65 +2763,7 @@ export function bootstrapViewsPage() {
         resultRegionEl.dataset.changeId = changeId;
       }
       const effectiveChangeId = displayedRun ? displayedRun.change_id : changeId;
-      const listedIds = lastLoadedListByChangeId.get(effectiveChangeId);
-      const listedRuns =
-        listedIds !== undefined
-          ? listedIds
-              .map((id) => runsById.get(id))
-              .filter((r): r is VerificationStatusResult => Boolean(r))
-          : null;
-      const loadedCard = activeEditor ? activeEditor.card : null;
-      flushSync(() => {
-        resultRoot.render(
-          <>
-            <VerificationView
-              changeId={effectiveChangeId}
-              build={knownTakingBuild(effectiveChangeId)}
-              run={displayedRun}
-              inputsKnown={displayedRun !== null && runInputsKnown(displayedRun)}
-              listedRuns={listedRuns}
-              loadedCard={loadedCard}
-              checking={displayedRun ? hasPending("get_verification", displayedRun.run_id) : false}
-              loadingList={hasPending("list_verifications", effectiveChangeId)}
-              loadingCard={editorBusy || cardRefresh !== null}
-              requestError={displayedRun ? runRequestErrors.get(displayedRun.run_id) ?? null : null}
-              listError={listRequestErrors.get(effectiveChangeId) ?? null}
-              cardLoadError={
-                effectiveChangeId ? cardLoadErrors.get(effectiveChangeId) ?? null : null
-              }
-              onCheckStatus={handleCheckVerificationStatus}
-              onLoadVerifications={() => handleListVerifications(effectiveChangeId)}
-              onSelectRun={handleSelectVerificationRun}
-              onOpenChangeCard={() => {
-                if (activeEditor?.card.change_id === effectiveChangeId) handleLoadLatestCard();
-                else openChange(effectiveChangeId);
-              }}
-              onReturnToChangeCard={handleReturnToChangeCard}
-              onFocusedControlRemoved={focusVerificationHeading}
-            />
-            {displayedRun ? (
-              <ApproveResultControl
-                build={buildChangeId === displayedRun.change_id && buildSnapshot?.state === "started" ? buildSnapshot : null}
-                run={displayedRun}
-                inputsKnown={runInputsKnown(displayedRun)}
-                card={
-                  loadedCard !== null && loadedCard.change_id === displayedRun.change_id
-                    ? loadedCard
-                    : null
-                }
-                busy={editorBusy}
-                available={
-                  approvalUnavailable === null &&
-                  (changeList === null || changeList.approval_available)
-                }
-                unavailableReason={approvalUnavailable}
-                error={approveErrors.get(displayedRun.run_id) ?? null}
-                onApprove={() => handleApprove(displayedRun)}
-              />
-            ) : null}
-          </>
-        );
-      });
+      flushSync(() => resultRoot.render(verificationDetailsView(displayedRun, effectiveChangeId)));
       return;
     }
     const incoming = activeEditor ? activeEditor.incomingCard : null;
@@ -2690,6 +2807,11 @@ export function bootstrapViewsPage() {
     syncNavRegion();
     syncTraceRegion();
     syncOpenedCheckStatus();
+    statusEl.hidden = activeResult?.kind === "cp5-approval" && [
+      "Review the build and its next step. The agreed details stay available below.",
+      "Review the saved check before approving it.",
+      "Showing the saved verification result.",
+    ].includes(statusEl.textContent ?? "");
   }
 
   // syncOpenedCheckStatus names the user's decision on the opened change,
@@ -2813,10 +2935,12 @@ export function bootstrapViewsPage() {
     }
     selectedVerificationChangeId = target.change_id;
     selectedRunId = target.run_id;
-    activeResult = { kind: "cp4-verification" };
-    rootEl.dataset.state = "cp4-verification";
+    const reviewing = activeResult?.kind === "cp5-approval";
+    const stage = reviewing ? "cp5-approval" : "cp4-verification";
+    activeResult = { kind: stage };
+    rootEl.dataset.state = stage;
     statusEl.textContent = "Showing the saved verification result.";
-    if (!runInputsKnown(target)) readVerification(target.run_id, target.change_id);
+    if (reviewing || !runInputsKnown(target)) readVerification(target.run_id, target.change_id);
     syncAllRegions();
   }
 
@@ -2825,7 +2949,7 @@ export function bootstrapViewsPage() {
   // different run is displayed by then.
   function handleCheckVerificationStatus() {
     const run = resolveDisplayedVerificationRun();
-    if (activeResult?.kind === "cp4-verification" && run !== null) {
+    if ((activeResult?.kind === "cp4-verification" || activeResult?.kind === "cp5-approval") && run !== null) {
       readVerification(run.run_id, run.change_id);
     }
   }
@@ -2833,6 +2957,10 @@ export function bootstrapViewsPage() {
   // readVerification coalesces a read invalidated while pending into one
   // replacement. A same-generation failure waits for an explicit retry.
   function readVerification(runID: string, changeId: string) {
+    if (activeResult?.kind === "cp5-approval" && selectedRunId === runID) {
+      readApprovalReview(runID, changeId);
+      return;
+    }
     if (sessionState !== "active") return;
     if (hasPending("get_verification", runID)) {
       runReadAgain.add(runID);
@@ -2880,12 +3008,59 @@ export function bootstrapViewsPage() {
     );
   }
 
+  // readApprovalReview coalesces invalidated reads and accepts a response only
+  // for its exact requested run, selection, generation and request order.
+  function readApprovalReview(runId: string, changeId: string) {
+    if (sessionState !== "active") return;
+    if (hasPending("review_verification", runId)) {
+      runReadAgain.add(runId);
+      return;
+    }
+    runReadAgain.delete(runId);
+    const generation = verificationGeneration;
+    const order = ++verificationReadOrder;
+    markRunReadPending(runId, order);
+    runRequestErrors.delete(runId);
+    const finish = () => {
+      const again = runReadAgain.delete(runId) || generation !== verificationGeneration;
+      if (again && sessionState === "active" && activeResult?.kind === "cp5-approval" && selectedRunId === runId) {
+        readApprovalReview(runId, changeId);
+      }
+    };
+    callServer("review_verification", { run_id: runId }, runId, (result) => {
+      if (result.run_id !== runId || result.change_id !== changeId) {
+        if (generation === verificationGeneration) runRequestErrors.set(runId, "The server returned a different verification run.");
+        finish();
+        return;
+      }
+      if (result.review.approval.state === "available" &&
+          (result.state.type !== "completed" || !result.state.value.report.passed)) {
+        if (generation === verificationGeneration) runRequestErrors.set(runId, "The owner returned approval availability without a passed report. Refresh this result.");
+        finish();
+        return;
+      }
+      upsertRunSnapshot(result, generation, order);
+      if (generation === verificationGeneration && order >= (runObservationOrder.get(runId) ?? -1) && selectedRunId === runId) {
+        approvalUnavailable = null;
+        selectedReview = { runId, generation, order, review: result.review };
+      }
+      finish();
+    }, (message, failure) => {
+      if (generation === verificationGeneration && order >= (runObservationOrder.get(runId) ?? -1)) {
+        if (failure.status === 501 && selectedRunId === runId) approvalUnavailable = message;
+        runRequestErrors.set(runId, message);
+      }
+      finish();
+    });
+  }
+
   // handleListVerifications loads the saved verification runs for requestedChangeId,
   // enforcing at most one in-flight list_verifications request per change_id.
   function handleListVerifications(requestedChangeId: string) {
     if (!requestedChangeId || hasPending("list_verifications", requestedChangeId)) {
       return;
     }
+    const reviewing = activeResult?.kind === "cp5-approval";
     selectionTouchedDuringList.set(requestedChangeId, false);
     listRequestErrors.delete(requestedChangeId);
     if (!shouldRetainEditor()) {
@@ -2898,8 +3073,9 @@ export function bootstrapViewsPage() {
         : selectedRunId;
     selectedVerificationChangeId = requestedChangeId;
     selectedRunId = nextRunId;
-    activeResult = { kind: "cp4-verification" };
-    rootEl.dataset.state = "cp4-verification";
+    const stage = reviewing ? "cp5-approval" : "cp4-verification";
+    activeResult = { kind: stage };
+    rootEl.dataset.state = stage;
     statusEl.textContent = "Loading saved verification runs...";
     const generation = verificationGeneration;
     const order = ++verificationReadOrder;
@@ -2918,7 +3094,7 @@ export function bootstrapViewsPage() {
         if (mismatchErr !== null) {
           listRequestErrors.set(requestedChangeId, mismatchErr);
           if (
-            activeResult?.kind === "cp4-verification" &&
+            (activeResult?.kind === "cp4-verification" || activeResult?.kind === "cp5-approval") &&
             selectedVerificationChangeId === requestedChangeId
           ) {
             statusEl.textContent = "Could not load saved verification runs.";
@@ -2933,7 +3109,7 @@ export function bootstrapViewsPage() {
         listRequestErrors.delete(requestedChangeId);
 
         if (
-          activeResult?.kind === "cp4-verification" &&
+          (activeResult?.kind === "cp4-verification" || activeResult?.kind === "cp5-approval") &&
           selectedVerificationChangeId === requestedChangeId
         ) {
           if (
@@ -2952,7 +3128,7 @@ export function bootstrapViewsPage() {
               ? "Showing saved verification runs for Change Card " + requestedChangeId + "."
               : "No saved verification runs found for Change Card " + requestedChangeId + ".";
         }
-        if (selectedRunId !== null && generation !== verificationGeneration) {
+        if (selectedRunId !== null && (generation !== verificationGeneration || activeResult?.kind === "cp5-approval")) {
           readVerification(selectedRunId, requestedChangeId);
         }
       },
@@ -2960,7 +3136,7 @@ export function bootstrapViewsPage() {
         selectionTouchedDuringList.delete(requestedChangeId);
         listRequestErrors.set(requestedChangeId, message);
         if (
-          activeResult?.kind === "cp4-verification" &&
+          (activeResult?.kind === "cp4-verification" || activeResult?.kind === "cp5-approval") &&
           selectedVerificationChangeId === requestedChangeId
         ) {
           statusEl.textContent = "Could not load saved verification runs.";
@@ -2972,9 +3148,15 @@ export function bootstrapViewsPage() {
   // handleReturnToChangeCard switches the view back to the retained Change Card
   // and restores any pending incoming Change Card banner.
   function handleReturnToChangeCard() {
+    showChangeEditor("agree");
+  }
+
+  // showChangeEditor restores retained form state and names the chosen stage.
+  function showChangeEditor(stage: "agree" | "build") {
     if (!activeEditor) {
       return;
     }
+    editorStage = stage;
     editorOpen = true;
     activeResult = activeEditor.incomingCard ? { kind: "cp1-incoming-card" } : null;
     rootEl.dataset.state = "cp1-change-card";
@@ -3240,68 +3422,51 @@ export function bootstrapViewsPage() {
     }
   }
 
-  // handleApprove asks the server to record approval of run's passed report
-  // for the exact card revision shown. A stale revision uses the editor's
-  // recovery. Approval can be recorded without promotion settings; a configured
-  // promotion target also checks its release inputs before approval.
+  // handleApprove submits the selected owner's available observation, bound to
+  // its exact run. Agreement/test/build admission is never recomputed here.
   function handleApprove(run: VerificationStatusResult) {
     const current = runsById.get(run.run_id);
-    const card = activeEditor?.card;
-    if (!current || !card || editorBusy || current.state.type !== "completed" ||
-        !current.state.value.report.passed || !runInputsKnown(current) || !current.inputs_current ||
-        card.change_id !== current.change_id || card.status !== "confirmed" ||
-        card.request_revision !== current.request_revision || approvalUnavailable !== null ||
-        changeList === null || !changeList.approval_available) {
-      return;
-    }
-    run = current;
+    const review = displayedApprovalReview();
+    if (current === undefined || current.run_id !== selectedRunId || editorBusy ||
+        !approvalReviewFresh(current) || review?.approval.state !== "available" ||
+        current.state.type !== "completed") return;
     const report = current.state.value.report;
-    approveErrors.delete(run.run_id);
-    statusEl.textContent = "Recording approval of this result...";
-    callEditorServer(
-      "approve_merge",
-      {
-        change_id: card.change_id,
-        request_revision: card.request_revision,
-        candidate_commit: run.candidate_commit,
-        report_digest: report.report_digest,
-      },
-      card.change_id,
-      (approved) => {
-        if (activeEditor && activeEditor.card.request_revision === approved.request_revision) {
-          activeEditor = { ...activeEditor, card: approved, formError: null };
-        } else {
-          mountChangeCard(approved, null, nextPriorCard(activeEditor, approved));
+    approveErrors.delete(current.run_id);
+    statusEl.textContent = "Recording approval of this result…";
+    callEditorServer("approve_merge", {
+      change_id: current.change_id, request_revision: current.request_revision,
+      candidate_commit: current.candidate_commit, report_digest: report.report_digest,
+    }, current.change_id, (approved) => {
+      // Preserve unrelated editors and their drafts; a saved approval is an
+      // owner fact, not permission to mount another card over the user's work.
+      if (activeEditor?.card.change_id === approved.change_id) receiveLatestCard(approved);
+      if (selectedReview?.runId === current.run_id && approved.approval !== undefined) {
+        selectedReview = { ...selectedReview, review: {
+          ...selectedReview.review, approval: { ...approved.approval, state: "recorded" },
+        } };
+      }
+      statusEl.textContent = "Approval recorded. Surla did not merge or deploy anything.";
+      syncAllRegions();
+      if (activeResult?.kind === "cp5-approval" && selectedRunId === current.run_id) focusResult("#surla-cp5-approval");
+    }, (message, failure) => {
+      approveErrors.set(current.run_id, message);
+      if (failure.status === 501) {
+        approvalUnavailable = message;
+        runObservationGeneration.delete(current.run_id);
+        if (selectedReview?.runId === current.run_id) {
+          selectedReview = { ...selectedReview, review: {
+            ...selectedReview.review, approval: { state: "blocked", reason: message },
+          } };
         }
-        editorOpen = true;
-        activeResult = activeEditor && activeEditor.incomingCard ? { kind: "cp1-incoming-card" } : null;
-        rootEl.dataset.state = "cp1-change-card";
-        statusEl.textContent = "Approval recorded for candidate " + run.candidate_commit.slice(0, 7) + ".";
-        syncAllRegions();
-        focusResult("#surla-cp5-approval");
-      },
-      (message, failure) => {
-        if (failure.status === 501) {
-          approvalUnavailable = message;
-          statusEl.textContent = "Approval is unavailable on this server.";
-          syncAllRegions();
-          focusResult("#surla-cp5-unavailable");
-          return;
-        }
-        if (failure.status === 409) {
-          editorOpen = true;
-          activeResult = activeEditor && activeEditor.incomingCard ? { kind: "cp1-incoming-card" } : null;
-          rootEl.dataset.state = "cp1-change-card";
-          showFormError(message);
-          focusResult("#surla-confirm-error");
-          return;
-        }
-        approveErrors.set(run.run_id, message);
-        statusEl.textContent = "Approval was not recorded.";
-        syncAllRegions();
+      }
+      statusEl.textContent = "Approval was not recorded.";
+      syncAllRegions();
+      if (activeResult?.kind === "cp5-approval" && selectedRunId === current.run_id) {
+        if (failure.status !== 501) readApprovalReview(current.run_id, current.change_id);
         focusResult("#surla-cp5-approve-error");
       }
-    );
+      if (failure.status === 409) refreshOpenCard(current.change_id);
+    });
   }
 
   // handleDiscardDraft restores saved values on the retained card and closes
@@ -3413,6 +3578,7 @@ export function bootstrapViewsPage() {
       formError: null,
     };
     editorOpen = true;
+    editorStage = card.status === "confirmed" ? "build" : "agree";
     statusEl.textContent =
       card.status === "confirmed"
         ? card.approval

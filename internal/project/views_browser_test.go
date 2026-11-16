@@ -58,6 +58,10 @@ type (
 		Taking bool `json:"taking,omitempty"`
 		// TakingState selects the saved presentation state.
 		TakingState string `json:"taking_state,omitempty"`
+		// Approval selects the fixed frame and Story evidence presentation scenario.
+		Approval bool `json:"approval,omitempty"`
+		// ApprovalState identifies the typed owner fixture shown in this batch.
+		ApprovalState string `json:"approval_state,omitempty"`
 		// CaptureDirectory receives the requested private viewport screenshots.
 		CaptureDirectory string `json:"capture_directory,omitempty"`
 		// Origin is the project server's origin.
@@ -103,8 +107,30 @@ type (
 		Phone phoneFacts `json:"phone"`
 		// Taking records one batched desktop and phone inspection.
 		Taking []takingViewFacts `json:"taking"`
+		// Approval records viewport, evidence and keyboard facts for one owner state.
+		Approval []approvalViewFacts `json:"approval"`
 		// Reload is the views page after a reload.
 		Reload reloadFacts `json:"reload"`
+	}
+
+	// approvalViewFacts records actual browser layout, never candidate execution.
+	approvalViewFacts struct {
+		Name                  string   `json:"name"`
+		Width                 int      `json:"width"`
+		DocumentWidth         int      `json:"document_width"`
+		Heading               string   `json:"heading"`
+		FinishedFlows         int      `json:"finished_flows"`
+		DraftVisible          bool     `json:"draft_visible"`
+		ApproveCount          int      `json:"approve_count"`
+		ApproveInNext         bool     `json:"approve_in_next"`
+		ApproveEnabled        bool     `json:"approve_enabled"`
+		KeyboardReachedAction bool     `json:"keyboard_reached_action"`
+		FocusVisible          bool     `json:"focus_visible"`
+		Commands              []string `json:"commands"`
+		FooterReserved        bool     `json:"footer_reserved"`
+		FlowLinesReadable     bool     `json:"flow_lines_readable"`
+		Overflowing           []string `json:"overflowing"`
+		Screenshot            string   `json:"screenshot"`
 	}
 
 	// takingViewFacts contains browser layout and keyboard evidence only.
