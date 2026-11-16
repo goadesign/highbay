@@ -44,9 +44,12 @@ excuse things a real user cannot see.
   from, or runs its product's code itself (`goa gen`, `go build`, `go run`,
   `go test`). Surla's own commands, including `surla init` on its starter
   templates, are allowed. It does those steps only through Surla's commands,
-  even where the docs show the direct command.
-  Never hint such a step. A participant who needs one has found a missing
-  capability, not made a wrong turn.
+  even where the docs show the direct command. These commands run the product's
+  code as ordinary processes with the user's file and network access; working
+  copies and process groups do not confine it. A coding-agent sandbox is a
+  separate environment restriction. Never hint a direct product-code step.
+  A participant who needs one has found a missing capability, not made a
+  wrong turn.
 
 ## Before the session
 

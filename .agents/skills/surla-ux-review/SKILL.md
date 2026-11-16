@@ -83,11 +83,14 @@ source out of its view.
   things the README does not, so the report lists them as a limitation;
 - whether commands run inside your coding agent's own sandbox, and whether
   they have network access. `surla init` downloads modules, and Surla builds
-  and runs the code under test as ordinary processes on the host. Give the
-  participant the host access you are authorized to give. Trusted Surla
-  commands run as the docs show, including `surla init`, which generates code
-  from Surla's own unmodified starter templates. The product's own code is
-  never compiled, generated from, or run except through Surla's commands. That
+  and runs the code under test as ordinary processes with the user's file
+  and network access. Working copies and process groups do not confine that
+  code. Keep any coding-agent sandbox restrictions separate from Surla's
+  documented execution policy. Give the participant the host access you are
+  authorized to give. Trusted Surla commands run as the docs show, including
+  `surla init`, which generates code from Surla's own unmodified starter
+  templates. The product's own code is never compiled, generated from, or run
+  except through Surla's commands. That
   includes `goa gen` on its design, which runs that design code. If the
   documented workflow needs a step Surla offers no command for, the study
   reports it as a missing capability. If the access Surla needs is not
@@ -117,7 +120,7 @@ fill in every placeholder:
 | --- | --- |
 | `{{TASK}}` | the task |
 | `{{PARTICIPANT_PROFILE}}` | the participant profile |
-| `{{ENVIRONMENT_FACTS}}` | the recorded facts that matter to a user: installed tools, credentials set, network and sandbox limits |
+| `{{ENVIRONMENT_FACTS}}` | the recorded facts that matter to a user: installed tools, credentials set, network access and coding-agent sandbox restrictions |
 | `{{CODING_AGENTS}}` | the coding-agent CLIs the participant may run, or "none" |
 | `{{PARTICIPANT}}` | the participant's folder |
 | `{{TESTER}}` | the tester's folder |
