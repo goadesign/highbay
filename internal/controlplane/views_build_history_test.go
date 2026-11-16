@@ -36,7 +36,7 @@ func TestViewsPageHistoricalTakingUsesTheEligibleResultsOwnCommits(t *testing.T)
 	for _, mode := range []string{"eligible", "prior_start", "before_start", "at_start", "after_start", "history_failure"} {
 		t.Run(mode, func(t *testing.T) {
 			reportDir := t.TempDir()
-			cp := newBuildControlPlane(t, Options{
+			cp := newBuildControlPlane(t, Options{BuildCacheDir: t.TempDir(),
 				RunsDir: t.TempDir(), SurlaVersion: testSurlaVersion,
 				WrittenTestRuns: &WrittenTestRuns{
 					ReportDir: reportDir, Command: []string{"/bin/sh", "-c", "exit 0", "sh"}, Timeout: time.Second,

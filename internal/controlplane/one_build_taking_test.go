@@ -91,7 +91,7 @@ func TestOneBuildPassRemainsReadableAfterItsBranchMovesOrDisappears(t *testing.T
 	for _, action := range []string{"moved", "deleted"} {
 		t.Run(action, func(t *testing.T) {
 			cfg := verificationConfig(t)
-			cp := newBuildControlPlane(t, Options{Verification: cfg})
+			cp := newBuildControlPlane(t, Options{BuildCacheDir: t.TempDir(), Verification: cfg})
 			card := buildableChange(t, cp, "x")
 			user := asCaller("alice@example.com", CallerUser)
 			first, err := cp.StartBuild(user, &gensurla.StartBuildPayload{ChangeID: "x", RequestRevision: card.RequestRevision})

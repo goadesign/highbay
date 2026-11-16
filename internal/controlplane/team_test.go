@@ -302,6 +302,7 @@ func TestTeamAssignmentGenerationsMatchBuildWork(t *testing.T) {
 		t.Run(map[bool]string{false: "ordinary project", true: "stored evaluator"}[stored], func(t *testing.T) {
 			opts := Options{Team: &TeamBinding{Owner: "alice@example.com", Service: &teamServiceFixture{}}}
 			if stored {
+				opts.BuildCacheDir = t.TempDir()
 				opts.Verification = &VerificationConfig{RunsDir: t.TempDir()}
 			}
 			cp := newBuildControlPlane(t, opts)
@@ -518,7 +519,7 @@ func TestTeamBindAssignmentsBeforeSupervise(t *testing.T) {
 func TestWhoHasWorkAndAssignmentLists(t *testing.T) {
 	runsDir := t.TempDir()
 	reportDir := t.TempDir()
-	cp := newBuildControlPlane(t, Options{
+	cp := newBuildControlPlane(t, Options{BuildCacheDir: t.TempDir(),
 		RunsDir: runsDir,
 		WrittenTestRuns: &WrittenTestRuns{
 			ReportDir: reportDir,
@@ -853,7 +854,7 @@ func TestWhoHasWorkAndAssignmentLists(t *testing.T) {
 	cardsDir := cp.cards.dir
 	workspaceDir := cp.activeWorkspaceDir
 	require.NoError(t, cp.Close())
-	configured := newControlPlane(t, Options{
+	configured := newControlPlane(t, Options{BuildCacheDir: t.TempDir(),
 		CardsDir:     cardsDir,
 		WorkspaceDir: workspaceDir,
 		RunsDir:      runsDir,

@@ -487,7 +487,7 @@ func normalizeAndValidateStartupPaths(
 	if err != nil {
 		return "", "", nil, nil, fmt.Errorf("%w; check that Git can read the workspace, then start Surla again", err)
 	}
-	if err := validateStartupSeparation(opts.CardsDir, runsDir, initStageDir, verifierRuns(verif), protectedDirs...); err != nil {
+	if err := validateStartupSeparation(opts.CardsDir, runsDir, initStageDir, opts.BuildCacheDir, verifierRuns(verif), protectedDirs...); err != nil {
 		return "", "", nil, nil, err
 	}
 	return runsDir, initStageDir, verif, protectedDirs, nil
@@ -517,11 +517,11 @@ func normalizeVerificationConfig(cfg *VerificationConfig) (*VerificationConfig, 
 	return &out, nil
 }
 
-// validateStartupSeparation verifies that cardsDir, runsDir, initStageDir, and
-// verCfg lie strictly outside protectedDirs (the bound workspace and its
+// validateStartupSeparation verifies that cardsDir, runsDir, initStageDir,
+// buildCacheDir and verCfg lie strictly outside protectedDirs (the bound workspace and its
 // enclosing Git working tree root).
 func validateStartupSeparation(
-	cardsDir, runsDir, initStageDir string,
+	cardsDir, runsDir, initStageDir, buildCacheDir string,
 	verCfg *VerificationConfig,
 	protectedDirs ...string,
 ) error {
@@ -533,6 +533,17 @@ func validateStartupSeparation(
 	}
 	if err := validateInitStageWorkspaceSeparation(initStageDir, protectedDirs...); err != nil {
 		return err
+	}
+	if buildCacheDir != "" {
+		for _, ws := range protectedDirs {
+			inside, err := abspath.Within(ws, buildCacheDir)
+			if err != nil {
+				return err
+			}
+			if inside {
+				return fmt.Errorf("build cache directory %s must be outside workspace %s", buildCacheDir, ws)
+			}
+		}
 	}
 	return validateVerificationWorkspaceSeparation(verCfg, protectedDirs...)
 }

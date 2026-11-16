@@ -180,7 +180,7 @@ func TestCheckProjectLifecycle(t *testing.T) {
 		"reports/public-fixture.json": "public fixture\n",
 	})
 	runGitForTest(t, workspace, "init", "-q")
-	clients := newCheckTestServer(t, Options{
+	clients := newCheckTestServer(t, Options{BuildCacheDir: t.TempDir(),
 		WorkspaceDir: workspace,
 		Verification: &VerificationConfig{RunsDir: realTempDir(t)},
 		GoProxyEnv:   []string{"GOPROXY=https://proxy.example.test", "GOPRIVATE=example.com/*"},
@@ -328,7 +328,7 @@ func TestCheckProjectLifecycle(t *testing.T) {
 	// leaves the starter test module eval out and says so in its result and
 	// captured output, so check_project -> update_dependencies -> check_project
 	// repairs "." without entering eval (even while failEvalTest is true).
-	writtenClients := newCheckTestServer(t, Options{
+	writtenClients := newCheckTestServer(t, Options{BuildCacheDir: t.TempDir(),
 		WorkspaceDir:    project,
 		RunsDir:         realTempDir(t),
 		WrittenTestRuns: &WrittenTestRuns{ReportDir: realTempDir(t), Timeout: time.Minute},
@@ -384,7 +384,7 @@ func TestUpdateDependenciesLifecycle(t *testing.T) {
 			"broken/go.mod": "module example.com/shop/broken\n\ngo 1.24\n",
 			"broken/go.sum": "keep-broken-sum\n",
 		})
-		clients := newCheckTestServer(t, Options{
+		clients := newCheckTestServer(t, Options{BuildCacheDir: t.TempDir(),
 			WorkspaceDir: workspace,
 			Verification: &VerificationConfig{RunsDir: realTempDir(t)},
 			GoProxyEnv:   []string{"GOPROXY=https://proxy.example.test"},
@@ -433,7 +433,7 @@ func TestUpdateDependenciesLifecycle(t *testing.T) {
 			"broken/go.mod": "module example.com/shop/broken\n\ngo 1.24\n",
 			"broken/go.sum": "keep-broken-sum\n",
 		})
-		clients := newCheckTestServer(t, Options{
+		clients := newCheckTestServer(t, Options{BuildCacheDir: t.TempDir(),
 			WorkspaceDir:    workspace,
 			RunsDir:         realTempDir(t),
 			WrittenTestRuns: &WrittenTestRuns{ReportDir: realTempDir(t), Timeout: time.Minute},

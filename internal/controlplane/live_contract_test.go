@@ -101,7 +101,7 @@ func TestWrittenLiveStartNeedsAModelBeforeLaunching(t *testing.T) {
 	require.NoError(t, err)
 	root := realTempDir(t)
 	repo := newLayoutRepo(t, filepath.Join(root, "repo"))
-	cp := newBuildControlPlane(t, Options{
+	cp := newBuildControlPlane(t, Options{BuildCacheDir: t.TempDir(),
 		WorkspaceDir: repo.workspace,
 		RunsDir:      filepath.Join(root, "runs"),
 		WrittenTestRuns: &WrittenTestRuns{
@@ -137,7 +137,7 @@ func TestAQueuedLiveStartUsesTheCurrentAcceptedTestsAndModel(t *testing.T) {
 	require.NoError(t, err)
 	root := realTempDir(t)
 	repo := newLayoutRepo(t, filepath.Join(root, "repo"))
-	cp := newBuildControlPlane(t, Options{
+	cp := newBuildControlPlane(t, Options{BuildCacheDir: t.TempDir(),
 		WorkspaceDir: repo.workspace,
 		RunsDir:      filepath.Join(root, "runs"),
 		WrittenTestRuns: &WrittenTestRuns{

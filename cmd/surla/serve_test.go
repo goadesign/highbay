@@ -210,6 +210,7 @@ func TestServeProposesWithoutAModelAndConfigureModelSwitchesTheLiveTargetModel(t
 }
 
 func TestWriteServeStatusNamesTheBoundAddressAndOffFeatures(t *testing.T) {
+	buildCache := t.TempDir()
 	fixedSuite := verify.Plan{SuiteCommit: strings.Repeat("b", 40), ReportDir: "/var/lib/surla/reports"}
 	cases := []struct {
 		name string
@@ -233,7 +234,7 @@ surla: CP5 (approve_merge): off, because CP4 is off (use surla verification set,
 		{
 			name: "loopback with verification and promotion but no live targets",
 			addr: &net.TCPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 8090},
-			opts: controlplane.Options{
+			opts: controlplane.Options{BuildCacheDir: buildCache,
 				CardsDir:        "/var/lib/surla/cards",
 				Verification:    &controlplane.VerificationConfig{RunsDir: "/var/lib/surla/runs", Plan: fixedSuite},
 				PromotionTarget: &releaseTarget{},
@@ -243,7 +244,7 @@ surla: saving Change Cards in /var/lib/surla/cards
 surla: CP1 (propose_change, revise_change, confirm_intent, decline_revision, get_change): on
 surla: CP2 (preview_architecture): on
 surla: CP3 (draft_override, start_live_target): compiled_rule is on; prompt_template is off (use surla verification set, then call start_live_target with the confirmed change_id and a commit; or edit the prompt's source text, commit, and verify the commit)
-surla: CP4 (verify_change, get_verification, list_verifications): on with stored verification settings (runs in /var/lib/surla/runs, reports in /var/lib/surla/reports, evaluator suite commit ` + fixedSuite.SuiteCommit + `)
+surla: CP4 (verify_change, get_verification, list_verifications): on with stored verification settings (runs in /var/lib/surla/runs, reports in /var/lib/surla/reports, build cache in ` + buildCache + `, evaluator suite commit ` + fixedSuite.SuiteCommit + `)
 surla: CP5 (approve_merge): on; approval also checks the release binaries the promotion settings name
 `,
 		},
@@ -260,7 +261,7 @@ surla: CP5 (approve_merge): on; approval also checks the release binaries the pr
 	}{
 		name: "live targets with a directory an earlier serve left",
 		addr: &net.TCPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 8090},
-		opts: controlplane.Options{
+		opts: controlplane.Options{BuildCacheDir: buildCache,
 			CardsDir:     cardsDir,
 			Verification: &controlplane.VerificationConfig{RunsDir: "/var/lib/surla/runs", Plan: fixedSuite},
 			Live:         &controlplane.LiveConfig{},
@@ -271,7 +272,7 @@ surla: CP1 (propose_change, revise_change, confirm_intent, decline_revision, get
 surla: CP2 (preview_architecture): on
 surla: CP3 (draft_override, start_live_target): compiled_rule is on; prompt_template is on once start_live_target runs a candidate commit for a confirmed change_id (live targets in ` + liveRoot + `)
 surla: CP3: an earlier project server using this cards directory left live target directory ` + leftover + `; its files were kept and may hold what its test program printed: remove it once its processes have stopped
-surla: CP4 (verify_change, get_verification, list_verifications): on with stored verification settings (runs in /var/lib/surla/runs, reports in /var/lib/surla/reports, evaluator suite commit ` + fixedSuite.SuiteCommit + `)
+surla: CP4 (verify_change, get_verification, list_verifications): on with stored verification settings (runs in /var/lib/surla/runs, reports in /var/lib/surla/reports, build cache in ` + buildCache + `, evaluator suite commit ` + fixedSuite.SuiteCommit + `)
 surla: CP5 (approve_merge): on; no promotion settings are stored, so approval checks no release binaries
 `,
 	})
@@ -284,7 +285,7 @@ surla: CP5 (approve_merge): on; no promotion settings are stored, so approval ch
 	}{
 		name: "project without stored settings runs each change's accepted tests",
 		addr: &net.TCPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 8090},
-		opts: controlplane.Options{
+		opts: controlplane.Options{BuildCacheDir: buildCache,
 			CardsDir:        cardsDir,
 			RunsDir:         "/work/ops/runs",
 			WrittenTestRuns: &controlplane.WrittenTestRuns{ReportDir: "/work/ops/reports"},
@@ -296,7 +297,7 @@ surla: CP1 (propose_change, revise_change, confirm_intent, decline_revision, get
 surla: CP2 (preview_architecture): on
 surla: CP3 (draft_override, start_live_target): compiled_rule is on; prompt_template is on once start_live_target runs a candidate commit for a confirmed change_id (live targets in ` + liveRoot + `)
 surla: CP3: an earlier project server using this cards directory left live target directory ` + leftover + `; its files were kept and may hold what its test program printed: remove it once its processes have stopped
-surla: CP4 (verify_change, get_verification, list_verifications): on with the tests accepted for each change's build (runs in /work/ops/runs, reports in /work/ops/reports)
+surla: CP4 (verify_change, get_verification, list_verifications): on with the tests accepted for each change's build (runs in /work/ops/runs, reports in /work/ops/reports, build cache in ` + buildCache + `)
 surla: CP5 (approve_merge): on; no promotion settings are stored, so approval checks no release binaries
 `,
 	})
@@ -308,7 +309,7 @@ surla: CP5 (approve_merge): on; no promotion settings are stored, so approval ch
 	}{
 		name: "explicit configuration keeps its fixed suite commit",
 		addr: &net.TCPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 8090},
-		opts: controlplane.Options{
+		opts: controlplane.Options{BuildCacheDir: buildCache,
 			CardsDir: "/srv/cards",
 			Verification: &controlplane.VerificationConfig{
 				RunsDir: "/srv/runs",
@@ -320,7 +321,7 @@ surla: saving Change Cards in /srv/cards
 surla: CP1 (propose_change, revise_change, confirm_intent, decline_revision, get_change): on
 surla: CP2 (preview_architecture): on
 surla: CP3 (draft_override, start_live_target): compiled_rule is on; prompt_template is off (use surla verification set, then call start_live_target with the confirmed change_id and a commit; or edit the prompt's source text, commit, and verify the commit)
-surla: CP4 (verify_change, get_verification, list_verifications): on with stored verification settings (runs in /srv/runs, reports in /srv/reports, evaluator suite commit ` + suite + `)
+surla: CP4 (verify_change, get_verification, list_verifications): on with stored verification settings (runs in /srv/runs, reports in /srv/reports, build cache in ` + buildCache + `, evaluator suite commit ` + suite + `)
 surla: CP5 (approve_merge): on; no promotion settings are stored, so approval checks no release binaries
 `,
 	})

@@ -17,6 +17,10 @@
 // current inputs. The prompt references a candidate attaches to its model
 // requests are the candidate's own claims; an evaluator can use them to
 // corroborate what it applied, never to establish it.
+// Compiler inputs, including retained packages, the module cache and toolchain,
+// are trusted. Same-user tampering can make the measured binary or test program
+// differ from what the selected source would produce; a digest does not
+// authenticate that source correspondence.
 package verify
 
 import (

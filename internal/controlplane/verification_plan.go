@@ -35,7 +35,7 @@ type (
 		// must lie outside the workspace.
 		ReportDir string
 		// Command is the argument list that runs this surla executable;
-		// runs start `<Command> verify-run supervise <dir>`.
+		// runs start `<Command> verify-run supervise <dir> <build-cache-dir>`.
 		Command []string
 		// Timeout is how long a run may take before it is stopped and
 		// recorded as interrupted.

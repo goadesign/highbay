@@ -26,7 +26,7 @@ func TestCardsSurviveANewControlPlane(t *testing.T) {
 		Question: "Does the limit include tax?", Options: []string{"with_tax", "without_tax"},
 	})
 
-	opts := buildFixtureOptions(t, Options{CardsDir: dir, Verification: cfg})
+	opts := buildFixtureOptions(t, Options{BuildCacheDir: t.TempDir(), CardsDir: dir, Verification: cfg})
 	first, err := New(opts)
 	require.NoError(t, err)
 	proposed := saveProposedCardFixture(t, first, "alice@example.com", "chg", "Refunds up to $50 are instant.", analysis)
@@ -166,7 +166,7 @@ func TestRequestsFinishingAfterCloseDoNotWrite(t *testing.T) {
 		Artifacts: map[string]string{"orders": "d1"},
 	}
 	target := &promotionTargetStub{artifacts: spec.Artifacts, loading: make(chan struct{}), release: make(chan struct{})}
-	cp, err := New(buildFixtureOptions(t, Options{CardsDir: dir, Verification: verificationConfig(t), PromotionTarget: target}))
+	cp, err := New(buildFixtureOptions(t, Options{BuildCacheDir: t.TempDir(), CardsDir: dir, Verification: verificationConfig(t), PromotionTarget: target}))
 	require.NoError(t, err)
 	card := saveStoredCardBuildFixture(t, cp, nil)
 	commit := commitBuilderCandidateFixture(t, cp, card)
@@ -306,7 +306,7 @@ func TestASavedApprovalNeedsAPromotionTarget(t *testing.T) {
 
 	// Without promotion settings, the saved approval is valid as long as the
 	// chosen tests' commit matches.
-	cpNoTarget := newControlPlane(t, buildFixtureOptions(t, Options{Verification: verificationConfig(t)}))
+	cpNoTarget := newControlPlane(t, buildFixtureOptions(t, Options{BuildCacheDir: t.TempDir(), Verification: verificationConfig(t)}))
 	saveStoredCardBuildFixture(t, cpNoTarget, recorded)
 	gotNoTarget, err := cpNoTarget.GetChange(alice, &gensurla.GetChangePayload{ChangeID: "chg"})
 	require.NoError(t, err)
@@ -317,7 +317,7 @@ func TestASavedApprovalNeedsAPromotionTarget(t *testing.T) {
 	// is served with unverified_approval while the saved record on disk is
 	// untouched.
 	target := &promotionTargetStub{artifactsErr: errors.New("missing release directory")}
-	cp := newControlPlane(t, buildFixtureOptions(t, Options{Verification: verificationConfig(t), PromotionTarget: target}))
+	cp := newControlPlane(t, buildFixtureOptions(t, Options{BuildCacheDir: t.TempDir(), Verification: verificationConfig(t), PromotionTarget: target}))
 	approved := saveStoredCardBuildFixture(t, cp, recorded)
 	got, err := cp.GetChange(alice, &gensurla.GetChangePayload{ChangeID: "chg"})
 	require.NoError(t, err)
@@ -369,7 +369,7 @@ func TestSavedCardInTodaysUntaggedFormWithApprovalDecodes(t *testing.T) {
 	cfg := verificationConfig(t)
 	cfg.Plan.SuiteCommit = suiteCommit
 	target := &promotionTargetStub{artifacts: map[string]string{"orders": artifactDigest}}
-	cp := newControlPlane(t, Options{Verification: cfg, PromotionTarget: target})
+	cp := newControlPlane(t, Options{BuildCacheDir: t.TempDir(), Verification: cfg, PromotionTarget: target})
 	require.NoError(t, os.WriteFile(cp.cards.path("chg"), []byte(rawFile), 0o600))
 	got, err := cp.GetChange(alice, &gensurla.GetChangePayload{ChangeID: "chg"})
 	require.NoError(t, err)
