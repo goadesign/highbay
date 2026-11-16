@@ -80,7 +80,7 @@ func TestBuildStatesReadTheSameOnBothInterfaces(t *testing.T) {
 			}
 			cp := newBuildControlPlane(t, opts)
 			srv := roleServer(t, cp)
-			card := buildableChange(t, cp, "chg")
+			card := saveBuildStoryCard(t, cp, "chg", StatusConfirmed, refundStory("Refund over the limit"))
 			_, err := cp.StartBuild(asCaller("alice@example.com", CallerUser), &gensurla.StartBuildPayload{ChangeID: "chg", RequestRevision: card.RequestRevision})
 			require.NoError(t, err)
 			makeBuildFixtureBuilderCopy(t, cp)
@@ -98,6 +98,13 @@ func TestBuildStatesReadTheSameOnBothInterfaces(t *testing.T) {
 			require.Empty(t, failure)
 			assert.JSONEq(t, tc.tests, jsonAt(t, result, "build", "test_writer", "tests"), "get_build over MCP")
 			assert.JSONEq(t, report, jsonAt(t, result, "build", "test_writer", "report"))
+			for _, raw := range [][]byte{[]byte(body), result} {
+				read, err := gensurla.DecodeChangeBuild(raw)
+				require.NoError(t, err)
+				started, ok := read.Build.AsStarted()
+				require.True(t, ok)
+				assert.Equal(t, []*gensurla.RequiredTest{{Story: "Refunds", FlowKey: "refund-over-limit", Scenario: "refund_over_limit", Hook: "RefundOverLimit"}}, started.RequiredTests)
+			}
 
 			status, body = httpCall(t, srv.URL, "builder", http.MethodGet, "/assignments/builder/chg", "")
 			require.Equal(t, http.StatusOK, status, body)

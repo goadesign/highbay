@@ -30,10 +30,41 @@ func pageGenerationFindings(t *testing.T) (*pageServer, *gensurla.ChangeCardResu
 		}}
 	}}
 	cp.buildCopyFactory = func(context.Context, string, scaffold.Layout) (buildCopy, error) { return copy, nil }
-	card := buildableChange(t, cp, "chg")
+	card := saveBuildStoryCard(t, cp, "chg", StatusConfirmed, refundStory("Refund over the limit"))
 	ps := startPageServer(t, cp)
 	ps.act("make-builder-copy", func() { makeBuildFixtureBuilderCopy(t, cp) })
 	return ps, card
+}
+
+// TestViewsPageTestsReturnedShowsRequirementsAndNext reads a real saved verdict
+// alongside its saved requirements without asking the user to do the writer's work.
+func TestViewsPageTestsReturnedShowsRequirementsAndNext(t *testing.T) {
+	ps, _ := pageGenerationFindings(t)
+	runPageScript(t, ps, nil, `
+const page = await openPage(origin, { link: input.link });
+await until(() => page.$("#surla-build-start") && !page.$("#surla-build-start").disabled, "Build was not ready");
+page.$("#surla-build-start").click();
+await until(() => page.$("#surla-build-again") && !page.$("#surla-build-again").disabled, "Build did not finish");
+const firstRead = await api(origin, "GET", "/assignments/test-writer/chg", undefined, input.testWriter);
+expect(firstRead.status === 200, "the writer could not prepare its assigned tests");
+await until(() => page.text("#surla-build-findings").includes("Finding from build 1."), "the owner's findings did not appear");
+page.$("#surla-nav-build").click();
+await until(() => page.text("#surla-frame-next").includes("The test writer corrects the tests and reports again."), "Next did not name the writer's next step");
+const required = page.$("#surla-build-required-tests");
+expect(required && required.children.length === 1, "the saved build's single finished flow was not shown");
+expect(required.textContent.includes("Refunds") && required.textContent.includes("refund-over-limit") && required.textContent.includes("refund_over_limit") && required.textContent.includes("RefundOverLimit"), "required test identity was not preserved");
+expect(!required.textContent.includes("disputed-chargeback"), "an unfinished flow became a required test");
+expect(!page.$("#surla-frame-next button"), "the writer's correction became a user control");
+expect(page.$("#surla-build-findings .surla-build-finding-text").getAttribute("tabindex") === "0", "long findings are not keyboard reachable");
+expect(page.$("#surla-build-view-team"), "the existing Team destination was lost");
+const reads = page.sent("GET", "/changes/chg/build/findings").length;
+const assignment = await api(origin, "GET", "/assignments/test-writer/chg", undefined, input.testWriter);
+expect(assignment.status === 200, "the test writer could not read its own assignment");
+await until(() => page.text("#surla-build-test-writer").includes("assignment read; findings to address"), "the read observation did not update");
+expect(page.sent("GET", "/changes/chg/build/findings").length === reads, "an assignment read refetched an unchanged verdict");
+expect(!page.$("#surla-frame-next button"), "assignment read invented a user decision");
+page.close();
+`)
 }
 
 // TestViewsPageIgnoresFindingTextFromThePreviousBuild delivers the first build's

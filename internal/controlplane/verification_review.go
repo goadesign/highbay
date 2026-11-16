@@ -8,7 +8,6 @@ import (
 	"time"
 
 	gensurla "github.com/goadesign/surla/gen/surla"
-	"github.com/goadesign/surla/internal/designeval"
 	"github.com/goadesign/surla/internal/verify"
 	"github.com/goadesign/surla/internal/verifyrun"
 	"go.opentelemetry.io/otel/attribute"
@@ -89,16 +88,9 @@ func runStoryContext(req verifyrun.Request) (gensurla.StoryContext, error) {
 	if req.Plan.Tests == verify.TestsEvaluator {
 		recorded.Mapping = gensurla.NewMappingNotRecordedForEvaluator(&gensurla.RunEvaluatorMappingUnknown{})
 	} else {
-		scenarios, _, err := designeval.StoryScenarios(context.Stories)
+		required, err := requiredStoryTests(context.Stories)
 		if err != nil {
 			return gensurla.StoryContext{}, err
-		}
-		required := make([]*gensurla.RequiredTest, len(scenarios))
-		for i, scenario := range scenarios {
-			required[i] = &gensurla.RequiredTest{
-				Story: scenario.Story, FlowKey: scenario.Key,
-				Scenario: scenario.Scenario, Hook: scenario.Hook,
-			}
 		}
 		recorded.Mapping = gensurla.NewMappingMapped(&gensurla.RunStoryMapping{RequiredTests: required})
 	}

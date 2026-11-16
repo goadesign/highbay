@@ -730,6 +730,56 @@ async function approvalScenario(input, facts, views) {
   }
 }
 
+// testReviewScenario measures the saved build's requirements beside its findings.
+async function testReviewScenario(input, facts, views) {
+  await views.dt.send("Page.bringToFront", {}, views.sessionId);
+  const ready = await until(views, "document.getElementById('surla-nav-build') !== null && document.getElementById('surla-build-test-writer') !== null");
+  if (ready.timed_out) throw new Error("test review did not load");
+  await evaluate(views, "document.getElementById('surla-nav-build').click(), true");
+  if (["needs_changes", "stale"].includes(input.test_review_state)) {
+    const findings = await until(views, "document.querySelector('.surla-build-finding-text') !== null");
+    if (findings.timed_out) throw new Error("test findings did not load");
+  }
+  facts.test_review = [];
+  for (const [name, width, height, scale] of [["desktop", 1280, 900, 1], ["laptop", 1024, 768, 1],
+      ["phone", 390, 844, 1], ["dark", 1280, 900, 1], ["reflow-200", 640, 450, 2]]) {
+    await views.dt.send("Emulation.setDeviceMetricsOverride", { width, height, deviceScaleFactor: scale, mobile: width < 600 }, views.sessionId);
+    await views.dt.send("Emulation.setEmulatedMedia", { features: [{ name: "prefers-color-scheme", value: name === "dark" ? "dark" : "light" }] }, views.sessionId);
+    await evaluate(views, "window.scrollTo(0, 0), new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))");
+    const measured = await evaluate(views, "(" + function measureTestReview() {
+      const next = document.getElementById("surla-frame-next");
+      const region = document.querySelector(".surla-build-finding-text");
+      const box = region?.getBoundingClientRect();
+      const phone = matchMedia("(max-width: 720px)").matches;
+      return { width: innerWidth, document_width: document.documentElement.scrollWidth,
+        required_tests: document.querySelectorAll("#surla-build-required-tests > li").length,
+        next: next?.innerText, next_controls: next?.querySelectorAll("button").length,
+        findings_visible: region !== null && box.width > 0,
+        findings_bounded: region === null || box.height <= parseFloat(getComputedStyle(document.documentElement).fontSize) * 20 + 1,
+        footer_reserved: !phone || getComputedStyle(next).position === "fixed" && parseFloat(getComputedStyle(document.body).paddingBottom) >= next.getBoundingClientRect().height };
+    }.toString() + ")()");
+    measured.keyboard_reachable = true;
+    if (measured.findings_visible) {
+      await evaluate(views, "document.activeElement?.blur(), document.body.focus(), true");
+      measured.keyboard_reachable = false;
+      for (let attempt = 0; attempt < 100; attempt++) {
+        await views.dt.send("Input.dispatchKeyEvent", { type: "keyDown", key: "Tab", code: "Tab", windowsVirtualKeyCode: 9 }, views.sessionId);
+        await views.dt.send("Input.dispatchKeyEvent", { type: "keyUp", key: "Tab", code: "Tab", windowsVirtualKeyCode: 9 }, views.sessionId);
+        if (await evaluate(views, "document.activeElement?.classList.contains('surla-build-finding-text')")) {
+          measured.keyboard_reachable = true;
+          break;
+        }
+      }
+    }
+    measured.name = name;
+    await evaluate(views, "document.activeElement?.blur(), window.scrollTo(0, 0), new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))");
+    const capture = await views.dt.send("Page.captureScreenshot", { format: "png", captureBeyondViewport: true }, views.sessionId);
+    measured.screenshot = require("node:path").join(input.capture_directory, input.test_review_state + "-" + name + ".png");
+    fs.writeFileSync(measured.screenshot, Buffer.from(capture.data, "base64"));
+    facts.test_review.push(measured);
+  }
+}
+
 // main runs the scenario. Each section names the Go subtest that judges it.
 async function main(input, facts) {
   const dt = await DevTools.connect(input.devtools);
@@ -759,6 +809,11 @@ async function main(input, facts) {
       target_url: targetInfo.url,
     };
 
+    if (input.test_review) {
+      await testReviewScenario(input, facts, views);
+      await dt.send("Target.closeTarget", { targetId: views.targetId });
+      return;
+    }
     if (input.approval) {
       await approvalScenario(input, facts, views);
       await dt.send("Target.closeTarget", { targetId: views.targetId });

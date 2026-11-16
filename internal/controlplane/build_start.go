@@ -246,7 +246,11 @@ func (c *ControlPlane) StartBuild(
 		return nil, gensurla.MakeConflict(errors.New("The open build changed while this start was being prepared. Read get_build and decide again."))
 	}
 	if currentFound {
-		currentProgress := startedBuild(heldBuild{file: current, inForce: buildInForce(current, record), storedEvaluator: c.storedEvaluator()}, openProgress.Taking)
+		currentProgress, err := startedBuild(heldBuild{file: current, inForce: buildInForce(current, record), storedEvaluator: c.storedEvaluator()}, openProgress.Taking)
+		if err != nil {
+			c.mu.Unlock()
+			return nil, err
+		}
 		if err := checkBuildReplacement(p, current, currentProgress); err != nil {
 			c.mu.Unlock()
 			return nil, err
@@ -264,13 +268,20 @@ func (c *ControlPlane) StartBuild(
 		Answers: confirmedAnswers(record.card), Examples: record.card.Examples,
 		PreservedBehaviors: append([]string{}, record.card.PreservedBehaviors...),
 	}
+	progress, err := startedBuild(heldBuild{
+		file: saved, inForce: true, storedEvaluator: c.storedEvaluator(),
+	}, gensurla.NewBuildTakingBuilding(&gensurla.BuildBuilding{}))
+	if err != nil {
+		c.mu.Unlock()
+		return nil, err
+	}
 	err = c.cards.saveOpenBuild(saved)
 	c.mu.Unlock()
 	if err != nil {
 		return nil, recordBuildError(span, err, "save build")
 	}
 	result := &gensurla.StartBuildResult{
-		Build: startedBuild(heldBuild{file: saved, inForce: true, storedEvaluator: c.storedEvaluator()}, gensurla.NewBuildTakingBuilding(&gensurla.BuildBuilding{})),
+		Build: progress,
 	}
 	builderFolder := filepath.Join(workspace, testwriter.BuilderRole.Folder, filepath.FromSlash(prefix))
 	testsFolder := filepath.Join(workspace, testwriter.TestsRole.Folder, filepath.FromSlash(prefix))

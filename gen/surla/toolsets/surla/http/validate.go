@@ -2546,6 +2546,9 @@ func ValidateStartedBuildTransport(body *StartedBuildTransport) (err error) {
 	if body.RequiredTestCount == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("required_test_count", "body"))
 	}
+	if body.RequiredTests == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("required_tests", "body"))
+	}
 	if body.Taking == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("taking", "body"))
 	}
@@ -2565,6 +2568,13 @@ func ValidateStartedBuildTransport(body *StartedBuildTransport) (err error) {
 	if body.RequiredTestCount != nil {
 		if *body.RequiredTestCount < 0 {
 			err = goa.MergeErrors(err, goa.InvalidRangeError("body.required_test_count", *body.RequiredTestCount, 0, true))
+		}
+	}
+	for _, e := range body.RequiredTests {
+		if e != nil {
+			if err2 := ValidateRequiredTestTransport(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
 		}
 	}
 	if body.Taking != nil {

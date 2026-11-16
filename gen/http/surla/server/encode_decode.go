@@ -5465,6 +5465,18 @@ func marshalSurlaStartedBuildToStartedBuildResponseBody(v *surla.StartedBuild) *
 	if v.TestWriter != nil {
 		res.TestWriter = marshalSurlaTestWriterProgressToTestWriterProgressResponseBody(v.TestWriter)
 	}
+	if v.RequiredTests != nil {
+		res.RequiredTests = make([]*RequiredTestResponseBody, len(v.RequiredTests))
+		for i, val := range v.RequiredTests {
+			if val == nil {
+				res.RequiredTests[i] = nil
+				continue
+			}
+			res.RequiredTests[i] = marshalSurlaRequiredTestToRequiredTestResponseBody(val)
+		}
+	} else {
+		res.RequiredTests = []*RequiredTestResponseBody{}
+	}
 	if v.Taking.Kind() != "" {
 		switch string(v.Taking.Kind()) {
 		case "building":
@@ -5646,6 +5658,19 @@ func marshalSurlaTestsCouldNotRunToTestsCouldNotRunResponseBody(v *surla.TestsCo
 		Reason:    v.Reason,
 		Step:      v.Step,
 		CheckedAt: v.CheckedAt,
+	}
+
+	return res
+}
+
+// marshalSurlaRequiredTestToRequiredTestResponseBody builds a value of type
+// *RequiredTestResponseBody from a value of type *surla.RequiredTest.
+func marshalSurlaRequiredTestToRequiredTestResponseBody(v *surla.RequiredTest) *RequiredTestResponseBody {
+	res := &RequiredTestResponseBody{
+		Story:    v.Story,
+		FlowKey:  v.FlowKey,
+		Scenario: v.Scenario,
+		Hook:     v.Hook,
 	}
 
 	return res
@@ -5865,19 +5890,6 @@ func marshalSurlaTestWriterAssignmentItemToTestWriterAssignmentItemResponseBody(
 	}
 	if v.Progress != nil {
 		res.Progress = marshalSurlaTestWriterProgressToTestWriterProgressResponseBody(v.Progress)
-	}
-
-	return res
-}
-
-// marshalSurlaRequiredTestToRequiredTestResponseBody builds a value of type
-// *RequiredTestResponseBody from a value of type *surla.RequiredTest.
-func marshalSurlaRequiredTestToRequiredTestResponseBody(v *surla.RequiredTest) *RequiredTestResponseBody {
-	res := &RequiredTestResponseBody{
-		Story:    v.Story,
-		FlowKey:  v.FlowKey,
-		Scenario: v.Scenario,
-		Hook:     v.Hook,
 	}
 
 	return res

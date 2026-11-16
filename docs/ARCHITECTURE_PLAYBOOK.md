@@ -164,6 +164,13 @@ The views page keeps one waiting read (`wait_for_changes`) open. Its answer is a
 
 One function, `testsChoice` in [`verification_plan.go`](../internal/controlplane/verification_plan.go), chooses which tests judge a change: the suite named in the stored verification settings, or the tests accepted for the change's build at its revision. Verification runs those tests, `approve_merge` requires the approved report to have run them, and a saved approval is shown only while they stay the same; `verificationPlan` builds a run's configuration from that choice. The builder names only the change, the revision and its commit.
 
+The build read returns `required_tests` for every caller, derived from its
+saved Story with `designeval.StoryScenarios`. Build, assignment and run-review
+reads share one conversion to the generated `RequiredTest` type; the count is
+the list length. The page presents these requirements beside the independently
+correlated findings strings, without inferring a relation between them. The
+list is derived on read, so existing saved build records need no new field.
+
 At acceptance, the control plane copies the open build's agreed Story and build
 identity into the immutable request owned by `internal/verifyrun`. This evidence
 survives later revisions and builds; runs without recorded context never borrow

@@ -107,6 +107,14 @@ func (c *ControlPlane) DropBuild(ctx context.Context, p *gensurla.DropBuildPaylo
 		c.draftMu.Unlock()
 		return nil, err
 	}
+	progress, err := startedBuild(heldBuild{
+		file: current, inForce: buildInForce(current, record), storedEvaluator: c.storedEvaluator(),
+	}, gensurla.NewBuildTakingDropped(&gensurla.BuildDropped{KeptBranches: branches}))
+	if err != nil {
+		c.mu.Unlock()
+		c.draftMu.Unlock()
+		return nil, err
+	}
 	// A legacy or freshly evaluated revision can precede the first saved list.
 	// Its generation still has to precede the new drop generation.
 	provenance.Write = max(provenance.Write, current.MadeFrom.Start.Write) + 1
@@ -123,9 +131,7 @@ func (c *ControlPlane) DropBuild(ctx context.Context, p *gensurla.DropBuildPaylo
 
 	return &gensurla.ChangeBuild{
 		ChangeID: current.ChangeID, DraftedBeforeDrop: draftedBeforeDrop(record, provenance),
-		Build: gensurla.NewBuildStarted(startedBuild(heldBuild{
-			file: current, inForce: buildInForce(current, record), storedEvaluator: c.storedEvaluator(),
-		}, gensurla.NewBuildTakingDropped(&gensurla.BuildDropped{KeptBranches: branches}))),
+		Build: gensurla.NewBuildStarted(progress),
 	}, nil
 }
 

@@ -7400,6 +7400,14 @@ func unmarshalStartedBuildResponseBodyToSurlaStartedBuild(v *StartedBuildRespons
 	}
 	res.Builder = unmarshalBuilderProgressResponseBodyToSurlaBuilderProgress(v.Builder)
 	res.TestWriter = unmarshalTestWriterProgressResponseBodyToSurlaTestWriterProgress(v.TestWriter)
+	res.RequiredTests = make([]*surla.RequiredTest, len(v.RequiredTests))
+	for i, val := range v.RequiredTests {
+		if val == nil {
+			res.RequiredTests[i] = nil
+			continue
+		}
+		res.RequiredTests[i] = unmarshalRequiredTestResponseBodyToSurlaRequiredTest(val)
+	}
 	switch string(v.Taking.Kind()) {
 	case "building":
 		actual, _ := v.Taking.AsBuilding()
@@ -7577,6 +7585,19 @@ func unmarshalTestsCouldNotRunResponseBodyToSurlaTestsCouldNotRun(v *TestsCouldN
 		Reason:    *v.Reason,
 		Step:      *v.Step,
 		CheckedAt: *v.CheckedAt,
+	}
+
+	return res
+}
+
+// unmarshalRequiredTestResponseBodyToSurlaRequiredTest builds a value of type
+// *surla.RequiredTest from a value of type *RequiredTestResponseBody.
+func unmarshalRequiredTestResponseBodyToSurlaRequiredTest(v *RequiredTestResponseBody) *surla.RequiredTest {
+	res := &surla.RequiredTest{
+		Story:    *v.Story,
+		FlowKey:  *v.FlowKey,
+		Scenario: *v.Scenario,
+		Hook:     *v.Hook,
 	}
 
 	return res
@@ -7783,19 +7804,6 @@ func unmarshalTestWriterAssignmentItemResponseBodyToSurlaTestWriterAssignmentIte
 		InForce:         *v.InForce,
 	}
 	res.Progress = unmarshalTestWriterProgressResponseBodyToSurlaTestWriterProgress(v.Progress)
-
-	return res
-}
-
-// unmarshalRequiredTestResponseBodyToSurlaRequiredTest builds a value of type
-// *surla.RequiredTest from a value of type *RequiredTestResponseBody.
-func unmarshalRequiredTestResponseBodyToSurlaRequiredTest(v *RequiredTestResponseBody) *surla.RequiredTest {
-	res := &surla.RequiredTest{
-		Story:    *v.Story,
-		FlowKey:  *v.FlowKey,
-		Scenario: *v.Scenario,
-		Hook:     *v.Hook,
-	}
 
 	return res
 }

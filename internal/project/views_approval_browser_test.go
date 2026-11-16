@@ -202,7 +202,7 @@ func browserApprovalFixture(
 					Actors: []*gensurla.StoryActorItem{{Key: "buyer", Title: "Buyer"}}}},
 				Mapping: gensurla.NewMappingMapped(&gensurla.RunStoryMapping{RequiredTests: required})})}}
 	build := &gensurla.StartedBuild{RequestRevision: card.RequestRevision, StartedAt: start, InForce: true,
-		RequiredTestCount: 2, Builder: &gensurla.BuilderProgress{Read: true},
+		RequiredTestCount: len(required), RequiredTests: required, Builder: &gensurla.BuilderProgress{Read: true},
 		TestWriter: &gensurla.TestWriterProgress{Read: true, Report: 1, Tests: gensurla.NewTestsAccepted(&gensurla.TestsAccepted{
 			Commit: tests, CheckedAt: at, NotJudged: "Surla checked that these tests build into the generated test program and declare every required scenario; it did not judge what they assert.",
 		})}, Taking: gensurla.NewBuildTakingPassed(&gensurla.BuildPassed{RunID: review.RunID,

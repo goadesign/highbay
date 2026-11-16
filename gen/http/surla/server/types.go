@@ -5219,6 +5219,9 @@ type StartedBuildResponseBody struct {
 	// Number of finished flows in the agreed Story. Zero means no test of this
 	// change's Story was required.
 	RequiredTestCount int `form:"required_test_count" json:"required_test_count" xml:"required_test_count"`
+	// Tests required by this build's saved Story, in declaration order; unfinished
+	// flows require none. Empty when no finished flow requires a test.
+	RequiredTests []*RequiredTestResponseBody `form:"required_tests" json:"required_tests" xml:"required_tests"`
 	// Whether the user has taken this build: building until a verification of it
 	// passes; passed with the commits to merge; merged once the branch checked out
 	// in the project folder holds the commits of one passed run, the builder's
@@ -5291,6 +5294,18 @@ type TestsCouldNotRunResponseBody struct {
 	Step string `form:"step" json:"step" xml:"step"`
 	// When Surla's check stopped.
 	CheckedAt string `form:"checked_at" json:"checked_at" xml:"checked_at"`
+}
+
+// RequiredTestResponseBody is used to define fields on response body types.
+type RequiredTestResponseBody struct {
+	// Name of the Story the flow belongs to.
+	Story string `form:"story" json:"story" xml:"story"`
+	// Key of the finished flow.
+	FlowKey string `form:"flow_key" json:"flow_key" xml:"flow_key"`
+	// Scenario name the evaluation suite declares for the flow.
+	Scenario string `form:"scenario" json:"scenario" xml:"scenario"`
+	// Hook method the test writer implements for the scenario.
+	Hook string `form:"hook" json:"hook" xml:"hook"`
 }
 
 // BuildBuildingResponseBody is used to define fields on response body types.
@@ -5429,18 +5444,6 @@ type TestWriterAssignmentItemResponseBody struct {
 	InForce bool `form:"in_force" json:"in_force" xml:"in_force"`
 	// Where this assignment stands.
 	Progress *TestWriterProgressResponseBody `form:"progress" json:"progress" xml:"progress"`
-}
-
-// RequiredTestResponseBody is used to define fields on response body types.
-type RequiredTestResponseBody struct {
-	// Name of the Story the flow belongs to.
-	Story string `form:"story" json:"story" xml:"story"`
-	// Key of the finished flow.
-	FlowKey string `form:"flow_key" json:"flow_key" xml:"flow_key"`
-	// Scenario name the evaluation suite declares for the flow.
-	Scenario string `form:"scenario" json:"scenario" xml:"scenario"`
-	// Hook method the test writer implements for the scenario.
-	Hook string `form:"hook" json:"hook" xml:"hook"`
 }
 
 // ConfirmedAnswerResponseBody is used to define fields on response body types.

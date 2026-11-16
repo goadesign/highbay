@@ -1784,8 +1784,14 @@ returns the same required fact in its `ChangeBuild` result.
 | `in_force` | `true` while that revision is the agreed one, including while a proposed revision waits; `false` when adoption or confirmation changes the agreed `request_revision`. Adopting a refreshed draft with unchanged content can keep it `true`. The build is not redone by itself. |
 | `taking` | How the open build stands with the project folder's branch: `building`, `passed` (with `run_id`, `candidate_commit`, `candidate_branch` `surla/build-<n>`, `tests`—`evaluator` or `written_tests` with `commit` and `branch` `surla/tests-<n>`—and `base_in_branch`), `merged`, or `dropped` (with `kept_branches`). |
 | `required_test_count` | Finished flows in the saved Story; `0` means no test was required. It counts entries; it does not judge what the tests assert. |
+| `required_tests` | Required for every caller: one `RequiredTest` per finished flow in the saved build Story, in declaration order (`story`, `flow_key`, `scenario`, `hook`); empty when none. Later agreement edits do not replace this list. It names requirements, not a mapping from findings to tests or proof of evaluator coverage. |
 | `builder.read` | Whether the builder read its assignment. |
 | `test_writer` | `read`, `report` (0 until the first report, one more with each) and `tests`. |
+
+`required_tests` also appears in other responses carrying `StartedBuild`,
+including build start and drop. Regenerate validating clients for this required
+field and update the server and embedded page together. Existing saved builds
+need no conversion; the server derives the list from their saved Story.
 
 `taking.state` becomes `merged` when the project folder's checked-out branch
 holds the commits of one passed run: the builder's commit and, for written

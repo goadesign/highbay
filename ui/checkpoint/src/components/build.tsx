@@ -4,6 +4,7 @@
 import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { ChangeBuild, ChangeCardResult, OpenBuildRefusal, ReplacedBuild, StartBuildResult, StartedBuild, VerificationStatusResult } from "../types";
 import { Alert, Badge, Button, Card } from "./shadcn";
+import { TestWriterFacts } from "./build-test-review";
 
 // BuildQuestion binds a read or confirmation to the owner observation it describes.
 type BuildQuestion = { kind: "reading" | "rebuild" | "drop"; identity: string };
@@ -647,81 +648,6 @@ function localBuildTime(at: string) {
     hour: "numeric",
     minute: "2-digit",
   });
-}
-
-// TestWriterFacts keeps assignment reads separate from declared test progress.
-// Findings text comes only from the page's independently correlated user read.
-function TestWriterFacts({ build, findingTexts, loading, error, disabled, onRead }: {
-  build: StartedBuild;
-  findingTexts: readonly string[] | null;
-  loading: boolean;
-  error: string | null;
-  disabled: boolean;
-  onRead: () => void;
-}) {
-  const tests = build.test_writer.tests;
-  const open = build.taking.state === "building" || build.taking.state === "passed";
-  let progress: string;
-  switch (tests.state) {
-    case "not_used": progress = "not needed; this project uses its configured tests"; break;
-    case "assigned": progress = build.test_writer.read
-      ? "assignment read, no tests reported yet"
-      : "assignment unread, no tests reported yet"; break;
-    case "reported": progress = build.test_writer.read
-      ? "assignment read; Surla is checking its reported tests"
-      : "assignment unread; its reported tests are being checked"; break;
-    case "needs_changes": progress = build.test_writer.read
-      ? "assignment read; findings to address"
-      : "assignment unread; new findings ready to read"; break;
-    case "accepted": progress = build.test_writer.read
-      ? "assignment read; accepted tests"
-      : "assignment unread; acceptance ready to read"; break;
-    case "could_not_run": progress = build.test_writer.read
-      ? "assignment read; check could not run"
-      : "assignment unread; reason ready to read"; break;
-  }
-  const findingCount = tests.state === "needs_changes" ? tests.finding_count : 0;
-  const items = findingTexts === null ? null : (
-    <ul className="surla-live-prompts">
-      {findingTexts.map((text, index) => <li key={index}>{text}</li>)}
-    </ul>
-  );
-  return (
-    <div id="surla-build-test-writer" data-state={tests.state}>
-      <p>Test writer: {progress}</p>
-      {tests.state === "could_not_run" ? <p>{tests.reason} {tests.step}</p> : null}
-      {tests.state === "accepted" ? <p id="surla-build-not-judged">{tests.not_judged}</p> : null}
-      {tests.state === "needs_changes" ? (
-        <div id="surla-build-findings" aria-busy={open && loading}>
-          <p><strong>What Surla told the test writer</strong></p>
-          <p>{findingCount} {findingCount === 1 ? "finding" : "findings"}</p>
-          {open && findingCount > 0 ? (
-            <>
-              {loading ? <p role="status">Reading findings…</p> : null}
-              {error !== null ? (
-                <Alert id="surla-build-findings-error" variant="destructive">
-                  Could not read findings. {error}
-                </Alert>
-              ) : null}
-              {!loading && (error !== null || findingTexts === null) ? (
-                <Button id="surla-build-findings-retry" disabled={disabled} onClick={onRead}>
-                  {error !== null ? "Retry findings read" : "Read findings"}
-                </Button>
-              ) : null}
-              {!loading && error === null && findingTexts !== null ? (
-                findingTexts.length > 3 ? (
-                  <details className="surla-details">
-                    <summary>Read {findingTexts.length} findings</summary>
-                    {items}
-                  </details>
-                ) : items
-              ) : null}
-            </>
-          ) : null}
-        </div>
-      ) : null}
-    </div>
-  );
 }
 
 // BuildDetails places exact revision, report and verdict evidence behind the
