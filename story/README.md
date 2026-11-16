@@ -66,19 +66,22 @@ evaluated on its own, without any API, service, or model declaration.
 This module supplies the language and its expressions only. Surla, in the
 module above this one, does the rest with them:
 
-- When the guide (the coding agent the user talks to) calls `refresh_story`,
-  Surla's server evaluates the project's Story. It keeps the
-  evaluated Story with a change when the guide proposes or revises that
-  change with the evaluation's `op_id`.
-- When the user builds the change, Surla generates one required test per
-  finished flow. A separate coding agent, the test writer, writes those
-  tests, and Surla checks what it reports before the tests count.
+- The guide (the coding agent the user talks to) writes the Story in its
+  draft: a copy of the project's design that Surla keeps in the project
+  folder for the guide, so the guide never edits the project's own design
+  files. When the guide calls `refresh_story`, Surla's server evaluates the
+  Story in that draft. It keeps the evaluated Story with a change when the
+  guide proposes or revises that change with the evaluation's `op_id`.
+- When the user builds the change, the build requires one test per finished
+  flow. A separate coding agent, the test writer, writes those tests in its
+  own working copy of the project, and Surla checks what it reports before
+  the tests count.
 - Surla verifies the commit of the builder, the coding agent that writes the
-  application code, with the accepted tests.
+  application code in its own working copy, with the accepted tests.
 
 [Story flows and the tests a build requires](../docs/STORY_TEST_DESIGN.md)
 describes each step. Surla's page shows a Story's flows; to change a Story,
-the guide edits its source.
+the guide edits its source in its draft.
 
 A project's design imports this module, so the project's `go.mod` must
 require it. A starter project made by `surla init` does, at the version

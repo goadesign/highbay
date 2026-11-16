@@ -132,17 +132,23 @@ in `examples/orders`.
 One change then goes like this:
 
 1. In the guide's pane, describe the change, for example "Card refunds above
-   $100 need a second manager". The guide proposes a Change Card: the saved
-   record of the request, its open questions, and the examples that become
-   checks. It appears on the views page.
+   $100 need a second manager". The guide writes the design change in its
+   own draft, the folder `.surla-draft` that Surla makes inside
+   `examples/orders`, never in your files. Then it proposes a Change Card:
+   the saved record of the request, its open questions, and the examples
+   that become checks. It appears on the views page.
 2. On the views page, answer the card's questions and confirm it. Only you
    can. The card's `request_revision` identifies the revision you agreed.
 3. Press **Build this change**. Because this project has stored verification
    settings, the build adds only the builder, the agent that writes the
    code; no test writer is used. Choose its agent app in the Chorus dialog.
-4. The builder writes the change, commits it and asks Surla to verify the
-   commit (`verify_change`). Surla builds `orders` and `orders-worker` from
-   that commit and runs the
+   The builder works in its own working copy of this repository: the folder
+   `.surla-build` that Surla makes inside `examples/orders`, on the branch
+   `surla/build-<n>`, where `n` is the build's number. Your checkout and
+   the branch checked out in it stay as they are.
+4. The builder writes the change in its working copy, commits it on
+   `surla/build-<n>` and asks Surla to verify the commit (`verify_change`).
+   Surla builds `orders` and `orders-worker` from that commit and runs the
    `orders_acceptance` suite at the stored commit against them. The result
    appears on the views page.
 5. Publish the binaries the run built, then approve. Because this project
@@ -168,10 +174,18 @@ One change then goes like this:
    without that check.
 
    The approval names the builder's commit and the tests commit, here the
-   stored suite commit. There is nothing to merge: the builder committed in
-   `examples/orders`, on the branch checked out in your checkout of this
-   repository, and the tests are the stored suite's. Surla merges and deploys
-   nothing.
+   stored suite commit. Surla merges and deploys nothing.
+6. Merge the builder's commit, or drop the build. The builder's commit is on
+   `surla/build-<n>`, not on the branch checked out in your checkout of this
+   repository. Once a run passed, the build shows **Passed**, and under
+   **To take this change, run in the project folder:** the page gives the
+   command to run in `examples/orders`: `git merge <candidate_commit>`, the
+   builder's commit. The tests are the stored suite's, so there is no tests
+   commit to merge. When your branch holds that commit, the build shows
+   **Merged**. To leave the change out instead, press **Drop…**, then
+   **Drop change**: the builder's commits stay on `surla/build-<n>`, and your
+   branch is unchanged. Surla builds another change only once this build is
+   merged or dropped.
 
 ---
 
@@ -196,9 +210,15 @@ drafts changed. If it ends unexpectedly, the view retains its commit, launch
 and observed-end times, and recovery message after confirming process cleanup.
 `draft_override` then refuses with `live_target_ended`; no draft is sent.
 
-Drafts are not verified and end with the live target. To keep a wording, the
-builder edits the agent's `SystemPrompt` in `design/orders.go`, regenerates,
-commits, and verifies that commit. The scripted model needs no provider key
+Drafts are not verified and end with the live target. The refund agent's
+prompt is part of the design, the `SystemPrompt` in `design/orders.go`, and
+the builder never edits `design/`: `generate_code` writes the agreed design
+there, and `verify_change` refuses a commit whose `design/` files differ
+from it. To keep a wording, the builder asks the guide to propose a revision
+of the change with that wording. You adopt the revision and build it, and the
+builder calls `generate_code`, commits, and verifies that commit.
+
+The scripted model needs no provider key
 and answers from a fixed script, so a draft changes the prompt text and
 version the live target's model requests carry, not its replies. The live
 target's chat API needs bearer tokens signed with a key only the evaluator
