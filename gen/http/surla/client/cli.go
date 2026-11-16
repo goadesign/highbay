@@ -869,3 +869,19 @@ func BuildReportTestsFinishedPayload(surlaReportTestsFinishedBody *string, surla
 
 	return v, nil
 }
+
+// BuildReviewVerificationPayload builds the payload for the surla
+// review_verification endpoint from CLI flags.
+func BuildReviewVerificationPayload(surlaReviewVerificationRunID *string) (*surla.GetVerificationPayload, error) {
+	var runID string
+	{
+		if surlaReviewVerificationRunID == nil {
+			return nil, fmt.Errorf("missing required flag --run-id")
+		}
+		runID = *surlaReviewVerificationRunID
+	}
+	v := &surla.GetVerificationPayload{}
+	v.RunID = runID
+
+	return v, nil
+}

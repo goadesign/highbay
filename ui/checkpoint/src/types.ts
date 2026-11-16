@@ -227,6 +227,13 @@ export interface ReplacedBuild {
   started_at: string;
 }
 
+export interface RequiredTest {
+  flow_key: string;
+  hook: string;
+  scenario: string;
+  story: string;
+}
+
 export interface ServerError {
   fault: boolean;
   id: string;
@@ -426,6 +433,25 @@ export interface VerificationNotCompleted {
   summary: string;
 }
 
+export interface VerificationReview {
+  approval: ({ "state": "available" } | { "reason": string; "state": "blocked" } | { "approved_by": string; "artifacts": Record<string, string>; "candidate_commit": string; "environment": string; "report_digest": string; "scenario_count": number; "state": "recorded"; "suite_commit": string; "suite_id": string; "test_source": ({ "source": "evaluator" } | { "commit": string; "notice": string; "source": "written_tests" }) } | { "approval": ApprovalItem; "reason": string; "state": "unverified" });
+  story_context: ({ "build_number": number; "build_started_at": string; "mapping": ({ "required_tests": RequiredTest[]; "state": "mapped" } | { "state": "not_recorded_for_evaluator" }); "state": "recorded"; "stories": StorySummaryItem[] } | { "state": "not_recorded" });
+}
+
+export interface VerificationReviewResult {
+  accepted_at: string;
+  candidate_binaries_dir?: string;
+  candidate_commit: string;
+  change_id: string;
+  inputs_current: boolean;
+  request_revision: string;
+  review: VerificationReview;
+  run_id: string;
+  state: ({ "type": "running"; "value": VerificationRunning } | { "type": "completed"; "value": VerificationCompleted } | { "type": "not_completed"; "value": VerificationNotCompleted });
+  suite_commit: string;
+  test_source: ({ "source": "evaluator" } | { "commit": string; "notice": string; "source": "written_tests" });
+}
+
 export interface VerificationRunning {
   started_at: string;
 }
@@ -498,6 +524,10 @@ export interface GetVerificationRequest {
   "run_id": string;
 }
 
+export interface ReviewVerificationRequest {
+  "run_id": string;
+}
+
 export interface ListTracesRequest {
   "status"?: "all" | "error" | "ok";
   "limit"?: number;
@@ -533,6 +563,7 @@ export interface Operations {
   preview_architecture: { request: PreviewArchitectureRequest; result: ArchitecturePreviewResult; failure: ServerError };
   list_verifications: { request: ListVerificationsRequest; result: VerificationListResult; failure: ServerError };
   get_verification: { request: GetVerificationRequest; result: VerificationStatusResult; failure: ServerError };
+  review_verification: { request: ReviewVerificationRequest; result: VerificationReviewResult; failure: ServerError };
   list_traces: { request: ListTracesRequest; result: TraceList; failure: ServerError };
   get_live_target: { request: GetLiveTargetRequest; result: LiveTargetStatus; failure: ServerError };
   stop_live_target: { request: StopLiveTargetRequest; result: StopLiveTargetResult; failure: ServerError };
@@ -645,6 +676,10 @@ function encodeGetVerification(request: GetVerificationRequest): EncodedRequest 
   return { path: "/verifications/" + encodeURIComponent(String(request.run_id)), body: undefined };
 }
 
+function encodeReviewVerification(request: ReviewVerificationRequest): EncodedRequest {
+  return { path: "/verifications/" + encodeURIComponent(String(request.run_id)) + "/review", body: undefined };
+}
+
 function encodeListTraces(request: ListTracesRequest): EncodedRequest {
   const query = new URLSearchParams();
   if (request.status !== undefined) {
@@ -750,6 +785,10 @@ function decodeGetVerificationFailure(_status: number, value: unknown): value is
   return isServerError(value);
 }
 
+function decodeReviewVerificationFailure(_status: number, value: unknown): value is Operations["review_verification"]["failure"] {
+  return isServerError(value);
+}
+
 function decodeListTracesFailure(_status: number, value: unknown): value is Operations["list_traces"]["failure"] {
   return isServerError(value);
 }
@@ -790,6 +829,7 @@ export const ROUTES: { [K in OperationName]: Route<K> } = {
   preview_architecture: { method: "POST", success: 200, encode: encodePreviewArchitecture, decode: isArchitecturePreviewResult, decodeFailure: decodePreviewArchitectureFailure },
   list_verifications: { method: "GET", success: 200, encode: encodeListVerifications, decode: isVerificationListResult, decodeFailure: decodeListVerificationsFailure },
   get_verification: { method: "GET", success: 200, encode: encodeGetVerification, decode: isVerificationStatusResult, decodeFailure: decodeGetVerificationFailure },
+  review_verification: { method: "GET", success: 200, encode: encodeReviewVerification, decode: isVerificationReviewResult, decodeFailure: decodeReviewVerificationFailure },
   list_traces: { method: "GET", success: 200, encode: encodeListTraces, decode: isTraceList, decodeFailure: decodeListTracesFailure },
   get_live_target: { method: "GET", success: 200, encode: encodeGetLiveTarget, decode: isLiveTargetStatus, decodeFailure: decodeGetLiveTargetFailure },
   stop_live_target: { method: "DELETE", success: 200, encode: encodeStopLiveTarget, decode: isStopLiveTargetResult, decodeFailure: decodeStopLiveTargetFailure },
@@ -2086,6 +2126,30 @@ const SCHEMA_DEFS: Record<string, JSONSchemaNode> = {
     },
     "additionalProperties": false
   },
+  "RequiredTest": {
+    "type": "object",
+    "required": [
+      "story",
+      "flow_key",
+      "scenario",
+      "hook"
+    ],
+    "properties": {
+      "flow_key": {
+        "type": "string"
+      },
+      "hook": {
+        "type": "string"
+      },
+      "scenario": {
+        "type": "string"
+      },
+      "story": {
+        "type": "string"
+      }
+    },
+    "additionalProperties": false
+  },
   "ServerError": {
     "type": "object",
     "required": [
@@ -3243,6 +3307,418 @@ const SCHEMA_DEFS: Record<string, JSONSchemaNode> = {
     },
     "additionalProperties": false
   },
+  "VerificationReview": {
+    "type": "object",
+    "required": [
+      "story_context",
+      "approval"
+    ],
+    "properties": {
+      "approval": {
+        "type": "object",
+        "anyOf": [
+          {
+            "type": "object",
+            "required": [
+              "state"
+            ],
+            "properties": {
+              "state": {
+                "type": "string",
+                "enum": [
+                  "available"
+                ]
+              }
+            },
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "required": [
+              "reason",
+              "state"
+            ],
+            "properties": {
+              "reason": {
+                "type": "string"
+              },
+              "state": {
+                "type": "string",
+                "enum": [
+                  "blocked"
+                ]
+              }
+            },
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "required": [
+              "approved_by",
+              "report_digest",
+              "candidate_commit",
+              "suite_id",
+              "suite_commit",
+              "environment",
+              "artifacts",
+              "scenario_count",
+              "test_source",
+              "state"
+            ],
+            "properties": {
+              "approved_by": {
+                "type": "string"
+              },
+              "artifacts": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "string"
+                }
+              },
+              "candidate_commit": {
+                "type": "string"
+              },
+              "environment": {
+                "type": "string"
+              },
+              "report_digest": {
+                "type": "string"
+              },
+              "scenario_count": {
+                "type": "integer"
+              },
+              "state": {
+                "type": "string",
+                "enum": [
+                  "recorded"
+                ]
+              },
+              "suite_commit": {
+                "type": "string"
+              },
+              "suite_id": {
+                "type": "string"
+              },
+              "test_source": {
+                "type": "object",
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "required": [
+                      "source"
+                    ],
+                    "properties": {
+                      "source": {
+                        "type": "string",
+                        "enum": [
+                          "evaluator"
+                        ]
+                      }
+                    },
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "required": [
+                      "commit",
+                      "notice",
+                      "source"
+                    ],
+                    "properties": {
+                      "commit": {
+                        "type": "string"
+                      },
+                      "notice": {
+                        "type": "string"
+                      },
+                      "source": {
+                        "type": "string",
+                        "enum": [
+                          "written_tests"
+                        ]
+                      }
+                    },
+                    "additionalProperties": false
+                  }
+                ]
+              }
+            },
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "required": [
+              "approval",
+              "reason",
+              "state"
+            ],
+            "properties": {
+              "approval": {
+                "$ref": "#/$defs/ApprovalItem"
+              },
+              "reason": {
+                "type": "string"
+              },
+              "state": {
+                "type": "string",
+                "enum": [
+                  "unverified"
+                ]
+              }
+            },
+            "additionalProperties": false
+          }
+        ]
+      },
+      "story_context": {
+        "type": "object",
+        "anyOf": [
+          {
+            "type": "object",
+            "required": [
+              "build_number",
+              "build_started_at",
+              "stories",
+              "mapping",
+              "state"
+            ],
+            "properties": {
+              "build_number": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "build_started_at": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "mapping": {
+                "type": "object",
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "required": [
+                      "required_tests",
+                      "state"
+                    ],
+                    "properties": {
+                      "required_tests": {
+                        "type": "array",
+                        "items": {
+                          "$ref": "#/$defs/RequiredTest"
+                        }
+                      },
+                      "state": {
+                        "type": "string",
+                        "enum": [
+                          "mapped"
+                        ]
+                      }
+                    },
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "required": [
+                      "state"
+                    ],
+                    "properties": {
+                      "state": {
+                        "type": "string",
+                        "enum": [
+                          "not_recorded_for_evaluator"
+                        ]
+                      }
+                    },
+                    "additionalProperties": false
+                  }
+                ]
+              },
+              "state": {
+                "type": "string",
+                "enum": [
+                  "recorded"
+                ]
+              },
+              "stories": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/$defs/StorySummaryItem"
+                }
+              }
+            },
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "required": [
+              "state"
+            ],
+            "properties": {
+              "state": {
+                "type": "string",
+                "enum": [
+                  "not_recorded"
+                ]
+              }
+            },
+            "additionalProperties": false
+          }
+        ]
+      }
+    },
+    "additionalProperties": false
+  },
+  "VerificationReviewResult": {
+    "type": "object",
+    "required": [
+      "review",
+      "run_id",
+      "change_id",
+      "request_revision",
+      "candidate_commit",
+      "suite_commit",
+      "accepted_at",
+      "inputs_current",
+      "test_source",
+      "state"
+    ],
+    "properties": {
+      "accepted_at": {
+        "type": "string",
+        "format": "date-time"
+      },
+      "candidate_binaries_dir": {
+        "type": "string"
+      },
+      "candidate_commit": {
+        "type": "string"
+      },
+      "change_id": {
+        "type": "string"
+      },
+      "inputs_current": {
+        "type": "boolean"
+      },
+      "request_revision": {
+        "type": "string"
+      },
+      "review": {
+        "$ref": "#/$defs/VerificationReview"
+      },
+      "run_id": {
+        "type": "string"
+      },
+      "state": {
+        "type": "object",
+        "anyOf": [
+          {
+            "type": "object",
+            "required": [
+              "type",
+              "value"
+            ],
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": [
+                  "running"
+                ]
+              },
+              "value": {
+                "$ref": "#/$defs/VerificationRunning"
+              }
+            },
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "required": [
+              "type",
+              "value"
+            ],
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": [
+                  "completed"
+                ]
+              },
+              "value": {
+                "$ref": "#/$defs/VerificationCompleted"
+              }
+            },
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "required": [
+              "type",
+              "value"
+            ],
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": [
+                  "not_completed"
+                ]
+              },
+              "value": {
+                "$ref": "#/$defs/VerificationNotCompleted"
+              }
+            },
+            "additionalProperties": false
+          }
+        ]
+      },
+      "suite_commit": {
+        "type": "string"
+      },
+      "test_source": {
+        "type": "object",
+        "anyOf": [
+          {
+            "type": "object",
+            "required": [
+              "source"
+            ],
+            "properties": {
+              "source": {
+                "type": "string",
+                "enum": [
+                  "evaluator"
+                ]
+              }
+            },
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "required": [
+              "commit",
+              "notice",
+              "source"
+            ],
+            "properties": {
+              "commit": {
+                "type": "string"
+              },
+              "notice": {
+                "type": "string"
+              },
+              "source": {
+                "type": "string",
+                "enum": [
+                  "written_tests"
+                ]
+              }
+            },
+            "additionalProperties": false
+          }
+        ]
+      }
+    },
+    "additionalProperties": false
+  },
   "VerificationRunning": {
     "type": "object",
     "required": [
@@ -3612,6 +4088,11 @@ export function isTraceList(value: unknown): value is TraceList {
 // isVerificationListResult validates a parsed answer against the generated VerificationListResult schema.
 export function isVerificationListResult(value: unknown): value is VerificationListResult {
   return matchesSchema(value, { $ref: "#/$defs/VerificationListResult" });
+}
+
+// isVerificationReviewResult validates a parsed answer against the generated VerificationReviewResult schema.
+export function isVerificationReviewResult(value: unknown): value is VerificationReviewResult {
+  return matchesSchema(value, { $ref: "#/$defs/VerificationReviewResult" });
 }
 
 // isVerificationStatusResult validates a parsed answer against the generated VerificationStatusResult schema.

@@ -218,3 +218,8 @@ func GetTestWriterAssignmentSurlaPath(changeID string) string {
 func ReportTestsFinishedSurlaPath(changeID string) string {
 	return fmt.Sprintf("/assignments/test-writer/%v/finished", changeID)
 }
+
+// ReviewVerificationSurlaPath returns the URL path to the surla service review_verification HTTP endpoint.
+func ReviewVerificationSurlaPath(runID string) string {
+	return fmt.Sprintf("/verifications/%v/review", runID)
+}

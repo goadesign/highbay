@@ -6149,6 +6149,130 @@ func DecodeReportTestsFinishedResponse(decoder func(*http.Response) goahttp.Deco
 	}
 }
 
+// BuildReviewVerificationRequest instantiates a HTTP request object with
+// method and path set to call the "surla" service "review_verification"
+// endpoint
+func (c *Client) BuildReviewVerificationRequest(ctx context.Context, v any) (*http.Request, error) {
+	var (
+		runID string
+	)
+	{
+		p, ok := v.(*surla.GetVerificationPayload)
+		if !ok {
+			return nil, goahttp.ErrInvalidType("surla", "review_verification", "*surla.GetVerificationPayload", v)
+		}
+		runID = p.RunID
+	}
+
+	rawPath := fmt.Sprintf("/verifications/%v/review", url.PathEscape(fmt.Sprint(runID)))
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: ReviewVerificationSurlaPath(runID), RawPath: rawPath}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("surla", "review_verification", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// DecodeReviewVerificationResponse returns a decoder for responses returned by
+// the surla review_verification endpoint. restoreBody controls whether the
+// response body should be restored after having been read.
+// DecodeReviewVerificationResponse may return the following errors:
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "not_implemented" (type *goa.ServiceError): http.StatusNotImplemented
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - error: internal error
+func DecodeReviewVerificationResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (result any, decodeErr error) {
+		responseBody := resp.Body
+		if restoreBody {
+			b, readErr := io.ReadAll(responseBody)
+			closeErr := responseBody.Close()
+			if err := errors.Join(readErr, closeErr); err != nil {
+				return nil, goahttp.ErrDecodingError("surla", "review_verification", err)
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer func() {
+				if err := responseBody.Close(); err != nil {
+					decodeErr = errors.Join(decodeErr, goahttp.ErrDecodingError("surla", "review_verification", err))
+				}
+			}()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body ReviewVerificationResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("surla", "review_verification", err)
+			}
+			err = ValidateReviewVerificationResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("surla", "review_verification", err)
+			}
+			res := NewReviewVerificationVerificationReviewResultOK(&body)
+			return res, nil
+		case http.StatusNotFound:
+			var (
+				body ReviewVerificationNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("surla", "review_verification", err)
+			}
+			err = ValidateReviewVerificationNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("surla", "review_verification", err)
+			}
+			return nil, NewReviewVerificationNotFound(&body)
+		case http.StatusNotImplemented:
+			var (
+				body ReviewVerificationNotImplementedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("surla", "review_verification", err)
+			}
+			err = ValidateReviewVerificationNotImplementedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("surla", "review_verification", err)
+			}
+			return nil, NewReviewVerificationNotImplemented(&body)
+		case http.StatusForbidden:
+			var (
+				body ReviewVerificationForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("surla", "review_verification", err)
+			}
+			err = ValidateReviewVerificationForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("surla", "review_verification", err)
+			}
+			return nil, NewReviewVerificationForbidden(&body)
+		default:
+			body, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("surla", "review_verification", err)
+			}
+			return nil, goahttp.ErrInvalidResponse("surla", "review_verification", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // marshalSurlaCP1AnalysisToCP1AnalysisRequestBody builds a value of type
 // *CP1AnalysisRequestBody from a value of type *surla.CP1Analysis.
 func marshalSurlaCP1AnalysisToCP1AnalysisRequestBody(v *surla.CP1Analysis) *CP1AnalysisRequestBody {
@@ -7684,6 +7808,168 @@ func unmarshalConfirmedAnswerResponseBodyToSurlaConfirmedAnswer(v *ConfirmedAnsw
 		ID:       *v.ID,
 		Question: *v.Question,
 		Answer:   *v.Answer,
+	}
+
+	return res
+}
+
+// unmarshalVerificationReviewResponseBodyToSurlaVerificationReview builds a
+// value of type *surla.VerificationReview from a value of type
+// *VerificationReviewResponseBody.
+func unmarshalVerificationReviewResponseBodyToSurlaVerificationReview(v *VerificationReviewResponseBody) *surla.VerificationReview {
+	res := &surla.VerificationReview{}
+	switch string(v.StoryContext.Kind()) {
+	case "recorded":
+		actual, _ := v.StoryContext.AsRecorded()
+		var obj *surla.RecordedRunStory
+		if actual != nil {
+			obj = unmarshalRecordedRunStoryResponseBodyToSurlaRecordedRunStory(actual)
+		}
+		u := res.StoryContext
+		u.SetRecorded((*surla.RecordedRunStory)(obj))
+		res.StoryContext = u
+	case "not_recorded":
+		actual, _ := v.StoryContext.AsNotRecorded()
+		var obj *surla.RunStoryNotRecorded
+		if actual != nil {
+			obj = unmarshalRunStoryNotRecordedResponseBodyToSurlaRunStoryNotRecorded(actual)
+		}
+		u := res.StoryContext
+		u.SetNotRecorded((*surla.RunStoryNotRecorded)(obj))
+		res.StoryContext = u
+	}
+	switch string(v.Approval.Kind()) {
+	case "available":
+		actual, _ := v.Approval.AsAvailable()
+		var obj *surla.RunApprovalAvailable
+		if actual != nil {
+			obj = unmarshalRunApprovalAvailableResponseBodyToSurlaRunApprovalAvailable(actual)
+		}
+		u := res.Approval
+		u.SetAvailable((*surla.RunApprovalAvailable)(obj))
+		res.Approval = u
+	case "blocked":
+		actual, _ := v.Approval.AsBlocked()
+		var obj *surla.RunApprovalBlocked
+		if actual != nil {
+			obj = unmarshalRunApprovalBlockedResponseBodyToSurlaRunApprovalBlocked(actual)
+		}
+		u := res.Approval
+		u.SetBlocked((*surla.RunApprovalBlocked)(obj))
+		res.Approval = u
+	case "recorded":
+		actual, _ := v.Approval.AsRecorded()
+		var obj *surla.ApprovalItem
+		if actual != nil {
+			obj = unmarshalApprovalItemResponseBodyToSurlaApprovalItem(actual)
+		}
+		u := res.Approval
+		u.SetRecorded((*surla.ApprovalItem)(obj))
+		res.Approval = u
+	case "unverified":
+		actual, _ := v.Approval.AsUnverified()
+		var obj *surla.UnverifiedApprovalItem
+		if actual != nil {
+			obj = unmarshalUnverifiedApprovalItemResponseBodyToSurlaUnverifiedApprovalItem(actual)
+		}
+		u := res.Approval
+		u.SetUnverified((*surla.UnverifiedApprovalItem)(obj))
+		res.Approval = u
+	}
+
+	return res
+}
+
+// unmarshalRecordedRunStoryResponseBodyToSurlaRecordedRunStory builds a value
+// of type *surla.RecordedRunStory from a value of type
+// *RecordedRunStoryResponseBody.
+func unmarshalRecordedRunStoryResponseBodyToSurlaRecordedRunStory(v *RecordedRunStoryResponseBody) *surla.RecordedRunStory {
+	res := &surla.RecordedRunStory{
+		BuildNumber:    *v.BuildNumber,
+		BuildStartedAt: *v.BuildStartedAt,
+	}
+	res.Stories = make([]*surla.StorySummaryItem, len(v.Stories))
+	for i, val := range v.Stories {
+		if val == nil {
+			res.Stories[i] = nil
+			continue
+		}
+		res.Stories[i] = unmarshalStorySummaryItemResponseBodyToSurlaStorySummaryItem(val)
+	}
+	switch string(v.Mapping.Kind()) {
+	case "mapped":
+		actual, _ := v.Mapping.AsMapped()
+		var obj *surla.RunStoryMapping
+		if actual != nil {
+			obj = unmarshalRunStoryMappingResponseBodyToSurlaRunStoryMapping(actual)
+		}
+		u := res.Mapping
+		u.SetMapped((*surla.RunStoryMapping)(obj))
+		res.Mapping = u
+	case "not_recorded_for_evaluator":
+		actual, _ := v.Mapping.AsNotRecordedForEvaluator()
+		var obj *surla.RunEvaluatorMappingUnknown
+		if actual != nil {
+			obj = unmarshalRunEvaluatorMappingUnknownResponseBodyToSurlaRunEvaluatorMappingUnknown(actual)
+		}
+		u := res.Mapping
+		u.SetNotRecordedForEvaluator((*surla.RunEvaluatorMappingUnknown)(obj))
+		res.Mapping = u
+	}
+
+	return res
+}
+
+// unmarshalRunStoryMappingResponseBodyToSurlaRunStoryMapping builds a value of
+// type *surla.RunStoryMapping from a value of type
+// *RunStoryMappingResponseBody.
+func unmarshalRunStoryMappingResponseBodyToSurlaRunStoryMapping(v *RunStoryMappingResponseBody) *surla.RunStoryMapping {
+	res := &surla.RunStoryMapping{}
+	res.RequiredTests = make([]*surla.RequiredTest, len(v.RequiredTests))
+	for i, val := range v.RequiredTests {
+		if val == nil {
+			res.RequiredTests[i] = nil
+			continue
+		}
+		res.RequiredTests[i] = unmarshalRequiredTestResponseBodyToSurlaRequiredTest(val)
+	}
+
+	return res
+}
+
+// unmarshalRunEvaluatorMappingUnknownResponseBodyToSurlaRunEvaluatorMappingUnknown
+// builds a value of type *surla.RunEvaluatorMappingUnknown from a value of
+// type *RunEvaluatorMappingUnknownResponseBody.
+func unmarshalRunEvaluatorMappingUnknownResponseBodyToSurlaRunEvaluatorMappingUnknown(v *RunEvaluatorMappingUnknownResponseBody) *surla.RunEvaluatorMappingUnknown {
+	res := &surla.RunEvaluatorMappingUnknown{}
+
+	return res
+}
+
+// unmarshalRunStoryNotRecordedResponseBodyToSurlaRunStoryNotRecorded builds a
+// value of type *surla.RunStoryNotRecorded from a value of type
+// *RunStoryNotRecordedResponseBody.
+func unmarshalRunStoryNotRecordedResponseBodyToSurlaRunStoryNotRecorded(v *RunStoryNotRecordedResponseBody) *surla.RunStoryNotRecorded {
+	res := &surla.RunStoryNotRecorded{}
+
+	return res
+}
+
+// unmarshalRunApprovalAvailableResponseBodyToSurlaRunApprovalAvailable builds
+// a value of type *surla.RunApprovalAvailable from a value of type
+// *RunApprovalAvailableResponseBody.
+func unmarshalRunApprovalAvailableResponseBodyToSurlaRunApprovalAvailable(v *RunApprovalAvailableResponseBody) *surla.RunApprovalAvailable {
+	res := &surla.RunApprovalAvailable{}
+
+	return res
+}
+
+// unmarshalRunApprovalBlockedResponseBodyToSurlaRunApprovalBlocked builds a
+// value of type *surla.RunApprovalBlocked from a value of type
+// *RunApprovalBlockedResponseBody.
+func unmarshalRunApprovalBlockedResponseBodyToSurlaRunApprovalBlocked(v *RunApprovalBlockedResponseBody) *surla.RunApprovalBlocked {
+	res := &surla.RunApprovalBlocked{
+		Reason: *v.Reason,
 	}
 
 	return res
