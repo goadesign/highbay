@@ -4,6 +4,7 @@ package controlplane
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -31,7 +32,8 @@ type teamServiceFixture struct {
 	calls     []string
 	bound     AssignmentReader
 	supervise func(context.Context, AssignmentReader) error
-	// Registration and start hooks observe the real start boundary without a window.
+	// Action hooks return owner refusals without a window or external process.
+	show     func(context.Context, string) error
 	register func(context.Context, BuildFolders) error
 	start    func(context.Context) (*gensurla.ProjectTeam, error)
 }
@@ -46,10 +48,14 @@ func (f *teamServiceFixture) ReadTeam(context.Context) (*gensurla.TeamSnapshot, 
 }
 
 // ShowPane records the authorized requested role.
-func (f *teamServiceFixture) ShowPane(_ context.Context, role string) error {
+func (f *teamServiceFixture) ShowPane(ctx context.Context, role string) error {
 	f.mu.Lock()
-	defer f.mu.Unlock()
 	f.calls = append(f.calls, "show:"+role)
+	show := f.show
+	f.mu.Unlock()
+	if show != nil {
+		return show(ctx, role)
+	}
 	return nil
 }
 
@@ -128,6 +134,40 @@ func TestTeamUserTransport(t *testing.T) {
 			response := httptest.NewRecorder()
 			handler.ServeHTTP(response, httptest.NewRequest("POST", "/team/pane", strings.NewReader(`{"role":"other"}`)))
 			assert.Equal(t, 400, response.Code)
+		})
+	}
+	for _, tc := range []struct {
+		name, path, body, call string
+		status                 int
+		owner                  *teamServiceFixture
+	}{
+		{
+			name: "window_busy", path: "/team/pane", body: `{"role":"builder"}`,
+			call: "show:builder", status: http.StatusConflict,
+			owner: &teamServiceFixture{show: func(context.Context, string) error {
+				return gensurla.MakeWindowBusy(errors.New("close the open Herdr dialog before showing a pane"))
+			}},
+		},
+		{
+			name: "team_unavailable", path: "/team/agents", call: "start", status: http.StatusServiceUnavailable,
+			owner: &teamServiceFixture{start: func(context.Context) (*gensurla.ProjectTeam, error) {
+				return nil, gensurla.MakeTeamUnavailable(errors.New("open the Herdr app, then try again"))
+			}},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			cp := newControlPlane(t, Options{Team: &TeamBinding{Owner: "owner", Service: tc.owner}})
+			handler := NewHTTPHandler(cp, func(*http.Request) (Principal, error) {
+				return Principal{ID: "owner", Kind: CallerUser}, nil
+			})
+			response := httptest.NewRecorder()
+			handler.ServeHTTP(response, httptest.NewRequest(http.MethodPost, tc.path, strings.NewReader(tc.body)))
+			assert.Equal(t, tc.status, response.Code, response.Body.String())
+			assert.Equal(t, tc.name, response.Header().Get("goa-error"))
+			var refusal struct{ Name string }
+			require.NoError(t, json.Unmarshal(response.Body.Bytes(), &refusal))
+			assert.Equal(t, tc.name, refusal.Name)
+			assert.Equal(t, []string{tc.call}, tc.owner.calls)
 		})
 	}
 }
