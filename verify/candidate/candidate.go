@@ -1,6 +1,6 @@
 // Package candidate builds and runs the code Surla's coding agents write.
-// Build and BuildTest compile a module offline to a staging path and publish
-// the result as a regular file. Pin copies a binary into a read-only,
+// Build, BuildTest and BuildModule compile a module offline to a staging path
+// and publish the result as a regular file. Pin copies a binary into a read-only,
 // digest-named store, and Exec, Run and Output start only a pinned binary
 // whose bytes still match its digest, with an explicit environment and its own
 // state directory as working directory, HOME and TMPDIR.
@@ -8,8 +8,8 @@
 // These are ordinary processes of the user who runs Surla: they can read and
 // write the user's files, use the network and start children; nothing here
 // confines them. The caller decides which process group owns them: Build,
-// BuildTest, Run and Output run the prepared command with the caller's run
-// function, and Exec starts it in the caller's own process group. A process
+// BuildTest, BuildModule, Run and Output run the prepared command with the
+// caller's run function, and Exec starts it in the caller's own process group. A process
 // that starts its own session or process group leaves that group, and no
 // caller's cleanup stops it.
 package candidate
@@ -77,7 +77,8 @@ type (
 		// SourceDir is the caller's source root, such as the candidate module
 		// or a whole checkout whose modules replace each other. A go.work file
 		// in ModuleDir, in SourceDir or in a folder between them applies to
-		// the build; one above SourceDir does not (GoWork).
+		// Build and BuildTest; one above SourceDir does not (GoWork).
+		// BuildModule ignores workspace files and retains the same source root.
 		SourceDir string
 		// ModuleDir is the directory of the module being built. It must
 		// resolve inside SourceDir.
@@ -92,10 +93,15 @@ type (
 		// ModCache is the already populated module cache; the build
 		// downloads nothing into it.
 		ModCache string
-		// WorkDir is a private writable directory for TMPDIR, GOCACHE, and the
-		// staged output binary.
+		// BuildCacheDir is the required Go build cache. It may be shared by
+		// concurrent builds on one machine using a local filesystem. Build
+		// creates it when missing; Go owns its entries and maintenance.
+		BuildCacheDir string
+		// WorkDir is an operation-owned writable directory for TMPDIR and the
+		// staged output binary. It is separate from retained package storage.
 		WorkDir string
-		// LogFile receives the build's output; it must lie outside ModuleDir.
+		// LogFile receives build output and cache-initialization failures; it
+		// must lie outside ModuleDir.
 		LogFile string
 	}
 
@@ -318,10 +324,13 @@ func ExcerptFile(path string, maxBytes int64) (string, bool, error) {
 // spec.Out, so, while WorkDir holds no link into spec.Out's directory, the
 // toolchain never writes there and only a regular file is published there.
 //
-// Build trusts GOROOT and ModCache as fixed inputs: the selected toolchain, and
-// module versions verified against their checksums when they were downloaded.
-// Build does not check that WorkDir is fresh: a caller that relies on it
-// holding only this build's cache and staged output must create it empty.
+// Build trusts GOROOT, ModCache and BuildCacheDir as compiler inputs. Go
+// checks cached package existence and recorded size, not correspondence to
+// selected source. Same-user code can plant a package that a later build links,
+// just as it can change the module cache, toolchain or executables. A measured
+// binary digest does not authenticate that source correspondence. Deleting the
+// build cache forces recompilation but does not authenticate the other inputs.
+// Build does not check that WorkDir is fresh; the caller owns its scratch lifetime.
 //
 // run runs the prepared build command to completion. The caller decides which
 // process group owns the compiler, assembler and linker the build starts: a
@@ -333,19 +342,22 @@ func Build(ctx context.Context, spec BuildSpec, run func(*exec.Cmd) error) error
 	if err != nil {
 		return err
 	}
-	stageDir, err := os.MkdirTemp(b.spec.WorkDir, ".surla-stage-*")
+	return b.build(ctx, workFile(b.spec.SourceDir, b.spec.ModuleDir), run)
+}
+
+// BuildModule compiles a standalone module offline with GOWORK=off, ignoring
+// go.work files both inside the module and elsewhere in SourceDir. Surla's
+// report checker and written-test verification use it so the module's go.mod
+// and go.sum own its dependencies. SourceDir remains the whole checkout, so
+// local replacements can still read sibling modules. Path validation, fixed
+// offline environment, staging, publication, runner lifetime and errors are
+// otherwise the same as Build.
+func BuildModule(ctx context.Context, spec BuildSpec, run func(*exec.Cmd) error) error {
+	b, err := resolveBuild(spec)
 	if err != nil {
-		return fmt.Errorf("create build staging directory: %w", err)
+		return err
 	}
-	defer os.RemoveAll(stageDir)
-	stageOut := filepath.Join(stageDir, filepath.Base(b.spec.Out))
-	if err := b.goRun(ctx, run, stageOut, "build", "-trimpath"); err != nil {
-		return fmt.Errorf("build of %s: %w", spec.Package, err)
-	}
-	if err := publishStagedOutput(stageOut, b.spec.Out); err != nil {
-		return fmt.Errorf("build of %s: %w", spec.Package, err)
-	}
-	return nil
+	return b.build(ctx, "off", run)
 }
 
 // BuildTest compiles the tests of one candidate package into a single test
@@ -401,7 +413,7 @@ func BuildTest(ctx context.Context, spec BuildSpec, run func(*exec.Cmd) error) (
 	}
 	defer os.RemoveAll(stageDir)
 	stageOut := filepath.Join(stageDir, filepath.Base(out))
-	if err := b.goRun(ctx, run, stageOut, "test", "-c", "-trimpath", "-vet=off"); err != nil {
+	if err := b.goRun(ctx, run, workFile(b.spec.SourceDir, b.spec.ModuleDir), stageOut, "test", "-c", "-trimpath", "-vet=off"); err != nil {
 		return false, fmt.Errorf("test build of %s: %w", spec.Package, err)
 	}
 	return publishStagedTestBinary(stageOut, out)
@@ -510,6 +522,14 @@ func prepare(ctx context.Context, a Artifact, spec Spec) (*exec.Cmd, *os.File, e
 // places Out in the resolved output directory, so the build, its log and its
 // diagnostics name physical paths.
 func resolveBuild(spec BuildSpec) (resolvedBuild, error) {
+	if spec.BuildCacheDir == "" {
+		return resolvedBuild{}, errors.New("build cache directory is required")
+	}
+	cache, err := abspath.EvalMissing(spec.BuildCacheDir)
+	if err != nil {
+		return resolvedBuild{}, fmt.Errorf("resolve build cache directory: %w", err)
+	}
+	spec.BuildCacheDir = cache
 	paths := map[string]*string{
 		"source": &spec.SourceDir, "module": &spec.ModuleDir, "goroot": &spec.GOROOT,
 		"modcache": &spec.ModCache, "work": &spec.WorkDir,
@@ -608,6 +628,24 @@ func publishStagedOutputAllowMissing(stagedOut, outPath string, allowMissing boo
 	return true, nil
 }
 
+// build owns the shared compile, staging and publication of Build and
+// BuildModule. goWork is the fixed-off or checkout-selected value of its entry.
+func (b resolvedBuild) build(ctx context.Context, goWork string, run func(*exec.Cmd) error) error {
+	stageDir, err := os.MkdirTemp(b.spec.WorkDir, ".surla-stage-*")
+	if err != nil {
+		return fmt.Errorf("create build staging directory: %w", err)
+	}
+	defer os.RemoveAll(stageDir)
+	stageOut := filepath.Join(stageDir, filepath.Base(b.spec.Out))
+	if err := b.goRun(ctx, run, goWork, stageOut, "build", "-trimpath"); err != nil {
+		return fmt.Errorf("build of %s: %w", b.spec.Package, err)
+	}
+	if err := publishStagedOutput(stageOut, b.spec.Out); err != nil {
+		return fmt.Errorf("build of %s: %w", b.spec.Package, err)
+	}
+	return nil
+}
+
 // goRun runs `go <args> -o <outPath> <Package>` from ModuleDir with the
 // toolchain's output in LogFile. It returns run's error unwrapped, an "open
 // build log" error when LogFile cannot be opened, or an error when opening
@@ -615,14 +653,14 @@ func publishStagedOutputAllowMissing(stagedOut, outPath string, allowMissing boo
 // the build offline (GOPROXY=off), on the selected toolchain (GOTOOLCHAIN=local),
 // unable to change go.mod (-mod=readonly), with cgo off as Surla's builds have
 // always had it (turning it on would link C code into binaries that never had
-// it), with only a go.work file inside the source root (GoWork), with TMPDIR
-// and GOCACHE inside WorkDir and no HOME, so os.UserConfigDir leaves Go
+// it), with the entry-selected workspace or fixed off for BuildModule, and
+// with TMPDIR in WorkDir, GOCACHE in BuildCacheDir and no HOME, so os.UserConfigDir leaves Go
 // telemetry disabled without starting its detached child process. A build gets
 // -buildvcs=false, so it never runs git and stamps no version-control facts.
 func (b resolvedBuild) goRun(
 	ctx context.Context,
 	run func(*exec.Cmd) error,
-	outPath string,
+	goWork, outPath string,
 	args ...string,
 ) error {
 	spec := b.spec
@@ -645,6 +683,13 @@ func (b resolvedBuild) goRun(
 		}
 		return aliasErr
 	}
+	// Surla owns the cache directory's private mode, including recreation
+	// after an idle deletion. Go owns only its entries and maintenance.
+	if err := os.MkdirAll(spec.BuildCacheDir, 0o700); err != nil {
+		cacheErr := fmt.Errorf("create build cache directory: %w", err)
+		_, logErr := fmt.Fprintln(logFile, cacheErr)
+		return errors.Join(cacheErr, logErr)
+	}
 	goArgs := append([]string{}, args...)
 	if args[0] == "build" {
 		goArgs = append(goArgs, "-buildvcs=false")
@@ -652,22 +697,22 @@ func (b resolvedBuild) goRun(
 	goArgs = append(goArgs, "-o", outPath, spec.Package)
 	cmd := exec.CommandContext(ctx, filepath.Join(spec.GOROOT, "bin", "go"), goArgs...)
 	cmd.Dir = spec.ModuleDir
-	cmd.Env = b.buildEnv()
+	cmd.Env = b.buildEnv(goWork)
 	cmd.Stdout, cmd.Stderr = logFile, logFile
 	return run(cmd)
 }
 
-// buildEnv returns the fixed environment of every Go build.
-func (b resolvedBuild) buildEnv() []string {
+// buildEnv fixes the offline build environment with its entry's workspace.
+func (b resolvedBuild) buildEnv(goWork string) []string {
 	spec := b.spec
 	return []string{
 		"PATH=" + filepath.Join(spec.GOROOT, "bin") + ":/usr/bin:/bin",
 		"TMPDIR=" + spec.WorkDir,
 		"GOROOT=" + spec.GOROOT,
-		"GOCACHE=" + filepath.Join(spec.WorkDir, "gocache"),
+		"GOCACHE=" + spec.BuildCacheDir,
 		"GOMODCACHE=" + spec.ModCache,
 		"GOTOOLCHAIN=local",
-		"GOWORK=" + workFile(spec.SourceDir, spec.ModuleDir),
+		"GOWORK=" + goWork,
 		"GOFLAGS=-mod=readonly",
 		"GOPROXY=off",
 		"GONOSUMDB=*",

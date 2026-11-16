@@ -32,10 +32,12 @@ type Service interface {
 	// using the current server-lifetime management credential.
 	Identity(context.Context) (res *ProjectIdentity, err error)
 	// The CLI asks the project server to ensure its team, guide credential, Herdr
-	// space and atomic launcher roster, then open the launcher only when an agent
-	// is missing. Accepted work has a bounded server-owned lifetime independent of
-	// client disconnection. Only the server management credential may call this
-	// operation; it is never an MCP tool.
+	// space and atomic launcher roster, then open the launcher only when the
+	// guide, or a worker role the open build needs, has no running agent. A role
+	// without work stays in the roster, and its agent finds an empty list. A
+	// failed read of who has work counts every role. Accepted work has a bounded
+	// server-owned lifetime independent of client disconnection. Only the server
+	// management credential may call this operation; it is never an MCP tool.
 	EnsureTeam(context.Context) (res *ProjectTeam, err error)
 	// The CLI requests ordered server shutdown. Before its listener closes, the
 	// server revokes management access and withdraws its running record; an

@@ -29,7 +29,10 @@ tests; Surla itself judges those tests and runs them against the code, which
 it builds and runs as ordinary processes on your machine, with your file and
 network access. You agree what is built
 and approve the result in your browser. Surla deploys nothing and merges
-nothing.
+nothing. Live starts and verification runs reuse the project's compiled Go
+packages while rebuilding outputs and running tests each time. The cache is a
+trusted compiler input that programs running as you can change; see
+[project storage and cache trust](docs/REFERENCE.md#project-state-folder).
 
 ## One change from start to finish
 
@@ -68,18 +71,19 @@ to $50 get instant store credit; larger ones wait for a manager":
    adopt or decline it; the agreed revision stays in force until then.
 5. **Build.** Press **Build this change** on the page. Surla saves the agreed
    revision, and the Chorus dialog asks you for agents for two more roles: the
-   builder and the test writer. The test writer gets its own working copy of
-   the project, in `.surla-tests` on the branch `surla/tests`, one required
-   test per finished flow of the Story, and your answers, examples and
-   preserved behaviors, which its tests must also hold the service to. Draft
-   flows require no test.
+   builder and the test writer. The builder gets its own working copy of the
+   project in `.surla-build` on the branch `surla/build-<n>`, and the test
+   writer gets its own working copy of the project in `.surla-tests` on the
+   branch `surla/tests-<n>`, one required test per finished flow of the Story,
+   and your answers, examples and preserved behaviors, which its tests must
+   also hold the service to. Draft flows require no test.
 6. **Tests.** The test writer writes those tests and reports. Surla does not
    take its word for it: it writes the required tests into the copy again,
    checks that nothing changed outside the test module (the project's `eval/`
    folder), and builds and lists the test program. Problems go
    back to the test writer as findings, which you can also read on the page.
    When the tests pass the check, Surla accepts them at one commit on
-   `surla/tests`.
+   `surla/tests-<n>`.
 7. **Code and verify.** Meanwhile the builder writes the code, builds and
    tests it, and commits. If the application calls a model, the builder can
    try prompt wording after Surla accepts the tests, using a *live target*:
@@ -87,16 +91,22 @@ to $50 get instant store credit; larger ones wait for a manager":
    that the server starts from a commit. The builder then asks Surla to
    verify its commit. Surla builds that commit and runs the
    tests accepted for that exact revision against it. It refuses to verify
-   until those tests are accepted. The result appears in the page's **Proof**
+   until those tests are accepted. The result appears in the page's **Check**
    view.
-8. **Approve and merge.** On the page, press **Approve this result** for a
-   passed run. Surla checks that the run passed and ran the tests accepted
+8. **Approve and merge.** Open the run in **Approve** to review its recorded
+   Story flows, test outcomes, excluded drafts and unknown coverage. When the
+   server says approval is available, Next offers **Approve this result**.
+   Surla checks that the run passed and ran the tests accepted
    for the agreed revision, then records the approval with the builder's
-   commit, the tests commit and the report. The recorded approval on the page
-   shows both commits and tells you to merge the tests commit, which is on
-   `surla/tests`. The builder commits in the project folder, so its commit is
-   already on the branch checked out there; you merge the tests commit into
-   that branch yourself. Surla merges and deploys nothing. Approval needs no
+   commit, the tests commit and the report. While the build shows **Passed**,
+   the recorded approval and the Build section on the page show both commits
+   and give you the `git merge <commit>` commands to run in the project folder:
+   first `git merge <candidate_commit>` (verified on `surla/build-<n>`), and
+   then, for written tests, `git merge <tests_commit>` (verified on
+   `surla/tests-<n>`). The builder commits in `.surla-build` rather than in
+   the project folder, so you merge the builder's commit first and then the
+   tests' commit into the branch checked out in the project folder yourself.
+   Surla merges and deploys nothing. Approval needs no
    settings. A project that stores
    [promotion settings](docs/REFERENCE.md#surla-verification-and-surla-promotion)
    (a release folder and the names of its binaries) gets one more check at
@@ -107,20 +117,24 @@ Only you confirm a change, start a build and approve a result, and you do it on
 the page. Each agent has its own connection to the server with only its own
 role's permissions. While the team works, the page's **Team** view shows each
 agent's state; an agent that is waiting for you is named above every view,
-with an action such as **Show guide pane** that brings its pane forward. When
-the builder or the test writer has an assignment it has not read, for example
-after Surla accepts the tests, the server sends it one fixed Chorus direct
-message asking it to read its assignments. One that stays idle with the
-assignment unread for 90 seconds is named as waiting for you, and the page says
-what to tell it.
+with an action such as **Show guide pane** that brings its pane forward. While
+the builder or the test writer has work on the open build and has an assignment
+it has not read, for example the builder after Surla accepts the tests, the
+server sends it one fixed Chorus direct message asking it to read its
+assignments. One that stays idle with that unread assignment for 90 seconds is
+named as waiting for you, and the page says what to tell it.
 
 You can go back at any point: adopt a revised change, build again, or the test
-writer reports again after findings. Adopting a revised change gives it a new
+writer reports again after findings. Adopting changed content gives it a new
 `request_revision`, which starts without an approval, and verification then
 needs a build of that revision: before you adopt, the page says that the
 existing build stays on the earlier revision. Building again replaces the
 build and requires the tests to be reported, judged and accepted again before
-verification or a new live target.
+verification or a new live target. After merging the current agreement, build
+another change or refine this one when there is more to do. **Build again…**
+remains available as a secondary action: it asks before starting a new build
+number from your branch as it is now, for the same agreement, with fresh
+assignments. Earlier reports do not establish that the new build passed.
 
 Two limits hold. All agents run as you on one machine, so they are separated
 by job, not walled off from each other. Surla runs the code the agents write
@@ -128,7 +142,7 @@ by job, not walled off from each other. Surla runs the code the agents write
 test program) as ordinary processes with your file and network access. The
 page states the second limit next to **Build this change**. Each verification
 run records where its tests came from. For the test writer's tests, the
-**Proof** view shows with the run, and the agents read in its result, the
+**Check** view shows with the run, and the agents read in its result, the
 server's notice that the tests were written by a separate agent on this
 machine and are not isolated from the builder.
 
@@ -341,9 +355,10 @@ See [`start_live_target`](docs/REFERENCE.md#start_live_target),
 
 The page lists the project's changes and shows each one's Story, questions,
 build, team, verification runs and approval, and updates itself without
-losing what you typed. Its **Traces** drawer shows safe summaries of what the
-agents and the server did. See the [views page](docs/REFERENCE.md#views-page)
-and [operation diagnostics](docs/REFERENCE.md#operation-diagnostics).
+losing what you typed. The frame names Describe, Agree, Build, Check and
+Approve. The approval decision appears in Next. The **Diagnostics** drawer
+shows safe summaries of what the agents and the server did. See the
+[views page](docs/REFERENCE.md#views-page) and [operation diagnostics](docs/REFERENCE.md#operation-diagnostics).
 
 > **Why the name "Surla"?** Named after **Tambdi Surla** in Goa, home to the
 > carved basalt Mahadeva temple beside the Surla River. In Surla

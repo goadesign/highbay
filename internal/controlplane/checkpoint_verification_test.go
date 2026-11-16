@@ -295,7 +295,7 @@ const runJSON = async (runId) => (await api(origin, "GET", "/verifications/" + r
   expect(buttons.length === 2 && buttons[0].dataset.runId === "20000000-0000-4000-8000-000000000002" && buttons[1].dataset.runId === "10000000-0000-4000-8000-000000000001", "run buttons changed the server's sub-second ordering");
   expect(buttons[0].textContent.includes("started ") && page.$('#surla-cp4-details time[datetime="2026-10-31T12:00:00.9Z"]').textContent === "2026-10-31T12:00:00.9Z", "the latest run lost its local start label or exact accepted_at time");
   expect(buttons[0].textContent.includes("candidate " + input.commit.slice(0, 7)), "candidate commit prefix missing in run button");
-  expect(!page.$("#surla-checkpoint-nav").hidden && page.$("#surla-nav-cp4").getAttribute("aria-current") === "page", "the stage navigation does not mark the runs");
+  expect(!page.$("#surla-checkpoint-nav").hidden && page.$("#surla-nav-cp4").getAttribute("aria-current") === "step", "the stage navigation does not mark the runs");
   const subject = page.$("#surla-context-result");
   expect(subject && subject.dataset.changeId === "chg-verify" && subject.dataset.requestRevision === input.revision, "the subject strip is not derived from the selected run");
   buttons[1].click();

@@ -282,11 +282,11 @@ func TestVerificationBinariesResolveOutsideControlPlaneLock(t *testing.T) {
 func binariesReadFixture(t *testing.T) (*ControlPlane, *gensurla.ChangeCardResult, string, string) {
 	t.Helper()
 	runsDir := t.TempDir()
-	cp := newBuildControlPlane(t, Options{
+	cp := newBuildControlPlane(t, Options{BuildCacheDir: t.TempDir(),
 		RunsDir:         runsDir,
 		WrittenTestRuns: &WrittenTestRuns{ReportDir: t.TempDir(), Timeout: time.Minute},
 	})
-	card := confirmedChange(t, cp, "chg")
+	card := buildableChange(t, cp, "chg")
 	runID := strings.Repeat("1", 32)
 	writeListedRun(t, runsDir, "alice@example.com", card, runID,
 		time.Date(2026, 10, 1, 9, 0, 0, 0, time.UTC), true)

@@ -168,11 +168,12 @@ func TestSharedServerOwnershipRefinementResourcesAndLockReleaseAcrossRestarts(t 
 	rawResources, ok := resourcesRes["resources"].([]any)
 	require.True(t, ok)
 	assert.Len(t, rawResources, 1)
-	// Waiting, starting builds, reading the model choice, reading a build's
+	// Waiting, starting or dropping builds, reading the model choice, reading a build's
 	// findings, the three team operations and the model settings hand-over
 	// are HTTP-only.
-	assert.Len(t, toolNames, len(gensurla.MethodNames)-len(rawResources)-8)
+	assert.Len(t, toolNames, len(gensurla.MethodNames)-len(rawResources)-9)
 	assert.False(t, toolNames["hand_over_model_settings"], "no MCP tool hands model settings over")
+	assert.False(t, toolNames["drop_build"], "dropping a build is the user's HTTP operation")
 
 	gpRead := s1.call("4", "resources/read", map[string]any{"uri": "surla://golden-path"})
 	gpContents := requireResourceContents(t, gpRead)
@@ -451,7 +452,7 @@ func TestSharedServerSignalExitAndDetachedVerificationSurvival(t *testing.T) {
 			ReportDir:       reportsDir,
 			Tests:           verify.TestsEvaluator,
 		},
-	}, []string{supervisorScript}, nil)
+	}, []string{supervisorScript}, nil, t.TempDir())
 	require.NoError(t, err)
 	t.Cleanup(func() {
 		assert.NoError(t, os.WriteFile(releaseFile, []byte("done"), 0o600))

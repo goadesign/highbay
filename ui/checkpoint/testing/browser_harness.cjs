@@ -556,6 +556,180 @@ async function phoneScenario(input, facts, views) {
   facts.phone.build_has_finding_text = responseFindings.some((text) => buildBody.body.includes(text));
 }
 
+// takingScenario inspects both requested viewport classes in one browser run.
+// The Go fixture supplies typed presentation facts; this proves no worker ran.
+async function takingScenario(input, facts, views) {
+  const takingState = input.taking_state === "replay" ? "merged" : input.taking_state === "dropped_stale" ? "dropped" : input.taking_state;
+  const ready = await until(views, "document.querySelector('#surla-build-taking[data-state=" + takingState + "]') !== null");
+  if (ready.timed_out) {
+    const state = await evaluate(views, "({ state: document.getElementById('surla-checkpoint-root')?.dataset.state, text: document.body.innerText.slice(0, 6000) })");
+    throw new Error("taking presentation did not load: " + JSON.stringify(state) + "; responses: " +
+      JSON.stringify(views.requests.filter(to(input.origin, "GET", "/changes/taking-layout/build")).map((request) => ({ status: request.status, failure: request.failure }))));
+  }
+  facts.taking = [];
+  for (const [name, width, height] of [["desktop", 1280, 900], ["mobile", 375, 800]]) {
+    await views.dt.send("Emulation.setDeviceMetricsOverride", {
+      width, height, deviceScaleFactor: 1, mobile: width < 600,
+    }, views.sessionId);
+    await evaluate(views, "new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))");
+    const trigger = input.taking_state === "passed" ? "surla-build-drop" : ["building", "replay"].includes(input.taking_state) ? "surla-build-again" : null;
+    let opened = { timed_out: false };
+    if (trigger !== null) {
+      await evaluate(views, "document.getElementById('" + trigger + "').focus(), true");
+      await views.dt.send("Input.dispatchKeyEvent", { type: "keyDown", key: "Enter", code: "Enter", windowsVirtualKeyCode: 13, text: "\r", unmodifiedText: "\r" }, views.sessionId);
+      await views.dt.send("Input.dispatchKeyEvent", { type: "keyUp", key: "Enter", code: "Enter", windowsVirtualKeyCode: 13 }, views.sessionId);
+      const question = input.taking_state === "passed" ? "surla-build-drop-question" : "surla-build-question";
+      opened = await until(views, "document.getElementById('" + question + "')?.contains(document.activeElement)");
+    }
+    const measured = await evaluate(views, "(" + function measure() {
+      const region = document.getElementById("surla-build-section");
+      return {
+        width: document.documentElement.clientWidth,
+        document_width: document.documentElement.scrollWidth,
+        commands: Array.from(region.querySelectorAll(".surla-build-merge pre"), (node) => node.textContent),
+        commands_usable: Array.from(region.querySelectorAll(".surla-build-merge pre")).every((node) => {
+          const style = getComputedStyle(node);
+          node.focus();
+          return style.whiteSpace === "pre" && ["auto", "scroll"].includes(style.overflowX) &&
+            node.tabIndex === 0 && document.activeElement === node && node.getAttribute("role") === "region" && node.getAttribute("aria-label");
+        }),
+        explanation: document.getElementById("surla-build-confirm-explanation")?.textContent.includes("nothing confines them") === true ||
+          (document.getElementById("surla-build-start-explanation")?.textContent.includes("nothing confines them") === true &&
+          document.getElementById("surla-build-start")?.getAttribute("aria-describedby")?.split(/\s+/).includes("surla-build-start-explanation") === true),
+        no_start: document.getElementById("surla-build-start") === null,
+        enabling_step: document.getElementById("surla-build-enabling-step")?.textContent.includes("This agreement was drafted before a build was dropped") === true && document.getElementById("surla-build-again") === null,
+        rewrite_warning: region.textContent.includes("commit where this build started") && region.textContent.includes("these merges bring that history back"),
+        overflowing: [region, ...region.querySelectorAll("*")].filter((node) => {
+          // Exact command lines intentionally scroll inside their focusable pre.
+          if (!node.getClientRects().length || node.closest(".surla-build-merge pre")) return false;
+          const box = node.getBoundingClientRect();
+          return box.left < -1 || box.right > document.documentElement.clientWidth + 1 || node.scrollWidth > node.clientWidth + 1;
+        }).map((node) => node.id || node.tagName),
+      };
+    }.toString() + ")()");
+    measured.question_focused = !opened.timed_out;
+    if (trigger !== null) await evaluate(views, "document.getElementById('" + (input.taking_state === "passed" ? "surla-build-drop-question" : "surla-build-question") + "').focus(), true");
+    const capture = await views.dt.send("Page.captureScreenshot", { format: "png", captureBeyondViewport: true }, views.sessionId);
+    measured.screenshot = require("node:path").join(input.capture_directory, input.taking_state + "-" + name + ".png");
+    fs.writeFileSync(measured.screenshot, Buffer.from(capture.data, "base64"));
+    if (trigger !== null) {
+      await views.dt.send("Input.dispatchKeyEvent", { type: "keyDown", key: "Escape", code: "Escape", windowsVirtualKeyCode: 27 }, views.sessionId);
+      await views.dt.send("Input.dispatchKeyEvent", { type: "keyUp", key: "Escape", code: "Escape", windowsVirtualKeyCode: 27 }, views.sessionId);
+      const question = input.taking_state === "passed" ? "surla-build-drop-question" : "surla-build-question";
+      const canceled = await until(views, "document.getElementById('" + question + "') === null && document.activeElement?.id === '" + trigger + "'");
+      measured.question_cancelled = !canceled.timed_out;
+    }
+    facts.taking.push(measured);
+  }
+}
+
+// approvalScenario captures the real served UI using explicit typed owner
+// fixtures. The separate served-page tests exercise real approval persistence.
+async function approvalScenario(input, facts, views) {
+  await views.dt.send("Page.bringToFront", {}, views.sessionId);
+  let ready = await until(views, "document.getElementById('surla-nav-cp5') !== null");
+  if (ready.timed_out) throw new Error("approval navigation did not load");
+  await evaluate(views, "document.getElementById('surla-nav-cp5').click(), true");
+  ready = await until(views, "document.getElementById('surla-approval-stage') !== null && document.querySelector('.surla-flow-evidence tbody tr') !== null && !document.getElementById('surla-cp5-observation-status')");
+  if (ready.timed_out) throw new Error("approval evidence did not settle: " + JSON.stringify({
+    page: await evaluate(views, "({ hidden: document.hidden, visibility: document.visibilityState, disabled: document.getElementById('surla-cp5-approve')?.disabled, text: document.body.innerText.slice(0, 5000) })"),
+    requests: views.requests.filter((r) => r.method === "GET").map((r) => ({ url: r.url, status: r.status, failure: r.failure })),
+    console: views.console,
+  }));
+  facts.approval = [];
+  const sizes = [["desktop", 1280, 900, 1], ["laptop", 1024, 768, 1], ["phone", 390, 844, 1]];
+  if (input.approval_state === "current") sizes.push(["dark", 1280, 900, 1], ["reflow-200", 640, 450, 2]);
+  for (const [name, width, height, scale] of sizes) {
+    await views.dt.send("Emulation.setDeviceMetricsOverride", { width, height, deviceScaleFactor: scale, mobile: width < 600 }, views.sessionId);
+    await views.dt.send("Emulation.setEmulatedMedia", { features: [{ name: "prefers-color-scheme", value: name === "dark" ? "dark" : "light" }] }, views.sessionId);
+    await evaluate(views, "window.scrollTo(0, 0), new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))");
+    // Two paint frames can still fall inside the incumbent 150ms color
+    // transition. Measure rest only after finite animations settle, bounded
+    // by the same deadline as every other browser observation.
+    const settled = await until(views, "document.getAnimations().every((animation) => animation.effect?.getTiming().iterations === Infinity || animation.playState !== 'running')");
+    if (settled.timed_out) throw new Error("approval colors did not settle at " + name);
+    const primaryAtRest = await evaluate(views, "(" + function measureRestingAction() {
+      const action = document.getElementById("surla-cp5-approve");
+      if (action === null) return true;
+      document.activeElement?.blur();
+      const probe = document.createElement("span");
+      probe.style.backgroundColor = "var(--primary)";
+      probe.style.color = "var(--primary-foreground)";
+      probe.style.display = "none";
+      document.body.append(probe);
+      const expected = getComputedStyle(probe), actual = getComputedStyle(action);
+      const matched = actual.backgroundColor === expected.backgroundColor && actual.color === expected.color;
+      probe.remove();
+      return matched;
+    }.toString() + ")()");
+    if (input.approval_state === "current") {
+      const resting = await views.dt.send("Page.captureScreenshot", { format: "png", captureBeyondViewport: false }, views.sessionId);
+      fs.writeFileSync(require("node:path").join(input.capture_directory, "current-" + name + "-resting.png"), Buffer.from(resting.data, "base64"));
+    }
+    let reached = false;
+    if (input.approval_state === "current") {
+      await evaluate(views, "document.querySelector('.surla-skip-link').focus(), true");
+      for (let step = 0; step < 24; step++) {
+        await views.dt.send("Input.dispatchKeyEvent", { type: "keyDown", key: "Tab", code: "Tab", windowsVirtualKeyCode: 9 }, views.sessionId);
+        await views.dt.send("Input.dispatchKeyEvent", { type: "keyUp", key: "Tab", code: "Tab", windowsVirtualKeyCode: 9 }, views.sessionId);
+        reached = await evaluate(views, "document.activeElement?.id === 'surla-cp5-approve'");
+        if (reached) break;
+      }
+    }
+    const measured = await evaluate(views, "(" + function measureApproval() {
+      const stage = document.getElementById("surla-approval-stage");
+      const action = document.getElementById("surla-cp5-approve");
+      const footer = document.getElementById("surla-frame-next");
+      const phone = matchMedia("(max-width: 720px)").matches;
+      const style = action ? getComputedStyle(action) : null;
+      const padding = parseFloat(getComputedStyle(document.body).paddingBottom);
+      return {
+        width: document.documentElement.clientWidth,
+        document_width: document.documentElement.scrollWidth,
+        heading: document.getElementById("surla-cp5-title").textContent,
+        finished_flows: stage.querySelectorAll(".surla-flow-evidence tbody tr").length,
+        draft_visible: stage.querySelector(".surla-approval-exclusions").textContent.includes("Draft, no required test"),
+        approve_count: document.querySelectorAll("#surla-cp5-approve").length,
+        approve_in_next: action !== null && footer.contains(action),
+        approve_enabled: action !== null && !action.disabled,
+        focus_visible: action !== null && document.activeElement === action && style.outlineStyle !== "none" && parseFloat(style.outlineWidth) >= 2,
+        commands: Array.from(stage.querySelectorAll(".surla-approval-basis .surla-build-merge pre"), (node) => node.textContent),
+        footer_reserved: !phone || padding >= footer.getBoundingClientRect().height,
+        overflowing: [stage, ...stage.querySelectorAll("*"), footer].filter((node) => {
+          if (!node.getClientRects().length || node.closest("pre") || getComputedStyle(node).clipPath === "inset(50%)") return false;
+          const box = node.getBoundingClientRect();
+          return box.left < -1 || box.right > document.documentElement.clientWidth + 1 || node.scrollWidth > node.clientWidth + 1;
+        }).map((node) => node.id || node.tagName),
+      };
+    }.toString() + ")()");
+    measured.name = name;
+    measured.primary_at_rest = primaryAtRest;
+    measured.keyboard_reached_action = reached;
+    measured.flow_lines_readable = true;
+    const capture = await views.dt.send("Page.captureScreenshot", { format: "png", captureBeyondViewport: true }, views.sessionId);
+    measured.screenshot = require("node:path").join(input.capture_directory, input.approval_state + "-" + name + ".png");
+    fs.writeFileSync(measured.screenshot, Buffer.from(capture.data, "base64"));
+    if (name === "phone" && input.approval_state === "current") {
+      for (let row = 0; row < measured.finished_flows; row++) {
+        const readable = await evaluate(views, "(" + async function inspectFlow(index) {
+          const row = document.querySelectorAll(".surla-flow-evidence tbody tr")[index];
+          row.scrollIntoView({ block: "center" });
+          await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+          const footer = document.getElementById("surla-frame-next").getBoundingClientRect();
+          return Array.from(row.children).every((cell) => {
+            const box = cell.getBoundingClientRect();
+            return box.top >= 0 && box.bottom <= footer.top;
+          });
+        }.toString() + ")(" + row + ")");
+        measured.flow_lines_readable &&= readable;
+        const viewport = await views.dt.send("Page.captureScreenshot", { format: "png", captureBeyondViewport: false }, views.sessionId);
+        fs.writeFileSync(require("node:path").join(input.capture_directory, "current-phone-flow-" + (row + 1) + ".png"), Buffer.from(viewport.data, "base64"));
+      }
+    }
+    facts.approval.push(measured);
+  }
+}
+
 // main runs the scenario. Each section names the Go subtest that judges it.
 async function main(input, facts) {
   const dt = await DevTools.connect(input.devtools);
@@ -585,6 +759,16 @@ async function main(input, facts) {
       target_url: targetInfo.url,
     };
 
+    if (input.approval) {
+      await approvalScenario(input, facts, views);
+      await dt.send("Target.closeTarget", { targetId: views.targetId });
+      return;
+    }
+    if (input.taking) {
+      await takingScenario(input, facts, views);
+      await dt.send("Target.closeTarget", { targetId: views.targetId });
+      return;
+    }
     if (input.phone) {
       await phoneScenario(input, facts, views);
       return;

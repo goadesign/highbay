@@ -80,8 +80,9 @@ export interface C4EdgeItem {
 }
 
 export interface ChangeBuild {
-  build: ({ "state": "not_started" } | { "builder": BuilderProgress; "in_force": boolean; "request_revision": string; "required_test_count": number; "started_at": string; "state": "started"; "test_writer": TestWriterProgress });
+  build: ({ "state": "not_started" } | { "builder": BuilderProgress; "in_force": boolean; "request_revision": string; "required_test_count": number; "started_at": string; "state": "started"; "taking": ({ "state": "building" } | { "base_in_branch": boolean; "candidate_branch": string; "candidate_commit": string; "run_id": string; "state": "passed"; "tests": ({ "source": "evaluator" } | { "branch": string; "commit": string; "source": "written_tests" }) } | { "state": "merged" } | { "kept_branches": string[]; "state": "dropped" }); "test_writer": TestWriterProgress });
   change_id: string;
+  drafted_before_drop: boolean;
 }
 
 export interface ChangeCardResult {
@@ -183,6 +184,13 @@ export interface ModelConnection {
   connection: ({ "kind": "none" } | { "kind": "direct"; "model_name": string; "provider": "anthropic" | "openai" } | { "gateway_addr": string; "kind": "gateway" });
 }
 
+export interface OpenBuildRefusal {
+  build: StartedBuild;
+  change_id: string;
+  message: string;
+  name: string;
+}
+
 export interface PreviewArchitecturePayload {
   change_id: string;
   request_revision: string;
@@ -214,6 +222,18 @@ export interface ProposedRevisionItem {
   ui_composition?: UICompositionItem;
 }
 
+export interface ReplacedBuild {
+  change_id: string;
+  started_at: string;
+}
+
+export interface RequiredTest {
+  flow_key: string;
+  hook: string;
+  scenario: string;
+  story: string;
+}
+
 export interface ServerError {
   fault: boolean;
   id: string;
@@ -228,13 +248,13 @@ export interface ShowTeamPaneRequestBody {
 }
 
 export interface StartBuildRequestBody {
+  replaces?: ReplacedBuild;
   request_revision: string;
 }
 
 export interface StartBuildResult {
   build: StartedBuild;
   team: ({ "dialog": "opened" | "already_open" | "not_needed"; "roles": ProjectTeamRole[]; "space": string; "state": "ready"; "step": string; "team": string } | { "state": "window_busy"; "step": string } | { "count": number; "state": "ambiguous_space"; "step": string } | { "state": "unavailable"; "step": string });
-  working_copy: ({ "state": "not_used" } | { "commit": string; "state": "at_project_commit" } | { "commit": string; "state": "not_contained"; "step": string } | { "commit": string; "state": "dirty" });
 }
 
 export interface StartedBuild {
@@ -243,6 +263,7 @@ export interface StartedBuild {
   request_revision: string;
   required_test_count: number;
   started_at: string;
+  taking: ({ "state": "building" } | { "base_in_branch": boolean; "candidate_branch": string; "candidate_commit": string; "run_id": string; "state": "passed"; "tests": ({ "source": "evaluator" } | { "branch": string; "commit": string; "source": "written_tests" }) } | { "state": "merged" } | { "kept_branches": string[]; "state": "dropped" });
   test_writer: TestWriterProgress;
 }
 
@@ -275,6 +296,7 @@ export interface StoryQuestionItem {
 
 export interface StoryRefreshResult {
   diagnostic?: string;
+  draft_folder: string;
   message: string;
   op_id?: string;
   snapshot_digest?: string;
@@ -299,7 +321,7 @@ export interface StorySummaryItem {
 }
 
 export interface TeamRoleState {
-  assignment: "unread" | "nothing_owed" | "unknown";
+  assignment: "unread" | "nothing_owed" | "no_work" | "unknown";
   attention: "none" | "permission" | "question" | "auth" | "silent" | "assignment" | "unknown";
   handle: string;
   role: "guide" | "builder" | "test_writer";
@@ -411,6 +433,25 @@ export interface VerificationNotCompleted {
   summary: string;
 }
 
+export interface VerificationReview {
+  approval: ({ "state": "available" } | { "reason": string; "state": "blocked" } | { "approved_by": string; "artifacts": Record<string, string>; "candidate_commit": string; "environment": string; "report_digest": string; "scenario_count": number; "state": "recorded"; "suite_commit": string; "suite_id": string; "test_source": ({ "source": "evaluator" } | { "commit": string; "notice": string; "source": "written_tests" }) } | { "approval": ApprovalItem; "reason": string; "state": "unverified" });
+  story_context: ({ "build_number": number; "build_started_at": string; "mapping": ({ "required_tests": RequiredTest[]; "state": "mapped" } | { "state": "not_recorded_for_evaluator" }); "state": "recorded"; "stories": StorySummaryItem[] } | { "state": "not_recorded" });
+}
+
+export interface VerificationReviewResult {
+  accepted_at: string;
+  candidate_binaries_dir?: string;
+  candidate_commit: string;
+  change_id: string;
+  inputs_current: boolean;
+  request_revision: string;
+  review: VerificationReview;
+  run_id: string;
+  state: ({ "type": "running"; "value": VerificationRunning } | { "type": "completed"; "value": VerificationCompleted } | { "type": "not_completed"; "value": VerificationNotCompleted });
+  suite_commit: string;
+  test_source: ({ "source": "evaluator" } | { "commit": string; "notice": string; "source": "written_tests" });
+}
+
 export interface VerificationRunning {
   started_at: string;
 }
@@ -451,6 +492,8 @@ export type GetStoryRefreshRequest = Record<string, never>;
 
 export type StartBuildRequest = StartBuildRequestBody & { "change_id": string };
 
+export type DropBuildRequest = VerificationRunning & { "change_id": string };
+
 export interface GetBuildRequest {
   "change_id": string;
 }
@@ -481,6 +524,10 @@ export interface GetVerificationRequest {
   "run_id": string;
 }
 
+export interface ReviewVerificationRequest {
+  "run_id": string;
+}
+
 export interface ListTracesRequest {
   "status"?: "all" | "error" | "ok";
   "limit"?: number;
@@ -495,34 +542,40 @@ export type GetModelConnectionRequest = Record<string, never>;
 
 export type ConfigureModelRequest = ConfigureModelPayload;
 
-// Operations maps each operation the page sends to its request and result.
+// Operations maps each operation the page sends to its request, result and
+// validated failure bodies.
 export interface Operations {
-  exchange_browser_link: { request: ExchangeBrowserLinkRequest; result: ExchangeBrowserLinkResponseBody };
-  list_changes: { request: ListChangesRequest; result: ChangeList };
-  wait_for_changes: { request: WaitForChangesRequest; result: ChangeListVersion };
-  get_change: { request: GetChangeRequest; result: ChangeCardResult };
-  get_story_refresh: { request: GetStoryRefreshRequest; result: StoryRefreshResult };
-  start_build: { request: StartBuildRequest; result: StartBuildResult };
-  get_build: { request: GetBuildRequest; result: ChangeBuild };
-  get_test_findings: { request: GetTestFindingsRequest; result: TestFindings };
-  get_team: { request: GetTeamRequest; result: TeamSnapshot };
-  show_team_pane: { request: ShowTeamPaneRequest; result: undefined };
-  start_team_agents: { request: StartTeamAgentsRequest; result: ProjectTeam };
-  confirm_intent: { request: ConfirmIntentRequest; result: ChangeCardResult };
-  decline_revision: { request: DeclineRevisionRequest; result: ChangeCardResult };
-  approve_merge: { request: ApproveMergeRequest; result: ChangeCardResult };
-  preview_architecture: { request: PreviewArchitectureRequest; result: ArchitecturePreviewResult };
-  list_verifications: { request: ListVerificationsRequest; result: VerificationListResult };
-  get_verification: { request: GetVerificationRequest; result: VerificationStatusResult };
-  list_traces: { request: ListTracesRequest; result: TraceList };
-  get_live_target: { request: GetLiveTargetRequest; result: LiveTargetStatus };
-  stop_live_target: { request: StopLiveTargetRequest; result: StopLiveTargetResult };
-  get_model_connection: { request: GetModelConnectionRequest; result: ModelConnection };
-  configure_model: { request: ConfigureModelRequest; result: ModelConfigResult };
+  exchange_browser_link: { request: ExchangeBrowserLinkRequest; result: ExchangeBrowserLinkResponseBody; failure: ServerError };
+  list_changes: { request: ListChangesRequest; result: ChangeList; failure: ServerError };
+  wait_for_changes: { request: WaitForChangesRequest; result: ChangeListVersion; failure: ServerError };
+  get_change: { request: GetChangeRequest; result: ChangeCardResult; failure: ServerError };
+  get_story_refresh: { request: GetStoryRefreshRequest; result: StoryRefreshResult; failure: ServerError };
+  start_build: { request: StartBuildRequest; result: StartBuildResult; failure: ServerError | OpenBuildRefusal };
+  drop_build: { request: DropBuildRequest; result: ChangeBuild; failure: ServerError | OpenBuildRefusal };
+  get_build: { request: GetBuildRequest; result: ChangeBuild; failure: ServerError };
+  get_test_findings: { request: GetTestFindingsRequest; result: TestFindings; failure: ServerError };
+  get_team: { request: GetTeamRequest; result: TeamSnapshot; failure: ServerError };
+  show_team_pane: { request: ShowTeamPaneRequest; result: undefined; failure: ServerError };
+  start_team_agents: { request: StartTeamAgentsRequest; result: ProjectTeam; failure: ServerError };
+  confirm_intent: { request: ConfirmIntentRequest; result: ChangeCardResult; failure: ServerError };
+  decline_revision: { request: DeclineRevisionRequest; result: ChangeCardResult; failure: ServerError };
+  approve_merge: { request: ApproveMergeRequest; result: ChangeCardResult; failure: ServerError };
+  preview_architecture: { request: PreviewArchitectureRequest; result: ArchitecturePreviewResult; failure: ServerError };
+  list_verifications: { request: ListVerificationsRequest; result: VerificationListResult; failure: ServerError };
+  get_verification: { request: GetVerificationRequest; result: VerificationStatusResult; failure: ServerError };
+  review_verification: { request: ReviewVerificationRequest; result: VerificationReviewResult; failure: ServerError };
+  list_traces: { request: ListTracesRequest; result: TraceList; failure: ServerError };
+  get_live_target: { request: GetLiveTargetRequest; result: LiveTargetStatus; failure: ServerError };
+  stop_live_target: { request: StopLiveTargetRequest; result: StopLiveTargetResult; failure: ServerError };
+  get_model_connection: { request: GetModelConnectionRequest; result: ModelConnection; failure: ServerError };
+  configure_model: { request: ConfigureModelRequest; result: ModelConfigResult; failure: ServerError };
 }
 
 // OperationName names one operation the page sends.
 export type OperationName = keyof Operations;
+
+// ServerFailure is a validated failure body returned to the page.
+export type ServerFailure = Operations[OperationName]["failure"];
 
 // EncodedRequest is a request's same-origin address and JSON body.
 export interface EncodedRequest {
@@ -532,7 +585,7 @@ export interface EncodedRequest {
   body: string | undefined;
 }
 
-// Route is how one operation is sent and how its success is recognized.
+// Route is how one operation is sent and its returned bodies are recognized.
 export interface Route<K extends OperationName> {
   // method is the HTTP method.
   method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
@@ -542,6 +595,8 @@ export interface Route<K extends OperationName> {
   encode: (request: Operations[K]["request"]) => EncodedRequest;
   // decode reports whether a parsed answer is the operation's result.
   decode: (value: unknown) => value is Operations[K]["result"];
+  // decodeFailure validates a failure body against its declared HTTP status.
+  decodeFailure: (status: number, value: unknown) => value is Operations[K]["failure"];
 }
 
 function encodeExchangeBrowserLink(request: ExchangeBrowserLinkRequest): EncodedRequest {
@@ -570,6 +625,11 @@ function encodeGetStoryRefresh(_request: GetStoryRefreshRequest): EncodedRequest
 function encodeStartBuild(request: StartBuildRequest): EncodedRequest {
   const { change_id: _change_id, ...payload } = request;
   return { path: "/changes/" + encodeURIComponent(String(request.change_id)) + "/build", body: JSON.stringify(payload) };
+}
+
+function encodeDropBuild(request: DropBuildRequest): EncodedRequest {
+  const { change_id: _change_id, ...payload } = request;
+  return { path: "/changes/" + encodeURIComponent(String(request.change_id)) + "/build/drop", body: JSON.stringify(payload) };
 }
 
 function encodeGetBuild(request: GetBuildRequest): EncodedRequest {
@@ -616,6 +676,10 @@ function encodeGetVerification(request: GetVerificationRequest): EncodedRequest 
   return { path: "/verifications/" + encodeURIComponent(String(request.run_id)), body: undefined };
 }
 
+function encodeReviewVerification(request: ReviewVerificationRequest): EncodedRequest {
+  return { path: "/verifications/" + encodeURIComponent(String(request.run_id)) + "/review", body: undefined };
+}
+
 function encodeListTraces(request: ListTracesRequest): EncodedRequest {
   const query = new URLSearchParams();
   if (request.status !== undefined) {
@@ -647,30 +711,130 @@ function encodeConfigureModel(request: ConfigureModelRequest): EncodedRequest {
   return { path: "/cp1/model", body: JSON.stringify(request) };
 }
 
+function decodeExchangeBrowserLinkFailure(_status: number, value: unknown): value is Operations["exchange_browser_link"]["failure"] {
+  return isServerError(value);
+}
+
+function decodeListChangesFailure(_status: number, value: unknown): value is Operations["list_changes"]["failure"] {
+  return isServerError(value);
+}
+
+function decodeWaitForChangesFailure(_status: number, value: unknown): value is Operations["wait_for_changes"]["failure"] {
+  return isServerError(value);
+}
+
+function decodeGetChangeFailure(_status: number, value: unknown): value is Operations["get_change"]["failure"] {
+  return isServerError(value);
+}
+
+function decodeGetStoryRefreshFailure(_status: number, value: unknown): value is Operations["get_story_refresh"]["failure"] {
+  return isServerError(value);
+}
+
+function decodeStartBuildFailure(status: number, value: unknown): value is Operations["start_build"]["failure"] {
+  return isServerError(value) ||
+    (status === 409 && matchesSchema(value, {"$ref":"#/$defs/OpenBuildRefusal"}));
+}
+
+function decodeDropBuildFailure(status: number, value: unknown): value is Operations["drop_build"]["failure"] {
+  return isServerError(value) ||
+    (status === 409 && matchesSchema(value, {"$ref":"#/$defs/OpenBuildRefusal"}));
+}
+
+function decodeGetBuildFailure(_status: number, value: unknown): value is Operations["get_build"]["failure"] {
+  return isServerError(value);
+}
+
+function decodeGetTestFindingsFailure(_status: number, value: unknown): value is Operations["get_test_findings"]["failure"] {
+  return isServerError(value);
+}
+
+function decodeGetTeamFailure(_status: number, value: unknown): value is Operations["get_team"]["failure"] {
+  return isServerError(value);
+}
+
+function decodeShowTeamPaneFailure(_status: number, value: unknown): value is Operations["show_team_pane"]["failure"] {
+  return isServerError(value);
+}
+
+function decodeStartTeamAgentsFailure(_status: number, value: unknown): value is Operations["start_team_agents"]["failure"] {
+  return isServerError(value);
+}
+
+function decodeConfirmIntentFailure(_status: number, value: unknown): value is Operations["confirm_intent"]["failure"] {
+  return isServerError(value);
+}
+
+function decodeDeclineRevisionFailure(_status: number, value: unknown): value is Operations["decline_revision"]["failure"] {
+  return isServerError(value);
+}
+
+function decodeApproveMergeFailure(_status: number, value: unknown): value is Operations["approve_merge"]["failure"] {
+  return isServerError(value);
+}
+
+function decodePreviewArchitectureFailure(_status: number, value: unknown): value is Operations["preview_architecture"]["failure"] {
+  return isServerError(value);
+}
+
+function decodeListVerificationsFailure(_status: number, value: unknown): value is Operations["list_verifications"]["failure"] {
+  return isServerError(value);
+}
+
+function decodeGetVerificationFailure(_status: number, value: unknown): value is Operations["get_verification"]["failure"] {
+  return isServerError(value);
+}
+
+function decodeReviewVerificationFailure(_status: number, value: unknown): value is Operations["review_verification"]["failure"] {
+  return isServerError(value);
+}
+
+function decodeListTracesFailure(_status: number, value: unknown): value is Operations["list_traces"]["failure"] {
+  return isServerError(value);
+}
+
+function decodeGetLiveTargetFailure(_status: number, value: unknown): value is Operations["get_live_target"]["failure"] {
+  return isServerError(value);
+}
+
+function decodeStopLiveTargetFailure(_status: number, value: unknown): value is Operations["stop_live_target"]["failure"] {
+  return isServerError(value);
+}
+
+function decodeGetModelConnectionFailure(_status: number, value: unknown): value is Operations["get_model_connection"]["failure"] {
+  return isServerError(value);
+}
+
+function decodeConfigureModelFailure(_status: number, value: unknown): value is Operations["configure_model"]["failure"] {
+  return isServerError(value);
+}
+
 // ROUTES addresses every operation the page sends.
 export const ROUTES: { [K in OperationName]: Route<K> } = {
-  exchange_browser_link: { method: "POST", success: 201, encode: encodeExchangeBrowserLink, decode: isExchangeBrowserLinkResponseBody },
-  list_changes: { method: "GET", success: 200, encode: encodeListChanges, decode: isChangeList },
-  wait_for_changes: { method: "GET", success: 200, encode: encodeWaitForChanges, decode: isChangeListVersion },
-  get_change: { method: "GET", success: 200, encode: encodeGetChange, decode: isChangeCardResult },
-  get_story_refresh: { method: "GET", success: 200, encode: encodeGetStoryRefresh, decode: isStoryRefreshResult },
-  start_build: { method: "POST", success: 200, encode: encodeStartBuild, decode: isStartBuildResult },
-  get_build: { method: "GET", success: 200, encode: encodeGetBuild, decode: isChangeBuild },
-  get_test_findings: { method: "GET", success: 200, encode: encodeGetTestFindings, decode: isTestFindings },
-  get_team: { method: "GET", success: 200, encode: encodeGetTeam, decode: isTeamSnapshot },
-  show_team_pane: { method: "POST", success: 204, encode: encodeShowTeamPane, decode: isNoContent },
-  start_team_agents: { method: "POST", success: 200, encode: encodeStartTeamAgents, decode: isProjectTeam },
-  confirm_intent: { method: "POST", success: 200, encode: encodeConfirmIntent, decode: isChangeCardResult },
-  decline_revision: { method: "POST", success: 200, encode: encodeDeclineRevision, decode: isChangeCardResult },
-  approve_merge: { method: "POST", success: 200, encode: encodeApproveMerge, decode: isChangeCardResult },
-  preview_architecture: { method: "POST", success: 200, encode: encodePreviewArchitecture, decode: isArchitecturePreviewResult },
-  list_verifications: { method: "GET", success: 200, encode: encodeListVerifications, decode: isVerificationListResult },
-  get_verification: { method: "GET", success: 200, encode: encodeGetVerification, decode: isVerificationStatusResult },
-  list_traces: { method: "GET", success: 200, encode: encodeListTraces, decode: isTraceList },
-  get_live_target: { method: "GET", success: 200, encode: encodeGetLiveTarget, decode: isLiveTargetStatus },
-  stop_live_target: { method: "DELETE", success: 200, encode: encodeStopLiveTarget, decode: isStopLiveTargetResult },
-  get_model_connection: { method: "GET", success: 200, encode: encodeGetModelConnection, decode: isModelConnection },
-  configure_model: { method: "POST", success: 200, encode: encodeConfigureModel, decode: isModelConfigResult },
+  exchange_browser_link: { method: "POST", success: 201, encode: encodeExchangeBrowserLink, decode: isExchangeBrowserLinkResponseBody, decodeFailure: decodeExchangeBrowserLinkFailure },
+  list_changes: { method: "GET", success: 200, encode: encodeListChanges, decode: isChangeList, decodeFailure: decodeListChangesFailure },
+  wait_for_changes: { method: "GET", success: 200, encode: encodeWaitForChanges, decode: isChangeListVersion, decodeFailure: decodeWaitForChangesFailure },
+  get_change: { method: "GET", success: 200, encode: encodeGetChange, decode: isChangeCardResult, decodeFailure: decodeGetChangeFailure },
+  get_story_refresh: { method: "GET", success: 200, encode: encodeGetStoryRefresh, decode: isStoryRefreshResult, decodeFailure: decodeGetStoryRefreshFailure },
+  start_build: { method: "POST", success: 200, encode: encodeStartBuild, decode: isStartBuildResult, decodeFailure: decodeStartBuildFailure },
+  drop_build: { method: "POST", success: 200, encode: encodeDropBuild, decode: isChangeBuild, decodeFailure: decodeDropBuildFailure },
+  get_build: { method: "GET", success: 200, encode: encodeGetBuild, decode: isChangeBuild, decodeFailure: decodeGetBuildFailure },
+  get_test_findings: { method: "GET", success: 200, encode: encodeGetTestFindings, decode: isTestFindings, decodeFailure: decodeGetTestFindingsFailure },
+  get_team: { method: "GET", success: 200, encode: encodeGetTeam, decode: isTeamSnapshot, decodeFailure: decodeGetTeamFailure },
+  show_team_pane: { method: "POST", success: 204, encode: encodeShowTeamPane, decode: isNoContent, decodeFailure: decodeShowTeamPaneFailure },
+  start_team_agents: { method: "POST", success: 200, encode: encodeStartTeamAgents, decode: isProjectTeam, decodeFailure: decodeStartTeamAgentsFailure },
+  confirm_intent: { method: "POST", success: 200, encode: encodeConfirmIntent, decode: isChangeCardResult, decodeFailure: decodeConfirmIntentFailure },
+  decline_revision: { method: "POST", success: 200, encode: encodeDeclineRevision, decode: isChangeCardResult, decodeFailure: decodeDeclineRevisionFailure },
+  approve_merge: { method: "POST", success: 200, encode: encodeApproveMerge, decode: isChangeCardResult, decodeFailure: decodeApproveMergeFailure },
+  preview_architecture: { method: "POST", success: 200, encode: encodePreviewArchitecture, decode: isArchitecturePreviewResult, decodeFailure: decodePreviewArchitectureFailure },
+  list_verifications: { method: "GET", success: 200, encode: encodeListVerifications, decode: isVerificationListResult, decodeFailure: decodeListVerificationsFailure },
+  get_verification: { method: "GET", success: 200, encode: encodeGetVerification, decode: isVerificationStatusResult, decodeFailure: decodeGetVerificationFailure },
+  review_verification: { method: "GET", success: 200, encode: encodeReviewVerification, decode: isVerificationReviewResult, decodeFailure: decodeReviewVerificationFailure },
+  list_traces: { method: "GET", success: 200, encode: encodeListTraces, decode: isTraceList, decodeFailure: decodeListTracesFailure },
+  get_live_target: { method: "GET", success: 200, encode: encodeGetLiveTarget, decode: isLiveTargetStatus, decodeFailure: decodeGetLiveTargetFailure },
+  stop_live_target: { method: "DELETE", success: 200, encode: encodeStopLiveTarget, decode: isStopLiveTargetResult, decodeFailure: decodeStopLiveTargetFailure },
+  get_model_connection: { method: "GET", success: 200, encode: encodeGetModelConnection, decode: isModelConnection, decodeFailure: decodeGetModelConnectionFailure },
+  configure_model: { method: "POST", success: 200, encode: encodeConfigureModel, decode: isModelConfigResult, decodeFailure: decodeConfigureModelFailure },
 };
 
 interface JSONSchemaNode {
@@ -1018,6 +1182,7 @@ const SCHEMA_DEFS: Record<string, JSONSchemaNode> = {
     "type": "object",
     "required": [
       "change_id",
+      "drafted_before_drop",
       "build"
     ],
     "properties": {
@@ -1048,6 +1213,7 @@ const SCHEMA_DEFS: Record<string, JSONSchemaNode> = {
               "builder",
               "test_writer",
               "required_test_count",
+              "taking",
               "state"
             ],
             "properties": {
@@ -1074,6 +1240,138 @@ const SCHEMA_DEFS: Record<string, JSONSchemaNode> = {
                   "started"
                 ]
               },
+              "taking": {
+                "type": "object",
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "required": [
+                      "state"
+                    ],
+                    "properties": {
+                      "state": {
+                        "type": "string",
+                        "enum": [
+                          "building"
+                        ]
+                      }
+                    },
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "required": [
+                      "run_id",
+                      "candidate_commit",
+                      "candidate_branch",
+                      "tests",
+                      "base_in_branch",
+                      "state"
+                    ],
+                    "properties": {
+                      "base_in_branch": {
+                        "type": "boolean"
+                      },
+                      "candidate_branch": {
+                        "type": "string"
+                      },
+                      "candidate_commit": {
+                        "type": "string"
+                      },
+                      "run_id": {
+                        "type": "string"
+                      },
+                      "state": {
+                        "type": "string",
+                        "enum": [
+                          "passed"
+                        ]
+                      },
+                      "tests": {
+                        "type": "object",
+                        "anyOf": [
+                          {
+                            "type": "object",
+                            "required": [
+                              "source"
+                            ],
+                            "properties": {
+                              "source": {
+                                "type": "string",
+                                "enum": [
+                                  "evaluator"
+                                ]
+                              }
+                            },
+                            "additionalProperties": false
+                          },
+                          {
+                            "type": "object",
+                            "required": [
+                              "commit",
+                              "branch",
+                              "source"
+                            ],
+                            "properties": {
+                              "branch": {
+                                "type": "string"
+                              },
+                              "commit": {
+                                "type": "string"
+                              },
+                              "source": {
+                                "type": "string",
+                                "enum": [
+                                  "written_tests"
+                                ]
+                              }
+                            },
+                            "additionalProperties": false
+                          }
+                        ]
+                      }
+                    },
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "required": [
+                      "state"
+                    ],
+                    "properties": {
+                      "state": {
+                        "type": "string",
+                        "enum": [
+                          "merged"
+                        ]
+                      }
+                    },
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "required": [
+                      "kept_branches",
+                      "state"
+                    ],
+                    "properties": {
+                      "kept_branches": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      },
+                      "state": {
+                        "type": "string",
+                        "enum": [
+                          "dropped"
+                        ]
+                      }
+                    },
+                    "additionalProperties": false
+                  }
+                ]
+              },
               "test_writer": {
                 "$ref": "#/$defs/TestWriterProgress"
               }
@@ -1084,6 +1382,9 @@ const SCHEMA_DEFS: Record<string, JSONSchemaNode> = {
       },
       "change_id": {
         "type": "string"
+      },
+      "drafted_before_drop": {
+        "type": "boolean"
       }
     },
     "additionalProperties": false
@@ -1651,6 +1952,30 @@ const SCHEMA_DEFS: Record<string, JSONSchemaNode> = {
     },
     "additionalProperties": false
   },
+  "OpenBuildRefusal": {
+    "type": "object",
+    "required": [
+      "name",
+      "message",
+      "change_id",
+      "build"
+    ],
+    "properties": {
+      "build": {
+        "$ref": "#/$defs/StartedBuild"
+      },
+      "change_id": {
+        "type": "string"
+      },
+      "message": {
+        "type": "string"
+      },
+      "name": {
+        "type": "string"
+      }
+    },
+    "additionalProperties": false
+  },
   "PreviewArchitecturePayload": {
     "type": "object",
     "required": [
@@ -1784,6 +2109,47 @@ const SCHEMA_DEFS: Record<string, JSONSchemaNode> = {
     },
     "additionalProperties": false
   },
+  "ReplacedBuild": {
+    "type": "object",
+    "required": [
+      "change_id",
+      "started_at"
+    ],
+    "properties": {
+      "change_id": {
+        "type": "string"
+      },
+      "started_at": {
+        "type": "string",
+        "format": "date-time"
+      }
+    },
+    "additionalProperties": false
+  },
+  "RequiredTest": {
+    "type": "object",
+    "required": [
+      "story",
+      "flow_key",
+      "scenario",
+      "hook"
+    ],
+    "properties": {
+      "flow_key": {
+        "type": "string"
+      },
+      "hook": {
+        "type": "string"
+      },
+      "scenario": {
+        "type": "string"
+      },
+      "story": {
+        "type": "string"
+      }
+    },
+    "additionalProperties": false
+  },
   "ServerError": {
     "type": "object",
     "required": [
@@ -1839,6 +2205,9 @@ const SCHEMA_DEFS: Record<string, JSONSchemaNode> = {
       "request_revision"
     ],
     "properties": {
+      "replaces": {
+        "$ref": "#/$defs/ReplacedBuild"
+      },
       "request_revision": {
         "type": "string"
       }
@@ -1849,8 +2218,7 @@ const SCHEMA_DEFS: Record<string, JSONSchemaNode> = {
     "type": "object",
     "required": [
       "build",
-      "team",
-      "working_copy"
+      "team"
     ],
     "properties": {
       "build": {
@@ -1965,87 +2333,6 @@ const SCHEMA_DEFS: Record<string, JSONSchemaNode> = {
             "additionalProperties": false
           }
         ]
-      },
-      "working_copy": {
-        "type": "object",
-        "anyOf": [
-          {
-            "type": "object",
-            "required": [
-              "state"
-            ],
-            "properties": {
-              "state": {
-                "type": "string",
-                "enum": [
-                  "not_used"
-                ]
-              }
-            },
-            "additionalProperties": false
-          },
-          {
-            "type": "object",
-            "required": [
-              "commit",
-              "state"
-            ],
-            "properties": {
-              "commit": {
-                "type": "string"
-              },
-              "state": {
-                "type": "string",
-                "enum": [
-                  "at_project_commit"
-                ]
-              }
-            },
-            "additionalProperties": false
-          },
-          {
-            "type": "object",
-            "required": [
-              "commit",
-              "step",
-              "state"
-            ],
-            "properties": {
-              "commit": {
-                "type": "string"
-              },
-              "state": {
-                "type": "string",
-                "enum": [
-                  "not_contained"
-                ]
-              },
-              "step": {
-                "type": "string"
-              }
-            },
-            "additionalProperties": false
-          },
-          {
-            "type": "object",
-            "required": [
-              "commit",
-              "state"
-            ],
-            "properties": {
-              "commit": {
-                "type": "string"
-              },
-              "state": {
-                "type": "string",
-                "enum": [
-                  "dirty"
-                ]
-              }
-            },
-            "additionalProperties": false
-          }
-        ]
       }
     },
     "additionalProperties": false
@@ -2058,7 +2345,8 @@ const SCHEMA_DEFS: Record<string, JSONSchemaNode> = {
       "in_force",
       "builder",
       "test_writer",
-      "required_test_count"
+      "required_test_count",
+      "taking"
     ],
     "properties": {
       "builder": {
@@ -2077,6 +2365,138 @@ const SCHEMA_DEFS: Record<string, JSONSchemaNode> = {
       "started_at": {
         "type": "string",
         "format": "date-time"
+      },
+      "taking": {
+        "type": "object",
+        "anyOf": [
+          {
+            "type": "object",
+            "required": [
+              "state"
+            ],
+            "properties": {
+              "state": {
+                "type": "string",
+                "enum": [
+                  "building"
+                ]
+              }
+            },
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "required": [
+              "run_id",
+              "candidate_commit",
+              "candidate_branch",
+              "tests",
+              "base_in_branch",
+              "state"
+            ],
+            "properties": {
+              "base_in_branch": {
+                "type": "boolean"
+              },
+              "candidate_branch": {
+                "type": "string"
+              },
+              "candidate_commit": {
+                "type": "string"
+              },
+              "run_id": {
+                "type": "string"
+              },
+              "state": {
+                "type": "string",
+                "enum": [
+                  "passed"
+                ]
+              },
+              "tests": {
+                "type": "object",
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "required": [
+                      "source"
+                    ],
+                    "properties": {
+                      "source": {
+                        "type": "string",
+                        "enum": [
+                          "evaluator"
+                        ]
+                      }
+                    },
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "required": [
+                      "commit",
+                      "branch",
+                      "source"
+                    ],
+                    "properties": {
+                      "branch": {
+                        "type": "string"
+                      },
+                      "commit": {
+                        "type": "string"
+                      },
+                      "source": {
+                        "type": "string",
+                        "enum": [
+                          "written_tests"
+                        ]
+                      }
+                    },
+                    "additionalProperties": false
+                  }
+                ]
+              }
+            },
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "required": [
+              "state"
+            ],
+            "properties": {
+              "state": {
+                "type": "string",
+                "enum": [
+                  "merged"
+                ]
+              }
+            },
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "required": [
+              "kept_branches",
+              "state"
+            ],
+            "properties": {
+              "kept_branches": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "state": {
+                "type": "string",
+                "enum": [
+                  "dropped"
+                ]
+              }
+            },
+            "additionalProperties": false
+          }
+        ]
       },
       "test_writer": {
         "$ref": "#/$defs/TestWriterProgress"
@@ -2187,10 +2607,14 @@ const SCHEMA_DEFS: Record<string, JSONSchemaNode> = {
     "required": [
       "state",
       "stories",
-      "message"
+      "message",
+      "draft_folder"
     ],
     "properties": {
       "diagnostic": {
+        "type": "string"
+      },
+      "draft_folder": {
         "type": "string"
       },
       "message": {
@@ -2304,6 +2728,7 @@ const SCHEMA_DEFS: Record<string, JSONSchemaNode> = {
         "enum": [
           "unread",
           "nothing_owed",
+          "no_work",
           "unknown"
         ]
       },
@@ -2882,6 +3307,418 @@ const SCHEMA_DEFS: Record<string, JSONSchemaNode> = {
     },
     "additionalProperties": false
   },
+  "VerificationReview": {
+    "type": "object",
+    "required": [
+      "story_context",
+      "approval"
+    ],
+    "properties": {
+      "approval": {
+        "type": "object",
+        "anyOf": [
+          {
+            "type": "object",
+            "required": [
+              "state"
+            ],
+            "properties": {
+              "state": {
+                "type": "string",
+                "enum": [
+                  "available"
+                ]
+              }
+            },
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "required": [
+              "reason",
+              "state"
+            ],
+            "properties": {
+              "reason": {
+                "type": "string"
+              },
+              "state": {
+                "type": "string",
+                "enum": [
+                  "blocked"
+                ]
+              }
+            },
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "required": [
+              "approved_by",
+              "report_digest",
+              "candidate_commit",
+              "suite_id",
+              "suite_commit",
+              "environment",
+              "artifacts",
+              "scenario_count",
+              "test_source",
+              "state"
+            ],
+            "properties": {
+              "approved_by": {
+                "type": "string"
+              },
+              "artifacts": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "string"
+                }
+              },
+              "candidate_commit": {
+                "type": "string"
+              },
+              "environment": {
+                "type": "string"
+              },
+              "report_digest": {
+                "type": "string"
+              },
+              "scenario_count": {
+                "type": "integer"
+              },
+              "state": {
+                "type": "string",
+                "enum": [
+                  "recorded"
+                ]
+              },
+              "suite_commit": {
+                "type": "string"
+              },
+              "suite_id": {
+                "type": "string"
+              },
+              "test_source": {
+                "type": "object",
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "required": [
+                      "source"
+                    ],
+                    "properties": {
+                      "source": {
+                        "type": "string",
+                        "enum": [
+                          "evaluator"
+                        ]
+                      }
+                    },
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "required": [
+                      "commit",
+                      "notice",
+                      "source"
+                    ],
+                    "properties": {
+                      "commit": {
+                        "type": "string"
+                      },
+                      "notice": {
+                        "type": "string"
+                      },
+                      "source": {
+                        "type": "string",
+                        "enum": [
+                          "written_tests"
+                        ]
+                      }
+                    },
+                    "additionalProperties": false
+                  }
+                ]
+              }
+            },
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "required": [
+              "approval",
+              "reason",
+              "state"
+            ],
+            "properties": {
+              "approval": {
+                "$ref": "#/$defs/ApprovalItem"
+              },
+              "reason": {
+                "type": "string"
+              },
+              "state": {
+                "type": "string",
+                "enum": [
+                  "unverified"
+                ]
+              }
+            },
+            "additionalProperties": false
+          }
+        ]
+      },
+      "story_context": {
+        "type": "object",
+        "anyOf": [
+          {
+            "type": "object",
+            "required": [
+              "build_number",
+              "build_started_at",
+              "stories",
+              "mapping",
+              "state"
+            ],
+            "properties": {
+              "build_number": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "build_started_at": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "mapping": {
+                "type": "object",
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "required": [
+                      "required_tests",
+                      "state"
+                    ],
+                    "properties": {
+                      "required_tests": {
+                        "type": "array",
+                        "items": {
+                          "$ref": "#/$defs/RequiredTest"
+                        }
+                      },
+                      "state": {
+                        "type": "string",
+                        "enum": [
+                          "mapped"
+                        ]
+                      }
+                    },
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "required": [
+                      "state"
+                    ],
+                    "properties": {
+                      "state": {
+                        "type": "string",
+                        "enum": [
+                          "not_recorded_for_evaluator"
+                        ]
+                      }
+                    },
+                    "additionalProperties": false
+                  }
+                ]
+              },
+              "state": {
+                "type": "string",
+                "enum": [
+                  "recorded"
+                ]
+              },
+              "stories": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/$defs/StorySummaryItem"
+                }
+              }
+            },
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "required": [
+              "state"
+            ],
+            "properties": {
+              "state": {
+                "type": "string",
+                "enum": [
+                  "not_recorded"
+                ]
+              }
+            },
+            "additionalProperties": false
+          }
+        ]
+      }
+    },
+    "additionalProperties": false
+  },
+  "VerificationReviewResult": {
+    "type": "object",
+    "required": [
+      "review",
+      "run_id",
+      "change_id",
+      "request_revision",
+      "candidate_commit",
+      "suite_commit",
+      "accepted_at",
+      "inputs_current",
+      "test_source",
+      "state"
+    ],
+    "properties": {
+      "accepted_at": {
+        "type": "string",
+        "format": "date-time"
+      },
+      "candidate_binaries_dir": {
+        "type": "string"
+      },
+      "candidate_commit": {
+        "type": "string"
+      },
+      "change_id": {
+        "type": "string"
+      },
+      "inputs_current": {
+        "type": "boolean"
+      },
+      "request_revision": {
+        "type": "string"
+      },
+      "review": {
+        "$ref": "#/$defs/VerificationReview"
+      },
+      "run_id": {
+        "type": "string"
+      },
+      "state": {
+        "type": "object",
+        "anyOf": [
+          {
+            "type": "object",
+            "required": [
+              "type",
+              "value"
+            ],
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": [
+                  "running"
+                ]
+              },
+              "value": {
+                "$ref": "#/$defs/VerificationRunning"
+              }
+            },
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "required": [
+              "type",
+              "value"
+            ],
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": [
+                  "completed"
+                ]
+              },
+              "value": {
+                "$ref": "#/$defs/VerificationCompleted"
+              }
+            },
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "required": [
+              "type",
+              "value"
+            ],
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": [
+                  "not_completed"
+                ]
+              },
+              "value": {
+                "$ref": "#/$defs/VerificationNotCompleted"
+              }
+            },
+            "additionalProperties": false
+          }
+        ]
+      },
+      "suite_commit": {
+        "type": "string"
+      },
+      "test_source": {
+        "type": "object",
+        "anyOf": [
+          {
+            "type": "object",
+            "required": [
+              "source"
+            ],
+            "properties": {
+              "source": {
+                "type": "string",
+                "enum": [
+                  "evaluator"
+                ]
+              }
+            },
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "required": [
+              "commit",
+              "notice",
+              "source"
+            ],
+            "properties": {
+              "commit": {
+                "type": "string"
+              },
+              "notice": {
+                "type": "string"
+              },
+              "source": {
+                "type": "string",
+                "enum": [
+                  "written_tests"
+                ]
+              }
+            },
+            "additionalProperties": false
+          }
+        ]
+      }
+    },
+    "additionalProperties": false
+  },
   "VerificationRunning": {
     "type": "object",
     "required": [
@@ -3203,6 +4040,11 @@ export function isModelConnection(value: unknown): value is ModelConnection {
   return matchesSchema(value, { $ref: "#/$defs/ModelConnection" });
 }
 
+// isOpenBuildRefusal validates a parsed answer against the generated OpenBuildRefusal schema.
+export function isOpenBuildRefusal(value: unknown): value is OpenBuildRefusal {
+  return matchesSchema(value, { $ref: "#/$defs/OpenBuildRefusal" });
+}
+
 // isProjectTeam validates a parsed answer against the generated ProjectTeam schema.
 export function isProjectTeam(value: unknown): value is ProjectTeam {
   return matchesSchema(value, { $ref: "#/$defs/ProjectTeam" });
@@ -3246,6 +4088,11 @@ export function isTraceList(value: unknown): value is TraceList {
 // isVerificationListResult validates a parsed answer against the generated VerificationListResult schema.
 export function isVerificationListResult(value: unknown): value is VerificationListResult {
   return matchesSchema(value, { $ref: "#/$defs/VerificationListResult" });
+}
+
+// isVerificationReviewResult validates a parsed answer against the generated VerificationReviewResult schema.
+export function isVerificationReviewResult(value: unknown): value is VerificationReviewResult {
+  return matchesSchema(value, { $ref: "#/$defs/VerificationReviewResult" });
 }
 
 // isVerificationStatusResult validates a parsed answer against the generated VerificationStatusResult schema.

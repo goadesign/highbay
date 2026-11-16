@@ -135,7 +135,7 @@ func TestALoadFailureNamesTheStoryRequirementStepOnlyWhenItIsMissing(t *testing.
 	require.True(t, ok, "Surla's go.mod requires the Story module")
 	step := "\nThe design imports the Story language, but its module's go.mod does not require it. " +
 		"In the folder that holds that go.mod, run: go get github.com/goadesign/surla/story@" + surlaStory +
-		", commit go.mod and go.sum, then try again."
+		", then try again."
 	const (
 		plainMod   = "module example.com/orders\n\ngo 1.24\n"
 		storyFile  = "package design\n\nimport . \"github.com/goadesign/surla/story/dsl\"\n\nvar _ = Story(\"Orders\", func() {})\n"

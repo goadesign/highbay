@@ -21,8 +21,8 @@ func TestViewsPageBuildIgnoresThePreviousChangesDelayedRead(t *testing.T) {
 	cp := newBuildControlPlane(t, Options{Team: &TeamBinding{Owner: pageOwner, Service: f}})
 	cp.changesWait = 400 * time.Millisecond
 	cp.changesPoll = 20 * time.Millisecond
-	confirmedChange(t, cp, "chg-first")
-	second := confirmedChange(t, cp, "chg-second")
+	buildableChange(t, cp, "chg-first")
+	second := buildableChange(t, cp, "chg-second")
 	started, err := cp.StartBuild(asCaller(pageOwner, CallerUser), &gensurla.StartBuildPayload{
 		ChangeID: second.ChangeID, RequestRevision: second.RequestRevision,
 	})
@@ -65,8 +65,8 @@ func TestViewsPageBuildWaitsForConfirmationAndARecoveredRead(t *testing.T) {
 	cp := newBuildControlPlane(t, Options{Team: &TeamBinding{Owner: pageOwner, Service: f}})
 	cp.changesWait = 400 * time.Millisecond
 	cp.changesPoll = 20 * time.Millisecond
-	confirmedChange(t, cp, "chg-confirmed")
-	mustPropose(t, cp, asCaller(pageOwner, CallerGuide), "chg-unconfirmed", "Route refunds to a manager.", refundAnalysis("Route refunds to a manager."))
+	buildableChange(t, cp, "chg-confirmed")
+	saveProposedCardFixture(t, cp, pageOwner, "chg-unconfirmed", "Route refunds to a manager.", refundAnalysis("Route refunds to a manager."))
 	ps := startPageServer(t, cp)
 
 	runPageScript(t, ps, nil, `
@@ -106,7 +106,7 @@ func TestViewsPageBuildWaitsForTheListedAgreementBeforeCardReadCompletes(t *test
 	cp := newBuildControlPlane(t, Options{Team: &TeamBinding{Owner: pageOwner, Service: f}})
 	cp.changesWait = 400 * time.Millisecond
 	cp.changesPoll = 20 * time.Millisecond
-	first := confirmedChange(t, cp, "chg")
+	first := buildableChange(t, cp, "chg")
 	ps := startPageServer(t, cp)
 	ps.act("refine-agreement", func() {
 		_, err := cp.ConfirmIntent(asCaller(pageOwner, CallerUser), &gensurla.ConfirmIntentPayload{
@@ -152,7 +152,7 @@ func TestViewsPageBuildUsesTheNewAgreementAndKeepsDraftAndProposal(t *testing.T)
 	cp := newBuildControlPlane(t, Options{Team: &TeamBinding{Owner: pageOwner, Service: f}})
 	cp.changesWait = 400 * time.Millisecond
 	cp.changesPoll = 20 * time.Millisecond
-	first := confirmedChange(t, cp, "chg")
+	first := buildableChange(t, cp, "chg")
 	_, err := cp.StartBuild(asCaller(pageOwner, CallerUser), &gensurla.StartBuildPayload{
 		ChangeID: first.ChangeID, RequestRevision: first.RequestRevision,
 	})
@@ -173,14 +173,33 @@ func TestViewsPageBuildUsesTheNewAgreementAndKeepsDraftAndProposal(t *testing.T)
 const path = "/changes/chg/build";
 const primary = (element) => element.classList.contains("surla-btn-primary");
 const page = await openPage(origin, { link: input.link });
-await until(() => page.$("#surla-build-start") && !page.$("#surla-build-start").disabled, "the earlier build did not offer a direct current build");
+await until(() => page.$("#surla-build-start") && !page.$("#surla-build-start").disabled, "the earlier build did not offer the current-agreement action");
 expect(page.text("#surla-build-start") === "Build current agreed revision", "the earlier build's recovery action is unclear");
+expect(page.$("#surla-build-start").getAttribute("aria-describedby").split(/\s+/).includes("surla-build-start-explanation") && page.text("#surla-build-start-explanation").includes("From Build on, the tests and the builder’s code run on this machine as ordinary programs, with your access to files and the network; nothing confines them. Approval decides only what merges."), "earlier building offer omitted its execution explanation");
 expect(page.text("#surla-build-state").includes("Earlier build") && page.text("#surla-build-state").includes("The agreed revision has changed."), "the saved build is presented as current");
-expect(primary(page.$("#surla-build-start")) && !primary(page.$("#surla-build-view-team")), "the direct current Build is not the primary action");
+expect(primary(page.$("#surla-build-start")) && !primary(page.$("#surla-build-view-team")), "the current-agreement Build is not the primary action");
+const earlierRead = page.sent("GET", path).find((read) => read.status === 200 && JSON.parse(read.answer).build.state === "started");
+expect(earlierRead, "the earlier build was not read from its owner");
+const earlier = JSON.parse(earlierRead.answer).build;
+expect(earlier.taking.state === "building" && earlier.request_revision !== input.revision, "the fixture is not an unfinished earlier revision");
 page.$("#surla-build-start").click();
-expect(!page.$("#surla-build-confirm"), "building a new agreement asked to restart the earlier build");
-await until(() => page.$("#surla-build-again") && !page.$("#surla-build-again").disabled, "the current agreement did not finish building");
-expect(page.sent("POST", path).length === 1 && page.sent("POST", path)[0].body.request_revision === input.revision, "the direct action did not build the current agreed revision");
+await until(() => page.$("#surla-build-confirm") && !page.$("#surla-build-confirm").disabled, "replacing an unfinished earlier build did not ask for consent");
+expect(page.sent("POST", path).length === 0, "opening the earlier-build question sent a start");
+page.$("#surla-build-confirm").dispatchEvent(new page.win.KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+await until(() => !page.$("#surla-build-confirm") && page.doc.activeElement === page.$("#surla-build-start") && !page.$("#surla-build-start").disabled, "Escape did not restore the earlier-build trigger and focus");
+expect(page.sent("POST", path).length === 0, "Escape sent an earlier-build replacement");
+page.$("#surla-build-start").click();
+await until(() => page.$("#surla-build-cancel"), "the earlier-build question did not reopen");
+page.$("#surla-build-cancel").click();
+await until(() => !page.$("#surla-build-confirm") && page.doc.activeElement === page.$("#surla-build-start") && !page.$("#surla-build-start").disabled, "Cancel did not restore the earlier-build trigger and focus");
+expect(page.sent("POST", path).length === 0, "Cancel sent an earlier-build replacement");
+page.$("#surla-build-start").click();
+await until(() => page.$("#surla-build-confirm") && !page.$("#surla-build-confirm").disabled, "the earlier-build confirmation did not become ready");
+page.$("#surla-build-confirm").click();
+await until(() => page.sent("POST", path).length === 1 && page.$("#surla-build-again") && !page.$("#surla-build-again").disabled, "the confirmed current agreement did not finish building");
+const firstReplacement = page.sent("POST", path)[0];
+expect(firstReplacement.body.request_revision === input.revision && firstReplacement.body.replaces?.change_id === "chg" && firstReplacement.body.replaces.started_at === earlier.started_at && Object.keys(firstReplacement.body.replaces).length === 2, "the confirmed new agreement did not replace exactly the observed earlier build");
+const currentStart = JSON.parse(firstReplacement.answer).build.started_at;
 expect(!primary(page.$("#surla-build-view-team")) && !primary(page.$("#surla-build-again")), "agent work gives navigation or rebuilding primary weight");
 const field = page.$('textarea[data-example-id="check_01"][data-field="scenario"]');
 page.type(field, "Unsaved scenario on the agreed revision");
@@ -198,7 +217,9 @@ await until(() => page.$("#surla-build-confirm") && !page.$("#surla-build-confir
 expect(page.sent("POST", path).length === 1, "opening the current rebuild question sent a start");
 page.$("#surla-build-confirm").click();
 await until(() => page.sent("POST", path).length === 2 && page.$("#surla-build-again") && !page.$("#surla-build-again").disabled, "the confirmed current rebuild did not finish");
-expect(page.sent("POST", path)[1].body.request_revision === input.revision, "the rebuild used the unadopted proposal");
+const currentReplacement = page.sent("POST", path)[1].body;
+expect(currentReplacement.request_revision === input.revision, "the rebuild used the unadopted proposal");
+expect(currentReplacement.replaces?.change_id === "chg" && currentReplacement.replaces.started_at === currentStart && Object.keys(currentReplacement.replaces).length === 2, "the current-agreement restart did not name exactly its observed predecessor");
 expect(field === page.$('textarea[data-example-id="check_01"][data-field="scenario"]') && field.value === "Unsaved scenario on the agreed revision", "the rebuild discarded or replaced the unsaved editor");
 expect(page.$('#surla-proposal [data-option="total_with_tax"]').getAttribute("aria-pressed") === "true", "the rebuild discarded the proposal answer");
 expect(page.$("#surla-proposal") && !page.$("#surla-proposal-adopt").disabled && page.$("#surla-confirm-submit").disabled, "the rebuild changed the waiting proposal's available actions");
@@ -218,14 +239,15 @@ page.$("#surla-build-again").click();
 await until(() => page.$("#surla-build-confirm"), "a fresh Build again did not ask for confirmation");
 expect(page.sent("POST", path).length === 2, "reopening the rebuild question sent a start");
 page.$("#surla-build-cancel").click();
-await until(() => !page.$("#surla-build-confirm"), "the fresh rebuild question did not cancel");
+await until(() => !page.$("#surla-build-confirm") && page.doc.activeElement === page.$("#surla-build-again"), "the fresh rebuild question did not cancel and restore focus");
+expect(page.sent("POST", path).length === 2, "Cancel sent another replacement");
 page.close();
 `)
 }
 
 // TestViewsPageBuildTeamRecoveryClearsTheOldInstructionEverywhere proves a
 // later successful Start agents supersedes a busy-window Build receipt in both
-// the card and global status, while retaining that Build's working-copy history.
+// the card and global status, while retaining the saved build's identity.
 func TestViewsPageBuildTeamRecoveryClearsTheOldInstructionEverywhere(t *testing.T) {
 	f := &teamServiceFixture{snapshot: pageTeamSnapshot("working")}
 	f.start = func(context.Context) (*gensurla.ProjectTeam, error) {
@@ -234,7 +256,7 @@ func TestViewsPageBuildTeamRecoveryClearsTheOldInstructionEverywhere(t *testing.
 	cp := newBuildControlPlane(t, Options{Team: &TeamBinding{Owner: pageOwner, Service: f}})
 	cp.changesWait = 400 * time.Millisecond
 	cp.changesPoll = 20 * time.Millisecond
-	confirmedChange(t, cp, "chg")
+	buildableChange(t, cp, "chg")
 	ps := startPageServer(t, cp)
 	ps.act("allow-team-start", func() {
 		f.mu.Lock()
@@ -255,8 +277,9 @@ await until(() => page.$("#surla-build-start") && !page.$("#surla-build-start").
 page.$("#surla-build-start").click();
 await until(() => page.$("#surla-build-start-team-receipt") && page.$("#surla-build-again") && !page.$("#surla-build-again").disabled, "the busy-window build did not finish");
 expect(page.text("#surla-build-start-team-receipt").includes("the build was saved and the team window was busy") && page.text("#surla-build-start-team-receipt").includes(oldStep), "the busy-window result was not shown as a historical receipt");
-const copyReceipt = page.text("#surla-build-start-copy-receipt");
-expect(copyReceipt.includes("the working copy was at the project commit"), "the Build's working-copy history is missing");
+const savedStart = JSON.parse(page.sent("POST", path)[0].answer).build.started_at;
+expect(page.text("#surla-build-details").includes(savedStart), "the saved Build identity is missing");
+expect(!page.$("#surla-build-start-copy-receipt"), "the removed working-copy receipt returned");
 await control(origin, "act", { key: "allow-team-start" });
 page.$("#surla-build-view-team").click();
 await until(() => page.state() === "team" && page.$("#surla-team-start") && !page.$("#surla-team-start").disabled, "View team did not open the recovery action");
@@ -265,9 +288,10 @@ page.$("#surla-team-start").click();
 await until(() => page.$("#surla-team-start-receipt") && page.text("#surla-team-start-receipt").includes("Choose the builder in the newly opened team dialog."), "the successful Team start receipt did not appear");
 expect(!page.doc.body.textContent.includes(oldStep), "the superseded Build instruction remained visible in Team");
 page.$("#surla-nav-cp1").click();
-await until(() => page.$("#surla-build-start-copy-receipt"), "returning to the card lost the Build history");
+await until(() => page.$("#surla-build-again") && page.text("#surla-build-details").includes(savedStart), "returning to the card lost the saved Build");
 expect(!page.$("#surla-build-start-team-receipt") && !page.doc.body.textContent.includes(oldStep), "the old busy-window instruction returned on the card or global status");
-expect(page.text("#surla-build-start-copy-receipt") === copyReceipt, "Team recovery rewrote the Build's working-copy history");
+expect(page.text("#surla-build-details").includes(savedStart), "Team recovery rewrote the saved Build identity");
+expect(!page.$("#surla-build-start-copy-receipt"), "Team recovery restored the removed working-copy receipt");
 page.$("#surla-nav-team").click();
 await until(() => page.$("#surla-team-start-receipt"), "the latest Team receipt was lost on navigation");
 expect(!page.doc.body.textContent.includes(oldStep), "the old Build instruction returned after reopening Team");

@@ -281,6 +281,11 @@ func TestFirstMessagesNameOnlyAllowedOperations(t *testing.T) {
 		_, message := roleFirstMessage(role)
 		assert.True(t, controlplane.OperationAllowed(controlplane.CallerKind(role), "golden_path"))
 		for _, operation := range names.FindAllString(files.ReplaceAllString(message, ""), -1) {
+			// These two words name fields of the builder assignment, not calls.
+			// Every other snake-case word must remain a permitted operation.
+			if role == "builder" && (operation == "working_folder" || operation == "gowork_off") {
+				continue
+			}
 			assert.Contains(t, gensurla.MethodNames, operation)
 			assert.True(t, controlplane.OperationAllowed(controlplane.CallerKind(role), operation), "%s may not call %s", role, operation)
 		}
@@ -314,7 +319,59 @@ func TestTheTestWriterMayRegenerateItsTestModule(t *testing.T) {
 	}
 	for _, role := range []string{"guide", "builder", "test_writer"} {
 		_, message := roleFirstMessage(role)
-		assert.NotContains(t, message, "drop", role)
+		assert.NotContains(t, message, "regenerating drops", role)
 		assert.NotContains(t, message, "never regenerate", role)
+	}
+}
+
+// TestFirstMessagesKeepTheRolesInTheirOwnedFolders checks the role boundaries
+// alongside the operation-policy check, including stop and branch invariants.
+func TestFirstMessagesKeepTheRolesInTheirOwnedFolders(t *testing.T) {
+	for _, tc := range []struct {
+		role     string
+		required []string
+	}{
+		{"guide", []string{
+			"call update_draft before each new change",
+			"Work only in the draft folder returned by update_draft or refresh_story",
+			"never edit the project folder or copy design files between it and the draft",
+			"when one is in the project folder, tell the user what to correct there and wait",
+			"run the same formatter in the draft, refresh and revise",
+		}},
+		{"builder", []string{
+			"Read each new assignment with get_builder_assignment before any other work",
+			"Then run git status: implementation files you authored or generated for this build are expected current work.",
+			"If you find unexpected files or work from an earlier build, stop and tell the user before carrying it forward.",
+			"it writes the agreed design into design/ and regenerates gen/; never edit either",
+			"When your assignment's gowork_off is true",
+			"Never merge, cherry-pick or copy files from another surla/ branch",
+		}},
+		{"test_writer", []string{
+			"Read each new assignment with get_test_writer_assignment before any other work",
+			"Then run git status: the Story table and generated test-module files Surla just prepared, and tests you already authored for this build, are expected current work.",
+			"Leave Surla's prepared files unchanged.",
+			"If you find unexpected files or work from an earlier build, stop and tell the user before carrying it forward.",
+			"do not commit: Surla commits what it accepts",
+			"Run every go command as GOWORK=off",
+			"Never bring files or commits from another surla/ branch",
+		}},
+	} {
+		t.Run(tc.role, func(t *testing.T) {
+			_, message := roleFirstMessage(tc.role)
+			for _, text := range tc.required {
+				assert.Contains(t, message, text)
+			}
+			if tc.role == "guide" {
+				return
+			}
+			assert.NotContains(t, message, "a file it lists was left by earlier work")
+			for _, text := range []string{
+				"An empty list means no build needs you: say so and stop.",
+				"When a Surla call says a build was dropped or a new one started, stop",
+				"Never name, move or delete a surla/ branch.",
+			} {
+				assert.Contains(t, message, text)
+			}
+		})
 	}
 }

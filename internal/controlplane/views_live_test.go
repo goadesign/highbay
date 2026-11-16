@@ -282,16 +282,17 @@ func TestViewsPageLiveTargetNotConfirmedStopped(t *testing.T) {
 		}
 		require.NoError(t, os.RemoveAll(cardsDir))
 	})
-	cp, err := New(Options{
+	cp, err := New(buildFixtureOptions(t, Options{BuildCacheDir: t.TempDir(),
 		CardsDir:     cardsDir,
 		Verification: &VerificationConfig{RunsDir: t.TempDir()},
 		Live: &LiveConfig{
 			Command: []string{self}, Env: append(os.Environ(), liveTargetModeEnv+"=serve"),
 			StartTimeout: time.Minute,
 		},
-	})
+	}))
 	require.NoError(t, err)
-	saveStoryCard(t, cp, "chg-live", StatusConfirmed, refundStory("Start a live target"))
+	card := saveBuildStoryCard(t, cp, "chg-live", StatusConfirmed, refundStory("Start a live target"))
+	saveStoredBuildFixture(t, cp, card)
 	cp.changesWait = 400 * time.Millisecond
 	cp.changesPoll = 20 * time.Millisecond
 	t.Cleanup(func() { assert.Error(t, cp.Close(), "Close reports the target it could not confirm stopped") })
@@ -492,13 +493,15 @@ func pageLiveControlPlane(t *testing.T, mode string, opts Options) *ControlPlane
 	t.Helper()
 	self, err := os.Executable()
 	require.NoError(t, err)
+	opts.BuildCacheDir = t.TempDir()
 	opts.Verification = &VerificationConfig{RunsDir: t.TempDir()}
 	opts.Live = &LiveConfig{
 		Command:      []string{self},
 		Env:          append(os.Environ(), liveTargetModeEnv+"="+mode),
 		StartTimeout: time.Minute,
 	}
-	cp := pageControlPlane(t, opts)
-	saveStoryCard(t, cp, "chg-live", StatusConfirmed, refundStory("Start a live target"))
+	cp := pageControlPlane(t, buildFixtureOptions(t, opts))
+	card := saveBuildStoryCard(t, cp, "chg-live", StatusConfirmed, refundStory("Start a live target"))
+	saveStoredBuildFixture(t, cp, card)
 	return cp
 }

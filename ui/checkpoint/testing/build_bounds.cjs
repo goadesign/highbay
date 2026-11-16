@@ -30,7 +30,11 @@ Object.assign(contract.components.schemas.TeamSnapshot.properties, probes);
 contract.components.schemas.TeamSnapshot.required.push(...Object.keys(probes));
 fs.mkdirSync(path.join(temporary, "gen/http"), { recursive: true });
 fs.writeFileSync(path.join(temporary, "gen/http/openapi3.json"), JSON.stringify(contract));
-execFileSync(process.execPath, [path.join(copiedPage, "build.mjs")], {
+// Invoke the real generator through an alias on every platform. Node resolves
+// its module URL, while argv keeps the alias, just as macOS temporary paths do.
+const generatorEntry = path.join(copiedPage, "build-entry.mjs");
+fs.symlinkSync("build.mjs", generatorEntry);
+execFileSync(process.execPath, [generatorEntry], {
   cwd: temporary, stdio: ["ignore", "pipe", "pipe"], timeout: 30000, maxBuffer: 8 * 1024 * 1024,
 });
 const validatorsPath = path.join(copiedPage, "numeric_types.cjs");
@@ -55,12 +59,12 @@ for (const [field, cases] of Object.entries({
   }
 }
 
-const saved = { request_revision: "revision", started_at: "2026-11-13T00:00:00Z", in_force: true,
+const saved = { request_revision: "revision", started_at: "2026-11-13T00:00:00Z", in_force: true, taking: { state: "building" },
   required_test_count: 0, builder: { read: false }, test_writer: { read: false, report: 0, tests: { state: "assigned" } } };
 for (const op of ["get_build", "start_build"]) {
   const answer = (build) => op === "get_build"
-    ? { change_id: "chg", build: { state: "started", ...build } }
-    : { build, team: { state: "window_busy", step: "Close the open dialog." }, working_copy: { state: "not_used" } };
+    ? { change_id: "chg", drafted_before_drop: false, build: { state: "started", ...build } }
+    : { build, team: { state: "window_busy", step: "Close the open dialog." } };
   for (const value of [-1, 0, 1]) {
     assert.equal(types.ROUTES[op].decode(answer({ ...saved, required_test_count: value })), value >= 0, op + " count=" + value);
     assert.equal(types.ROUTES[op].decode(answer({ ...saved, test_writer: { ...saved.test_writer, report: value } })), value >= 0, op + " report=" + value);
@@ -73,7 +77,7 @@ for (const op of ["get_build", "start_build"]) {
 }
 for (const count of [1, 2, 3]) {
   assert.equal(types.ROUTES.start_build.decode({ build: saved,
-    team: { state: "ambiguous_space", count, step: "Close the duplicate spaces." }, working_copy: { state: "not_used" } }), count >= 2, "ambiguous count=" + count);
+    team: { state: "ambiguous_space", count, step: "Close the duplicate spaces." } }), count >= 2, "ambiguous count=" + count);
 }
 // Malformed numeric constraints fail generation rather than becoming a silent
 // omission or a JavaScript comparison against a coerced string.
@@ -81,7 +85,7 @@ for (const bound of ["minimum", "maximum"]) {
   const malformed = structuredClone(contract);
   malformed.components.schemas.TeamSnapshot.properties.number_between[bound] = "0";
   fs.writeFileSync(path.join(temporary, "gen/http/openapi3.json"), JSON.stringify(malformed));
-  assert.throws(() => execFileSync(process.execPath, [path.join(copiedPage, "build.mjs")], {
+  assert.throws(() => execFileSync(process.execPath, [generatorEntry], {
     cwd: temporary, stdio: ["ignore", "pipe", "pipe"], timeout: 30000, maxBuffer: 8 * 1024 * 1024,
   }), (error) => error.status !== 0 && String(error.stderr).includes("Invalid numeric " + bound));
 }

@@ -153,7 +153,7 @@ func TestViewsPageOpensTheOnlyChangeDirectly(t *testing.T) {
 const page = await openPage(origin, { link: input.link });
 await until(() => page.$("#surla-cp1-editor").dataset.changeId === "chg-only", "the only change did not open directly");
 expect(page.state() === "cp1-change-card" && !page.$("#surla-change-list"), "the page showed the list instead of the only change");
-expect(page.$("#surla-nav-changes") && page.$("#surla-nav-cp1").getAttribute("aria-current") === "page", "stage navigation does not offer the list and mark the open stage");
+expect(page.$("#surla-nav-changes") && page.$("#surla-nav-cp1").getAttribute("aria-current") === "step", "stage navigation does not offer the list and mark the open stage");
 page.$("#surla-nav-changes").click();
 expect(page.$$("#surla-change-list li").length === 1 && page.$("#surla-open-change-chg-only").getAttribute("aria-current") === "true", "the list does not mark the open change");
 page.close();
@@ -317,15 +317,53 @@ func TestViewsPageApprovesAPassedResult(t *testing.T) {
 	guide := WithPrincipal(context.Background(), Principal{ID: pageOwner, CallerID: "guide", Kind: CallerGuide})
 	user := WithPrincipal(context.Background(), Principal{ID: pageOwner, CallerID: pageUserID, Kind: CallerUser})
 
+	t.Run("approves after merging", func(t *testing.T) {
+		target := &pageTarget{artifacts: spec.Artifacts}
+		cp := pageControlPlane(t, buildFixtureOptions(t, Options{ResolvePromotionTarget: target.resolve}))
+		card := buildableChange(t, cp, "chg-merged-approve")
+		saveStoredBuildFixture(t, cp, card)
+		commit := commitBuilderCandidateFixture(t, cp, card)
+		read, err := cp.GetBuild(user, &gensurla.GetBuildPayload{ChangeID: card.ChangeID})
+		require.NoError(t, err)
+		build, ok := read.Build.AsStarted()
+		require.True(t, ok)
+		encoded, err := gensurla.EncodeStartedBuild(build)
+		require.NoError(t, err)
+		report := passingReport(t, card.RequestRevision, commit, spec)
+		target.update(func(p *pageTarget) { p.report = report })
+		svc := newPageVerifications(cp)
+		run := passedRun(card, "abcdefabcdefabcdefabcdefabcdefab", commit, report.Digest)
+		run.InputsCurrent = true
+		svc.set(run)
+		svc.list(card.ChangeID, run.RunID)
+		ps := startPageServer(t, svc)
+		runPageScript(t, ps, map[string]any{"build": string(encoded)}, `
+await control(origin, "reply", { key: "GET /changes/chg-merged-approve/build", status: 200,
+  body: { change_id: "chg-merged-approve", drafted_before_drop: false, build: { ...JSON.parse(input.build), state: "started", taking: { state: "merged" } } } });
+const page = await openPage(origin, { link: input.link });
+await until(() => page.$("#surla-build-taking")?.dataset.state === "merged", "the merged state did not appear");
+expect(!page.text("#surla-build-taking").includes("git merge") && !page.$("#surla-build-drop"), "a merged build still offers taking actions");
+page.$("#surla-nav-cp5").click();
+await until(() => page.$("#surla-cp5-approve") && !page.$("#surla-cp5-approve").disabled, "merging hid approval of the still-current passed report");
+page.$("#surla-cp5-approve").click();
+await until(() => page.$("#surla-cp5-approval"), "approval after merging was not recorded");
+expect(page.sent("POST", "/changes/approve").length === 1, "approval after merging sent more than one write");
+page.close();
+`)
+	})
+
 	t.Run("approves", func(t *testing.T) {
 		target := &pageTarget{artifacts: spec.Artifacts}
-		cp := pageControlPlane(t, Options{ResolvePromotionTarget: target.resolve})
-		proposed := mustPropose(t, cp, guide, "chg-approve", "Route refunds to a manager.", refundAnalysis("Route refunds to a manager."))
+		cp := pageControlPlane(t, buildFixtureOptions(t, Options{ResolvePromotionTarget: target.resolve}))
+		proposed := saveProposedCardFixture(t, cp, pageOwner, "chg-approve", "Route refunds to a manager.", refundAnalysis("Route refunds to a manager."))
+		proposed = attachBuildSnapshot(t, cp, proposed.ChangeID)
 		confirmed, err := cp.ConfirmIntent(user, &gensurla.ConfirmIntentPayload{
 			ChangeID: proposed.ChangeID, RequestRevision: proposed.RequestRevision,
 			Answers: map[string]string{}, Examples: proposed.Examples,
 		})
 		require.NoError(t, err)
+		saveStoredBuildFixture(t, cp, confirmed)
+		commit := commitBuilderCandidateFixture(t, cp, confirmed)
 		report := passingReport(t, confirmed.RequestRevision, commit, spec)
 		target.update(func(p *pageTarget) { p.report = report })
 		svc := newPageVerifications(cp)
@@ -335,24 +373,25 @@ func TestViewsPageApprovesAPassedResult(t *testing.T) {
 		svc.set(run)
 		svc.list(confirmed.ChangeID, run.RunID)
 		ps := startPageServer(t, svc)
-		runPageScript(t, ps, map[string]any{"run": run.RunID, "digest": report.Digest, "revision": confirmed.RequestRevision}, viewsPageScriptHelpers+`
+		runPageScript(t, ps, map[string]any{"run": run.RunID, "digest": report.Digest, "revision": confirmed.RequestRevision, "candidate": commit}, viewsPageScriptHelpers+`
 const page = await openPage(origin, { link: input.link });
 await until(() => page.$("#surla-cp1-editor").dataset.changeId === "chg-approve", "the change did not open");
-page.$("#surla-nav-cp4").click();
+page.$("#surla-nav-cp5").click();
 await until(() => page.$("#surla-cp5-approve") && !page.$("#surla-cp5-approve").disabled, "a passed result offered no approval control");
-expect(page.text("#surla-result-view").includes("The check passed: 2 of 2 scenarios.") && page.text("#surla-result-view").includes("holdout-1"), "the run's result is not shown");
+expect(page.text("#surla-result-view").includes("2 of 2 declared tests passed.") && page.text("#surla-result-view").includes("holdout-1"), "the run's result is not shown");
 checkControl(page, page.$("#surla-cp5-approve"), "approve control");
 await control(origin, "hold", { key: "POST /changes/approve" });
 page.$("#surla-cp5-approve").click();
-expect(page.$("#surla-cp5-approve").disabled && page.$("#surla-cp5-approve").textContent === "Approving..." && page.$("#surla-cp5-approve-region").getAttribute("aria-busy") === "true", "approving showed no busy state");
+expect(page.$("#surla-cp5-approve").disabled && page.$("#surla-cp5-approve").textContent === "Approving…" && page.$("#surla-approval-stage").getAttribute("aria-busy") === "true", "approving showed no busy state");
 const sent = page.sent("POST", "/changes/approve");
-expect(sent.length === 1 && JSON.stringify(sent[0].body) === JSON.stringify({ change_id: "chg-approve", request_revision: input.revision, candidate_commit: "1111111111111111111111111111111111111111", report_digest: input.digest }), "approval did not act on the exact revision and result shown: " + JSON.stringify(sent));
+expect(sent.length === 1 && JSON.stringify(sent[0].body) === JSON.stringify({ change_id: "chg-approve", request_revision: input.revision, candidate_commit: input.candidate, report_digest: input.digest }), "approval did not act on the exact revision and result shown: " + JSON.stringify(sent));
 await control(origin, "release", { key: "POST /changes/approve" });
 await until(() => page.$("#surla-cp5-approval"), "the recorded approval is not shown");
 expect(page.doc.activeElement === page.$("#surla-cp5-approval"), "approving did not move focus to the result");
-const approval = page.text("#surla-cp5-approval");
-expect(approval.includes("Approval recorded") && approval.includes("No merge or deploy side effect") && approval.includes(input.owner) && approval.includes(input.digest) && approval.includes("orders_acceptance") && approval.includes("Builder's commit:") && approval.includes("Tests' commit:") && approval.includes("1111111111111111111111111111111111111111") && approval.includes("2222222222222222222222222222222222222222"), "the approval panel lacks its record: " + approval);
+const approval = page.text("#surla-approval-stage");
+expect(approval.includes("Approval recorded") && approval.includes("Approval records permission to promote these verified inputs") && approval.includes(input.owner) && approval.includes(input.digest) && approval.includes("orders_acceptance") && approval.includes("Builder’s commit") && approval.includes("Tests’ commit") && approval.includes(input.candidate) && approval.includes("2222222222222222222222222222222222222222"), "the approval panel lacks its record: " + approval);
 expect(!page.$("#surla-cp5-approval-dirty-warning"), "a clean approved card warned about unsaved edits");
+page.$("#surla-nav-cp1").click();
 const outcome = page.$('textarea[data-field="expected_outcome"]');
 const saved = outcome.value;
 page.type(outcome, "edited after approval");
@@ -365,10 +404,10 @@ page.close();
 
 // A new page session confirming the unchanged answers keeps the revision and the approval.
 const again = await openPage(origin, { link: input.link + "-2" });
-await until(() => again.$("#surla-cp1-editor").dataset.changeId === "chg-approve" && again.$("#surla-cp5-approval"), "a new session did not open the approved change");
+await until(() => again.$("#surla-cp1-editor").dataset.changeId === "chg-approve" && again.$("#surla-review-approval"), "a new session did not open the approved change");
 again.$("#surla-confirm-submit").click();
 await until(() => again.sent("POST", "/changes/confirm").length === 1 && !again.$("#surla-confirm-submit").disabled, "the unchanged confirmation did not finish");
-expect(again.$("#surla-cp1-editor").dataset.requestRevision === input.revision && again.$("#surla-cp5-approval"), "confirming unchanged answers changed the revision or dropped the approval");
+expect(again.$("#surla-cp1-editor").dataset.requestRevision === input.revision && again.$("#surla-review-approval"), "confirming unchanged answers changed the revision or dropped the approval");
 const unchanged = await readCard("chg-approve");
 expect(unchanged.request_revision === input.revision && unchanged.approval && unchanged.approval.approved_by === input.owner, "the saved revision or approval changed");
 again.close();
@@ -377,7 +416,7 @@ again.close();
 
 	t.Run("written tests approval without promotion settings shows both commits and hides automatically when tests change", func(t *testing.T) {
 		reportDir := t.TempDir()
-		cp := newBuildControlPlane(t, Options{
+		cp := newBuildControlPlane(t, Options{BuildCacheDir: t.TempDir(),
 			WorkspaceDir:    t.TempDir(),
 			RunsDir:         t.TempDir(),
 			SurlaVersion:    testSurlaVersion,
@@ -385,10 +424,11 @@ again.close();
 		})
 		cp.changesWait = 400000000
 		cp.changesPoll = 20000000
-		confirmed := saveStoryCard(t, cp, "chg-written-approve", StatusConfirmed, refundStory("Refund over the limit waits"))
+		confirmed := saveBuildStoryCard(t, cp, "chg-written-approve", StatusConfirmed, refundStory("Refund over the limit waits"))
 		_, err := cp.StartBuild(user, &gensurla.StartBuildPayload{ChangeID: confirmed.ChangeID, RequestRevision: confirmed.RequestRevision})
 		require.NoError(t, err)
 		acceptTests(t, cp, confirmed.ChangeID, spec.SuiteCommit)
+		commit := commitBuilderCandidateFixture(t, cp, confirmed)
 		report := passingReport(t, confirmed.RequestRevision, commit, spec)
 		writeReportFile(t, reportDir, report)
 		svc := newPageVerifications(cp)
@@ -407,24 +447,23 @@ again.close();
 			stale.InputsCurrent = false
 			svc.set(&stale)
 		})
-		runPageScript(t, ps, map[string]any{"suiteCommit": spec.SuiteCommit}, viewsPageScriptHelpers+`
+		runPageScript(t, ps, map[string]any{"suiteCommit": spec.SuiteCommit, "candidate": commit}, viewsPageScriptHelpers+`
 const page = await openPage(origin, { link: input.link });
 await until(() => page.$("#surla-cp1-editor").dataset.changeId === "chg-written-approve", "the change did not open");
-page.$("#surla-nav-cp4").click();
+page.$("#surla-nav-cp5").click();
 await until(() => page.$("#surla-cp5-approve") && !page.$("#surla-cp5-approve").disabled, "a passed result without promotion settings offered no approval control");
 page.$("#surla-cp5-approve").click();
 await until(() => page.$("#surla-cp5-approval"), "the recorded approval is not shown");
-const approval = page.text("#surla-cp5-approval");
-expect(approval.includes("Builder's commit:") && approval.includes("1111111111111111111111111111111111111111") && approval.includes("Tests' commit:") && approval.includes("orders_acceptance @ " + input.suiteCommit) && approval.includes(" — merge commit " + input.suiteCommit + " (on branch surla/tests)."), "written-tests approval did not show both commits and the merge sentence: " + approval);
+const approval = page.text("#surla-approval-stage");
+expect(approval.includes("Builder’s commit") && approval.includes(input.candidate) && approval.includes("Tests’ commit") && approval.includes("orders_acceptance") && approval.includes(input.suiteCommit) && approval.includes("This saved result names the builder’s commit") && !approval.includes("on branch surla/tests)."), "written-tests approval did not keep its own commits or invented a historical branch: " + approval);
 const reads = page.sent("GET", "/changes/chg-written-approve").length;
 await control(origin, "act", { key: "accept-new-tests" });
 await until(() => page.sent("GET", "/changes/chg-written-approve").length > reads && !page.$("#surla-cp5-approval"), "accepting another tests commit did not automatically hide the approval and merge sentence without clicking refresh");
-page.$("#surla-nav-cp4").click();
-await until(() => page.$("#surla-cp5-approve") && page.$("#surla-cp5-approve").disabled && page.text("#surla-cp4-inputs").includes("does not match"), "the older tests report did not remain visible with approval disabled");
+page.$("#surla-nav-cp5").click();
+await until(() => !page.$("#surla-cp5-approve") && page.$("#surla-cp5-approve-blocked"), "the older tests report did not remain visible with the owner’s refusal");
 const approvals = page.sent("POST", "/changes/approve").length;
-page.$("#surla-cp5-approve").click();
 expect(page.sent("POST", "/changes/approve").length === approvals && !page.$("#surla-cp5-approve-error"), "a saved report with old tests submitted another approval");
-expect(page.text("#surla-cp4-details").includes(input.suiteCommit) && page.text("#surla-cp4-title") === "The check passed: 2 of 2 scenarios.", "the stale observation changed the saved passing report or its tests commit");
+expect(page.text("#surla-cp5-approval-details").includes(input.suiteCommit) && page.text("#surla-cp5-title") === "The check passed", "the stale observation changed the saved passing report or its tests commit");
 page.close();
 `)
 	})
@@ -449,8 +488,8 @@ page.close();
 		runPageScript(t, ps, nil, viewsPageScriptHelpers+`
 const page = await openPage(origin, { link: input.link });
 await until(() => page.$("#surla-cp1-editor").dataset.changeId === "chg-unavailable", "the change did not open");
-page.$("#surla-nav-cp4").click();
-await until(() => page.$("#surla-cp5-approve-region"), "a passed result showed no approval region");
+page.$("#surla-nav-cp5").click();
+await until(() => page.$("#surla-approval-stage"), "a passed result showed no review stage");
 await until(() => page.$("#surla-cp5-unavailable"), "approval was not shown as unavailable before any click");
 const reason = page.text("#surla-cp5-unavailable");
 expect(reason.includes("Approval is unavailable on this server") && reason.includes("Start Surla from a project directory") && !reason.includes("surla promotion set"), "unavailable approval does not name the enabling step: " + reason);
@@ -462,15 +501,20 @@ page.close();
 
 	t.Run("a refused approval still shows why", func(t *testing.T) {
 		target := &pageTarget{artifacts: spec.Artifacts}
-		cp := pageControlPlane(t, Options{ResolvePromotionTarget: target.resolve})
-		proposed := mustPropose(t, cp, guide, "chg-refused", "Route refunds to a manager.", refundAnalysis("Route refunds to a manager."))
+		cp := pageControlPlane(t, buildFixtureOptions(t, Options{ResolvePromotionTarget: target.resolve}))
+		proposed := saveProposedCardFixture(t, cp, pageOwner, "chg-refused", "Route refunds to a manager.", refundAnalysis("Route refunds to a manager."))
+		proposed = attachBuildSnapshot(t, cp, proposed.ChangeID)
 		confirmed, err := cp.ConfirmIntent(user, &gensurla.ConfirmIntentPayload{
 			ChangeID: proposed.ChangeID, RequestRevision: proposed.RequestRevision,
 			Answers: map[string]string{}, Examples: proposed.Examples,
 		})
 		require.NoError(t, err)
+		saveStoredBuildFixture(t, cp, confirmed)
+		candidate := commitBuilderCandidateFixture(t, cp, confirmed)
+		report := passingReport(t, confirmed.RequestRevision, candidate, spec)
+		target.update(func(p *pageTarget) { p.report = report })
 		svc := newPageVerifications(cp)
-		run := passedRun(confirmed, "dddddddddddddddddddddddddddddddd", commit, strings.Repeat("3", 64))
+		run := passedRun(confirmed, "dddddddddddddddddddddddddddddddd", candidate, report.Digest)
 		// The fixture models the owner observing this confirmed revision and selected tests.
 		run.InputsCurrent = true
 		svc.set(run)
@@ -479,31 +523,36 @@ page.close();
 		runPageScript(t, ps, nil, viewsPageScriptHelpers+`
 const page = await openPage(origin, { link: input.link });
 await until(() => page.$("#surla-cp1-editor").dataset.changeId === "chg-refused", "the change did not open");
-page.$("#surla-nav-cp4").click();
+page.$("#surla-nav-cp5").click();
 await until(() => page.$("#surla-cp5-approve") && !page.$("#surla-cp5-approve").disabled, "an available approval offered no control");
 checkControl(page, page.$("#surla-cp5-approve"), "approve control");
 await control(origin, "reply", { key: "POST /changes/approve", status: 501, body: { name: "not_implemented", id: "x", message: "verification is not configured on this control plane", temporary: false, timeout: false, fault: false } });
 page.$("#surla-cp5-approve").click();
-await until(() => page.$("#surla-cp5-unavailable"), "a refused approval was not shown as unavailable");
+await until(() => page.$("#surla-cp5-approve-error"), "a refused approval was not shown in the review");
 const reason = page.text("#surla-cp5-unavailable");
 expect(reason.includes("verification is not configured") && reason.includes("Start Surla from a project directory") && !reason.includes("surla promotion set"), "the refusal does not carry the server's reason and the enabling step: " + reason);
-expect(page.doc.activeElement === page.$("#surla-cp5-unavailable"), "the unavailable result did not take focus");
+expect(page.doc.activeElement === page.$("#surla-cp5-approve-error"), "the unavailable result did not take focus");
 expect(!page.$("#surla-cp5-approve"), "a refused approval still offered its control");
 page.close();
 `)
 	})
 
-	t.Run("stale revision uses the editor's recovery", func(t *testing.T) {
+	t.Run("stale revision keeps the review and preserved editor recovery", func(t *testing.T) {
 		target := &pageTarget{artifacts: spec.Artifacts}
-		cp := pageControlPlane(t, Options{ResolvePromotionTarget: target.resolve})
-		proposed := mustPropose(t, cp, guide, "chg-stale", "Route refunds to a manager.", refundAnalysis("Route refunds to a manager."))
+		cp := pageControlPlane(t, buildFixtureOptions(t, Options{ResolvePromotionTarget: target.resolve}))
+		proposed := saveProposedCardFixture(t, cp, pageOwner, "chg-stale", "Route refunds to a manager.", refundAnalysis("Route refunds to a manager."))
+		proposed = attachBuildSnapshot(t, cp, proposed.ChangeID)
 		confirmed, err := cp.ConfirmIntent(user, &gensurla.ConfirmIntentPayload{
 			ChangeID: proposed.ChangeID, RequestRevision: proposed.RequestRevision,
 			Answers: map[string]string{}, Examples: proposed.Examples,
 		})
 		require.NoError(t, err)
+		saveStoredBuildFixture(t, cp, confirmed)
+		candidate := commitBuilderCandidateFixture(t, cp, confirmed)
+		report := passingReport(t, confirmed.RequestRevision, candidate, spec)
+		target.update(func(p *pageTarget) { p.report = report })
 		svc := newPageVerifications(cp)
-		run := passedRun(confirmed, "cccccccccccccccccccccccccccccccc", commit, strings.Repeat("3", 64))
+		run := passedRun(confirmed, "cccccccccccccccccccccccccccccccc", candidate, report.Digest)
 		// The fixture models the owner observing this confirmed revision and selected tests.
 		run.InputsCurrent = true
 		svc.set(run)
@@ -520,10 +569,10 @@ page.close();
 			})
 			require.NoError(t, err)
 		})
-		runPageScript(t, ps, nil, viewsPageScriptHelpers+`
+		runPageScript(t, ps, map[string]any{"revision": confirmed.RequestRevision}, viewsPageScriptHelpers+`
 const page = await openPage(origin, { link: input.link });
 await until(() => page.$("#surla-cp1-editor").dataset.changeId === "chg-stale", "the change did not open");
-page.$("#surla-nav-cp4").click();
+page.$("#surla-nav-cp5").click();
 await until(() => page.$("#surla-cp5-approve") && !page.$("#surla-cp5-approve").disabled, "no current approval control");
 // The owner can save a new revision after this page submits a current result.
 await control(origin, "hold", { key: "POST /changes/approve" });
@@ -531,11 +580,11 @@ await control(origin, "reply", { key: "POST /changes/approve", status: 409, body
 page.$("#surla-cp5-approve").click();
 await control(origin, "act", { key: "refine" });
 await control(origin, "release", { key: "POST /changes/approve" });
-await until(() => page.$("#surla-confirm-error"), "a stale approval did not show the editor's recovery");
-expect(page.text("#surla-confirm-error").includes("request_revision mismatch") && page.$("#surla-load-latest-card"), "stale approval did not show the server's refusal and offer Load Latest Card: " + page.text("#surla-confirm-error"));
-expect(page.doc.activeElement === page.$("#surla-confirm-error"), "the refusal did not take focus");
-page.$("#surla-load-latest-card").click();
-await until(() => page.$("#surla-cp1-editor").dataset.requestRevision !== input.revision && page.$("#surla-prior-revision"), "Load Latest Card did not show the newer revision");
+await until(() => page.$("#surla-cp5-approve-error"), "a stale approval did not stay in the review");
+expect(page.text("#surla-cp5-approve-error").includes("request_revision mismatch"), "the owner's refusal was lost");
+expect(page.$("#surla-approval-stage") && page.doc.activeElement === page.$("#surla-cp5-approve-error"), "the refusal left the stage or lost focus");
+page.$("#surla-nav-cp1").click();
+await until(() => page.$("#surla-cp1-editor").dataset.requestRevision !== input.revision && page.$("#surla-prior-revision"), "the owner refresh did not preserve the new revision and prior context");
 page.close();
 `)
 	})

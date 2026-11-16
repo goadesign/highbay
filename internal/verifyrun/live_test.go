@@ -229,7 +229,13 @@ func startLiveWith(
 	command, env []string,
 	settings ...modelsettings.Settings,
 ) (*LiveProcess, error) {
-	p, err := LaunchLive(root, plan, key, command, env, settings)
+	// Like the composition root, supply an absolute cache independently of
+	// the live root's supported relative spelling.
+	cache, err := filepath.Abs(filepath.Join(root, "build-cache"))
+	if err != nil {
+		return nil, err
+	}
+	p, err := LaunchLive(root, plan, key, command, env, settings, cache)
 	if err != nil {
 		return nil, err
 	}
@@ -659,7 +665,7 @@ func TestLiveExecutorEndsItsWholeGroupOnATerminalEvent(t *testing.T) {
 			control, keep, err := os.Pipe()
 			require.NoError(t, err)
 			defer keep.Close()
-			cmd := exec.Command(self, "verify-run", "live", dir)
+			cmd := exec.Command(self, "verify-run", "live", dir, t.TempDir())
 			cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 			cmd.ExtraFiles = []*os.File{control}
 			cmd.Env = append(liveEnv(os.Environ()), "TMPDIR="+tmp, suite.LiveKeyEnv+"=secret-key")
@@ -781,7 +787,7 @@ func TestAwaitReadyCapturesDetailOnTimeoutAndLeavesTheTargetToItsOwner(t *testin
 	t.Setenv(liveFakeEnv, "prepare-hangs")
 	self, err := os.Executable()
 	require.NoError(t, err)
-	p, err := LaunchLive(t.TempDir(), evaluatorPlan, "secret-key", []string{self}, os.Environ(), nil)
+	p, err := LaunchLive(t.TempDir(), evaluatorPlan, "secret-key", []string{self}, os.Environ(), nil, t.TempDir())
 	require.NoError(t, err)
 	pgid, _ := recordedPIDs(t, p.Dir(), 2)
 	ctx, cancel := context.WithTimeout(t.Context(), 300*time.Millisecond)

@@ -139,14 +139,14 @@ func TestListChangesSaysWhetherApprovalIsAvailable(t *testing.T) {
 		{
 			name: "stored verification without promotion target",
 			opts: func(t *testing.T) Options {
-				return Options{WorkspaceDir: ws, Verification: verificationConfig(t)}
+				return Options{BuildCacheDir: t.TempDir(), WorkspaceDir: ws, Verification: verificationConfig(t)}
 			},
 			available: true,
 		},
 		{
 			name: "written test runs without promotion target",
 			opts: func(t *testing.T) Options {
-				return Options{
+				return Options{BuildCacheDir: t.TempDir(),
 					WorkspaceDir:    ws,
 					RunsDir:         t.TempDir(),
 					WrittenTestRuns: &WrittenTestRuns{ReportDir: t.TempDir(), Command: []string{"/bin/sh", "-c", "exit 0", "sh"}, Timeout: time.Hour},
@@ -164,14 +164,14 @@ func TestListChangesSaysWhetherApprovalIsAvailable(t *testing.T) {
 		{
 			name: "stored verification with promotion target",
 			opts: func(t *testing.T) Options {
-				return Options{WorkspaceDir: ws, Verification: verificationConfig(t), ResolvePromotionTarget: bound.resolve}
+				return Options{BuildCacheDir: t.TempDir(), WorkspaceDir: ws, Verification: verificationConfig(t), ResolvePromotionTarget: bound.resolve}
 			},
 			available: true,
 		},
 		{
 			name: "resolver fails",
 			opts: func(t *testing.T) Options {
-				return Options{
+				return Options{BuildCacheDir: t.TempDir(),
 					WorkspaceDir:           ws,
 					Verification:           verificationConfig(t),
 					ResolvePromotionTarget: func(context.Context, string) (PromotionTarget, error) { return nil, unreadable },
@@ -398,7 +398,7 @@ func TestChangeListOperationsFollowTheRoleTable(t *testing.T) {
 		Environment: "sim", Artifacts: map[string]string{"orders": strings.Repeat("a", 64)},
 	}
 	target := &pageTarget{artifacts: spec.Artifacts}
-	cp := newControlPlane(t, Options{Verification: verificationConfig(t), ResolvePromotionTarget: target.resolve})
+	cp := newControlPlane(t, Options{BuildCacheDir: t.TempDir(), Verification: verificationConfig(t), ResolvePromotionTarget: target.resolve})
 	cp.changesWait = 20 * time.Millisecond
 	auth := fixtureCredentials(map[string]Principal{
 		"user":    {ID: "alice@example.com", CallerID: "user-1", Kind: CallerUser},
@@ -493,8 +493,17 @@ func TestChangeListOperationsFollowTheRoleTable(t *testing.T) {
 // under runsDir, with its report, as a verify-run supervisor leaves it.
 func writeListedRun(t *testing.T, runsDir, owner string, card *gensurla.ChangeCardResult, runID string, accepted time.Time, passed bool) {
 	t.Helper()
+	writeListedRunAt(t, runsDir, owner, card, runID, accepted, passed, strings.Repeat("1", 40))
+}
+
+// writeListedRunAt binds a complete fixture report and request to the supplied
+// candidate, including a real commit for public-consumer branch recovery tests.
+func writeListedRunAt(
+	t *testing.T, runsDir, owner string, card *gensurla.ChangeCardResult,
+	runID string, accepted time.Time, passed bool, commit string,
+) {
+	t.Helper()
 	spec := reportSpec{SuiteID: "orders_acceptance", SuiteCommit: strings.Repeat("2", 40), Environment: "sim", Artifacts: map[string]string{"orders": strings.Repeat("a", 64)}}
-	commit := strings.Repeat("1", 40)
 	report := failingReport(t, card.RequestRevision, commit, spec)
 	if passed {
 		report = passingReport(t, card.RequestRevision, commit, spec)

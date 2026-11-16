@@ -1,0 +1,33 @@
+package design
+
+import . "goa.design/goa/v3/dsl"
+
+var _ = Service("orders", func() {
+	Method("m76", func() {
+		Result(Order)
+		NoSecurity()
+
+		Payload(UpdatePayload)
+
+		Result(OrderView)
+	})
+
+	Method("m1", func() {
+		Payload(UpdatePayload)
+		HTTP(func() { POST("/orders") })
+		Error("invalid")
+		Meta("swagger:summary", "x")
+	})
+
+	Method("m44", func() {
+		Result(Order)
+	})
+
+	Method("m21", func() {
+		NoSecurity()
+		HTTP(func() { GET("/orders/{id}") })
+
+		Result(Order)
+		NoSecurity()
+	})
+})

@@ -41,8 +41,8 @@ var refundStories = []designeval.StorySummary{{
 	},
 }}
 
-// fixture caches the fixture project, which takes a generation and
-// a go mod tidy to build. Tests clone it.
+// fixture holds the prepared project files. Preparation generates and tidies
+// the module and warms the checker's build cache; tests clone the files.
 var fixture struct {
 	mu sync.Mutex
 	// files is the project's tree keyed by slash path, nil until built.
@@ -88,10 +88,10 @@ func TestPrepareWritesOneRequiredMethodPerFinishedFlow(t *testing.T) {
 	skipInShortMode(t)
 	repo, markers := newProject(t, fixtureProject(t))
 	before := projectFiles(t, repo)
-	wc, err := OpenWorkingCopy(t.Context(), repo)
+	wc, err := MakeCopy(t.Context(), repo, TestsRole, TestsRole.Branch(1), "HEAD")
 	require.NoError(t, err)
 
-	required, err := testChecker.Prepare(t.Context(), wc, fixtureSuite, refundStories)
+	required, err := testChecker.Prepare(t.Context(), wc, fixtureSuite, TestsRole.Branch(1), "HEAD", refundStories)
 	require.NoError(t, err)
 	assert.Equal(t, []designeval.StoryScenario{
 		{Story: "Refunds", Key: "refund-over-limit", Scenario: "refund_over_limit", Hook: "RefundOverLimit"},
@@ -114,14 +114,14 @@ func TestPrepareWritesOneRequiredMethodPerFinishedFlow(t *testing.T) {
 func TestPrepareGivesTheAuthorItsGenerationFailure(t *testing.T) {
 	skipInShortMode(t)
 	repo, _ := newProject(t, fixtureProject(t))
-	wc, err := OpenWorkingCopy(t.Context(), repo)
+	wc, err := MakeCopy(t.Context(), repo, TestsRole, TestsRole.Branch(1), "HEAD")
 	require.NoError(t, err)
 	design := filepath.Join(wc.Project(), "eval", "design", "design.go")
 	raw, err := os.ReadFile(design)
 	require.NoError(t, err)
 	require.NoError(t, os.WriteFile(design, append(raw, "\nvar _ = undefinedInTheDesign\n"...), 0o600))
 
-	_, err = testChecker.Prepare(t.Context(), wc, fixtureSuite, refundStories)
+	_, err = testChecker.Prepare(t.Context(), wc, fixtureSuite, TestsRole.Branch(1), "HEAD", refundStories)
 	var author *AuthorError
 	require.ErrorAs(t, err, &author)
 	assert.Equal(t, FindingGeneration, author.Finding.Kind)
@@ -153,9 +153,10 @@ func TestCheckJudgesTheWorkingCopy(t *testing.T) {
 	skipInShortMode(t)
 	repo, markers := newProject(t, fixtureProject(t))
 	start := runGit(t, repo, "rev-parse", "HEAD")
-	wc, err := OpenWorkingCopy(t.Context(), repo)
+	branch := TestsRole.Branch(1)
+	wc, err := MakeCopy(t.Context(), repo, TestsRole, branch, "HEAD")
 	require.NoError(t, err)
-	_, err = testChecker.Prepare(t.Context(), wc, fixtureSuite, refundStories)
+	_, err = testChecker.Prepare(t.Context(), wc, fixtureSuite, branch, start, refundStories)
 	require.NoError(t, err)
 	prepared, err := os.ReadFile(filepath.Join(wc.Project(), "eval", generatedSuite))
 	require.NoError(t, err)
@@ -228,7 +229,7 @@ func TestCheckJudgesTheWorkingCopy(t *testing.T) {
 		}
 		var before, after runtime.MemStats
 		runtime.ReadMemStats(&before)
-		v, err := testChecker.Check(t.Context(), wc, fixtureSuite, refundStories)
+		v, err := testChecker.Check(t.Context(), wc, fixtureSuite, branch, start, refundStories)
 		runtime.ReadMemStats(&after)
 		require.NoError(t, err, step.name)
 		if step.maxAlloc > 0 {
@@ -259,7 +260,7 @@ func TestCheckJudgesTheWorkingCopy(t *testing.T) {
 	require.NoError(t, os.WriteFile(signer, []byte("#!/bin/sh\n: > "+shquote.Quote(signed)+"\nexit 1\n"), 0o700))
 	runGit(t, repo, "config", "commit.gpgsign", "true")
 	runGit(t, repo, "config", "gpg.program", signer)
-	commit, err := Record(t.Context(), accepted, "Add the accepted tests")
+	commit, err := Record(t.Context(), accepted, branch, runGit(t, repo, "rev-parse", branch), "Add the accepted tests")
 	require.NoError(t, err)
 	assert.NoFileExists(t, signed, "the signing program never ran")
 	assert.NotContains(t, runGit(t, repo, "cat-file", "commit", commit), "gpgsig")
@@ -274,10 +275,10 @@ func TestCheckJudgesTheWorkingCopy(t *testing.T) {
 	}
 	assert.Empty(t, runGit(t, repo, "status", "--porcelain", "--untracked-files=all"))
 
-	again, err := testChecker.Check(t.Context(), wc, fixtureSuite, refundStories)
+	again, err := testChecker.Check(t.Context(), wc, fixtureSuite, branch, start, refundStories)
 	require.NoError(t, err)
 	require.True(t, again.Accepted(), "%+v", again.Findings)
-	same, err := Record(t.Context(), again, "Add the accepted tests")
+	same, err := Record(t.Context(), again, branch, runGit(t, repo, "rev-parse", branch), "Add the accepted tests")
 	require.NoError(t, err)
 	assert.Equal(t, commit, same, "an unchanged copy returns the existing commit")
 	assert.Empty(t, ranHooks(t, markers))
@@ -291,9 +292,11 @@ func TestCheckJudgesTheWorkingCopy(t *testing.T) {
 func TestCheckIgnoresTheCopysOwnRepository(t *testing.T) {
 	skipInShortMode(t)
 	repo, markers := newProject(t, fixtureProject(t))
-	wc, err := OpenWorkingCopy(t.Context(), repo)
+	start := runGit(t, repo, "rev-parse", "HEAD")
+	branch := TestsRole.Branch(1)
+	wc, err := MakeCopy(t.Context(), repo, TestsRole, branch, "HEAD")
 	require.NoError(t, err)
-	_, err = testChecker.Prepare(t.Context(), wc, fixtureSuite, refundStories)
+	_, err = testChecker.Prepare(t.Context(), wc, fixtureSuite, branch, start, refundStories)
 	require.NoError(t, err)
 	prepared, err := os.ReadFile(filepath.Join(wc.Project(), "eval", generatedSuite))
 	require.NoError(t, err)
@@ -304,11 +307,11 @@ func TestCheckIgnoresTheCopysOwnRepository(t *testing.T) {
 	marker := filepath.Join(t.TempDir(), "filter-ran")
 	for _, rewrite := range []func(t *testing.T, dir, marker string){replaceCopysGit, pointCopysGitInside} {
 		rewrite(t, wc.Dir(), marker)
-		v, err := testChecker.Check(t.Context(), wc, fixtureSuite, refundStories)
+		v, err := testChecker.Check(t.Context(), wc, fixtureSuite, branch, start, refundStories)
 		require.NoError(t, err)
 		require.True(t, v.Accepted(), "%+v", v.Findings)
 		assert.NoFileExists(t, marker, "no program named inside the copy runs")
-		commit, err := Record(t.Context(), v, "Add the accepted tests")
+		commit, err := Record(t.Context(), v, branch, runGit(t, repo, "rev-parse", branch), "Add the accepted tests")
 		require.NoError(t, err)
 		assert.Equal(t, strings.TrimSpace(string(prepared)), runGit(t, repo, "show", commit+":eval/"+generatedSuite))
 	}
@@ -325,7 +328,9 @@ func TestCheckIgnoresTheCopysOwnRepository(t *testing.T) {
 func TestCheckWantsExactlyOneEvaluationSuite(t *testing.T) {
 	skipInShortMode(t)
 	repo, _ := newProject(t, fixtureProject(t))
-	wc, err := OpenWorkingCopy(t.Context(), repo)
+	start := runGit(t, repo, "rev-parse", "HEAD")
+	branch := TestsRole.Branch(1)
+	wc, err := MakeCopy(t.Context(), repo, TestsRole, branch, "HEAD")
 	require.NoError(t, err)
 	module := filepath.Join(wc.Project(), "eval")
 	design := fixtureProject(t)["eval/design/design.go"]
@@ -349,7 +354,7 @@ var _ = Suite("second", func() {
 		} {
 			t.Run(tc.name+", "+storyName, func(t *testing.T) {
 				writeFiles(t, module, map[string]string{"design/design.go": tc.design})
-				v, err := testChecker.Check(t.Context(), wc, fixtureSuite, stories)
+				v, err := testChecker.Check(t.Context(), wc, fixtureSuite, branch, start, stories)
 				require.NoError(t, err)
 				require.Len(t, v.Findings, 1, "%+v", v.Findings)
 				assert.Equal(t, FindingGeneration, v.Findings[0].Kind)
@@ -363,7 +368,7 @@ var _ = Suite("second", func() {
 	t.Run("a module without its acceptance package", func(t *testing.T) {
 		require.NoError(t, os.RemoveAll(filepath.Join(module, "acceptance")))
 		writeFiles(t, module, map[string]string{"design/design.go": design})
-		v, err := testChecker.Check(t.Context(), wc, fixtureSuite, refundStories)
+		v, err := testChecker.Check(t.Context(), wc, fixtureSuite, branch, start, refundStories)
 		require.NoError(t, err)
 		require.Len(t, v.Findings, 1, "%+v", v.Findings)
 		assert.Equal(t, FindingGeneration, v.Findings[0].Kind)
@@ -378,7 +383,7 @@ var _ = Suite("second", func() {
 			"acceptance/acceptance.go": fixtureProject(t)["eval/acceptance/acceptance.go"],
 			"go.mod":                   strings.Replace(goMod, "module example.com/shop/eval\n", "module example.com/shop/evaluation\n", 1),
 		})
-		v, err := testChecker.Check(t.Context(), wc, fixtureSuite, refundStories)
+		v, err := testChecker.Check(t.Context(), wc, fixtureSuite, branch, start, refundStories)
 		require.NoError(t, err)
 		require.Len(t, v.Findings, 1, "%+v", v.Findings)
 		assert.Equal(t, FindingGeneration, v.Findings[0].Kind)
@@ -396,7 +401,9 @@ var _ = Suite("second", func() {
 func TestCheckLimitsTheBuildAndTheListing(t *testing.T) {
 	skipInShortMode(t)
 	repo, _ := newProject(t, fixtureProject(t))
-	wc, err := OpenWorkingCopy(t.Context(), repo)
+	start := runGit(t, repo, "rev-parse", "HEAD")
+	branch := TestsRole.Branch(1)
+	wc, err := MakeCopy(t.Context(), repo, TestsRole, branch, "HEAD")
 	require.NoError(t, err)
 	writeFiles(t, filepath.Join(wc.Project(), "eval"), map[string]string{
 		"acceptance/acceptance.go": fixtureAcceptance(quietInit, "RefundOverLimit", "StoreCreditWithinLimit"),
@@ -446,7 +453,7 @@ func TestCheckLimitsTheBuildAndTheListing(t *testing.T) {
 			c := *testChecker
 			c.buildLimit, c.listLimit = limit, limit
 			c.build, c.list = sleepThenBuild(tc.build), sleepThenList(tc.list, tc.listed)
-			v, err := c.Check(t.Context(), wc, fixtureSuite, refundStories)
+			v, err := c.Check(t.Context(), wc, fixtureSuite, branch, start, refundStories)
 			require.NoError(t, err)
 			if tc.wantKind == "" {
 				assert.True(t, v.Accepted(), "%+v", v.Findings)
@@ -457,6 +464,45 @@ func TestCheckLimitsTheBuildAndTheListing(t *testing.T) {
 			assert.Contains(t, v.Findings[0].Message, tc.wantWords)
 		})
 	}
+	t.Run("completed build cache survives a timeout", func(t *testing.T) {
+		c := *testChecker
+		c.workDir = t.TempDir()
+		c.buildLimit, c.listLimit = limit, limit
+		c.list = sleepThenList(0, complete)
+		var home string
+		c.build = func(ctx context.Context, spec candidate.BuildSpec, _ func(*exec.Cmd) error) error {
+			home = spec.WorkDir
+			cache := filepath.Join(home, "gocache")
+			if err := os.MkdirAll(cache, 0o700); err != nil {
+				return err
+			}
+			if err := os.WriteFile(filepath.Join(cache, "completed-entry"), []byte("completed"), 0o600); err != nil {
+				return err
+			}
+			<-ctx.Done()
+			return ctx.Err()
+		}
+		v, err := c.Check(t.Context(), wc, fixtureSuite, branch, start, refundStories)
+		require.NoError(t, err)
+		require.Len(t, v.Findings, 1)
+		assert.Equal(t, FindingBuild, v.Findings[0].Kind)
+		assert.Equal(t, "The test program did not finish building within 500ms. "+
+			"Report again: the retained build cache can reuse compilation that completed. "+
+			"If it still does not finish, make the test module build faster, for example with fewer or smaller dependencies.",
+			v.Findings[0].Message)
+		c.build = func(_ context.Context, spec candidate.BuildSpec, _ func(*exec.Cmd) error) error {
+			assert.Equal(t, home, spec.WorkDir)
+			content, err := os.ReadFile(filepath.Join(spec.WorkDir, "gocache", "completed-entry"))
+			if err != nil {
+				return err
+			}
+			assert.Equal(t, "completed", string(content))
+			return os.WriteFile(spec.Out, []byte("stand-in program"), 0o700)
+		}
+		v, err = c.Check(t.Context(), wc, fixtureSuite, branch, start, refundStories)
+		require.NoError(t, err)
+		assert.True(t, v.Accepted(), "%+v", v.Findings)
+	})
 }
 
 // generatedSuite is the fixture's generated suite file, relative to its
@@ -481,7 +527,8 @@ const publishedSurla = "v0.0.0-20261115014514-02c792da3ded"
 // under eval/, as a test writer would start from: generated without a Story,
 // so with the generated program, and with an acceptance package providing the
 // five names the program calls. The module requires publishedSurla for the
-// suite contract the program uses.
+// suite contract the program uses. The first preparation also builds the
+// valid program in testChecker's build home to prepare its compiler cache.
 func fixtureProject(t *testing.T) map[string]string {
 	t.Helper()
 	fixture.mu.Lock()
@@ -500,8 +547,32 @@ func fixtureProject(t *testing.T) map[string]string {
 		}
 		module["go.mod"] = strings.Replace(module["go.mod"], "require (",
 			"require (\n\tgithub.com/goadesign/surla "+publishedSurla, 1)
+		module = testmodule.Tidy(t, module)
+		// Compile the valid baseline once in the checker's own build home.
+		// Only the compiler's normal cache survives; the source and binary do not.
+		tmp := t.TempDir()
+		moduleDir := filepath.Join(tmp, "module")
+		writeFiles(t, moduleDir, module)
+		tc, err := resolveToolchain(t.Context(), tmp)
+		require.NoError(t, err)
+		home := filepath.Join(testChecker.workDir, "build-home")
+		require.NoError(t, os.MkdirAll(home, 0o700))
+		log := filepath.Join(tmp, "build.log")
+		ctx, cancel := context.WithTimeout(t.Context(), 10*time.Minute)
+		var keep bool
+		err = candidate.BuildModule(ctx, candidate.BuildSpec{BuildCacheDir: filepath.Join(home, "gocache"),
+			SourceDir: tmp, ModuleDir: moduleDir, Package: fixtureSuite.Command,
+			Out: filepath.Join(tmp, "suite"), GOROOT: tc.goroot, ModCache: tc.modCache,
+			WorkDir: home, LogFile: log,
+		}, runInGroup(&keep))
+		cancel()
+		if err != nil {
+			output, readErr := os.ReadFile(log)
+			t.Fatalf("warm fixture build: %v; build log: %s (read error: %v)", err, output, readErr)
+		}
+		require.NoError(t, os.RemoveAll(tmp))
 		files := map[string]string{"README.md": "shop\n"}
-		for p, content := range testmodule.Tidy(t, module) {
+		for p, content := range module {
 			files["eval/"+p] = content
 		}
 		fixture.files = files
@@ -693,15 +764,17 @@ func TestRunInGroupStopsTheChildrenOfACommand(t *testing.T) {
 func TestCheckFindsAListingThatLeavesAProcessHoldingItsOutput(t *testing.T) {
 	skipInShortMode(t)
 	repo, _ := newProject(t, fixtureProject(t))
-	wc, err := OpenWorkingCopy(t.Context(), repo)
+	base := runGit(t, repo, "rev-parse", "HEAD")
+	branch := TestsRole.Branch(1)
+	wc, err := MakeCopy(t.Context(), repo, TestsRole, branch, base)
 	require.NoError(t, err)
-	_, err = testChecker.Prepare(t.Context(), wc, fixtureSuite, refundStories)
+	_, err = testChecker.Prepare(t.Context(), wc, fixtureSuite, branch, base, refundStories)
 	require.NoError(t, err)
 	pidFile := filepath.Join(t.TempDir(), "children")
 	writeFiles(t, filepath.Join(wc.Project(), "eval"), map[string]string{
 		"acceptance/acceptance.go": fixtureAcceptance(childInit(pidFile, true), "RefundOverLimit", "StoreCreditWithinLimit"),
 	})
-	v, err := testChecker.Check(t.Context(), wc, fixtureSuite, refundStories)
+	v, err := testChecker.Check(t.Context(), wc, fixtureSuite, branch, base, refundStories)
 	require.NoError(t, err)
 	require.Len(t, v.Findings, 1, "%+v", v.Findings)
 	assert.Equal(t, FindingListing, v.Findings[0].Kind)

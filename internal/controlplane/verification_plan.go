@@ -9,7 +9,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"go/scanner"
+	"maps"
 	"path"
+	"slices"
 	"strings"
 	"time"
 
@@ -17,7 +20,7 @@ import (
 
 	gensurla "github.com/goadesign/surla/gen/surla"
 	"github.com/goadesign/surla/internal/scaffold"
-	"github.com/goadesign/surla/internal/shquote"
+	"github.com/goadesign/surla/internal/testwriter"
 	"github.com/goadesign/surla/internal/verify"
 )
 
@@ -32,7 +35,7 @@ type (
 		// must lie outside the workspace.
 		ReportDir string
 		// Command is the argument list that runs this surla executable;
-		// runs start `<Command> verify-run supervise <dir>`.
+		// runs start `<Command> verify-run supervise <dir> <build-cache-dir>`.
 		Command []string
 		// Timeout is how long a run may take before it is stopped and
 		// recorded as interrupted.
@@ -100,7 +103,7 @@ type (
 		testModule string
 		// changed lists the hand-written files under testModule that differ
 		// between baseCommit and commit, for refusedTestModuleChanged.
-		changed []changedGitFile
+		changed []string
 		// actor is who changes that commit, for refusedMissingTests and
 		// refusedNoLayout.
 		actor layoutActor
@@ -176,43 +179,25 @@ func (r *layoutRefusal) Error() string {
 		return fmt.Sprintf("the candidate commit %s is not in the project's repository; commit it and try again", r.commit)
 	case refusedNoCommonBase:
 		return fmt.Sprintf("candidate commit %s shares no history with the accepted tests' commit %s;"+
-			" ask the user: %s", r.commit, r.testsCommit, stepNoCommonBase)
+			" build the change again from the project's current commit, then read the new assignments and verify again", r.commit, r.testsCommit)
 	case refusedTestModuleChanged:
 		shown := r.changed[:min(len(r.changed), maxChangedTestFiles)]
-		names := make([]string, len(shown))
-		var restore, remove []string
-		for i, c := range shown {
-			names[i] = c.path
-			spec := shquote.Quote(":(top,literal)" + c.path)
-			if c.added {
-				remove = append(remove, spec)
-			} else {
-				restore = append(restore, spec)
-			}
-		}
-		list := strings.Join(names, ", ")
+		list := strings.Join(shown, ", ")
 		if rest := len(r.changed) - len(shown); rest > 0 {
 			list = fmt.Sprintf("%s (and %d more)", list, rest)
-		}
-		var cmds []string
-		if len(restore) > 0 {
-			cmds = append(cmds, fmt.Sprintf("git restore --source=%s --staged --worktree -- %s", r.baseCommit, strings.Join(restore, " ")))
-		}
-		if len(remove) > 0 {
-			cmds = append(cmds, fmt.Sprintf("git rm -f -- %s", strings.Join(remove, " ")))
 		}
 		renameNote := ""
 		testGoMod := path.Join(r.testModule, "go.mod")
 		for _, c := range r.changed {
-			if c.path == testGoMod {
+			if c == testGoMod {
 				renameNote = "; renaming the service module is the user's to do on their own branch between changes, not during a build"
 				break
 			}
 		}
 		return fmt.Sprintf("candidate commit %s changes hand-written files in the test module %s since base commit %s (%s);"+
 			" tests in %s belong to the test writer, not the builder%s:"+
-			" restore %s to base commit %s (%s), commit, and call verify_change or start_live_target again",
-			r.commit, r.testModule, r.baseCommit, list, r.testModule, renameNote, r.testModule, r.baseCommit, strings.Join(cmds, " && "))
+			" restore these files to their versions or absence in commit %s, commit, and call verify_change or start_live_target again",
+			r.commit, r.testModule, r.baseCommit, list, r.testModule, renameNote, r.baseCommit)
 	}
 	step := "the builder commits the layout surla init makes and verifies again"
 	if r.actor == testWriterActs {
@@ -257,6 +242,200 @@ func (c *ControlPlane) verificationPlan(
 	testsCommit, _, err := c.testsChoice(principal, changeID, revision)
 	c.mu.RUnlock()
 	return c.verificationPlanForTests(ctx, candidateCommit, revision, testsCommit, err)
+}
+
+// verificationBuild requires the current owned, undropped build at the entry
+// to verification or approval, including stored-evaluator projects. Callers
+// hold c.mu. Missing verification configuration is refused before classifying
+// build roles; historical reads and live starts keep their own selection rules.
+func (c *ControlPlane) verificationBuild(
+	principal Principal, changeID, revision string,
+) (heldBuild, error) {
+	if _, none := c.verifier.(noVerification); none {
+		return heldBuild{}, gensurla.MakeNotImplemented(errVerificationUnavailable)
+	}
+	held, err := c.workerOwnedBuild(principal, changeID)
+	var missing *goa.ServiceError
+	if errors.As(err, &missing) && missing.Name == "not_found" {
+		if c.storedEvaluator() {
+			return heldBuild{}, gensurla.MakeNoBuild(fmt.Errorf(
+				"change %q has no build for revision %s: the user starts a build on the views page",
+				changeID, revision))
+		}
+		return heldBuild{}, refuseNoBuild(changeID, revision, buildFile{}, false)
+	}
+	if err != nil {
+		return heldBuild{}, err
+	}
+	if held.file.RequestRevision != revision {
+		return heldBuild{}, refuseNoBuild(changeID, revision, held.file, true)
+	}
+	return held, nil
+}
+
+// checkCandidateBuildCommit applies rule 13 to an immutable candidate, using
+// both the repository's build branches and the tips preserved by Drop. It
+// takes no copy turn and changes no branch; its caller owns the entry's turn
+// and supplies the bound workspace. Approval passes the report's commit. Each
+// entry formats a failed invariant for its own reader.
+func (c *ControlPlane) checkCandidateBuildCommit(
+	ctx context.Context, workspace string, saved buildFile, candidate string,
+) (testwriter.CommitCheck, error) {
+	return c.checkBuildCommit(ctx, workspace, saved, candidate, testwriter.BuilderRole.Branch(saved.Number))
+}
+
+// checkBuildCommit applies L1 at the owning entry's explicit build branch.
+// Drop tips remain a control-plane read; callers own their copy turn and
+// supply the bound workspace without holding c.mu across Git reads.
+func (c *ControlPlane) checkBuildCommit(
+	ctx context.Context, workspace string, saved buildFile, commit, ownBranch string,
+) (testwriter.CommitCheck, error) {
+	c.mu.RLock()
+	provenance, found, err := c.cards.loadMadeFrom()
+	c.mu.RUnlock()
+	if err != nil {
+		return testwriter.CommitCheck{}, err
+	}
+	var recorded []testwriter.BranchTip
+	if found && provenance.Start.Dropped != nil {
+		tips := provenance.Start.Dropped.BranchTips
+		for _, branch := range slices.Sorted(maps.Keys(tips)) {
+			recorded = append(recorded, testwriter.BranchTip{Branch: branch, Commit: tips[branch]})
+		}
+	}
+	work, cancel := context.WithTimeout(ctx, layoutReadTimeout)
+	defer cancel()
+	exists, err := commitExists(work, workspace, commit)
+	if err != nil {
+		return testwriter.CommitCheck{}, err
+	}
+	if !exists {
+		return testwriter.CommitCheck{}, gensurla.MakeConflict(&layoutRefusal{reason: refusedUnknownCommit, commit: commit})
+	}
+	branches := [2]string{testwriter.BuilderRole.Branch(saved.Number), testwriter.TestsRole.Branch(saved.Number)}
+	return testwriter.CheckBuildCommit(work, workspace, commit, ownBranch, saved.Base, branches, recorded)
+}
+
+// checkCandidateDesign admits the candidate's canonical agreed design only
+// when its merge base with the current project belongs to this build's own
+// immutable provenance. Only VerifyChange uses this execution-entry policy.
+func checkCandidateDesign(
+	ctx context.Context, workspace string, saved buildFile, candidate string,
+) error {
+	expected, err := decodeDesignSource(saved.DesignSource)
+	if err != nil {
+		return err
+	}
+	if len(expected) == 0 {
+		return gensurla.MakeConflict(errors.New("The open build records no agreed design. Ask the guide to propose a revision from its draft, adopt it, then build."))
+	}
+	work, cancel := context.WithTimeout(ctx, layoutReadTimeout)
+	defer cancel()
+	repo, prefix, project, err := currentProjectCommit(work, workspace)
+	if err != nil {
+		return err
+	}
+	if project == "" {
+		return gensurla.MakeConflict(errors.New("The project has no current Git commit. Commit the project, then build the change again and read its new assignment."))
+	}
+	actual, err := committedDesignAt(work, workspace, repo, prefix, candidate)
+	if err != nil {
+		// Parser faults describe candidate content, not private input storage.
+		// Preserve Git/read faults for the entry's safe response and raw span.
+		var syntax scanner.ErrorList
+		var source *committedDesignCanonicalError
+		if errors.As(err, &syntax) && errors.As(err, &source) {
+			return candidateDesignRefusal(candidate, []string{source.file})
+		}
+		return err
+	}
+	var changed []string
+	for _, file := range designPaths(nil, expected, actual) {
+		if expected[file] != actual[file] {
+			changed = append(changed, file)
+		}
+	}
+	if len(changed) > 0 {
+		return candidateDesignRefusal(candidate, changed)
+	}
+	base, found, err := mergeBaseCommit(work, repo, candidate, project)
+	if err != nil {
+		return err
+	}
+	if !found {
+		return gensurla.MakeConflict(fmt.Errorf("candidate commit %s shares no history with the project's current commit %s: ask the user to Drop the current build on the views page; ask the guide to call update_draft, refresh_story and revise_change from the current project, adopt the revision, then start a new build, read its assignment and make the change again", candidate, project))
+	}
+	return checkDesignBase(work, workspace, base, &saved.MadeFrom)
+}
+
+// candidateDesignRefusal names differing candidate files and the builder's
+// existing generation recovery without exposing raw parser/read diagnostics.
+func candidateDesignRefusal(candidate string, files []string) error {
+	names := make([]string, len(files))
+	for i, file := range files {
+		names[i] = testwriter.ShownName(file)
+	}
+	return gensurla.MakeConflict(fmt.Errorf("candidate commit %s differs from this build's agreed design in %s: call generate_code, commit the agreed design, and call verify_change again", candidate, strings.Join(names, ", ")))
+}
+
+// candidateBuildRefusal gives the builder the branch and working-copy repair
+// goal, including uncommitted file changes retained by a soft reset.
+func candidateBuildRefusal(candidate, base, branch string, check testwriter.CommitCheck) error {
+	reasons := buildCommitReasons(candidate, base, branch, check)
+	if reasons == "" {
+		return nil
+	}
+	return gensurla.MakeBuildBranchMismatch(fmt.Errorf("%s. Make %s and your working copy hold neither the other builds' commits nor their changes to the named files. Make your own work again as a new commit on %s from base %s, then call verify_change again; if you cannot, ask the user to build the change again and make your own work again from that build's base.", reasons, branch, branch, base))
+}
+
+// approvalBuildRefusal tells the user to have the builder repair and verify
+// the build again; approval never asks the user to make the builder's commits.
+func approvalBuildRefusal(candidate, base, branch string, check testwriter.CommitCheck) error {
+	reasons := buildCommitReasons(candidate, base, branch, check)
+	if reasons == "" {
+		return nil
+	}
+	return gensurla.MakeBuildBranchMismatch(fmt.Errorf("%s. Ask the builder to make %s and its working copy hold neither the other builds' commits nor their changes to the named files, make its own work again as a new commit on %s from base %s, and call verify_change again; then approve that run.", reasons, branch, branch, base))
+}
+
+// buildCommitReasons describes failed invariants without inventing file names
+// for zero-file merges. L1 already bounds files and counts them all.
+func buildCommitReasons(candidate, base, branch string, check testwriter.CommitCheck) string {
+	var reasons []string
+	if !check.OnBranch {
+		reasons = append(reasons, fmt.Sprintf("candidate commit %s is not on %s", candidate, branch))
+	}
+	if !check.FromBase {
+		reasons = append(reasons, fmt.Sprintf("candidate commit %s does not descend from this build's base %s", candidate, base))
+	}
+	if check.IsBase {
+		reasons = append(reasons, fmt.Sprintf("candidate commit %s is this build's base and holds no builder work", candidate))
+	}
+	reasons = append(reasons, foreignBuildWorkReasons(check.Foreign)...)
+
+	return strings.Join(reasons, "; ")
+}
+
+// foreignBuildWorkReasons shares L1's bounded, quoted work facts between
+// builder refusals and test-writer findings, without builder-only base policy.
+func foreignBuildWorkReasons(work []testwriter.ForeignWork) []string {
+	var reasons []string
+	for _, foreign := range work {
+		reason := fmt.Sprintf("commit %s on %s merges work the user has not taken", foreign.MergeBase, testwriter.ShownBranch(foreign.Branch))
+		if foreign.FileCount > 0 {
+			files := make([]string, len(foreign.Files))
+			for i, file := range foreign.Files {
+				files[i] = testwriter.ShownName(file)
+			}
+			reason += fmt.Sprintf(" (%d files", foreign.FileCount)
+			if len(files) > 0 {
+				reason += ": " + strings.Join(files, ", ")
+			}
+			reason += ")"
+		}
+		reasons = append(reasons, reason)
+	}
+	return reasons
 }
 
 // verificationPlanForTests completes the shared plan from testsChoice's

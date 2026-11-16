@@ -78,7 +78,16 @@ func TestMain(m *testing.M) {
 	if len(os.Args) == 5 && os.Args[1] == "check-host" {
 		os.Exit(checkHost(os.Args[2], os.Args[3], os.Args[4]))
 	}
-	if len(os.Args) == 4 && os.Args[1] == "verify-run" && os.Args[2] == "live" {
+	if len(os.Args) > 1 && os.Args[1] == "verify-run" {
+		// Refuse malformed helpers before m.Run can recursively launch tests.
+		if len(os.Args) != 5 || os.Args[2] != "live" {
+			fmt.Fprintln(os.Stderr, "verify-run needs live, a run directory and build cache directory")
+			os.Exit(1)
+		}
+		if err := os.WriteFile(filepath.Join(os.Args[3], "received-build-cache"), []byte(os.Args[4]), 0o600); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
 		if err := verifyrun.Live(os.Args[3], fakeLivePrepare, nil, os.Stdout, os.Stderr); err != nil {
 			fmt.Fprintln(os.Stderr, err)
 			os.Exit(1)
@@ -122,8 +131,12 @@ func (f *fakeTarget) APIKeyAuth(ctx context.Context, key string, _ *security.API
 	return ctx, nil
 }
 
-// fakeLivePrepare returns this test binary as the suite.
-func fakeLivePrepare(ctx context.Context, _ verify.Plan) (verify.Prepared, error) {
+// fakeLivePrepare normally returns this test binary as the suite. The process
+// diagnostic fixture uses the real preparation owner to reach its live consumer.
+func fakeLivePrepare(ctx context.Context, plan verify.Plan) (verify.Prepared, error) {
+	if os.Getenv(liveTargetModeEnv) == "process-diagnostics" {
+		return verify.Prepare(ctx, plan, os.Args[4])
+	}
 	if os.Getenv(liveTargetModeEnv) == "prepare-hangs" {
 		fmt.Fprintln(os.Stderr, "preparing: downloading modules")
 		<-ctx.Done()
@@ -223,25 +236,25 @@ func newLiveControlPlane(t *testing.T, mode string) (*ControlPlane, string) {
 	self, err := os.Executable()
 	require.NoError(t, err)
 	cardsDir := t.TempDir()
-	cp, err := New(Options{
+	cp, err := New(buildFixtureOptions(t, Options{BuildCacheDir: t.TempDir(),
 		CardsDir:     cardsDir,
 		Verification: &VerificationConfig{RunsDir: t.TempDir()},
 		Live: &LiveConfig{
 			Command: []string{self},
 			Env:     append(os.Environ(), liveTargetModeEnv+"="+mode), StartTimeout: time.Minute,
 		},
-	})
+	}))
 	require.NoError(t, err)
 	t.Cleanup(func() { assert.NoError(t, cp.Close()) })
 	seedLiveChange(t, cp)
 	return cp, LiveRoot(cardsDir)
 }
 
-// seedLiveChange gives the stored-evaluator fixture a confirmed card owned by alice.
-// It does not create a build: stored evaluator starts must keep that capability.
+// seedLiveChange supplies a confirmed card without a build: stored-evaluator
+// live targets use the operator's suite independently of build assignments.
 func seedLiveChange(t *testing.T, cp *ControlPlane) {
 	t.Helper()
-	saveStoryCard(t, cp, liveTestChangeID, StatusConfirmed, refundStory("Refund over the limit waits"))
+	saveBuildStoryCard(t, cp, liveTestChangeID, StatusConfirmed, refundStory("Refund over the limit waits"))
 }
 
 // boundTargetForTest reads the bound target for lifecycle assertions. Consumer
@@ -279,6 +292,9 @@ func goaErrorName(err error) string {
 
 func TestLiveTargetAppliesDraftsThroughTheGeneratedContract(t *testing.T) {
 	cp, root := newLiveControlPlane(t, "serve")
+	_, found, err := cp.cards.loadOpenBuild()
+	require.NoError(t, err)
+	require.False(t, found, "stored-evaluator live targets need no build")
 	alice := WithPrincipal(context.Background(), Principal{ID: "alice@example.com", CallerID: "alice@example.com", Kind: CallerUser})
 	commit := strings.Repeat("a", 40)
 
@@ -462,11 +478,11 @@ func TestCloseStopsTheLiveTarget(t *testing.T) {
 	require.NoError(t, err)
 	cardsDir := t.TempDir()
 	root := LiveRoot(cardsDir)
-	cp, err := New(Options{
+	cp, err := New(buildFixtureOptions(t, Options{BuildCacheDir: t.TempDir(),
 		CardsDir:     cardsDir,
 		Verification: &VerificationConfig{RunsDir: t.TempDir()},
 		Live:         &LiveConfig{Command: []string{self}, Env: append(os.Environ(), liveTargetModeEnv+"=serve")},
-	})
+	}))
 	require.NoError(t, err)
 	seedLiveChange(t, cp)
 	alice := WithPrincipal(context.Background(), Principal{ID: "alice@example.com", CallerID: "alice@example.com", Kind: CallerUser})
@@ -488,12 +504,12 @@ func TestCloseEndsAStartInProgressAndRefusesLaterStarts(t *testing.T) {
 	self, err := os.Executable()
 	require.NoError(t, err)
 	cardsDir := t.TempDir()
-	cp, err := New(Options{
+	cp, err := New(buildFixtureOptions(t, Options{BuildCacheDir: t.TempDir(),
 		CardsDir:     cardsDir,
 		Verification: &VerificationConfig{RunsDir: t.TempDir()},
 		Live: &LiveConfig{Command: []string{self}, Env: append(os.Environ(), liveTargetModeEnv+"=prepare-hangs"),
 			StartTimeout: time.Hour},
-	})
+	}))
 	require.NoError(t, err)
 	seedLiveChange(t, cp)
 	alice := WithPrincipal(context.Background(), Principal{ID: "alice@example.com", CallerID: "alice@example.com", Kind: CallerUser})
@@ -533,11 +549,11 @@ func TestAFailedStopKeepsTheOwnerAndStartsNoOtherTarget(t *testing.T) {
 	self, err := os.Executable()
 	require.NoError(t, err)
 	cardsDir := t.TempDir()
-	cp, err := New(Options{
+	cp, err := New(buildFixtureOptions(t, Options{BuildCacheDir: t.TempDir(),
 		CardsDir:     cardsDir,
 		Verification: &VerificationConfig{RunsDir: t.TempDir()},
 		Live:         &LiveConfig{Command: []string{self}, Env: append(os.Environ(), liveTargetModeEnv+"=serve")},
-	})
+	}))
 	require.NoError(t, err)
 	t.Cleanup(func() {
 		matches, globErr := filepath.Glob(filepath.Join(LiveRoot(cardsDir), "live-*", "tmp", "immutable"))
@@ -584,11 +600,11 @@ func TestAFailedStopKeepsTheOwnerAndStartsNoOtherTarget(t *testing.T) {
 		New: &gensurla.DesignSnapshot{Files: map[string]string{"design/design.go": "package design\n"}},
 	})
 	require.Error(t, err)
-	require.Len(t, workspaces(t, tmp), 1)
+	require.Len(t, workspaces(t, filepath.Join(cardsDir, "designeval")), 1)
 
 	err = cp.Close()
 	require.Error(t, err, "Close reports the target it could not confirm stopped")
-	assert.Empty(t, workspaces(t, tmp), "Close still removes the evaluator's workspace")
+	assert.Empty(t, workspaces(t, filepath.Join(cardsDir, "designeval")), "Close still removes the evaluator's workspace")
 	again := cp.Close()
 	require.Error(t, again, "a later Close returns the same stop failure")
 	assert.Equal(t, err.Error(), again.Error())
@@ -784,11 +800,11 @@ func TestAStartThatFailsBeforeReadyAndCannotBeCleanedUpKeepsItsOwner(t *testing.
 	self, err := os.Executable()
 	require.NoError(t, err)
 	cardsDir := t.TempDir()
-	cp, err := New(Options{
+	cp, err := New(buildFixtureOptions(t, Options{BuildCacheDir: t.TempDir(),
 		CardsDir:     cardsDir,
 		Verification: &VerificationConfig{RunsDir: t.TempDir()},
 		Live:         &LiveConfig{Command: []string{self}, Env: append(os.Environ(), liveTargetModeEnv+"=fail-pinned")},
-	})
+	}))
 	require.NoError(t, err)
 	t.Cleanup(func() {
 		matches, err := filepath.Glob(filepath.Join(LiveRoot(cardsDir), "live-*", "tmp", "immutable"))
@@ -827,12 +843,12 @@ func TestAStartThatTimesOutSaysSo(t *testing.T) {
 	self, err := os.Executable()
 	require.NoError(t, err)
 	cardsDir := t.TempDir()
-	cp, err := New(Options{
+	cp, err := New(buildFixtureOptions(t, Options{BuildCacheDir: t.TempDir(),
 		CardsDir:     cardsDir,
 		Verification: &VerificationConfig{RunsDir: t.TempDir()},
 		Live: &LiveConfig{Command: []string{self}, Env: append(os.Environ(), liveTargetModeEnv+"=prepare-hangs"),
 			StartTimeout: 300 * time.Millisecond},
-	})
+	}))
 	require.NoError(t, err)
 	t.Cleanup(func() { assert.NoError(t, cp.Close()) })
 	seedLiveChange(t, cp)
@@ -873,14 +889,14 @@ func TestGetLiveTargetFollowsEachTransition(t *testing.T) {
 	t.Cleanup(func() { assert.NoError(t, provider.Shutdown(context.Background())) })
 	self, err := os.Executable()
 	require.NoError(t, err)
-	cp := newControlPlane(t, Options{
+	cp := newControlPlane(t, buildFixtureOptions(t, Options{BuildCacheDir: t.TempDir(),
 		TracerProvider: provider,
 		Verification:   &VerificationConfig{RunsDir: t.TempDir()},
 		Live: &LiveConfig{
 			Command: []string{self}, Env: append(os.Environ(), liveTargetModeEnv+"=serve"),
 			StartTimeout: time.Minute,
 		},
-	})
+	}))
 	seedLiveChange(t, cp)
 	alice := WithPrincipal(context.Background(), Principal{ID: "alice@example.com", CallerID: "alice@example.com", Kind: CallerUser})
 	assert.Equal(t, gensurla.LiveTargetKindNone, cp.liveTargetState().Kind(), "no live target before a start")
@@ -970,12 +986,12 @@ func TestGetLiveTargetFollowsEachTransition(t *testing.T) {
 func TestGetLiveTargetShowsAStartInProgressWithoutWaiting(t *testing.T) {
 	self, err := os.Executable()
 	require.NoError(t, err)
-	cp, err := New(Options{
+	cp, err := New(buildFixtureOptions(t, Options{BuildCacheDir: t.TempDir(),
 		CardsDir:     t.TempDir(),
 		Verification: &VerificationConfig{RunsDir: t.TempDir()},
 		Live: &LiveConfig{Command: []string{self}, Env: append(os.Environ(), liveTargetModeEnv+"=prepare-hangs"),
 			StartTimeout: time.Hour},
-	})
+	}))
 	require.NoError(t, err)
 	seedLiveChange(t, cp)
 	alice := WithPrincipal(context.Background(), Principal{ID: "alice@example.com", CallerID: "alice@example.com", Kind: CallerUser})
@@ -1016,11 +1032,11 @@ func TestGetLiveTargetShowsATargetNotConfirmedStopped(t *testing.T) {
 	self, err := os.Executable()
 	require.NoError(t, err)
 	cardsDir := t.TempDir()
-	cp, err := New(Options{
+	cp, err := New(buildFixtureOptions(t, Options{BuildCacheDir: t.TempDir(),
 		CardsDir:     cardsDir,
 		Verification: &VerificationConfig{RunsDir: t.TempDir()},
 		Live:         &LiveConfig{Command: []string{self}, Env: append(os.Environ(), liveTargetModeEnv+"=serve")},
-	})
+	}))
 	require.NoError(t, err)
 	seedLiveChange(t, cp)
 	alice := WithPrincipal(context.Background(), Principal{ID: "alice@example.com", CallerID: "alice@example.com", Kind: CallerUser})
@@ -1104,14 +1120,14 @@ func TestChangeListVersionFollowsTheLiveTarget(t *testing.T) {
 	t.Cleanup(func() { assert.NoError(t, provider.Shutdown(context.Background())) })
 	self, err := os.Executable()
 	require.NoError(t, err)
-	cp := newControlPlane(t, Options{
+	cp := newControlPlane(t, buildFixtureOptions(t, Options{BuildCacheDir: t.TempDir(),
 		TracerProvider: provider,
 		Verification:   &VerificationConfig{RunsDir: t.TempDir()},
 		Live: &LiveConfig{
 			Command: []string{self}, Env: append(os.Environ(), liveTargetModeEnv+"=serve"),
 			StartTimeout: time.Minute,
 		},
-	})
+	}))
 	cp.changesWait = 20 * time.Second
 	cp.changesPoll = 20 * time.Millisecond
 	seedLiveChange(t, cp)
@@ -1176,5 +1192,33 @@ func TestChangeListVersionFollowsTheLiveTarget(t *testing.T) {
 	require.NoError(t, err)
 	assert.NotEqual(t, before, version(), "a new target of the same commit changes the version")
 	_, err = cp.StopLiveTarget(alice)
+	require.NoError(t, err)
+}
+
+// TestStoredEvaluatorLiveTargetSurvivesDrop verifies the real live-target
+// consumer before a build and after the user drops it.
+func TestStoredEvaluatorLiveTargetSurvivesDrop(t *testing.T) {
+	self, err := os.Executable()
+	require.NoError(t, err)
+	cp := newBuildControlPlane(t, Options{BuildCacheDir: t.TempDir(),
+		Verification: &VerificationConfig{RunsDir: t.TempDir()},
+		Live:         &LiveConfig{Command: []string{self}, Env: append(os.Environ(), liveTargetModeEnv+"=serve"), StartTimeout: time.Minute},
+	})
+	seedLiveChange(t, cp)
+	user := asCaller("alice@example.com", CallerUser)
+	payload := &gensurla.StartLiveTargetPayload{ChangeID: liveTestChangeID, CandidateCommit: strings.Repeat("a", 40)}
+	_, err = cp.StartLiveTarget(user, payload)
+	require.NoError(t, err)
+	_, err = cp.StopLiveTarget(user)
+	require.NoError(t, err)
+	card, err := cp.GetChange(user, &gensurla.GetChangePayload{ChangeID: liveTestChangeID})
+	require.NoError(t, err)
+	first, err := cp.StartBuild(user, &gensurla.StartBuildPayload{ChangeID: liveTestChangeID, RequestRevision: card.RequestRevision})
+	require.NoError(t, err)
+	_, err = cp.DropBuild(user, &gensurla.DropBuildPayload{ChangeID: liveTestChangeID, StartedAt: first.Build.StartedAt})
+	require.NoError(t, err)
+	_, err = cp.StartLiveTarget(user, payload)
+	require.NoError(t, err)
+	_, err = cp.StopLiveTarget(user)
 	require.NoError(t, err)
 }

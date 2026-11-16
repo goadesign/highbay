@@ -24,7 +24,9 @@ func pageTeamSnapshot(state string) gensurla.TeamSnapshot {
 // follows the one version chain, pane actions accept real empty 204 answers,
 // and a removed focused attention control returns focus to the current view.
 func TestViewsPageTeamFollowsAttentionAndShowsPane(t *testing.T) {
-	f := &teamServiceFixture{snapshot: pageTeamSnapshot("needs_you")}
+	snapshot := pageTeamSnapshot("needs_you")
+	snapshot.Roles[2].Assignment = "no_work"
+	f := &teamServiceFixture{snapshot: snapshot}
 	cp := pageControlPlane(t, Options{Team: &TeamBinding{Owner: pageOwner, Service: f}})
 	ps := startPageServer(t, cp)
 	ps.act("builder-working", func() {
@@ -46,6 +48,7 @@ page.$("#surla-nav-team").click();
 await until(() => page.state() === "team" && page.$("#surla-team-role-builder"), "Team did not open");
 expect(page.text("#surla-team-role-builder").includes("Chorus watcher absent") && page.text("#surla-team-role-builder").includes("Assignment unread"), "independent facts were inferred from terminal state");
 expect(page.text("#surla-team-role-test_writer").includes("Status unknown") && page.text("#surla-team-role-test_writer").includes("Chorus watcher held"), "unknown terminal hid a known watcher");
+expect(page.text("#surla-team-role-test_writer").includes("No work now"), "the declared no_work assignment fact is missing");
 expect(page.doc.activeElement === page.$("#surla-team-title"), "opening Team did not focus its title");
 page.$("#surla-team-attention-show-pane-builder").focus();
 await control(origin, "act", { key: "builder-working" });
@@ -97,9 +100,11 @@ await until(() => page.$("#surla-team-attention-builder"), "initial team was not
 page.$("#surla-nav-team").click();
 await until(() => page.$("#surla-team-start"), "Start agents is missing");
 expect(page.sent("POST", "/team/agents").length === 0, "opening Team started agents");
-await control(origin, "reply", { key: "GET /team", status: 503, body: { name: "unavailable", message: "Team owner unavailable." } });
+await control(origin, "reply", { key: "GET /team", status: 503, body: { name: "unavailable", id: "team-read", message: "Team owner unavailable.", temporary: true, timeout: false, fault: false } });
 page.$("#surla-team-refresh").click();
 await until(() => page.$("#surla-team-read-error"), "read failure was not shown");
+expect(page.text("#surla-team-read-error") === "Could not read the project team. Team owner unavailable.", "Team did not name the failed read before the raw diagnostic: " + page.text("#surla-team-read-error"));
+expect(page.$("#surla-team-read-error").getAttribute("role") === "alert", "the failed Team read is not announced as an alert");
 expect(page.text("#surla-team-stale").includes("Last-read"), "retained facts are presented as current");
 expect(page.text("#surla-team-attention-builder").includes("Last read:"), "global attention is presented as current after read failure");
 expect(page.$("#surla-team-role-builder").dataset.state === "needs_you", "failed read discarded known facts");
@@ -115,6 +120,22 @@ page.close();
 `)
 }
 
+// TestViewsPageUnboundTeamNamesTheEnablingStep checks the real owner refusal.
+func TestViewsPageUnboundTeamNamesTheEnablingStep(t *testing.T) {
+	cp := pageControlPlane(t, Options{})
+	ps := startPageServer(t, cp)
+	runPageScript(t, ps, nil, `
+const page = await openPage(origin, { link: input.link });
+await until(() => page.sent("GET", "/team").some((r) => r.status === 400), "unbound Team read did not return its real refusal");
+await until(() => page.text("#surla-checkpoint-status") === "Start this project with surla to use its team.", "header did not show the single owner instruction");
+page.$("#surla-nav-team").click();
+await until(() => page.$("#surla-team-read-error"), "Team did not show its diagnostic");
+expect(page.text("#surla-team-read-error") === "Start this project with surla to use its team.", "Team duplicated or changed the owner instruction");
+expect(page.sent("POST", "/team/agents").length === 0, "opening Team started agents");
+page.close();
+`)
+}
+
 // TestViewsPageTeamAndBuildUpdatesPreserveTheModelDraft keeps all four model
 // inputs through the new update reasons and navigation without applying them.
 // A rejected session then leaves the team facts labeled and its actions inert.
@@ -123,7 +144,7 @@ func TestViewsPageTeamAndBuildUpdatesPreserveTheModelDraft(t *testing.T) {
 	cp := newBuildControlPlane(t, Options{Team: &TeamBinding{Owner: pageOwner, Service: f}})
 	cp.changesWait = 400 * time.Millisecond
 	cp.changesPoll = 20 * time.Millisecond
-	card := confirmedChange(t, cp, "chg")
+	card := buildableChange(t, cp, "chg")
 	ps := startPageServer(t, cp)
 	ps.act("start-build-and-attention", func() {
 		_, err := cp.StartBuild(asCaller(pageOwner, CallerUser), &gensurla.StartBuildPayload{
@@ -170,6 +191,7 @@ await control(origin, "reply", { key: "GET /team", status: 401, body: { name: "u
 page.$("#surla-team-refresh").click();
 await until(() => page.$("#surla-checkpoint-root").dataset.session === "ended", "the refused session remained active");
 expect(page.text("#surla-team-attention-builder").includes("Last read:"), "ended session shows retained attention as current");
+expect(page.text("#surla-team-read-error") === "The session ended; these are last-read facts.", "ended session is presented as a failed team read: " + page.text("#surla-team-read-error"));
 for (const button of page.$$("#surla-team-stage button, #surla-team-attention button")) {
   expect(button.disabled, "ended session left an active Team control: " + button.id);
 }

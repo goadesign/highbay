@@ -25,6 +25,7 @@ import (
 	genmcpsurla "github.com/goadesign/surla/gen/jsonrpc/mcp_surla/server"
 	genmcpadapter "github.com/goadesign/surla/gen/mcp_surla"
 	gensurla "github.com/goadesign/surla/gen/surla"
+	"github.com/goadesign/surla/internal/abspath"
 	"github.com/goadesign/surla/internal/designeval"
 	"github.com/goadesign/surla/internal/diff"
 	"github.com/goadesign/surla/internal/goldenpath"
@@ -119,7 +120,7 @@ type (
 		// GONOPROXY, GONOSUMDB and GOINSECURE settings as KEY=value, passed
 		// to dependency-download containers and nothing else.
 		GoProxyEnv []string
-		// Evaluator evaluates Goa design snapshots for preview_architecture and
+		// Evaluator evaluates Goa design snapshots for refresh_story and
 		// diff. When nil, New constructs a default designeval.Evaluator (using
 		// <CardsDir>/designeval as its protected temporary parent when
 		// WorkspaceDir is set). When a host supplies Evaluator for a bound
@@ -158,6 +159,10 @@ type (
 		// get_verification, list_verifications, and init_project when
 		// Verification is nil. WrittenTestRuns requires it.
 		RunsDir string
+		// BuildCacheDir is the required retained Go package cache when Verification
+		// or WrittenTestRuns is configured. It must lie outside the workspace.
+		// Concurrent operations share it on one machine using a local filesystem.
+		BuildCacheDir string
 		// WrittenTestRuns lets verify_change run, in RunsDir, the tests
 		// accepted for each change's build, in a project without a stored
 		// evaluator. start_live_target uses the same accepted tests, both
@@ -186,6 +191,12 @@ type (
 		// stories holds the evaluated domain Stories adopted for this revision,
 		// or nil when none were adopted.
 		stories []designeval.StorySummary
+		// architecture is the evaluated topology retained outside the revision hash.
+		architecture *savedArchitecture
+		// goMod is the module text evaluated with this revision.
+		goMod string
+		// madeFrom is this revision's immutable design provenance, absent on older cards.
+		madeFrom *madeFromSnapshot
 		// savedAt is when the card store last wrote this card; zero for a
 		// record not yet saved. It is not part of request_revision.
 		savedAt time.Time
@@ -205,6 +216,12 @@ type (
 		designSource string
 		// stories holds the proposal's evaluated domain Stories, or nil.
 		stories []designeval.StorySummary
+		// architecture is the evaluated topology retained outside the revision hash.
+		architecture *savedArchitecture
+		// goMod is the module text evaluated with this revision.
+		goMod string
+		// madeFrom is this revision's immutable design provenance, absent on older cards.
+		madeFrom *madeFromSnapshot
 	}
 
 	// canonicalAnswerPair is a deterministic key/value entry for JSON hashing.
@@ -282,6 +299,8 @@ type (
 		// runsDir is the protected verification runs directory: RunsDir, or
 		// the stored evaluator's when RunsDir is empty.
 		runsDir string
+		// buildCacheDir is the project-owned package cache, independent of run cleanup.
+		buildCacheDir string
 		// evaluator evaluates designs for preview_architecture and diff. It
 		// creates its build workspace on the first evaluation, and Close
 		// removes it.
@@ -357,6 +376,9 @@ type (
 		buildCopyFactory func(context.Context, string, scaffold.Layout) (buildCopy, error)
 		// buildIdentityCheck replaces the host identity check in tests.
 		buildIdentityCheck func(context.Context, string) error
+		// builderCopyTurn reserves the builder's copy independently of test checks.
+		// Later copy operations take it without waiting before workingCopyTurn.
+		builderCopyTurn chan struct{}
 		// workingCopyTurn is the one lock on the project's test working copy,
 		// a channel with room for one value: a sender takes the turn, a
 		// receive releases it, and a waiter can give up when its context
@@ -364,7 +386,8 @@ type (
 		// writing the required tests into it, checking it or recording its
 		// accepted tests, for the whole of that step: a build start takes it
 		// without waiting, and the report checker holds it for each report it
-		// judges. Locks are taken in the order workingCopyTurn, reportMu, mu,
+		// judges. With workspaceMu as the outer lifetime gate, locks are taken in
+		// the order builderCopyTurn, workingCopyTurn, reportMu, draftMu, mu,
 		// never the other way: the turn's steps run for minutes, and mu guards
 		// every card and build read.
 		workingCopyTurn chan struct{}
@@ -375,6 +398,10 @@ type (
 		// waits for one Record, which takes milliseconds. Taken after
 		// workingCopyTurn and before mu.
 		reportMu sync.Mutex
+		// draftMu serializes the draft and its made-from list. Git and evaluation
+		// work never run under mu; only draft file copies and merge-file run
+		// under draftMu. The new draft owners activate this lock in later slices.
+		draftMu sync.Mutex
 		// reportWake tells the report checker that a report was recorded.
 		// It has room for one value; report_tests_finished sends without
 		// waiting, and a full channel already says the same.
@@ -468,6 +495,16 @@ func newWithWorkspaceGitTimeout(
 		err := errors.New("WrittenTestRuns requires WorkspaceDir, whose repository holds the commits it verifies")
 		return nil, errors.Join(err, cleanupFailedNew())
 	}
+	if (opts.Verification != nil || opts.WrittenTestRuns != nil) && opts.BuildCacheDir == "" {
+		return nil, errors.Join(errors.New("Verification and WrittenTestRuns require BuildCacheDir"), cleanupFailedNew())
+	}
+	if opts.BuildCacheDir != "" {
+		var err error
+		opts.BuildCacheDir, err = abspath.EvalMissing(opts.BuildCacheDir)
+		if err != nil {
+			return nil, errors.Join(fmt.Errorf("resolve build cache directory: %w", err), cleanupFailedNew())
+		}
+	}
 	runsDir, initStageDir, verif, protectedDirs, err := normalizeAndValidateStartupPaths(opts, wsRoot, withTimeout)
 	if err != nil {
 		return nil, errors.Join(err, cleanupFailedNew())
@@ -498,6 +535,7 @@ func newWithWorkspaceGitTimeout(
 		resolvePromotionTarget: opts.ResolvePromotionTarget,
 		verifier:               verif,
 		runsDir:                runsDir,
+		buildCacheDir:          opts.BuildCacheDir,
 		evaluator:              eval,
 		initialWorkspaceRoot:   wsRoot,
 		protectedDirs:          protectedDirs,
@@ -515,6 +553,7 @@ func newWithWorkspaceGitTimeout(
 		initRunner:             opts.InitRunner,
 		surlaVersion:           surlaVersion,
 		liveState:              newLiveState(opts.Live, cards.dir),
+		builderCopyTurn:        make(chan struct{}, 1),
 		workingCopyTurn:        make(chan struct{}, 1),
 		reportWake:             make(chan struct{}, 1),
 		team:                   opts.Team,
@@ -522,7 +561,7 @@ func newWithWorkspaceGitTimeout(
 	if err := cp.restoreWorkspace(); err != nil {
 		return nil, errors.Join(err, cp.Close())
 	}
-	if err := validateStartupSeparation(cards.dir, runsDir, initStageDir, verifierRuns(verif), protectedDirs...); err != nil {
+	if err := validateStartupSeparation(cards.dir, runsDir, initStageDir, opts.BuildCacheDir, verifierRuns(verif), protectedDirs...); err != nil {
 		return nil, errors.Join(err, cp.Close())
 	}
 	if opts.Checker != nil {
@@ -576,7 +615,9 @@ func NewHTTPHandler(svc gensurla.Service, auth RequestAuthenticator) http.Handle
 	)
 	gensurlahttp.Mount(mux, httpServer)
 
-	mcpAdapter := genmcpadapter.NewMCPAdapter(endpoints, nil)
+	mcpAdapter := genmcpadapter.NewMCPAdapter(endpoints, &genmcpadapter.MCPAdapterOptions{
+		ErrorMapper: mapMCPRefusal,
+	})
 	mcpEndpoints := genmcpadapter.NewEndpoints(mcpAdapter)
 	filterMCPDiscovery(mcpEndpoints)
 	mcpServer := genmcpsurla.New(
@@ -584,7 +625,13 @@ func NewHTTPHandler(svc gensurla.Service, auth RequestAuthenticator) http.Handle
 		mux,
 		goahttp.RequestDecoder,
 		goahttp.ResponseEncoder,
-		nil,
+		func(ctx context.Context, _ http.ResponseWriter, err error) {
+			_, span := recorder.Start(ctx, "surla.mcp.transport_error")
+			defer span.End()
+			span.SetAttributes(attribute.String("error.classification", "mcp_transport"))
+			span.RecordError(err)
+			span.SetStatus(codes.Error, "MCP transport failure")
+		},
 	)
 	genmcpsurla.Mount(mux, mcpServer)
 
@@ -642,23 +689,15 @@ func (c *ControlPlane) ProposeChange(ctx context.Context, p *gensurla.ProposeCha
 	if strings.TrimSpace(p.ChangeID) == "" || strings.TrimSpace(p.Prompt) == "" {
 		return nil, gensurla.MakeUnprocessable(errors.New("change_id and prompt are required"))
 	}
-	var designSrc string
-	var stories []designeval.StorySummary
-	switch {
-	case p.StoryRefreshOpID != nil:
+	var snapshot refreshedSnapshot
+	if p.StoryRefreshOpID != nil {
 		var err error
-		designSrc, stories, err = c.adoptStoryRefresh(principal, *p.StoryRefreshOpID)
+		snapshot, err = c.adoptStoryRefresh(principal, *p.StoryRefreshOpID)
 		if err != nil {
 			return nil, err
 		}
-	default:
-		if wsDir, wsDev, wsIno := c.currentWorkspaceTarget(); wsDir != "" {
-			src, err := readWorkspaceDesignSource(wsDir, wsDev, wsIno)
-			if err != nil {
-				return nil, err
-			}
-			designSrc = src
-		}
+	} else if err := c.requireRefreshForModule(); err != nil {
+		return nil, err
 	}
 
 	_, span := c.tracer("surla/controlplane").Start(
@@ -683,9 +722,9 @@ func (c *ControlPlane) ProposeChange(ctx context.Context, p *gensurla.ProposeCha
 		Ambiguities:        ambiguities,
 		Examples:           examples,
 		PreservedBehaviors: preserved,
-		Stories:            storySummaryItemsOrNil(stories),
+		Stories:            storySummaryItemsOrNil(snapshot.stories),
 	}
-	rev, err := computeCanonicalRevision(card, principal.ID, designSrc)
+	rev, err := computeCanonicalRevision(card, principal.ID, snapshot.designSource)
 	if err != nil {
 		span.SetAttributes(attribute.String("surla.public_summary", cp1SafeFaultSummary(false, cp1FaultRevision)))
 		span.RecordError(err)
@@ -699,6 +738,10 @@ func (c *ControlPlane) ProposeChange(ctx context.Context, p *gensurla.ProposeCha
 		card.UIComposition = &gensurla.UICompositionItem{Program: *p.Analysis.UIComposition, ComposedForRevision: rev}
 	}
 
+	if snapshot.madeFrom != nil {
+		c.draftMu.Lock()
+		defer c.draftMu.Unlock()
+	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	_, exists, err := c.cards.load(p.ChangeID)
@@ -712,17 +755,24 @@ func (c *ControlPlane) ProposeChange(ctx context.Context, p *gensurla.ProposeCha
 		span.SetAttributes(attribute.String("surla.public_summary", "Change Card ID already exists (this request did not overwrite the existing Change Card); call get_change or choose a new change_id."))
 		return nil, gensurla.MakeConflict(fmt.Errorf("change_id %q already exists", p.ChangeID))
 	}
+	if snapshot.madeFrom != nil {
+		if err := c.recordRefreshedSnapshot(span, snapshot); err != nil {
+			return nil, err
+		}
+	}
 	if err := c.cards.save(storedChangeCard{
 		card:         card,
 		owner:        principal.ID,
-		designSource: designSrc,
-		stories:      stories,
+		designSource: snapshot.designSource,
+		stories:      snapshot.stories,
+		architecture: snapshot.architecture, goMod: snapshot.goMod, madeFrom: snapshot.madeFrom,
 	}); err != nil {
 		span.SetAttributes(attribute.String("surla.public_summary", cp1SafeFaultSummary(false, cp1FaultStorageSave)))
 		span.RecordError(err)
 		span.SetStatus(codes.Error, "save cp1 change card")
 		return nil, err
 	}
+	c.suppressDraftDropNote(snapshot.madeFrom)
 	span.SetAttributes(attribute.String("surla.public_summary", fmt.Sprintf("Proposed Change Card (%s).", status)))
 	return card, nil
 }
@@ -800,10 +850,10 @@ func (c *ControlPlane) GetChange(ctx context.Context, p *gensurla.GetChangePaylo
 	return c.changeResult(ctx, record)
 }
 
-// PreviewArchitecture evaluates the candidate design module snapshot via the
-// real Goa evaluation engine (the control plane's designeval.Evaluator) bound to a confirmed CP1
-// Change Card and returns the validated C4 topology, directed edges, per-agent
-// runtime policies, and tool contracts.
+// PreviewArchitecture returns the evaluated architecture saved with the user's
+// confirmed revision. It reads no workspace and runs no evaluation, so a later
+// draft, project edit or waiting proposal cannot change that agreed preview.
+// Older cards without architecture must adopt a succeeded refresh first.
 func (c *ControlPlane) PreviewArchitecture(ctx context.Context, p *gensurla.PreviewArchitecturePayload) (*gensurla.ArchitecturePreviewResult, error) {
 	principal, ok := PrincipalFromContext(ctx)
 	if !ok {
@@ -832,23 +882,13 @@ func (c *ControlPlane) PreviewArchitecture(ctx context.Context, p *gensurla.Prev
 		return nil, gensurla.MakeConflict(fmt.Errorf("request_revision mismatch for %q: got %q, want %q", p.ChangeID, p.RequestRevision, record.card.RequestRevision))
 	}
 
-	wsDir, wsDev, wsIno := c.currentWorkspaceTarget()
-	if wsDir == "" {
-		return nil, gensurla.MakeUnprocessable(errors.New(
-			"workspace directory is not bound to this control plane",
-		))
+	if record.architecture == nil {
+		return nil, gensurla.MakeUnprocessable(errors.New("no architecture to show; call refresh_story, then revise_change with its op_id"))
 	}
-	designFiles, err := readWorkspaceModuleSnapshot(wsDir, wsDev, wsIno)
-	if err != nil {
-		return nil, err
-	}
-
-	if err := reportProgress(ctx, 0, 2, "Evaluating the candidate design"); err != nil {
-		return nil, err
-	}
-	evaluated, err := c.evaluator.Evaluate(ctx, designFiles)
-	if err != nil {
-		return nil, err
+	evaluated := designeval.Result{
+		SystemName: record.architecture.SystemName, Containers: record.architecture.Containers,
+		Edges: record.architecture.Edges, AgentPolicies: record.architecture.AgentPolicies,
+		Tools: record.architecture.Tools,
 	}
 	if evaluated.SystemName == "" || len(evaluated.Containers) == 0 {
 		return nil, gensurla.MakeUnprocessable(errors.New("design must declare at least one Goa API or Service container"))
@@ -859,10 +899,7 @@ func (c *ControlPlane) PreviewArchitecture(ctx context.Context, p *gensurla.Prev
 		}
 	}
 
-	designDigest := designeval.SnapshotDigest(designFiles)
-	if err := reportProgress(ctx, 2, 2, "Architecture preview ready"); err != nil {
-		return nil, err
-	}
+	designDigest := record.architecture.DesignDigest
 	banner := evaluated.Summary()
 
 	return &gensurla.ArchitecturePreviewResult{

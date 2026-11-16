@@ -72,11 +72,11 @@ const maxListBytes = maxGitStdout
 // the copy cannot follow. Any other error is a failure to decide: git, the
 // file system, or ctx ended.
 func (c *Checker) dependencyFailure(
-	ctx context.Context, wc WorkingCopy, goBin, modulePath string, current dependencyLists,
+	ctx context.Context, wc WorkingCopy, base, goBin, modulePath string, current dependencyLists,
 ) (comparedWith string, err error) {
-	base, err := copyBase(ctx, wc)
+	base, err = wc.git(ctx, wc.dir, nil, "rev-parse", "--verify", base+"^{commit}")
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("read the copy's base commit: %w", err)
 	}
 	based, found, err := baseDependencyLists(ctx, wc, base, modulePath)
 	if err != nil {
@@ -119,7 +119,7 @@ func (c *Checker) dependencyFailure(
 // is dependencyFailure's: an error wrapping ErrDependencies for a cause
 // outside the author's changes, nil for the author's, or a failure to decide.
 func (c *Checker) loadFailure(
-	ctx context.Context, wc WorkingCopy, modulePath string, files map[string]string,
+	ctx context.Context, wc WorkingCopy, base, modulePath string, files map[string]string,
 ) error {
 	if err := os.MkdirAll(c.workDir, 0o700); err != nil {
 		return fmt.Errorf("create the check folder: %w", err)
@@ -141,7 +141,7 @@ func (c *Checker) loadFailure(
 	case downloadErr == nil:
 		return nil
 	}
-	_, err = c.dependencyFailure(ctx, wc, tc.goBin(), modulePath, current)
+	_, err = c.dependencyFailure(ctx, wc, base, tc.goBin(), modulePath, current)
 	return err
 }
 

@@ -11,6 +11,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/goadesign/surla/internal/controlplane"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel"
@@ -27,12 +28,15 @@ func TestTeamWrittenRosterClosedContract(t *testing.T) {
 	host := deps.Host.(*teamFixture)
 	server, err := NewServer(state, func() {}, deps)
 	require.NoError(t, err)
+	server.BindAssignments(func(context.Context) (controlplane.TeamAssignments, error) {
+		return controlplane.TeamAssignments{}, nil
+	})
 	team, err := server.EnsureTeam(teamContext(state))
 	require.NoError(t, err)
 	raw, err := os.ReadFile(filepath.Join(deps.RosterDirectory, team.Space+".json"))
 	require.NoError(t, err)
 	handle := "guide-" + state.Record.ID[:12]
-	message := "Work through the Story and the change with the user in this project's pane. Use your surla connection, starting with the surla://golden-path guidance resource and list_changes/get_change. Only the user confirms intent and approves results, on the views page."
+	_, message := roleFirstMessage("guide")
 	expected := fmt.Sprintf(`{"root":%q,"swarm":%q,"roles":[{"role":"guide","title":"Guide","handle":%q,"folder":%q,"first_message":%q,"connections":[{"name":"surla","url":"http://127.0.0.1:%d/mcp","credential_file":%q}],"place":null}]}`, state.Record.Directory, team.Team, handle, state.Record.Directory, message, state.Record.Port, state.AgentFile(handle))
 	assert.JSONEq(t, expected, string(raw))
 	assert.Equal(t, []string{"overlays", "spaces", "create", "terminals", "focus", "open"}, host.calls, "observe overlays and focus this space before opening its launcher")
@@ -135,6 +139,9 @@ func TestSavedSpaceWinsNameMatches(t *testing.T) {
 	host.spaces = []TeamSpace{{ID: "candidate1", Name: state.Record.Team, Folder: state.Record.Directory}, {ID: "candidate2", Name: state.Record.Team, Folder: state.Record.Directory}, {ID: "saved", Name: "renamed by user", Folder: "/different", Tabs: []TeamTab{{ID: "tab", Terminals: []TeamPane{{Terminal: "terminal"}}}}}}
 	server, err := NewServer(state, func() {}, deps)
 	require.NoError(t, err)
+	server.BindAssignments(func(context.Context) (controlplane.TeamAssignments, error) {
+		return controlplane.TeamAssignments{}, nil
+	})
 	team, err := server.EnsureTeam(teamContext(state))
 	require.NoError(t, err)
 	assert.Equal(t, "saved", team.Space)
@@ -210,6 +217,9 @@ func TestTeamSpansReportBoundedOutcomes(t *testing.T) {
 	host := deps.Host.(*teamFixture)
 	server, err := NewServer(state, func() {}, deps)
 	require.NoError(t, err)
+	server.BindAssignments(func(context.Context) (controlplane.TeamAssignments, error) {
+		return controlplane.TeamAssignments{}, nil
+	})
 	team, err := server.EnsureTeam(teamContext(state))
 	require.NoError(t, err)
 	host.overlays = []string{"chorus-launcher"}

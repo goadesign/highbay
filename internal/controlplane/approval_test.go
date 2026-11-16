@@ -105,7 +105,7 @@ type (
 func TestApproveMergeRecordsApprovalOnlyForTheCheckedRevision(t *testing.T) {
 	aliceCtx := WithPrincipal(context.Background(), Principal{ID: "alice@example.com", CallerID: "alice@example.com", Kind: CallerUser})
 	bobCtx := WithPrincipal(context.Background(), Principal{ID: "bob@example.com", CallerID: "bob@example.com", Kind: CallerUser})
-	const commit = "0123456789abcdef0123456789abcdef01234567"
+	var commit string
 	analysis := &gensurla.CP1Analysis{
 		Summary:     "Refunds up to $50 are instant.",
 		Ambiguities: []*gensurla.CP1AnalysisAmbiguity{},
@@ -127,14 +127,16 @@ func TestApproveMergeRecordsApprovalOnlyForTheCheckedRevision(t *testing.T) {
 		cfg := verificationConfig(t)
 		cfg.Plan.SuiteCommit = spec.SuiteCommit
 		target := &promotionTargetStub{artifacts: maps.Clone(spec.Artifacts)}
-		cp := newControlPlane(t, Options{
+		cp := newControlPlane(t, buildFixtureOptions(t, Options{BuildCacheDir: t.TempDir(),
 			Verification:    cfg,
 			PromotionTarget: target,
-		})
-		card, err := cp.ProposeChange(aliceCtx, &gensurla.ProposeChangePayload{ChangeID: "chg", Prompt: "Refunds up to $50 are instant.", Analysis: analysis})
-		require.NoError(t, err)
+		}))
+		card := saveProposedCardFixture(t, cp, "alice@example.com", "chg", "Refunds up to $50 are instant.", analysis)
+		card = attachBuildSnapshot(t, cp, card.ChangeID)
 		card = mustConfirmNoop(t, cp, aliceCtx, card)
+		saveStoredBuildFixture(t, cp, card)
 		require.Equal(t, StatusConfirmed, card.Status)
+		commit = commitBuilderCandidateFixture(t, cp, card)
 		target.report = passingReport(t, card.RequestRevision, commit, spec)
 		return cp, target, card
 	}
@@ -188,10 +190,12 @@ func TestApproveMergeRecordsApprovalOnlyForTheCheckedRevision(t *testing.T) {
 	t.Run("approval without promotion settings loads the report from the verifier and records empty artifacts", func(t *testing.T) {
 		cfg := verificationConfig(t)
 		cfg.Plan.SuiteCommit = spec.SuiteCommit
-		cp := newControlPlane(t, Options{Verification: cfg})
-		card, err := cp.ProposeChange(aliceCtx, &gensurla.ProposeChangePayload{ChangeID: "chg", Prompt: "Refunds up to $50 are instant.", Analysis: analysis})
-		require.NoError(t, err)
+		cp := newControlPlane(t, buildFixtureOptions(t, Options{BuildCacheDir: t.TempDir(), Verification: cfg}))
+		card := saveProposedCardFixture(t, cp, "alice@example.com", "chg", "Refunds up to $50 are instant.", analysis)
+		card = attachBuildSnapshot(t, cp, card.ChangeID)
 		card = mustConfirmNoop(t, cp, aliceCtx, card)
+		saveStoredBuildFixture(t, cp, card)
+		commit = commitBuilderCandidateFixture(t, cp, card)
 		report := passingReport(t, card.RequestRevision, commit, spec)
 		writeReportFile(t, cfg.Plan.ReportDir, report)
 
@@ -423,13 +427,12 @@ func TestApproveMergeRecordsApprovalOnlyForTheCheckedRevision(t *testing.T) {
 		}
 		cfg := verificationConfig(t)
 		cfg.Plan.SuiteCommit = spec.SuiteCommit
-		cp := newControlPlane(t, Options{
+		cp := newControlPlane(t, buildFixtureOptions(t, Options{BuildCacheDir: t.TempDir(),
 			Verification:    cfg,
 			PromotionTarget: &promotionTargetStub{artifacts: maps.Clone(spec.Artifacts)},
-		})
-		card, err := cp.ProposeChange(aliceCtx, &gensurla.ProposeChangePayload{ChangeID: "chg", Prompt: "Refunds up to $50 are instant.", Analysis: ambiguous})
-		require.NoError(t, err)
-		_, err = approve(aliceCtx, cp, card, strings.Repeat("0", 64))
+		}))
+		card := saveProposedCardFixture(t, cp, "alice@example.com", "chg", "Refunds up to $50 are instant.", ambiguous)
+		_, err := approve(aliceCtx, cp, card, strings.Repeat("0", 64))
 		assert.ErrorContains(t, err, "must be confirmed")
 	})
 
@@ -517,9 +520,8 @@ func TestApproveMergeRecordsApprovalOnlyForTheCheckedRevision(t *testing.T) {
 // refused with no_build or tests_not_accepted.
 func TestApproveMergeChecksTheChosenTestsCommit(t *testing.T) {
 	const (
-		candidate = "0123456789abcdef0123456789abcdef01234567"
-		commitT   = "1111111111111111111111111111111111111111"
-		commitU   = "2222222222222222222222222222222222222222"
+		commitT = "1111111111111111111111111111111111111111"
+		commitU = "2222222222222222222222222222222222222222"
 	)
 	artifacts := map[string]string{"shop": strings.Repeat("a", 64)}
 
@@ -638,8 +640,10 @@ func TestApproveMergeChecksTheChosenTestsCommit(t *testing.T) {
 				if tc.stored {
 					cfg := verificationConfig(t)
 					cfg.Plan.SuiteCommit = commitT
+					opts.BuildCacheDir = t.TempDir()
 					opts.Verification = cfg
 				} else {
+					opts.BuildCacheDir = t.TempDir()
 					opts.WrittenTestRuns = &WrittenTestRuns{
 						ReportDir: t.TempDir(),
 						Command:   []string{"/bin/sh", "-c", "exit 0", "sh"},
@@ -647,14 +651,23 @@ func TestApproveMergeChecksTheChosenTestsCommit(t *testing.T) {
 					}
 				}
 				cp := newBuildControlPlane(t, opts)
-				card := saveStoryCard(t, cp, "chg", StatusConfirmed, refundStory("Refund over the limit waits"))
+				card := saveBuildStoryCard(t, cp, "chg", StatusConfirmed, refundStory("Refund over the limit waits"))
 				user := asCaller("alice@example.com", CallerUser)
+				if tc.stored {
+					saveStoredBuildFixture(t, cp, card)
+				}
 				if tc.startBuild {
 					_, err := cp.StartBuild(user, &gensurla.StartBuildPayload{ChangeID: "chg", RequestRevision: card.RequestRevision})
 					require.NoError(t, err)
 				}
 				if tc.tw != nil {
 					saveTestWriter(t, cp, "chg", *tc.tw)
+				}
+				// The no-build rejection never reads a candidate; every execution
+				// with a build uses authored work on its numbered builder branch.
+				candidate := strings.Repeat("f", 40)
+				if tc.stored || tc.startBuild {
+					candidate = commitBuilderCandidateFixture(t, cp, card)
 				}
 				spec := reportSpec{
 					SuiteID: "shop_acceptance", SuiteCommit: tc.reportCommit,
@@ -728,24 +741,24 @@ func TestSavedApprovalStaysValidOnlyWhileChosenTestsMatch(t *testing.T) {
 	t.Cleanup(func() { otel.SetTracerProvider(prevProvider) })
 
 	const (
-		candidate = "0123456789abcdef0123456789abcdef01234567"
-		commitT   = "1111111111111111111111111111111111111111"
-		commitU   = "2222222222222222222222222222222222222222"
+		commitT = "1111111111111111111111111111111111111111"
+		commitU = "2222222222222222222222222222222222222222"
 	)
 	artifacts := map[string]string{"shop": strings.Repeat("a", 64)}
 	target := &promotionTargetStub{artifacts: maps.Clone(artifacts)}
-	cp := newBuildControlPlane(t, Options{
+	cp := newBuildControlPlane(t, Options{BuildCacheDir: t.TempDir(),
 		WorkspaceDir:    t.TempDir(),
 		RunsDir:         t.TempDir(),
 		SurlaVersion:    testSurlaVersion,
 		WrittenTestRuns: &WrittenTestRuns{ReportDir: t.TempDir(), Command: []string{"/bin/sh", "-c", "exit 0", "sh"}, Timeout: time.Hour},
 		PromotionTarget: target,
 	})
-	card := saveStoryCard(t, cp, "chg", StatusConfirmed, refundStory("Refund over the limit waits"))
+	card := saveBuildStoryCard(t, cp, "chg", StatusConfirmed, refundStory("Refund over the limit waits"))
 	user := asCaller("alice@example.com", CallerUser)
 	_, err := cp.StartBuild(user, &gensurla.StartBuildPayload{ChangeID: "chg", RequestRevision: card.RequestRevision})
 	require.NoError(t, err)
 	acceptTests(t, cp, "chg", commitT)
+	candidate := commitBuilderCandidateFixture(t, cp, card)
 
 	spec := reportSpec{SuiteID: "shop_acceptance", SuiteCommit: commitT, Environment: "sim", Artifacts: maps.Clone(artifacts)}
 	target.report = passingReport(t, card.RequestRevision, candidate, spec)
@@ -778,7 +791,7 @@ func TestSavedApprovalStaysValidOnlyWhileChosenTestsMatch(t *testing.T) {
 	assert.Nil(t, read.UnverifiedApproval)
 
 	// 3. Rebuild and accept T again -> returned.
-	_, err = cp.StartBuild(user, &gensurla.StartBuildPayload{ChangeID: "chg", RequestRevision: card.RequestRevision})
+	_, err = startBuildAgain(t, cp, user, "chg", card.RequestRevision)
 	require.NoError(t, err)
 	read, err = cp.GetChange(user, &gensurla.GetChangePayload{ChangeID: "chg"})
 	require.NoError(t, err)
@@ -795,9 +808,8 @@ func TestSavedApprovalStaysValidOnlyWhileChosenTestsMatch(t *testing.T) {
 // approving: approve again") and saves nothing.
 func TestApproveMergeRejectsAcceptanceChangedDuringReportLoad(t *testing.T) {
 	const (
-		candidate = "0123456789abcdef0123456789abcdef01234567"
-		commitT   = "1111111111111111111111111111111111111111"
-		commitU   = "2222222222222222222222222222222222222222"
+		commitT = "1111111111111111111111111111111111111111"
+		commitU = "2222222222222222222222222222222222222222"
 	)
 	artifacts := map[string]string{"shop": strings.Repeat("a", 64)}
 	target := &promotionTargetStub{
@@ -805,18 +817,19 @@ func TestApproveMergeRejectsAcceptanceChangedDuringReportLoad(t *testing.T) {
 		loading:   make(chan struct{}),
 		release:   make(chan struct{}),
 	}
-	cp := newBuildControlPlane(t, Options{
+	cp := newBuildControlPlane(t, Options{BuildCacheDir: t.TempDir(),
 		WorkspaceDir:    t.TempDir(),
 		RunsDir:         t.TempDir(),
 		SurlaVersion:    testSurlaVersion,
 		WrittenTestRuns: &WrittenTestRuns{ReportDir: t.TempDir(), Command: []string{"/bin/sh", "-c", "exit 0", "sh"}, Timeout: time.Hour},
 		PromotionTarget: target,
 	})
-	card := saveStoryCard(t, cp, "chg", StatusConfirmed, refundStory("Refund over the limit waits"))
+	card := saveBuildStoryCard(t, cp, "chg", StatusConfirmed, refundStory("Refund over the limit waits"))
 	user := asCaller("alice@example.com", CallerUser)
 	_, err := cp.StartBuild(user, &gensurla.StartBuildPayload{ChangeID: "chg", RequestRevision: card.RequestRevision})
 	require.NoError(t, err)
 	acceptTests(t, cp, "chg", commitT)
+	candidate := commitBuilderCandidateFixture(t, cp, card)
 	target.report = passingReport(t, card.RequestRevision, candidate, reportSpec{
 		SuiteID: "shop_acceptance", SuiteCommit: commitT, Environment: "sim", Artifacts: maps.Clone(artifacts),
 	})
@@ -854,7 +867,6 @@ func TestCurrentCardAllFiveApprovalStatesAndSpanRecording(t *testing.T) {
 	t.Cleanup(func() { otel.SetTracerProvider(prevProvider) })
 
 	aliceCtx := WithPrincipal(context.Background(), Principal{ID: "alice@example.com", CallerID: "alice@example.com", Kind: CallerUser})
-	const commit = "0123456789abcdef0123456789abcdef01234567"
 	const secretHostPath = "/var/lib/surla/secret-releases/0123456789abcdef0123456789abcdef01234567/orders"
 
 	analysis := &gensurla.CP1Analysis{
@@ -875,11 +887,11 @@ func TestCurrentCardAllFiveApprovalStatesAndSpanRecording(t *testing.T) {
 	cfg := verificationConfig(t)
 	cfg.Plan.SuiteCommit = spec.SuiteCommit
 	target := &promotionTargetStub{artifacts: maps.Clone(spec.Artifacts)}
-	cp := newControlPlane(t, Options{
+	cp := newControlPlane(t, buildFixtureOptions(t, Options{BuildCacheDir: t.TempDir(),
 		CardsDir:        cardsDir,
 		Verification:    cfg,
 		PromotionTarget: target,
-	})
+	}))
 	srv := httptest.NewServer(NewHTTPHandler(cp, workflowAuthenticator(map[string]Principal{"alice-token": {ID: "alice@example.com"}})))
 	t.Cleanup(srv.Close)
 	adapter := genmcpadapter.NewMCPAdapter(gensurla.NewEndpoints(cp), nil)
@@ -958,9 +970,10 @@ func TestCurrentCardAllFiveApprovalStatesAndSpanRecording(t *testing.T) {
 	}
 
 	// State 1: no approval record.
-	card, err := cp.ProposeChange(aliceCtx, &gensurla.ProposeChangePayload{ChangeID: "chg", Prompt: "Refunds up to $50 are instant.", Analysis: analysis})
-	require.NoError(t, err)
+	card := saveProposedCardFixture(t, cp, "alice@example.com", "chg", "Refunds up to $50 are instant.", analysis)
+	card = attachBuildSnapshot(t, cp, card.ChangeID)
 	card = mustConfirmNoop(t, cp, aliceCtx, card)
+	saveStoredBuildFixture(t, cp, card)
 	for _, got := range []*gensurla.ChangeCardResult{
 		mustGetChange(t, cp, aliceCtx, "chg"),
 		mustConfirmNoop(t, cp, aliceCtx, card),
@@ -974,6 +987,7 @@ func TestCurrentCardAllFiveApprovalStatesAndSpanRecording(t *testing.T) {
 	}
 
 	// State 2: current approval.
+	commit := commitBuilderCandidateFixture(t, cp, card)
 	target.report = passingReport(t, card.RequestRevision, commit, spec)
 	approved, err := cp.ApproveMerge(aliceCtx, &gensurla.ApproveMergePayload{
 		ChangeID: "chg", RequestRevision: card.RequestRevision, CandidateCommit: commit, ReportDigest: target.report.Digest,
@@ -1048,7 +1062,7 @@ func TestCurrentCardAllFiveApprovalStatesAndSpanRecording(t *testing.T) {
 	// without promotion settings, the saved approval remains valid while the
 	// chosen tests' commit still matches.
 	require.NoError(t, cp.Close())
-	cpNoTarget := newControlPlane(t, Options{
+	cpNoTarget := newControlPlane(t, Options{BuildCacheDir: t.TempDir(),
 		CardsDir:     cardsDir,
 		Verification: cfg,
 	})

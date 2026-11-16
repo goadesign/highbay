@@ -290,7 +290,7 @@ type (
 	// GenerateCodePayload defines the JSON payload for the surla.generate_code tool.
 	GenerateCodePayload = struct {
 		// Module to regenerate: candidate (the application, the default when omitted)
-		// or eval (the local eval/ module).
+		// or eval (the test module).
 		Target *string
 	}
 	// GenerateCodeResult defines the JSON result for the surla.generate_code tool.
@@ -313,6 +313,17 @@ type (
 	GetBuildResult = struct {
 		// Change Card identifier.
 		ChangeID string
+		// True only when the current agreed revision’s saved record of how its design
+		// was drafted predates the current actual drop: start_build would refuse it
+		// with drafted_before_drop. It becomes true after that drop and false once the
+		// user adopts a revision drafted after the drop, even if its request_revision
+		// is unchanged. A waiting proposal does not change this fact; ask the guide to
+		// refresh_story and revise_change from that refresh, then adopt the revision
+		// before building. False says only that this refusal does not apply, not that
+		// every other build check will pass; it is also false without an agreed
+		// revision or saved record of its draft. start_build rechecks concurrent
+		// changes.
+		DraftedBeforeDrop bool
 		// not_started when the change has no usable build for the current test source;
 		// start a new build on the views page. Otherwise started with the usable build.
 		Build Build
@@ -328,11 +339,12 @@ type (
 		ChangeID string
 		// Change Card revision to build; verify_change takes it.
 		RequestRevision string
-		// True when request_revision is the change's confirmed revision in force, as
-		// get_build reports it. It stays true while a revision the guide proposed
-		// waits beside the agreed one, and is false once the user has adopted a
-		// proposed revision or confirmed another revision: verify_change then refuses
-		// this revision, and the assignment stays as it is until the user builds again.
+		// True when request_revision is the change's agreed revision, the one in
+		// force, as get_build reports it. It stays true while a proposed revision
+		// waits and when a refreshed draft is adopted without changing
+		// request_revision. If adoption or confirmation changes the agreed
+		// request_revision, it becomes false; verify_change refuses this earlier
+		// revision, and the assignment stays as it is until the user builds again.
 		InForce bool
 		// True once you read this assignment in full with get_builder_assignment.
 		Read bool
@@ -341,6 +353,14 @@ type (
 		// otherwise accepted, with the commit and time, when the build records
 		// accepted tests, and not_yet_accepted when it records none.
 		WrittenTests WrittenTests
+		// Absolute path of the folder to build in: the project's folder inside your
+		// working copy .surla-build, on the build's branch surla/build-<n>. Run git
+		// and go there, never in the project folder.
+		WorkingFolder string
+		// True when no go.work lies in working_folder or in a folder between it and
+		// the working copy's root: run every go command there as GOWORK=off go …, so a
+		// go.work of the project folder around your copy does not take it over.
+		GoworkOff bool
 	}
 	// GetChangePayload defines the JSON payload for the surla.get_change tool.
 	GetChangePayload = struct {
@@ -418,15 +438,20 @@ type (
 	}
 	// GetStoryRefreshResult defines the JSON result for the surla.get_story_refresh tool.
 	GetStoryRefreshResult = struct {
-		// Identifier of the owner's current Story refresh operation for the bound
-		// workspace; present when state is running, succeeded, or failed. Pass it as
+		// Absolute path intended for the guide's draft, .surla-draft in the project
+		// folder, whose go.mod, go.sum and design/ refresh_story reads. When state is
+		// none, this path does not mean the folder exists; refresh_story makes it when
+		// needed.
+		DraftFolder string
+		// Identifier of the owner's current Story refresh operation for the guide's
+		// draft; present when state is running, succeeded, or failed. Pass it as
 		// story_refresh_op_id to propose_change or revise_change once state is
 		// succeeded to adopt the evaluated Story into a Change Card.
 		OpID *string
 		// Current operation state: none, running, succeeded, or failed.
 		State string
-		// Canonical SHA-256 digest of the workspace module snapshot read when this
-		// refresh started; present when state is running, succeeded, or failed.
+		// Canonical SHA-256 digest of the draft snapshot read when this refresh
+		// started; present when state is running, succeeded, or failed.
 		SnapshotDigest *string
 		// Evaluated domain Stories in declaration order when state is succeeded (empty
 		// when the design declares no Stories or when state is none, running, or
@@ -434,7 +459,9 @@ type (
 		Stories []*StorySummaryItem
 		// Safe failure or timeout diagnostic when state is failed; omitted otherwise.
 		Diagnostic *string
-		// Summary of the current Story refresh state and next action.
+		// Summary of the current Story refresh state and next action. After a dropped
+		// build remakes the draft and until a revision is saved from it, begins by
+		// naming the dropped change and saying that edits made before then are gone.
 		Message string
 	}
 	// GetTestWriterAssignmentPayload defines the JSON payload for the surla.get_test_writer_assignment tool.
@@ -448,11 +475,12 @@ type (
 		ChangeID string
 		// Change Card revision the tests are for; report_tests_finished takes it.
 		RequestRevision string
-		// True when request_revision is the change's confirmed revision in force, as
-		// get_build reports it. It stays true while a revision the guide proposed
-		// waits beside the agreed one, and is false once the user has adopted a
-		// proposed revision or confirmed another revision: the assignment then stays
-		// for this earlier revision until the user builds again.
+		// True when request_revision is the change's agreed revision, the one in
+		// force, as get_build reports it. It stays true while a proposed revision
+		// waits and when a refreshed draft is adopted without changing
+		// request_revision. If adoption or confirmation changes the agreed
+		// request_revision, it becomes false; the assignment stays on the earlier
+		// revision until the user builds again.
 		InForce bool
 		// Where this assignment stands.
 		Progress *TestWriterProgress
@@ -460,7 +488,9 @@ type (
 		// progress gives in finding_count when its state is needs_changes, and none in
 		// any other state. Fix them in working_folder, then report again.
 		Findings []string
-		// Folder to write the tests in: your own working copy of the project.
+		// Folder to write the tests in: your own working copy of the project,
+		// .surla-tests, on the build's branch surla/tests-<n>. Do not commit there:
+		// Surla commits what it accepts.
 		WorkingFolder string
 		// The canonical design source as agreed at request_revision, copied when this
 		// build started; later revisions do not change it.
@@ -548,8 +578,7 @@ type (
 	}
 	// ListBuilderAssignmentsResult defines the JSON result for the surla.list_builder_assignments tool.
 	ListBuilderAssignmentsResult = struct {
-		// Assignments, most recently started first; empty when the user has built no
-		// change.
+		// The open build's assignment while it needs this role; empty otherwise.
 		Assignments []*BuilderAssignment
 	}
 	// ListChangesPayload defines the JSON payload for the surla.list_changes tool.
@@ -573,8 +602,7 @@ type (
 	}
 	// ListTestWriterAssignmentsResult defines the JSON result for the surla.list_test_writer_assignments tool.
 	ListTestWriterAssignmentsResult = struct {
-		// Assignments, most recently started first; empty when the user has built no
-		// change.
+		// The open build's assignment while it needs this role; empty otherwise.
 		Assignments []*TestWriterAssignmentItem
 	}
 	// ListTracesPayload defines the JSON payload for the surla.list_traces tool.
@@ -623,8 +651,8 @@ type (
 		ChangeID string
 		// Bound CP1 request_revision digest.
 		RequestRevision string
-		// SHA-256 digest of the evaluated design snapshot (sorted path and content
-		// pairs).
+		// SHA-256 digest of the design snapshot the revision's refresh evaluated
+		// (sorted path and content pairs).
 		DesignDigest string
 		// API or primary service name declared in the design.
 		SystemName string
@@ -645,11 +673,9 @@ type (
 		ChangeID string
 		// The user's feature request.
 		Prompt string
-		// Optional op_id of a succeeded refresh_story operation for the bound
-		// workspace whose evaluated Stories this card adopts. When set, Surla reads
-		// one workspace snapshot, requires its snapshot_digest to match the
-		// operation's, and records both the evaluated Stories and that snapshot's
-		// design/*.go on the card. Omit when the card has no Story.
+		// op_id of a succeeded refresh_story operation whose evaluated draft this card
+		// adopts: its design, Stories, architecture, go.mod and made-from list.
+		// Required when the project folder holds a go.mod; Surla reads no file.
 		StoryRefreshOpID *string
 		// Your analysis of prompt against the target's current design.
 		Analysis *CP1Analysis
@@ -732,15 +758,20 @@ type (
 	}
 	// RefreshStoryResult defines the JSON result for the surla.refresh_story tool.
 	RefreshStoryResult = struct {
-		// Identifier of the owner's current Story refresh operation for the bound
-		// workspace; present when state is running, succeeded, or failed. Pass it as
+		// Absolute path intended for the guide's draft, .surla-draft in the project
+		// folder, whose go.mod, go.sum and design/ refresh_story reads. When state is
+		// none, this path does not mean the folder exists; refresh_story makes it when
+		// needed.
+		DraftFolder string
+		// Identifier of the owner's current Story refresh operation for the guide's
+		// draft; present when state is running, succeeded, or failed. Pass it as
 		// story_refresh_op_id to propose_change or revise_change once state is
 		// succeeded to adopt the evaluated Story into a Change Card.
 		OpID *string
 		// Current operation state: none, running, succeeded, or failed.
 		State string
-		// Canonical SHA-256 digest of the workspace module snapshot read when this
-		// refresh started; present when state is running, succeeded, or failed.
+		// Canonical SHA-256 digest of the draft snapshot read when this refresh
+		// started; present when state is running, succeeded, or failed.
 		SnapshotDigest *string
 		// Evaluated domain Stories in declaration order when state is succeeded (empty
 		// when the design declares no Stories or when state is none, running, or
@@ -748,7 +779,9 @@ type (
 		Stories []*StorySummaryItem
 		// Safe failure or timeout diagnostic when state is failed; omitted otherwise.
 		Diagnostic *string
-		// Summary of the current Story refresh state and next action.
+		// Summary of the current Story refresh state and next action. After a dropped
+		// build remakes the draft and until a revision is saved from it, begins by
+		// naming the dropped change and saying that edits made before then are gone.
 		Message string
 	}
 	// ReportTestsFinishedPayload defines the JSON payload for the surla.report_tests_finished tool.
@@ -764,14 +797,53 @@ type (
 		ChangeID string
 		// Change Card revision the tests are for.
 		RequestRevision string
-		// True when request_revision is the change's confirmed revision in force, as
-		// get_build reports it. It stays true while a revision the guide proposed
-		// waits beside the agreed one, and is false once the user has adopted a
-		// proposed revision or confirmed another revision: the assignment then stays
-		// for this earlier revision until the user builds again.
+		// True when request_revision is the change's agreed revision, the one in
+		// force, as get_build reports it. It stays true while a proposed revision
+		// waits and when a refreshed draft is adopted without changing
+		// request_revision. If adoption or confirmation changes the agreed
+		// request_revision, it becomes false; the assignment stays on the earlier
+		// revision until the user builds again.
 		InForce bool
 		// Where this assignment stands.
 		Progress *TestWriterProgress
+	}
+	// ReviewVerificationPayload defines the JSON payload for the surla.review_verification tool.
+	ReviewVerificationPayload = struct {
+		// Verification run identifier returned by verify_change.
+		RunID string
+	}
+	// ReviewVerificationResult defines the JSON result for the surla.review_verification tool.
+	ReviewVerificationResult = struct {
+		// Immutable Story evidence and the owner's current approval observation.
+		Review *VerificationReview
+		// Verification run identifier; get_verification takes it.
+		RunID string
+		// Change Card the run verifies.
+		ChangeID string
+		// Change Card revision the run verifies.
+		RequestRevision string
+		// Candidate commit the run builds and verifies.
+		CandidateCommit string
+		// Commit of the tests the run uses: the operator's evaluator, or the tests
+		// accepted for the change's build.
+		SuiteCommit string
+		// When the run was accepted.
+		AcceptedAt string
+		// Whether this run's agreed revision and selected tests match the current
+		// Change Card and the usable build or the stored verification settings. This
+		// observation does not establish the current candidate working tree,
+		// deployment or approval.
+		InputsCurrent bool
+		// Absolute folder containing the binaries built by this completed run.
+		// Returned only to the user when promotion settings are configured, so the
+		// user can publish these exact binaries before approval. Agents never receive
+		// this private path.
+		CandidateBinariesDir *string
+		// Where the run's tests came from, recorded when the run started: evaluator,
+		// or written_tests with their commit and a notice.
+		TestSource TestSource
+		// Exactly one of running, completed or not_completed.
+		State State
 	}
 	// ReviseChangePayload defines the JSON payload for the surla.revise_change tool.
 	ReviseChangePayload = struct {
@@ -783,12 +855,11 @@ type (
 		RequestRevision string
 		// The user's revised feature request.
 		Prompt string
-		// Optional op_id of a succeeded refresh_story operation for the bound
-		// workspace whose evaluated Stories this revision adopts. When set, Surla
-		// reads one workspace snapshot, requires its snapshot_digest to match the
-		// operation's, and records both the evaluated Stories and that snapshot's
-		// design/*.go on the revised card. When omitted on a card that already has
-		// Stories, the card's saved Stories and their design source are kept together.
+		// op_id of a succeeded refresh_story operation whose evaluated draft this
+		// revision adopts. When omitted, the revision keeps every snapshot field of
+		// the revision it revises: design, Stories, architecture, go.mod and made-from
+		// list, even with zero Stories. A project with a go.mod refuses an omitted
+		// op_id when that revision has no design. Surla reads no file.
 		StoryRefreshOpID *string
 		// Your analysis of the revised prompt against the current card and the
 		// target's current design.
@@ -883,12 +954,29 @@ type (
 	UpdateDependenciesResult = struct {
 		// Operation identifier; pass it to read_check_output to read the full output.
 		OpID string
-		// Workspace-relative go.mod, go.sum and go.work.sum files whose bytes changed
-		// and were written.
+		// Working-folder-relative go.mod, go.sum and go.work.sum files whose bytes
+		// changed and were written.
 		FilesWritten []string
 		// At most 16 KiB: what was updated, and Go's message for any module that could
 		// not be.
 		Message string
+	}
+	// UpdateDraftPayload defines the JSON payload for the surla.update_draft tool.
+	UpdateDraftPayload = struct {
+	}
+	// UpdateDraftResult defines the JSON result for the surla.update_draft tool.
+	UpdateDraftResult = struct {
+		// Absolute path of the guide's draft folder.
+		DraftFolder string
+		// Design files the draft took from the project folder because it had not
+		// changed them, in path order.
+		Taken []string
+		// Design files where the project folder's change and the draft's edits merged
+		// without conflict, in path order.
+		Merged []string
+		// Files to correct before refreshing, each in the folder it names, in path
+		// order; empty when none.
+		ToCorrect []*DraftCorrection
 	}
 	// VerifyChangePayload defines the JSON payload for the surla.verify_change tool.
 	VerifyChangePayload = struct {
@@ -993,8 +1081,47 @@ type (
 		// or written_tests with their commit and a notice.
 		TestSource ApprovalTestSource
 	}
+	// BuildBuilding is a nested type used by the generated JSON contract.
+	BuildBuilding = struct {
+	}
+	// BuildDropped is a nested type used by the generated JSON contract.
+	BuildDropped = struct {
+		// The build's own branches that exist and hold a commit made after the build's
+		// base, where its work stays (git log <branch> shows it); empty when nothing
+		// was committed for it.
+		KeptBranches []string
+	}
+	// BuildMerged is a nested type used by the generated JSON contract.
+	BuildMerged = struct {
+	}
 	// BuildNotStarted is a nested type used by the generated JSON contract.
 	BuildNotStarted = struct {
+	}
+	// BuildPassed is a nested type used by the generated JSON contract.
+	BuildPassed = struct {
+		// The newest passed run; get_verification takes it.
+		RunID string
+		// The builder's commit the run passed.
+		CandidateCommit string
+		// The build's builder branch, surla/build-<n>, where this commit was verified.
+		CandidateBranch string
+		// written_tests with the accepted tests' commit to merge after the builder's;
+		// evaluator when the project verifies with its stored evaluator, whose tests
+		// are not merged.
+		Tests BuildPassedTestSource
+		// False when the branch checked out in the project folder no longer holds the
+		// commit this build started from, because its history was rewritten: merging
+		// these commits brings that history back, and dropping the build and building
+		// again starts from the branch as it is.
+		BaseInBranch bool
+	}
+	// BuildPassedTests is a nested type used by the generated JSON contract.
+	BuildPassedTests = struct {
+		// Commit Surla recorded the accepted tests at.
+		Commit string
+		// The build's test-writer branch, surla/tests-<n>, where this commit was
+		// verified.
+		Branch string
 	}
 	// BuilderAssignment is a nested type used by the generated JSON contract.
 	BuilderAssignment = struct {
@@ -1002,11 +1129,12 @@ type (
 		ChangeID string
 		// Change Card revision to build; verify_change takes it.
 		RequestRevision string
-		// True when request_revision is the change's confirmed revision in force, as
-		// get_build reports it. It stays true while a revision the guide proposed
-		// waits beside the agreed one, and is false once the user has adopted a
-		// proposed revision or confirmed another revision: verify_change then refuses
-		// this revision, and the assignment stays as it is until the user builds again.
+		// True when request_revision is the change's agreed revision, the one in
+		// force, as get_build reports it. It stays true while a proposed revision
+		// waits and when a refreshed draft is adopted without changing
+		// request_revision. If adoption or confirmation changes the agreed
+		// request_revision, it becomes false; verify_change refuses this earlier
+		// revision, and the assignment stays as it is until the user builds again.
 		InForce bool
 		// True once you read this assignment in full with get_builder_assignment.
 		Read bool
@@ -1015,6 +1143,14 @@ type (
 		// otherwise accepted, with the commit and time, when the build records
 		// accepted tests, and not_yet_accepted when it records none.
 		WrittenTests WrittenTests
+		// Absolute path of the folder to build in: the project's folder inside your
+		// working copy .surla-build, on the build's branch surla/build-<n>. Run git
+		// and go there, never in the project folder.
+		WorkingFolder string
+		// True when no go.work lies in working_folder or in a folder between it and
+		// the working copy's root: run every go command there as GOWORK=off go …, so a
+		// go.work of the project folder around your copy does not take it over.
+		GoworkOff bool
 	}
 	// BuilderProgress is a nested type used by the generated JSON contract.
 	BuilderProgress = struct {
@@ -1186,6 +1322,26 @@ type (
 		// go.mod.
 		Files map[string]string
 	}
+	// DraftCorrection is a nested type used by the generated JSON contract.
+	DraftCorrection = struct {
+		// Path relative to the folder that folder names, such as design/types.go or
+		// go.mod.
+		Path string
+		// Which folder holds the file to correct: draft_folder is the guide's draft,
+		// at the result's draft_folder; project_folder is the user's project folder,
+		// which holds the draft.
+		Folder string
+		// What to correct. In the draft: conflict markers where the draft and the
+		// project folder changed the same lines; a file removed on one side and
+		// changed on the other; a draft file Go cannot parse, with its line; a file
+		// whose project change Surla took without merging, or was writing when it
+		// stopped, to check that it holds the intended edits once; or a module the
+		// project's go.mod requires at another version than the draft's, or that the
+		// draft's lacks, including differing replace directives and a differing module
+		// path. In the project folder: a design file or go.mod there that cannot be
+		// parsed, with its line, or a go.mod that declares no module.
+		Problem string
+	}
 	// ExampleItem is a nested type used by the generated JSON contract.
 	ExampleItem = struct {
 		// Stable example identifier. Default code-assigned IDs use check_01, check_02,
@@ -1286,6 +1442,19 @@ type (
 		// source.
 		ChangedDesignFiles []string
 	}
+	// RecordedRunStory is a nested type used by the generated JSON contract.
+	RecordedRunStory = struct {
+		// Number of the build this run was accepted for.
+		BuildNumber int
+		// Accepted build's saved start time.
+		BuildStartedAt string
+		// Stories as agreed for this run, in declaration order; empty when the
+		// agreement declares none.
+		Stories []*StorySummaryItem
+		// The owner's exact required-test mapping for written tests, or the explicit
+		// absence of such a mapping for an operator evaluator.
+		Mapping Mapping
+	}
 	// RequiredTest is a nested type used by the generated JSON contract.
 	RequiredTest = struct {
 		// Name of the Story the flow belongs to.
@@ -1296,6 +1465,25 @@ type (
 		Scenario string
 		// Hook method the test writer implements for the scenario.
 		Hook string
+	}
+	// RunApprovalAvailable is a nested type used by the generated JSON contract.
+	RunApprovalAvailable = struct {
+	}
+	// RunApprovalBlocked is a nested type used by the generated JSON contract.
+	RunApprovalBlocked = struct {
+		// Owner's safe explanation and enabling step.
+		Reason string
+	}
+	// RunEvaluatorMappingUnknown is a nested type used by the generated JSON contract.
+	RunEvaluatorMappingUnknown = struct {
+	}
+	// RunStoryMapping is a nested type used by the generated JSON contract.
+	RunStoryMapping = struct {
+		// One test per finished flow, in declaration order.
+		RequiredTests []*RequiredTest
+	}
+	// RunStoryNotRecorded is a nested type used by the generated JSON contract.
+	RunStoryNotRecorded = struct {
 	}
 	// RunningLiveTarget is a nested type used by the generated JSON contract.
 	RunningLiveTarget = struct {
@@ -1316,10 +1504,11 @@ type (
 		// When the user started this build.
 		StartedAt string
 		// True when request_revision is the change's agreed revision, the one in
-		// force. It stays true while a revision the guide proposed waits beside the
-		// agreed one, and turns false once the user adopts a proposed revision or
-		// confirms another revision: the assignments then stay as they are, for this
-		// earlier revision, until the user builds again.
+		// force, as get_build reports it. It stays true while a proposed revision
+		// waits and when a refreshed draft is adopted without changing
+		// request_revision. If adoption or confirmation changes the agreed
+		// request_revision, it becomes false; the assignments stay on the earlier
+		// revision until the user builds again.
 		InForce bool
 		// The builder's assignment.
 		Builder *BuilderProgress
@@ -1328,6 +1517,13 @@ type (
 		// Number of finished flows in the agreed Story. Zero means no test of this
 		// change's Story was required.
 		RequiredTestCount int
+		// Whether the user has taken this build: building until a verification of it
+		// passes; passed with the commits to merge; merged once the branch checked out
+		// in the project folder holds the commits of one passed run, the builder's
+		// and, for written tests, the tests'; dropped once the user dropped it. A
+		// project has one open build, and another change is built only once it is
+		// merged or dropped.
+		Taking BuildTaking
 	}
 	// StoryActorItem is a nested type used by the generated JSON contract.
 	StoryActorItem = struct {
@@ -1397,11 +1593,12 @@ type (
 		ChangeID string
 		// Change Card revision the tests are for.
 		RequestRevision string
-		// True when request_revision is the change's confirmed revision in force, as
-		// get_build reports it. It stays true while a revision the guide proposed
-		// waits beside the agreed one, and is false once the user has adopted a
-		// proposed revision or confirmed another revision: the assignment then stays
-		// for this earlier revision until the user builds again.
+		// True when request_revision is the change's agreed revision, the one in
+		// force, as get_build reports it. It stays true while a proposed revision
+		// waits and when a refreshed draft is adopted without changing
+		// request_revision. If adoption or confirmation changes the agreed
+		// request_revision, it becomes false; the assignment stays on the earlier
+		// revision until the user builds again.
 		InForce bool
 		// Where this assignment stands.
 		Progress *TestWriterProgress
@@ -1590,6 +1787,14 @@ type (
 		Stage string
 		// Builder-safe description of what stopped the run; never command output.
 		Summary string
+	}
+	// VerificationReview is a nested type used by the generated JSON contract.
+	VerificationReview = struct {
+		// The run's immutable Story context, or the explicit fact it was not recorded.
+		StoryContext StoryContext
+		// The owner's current observation for this exact report, independent of
+		// inputs_current.
+		Approval Approval
 	}
 	// VerificationRunning is a nested type used by the generated JSON contract.
 	VerificationRunning = struct {

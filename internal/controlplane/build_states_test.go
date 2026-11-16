@@ -75,13 +75,15 @@ func TestBuildStatesReadTheSameOnBothInterfaces(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			opts := Options{}
 			if tc.stored {
+				opts.BuildCacheDir = t.TempDir()
 				opts.Verification = &VerificationConfig{RunsDir: t.TempDir()}
 			}
 			cp := newBuildControlPlane(t, opts)
 			srv := roleServer(t, cp)
-			card := confirmedChange(t, cp, "chg")
+			card := buildableChange(t, cp, "chg")
 			_, err := cp.StartBuild(asCaller("alice@example.com", CallerUser), &gensurla.StartBuildPayload{ChangeID: "chg", RequestRevision: card.RequestRevision})
 			require.NoError(t, err)
+			makeBuildFixtureBuilderCopy(t, cp)
 			editBuildFile(t, cp, "chg", savedTestWriter(tc.saved))
 
 			status, body := httpCall(t, srv.URL, "user", http.MethodGet, "/changes/chg/build", "")
@@ -113,7 +115,7 @@ func TestBuildStatesReadTheSameOnBothInterfaces(t *testing.T) {
 func TestBuildReadsShowTheSavedReportNumber(t *testing.T) {
 	cp := newBuildControlPlane(t, Options{})
 	srv := roleServer(t, cp)
-	card := confirmedChange(t, cp, "chg")
+	card := buildableChange(t, cp, "chg")
 	_, err := cp.StartBuild(asCaller("alice@example.com", CallerUser), &gensurla.StartBuildPayload{ChangeID: "chg", RequestRevision: card.RequestRevision})
 	require.NoError(t, err)
 	editBuildFile(t, cp, "chg", func(f map[string]any) map[string]any {
@@ -148,7 +150,7 @@ func TestBuildReadsShowTheSavedReportNumber(t *testing.T) {
 // and that the next save writes it in UTC.
 func TestVerdictTimesAreSavedAndReturnedInUTC(t *testing.T) {
 	cp := newBuildControlPlane(t, Options{})
-	card := confirmedChange(t, cp, "chg")
+	card := buildableChange(t, cp, "chg")
 	_, err := cp.StartBuild(asCaller("alice@example.com", CallerUser), &gensurla.StartBuildPayload{ChangeID: "chg", RequestRevision: card.RequestRevision})
 	require.NoError(t, err)
 	editBuildFile(t, cp, "chg", savedTestWriter(map[string]any{
@@ -180,13 +182,16 @@ func TestStoredEvaluatorBuildsReadNotUsed(t *testing.T) {
 	}
 	for _, fields := range saved {
 		t.Run(fields["state"].(string), func(t *testing.T) {
-			stored := newBuildControlPlane(t, Options{Verification: &VerificationConfig{RunsDir: t.TempDir()}})
+			stored := newBuildControlPlane(t, Options{BuildCacheDir: t.TempDir(), Verification: &VerificationConfig{RunsDir: t.TempDir()}})
 			require.True(t, stored.storedEvaluator())
 			without := newBuildControlPlane(t, Options{})
 			for _, cp := range []*ControlPlane{stored, without} {
-				card := confirmedChange(t, cp, "chg")
+				card := buildableChange(t, cp, "chg")
 				_, err := cp.StartBuild(asCaller("alice@example.com", CallerUser), &gensurla.StartBuildPayload{ChangeID: "chg", RequestRevision: card.RequestRevision})
 				require.NoError(t, err)
+				if cp == stored {
+					makeBuildFixtureBuilderCopy(t, cp)
+				}
 				editBuildFile(t, cp, "chg", savedTestWriter(fields))
 			}
 
@@ -226,7 +231,7 @@ func TestReportAfterAVerdictClearsIt(t *testing.T) {
 	for _, fields := range verdicts {
 		t.Run(fields["state"].(string), func(t *testing.T) {
 			cp := newBuildControlPlane(t, Options{})
-			card := confirmedChange(t, cp, "chg")
+			card := buildableChange(t, cp, "chg")
 			_, err := cp.StartBuild(asCaller("alice@example.com", CallerUser), &gensurla.StartBuildPayload{ChangeID: "chg", RequestRevision: card.RequestRevision})
 			require.NoError(t, err)
 			editBuildFile(t, cp, "chg", savedTestWriter(fields))
@@ -259,14 +264,14 @@ func TestStartBuildWithAStoredEvaluatorReturnsNotUsed(t *testing.T) {
 		tests gensurla.TestsKind
 	}{
 		{name: "stored evaluator", opts: func(t *testing.T) Options {
-			return Options{Verification: &VerificationConfig{RunsDir: t.TempDir()}}
+			return Options{BuildCacheDir: t.TempDir(), Verification: &VerificationConfig{RunsDir: t.TempDir()}}
 		}, tests: gensurla.TestsKindNotUsed},
 		{name: "no stored evaluator", opts: func(*testing.T) Options { return Options{} }, tests: gensurla.TestsKindAssigned},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			cp := newBuildControlPlane(t, tc.opts(t))
-			card := confirmedChange(t, cp, "chg")
+			card := buildableChange(t, cp, "chg")
 			started, err := cp.StartBuild(asCaller("alice@example.com", CallerUser), &gensurla.StartBuildPayload{ChangeID: "chg", RequestRevision: card.RequestRevision})
 			require.NoError(t, err)
 			assert.Equal(t, tc.tests, started.Build.TestWriter.Tests.Kind())
@@ -294,7 +299,7 @@ func editBuildFile(t *testing.T, cp *ControlPlane, changeID string, edit func(ma
 	require.NoError(t, json.Unmarshal(readBuildFile(t, cp, changeID), &file))
 	raw, err := json.Marshal(edit(file))
 	require.NoError(t, err)
-	require.NoError(t, os.WriteFile(filepath.Join(cp.cards.dir, buildFileName(changeID)), raw, 0o600))
+	require.NoError(t, os.WriteFile(filepath.Join(cp.cards.dir, openBuildRecordFile), raw, 0o600))
 }
 
 // jsonAt returns the JSON value at keys in raw; a key that is a number

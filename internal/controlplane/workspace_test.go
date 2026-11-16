@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"maps"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -28,6 +29,7 @@ import (
 	gensurla "github.com/goadesign/surla/gen/surla"
 	"github.com/goadesign/surla/internal/abspath"
 	"github.com/goadesign/surla/internal/scaffold"
+	"github.com/goadesign/surla/internal/testmodule"
 )
 
 type (
@@ -677,10 +679,16 @@ func TestInitProjectUsesSavedSourceToProtectAnExistingProject(t *testing.T) {
 				InitRunner:   fakeInitRunner,
 				NewGenerator: func() scaffold.Generator { return &fakeInitGenerator{pkg: "shop"} },
 			})
-			_, err := cp.ProposeChange(alice, &gensurla.ProposeChangePayload{
-				ChangeID: "chg", Prompt: "Create a shop.", Analysis: refundAnalysis("Create a shop."),
-			})
-			require.NoError(t, err)
+			if withSource {
+				// A legacy card can retain source captured by an older producer.
+				// Initialization must still protect that saved input.
+				saveDraftSourceCardFixture(t, cp, "chg", map[string]string{"design/design.go": "package design\n"})
+			} else {
+				_, err := cp.ProposeChange(alice, &gensurla.ProposeChangePayload{
+					ChangeID: "chg", Prompt: "Create a shop.", Analysis: refundAnalysis("Create a shop."),
+				})
+				require.NoError(t, err)
+			}
 			if withSource {
 				// The saved card is now the only evidence of prior design files.
 				require.NoError(t, os.Remove(filepath.Join(workspace, "design", "design.go")))
@@ -872,87 +880,79 @@ func TestCloseDrainsAndCancelsInFlightInitProjectBeforeReleasingLocks(t *testing
 // is reopened. The design source is saved and hashed into
 // request_revision; nothing interprets it.
 func TestCP1WorkspaceDesignSourceProvenanceAcrossProposeReviseAndReopen(t *testing.T) {
-	t.Parallel()
-	aliceCtx := WithPrincipal(context.Background(), Principal{ID: "alice@example.com", CallerID: "alice@example.com", Kind: CallerUser})
-	root := t.TempDir()
-	wsDir := filepath.Join(root, "ws")
-	cardsDir := filepath.Join(root, "cards")
-	designDir := filepath.Join(wsDir, "design")
-	require.NoError(t, os.MkdirAll(designDir, 0o755))
-
-	const designV1 = "package design\n// v1 workspace design\n"
-	const designV2 = "package design\n// v2 workspace design\n"
-	require.NoError(t, os.WriteFile(filepath.Join(designDir, "design.go"), []byte(designV1), 0o644))
-
-	proposal := func(summary string) *gensurla.CP1Analysis {
-		return &gensurla.CP1Analysis{
-			Summary:     summary,
-			Ambiguities: []*gensurla.CP1AnalysisAmbiguity{},
-			Examples: []*gensurla.CP1AnalysisExample{{
-				Scenario: "Price an item", InputSummary: "1 item at $10.00", ExpectedOutcome: "Returns total $10.00", VerificationKind: "deterministic",
-			}},
-			PreservedBehaviors: []string{"Existing orders continue to price as before."},
-		}
+	if testing.Short() {
+		t.Skip("evaluates real module snapshots; the full suite covers this journey")
 	}
-	revision := func(summary string) *gensurla.CP1RevisionAnalysis {
-		priorID := "check_01"
-		return &gensurla.CP1RevisionAnalysis{
-			Summary:     summary,
-			Ambiguities: []*gensurla.CP1AnalysisAmbiguity{},
-			Examples: []*gensurla.CP1RevisionAnalysisExample{{
-				PriorID: &priorID, Scenario: "Price an item", InputSummary: "1 item at $10.00", ExpectedOutcome: "Returns total $10.00", VerificationKind: "deterministic",
-			}},
-			RemovedExampleIds:  []string{},
-			PreservedBehaviors: []string{"Existing orders continue to price as before."},
-		}
-	}
-	savedSource := func(cp *ControlPlane, changeID string) string {
-		t.Helper()
-		rec, ok, err := cp.cards.load(changeID)
-		require.NoError(t, err)
-		require.True(t, ok)
-		return rec.designSource
-	}
-
-	cp1, err := New(Options{
-		CardsDir:     cardsDir,
-		WorkspaceDir: wsDir,
+	project := t.TempDir()
+	opts := Options{WorkspaceDir: project, CardsDir: t.TempDir()}
+	guide, user := asCaller("alice@example.com", CallerGuide), asCaller("alice@example.com", CallerUser)
+	designV1 := "// v1 workspace design\n" + architectureTestDesign
+	designV2 := "// v2 workspace design\n" + strings.ReplaceAll(architectureTestDesign, `"orders"`, `"shipping"`)
+	files := testmodule.Snapshot(t, "", designV1)
+	writeWorkspaceFiles(t, project, files)
+	first := newControlPlane(t, opts)
+	card := mustProposeFromRefresh(t, first, guide, "chg-workspace-origin", "Route refunds under $50 automatically.", refundAnalysis("Route refunds under $50 automatically."))
+	card, err := first.ConfirmIntent(user, &gensurla.ConfirmIntentPayload{
+		ChangeID: card.ChangeID, RequestRevision: card.RequestRevision, Answers: map[string]string{}, Examples: card.Examples,
 	})
 	require.NoError(t, err)
+	original := loadMetadataRecord(t, first, card.ChangeID)
+	assert.Contains(t, original.designSource, "v1 workspace design")
+	require.NotNil(t, original.architecture)
+	assert.Empty(t, original.stories, "a Goa-only design has zero Stories")
+	require.NoError(t, first.Close())
 
-	// 1. ProposeChange records design/design.go (v1) from the bound workspace.
-	wsCard, err := cp1.ProposeChange(aliceCtx, &gensurla.ProposeChangePayload{
-		ChangeID: "chg-workspace-origin",
-		Prompt:   "Add loyalty discount",
-		Analysis: proposal("Loyal customers get a discount."),
+	// Neither later project edits nor an unreadable draft can change the saved
+	// source, module, topology or history of a revision that omits a new op.
+	writeWorkspaceFiles(t, project, map[string]string{"go.mod": "broken module", "design/design.go": designV2})
+	writeWorkspaceFiles(t, filepath.Join(project, draftFolderName), map[string]string{"design/design.go": "not Go"})
+	second := newControlPlane(t, opts)
+	kept, err := second.ReviseChange(guide, revisionPayload(card.ChangeID, card.RequestRevision, "Route refunds with review", card.Examples[0].ID))
+	require.NoError(t, err)
+	require.NotNil(t, kept.ProposedRevision)
+	saved := loadMetadataRecord(t, second, card.ChangeID).latest()
+	assert.Equal(t, original.designSource, saved.designSource)
+	assert.Equal(t, original.stories, saved.stories)
+	assert.Equal(t, original.architecture, saved.architecture)
+	assert.Equal(t, original.goMod, saved.goMod)
+	assert.Equal(t, original.madeFrom, saved.madeFrom)
+	preview, err := second.PreviewArchitecture(guide, &gensurla.PreviewArchitecturePayload{ChangeID: card.ChangeID, RequestRevision: card.RequestRevision})
+	require.NoError(t, err)
+	assert.Equal(t, "orders", preview.SystemName, "the confirmed revision stays previewable beside its proposal")
+
+	// An explicit new refresh replaces the whole group. Project files remain
+	// broken, and edits after that refresh still cannot alter its adoption.
+	nextFiles := maps.Clone(files)
+	nextFiles["design/design.go"] = designV2
+	nextFiles["go.mod"] += "\n// evaluated second snapshot\n"
+	writeWorkspaceFiles(t, filepath.Join(project, draftFolderName), nextFiles)
+	refreshed := mustRefreshStory(t, second, guide)
+	writeWorkspaceFiles(t, filepath.Join(project, draftFolderName), map[string]string{"design/design.go": "not Go"})
+	next := revisionPayload(card.ChangeID, kept.ProposedRevision.RequestRevision, "Route shipping refunds with review", kept.ProposedRevision.Examples[0].ID)
+	next.StoryRefreshOpID = refreshed.OpID
+	revised, err := second.ReviseChange(guide, next)
+	require.NoError(t, err)
+	require.NotNil(t, revised.ProposedRevision)
+	replaced := loadMetadataRecord(t, second, card.ChangeID).latest()
+	assert.Contains(t, replaced.designSource, "v2 workspace design")
+	assert.Equal(t, "shipping", replaced.architecture.SystemName)
+	assert.Equal(t, *refreshed.SnapshotDigest, replaced.architecture.DesignDigest)
+	assert.Equal(t, nextFiles["go.mod"], replaced.goMod)
+	assert.NotEqual(t, original.goMod, replaced.goMod)
+	assert.NotEqual(t, original.madeFrom, replaced.madeFrom)
+	adopted, err := second.ConfirmIntent(user, &gensurla.ConfirmIntentPayload{
+		ChangeID: card.ChangeID, RequestRevision: revised.ProposedRevision.RequestRevision,
+		Answers: map[string]string{card.ChangeID + "-ambiguity-01": "with_tax"}, Examples: revised.ProposedRevision.Examples,
 	})
 	require.NoError(t, err)
-	src := savedSource(cp1, wsCard.ChangeID)
-	assert.Contains(t, src, "v1 workspace design")
-
-	require.NoError(t, cp1.Close())
-
-	// Update workspace design/design.go on disk to v2 and reopen ControlPlane.
-	require.NoError(t, os.WriteFile(filepath.Join(designDir, "design.go"), []byte(designV2), 0o644))
-	cp2, err := New(Options{
-		CardsDir:     cardsDir,
-		WorkspaceDir: wsDir,
-	})
+	finalPreview, err := second.PreviewArchitecture(guide, &gensurla.PreviewArchitecturePayload{ChangeID: card.ChangeID, RequestRevision: adopted.RequestRevision})
 	require.NoError(t, err)
-	defer cp2.Close()
-
-	// 3. ReviseChange records v2 from disk.
-	revisedWS, err := cp2.ReviseChange(aliceCtx, &gensurla.ReviseChangePayload{
-		ChangeID:        wsCard.ChangeID,
-		RequestRevision: wsCard.RequestRevision,
-		Prompt:          "Add loyalty discount with cap",
-		Analysis:        revision("Loyal customers get a discount capped at $20."),
-	})
+	assert.Equal(t, "shipping", finalPreview.SystemName)
+	require.NoError(t, second.Close())
+	third := newControlPlane(t, opts)
+	reopened, err := third.PreviewArchitecture(guide, &gensurla.PreviewArchitecturePayload{ChangeID: card.ChangeID, RequestRevision: adopted.RequestRevision})
 	require.NoError(t, err)
-	src = savedSource(cp2, wsCard.ChangeID)
-	assert.Contains(t, src, "v2 workspace design")
-	assert.Equal(t, "check_01", revisedWS.Examples[0].ID)
-
+	assert.Equal(t, finalPreview, reopened, "saved architecture survives restart with both folders still changed")
 }
 
 // Generate returns a single stub generated Go source file for g.pkg.

@@ -8,14 +8,25 @@ import { Alert, Badge, Button, Card } from "./shadcn";
 // Role is a registered role from the generated team contract.
 type Role = TeamRoleState["role"];
 
+// TeamFactsError says why the page cannot show current team facts. Only a
+// failed read is named by the view in fixed words; the other messages are
+// complete sentences and stand alone.
+export interface TeamFactsError {
+  // readFailed adds the failed-read label. An unbound team's instruction or
+  // a notice that updates stopped is already a complete message.
+  readFailed: boolean;
+  // message is the server's diagnostic or the page's reason, shown unchanged.
+  message: string;
+}
+
 // TeamStageProps supplies the shared team read and the page-owned actions.
 export interface TeamStageProps {
   // snapshot is the last successful read, retained when a refresh fails.
   snapshot: TeamSnapshot | null;
   // loading reflects an outstanding team read.
   loading: boolean;
-  // error is the last read failure; retained facts are stale while it is set.
-  error: string | null;
+  // error is why the facts are not current; retained facts are stale while it is set.
+  error: TeamFactsError | null;
   // starting prevents a second Start agents request while one is pending.
   starting: boolean;
   // disabled prevents actions after the browser session has ended.
@@ -96,6 +107,7 @@ const watcherLabels: Record<TeamRoleState["watcher"], string> = {
 const assignmentLabels: Record<TeamRoleState["assignment"], string> = {
   unread: "Assignment unread",
   nothing_owed: "No unread assignment",
+  no_work: "No work now",
   unknown: "Assignment status unknown",
 };
 
@@ -145,8 +157,9 @@ export function TeamStageView({
         </div>
       </div>
       {error !== null ? (
-        <Alert id="surla-team-read-error" variant="destructive">
-          <strong>Could not read the team. </strong>{error}
+        <Alert id="surla-team-read-error" variant="destructive" role="alert">
+          {error.readFailed ? <strong>Could not read the project team. </strong> : null}
+          {error.message}
         </Alert>
       ) : null}
       {loading ? (

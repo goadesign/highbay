@@ -2388,7 +2388,7 @@ func ValidateDraftOverrideResultTransport(value *DraftOverrideResultTransport) (
 // GenerateCodePayloadTransport stores JSON fields until they have been validated.
 type GenerateCodePayloadTransport struct {
 	// Module to regenerate: candidate (the application, the default when omitted)
-	// or eval (the local eval/ module).
+	// or eval (the test module).
 	Target *string `json:"target,omitempty"`
 }
 
@@ -2461,6 +2461,51 @@ func ValidateGetBuildPayloadTransport(value *GetBuildPayloadTransport) (err erro
 	return err
 }
 
+// GetBuildResultBuildBuildingTransport stores JSON fields until they have been validated.
+type GetBuildResultBuildBuildingTransport struct {
+}
+
+// ValidateGetBuildResultBuildBuildingTransport checks decoded JSON before it becomes a service value.
+func ValidateGetBuildResultBuildBuildingTransport(value *GetBuildResultBuildBuildingTransport) (err error) {
+	if value == nil {
+		return goa.MissingFieldError("body", "JSON value")
+	}
+
+	return err
+}
+
+// GetBuildResultBuildDroppedTransport stores JSON fields until they have been validated.
+type GetBuildResultBuildDroppedTransport struct {
+	// The build's own branches that exist and hold a commit made after the build's
+	// base, where its work stays (git log <branch> shows it); empty when nothing
+	// was committed for it.
+	KeptBranches []string `json:"kept_branches"`
+}
+
+// ValidateGetBuildResultBuildDroppedTransport checks decoded JSON before it becomes a service value.
+func ValidateGetBuildResultBuildDroppedTransport(value *GetBuildResultBuildDroppedTransport) (err error) {
+	if value == nil {
+		return goa.MissingFieldError("body", "JSON value")
+	}
+	if value.KeptBranches == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("kept_branches", "body"))
+	}
+	return err
+}
+
+// GetBuildResultBuildMergedTransport stores JSON fields until they have been validated.
+type GetBuildResultBuildMergedTransport struct {
+}
+
+// ValidateGetBuildResultBuildMergedTransport checks decoded JSON before it becomes a service value.
+func ValidateGetBuildResultBuildMergedTransport(value *GetBuildResultBuildMergedTransport) (err error) {
+	if value == nil {
+		return goa.MissingFieldError("body", "JSON value")
+	}
+
+	return err
+}
+
 // GetBuildResultBuildNotStartedTransport stores JSON fields until they have been validated.
 type GetBuildResultBuildNotStartedTransport struct {
 }
@@ -2471,6 +2516,94 @@ func ValidateGetBuildResultBuildNotStartedTransport(value *GetBuildResultBuildNo
 		return goa.MissingFieldError("body", "JSON value")
 	}
 
+	return err
+}
+
+// GetBuildResultBuildPassedTestsTransport stores JSON fields until they have been validated.
+type GetBuildResultBuildPassedTestsTransport struct {
+	// Commit Surla recorded the accepted tests at.
+	Commit *string `json:"commit"`
+	// The build's test-writer branch, surla/tests-<n>, where this commit was
+	// verified.
+	Branch *string `json:"branch"`
+}
+
+// ValidateGetBuildResultBuildPassedTestsTransport checks decoded JSON before it becomes a service value.
+func ValidateGetBuildResultBuildPassedTestsTransport(value *GetBuildResultBuildPassedTestsTransport) (err error) {
+	if value == nil {
+		return goa.MissingFieldError("body", "JSON value")
+	}
+	if value.Commit == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("commit", "body"))
+	}
+	if value.Branch == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("branch", "body"))
+	}
+	if value.Commit != nil {
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.commit", *value.Commit, "^([0-9a-f]{40}|[0-9a-f]{64})$"))
+	}
+	return err
+}
+
+// GetBuildResultBuildPassedTransport stores JSON fields until they have been validated.
+type GetBuildResultBuildPassedTransport struct {
+	// The newest passed run; get_verification takes it.
+	RunID *string `json:"run_id"`
+	// The builder's commit the run passed.
+	CandidateCommit *string `json:"candidate_commit"`
+	// The build's builder branch, surla/build-<n>, where this commit was verified.
+	CandidateBranch *string `json:"candidate_branch"`
+	// written_tests with the accepted tests' commit to merge after the builder's;
+	// evaluator when the project verifies with its stored evaluator, whose tests
+	// are not merged.
+	Tests *GetBuildResultBuildPassedTestSourceTransport `json:"tests"`
+	// False when the branch checked out in the project folder no longer holds the
+	// commit this build started from, because its history was rewritten: merging
+	// these commits brings that history back, and dropping the build and building
+	// again starts from the branch as it is.
+	BaseInBranch *bool `json:"base_in_branch"`
+}
+
+// ValidateGetBuildResultBuildPassedTransport checks decoded JSON before it becomes a service value.
+func ValidateGetBuildResultBuildPassedTransport(value *GetBuildResultBuildPassedTransport) (err error) {
+	if value == nil {
+		return goa.MissingFieldError("body", "JSON value")
+	}
+	if value.RunID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("run_id", "body"))
+	}
+	if value.CandidateCommit == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("candidate_commit", "body"))
+	}
+	if value.CandidateBranch == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("candidate_branch", "body"))
+	}
+	if value.Tests == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("tests", "body"))
+	}
+	if value.BaseInBranch == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("base_in_branch", "body"))
+	}
+	if value.CandidateCommit != nil {
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.candidate_commit", *value.CandidateCommit, "^([0-9a-f]{40}|[0-9a-f]{64})$"))
+	}
+	if value.Tests != nil {
+
+		if err2 := value.Tests.Validate(); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		} else {
+			switch string(value.Tests.Kind()) {
+			case "written_tests":
+				actual, _ := value.Tests.AsWrittenTests()
+				if actual != nil {
+					if err2 := ValidateGetBuildResultBuildPassedTestsTransport(actual); err2 != nil {
+						err = goa.MergeErrors(err, err2)
+					}
+				}
+			}
+		}
+
+	}
 	return err
 }
 
@@ -2492,6 +2625,19 @@ func ValidateGetBuildResultBuilderProgressTransport(value *GetBuildResultBuilder
 	return err
 }
 
+// GetBuildResultOperatorEvaluatorTestsTransport stores JSON fields until they have been validated.
+type GetBuildResultOperatorEvaluatorTestsTransport struct {
+}
+
+// ValidateGetBuildResultOperatorEvaluatorTestsTransport checks decoded JSON before it becomes a service value.
+func ValidateGetBuildResultOperatorEvaluatorTestsTransport(value *GetBuildResultOperatorEvaluatorTestsTransport) (err error) {
+	if value == nil {
+		return goa.MissingFieldError("body", "JSON value")
+	}
+
+	return err
+}
+
 // GetBuildResultStartedBuildTransport stores JSON fields until they have been validated.
 type GetBuildResultStartedBuildTransport struct {
 	// Change Card revision the user built.
@@ -2499,10 +2645,11 @@ type GetBuildResultStartedBuildTransport struct {
 	// When the user started this build.
 	StartedAt *string `json:"started_at"`
 	// True when request_revision is the change's agreed revision, the one in
-	// force. It stays true while a revision the guide proposed waits beside the
-	// agreed one, and turns false once the user adopts a proposed revision or
-	// confirms another revision: the assignments then stay as they are, for this
-	// earlier revision, until the user builds again.
+	// force, as get_build reports it. It stays true while a proposed revision
+	// waits and when a refreshed draft is adopted without changing
+	// request_revision. If adoption or confirmation changes the agreed
+	// request_revision, it becomes false; the assignments stay on the earlier
+	// revision until the user builds again.
 	InForce *bool `json:"in_force"`
 	// The builder's assignment.
 	Builder *GetBuildResultBuilderProgressTransport `json:"builder"`
@@ -2511,6 +2658,13 @@ type GetBuildResultStartedBuildTransport struct {
 	// Number of finished flows in the agreed Story. Zero means no test of this
 	// change's Story was required.
 	RequiredTestCount *int `json:"required_test_count"`
+	// Whether the user has taken this build: building until a verification of it
+	// passes; passed with the commits to merge; merged once the branch checked out
+	// in the project folder holds the commits of one passed run, the builder's
+	// and, for written tests, the tests'; dropped once the user dropped it. A
+	// project has one open build, and another change is built only once it is
+	// merged or dropped.
+	Taking *GetBuildResultBuildTakingTransport `json:"taking"`
 }
 
 // ValidateGetBuildResultStartedBuildTransport checks decoded JSON before it becomes a service value.
@@ -2536,6 +2690,9 @@ func ValidateGetBuildResultStartedBuildTransport(value *GetBuildResultStartedBui
 	if value.RequiredTestCount == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("required_test_count", "body"))
 	}
+	if value.Taking == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("taking", "body"))
+	}
 	if value.StartedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.started_at", *value.StartedAt, goa.FormatDateTime))
 	}
@@ -2553,6 +2710,30 @@ func ValidateGetBuildResultStartedBuildTransport(value *GetBuildResultStartedBui
 		if *value.RequiredTestCount < 0 {
 			err = goa.MergeErrors(err, goa.InvalidRangeError("body.required_test_count", *value.RequiredTestCount, 0, true))
 		}
+	}
+	if value.Taking != nil {
+
+		if err2 := value.Taking.Validate(); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		} else {
+			switch string(value.Taking.Kind()) {
+			case "passed":
+				actual, _ := value.Taking.AsPassed()
+				if actual != nil {
+					if err2 := ValidateGetBuildResultBuildPassedTransport(actual); err2 != nil {
+						err = goa.MergeErrors(err, err2)
+					}
+				}
+			case "dropped":
+				actual, _ := value.Taking.AsDropped()
+				if actual != nil {
+					if err2 := ValidateGetBuildResultBuildDroppedTransport(actual); err2 != nil {
+						err = goa.MergeErrors(err, err2)
+					}
+				}
+			}
+		}
+
 	}
 	return err
 }
@@ -2784,6 +2965,17 @@ func ValidateGetBuildResultTestsReportedTransport(value *GetBuildResultTestsRepo
 type GetBuildResultTransport struct {
 	// Change Card identifier.
 	ChangeID *string `json:"change_id"`
+	// True only when the current agreed revision’s saved record of how its design
+	// was drafted predates the current actual drop: start_build would refuse it
+	// with drafted_before_drop. It becomes true after that drop and false once the
+	// user adopts a revision drafted after the drop, even if its request_revision
+	// is unchanged. A waiting proposal does not change this fact; ask the guide to
+	// refresh_story and revise_change from that refresh, then adopt the revision
+	// before building. False says only that this refusal does not apply, not that
+	// every other build check will pass; it is also false without an agreed
+	// revision or saved record of its draft. start_build rechecks concurrent
+	// changes.
+	DraftedBeforeDrop *bool `json:"drafted_before_drop"`
 	// not_started when the change has no usable build for the current test source;
 	// start a new build on the views page. Otherwise started with the usable build.
 	Build *GetBuildResultbuildTransport `json:"build"`
@@ -2796,6 +2988,9 @@ func ValidateGetBuildResultTransport(value *GetBuildResultTransport) (err error)
 	}
 	if value.ChangeID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("change_id", "body"))
+	}
+	if value.DraftedBeforeDrop == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("drafted_before_drop", "body"))
 	}
 	if value.Build == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("build", "body"))
@@ -2913,11 +3108,12 @@ type GetBuilderAssignmentResultTransport struct {
 	ChangeID *string `json:"change_id"`
 	// Change Card revision to build; verify_change takes it.
 	RequestRevision *string `json:"request_revision"`
-	// True when request_revision is the change's confirmed revision in force, as
-	// get_build reports it. It stays true while a revision the guide proposed
-	// waits beside the agreed one, and is false once the user has adopted a
-	// proposed revision or confirmed another revision: verify_change then refuses
-	// this revision, and the assignment stays as it is until the user builds again.
+	// True when request_revision is the change's agreed revision, the one in
+	// force, as get_build reports it. It stays true while a proposed revision
+	// waits and when a refreshed draft is adopted without changing
+	// request_revision. If adoption or confirmation changes the agreed
+	// request_revision, it becomes false; verify_change refuses this earlier
+	// revision, and the assignment stays as it is until the user builds again.
 	InForce *bool `json:"in_force"`
 	// True once you read this assignment in full with get_builder_assignment.
 	Read *bool `json:"read"`
@@ -2926,6 +3122,14 @@ type GetBuilderAssignmentResultTransport struct {
 	// otherwise accepted, with the commit and time, when the build records
 	// accepted tests, and not_yet_accepted when it records none.
 	WrittenTests *GetBuilderAssignmentResultwrittenTestsTransport `json:"written_tests"`
+	// Absolute path of the folder to build in: the project's folder inside your
+	// working copy .surla-build, on the build's branch surla/build-<n>. Run git
+	// and go there, never in the project folder.
+	WorkingFolder *string `json:"working_folder"`
+	// True when no go.work lies in working_folder or in a folder between it and
+	// the working copy's root: run every go command there as GOWORK=off go …, so a
+	// go.work of the project folder around your copy does not take it over.
+	GoworkOff *bool `json:"gowork_off"`
 }
 
 // ValidateGetBuilderAssignmentResultTransport checks decoded JSON before it becomes a service value.
@@ -2944,6 +3148,12 @@ func ValidateGetBuilderAssignmentResultTransport(value *GetBuilderAssignmentResu
 	}
 	if value.Read == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("read", "body"))
+	}
+	if value.WorkingFolder == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("working_folder", "body"))
+	}
+	if value.GoworkOff == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("gowork_off", "body"))
 	}
 	if value.WrittenTests == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("written_tests", "body"))
@@ -4072,15 +4282,20 @@ func ValidateGetStoryRefreshResultStorySummaryItemTransport(value *GetStoryRefre
 
 // GetStoryRefreshResultTransport stores JSON fields until they have been validated.
 type GetStoryRefreshResultTransport struct {
-	// Identifier of the owner's current Story refresh operation for the bound
-	// workspace; present when state is running, succeeded, or failed. Pass it as
+	// Absolute path intended for the guide's draft, .surla-draft in the project
+	// folder, whose go.mod, go.sum and design/ refresh_story reads. When state is
+	// none, this path does not mean the folder exists; refresh_story makes it when
+	// needed.
+	DraftFolder *string `json:"draft_folder"`
+	// Identifier of the owner's current Story refresh operation for the guide's
+	// draft; present when state is running, succeeded, or failed. Pass it as
 	// story_refresh_op_id to propose_change or revise_change once state is
 	// succeeded to adopt the evaluated Story into a Change Card.
 	OpID *string `json:"op_id,omitempty"`
 	// Current operation state: none, running, succeeded, or failed.
 	State *string `json:"state"`
-	// Canonical SHA-256 digest of the workspace module snapshot read when this
-	// refresh started; present when state is running, succeeded, or failed.
+	// Canonical SHA-256 digest of the draft snapshot read when this refresh
+	// started; present when state is running, succeeded, or failed.
 	SnapshotDigest *string `json:"snapshot_digest,omitempty"`
 	// Evaluated domain Stories in declaration order when state is succeeded (empty
 	// when the design declares no Stories or when state is none, running, or
@@ -4088,7 +4303,9 @@ type GetStoryRefreshResultTransport struct {
 	Stories []*GetStoryRefreshResultStorySummaryItemTransport `json:"stories"`
 	// Safe failure or timeout diagnostic when state is failed; omitted otherwise.
 	Diagnostic *string `json:"diagnostic,omitempty"`
-	// Summary of the current Story refresh state and next action.
+	// Summary of the current Story refresh state and next action. After a dropped
+	// build remakes the draft and until a revision is saved from it, begins by
+	// naming the dropped change and saying that edits made before then are gone.
 	Message *string `json:"message"`
 }
 
@@ -4105,6 +4322,9 @@ func ValidateGetStoryRefreshResultTransport(value *GetStoryRefreshResultTranspor
 	}
 	if value.Message == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if value.DraftFolder == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("draft_folder", "body"))
 	}
 	if value.State != nil {
 		if !(*value.State == "none" || *value.State == "running" || *value.State == "succeeded" || *value.State == "failed") {
@@ -4676,11 +4896,12 @@ type GetTestWriterAssignmentResultTransport struct {
 	ChangeID *string `json:"change_id"`
 	// Change Card revision the tests are for; report_tests_finished takes it.
 	RequestRevision *string `json:"request_revision"`
-	// True when request_revision is the change's confirmed revision in force, as
-	// get_build reports it. It stays true while a revision the guide proposed
-	// waits beside the agreed one, and is false once the user has adopted a
-	// proposed revision or confirmed another revision: the assignment then stays
-	// for this earlier revision until the user builds again.
+	// True when request_revision is the change's agreed revision, the one in
+	// force, as get_build reports it. It stays true while a proposed revision
+	// waits and when a refreshed draft is adopted without changing
+	// request_revision. If adoption or confirmation changes the agreed
+	// request_revision, it becomes false; the assignment stays on the earlier
+	// revision until the user builds again.
 	InForce *bool `json:"in_force"`
 	// Where this assignment stands.
 	Progress *GetTestWriterAssignmentResultTestWriterProgressTransport `json:"progress"`
@@ -4688,7 +4909,9 @@ type GetTestWriterAssignmentResultTransport struct {
 	// progress gives in finding_count when its state is needs_changes, and none in
 	// any other state. Fix them in working_folder, then report again.
 	Findings []string `json:"findings"`
-	// Folder to write the tests in: your own working copy of the project.
+	// Folder to write the tests in: your own working copy of the project,
+	// .surla-tests, on the build's branch surla/tests-<n>. Do not commit there:
+	// Surla commits what it accepts.
 	WorkingFolder *string `json:"working_folder"`
 	// The canonical design source as agreed at request_revision, copied when this
 	// build started; later revisions do not change it.
@@ -5276,11 +5499,12 @@ type ListBuilderAssignmentsResultBuilderAssignmentTransport struct {
 	ChangeID *string `json:"change_id"`
 	// Change Card revision to build; verify_change takes it.
 	RequestRevision *string `json:"request_revision"`
-	// True when request_revision is the change's confirmed revision in force, as
-	// get_build reports it. It stays true while a revision the guide proposed
-	// waits beside the agreed one, and is false once the user has adopted a
-	// proposed revision or confirmed another revision: verify_change then refuses
-	// this revision, and the assignment stays as it is until the user builds again.
+	// True when request_revision is the change's agreed revision, the one in
+	// force, as get_build reports it. It stays true while a proposed revision
+	// waits and when a refreshed draft is adopted without changing
+	// request_revision. If adoption or confirmation changes the agreed
+	// request_revision, it becomes false; verify_change refuses this earlier
+	// revision, and the assignment stays as it is until the user builds again.
 	InForce *bool `json:"in_force"`
 	// True once you read this assignment in full with get_builder_assignment.
 	Read *bool `json:"read"`
@@ -5289,6 +5513,14 @@ type ListBuilderAssignmentsResultBuilderAssignmentTransport struct {
 	// otherwise accepted, with the commit and time, when the build records
 	// accepted tests, and not_yet_accepted when it records none.
 	WrittenTests *ListBuilderAssignmentsResultwrittenTestsTransport `json:"written_tests"`
+	// Absolute path of the folder to build in: the project's folder inside your
+	// working copy .surla-build, on the build's branch surla/build-<n>. Run git
+	// and go there, never in the project folder.
+	WorkingFolder *string `json:"working_folder"`
+	// True when no go.work lies in working_folder or in a folder between it and
+	// the working copy's root: run every go command there as GOWORK=off go …, so a
+	// go.work of the project folder around your copy does not take it over.
+	GoworkOff *bool `json:"gowork_off"`
 }
 
 // ValidateListBuilderAssignmentsResultBuilderAssignmentTransport checks decoded JSON before it becomes a service value.
@@ -5307,6 +5539,12 @@ func ValidateListBuilderAssignmentsResultBuilderAssignmentTransport(value *ListB
 	}
 	if value.Read == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("read", "body"))
+	}
+	if value.WorkingFolder == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("working_folder", "body"))
+	}
+	if value.GoworkOff == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("gowork_off", "body"))
 	}
 	if value.WrittenTests == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("written_tests", "body"))
@@ -5398,8 +5636,7 @@ func ValidateListBuilderAssignmentsResultTestsNotYetAcceptedTransport(value *Lis
 
 // ListBuilderAssignmentsResultTransport stores JSON fields until they have been validated.
 type ListBuilderAssignmentsResultTransport struct {
-	// Assignments, most recently started first; empty when the user has built no
-	// change.
+	// The open build's assignment while it needs this role; empty otherwise.
 	Assignments []*ListBuilderAssignmentsResultBuilderAssignmentTransport `json:"assignments"`
 }
 
@@ -5559,11 +5796,12 @@ type ListTestWriterAssignmentsResultTestWriterAssignmentItemTransport struct {
 	ChangeID *string `json:"change_id"`
 	// Change Card revision the tests are for.
 	RequestRevision *string `json:"request_revision"`
-	// True when request_revision is the change's confirmed revision in force, as
-	// get_build reports it. It stays true while a revision the guide proposed
-	// waits beside the agreed one, and is false once the user has adopted a
-	// proposed revision or confirmed another revision: the assignment then stays
-	// for this earlier revision until the user builds again.
+	// True when request_revision is the change's agreed revision, the one in
+	// force, as get_build reports it. It stays true while a proposed revision
+	// waits and when a refreshed draft is adopted without changing
+	// request_revision. If adoption or confirmation changes the agreed
+	// request_revision, it becomes false; the assignment stays on the earlier
+	// revision until the user builds again.
 	InForce *bool `json:"in_force"`
 	// Where this assignment stands.
 	Progress *ListTestWriterAssignmentsResultTestWriterProgressTransport `json:"progress"`
@@ -5819,8 +6057,7 @@ func ValidateListTestWriterAssignmentsResultTestsReportedTransport(value *ListTe
 
 // ListTestWriterAssignmentsResultTransport stores JSON fields until they have been validated.
 type ListTestWriterAssignmentsResultTransport struct {
-	// Assignments, most recently started first; empty when the user has built no
-	// change.
+	// The open build's assignment while it needs this role; empty otherwise.
 	Assignments []*ListTestWriterAssignmentsResultTestWriterAssignmentItemTransport `json:"assignments"`
 }
 
@@ -6706,8 +6943,8 @@ type PreviewArchitectureResultTransport struct {
 	ChangeID *string `json:"change_id"`
 	// Bound CP1 request_revision digest.
 	RequestRevision *string `json:"request_revision"`
-	// SHA-256 digest of the evaluated design snapshot (sorted path and content
-	// pairs).
+	// SHA-256 digest of the design snapshot the revision's refresh evaluated
+	// (sorted path and content pairs).
 	DesignDigest *string `json:"design_digest"`
 	// API or primary service name declared in the design.
 	SystemName *string `json:"system_name"`
@@ -6958,11 +7195,9 @@ type ProposeChangePayloadTransport struct {
 	ChangeID *string `json:"change_id"`
 	// The user's feature request.
 	Prompt *string `json:"prompt"`
-	// Optional op_id of a succeeded refresh_story operation for the bound
-	// workspace whose evaluated Stories this card adopts. When set, Surla reads
-	// one workspace snapshot, requires its snapshot_digest to match the
-	// operation's, and records both the evaluated Stories and that snapshot's
-	// design/*.go on the card. Omit when the card has no Story.
+	// op_id of a succeeded refresh_story operation whose evaluated draft this card
+	// adopts: its design, Stories, architecture, go.mod and made-from list.
+	// Required when the project folder holds a go.mod; Surla reads no file.
 	StoryRefreshOpID *string `json:"story_refresh_op_id,omitempty"`
 	// Your analysis of prompt against the target's current design.
 	Analysis *ProposeChangePayloadCP1AnalysisTransport `json:"analysis"`
@@ -7894,15 +8129,20 @@ func ValidateRefreshStoryResultStorySummaryItemTransport(value *RefreshStoryResu
 
 // RefreshStoryResultTransport stores JSON fields until they have been validated.
 type RefreshStoryResultTransport struct {
-	// Identifier of the owner's current Story refresh operation for the bound
-	// workspace; present when state is running, succeeded, or failed. Pass it as
+	// Absolute path intended for the guide's draft, .surla-draft in the project
+	// folder, whose go.mod, go.sum and design/ refresh_story reads. When state is
+	// none, this path does not mean the folder exists; refresh_story makes it when
+	// needed.
+	DraftFolder *string `json:"draft_folder"`
+	// Identifier of the owner's current Story refresh operation for the guide's
+	// draft; present when state is running, succeeded, or failed. Pass it as
 	// story_refresh_op_id to propose_change or revise_change once state is
 	// succeeded to adopt the evaluated Story into a Change Card.
 	OpID *string `json:"op_id,omitempty"`
 	// Current operation state: none, running, succeeded, or failed.
 	State *string `json:"state"`
-	// Canonical SHA-256 digest of the workspace module snapshot read when this
-	// refresh started; present when state is running, succeeded, or failed.
+	// Canonical SHA-256 digest of the draft snapshot read when this refresh
+	// started; present when state is running, succeeded, or failed.
 	SnapshotDigest *string `json:"snapshot_digest,omitempty"`
 	// Evaluated domain Stories in declaration order when state is succeeded (empty
 	// when the design declares no Stories or when state is none, running, or
@@ -7910,7 +8150,9 @@ type RefreshStoryResultTransport struct {
 	Stories []*RefreshStoryResultStorySummaryItemTransport `json:"stories"`
 	// Safe failure or timeout diagnostic when state is failed; omitted otherwise.
 	Diagnostic *string `json:"diagnostic,omitempty"`
-	// Summary of the current Story refresh state and next action.
+	// Summary of the current Story refresh state and next action. After a dropped
+	// build remakes the draft and until a revision is saved from it, begins by
+	// naming the dropped change and saying that edits made before then are gone.
 	Message *string `json:"message"`
 }
 
@@ -7927,6 +8169,9 @@ func ValidateRefreshStoryResultTransport(value *RefreshStoryResultTransport) (er
 	}
 	if value.Message == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if value.DraftFolder == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("draft_folder", "body"))
 	}
 	if value.State != nil {
 		if !(*value.State == "none" || *value.State == "running" || *value.State == "succeeded" || *value.State == "failed") {
@@ -8204,11 +8449,12 @@ type ReportTestsFinishedResultTransport struct {
 	ChangeID *string `json:"change_id"`
 	// Change Card revision the tests are for.
 	RequestRevision *string `json:"request_revision"`
-	// True when request_revision is the change's confirmed revision in force, as
-	// get_build reports it. It stays true while a revision the guide proposed
-	// waits beside the agreed one, and is false once the user has adopted a
-	// proposed revision or confirmed another revision: the assignment then stays
-	// for this earlier revision until the user builds again.
+	// True when request_revision is the change's agreed revision, the one in
+	// force, as get_build reports it. It stays true while a proposed revision
+	// waits and when a refreshed draft is adopted without changing
+	// request_revision. If adoption or confirmation changes the agreed
+	// request_revision, it becomes false; the assignment stays on the earlier
+	// revision until the user builds again.
 	InForce *bool `json:"in_force"`
 	// Where this assignment stands.
 	Progress *ReportTestsFinishedResultTestWriterProgressTransport `json:"progress"`
@@ -8234,6 +8480,994 @@ func ValidateReportTestsFinishedResultTransport(value *ReportTestsFinishedResult
 	if value.Progress != nil {
 		if err2 := ValidateReportTestsFinishedResultTestWriterProgressTransport(value.Progress); err2 != nil {
 			err = goa.MergeErrors(err, err2)
+		}
+	}
+	return err
+}
+
+// ReviewVerificationPayloadTransport stores JSON fields until they have been validated.
+type ReviewVerificationPayloadTransport struct {
+	// Verification run identifier returned by verify_change.
+	RunID *string `json:"run_id"`
+}
+
+// ValidateReviewVerificationPayloadTransport checks decoded JSON before it becomes a service value.
+func ValidateReviewVerificationPayloadTransport(value *ReviewVerificationPayloadTransport) (err error) {
+	if value == nil {
+		return goa.MissingFieldError("body", "JSON value")
+	}
+	if value.RunID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("run_id", "body"))
+	}
+	return err
+}
+
+// ReviewVerificationResultAgentWrittenTestsTransport stores JSON fields until they have been validated.
+type ReviewVerificationResultAgentWrittenTestsTransport struct {
+	// Commit Surla recorded the accepted tests at; the same as suite_commit.
+	Commit *string `json:"commit"`
+	// Always: These tests were written by a separate agent on this machine and are
+	// not isolated from the builder.
+	Notice *string `json:"notice"`
+}
+
+// ValidateReviewVerificationResultAgentWrittenTestsTransport checks decoded JSON before it becomes a service value.
+func ValidateReviewVerificationResultAgentWrittenTestsTransport(value *ReviewVerificationResultAgentWrittenTestsTransport) (err error) {
+	if value == nil {
+		return goa.MissingFieldError("body", "JSON value")
+	}
+	if value.Commit == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("commit", "body"))
+	}
+	if value.Notice == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("notice", "body"))
+	}
+	return err
+}
+
+// ReviewVerificationResultApprovalItemTransport stores JSON fields until they have been validated.
+type ReviewVerificationResultApprovalItemTransport struct {
+	// User who approved the result.
+	ApprovedBy *string `json:"approved_by"`
+	// SHA-256 digest of the approved CP4 verification report.
+	ReportDigest *string `json:"report_digest"`
+	// Candidate commit the report was checked against.
+	CandidateCommit *string `json:"candidate_commit"`
+	// Suite identifier the tests at suite_commit declared in the report (shown,
+	// not compared).
+	SuiteID *string `json:"suite_id"`
+	// Commit of the tests the report ran: the evaluator suite commit in the stored
+	// verification settings, or the tests Surla accepted for the change's build.
+	SuiteCommit *string `json:"suite_commit"`
+	// Dependency profile the tests at suite_commit declared in the report, such as
+	// sim or scripted-model (shown, not compared).
+	Environment *string `json:"environment"`
+	// SHA-256 digest of each candidate binary the promotion target measured, keyed
+	// by binary name; empty when no promotion settings are configured.
+	Artifacts map[string]string `json:"artifacts"`
+	// Number of declared scenarios in the report, every one of which passed.
+	ScenarioCount *int `json:"scenario_count"`
+	// Where the tests at suite_commit came from, derived on each read: evaluator,
+	// or written_tests with their commit and a notice.
+	TestSource *ReviewVerificationResultApprovalTestSourceTransport `json:"test_source"`
+}
+
+// ValidateReviewVerificationResultApprovalItemTransport checks decoded JSON before it becomes a service value.
+func ValidateReviewVerificationResultApprovalItemTransport(value *ReviewVerificationResultApprovalItemTransport) (err error) {
+	if value == nil {
+		return goa.MissingFieldError("body", "JSON value")
+	}
+	if value.ApprovedBy == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("approved_by", "body"))
+	}
+	if value.ReportDigest == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("report_digest", "body"))
+	}
+	if value.CandidateCommit == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("candidate_commit", "body"))
+	}
+	if value.SuiteID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("suite_id", "body"))
+	}
+	if value.SuiteCommit == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("suite_commit", "body"))
+	}
+	if value.Environment == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("environment", "body"))
+	}
+	if value.Artifacts == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("artifacts", "body"))
+	}
+	if value.ScenarioCount == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("scenario_count", "body"))
+	}
+	if value.TestSource == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("test_source", "body"))
+	}
+	if value.TestSource != nil {
+
+		if err2 := value.TestSource.Validate(); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		} else {
+			switch string(value.TestSource.Kind()) {
+			case "written_tests":
+				actual, _ := value.TestSource.AsWrittenTests()
+				if actual != nil {
+					if err2 := ValidateReviewVerificationResultAgentWrittenTestsTransport(actual); err2 != nil {
+						err = goa.MergeErrors(err, err2)
+					}
+				}
+			}
+		}
+
+	}
+	return err
+}
+
+// ReviewVerificationResultBuilderVerificationReportTransport stores JSON fields until they have been validated.
+type ReviewVerificationResultBuilderVerificationReportTransport struct {
+	// SHA-256 digest of the full report the evaluator saved; approve_merge and
+	// surla approve take this digest.
+	ReportDigest *string `json:"report_digest"`
+	// Every declared scenario, counted by outcome.
+	Counts *ReviewVerificationResultVerificationCountsTransport `json:"counts"`
+	// The verdict: true only when every declared scenario passed and the suite ran
+	// cleanly.
+	Passed *bool `json:"passed"`
+	// Whether the evaluator suite itself failed or ended abnormally.
+	SuiteFailed *bool `json:"suite_failed"`
+	// Every declared scenario in declaration order.
+	Scenarios []*ReviewVerificationResultVerificationScenarioTransport `json:"scenarios"`
+}
+
+// ValidateReviewVerificationResultBuilderVerificationReportTransport checks decoded JSON before it becomes a service value.
+func ValidateReviewVerificationResultBuilderVerificationReportTransport(value *ReviewVerificationResultBuilderVerificationReportTransport) (err error) {
+	if value == nil {
+		return goa.MissingFieldError("body", "JSON value")
+	}
+	if value.ReportDigest == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("report_digest", "body"))
+	}
+	if value.Counts == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("counts", "body"))
+	}
+	if value.Passed == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("passed", "body"))
+	}
+	if value.SuiteFailed == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("suite_failed", "body"))
+	}
+	if value.Scenarios == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("scenarios", "body"))
+	}
+	if value.Counts != nil {
+		if err2 := ValidateReviewVerificationResultVerificationCountsTransport(value.Counts); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	for _, e := range value.Scenarios {
+		if e != nil {
+			if err2 := ValidateReviewVerificationResultVerificationScenarioTransport(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	return err
+}
+
+// ReviewVerificationResultOperatorEvaluatorTestsTransport stores JSON fields until they have been validated.
+type ReviewVerificationResultOperatorEvaluatorTestsTransport struct {
+}
+
+// ValidateReviewVerificationResultOperatorEvaluatorTestsTransport checks decoded JSON before it becomes a service value.
+func ValidateReviewVerificationResultOperatorEvaluatorTestsTransport(value *ReviewVerificationResultOperatorEvaluatorTestsTransport) (err error) {
+	if value == nil {
+		return goa.MissingFieldError("body", "JSON value")
+	}
+
+	return err
+}
+
+// ReviewVerificationResultRecordedRunStoryTransport stores JSON fields until they have been validated.
+type ReviewVerificationResultRecordedRunStoryTransport struct {
+	// Number of the build this run was accepted for.
+	BuildNumber *int `json:"build_number"`
+	// Accepted build's saved start time.
+	BuildStartedAt *string `json:"build_started_at"`
+	// Stories as agreed for this run, in declaration order; empty when the
+	// agreement declares none.
+	Stories []*ReviewVerificationResultStorySummaryItemTransport `json:"stories"`
+	// The owner's exact required-test mapping for written tests, or the explicit
+	// absence of such a mapping for an operator evaluator.
+	Mapping *ReviewVerificationResultmappingTransport `json:"mapping"`
+}
+
+// ValidateReviewVerificationResultRecordedRunStoryTransport checks decoded JSON before it becomes a service value.
+func ValidateReviewVerificationResultRecordedRunStoryTransport(value *ReviewVerificationResultRecordedRunStoryTransport) (err error) {
+	if value == nil {
+		return goa.MissingFieldError("body", "JSON value")
+	}
+	if value.BuildNumber == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("build_number", "body"))
+	}
+	if value.BuildStartedAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("build_started_at", "body"))
+	}
+	if value.Stories == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("stories", "body"))
+	}
+	if value.Mapping == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("mapping", "body"))
+	}
+	if value.BuildNumber != nil {
+		if *value.BuildNumber < 1 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.build_number", *value.BuildNumber, 1, true))
+		}
+	}
+	if value.BuildStartedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.build_started_at", *value.BuildStartedAt, goa.FormatDateTime))
+	}
+	for _, e := range value.Stories {
+		if e != nil {
+			if err2 := ValidateReviewVerificationResultStorySummaryItemTransport(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	if value.Mapping != nil {
+
+		if err2 := value.Mapping.Validate(); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		} else {
+			switch string(value.Mapping.Kind()) {
+			case "mapped":
+				actual, _ := value.Mapping.AsMapped()
+				if actual != nil {
+					if err2 := ValidateReviewVerificationResultRunStoryMappingTransport(actual); err2 != nil {
+						err = goa.MergeErrors(err, err2)
+					}
+				}
+			}
+		}
+
+	}
+	return err
+}
+
+// ReviewVerificationResultRequiredTestTransport stores JSON fields until they have been validated.
+type ReviewVerificationResultRequiredTestTransport struct {
+	// Name of the Story the flow belongs to.
+	Story *string `json:"story"`
+	// Key of the finished flow.
+	FlowKey *string `json:"flow_key"`
+	// Scenario name the evaluation suite declares for the flow.
+	Scenario *string `json:"scenario"`
+	// Hook method the test writer implements for the scenario.
+	Hook *string `json:"hook"`
+}
+
+// ValidateReviewVerificationResultRequiredTestTransport checks decoded JSON before it becomes a service value.
+func ValidateReviewVerificationResultRequiredTestTransport(value *ReviewVerificationResultRequiredTestTransport) (err error) {
+	if value == nil {
+		return goa.MissingFieldError("body", "JSON value")
+	}
+	if value.Story == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("story", "body"))
+	}
+	if value.FlowKey == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("flow_key", "body"))
+	}
+	if value.Scenario == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("scenario", "body"))
+	}
+	if value.Hook == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("hook", "body"))
+	}
+	return err
+}
+
+// ReviewVerificationResultRunApprovalAvailableTransport stores JSON fields until they have been validated.
+type ReviewVerificationResultRunApprovalAvailableTransport struct {
+}
+
+// ValidateReviewVerificationResultRunApprovalAvailableTransport checks decoded JSON before it becomes a service value.
+func ValidateReviewVerificationResultRunApprovalAvailableTransport(value *ReviewVerificationResultRunApprovalAvailableTransport) (err error) {
+	if value == nil {
+		return goa.MissingFieldError("body", "JSON value")
+	}
+
+	return err
+}
+
+// ReviewVerificationResultRunApprovalBlockedTransport stores JSON fields until they have been validated.
+type ReviewVerificationResultRunApprovalBlockedTransport struct {
+	// Owner's safe explanation and enabling step.
+	Reason *string `json:"reason"`
+}
+
+// ValidateReviewVerificationResultRunApprovalBlockedTransport checks decoded JSON before it becomes a service value.
+func ValidateReviewVerificationResultRunApprovalBlockedTransport(value *ReviewVerificationResultRunApprovalBlockedTransport) (err error) {
+	if value == nil {
+		return goa.MissingFieldError("body", "JSON value")
+	}
+	if value.Reason == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("reason", "body"))
+	}
+	if value.Reason != nil {
+		if utf8.RuneCountInString(*value.Reason) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.reason", *value.Reason, utf8.RuneCountInString(*value.Reason), 1, true))
+		}
+	}
+	return err
+}
+
+// ReviewVerificationResultRunEvaluatorMappingUnknownTransport stores JSON fields until they have been validated.
+type ReviewVerificationResultRunEvaluatorMappingUnknownTransport struct {
+}
+
+// ValidateReviewVerificationResultRunEvaluatorMappingUnknownTransport checks decoded JSON before it becomes a service value.
+func ValidateReviewVerificationResultRunEvaluatorMappingUnknownTransport(value *ReviewVerificationResultRunEvaluatorMappingUnknownTransport) (err error) {
+	if value == nil {
+		return goa.MissingFieldError("body", "JSON value")
+	}
+
+	return err
+}
+
+// ReviewVerificationResultRunStoryMappingTransport stores JSON fields until they have been validated.
+type ReviewVerificationResultRunStoryMappingTransport struct {
+	// One test per finished flow, in declaration order.
+	RequiredTests []*ReviewVerificationResultRequiredTestTransport `json:"required_tests"`
+}
+
+// ValidateReviewVerificationResultRunStoryMappingTransport checks decoded JSON before it becomes a service value.
+func ValidateReviewVerificationResultRunStoryMappingTransport(value *ReviewVerificationResultRunStoryMappingTransport) (err error) {
+	if value == nil {
+		return goa.MissingFieldError("body", "JSON value")
+	}
+	if value.RequiredTests == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("required_tests", "body"))
+	}
+	for _, e := range value.RequiredTests {
+		if e != nil {
+			if err2 := ValidateReviewVerificationResultRequiredTestTransport(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	return err
+}
+
+// ReviewVerificationResultRunStoryNotRecordedTransport stores JSON fields until they have been validated.
+type ReviewVerificationResultRunStoryNotRecordedTransport struct {
+}
+
+// ValidateReviewVerificationResultRunStoryNotRecordedTransport checks decoded JSON before it becomes a service value.
+func ValidateReviewVerificationResultRunStoryNotRecordedTransport(value *ReviewVerificationResultRunStoryNotRecordedTransport) (err error) {
+	if value == nil {
+		return goa.MissingFieldError("body", "JSON value")
+	}
+
+	return err
+}
+
+// ReviewVerificationResultStoryActorItemTransport stores JSON fields until they have been validated.
+type ReviewVerificationResultStoryActorItemTransport struct {
+	// Story-scoped actor key.
+	Key *string `json:"key"`
+	// Human-facing actor label.
+	Title *string `json:"title"`
+	// Optional longer explanation of the actor role.
+	Description *string `json:"description,omitempty"`
+}
+
+// ValidateReviewVerificationResultStoryActorItemTransport checks decoded JSON before it becomes a service value.
+func ValidateReviewVerificationResultStoryActorItemTransport(value *ReviewVerificationResultStoryActorItemTransport) (err error) {
+	if value == nil {
+		return goa.MissingFieldError("body", "JSON value")
+	}
+	if value.Key == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("key", "body"))
+	}
+	if value.Title == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("title", "body"))
+	}
+	return err
+}
+
+// ReviewVerificationResultStoryFlowItemTransport stores JSON fields until they have been validated.
+type ReviewVerificationResultStoryFlowItemTransport struct {
+	// Story-scoped flow key.
+	Key *string `json:"key"`
+	// Human-facing flow title.
+	Title *string `json:"title"`
+	// Optional longer explanation of the flow.
+	Description *string `json:"description,omitempty"`
+	// True when the flow has a start, at least one outcome, and no open questions
+	// on the flow or any of its steps.
+	Complete *bool `json:"complete"`
+	// Starting, intermediate, and outcome steps in declaration order.
+	Steps []*ReviewVerificationResultStoryStepItemTransport `json:"steps"`
+	// Unresolved flow-level decisions in declaration order.
+	Questions []*ReviewVerificationResultStoryQuestionItemTransport `json:"questions"`
+}
+
+// ValidateReviewVerificationResultStoryFlowItemTransport checks decoded JSON before it becomes a service value.
+func ValidateReviewVerificationResultStoryFlowItemTransport(value *ReviewVerificationResultStoryFlowItemTransport) (err error) {
+	if value == nil {
+		return goa.MissingFieldError("body", "JSON value")
+	}
+	if value.Key == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("key", "body"))
+	}
+	if value.Title == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("title", "body"))
+	}
+	if value.Complete == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("complete", "body"))
+	}
+	if value.Steps == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("steps", "body"))
+	}
+	if value.Questions == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("questions", "body"))
+	}
+	for _, e := range value.Steps {
+		if e != nil {
+			if err2 := ValidateReviewVerificationResultStoryStepItemTransport(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	for _, e := range value.Questions {
+		if e != nil {
+			if err2 := ValidateReviewVerificationResultStoryQuestionItemTransport(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	return err
+}
+
+// ReviewVerificationResultStoryQuestionItemTransport stores JSON fields until they have been validated.
+type ReviewVerificationResultStoryQuestionItemTransport struct {
+	// Flow-scoped question key.
+	Key *string `json:"key"`
+	// Human-facing question text.
+	Prompt *string `json:"prompt"`
+	// Optional longer context for the question.
+	Description *string `json:"description,omitempty"`
+	// Suggested choices in declaration order.
+	Options []string `json:"options"`
+}
+
+// ValidateReviewVerificationResultStoryQuestionItemTransport checks decoded JSON before it becomes a service value.
+func ValidateReviewVerificationResultStoryQuestionItemTransport(value *ReviewVerificationResultStoryQuestionItemTransport) (err error) {
+	if value == nil {
+		return goa.MissingFieldError("body", "JSON value")
+	}
+	if value.Key == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("key", "body"))
+	}
+	if value.Prompt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("prompt", "body"))
+	}
+	if value.Options == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("options", "body"))
+	}
+	return err
+}
+
+// ReviewVerificationResultStoryStepItemTransport stores JSON fields until they have been validated.
+type ReviewVerificationResultStoryStepItemTransport struct {
+	// Flow-scoped step key.
+	Key *string `json:"key"`
+	// Story-scoped key of the actor performing or observing the step.
+	ActorKey *string `json:"actor_key"`
+	// Timeline sticky-note sentence for the step.
+	Summary *string `json:"summary"`
+	// Optional longer explanation of the step.
+	Description *string `json:"description,omitempty"`
+	// Step position in the flow: start, step, or outcome.
+	Kind *string `json:"kind"`
+	// Unresolved step-level decisions in declaration order.
+	Questions []*ReviewVerificationResultStoryQuestionItemTransport `json:"questions"`
+}
+
+// ValidateReviewVerificationResultStoryStepItemTransport checks decoded JSON before it becomes a service value.
+func ValidateReviewVerificationResultStoryStepItemTransport(value *ReviewVerificationResultStoryStepItemTransport) (err error) {
+	if value == nil {
+		return goa.MissingFieldError("body", "JSON value")
+	}
+	if value.Key == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("key", "body"))
+	}
+	if value.ActorKey == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("actor_key", "body"))
+	}
+	if value.Summary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("summary", "body"))
+	}
+	if value.Kind == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("kind", "body"))
+	}
+	if value.Questions == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("questions", "body"))
+	}
+	if value.Kind != nil {
+		if !(*value.Kind == "start" || *value.Kind == "step" || *value.Kind == "outcome") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.kind", *value.Kind, []any{"start", "step", "outcome"}))
+		}
+	}
+	for _, e := range value.Questions {
+		if e != nil {
+			if err2 := ValidateReviewVerificationResultStoryQuestionItemTransport(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	return err
+}
+
+// ReviewVerificationResultStorySummaryItemTransport stores JSON fields until they have been validated.
+type ReviewVerificationResultStorySummaryItemTransport struct {
+	// Human-facing Story title.
+	Name *string `json:"name"`
+	// Optional longer explanation of the Story.
+	Description *string `json:"description,omitempty"`
+	// Domain roles declared in the Story in declaration order.
+	Actors []*ReviewVerificationResultStoryActorItemTransport `json:"actors"`
+	// Timeline paths declared in the Story in declaration order.
+	Flows []*ReviewVerificationResultStoryFlowItemTransport `json:"flows"`
+}
+
+// ValidateReviewVerificationResultStorySummaryItemTransport checks decoded JSON before it becomes a service value.
+func ValidateReviewVerificationResultStorySummaryItemTransport(value *ReviewVerificationResultStorySummaryItemTransport) (err error) {
+	if value == nil {
+		return goa.MissingFieldError("body", "JSON value")
+	}
+	if value.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if value.Actors == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("actors", "body"))
+	}
+	if value.Flows == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("flows", "body"))
+	}
+	for _, e := range value.Actors {
+		if e != nil {
+			if err2 := ValidateReviewVerificationResultStoryActorItemTransport(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	for _, e := range value.Flows {
+		if e != nil {
+			if err2 := ValidateReviewVerificationResultStoryFlowItemTransport(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	return err
+}
+
+// ReviewVerificationResultTransport stores JSON fields until they have been validated.
+type ReviewVerificationResultTransport struct {
+	// Immutable Story evidence and the owner's current approval observation.
+	Review *ReviewVerificationResultVerificationReviewTransport `json:"review"`
+	// Verification run identifier; get_verification takes it.
+	RunID *string `json:"run_id"`
+	// Change Card the run verifies.
+	ChangeID *string `json:"change_id"`
+	// Change Card revision the run verifies.
+	RequestRevision *string `json:"request_revision"`
+	// Candidate commit the run builds and verifies.
+	CandidateCommit *string `json:"candidate_commit"`
+	// Commit of the tests the run uses: the operator's evaluator, or the tests
+	// accepted for the change's build.
+	SuiteCommit *string `json:"suite_commit"`
+	// When the run was accepted.
+	AcceptedAt *string `json:"accepted_at"`
+	// Whether this run's agreed revision and selected tests match the current
+	// Change Card and the usable build or the stored verification settings. This
+	// observation does not establish the current candidate working tree,
+	// deployment or approval.
+	InputsCurrent *bool `json:"inputs_current"`
+	// Absolute folder containing the binaries built by this completed run.
+	// Returned only to the user when promotion settings are configured, so the
+	// user can publish these exact binaries before approval. Agents never receive
+	// this private path.
+	CandidateBinariesDir *string `json:"candidate_binaries_dir,omitempty"`
+	// Where the run's tests came from, recorded when the run started: evaluator,
+	// or written_tests with their commit and a notice.
+	TestSource *ReviewVerificationResulttestSourceTransport `json:"test_source"`
+	// Exactly one of running, completed or not_completed.
+	State *ReviewVerificationResultstateTransport `json:"state"`
+}
+
+// ValidateReviewVerificationResultTransport checks decoded JSON before it becomes a service value.
+func ValidateReviewVerificationResultTransport(value *ReviewVerificationResultTransport) (err error) {
+	if value == nil {
+		return goa.MissingFieldError("body", "JSON value")
+	}
+	if value.Review == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("review", "body"))
+	}
+	if value.RunID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("run_id", "body"))
+	}
+	if value.ChangeID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("change_id", "body"))
+	}
+	if value.RequestRevision == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("request_revision", "body"))
+	}
+	if value.CandidateCommit == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("candidate_commit", "body"))
+	}
+	if value.SuiteCommit == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("suite_commit", "body"))
+	}
+	if value.AcceptedAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("accepted_at", "body"))
+	}
+	if value.InputsCurrent == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("inputs_current", "body"))
+	}
+	if value.TestSource == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("test_source", "body"))
+	}
+	if value.State == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("state", "body"))
+	}
+	if value.Review != nil {
+		if err2 := ValidateReviewVerificationResultVerificationReviewTransport(value.Review); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	if value.AcceptedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.accepted_at", *value.AcceptedAt, goa.FormatDateTime))
+	}
+	if value.CandidateBinariesDir != nil {
+		if utf8.RuneCountInString(*value.CandidateBinariesDir) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.candidate_binaries_dir", *value.CandidateBinariesDir, utf8.RuneCountInString(*value.CandidateBinariesDir), 1, true))
+		}
+	}
+	if value.TestSource != nil {
+
+		if err2 := value.TestSource.Validate(); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		} else {
+			switch string(value.TestSource.Kind()) {
+			case "written_tests":
+				actual, _ := value.TestSource.AsWrittenTests()
+				if actual != nil {
+					if err2 := ValidateReviewVerificationResultAgentWrittenTestsTransport(actual); err2 != nil {
+						err = goa.MergeErrors(err, err2)
+					}
+				}
+			}
+		}
+
+	}
+	if value.State != nil {
+
+		if err2 := value.State.Validate(); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		} else {
+			switch string(value.State.Kind()) {
+			case "running":
+				actual, _ := value.State.AsRunning()
+				if actual != nil {
+					if err2 := ValidateReviewVerificationResultVerificationRunningTransport(actual); err2 != nil {
+						err = goa.MergeErrors(err, err2)
+					}
+				}
+			case "completed":
+				actual, _ := value.State.AsCompleted()
+				if actual != nil {
+					if err2 := ValidateReviewVerificationResultVerificationCompletedTransport(actual); err2 != nil {
+						err = goa.MergeErrors(err, err2)
+					}
+				}
+			case "not_completed":
+				actual, _ := value.State.AsNotCompleted()
+				if actual != nil {
+					if err2 := ValidateReviewVerificationResultVerificationNotCompletedTransport(actual); err2 != nil {
+						err = goa.MergeErrors(err, err2)
+					}
+				}
+			}
+		}
+
+	}
+	return err
+}
+
+// ReviewVerificationResultUnverifiedApprovalItemTransport stores JSON fields until they have been validated.
+type ReviewVerificationResultUnverifiedApprovalItemTransport struct {
+	// Recorded promotion approval from the Change Card.
+	Approval *ReviewVerificationResultApprovalItemTransport `json:"approval"`
+	// Explanation of why the recorded approval could not be verified against
+	// current release binaries and how to recover.
+	Reason *string `json:"reason"`
+}
+
+// ValidateReviewVerificationResultUnverifiedApprovalItemTransport checks decoded JSON before it becomes a service value.
+func ValidateReviewVerificationResultUnverifiedApprovalItemTransport(value *ReviewVerificationResultUnverifiedApprovalItemTransport) (err error) {
+	if value == nil {
+		return goa.MissingFieldError("body", "JSON value")
+	}
+	if value.Approval == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("approval", "body"))
+	}
+	if value.Reason == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("reason", "body"))
+	}
+	if value.Approval != nil {
+		if err2 := ValidateReviewVerificationResultApprovalItemTransport(value.Approval); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	return err
+}
+
+// ReviewVerificationResultVerificationCheckTransport stores JSON fields until they have been validated.
+type ReviewVerificationResultVerificationCheckTransport struct {
+	// Check name.
+	Name *string `json:"name"`
+	// Whether the check passed.
+	Passed *bool `json:"passed"`
+	// Why the check failed; empty when it passed.
+	Diagnostic *string `json:"diagnostic,omitempty"`
+}
+
+// ValidateReviewVerificationResultVerificationCheckTransport checks decoded JSON before it becomes a service value.
+func ValidateReviewVerificationResultVerificationCheckTransport(value *ReviewVerificationResultVerificationCheckTransport) (err error) {
+	if value == nil {
+		return goa.MissingFieldError("body", "JSON value")
+	}
+	if value.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if value.Passed == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("passed", "body"))
+	}
+	return err
+}
+
+// ReviewVerificationResultVerificationCompletedTransport stores JSON fields until they have been validated.
+type ReviewVerificationResultVerificationCompletedTransport struct {
+	// Evaluator suite the report was produced by.
+	SuiteID *string `json:"suite_id"`
+	// Dependency profile the suite ran the candidate with, such as sim.
+	Environment *string `json:"environment"`
+	// The builder view of the report.
+	Report *ReviewVerificationResultBuilderVerificationReportTransport `json:"report"`
+}
+
+// ValidateReviewVerificationResultVerificationCompletedTransport checks decoded JSON before it becomes a service value.
+func ValidateReviewVerificationResultVerificationCompletedTransport(value *ReviewVerificationResultVerificationCompletedTransport) (err error) {
+	if value == nil {
+		return goa.MissingFieldError("body", "JSON value")
+	}
+	if value.SuiteID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("suite_id", "body"))
+	}
+	if value.Environment == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("environment", "body"))
+	}
+	if value.Report == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("report", "body"))
+	}
+	if value.Report != nil {
+		if err2 := ValidateReviewVerificationResultBuilderVerificationReportTransport(value.Report); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	return err
+}
+
+// ReviewVerificationResultVerificationCountsTransport stores JSON fields until they have been validated.
+type ReviewVerificationResultVerificationCountsTransport struct {
+	// Scenarios the suite declares.
+	Required *int `json:"required"`
+	// Scenarios that passed.
+	Passed *int `json:"passed"`
+	// Scenarios whose checks failed.
+	Failed *int `json:"failed"`
+	// Declared scenarios the suite did not report.
+	NotRun *int `json:"not_run"`
+	// Scenarios that could not be evaluated.
+	HarnessError *int `json:"harness_error"`
+}
+
+// ValidateReviewVerificationResultVerificationCountsTransport checks decoded JSON before it becomes a service value.
+func ValidateReviewVerificationResultVerificationCountsTransport(value *ReviewVerificationResultVerificationCountsTransport) (err error) {
+	if value == nil {
+		return goa.MissingFieldError("body", "JSON value")
+	}
+	if value.Required == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("required", "body"))
+	}
+	if value.Passed == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("passed", "body"))
+	}
+	if value.Failed == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("failed", "body"))
+	}
+	if value.NotRun == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("not_run", "body"))
+	}
+	if value.HarnessError == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("harness_error", "body"))
+	}
+	return err
+}
+
+// ReviewVerificationResultVerificationNotCompletedTransport stores JSON fields until they have been validated.
+type ReviewVerificationResultVerificationNotCompletedTransport struct {
+	// execution_failed when a step failed; interrupted when the run's process
+	// ended before it finished.
+	Kind *string `json:"kind"`
+	// Where the run stopped.
+	Stage *string `json:"stage"`
+	// Builder-safe description of what stopped the run; never command output.
+	Summary *string `json:"summary"`
+}
+
+// ValidateReviewVerificationResultVerificationNotCompletedTransport checks decoded JSON before it becomes a service value.
+func ValidateReviewVerificationResultVerificationNotCompletedTransport(value *ReviewVerificationResultVerificationNotCompletedTransport) (err error) {
+	if value == nil {
+		return goa.MissingFieldError("body", "JSON value")
+	}
+	if value.Kind == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("kind", "body"))
+	}
+	if value.Stage == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("stage", "body"))
+	}
+	if value.Summary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("summary", "body"))
+	}
+	if value.Kind != nil {
+		if !(*value.Kind == "execution_failed" || *value.Kind == "interrupted") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.kind", *value.Kind, []any{"execution_failed", "interrupted"}))
+		}
+	}
+	if value.Stage != nil {
+		if !(*value.Stage == "checkout" || *value.Stage == "build" || *value.Stage == "describe" || *value.Stage == "suite" || *value.Stage == "report" || *value.Stage == "supervise") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.stage", *value.Stage, []any{"checkout", "build", "describe", "suite", "report", "supervise"}))
+		}
+	}
+	return err
+}
+
+// ReviewVerificationResultVerificationReviewTransport stores JSON fields until they have been validated.
+type ReviewVerificationResultVerificationReviewTransport struct {
+	// The run's immutable Story context, or the explicit fact it was not recorded.
+	StoryContext *ReviewVerificationResultstoryContextTransport `json:"story_context"`
+	// The owner's current observation for this exact report, independent of
+	// inputs_current.
+	Approval *ReviewVerificationResultapprovalTransport `json:"approval"`
+}
+
+// ValidateReviewVerificationResultVerificationReviewTransport checks decoded JSON before it becomes a service value.
+func ValidateReviewVerificationResultVerificationReviewTransport(value *ReviewVerificationResultVerificationReviewTransport) (err error) {
+	if value == nil {
+		return goa.MissingFieldError("body", "JSON value")
+	}
+	if value.StoryContext == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("story_context", "body"))
+	}
+	if value.Approval == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("approval", "body"))
+	}
+	if value.StoryContext != nil {
+
+		if err2 := value.StoryContext.Validate(); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		} else {
+			switch string(value.StoryContext.Kind()) {
+			case "recorded":
+				actual, _ := value.StoryContext.AsRecorded()
+				if actual != nil {
+					if err2 := ValidateReviewVerificationResultRecordedRunStoryTransport(actual); err2 != nil {
+						err = goa.MergeErrors(err, err2)
+					}
+				}
+			}
+		}
+
+	}
+	if value.Approval != nil {
+
+		if err2 := value.Approval.Validate(); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		} else {
+			switch string(value.Approval.Kind()) {
+			case "blocked":
+				actual, _ := value.Approval.AsBlocked()
+				if actual != nil {
+					if err2 := ValidateReviewVerificationResultRunApprovalBlockedTransport(actual); err2 != nil {
+						err = goa.MergeErrors(err, err2)
+					}
+				}
+			case "recorded":
+				actual, _ := value.Approval.AsRecorded()
+				if actual != nil {
+					if err2 := ValidateReviewVerificationResultApprovalItemTransport(actual); err2 != nil {
+						err = goa.MergeErrors(err, err2)
+					}
+				}
+			case "unverified":
+				actual, _ := value.Approval.AsUnverified()
+				if actual != nil {
+					if err2 := ValidateReviewVerificationResultUnverifiedApprovalItemTransport(actual); err2 != nil {
+						err = goa.MergeErrors(err, err2)
+					}
+				}
+			}
+		}
+
+	}
+	return err
+}
+
+// ReviewVerificationResultVerificationRunningTransport stores JSON fields until they have been validated.
+type ReviewVerificationResultVerificationRunningTransport struct {
+	// When the run was accepted.
+	StartedAt *string `json:"started_at"`
+}
+
+// ValidateReviewVerificationResultVerificationRunningTransport checks decoded JSON before it becomes a service value.
+func ValidateReviewVerificationResultVerificationRunningTransport(value *ReviewVerificationResultVerificationRunningTransport) (err error) {
+	if value == nil {
+		return goa.MissingFieldError("body", "JSON value")
+	}
+	if value.StartedAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("started_at", "body"))
+	}
+	if value.StartedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.started_at", *value.StartedAt, goa.FormatDateTime))
+	}
+	return err
+}
+
+// ReviewVerificationResultVerificationScenarioTransport stores JSON fields until they have been validated.
+type ReviewVerificationResultVerificationScenarioTransport struct {
+	// Scenario name for a repair scenario, or holdout-<n> for a holdout.
+	ID *string `json:"id"`
+	// How the scenario ended.
+	Outcome *string `json:"outcome"`
+	// The repair scenario's checks; empty for holdouts.
+	Checks []*ReviewVerificationResultVerificationCheckTransport `json:"checks,omitempty"`
+	// The repair scenario's environment error; empty for holdouts.
+	Error *string `json:"error,omitempty"`
+}
+
+// ValidateReviewVerificationResultVerificationScenarioTransport checks decoded JSON before it becomes a service value.
+func ValidateReviewVerificationResultVerificationScenarioTransport(value *ReviewVerificationResultVerificationScenarioTransport) (err error) {
+	if value == nil {
+		return goa.MissingFieldError("body", "JSON value")
+	}
+	if value.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if value.Outcome == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("outcome", "body"))
+	}
+	if value.Outcome != nil {
+		if !(*value.Outcome == "passed" || *value.Outcome == "failed" || *value.Outcome == "not_run" || *value.Outcome == "harness_error") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.outcome", *value.Outcome, []any{"passed", "failed", "not_run", "harness_error"}))
+		}
+	}
+	for _, e := range value.Checks {
+		if e != nil {
+			if err2 := ValidateReviewVerificationResultVerificationCheckTransport(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
 		}
 	}
 	return err
@@ -8442,12 +9676,11 @@ type ReviseChangePayloadTransport struct {
 	RequestRevision *string `json:"request_revision"`
 	// The user's revised feature request.
 	Prompt *string `json:"prompt"`
-	// Optional op_id of a succeeded refresh_story operation for the bound
-	// workspace whose evaluated Stories this revision adopts. When set, Surla
-	// reads one workspace snapshot, requires its snapshot_digest to match the
-	// operation's, and records both the evaluated Stories and that snapshot's
-	// design/*.go on the revised card. When omitted on a card that already has
-	// Stories, the card's saved Stories and their design source are kept together.
+	// op_id of a succeeded refresh_story operation whose evaluated draft this
+	// revision adopts. When omitted, the revision keeps every snapshot field of
+	// the revision it revises: design, Stories, architecture, go.mod and made-from
+	// list, even with zero Stories. A project with a go.mod refuses an omitted
+	// op_id when that revision has no design. Surla reads no file.
 	StoryRefreshOpID *string `json:"story_refresh_op_id,omitempty"`
 	// Your analysis of the revised prompt against the current card and the
 	// target's current design.
@@ -9216,8 +10449,8 @@ func ValidateStopLiveTargetResultTransport(value *StopLiveTargetResultTransport)
 type UpdateDependenciesResultTransport struct {
 	// Operation identifier; pass it to read_check_output to read the full output.
 	OpID *string `json:"op_id"`
-	// Workspace-relative go.mod, go.sum and go.work.sum files whose bytes changed
-	// and were written.
+	// Working-folder-relative go.mod, go.sum and go.work.sum files whose bytes
+	// changed and were written.
 	FilesWritten []string `json:"files_written"`
 	// At most 16 KiB: what was updated, and Go's message for any module that could
 	// not be.
@@ -9237,6 +10470,91 @@ func ValidateUpdateDependenciesResultTransport(value *UpdateDependenciesResultTr
 	}
 	if value.Message == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	return err
+}
+
+// UpdateDraftResultDraftCorrectionTransport stores JSON fields until they have been validated.
+type UpdateDraftResultDraftCorrectionTransport struct {
+	// Path relative to the folder that folder names, such as design/types.go or
+	// go.mod.
+	Path *string `json:"path"`
+	// Which folder holds the file to correct: draft_folder is the guide's draft,
+	// at the result's draft_folder; project_folder is the user's project folder,
+	// which holds the draft.
+	Folder *string `json:"folder"`
+	// What to correct. In the draft: conflict markers where the draft and the
+	// project folder changed the same lines; a file removed on one side and
+	// changed on the other; a draft file Go cannot parse, with its line; a file
+	// whose project change Surla took without merging, or was writing when it
+	// stopped, to check that it holds the intended edits once; or a module the
+	// project's go.mod requires at another version than the draft's, or that the
+	// draft's lacks, including differing replace directives and a differing module
+	// path. In the project folder: a design file or go.mod there that cannot be
+	// parsed, with its line, or a go.mod that declares no module.
+	Problem *string `json:"problem"`
+}
+
+// ValidateUpdateDraftResultDraftCorrectionTransport checks decoded JSON before it becomes a service value.
+func ValidateUpdateDraftResultDraftCorrectionTransport(value *UpdateDraftResultDraftCorrectionTransport) (err error) {
+	if value == nil {
+		return goa.MissingFieldError("body", "JSON value")
+	}
+	if value.Path == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("path", "body"))
+	}
+	if value.Folder == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("folder", "body"))
+	}
+	if value.Problem == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("problem", "body"))
+	}
+	if value.Folder != nil {
+		if !(*value.Folder == "draft_folder" || *value.Folder == "project_folder") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.folder", *value.Folder, []any{"draft_folder", "project_folder"}))
+		}
+	}
+	return err
+}
+
+// UpdateDraftResultTransport stores JSON fields until they have been validated.
+type UpdateDraftResultTransport struct {
+	// Absolute path of the guide's draft folder.
+	DraftFolder *string `json:"draft_folder"`
+	// Design files the draft took from the project folder because it had not
+	// changed them, in path order.
+	Taken []string `json:"taken"`
+	// Design files where the project folder's change and the draft's edits merged
+	// without conflict, in path order.
+	Merged []string `json:"merged"`
+	// Files to correct before refreshing, each in the folder it names, in path
+	// order; empty when none.
+	ToCorrect []*UpdateDraftResultDraftCorrectionTransport `json:"to_correct"`
+}
+
+// ValidateUpdateDraftResultTransport checks decoded JSON before it becomes a service value.
+func ValidateUpdateDraftResultTransport(value *UpdateDraftResultTransport) (err error) {
+	if value == nil {
+		return goa.MissingFieldError("body", "JSON value")
+	}
+	if value.DraftFolder == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("draft_folder", "body"))
+	}
+	if value.Taken == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("taken", "body"))
+	}
+	if value.Merged == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("merged", "body"))
+	}
+	if value.ToCorrect == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("to_correct", "body"))
+	}
+	for _, e := range value.ToCorrect {
+		if e != nil {
+			if err2 := ValidateUpdateDraftResultDraftCorrectionTransport(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
 	}
 	return err
 }
@@ -10010,6 +11328,290 @@ func (u DeclineRevisionResultApprovalTestSourceTransport) MarshalJSON() ([]byte,
 		return nil, err
 	}
 	fields["source"] = tag
+	return json.Marshal(fields)
+}
+
+// GetBuildResultBuildPassedTestSourceTransport stores exactly one selected Goa OneOf branch.
+type GetBuildResultBuildPassedTestSourceTransport struct {
+	kind         GetBuildResultBuildPassedTestSourceTransportKind
+	Evaluator    *GetBuildResultOperatorEvaluatorTestsTransport
+	WrittenTests *GetBuildResultBuildPassedTestsTransport
+}
+
+// GetBuildResultBuildPassedTestSourceTransportKind identifies the selected branch of GetBuildResultBuildPassedTestSourceTransport.
+type GetBuildResultBuildPassedTestSourceTransportKind string
+
+const (
+	GetBuildResultBuildPassedTestSourceTransportKindEvaluator    GetBuildResultBuildPassedTestSourceTransportKind = "evaluator"
+	GetBuildResultBuildPassedTestSourceTransportKindWrittenTests GetBuildResultBuildPassedTestSourceTransportKind = "written_tests"
+)
+
+// Kind returns the selected branch.
+func (u GetBuildResultBuildPassedTestSourceTransport) Kind() GetBuildResultBuildPassedTestSourceTransportKind {
+	return u.kind
+}
+
+// NewGetBuildResultBuildPassedTestSourceTransportEvaluator creates GetBuildResultBuildPassedTestSourceTransport with its evaluator branch selected.
+func NewGetBuildResultBuildPassedTestSourceTransportEvaluator(value *GetBuildResultOperatorEvaluatorTestsTransport) GetBuildResultBuildPassedTestSourceTransport {
+	return GetBuildResultBuildPassedTestSourceTransport{kind: GetBuildResultBuildPassedTestSourceTransportKindEvaluator, Evaluator: value}
+}
+
+// AsEvaluator returns the evaluator branch when it is selected.
+func (u GetBuildResultBuildPassedTestSourceTransport) AsEvaluator() (_ *GetBuildResultOperatorEvaluatorTestsTransport, ok bool) {
+	if u.kind != GetBuildResultBuildPassedTestSourceTransportKindEvaluator {
+		return
+	}
+	return u.Evaluator, true
+}
+
+// SetEvaluator selects the evaluator branch.
+func (u *GetBuildResultBuildPassedTestSourceTransport) SetEvaluator(value *GetBuildResultOperatorEvaluatorTestsTransport) {
+	u.kind = GetBuildResultBuildPassedTestSourceTransportKindEvaluator
+	u.Evaluator = value
+}
+
+// NewGetBuildResultBuildPassedTestSourceTransportWrittenTests creates GetBuildResultBuildPassedTestSourceTransport with its written_tests branch selected.
+func NewGetBuildResultBuildPassedTestSourceTransportWrittenTests(value *GetBuildResultBuildPassedTestsTransport) GetBuildResultBuildPassedTestSourceTransport {
+	return GetBuildResultBuildPassedTestSourceTransport{kind: GetBuildResultBuildPassedTestSourceTransportKindWrittenTests, WrittenTests: value}
+}
+
+// AsWrittenTests returns the written_tests branch when it is selected.
+func (u GetBuildResultBuildPassedTestSourceTransport) AsWrittenTests() (_ *GetBuildResultBuildPassedTestsTransport, ok bool) {
+	if u.kind != GetBuildResultBuildPassedTestSourceTransportKindWrittenTests {
+		return
+	}
+	return u.WrittenTests, true
+}
+
+// SetWrittenTests selects the written_tests branch.
+func (u *GetBuildResultBuildPassedTestSourceTransport) SetWrittenTests(value *GetBuildResultBuildPassedTestsTransport) {
+	u.kind = GetBuildResultBuildPassedTestSourceTransportKindWrittenTests
+	u.WrittenTests = value
+}
+
+// Validate checks that one complete branch is selected.
+func (u GetBuildResultBuildPassedTestSourceTransport) Validate() error {
+	switch u.kind {
+	case GetBuildResultBuildPassedTestSourceTransportKindEvaluator:
+		if u.Evaluator == nil {
+			return goa.MissingFieldError("value", "GetBuildResultBuildPassedTestSourceTransport")
+		}
+		return nil
+	case GetBuildResultBuildPassedTestSourceTransportKindWrittenTests:
+		if u.WrittenTests == nil {
+			return goa.MissingFieldError("value", "GetBuildResultBuildPassedTestSourceTransport")
+		}
+		return nil
+	case "":
+		return goa.MissingFieldError("source", "GetBuildResultBuildPassedTestSourceTransport")
+	default:
+		return goa.InvalidEnumValueError("source", u.kind, []any{string(GetBuildResultBuildPassedTestSourceTransportKindEvaluator), string(GetBuildResultBuildPassedTestSourceTransportKindWrittenTests)})
+	}
+}
+
+// MarshalJSON writes the selected branch name and value.
+func (u GetBuildResultBuildPassedTestSourceTransport) MarshalJSON() ([]byte, error) {
+	if err := u.Validate(); err != nil {
+		return nil, err
+	}
+	var value any
+	switch u.kind {
+	case GetBuildResultBuildPassedTestSourceTransportKindEvaluator:
+		value = u.Evaluator
+	case GetBuildResultBuildPassedTestSourceTransportKindWrittenTests:
+		value = u.WrittenTests
+	default:
+		return nil, fmt.Errorf("unexpected GetBuildResultBuildPassedTestSourceTransport branch %q", u.kind)
+	}
+	data, err := json.Marshal(value)
+	if err != nil {
+		return nil, err
+	}
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(data, &fields); err != nil {
+		return nil, err
+	}
+	if fields == nil {
+		return nil, goa.InvalidFieldTypeError("source", nil, "non-null JSON object")
+	}
+	if _, exists := fields["source"]; exists {
+		return nil, fmt.Errorf("GetBuildResultBuildPassedTestSourceTransport branch already contains discriminator %q", "source")
+	}
+	tag, err := json.Marshal(string(u.kind))
+	if err != nil {
+		return nil, err
+	}
+	fields["source"] = tag
+	return json.Marshal(fields)
+}
+
+// GetBuildResultBuildTakingTransport stores exactly one selected Goa OneOf branch.
+type GetBuildResultBuildTakingTransport struct {
+	kind     GetBuildResultBuildTakingTransportKind
+	Building *GetBuildResultBuildBuildingTransport
+	Passed   *GetBuildResultBuildPassedTransport
+	Merged   *GetBuildResultBuildMergedTransport
+	Dropped  *GetBuildResultBuildDroppedTransport
+}
+
+// GetBuildResultBuildTakingTransportKind identifies the selected branch of GetBuildResultBuildTakingTransport.
+type GetBuildResultBuildTakingTransportKind string
+
+const (
+	GetBuildResultBuildTakingTransportKindBuilding GetBuildResultBuildTakingTransportKind = "building"
+	GetBuildResultBuildTakingTransportKindPassed   GetBuildResultBuildTakingTransportKind = "passed"
+	GetBuildResultBuildTakingTransportKindMerged   GetBuildResultBuildTakingTransportKind = "merged"
+	GetBuildResultBuildTakingTransportKindDropped  GetBuildResultBuildTakingTransportKind = "dropped"
+)
+
+// Kind returns the selected branch.
+func (u GetBuildResultBuildTakingTransport) Kind() GetBuildResultBuildTakingTransportKind {
+	return u.kind
+}
+
+// NewGetBuildResultBuildTakingTransportBuilding creates GetBuildResultBuildTakingTransport with its building branch selected.
+func NewGetBuildResultBuildTakingTransportBuilding(value *GetBuildResultBuildBuildingTransport) GetBuildResultBuildTakingTransport {
+	return GetBuildResultBuildTakingTransport{kind: GetBuildResultBuildTakingTransportKindBuilding, Building: value}
+}
+
+// AsBuilding returns the building branch when it is selected.
+func (u GetBuildResultBuildTakingTransport) AsBuilding() (_ *GetBuildResultBuildBuildingTransport, ok bool) {
+	if u.kind != GetBuildResultBuildTakingTransportKindBuilding {
+		return
+	}
+	return u.Building, true
+}
+
+// SetBuilding selects the building branch.
+func (u *GetBuildResultBuildTakingTransport) SetBuilding(value *GetBuildResultBuildBuildingTransport) {
+	u.kind = GetBuildResultBuildTakingTransportKindBuilding
+	u.Building = value
+}
+
+// NewGetBuildResultBuildTakingTransportPassed creates GetBuildResultBuildTakingTransport with its passed branch selected.
+func NewGetBuildResultBuildTakingTransportPassed(value *GetBuildResultBuildPassedTransport) GetBuildResultBuildTakingTransport {
+	return GetBuildResultBuildTakingTransport{kind: GetBuildResultBuildTakingTransportKindPassed, Passed: value}
+}
+
+// AsPassed returns the passed branch when it is selected.
+func (u GetBuildResultBuildTakingTransport) AsPassed() (_ *GetBuildResultBuildPassedTransport, ok bool) {
+	if u.kind != GetBuildResultBuildTakingTransportKindPassed {
+		return
+	}
+	return u.Passed, true
+}
+
+// SetPassed selects the passed branch.
+func (u *GetBuildResultBuildTakingTransport) SetPassed(value *GetBuildResultBuildPassedTransport) {
+	u.kind = GetBuildResultBuildTakingTransportKindPassed
+	u.Passed = value
+}
+
+// NewGetBuildResultBuildTakingTransportMerged creates GetBuildResultBuildTakingTransport with its merged branch selected.
+func NewGetBuildResultBuildTakingTransportMerged(value *GetBuildResultBuildMergedTransport) GetBuildResultBuildTakingTransport {
+	return GetBuildResultBuildTakingTransport{kind: GetBuildResultBuildTakingTransportKindMerged, Merged: value}
+}
+
+// AsMerged returns the merged branch when it is selected.
+func (u GetBuildResultBuildTakingTransport) AsMerged() (_ *GetBuildResultBuildMergedTransport, ok bool) {
+	if u.kind != GetBuildResultBuildTakingTransportKindMerged {
+		return
+	}
+	return u.Merged, true
+}
+
+// SetMerged selects the merged branch.
+func (u *GetBuildResultBuildTakingTransport) SetMerged(value *GetBuildResultBuildMergedTransport) {
+	u.kind = GetBuildResultBuildTakingTransportKindMerged
+	u.Merged = value
+}
+
+// NewGetBuildResultBuildTakingTransportDropped creates GetBuildResultBuildTakingTransport with its dropped branch selected.
+func NewGetBuildResultBuildTakingTransportDropped(value *GetBuildResultBuildDroppedTransport) GetBuildResultBuildTakingTransport {
+	return GetBuildResultBuildTakingTransport{kind: GetBuildResultBuildTakingTransportKindDropped, Dropped: value}
+}
+
+// AsDropped returns the dropped branch when it is selected.
+func (u GetBuildResultBuildTakingTransport) AsDropped() (_ *GetBuildResultBuildDroppedTransport, ok bool) {
+	if u.kind != GetBuildResultBuildTakingTransportKindDropped {
+		return
+	}
+	return u.Dropped, true
+}
+
+// SetDropped selects the dropped branch.
+func (u *GetBuildResultBuildTakingTransport) SetDropped(value *GetBuildResultBuildDroppedTransport) {
+	u.kind = GetBuildResultBuildTakingTransportKindDropped
+	u.Dropped = value
+}
+
+// Validate checks that one complete branch is selected.
+func (u GetBuildResultBuildTakingTransport) Validate() error {
+	switch u.kind {
+	case GetBuildResultBuildTakingTransportKindBuilding:
+		if u.Building == nil {
+			return goa.MissingFieldError("value", "GetBuildResultBuildTakingTransport")
+		}
+		return nil
+	case GetBuildResultBuildTakingTransportKindPassed:
+		if u.Passed == nil {
+			return goa.MissingFieldError("value", "GetBuildResultBuildTakingTransport")
+		}
+		return nil
+	case GetBuildResultBuildTakingTransportKindMerged:
+		if u.Merged == nil {
+			return goa.MissingFieldError("value", "GetBuildResultBuildTakingTransport")
+		}
+		return nil
+	case GetBuildResultBuildTakingTransportKindDropped:
+		if u.Dropped == nil {
+			return goa.MissingFieldError("value", "GetBuildResultBuildTakingTransport")
+		}
+		return nil
+	case "":
+		return goa.MissingFieldError("state", "GetBuildResultBuildTakingTransport")
+	default:
+		return goa.InvalidEnumValueError("state", u.kind, []any{string(GetBuildResultBuildTakingTransportKindBuilding), string(GetBuildResultBuildTakingTransportKindPassed), string(GetBuildResultBuildTakingTransportKindMerged), string(GetBuildResultBuildTakingTransportKindDropped)})
+	}
+}
+
+// MarshalJSON writes the selected branch name and value.
+func (u GetBuildResultBuildTakingTransport) MarshalJSON() ([]byte, error) {
+	if err := u.Validate(); err != nil {
+		return nil, err
+	}
+	var value any
+	switch u.kind {
+	case GetBuildResultBuildTakingTransportKindBuilding:
+		value = u.Building
+	case GetBuildResultBuildTakingTransportKindPassed:
+		value = u.Passed
+	case GetBuildResultBuildTakingTransportKindMerged:
+		value = u.Merged
+	case GetBuildResultBuildTakingTransportKindDropped:
+		value = u.Dropped
+	default:
+		return nil, fmt.Errorf("unexpected GetBuildResultBuildTakingTransport branch %q", u.kind)
+	}
+	data, err := json.Marshal(value)
+	if err != nil {
+		return nil, err
+	}
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(data, &fields); err != nil {
+		return nil, err
+	}
+	if fields == nil {
+		return nil, goa.InvalidFieldTypeError("state", nil, "non-null JSON object")
+	}
+	if _, exists := fields["state"]; exists {
+		return nil, fmt.Errorf("GetBuildResultBuildTakingTransport branch already contains discriminator %q", "state")
+	}
+	tag, err := json.Marshal(string(u.kind))
+	if err != nil {
+		return nil, err
+	}
+	fields["state"] = tag
 	return json.Marshal(fields)
 }
 
@@ -12221,6 +13823,758 @@ func (u ReportTestsFinishedResulttestsTransport) MarshalJSON() ([]byte, error) {
 	return json.Marshal(fields)
 }
 
+// ReviewVerificationResultApprovalTestSourceTransport stores exactly one selected Goa OneOf branch.
+type ReviewVerificationResultApprovalTestSourceTransport struct {
+	kind         ReviewVerificationResultApprovalTestSourceTransportKind
+	Evaluator    *ReviewVerificationResultOperatorEvaluatorTestsTransport
+	WrittenTests *ReviewVerificationResultAgentWrittenTestsTransport
+}
+
+// ReviewVerificationResultApprovalTestSourceTransportKind identifies the selected branch of ReviewVerificationResultApprovalTestSourceTransport.
+type ReviewVerificationResultApprovalTestSourceTransportKind string
+
+const (
+	ReviewVerificationResultApprovalTestSourceTransportKindEvaluator    ReviewVerificationResultApprovalTestSourceTransportKind = "evaluator"
+	ReviewVerificationResultApprovalTestSourceTransportKindWrittenTests ReviewVerificationResultApprovalTestSourceTransportKind = "written_tests"
+)
+
+// Kind returns the selected branch.
+func (u ReviewVerificationResultApprovalTestSourceTransport) Kind() ReviewVerificationResultApprovalTestSourceTransportKind {
+	return u.kind
+}
+
+// NewReviewVerificationResultApprovalTestSourceTransportEvaluator creates ReviewVerificationResultApprovalTestSourceTransport with its evaluator branch selected.
+func NewReviewVerificationResultApprovalTestSourceTransportEvaluator(value *ReviewVerificationResultOperatorEvaluatorTestsTransport) ReviewVerificationResultApprovalTestSourceTransport {
+	return ReviewVerificationResultApprovalTestSourceTransport{kind: ReviewVerificationResultApprovalTestSourceTransportKindEvaluator, Evaluator: value}
+}
+
+// AsEvaluator returns the evaluator branch when it is selected.
+func (u ReviewVerificationResultApprovalTestSourceTransport) AsEvaluator() (_ *ReviewVerificationResultOperatorEvaluatorTestsTransport, ok bool) {
+	if u.kind != ReviewVerificationResultApprovalTestSourceTransportKindEvaluator {
+		return
+	}
+	return u.Evaluator, true
+}
+
+// SetEvaluator selects the evaluator branch.
+func (u *ReviewVerificationResultApprovalTestSourceTransport) SetEvaluator(value *ReviewVerificationResultOperatorEvaluatorTestsTransport) {
+	u.kind = ReviewVerificationResultApprovalTestSourceTransportKindEvaluator
+	u.Evaluator = value
+}
+
+// NewReviewVerificationResultApprovalTestSourceTransportWrittenTests creates ReviewVerificationResultApprovalTestSourceTransport with its written_tests branch selected.
+func NewReviewVerificationResultApprovalTestSourceTransportWrittenTests(value *ReviewVerificationResultAgentWrittenTestsTransport) ReviewVerificationResultApprovalTestSourceTransport {
+	return ReviewVerificationResultApprovalTestSourceTransport{kind: ReviewVerificationResultApprovalTestSourceTransportKindWrittenTests, WrittenTests: value}
+}
+
+// AsWrittenTests returns the written_tests branch when it is selected.
+func (u ReviewVerificationResultApprovalTestSourceTransport) AsWrittenTests() (_ *ReviewVerificationResultAgentWrittenTestsTransport, ok bool) {
+	if u.kind != ReviewVerificationResultApprovalTestSourceTransportKindWrittenTests {
+		return
+	}
+	return u.WrittenTests, true
+}
+
+// SetWrittenTests selects the written_tests branch.
+func (u *ReviewVerificationResultApprovalTestSourceTransport) SetWrittenTests(value *ReviewVerificationResultAgentWrittenTestsTransport) {
+	u.kind = ReviewVerificationResultApprovalTestSourceTransportKindWrittenTests
+	u.WrittenTests = value
+}
+
+// Validate checks that one complete branch is selected.
+func (u ReviewVerificationResultApprovalTestSourceTransport) Validate() error {
+	switch u.kind {
+	case ReviewVerificationResultApprovalTestSourceTransportKindEvaluator:
+		if u.Evaluator == nil {
+			return goa.MissingFieldError("value", "ReviewVerificationResultApprovalTestSourceTransport")
+		}
+		return nil
+	case ReviewVerificationResultApprovalTestSourceTransportKindWrittenTests:
+		if u.WrittenTests == nil {
+			return goa.MissingFieldError("value", "ReviewVerificationResultApprovalTestSourceTransport")
+		}
+		return nil
+	case "":
+		return goa.MissingFieldError("source", "ReviewVerificationResultApprovalTestSourceTransport")
+	default:
+		return goa.InvalidEnumValueError("source", u.kind, []any{string(ReviewVerificationResultApprovalTestSourceTransportKindEvaluator), string(ReviewVerificationResultApprovalTestSourceTransportKindWrittenTests)})
+	}
+}
+
+// MarshalJSON writes the selected branch name and value.
+func (u ReviewVerificationResultApprovalTestSourceTransport) MarshalJSON() ([]byte, error) {
+	if err := u.Validate(); err != nil {
+		return nil, err
+	}
+	var value any
+	switch u.kind {
+	case ReviewVerificationResultApprovalTestSourceTransportKindEvaluator:
+		value = u.Evaluator
+	case ReviewVerificationResultApprovalTestSourceTransportKindWrittenTests:
+		value = u.WrittenTests
+	default:
+		return nil, fmt.Errorf("unexpected ReviewVerificationResultApprovalTestSourceTransport branch %q", u.kind)
+	}
+	data, err := json.Marshal(value)
+	if err != nil {
+		return nil, err
+	}
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(data, &fields); err != nil {
+		return nil, err
+	}
+	if fields == nil {
+		return nil, goa.InvalidFieldTypeError("source", nil, "non-null JSON object")
+	}
+	if _, exists := fields["source"]; exists {
+		return nil, fmt.Errorf("ReviewVerificationResultApprovalTestSourceTransport branch already contains discriminator %q", "source")
+	}
+	tag, err := json.Marshal(string(u.kind))
+	if err != nil {
+		return nil, err
+	}
+	fields["source"] = tag
+	return json.Marshal(fields)
+}
+
+// ReviewVerificationResultapprovalTransport stores exactly one selected Goa OneOf branch.
+type ReviewVerificationResultapprovalTransport struct {
+	kind       ReviewVerificationResultapprovalTransportKind
+	Available  *ReviewVerificationResultRunApprovalAvailableTransport
+	Blocked    *ReviewVerificationResultRunApprovalBlockedTransport
+	Recorded   *ReviewVerificationResultApprovalItemTransport
+	Unverified *ReviewVerificationResultUnverifiedApprovalItemTransport
+}
+
+// ReviewVerificationResultapprovalTransportKind identifies the selected branch of ReviewVerificationResultapprovalTransport.
+type ReviewVerificationResultapprovalTransportKind string
+
+const (
+	ReviewVerificationResultapprovalTransportKindAvailable  ReviewVerificationResultapprovalTransportKind = "available"
+	ReviewVerificationResultapprovalTransportKindBlocked    ReviewVerificationResultapprovalTransportKind = "blocked"
+	ReviewVerificationResultapprovalTransportKindRecorded   ReviewVerificationResultapprovalTransportKind = "recorded"
+	ReviewVerificationResultapprovalTransportKindUnverified ReviewVerificationResultapprovalTransportKind = "unverified"
+)
+
+// Kind returns the selected branch.
+func (u ReviewVerificationResultapprovalTransport) Kind() ReviewVerificationResultapprovalTransportKind {
+	return u.kind
+}
+
+// NewReviewVerificationResultapprovalTransportAvailable creates ReviewVerificationResultapprovalTransport with its available branch selected.
+func NewReviewVerificationResultapprovalTransportAvailable(value *ReviewVerificationResultRunApprovalAvailableTransport) ReviewVerificationResultapprovalTransport {
+	return ReviewVerificationResultapprovalTransport{kind: ReviewVerificationResultapprovalTransportKindAvailable, Available: value}
+}
+
+// AsAvailable returns the available branch when it is selected.
+func (u ReviewVerificationResultapprovalTransport) AsAvailable() (_ *ReviewVerificationResultRunApprovalAvailableTransport, ok bool) {
+	if u.kind != ReviewVerificationResultapprovalTransportKindAvailable {
+		return
+	}
+	return u.Available, true
+}
+
+// SetAvailable selects the available branch.
+func (u *ReviewVerificationResultapprovalTransport) SetAvailable(value *ReviewVerificationResultRunApprovalAvailableTransport) {
+	u.kind = ReviewVerificationResultapprovalTransportKindAvailable
+	u.Available = value
+}
+
+// NewReviewVerificationResultapprovalTransportBlocked creates ReviewVerificationResultapprovalTransport with its blocked branch selected.
+func NewReviewVerificationResultapprovalTransportBlocked(value *ReviewVerificationResultRunApprovalBlockedTransport) ReviewVerificationResultapprovalTransport {
+	return ReviewVerificationResultapprovalTransport{kind: ReviewVerificationResultapprovalTransportKindBlocked, Blocked: value}
+}
+
+// AsBlocked returns the blocked branch when it is selected.
+func (u ReviewVerificationResultapprovalTransport) AsBlocked() (_ *ReviewVerificationResultRunApprovalBlockedTransport, ok bool) {
+	if u.kind != ReviewVerificationResultapprovalTransportKindBlocked {
+		return
+	}
+	return u.Blocked, true
+}
+
+// SetBlocked selects the blocked branch.
+func (u *ReviewVerificationResultapprovalTransport) SetBlocked(value *ReviewVerificationResultRunApprovalBlockedTransport) {
+	u.kind = ReviewVerificationResultapprovalTransportKindBlocked
+	u.Blocked = value
+}
+
+// NewReviewVerificationResultapprovalTransportRecorded creates ReviewVerificationResultapprovalTransport with its recorded branch selected.
+func NewReviewVerificationResultapprovalTransportRecorded(value *ReviewVerificationResultApprovalItemTransport) ReviewVerificationResultapprovalTransport {
+	return ReviewVerificationResultapprovalTransport{kind: ReviewVerificationResultapprovalTransportKindRecorded, Recorded: value}
+}
+
+// AsRecorded returns the recorded branch when it is selected.
+func (u ReviewVerificationResultapprovalTransport) AsRecorded() (_ *ReviewVerificationResultApprovalItemTransport, ok bool) {
+	if u.kind != ReviewVerificationResultapprovalTransportKindRecorded {
+		return
+	}
+	return u.Recorded, true
+}
+
+// SetRecorded selects the recorded branch.
+func (u *ReviewVerificationResultapprovalTransport) SetRecorded(value *ReviewVerificationResultApprovalItemTransport) {
+	u.kind = ReviewVerificationResultapprovalTransportKindRecorded
+	u.Recorded = value
+}
+
+// NewReviewVerificationResultapprovalTransportUnverified creates ReviewVerificationResultapprovalTransport with its unverified branch selected.
+func NewReviewVerificationResultapprovalTransportUnverified(value *ReviewVerificationResultUnverifiedApprovalItemTransport) ReviewVerificationResultapprovalTransport {
+	return ReviewVerificationResultapprovalTransport{kind: ReviewVerificationResultapprovalTransportKindUnverified, Unverified: value}
+}
+
+// AsUnverified returns the unverified branch when it is selected.
+func (u ReviewVerificationResultapprovalTransport) AsUnverified() (_ *ReviewVerificationResultUnverifiedApprovalItemTransport, ok bool) {
+	if u.kind != ReviewVerificationResultapprovalTransportKindUnverified {
+		return
+	}
+	return u.Unverified, true
+}
+
+// SetUnverified selects the unverified branch.
+func (u *ReviewVerificationResultapprovalTransport) SetUnverified(value *ReviewVerificationResultUnverifiedApprovalItemTransport) {
+	u.kind = ReviewVerificationResultapprovalTransportKindUnverified
+	u.Unverified = value
+}
+
+// Validate checks that one complete branch is selected.
+func (u ReviewVerificationResultapprovalTransport) Validate() error {
+	switch u.kind {
+	case ReviewVerificationResultapprovalTransportKindAvailable:
+		if u.Available == nil {
+			return goa.MissingFieldError("value", "ReviewVerificationResultapprovalTransport")
+		}
+		return nil
+	case ReviewVerificationResultapprovalTransportKindBlocked:
+		if u.Blocked == nil {
+			return goa.MissingFieldError("value", "ReviewVerificationResultapprovalTransport")
+		}
+		return nil
+	case ReviewVerificationResultapprovalTransportKindRecorded:
+		if u.Recorded == nil {
+			return goa.MissingFieldError("value", "ReviewVerificationResultapprovalTransport")
+		}
+		return nil
+	case ReviewVerificationResultapprovalTransportKindUnverified:
+		if u.Unverified == nil {
+			return goa.MissingFieldError("value", "ReviewVerificationResultapprovalTransport")
+		}
+		return nil
+	case "":
+		return goa.MissingFieldError("state", "ReviewVerificationResultapprovalTransport")
+	default:
+		return goa.InvalidEnumValueError("state", u.kind, []any{string(ReviewVerificationResultapprovalTransportKindAvailable), string(ReviewVerificationResultapprovalTransportKindBlocked), string(ReviewVerificationResultapprovalTransportKindRecorded), string(ReviewVerificationResultapprovalTransportKindUnverified)})
+	}
+}
+
+// MarshalJSON writes the selected branch name and value.
+func (u ReviewVerificationResultapprovalTransport) MarshalJSON() ([]byte, error) {
+	if err := u.Validate(); err != nil {
+		return nil, err
+	}
+	var value any
+	switch u.kind {
+	case ReviewVerificationResultapprovalTransportKindAvailable:
+		value = u.Available
+	case ReviewVerificationResultapprovalTransportKindBlocked:
+		value = u.Blocked
+	case ReviewVerificationResultapprovalTransportKindRecorded:
+		value = u.Recorded
+	case ReviewVerificationResultapprovalTransportKindUnverified:
+		value = u.Unverified
+	default:
+		return nil, fmt.Errorf("unexpected ReviewVerificationResultapprovalTransport branch %q", u.kind)
+	}
+	data, err := json.Marshal(value)
+	if err != nil {
+		return nil, err
+	}
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(data, &fields); err != nil {
+		return nil, err
+	}
+	if fields == nil {
+		return nil, goa.InvalidFieldTypeError("state", nil, "non-null JSON object")
+	}
+	if _, exists := fields["state"]; exists {
+		return nil, fmt.Errorf("ReviewVerificationResultapprovalTransport branch already contains discriminator %q", "state")
+	}
+	tag, err := json.Marshal(string(u.kind))
+	if err != nil {
+		return nil, err
+	}
+	fields["state"] = tag
+	return json.Marshal(fields)
+}
+
+// ReviewVerificationResultmappingTransport stores exactly one selected Goa OneOf branch.
+type ReviewVerificationResultmappingTransport struct {
+	kind                    ReviewVerificationResultmappingTransportKind
+	Mapped                  *ReviewVerificationResultRunStoryMappingTransport
+	NotRecordedForEvaluator *ReviewVerificationResultRunEvaluatorMappingUnknownTransport
+}
+
+// ReviewVerificationResultmappingTransportKind identifies the selected branch of ReviewVerificationResultmappingTransport.
+type ReviewVerificationResultmappingTransportKind string
+
+const (
+	ReviewVerificationResultmappingTransportKindMapped                  ReviewVerificationResultmappingTransportKind = "mapped"
+	ReviewVerificationResultmappingTransportKindNotRecordedForEvaluator ReviewVerificationResultmappingTransportKind = "not_recorded_for_evaluator"
+)
+
+// Kind returns the selected branch.
+func (u ReviewVerificationResultmappingTransport) Kind() ReviewVerificationResultmappingTransportKind {
+	return u.kind
+}
+
+// NewReviewVerificationResultmappingTransportMapped creates ReviewVerificationResultmappingTransport with its mapped branch selected.
+func NewReviewVerificationResultmappingTransportMapped(value *ReviewVerificationResultRunStoryMappingTransport) ReviewVerificationResultmappingTransport {
+	return ReviewVerificationResultmappingTransport{kind: ReviewVerificationResultmappingTransportKindMapped, Mapped: value}
+}
+
+// AsMapped returns the mapped branch when it is selected.
+func (u ReviewVerificationResultmappingTransport) AsMapped() (_ *ReviewVerificationResultRunStoryMappingTransport, ok bool) {
+	if u.kind != ReviewVerificationResultmappingTransportKindMapped {
+		return
+	}
+	return u.Mapped, true
+}
+
+// SetMapped selects the mapped branch.
+func (u *ReviewVerificationResultmappingTransport) SetMapped(value *ReviewVerificationResultRunStoryMappingTransport) {
+	u.kind = ReviewVerificationResultmappingTransportKindMapped
+	u.Mapped = value
+}
+
+// NewReviewVerificationResultmappingTransportNotRecordedForEvaluator creates ReviewVerificationResultmappingTransport with its not_recorded_for_evaluator branch selected.
+func NewReviewVerificationResultmappingTransportNotRecordedForEvaluator(value *ReviewVerificationResultRunEvaluatorMappingUnknownTransport) ReviewVerificationResultmappingTransport {
+	return ReviewVerificationResultmappingTransport{kind: ReviewVerificationResultmappingTransportKindNotRecordedForEvaluator, NotRecordedForEvaluator: value}
+}
+
+// AsNotRecordedForEvaluator returns the not_recorded_for_evaluator branch when it is selected.
+func (u ReviewVerificationResultmappingTransport) AsNotRecordedForEvaluator() (_ *ReviewVerificationResultRunEvaluatorMappingUnknownTransport, ok bool) {
+	if u.kind != ReviewVerificationResultmappingTransportKindNotRecordedForEvaluator {
+		return
+	}
+	return u.NotRecordedForEvaluator, true
+}
+
+// SetNotRecordedForEvaluator selects the not_recorded_for_evaluator branch.
+func (u *ReviewVerificationResultmappingTransport) SetNotRecordedForEvaluator(value *ReviewVerificationResultRunEvaluatorMappingUnknownTransport) {
+	u.kind = ReviewVerificationResultmappingTransportKindNotRecordedForEvaluator
+	u.NotRecordedForEvaluator = value
+}
+
+// Validate checks that one complete branch is selected.
+func (u ReviewVerificationResultmappingTransport) Validate() error {
+	switch u.kind {
+	case ReviewVerificationResultmappingTransportKindMapped:
+		if u.Mapped == nil {
+			return goa.MissingFieldError("value", "ReviewVerificationResultmappingTransport")
+		}
+		return nil
+	case ReviewVerificationResultmappingTransportKindNotRecordedForEvaluator:
+		if u.NotRecordedForEvaluator == nil {
+			return goa.MissingFieldError("value", "ReviewVerificationResultmappingTransport")
+		}
+		return nil
+	case "":
+		return goa.MissingFieldError("state", "ReviewVerificationResultmappingTransport")
+	default:
+		return goa.InvalidEnumValueError("state", u.kind, []any{string(ReviewVerificationResultmappingTransportKindMapped), string(ReviewVerificationResultmappingTransportKindNotRecordedForEvaluator)})
+	}
+}
+
+// MarshalJSON writes the selected branch name and value.
+func (u ReviewVerificationResultmappingTransport) MarshalJSON() ([]byte, error) {
+	if err := u.Validate(); err != nil {
+		return nil, err
+	}
+	var value any
+	switch u.kind {
+	case ReviewVerificationResultmappingTransportKindMapped:
+		value = u.Mapped
+	case ReviewVerificationResultmappingTransportKindNotRecordedForEvaluator:
+		value = u.NotRecordedForEvaluator
+	default:
+		return nil, fmt.Errorf("unexpected ReviewVerificationResultmappingTransport branch %q", u.kind)
+	}
+	data, err := json.Marshal(value)
+	if err != nil {
+		return nil, err
+	}
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(data, &fields); err != nil {
+		return nil, err
+	}
+	if fields == nil {
+		return nil, goa.InvalidFieldTypeError("state", nil, "non-null JSON object")
+	}
+	if _, exists := fields["state"]; exists {
+		return nil, fmt.Errorf("ReviewVerificationResultmappingTransport branch already contains discriminator %q", "state")
+	}
+	tag, err := json.Marshal(string(u.kind))
+	if err != nil {
+		return nil, err
+	}
+	fields["state"] = tag
+	return json.Marshal(fields)
+}
+
+// ReviewVerificationResultstateTransport stores exactly one selected Goa OneOf branch.
+type ReviewVerificationResultstateTransport struct {
+	kind         ReviewVerificationResultstateTransportKind
+	Running      *ReviewVerificationResultVerificationRunningTransport
+	Completed    *ReviewVerificationResultVerificationCompletedTransport
+	NotCompleted *ReviewVerificationResultVerificationNotCompletedTransport
+}
+
+// ReviewVerificationResultstateTransportKind identifies the selected branch of ReviewVerificationResultstateTransport.
+type ReviewVerificationResultstateTransportKind string
+
+const (
+	ReviewVerificationResultstateTransportKindRunning      ReviewVerificationResultstateTransportKind = "running"
+	ReviewVerificationResultstateTransportKindCompleted    ReviewVerificationResultstateTransportKind = "completed"
+	ReviewVerificationResultstateTransportKindNotCompleted ReviewVerificationResultstateTransportKind = "not_completed"
+)
+
+// Kind returns the selected branch.
+func (u ReviewVerificationResultstateTransport) Kind() ReviewVerificationResultstateTransportKind {
+	return u.kind
+}
+
+// NewReviewVerificationResultstateTransportRunning creates ReviewVerificationResultstateTransport with its running branch selected.
+func NewReviewVerificationResultstateTransportRunning(value *ReviewVerificationResultVerificationRunningTransport) ReviewVerificationResultstateTransport {
+	return ReviewVerificationResultstateTransport{kind: ReviewVerificationResultstateTransportKindRunning, Running: value}
+}
+
+// AsRunning returns the running branch when it is selected.
+func (u ReviewVerificationResultstateTransport) AsRunning() (_ *ReviewVerificationResultVerificationRunningTransport, ok bool) {
+	if u.kind != ReviewVerificationResultstateTransportKindRunning {
+		return
+	}
+	return u.Running, true
+}
+
+// SetRunning selects the running branch.
+func (u *ReviewVerificationResultstateTransport) SetRunning(value *ReviewVerificationResultVerificationRunningTransport) {
+	u.kind = ReviewVerificationResultstateTransportKindRunning
+	u.Running = value
+}
+
+// NewReviewVerificationResultstateTransportCompleted creates ReviewVerificationResultstateTransport with its completed branch selected.
+func NewReviewVerificationResultstateTransportCompleted(value *ReviewVerificationResultVerificationCompletedTransport) ReviewVerificationResultstateTransport {
+	return ReviewVerificationResultstateTransport{kind: ReviewVerificationResultstateTransportKindCompleted, Completed: value}
+}
+
+// AsCompleted returns the completed branch when it is selected.
+func (u ReviewVerificationResultstateTransport) AsCompleted() (_ *ReviewVerificationResultVerificationCompletedTransport, ok bool) {
+	if u.kind != ReviewVerificationResultstateTransportKindCompleted {
+		return
+	}
+	return u.Completed, true
+}
+
+// SetCompleted selects the completed branch.
+func (u *ReviewVerificationResultstateTransport) SetCompleted(value *ReviewVerificationResultVerificationCompletedTransport) {
+	u.kind = ReviewVerificationResultstateTransportKindCompleted
+	u.Completed = value
+}
+
+// NewReviewVerificationResultstateTransportNotCompleted creates ReviewVerificationResultstateTransport with its not_completed branch selected.
+func NewReviewVerificationResultstateTransportNotCompleted(value *ReviewVerificationResultVerificationNotCompletedTransport) ReviewVerificationResultstateTransport {
+	return ReviewVerificationResultstateTransport{kind: ReviewVerificationResultstateTransportKindNotCompleted, NotCompleted: value}
+}
+
+// AsNotCompleted returns the not_completed branch when it is selected.
+func (u ReviewVerificationResultstateTransport) AsNotCompleted() (_ *ReviewVerificationResultVerificationNotCompletedTransport, ok bool) {
+	if u.kind != ReviewVerificationResultstateTransportKindNotCompleted {
+		return
+	}
+	return u.NotCompleted, true
+}
+
+// SetNotCompleted selects the not_completed branch.
+func (u *ReviewVerificationResultstateTransport) SetNotCompleted(value *ReviewVerificationResultVerificationNotCompletedTransport) {
+	u.kind = ReviewVerificationResultstateTransportKindNotCompleted
+	u.NotCompleted = value
+}
+
+// Validate checks that one complete branch is selected.
+func (u ReviewVerificationResultstateTransport) Validate() error {
+	switch u.kind {
+	case ReviewVerificationResultstateTransportKindRunning:
+		if u.Running == nil {
+			return goa.MissingFieldError("value", "ReviewVerificationResultstateTransport")
+		}
+		return nil
+	case ReviewVerificationResultstateTransportKindCompleted:
+		if u.Completed == nil {
+			return goa.MissingFieldError("value", "ReviewVerificationResultstateTransport")
+		}
+		return nil
+	case ReviewVerificationResultstateTransportKindNotCompleted:
+		if u.NotCompleted == nil {
+			return goa.MissingFieldError("value", "ReviewVerificationResultstateTransport")
+		}
+		return nil
+	case "":
+		return goa.MissingFieldError("type", "ReviewVerificationResultstateTransport")
+	default:
+		return goa.InvalidEnumValueError("type", u.kind, []any{string(ReviewVerificationResultstateTransportKindRunning), string(ReviewVerificationResultstateTransportKindCompleted), string(ReviewVerificationResultstateTransportKindNotCompleted)})
+	}
+}
+
+// MarshalJSON writes the selected branch name and value.
+func (u ReviewVerificationResultstateTransport) MarshalJSON() ([]byte, error) {
+	if err := u.Validate(); err != nil {
+		return nil, err
+	}
+	var value any
+	switch u.kind {
+	case ReviewVerificationResultstateTransportKindRunning:
+		value = u.Running
+	case ReviewVerificationResultstateTransportKindCompleted:
+		value = u.Completed
+	case ReviewVerificationResultstateTransportKindNotCompleted:
+		value = u.NotCompleted
+	default:
+		return nil, fmt.Errorf("unexpected ReviewVerificationResultstateTransport branch %q", u.kind)
+	}
+	return json.Marshal(struct {
+		Type  string `json:"type"`
+		Value any    `json:"value"`
+	}{Type: string(u.kind), Value: value})
+}
+
+// ReviewVerificationResultstoryContextTransport stores exactly one selected Goa OneOf branch.
+type ReviewVerificationResultstoryContextTransport struct {
+	kind        ReviewVerificationResultstoryContextTransportKind
+	Recorded    *ReviewVerificationResultRecordedRunStoryTransport
+	NotRecorded *ReviewVerificationResultRunStoryNotRecordedTransport
+}
+
+// ReviewVerificationResultstoryContextTransportKind identifies the selected branch of ReviewVerificationResultstoryContextTransport.
+type ReviewVerificationResultstoryContextTransportKind string
+
+const (
+	ReviewVerificationResultstoryContextTransportKindRecorded    ReviewVerificationResultstoryContextTransportKind = "recorded"
+	ReviewVerificationResultstoryContextTransportKindNotRecorded ReviewVerificationResultstoryContextTransportKind = "not_recorded"
+)
+
+// Kind returns the selected branch.
+func (u ReviewVerificationResultstoryContextTransport) Kind() ReviewVerificationResultstoryContextTransportKind {
+	return u.kind
+}
+
+// NewReviewVerificationResultstoryContextTransportRecorded creates ReviewVerificationResultstoryContextTransport with its recorded branch selected.
+func NewReviewVerificationResultstoryContextTransportRecorded(value *ReviewVerificationResultRecordedRunStoryTransport) ReviewVerificationResultstoryContextTransport {
+	return ReviewVerificationResultstoryContextTransport{kind: ReviewVerificationResultstoryContextTransportKindRecorded, Recorded: value}
+}
+
+// AsRecorded returns the recorded branch when it is selected.
+func (u ReviewVerificationResultstoryContextTransport) AsRecorded() (_ *ReviewVerificationResultRecordedRunStoryTransport, ok bool) {
+	if u.kind != ReviewVerificationResultstoryContextTransportKindRecorded {
+		return
+	}
+	return u.Recorded, true
+}
+
+// SetRecorded selects the recorded branch.
+func (u *ReviewVerificationResultstoryContextTransport) SetRecorded(value *ReviewVerificationResultRecordedRunStoryTransport) {
+	u.kind = ReviewVerificationResultstoryContextTransportKindRecorded
+	u.Recorded = value
+}
+
+// NewReviewVerificationResultstoryContextTransportNotRecorded creates ReviewVerificationResultstoryContextTransport with its not_recorded branch selected.
+func NewReviewVerificationResultstoryContextTransportNotRecorded(value *ReviewVerificationResultRunStoryNotRecordedTransport) ReviewVerificationResultstoryContextTransport {
+	return ReviewVerificationResultstoryContextTransport{kind: ReviewVerificationResultstoryContextTransportKindNotRecorded, NotRecorded: value}
+}
+
+// AsNotRecorded returns the not_recorded branch when it is selected.
+func (u ReviewVerificationResultstoryContextTransport) AsNotRecorded() (_ *ReviewVerificationResultRunStoryNotRecordedTransport, ok bool) {
+	if u.kind != ReviewVerificationResultstoryContextTransportKindNotRecorded {
+		return
+	}
+	return u.NotRecorded, true
+}
+
+// SetNotRecorded selects the not_recorded branch.
+func (u *ReviewVerificationResultstoryContextTransport) SetNotRecorded(value *ReviewVerificationResultRunStoryNotRecordedTransport) {
+	u.kind = ReviewVerificationResultstoryContextTransportKindNotRecorded
+	u.NotRecorded = value
+}
+
+// Validate checks that one complete branch is selected.
+func (u ReviewVerificationResultstoryContextTransport) Validate() error {
+	switch u.kind {
+	case ReviewVerificationResultstoryContextTransportKindRecorded:
+		if u.Recorded == nil {
+			return goa.MissingFieldError("value", "ReviewVerificationResultstoryContextTransport")
+		}
+		return nil
+	case ReviewVerificationResultstoryContextTransportKindNotRecorded:
+		if u.NotRecorded == nil {
+			return goa.MissingFieldError("value", "ReviewVerificationResultstoryContextTransport")
+		}
+		return nil
+	case "":
+		return goa.MissingFieldError("state", "ReviewVerificationResultstoryContextTransport")
+	default:
+		return goa.InvalidEnumValueError("state", u.kind, []any{string(ReviewVerificationResultstoryContextTransportKindRecorded), string(ReviewVerificationResultstoryContextTransportKindNotRecorded)})
+	}
+}
+
+// MarshalJSON writes the selected branch name and value.
+func (u ReviewVerificationResultstoryContextTransport) MarshalJSON() ([]byte, error) {
+	if err := u.Validate(); err != nil {
+		return nil, err
+	}
+	var value any
+	switch u.kind {
+	case ReviewVerificationResultstoryContextTransportKindRecorded:
+		value = u.Recorded
+	case ReviewVerificationResultstoryContextTransportKindNotRecorded:
+		value = u.NotRecorded
+	default:
+		return nil, fmt.Errorf("unexpected ReviewVerificationResultstoryContextTransport branch %q", u.kind)
+	}
+	data, err := json.Marshal(value)
+	if err != nil {
+		return nil, err
+	}
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(data, &fields); err != nil {
+		return nil, err
+	}
+	if fields == nil {
+		return nil, goa.InvalidFieldTypeError("state", nil, "non-null JSON object")
+	}
+	if _, exists := fields["state"]; exists {
+		return nil, fmt.Errorf("ReviewVerificationResultstoryContextTransport branch already contains discriminator %q", "state")
+	}
+	tag, err := json.Marshal(string(u.kind))
+	if err != nil {
+		return nil, err
+	}
+	fields["state"] = tag
+	return json.Marshal(fields)
+}
+
+// ReviewVerificationResulttestSourceTransport stores exactly one selected Goa OneOf branch.
+type ReviewVerificationResulttestSourceTransport struct {
+	kind         ReviewVerificationResulttestSourceTransportKind
+	Evaluator    *ReviewVerificationResultOperatorEvaluatorTestsTransport
+	WrittenTests *ReviewVerificationResultAgentWrittenTestsTransport
+}
+
+// ReviewVerificationResulttestSourceTransportKind identifies the selected branch of ReviewVerificationResulttestSourceTransport.
+type ReviewVerificationResulttestSourceTransportKind string
+
+const (
+	ReviewVerificationResulttestSourceTransportKindEvaluator    ReviewVerificationResulttestSourceTransportKind = "evaluator"
+	ReviewVerificationResulttestSourceTransportKindWrittenTests ReviewVerificationResulttestSourceTransportKind = "written_tests"
+)
+
+// Kind returns the selected branch.
+func (u ReviewVerificationResulttestSourceTransport) Kind() ReviewVerificationResulttestSourceTransportKind {
+	return u.kind
+}
+
+// NewReviewVerificationResulttestSourceTransportEvaluator creates ReviewVerificationResulttestSourceTransport with its evaluator branch selected.
+func NewReviewVerificationResulttestSourceTransportEvaluator(value *ReviewVerificationResultOperatorEvaluatorTestsTransport) ReviewVerificationResulttestSourceTransport {
+	return ReviewVerificationResulttestSourceTransport{kind: ReviewVerificationResulttestSourceTransportKindEvaluator, Evaluator: value}
+}
+
+// AsEvaluator returns the evaluator branch when it is selected.
+func (u ReviewVerificationResulttestSourceTransport) AsEvaluator() (_ *ReviewVerificationResultOperatorEvaluatorTestsTransport, ok bool) {
+	if u.kind != ReviewVerificationResulttestSourceTransportKindEvaluator {
+		return
+	}
+	return u.Evaluator, true
+}
+
+// SetEvaluator selects the evaluator branch.
+func (u *ReviewVerificationResulttestSourceTransport) SetEvaluator(value *ReviewVerificationResultOperatorEvaluatorTestsTransport) {
+	u.kind = ReviewVerificationResulttestSourceTransportKindEvaluator
+	u.Evaluator = value
+}
+
+// NewReviewVerificationResulttestSourceTransportWrittenTests creates ReviewVerificationResulttestSourceTransport with its written_tests branch selected.
+func NewReviewVerificationResulttestSourceTransportWrittenTests(value *ReviewVerificationResultAgentWrittenTestsTransport) ReviewVerificationResulttestSourceTransport {
+	return ReviewVerificationResulttestSourceTransport{kind: ReviewVerificationResulttestSourceTransportKindWrittenTests, WrittenTests: value}
+}
+
+// AsWrittenTests returns the written_tests branch when it is selected.
+func (u ReviewVerificationResulttestSourceTransport) AsWrittenTests() (_ *ReviewVerificationResultAgentWrittenTestsTransport, ok bool) {
+	if u.kind != ReviewVerificationResulttestSourceTransportKindWrittenTests {
+		return
+	}
+	return u.WrittenTests, true
+}
+
+// SetWrittenTests selects the written_tests branch.
+func (u *ReviewVerificationResulttestSourceTransport) SetWrittenTests(value *ReviewVerificationResultAgentWrittenTestsTransport) {
+	u.kind = ReviewVerificationResulttestSourceTransportKindWrittenTests
+	u.WrittenTests = value
+}
+
+// Validate checks that one complete branch is selected.
+func (u ReviewVerificationResulttestSourceTransport) Validate() error {
+	switch u.kind {
+	case ReviewVerificationResulttestSourceTransportKindEvaluator:
+		if u.Evaluator == nil {
+			return goa.MissingFieldError("value", "ReviewVerificationResulttestSourceTransport")
+		}
+		return nil
+	case ReviewVerificationResulttestSourceTransportKindWrittenTests:
+		if u.WrittenTests == nil {
+			return goa.MissingFieldError("value", "ReviewVerificationResulttestSourceTransport")
+		}
+		return nil
+	case "":
+		return goa.MissingFieldError("source", "ReviewVerificationResulttestSourceTransport")
+	default:
+		return goa.InvalidEnumValueError("source", u.kind, []any{string(ReviewVerificationResulttestSourceTransportKindEvaluator), string(ReviewVerificationResulttestSourceTransportKindWrittenTests)})
+	}
+}
+
+// MarshalJSON writes the selected branch name and value.
+func (u ReviewVerificationResulttestSourceTransport) MarshalJSON() ([]byte, error) {
+	if err := u.Validate(); err != nil {
+		return nil, err
+	}
+	var value any
+	switch u.kind {
+	case ReviewVerificationResulttestSourceTransportKindEvaluator:
+		value = u.Evaluator
+	case ReviewVerificationResulttestSourceTransportKindWrittenTests:
+		value = u.WrittenTests
+	default:
+		return nil, fmt.Errorf("unexpected ReviewVerificationResulttestSourceTransport branch %q", u.kind)
+	}
+	data, err := json.Marshal(value)
+	if err != nil {
+		return nil, err
+	}
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(data, &fields); err != nil {
+		return nil, err
+	}
+	if fields == nil {
+		return nil, goa.InvalidFieldTypeError("source", nil, "non-null JSON object")
+	}
+	if _, exists := fields["source"]; exists {
+		return nil, fmt.Errorf("ReviewVerificationResulttestSourceTransport branch already contains discriminator %q", "source")
+	}
+	tag, err := json.Marshal(string(u.kind))
+	if err != nil {
+		return nil, err
+	}
+	fields["source"] = tag
+	return json.Marshal(fields)
+}
+
 // ReviseChangeResultApprovalTestSourceTransport stores exactly one selected Goa OneOf branch.
 type ReviseChangeResultApprovalTestSourceTransport struct {
 	kind         ReviseChangeResultApprovalTestSourceTransportKind
@@ -13150,7 +15504,8 @@ func EncodeGetBuildResult(in *surla.ChangeBuild) ([]byte, error) {
 	var body *GetBuildResultTransport
 	{
 		body = &GetBuildResultTransport{
-			ChangeID: &in.ChangeID,
+			ChangeID:          &in.ChangeID,
+			DraftedBeforeDrop: &in.DraftedBeforeDrop,
 		}
 		var buildValue GetBuildResultbuildTransport
 		switch string(in.Build.Kind()) {
@@ -13219,6 +15574,8 @@ func EncodeGetBuilderAssignmentResult(in *surla.BuilderAssignment) ([]byte, erro
 			RequestRevision: &in.RequestRevision,
 			InForce:         &in.InForce,
 			Read:            &in.Read,
+			WorkingFolder:   &in.WorkingFolder,
+			GoworkOff:       &in.GoworkOff,
 		}
 		var writtenTestsValue GetBuilderAssignmentResultwrittenTestsTransport
 		switch string(in.WrittenTests.Kind()) {
@@ -13432,6 +15789,7 @@ func EncodeGetStoryRefreshResult(in *surla.StoryRefreshResult) ([]byte, error) {
 	var body *GetStoryRefreshResultTransport
 	{
 		body = &GetStoryRefreshResultTransport{
+			DraftFolder:    &in.DraftFolder,
 			OpID:           in.OpID,
 			State:          &in.State,
 			SnapshotDigest: in.SnapshotDigest,
@@ -14120,6 +16478,7 @@ func EncodeRefreshStoryResult(in *surla.StoryRefreshResult) ([]byte, error) {
 	var body *RefreshStoryResultTransport
 	{
 		body = &RefreshStoryResultTransport{
+			DraftFolder:    &in.DraftFolder,
 			OpID:           in.OpID,
 			State:          &in.State,
 			SnapshotDigest: in.SnapshotDigest,
@@ -14188,6 +16547,110 @@ func EncodeReportTestsFinishedResult(in *surla.TestWriterAssignmentItem) ([]byte
 	data, err := json.Marshal(body)
 	if err != nil {
 		return nil, fmt.Errorf("encode ReportTestsFinishedResult JSON: %w", err)
+	}
+	return data, nil
+}
+
+// DecodeReviewVerificationPayload checks JSON field names from the Goa design and returns a service value.
+func DecodeReviewVerificationPayload(data []byte) (out *surla.GetVerificationPayload, err error) {
+	var body *ReviewVerificationPayloadTransport
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&body); err != nil {
+		return out, fmt.Errorf("decode ReviewVerificationPayload JSON: %w", err)
+	}
+	if err := decoder.Decode(&struct{}{}); err != io.EOF {
+		if err == nil {
+			return out, fmt.Errorf("decode ReviewVerificationPayload JSON: multiple JSON values")
+		}
+		return out, fmt.Errorf("decode ReviewVerificationPayload JSON after first value: %w", err)
+	}
+	if err := ValidateReviewVerificationPayloadTransport(body); err != nil {
+		return out, fmt.Errorf("validate ReviewVerificationPayload JSON: %w", err)
+	}
+	{
+		out = &surla.GetVerificationPayload{
+			RunID: *body.RunID,
+		}
+	}
+	return out, nil
+}
+
+// EncodeReviewVerificationResult turns a service value into JSON using the field names in the Goa design.
+func EncodeReviewVerificationResult(in *surla.VerificationReviewResult) ([]byte, error) {
+	var body *ReviewVerificationResultTransport
+	{
+		body = &ReviewVerificationResultTransport{
+			RunID:                &in.RunID,
+			ChangeID:             &in.ChangeID,
+			RequestRevision:      &in.RequestRevision,
+			CandidateCommit:      &in.CandidateCommit,
+			SuiteCommit:          &in.SuiteCommit,
+			AcceptedAt:           &in.AcceptedAt,
+			InputsCurrent:        &in.InputsCurrent,
+			CandidateBinariesDir: in.CandidateBinariesDir,
+		}
+		body.Review = encodeVerificationReviewToReviewVerificationResultVerificationReviewTransport(in.Review)
+		var testSourceValue ReviewVerificationResulttestSourceTransport
+		switch string(in.TestSource.Kind()) {
+		case "evaluator":
+			actual, _ := in.TestSource.AsEvaluator()
+			var obj *ReviewVerificationResultOperatorEvaluatorTestsTransport
+			if actual != nil {
+				obj = encodeOperatorEvaluatorTestsToReviewVerificationResultOperatorEvaluatorTestsTransport3(actual)
+			}
+			u := testSourceValue
+			u.SetEvaluator((*ReviewVerificationResultOperatorEvaluatorTestsTransport)(obj))
+			testSourceValue = u
+		case "written_tests":
+			actual, _ := in.TestSource.AsWrittenTests()
+			var obj *ReviewVerificationResultAgentWrittenTestsTransport
+			if actual != nil {
+				obj = encodeAgentWrittenTestsToReviewVerificationResultAgentWrittenTestsTransport3(actual)
+			}
+			u := testSourceValue
+			u.SetWrittenTests((*ReviewVerificationResultAgentWrittenTestsTransport)(obj))
+			testSourceValue = u
+		}
+		body.TestSource = &testSourceValue
+		var stateValue ReviewVerificationResultstateTransport
+		switch string(in.State.Kind()) {
+		case "running":
+			actual, _ := in.State.AsRunning()
+			var obj *ReviewVerificationResultVerificationRunningTransport
+			if actual != nil {
+				obj = encodeVerificationRunningToReviewVerificationResultVerificationRunningTransport(actual)
+			}
+			u := stateValue
+			u.SetRunning((*ReviewVerificationResultVerificationRunningTransport)(obj))
+			stateValue = u
+		case "completed":
+			actual, _ := in.State.AsCompleted()
+			var obj *ReviewVerificationResultVerificationCompletedTransport
+			if actual != nil {
+				obj = encodeVerificationCompletedToReviewVerificationResultVerificationCompletedTransport(actual)
+			}
+			u := stateValue
+			u.SetCompleted((*ReviewVerificationResultVerificationCompletedTransport)(obj))
+			stateValue = u
+		case "not_completed":
+			actual, _ := in.State.AsNotCompleted()
+			var obj *ReviewVerificationResultVerificationNotCompletedTransport
+			if actual != nil {
+				obj = encodeVerificationNotCompletedToReviewVerificationResultVerificationNotCompletedTransport(actual)
+			}
+			u := stateValue
+			u.SetNotCompleted((*ReviewVerificationResultVerificationNotCompletedTransport)(obj))
+			stateValue = u
+		}
+		body.State = &stateValue
+	}
+	if err := ValidateReviewVerificationResultTransport(body); err != nil {
+		return nil, fmt.Errorf("validate ReviewVerificationResult JSON: %w", err)
+	}
+	data, err := json.Marshal(body)
+	if err != nil {
+		return nil, fmt.Errorf("encode ReviewVerificationResult JSON: %w", err)
 	}
 	return data, nil
 }
@@ -14380,6 +16843,40 @@ func EncodeUpdateDependenciesResult(in *surla.UpdateDependenciesResult) ([]byte,
 	data, err := json.Marshal(body)
 	if err != nil {
 		return nil, fmt.Errorf("encode UpdateDependenciesResult JSON: %w", err)
+	}
+	return data, nil
+}
+
+// EncodeUpdateDraftResult turns a service value into JSON using the field names in the Goa design.
+func EncodeUpdateDraftResult(in *surla.DraftUpdateResult) ([]byte, error) {
+	var body *UpdateDraftResultTransport
+	{
+		body = &UpdateDraftResultTransport{
+			DraftFolder: &in.DraftFolder,
+		}
+		body.Taken = make([]string, len(in.Taken))
+		for i, val := range in.Taken {
+			body.Taken[i] = val
+		}
+		body.Merged = make([]string, len(in.Merged))
+		for i, val := range in.Merged {
+			body.Merged[i] = val
+		}
+		body.ToCorrect = make([]*UpdateDraftResultDraftCorrectionTransport, len(in.ToCorrect))
+		for i, val := range in.ToCorrect {
+			if val == nil {
+				body.ToCorrect[i] = nil
+				continue
+			}
+			body.ToCorrect[i] = encodeDraftCorrectionToUpdateDraftResultDraftCorrectionTransport(val)
+		}
+	}
+	if err := ValidateUpdateDraftResultTransport(body); err != nil {
+		return nil, fmt.Errorf("validate UpdateDraftResult JSON: %w", err)
+	}
+	data, err := json.Marshal(body)
+	if err != nil {
+		return nil, fmt.Errorf("encode UpdateDraftResult JSON: %w", err)
 	}
 	return data, nil
 }
@@ -14750,6 +17247,33 @@ func encodeAgentWrittenTestsToProposeChangeResultAgentWrittenTestsTransport(v *s
 
 func encodeAgentWrittenTestsToProposeChangeResultAgentWrittenTestsTransport2(v *surla.AgentWrittenTests) *ProposeChangeResultAgentWrittenTestsTransport {
 	res := &ProposeChangeResultAgentWrittenTestsTransport{
+		Commit: &v.Commit,
+		Notice: &v.Notice,
+	}
+
+	return res
+}
+
+func encodeAgentWrittenTestsToReviewVerificationResultAgentWrittenTestsTransport(v *surla.AgentWrittenTests) *ReviewVerificationResultAgentWrittenTestsTransport {
+	res := &ReviewVerificationResultAgentWrittenTestsTransport{
+		Commit: &v.Commit,
+		Notice: &v.Notice,
+	}
+
+	return res
+}
+
+func encodeAgentWrittenTestsToReviewVerificationResultAgentWrittenTestsTransport2(v *surla.AgentWrittenTests) *ReviewVerificationResultAgentWrittenTestsTransport {
+	res := &ReviewVerificationResultAgentWrittenTestsTransport{
+		Commit: &v.Commit,
+		Notice: &v.Notice,
+	}
+
+	return res
+}
+
+func encodeAgentWrittenTestsToReviewVerificationResultAgentWrittenTestsTransport3(v *surla.AgentWrittenTests) *ReviewVerificationResultAgentWrittenTestsTransport {
+	res := &ReviewVerificationResultAgentWrittenTestsTransport{
 		Commit: &v.Commit,
 		Notice: &v.Notice,
 	}
@@ -15360,6 +17884,90 @@ func encodeApprovalItemToProposeChangeResultApprovalItemTransport2(v *surla.Appr
 	return res
 }
 
+func encodeApprovalItemToReviewVerificationResultApprovalItemTransport(v *surla.ApprovalItem) *ReviewVerificationResultApprovalItemTransport {
+	res := &ReviewVerificationResultApprovalItemTransport{
+		ApprovedBy:      &v.ApprovedBy,
+		ReportDigest:    &v.ReportDigest,
+		CandidateCommit: &v.CandidateCommit,
+		SuiteID:         &v.SuiteID,
+		SuiteCommit:     &v.SuiteCommit,
+		Environment:     &v.Environment,
+		ScenarioCount:   &v.ScenarioCount,
+	}
+	res.Artifacts = make(map[string]string, len(v.Artifacts))
+	for key, val := range v.Artifacts {
+		tk := key
+		tv := val
+		res.Artifacts[tk] = tv
+	}
+	var testSourceValue ReviewVerificationResultApprovalTestSourceTransport
+	switch string(v.TestSource.Kind()) {
+	case "evaluator":
+		actual, _ := v.TestSource.AsEvaluator()
+		var obj *ReviewVerificationResultOperatorEvaluatorTestsTransport
+		if actual != nil {
+			obj = encodeOperatorEvaluatorTestsToReviewVerificationResultOperatorEvaluatorTestsTransport(actual)
+		}
+		u := testSourceValue
+		u.SetEvaluator((*ReviewVerificationResultOperatorEvaluatorTestsTransport)(obj))
+		testSourceValue = u
+	case "written_tests":
+		actual, _ := v.TestSource.AsWrittenTests()
+		var obj *ReviewVerificationResultAgentWrittenTestsTransport
+		if actual != nil {
+			obj = encodeAgentWrittenTestsToReviewVerificationResultAgentWrittenTestsTransport(actual)
+		}
+		u := testSourceValue
+		u.SetWrittenTests((*ReviewVerificationResultAgentWrittenTestsTransport)(obj))
+		testSourceValue = u
+	}
+	res.TestSource = &testSourceValue
+
+	return res
+}
+
+func encodeApprovalItemToReviewVerificationResultApprovalItemTransport2(v *surla.ApprovalItem) *ReviewVerificationResultApprovalItemTransport {
+	res := &ReviewVerificationResultApprovalItemTransport{
+		ApprovedBy:      &v.ApprovedBy,
+		ReportDigest:    &v.ReportDigest,
+		CandidateCommit: &v.CandidateCommit,
+		SuiteID:         &v.SuiteID,
+		SuiteCommit:     &v.SuiteCommit,
+		Environment:     &v.Environment,
+		ScenarioCount:   &v.ScenarioCount,
+	}
+	res.Artifacts = make(map[string]string, len(v.Artifacts))
+	for key, val := range v.Artifacts {
+		tk := key
+		tv := val
+		res.Artifacts[tk] = tv
+	}
+	var testSourceValue ReviewVerificationResultApprovalTestSourceTransport
+	switch string(v.TestSource.Kind()) {
+	case "evaluator":
+		actual, _ := v.TestSource.AsEvaluator()
+		var obj *ReviewVerificationResultOperatorEvaluatorTestsTransport
+		if actual != nil {
+			obj = encodeOperatorEvaluatorTestsToReviewVerificationResultOperatorEvaluatorTestsTransport2(actual)
+		}
+		u := testSourceValue
+		u.SetEvaluator((*ReviewVerificationResultOperatorEvaluatorTestsTransport)(obj))
+		testSourceValue = u
+	case "written_tests":
+		actual, _ := v.TestSource.AsWrittenTests()
+		var obj *ReviewVerificationResultAgentWrittenTestsTransport
+		if actual != nil {
+			obj = encodeAgentWrittenTestsToReviewVerificationResultAgentWrittenTestsTransport2(actual)
+		}
+		u := testSourceValue
+		u.SetWrittenTests((*ReviewVerificationResultAgentWrittenTestsTransport)(obj))
+		testSourceValue = u
+	}
+	res.TestSource = &testSourceValue
+
+	return res
+}
+
 func encodeApprovalItemToReviseChangeResultApprovalItemTransport(v *surla.ApprovalItem) *ReviseChangeResultApprovalItemTransport {
 	res := &ReviseChangeResultApprovalItemTransport{
 		ApprovedBy:      &v.ApprovedBy,
@@ -15444,8 +18052,72 @@ func encodeApprovalItemToReviseChangeResultApprovalItemTransport2(v *surla.Appro
 	return res
 }
 
+func encodeBuildBuildingToGetBuildResultBuildBuildingTransport(v *surla.BuildBuilding) *GetBuildResultBuildBuildingTransport {
+	res := &GetBuildResultBuildBuildingTransport{}
+
+	return res
+}
+
+func encodeBuildDroppedToGetBuildResultBuildDroppedTransport(v *surla.BuildDropped) *GetBuildResultBuildDroppedTransport {
+	res := &GetBuildResultBuildDroppedTransport{}
+	res.KeptBranches = make([]string, len(v.KeptBranches))
+	for i, val := range v.KeptBranches {
+		res.KeptBranches[i] = val
+	}
+
+	return res
+}
+
+func encodeBuildMergedToGetBuildResultBuildMergedTransport(v *surla.BuildMerged) *GetBuildResultBuildMergedTransport {
+	res := &GetBuildResultBuildMergedTransport{}
+
+	return res
+}
+
 func encodeBuildNotStartedToGetBuildResultBuildNotStartedTransport(v *surla.BuildNotStarted) *GetBuildResultBuildNotStartedTransport {
 	res := &GetBuildResultBuildNotStartedTransport{}
+
+	return res
+}
+
+func encodeBuildPassedTestsToGetBuildResultBuildPassedTestsTransport(v *surla.BuildPassedTests) *GetBuildResultBuildPassedTestsTransport {
+	res := &GetBuildResultBuildPassedTestsTransport{
+		Commit: &v.Commit,
+		Branch: &v.Branch,
+	}
+
+	return res
+}
+
+func encodeBuildPassedToGetBuildResultBuildPassedTransport(v *surla.BuildPassed) *GetBuildResultBuildPassedTransport {
+	res := &GetBuildResultBuildPassedTransport{
+		RunID:           &v.RunID,
+		CandidateCommit: &v.CandidateCommit,
+		CandidateBranch: &v.CandidateBranch,
+		BaseInBranch:    &v.BaseInBranch,
+	}
+	var testsValue GetBuildResultBuildPassedTestSourceTransport
+	switch string(v.Tests.Kind()) {
+	case "evaluator":
+		actual, _ := v.Tests.AsEvaluator()
+		var obj *GetBuildResultOperatorEvaluatorTestsTransport
+		if actual != nil {
+			obj = encodeOperatorEvaluatorTestsToGetBuildResultOperatorEvaluatorTestsTransport(actual)
+		}
+		u := testsValue
+		u.SetEvaluator((*GetBuildResultOperatorEvaluatorTestsTransport)(obj))
+		testsValue = u
+	case "written_tests":
+		actual, _ := v.Tests.AsWrittenTests()
+		var obj *GetBuildResultBuildPassedTestsTransport
+		if actual != nil {
+			obj = encodeBuildPassedTestsToGetBuildResultBuildPassedTestsTransport(actual)
+		}
+		u := testsValue
+		u.SetWrittenTests((*GetBuildResultBuildPassedTestsTransport)(obj))
+		testsValue = u
+	}
+	res.Tests = &testsValue
 
 	return res
 }
@@ -15456,6 +18128,8 @@ func encodeBuilderAssignmentToListBuilderAssignmentsResultBuilderAssignmentTrans
 		RequestRevision: &v.RequestRevision,
 		InForce:         &v.InForce,
 		Read:            &v.Read,
+		WorkingFolder:   &v.WorkingFolder,
+		GoworkOff:       &v.GoworkOff,
 	}
 	var writtenTestsValue ListBuilderAssignmentsResultwrittenTestsTransport
 	switch string(v.WrittenTests.Kind()) {
@@ -15538,6 +18212,25 @@ func encodeBuilderVerificationReportToListVerificationsResultBuilderVerification
 	return res
 }
 
+func encodeBuilderVerificationReportToReviewVerificationResultBuilderVerificationReportTransport(v *surla.BuilderVerificationReport) *ReviewVerificationResultBuilderVerificationReportTransport {
+	res := &ReviewVerificationResultBuilderVerificationReportTransport{
+		ReportDigest: &v.ReportDigest,
+		Passed:       &v.Passed,
+		SuiteFailed:  &v.SuiteFailed,
+	}
+	res.Counts = encodeVerificationCountsToReviewVerificationResultVerificationCountsTransport(v.Counts)
+	res.Scenarios = make([]*ReviewVerificationResultVerificationScenarioTransport, len(v.Scenarios))
+	for i, val := range v.Scenarios {
+		if val == nil {
+			res.Scenarios[i] = nil
+			continue
+		}
+		res.Scenarios[i] = encodeVerificationScenarioToReviewVerificationResultVerificationScenarioTransport(val)
+	}
+
+	return res
+}
+
 func encodeBuilderVerificationReportToVerifyChangeResultBuilderVerificationReportTransport(v *surla.BuilderVerificationReport) *VerifyChangeResultBuilderVerificationReportTransport {
 	res := &VerifyChangeResultBuilderVerificationReportTransport{
 		ReportDigest: &v.ReportDigest,
@@ -15599,6 +18292,16 @@ func encodeConfirmedAnswerToGetTestWriterAssignmentResultConfirmedAnswerTranspor
 		ID:       &v.ID,
 		Question: &v.Question,
 		Answer:   &v.Answer,
+	}
+
+	return res
+}
+
+func encodeDraftCorrectionToUpdateDraftResultDraftCorrectionTransport(v *surla.DraftCorrection) *UpdateDraftResultDraftCorrectionTransport {
+	res := &UpdateDraftResultDraftCorrectionTransport{
+		Path:    &v.Path,
+		Folder:  &v.Folder,
+		Problem: &v.Problem,
 	}
 
 	return res
@@ -15851,6 +18554,12 @@ func encodeOperatorEvaluatorTestsToDeclineRevisionResultOperatorEvaluatorTestsTr
 	return res
 }
 
+func encodeOperatorEvaluatorTestsToGetBuildResultOperatorEvaluatorTestsTransport(v *surla.OperatorEvaluatorTests) *GetBuildResultOperatorEvaluatorTestsTransport {
+	res := &GetBuildResultOperatorEvaluatorTestsTransport{}
+
+	return res
+}
+
 func encodeOperatorEvaluatorTestsToGetChangeResultOperatorEvaluatorTestsTransport(v *surla.OperatorEvaluatorTests) *GetChangeResultOperatorEvaluatorTestsTransport {
 	res := &GetChangeResultOperatorEvaluatorTestsTransport{}
 
@@ -15883,6 +18592,24 @@ func encodeOperatorEvaluatorTestsToProposeChangeResultOperatorEvaluatorTestsTran
 
 func encodeOperatorEvaluatorTestsToProposeChangeResultOperatorEvaluatorTestsTransport2(v *surla.OperatorEvaluatorTests) *ProposeChangeResultOperatorEvaluatorTestsTransport {
 	res := &ProposeChangeResultOperatorEvaluatorTestsTransport{}
+
+	return res
+}
+
+func encodeOperatorEvaluatorTestsToReviewVerificationResultOperatorEvaluatorTestsTransport(v *surla.OperatorEvaluatorTests) *ReviewVerificationResultOperatorEvaluatorTestsTransport {
+	res := &ReviewVerificationResultOperatorEvaluatorTestsTransport{}
+
+	return res
+}
+
+func encodeOperatorEvaluatorTestsToReviewVerificationResultOperatorEvaluatorTestsTransport2(v *surla.OperatorEvaluatorTests) *ReviewVerificationResultOperatorEvaluatorTestsTransport {
+	res := &ReviewVerificationResultOperatorEvaluatorTestsTransport{}
+
+	return res
+}
+
+func encodeOperatorEvaluatorTestsToReviewVerificationResultOperatorEvaluatorTestsTransport3(v *surla.OperatorEvaluatorTests) *ReviewVerificationResultOperatorEvaluatorTestsTransport {
+	res := &ReviewVerificationResultOperatorEvaluatorTestsTransport{}
 
 	return res
 }
@@ -16199,6 +18926,45 @@ func encodeProposedRevisionItemToReviseChangeResultProposedRevisionItemTransport
 	return res
 }
 
+func encodeRecordedRunStoryToReviewVerificationResultRecordedRunStoryTransport(v *surla.RecordedRunStory) *ReviewVerificationResultRecordedRunStoryTransport {
+	res := &ReviewVerificationResultRecordedRunStoryTransport{
+		BuildNumber:    &v.BuildNumber,
+		BuildStartedAt: &v.BuildStartedAt,
+	}
+	res.Stories = make([]*ReviewVerificationResultStorySummaryItemTransport, len(v.Stories))
+	for i, val := range v.Stories {
+		if val == nil {
+			res.Stories[i] = nil
+			continue
+		}
+		res.Stories[i] = encodeStorySummaryItemToReviewVerificationResultStorySummaryItemTransport(val)
+	}
+	var mappingValue ReviewVerificationResultmappingTransport
+	switch string(v.Mapping.Kind()) {
+	case "mapped":
+		actual, _ := v.Mapping.AsMapped()
+		var obj *ReviewVerificationResultRunStoryMappingTransport
+		if actual != nil {
+			obj = encodeRunStoryMappingToReviewVerificationResultRunStoryMappingTransport(actual)
+		}
+		u := mappingValue
+		u.SetMapped((*ReviewVerificationResultRunStoryMappingTransport)(obj))
+		mappingValue = u
+	case "not_recorded_for_evaluator":
+		actual, _ := v.Mapping.AsNotRecordedForEvaluator()
+		var obj *ReviewVerificationResultRunEvaluatorMappingUnknownTransport
+		if actual != nil {
+			obj = encodeRunEvaluatorMappingUnknownToReviewVerificationResultRunEvaluatorMappingUnknownTransport(actual)
+		}
+		u := mappingValue
+		u.SetNotRecordedForEvaluator((*ReviewVerificationResultRunEvaluatorMappingUnknownTransport)(obj))
+		mappingValue = u
+	}
+	res.Mapping = &mappingValue
+
+	return res
+}
+
 func encodeRequiredTestToGetTestWriterAssignmentResultRequiredTestTransport(v *surla.RequiredTest) *GetTestWriterAssignmentResultRequiredTestTransport {
 	res := &GetTestWriterAssignmentResultRequiredTestTransport{
 		Story:    &v.Story,
@@ -16206,6 +18972,57 @@ func encodeRequiredTestToGetTestWriterAssignmentResultRequiredTestTransport(v *s
 		Scenario: &v.Scenario,
 		Hook:     &v.Hook,
 	}
+
+	return res
+}
+
+func encodeRequiredTestToReviewVerificationResultRequiredTestTransport(v *surla.RequiredTest) *ReviewVerificationResultRequiredTestTransport {
+	res := &ReviewVerificationResultRequiredTestTransport{
+		Story:    &v.Story,
+		FlowKey:  &v.FlowKey,
+		Scenario: &v.Scenario,
+		Hook:     &v.Hook,
+	}
+
+	return res
+}
+
+func encodeRunApprovalAvailableToReviewVerificationResultRunApprovalAvailableTransport(v *surla.RunApprovalAvailable) *ReviewVerificationResultRunApprovalAvailableTransport {
+	res := &ReviewVerificationResultRunApprovalAvailableTransport{}
+
+	return res
+}
+
+func encodeRunApprovalBlockedToReviewVerificationResultRunApprovalBlockedTransport(v *surla.RunApprovalBlocked) *ReviewVerificationResultRunApprovalBlockedTransport {
+	res := &ReviewVerificationResultRunApprovalBlockedTransport{
+		Reason: &v.Reason,
+	}
+
+	return res
+}
+
+func encodeRunEvaluatorMappingUnknownToReviewVerificationResultRunEvaluatorMappingUnknownTransport(v *surla.RunEvaluatorMappingUnknown) *ReviewVerificationResultRunEvaluatorMappingUnknownTransport {
+	res := &ReviewVerificationResultRunEvaluatorMappingUnknownTransport{}
+
+	return res
+}
+
+func encodeRunStoryMappingToReviewVerificationResultRunStoryMappingTransport(v *surla.RunStoryMapping) *ReviewVerificationResultRunStoryMappingTransport {
+	res := &ReviewVerificationResultRunStoryMappingTransport{}
+	res.RequiredTests = make([]*ReviewVerificationResultRequiredTestTransport, len(v.RequiredTests))
+	for i, val := range v.RequiredTests {
+		if val == nil {
+			res.RequiredTests[i] = nil
+			continue
+		}
+		res.RequiredTests[i] = encodeRequiredTestToReviewVerificationResultRequiredTestTransport(val)
+	}
+
+	return res
+}
+
+func encodeRunStoryNotRecordedToReviewVerificationResultRunStoryNotRecordedTransport(v *surla.RunStoryNotRecorded) *ReviewVerificationResultRunStoryNotRecordedTransport {
+	res := &ReviewVerificationResultRunStoryNotRecordedTransport{}
 
 	return res
 }
@@ -16237,6 +19054,46 @@ func encodeStartedBuildToGetBuildResultStartedBuildTransport(v *surla.StartedBui
 	}
 	res.Builder = encodeBuilderProgressToGetBuildResultBuilderProgressTransport(v.Builder)
 	res.TestWriter = encodeTestWriterProgressToGetBuildResultTestWriterProgressTransport(v.TestWriter)
+	var takingValue GetBuildResultBuildTakingTransport
+	switch string(v.Taking.Kind()) {
+	case "building":
+		actual, _ := v.Taking.AsBuilding()
+		var obj *GetBuildResultBuildBuildingTransport
+		if actual != nil {
+			obj = encodeBuildBuildingToGetBuildResultBuildBuildingTransport(actual)
+		}
+		u := takingValue
+		u.SetBuilding((*GetBuildResultBuildBuildingTransport)(obj))
+		takingValue = u
+	case "passed":
+		actual, _ := v.Taking.AsPassed()
+		var obj *GetBuildResultBuildPassedTransport
+		if actual != nil {
+			obj = encodeBuildPassedToGetBuildResultBuildPassedTransport(actual)
+		}
+		u := takingValue
+		u.SetPassed((*GetBuildResultBuildPassedTransport)(obj))
+		takingValue = u
+	case "merged":
+		actual, _ := v.Taking.AsMerged()
+		var obj *GetBuildResultBuildMergedTransport
+		if actual != nil {
+			obj = encodeBuildMergedToGetBuildResultBuildMergedTransport(actual)
+		}
+		u := takingValue
+		u.SetMerged((*GetBuildResultBuildMergedTransport)(obj))
+		takingValue = u
+	case "dropped":
+		actual, _ := v.Taking.AsDropped()
+		var obj *GetBuildResultBuildDroppedTransport
+		if actual != nil {
+			obj = encodeBuildDroppedToGetBuildResultBuildDroppedTransport(actual)
+		}
+		u := takingValue
+		u.SetDropped((*GetBuildResultBuildDroppedTransport)(obj))
+		takingValue = u
+	}
+	res.Taking = &takingValue
 
 	return res
 }
@@ -16363,6 +19220,16 @@ func encodeStoryActorItemToProposeChangeResultStoryActorItemTransport2(v *surla.
 
 func encodeStoryActorItemToRefreshStoryResultStoryActorItemTransport(v *surla.StoryActorItem) *RefreshStoryResultStoryActorItemTransport {
 	res := &RefreshStoryResultStoryActorItemTransport{
+		Key:         &v.Key,
+		Title:       &v.Title,
+		Description: v.Description,
+	}
+
+	return res
+}
+
+func encodeStoryActorItemToReviewVerificationResultStoryActorItemTransport(v *surla.StoryActorItem) *ReviewVerificationResultStoryActorItemTransport {
+	res := &ReviewVerificationResultStoryActorItemTransport{
 		Key:         &v.Key,
 		Title:       &v.Title,
 		Description: v.Description,
@@ -16737,6 +19604,33 @@ func encodeStoryFlowItemToRefreshStoryResultStoryFlowItemTransport(v *surla.Stor
 			continue
 		}
 		res.Questions[i] = encodeStoryQuestionItemToRefreshStoryResultStoryQuestionItemTransport2(val)
+	}
+
+	return res
+}
+
+func encodeStoryFlowItemToReviewVerificationResultStoryFlowItemTransport(v *surla.StoryFlowItem) *ReviewVerificationResultStoryFlowItemTransport {
+	res := &ReviewVerificationResultStoryFlowItemTransport{
+		Key:         &v.Key,
+		Title:       &v.Title,
+		Description: v.Description,
+		Complete:    &v.Complete,
+	}
+	res.Steps = make([]*ReviewVerificationResultStoryStepItemTransport, len(v.Steps))
+	for i, val := range v.Steps {
+		if val == nil {
+			res.Steps[i] = nil
+			continue
+		}
+		res.Steps[i] = encodeStoryStepItemToReviewVerificationResultStoryStepItemTransport(val)
+	}
+	res.Questions = make([]*ReviewVerificationResultStoryQuestionItemTransport, len(v.Questions))
+	for i, val := range v.Questions {
+		if val == nil {
+			res.Questions[i] = nil
+			continue
+		}
+		res.Questions[i] = encodeStoryQuestionItemToReviewVerificationResultStoryQuestionItemTransport2(val)
 	}
 
 	return res
@@ -17160,6 +20054,34 @@ func encodeStoryQuestionItemToRefreshStoryResultStoryQuestionItemTransport2(v *s
 	return res
 }
 
+func encodeStoryQuestionItemToReviewVerificationResultStoryQuestionItemTransport(v *surla.StoryQuestionItem) *ReviewVerificationResultStoryQuestionItemTransport {
+	res := &ReviewVerificationResultStoryQuestionItemTransport{
+		Key:         &v.Key,
+		Prompt:      &v.Prompt,
+		Description: v.Description,
+	}
+	res.Options = make([]string, len(v.Options))
+	for i, val := range v.Options {
+		res.Options[i] = val
+	}
+
+	return res
+}
+
+func encodeStoryQuestionItemToReviewVerificationResultStoryQuestionItemTransport2(v *surla.StoryQuestionItem) *ReviewVerificationResultStoryQuestionItemTransport {
+	res := &ReviewVerificationResultStoryQuestionItemTransport{
+		Key:         &v.Key,
+		Prompt:      &v.Prompt,
+		Description: v.Description,
+	}
+	res.Options = make([]string, len(v.Options))
+	for i, val := range v.Options {
+		res.Options[i] = val
+	}
+
+	return res
+}
+
 func encodeStoryQuestionItemToReviseChangeResultStoryQuestionItemTransport(v *surla.StoryQuestionItem) *ReviseChangeResultStoryQuestionItemTransport {
 	res := &ReviseChangeResultStoryQuestionItemTransport{
 		Key:         &v.Key,
@@ -17471,6 +20393,26 @@ func encodeStoryStepItemToRefreshStoryResultStoryStepItemTransport(v *surla.Stor
 			continue
 		}
 		res.Questions[i] = encodeStoryQuestionItemToRefreshStoryResultStoryQuestionItemTransport(val)
+	}
+
+	return res
+}
+
+func encodeStoryStepItemToReviewVerificationResultStoryStepItemTransport(v *surla.StoryStepItem) *ReviewVerificationResultStoryStepItemTransport {
+	res := &ReviewVerificationResultStoryStepItemTransport{
+		Key:         &v.Key,
+		ActorKey:    &v.ActorKey,
+		Summary:     &v.Summary,
+		Description: v.Description,
+		Kind:        &v.Kind,
+	}
+	res.Questions = make([]*ReviewVerificationResultStoryQuestionItemTransport, len(v.Questions))
+	for i, val := range v.Questions {
+		if val == nil {
+			res.Questions[i] = nil
+			continue
+		}
+		res.Questions[i] = encodeStoryQuestionItemToReviewVerificationResultStoryQuestionItemTransport(val)
 	}
 
 	return res
@@ -17836,6 +20778,31 @@ func encodeStorySummaryItemToRefreshStoryResultStorySummaryItemTransport(v *surl
 			continue
 		}
 		res.Flows[i] = encodeStoryFlowItemToRefreshStoryResultStoryFlowItemTransport(val)
+	}
+
+	return res
+}
+
+func encodeStorySummaryItemToReviewVerificationResultStorySummaryItemTransport(v *surla.StorySummaryItem) *ReviewVerificationResultStorySummaryItemTransport {
+	res := &ReviewVerificationResultStorySummaryItemTransport{
+		Name:        &v.Name,
+		Description: v.Description,
+	}
+	res.Actors = make([]*ReviewVerificationResultStoryActorItemTransport, len(v.Actors))
+	for i, val := range v.Actors {
+		if val == nil {
+			res.Actors[i] = nil
+			continue
+		}
+		res.Actors[i] = encodeStoryActorItemToReviewVerificationResultStoryActorItemTransport(val)
+	}
+	res.Flows = make([]*ReviewVerificationResultStoryFlowItemTransport, len(v.Flows))
+	for i, val := range v.Flows {
+		if val == nil {
+			res.Flows[i] = nil
+			continue
+		}
+		res.Flows[i] = encodeStoryFlowItemToReviewVerificationResultStoryFlowItemTransport(val)
 	}
 
 	return res
@@ -18617,6 +21584,15 @@ func encodeUnverifiedApprovalItemToProposeChangeResultUnverifiedApprovalItemTran
 	return res
 }
 
+func encodeUnverifiedApprovalItemToReviewVerificationResultUnverifiedApprovalItemTransport(v *surla.UnverifiedApprovalItem) *ReviewVerificationResultUnverifiedApprovalItemTransport {
+	res := &ReviewVerificationResultUnverifiedApprovalItemTransport{
+		Reason: &v.Reason,
+	}
+	res.Approval = encodeApprovalItemToReviewVerificationResultApprovalItemTransport2(v.Approval)
+
+	return res
+}
+
 func encodeUnverifiedApprovalItemToReviseChangeResultUnverifiedApprovalItemTransport(v *surla.UnverifiedApprovalItem) *ReviseChangeResultUnverifiedApprovalItemTransport {
 	res := &ReviseChangeResultUnverifiedApprovalItemTransport{
 		Reason: &v.Reason,
@@ -18638,6 +21614,16 @@ func encodeVerificationCheckToGetVerificationResultVerificationCheckTransport(v 
 
 func encodeVerificationCheckToListVerificationsResultVerificationCheckTransport(v *surla.VerificationCheck) *ListVerificationsResultVerificationCheckTransport {
 	res := &ListVerificationsResultVerificationCheckTransport{
+		Name:       &v.Name,
+		Passed:     &v.Passed,
+		Diagnostic: v.Diagnostic,
+	}
+
+	return res
+}
+
+func encodeVerificationCheckToReviewVerificationResultVerificationCheckTransport(v *surla.VerificationCheck) *ReviewVerificationResultVerificationCheckTransport {
+	res := &ReviewVerificationResultVerificationCheckTransport{
 		Name:       &v.Name,
 		Passed:     &v.Passed,
 		Diagnostic: v.Diagnostic,
@@ -18676,6 +21662,16 @@ func encodeVerificationCompletedToListVerificationsResultVerificationCompletedTr
 	return res
 }
 
+func encodeVerificationCompletedToReviewVerificationResultVerificationCompletedTransport(v *surla.VerificationCompleted) *ReviewVerificationResultVerificationCompletedTransport {
+	res := &ReviewVerificationResultVerificationCompletedTransport{
+		SuiteID:     &v.SuiteID,
+		Environment: &v.Environment,
+	}
+	res.Report = encodeBuilderVerificationReportToReviewVerificationResultBuilderVerificationReportTransport(v.Report)
+
+	return res
+}
+
 func encodeVerificationCompletedToVerifyChangeResultVerificationCompletedTransport(v *surla.VerificationCompleted) *VerifyChangeResultVerificationCompletedTransport {
 	res := &VerifyChangeResultVerificationCompletedTransport{
 		SuiteID:     &v.SuiteID,
@@ -18700,6 +21696,18 @@ func encodeVerificationCountsToGetVerificationResultVerificationCountsTransport(
 
 func encodeVerificationCountsToListVerificationsResultVerificationCountsTransport(v *surla.VerificationCounts) *ListVerificationsResultVerificationCountsTransport {
 	res := &ListVerificationsResultVerificationCountsTransport{
+		Required:     &v.Required,
+		Passed:       &v.Passed,
+		Failed:       &v.Failed,
+		NotRun:       &v.NotRun,
+		HarnessError: &v.HarnessError,
+	}
+
+	return res
+}
+
+func encodeVerificationCountsToReviewVerificationResultVerificationCountsTransport(v *surla.VerificationCounts) *ReviewVerificationResultVerificationCountsTransport {
+	res := &ReviewVerificationResultVerificationCountsTransport{
 		Required:     &v.Required,
 		Passed:       &v.Passed,
 		Failed:       &v.Failed,
@@ -18742,12 +21750,90 @@ func encodeVerificationNotCompletedToListVerificationsResultVerificationNotCompl
 	return res
 }
 
+func encodeVerificationNotCompletedToReviewVerificationResultVerificationNotCompletedTransport(v *surla.VerificationNotCompleted) *ReviewVerificationResultVerificationNotCompletedTransport {
+	res := &ReviewVerificationResultVerificationNotCompletedTransport{
+		Kind:    &v.Kind,
+		Stage:   &v.Stage,
+		Summary: &v.Summary,
+	}
+
+	return res
+}
+
 func encodeVerificationNotCompletedToVerifyChangeResultVerificationNotCompletedTransport(v *surla.VerificationNotCompleted) *VerifyChangeResultVerificationNotCompletedTransport {
 	res := &VerifyChangeResultVerificationNotCompletedTransport{
 		Kind:    &v.Kind,
 		Stage:   &v.Stage,
 		Summary: &v.Summary,
 	}
+
+	return res
+}
+
+func encodeVerificationReviewToReviewVerificationResultVerificationReviewTransport(v *surla.VerificationReview) *ReviewVerificationResultVerificationReviewTransport {
+	res := &ReviewVerificationResultVerificationReviewTransport{}
+	var storyContextValue ReviewVerificationResultstoryContextTransport
+	switch string(v.StoryContext.Kind()) {
+	case "recorded":
+		actual, _ := v.StoryContext.AsRecorded()
+		var obj *ReviewVerificationResultRecordedRunStoryTransport
+		if actual != nil {
+			obj = encodeRecordedRunStoryToReviewVerificationResultRecordedRunStoryTransport(actual)
+		}
+		u := storyContextValue
+		u.SetRecorded((*ReviewVerificationResultRecordedRunStoryTransport)(obj))
+		storyContextValue = u
+	case "not_recorded":
+		actual, _ := v.StoryContext.AsNotRecorded()
+		var obj *ReviewVerificationResultRunStoryNotRecordedTransport
+		if actual != nil {
+			obj = encodeRunStoryNotRecordedToReviewVerificationResultRunStoryNotRecordedTransport(actual)
+		}
+		u := storyContextValue
+		u.SetNotRecorded((*ReviewVerificationResultRunStoryNotRecordedTransport)(obj))
+		storyContextValue = u
+	}
+	res.StoryContext = &storyContextValue
+	var approvalValue ReviewVerificationResultapprovalTransport
+	switch string(v.Approval.Kind()) {
+	case "available":
+		actual, _ := v.Approval.AsAvailable()
+		var obj *ReviewVerificationResultRunApprovalAvailableTransport
+		if actual != nil {
+			obj = encodeRunApprovalAvailableToReviewVerificationResultRunApprovalAvailableTransport(actual)
+		}
+		u := approvalValue
+		u.SetAvailable((*ReviewVerificationResultRunApprovalAvailableTransport)(obj))
+		approvalValue = u
+	case "blocked":
+		actual, _ := v.Approval.AsBlocked()
+		var obj *ReviewVerificationResultRunApprovalBlockedTransport
+		if actual != nil {
+			obj = encodeRunApprovalBlockedToReviewVerificationResultRunApprovalBlockedTransport(actual)
+		}
+		u := approvalValue
+		u.SetBlocked((*ReviewVerificationResultRunApprovalBlockedTransport)(obj))
+		approvalValue = u
+	case "recorded":
+		actual, _ := v.Approval.AsRecorded()
+		var obj *ReviewVerificationResultApprovalItemTransport
+		if actual != nil {
+			obj = encodeApprovalItemToReviewVerificationResultApprovalItemTransport(actual)
+		}
+		u := approvalValue
+		u.SetRecorded((*ReviewVerificationResultApprovalItemTransport)(obj))
+		approvalValue = u
+	case "unverified":
+		actual, _ := v.Approval.AsUnverified()
+		var obj *ReviewVerificationResultUnverifiedApprovalItemTransport
+		if actual != nil {
+			obj = encodeUnverifiedApprovalItemToReviewVerificationResultUnverifiedApprovalItemTransport(actual)
+		}
+		u := approvalValue
+		u.SetUnverified((*ReviewVerificationResultUnverifiedApprovalItemTransport)(obj))
+		approvalValue = u
+	}
+	res.Approval = &approvalValue
 
 	return res
 }
@@ -18762,6 +21848,14 @@ func encodeVerificationRunningToGetVerificationResultVerificationRunningTranspor
 
 func encodeVerificationRunningToListVerificationsResultVerificationRunningTransport(v *surla.VerificationRunning) *ListVerificationsResultVerificationRunningTransport {
 	res := &ListVerificationsResultVerificationRunningTransport{
+		StartedAt: &v.StartedAt,
+	}
+
+	return res
+}
+
+func encodeVerificationRunningToReviewVerificationResultVerificationRunningTransport(v *surla.VerificationRunning) *ReviewVerificationResultVerificationRunningTransport {
+	res := &ReviewVerificationResultVerificationRunningTransport{
 		StartedAt: &v.StartedAt,
 	}
 
@@ -18810,6 +21904,26 @@ func encodeVerificationScenarioToListVerificationsResultVerificationScenarioTran
 				continue
 			}
 			res.Checks[i] = encodeVerificationCheckToListVerificationsResultVerificationCheckTransport(val)
+		}
+	}
+
+	return res
+}
+
+func encodeVerificationScenarioToReviewVerificationResultVerificationScenarioTransport(v *surla.VerificationScenario) *ReviewVerificationResultVerificationScenarioTransport {
+	res := &ReviewVerificationResultVerificationScenarioTransport{
+		ID:      &v.ID,
+		Outcome: &v.Outcome,
+		Error:   v.Error,
+	}
+	if v.Checks != nil {
+		res.Checks = make([]*ReviewVerificationResultVerificationCheckTransport, len(v.Checks))
+		for i, val := range v.Checks {
+			if val == nil {
+				res.Checks[i] = nil
+				continue
+			}
+			res.Checks[i] = encodeVerificationCheckToReviewVerificationResultVerificationCheckTransport(val)
 		}
 	}
 

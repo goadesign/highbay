@@ -93,14 +93,18 @@ func newSupervisionFixture(t *testing.T) (*teamSupervisor, *supervisionFixture, 
 // setOwed replaces the owner's assignment read with the given unread generations per role.
 func setOwed(t *testing.T, o *teamSupervisor, owed map[string][]string) {
 	t.Helper()
-	o.assignments(t.Context(), func(context.Context) ([]controlplane.AssignmentGeneration, error) {
+	o.assignments(t.Context(), func(context.Context) (controlplane.TeamAssignments, error) {
 		var generations []controlplane.AssignmentGeneration
 		for role, names := range owed {
 			for _, name := range names {
 				generations = append(generations, controlplane.AssignmentGeneration{Role: role, Generation: name})
 			}
 		}
-		return generations, nil
+		return controlplane.TeamAssignments{
+			BuilderHasWork:    true,
+			TestWriterHasWork: true,
+			Unread:            generations,
+		}, nil
 	})
 }
 
@@ -274,7 +278,9 @@ func TestTeamReminderUnmetConditions(t *testing.T) {
 			case "handle not listed":
 				listed(o, now, false, "another-handle")
 			case "assignment read failed":
-				o.assignments(t.Context(), func(context.Context) ([]controlplane.AssignmentGeneration, error) { return nil, assert.AnError })
+				o.assignments(t.Context(), func(context.Context) (controlplane.TeamAssignments, error) {
+					return controlplane.TeamAssignments{}, assert.AnError
+				})
 				assert.Contains(t, o.roles["builder"].owed, "one", "the unsent generation is kept")
 			case "guide":
 				_, err := registerTestAgent(o.server, "guide-example", "guide", o.server.state.Record.Directory)
@@ -696,7 +702,9 @@ func TestTeamSupervisorLifetime(t *testing.T) {
 			}
 			done := make(chan error, 1)
 			go func() {
-				done <- o.server.Supervise(ctx, func(context.Context) ([]controlplane.AssignmentGeneration, error) { return nil, nil })
+				done <- o.server.Supervise(ctx, func(context.Context) (controlplane.TeamAssignments, error) {
+					return controlplane.TeamAssignments{}, nil
+				})
 			}()
 			for range 2 {
 				select {
@@ -721,4 +729,141 @@ func TestTeamSupervisorLifetime(t *testing.T) {
 			assert.Len(t, joined, 2)
 		})
 	}
+}
+
+// TestTeamNoWorkClearsOwedAndLaterWorkRestoresReminders checks that ReadTeam
+// reports no_work, unread, nothing_owed, and unknown from real state, that
+// no_work clears owed so no reminder is sent and idle waiting never turns into
+// needs_you, and that a later build giving work again restores unread and
+// reminders.
+func TestTeamNoWorkClearsOwedAndLaterWorkRestoresReminders(t *testing.T) {
+	o, f, now := newSupervisionFixture(t)
+	_, err := registerTestAgent(o.server, "guide-example", "guide", o.server.state.Record.Directory)
+	require.NoError(t, err)
+	_, err = registerTestAgent(o.server, "writer-example", "test_writer", o.server.state.Record.Directory)
+	require.NoError(t, err)
+	o.syncSelection(o.server.teamSelection())
+	o.event(t.Context(), TeamEvent{Kind: "snapshot", Role: "guide", Sequence: 10}, now)
+	o.event(t.Context(), TeamEvent{Kind: "snapshot", Role: "builder", Sequence: 10, Terminals: []TeamTerminal{f.terminal}}, now)
+	o.event(t.Context(), TeamEvent{Kind: "snapshot", Role: "test_writer", Sequence: 10}, now)
+	listed(o, now.Add(-teamJoinSettle), true, "guide-example", "builder-example", "writer-example")
+
+	readAssignments := func() map[string]string {
+		snapshot, err := o.server.ReadTeam(t.Context())
+		require.NoError(t, err)
+		got := make(map[string]string, len(snapshot.Roles))
+		for _, r := range snapshot.Roles {
+			got[r.Role] = r.Assignment
+		}
+		return got
+	}
+
+	// 1. Both worker roles have unread work; guide stays nothing_owed.
+	setOwed(t, o, map[string][]string{"builder": {"gen-1"}, "test_writer": {"gen-1"}})
+	o.publish(t.Context(), now, false)
+	assert.Equal(t, map[string]string{
+		"guide":       "nothing_owed",
+		"builder":     "unread",
+		"test_writer": "unread",
+	}, readAssignments())
+
+	// 2. Builder reads its assignment (has work, nothing owed); test_writer
+	// finishes its work (accepted -> no_work).
+	o.assignments(t.Context(), func(context.Context) (controlplane.TeamAssignments, error) {
+		return controlplane.TeamAssignments{
+			BuilderHasWork:    true,
+			TestWriterHasWork: false,
+		}, nil
+	})
+	o.publish(t.Context(), now, false)
+	assert.Equal(t, map[string]string{
+		"guide":       "nothing_owed",
+		"builder":     "nothing_owed",
+		"test_writer": "no_work",
+	}, readAssignments())
+	assert.Empty(t, o.roles["test_writer"].owed, "no_work clears owed")
+
+	// 3. Build is dropped or passes while builder had an unread generation:
+	// both worker roles have no_work, owed is cleared, no reminder is sent,
+	// and waiting past teamIdleUnreadBound stays waiting with attention none.
+	setOwed(t, o, map[string][]string{"builder": {"gen-2"}, "test_writer": {"gen-2"}})
+	require.NotEmpty(t, o.roles["builder"].owed)
+	o.assignments(t.Context(), func(context.Context) (controlplane.TeamAssignments, error) {
+		return controlplane.TeamAssignments{
+			BuilderHasWork:    false,
+			TestWriterHasWork: false,
+		}, nil
+	})
+	later := now.Add(teamIdleUnreadBound + time.Second)
+	for _, r := range o.roles {
+		r.lastEvent = later
+	}
+	o.publish(t.Context(), later, false)
+	o.remind(t.Context(), later)
+	assert.Empty(t, f.sends, "a role with no_work gets no reminder")
+	assert.Empty(t, o.roles["builder"].owed)
+	assert.Empty(t, o.roles["test_writer"].owed)
+	snapshot, err := o.server.ReadTeam(t.Context())
+	require.NoError(t, err)
+	for _, r := range snapshot.Roles {
+		if r.Role == "builder" {
+			assert.Equal(t, "waiting", r.State, "no_work must not become needs_you after teamIdleUnreadBound")
+			assert.Equal(t, "none", r.Attention)
+			assert.Equal(t, "no_work", r.Assignment)
+		}
+	}
+
+	// 4. A failed assignment read reports unknown for worker roles and keeps
+	// guide at nothing_owed.
+	o.assignments(t.Context(), func(context.Context) (controlplane.TeamAssignments, error) {
+		return controlplane.TeamAssignments{}, assert.AnError
+	})
+	o.publish(t.Context(), later, false)
+	assert.Equal(t, map[string]string{
+		"guide":       "nothing_owed",
+		"builder":     "unknown",
+		"test_writer": "unknown",
+	}, readAssignments())
+
+	// 5. Later accepted tests after a pass give the builder work and an unread
+	// generation again while test_writer stays no_work; then a pass on the new
+	// inputs returns the builder to no_work.
+	o.assignments(t.Context(), func(context.Context) (controlplane.TeamAssignments, error) {
+		return controlplane.TeamAssignments{
+			BuilderHasWork:    true,
+			TestWriterHasWork: false,
+			Unread:            []controlplane.AssignmentGeneration{{Role: "builder", Generation: "gen-later-tests"}},
+		}, nil
+	})
+	o.publish(t.Context(), later, false)
+	assert.Equal(t, map[string]string{
+		"guide":       "nothing_owed",
+		"builder":     "unread",
+		"test_writer": "no_work",
+	}, readAssignments())
+
+	o.assignments(t.Context(), func(context.Context) (controlplane.TeamAssignments, error) {
+		return controlplane.TeamAssignments{
+			BuilderHasWork:    false,
+			TestWriterHasWork: false,
+		}, nil
+	})
+	o.publish(t.Context(), later, false)
+	assert.Equal(t, map[string]string{
+		"guide":       "nothing_owed",
+		"builder":     "no_work",
+		"test_writer": "no_work",
+	}, readAssignments())
+
+	// 6. A later build gives both roles work again: ReadTeam shows unread and
+	// remind sends to both roles.
+	setOwed(t, o, map[string][]string{"builder": {"gen-2"}, "test_writer": {"gen-2"}})
+	o.publish(t.Context(), later, false)
+	assert.Equal(t, map[string]string{
+		"guide":       "nothing_owed",
+		"builder":     "unread",
+		"test_writer": "unread",
+	}, readAssignments())
+	o.remind(t.Context(), later)
+	require.Len(t, f.sends, 2)
 }

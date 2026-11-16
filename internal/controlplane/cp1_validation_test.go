@@ -184,7 +184,7 @@ func TestChangeCardHTTPErrorsAndMCPToolPreservation(t *testing.T) {
 			}},
 		}, http.StatusUnprocessableEntity, false, "is not one of its options"},
 		{"preview unconfirmed card", handler, http.MethodPost, "/changes/preview", "alice-token", map[string]any{"change_id": "chg", "request_revision": pending.RequestRevision}, http.StatusConflict, false, `change_id "chg" must be confirmed before architecture preview (status "needs_confirmation")`},
-		{"preview without a workspace", handler, http.MethodPost, "/changes/preview", "alice-token", map[string]any{"change_id": "chg-ok", "request_revision": confirmed.RequestRevision}, http.StatusUnprocessableEntity, false, "workspace directory is not bound"},
+		{"preview without saved architecture", handler, http.MethodPost, "/changes/preview", "alice-token", map[string]any{"change_id": "chg-ok", "request_revision": confirmed.RequestRevision}, http.StatusUnprocessableEntity, false, "no architecture to show"},
 		{"verify_change without config", handler, http.MethodPost, "/changes/chg-ok/verifications", "alice-token", map[string]any{"request_revision": confirmed.RequestRevision, "candidate_commit": strings.Repeat("a", 40)}, http.StatusNotImplemented, false, "verification is not configured"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

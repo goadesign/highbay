@@ -36,12 +36,14 @@ const (
 var operationRoles = map[string][]CallerKind{
 	"ensure_team": {CallerManagement}, "identity": {CallerManagement}, "stop": {CallerManagement}, "browser_link": {CallerManagement},
 	"hand_over_model_settings": {CallerManagement}, "confirm_intent": {CallerUser}, "approve_merge": {CallerUser}, "configure_model": {CallerUser},
+	"update_draft": {CallerGuide}, "drop_build": {CallerUser},
 	"propose_change": {CallerGuide}, "revise_change": {CallerGuide}, "refresh_story": {CallerGuide},
 	"get_story_refresh": {CallerUser, CallerGuide, CallerBuilder}, "init_project": {CallerGuide},
 	"generate_code": {CallerBuilder}, "check_project": {CallerBuilder}, "update_dependencies": {CallerBuilder},
 	"start_live_target": {CallerBuilder}, "stop_live_target": {CallerUser, CallerBuilder}, "draft_override": {CallerBuilder},
 	"get_live_target": {CallerUser, CallerBuilder}, "get_model_connection": {CallerUser},
 	"verify_change":        {CallerBuilder},
+	"review_verification":  {CallerUser},
 	"get_change":           {CallerUser, CallerGuide, CallerBuilder},
 	"preview_architecture": {CallerUser, CallerGuide, CallerBuilder},
 	"diff":                 {CallerUser, CallerGuide, CallerBuilder},
@@ -81,12 +83,9 @@ func authorizeOperation(name string, next goa.Endpoint, recorder trace.Tracer) g
 		ctx, span := recorder.Start(ctx, "surla.request."+name)
 		defer span.End()
 		defer func() {
-			if err != nil {
-				var domain *goa.ServiceError
-				if !errors.As(err, &domain) || domain.Fault {
-					span.RecordError(err)
-					span.SetStatus(codes.Error, "operation failed")
-				}
+			if err != nil && !expectedRequestRefusal(err) {
+				span.RecordError(err)
+				span.SetStatus(codes.Error, "operation failed")
 			}
 		}()
 
@@ -113,6 +112,7 @@ func applyOperationPolicy(e *gensurla.Endpoints, recorder trace.Tracer) {
 	e.GetLiveTarget = wrap("get_live_target", e.GetLiveTarget)
 	e.VerifyChange = wrap("verify_change", e.VerifyChange)
 	e.GetVerification = wrap("get_verification", e.GetVerification)
+	e.ReviewVerification = wrap("review_verification", e.ReviewVerification)
 	e.ListVerifications = wrap("list_verifications", e.ListVerifications)
 	e.ApproveMerge = wrap("approve_merge", e.ApproveMerge)
 	e.Diff = wrap("diff", e.Diff)
@@ -132,6 +132,8 @@ func applyOperationPolicy(e *gensurla.Endpoints, recorder trace.Tracer) {
 	e.GetTeam = wrap("get_team", e.GetTeam)
 	e.ShowTeamPane = wrap("show_team_pane", e.ShowTeamPane)
 	e.StartTeamAgents = wrap("start_team_agents", e.StartTeamAgents)
+	e.DropBuild = wrap("drop_build", e.DropBuild)
+	e.UpdateDraft = wrap("update_draft", e.UpdateDraft)
 	e.StartBuild = wrap("start_build", e.StartBuild)
 	e.GetBuild = wrap("get_build", e.GetBuild)
 	e.GetTestFindings = wrap("get_test_findings", e.GetTestFindings)
@@ -180,4 +182,43 @@ func filterMCPDiscovery(e *genmcp.Endpoints) {
 		catalog.Tools = tools
 		return catalog, nil
 	}
+}
+
+// expectedRequestRefusal classifies the owning named error of a single
+// wrapped failure. Independent joined failures keep their own meaning rather
+// than borrowing one child's refusal type and hiding another child's fault.
+func expectedRequestRefusal(err error) bool {
+	switch failure := requestErrorOwner(err).(type) {
+	case *goa.ServiceError:
+		return !failure.Fault
+	case *gensurla.CopyOffBranch, *gensurla.OpenBuildRefusal:
+		return true
+	default:
+		return false
+	}
+}
+
+// requestErrorOwner follows only a single wrapping chain to its named owner.
+// A join of independent failures owns its meaning; choosing one child would
+// turn an unrelated storage failure into that child's ordinary refusal.
+func requestErrorOwner(err error) error {
+	for err != nil {
+		if _, named := err.(goa.GoaErrorNamer); named {
+			return err
+		}
+		if joined, ok := err.(interface{ Unwrap() []error }); ok {
+			causes := joined.Unwrap()
+			if len(causes) != 1 {
+				return err
+			}
+			err = causes[0]
+		} else {
+			cause := errors.Unwrap(err)
+			if cause == nil {
+				return err
+			}
+			err = cause
+		}
+	}
+	return nil
 }

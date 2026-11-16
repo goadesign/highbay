@@ -67,7 +67,7 @@ The team of coding agents that builds it runs on two more:
 
 The `surla` command, run in a project folder, starts the project's Surla server (from here on, the server). The server serves the views page in the user's browser and one HTTP and MCP endpoint to the project's team of coding agents:
 
-- **The guide** is the agent the user talks to. It writes the Story, the Go source in `design/` that describes the business's flows, and proposes changes. A flow is one path of who does what, from the event that starts it to its outcomes.
+- **The guide** is the agent the user talks to. Working in its `.surla-draft` copy inside the project folder (never in the project folder itself), it writes the Story and the rest of the Go source in `design/` that describes the business's flows, evaluates that draft with `refresh_story`, and proposes changes. A flow is one path of who does what, from the event that starts it to its outcomes.
 - **The builder** writes the application code and asks Surla to verify a commit.
 - **The test writer** writes the tests a build requires, in its own working copy of the project.
 
@@ -78,14 +78,14 @@ Each change is saved as a Change Card: the record of the request, its open quest
 | The `surla` command | `cmd/surla` | Finding the project's private state folder, starting the server in Herdr, starting Chorus and Herdr, the stored settings |
 | The server | `internal/project` | The project's identity and port, credentials and browser sessions, the team record, the Chorus roster (the list of roles the Chorus dialog shows) and the team's observed state |
 | The control plane | `internal/controlplane` | Change Cards, builds and assignments, the report checker, the verification plan, the live target and operation diagnostics |
-| The test writer's working copy | `internal/testwriter` | The `.surla-tests` folder, the `surla/tests` branch, the required tests, the check of a report and the commit of accepted tests |
+| The build working copies | `internal/testwriter` | The `.surla-build` and `.surla-tests` folders, the numbered `surla/build-<n>` and `surla/tests-<n>` branches, the required tests, the check of a report and the commit of accepted tests |
 | Verification runs | `internal/verifyrun`, `internal/verify` | One folder per verification run (its run directory) and the processes that build, run and report it |
 | Herdr | outside Surla | Terminals, panes and spaces |
 | Chorus | outside Surla | Agent messaging and the dialog that starts each role's agent |
 
 ### The server and its state
 
-A project is one physical folder. `surla` looks for the nearest folder that has a project record and otherwise creates a new, empty project, so moving or renaming the folder starts a new project. Each project has one private state folder under the user's configuration folder, outside the project. It holds the project record (its ID, folder, owning operating-system account, port, team name and Herdr space, and each registered agent's role and working folder), one credential file per agent, the Change Card folder, verification runs and reports, and the stored verification and promotion settings. A new project saves a free loopback port that no other project of the account saved, and keeps it, because its agents' connections and the Chorus roster name that address. When `surla` cannot use a project's record, it names the project folder, the record's path and the repair; when it cannot use a state folder, it names that folder and the repair.
+A project is one physical folder. `surla` looks for the nearest folder that has a project record and otherwise creates a new, empty project, so moving or renaming the folder starts a new project. Each project has one private state folder under the user's configuration folder, outside the project. It holds the project record (its ID, folder, owning operating-system account, port, team name and Herdr space, and each registered agent's role and working folder), one credential file per agent, the Change Card folder, verification runs and reports, one retained Go build cache, and the stored verification and promotion settings. A new project saves a free loopback port that no other project of the account saved, and keeps it, because its agents' connections and the Chorus roster name that address. When `surla` cannot use a project's record, it names the project folder, the record's path and the repair; when it cannot use a state folder, it names that folder and the repair.
 
 When the user runs `surla`:
 
@@ -107,49 +107,74 @@ Before creating any state, `surla` checks that Herdr core (`herdr-core` and `hc`
 1. adopts the project's saved Herdr space, or the single space with the team's name and the project's folder, or creates one; several matching spaces are refused, and the user closes the duplicates;
 2. registers the guide, working in the project folder;
 3. writes the Chorus roster: one row per registered role whose folder exists, with that folder, its first message, and a connection to the server's MCP endpoint that names the role's credential file, never the credential itself;
-4. opens the Chorus dialog when a listed role is not running.
+4. opens the Chorus dialog when the guide, or a worker role that has work on the open build (or any listed role when the assignment read fails), is not running.
 
 `surla` prints `Team <name>.` and the user's next step, opens the views page and prints `Surla is running for <folder> at <address>`. The roster places the builder's pane to the right of the guide's and the test writer's below the builder's.
 
-A build adds roles. The control plane asks the server to register the builder, working in the project folder, and, when tests are written for this build, the test writer, working in its own working copy. A build that uses no test writer removes a former test writer and its credential. The server derives every first message and the team's next step in one place and never keeps them in its saved state.
+A build adds roles. The control plane asks the server to register the builder, working in its `.surla-build` working copy, and, when tests are written for this build, the test writer, working in its `.surla-tests` working copy. A build that uses no test writer removes a former test writer and its credential. The server derives every first message and the team's next step in one place and never keeps them in its saved state.
 
-While the team runs, the server watches each registered role's terminal through Herdr and whether Chorus reports a watcher for each agent: the wait through which the agent receives its messages. It keeps the terminal's state and reported status, the foreground program's arguments and the watcher facts, never screen text, titles or messages. Herdr sends a heartbeat every 15 seconds; when three are missed, every role is unknown until fresh snapshots arrive. Chorus answers are read only up to their agent list, at most 256 KiB, before any conversation data. The control plane gives the server a read-only callback that lists the unread assignments; calling it never marks work read. Surla types nothing into a pane. It reminds a role of an unread assignment with two tool calls posted to Chorus's `/mcp` endpoint, written as Chorus's dashboard writes them: `who` registers Surla's own handle in the team, then `send` hands the role one fixed direct message. The sender has its own client, bounded at 5 seconds per post; it fails a response longer than 2 MiB and decodes only whether each call failed. The supervisor alone keeps, in memory, which generations of an unread assignment it has already tried. [Team supervision](REFERENCE.md#team-supervision) gives the user's view of this.
+While the team runs, the server watches each registered role's terminal through Herdr and whether Chorus reports a watcher for each agent: the wait through which the agent receives its messages. It keeps the terminal's state and reported status, the foreground program's arguments and the watcher facts, never screen text, titles or messages. Herdr sends a heartbeat every 15 seconds; when three are missed, every role is unknown until fresh snapshots arrive. Chorus answers are read only up to their agent list, at most 256 KiB, before any conversation data. The control plane gives the server a read-only callback that reports which worker roles have work on the open build and which unread assignment generations they owe; calling it never marks work read. Surla types nothing into a pane. It reminds a worker role that has work on the open build and owes an unread assignment with two tool calls posted to Chorus's `/mcp` endpoint, written as Chorus's dashboard writes them: `who` registers Surla's own handle in the team, then `send` hands the role one fixed direct message. The sender has its own client, bounded at 5 seconds per post; it fails a response longer than 2 MiB and decodes only whether each call failed. The supervisor alone keeps, in memory, which generations of an unread assignment it has already tried. [Team supervision](REFERENCE.md#team-supervision) gives the user's view of this.
 
 ### Change Cards and builds
 
 The control plane keeps Change Cards in the Change Card folder, under the folder lock the running server holds. Only the guide proposes or revises a change. Once the user confirms a change, its agreed revision stays in force while a revision the guide proposes waits beside it, until the user adopts or declines that proposed revision.
 
-A build is the user's decision to build the agreed revision. The control plane saves one build per change, in `<sha256(change_id)>.build.json` beside the cards, by writing a staging file, renaming it and syncing the folder, under the card lock. The card lock (`ControlPlane.mu`) is an in-process lock that guards every read and write of a card or a build inside the server; it is not the folder lock. The build file's reader refuses unknown fields, trailing data, an unknown role selection, a negative report number and a test writer state that contradicts its other fields. A build holds:
+A build is the user's decision to build the agreed revision. The control plane saves one open build per project in `build.json` beside the cards, by writing a staging file (`pending-open-build`), renaming it and syncing the folder, under the card lock, and records dropped builds in `made-from.json`. The card lock (`ControlPlane.mu`) is an in-process lock that guards every read and write of a card or a build inside the server; it is not the folder lock. The build file's reader refuses unknown fields, trailing data, an unknown role selection, a negative report number and a test writer state that contradicts its other fields. A build holds:
 
 | Field | Meaning |
 | --- | --- |
-| `change_id`, `request_revision`, `started_at` | The change, the agreed revision the build started from, and when the user pressed **Build this change** |
-| `stories`, `design_source` | The Story and design as agreed, copied when the build started; later revisions do not change them |
+| `change_id`, `request_revision`, `started_at` | The change, the agreed revision the build started from, and when the user started the build |
+| `number`, `base` | The build's number `n` (`surla/build-<n>` and `surla/tests-<n>`) and the project folder's commit the build started from |
+| `stories`, `design_source`, `go_mod`, `made_from` | The Story and design as agreed, the text of the `go.mod` the design was evaluated with, and the record of what the revision was made from (the project commit its draft started from and the versions of each design file), copied when the build started; later revisions do not change them |
 | `answers`, `examples`, `preserved_behaviors` | Each question with the answer the user confirmed, the confirmation examples and the preserved behaviors, as agreed, copied at the same time; the test writer, which may not read the change, receives them in its assignment |
 | `roles` | `builder_and_test_writer`, or `builder_only` when stored verification settings supply the tests |
-| `builder`, `test_writer` | Each assignment; the test writer's carries its state, findings, accepted tests commit and working folder |
+| `builder`, `test_writer` | Each assignment; the test writer's carries its state, findings and accepted tests commit |
 | `report_number` | The test writer's latest report, 0 before the first |
 
-The server's agent record maps each role to its folder and credential file. The build file holds the test writer's working folder but no credential, and neither store writes the other's data.
+The server's agent record maps each role to its folder and credential file. The build file holds no credential, and neither store writes the other's data.
 
 When the user presses **Build this change** on the views page, `start_build`:
 
-1. checks that the caller is the project's owner, then takes the project's working-copy turn without waiting; while another start or a report check holds the turn, the start is refused and nothing is saved;
-2. checks the agreed revision, opens and refreshes the test writer's working copy when tests are written for this build, and checks the revision again;
-3. saves the build, with the Story, design, answers, examples and preserved behaviors of the revision that second check read, then registers its roles with the server, so a saved build never lacks its agents;
-4. writes the required tests into the working copy, releases the turn and asks the server to start the agents.
+1. checks that the caller is the project's owner, then takes the builder's copy turn and the test writer's working-copy turn without waiting; while another start, an assignment read or a report check holds a turn, the start is refused and nothing is saved;
+2. checks the agreed revision, checks open-build replacement (`previous_change_open` and `unfinished_build_open` with `replaces`), checks `drafted_before_drop` and `design_changed_outside`, numbers a new build (or keeps the unmerged, undropped open build's number and base), and checks the revision again;
+3. saves the open build in `build.json`, with the Story, design, answers, examples and preserved behaviors of the revision that second check read, creates any missing `.surla-build` (`surla/build-<n>`) and `.surla-tests` (`surla/tests-<n>`) working copies at the build's base commit without moving existing copies, and registers its roles with the server; when a copy cannot be made or the server stops first, the build stays saved, and building again makes the copy and registers the roles;
+4. releases the turns and asks the server to start the agents; each existing copy joins its build branch (`surla/build-<n>` or `surla/tests-<n>`), and `.surla-tests` receives the required tests, when its worker first reads the assignment.
 
-The work under the turn has one five-minute limit; starting the agents has its own 45-second limit. Accepted work belongs to the server and survives the page closing. A build started with only the builder stays usable while stored verification settings supply its tests; when those settings are removed, the user builds again.
+The work under the turns has one five-minute limit; starting the agents has its own 45-second limit. Accepted work belongs to the server and survives the page closing. A build started with only the builder stays usable while stored verification settings supply its tests; when those settings are removed, the user builds again.
+
+The control plane derives `ChangeBuild.drafted_before_drop` from the agreed
+revision's saved design provenance and the current actual drop. One predicate
+serves build admission before preparation and before save, `get_build`,
+`drop_build` and the build rendering included in change-list versions. The
+fact describes only this refusal, not overall start eligibility; no private
+provenance generation leaves the owner and no new persisted value is added.
+The page uses that fact for recovery guidance and includes it in the identity
+of any pending Build question. A merged build of the current agreement has a
+secondary replay question; confirmation starts a new number from current
+project HEAD with fresh assignments, rather than reusing the merged build's
+number or passed result.
 
 The views page keeps one waiting read (`wait_for_changes`) open. Its answer is a version of the change list that changes whenever a card, a change's latest verification run, a build as `get_build` shows it, the team, the Story evaluation or the live target changes, and the page then reads again. The page sends a build or a window action only when the user acts.
 
 ### The test writer's working copy and the report checker
 
-`internal/testwriter` owns the test writer's working copy: a linked Git working copy of the project at `.surla-tests` on the branch `surla/tests`. It prepares the required tests, checks a report and records accepted tests as a commit on that branch. The control plane runs one report checker per project: it starts when the server binds the team and drains before the stores close. A check holds the working-copy turn, so a build start cannot change the copy under it. Three in-process locks are always taken in this order: the working-copy turn, the report lock, the card lock. A report check holds the working-copy turn from start to verdict, and a build start holds it until the required tests are written; either can take minutes. The report lock (`ControlPlane.reportMu`) makes a newly arriving report wait while the checker confirms the build is the one it checked, records the accepted tests and saves the verdict. Git and the commands that build and run the test writer's code never run under the card lock. [Story flows and the tests a build requires](STORY_TEST_DESIGN.md) describes [the copy](STORY_TEST_DESIGN.md#the-test-writers-working-copy) and [the check and its findings](STORY_TEST_DESIGN.md#how-surla-judges-a-report).
+`internal/testwriter` owns the builder's and the test writer's working copies—linked Git working copies of the project at `.surla-build` on `surla/build-<n>` and `.surla-tests` on `surla/tests-<n>`—joining each to its build branch on the first assignment read, checking build-branch lineage, and preparing, checking and recording accepted tests as a commit on `surla/tests-<n>`. The control plane runs one report checker per project: it starts when the server binds the team and drains before the stores close. Two working-copy turns—the builder's copy turn (`ControlPlane.builderCopyTurn`) and the test writer's working-copy turn (`ControlPlane.workingCopyTurn`)—guard the working copies, and in-process locks are always taken in this order: the builder's copy turn, the working-copy turn, the report lock, the draft lock (`ControlPlane.draftMu`, which serializes the guide's draft and its made-from list), the card lock. A build start takes the builder's copy turn and then the working-copy turn and releases both after registering the roles, without writing tests; the test writer's marking assignment read and each report check hold the working-copy turn and write the required tests, and either can take minutes. The report lock (`ControlPlane.reportMu`) makes a newly arriving report wait while the checker confirms the build is the one it checked, records the accepted tests and saves the verdict. Git and the commands that build and run the test writer's code never run under the card lock. [Story flows and the tests a build requires](STORY_TEST_DESIGN.md) describes [the copy](STORY_TEST_DESIGN.md#the-test-writers-working-copy) and [the check and its findings](STORY_TEST_DESIGN.md#how-surla-judges-a-report).
 
 ### Verification runs and the live target
 
 One function, `testsChoice` in [`verification_plan.go`](../internal/controlplane/verification_plan.go), chooses which tests judge a change: the suite named in the stored verification settings, or the tests accepted for the change's build at its revision. Verification runs those tests, `approve_merge` requires the approved report to have run them, and a saved approval is shown only while they stay the same; `verificationPlan` builds a run's configuration from that choice. The builder names only the change, the revision and its commit.
+
+At acceptance, the control plane copies the open build's agreed Story and build
+identity into the immutable request owned by `internal/verifyrun`. This evidence
+survives later revisions and builds; runs without recorded context never borrow
+the current Story. The user-only `review_verification` read returns that snapshot
+and an approval observation without changing workflow state. Its required-test
+mapping comes from `designeval.StoryScenarios`, the same owner used by generation;
+operator-evaluator mapping remains explicitly unknown. The read and
+`approve_merge` share `readApprovalInputs`, `checkApprovalReport` and
+`recheckApproval`; the write holds the final lock through persistence. A readable
+run alone does not imply approval, and an observation grants no lease. Shared
+agent reads and history listing keep their existing builder-safe contracts.
 
 `internal/verifyrun` runs each verification in its run directory, one folder per run under the state folder's runs folder that holds the run's request, lock, result and logs. A supervisor process, started for the run, holds the run's lock for its whole life, so a run outlives the server that accepted it and its state is read back from the lock and the result file alone. `internal/verify` builds the candidate (the builder's commit under verification) and the test program, then runs the test program, which starts the candidate's programs; they all run as ordinary processes with the user's file and network access, in the run's one process group, which a process that starts its own session leaves.
 
@@ -158,6 +183,32 @@ The control plane runs at most one live target for an owned, confirmed change. `
 `internal/verifyrun` owns the live executor's process group and temporary directory under the Change Card folder. For written tests with a direct provider, `LaunchLive` passes the held settings over standard input rather than in the executor's starting environment. After preparation, the executor constructs the provider and serves a loopback model gateway; the accepted test program gets the gateway address and target key, without provider settings. The SDK constructor belongs to the command composition root, while `internal/verifyrun` owns gateway and process lifetime. A chosen gateway passes through, and evaluators in stored verification settings keep their existing provider-settings path. Gateway answers preserve structured model error types with server-authored messages instead of provider error text; the pinned Anthropic SDK's API-key precedence remains unchanged. See [model provider settings](REFERENCE.md#model-provider-settings) for that setting's limits.
 
 Surla sends prompt drafts to a running target with a key minted for it. An unexpected executor ending unbinds drafts and stops the entire group. Only after confirmed cleanup does the control plane retain one in-memory `ended` value containing the commit, ready time, observed-end time and fixed recovery message, without the process, key, provider settings or draft map. Failed cleanup keeps the target owned and `not_confirmed_stopped`. Explicit successful Stop or an accepted replacement clears the observation, and restarting the server loses it. Closing the control plane stops the target and gateway; an open model stream never delays that cleanup.
+
+The project composition root supplies one required `BuildCacheDir` in
+`controlplane.Options` whenever either test source is configured. It lives
+beside runs and reports, outside the workspace, and travels as an explicit
+argument through the internal supervisor, executor and live roles. Saved
+requests, live records and verification plans contain no cache path.
+`verify.Prepare` passes it as `candidate.BuildSpec.BuildCacheDir` for candidate
+and test-program compilation; `WorkDir` keeps only operation-owned scratch and
+staging. The standalone `surla verify` composition root instead supplies a cache
+under its own work directory. Design evaluation and test checking keep their
+existing separate cache lifetimes.
+
+The project cache survives Stop, Close, restart and run pruning. Go maintains
+entries; canceled compiler scratch stays with the operation's cleanup owner.
+Concurrent processes may share the cache on one machine using a local
+filesystem. The user may delete it while no operation is running; the next
+build recreates it. No cache entry skips checkout, output publication, digest
+measurement or test execution.
+
+Cache ownership provides no confinement. Go checks existence and recorded size
+when reading cached package files, not compiled contents against selected
+source. Same-user code can plant a compiled package that a later build links
+into the candidate or test program, so its report can bind a binary the
+selected source would not produce. This joins the trusted module cache, toolchain, executable search path and
+Surla's files. Deleting the build cache forces recompilation but does not
+authenticate those other inputs.
 
 ### Operation diagnostics
 

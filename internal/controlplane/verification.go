@@ -15,6 +15,7 @@ import (
 
 	gensurla "github.com/goadesign/surla/gen/surla"
 	"github.com/goadesign/surla/internal/modelsettings"
+	"github.com/goadesign/surla/internal/testwriter"
 	"github.com/goadesign/surla/internal/verify"
 	"github.com/goadesign/surla/internal/verifyrun"
 )
@@ -35,7 +36,7 @@ type VerificationConfig struct {
 	// directory per run, kept as evidence; the operator prunes it.
 	Plan verify.Plan
 	// Command is the argument list that runs this surla executable; runs
-	// start `<Command> verify-run supervise <dir>`.
+	// start `<Command> verify-run supervise <dir> <build-cache-dir>`.
 	Command []string
 	// Timeout is how long a run may take before it is stopped and recorded
 	// as interrupted.
@@ -53,10 +54,10 @@ var errVerificationUnavailable = errors.New("verification is not configured on t
 // VerifyChange starts Checkpoint 4 verification of a candidate commit for the
 // caller's confirmed Change Card revision and returns at once with the run in
 // the running state. The caller must own the card, the card must be
-// confirmed, and request_revision must be its current revision; then
-// verificationPlan chooses what runs and refuses what cannot (no build, tests
-// not accepted, no test layout, no common history with the accepted tests, or
-// hand-written changes in the test module). The run is accepted into its own
+// confirmed, and request_revision must be its current revision. Both test
+// sources require the current open build, its read builder assignment and a
+// candidate belonging to that build; verificationPlan then chooses the tests
+// and checks the committed test layout. The run is accepted into its own
 // directory under the runs folder and carried out by processes that outlive
 // this call and this server (see verifyrun).
 func (c *ControlPlane) VerifyChange(ctx context.Context, p *gensurla.VerifyChangePayload) (*gensurla.VerificationStatusResult, error) {
@@ -69,6 +70,56 @@ func (c *ControlPlane) VerifyChange(ctx context.Context, p *gensurla.VerifyChang
 	}
 	if err := c.verifiableCard(principal, p.ChangeID, p.RequestRevision); err != nil {
 		return nil, err
+	}
+	_, span := c.tracer("surla/controlplane").Start(ctx, "surla.controlplane.start_verification",
+		trace.WithAttributes(attribute.String("surla.change_id", p.ChangeID)))
+	defer span.End()
+	// The caller owns the copy turn through readiness, candidate preflight and
+	// acceptance. Verification never joins a copy or marks an assignment read.
+	select {
+	case c.builderCopyTurn <- struct{}{}:
+	default:
+		return nil, gensurla.MakeConflict(errors.New("Surla is using the builder's working copy; call verify_change again when that operation has ended."))
+	}
+	defer func() { <-c.builderCopyTurn }()
+	c.mu.RLock()
+	held, err := c.verificationBuild(principal, p.ChangeID, p.RequestRevision)
+	c.mu.RUnlock()
+	if err != nil {
+		return nil, verificationStartInputError(span, p.ChangeID, err)
+	}
+	c.workspaceMu.RLock()
+	ready, err := c.builderCopyReady(ctx, c.activeWorkspaceDir, "verify_change")
+	var readiness *goa.ServiceError
+	if errors.As(err, &readiness) && readiness.Name == "unprocessable" {
+		// Go workspace selection can refuse a module resolving outside the
+		// copy. Verify exposes that readiness goal through its declared conflict.
+		err = gensurla.MakeConflict(fmt.Errorf("%s. Restore the builder's module folder inside its assigned working copy, then call verify_change again.", readiness.Message))
+	}
+	if _, written := c.verifier.(writtenTestVerification); written &&
+		(errors.Is(err, errNoRepository) || errors.Is(err, testwriter.ErrNotRepository)) {
+		// Readiness now observes the missing project repository before the
+		// layout reader does; retain that owner's declared, actionable refusal.
+		err = refuseNoTestLayout(&layoutRefusal{reason: refusedNoRepository, folder: c.activeWorkspaceDir})
+	}
+	if err == nil && (ready.build.file.ChangeID != held.file.ChangeID ||
+		ready.build.file.RequestRevision != held.file.RequestRevision ||
+		!ready.build.file.StartedAt.Equal(held.file.StartedAt)) {
+		err = gensurla.MakeConflict(errors.New("the open build changed while preparing verification: read get_builder_assignment and verify again"))
+	}
+	if err == nil {
+		var check testwriter.CommitCheck
+		check, err = c.checkCandidateBuildCommit(ctx, c.activeWorkspaceDir, held.file, p.CandidateCommit)
+		if err == nil {
+			err = candidateBuildRefusal(p.CandidateCommit, held.file.Base, testwriter.BuilderRole.Branch(held.file.Number), check)
+		}
+		if err == nil {
+			err = checkCandidateDesign(ctx, c.activeWorkspaceDir, held.file, p.CandidateCommit)
+		}
+	}
+	c.workspaceMu.RUnlock()
+	if err != nil {
+		return nil, verificationStartInputError(span, p.ChangeID, err)
 	}
 	verCfg, err := c.verificationPlan(ctx, principal, p.ChangeID, p.RequestRevision, p.CandidateCommit)
 	if err != nil {
@@ -86,19 +137,30 @@ func (c *ControlPlane) VerifyChange(ctx context.Context, p *gensurla.VerifyChang
 		AcceptedAt: time.Now().UTC(),
 		Timeout:    verCfg.Timeout,
 		Plan:       plan,
+		StoryContext: verifyrun.StoryContext{
+			State:          verifyrun.StoryRecorded,
+			BuildNumber:    held.file.Number,
+			BuildStartedAt: held.file.StartedAt,
+			Stories:        held.file.Stories,
+		},
 	}
 	// Observe the selected inputs before accepting work. A later edit can
 	// invalidate this observation, but no failed read can hide an accepted run.
-	_, span := c.tracer("surla/controlplane").Start(ctx, "surla.controlplane.start_verification",
-		trace.WithAttributes(attribute.String("surla.change_id", p.ChangeID)))
-	defer span.End()
 	c.mu.RLock()
+	currentBuild, buildErr := c.verificationBuild(principal, p.ChangeID, p.RequestRevision)
+	if buildErr != nil {
+		c.mu.RUnlock()
+		return nil, verificationStartInputError(span, p.ChangeID, buildErr)
+	}
+	if currentBuild.file.Number != held.file.Number ||
+		!currentBuild.file.StartedAt.Equal(held.file.StartedAt) {
+		c.mu.RUnlock()
+		return nil, gensurla.MakeConflict(errors.New("the open build changed while preparing verification: read get_builder_assignment and verify again"))
+	}
 	inputsCurrent, err := c.currentVerificationInputs(principal, p.ChangeID, plan)
 	c.mu.RUnlock()
 	if err != nil {
-		span.RecordError(err)
-		span.SetStatus(codes.Error, "read verification inputs")
-		return nil, fmt.Errorf("start verification for %q: saved verification inputs could not be read", p.ChangeID)
+		return nil, verificationStartInputError(span, p.ChangeID, err)
 	}
 	// Only the operator's stored evaluator receives provider settings, every
 	// held provider's, snapshotted now: later hand-overs affect later runs.
@@ -106,12 +168,24 @@ func (c *ControlPlane) VerifyChange(ctx context.Context, p *gensurla.VerifyChang
 	if plan.Tests == verify.TestsEvaluator {
 		settings = c.evaluatorSettings()
 	}
-	if _, err := verifyrun.Start(verCfg.RunsDir, req, verCfg.Command, settings); err != nil {
+	if _, err := verifyrun.Start(verCfg.RunsDir, req, verCfg.Command, settings, c.buildCacheDir); err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, "start verification run")
 		return nil, fmt.Errorf("start verification: %w", err)
 	}
 	return statusResult(req, verifyrun.State{Kind: verifyrun.StateRunning}, inputsCurrent, nil), nil
+}
+
+// verificationStartInputError preserves declared refusals and keeps raw input
+// read failures on the operation span, outside the builder's public response.
+func verificationStartInputError(span trace.Span, changeID string, err error) error {
+	var refusal goa.GoaErrorNamer
+	if errors.As(err, &refusal) {
+		return err
+	}
+	span.RecordError(err)
+	span.SetStatus(codes.Error, "read verification inputs")
+	return fmt.Errorf("start verification for %q: saved verification inputs could not be read", changeID)
 }
 
 // verifiableCard checks, under the read lock, that principal owns the card
@@ -158,54 +232,12 @@ func (c *ControlPlane) GetVerification(ctx context.Context, p *gensurla.GetVerif
 	if !ok {
 		return nil, errors.New("authenticated principal is required")
 	}
-	runsDir := c.runsDir
-	if runsDir == "" {
-		return nil, gensurla.MakeNotImplemented(errVerificationUnavailable)
-	}
-	_, span := c.tracer("surla/controlplane").Start(ctx, "surla.controlplane.get_verification",
+	ctx, span := c.tracer("surla/controlplane").Start(ctx, "surla.controlplane.get_verification",
 		trace.WithAttributes(attribute.String("surla.run_id", p.RunID)))
 	defer span.End()
-
-	c.mu.RLock()
-	req, state, err := verifyrun.Read(runsDir, p.RunID)
-	c.mu.RUnlock()
-	switch {
-	case req.Owner == "" && errors.Is(err, fs.ErrNotExist):
-		return nil, gensurla.MakeNotFound(fmt.Errorf("unknown run_id %q", p.RunID))
-	case req.Owner != principal.ID && req.Owner != "":
-		// Checked before any later read error, whose text may name
-		// evaluator paths.
-		return nil, gensurla.MakeForbidden(fmt.Errorf("principal %q is not the owner of run_id %q", principal.ID, p.RunID))
-	case err != nil:
-		span.RecordError(err)
-		span.SetStatus(codes.Error, "read verification run")
-		return nil, fmt.Errorf("read verification %q: saved verification record could not be read", p.RunID)
-	}
-	c.mu.RLock()
-	if principal.Kind == CallerTestWriter {
-		holds, err := c.testWriterHolds(principal, req.ChangeID)
-		if err != nil {
-			c.mu.RUnlock()
-			var refusal *goa.ServiceError
-			if errors.As(err, &refusal) {
-				return nil, err
-			}
-			span.RecordError(err)
-			span.SetStatus(codes.Error, "read verification assignment")
-			return nil, fmt.Errorf("read verification %q: saved verification inputs could not be read", p.RunID)
-		}
-		if !holds {
-			c.mu.RUnlock()
-			return nil, gensurla.MakeForbidden(fmt.Errorf(
-				"the test writer reads only the runs of a change it has an assignment for, and change %q has none", req.ChangeID))
-		}
-	}
-	inputsCurrent, err := c.currentVerificationInputs(principal, req.ChangeID, req.Plan)
-	c.mu.RUnlock()
+	req, state, inputsCurrent, err := c.readVerificationRun(principal, p.RunID, span)
 	if err != nil {
-		span.RecordError(err)
-		span.SetStatus(codes.Error, "read verification inputs")
-		return nil, fmt.Errorf("read verification %q: saved verification inputs could not be read", p.RunID)
+		return nil, err
 	}
 	showBinaries := false
 	if state.Kind == verifyrun.StateCompleted {
@@ -223,6 +255,60 @@ func (c *ControlPlane) GetVerification(ctx context.Context, p *gensurla.GetVerif
 		return nil, fmt.Errorf("read verification %q: saved binaries location could not be read", p.RunID)
 	}
 	return statusResult(req, state, inputsCurrent, binariesDir), nil
+}
+
+// readVerificationRun reads and authorizes one run once, preserving its full
+// report privately for owner checks while each caller chooses its safe result.
+func (c *ControlPlane) readVerificationRun(
+	principal Principal, runID string, span trace.Span,
+) (verifyrun.Request, verifyrun.State, bool, error) {
+	runsDir := c.runsDir
+	if runsDir == "" {
+		return verifyrun.Request{}, verifyrun.State{}, false, gensurla.MakeNotImplemented(errVerificationUnavailable)
+	}
+
+	c.mu.RLock()
+	req, state, err := verifyrun.Read(runsDir, runID)
+	c.mu.RUnlock()
+	switch {
+	case req.Owner == "" && errors.Is(err, fs.ErrNotExist):
+		return verifyrun.Request{}, verifyrun.State{}, false, gensurla.MakeNotFound(fmt.Errorf("unknown run_id %q", runID))
+	case req.Owner != principal.ID && req.Owner != "":
+		// Checked before any later read error, whose text may name
+		// evaluator paths.
+		return verifyrun.Request{}, verifyrun.State{}, false, gensurla.MakeForbidden(fmt.Errorf("principal %q is not the owner of run_id %q", principal.ID, runID))
+	case err != nil:
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "read verification run")
+		return verifyrun.Request{}, verifyrun.State{}, false, fmt.Errorf("read verification %q: saved verification record could not be read", runID)
+	}
+	c.mu.RLock()
+	if principal.Kind == CallerTestWriter {
+		holds, err := c.testWriterHolds(principal, req.ChangeID)
+		if err != nil {
+			c.mu.RUnlock()
+			var refusal *goa.ServiceError
+			if errors.As(err, &refusal) {
+				return verifyrun.Request{}, verifyrun.State{}, false, err
+			}
+			span.RecordError(err)
+			span.SetStatus(codes.Error, "read verification assignment")
+			return verifyrun.Request{}, verifyrun.State{}, false, fmt.Errorf("read verification %q: saved verification inputs could not be read", runID)
+		}
+		if !holds {
+			c.mu.RUnlock()
+			return verifyrun.Request{}, verifyrun.State{}, false, gensurla.MakeForbidden(fmt.Errorf(
+				"the test writer reads only the runs of a change it has an assignment for, and change %q has none", req.ChangeID))
+		}
+	}
+	inputsCurrent, err := c.currentVerificationInputs(principal, req.ChangeID, req.Plan)
+	c.mu.RUnlock()
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "read verification inputs")
+		return verifyrun.Request{}, verifyrun.State{}, false, fmt.Errorf("read verification %q: saved verification inputs could not be read", runID)
+	}
+	return req, state, inputsCurrent, nil
 }
 
 // ListVerifications returns all Checkpoint 4 verification runs started by the
@@ -265,7 +351,10 @@ func (c *ControlPlane) ListVerifications(ctx context.Context, p *gensurla.ListVe
 					"the test writer reads only the runs of a change it has an assignment for, and change %q has none", p.ChangeID))
 			}
 		}
-		build, buildErr := c.changeBuild(record)
+		build, buildFound, buildErr := c.cards.loadOpenBuild()
+		if buildErr == nil {
+			buildFound, buildErr = c.activeBuildFound(build, buildFound)
+		}
 		if buildErr != nil {
 			c.mu.RUnlock()
 			span.RecordError(buildErr)
@@ -300,7 +389,7 @@ func (c *ControlPlane) ListVerifications(ctx context.Context, p *gensurla.ListVe
 				return nil, fmt.Errorf("list verifications for %q: saved binaries location could not be read", p.ChangeID)
 			}
 			out = append(out, statusResult(r.Request, r.State,
-				c.verificationInputsCurrent(record, build, r.Request.Plan), binariesDir))
+				c.verificationInputsCurrent(record, build, buildFound, r.Request.Plan), binariesDir))
 		}
 		return &gensurla.VerificationListResult{
 			ChangeID: p.ChangeID,
@@ -368,11 +457,15 @@ func (c *ControlPlane) currentVerificationInputs(
 	if !exists || record.owner != principal.ID {
 		return false, nil
 	}
-	build, err := c.changeBuild(record)
+	build, found, err := c.cards.loadOpenBuild()
 	if err != nil {
 		return false, err
 	}
-	return c.verificationInputsCurrent(record, build, plan), nil
+	found, err = c.activeBuildFound(build, found)
+	if err != nil {
+		return false, err
+	}
+	return c.verificationInputsCurrent(record, build, found, plan), nil
 }
 
 // runTestSource renders where a run's tests came from, from its stored plan,

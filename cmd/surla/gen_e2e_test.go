@@ -4,7 +4,6 @@ package main
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
 	"io"
 	"maps"
@@ -23,6 +22,7 @@ import (
 	"github.com/stretchr/testify/require"
 	goahttp "goa.design/goa/v3/http"
 
+	genhttpclient "github.com/goadesign/surla/gen/http/surla/client"
 	genmcpclient "github.com/goadesign/surla/gen/jsonrpc/mcp_surla/client"
 	genmcpsurla "github.com/goadesign/surla/gen/mcp_surla"
 	gensurla "github.com/goadesign/surla/gen/surla"
@@ -35,6 +35,11 @@ import (
 // starterSurlaVersion is a published Surla version the starter's evaluator
 // module requires, as the scaffold tests use.
 const starterSurlaVersion = "v0.0.0-20261115014514-02c792da3ded"
+
+// starterInitWait bounds the init_project call that creates the starter. The
+// server sets no limit of its own on that call: it generates, builds, tests
+// and commits the starter for as long as the caller waits.
+const starterInitWait = 10 * time.Minute
 
 // headerCommand matches the command line Goa writes in generated file
 // headers, which names the program that generated them.
@@ -86,6 +91,7 @@ func TestGenOnAFreshStarterChangesNothingAndKeepsModulesApart(t *testing.T) {
 	require.NoError(t, err)
 	// A test executable has no released module version in its build info.
 	opts.SurlaVersion = starterSurlaVersion
+	opts.Team = &controlplane.TeamBinding{Owner: "operator@example.com", Service: &promotionTeamFixture{}}
 	cp, err := controlplane.New(opts)
 	require.NoError(t, err)
 	_, err = cp.ConfigureModel(controlplane.WithPrincipal(t.Context(), controlplane.Principal{ID: "operator@example.com", CallerID: "user", Kind: controlplane.CallerUser}), &gensurla.ConfigureModelPayload{GatewayAddr: &gatewayAddr})
@@ -108,10 +114,10 @@ func TestGenOnAFreshStarterChangesNothingAndKeepsModulesApart(t *testing.T) {
 		ModulePath: "example.com/shop",
 	})
 	require.NoError(t, err)
-	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Minute)
-	defer cancel()
 	call := &genmcpsurla.ToolsCallPayload{Name: "init_project", Arguments: args}
-	result, err := client.ToolsCall(ctx, call)
+	phaseStart := time.Now()
+	result, err := client.ToolsCall(stepContext(t, starterInitWait), call)
+	t.Logf("init_project: %s", time.Since(phaseStart))
 	require.NoError(t, err)
 	complete, ok := result.Outcome.AsComplete()
 	require.True(t, ok, "initialization completes in the same MCP call")
@@ -127,7 +133,7 @@ func TestGenOnAFreshStarterChangesNothingAndKeepsModulesApart(t *testing.T) {
 	assert.Equal(t, "example.com/shop", initialized.ModulePath)
 	assert.Equal(t, "shop", initialized.ServiceName)
 	assert.Regexp(t, "^([0-9a-f]{40}|[0-9a-f]{64})$", initialized.Commit)
-	headCmd := exec.CommandContext(ctx, "git", "-C", dir, "rev-parse", "--verify", "HEAD^{commit}")
+	headCmd := exec.CommandContext(stepContext(t, journeyQuickWait), "git", "-C", dir, "rev-parse", "--verify", "HEAD^{commit}")
 	headOut, err := headCmd.CombinedOutput()
 	require.NoError(t, err, string(headOut))
 	assert.Equal(t, initialized.Commit, strings.TrimSpace(string(headOut)))
@@ -138,7 +144,7 @@ func TestGenOnAFreshStarterChangesNothingAndKeepsModulesApart(t *testing.T) {
 
 	// A second call must observe the first call's active workspace without
 	// restarting the server or running another starter build.
-	result, err = client.ToolsCall(ctx, call)
+	result, err = client.ToolsCall(stepContext(t, journeyQuickWait), call)
 	require.NoError(t, err)
 	complete, ok = result.Outcome.AsComplete()
 	require.True(t, ok)
@@ -157,7 +163,9 @@ func TestGenOnAFreshStarterChangesNothingAndKeepsModulesApart(t *testing.T) {
 
 	for _, module := range []string{dir, evalDir} {
 		var out bytes.Buffer
+		phaseStart = time.Now()
 		require.NoError(t, runGen([]string{"-dir", module}, &out, io.Discard))
+		t.Logf("gen unchanged %s: %s", module, time.Since(phaseStart))
 		assert.Contains(t, out.String(), "added: 0\nchanged: 0\nremoved: 0\n", module)
 	}
 	assert.Equal(t, created, files(t, dir, "."), "regenerating an untouched starter changes no byte")
@@ -175,7 +183,9 @@ func TestGenOnAFreshStarterChangesNothingAndKeepsModulesApart(t *testing.T) {
 	require.NoError(t, os.WriteFile(commentPath, append(source, []byte("\n// Builder-only comment; evaluator behavior stays unchanged.\n")...), 0o644))
 	candidateCommit := trustedSuiteCommit(t, dir)
 	require.NotEqual(t, initialized.Commit, candidateCommit)
-	assertVerifyRefusedWithoutBuild(t, ctx, client, opts.RunsDir, "operator@example.com", "unbuilt", candidateCommit)
+	phaseStart = time.Now()
+	assertVerifyRefusedWithoutBuild(t, client, opts.RunsDir, "operator@example.com", "unbuilt", candidateCommit)
+	t.Logf("initial refresh and refused verification: %s", time.Since(phaseStart))
 
 	// The operator stores verification and promotion after initialization; a
 	// server restart adopts them.
@@ -196,6 +206,7 @@ func TestGenOnAFreshStarterChangesNothingAndKeepsModulesApart(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, state.CardsDir(), opts.CardsDir)
 	opts.SurlaVersion = starterSurlaVersion
+	opts.Team = &controlplane.TeamBinding{Owner: "operator@example.com", Service: &promotionTeamFixture{}}
 	cp, err = controlplane.New(opts)
 	require.NoError(t, err)
 	_, err = cp.ConfigureModel(controlplane.WithPrincipal(t.Context(), controlplane.Principal{ID: "operator@example.com", CallerID: "user", Kind: controlplane.CallerUser}), &gensurla.ConfigureModelPayload{GatewayAddr: &gatewayAddr})
@@ -206,8 +217,12 @@ func TestGenOnAFreshStarterChangesNothingAndKeepsModulesApart(t *testing.T) {
 	require.NoError(t, err)
 	transport = genmcpclient.NewClient(serverURL.Scheme, serverURL.Host, &bearerDoer{client: srv.Client(), token: "test-token"}, goahttp.RequestEncoder, goahttp.ResponseDecoder, false)
 	client = &genmcpsurla.Client{ToolsCallEndpoint: transport.ToolsCall()}
+	userTransport := genhttpclient.NewClient(serverURL.Scheme, serverURL.Host,
+		&bearerDoer{client: srv.Client(), token: "test-token"},
+		goahttp.RequestEncoder, goahttp.ResponseDecoder, false)
+	user := &gensurla.Client{StartBuildEndpoint: userTransport.StartBuild()}
 	// The control-plane owner reloads the actual initialized child from workspace.json.
-	result, err = client.ToolsCall(ctx, call)
+	result, err = client.ToolsCall(stepContext(t, journeyQuickWait), call)
 	require.NoError(t, err)
 	complete, ok = result.Outcome.AsComplete()
 	require.True(t, ok)
@@ -216,7 +231,9 @@ func TestGenOnAFreshStarterChangesNothingAndKeepsModulesApart(t *testing.T) {
 	require.NotEmpty(t, complete.Content)
 	require.NotNil(t, complete.Content[0].Text)
 	assert.Contains(t, *complete.Content[0].Text, "already initialized at "+dir)
-	assertTrustedSuiteJourney(t, client, opts.CardsDir, opts.RunsDir, candidateCommit, initialized.Commit, "initialized", promotion)
+	phaseStart = time.Now()
+	assertTrustedSuiteJourney(t, client, user, dir, opts.CardsDir, opts.RunsDir, initialized.Commit, "initialized", promotion)
+	t.Logf("trusted suite journey: %s", time.Since(phaseStart))
 
 	edits := []struct {
 		// module is the module directory surla gen runs in.
@@ -240,7 +257,9 @@ func TestGenOnAFreshStarterChangesNothingAndKeepsModulesApart(t *testing.T) {
 		require.Contains(t, string(src), e.old)
 		require.NoError(t, os.WriteFile(path, []byte(strings.Replace(string(src), e.old, e.new, 1)), 0o644))
 		var out bytes.Buffer
+		phaseStart = time.Now()
 		require.NoError(t, runGen([]string{"-dir", e.module}, &out, io.Discard))
+		t.Logf("gen edited %s: %s", e.module, time.Since(phaseStart))
 		assert.NotContains(t, out.String(), "changed: 0\n", "the edit changes generated files in %s", e.module)
 		assert.Equal(t, before, files(t, dir, e.other), "regenerating %s leaves %s unchanged", e.module, e.other)
 	}

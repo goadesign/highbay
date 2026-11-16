@@ -18,13 +18,13 @@ import (
 // accessible with its own revision and the written-test notice.
 func TestViewsPageSeparatesRecordedRunsFromCurrentInputs(t *testing.T) {
 	runsDir := t.TempDir()
-	cp := newBuildControlPlane(t, Options{
+	cp := newBuildControlPlane(t, Options{BuildCacheDir: t.TempDir(),
 		RunsDir: runsDir, WrittenTestRuns: &WrittenTestRuns{ReportDir: t.TempDir(), Timeout: time.Minute},
 		Team: &TeamBinding{Owner: pageOwner, Service: &teamServiceFixture{}},
 	})
 	cp.changesWait, cp.changesPoll = 400*time.Millisecond, 20*time.Millisecond
 	user := asCaller(pageOwner, CallerUser)
-	card := confirmedChange(t, cp, "chg-summary")
+	card := buildableChange(t, cp, "chg-summary")
 	_, err := cp.StartBuild(user, &gensurla.StartBuildPayload{
 		ChangeID: card.ChangeID, RequestRevision: card.RequestRevision,
 	})

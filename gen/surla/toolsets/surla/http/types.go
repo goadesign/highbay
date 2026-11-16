@@ -335,7 +335,7 @@ type (
 	// the public tool type.
 	GenerateCodePayloadTransport struct {
 		// Module to regenerate: candidate (the application, the default when omitted)
-		// or eval (the local eval/ module).
+		// or eval (the test module).
 		Target *string `json:"target,omitempty"`
 	}
 	// GenerateCodeResultTransport is the internal JSON transport type for GenerateCodeResult.
@@ -367,6 +367,17 @@ type (
 	GetBuildResultTransport struct {
 		// Change Card identifier.
 		ChangeID *string `json:"change_id"`
+		// True only when the current agreed revision’s saved record of how its design
+		// was drafted predates the current actual drop: start_build would refuse it
+		// with drafted_before_drop. It becomes true after that drop and false once the
+		// user adopts a revision drafted after the drop, even if its request_revision
+		// is unchanged. A waiting proposal does not change this fact; ask the guide to
+		// refresh_story and revise_change from that refresh, then adopt the revision
+		// before building. False says only that this refusal does not apply, not that
+		// every other build check will pass; it is also false without an agreed
+		// revision or saved record of its draft. start_build rechecks concurrent
+		// changes.
+		DraftedBeforeDrop *bool `json:"drafted_before_drop"`
 		// not_started when the change has no usable build for the current test source;
 		// start a new build on the views page. Otherwise started with the usable build.
 		Build *Build `json:"build"`
@@ -388,11 +399,12 @@ type (
 		ChangeID *string `json:"change_id"`
 		// Change Card revision to build; verify_change takes it.
 		RequestRevision *string `json:"request_revision"`
-		// True when request_revision is the change's confirmed revision in force, as
-		// get_build reports it. It stays true while a revision the guide proposed
-		// waits beside the agreed one, and is false once the user has adopted a
-		// proposed revision or confirmed another revision: verify_change then refuses
-		// this revision, and the assignment stays as it is until the user builds again.
+		// True when request_revision is the change's agreed revision, the one in
+		// force, as get_build reports it. It stays true while a proposed revision
+		// waits and when a refreshed draft is adopted without changing
+		// request_revision. If adoption or confirmation changes the agreed
+		// request_revision, it becomes false; verify_change refuses this earlier
+		// revision, and the assignment stays as it is until the user builds again.
 		InForce *bool `json:"in_force"`
 		// True once you read this assignment in full with get_builder_assignment.
 		Read *bool `json:"read"`
@@ -401,6 +413,14 @@ type (
 		// otherwise accepted, with the commit and time, when the build records
 		// accepted tests, and not_yet_accepted when it records none.
 		WrittenTests *WrittenTests `json:"written_tests"`
+		// Absolute path of the folder to build in: the project's folder inside your
+		// working copy .surla-build, on the build's branch surla/build-<n>. Run git
+		// and go there, never in the project folder.
+		WorkingFolder *string `json:"working_folder"`
+		// True when no go.work lies in working_folder or in a folder between it and
+		// the working copy's root: run every go command there as GOWORK=off go …, so a
+		// go.work of the project folder around your copy does not take it over.
+		GoworkOff *bool `json:"gowork_off"`
 	}
 	// GetChangePayloadTransport is the internal JSON transport type for GetChangePayload.
 	// It lives in the toolset-local http package and is used only for JSON
@@ -496,15 +516,20 @@ type (
 	// decode + validation (missing-field detection) before transforming into
 	// the public tool type.
 	GetStoryRefreshResultTransport struct {
-		// Identifier of the owner's current Story refresh operation for the bound
-		// workspace; present when state is running, succeeded, or failed. Pass it as
+		// Absolute path intended for the guide's draft, .surla-draft in the project
+		// folder, whose go.mod, go.sum and design/ refresh_story reads. When state is
+		// none, this path does not mean the folder exists; refresh_story makes it when
+		// needed.
+		DraftFolder *string `json:"draft_folder"`
+		// Identifier of the owner's current Story refresh operation for the guide's
+		// draft; present when state is running, succeeded, or failed. Pass it as
 		// story_refresh_op_id to propose_change or revise_change once state is
 		// succeeded to adopt the evaluated Story into a Change Card.
 		OpID *string `json:"op_id,omitempty"`
 		// Current operation state: none, running, succeeded, or failed.
 		State *string `json:"state"`
-		// Canonical SHA-256 digest of the workspace module snapshot read when this
-		// refresh started; present when state is running, succeeded, or failed.
+		// Canonical SHA-256 digest of the draft snapshot read when this refresh
+		// started; present when state is running, succeeded, or failed.
 		SnapshotDigest *string `json:"snapshot_digest,omitempty"`
 		// Evaluated domain Stories in declaration order when state is succeeded (empty
 		// when the design declares no Stories or when state is none, running, or
@@ -512,7 +537,9 @@ type (
 		Stories []*StorySummaryItemTransport `json:"stories"`
 		// Safe failure or timeout diagnostic when state is failed; omitted otherwise.
 		Diagnostic *string `json:"diagnostic,omitempty"`
-		// Summary of the current Story refresh state and next action.
+		// Summary of the current Story refresh state and next action. After a dropped
+		// build remakes the draft and until a revision is saved from it, begins by
+		// naming the dropped change and saying that edits made before then are gone.
 		Message *string `json:"message"`
 	}
 	// GetTestWriterAssignmentPayloadTransport is the internal JSON transport type for GetTestWriterAssignmentPayload.
@@ -532,11 +559,12 @@ type (
 		ChangeID *string `json:"change_id"`
 		// Change Card revision the tests are for; report_tests_finished takes it.
 		RequestRevision *string `json:"request_revision"`
-		// True when request_revision is the change's confirmed revision in force, as
-		// get_build reports it. It stays true while a revision the guide proposed
-		// waits beside the agreed one, and is false once the user has adopted a
-		// proposed revision or confirmed another revision: the assignment then stays
-		// for this earlier revision until the user builds again.
+		// True when request_revision is the change's agreed revision, the one in
+		// force, as get_build reports it. It stays true while a proposed revision
+		// waits and when a refreshed draft is adopted without changing
+		// request_revision. If adoption or confirmation changes the agreed
+		// request_revision, it becomes false; the assignment stays on the earlier
+		// revision until the user builds again.
 		InForce *bool `json:"in_force"`
 		// Where this assignment stands.
 		Progress *TestWriterProgressTransport `json:"progress"`
@@ -544,7 +572,9 @@ type (
 		// progress gives in finding_count when its state is needs_changes, and none in
 		// any other state. Fix them in working_folder, then report again.
 		Findings []string `json:"findings"`
-		// Folder to write the tests in: your own working copy of the project.
+		// Folder to write the tests in: your own working copy of the project,
+		// .surla-tests, on the build's branch surla/tests-<n>. Do not commit there:
+		// Surla commits what it accepts.
 		WorkingFolder *string `json:"working_folder"`
 		// The canonical design source as agreed at request_revision, copied when this
 		// build started; later revisions do not change it.
@@ -650,8 +680,7 @@ type (
 	// decode + validation (missing-field detection) before transforming into
 	// the public tool type.
 	ListBuilderAssignmentsResultTransport struct {
-		// Assignments, most recently started first; empty when the user has built no
-		// change.
+		// The open build's assignment while it needs this role; empty otherwise.
 		Assignments []*BuilderAssignmentTransport `json:"assignments"`
 	}
 	// ListChangesPayloadTransport is the internal JSON transport type for ListChangesPayload.
@@ -687,8 +716,7 @@ type (
 	// decode + validation (missing-field detection) before transforming into
 	// the public tool type.
 	ListTestWriterAssignmentsResultTransport struct {
-		// Assignments, most recently started first; empty when the user has built no
-		// change.
+		// The open build's assignment while it needs this role; empty otherwise.
 		Assignments []*TestWriterAssignmentItemTransport `json:"assignments"`
 	}
 	// ListTracesPayloadTransport is the internal JSON transport type for ListTracesPayload.
@@ -755,8 +783,8 @@ type (
 		ChangeID *string `json:"change_id"`
 		// Bound CP1 request_revision digest.
 		RequestRevision *string `json:"request_revision"`
-		// SHA-256 digest of the evaluated design snapshot (sorted path and content
-		// pairs).
+		// SHA-256 digest of the design snapshot the revision's refresh evaluated
+		// (sorted path and content pairs).
 		DesignDigest *string `json:"design_digest"`
 		// API or primary service name declared in the design.
 		SystemName *string `json:"system_name"`
@@ -780,11 +808,9 @@ type (
 		ChangeID *string `json:"change_id"`
 		// The user's feature request.
 		Prompt *string `json:"prompt"`
-		// Optional op_id of a succeeded refresh_story operation for the bound
-		// workspace whose evaluated Stories this card adopts. When set, Surla reads
-		// one workspace snapshot, requires its snapshot_digest to match the
-		// operation's, and records both the evaluated Stories and that snapshot's
-		// design/*.go on the card. Omit when the card has no Story.
+		// op_id of a succeeded refresh_story operation whose evaluated draft this card
+		// adopts: its design, Stories, architecture, go.mod and made-from list.
+		// Required when the project folder holds a go.mod; Surla reads no file.
 		StoryRefreshOpID *string `json:"story_refresh_op_id,omitempty"`
 		// Your analysis of prompt against the target's current design.
 		Analysis *CP1AnalysisTransport `json:"analysis"`
@@ -882,15 +908,20 @@ type (
 	// decode + validation (missing-field detection) before transforming into
 	// the public tool type.
 	RefreshStoryResultTransport struct {
-		// Identifier of the owner's current Story refresh operation for the bound
-		// workspace; present when state is running, succeeded, or failed. Pass it as
+		// Absolute path intended for the guide's draft, .surla-draft in the project
+		// folder, whose go.mod, go.sum and design/ refresh_story reads. When state is
+		// none, this path does not mean the folder exists; refresh_story makes it when
+		// needed.
+		DraftFolder *string `json:"draft_folder"`
+		// Identifier of the owner's current Story refresh operation for the guide's
+		// draft; present when state is running, succeeded, or failed. Pass it as
 		// story_refresh_op_id to propose_change or revise_change once state is
 		// succeeded to adopt the evaluated Story into a Change Card.
 		OpID *string `json:"op_id,omitempty"`
 		// Current operation state: none, running, succeeded, or failed.
 		State *string `json:"state"`
-		// Canonical SHA-256 digest of the workspace module snapshot read when this
-		// refresh started; present when state is running, succeeded, or failed.
+		// Canonical SHA-256 digest of the draft snapshot read when this refresh
+		// started; present when state is running, succeeded, or failed.
 		SnapshotDigest *string `json:"snapshot_digest,omitempty"`
 		// Evaluated domain Stories in declaration order when state is succeeded (empty
 		// when the design declares no Stories or when state is none, running, or
@@ -898,7 +929,9 @@ type (
 		Stories []*StorySummaryItemTransport `json:"stories"`
 		// Safe failure or timeout diagnostic when state is failed; omitted otherwise.
 		Diagnostic *string `json:"diagnostic,omitempty"`
-		// Summary of the current Story refresh state and next action.
+		// Summary of the current Story refresh state and next action. After a dropped
+		// build remakes the draft and until a revision is saved from it, begins by
+		// naming the dropped change and saying that edits made before then are gone.
 		Message *string `json:"message"`
 	}
 	// ReportTestsFinishedPayloadTransport is the internal JSON transport type for ReportTestsFinishedPayload.
@@ -920,14 +953,59 @@ type (
 		ChangeID *string `json:"change_id"`
 		// Change Card revision the tests are for.
 		RequestRevision *string `json:"request_revision"`
-		// True when request_revision is the change's confirmed revision in force, as
-		// get_build reports it. It stays true while a revision the guide proposed
-		// waits beside the agreed one, and is false once the user has adopted a
-		// proposed revision or confirmed another revision: the assignment then stays
-		// for this earlier revision until the user builds again.
+		// True when request_revision is the change's agreed revision, the one in
+		// force, as get_build reports it. It stays true while a proposed revision
+		// waits and when a refreshed draft is adopted without changing
+		// request_revision. If adoption or confirmation changes the agreed
+		// request_revision, it becomes false; the assignment stays on the earlier
+		// revision until the user builds again.
 		InForce *bool `json:"in_force"`
 		// Where this assignment stands.
 		Progress *TestWriterProgressTransport `json:"progress"`
+	}
+	// ReviewVerificationPayloadTransport is the internal JSON transport type for ReviewVerificationPayload.
+	// It lives in the toolset-local http package and is used only for JSON
+	// decode + validation (missing-field detection) before transforming into
+	// the public tool type.
+	ReviewVerificationPayloadTransport struct {
+		// Verification run identifier returned by verify_change.
+		RunID *string `json:"run_id"`
+	}
+	// ReviewVerificationResultTransport is the internal JSON transport type for ReviewVerificationResult.
+	// It lives in the toolset-local http package and is used only for JSON
+	// decode + validation (missing-field detection) before transforming into
+	// the public tool type.
+	ReviewVerificationResultTransport struct {
+		// Immutable Story evidence and the owner's current approval observation.
+		Review *VerificationReviewTransport `json:"review"`
+		// Verification run identifier; get_verification takes it.
+		RunID *string `json:"run_id"`
+		// Change Card the run verifies.
+		ChangeID *string `json:"change_id"`
+		// Change Card revision the run verifies.
+		RequestRevision *string `json:"request_revision"`
+		// Candidate commit the run builds and verifies.
+		CandidateCommit *string `json:"candidate_commit"`
+		// Commit of the tests the run uses: the operator's evaluator, or the tests
+		// accepted for the change's build.
+		SuiteCommit *string `json:"suite_commit"`
+		// When the run was accepted.
+		AcceptedAt *string `json:"accepted_at"`
+		// Whether this run's agreed revision and selected tests match the current
+		// Change Card and the usable build or the stored verification settings. This
+		// observation does not establish the current candidate working tree,
+		// deployment or approval.
+		InputsCurrent *bool `json:"inputs_current"`
+		// Absolute folder containing the binaries built by this completed run.
+		// Returned only to the user when promotion settings are configured, so the
+		// user can publish these exact binaries before approval. Agents never receive
+		// this private path.
+		CandidateBinariesDir *string `json:"candidate_binaries_dir,omitempty"`
+		// Where the run's tests came from, recorded when the run started: evaluator,
+		// or written_tests with their commit and a notice.
+		TestSource *TestSource `json:"test_source"`
+		// Exactly one of running, completed or not_completed.
+		State *State `json:"state"`
 	}
 	// ReviseChangePayloadTransport is the internal JSON transport type for ReviseChangePayload.
 	// It lives in the toolset-local http package and is used only for JSON
@@ -942,12 +1020,11 @@ type (
 		RequestRevision *string `json:"request_revision"`
 		// The user's revised feature request.
 		Prompt *string `json:"prompt"`
-		// Optional op_id of a succeeded refresh_story operation for the bound
-		// workspace whose evaluated Stories this revision adopts. When set, Surla
-		// reads one workspace snapshot, requires its snapshot_digest to match the
-		// operation's, and records both the evaluated Stories and that snapshot's
-		// design/*.go on the revised card. When omitted on a card that already has
-		// Stories, the card's saved Stories and their design source are kept together.
+		// op_id of a succeeded refresh_story operation whose evaluated draft this
+		// revision adopts. When omitted, the revision keeps every snapshot field of
+		// the revision it revises: design, Stories, architecture, go.mod and made-from
+		// list, even with zero Stories. A project with a go.mod refuses an omitted
+		// op_id when that revision has no design. Surla reads no file.
 		StoryRefreshOpID *string `json:"story_refresh_op_id,omitempty"`
 		// Your analysis of the revised prompt against the current card and the
 		// target's current design.
@@ -1063,12 +1140,35 @@ type (
 	UpdateDependenciesResultTransport struct {
 		// Operation identifier; pass it to read_check_output to read the full output.
 		OpID *string `json:"op_id"`
-		// Workspace-relative go.mod, go.sum and go.work.sum files whose bytes changed
-		// and were written.
+		// Working-folder-relative go.mod, go.sum and go.work.sum files whose bytes
+		// changed and were written.
 		FilesWritten []string `json:"files_written"`
 		// At most 16 KiB: what was updated, and Go's message for any module that could
 		// not be.
 		Message *string `json:"message"`
+	}
+	// UpdateDraftPayloadTransport is the internal JSON transport type for UpdateDraftPayload.
+	// It lives in the toolset-local http package and is used only for JSON
+	// decode + validation (missing-field detection) before transforming into
+	// the public tool type.
+	UpdateDraftPayloadTransport struct {
+	}
+	// UpdateDraftResultTransport is the internal JSON transport type for UpdateDraftResult.
+	// It lives in the toolset-local http package and is used only for JSON
+	// decode + validation (missing-field detection) before transforming into
+	// the public tool type.
+	UpdateDraftResultTransport struct {
+		// Absolute path of the guide's draft folder.
+		DraftFolder *string `json:"draft_folder"`
+		// Design files the draft took from the project folder because it had not
+		// changed them, in path order.
+		Taken []string `json:"taken"`
+		// Design files where the project folder's change and the draft's edits merged
+		// without conflict, in path order.
+		Merged []string `json:"merged"`
+		// Files to correct before refreshing, each in the folder it names, in path
+		// order; empty when none.
+		ToCorrect []*DraftCorrectionTransport `json:"to_correct"`
 	}
 	// VerifyChangePayloadTransport is the internal JSON transport type for VerifyChangePayload.
 	// It lives in the toolset-local http package and is used only for JSON
@@ -1191,11 +1291,65 @@ type (
 		// or written_tests with their commit and a notice.
 		TestSource *ApprovalTestSource `json:"test_source"`
 	}
+	// BuildBuildingTransport is the internal JSON transport type for BuildBuildingTransport.
+	// It lives in the toolset-local http package and is used only for JSON
+	// decode + validation (missing-field detection) before transforming into
+	// the public tool type.
+	BuildBuildingTransport struct {
+	}
+	// BuildDroppedTransport is the internal JSON transport type for BuildDroppedTransport.
+	// It lives in the toolset-local http package and is used only for JSON
+	// decode + validation (missing-field detection) before transforming into
+	// the public tool type.
+	BuildDroppedTransport struct {
+		// The build's own branches that exist and hold a commit made after the build's
+		// base, where its work stays (git log <branch> shows it); empty when nothing
+		// was committed for it.
+		KeptBranches []string `json:"kept_branches"`
+	}
+	// BuildMergedTransport is the internal JSON transport type for BuildMergedTransport.
+	// It lives in the toolset-local http package and is used only for JSON
+	// decode + validation (missing-field detection) before transforming into
+	// the public tool type.
+	BuildMergedTransport struct {
+	}
 	// BuildNotStartedTransport is the internal JSON transport type for BuildNotStartedTransport.
 	// It lives in the toolset-local http package and is used only for JSON
 	// decode + validation (missing-field detection) before transforming into
 	// the public tool type.
 	BuildNotStartedTransport struct {
+	}
+	// BuildPassedTestsTransport is the internal JSON transport type for BuildPassedTestsTransport.
+	// It lives in the toolset-local http package and is used only for JSON
+	// decode + validation (missing-field detection) before transforming into
+	// the public tool type.
+	BuildPassedTestsTransport struct {
+		// Commit Surla recorded the accepted tests at.
+		Commit *string `json:"commit"`
+		// The build's test-writer branch, surla/tests-<n>, where this commit was
+		// verified.
+		Branch *string `json:"branch"`
+	}
+	// BuildPassedTransport is the internal JSON transport type for BuildPassedTransport.
+	// It lives in the toolset-local http package and is used only for JSON
+	// decode + validation (missing-field detection) before transforming into
+	// the public tool type.
+	BuildPassedTransport struct {
+		// The newest passed run; get_verification takes it.
+		RunID *string `json:"run_id"`
+		// The builder's commit the run passed.
+		CandidateCommit *string `json:"candidate_commit"`
+		// The build's builder branch, surla/build-<n>, where this commit was verified.
+		CandidateBranch *string `json:"candidate_branch"`
+		// written_tests with the accepted tests' commit to merge after the builder's;
+		// evaluator when the project verifies with its stored evaluator, whose tests
+		// are not merged.
+		Tests *BuildPassedTestSource `json:"tests"`
+		// False when the branch checked out in the project folder no longer holds the
+		// commit this build started from, because its history was rewritten: merging
+		// these commits brings that history back, and dropping the build and building
+		// again starts from the branch as it is.
+		BaseInBranch *bool `json:"base_in_branch"`
 	}
 	// BuilderAssignmentTransport is the internal JSON transport type for BuilderAssignmentTransport.
 	// It lives in the toolset-local http package and is used only for JSON
@@ -1206,11 +1360,12 @@ type (
 		ChangeID *string `json:"change_id"`
 		// Change Card revision to build; verify_change takes it.
 		RequestRevision *string `json:"request_revision"`
-		// True when request_revision is the change's confirmed revision in force, as
-		// get_build reports it. It stays true while a revision the guide proposed
-		// waits beside the agreed one, and is false once the user has adopted a
-		// proposed revision or confirmed another revision: verify_change then refuses
-		// this revision, and the assignment stays as it is until the user builds again.
+		// True when request_revision is the change's agreed revision, the one in
+		// force, as get_build reports it. It stays true while a proposed revision
+		// waits and when a refreshed draft is adopted without changing
+		// request_revision. If adoption or confirmation changes the agreed
+		// request_revision, it becomes false; verify_change refuses this earlier
+		// revision, and the assignment stays as it is until the user builds again.
 		InForce *bool `json:"in_force"`
 		// True once you read this assignment in full with get_builder_assignment.
 		Read *bool `json:"read"`
@@ -1219,6 +1374,14 @@ type (
 		// otherwise accepted, with the commit and time, when the build records
 		// accepted tests, and not_yet_accepted when it records none.
 		WrittenTests *WrittenTests `json:"written_tests"`
+		// Absolute path of the folder to build in: the project's folder inside your
+		// working copy .surla-build, on the build's branch surla/build-<n>. Run git
+		// and go there, never in the project folder.
+		WorkingFolder *string `json:"working_folder"`
+		// True when no go.work lies in working_folder or in a folder between it and
+		// the working copy's root: run every go command there as GOWORK=off go …, so a
+		// go.work of the project folder around your copy does not take it over.
+		GoworkOff *bool `json:"gowork_off"`
 	}
 	// BuilderProgressTransport is the internal JSON transport type for BuilderProgressTransport.
 	// It lives in the toolset-local http package and is used only for JSON
@@ -1426,6 +1589,29 @@ type (
 		// go.mod.
 		Files map[string]string `json:"files"`
 	}
+	// DraftCorrectionTransport is the internal JSON transport type for DraftCorrectionTransport.
+	// It lives in the toolset-local http package and is used only for JSON
+	// decode + validation (missing-field detection) before transforming into
+	// the public tool type.
+	DraftCorrectionTransport struct {
+		// Path relative to the folder that folder names, such as design/types.go or
+		// go.mod.
+		Path *string `json:"path"`
+		// Which folder holds the file to correct: draft_folder is the guide's draft,
+		// at the result's draft_folder; project_folder is the user's project folder,
+		// which holds the draft.
+		Folder *string `json:"folder"`
+		// What to correct. In the draft: conflict markers where the draft and the
+		// project folder changed the same lines; a file removed on one side and
+		// changed on the other; a draft file Go cannot parse, with its line; a file
+		// whose project change Surla took without merging, or was writing when it
+		// stopped, to check that it holds the intended edits once; or a module the
+		// project's go.mod requires at another version than the draft's, or that the
+		// draft's lacks, including differing replace directives and a differing module
+		// path. In the project folder: a design file or go.mod there that cannot be
+		// parsed, with its line, or a go.mod that declares no module.
+		Problem *string `json:"problem"`
+	}
 	// ExampleItemTransport is the internal JSON transport type for ExampleItemTransport.
 	// It lives in the toolset-local http package and is used only for JSON
 	// decode + validation (missing-field detection) before transforming into
@@ -1553,6 +1739,22 @@ type (
 		// source.
 		ChangedDesignFiles []string `json:"changed_design_files"`
 	}
+	// RecordedRunStoryTransport is the internal JSON transport type for RecordedRunStoryTransport.
+	// It lives in the toolset-local http package and is used only for JSON
+	// decode + validation (missing-field detection) before transforming into
+	// the public tool type.
+	RecordedRunStoryTransport struct {
+		// Number of the build this run was accepted for.
+		BuildNumber *int `json:"build_number"`
+		// Accepted build's saved start time.
+		BuildStartedAt *string `json:"build_started_at"`
+		// Stories as agreed for this run, in declaration order; empty when the
+		// agreement declares none.
+		Stories []*StorySummaryItemTransport `json:"stories"`
+		// The owner's exact required-test mapping for written tests, or the explicit
+		// absence of such a mapping for an operator evaluator.
+		Mapping *Mapping `json:"mapping"`
+	}
 	// RequiredTestTransport is the internal JSON transport type for RequiredTestTransport.
 	// It lives in the toolset-local http package and is used only for JSON
 	// decode + validation (missing-field detection) before transforming into
@@ -1566,6 +1768,40 @@ type (
 		Scenario *string `json:"scenario"`
 		// Hook method the test writer implements for the scenario.
 		Hook *string `json:"hook"`
+	}
+	// RunApprovalAvailableTransport is the internal JSON transport type for RunApprovalAvailableTransport.
+	// It lives in the toolset-local http package and is used only for JSON
+	// decode + validation (missing-field detection) before transforming into
+	// the public tool type.
+	RunApprovalAvailableTransport struct {
+	}
+	// RunApprovalBlockedTransport is the internal JSON transport type for RunApprovalBlockedTransport.
+	// It lives in the toolset-local http package and is used only for JSON
+	// decode + validation (missing-field detection) before transforming into
+	// the public tool type.
+	RunApprovalBlockedTransport struct {
+		// Owner's safe explanation and enabling step.
+		Reason *string `json:"reason"`
+	}
+	// RunEvaluatorMappingUnknownTransport is the internal JSON transport type for RunEvaluatorMappingUnknownTransport.
+	// It lives in the toolset-local http package and is used only for JSON
+	// decode + validation (missing-field detection) before transforming into
+	// the public tool type.
+	RunEvaluatorMappingUnknownTransport struct {
+	}
+	// RunStoryMappingTransport is the internal JSON transport type for RunStoryMappingTransport.
+	// It lives in the toolset-local http package and is used only for JSON
+	// decode + validation (missing-field detection) before transforming into
+	// the public tool type.
+	RunStoryMappingTransport struct {
+		// One test per finished flow, in declaration order.
+		RequiredTests []*RequiredTestTransport `json:"required_tests"`
+	}
+	// RunStoryNotRecordedTransport is the internal JSON transport type for RunStoryNotRecordedTransport.
+	// It lives in the toolset-local http package and is used only for JSON
+	// decode + validation (missing-field detection) before transforming into
+	// the public tool type.
+	RunStoryNotRecordedTransport struct {
 	}
 	// RunningLiveTargetTransport is the internal JSON transport type for RunningLiveTargetTransport.
 	// It lives in the toolset-local http package and is used only for JSON
@@ -1592,10 +1828,11 @@ type (
 		// When the user started this build.
 		StartedAt *string `json:"started_at"`
 		// True when request_revision is the change's agreed revision, the one in
-		// force. It stays true while a revision the guide proposed waits beside the
-		// agreed one, and turns false once the user adopts a proposed revision or
-		// confirms another revision: the assignments then stay as they are, for this
-		// earlier revision, until the user builds again.
+		// force, as get_build reports it. It stays true while a proposed revision
+		// waits and when a refreshed draft is adopted without changing
+		// request_revision. If adoption or confirmation changes the agreed
+		// request_revision, it becomes false; the assignments stay on the earlier
+		// revision until the user builds again.
 		InForce *bool `json:"in_force"`
 		// The builder's assignment.
 		Builder *BuilderProgressTransport `json:"builder"`
@@ -1604,6 +1841,13 @@ type (
 		// Number of finished flows in the agreed Story. Zero means no test of this
 		// change's Story was required.
 		RequiredTestCount *int `json:"required_test_count"`
+		// Whether the user has taken this build: building until a verification of it
+		// passes; passed with the commits to merge; merged once the branch checked out
+		// in the project folder holds the commits of one passed run, the builder's
+		// and, for written tests, the tests'; dropped once the user dropped it. A
+		// project has one open build, and another change is built only once it is
+		// merged or dropped.
+		Taking *BuildTaking `json:"taking"`
 	}
 	// StoryActorItemTransport is the internal JSON transport type for StoryActorItemTransport.
 	// It lives in the toolset-local http package and is used only for JSON
@@ -1691,11 +1935,12 @@ type (
 		ChangeID *string `json:"change_id"`
 		// Change Card revision the tests are for.
 		RequestRevision *string `json:"request_revision"`
-		// True when request_revision is the change's confirmed revision in force, as
-		// get_build reports it. It stays true while a revision the guide proposed
-		// waits beside the agreed one, and is false once the user has adopted a
-		// proposed revision or confirmed another revision: the assignment then stays
-		// for this earlier revision until the user builds again.
+		// True when request_revision is the change's agreed revision, the one in
+		// force, as get_build reports it. It stays true while a proposed revision
+		// waits and when a refreshed draft is adopted without changing
+		// request_revision. If adoption or confirmation changes the agreed
+		// request_revision, it becomes false; the assignment stays on the earlier
+		// revision until the user builds again.
 		InForce *bool `json:"in_force"`
 		// Where this assignment stands.
 		Progress *TestWriterProgressTransport `json:"progress"`
@@ -1935,6 +2180,17 @@ type (
 		Stage *string `json:"stage"`
 		// Builder-safe description of what stopped the run; never command output.
 		Summary *string `json:"summary"`
+	}
+	// VerificationReviewTransport is the internal JSON transport type for VerificationReviewTransport.
+	// It lives in the toolset-local http package and is used only for JSON
+	// decode + validation (missing-field detection) before transforming into
+	// the public tool type.
+	VerificationReviewTransport struct {
+		// The run's immutable Story context, or the explicit fact it was not recorded.
+		StoryContext *StoryContext `json:"story_context"`
+		// The owner's current observation for this exact report, independent of
+		// inputs_current.
+		Approval *Approval `json:"approval"`
 	}
 	// VerificationRunningTransport is the internal JSON transport type for VerificationRunningTransport.
 	// It lives in the toolset-local http package and is used only for JSON

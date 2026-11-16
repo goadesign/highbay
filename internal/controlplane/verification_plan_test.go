@@ -98,12 +98,14 @@ func TestStarterPlanReadsTheCommittedLayout(t *testing.T) {
 		assert.Equal(t, refusedTestModuleChanged, refusal.reason)
 		assert.Equal(t, tests, refusal.baseCommit)
 		assert.Equal(t, "eval", refusal.testModule)
-		assert.Equal(t, []changedGitFile{{path: "eval/go.mod"}}, refusal.changed)
+		assert.Equal(t, []string{"eval/go.mod"}, refusal.changed)
 		assert.ErrorContains(t, err,
 			"candidate commit "+candidate+" changes hand-written files in the test module eval since base commit "+tests+" (eval/go.mod);"+
 				" tests in eval belong to the test writer, not the builder;"+
 				" renaming the service module is the user's to do on their own branch between changes, not during a build:"+
-				" restore eval to base commit "+tests+" (git restore --source="+tests+" --staged --worktree -- ':(top,literal)eval/go.mod'), commit, and call verify_change or start_live_target again")
+				" restore these files to their versions or absence in commit "+tests+", commit, and call verify_change or start_live_target again")
+		assert.NotContains(t, err.Error(), "git restore")
+		assert.NotContains(t, err.Error(), "git rm")
 	})
 
 	t.Run("committed layout wins over working files", func(t *testing.T) {
@@ -151,6 +153,40 @@ func TestStarterPlanReadsTheCommittedLayout(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, map[string]string{"shop": "./cmd/shop"}, plan.Binaries)
 	})
+}
+
+// TestTestModuleChangedPathsPreserveGitNames checks the goal's path facts
+// after status data is removed: NUL-delimited names retain special characters,
+// deleted and added paths stay ordered, and generated files remain excluded.
+func TestTestModuleChangedPathsPreserveGitNames(t *testing.T) {
+	repo := realTempDir(t)
+	gitForLayoutTest(t, repo, "init", "-q")
+	writeStarterAt(t, repo, "example.com/shop")
+	writeTree(t, repo, map[string]string{
+		"eval/acceptance/deleted.go":    "package acceptance\n",
+		"eval/acceptance/space name.go": "package acceptance\n",
+	})
+	base := commitAllForLayoutTest(t, repo)
+	require.NoError(t, os.Remove(filepath.Join(repo, "eval", "acceptance", "deleted.go")))
+	writeTree(t, repo, map[string]string{
+		"eval/acceptance/line\nbreak.go":  "package acceptance\n",
+		"eval/acceptance/quote'\tname.go": "package acceptance\n",
+		"eval/acceptance/space name.go":   "package acceptance\n// Edited.\n",
+		"eval/gen/generated.go":           "package generated\n",
+		"eval/AGENTS_QUICKSTART.md":       "generated instructions\n",
+	})
+	candidate := commitAllForLayoutTest(t, repo)
+	changed, err := changedTestModuleFiles(t.Context(), repo, base, candidate, "eval")
+	require.NoError(t, err)
+	assert.Equal(t, []string{
+		"eval/acceptance/deleted.go",
+		"eval/acceptance/line\nbreak.go",
+		"eval/acceptance/quote'\tname.go",
+		"eval/acceptance/space name.go",
+	}, changed)
+	unchanged, err := changedTestModuleFiles(t.Context(), repo, candidate, candidate, "eval")
+	require.NoError(t, err)
+	assert.Empty(t, unchanged)
 }
 
 // TestStarterPlanRefusesUnusableRepositories checks that each repository or
@@ -314,7 +350,7 @@ func TestStarterPlanRefusesUnusableRepositories(t *testing.T) {
 func planServer(t *testing.T, workspace string) *ControlPlane {
 	t.Helper()
 	ops := realTempDir(t)
-	return newControlPlane(t, Options{
+	return newControlPlane(t, Options{BuildCacheDir: t.TempDir(),
 		WorkspaceDir:    workspace,
 		RunsDir:         filepath.Join(ops, "runs"),
 		SurlaVersion:    testSurlaVersion,

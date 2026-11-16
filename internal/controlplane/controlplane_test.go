@@ -79,7 +79,7 @@ func TestCP1AmbiguityResolutionStrictValidationOwnershipAndRevisionLock(t *testi
 	require.NoError(t, os.MkdirAll(filepath.Join(workspace, "design"), 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(workspace, "design", "design.go"), []byte("package design // orders service"), 0o644))
 	cp := newControlPlane(t, Options{WorkspaceDir: workspace})
-	designSrc := `{"design/design.go":"package design // orders service"}`
+	designSrc := "" // Intent before initialization does not inspect project design files.
 	if _, err := cp.ProposeChange(context.Background(), &gensurla.ProposeChangePayload{
 		ChangeID: "chg-refund-50",
 		Prompt:   "Refunds under $50 should be automatic, otherwise ask a manager.",
@@ -152,9 +152,8 @@ func TestCP1AmbiguityResolutionStrictValidationOwnershipAndRevisionLock(t *testi
 }
 
 // TestProposeChangeWaitsForUserWithoutQuestions verifies that an
-// analysis with no open questions is saved confirmed by its owner, and that a
-// proposal on a server bound to a workspace records that workspace's
-// design/*.go as the card's design source.
+// analysis with no open questions still waits for confirmation. Before a
+// module is initialized, a proposal keeps intent without reading design files.
 func TestProposeChangeWaitsForUserWithoutQuestions(t *testing.T) {
 	alice := WithPrincipal(context.Background(), Principal{ID: "alice@example.com", CallerID: "alice@example.com", Kind: CallerUser})
 	ws := t.TempDir()
@@ -176,14 +175,12 @@ func TestProposeChangeWaitsForUserWithoutQuestions(t *testing.T) {
 	stored, ok, err := cp.cards.load("chg-instant")
 	require.NoError(t, err)
 	require.True(t, ok)
-	assert.Equal(t, `{"design/design.go":"package design // refunds\n"}`, stored.designSource)
+	assert.Empty(t, stored.designSource)
 }
 
 // TestProposeChangeRecordsTheDesignSourceItWasMadeAgainst verifies the design
-// source a card records and hashes into request_revision: none when
-// no workspace is bound, none for a bound workspace without
-// design/*.go (so the card does not block init_project), and the bound
-// workspace's design/*.go as a JSON object with HTML characters unescaped.
+// source is absent before initialization, including when uninitialized
+// design files exist. Only an explicit refresh can supply evaluated source.
 func TestProposeChangeRecordsTheDesignSourceItWasMadeAgainst(t *testing.T) {
 	alice := WithPrincipal(context.Background(), Principal{ID: "alice@example.com", CallerID: "alice@example.com", Kind: CallerUser})
 	emptyWorkspace := t.TempDir()
@@ -197,7 +194,7 @@ func TestProposeChangeRecordsTheDesignSourceItWasMadeAgainst(t *testing.T) {
 	}{
 		{"no design and no workspace", "", ""},
 		{"workspace without design files", emptyWorkspace, ""},
-		{"workspace design files", designWorkspace, `{"design/design.go":"package design // a < b && c > d\n"}`},
+		{"workspace design before a module exists is not read", designWorkspace, ""},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			cp := newControlPlane(t, Options{CardsDir: t.TempDir(), WorkspaceDir: tc.workspace})
@@ -215,17 +212,7 @@ func TestProposeChangeRecordsTheDesignSourceItWasMadeAgainst(t *testing.T) {
 			assert.Equal(t, rev, card.RequestRevision, "request_revision covers the recorded design source")
 			blocked, err := cp.cards.hasWorkspaceCardsWithFiles()
 			require.NoError(t, err)
-			assert.Equal(t, tc.workspace == designWorkspace, blocked, "only a card that recorded workspace design files blocks init_project")
-			if tc.wantSource != "" {
-				// Changing only private source bytes must invalidate the saved revision.
-				raw, err := os.ReadFile(cp.cards.path(card.ChangeID))
-				require.NoError(t, err)
-				tampered := strings.Replace(string(raw), "package design", "package altered", 1)
-				require.NotEqual(t, string(raw), tampered)
-				require.NoError(t, os.WriteFile(cp.cards.path(card.ChangeID), []byte(tampered), 0o600))
-				_, err = cp.GetChange(alice, &gensurla.GetChangePayload{ChangeID: card.ChangeID})
-				assert.ErrorContains(t, err, "does not match its request_revision")
-			}
+			assert.False(t, blocked, "intent before initialization has no saved evaluated design")
 
 		})
 	}
@@ -517,17 +504,10 @@ var _ = Service("orders", func() {
 			t.Fatalf("fixture input incomplete: prepare the Goa and Goa-AI DSL profile with GOPROXY=off: %v\n%s", err, output)
 		}
 	}
-	card, err := cp.ProposeChange(ctx, &gensurla.ProposeChangePayload{
-		ChangeID: "chg-clear",
-		Prompt:   "Auto-approve when item_subtotal_cents < 5000; require manager when item_subtotal_cents >= 5000.",
-
-		Analysis: clearAnalysis,
-	})
-	if err != nil {
-		t.Fatalf("ProposeChange failed: %v", err)
-	}
+	card := mustProposeFromRefresh(t, cp, ctx, "chg-clear",
+		"Auto-approve when item_subtotal_cents < 5000; require manager when item_subtotal_cents >= 5000.", clearAnalysis)
 	require.Equal(t, StatusNeedsConfirmation, card.Status)
-	card, err = cp.ConfirmIntent(ctx, &gensurla.ConfirmIntentPayload{ChangeID: card.ChangeID, RequestRevision: card.RequestRevision, Answers: map[string]string{}, Examples: card.Examples})
+	card, err := cp.ConfirmIntent(ctx, &gensurla.ConfirmIntentPayload{ChangeID: card.ChangeID, RequestRevision: card.RequestRevision, Answers: map[string]string{}, Examples: card.Examples})
 	require.NoError(t, err)
 	require.Equal(t, StatusConfirmed, card.Status)
 
@@ -610,9 +590,9 @@ var _ = Service("orders", func() {
 	assert.ElementsMatch(t, []string{
 		"propose_change", "revise_change", "confirm_intent", "get_change", "configure_model", "init_project", "generate_code", "preview_architecture", "draft_override", "approve_merge", "diff",
 		"start_live_target", "stop_live_target", "get_live_target",
-		"verify_change", "get_verification", "list_verifications",
+		"verify_change", "get_verification", "review_verification", "list_verifications",
 		"check_project", "update_dependencies", "read_check_output",
-		"list_traces", "refresh_story", "get_story_refresh", "list_changes", "decline_revision",
+		"list_traces", "refresh_story", "get_story_refresh", "update_draft", "list_changes", "decline_revision",
 		"get_build", "list_builder_assignments", "get_builder_assignment",
 		"list_test_writer_assignments", "get_test_writer_assignment", "report_tests_finished",
 	}, toolNames)
@@ -945,7 +925,7 @@ func TestUnchangedConfirmationFromAnotherSessionKeepsRevision(t *testing.T) {
 	t.Cleanup(func() { assert.NoError(t, provider.Shutdown(context.Background())) })
 	spec := reportSpec{SuiteID: "suite", SuiteCommit: strings.Repeat("b", 40), Environment: "sim", Artifacts: map[string]string{"app": "artifact"}}
 	target := &promotionTargetStub{artifacts: spec.Artifacts}
-	cp := newControlPlane(t, Options{Verification: verificationConfig(t), PromotionTarget: target, TracerProvider: provider})
+	cp := newControlPlane(t, buildFixtureOptions(t, Options{BuildCacheDir: t.TempDir(), Verification: verificationConfig(t), PromotionTarget: target, TracerProvider: provider}))
 	auth := fixtureCredentials(map[string]Principal{
 		"guide":  {ID: "owner", CallerID: "guide", Kind: CallerGuide},
 		"first":  {ID: "owner", CallerID: "session-one", Kind: CallerUser},
@@ -953,8 +933,8 @@ func TestUnchangedConfirmationFromAnotherSessionKeepsRevision(t *testing.T) {
 	})
 	srv := httptest.NewServer(NewHTTPHandler(cp, auth))
 	defer srv.Close()
-	guide := WithPrincipal(t.Context(), Principal{ID: "owner", CallerID: "guide", Kind: CallerGuide})
-	card := mustPropose(t, cp, guide, "session-change", "Keep the same rules", refundAnalysis("Keep the same rules"))
+	card := saveProposedCardFixture(t, cp, "owner", "session-change", "Keep the same rules", refundAnalysis("Keep the same rules"))
+	card = attachBuildSnapshot(t, cp, card.ChangeID)
 	payload := &gensurla.ConfirmIntentPayload{ChangeID: card.ChangeID, RequestRevision: card.RequestRevision, Answers: map[string]string{}, Examples: card.Examples}
 	raw, err := gensurla.EncodeConfirmIntentPayload(payload)
 	require.NoError(t, err)
@@ -974,9 +954,11 @@ func TestUnchangedConfirmationFromAnotherSessionKeepsRevision(t *testing.T) {
 		return result
 	}
 	confirmed := send("first", raw)
+	saveStoredBuildFixture(t, cp, confirmed)
+	candidate := commitBuilderCandidateFixture(t, cp, confirmed)
 	first := WithPrincipal(t.Context(), Principal{ID: "owner", CallerID: "session-one", Kind: CallerUser})
-	target.report = passingReport(t, confirmed.RequestRevision, strings.Repeat("c", 40), spec)
-	approved, err := cp.ApproveMerge(first, &gensurla.ApproveMergePayload{ChangeID: confirmed.ChangeID, RequestRevision: confirmed.RequestRevision, CandidateCommit: strings.Repeat("c", 40), ReportDigest: target.report.Digest})
+	target.report = passingReport(t, confirmed.RequestRevision, candidate, spec)
+	approved, err := cp.ApproveMerge(first, &gensurla.ApproveMergePayload{ChangeID: confirmed.ChangeID, RequestRevision: confirmed.RequestRevision, CandidateCommit: candidate, ReportDigest: target.report.Digest})
 	require.NoError(t, err)
 	require.NotNil(t, approved.Approval)
 	payload.RequestRevision = approved.RequestRevision

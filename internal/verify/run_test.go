@@ -29,7 +29,7 @@ func TestRunAcceptsOnlyFullCommitIDs(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			_, err := Run(t.Context(), Plan{CandidateCommit: c.candidate, SuiteCommit: c.suite, WorkDir: t.TempDir()}, os.Environ())
+			_, err := Run(t.Context(), Plan{CandidateCommit: c.candidate, SuiteCommit: c.suite, WorkDir: t.TempDir()}, os.Environ(), t.TempDir())
 			assert.ErrorContains(t, err, "is not a full commit ID")
 		})
 	}
@@ -70,7 +70,7 @@ func TestRunRejectsInvalidPlansBeforeWriting(t *testing.T) {
 			p := valid()
 			p.WorkDir = t.TempDir()
 			c.edit(&p)
-			_, err := Run(t.Context(), p, os.Environ())
+			_, err := Run(t.Context(), p, os.Environ(), t.TempDir())
 			var stage *StageError
 			require.ErrorAs(t, err, &stage)
 			assert.Equal(t, StageCheckout, stage.Stage)
@@ -82,13 +82,13 @@ func TestRunRejectsInvalidPlansBeforeWriting(t *testing.T) {
 		})
 	}
 
-	_, err := Run(t.Context(), valid(), os.Environ())
+	_, err := Run(t.Context(), valid(), os.Environ(), t.TempDir())
 	assert.EqualError(t, errors.Unwrap(err), "work directory is required", "an empty WorkDir must not mean the current directory")
 
 	used := valid()
 	used.WorkDir = t.TempDir()
 	require.NoError(t, os.MkdirAll(filepath.Join(used.WorkDir, "build-home-suite"), 0o700))
-	_, err = Run(t.Context(), used, os.Environ())
+	_, err = Run(t.Context(), used, os.Environ(), t.TempDir())
 	assert.EqualError(t, errors.Unwrap(err), "work directory "+used.WorkDir+" must be missing or empty",
 		"files left in WorkDir could be read by a build through a committed link")
 }
@@ -150,7 +150,7 @@ func TestRunRefusesACommittedModuleLinkOutsideTheCheckout(t *testing.T) {
 		SuiteCommand:    "./cmd/suite",
 		WorkDir:         t.TempDir(),
 		Tests:           TestsEvaluator,
-	}, os.Environ())
+	}, os.Environ(), t.TempDir())
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), `candidate module "module": resolves to`)
 	assert.Contains(t, err.Error(), "outside")
@@ -198,7 +198,7 @@ func TestRunChecksOutOnlyThePlansRepositoryWhateverGitEnvironmentItInherits(t *t
 		SuiteCommand:    "./cmd/suite",
 		WorkDir:         workDir,
 		Tests:           TestsEvaluator,
-	}, os.Environ())
+	}, os.Environ(), t.TempDir())
 	var stage *StageError
 	require.ErrorAs(t, err, &stage)
 	assert.Equal(t, "The candidate commit does not contain the configured module.", stage.Summary,
@@ -245,7 +245,7 @@ func TestPrepareBuildFetchesModulesWhateverGitEnvironmentItInherits(t *testing.T
 	pointGitAt(t, decoy)
 
 	r := &runner{evidenceDir: t.TempDir()}
-	toolchain, err := r.prepareBuild(t.Context(), "candidate", moduleDir, moduleDir, t.TempDir())
+	toolchain, err := r.prepareBuild(t.Context(), "candidate", moduleDir, moduleDir, t.TempDir(), []string{"."})
 	require.NoError(t, err, "the dependency is fetched with the user's Git settings")
 	assert.Equal(t, modCache, toolchain.modCache)
 	assert.Equal(t, before, filesUnder(t, decoy), "the inherited repository is untouched")
@@ -268,6 +268,7 @@ func TestPrepareBuildDownloadsWhatTheModulesGoWorkNeeds(t *testing.T) {
 	git(t, dep, "tag", "v1.0.0")
 	for name, content := range map[string]string{
 		"go.mod":     "module example.invalid/main\n\ngo 1.21\n",
+		"main.go":    "package main\nimport _ \"example.invalid/lib\"\nfunc main() {}\n",
 		"go.work":    "go 1.21\n\nuse (\n\t.\n\t./lib\n)\n",
 		"lib/go.mod": "module example.invalid/lib\n\ngo 1.21\n\nrequire example.invalid/dep.git v1.0.0\n",
 		"lib/lib.go": "package lib\n\nimport _ \"example.invalid/dep.git\"\n",
@@ -290,10 +291,13 @@ func TestPrepareBuildDownloadsWhatTheModulesGoWorkNeeds(t *testing.T) {
 	t.Setenv("GIT_ALLOW_PROTOCOL", "https:file")
 
 	r := &runner{evidenceDir: t.TempDir()}
-	_, err := r.prepareBuild(t.Context(), "candidate", moduleDir, moduleDir, t.TempDir())
+	_, err := r.prepareBuild(t.Context(), "candidate", moduleDir, moduleDir, t.TempDir(), []string{"."})
 	require.NoError(t, err)
-	assert.DirExists(t, filepath.Join(modCache, "example.invalid", "dep.git@v1.0.0"),
-		"the download fetched the dependency the module's go.work needs")
+	cached := filepath.Join(modCache, "example.invalid", "dep.git@v1.0.0")
+	assert.DirExists(t, cached, "the configured target's workspace dependency was fetched")
+	// Workspace loading uses compilation's readonly flags instead of the
+	// ambient -modcacherw; make this test-owned extraction removable.
+	require.NoError(t, os.Chmod(cached, 0o700))
 }
 
 // TestRunClonesARemoteRepositoryThroughTheUsersGitSettings runs a
@@ -322,7 +326,7 @@ func TestRunClonesARemoteRepositoryThroughTheUsersGitSettings(t *testing.T) {
 		SuiteCommand:    "./cmd/suite",
 		WorkDir:         t.TempDir(),
 		Tests:           TestsEvaluator,
-	}, os.Environ())
+	}, os.Environ(), t.TempDir())
 	var stage *StageError
 	require.ErrorAs(t, err, &stage)
 	assert.Equal(t, "The candidate commit does not contain the configured module.", stage.Summary,

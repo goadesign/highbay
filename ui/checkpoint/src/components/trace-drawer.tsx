@@ -25,14 +25,6 @@ interface TraceDrawerProps {
 export function TraceDrawer(props: TraceDrawerProps) {
   return (
     <div className="surla-trace-view">
-      <Button
-        id="surla-trace-drawer-toggle"
-        aria-expanded={props.open}
-        aria-controls="surla-trace-drawer"
-        onClick={props.onToggle}
-      >
-        {props.open ? "Hide traces" : "Traces"}
-      </Button>
       <section
         id="surla-trace-drawer"
         hidden={!props.open}
@@ -41,6 +33,7 @@ export function TraceDrawer(props: TraceDrawerProps) {
         className="surla-trace-panel"
       >
         <h2 id="surla-trace-title">Operation diagnostics</h2>
+        <Button id="surla-trace-close" onClick={props.onToggle}>Close diagnostics</Button>
         <p className="surla-muted">
           Saved diagnostics for your instrumented operations, newest first.
           Raw errors and inputs stay with the server operator.

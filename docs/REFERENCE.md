@@ -25,8 +25,8 @@ an operation, who may call it, what it returns and how it refuses.
 | **`request_revision`** | The SHA-256 hex digest of a Change Card's content, including its design source and Story. Previews, builds, verification runs and approvals name the revision they are for, so editing the agreed answers or examples, or adopting another revision, leaves them attached to the earlier revision. |
 | **Agreed revision** | The confirmed revision of a change, the one *in force* (`in_force: true` on builds and assignments). It stays in force while the guide's proposed revision waits beside it. |
 | **Proposed revision** | A revision the guide saved beside an agreed change. The user adopts or declines it on the views page. |
-| **Build** | The user's decision to build one agreed revision. It saves that revision's Story and design, with the answers, examples and preserved behaviors the user confirmed, and gives the builder and the test writer their assignments. |
-| **The test writer's working copy** | A linked Git working copy of the project at `.surla-tests`, on the branch `surla/tests`, where the test writer works and where Surla commits accepted tests. |
+| **Build** | The user's decision to build one agreed revision as the project's one open build (numbered `n`, with `taking` state `building`, `passed`, `merged` or `dropped`). It saves that revision's Story, design, base commit and confirmed answers, examples and preserved behaviors, and gives the builder and the test writer their assignments. |
+| **The build working copies** | Linked Git working copies of the project at `.surla-build` on `surla/build-<n>` (where the builder works and commits) and `.surla-tests` on `surla/tests-<n>` (where the test writer works and where Surla commits accepted tests). |
 | **Evaluator** | A test program that follows the [evaluator suite command contract](#evaluator-suite-command-contract): it declares its scenarios, runs them against the application's binaries and prints a report. Surla generates the evaluator of a Surla test module, such as the one the test writer works in, from that module's tests; stored verification settings name an evaluator the user maintains. |
 | **Scenario** | One named test in an evaluator, such as `prices_tea`. A report gives each scenario's outcome: passed, failed, not run or a harness error. |
 | **Tests commit** | The commit at which Surla accepted a build's tests, or the evaluator commit named in stored verification settings. Verification runs those tests. |
@@ -51,7 +51,7 @@ an operation, who may call it, what it returns and how it refuses.
 | **Herdr app** (`herdr-app`) | The window that shows the team's panes. | `curl -fsSL https://releases.herdr.dev/app/install.sh \| sh` ([herdr.dev](https://herdr.dev/)) |
 | **Chorus v0.11.0 or later** | Agent messaging and the Chorus dialog. | `curl -fsSL https://raw.githubusercontent.com/goadesign/chorus/main/scripts/install.sh \| sh`; update with `chorus update -yes` |
 | **A coding agent** that the Chorus dialog can start | An agent app plays each role: the user picks one per role in the Chorus dialog. | — |
-| **Git 2.45 or newer**, with a name and address | Startup requires support for `--no-lazy-fetch`, so Surla's Git reads do not download missing objects. Without stored verification settings, builds, live targets and verification need the project in a Git repository with a first commit, and Surla records accepted tests as commits under your Git identity. | Install Git 2.45 or newer on `PATH`; `git config --global user.name …` and `user.email …` configure its identity. |
+| **Git 2.45 or newer**, with a name and address | Startup requires support for `--no-lazy-fetch`, so Surla's Git reads do not download missing objects. Every build needs the project in a Git repository with a first commit and a Git name and address, with or without stored verification settings, and so does verification, which needs the build. Without stored verification settings, live targets need the repository too. Surla records accepted tests, and any uncommitted files a working copy holds when it joins a new build, as commits under your Git identity. | Install Git 2.45 or newer on `PATH`; `git config --global user.name …` and `user.email …` configure its identity. |
 | **Docker** (Docker Desktop, or another local engine on a `unix://` socket) | `check_project` and `update_dependencies` run Go in Linux containers. The first check pulls `golang:1.27.3`. | [docker.com](https://www.docker.com/) |
 | **Temporal CLI** | Only to run the Orders evaluator, which starts a local Temporal server for its scenarios: when Surla verifies the Orders project or starts a live target of it, when `surla verify` runs that evaluator, and in the full-suite tests that run it (the `examples/orders` acceptance suite and the `e2e` tests of `./internal/verify` and `./cmd/surla`). | `brew install temporal` |
 
@@ -151,11 +151,13 @@ shell keep what they inherited.
 owns the team: its stable Chorus name, each role's handle and credential, the
 Herdr space, and the roster the Chorus dialog reads. Before any build, the
 roster holds only the guide; a build adds the builder and, unless
-verification settings are stored, the test writer. When a listed role has no
-agent running, or its pane holds only an idle shell, Surla focuses this
-project's space and opens the Chorus dialog, where the user picks an agent
-app and a model for each role. When every listed role is running, no dialog
-opens. The guide's pane is on the left of the team's tab; the builder's pane
+verification settings are stored, the test writer. When the guide, or a worker
+role that has work on the open build (or any listed role when the assignment
+read fails), has no agent running or its pane holds only an idle shell, Surla
+focuses this project's space and opens the Chorus dialog, where the user picks
+an agent app and a model for each role. A worker role without work stays in the
+roster, and when every role that has work is running, no dialog opens. The
+guide's pane is on the left of the team's tab; the builder's pane
 is to its right, and the test writer's below the builder's. Starting again
 reuses the guide and the saved space. If the space was closed, the server
 adopts the one local space that matches its team name and folder, or creates
@@ -177,6 +179,8 @@ shell* when both hold:
 A shell started with such a command flag counts as running. A live pane that
 reports no foreground program also counts as running.
 
+<a id="project-state-folder"></a>
+
 **The project and its state folder.** A project is a folder, with or without
 Git. Surla resolves symlinks in the path and uses the nearest project record
 in that folder or its parents, so running `surla` inside a project the guide
@@ -187,10 +191,31 @@ outside the folder, in
 the user's configuration folder (on macOS, `~/Library/Application Support`).
 It holds the owner's account identity, one saved `127.0.0.1` port, the Change
 Cards and builds (`cards/`), verification runs (`runs/`), reports
-(`reports/`), agent credentials (`agents/`), stored settings, and the running
-server's record. A new project saves a free port that no other project of
-this account saved, running or not, and keeps it. No caller chooses an
+(`reports/`), the Go build cache (`build-cache/`), agent credentials
+(`agents/`), stored settings, and the running server's record. A new project
+saves a free port that no other project of this account saved, running or not,
+and keeps it. No caller chooses an
 identity, address, token or storage path.
+
+Live starts and verifications share this project's compiled Go packages in
+`build-cache/`. Every operation still checks out the selected commits, builds
+new output binaries, measures their digests and runs its test program; a cache
+hit is not a passed verification. Scratch, staging, checkouts, outputs and
+evidence stay in each operation's work directory; reports are published in
+the project's shared `reports/` folder. The cache survives Stop, server restart
+and pruning individual runs. Go maintains its cache entries. Use it on a local
+filesystem on one machine; sharing it across machines or a network filesystem
+is unsupported. When no live start or verification is running, you can delete
+`build-cache/`; the next operation recreates it and builds cold.
+
+The retained packages are trusted compiler inputs, like the Go module cache,
+toolchain, executable search path and Surla's files. Go checks a cached file's
+existence and recorded size; it does not check compiled contents against the
+selected source. Code running as you can plant a compiled package that a later
+build links into the candidate or test program. Its report can bind a binary
+the selected source would not produce; the binary digest does not authenticate
+that correspondence. Deleting
+this cache forces recompilation but does not authenticate the other inputs.
 
 Before starting the server or accepting `surla verification set` or
 `surla promotion set`, Surla asks Git for the project's enclosing working tree
@@ -379,7 +404,7 @@ that differs from the binary the run verified, prevents approval; the
 refusal names no folder path and ends with the step "publish the binaries
 the run built, whose folder the run's Proof view shows, into the release
 folder that the promotion settings name, in a folder named after the commit,
-or remove the promotion settings". The Proof view shows the selected run's
+or remove the promotion settings". The Check view shows the selected run's
 actual source folder under **Binaries built by this run**, as selectable code;
 the approval error panel repeats it. Without promotion settings, an approval
 records no release binaries. A stored file the server cannot accept, such
@@ -473,10 +498,18 @@ non-zero; a setup or build failure prints no report.
 | `-suite-module <dir>` | Evaluator module folder (default `.`). |
 | `-suite-command <package>` *(required)* | The evaluator program's package, such as `./cmd/orders_acceptance-evals`. |
 | `-request-revision <digest>` *(required)* | The `request_revision` recorded in the report. Without a Change Card, any label works if `surla approve` gets the same one. |
-| `-work-dir <path>` *(required)* | A missing or empty private folder that agents cannot read. |
+| `-work-dir <path>` *(required)* | A missing or empty operator-owned folder for this operation's checkouts, scratch, outputs, evidence and Go build cache. Suite evidence can name hidden scenarios: keep this folder separate from builders' working copies and do not show it to builders. Programs running as you retain your file access. Relative paths resolve from the caller's directory. |
 | `-report-dir <path>` *(required)* | Where the full report is written; keep it from the builder when scenarios are hidden. |
 | `-timeout <duration>` | Limit for the run (default `0`, no limit). A stopped run prints any partial report the evaluator saved and exits non-zero; a partial report can pass. |
-| `-builder-view` | Default `true`. `-builder-view=false` prints the full report and names hidden scenarios in the summary. Raw diagnostics of a stopped run go to standard error in either view; do not show them to the builder. |
+| `-builder-view` | Default `true`. `-builder-view=false` prints the full report and names hidden scenarios in the summary. Failures go to standard error in either view; do not show them to the builder. |
+
+Failures during checkout, standalone dependency downloads and toolchain
+lookups, and the evaluator protocol name the failed operation, its process
+status when present, and the private evidence file. Their raw standard output
+and standard error remain under `<work-dir>/evidence/`, including after the
+command ends, so the operator can inspect the named file and retry. Workspace
+preparation diagnostics are discarded. Compiler failures still include bounded
+build-output excerpts.
 
 #### Evaluator suite command contract
 
@@ -519,7 +552,9 @@ func main() {
    attaches the evidence of every binary it used, such as
    `pinned["orders"].Evidence("orders")`, which `surla verify` compares with the
    digest it measured; missing or different evidence makes the scenario a
-   `harness_error`. Exit codes: `0` all passed; `1` the suite ran and a
+   `harness_error`. The builder view then says in one fixed sentence which
+   check failed; the names and digests the scenario reported stay in the
+   saved report. Exit codes: `0` all passed; `1` the suite ran and a
    scenario failed; `2` the suite could not run or finish cleanly. The program
    also accepts `--scenario <id>`, or `--tag <tag>`, and `--max-concurrency <n>`
    for direct runs.
@@ -587,6 +622,7 @@ all act for that owner.
 | [`decline_revision`](#decline_revision) | ✓ | | | | | MCP tool and HTTP |
 | [`refresh_story`](#refresh_story) | | ✓ | | | | MCP tool and HTTP |
 | [`get_story_refresh`](#get_story_refresh) | ✓ | ✓ | ✓ | | | MCP tool and HTTP |
+| [`update_draft`](#update_draft) | | ✓ | | | | MCP tool and HTTP |
 | [`surla://golden-path`](#mcp-resources) (`golden_path`) | ✓ | ✓ | ✓ | ✓ | | MCP resource and HTTP |
 | [`init_project`](#init_project) | | ✓ | | | | MCP tool and HTTP |
 | [`generate_code`](#generate_code) | | | ✓ | | | MCP tool and HTTP |
@@ -596,6 +632,7 @@ all act for that owner.
 | [`preview_architecture`](#preview_architecture) | ✓ | ✓ | ✓ | | | MCP tool and HTTP |
 | [`diff`](#diff) | ✓ | ✓ | ✓ | | | MCP tool and HTTP |
 | [`start_build`](#start_build) | ✓ | | | | | HTTP |
+| [`drop_build`](#drop_build) | ✓ | | | | | HTTP |
 | [`get_build`](#get_build) | ✓ | ✓ | ✓ | ✓ | | MCP tool and HTTP |
 | [`get_test_findings`](#get_test_findings) | ✓ | | | | | HTTP |
 | [`list_builder_assignments`](#list_builder_assignments-and-get_builder_assignment) | | | ✓ | | | MCP tool and HTTP |
@@ -612,6 +649,7 @@ all act for that owner.
 | [`hand_over_model_settings`](#hand_over_model_settings) | | | | | ✓ | HTTP |
 | [`verify_change`](#verify_change) | | | ✓ | | | MCP tool and HTTP |
 | [`get_verification`](#get_verification) | ✓ | ✓ | ✓ | ✓ | | MCP tool and HTTP |
+| [`review_verification`](#review_verification) | ✓ | | | | | MCP tool and HTTP |
 | [`list_verifications`](#list_verifications) | ✓ | ✓ | ✓ | ✓ | | MCP tool and HTTP |
 | [`approve_merge`](#approve_merge) | ✓ | | | | | MCP tool and HTTP |
 | [`list_traces`](#list_traces) | ✓ | ✓ | ✓ | | | MCP tool and HTTP |
@@ -624,7 +662,8 @@ all act for that owner.
 | `browser_link` (`POST /project/browser-link`) | | | | | ✓ | HTTP |
 
 The user's browser session sends HTTP only, so the user-only MCP tools
-(`confirm_intent`, `decline_revision`, `configure_model`, `approve_merge`)
+(`confirm_intent`, `decline_revision`, `configure_model`, `review_verification`,
+`approve_merge`)
 appear in no agent's tool list. `surla` and `surla stop` call the management
 operations. The views page exchanges its single-use link with
 `POST /project/browser-session`, which needs no credential because the link
@@ -738,11 +777,13 @@ its revision are still at the approval's `suite_commit` and, when promotion
 settings are stored, the release binaries still have the approved digests. A
 later report of the tests, the acceptance of other tests, a build after which
 Surla does not accept the same commit again, or changed release binaries
-hide it; the card file keeps it. After a build, Surla's check of a report
-accepts the same commit again only while `surla/tests` still points at it
-and the files it checked are exactly the files that commit holds. A build
-that brings the working copy to a later project commit, such as the user's
-merge of the tests, moves `surla/tests` there, so the approval stays hidden.
+hide it; the card file keeps it. After the user rebuilds an unmerged,
+undropped open build of the same change, Surla's check of a report accepts the
+same commit again only while that build's branch `surla/tests-<n>` still
+points at it and the files it checked are exactly the files that commit holds.
+A build started after a merge or drop is a new numbered build on a new
+`surla/tests-<n>` branch at the project's current commit, so the earlier
+approval stays hidden.
 When the tests still match and promotion settings are stored but the
 release binaries cannot be read, `unverified_approval` carries the saved
 approval and this `reason`: "Saved approval for candidate
@@ -762,8 +803,9 @@ when the release binaries cannot be read.
 
 Saves the guide's analysis of a request as a Change Card waiting for the
 user. Surla runs no model to propose or revise, so these operations need no
-model key. The guide reads the project's `design/*.go` and
-[`surla://golden-path`](#mcp-resources), then sends `analysis`:
+model key. The guide reads [`surla://golden-path`](#mcp-resources), drafts only
+in the `.surla-draft` folder [`refresh_story`](#refresh_story) returns, and
+sends `analysis`:
 
 | Field | Content |
 | --- | --- |
@@ -776,15 +818,18 @@ model key. The guide reads the project's `design/*.go` and
 Surla numbers the questions `<change_id>-ambiguity-NN` and the examples
 `check_01`, `check_02`, …, keeps every text as sent, computes
 `request_revision`, and saves the card as `needs_confirmation`, even with no
-question. With `story_refresh_op_id`, it adopts the Stories of that succeeded
-[`refresh_story`](#refresh_story) operation and the design files they were
-evaluated from, after checking that the project's files still match them.
-Without it, it records the project's `design/*.go`.
+question. With `story_refresh_op_id`, it saves what that succeeded
+[`refresh_story`](#refresh_story) operation evaluated from the draft—its
+design, Stories, architecture, `go.mod` and made-from record—without reading
+any file. A project folder with a `go.mod` requires `story_refresh_op_id` for a
+new card; with neither a `go.mod` nor `story_refresh_op_id`, the card records no
+design.
 
 | Refusal | When |
 | --- | --- |
 | `conflict` (`409`) | `change_id` already has a card. |
-| `unprocessable` (`422`) | `change_id` or `prompt` is blank; the analysis breaks a rule that spans fields (message starting `invalid analysis:`, such as a question that repeats an option); `story_refresh_op_id` is unknown, failed, replaced or stale (the message names `refresh_story`); or the design files cannot be read. |
+| `drafted_before_drop` (`409`) | The user dropped a build after `story_refresh_op_id` was evaluated; call `refresh_story` to remake and evaluate the draft from the project folder, then propose again. |
+| `unprocessable` (`422`) | `change_id` or `prompt` is blank; the analysis breaks a rule that spans fields (message starting `invalid analysis:`, such as a question that repeats an option); `story_refresh_op_id` does not name the owner's current succeeded `refresh_story` operation (the message names `refresh_story`); or the project folder holds a `go.mod` and `story_refresh_op_id` is omitted. |
 
 Surla cannot judge whether an analysis is complete or right; the user does
 that when confirming.
@@ -810,15 +855,20 @@ The guide keeps or edits each current example by naming it in `prior_id`,
 lists each dropped one in `removed_example_ids`, and restates the decisions
 that still hold, because the revision has no answers of its own. Kept and
 edited examples keep their IDs; added ones get the lowest free `check_NN`.
-With `story_refresh_op_id`, the revision takes that operation's Story and
-design files; without it, a revision with Stories keeps its Story and design,
-and one without re-reads `design/*.go`.
+With `story_refresh_op_id`, the revision saves what that succeeded
+[`refresh_story`](#refresh_story) operation evaluated from the draft—its
+design, Stories, architecture, `go.mod` and made-from record—without reading
+any file; without `story_refresh_op_id`, it keeps every saved snapshot field of
+the revision it revises (design, Stories, architecture, `go.mod` and made-from
+record), even with zero Stories, and a project folder with a `go.mod` refuses
+an omitted `story_refresh_op_id` when the revision being revised has no design.
 
 | Refusal | When |
 | --- | --- |
 | `not_found` (`404`) | No card has this `change_id`. |
 | `conflict` (`409`) | `request_revision` is not the latest revision, including the agreed revision while a proposed revision waits. |
-| `unprocessable` (`422`) | Blank text, an example not accounted for exactly once, a stale `story_refresh_op_id`, or unreadable design files. |
+| `drafted_before_drop` (`409`) | The user dropped a build after `story_refresh_op_id` was evaluated; call `refresh_story` to remake and evaluate the draft from the project folder, then revise again. |
+| `unprocessable` (`422`) | Blank text, an example not accounted for exactly once, `story_refresh_op_id` does not name the owner's current succeeded `refresh_story` operation, or the project folder holds a `go.mod` and `story_refresh_op_id` is omitted when the revision being revised has no design. |
 
 #### `confirm_intent`
 
@@ -863,10 +913,14 @@ stays exactly as saved.
 #### `refresh_story`
 
 `POST /workspace/story/refresh`. **Input:** none. **Output:**
-`StoryRefreshResult` (`op_id`, `state`, `snapshot_digest`, `stories`,
-`diagnostic`, `message`).
+`StoryRefreshResult` (`op_id`, `state`, `snapshot_digest`, `draft_folder`,
+`stories`, `diagnostic`, `message`).
 
-Reads the project's Go module (`go.mod`, `go.sum` and non-test `.go` files),
+Reads the guide's draft Go module in `.surla-draft` (`go.mod`, `go.sum` and
+the non-test `.go` files under `design/`; on the first `refresh_story` after
+the user drops a build with [`drop_build`](#drop_build), Surla remakes
+`.surla-draft` from the project folder and notes in `message` that edits made
+before the drop are gone until a revision is saved),
 computes its `snapshot_digest`, and starts, or reuses, an evaluation
 of its Stories. It answers at once with `state` `running` or `succeeded`.
 There is one current evaluation per project, kept in memory only: refreshing
@@ -877,7 +931,7 @@ disconnecting. A design that does not use the Story language succeeds with
 
 | Refusal | When |
 | --- | --- |
-| `unprocessable` (`422`) | The project folder has no `go.mod`, was replaced, or holds a file that is not valid UTF-8. |
+| `unprocessable` (`422`) | The project folder has no `go.mod` or was replaced; a draft file is not valid UTF-8, cannot be parsed as Go, or imports a package of the project outside `design/` (the message names the file and line); or `.surla-draft` is a link or a file, not a folder. |
 | `unavailable` (`503`) | The server is stopping. |
 
 #### `get_story_refresh`
@@ -891,13 +945,89 @@ since the server started; call `refresh_story`), `running`, `succeeded` with
 Pass a succeeded `op_id` as `story_refresh_op_id` to
 [`propose_change`](#propose_change) or [`revise_change`](#revise_change).
 
-When a design file imports the Story language but the project's `go.mod`
+When a design file imports the Story language but the draft's `go.mod`
 does not require `github.com/goadesign/surla/story`, the `diagnostic` of the
-failed evaluation also names the step: in the folder that holds that
-`go.mod`, run `go get github.com/goadesign/surla/story@<version>`, with the
-version Surla's own `go.mod` requires, commit `go.mod` and `go.sum`, then try
-again. A project made by `surla init` or `init_project` already requires the
-module.
+failed evaluation also names the step: “`In the folder that holds that
+go.mod, run: go get github.com/goadesign/surla/story@<version>, then try
+again.`” The version is the one Surla's own `go.mod` requires. The guide runs
+the command in its draft, whose `go.mod` was evaluated. A project made by
+`surla init` or `init_project` already requires the module.
+
+#### `update_draft`
+
+`POST /workspace/draft/update`. **Input:** none. **Output:**
+`DraftUpdateResult` (`draft_folder`, `taken`, `merged`, `to_correct`).
+
+The guide brings design changes from the project folder into `.surla-draft`
+(making `.surla-draft` first when missing, as [`refresh_story`](#refresh_story)
+does) without running an evaluation. Call it before drafting each new change,
+such as after the user merges a passed build, and whenever a design file
+changed in the project folder outside Surla (after committing an outside design
+change when a build or verification reports `design_changed_outside`).
+
+For each Go file under `design/` (test files excluded) in the recorded history,
+`.surla-draft` or the project folder, Surla compares the project folder's
+canonical Go version and the draft's version over a comparison base: whichever
+was recorded later between the history base (the latest recorded version in the
+project's committed history since the draft's start, or the starting folder
+version when that history supplies none) and the outside version the draft last
+took. A project folder version equal to that comparison base, or already
+current in the recorded history, changes nothing. Otherwise, unless a
+`to_correct` case below applies:
+
+- When the draft did not change the file from the comparison base, Surla writes
+  the project folder's version into `.surla-draft` (or removes the file when the
+  project folder removed it) and lists its path in `taken`.
+- When the draft already holds the project folder's version, or when both
+  changed the file and `git merge-file` merges them without conflict into valid
+  Go, Surla writes the canonical Go result into `.surla-draft` and lists its
+  path in `merged`.
+- When a file needs correction, it is listed in `to_correct`
+  (`path`, `folder`, `problem`), in path order. `path` is relative to the folder
+  that `folder` names: `draft_folder` for the guide's draft, or `project_folder`
+  for the user's project folder:
+  - the draft file cannot be parsed as Go, or the project folder's file cannot
+    be parsed as Go; `folder` identifies which file needs correction;
+  - the project's committed history gained a recorded version from another line
+    after the file was last taken, so Surla wrote the project folder's live file
+    into `.surla-draft` without merging (`The project's history gained design
+    changes from another line after this file was taken. Surla took the live
+    project file without merging; check that it holds your intended draft edits
+    once.`);
+  - one side removed the file while the other changed it (`One side removed
+    this file while the other changed it; correct the draft to keep the
+    intended design.`);
+  - both sides changed the same lines, leaving conflict markers in the draft
+    file (`The draft and project folder changed the same lines; resolve the
+    conflict markers in this draft file.`), or the merged text does not parse as
+    Go;
+  - a previous `update_draft` stopped while writing the file and the draft
+    changed since (`Surla stopped while bringing the project folder's change
+    into your draft, and the draft changed since: make sure it holds that
+    change once.`); when the draft file is still as it was before the write or
+    already holds its result, `update_draft` finishes the interrupted update and
+    never brings that change in a second time;
+  - `go.mod`, which Surla never merges or rewrites, cannot be parsed in the
+    project or draft, the project's `go.mod` declares no module, the draft
+    declares a different module path (`The project and draft
+    must declare the same module.`), lacks or differs on a version the project's
+    `go.mod` requires (`The project requires <module> <version>; the draft
+    requires <version>.`), or has different `replace` directives (`The project
+    and draft go.mod have differing replace directives; correct the draft's
+    replacements.`).
+
+The guide fixes entries whose `folder` is `draft_folder` inside the result's
+`draft_folder`. For an entry whose `folder` is `project_folder`, it tells the
+user what to correct there and waits; it never edits the project folder. It
+calls `update_draft` again until `to_correct` is empty, then calls
+[`refresh_story`](#refresh_story).
+
+| Refusal | When |
+| --- | --- |
+| `unprocessable` (`422`) | The project folder was replaced; `.surla-draft` is a link or a file rather than a folder, its `.gitignore` has no Surla draft marker, or its provenance is missing; the draft or provenance changed while Surla first made the draft; the draft's or project folder's `go.mod` is missing, or a `go.mod`, `go.sum` or design file there is not regular, cannot be read or is not valid UTF-8; or a design file in the project's current commit cannot be parsed as Go or is a link or submodule. The message names the file or folder and who corrects it. The guide corrects its draft, or asks the user to correct the project file (and commit a correction to committed design), then calls again. |
+| `not_implemented` (`501`) | No project folder is bound: `no workspace directory is bound to this control plane; start Surla from a project directory`. |
+| `conflict` (`409`) | The project's commit, the draft, the project files or the design provenance changed while preparing the update (`The project's commit changed while preparing the draft update; call update_draft again.` or `The draft, project files or design provenance changed while preparing the update; call update_draft again.`). |
+| `unavailable` (`503`) | The server is stopping. |
 
 ### Project files and checks
 
@@ -926,27 +1056,46 @@ MCP `progressToken`, it reports each phase.
 `eval`). **Output:** `GenerateCodeResult` (`target`, `files_written`,
 `warnings`).
 
-The builder's generation: compiles the edited design of the application, or
-of `eval/` with `{"target":"eval"}` outside a build that runs with a test writer (during such a build, without stored verification settings, `eval/`, `eval/design/` included, belongs to the test writer, and Surla regenerates `eval/gen/` at build start and on each report), and replaces that
-module's `gen/` exactly as [`surla gen`](#surla-gen) does. It compiles only;
-call [`check_project`](#check_project) to build and test before committing.
-An error means `gen/` was not replaced; a warning means it was.
+The builder's generation in its `.surla-build` working copy on `surla/build-<n>`
+(never in the project folder). For `candidate` (the default), it writes the open
+build's saved agreed design into `design/` of the builder's working folder,
+checks that `go.mod` there requires the modules that design imports, compiles
+the design, and replaces that module's `gen/` exactly as [`surla gen`](#surla-gen)
+does. With `{"target":"eval"}`, it regenerates the `eval/` module of the
+builder's working folder from that module's own design. In a build that runs
+with a test writer (without stored verification settings), `eval/`,
+`eval/design/` included, belongs to the test writer and the builder leaves it
+untouched; Surla regenerates `eval/gen/` in `.surla-tests` when
+`get_test_writer_assignment` marks an assigned build's assignment read and on
+each report. Both targets require an open, undropped build in force with the
+builder's assignment read. It compiles only; call
+[`check_project`](#check_project) to build and test before committing. An error
+means `gen/` was not replaced; a warning means it was.
 
 | Refusal | When |
 | --- | --- |
-| `unprocessable` (`422`) | The module is absent, replaced or invalid, or its design does not compile; the message states the failed phase. |
+| `no_build` (`409`) | No build is open, or the open build was dropped. |
+| `conflict` (`409`) | The open build is of an earlier revision (`in_force: false`); the user builds the agreed revision first. |
+| `assignment_unread` (`409`) | The builder has not read the open build's assignment; call `get_builder_assignment` first. |
+| `copy_off_branch` (`409`) | `.surla-build` is not on `surla/build-<n>` or has a Git operation in progress. |
+| `working_folder_missing` (`409`) | The builder's working folder in `.surla-build` is missing or not a directory. |
+| `working_copy_busy` (`409`) | Another operation is using the builder's working copy; call again when it ends. |
+| `missing_modules` (`422`) | `.surla-build/go.mod` lacks a module the agreed design requires, requires an older version, or has a differing `replace` directive. |
+| `unprocessable` (`422`) | The module is absent, replaced or invalid. |
+| A server fault (`500`) | The design does not compile or generation fails; the message states the failed phase and says to call `generate_code` again. |
 
 #### `check_project`
 
 `POST /workspace/check`. **Input:** none. **Output:** `CheckProjectResult`
 (`op_id`, `passed`, `message`).
 
-Runs `go test ./...` in every Go module of the project folder (skipping
+Runs `go test ./...` in every Go module of the builder's working folder in
+`.surla-build` on `surla/build-<n>` (skipping
 `testdata`, `vendor` and folders starting with `.` or `_`, and leaving out
 `eval` without stored verification settings when the project has the starter
 test layout `go.mod` and `eval/go.mod`: `Left test module eval out (tests
-belong to the test writer)`) on the current files, uncommitted edits included,
-without changing them. The server copies
+belong to the test writer)`) on the current files in `.surla-build`, uncommitted
+edits included, without changing them. The server copies
 the files (leaving out `.git` and `.surla*`, never following a link) into a
 private folder, then runs each module in two Linux containers from
 `golang:1.27.3`: first downloading dependencies with your `GOPROXY`,
@@ -961,7 +1110,8 @@ output with [`read_check_output`](#read_check_output). When the message says
 
 | Refusal | When |
 | --- | --- |
-| `unprocessable` (`422`) | The project folder has no Go module. |
+| `no_build` (`409`), `assignment_unread` (`409`), `copy_off_branch` (`409`), `working_folder_missing` (`409`), `working_copy_busy` (`409`) | As for `generate_code`. |
+| `unprocessable` (`422`) | The builder's working folder has no Go module. |
 | `unavailable` (`503`) | `docker` is missing, the engine does not answer or is not local, or the image cannot be pulled. Start Docker and call again: the server looks Docker up on every call. An engine other than the default needs `DOCKER_HOST` or the Docker context in the server's environment. |
 | An error naming a path or a container | The files changed while they were copied, or a container's removal could not be confirmed (`docker rm -f <name>`). The server checks again at every stop and start. |
 
@@ -970,11 +1120,12 @@ output with [`read_check_output`](#read_check_output). When the message says
 `POST /workspace/dependencies`. **Input:** none. **Output:**
 `UpdateDependenciesResult` (`op_id`, `files_written`, `message`).
 
-Runs `go mod tidy` for every module in the same kind of private copy and
-containers, with network, then writes back only the `go.mod`, `go.sum` and
-`go.work.sum` files whose bytes changed. Without stored verification settings,
-when the project has the starter test layout (`go.mod` and `eval/go.mod` for
-`<module>/eval`), `eval` is left out (`Left test module eval out (tests belong
+Runs `go mod tidy` for every module of the builder's working folder in
+`.surla-build` on `surla/build-<n>` in the same kind of private copy and
+containers, with network, then writes back into `.surla-build` only the `go.mod`,
+`go.sum` and `go.work.sum` files whose bytes changed. Without stored verification
+settings, when the project has the starter test layout (`go.mod` and `eval/go.mod`
+for `<module>/eval`), `eval` is left out (`Left test module eval out (tests belong
 to the test writer)`). A file that is a symlink, or that
 someone edited during the call, is not written, and `message` says why.
 Modules and files are written one at a time, so a stopped call can leave a
@@ -1004,9 +1155,11 @@ end. Each operation keeps at most 64 MiB; `dropped_bytes` counts the rest.
 `POST /changes/preview`. **Input:** `change_id`, `request_revision`.
 **Output:** `ArchitecturePreviewResult`.
 
-For a confirmed change, evaluates the project's design and
-returns the C4 `containers` and `edges`, `agent_policies`, and `tools` with
-their `input_binding`. It reports what the design declares; it does not
+For a confirmed change, returns the architecture saved with the
+agreed revision, as the [`refresh_story`](#refresh_story) operation the
+guide proposed or revised with evaluated it: the C4 `containers` and
+`edges`, `agent_policies`, and `tools` with their `input_binding`. It reads
+and evaluates no file. It reports what the design declares; it does not
 compare it with the change. A tool's `requires_confirmation` shows a design
 declares a confirmation gate, not that the application delivers it; see
 [`examples/orders`](../examples/orders/README.md) for an implemented one.
@@ -1015,7 +1168,7 @@ declares a confirmation gate, not that the application delivers it; see
 | --- | --- |
 | `not_found` (`404`) | No card has this `change_id`. |
 | `conflict` (`409`) | The card is not confirmed, or `request_revision` is stale. |
-| `unprocessable` (`422`) | The design does not evaluate or declares no Goa API or service container. |
+| `unprocessable` (`422`) | The agreed revision holds no saved architecture (the guide calls `refresh_story`, then `revise_change` with its `op_id`), the design declares no Goa API or service container, or an agent declares no positive `TimeBudget` and `DefaultCaps(MaxToolCalls)`. |
 
 #### `diff`
 
@@ -1213,6 +1366,16 @@ started with.
 
 ### Verification and approval
 
+#### Go workspace policy
+
+| Built source | Workspace selection for toolchain lookup, dependency download and compilation |
+| --- | --- |
+| Application binaries and tests, and suites from stored verification settings | Use the checkout's internal `go.work` when present; ignore a workspace above the checkout. |
+| Surla-written tests, both report checks and verification suites | Use `GOWORK=off`, including when `go.work` exists in the checkout root or the test module. The module's `go.mod` and `go.sum` own its dependencies. |
+
+Both policies keep the full checkout, including sibling files used by local
+module replacements.
+
 #### `verify_change`
 
 `POST /changes/{change_id}/verifications`. **Input:** `change_id`,
@@ -1230,7 +1393,7 @@ Which tests run depends on the project:
 | The project has | Tests that run |
 | --- | --- |
 | No stored verification settings | The tests Surla accepted for the user's build of this revision, at their tests commit (`get_build` shows `tests.state == "accepted"`). The run builds the application's programs from `candidate_commit` and the test program `eval/gen/cmd/<service>-evals` from the tests commit, both read from Git, never from working files. Both commits need the layout `surla init` makes: `go.mod`, `eval/go.mod` for `<module>/eval`, `cmd/<service>` in the candidate and the generated test program in the tests commit. |
-| Stored verification settings | The evaluator the settings name, at their `suite_commit`. No build is needed. |
+| Stored verification settings | The evaluator the settings name, at their `suite_commit`. The change's open, undropped build of the agreed revision is still required for the builder's working copy and branch. |
 
 Tests a separate agent wrote run, like the application, as ordinary processes
 with your file and network access. Their program starts with
@@ -1241,10 +1404,15 @@ provider's settings.
 
 | Refusal (all `409`) | When and the step |
 | --- | --- |
-| `no_build` | The user has not built the agreed revision, the build is of another revision (named), or the build was started without a test writer while verification settings were stored, and they have since been removed. The user builds again. |
+| `no_build` | No build is open, the open build belongs to another change or is of another revision (named), the user dropped the build, or the build was started without a test writer while verification settings were stored and they have since been removed. The user builds again. |
+| `assignment_unread` | The builder has not read the open build's assignment; call `get_builder_assignment` first. |
+| `copy_off_branch` | `.surla-build` is not on `surla/build-<n>` or has a Git operation in progress. |
+| `working_folder_missing` | The builder's working folder in `.surla-build` is missing or not a directory. |
+| `build_branch_mismatch` | `candidate_commit` is not on the open build's branch `surla/build-<n>`, does not descend from the build's base commit, is the base commit itself, or holds commits from another build's branch. |
+| `design_changed_outside` | A design file at `candidate_commit`'s merge base with the project's commit was changed outside Surla. |
 | `tests_not_accepted` | Surla has not accepted the build's tests. The message names their state (assigned, reported, needs changes, could not run) and who acts next, and ends with the builder's own step, for example `the tests of this build are not accepted; their state is reported: Surla is checking the test writer's report; your step: keep your Chorus watcher running; Surla messages you there when the tests are accepted; then read get_builder_assignment and verify or call start_live_target again`. |
 | `no_test_layout` | A commit lacks the layout, naming what is missing: the builder fixes its commit, or the test writer reports again for the tests commit. Also an accepted tests commit the repository does not hold (the test writer reports again, or the user builds again), and a project folder in no Git repository (make it one and commit). |
-| `conflict` | The card is not confirmed or `request_revision` is stale; `candidate_commit` is not in the repository (commit it and try again); without stored verification settings, `candidate_commit` changes hand-written files of the test module since the last commit it shares with the accepted tests commit (`eval/gen/...` and `eval/AGENTS_QUICKSTART.md` excluded; the message names up to 20 files, notes on `eval/go.mod` changes that renaming the service module is the user's to do on their own branch between changes, and gives the `git restore` or `git rm -f` command to restore or remove them and commit again) or shares no commit with the accepted tests commit (ask the user to delete the test writer's working copy and branch — `git worktree remove .surla-tests` and `git branch -D surla/tests` in the project folder — then build the change again); or the project folder was replaced after the server started (stop and start Surla). |
+| `conflict` | The card is not confirmed or `request_revision` is stale; Surla is using the builder's working copy (call `verify_change` again when that operation has ended); `candidate_commit` is not in the repository (commit it and try again), shares no history with the project's current commit, or its `design/` differs from the open build's agreed design (run `generate_code` to restore the agreed design, commit on `surla/build-<n>`, and verify again); without stored verification settings, `candidate_commit` changes hand-written files of the test module since the last commit it shares with the accepted tests commit (`eval/gen/...` and `eval/AGENTS_QUICKSTART.md` excluded; the message names up to 20 files, notes on `eval/go.mod` changes that renaming the service module is the user's to do on their own branch between changes, and gives the `git restore` or `git rm -f` command to restore or remove them and commit again) or shares no commit with the accepted tests commit (build the change again from the project's current commit, then read the new assignments and verify again); or the project folder was replaced after the server started (stop and start Surla). |
 
 `not_found` (`404`) means no card has this `change_id`.
 
@@ -1274,7 +1442,7 @@ For a completed run, get and list responses also include optional
 `candidate_binaries_dir` when the caller is the user and the server has
 promotion settings. It names the actual folder of binaries built by that
 run, read from its recorded plan, rather than a reconstructed run layout.
-Agents never receive this path. The Proof view shows it under **Binaries
+Agents never receive this path. The Check view shows it under **Binaries
 built by this run**, as selectable code, and repeats it in the approval
 error panel for that selected run.
 
@@ -1288,6 +1456,31 @@ get and list observe it while reading current owned card and build records.
 An authorized historical get with no current owned card still returns the
 report with `inputs_current: false`. Unreadable current records fail the read
 instead of returning a false match.
+
+#### `review_verification`
+
+`GET /verifications/{run_id}/review`. **Output:** `VerificationReviewResult`.
+Only the user may call this read; agents use `get_verification`.
+
+Returns the same run status and builder-safe report fields as
+[`get_verification`](#get_verification), plus required `review`:
+
+| Field | Meaning |
+| --- | --- |
+| `story_context.state` | `recorded`, with the accepted build's number, start time and agreed `stories`; or `not_recorded` when the run has no saved Story context. A recorded empty Story remains `recorded`. Later revisions never replace this snapshot. |
+| Recorded context's `mapping.state` | `mapped`, with `required_tests` naming each finished flow's exact generated scenario and hook; or `not_recorded_for_evaluator`, because an operator evaluator records no relation between its tests and Story flows. Unknown mapping does not prove an untested flow. Draft flows remain in the Story and require no test. |
+| `approval.state` | `available`, `blocked` with the owner's `reason`, `recorded` with the current saved approval, or `unverified` with the saved approval and the reason its release artifacts could not be checked. |
+
+`available` observes the same approval requirements the write checks, including
+the current build, selected tests, report, candidate membership and configured
+release artifacts. It is not a reservation: `approve_merge` rechecks and may
+refuse a change that happens after the read. A failed observation withholds
+approval and explains recovery. If current promotion settings cannot be read,
+this read retains the saved run evidence and omits promotion-only binary-folder
+metadata; the shared `get_verification` read retains its existing failure
+behavior. Reading records no approval, merge or deployment and changes no
+assignment or build state. Run IDs and authorization are checked
+by the same owner as `get_verification`; unknown runs return `not_found` (`404`).
 
 #### `list_verifications`
 
@@ -1316,18 +1509,22 @@ stored, it also measures the release binaries in
 `<release_dir>/<candidate_commit>/`; without them, the approval records no
 release binaries. Then it saves the approval, after checking that the
 revision and its accepted tests did not change meanwhile. The approval names
-two commits: `candidate_commit`, the builder's commit, and `suite_commit`,
-the tests commit, with `test_source`. The builder commits in the project
-folder, so its commit is already on the branch checked out there. For
-written tests the user merges the tests commit, on the branch `surla/tests`,
-into that branch; with stored verification settings there is nothing to
-merge. Surla merges and deploys nothing.
+two commits: `candidate_commit`, the builder's commit on `surla/build-<n>`,
+and `suite_commit`, the tests commit on `surla/tests-<n>` (or the stored
+evaluator's commit), with `test_source`. Because the builder commits in
+`.surla-build` rather than in the project folder, while the open build shows
+`passed` the page gives the `git merge <commit>` commands to run in the project
+folder: first `git merge <candidate_commit>` (verified on `surla/build-<n>`),
+and then, for written tests, `git merge <suite_commit>` (verified on
+`surla/tests-<n>`); with stored verification settings, only
+`git merge <candidate_commit>` is shown. Surla merges and deploys nothing.
 
 | Refusal | When and the step |
 | --- | --- |
 | `not_found` (`404`) | No card has this `change_id`. |
 | `conflict` (`409`) | The card is not confirmed, `request_revision` is stale, or the accepted tests changed while approving (approve again). |
-| `no_build` (`409`) | As for `verify_change`. |
+| `no_build` (`409`) | The change has no open, undropped build of the agreed revision, or a builder-only build lost stored verification settings; the user builds again. |
+| `build_branch_mismatch` (`409`) | `candidate_commit` is not on the open build's branch `surla/build-<n>`, does not descend from the build's base commit, is the base commit itself, or holds commits from another build's branch. |
 | `tests_not_accepted` (`409`) | Surla has not accepted the build's tests. The message, which the user reads, names their state and who acts next, naming the builder rather than instructing it, for example `the tests of this build are not accepted; their state is reported: Surla is checking the test writer's report; the builder verifies again after its verdict`. |
 | `unprocessable` (`422`) | The report did not pass, does not follow from its own evidence, was made for another candidate commit or another revision than the ones named, or ran tests at another commit than the tests chosen for the revision. For other tests the message names both commits and ends with the step `the builder verifies the candidate again; then approve that run`. |
 | `unprocessable` (`422`) | Promotion settings are stored and a release binary is missing, unreadable or differs from the run's. The message names no folder path and ends with the step `publish the binaries the run built, whose folder the run's Proof view shows, into the release folder that the promotion settings name, in a folder named after the commit, or remove the promotion settings`: that folder is `<release_dir>/<candidate_commit>/`, and removing the settings is `surla promotion remove`, then `surla stop` and `surla`. |
@@ -1356,97 +1553,145 @@ status, including `unset`, which does not prove success. `unprocessable`
 
 ## Builds and assignments
 
-**Input:** the user's start button in the Build section of the Decisions &
-Approval view, such as **Build this change** for a first build.
+**Input:** the user's start button in Build, such as **Build this change**
+for a first build.
 **Who acts:** the server saves the agreed revision's Story and design, with
 the answers, examples and preserved behaviors the user confirmed for it,
-prepares the test writer's working copy, gives the builder and the test
-writer their assignments, adds them to the team, and writes the required
-tests. **What the user sees:** the Build section shows the build, each
+creates any missing `.surla-build` and `.surla-tests` working copies, gives the
+builder and the test writer their assignments, and adds them to the team; when
+each worker first reads its assignment, Surla joins its working copy to the
+build's branch, and `get_test_writer_assignment` writes the required tests when
+marking the assignment read. **What the user sees:** the Build section shows the
+build, each
 role's assignment and the test writer's progress, and the Chorus dialog asks
 for an agent for each role it adds.
 
-Each change has one current build. Building again replaces it and makes both
-assignments unread. A proposed revision is built only after the user adopts
+A project has one open build, numbered `n`, whose `taking.state` is `building`,
+`passed`, `merged` or `dropped`. Building another change is refused with
+`previous_change_open` until the open build is `merged` or `dropped`. Building
+the open build's own change again before it is `merged` or `dropped` keeps its
+number `n` and base commit (requiring `replaces` while `taking.state` is
+`building`) and makes both assignments unread; building it again after a merge
+starts a new numbered build from the project's current `HEAD` commit, and so
+does a build after a drop once the revision to build was drafted after that
+drop; a revision drafted before it is refused with `drafted_before_drop`. A
+proposed revision is built only after the user adopts
 it. With stored verification settings, a build adds only the builder.
 
-**The test writer's working copy.** Without stored verification settings, the
-project needs the test layout `surla init` makes. The server opens a linked
-Git working copy of the project's repository at `.surla-tests` inside the
-project folder, on the branch
-`surla/tests`, which starts at the project's commit. It adds `.surla-tests/`
-to the repository's own `.git/info/exclude` file, never to a tracked file, so
-`git status` stays clean. Each later build moves the copy to the project's
-commit when it can, and keeps it where it is when the test writer has
-uncommitted work or when `surla/tests` holds commits the project's branch
-does not contain; the user merges `surla/tests`, then builds again. Accepted
-tests are commits on `surla/tests`, so deleting `.surla-tests` loses only
-uncommitted work: the next build recreates the folder on the same branch.
+**The build working copies.** Surla creates linked Git working copies inside
+the project folder at `.surla-build` on `surla/build-<n>` for the builder and,
+when no verification settings are stored (the project then needs the test
+layout `surla init` makes), at `.surla-tests` on `surla/tests-<n>` for the
+test writer, each starting at the build's base commit. It adds `# Surla's
+working copies.`,
+`.surla-build/` and `.surla-tests/` to the repository's own `.git/info/exclude`
+file, never to a tracked file, so `git status` stays clean. Starting a build
+creates any missing working copy and leaves existing copies where they are;
+when each worker first reads its assignment for a new numbered build, Surla
+switches its copy to `surla/build-<n>` or `surla/tests-<n>` at the build's base
+commit (first committing any uncommitted files left on an earlier build branch
+of that role onto that earlier branch with `Left uncommitted when change <id>
+started`). Accepted tests are commits on `surla/tests-<n>`, so deleting a
+working copy loses only uncommitted work: the next build recreates the folder.
 
-**Required tests.** The build writes the test module's Story table,
-`eval/design/story_tests.go`, which declares one scenario per finished flow
-of the saved Story, and generates the module from its design. Flow
-`refund-over-limit` requires scenario `refund_over_limit` and the hook method
-`RefundOverLimit`. Unfinished flows require none; with no finished flow, the
-test program must still build. Surla writes the table and the test module's
-generated code at the build start and again at each report, generating with
-the table it renders in place of whatever the test writer left at that path;
-the test writer leaves that file as it is. Because the required tests are
-part of the module's design, regenerating the module keeps them. A
-generation that fails writes neither the table nor the generated code, so the
-copy stays as it was; only a symbolic link at the table's path is replaced by
-the table first. When the start cannot write them, a cause the test
+**Required tests.** For a build with a test writer, Surla writes the test
+module's Story table, `eval/design/story_tests.go`, which declares one scenario
+per finished flow of the saved Story, and generates the module from its design.
+Flow `refund-over-limit` requires scenario `refund_over_limit` and the hook
+method `RefundOverLimit`. Unfinished flows require none; with no finished flow,
+the test program must still build. Surla writes the table and the test module's
+generated code when `get_test_writer_assignment` marks an assigned build's
+assignment read (at report 0) and again at each report, generating with the
+table it renders in place of whatever the test writer left at that path; the
+test writer leaves that file as it is. Because the required tests are part of
+the module's design, regenerating the module keeps them. A generation that
+fails writes neither the table nor the generated code, so the copy stays as it
+was; only a symbolic link at the table's path is replaced by the table first.
+When that marking read cannot write them, a cause the test
 writer can fix, such as a test module design that does not compile, sets the
 tests to `needs_changes` with that finding, at report 0. Any other cause sets
-`could_not_run`, with a reason that says what failed (the start's time
+`could_not_run`, with a reason that says what failed (the preparation's time
 limit or a server stop, a download of the module's dependencies that fails
 outside the test writer's changes, the generator and its phase, or writing
 the generated folder into the copy; for any other cause, the reason points
-at the server's trace of the start) and the user's step, which ends with
+at the server's trace) and the user's step, which ends with
 building the change again.
 
-**Limits and recovery.** Preparation has five minutes and continues if the
-page closes. A build start, or Surla's check of a report, holds the project's
-turn; another start during it is refused as `working_copy_busy`, not queued.
-After the turn is released, bringing the team up has 45 seconds. A team
-problem after saving leaves the build and its roles in place: the result says
-what to do, and **Start agents** or `surla` finishes it. If the server stops
-after saving, the saved build stays; build again to finish preparation.
+**Limits and recovery.** A build start's saving and copy-making, and the
+writing of the required tests on the test writer's read that marks its
+assignment read, each have five minutes and continue if the page closes. One
+operation at a time uses each working copy. A build start does not wait: it
+answers `working_copy_busy` while another start, a worker's assignment read,
+one of the builder's tools (`generate_code`, `check_project`,
+`update_dependencies`, `verify_change`) or a check of a report is running. A
+worker's assignment read and the builder's tools are refused too while their
+copy is in use (`working_copy_busy`, or `conflict` for `verify_change`); only
+Surla's check of a report waits for the copy. After a start has saved the
+build and made the copies,
+bringing the team up has 45 seconds. A team problem after saving leaves the
+build and its roles in place: the result says what to do, and **Start agents**
+or `surla` finishes it. If the server stops after saving, the saved build
+stays; building again makes any missing working copy and registers the roles.
+Required tests that a stopped read did not finish writing are written again at
+the test writer's next report.
 
 ### `start_build`
 
 `POST /changes/{change_id}/build`. **Input:** `change_id`, `request_revision`
-(the agreed revision). **Output:** `StartBuildResult` (`build`, `team`,
-`working_copy`).
+(the agreed revision), `replaces?` (`ReplacedBuild`: `change_id`,
+`started_at`). **Output:** `StartBuildResult` (`build`, `team`).
 
 - `build` is the saved `StartedBuild`, as `get_build` returns it.
 - `team.state` is `ready` (the team result with its `step`), `window_busy`,
   `ambiguous_space` (with the `count`) or `unavailable`, each with a `step`.
   A team warning still means the build was saved.
-- `working_copy.state` is `not_used` (stored verification settings),
-  `at_project_commit` (`commit`), `not_contained` (`commit`, and the step:
-  merge `surla/tests` into the project's branch, then build again) or
-  `dirty` (`commit`; uncommitted work kept). These describe this start only.
 
-Every refusal below saves no build and registers no role. A refusal after
-Surla opened the test writer's working copy, such as a `conflict` because the
-agreed revision changed meanwhile, or `unavailable`, may leave that copy; the
-next build reuses it.
+Every refusal below saves no build and registers no role.
 
 | Refusal | HTTP | Recovery |
 | --- | --- | --- |
 | `not_found` | 404 | No card has this `change_id`. |
-| `conflict` | 409 | The card is not confirmed, or `request_revision` is not its agreed revision. |
+| `conflict` | 409 | The card is not confirmed, `request_revision` is not its agreed revision, or the agreed revision records no design. |
+| `previous_change_open` | 409 | Another change's open build (`OpenBuildRefusal`: `name`, `message`, `change_id` and `build`, the open build as `get_build` reports it, with its `started_at` and `taking`) is still `building` or `passed`; merge or drop it first. |
+| `unfinished_build_open` | 409 | This change's open build (`OpenBuildRefusal`) is still `building`, and `replaces` was omitted or did not match its `change_id` and `started_at`. |
+| `drafted_before_drop` | 409 | The agreed revision was made from a draft before a build was dropped; the guide refreshes the Story and revises the change, and the user adopts the revision before building. |
+| `design_changed_outside` | 409 | A design file at the build's base commit is not a version the agreed revision was made from: it was changed outside Surla. The message names the file and the commit. |
 | `unprocessable` | 422 | Two finished flows would have the same test name, or one has an empty name; the guide revises the Story. |
 | `not_repository` | 409 | Make the project folder a Git repository and commit its files. |
 | `no_commit` | 409 | Commit the project's files. |
 | `no_test_layout` | 409 | The project has neither stored verification settings nor the test layout; store verification settings, then build again. |
 | `git_identity_missing` | 409 | Configure Git's name and address, then build again. |
-| `copy_folder_in_use` | 409 | Move the project's `.surla-tests` entry, which is not Surla's working copy, out of the project. |
-| `tests_branch_in_use` | 409 | Another working copy holds `surla/tests`; the message names it and the step. |
-| `working_copy_busy` | 409 | Build again when the current start or check has ended. |
+| `copy_folder_in_use` | 409 | Move the project's `.surla-build` or `.surla-tests` entry, which is not Surla's working copy, out of the project. |
+| `tests_branch_in_use` | 409 | Another working copy holds `surla/build-<n>` or `surla/tests-<n>`; the message names it and the step. |
+| `working_copy_busy` | 409 | Build again when the current build start, assignment read or report check has ended. |
 | `not_implemented` | 501 | The server has no team; start the project with `surla`. |
 | `unavailable` | 503 | The server is stopping or the start ran out of time; build again. |
+
+### `drop_build`
+
+`POST /changes/{change_id}/build/drop`. **Input:** `change_id`, `started_at`
+(RFC3339). **Output:** `ChangeBuild` (`change_id`, `drafted_before_drop`,
+`build` with `taking.state == "dropped"` and `kept_branches`).
+
+The user's **Drop change** confirmation on the views page. Marks the open build
+`dropped` when its `change_id` and `started_at` match (the page offers the
+action while `taking.state` is `building` or `passed`; a `merged` build may be
+dropped too), records the branches (`surla/build-<n>` and
+`surla/tests-<n>`) that already hold commits beyond the build's base in
+`kept_branches`, stops worker tools on that build with `no_build`, and causes
+the next [`refresh_story`](#refresh_story) to remake `.surla-draft` from the
+project folder. The dropped build no longer blocks starting another build,
+but an agreement drafted before the drop still cannot be built. The guide
+refreshes the draft and revises the change, then the user adopts that revision;
+[`get_build`](#get_build) reports this condition as `drafted_before_drop`. Other
+start checks still apply.
+
+| Refusal | HTTP | Recovery |
+| --- | --- | --- |
+| `not_found` | 404 | No card has this `change_id`, or the project has no open build. |
+| `build_changed` | 409 | The open build (`OpenBuildRefusal`) belongs to another change or has a different `started_at` than named. |
+| `conflict` | 409 | The build was already dropped. |
+| `not_implemented` | 501 | The server has no team; start the project with `surla`. |
 
 ### Judging reports
 
@@ -1455,26 +1700,31 @@ Surla, not the test writer, decides whether the tests count. Each
 number and wakes the server's report checker, which judges the working copy
 against the build's saved Story:
 
-1. It writes the required tests into the copy again from the Story. Like a
-   build start, it first removes any `.surla-gen-*` staging folder that a
+1. It writes the required tests into the copy again from the Story. Like the
+   test writer's read that marks its assignment read, it first removes any
+   `.surla-gen-*` staging folder that a
    write cut short by a server's death left in the test module. An entry with
    such a name that is a link, a file, or a folder holding anything but a
    generated `gen` folder is the test writer's and is left alone.
-2. It checks that only files inside the test module changed since the copy's
-   base, regenerates the generated folder in a private snapshot, downloads
-   the module's dependencies, builds the test program
+2. It checks that `.surla-tests` is on `surla/tests-<n>` with no Git operation
+   in progress and that only files inside the test module changed since the
+   build's base, regenerates the generated folder in a private snapshot,
+   downloads the module's dependencies, builds the test program
    `./gen/cmd/<name>-evals` (10 minutes), and lists its
    scenarios (60 seconds). The build and the listing run as ordinary
    processes with your file and network access, each in its own process
    group that the check stops; a process that starts its own session leaves
-   its group and keeps running. The whole judgment has 15 minutes.
+   its group and keeps running. The whole judgment has 15 minutes. Before
+   recording an acceptance, it also checks that the tip of `surla/tests-<n>`
+   descends from the build's base without commits from other builds' branches.
 3. Its verdict replaces `reported` and marks the test writer's assignment
    unread:
    - `needs_changes`, with findings, such as a missing hook method, a file
      changed outside the test module, a scenario tagged `holdout`, a module
      that does not declare exactly one evaluation suite, or a build or
-     listing that ran out of time;
-   - `accepted`: Surla commits the tests on `surla/tests` and marks the
+     listing that ran out of time (when building hits the 10-minute limit, the
+     finding says `The test program did not finish building within 10 minutes. Report again: the retained build cache can reuse compilation that completed. If it still does not finish, make the test module build faster, for example with fewer or smaller dependencies.`);
+   - `accepted`: Surla commits the tests on `surla/tests-<n>` and marks the
      builder's assignment unread too;
    - `could_not_run`: a cause the test writer cannot fix, with the user's
      step.
@@ -1489,8 +1739,9 @@ download and only the test writer's changed ones do not, it is the test
 writer's finding, which names the base commit. A module the test writer
 added that exists but cannot be reached from where Surla runs reads the same
 as one that does not exist, so that finding also says to tell the user when
-the download works in the copy. A build start decides the same way when
-generation fails while loading the module's dependencies.
+the download works in the copy. The writing of the required tests on that read
+decides the same way when generation fails while loading the module's
+dependencies.
 
 Every acceptance carries `not_judged`, always the sentence `Surla checked that
 these tests build into the generated test program and declare every required
@@ -1510,18 +1761,38 @@ start. Findings contain no absolute path.
 ### `get_build`
 
 `GET /changes/{change_id}/build`. **Output:** `ChangeBuild` (`change_id`,
-`build`).
+`drafted_before_drop`, `build`).
 
-`build.state` is `not_started` when the change has no usable build, otherwise
+`drafted_before_drop` reports one precise admission condition for the current
+agreed revision: its saved record of how the design was drafted predates the
+current actual drop, so `start_build` would refuse it with that error. It stays true while a
+proposal waits, including a refreshed proposal, and becomes false once the
+user adopts a revision drafted after the drop, even if `request_revision`
+stays the same. To recover, the guide calls `refresh_story` and `revise_change`
+from that refresh, then the user adopts the revision. It is false without an
+agreed revision or saved record of its draft. False does not guarantee the
+other start checks will pass; `start_build` rechecks concurrent changes. `drop_build`
+returns the same required fact in its `ChangeBuild` result.
+
+`build.state` is `not_started` when `change_id` is not the project's open build
+(or its builder-only build lost stored verification settings), otherwise
 `started` with:
 
 | Field | Meaning |
 | --- | --- |
 | `request_revision`, `started_at` | The revision built and when. |
-| `in_force` | `true` while that revision is the agreed one, including while a proposed revision waits; `false` once the user adopts or confirms another revision. The build is not redone by itself. |
+| `in_force` | `true` while that revision is the agreed one, including while a proposed revision waits; `false` when adoption or confirmation changes the agreed `request_revision`. Adopting a refreshed draft with unchanged content can keep it `true`. The build is not redone by itself. |
+| `taking` | How the open build stands with the project folder's branch: `building`, `passed` (with `run_id`, `candidate_commit`, `candidate_branch` `surla/build-<n>`, `tests`—`evaluator` or `written_tests` with `commit` and `branch` `surla/tests-<n>`—and `base_in_branch`), `merged`, or `dropped` (with `kept_branches`). |
 | `required_test_count` | Finished flows in the saved Story; `0` means no test was required. It counts entries; it does not judge what the tests assert. |
 | `builder.read` | Whether the builder read its assignment. |
 | `test_writer` | `read`, `report` (0 until the first report, one more with each) and `tests`. |
+
+`taking.state` becomes `merged` when the project folder's checked-out branch
+holds the commits of one passed run: the builder's commit and, for written
+tests, the tests commit. Stored evaluator tests are never merged. Each commit
+counts when it is in the branch's history or a squash commit holds every file
+it changed as that commit has it. A merged build no longer blocks starting
+another build; `start_build` still applies its other checks.
 
 `tests.state` is `not_used` (stored verification settings), `assigned`,
 `reported`, `needs_changes` (`finding_count`, never the text), `accepted`
@@ -1538,30 +1809,43 @@ verification settings are stored; once they are removed, it reads as
 
 The text of Surla's findings while the tests are `needs_changes`, for the
 views page, with the build and the report they belong to (`report` is 0 when
-the problems were found at the build start). `conflict` (`409`) in any other
-state, naming it; `not_found` when there is no usable build.
+the problems were found while writing the required tests, before any report).
+`conflict` (`409`) in any other state, naming it; `not_found` when there is no
+usable build.
 
 ### `list_builder_assignments` and `get_builder_assignment`
 
 `GET /assignments/builder` and `GET /assignments/builder/{change_id}`.
-**Output:** `BuilderAssignmentList` (most recently started first) or one
-`BuilderAssignment` (`change_id`, `request_revision`, `in_force`, `read`,
-`written_tests`).
+**Output:** `BuilderAssignmentList` (the open build's assignment while that
+build is open, not dropped, and needs the builder—until a verification of it
+passes with current inputs; empty otherwise) or one `BuilderAssignment`
+(`change_id`, `request_revision`, `in_force`, `working_folder`, `gowork_off`,
+`read`, `written_tests`).
 
-The builder works in the project folder. `written_tests.state` is
-`not_used`, `not_yet_accepted`, or `accepted` with the tests commit and the
-verdict's time. Reading one assignment marks it read; listing changes
-nothing. `not_found` means there is no usable build of that change.
+The builder works in `working_folder`, inside `.surla-build` on `surla/build-<n>`
+(never in the project folder), and runs Go with `GOWORK=off` when `gowork_off`
+is `true`. On the first `get_builder_assignment` of a new numbered build, Surla
+joins `.surla-build` to `surla/build-<n>` at the build's base commit (first
+committing any uncommitted files left on an earlier `surla/build-<k>` branch
+onto that earlier branch). `written_tests.state` is `not_used`,
+`not_yet_accepted`, or `accepted` with the tests commit and the verdict's time.
+Reading one assignment marks it read; listing changes nothing. `get_builder_assignment`
+refuses with `not_found` (`404`) when there is no usable open build of that
+change, and with `no_build` (`409`, when the open build was dropped),
+`copy_off_branch` (`409`), `working_copy_busy` (`409`) or
+`working_folder_missing` (`409`).
 
 ### `list_test_writer_assignments` and `get_test_writer_assignment`
 
 `GET /assignments/test-writer` and `GET /assignments/test-writer/{change_id}`.
-**Output:** the list, or one `TestWriterAssignment`:
+**Output:** the list (the open build's assignment while that build is open, not
+dropped, uses a test writer, and its tests are not yet `accepted`; empty
+otherwise), or one `TestWriterAssignment`:
 
 | Field | Meaning |
 | --- | --- |
 | `request_revision`, `in_force`, `progress` | As in `get_build`. |
-| `working_folder` | The project's folder inside the test writer's working copy. |
+| `working_folder` | The project's folder inside the test writer's `.surla-tests` working copy on `surla/tests-<n>`. |
 | `design_source`, `stories` | The design and Story as agreed at the built revision; later revisions do not change them. |
 | `answers` | Each question of the agreed revision with the option the user confirmed (`id`, `question`, `answer`), in question order; empty when the revision asked none. |
 | `examples`, `preserved_behaviors` | The revision's confirmation examples and preserved behaviors, exactly as the user confirmed them. |
@@ -1581,17 +1865,24 @@ fields, fails with `the build of change "<change_id>" holds none of the
 agreed answers, examples and preserved behaviors; the user builds this change
 again on the views page`.
 
-The test writer aligns the service interface in its copy with the agreed
-design, writes the tests in `eval/` of `working_folder`, checks them with
-`go build ./...` in `eval/`, which names any required method still missing,
+On the first `get_test_writer_assignment` of a new numbered build, Surla joins
+`.surla-tests` to `surla/tests-<n>` at the build's base commit (first committing
+any uncommitted files left on an earlier `surla/tests-<k>` branch onto that
+earlier branch). The test writer aligns the service interface in its copy with
+the agreed design, writes the tests in `eval/` of `working_folder`, checks them
+with `go build ./...` in `eval/`, which names any required method still missing,
 and then reports. It leaves the Story table, `eval/design/story_tests.go`,
-as it is: Surla writes it from the agreed Story at the build start and again
-at each report. Because the required tests are part of the module's design,
-regenerating the module with `surla gen -dir eval` keeps them. After changing
-the test module's design, the test writer reports, and Surla generates the
-module again; it can also run
+as it is: Surla writes it from the agreed Story and generates `eval/gen/` when
+`get_test_writer_assignment` marks an assigned build's assignment read, and
+again at each report. Because the required tests are part of the module's
+design, regenerating the module with `surla gen -dir eval` keeps them. After
+changing the test module's design, the test writer reports, and Surla generates
+the module again; it can also run
 `surla gen -dir eval` in `working_folder` first. Reading an assignment marks
-it read.
+it read. `get_test_writer_assignment` refuses with `not_found` (`404`) when
+there is no usable test assignment for this change, and with `no_build` (`409`,
+when the open build was dropped), `copy_off_branch` (`409`),
+`working_copy_busy` (`409`) or `working_folder_missing` (`409`).
 
 ### `report_tests_finished`
 
@@ -1603,6 +1894,10 @@ verdict, returns at once and wakes the report checker.
 
 | Refusal | When |
 | --- | --- |
+| `no_build` (`409`) | The open build was dropped. |
+| `assignment_unread` (`409`) | The test writer has not read the open build's assignment; call `get_test_writer_assignment` first. |
+| `copy_off_branch` (`409`) | `.surla-tests` is not on `surla/tests-<n>` or has a Git operation in progress. |
+| `working_folder_missing` (`409`) | The test writer's working folder in `.surla-tests` is missing or not a directory. |
 | `conflict` (`409`) | Another revision than the assignment's, or the project stores verification settings and uses no test writer. |
 | `not_found` (`404`) | No usable test assignment for this change. |
 
@@ -1627,11 +1922,11 @@ creates nothing and marks nothing read. Each role has:
 | `state` | `not_started`, `ended`, `starting`, `needs_you`, `working`, `waiting`, `error` or `unknown` |
 | `attention` | Why a role needs the user: `none`, `permission`, `question`, `auth`, `silent` (a running agent that reported nothing for 60 seconds), `assignment` (a role `waiting` with an unread assignment for 90 seconds; see **Reminders** below) or `unknown`. `silent` and `assignment` change only what is shown. |
 | `watcher` | `held` when Chorus reports the agent's watcher, `gone` after 90 seconds of known absence, or `unknown` |
-| `assignment` | `unread`, `nothing_owed` or `unknown`; the guide has none |
+| `assignment` | `unread` (the role has work on the open build and owes an assignment read), `nothing_owed` (the role has work and owes no read; the guide always reads `nothing_owed`, shown on the page as `No assignments`), `no_work` (the open build needs nothing from that role: no build is open, the open build was dropped, the test writer's tests are `accepted`, or a verification of the builder's build passed with current inputs) or `unknown` |
 
 When Herdr sends no heartbeat or event for 45 seconds, every role reads
 `unknown` until fresh facts arrive. A failed assignment read never reads as
-nothing owed. `wait_for_changes` also covers these facts.
+`nothing_owed` or `no_work`. `wait_for_changes` also covers these facts.
 
 ### `show_team_pane`
 
@@ -1648,7 +1943,9 @@ that role's pane, only when the user asks.
 
 `POST /team/agents`. **Output:** `ProjectTeam` (`team`, `space`, `roles`,
 `dialog`, `step`). The **Start agents** action: the same team preparation
-`surla` runs, opening the Chorus dialog when a listed role is not running.
+`surla` runs, opening the Chorus dialog when the guide, or a worker role that
+has work on the open build (or any listed role when the assignment read fails),
+is not running.
 Refusals: `ambiguous_space` (`409`, close the duplicate Herdr spaces, then
 start the agents), `window_busy` (`409`) and `team_unavailable` (`503`), whose
 message is the views page's step for its cause (see
@@ -1660,8 +1957,9 @@ the roster; they stay saved, and the next start reuses them.
 
 `POST /project/team`, called by `surla`. It prepares the same team and
 returns `team`, `space`, `roles` (`role`, `handle`, `running`), `dialog`
-(`opened`, `already_open` or `not_needed`) and `step`. `surla` prints `step`
-unchanged. Its refusals, `ambiguous_space` (with the count), `window_busy`
+(`opened`, `already_open` or `not_needed`; a worker role without work on the
+open build stays in the roster without opening the dialog) and `step`. `surla`
+prints `step` unchanged. Its refusals, `ambiguous_space` (with the count), `window_busy`
 and `team_unavailable`, are shown with fixed recovery text. As for
 `start_team_agents`, `team_unavailable` may leave the team's name, space,
 guide and roster saved for the next start.
@@ -1683,9 +1981,12 @@ A team request from `surla` that runs out of time prints `project team
 request did not finish because Herdr did not answer in time; open the Herdr
 app, then click Start agents on the views page: context deadline exceeded`.
 
-**Reminders.** Each version of an assignment that a role has not read is a
-generation: a new build gives each of its roles one, every verdict gives the
-test writer one, and an acceptance also gives the builder one. The server
+**Reminders.** Each version of an assignment that a worker role with work on
+the open build has not read is a generation: a new build gives each of its
+roles one while that role has work, every non-accepting verdict gives the test
+writer one, and an acceptance ends the test writer's work on that build and
+gives the builder one while no verification of the build has passed with
+current inputs. The server
 sends the role one fixed Chorus direct message for all its generations not yet
 tried, so at most one per generation, for example `Surla: you have an unread
 assignment. Use list_builder_assignments and get_builder_assignment to read
@@ -1845,38 +2146,74 @@ holds it beside them (**Switch to Incoming Card**).
 
 | View | What it shows and does |
 | --- | --- |
-| **Changes** | The project's changes ([`list_changes`](#list_changes)), opening directly on the only one. With none: `This project has no changes yet. Ask the guide to propose a change; it appears here by itself.` A change with a waiting proposed revision is marked **New revision proposed**. Each change shows its latest saved run, such as **Latest saved run: passed**, or **No saved runs**, and under a run what `inputs_current` says: `Matches the agreed revision and selected tests.` or `Earlier inputs or no current test selection. Ask the builder for a check of the agreed revision and selected tests.` |
-| **Team** | Each registered role's state, its Chorus watcher, and whether its assignment is read, with a **Show … pane** action per role, such as **Show guide pane**, and **Start agents**, which says what it returned and when. With no role: `No agents are registered. Start agents prepares the guide; building adds the required roles.` Nothing runs on a refresh. |
+| **Describe** | The project's changes ([`list_changes`](#list_changes)), opening directly on the only one. With none: `This project has no changes yet. Ask the guide to propose a change; it appears here by itself.` A change with a waiting proposed revision is marked **New revision proposed**. Each change shows its latest saved run, such as **Latest saved run: passed**, or **No saved runs**, and under a run what `inputs_current` says: `Matches the agreed revision and selected tests.` or `Earlier inputs or no current test selection. Ask the builder for a check of the agreed revision and selected tests.` |
+| **Team** | Each registered role's state, its Chorus watcher, and its assignment status (**No assignments** for the guide, and **Assignment unread**, **No unread assignment**, **No work now** or **Assignment status unknown** for a worker role), with a **Show … pane** action per role, such as **Show guide pane**, and **Start agents**, which says what it returned and when. With no role: `No agents are registered. Start agents prepares the guide; building adds the required roles.` Nothing runs on a refresh. |
 | **Story** | The Story saved with the shown revision, one row of step cards per flow: a finished flow is marked **will be tested end to end**, others **draft: not tested** with the reasons. Below it, the current Story evaluation ([`get_story_refresh`](#get_story_refresh)): none, running, failed, or succeeded, and how it differs from the change's Story; a draft is not part of the change until the guide revises the change with it and the user confirms. |
 | **Live target** | Whether a live target is starting, running, ended unexpectedly or not confirmed stopped. A running target shows its commit, address, accepted prompt versions (never the text), and **Stop live target**, which asks first. An ended target shows its commit, launch and observed-end times, and the builder's recovery step. Below it, the model live targets started afterwards use and a form whose **Apply** sends [`configure_model`](#configure_model); a refusal names a missing key's variable. |
-| **Decisions & Approval** | The Change Card: questions to answer, examples, preserved behaviors, and **Confirm Intent & Lock Examples** (on an agreed card, **Refine Confirmed Answers & Examples**). A proposed revision appears above the agreed one with everything adopting it would confirm (changed request and summary, questions and examples marked **New**, **Edited**, **Kept** or **Removed**, Story and design changes), **Adopt this revision** and **Decline**. A stale submission offers **Load Latest Card**. On a confirmed card the **Build** section comes first, with the saved agreement below it under **Agreed:** and the request. **Agreement details** and **Refine agreed answers and examples** remain available for review and refinement; an active edit stays open. After approval, the recorded approval names the builder's commit and the tests commit. |
+| **Agree** | The Change Card: questions to answer, examples, preserved behaviors, and **Confirm Intent & Lock Examples** (on an agreed card, **Refine Confirmed Answers & Examples**). A proposed revision appears above the agreed one with everything adopting it would confirm (changed request and summary, questions and examples marked **New**, **Edited**, **Kept** or **Removed**, Story and design changes), **Adopt this revision** and **Decline**. A stale submission offers **Load Latest Card**. On a confirmed card the **Build** section comes first, with the saved agreement below it under **Agreed:** and the request. **Agreement details** and **Refine agreed answers and examples** remain available for review and refinement; an active edit stays open. **Review saved approval** opens the record in Approve. **Build** opens the same saved build section directly. |
 | **Architecture** | [`preview_architecture`](#preview_architecture) for the revision shown. |
-| **Proof** | The change's verification runs and each report's scenario outcomes, hidden scenarios anonymous, with **Approve this result** for a matching passed run. **Check started** shows the request's start time in local time, not a completion time; the exact recorded timestamp stays in details. A single saved run needs no selector. With promotion settings, a completed run shows its actual binary folder under **Binaries built by this run**, as selectable code; the approval error panel repeats the selected run's folder. A run of written tests shows the `notice` of its `test_source`. **Candidate and run details** shows the run's candidate commit and its tests commit, labeled **Accepted tests commit** for written tests and **Evaluator commit** for an evaluator named in stored verification settings. |
-| **Traces** | A drawer listing recorded errors, with **All statuses** and **Without error status**, older pages, and **Retry from newest** after a failed read. |
+| **Check** | The change's verification runs and each report's scenario outcomes, hidden scenarios anonymous. **Check started** shows the request's start time in local time, not a completion time; the exact recorded timestamp stays in details. A single saved run needs no selector. With promotion settings, a completed run shows its actual binary folder under **Binaries built by this run**, as selectable code; the approval error panel repeats the selected run's folder. A run of written tests shows the `notice` of its `test_source`. **Candidate and run details** shows the run's candidate commit and its tests commit, labeled **Accepted tests commit** for written tests and **Evaluator commit** for an evaluator named in stored verification settings. |
+| **Approve** | The exact selected run’s recorded Story flows, required tests and outcomes; excluded drafts and unknown mapping; test source, human judgment limits and verified commits. **Test details and saved runs** discloses the safe report and history. **Verified inputs and digests** discloses full bindings. Next owns the single approval action, based on [`review_verification`](#review_verification); blocked or unverified records retain the owner’s reason. Unsaved Agree edits remain available on return. |
+| **Diagnostics** | A drawer listing recorded errors, with **All statuses** and **Without error status**, older pages, and **Retry from newest** after a failed read. |
 
 **The Build section.** It appears once the change is confirmed or has a
 saved build, and then always offers **View team**. While the agreed
-revision has no build, it offers one start button: **Build this change**
-before any build, **Build current agreed revision** when the saved build is of
-an earlier revision, and **Build agreed revision** in either case while a
-proposed revision waits. Once the agreed revision is built, it offers **Build
-again…** instead, which asks first. Next to each control that sends a start,
-it explains which agents start: the builder and, unless the project uses
-configured tests, a test writer. It also says that, from Build on, the tests
-and the builder's code run on this machine as ordinary programs, with your
-access to files and the network, that nothing confines them, and that
-approval decides only what merges. It refuses to start from an
+revision has no open build in `building`, `passed` or `merged` (and
+`drafted_before_drop` is `false`), it offers one start button: **Build this
+change** before any build, **Build current agreed revision** when the change
+has a saved build (an earlier revision's build or a `dropped` build), and
+**Build agreed revision** in either case while a proposed revision waits.
+When replacing an earlier revision's open build whose `taking.state` is
+`building`, that button asks first (**Replace the earlier build with the agreed
+revision?**, with **Build again** and **Cancel**) and sends `replaces`. While
+the agreed revision's open build is `building` or `passed`, it offers **Build
+again…** instead, which asks first (**Build the agreed revision again?**, with
+**Build again** and **Cancel**, sending `replaces` when `building`). A merged
+build of the current agreement keeps completion guidance (`Merged.`, `It is in
+your branch. Build another change or refine this one when there is more to do.
+No role has work on this build.`) and offers **Build again…** as a secondary
+action; confirmation (**Build the agreed revision again?**, with **Build again**
+and **Cancel**) starts a new numbered build from the branch as it is now, with
+fresh unread assignments for the same agreement. Earlier reports do not
+establish that the new build passed. A merged build of an earlier agreement
+keeps the primary **Build current agreed revision** action; while a proposed
+revision waits, the button reads **Build agreed revision** and is no longer the
+primary action. When `drafted_before_drop` is
+`true`, the page instead explains refresh (`refresh_story`), revision
+(`revise_change`) and adoption before building; a proposal already waiting may
+predate the drop. Before any build and inside the rebuild confirmation, it
+explains which agents start: the builder and, unless the project uses
+configured tests, a test writer. Beside every control that starts a build,
+including the start button of a change that already has a saved build, it says
+that, from Build on, the tests and the builder's code run on this machine as
+ordinary programs, with your access to files and the network, that nothing
+confines them, and that approval decides only what merges. While the change's
+open build is `building` or `passed`, it also offers **Drop…**, which asks
+**Drop change `<change_id>`?** with **Drop change** and **Keep building** (when
+`building`) or **Keep this build** (when `passed`), calling
+[`drop_build`](#drop_build). When another change's open build blocks starting a
+build (`previous_change_open`), a blocking panel names that change, shows its
+`git merge` commands when its build is `passed`, and offers **Open change
+`<change_id>`** and **Drop `<change_id>`’s build…**. Rebuild and drop questions
+are asked one at a time, and opening the rebuild question first re-reads the
+saved build. It refuses to start from an
 unconfirmed change (`Confirm the change before building it.`) or an older
 revision, and builds the agreed revision even while the editor holds unsaved
-edits. It shows when the build started, the required test count, whether
+edits. It shows the open build's `taking` state (`building`, `passed`, `merged`
+or `dropped`, with any kept branches), when the build started, the required
+test count, whether
 each assignment is read, the test writer's state, the accepted tests commit,
 the `not_judged` sentence, and, when tests need changes, the findings read
-with [`get_test_findings`](#get_test_findings). A start's team and working-copy
-outcomes are shown with the time of that start, not as current health.
+with [`get_test_findings`](#get_test_findings). While the open build's
+`taking.state` is `passed`, it shows **To take this change, run in the project
+folder:** with `git merge <candidate_commit>` (verified on `surla/build-<n>`)
+first and then, for written tests, `git merge <tests_commit>` (verified on
+`surla/tests-<n>`). A start's team outcome is shown with the time of that
+start, not as current health.
 
 When tests need changes, the test writer is the actor that fixes and reports
 them; **Read findings** opens **What Surla told the test writer**. A matching
-passed check gives the build **Review and approve**, opening that exact run.
+passed check gives the build **Review result**, opening that exact run.
 The selected run refreshes its input match when the agreement or build
 changes, including when it is older than the latest run. A stale, pending or
 unreadable match disables approval while keeping the saved report and any
@@ -1895,10 +2232,25 @@ verification keeps using those settings. When the page could not read the
 build, it gives the same warning for any existing build. A confirmation that
 changes nothing keeps the revision and its build.
 
-**Approval on the page.** The recorded approval shows **Builder's commit**
-and **Tests' commit**; for written tests it says to merge the tests commit on
-branch `surla/tests`. When the server cannot record approvals, **Approval is
-unavailable on this server** replaces **Approve this result**.
+**Approval on the page.** The frame shows the project, journey, agreed change,
+what needs you and one Next action. On a phone, Next moves to a bottom surface
+with reserved document space. Approve presents the run’s recorded evidence;
+**Refresh result** reads the owner’s current requirements. Only an `available`
+observation enables **Approve this result**. Pending or failed reads keep the
+evidence and disable submission. A refusal stays on the same stage with its
+reason; success shows the recorded approval and moves focus to it. A saved
+approval without a readable run remains available through **Review saved
+approval**, with **Check current approval** to read the card again.
+
+The recorded approval shows **Builder's commit** and **Tests' commit**. While
+the current agreement’s open build has `taking.state: passed` and the run is
+an eligible result of that build, it shows **To take this change, run in the
+project folder:** with `git merge <candidate_commit>` first and, for written
+tests, a separate `git merge <tests_commit>`. The branch labels show where
+those commits were verified. An earlier agreement’s build receives no merge
+instruction on Approve; its commit bindings remain readable. Existing Check
+history preserves older results. Approval records permission and never merges
+or deploys. An unverified saved record remains explicitly unverified.
 
 **What the page never shows or does.** It never shows prompt text or
 structural `diff` results, and it starts no live target and sends no prompt
@@ -2012,20 +2364,41 @@ requests and on pushes to the branches its `push` trigger names: `main`, and
 an integration branch for as long as pull requests target one. The short
 checks are:
 
-- Vet and short race tests of each Go module on macOS: the root,
+- Vet and short race tests of each Go module: the root,
   [`story`](../story/README.md), `examples/orders` and `examples/orders-eval`.
-  The root module's short tests run in three jobs. **Go (., page tests)**
-  runs only `internal/controlplane` and `internal/project`, selecting
-  `TestViewsPage…` and `TestCheckpoint…`. **Go (., control plane)** runs the
-  control plane's other short tests. **Go (.)** derives every other package
-  with tests and skips page tests, so each current test runs once. Each of
+  The other modules run on macOS. The root module's short tests run in five
+  jobs. **Go (., page tests)** runs only `internal/controlplane` and
+  `internal/project` on macOS, selecting `TestViewsPage…` and
+  `TestCheckpoint…` in two sequential commands. Both commands name both
+  packages: the first selects `^Test(Checkpoint|ViewsPage[A-L])`, and the
+  second selects every remaining page test by applying the full page pattern
+  and skipping the first group. Each command gives each package its own
+  three-minute alarm, so smaller groups replace the whole page suite's
+  aggregate alarm. The page job keeps its ten-minute backstop and one cache
+  owner; the commands reuse setup and the build cache. This split preserves
+  the total test work and does not guarantee a faster job.
+  **Go (., control plane, A-L)** runs non-page tests whose
+  names start with `TestA` through `TestL`, on Linux.
+  **Go (., control plane, remaining)** runs every other non-page test,
+  including examples and fuzz seeds, also on Linux. **Go (.)** runs on macOS,
+  derives every other package with tests and skips page tests. These four
+  owners cover every root short test. **Go (., control plane, macOS-platform)**
+  additionally runs nine explicitly named non-page tests on macOS: failed
+  live-target cleanup and stop ownership, filesystem aliases, and opening
+  entries through the Darwin backend. Its static name check fails if a listed
+  test disappears. Pull requests do not execute the other generic non-page
+  control-plane tests on macOS; they still compile and receive full vet there
+  through the page job. Full macOS execution remains in the root control-plane
+  job on pushes to `main`, `team-start` and `builder-copy`, nightly runs and
+  manual full runs, alongside the Linux full job. Each of
   these jobs saves and restores its own Go build and module cache key,
   qualified by operating system, architecture, Go version and root dependency
-  files; one job's narrower build cannot become another job's saved cache.
-  The module-matrix jobs use a 12-minute backstop to finish cold checks and
-  post-run cache saves, with the same three-minute package alarms, race
-  detection and vet checks.
-  Pushes to `main`, `team-start` and `builder-copy` run all three jobs and
+  files. The two Linux groups keep separate owner keys, and the macOS platform
+  subset has its own key. The module-matrix jobs use a 12-minute backstop to
+  finish cold checks and post-run cache saves, with the same three-minute
+  package alarms, race detection and vet checks.
+  Pushes to `main`, `team-start` and `builder-copy` run all five jobs with the
+  same three-minute package alarm and
   save missing caches after success, making them available to pull requests
   targeting those branches. Each job targets five minutes with an exact
   cache hit; cold durations are recorded separately. On a miss, its job
@@ -2052,6 +2425,21 @@ and the remaining root packages. The page partition uses the same test-name
 pattern as the short checks; the remaining packages still run their own page
 tests.
 
+The **Full / docker-check** job also runs on pushes to `main`, `team-start`
+and `builder-copy`, nightly and on manual runs, on Ubuntu with its Docker
+engine. It executes the dependency-repair journey through one project server:
+the initialized builder copy passes, missing `go.sum` entries are repaired,
+and workspace-only checksums are repaired into `go.work.sum`, while the user's
+project stays unchanged. It uses `-tags=e2e,docker` and selects
+`TestCheckProjectRepairsDependenciesOnOneServer`; pull requests do not run it.
+The package alarm is 40 minutes and the job backstop is 50 minutes, including
+cold compilation and downloads. These are execution bounds, not measured
+completion times. To run the journey locally with a running Docker engine:
+
+```bash
+go test -race -count=1 -timeout 40m -tags=e2e,docker -run '^TestCheckProjectRepairsDependenciesOnOneServer$' ./cmd/surla
+```
+
 ### Committed test module profiles
 
 CI downloads the root module requirements and these committed profiles before
@@ -2077,12 +2465,12 @@ matching versions in the profiles and refresh their checksums. For example,
 with the root requirements currently in this repository, run:
 
 ```sh
-GOWORK=off go -C internal/project/testdata/story-fixture mod edit -require=github.com/goadesign/surla/story@v0.0.0-20261111183703-4568fcf5bb85 -require=goa.design/goa/v3@v3.35.1-0.20261103205041-35e789e8f9b1 </dev/null
-GOWORK=off go -C internal/project/testdata/story-evaluator mod edit -require=github.com/goadesign/surla/story@v0.0.0-20261111183703-4568fcf5bb85 -require=goa.design/goa/v3@v3.35.1-0.20261103205041-35e789e8f9b1 -require=goa.design/goa-ai@v0.90.1-0.20261111075239-0114fb9d40d3 -require=goa.design/model@v1.16.11-0.20261030164016-5e17c2e932fb </dev/null
-GOWORK=off go -C internal/testmodule/testdata/goa-goaai-dsl mod edit -require=goa.design/goa/v3@v3.35.1-0.20261103205041-35e789e8f9b1 -require=goa.design/goa-ai@v0.90.1-0.20261111075239-0114fb9d40d3 </dev/null
+GOWORK=off go -C internal/project/testdata/story-fixture mod edit -require=github.com/goadesign/surla/story@v0.0.0-20261111183703-4568fcf5bb85 -require=goa.design/goa/v3@v3.35.1-0.20261114184515-dee88e893eb3 </dev/null
+GOWORK=off go -C internal/project/testdata/story-evaluator mod edit -require=github.com/goadesign/surla/story@v0.0.0-20261111183703-4568fcf5bb85 -require=goa.design/goa/v3@v3.35.1-0.20261114184515-dee88e893eb3 -require=goa.design/goa-ai@v0.90.1-0.20261111075239-0114fb9d40d3 -require=goa.design/model@v1.16.11-0.20261030164016-5e17c2e932fb </dev/null
+GOWORK=off go -C internal/testmodule/testdata/goa-goaai-dsl mod edit -require=goa.design/goa/v3@v3.35.1-0.20261114184515-dee88e893eb3 -require=goa.design/goa-ai@v0.90.1-0.20261111075239-0114fb9d40d3 </dev/null
 GOWORK=off go -C internal/project/testdata/story-fixture mod download all </dev/null
 GOWORK=off go -C internal/project/testdata/story-evaluator mod download all </dev/null
-GOWORK=off go -C internal/testmodule/testdata/goa-goaai-evaluator mod edit -require=goa.design/goa/v3@v3.35.1-0.20261103205041-35e789e8f9b1 -require=goa.design/goa-ai@v0.90.1-0.20261111075239-0114fb9d40d3 -require=goa.design/model@v1.16.11-0.20261030164016-5e17c2e932fb </dev/null
+GOWORK=off go -C internal/testmodule/testdata/goa-goaai-evaluator mod edit -require=goa.design/goa/v3@v3.35.1-0.20261114184515-dee88e893eb3 -require=goa.design/goa-ai@v0.90.1-0.20261111075239-0114fb9d40d3 -require=goa.design/model@v1.16.11-0.20261030164016-5e17c2e932fb </dev/null
 GOWORK=off go -C internal/testmodule/testdata/goa-goaai-dsl mod download all </dev/null
 GOWORK=off go -C internal/testmodule/testdata/goa-goaai-evaluator mod download all </dev/null
 ```
@@ -2094,7 +2482,12 @@ check the actual evaluators against the updated inputs.
 All full suites run nightly at 07:17 UTC and on a manual **Run workflow**
 request (`CI=true gh workflow run ci.yml --ref <branch> </dev/null`). This adds
 the other modules' complete tests and the verifier, generation, starter and
-orders acceptance suites as parallel jobs. A passing short run does not prove
+orders acceptance suites as parallel jobs. **Full / generation** uses a
+60-minute package alarm and a 70-minute job backstop for the suite's project
+compilations on slow runners, including cold builds. The job limit also
+covers setup and downloads. These are execution bounds, not measured
+completion times or a reduction in compilation work.
+A passing short run does not prove
 paths that build and run agent-written code; changes to candidate execution
 or starter generation need the full suite. On macOS, with the Temporal CLI
 for the first three:
@@ -2127,7 +2520,7 @@ go test -race -count=1 -tags browser ./internal/project
 │   ├── design.go                # Change Cards, checks, live target, verification, approval
 │   ├── changes.go               # The change list and the views page's waiting read
 │   ├── builds.go                # Builds and the builder's and test writer's assignments
-│   ├── build_start.go           # A build start's team and working-copy outcomes and refusals
+│   ├── build_start.go           # A build start's saved build, team outcome and refusals
 │   ├── team.go                  # The user's team read and actions
 │   ├── project.go               # Management: identity, team, stop, browser link
 │   ├── story_refresh.go, traces.go, cp1_analysis.go

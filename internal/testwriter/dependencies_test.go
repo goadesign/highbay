@@ -95,14 +95,14 @@ func TestALoadFailureOutsideTheModuleIsNotTheAuthorsFinding(t *testing.T) {
 			}
 			repo, _ := newProject(t, files)
 			base := runGit(t, repo, "rev-parse", "HEAD")
-			wc, err := OpenWorkingCopy(t.Context(), repo)
+			wc, err := MakeCopy(t.Context(), repo, TestsRole, TestsRole.Branch(1), "HEAD")
 			require.NoError(t, err)
 			writeFiles(t, filepath.Join(wc.Project(), "eval"), tc.edits)
 			var downloads int
 			c := *testChecker
 			c.download = failingDownload(tc.failsFor, &downloads)
 
-			_, err = c.Prepare(t.Context(), wc, Suite{Module: "eval", Command: "./gen/cmd/shop-evals"}, nil)
+			_, err = c.Prepare(t.Context(), wc, Suite{Module: "eval", Command: "./gen/cmd/shop-evals"}, TestsRole.Branch(1), base, nil)
 			require.Error(t, err)
 			assert.Positive(t, downloads, "the download decides whose failure it is")
 			var author *AuthorError
@@ -149,7 +149,8 @@ func TestADownloadFailureOutsideTheModuleIsNotTheAuthorsFinding(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			repo, _ := newProject(t, fixtureProject(t))
 			base := runGit(t, repo, "rev-parse", "HEAD")
-			wc, err := OpenWorkingCopy(t.Context(), repo)
+			branch := TestsRole.Branch(1)
+			wc, err := MakeCopy(t.Context(), repo, TestsRole, branch, "HEAD")
 			require.NoError(t, err)
 			if tc.edited {
 				goMod := filepath.Join(wc.Project(), "eval", "go.mod")
@@ -161,7 +162,7 @@ func TestADownloadFailureOutsideTheModuleIsNotTheAuthorsFinding(t *testing.T) {
 			c := *testChecker
 			c.download = failingDownload(tc.failsFor, &downloads)
 
-			v, err := c.Check(t.Context(), wc, fixtureSuite, refundStories)
+			v, err := c.Check(t.Context(), wc, fixtureSuite, branch, base, refundStories)
 			if tc.wantAuthor {
 				require.NoError(t, err)
 				require.Len(t, v.Findings, 1, "%+v", v.Findings)
@@ -255,14 +256,14 @@ func TestDependencyFailureComparesWithTheProjectsOwnLists(t *testing.T) {
 			t.Parallel()
 			repo, _ := newProject(t, tc.project)
 			base := runGit(t, repo, "rev-parse", "HEAD")
-			wc, err := OpenWorkingCopy(t.Context(), repo)
+			wc, err := MakeCopy(t.Context(), repo, TestsRole, TestsRole.Branch(1), "HEAD")
 			require.NoError(t, err)
 			var downloads int
 			c := *testChecker
 			c.workDir = t.TempDir()
 			c.download = failingDownload(tc.failsFor, &downloads)
 
-			compared, err := c.dependencyFailure(t.Context(), wc, "go", "eval", tc.current)
+			compared, err := c.dependencyFailure(t.Context(), wc, base, "go", "eval", tc.current)
 			assert.Equal(t, tc.wantDownloads, downloads)
 			left, readErr := os.ReadDir(c.workDir)
 			require.NoError(t, readErr)
@@ -296,5 +297,59 @@ func TestDownloadDependenciesFailsForAModuleItCannotFetch(t *testing.T) {
 		writeFiles(t, dir, map[string]string{"go.mod": "module example.com/shop/eval\n\ngo 1.24\n" + requirement})
 		err := downloadDependencies(t.Context(), tc.goBin(), dir)
 		assert.Equal(t, wantErr, err != nil, "requirement %q: %v", requirement, err)
+	}
+}
+
+// TestPrepareAttributesCommittedDependencyChanges verifies that when the test
+// writer commits its own unloadable go.mod on surla/tests-1 (or switches to a
+// side branch), Prepare measures dependency attribution from the build's base
+// rather than HEAD and checks the branch before preparing: on the build branch
+// it returns an *AuthorError (not ErrDependencies), and on a side branch it
+// returns an *AuthorError with FindingWorkingCopy without running the
+// generator or writing generated files into the side branch.
+func TestPrepareAttributesCommittedDependencyChanges(t *testing.T) {
+	t.Setenv("GOPROXY", "off")
+	const (
+		plainMod   = "module example.com/shop/eval\n\ngo 1.24\n"
+		plain      = "package design\n"
+		importing  = "package design\n\nimport _ \"" + unreachable + "/dsl\"\n"
+		unloadable = plainMod + "\n" + unreachableRequirement
+	)
+	for _, onSide := range []bool{false, true} {
+		name := "on its build branch"
+		if onSide {
+			name = "on a side branch"
+		}
+		t.Run(name, func(t *testing.T) {
+			repo, _ := newProject(t, map[string]string{
+				"eval/go.mod": plainMod, "eval/go.sum": "", "eval/design/design.go": plain,
+			})
+			base := runGit(t, repo, "rev-parse", "HEAD")
+			branch := TestsRole.Branch(1)
+			wc, err := MakeCopy(t.Context(), repo, TestsRole, branch, base)
+			require.NoError(t, err)
+			if onSide {
+				runGit(t, wc.Dir(), "switch", "--quiet", "-c", "mine")
+			}
+			writeFiles(t, filepath.Join(wc.Project(), "eval"), map[string]string{"go.mod": unloadable, "design/design.go": importing})
+			runGit(t, wc.Dir(), "commit", "--quiet", "-am", "the test writer's own dependency change")
+			var downloads int
+			c := *testChecker
+			c.download = failingDownload(unreachable, &downloads)
+
+			_, err = c.Prepare(t.Context(), wc, Suite{Module: "eval", Command: "./gen/cmd/shop-evals"}, branch, base, nil)
+			var author *AuthorError
+			require.ErrorAs(t, err, &author, "Prepare err=%v", err)
+			assert.NotErrorIs(t, err, ErrDependencies)
+			if !onSide {
+				assert.Equal(t, FindingGeneration, author.Finding.Kind)
+				assert.Positive(t, downloads)
+			} else {
+				assert.Equal(t, FindingWorkingCopy, author.Finding.Kind)
+				assert.Contains(t, author.Finding.Message, "Your working copy (.surla-tests) is on branch 'mine'.")
+				assert.Zero(t, downloads, "off-branch copy is refused before running generation or downloads")
+				assert.Empty(t, runGit(t, wc.Dir(), "status", "--porcelain", "--untracked-files=all"))
+			}
+		})
 	}
 }

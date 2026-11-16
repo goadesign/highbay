@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -39,16 +40,24 @@ var (
 // TestARevisionOfAnAgreedChangeWaitsAndTheAgreedRevisionStaysInForce
 // revises a confirmed and approved change and checks that the agreed
 // revision is still read, previewed (its revision check passes and preview
-// goes on to evaluate the design), verified and approved at its revision
+// checks the saved architecture), verified and approved at its revision
 // while the proposal waits, with its answers, confirmation, approval, Story
 // and source untouched on disk; after the user adopts the proposal, each of
 // those operations refuses the earlier revision.
 func TestARevisionOfAnAgreedChangeWaitsAndTheAgreedRevisionStaysInForce(t *testing.T) {
 	spec := agreedReportSpec()
 	target := &pageTarget{artifacts: spec.Artifacts}
-	cp := newControlPlane(t, Options{Verification: verificationConfig(t), ResolvePromotionTarget: target.resolve})
-	agreed := agreeChange(t, cp, "chg")
-	commit := strings.Repeat("1", 40)
+	cp := newControlPlane(t, buildFixtureOptions(t, Options{BuildCacheDir: t.TempDir(), Verification: verificationConfig(t), ResolvePromotionTarget: target.resolve}))
+	proposed := saveProposedCardFixture(t, cp, agreedOwner, "chg", "Refunds up to $50 are instant.",
+		refundAnalysis("Refunds up to $50 are instant.", refundTaxQuestion()))
+	proposed = attachBuildSnapshot(t, cp, "chg")
+	agreed, err := cp.ConfirmIntent(agreedUser, &gensurla.ConfirmIntentPayload{
+		ChangeID: "chg", RequestRevision: proposed.RequestRevision,
+		Answers: map[string]string{"chg-ambiguity-01": "with_tax"}, Examples: proposed.Examples,
+	})
+	require.NoError(t, err)
+	saveStoredBuildFixture(t, cp, agreed)
+	commit := commitBuilderCandidateFixture(t, cp, agreed)
 	report := passingReport(t, agreed.RequestRevision, commit, spec)
 	target.update(func(p *pageTarget) { p.report = report })
 	approved, err := cp.ApproveMerge(agreedUser, &gensurla.ApproveMergePayload{
@@ -81,7 +90,7 @@ func TestARevisionOfAnAgreedChangeWaitsAndTheAgreedRevisionStaysInForce(t *testi
 
 	_, err = cp.PreviewArchitecture(agreedGuide, &gensurla.PreviewArchitecturePayload{ChangeID: "chg", RequestRevision: agreed.RequestRevision})
 	assertServiceError(t, err, "unprocessable")
-	assert.ErrorContains(t, err, "workspace directory is not bound", "preview accepted the agreed revision and went on to read the design")
+	assert.ErrorContains(t, err, "design must declare at least one Goa API or Service container", "preview accepted the agreed revision and applied its saved Story-only architecture checks")
 
 	run, err := cp.VerifyChange(agreedBuilder, &gensurla.VerifyChangePayload{ChangeID: "chg", RequestRevision: agreed.RequestRevision, CandidateCommit: commit})
 	require.NoError(t, err, "verification of the agreed revision is accepted")
@@ -127,7 +136,12 @@ var _ = Service("orders", func() {
 })
 `))
 	cp := newControlPlane(t, Options{WorkspaceDir: workspace})
-	agreed := agreeChange(t, cp, "chg")
+	proposed := mustProposeFromRefresh(t, cp, agreedGuide, "chg", "Refunds up to $50 are instant.", refundAnalysis("Refunds up to $50 are instant.", refundTaxQuestion()))
+	agreed, err := cp.ConfirmIntent(agreedUser, &gensurla.ConfirmIntentPayload{
+		ChangeID: "chg", RequestRevision: proposed.RequestRevision,
+		Answers: map[string]string{"chg-ambiguity-01": "with_tax"}, Examples: proposed.Examples,
+	})
+	require.NoError(t, err)
 	proposeRevision(t, cp, "chg", agreed.RequestRevision, "Refunds up to $60 are instant.")
 	preview, err := cp.PreviewArchitecture(agreedGuide, &gensurla.PreviewArchitecturePayload{ChangeID: "chg", RequestRevision: agreed.RequestRevision})
 	require.NoError(t, err)
@@ -163,8 +177,8 @@ func TestAProposalIsReplacedByTheNextRevisionAndAStaleOneIsRefused(t *testing.T)
 // revision in force under a new request_revision, the slot is empty, and no
 // approval carries over. A missing answer refuses the adoption.
 func TestAdoptingMakesTheProposalTheRevisionInForce(t *testing.T) {
-	cp := newControlPlane(t, Options{Verification: verificationConfig(t)})
-	saveCard(t, cp, &gensurla.ApprovalItem{
+	cp := newControlPlane(t, buildFixtureOptions(t, Options{BuildCacheDir: t.TempDir(), Verification: verificationConfig(t)}))
+	saveStoredCardBuildFixture(t, cp, &gensurla.ApprovalItem{
 		ApprovedBy: agreedOwner, ReportDigest: strings.Repeat("d", 64), CandidateCommit: strings.Repeat("c", 40),
 		SuiteID: "orders", SuiteCommit: strings.Repeat("b", 40), Environment: "sim",
 		Artifacts: map[string]string{"orders": strings.Repeat("e", 64)}, ScenarioCount: 1,
@@ -202,8 +216,8 @@ func TestAdoptingMakesTheProposalTheRevisionInForce(t *testing.T) {
 // file equals the one before the revision except for its saved time, and a
 // second decline or one naming the agreed revision is refused.
 func TestDecliningRestoresTheAgreedChangeExactly(t *testing.T) {
-	cp := newControlPlane(t, Options{Verification: verificationConfig(t)})
-	saveCard(t, cp, &gensurla.ApprovalItem{
+	cp := newControlPlane(t, buildFixtureOptions(t, Options{BuildCacheDir: t.TempDir(), Verification: verificationConfig(t)}))
+	saveStoredCardBuildFixture(t, cp, &gensurla.ApprovalItem{
 		ApprovedBy: agreedOwner, ReportDigest: strings.Repeat("d", 64), CandidateCommit: strings.Repeat("c", 40),
 		SuiteID: "orders", SuiteCommit: strings.Repeat("b", 40), Environment: "sim",
 		Artifacts: map[string]string{"orders": strings.Repeat("e", 64)}, ScenarioCount: 1,
@@ -417,7 +431,7 @@ func TestAProposalKeepsItsOwnStoryAndDesignSource(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	writeWorkspaceFiles(t, ws, map[string]string{"design/design.go": "package design // exchanges\n"})
+	writeWorkspaceFiles(t, filepath.Join(ws, draftFolderName), map[string]string{"design/design.go": "package design // exchanges\n"})
 	draftOp := seedStoryRefreshForTest(t, cp, agreedOwner, storyRefreshStateSucceeded, pageStories(), "")
 	first := revisionPayload("chg", agreed.RequestRevision, "Refunds up to $60 are instant.", agreed.Examples[0].ID)
 	first.StoryRefreshOpID = &draftOp
@@ -584,21 +598,28 @@ func TestAProposalThatIsNotAwaitingConfirmationIsRefusedOnLoad(t *testing.T) {
 // proposes a revision that records them: init_project's check then counts
 // the proposal's files although the revision in force has none.
 func TestAWaitingProposalsDesignFilesBlockInitialization(t *testing.T) {
-	ws := t.TempDir()
-	writeWorkspaceFiles(t, ws, map[string]string{"go.mod": "module example.com/orders\n\ngo 1.24\n"})
-	cp := newControlPlane(t, Options{WorkspaceDir: ws})
-	agreed := agreeChange(t, cp, "chg")
+	cp := newControlPlane(t, Options{})
+	agreeChange(t, cp, "chg")
 	blocked, err := cp.cards.hasWorkspaceCardsWithFiles()
 	require.NoError(t, err)
 	require.False(t, blocked, "a change made before any design file does not block initialization")
-	writeWorkspaceFiles(t, ws, map[string]string{"design/design.go": "package design\n"})
-	proposeRevision(t, cp, "chg", agreed.RequestRevision, "Refunds up to $60 are instant.")
+	// Retain the storage compatibility contract for a proposal produced before
+	// refresh adoption became required, without reproducing its obsolete scan.
 	stored := loadChange(t, cp, "chg")
+	proposed := *stored.card
+	proposed.Status, proposed.ConfirmedBy, proposed.Approval = StatusNeedsConfirmation, nil, nil
+	proposed.Answers = map[string]string{}
+	proposed.Prompt, proposed.Summary = "Refunds up to $60 are instant.", "Refunds up to $60 are instant."
+	source := `{"design/design.go":"package design\n"}`
+	proposed.RequestRevision, err = computeCanonicalRevision(&proposed, stored.owner, source)
+	require.NoError(t, err)
+	stored.proposed = &storedRevision{card: &proposed, designSource: source}
+	saveMetadataRecord(t, cp, stored)
 	require.Empty(t, stored.designSource)
 	require.NotEmpty(t, stored.proposed.designSource)
 	blocked, err = cp.cards.hasWorkspaceCardsWithFiles()
 	require.NoError(t, err)
-	assert.True(t, blocked, "a waiting proposal's design files block initialization")
+	assert.True(t, blocked, "a waiting legacy proposal's design files block initialization")
 }
 
 // TestBuildsFollowTheAgreedRevision builds an agreed change while the guide's
@@ -613,8 +634,7 @@ func TestBuildsFollowTheAgreedRevision(t *testing.T) {
 	cp := newBuildControlPlane(t, Options{WorkspaceDir: ws})
 	agreedOp := seedStoryRefreshForTest(t, cp, agreedOwner, storyRefreshStateSucceeded, sampleAdoptedStories(), "")
 	proposeWithStory(t, cp, agreedGuide, "chg", agreedOp)
-	proposed, err := cp.GetChange(agreedUser, &gensurla.GetChangePayload{ChangeID: "chg"})
-	require.NoError(t, err)
+	proposed := attachBuildSnapshot(t, cp, "chg")
 	agreed, err := cp.ConfirmIntent(agreedUser, &gensurla.ConfirmIntentPayload{
 		ChangeID: "chg", RequestRevision: proposed.RequestRevision, Answers: map[string]string{}, Examples: proposed.Examples,
 	})
@@ -641,6 +661,7 @@ func TestBuildsFollowTheAgreedRevision(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, flowKeys(storySummaryItems(sampleAdoptedStories())), flowKeys(tests.Stories), "the build holds the agreed Story, not the proposal's")
 
+	makeBuildFixtureBuilderCopy(t, cp)
 	inForce := func() map[string]bool {
 		t.Helper()
 		build := mustStartedBuild(t, cp, agreedUser, "chg")
@@ -698,9 +719,11 @@ func TestRevisionDescriptionsSayTheAgreedChangeStaysInForce(t *testing.T) {
 
 // agreeChange proposes changeID with one question and confirms it as the
 // user, returning the confirmed card.
+// agreeChange confirms a legacy stored-card consumer fixture, without claiming
+// the public proposal producer read or evaluated a workspace.
 func agreeChange(t *testing.T, cp *ControlPlane, changeID string) *gensurla.ChangeCardResult {
 	t.Helper()
-	proposed := mustPropose(t, cp, agreedGuide, changeID, "Refunds up to $50 are instant.", refundAnalysis("Refunds up to $50 are instant.", refundTaxQuestion()))
+	proposed := saveProposedCardFixture(t, cp, agreedOwner, changeID, "Refunds up to $50 are instant.", refundAnalysis("Refunds up to $50 are instant.", refundTaxQuestion()))
 	confirmed, err := cp.ConfirmIntent(agreedUser, &gensurla.ConfirmIntentPayload{
 		ChangeID: changeID, RequestRevision: proposed.RequestRevision,
 		Answers: map[string]string{changeID + "-ambiguity-01": "with_tax"}, Examples: proposed.Examples,

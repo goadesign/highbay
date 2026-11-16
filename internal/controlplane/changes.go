@@ -133,6 +133,18 @@ func (c *ControlPlane) changeList(ctx context.Context, span trace.Span, owner st
 		span.SetStatus(codes.Error, "read change cards")
 		return nil, errors.New("list changes: saved change cards could not be read")
 	}
+	saved, found, err := c.cards.loadOpenBuild()
+	var provenance madeFromRecord
+	if err == nil {
+		provenance, _, err = c.cards.loadMadeFrom()
+	}
+	activeFound := found && !buildDropped(provenance, saved)
+	c.mu.RUnlock()
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "read builds")
+		return nil, errors.New("list changes: saved builds could not be read")
+	}
 	records = slices.DeleteFunc(records, func(r storedChangeCard) bool { return r.owner != owner })
 	slices.SortFunc(records, func(a, b storedChangeCard) int {
 		if byTime := b.savedAt.Compare(a.savedAt); byTime != 0 {
@@ -143,16 +155,14 @@ func (c *ControlPlane) changeList(ctx context.Context, span trace.Span, owner st
 	buildVersions := make([]string, 0, len(records))
 	items := make([]*gensurla.ChangeListItem, 0, len(records))
 	for _, record := range records {
-		build, err := c.changeBuild(record)
+		build, err := c.changeBuild(ctx, record, saved, found, draftedBeforeDrop(record, provenance))
 		if err != nil {
-			c.mu.RUnlock()
 			span.RecordError(err)
 			span.SetStatus(codes.Error, "read builds")
 			return nil, errors.New("list changes: saved builds could not be read")
 		}
 		raw, err := gensurla.EncodeChangeBuild(build)
 		if err != nil {
-			c.mu.RUnlock()
 			span.RecordError(err)
 			span.SetStatus(codes.Error, "encode builds")
 			return nil, errors.New("list changes: saved builds could not be encoded")
@@ -168,7 +178,7 @@ func (c *ControlPlane) changeList(ctx context.Context, span trace.Span, owner st
 		}
 		if run, ok := latest[record.card.ChangeID]; ok {
 			item.LatestVerification = latestVerification(
-				run, c.verificationInputsCurrent(record, build, run.Request.Plan),
+				run, c.verificationInputsCurrent(record, saved, activeFound, run.Request.Plan),
 			)
 		}
 		if record.proposed != nil {
@@ -176,7 +186,6 @@ func (c *ControlPlane) changeList(ctx context.Context, span trace.Span, owner st
 		}
 		items = append(items, item)
 	}
-	c.mu.RUnlock()
 	_, err = c.resolvePromotion(ctx)
 	if err != nil {
 		span.RecordError(err)
@@ -237,12 +246,14 @@ func latestVerification(run verifyrun.Run, inputsCurrent bool) *gensurla.LatestV
 }
 
 // verificationInputsCurrent compares only the agreed revision and selected
-// tests, using the usable build rendering already read by the owning operation.
+// tests. Written tests use the build already read by the owning operation;
+// stored evaluator inputs remain independent of build assignments.
 // A matching run remains historical evidence of its recorded candidate; it
 // does not establish the state of a working tree, deployment or approval.
 func (c *ControlPlane) verificationInputsCurrent(
 	record storedChangeCard,
-	build *gensurla.ChangeBuild,
+	build buildFile,
+	found bool,
 	plan verify.Plan,
 ) bool {
 	if agreed := record.agreedRevision(); agreed == "" || plan.RequestRevision != agreed {
@@ -255,12 +266,9 @@ func (c *ControlPlane) verificationInputsCurrent(
 			plan.SuiteRepo == selected.SuiteRepo && plan.SuiteCommit == selected.SuiteCommit &&
 			plan.SuiteModule == selected.SuiteModule && plan.SuiteCommand == selected.SuiteCommand
 	case writtenTestVerification:
-		started, ok := build.Build.AsStarted()
-		if !ok || !started.InForce || plan.Tests != verify.TestsWritten {
-			return false
-		}
-		accepted, ok := started.TestWriter.Tests.AsAccepted()
-		return ok && plan.SuiteCommit == accepted.Commit
+		return found && build.ChangeID == record.card.ChangeID && c.usableBuild(build) &&
+			buildInForce(build, record) && plan.Tests == verify.TestsWritten && build.TestWriter.State == testsAccepted &&
+			plan.SuiteCommit == build.TestWriter.Commit
 	default:
 		return false
 	}

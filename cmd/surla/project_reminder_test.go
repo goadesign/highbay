@@ -280,12 +280,6 @@ func TestTeamReminderPostFailures(t *testing.T) {
 			t.Run(post+" "+kind, func(t *testing.T) {
 				t.Parallel()
 				chorus, sender := startRecordedChorus(t, map[string]http.HandlerFunc{post: answers[kind](t)})
-				if post == "who" && kind == "connection" {
-					// A closed listener refuses the connection outright.
-					closed := httptest.NewServer(chorus)
-					closed.Close()
-					sender.chorusURL = closed.URL
-				}
 				started := time.Now()
 				err := sender.Send(t.Context(), testReminder)
 				elapsed := time.Since(started)

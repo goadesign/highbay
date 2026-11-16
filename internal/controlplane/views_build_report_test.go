@@ -194,7 +194,7 @@ await nativeStage("build", 0, "assigned", async () => page.$("#surla-build-start
 const started = shownBuild("assigned", 0);
 expect(started.required_test_count === 1 && started.request_revision === input.revision && started.in_force, "Build did not use exactly the complete Story flow: " + JSON.stringify(started));
 expect(!started.builder.read && !started.test_writer.read, "new assignments were already read");
-await until(() => page.text("#surla-build-builder").includes("Assignment unread") && page.text("#surla-build-test-writer").includes("Assignment unread"), "the page did not show both new assignments as unread");
+await until(() => page.text("#surla-build-builder").includes("assignment unread") && page.text("#surla-build-test-writer").includes("assignment unread"), "the page did not show both new assignments as unread");
 expect(page.sent("POST", buildPath).length === 1, "the user click did not send exactly one Build");
 await version("assigned");
 
@@ -207,7 +207,7 @@ expect(writer.progress.read && builder.read, "full assignment reads did not mark
 expect(writer.required_tests.length === 1 && writer.required_tests[0].hook === "RefundOverLimit", "the draft flow changed the required tests: " + JSON.stringify(writer.required_tests));
 expect(writer.stories.length === 1 && writer.stories[0].flows.length === 2 && writer.working_folder.length > 0, "the full assignment lacks its saved Story or working folder");
 await version("read-1");
-await until(() => page.text("#surla-build-builder").includes("Assignment read") && page.text("#surla-build-test-writer").includes("Assignment read"), "full agent reads did not update the page's assignment facts");
+await until(() => page.text("#surla-build-builder").includes("assignment read") && page.text("#surla-build-test-writer").includes("assignment read"), "full agent reads did not update the page's assignment facts");
 const inputSelector = 'textarea[data-field="expected_outcome"]';
 const typed = page.$(inputSelector);
 page.type(typed, "Keep this unsaved expected outcome");
@@ -221,7 +221,7 @@ const findings = answers(findingsPath).findLast((f) => f.report === 1);
 expect(findings.change_id === input.change && findings.request_revision === input.revision && findings.started_at === started.started_at && findings.report === 1 && findings.checked_at === rejected.test_writer.tests.checked_at, "finding text was not correlated to all five build/verdict values: " + JSON.stringify(findings));
 expect(findings.findings.length === 1 && findings.findings[0].includes("RefundOverLimit") && findings.findings[0].includes("does not compile"), "the finding did not come from the missing-hook compilation: " + JSON.stringify(findings));
 await until(() => page.text("#surla-build-findings").includes("RefundOverLimit"), "the user's page showed only a finding count");
-expect(page.text("#surla-build-test-writer").includes("Assignment unread"), "the compiler verdict did not show new unread writer work");
+expect(page.text("#surla-build-test-writer").includes("assignment unread"), "the compiler verdict did not show new unread writer work");
 expect(page.$(inputSelector) === typed && typed.value === "Keep this unsaved expected outcome", "a worker refresh lost typed input");
 await version("needs_changes");
 
@@ -231,7 +231,7 @@ await nativeStage("report-2", 2, "accepted", () => report(2),
   () => shownBuild("accepted", 2) && page.$("#surla-build-test-writer").dataset.state === "accepted");
 const accepted = shownBuild("accepted", 2);
 expect(/^[a-f0-9]{40,64}$/.test(accepted.test_writer.tests.commit) && !accepted.builder.read && !accepted.test_writer.read, "acceptance did not record a commit and new unread assignments: " + JSON.stringify(accepted));
-expect(page.text("#surla-build-builder").includes("Assignment unread") && page.text("#surla-build-test-writer").includes("Assignment unread"), "acceptance did not show both new unread assignments");
+expect(page.text("#surla-build-builder").includes("assignment unread") && page.text("#surla-build-test-writer").includes("assignment unread"), "acceptance did not show both new unread assignments");
 expect(page.text("#surla-build-section").includes(accepted.test_writer.tests.not_judged) && accepted.test_writer.tests.not_judged.includes("did not judge what they assert"), "the page overstated what acceptance proves");
 expect(!page.$("#surla-build-findings"), "the superseded finding stayed beside acceptance");
 expect(page.$(inputSelector) === typed && typed.value === "Keep this unsaved expected outcome", "acceptance lost typed input");
@@ -259,12 +259,12 @@ func TestViewsPageFollowsRealTestReports(t *testing.T) {
 	// Written-test runs make the project verify with the tests a build
 	// accepts, so the build uses a test writer; without them the page harness
 	// stores verification settings and the build would use none.
-	cp := pageControlPlane(t, Options{
+	cp := pageControlPlane(t, Options{BuildCacheDir: t.TempDir(),
 		WorkspaceDir: project, Team: &TeamBinding{Owner: pageOwner, Service: team},
 		RunsDir:         t.TempDir(),
 		WrittenTestRuns: &WrittenTestRuns{ReportDir: t.TempDir(), Command: []string{"/bin/sh", "-c", "exit 0", "sh"}, Timeout: time.Hour},
 	})
-	card := saveStoryCard(t, cp, "chg-real-report", StatusConfirmed, refundStory("Refund over the limit"))
+	card := saveBuildStoryCard(t, cp, "chg-real-report", StatusConfirmed, refundStory("Refund over the limit"))
 	user := asCaller(pageOwner, CallerUser)
 	before, err := cp.ListChanges(user)
 	require.NoError(t, err)
@@ -338,7 +338,7 @@ func TestViewsPageFollowsRealTestReports(t *testing.T) {
 	accepted, ok := build.TestWriter.Tests.AsAccepted()
 	require.True(t, ok, "the production worker accepted the repaired hook")
 	assert.Equal(t, 2, build.TestWriter.Report)
-	assert.Equal(t, accepted.Commit, productionBuildGit(t, repo, "rev-parse", "surla/tests"))
+	assert.Equal(t, accepted.Commit, productionBuildGit(t, repo, "rev-parse", testwriter.TestsRole.Branch(1)))
 	assert.NotEqual(t, productionBuildGit(t, repo, "rev-parse", "HEAD"), accepted.Commit)
 	assert.Equal(t, "Add the tests Surla accepted for change "+card.ChangeID+", report 2",
 		productionBuildGit(t, repo, "show", "-s", "--format=%s", accepted.Commit))

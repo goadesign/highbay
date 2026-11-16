@@ -40,7 +40,7 @@ func TestRunVerifiesTheOrdersReference(t *testing.T) {
 		WorkDir:         filepath.Join(work, "work"),
 		ReportDir:       filepath.Join(work, "reports"),
 		Tests:           TestsEvaluator,
-	}, os.Environ())
+	}, os.Environ(), t.TempDir())
 	require.NoError(t, err)
 	for _, s := range report.Scenarios {
 		if s.Outcome != OutcomePassed && s.Detail != nil {

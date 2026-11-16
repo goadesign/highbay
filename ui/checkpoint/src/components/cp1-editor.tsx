@@ -50,6 +50,8 @@ export interface CP1EditorProps {
   onLoadVerifications: () => void;
   // onOpenStory shows the Story stage for this change.
   onOpenStory: () => void;
+  // onReviewApproval opens the saved record in the approval stage.
+  onReviewApproval: () => void;
 }
 
 interface FieldTextareaProps {
@@ -154,18 +156,12 @@ export function CP1EditorView({
   onLoadLatestCard,
   onLoadVerifications,
   onOpenStory,
+  onReviewApproval,
 }: CP1EditorProps) {
   const ambiguities = Array.isArray(card.ambiguities) ? card.ambiguities : [];
   const stories = card.stories ?? [];
   const localExamplesEdited = areExamplesModified(card.examples, draftExamples);
   const draftDirty = isDraftDirty(card, draftAnswers, draftExamples);
-  const artifactNames = card.approval
-    ? Object.keys(card.approval.artifacts || {}).sort()
-    : [];
-  const unverifiedArtifactNames = card.unverified_approval
-    ? Object.keys(card.unverified_approval.approval.artifacts || {}).sort()
-    : [];
-
   const ctxValue: CP1DraftContextValue = {
     card,
     draftAnswers,
@@ -296,161 +292,15 @@ export function CP1EditorView({
 
       {card.status !== "confirmed" ? buildSection : null}
 
-      {card.approval ? (
-        <Card
-          id="surla-cp5-approval"
-          className="surla-card"
-          role="region"
-          aria-label="Recorded Promotion Approval"
-          tabIndex={-1}
-        >
-          <div className="surla-region-header">
-            <div className="surla-field-row">
-              <h3>Recorded Promotion Approval</h3>
-              <Badge variant="success">Approval recorded</Badge>
-              <Badge>No merge or deploy side effect</Badge>
-            </div>
-            <Button
-              id="surla-cp5-refresh-approval"
-              disabled={rpcInFlight}
-              onClick={onLoadLatestCard}
-            >
-              Check current approval
-            </Button>
-          </div>
-          <p>
-            Approval recorded by bearer principal <code>{card.approval.approved_by}</code> for this
-            confirmed <code>request_revision</code> on the saved Change Card. Recording approval
-            does not merge branches or deploy binaries. This record describes the verified inputs
-            below. Check current approval to compare the accepted tests commit again; when this
-            project stores promotion settings, Surla also compares the release binaries.
-          </p>
-          {draftDirty ? (
-            <Alert id="surla-cp5-approval-dirty-warning" variant="warning" role="status">
-              <strong>Unsaved draft edits detected: </strong>
-              Saving refined answers or examples will mint a new <code>request_revision</code> and
-              clear this approval.
-            </Alert>
-          ) : null}
-          <p>
-            <strong>Approved by: </strong>
-            <code>{card.approval.approved_by}</code> · <strong>Environment: </strong>
-            <code>{card.approval.environment}</code> · <strong>Evaluator suite: </strong>
-            <code>{card.approval.suite_id}</code> · <strong>Scenarios passed: </strong>
-            <code>{String(card.approval.scenario_count)}</code> ·{" "}
-            <strong>Verified artifacts: </strong>
-            <code>{String(artifactNames.length)}</code>
-          </p>
-          {card.approval.test_source.source === "written_tests" ? (
-            <p>
-              {card.approval.test_source.notice + " — merge commit "}
-              <code>{card.approval.suite_commit}</code>
-              {" (on branch surla/tests)."}
-            </p>
-          ) : null}
-          <details className="surla-details" id="surla-cp5-approval-details">
-            <summary>Verified inputs and digests</summary>
-            <p>
-              <strong>Builder&apos;s commit: </strong>
-              <code>{card.approval.candidate_commit}</code>
-            </p>
-            <p>
-              <strong>Verification report digest: </strong>
-              <code>{card.approval.report_digest}</code>
-            </p>
-            <p>
-              <strong>Tests&apos; commit: </strong>
-              <code>{card.approval.suite_id}</code> @ <code>{card.approval.suite_commit}</code>
-            </p>
-            <h4>{"Verified Candidate Artifacts (" + artifactNames.length + ")"}</h4>
-            <ul>
-              {artifactNames.map((name) => (
-                <li key={name}>
-                  <code>{name}</code>: <code>{card.approval!.artifacts[name]}</code>
-                </li>
-              ))}
-            </ul>
-          </details>
-        </Card>
-      ) : null}
-
-      {card.unverified_approval ? (
-        <Card
-          id="surla-cp5-unverified-approval"
-          className="surla-card"
-          role="region"
-          aria-label="Unverified Promotion Approval"
-        >
-          <div className="surla-region-header">
-            <div className="surla-field-row">
-              <h3>Saved Promotion Approval (Unverified)</h3>
-              <Badge variant="warning">Inputs not verified on this read</Badge>
-              <Badge>No merge or deploy side effect</Badge>
-            </div>
-            <Button
-              id="surla-cp5-refresh-approval"
-              disabled={rpcInFlight}
-              onClick={onLoadLatestCard}
-            >
-              Check current approval
-            </Button>
-          </div>
-          <Alert id="surla-cp5-unverified-approval-reason" variant="warning" role="status">
-            <strong>Saved approval could not be verified: </strong>
-            {card.unverified_approval.reason}
-          </Alert>
-          {draftDirty ? (
-            <Alert id="surla-cp5-approval-dirty-warning" variant="warning" role="status">
-              <strong>Unsaved draft edits detected: </strong>
-              Saving refined answers or examples will mint a new <code>request_revision</code> and
-              clear this saved approval.
-            </Alert>
-          ) : null}
-          <p>
-            <strong>Recorded approval by: </strong>
-            <code>{card.unverified_approval.approval.approved_by}</code> ·{" "}
-            <strong>Environment: </strong>
-            <code>{card.unverified_approval.approval.environment}</code> ·{" "}
-            <strong>Evaluator suite: </strong>
-            <code>{card.unverified_approval.approval.suite_id}</code> ·{" "}
-            <strong>Scenarios passed: </strong>
-            <code>{String(card.unverified_approval.approval.scenario_count)}</code> ·{" "}
-            <strong>Recorded artifacts: </strong>
-            <code>{String(unverifiedArtifactNames.length)}</code>
-          </p>
-          {card.unverified_approval.approval.test_source.source === "written_tests" ? (
-            <p>
-              {card.unverified_approval.approval.test_source.notice + " — merge commit "}
-              <code>{card.unverified_approval.approval.suite_commit}</code>
-              {" (on branch surla/tests)."}
-            </p>
-          ) : null}
-          <details className="surla-details" id="surla-cp5-unverified-approval-details">
-            <summary>Recorded inputs and digests</summary>
-            <p>
-              <strong>Builder&apos;s commit: </strong>
-              <code>{card.unverified_approval.approval.candidate_commit}</code>
-            </p>
-            <p>
-              <strong>Verification report digest: </strong>
-              <code>{card.unverified_approval.approval.report_digest}</code>
-            </p>
-            <p>
-              <strong>Tests&apos; commit: </strong>
-              <code>{card.unverified_approval.approval.suite_id}</code> @{" "}
-              <code>{card.unverified_approval.approval.suite_commit}</code>
-            </p>
-            <h4>{"Recorded Candidate Artifacts (" + unverifiedArtifactNames.length + ")"}</h4>
-            <ul>
-              {unverifiedArtifactNames.map((name) => (
-                <li key={name}>
-                  <code>{name}</code>:{" "}
-                  <code>{card.unverified_approval!.approval.artifacts[name]}</code>
-                </li>
-              ))}
-            </ul>
-          </details>
-        </Card>
+      {card.approval !== undefined || card.unverified_approval !== undefined ? (
+        <section className="surla-approval-summary" aria-label="Saved approval">
+          <p><strong>{card.unverified_approval !== undefined ? "Saved approval needs checking." : "Approval recorded."}</strong>
+            {" Read its evidence, verified commits and current status in Approve."}</p>
+          {draftDirty ? <Alert id="surla-cp5-approval-dirty-warning" variant="warning" role="status">
+            Saving different answers or examples creates a new revision and clears this approval.
+          </Alert> : null}
+          <Button id="surla-review-approval" onClick={onReviewApproval}>Review saved approval</Button>
+        </section>
       ) : null}
 
       {priorCard ? (

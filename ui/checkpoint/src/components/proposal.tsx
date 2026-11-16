@@ -69,7 +69,7 @@ export function ProposedRevisionView({
       </div>
       <p>
         The guide proposed a new revision of this change. The agreed revision stays in force, and
-        architecture, verification and approval keep working on it, until you adopt or decline
+        architecture shows its saved design, and verification and approval keep working on it, until you adopt or decline
         this one. Adopting confirms it with your answers and makes it the agreed revision; an
         approval of the agreed revision does not carry over.
       </p>

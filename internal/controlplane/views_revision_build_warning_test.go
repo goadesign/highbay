@@ -34,11 +34,12 @@ func TestViewsPageWarnsBeforeChangingABuiltRevision(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			opts := Options{Team: &TeamBinding{Owner: pageOwner, Service: &teamServiceFixture{}}}
 			if tc.stored {
+				opts.BuildCacheDir = t.TempDir()
 				opts.Verification = &VerificationConfig{RunsDir: t.TempDir()}
 			}
 			cp := newBuildControlPlane(t, opts)
 			cp.changesWait, cp.changesPoll = 400*time.Millisecond, 20*time.Millisecond
-			card := confirmedChange(t, cp, "chg-warning")
+			card := buildableChange(t, cp, "chg-warning")
 			if tc.build {
 				_, err := cp.StartBuild(asCaller(pageOwner, CallerUser), &gensurla.StartBuildPayload{
 					ChangeID: card.ChangeID, RequestRevision: card.RequestRevision,

@@ -120,13 +120,15 @@ func TestPublishRecordsWarningsWithoutFailing(t *testing.T) {
 func TestALeftoverStagingFolderFailsNeitherPrepareNorCheck(t *testing.T) {
 	skipInShortMode(t)
 	repo, _ := newProject(t, fixtureProject(t))
-	wc, err := OpenWorkingCopy(t.Context(), repo)
+	base := runGit(t, repo, "rev-parse", "HEAD")
+	branch := TestsRole.Branch(1)
+	wc, err := MakeCopy(t.Context(), repo, TestsRole, branch, "HEAD")
 	require.NoError(t, err)
 	module := filepath.Join(wc.Project(), "eval")
 	stage := map[string]string{leftoverStage + "/gen/evals/shop_acceptance/suite.go": "package half\n"}
 	writeFiles(t, module, stage)
 
-	_, err = testChecker.Prepare(t.Context(), wc, fixtureSuite, refundStories)
+	_, err = testChecker.Prepare(t.Context(), wc, fixtureSuite, branch, base, refundStories)
 	require.NoError(t, err, "a staging folder left by an interrupted publication does not fail the preparation")
 	assert.NoDirExists(t, filepath.Join(module, leftoverStage), "the preparation removed it")
 	suiteGo, err := os.ReadFile(filepath.Join(module, generatedSuite))
@@ -148,7 +150,7 @@ func TestALeftoverStagingFolderFailsNeitherPrepareNorCheck(t *testing.T) {
 		}
 		return json.Marshal(d)
 	}
-	v, err := c.Check(t.Context(), wc, fixtureSuite, refundStories)
+	v, err := c.Check(t.Context(), wc, fixtureSuite, branch, base, refundStories)
 	require.NoError(t, err, "a staging folder in the copy does not stop the check")
 	require.True(t, v.Accepted(), "%+v", v.Findings)
 	assert.NotContains(t, runGit(t, repo, "ls-tree", "-r", "--name-only", v.tree), leftoverStage,
@@ -167,14 +169,14 @@ func TestALinkWithAStagingFoldersNameIsTheAuthorsFinding(t *testing.T) {
 		"eval/design/design.go": "package design\n",
 	}
 	repo, _ := newProject(t, files)
-	wc, err := OpenWorkingCopy(t.Context(), repo)
+	wc, err := MakeCopy(t.Context(), repo, TestsRole, TestsRole.Branch(1), "HEAD")
 	require.NoError(t, err)
 	outside := t.TempDir()
 	writeFiles(t, outside, map[string]string{"gen/theirs.go": "theirs\n", "keep.txt": "keep\n"})
 	link := filepath.Join(wc.Project(), "eval", leftoverStage)
 	require.NoError(t, os.Symlink(outside, link))
 
-	_, err = testChecker.Prepare(t.Context(), wc, Suite{Module: "eval", Command: "./cmd/shop-evals"}, nil)
+	_, err = testChecker.Prepare(t.Context(), wc, Suite{Module: "eval", Command: "./cmd/shop-evals"}, TestsRole.Branch(1), "HEAD", nil)
 	var author *AuthorError
 	require.ErrorAs(t, err, &author, "a link the author placed is the author's to fix")
 	assert.Equal(t, FindingGeneration, author.Finding.Kind)

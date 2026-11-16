@@ -105,12 +105,14 @@ func TestWithoutAbsolutePathsKeepsURLsImportsAndRelativePaths(t *testing.T) {
 func TestCheckNamesFilesChangedOutsideTheTestModule(t *testing.T) {
 	t.Parallel()
 	suite := Suite{Module: "eval", Command: "./gen/cmd/shop-evals"}
+	branch := TestsRole.Branch(1)
 	t.Run("each change outside", func(t *testing.T) {
 		t.Parallel()
 		repo, _ := newProject(t, map[string]string{
 			"README.md": "shop\n", "docs/a.md": "a\n", "docs/b.md": "b\n", "eval/go.mod": "module example.com/shop/eval\n",
 		})
-		wc, err := OpenWorkingCopy(t.Context(), repo)
+		base := runGit(t, repo, "rev-parse", "HEAD")
+		wc, err := MakeCopy(t.Context(), repo, TestsRole, branch, "HEAD")
 		require.NoError(t, err)
 		writeFiles(t, wc.Dir(), map[string]string{"docs/b.md": "committed by the author\n"})
 		runGit(t, wc.Dir(), "commit", "--quiet", "-am", "The author's own commit")
@@ -119,7 +121,7 @@ func TestCheckNamesFilesChangedOutsideTheTestModule(t *testing.T) {
 		})
 		require.NoError(t, os.Remove(filepath.Join(wc.Dir(), "docs", "a.md")))
 
-		v, err := testChecker.Check(t.Context(), wc, suite, nil)
+		v, err := testChecker.Check(t.Context(), wc, suite, branch, base, nil)
 		require.NoError(t, err)
 		var named []string
 		for _, f := range v.Findings {
@@ -131,15 +133,16 @@ func TestCheckNamesFilesChangedOutsideTheTestModule(t *testing.T) {
 			assert.Contains(t, fmt.Sprint(named), p+" is changed outside the test module eval")
 		}
 		assert.NotContains(t, fmt.Sprint(named), "eval/hooks.go")
-		assert.Contains(t, named[0], "If you never changed it, the project's history was rewritten",
-			"a finding also explains a file the test writer never touched")
+		assert.Contains(t, named[0], "make it match its version in commit "+base,
+			"the goal still applies to a file the test writer never touched")
+		assert.NotContains(t, fmt.Sprint(named), "delete the project's")
 		assertNoAbsolutePath(t, v.Findings)
 	})
 	t.Run("a replace ref", func(t *testing.T) {
 		t.Parallel()
 		repo, _ := newProject(t, map[string]string{"README.md": "shop\n", "eval/go.mod": "module example.com/shop/eval\n"})
 		base := runGit(t, repo, "rev-parse", "HEAD")
-		wc, err := OpenWorkingCopy(t.Context(), repo)
+		wc, err := MakeCopy(t.Context(), repo, TestsRole, branch, "HEAD")
 		require.NoError(t, err)
 		writeFiles(t, wc.Dir(), map[string]string{"README.md": "committed by the author\n"})
 		runGit(t, wc.Dir(), "commit", "--quiet", "-am", "The author's own commit")
@@ -148,7 +151,7 @@ func TestCheckNamesFilesChangedOutsideTheTestModule(t *testing.T) {
 		fake := runGit(t, wc.Dir(), "commit-tree", "--no-gpg-sign", "HEAD^{tree}", "-m", "Start the project")
 		runGit(t, wc.Dir(), "replace", base, fake)
 
-		v, err := testChecker.Check(t.Context(), wc, suite, nil)
+		v, err := testChecker.Check(t.Context(), wc, suite, branch, base, nil)
 		require.NoError(t, err)
 		require.Len(t, v.Findings, 1, "%+v", v.Findings)
 		assert.Equal(t, FindingOutsideModule, v.Findings[0].Kind)
@@ -157,14 +160,15 @@ func TestCheckNamesFilesChangedOutsideTheTestModule(t *testing.T) {
 	t.Run("more than the bound", func(t *testing.T) {
 		t.Parallel()
 		repo, _ := newProject(t, map[string]string{"README.md": "shop\n", "eval/go.mod": "module example.com/shop/eval\n"})
-		wc, err := OpenWorkingCopy(t.Context(), repo)
+		base := runGit(t, repo, "rev-parse", "HEAD")
+		wc, err := MakeCopy(t.Context(), repo, TestsRole, branch, "HEAD")
 		require.NoError(t, err)
 		added := map[string]string{}
 		for i := range maxOutsideFindings + 5 {
 			added[fmt.Sprintf("extra/%02d.txt", i)] = "added\n"
 		}
 		writeFiles(t, wc.Dir(), added)
-		v, err := testChecker.Check(t.Context(), wc, suite, nil)
+		v, err := testChecker.Check(t.Context(), wc, suite, branch, base, nil)
 		require.NoError(t, err)
 		require.Len(t, v.Findings, maxOutsideFindings+1)
 		assert.Contains(t, v.Findings[maxOutsideFindings].Message, "5 more files outside the test module eval")
@@ -175,18 +179,19 @@ func TestCheckNamesFilesChangedOutsideTheTestModule(t *testing.T) {
 // the test module in each way the test writer can, some of them committed in
 // the copy, where restoring a file from the copy's own HEAD brings back the
 // committed change. Each finding names the copy's base commit and the step
-// that undoes its change: the command to run for a file the base has, and to
-// delete one it does not have. Following each step, from the project's
-// folder inside the copy, leaves no change outside the module.
+// that undoes its change as a goal, without a Git command or deletion recipe.
+// Satisfying each goal from the project's folder inside the copy leaves no
+// change outside the module.
 func TestTheOutsideModuleFindingNamesTheCommitToRestoreTo(t *testing.T) {
 	t.Parallel()
 	suite := Suite{Module: "eval", Command: "./gen/cmd/shop-evals"}
+	branch := TestsRole.Branch(1)
 	repo, _ := newProject(t, map[string]string{
 		"README.md": "shop\n", "services/shop/docs/a.md": "a\n", "services/shop/docs/b [c]*.md": "b\n",
 		"services/shop/eval/go.mod": "module example.com/shop/eval\n",
 	})
 	base := runGit(t, repo, "rev-parse", "HEAD")
-	wc, err := OpenWorkingCopy(t.Context(), filepath.Join(repo, "services", "shop"))
+	wc, err := MakeCopy(t.Context(), filepath.Join(repo, "services", "shop"), TestsRole, branch, "HEAD")
 	require.NoError(t, err)
 	writeFiles(t, wc.Dir(), map[string]string{
 		"services/shop/docs/b [c]*.md": "committed by the author\n", "go.work": "go 1.24\n",
@@ -196,7 +201,7 @@ func TestTheOutsideModuleFindingNamesTheCommitToRestoreTo(t *testing.T) {
 	writeFiles(t, wc.Dir(), map[string]string{"README.md": "edited\n", "notes.txt": "added\n"})
 	require.NoError(t, os.Remove(filepath.Join(wc.Dir(), "services", "shop", "docs", "a.md")))
 
-	v, err := testChecker.Check(t.Context(), wc, suite, nil)
+	v, err := testChecker.Check(t.Context(), wc, suite, branch, base, nil)
 	require.NoError(t, err)
 	// restored maps each changed file to whether the base has it.
 	restored := map[string]bool{
@@ -213,19 +218,20 @@ func TestTheOutsideModuleFindingNamesTheCommitToRestoreTo(t *testing.T) {
 		inBase, known := restored[name]
 		require.True(t, known, f.Message)
 		if !inBase {
-			assert.Contains(t, f.Message, "does not have this file: delete it")
+			assert.Contains(t, f.Message, "has no such file: make your working copy match that absence")
 			require.NoError(t, os.Remove(filepath.Join(wc.Dir(), filepath.FromSlash(name))))
 			continue
 		}
 		command := "git restore --source=" + base + " --staged --worktree -- " + shquote.Quote(":(top,literal)"+name)
-		assert.Contains(t, f.Message, command, "the finding gives the command that restores the file")
+		assert.Contains(t, f.Message, "make it match its version in commit "+base)
+		assert.NotContains(t, f.Message, "git restore", "the agent chooses how to satisfy the goal")
 		step := exec.CommandContext(t.Context(), "sh", "-c", command)
 		step.Dir = wc.Project()
 		out, err := step.CombinedOutput()
 		require.NoError(t, err, "%s: %s", command, out)
 	}
 
-	again, err := testChecker.Check(t.Context(), wc, suite, nil)
+	again, err := testChecker.Check(t.Context(), wc, suite, branch, base, nil)
 	require.NoError(t, err)
 	for _, f := range again.Findings {
 		assert.NotEqual(t, FindingOutsideModule, f.Kind, "following the steps left a change outside: %s", f.Message)
@@ -233,18 +239,90 @@ func TestTheOutsideModuleFindingNamesTheCommitToRestoreTo(t *testing.T) {
 }
 
 // TestCheckStopsWhenTheHistoryIsReplaced replaces the project's history with
-// an unrelated one, as rewriting it from its first commit does: Check stops
-// with ErrNoCommonBase, whose text names the step.
+// an unrelated one after the build's base B: Check measures against B rather
+// than the project's current HEAD, so it finds no change outside the test
+// module without treating unrelated project history as a failure. It also
+// verifies FindingWorkingCopy when
+// the copy is off its build branch or has a Git operation in progress.
 func TestCheckStopsWhenTheHistoryIsReplaced(t *testing.T) {
 	t.Parallel()
+	branch := TestsRole.Branch(1)
 	repo, _ := newProject(t, map[string]string{"README.md": "shop\n", "eval/go.mod": "module example.com/shop/eval\n"})
-	wc, err := OpenWorkingCopy(t.Context(), repo)
+	base := runGit(t, repo, "rev-parse", "HEAD")
+	wc, err := MakeCopy(t.Context(), repo, TestsRole, branch, "HEAD")
 	require.NoError(t, err)
 	runGit(t, repo, "switch", "--quiet", "--orphan", "rewritten")
-	writeFiles(t, repo, map[string]string{"README.md": "shop\n", "eval/go.mod": "module example.com/shop/eval\n"})
+	writeFiles(t, repo, map[string]string{"README.md": "rewritten on project\n", "eval/go.mod": "module example.com/shop/eval\n"})
 	runGit(t, repo, "add", "README.md", "eval/go.mod")
 	runGit(t, repo, "commit", "--quiet", "-m", "A new history")
 
-	_, err = testChecker.Check(t.Context(), wc, Suite{Module: "eval", Command: "./gen/cmd/shop-evals"}, nil)
-	require.ErrorIs(t, err, ErrNoCommonBase)
+	v, err := testChecker.Check(t.Context(), wc, Suite{Module: "eval", Command: "./gen/cmd/shop-evals"}, branch, base, nil)
+	require.NoError(t, err)
+	for _, f := range v.Findings {
+		assert.NotEqual(t, FindingOutsideModule, f.Kind, "measured from B, not the rewritten HEAD: %s", f.Message)
+		assert.NotEqual(t, FindingWorkingCopy, f.Kind)
+	}
+
+	t.Run("copy switched off its build branch", func(t *testing.T) {
+		runGit(t, wc.Dir(), "switch", "--quiet", "-c", "side-work")
+		t.Cleanup(func() { runGit(t, wc.Dir(), "switch", "--quiet", branch) })
+		v, err := testChecker.Check(t.Context(), wc, Suite{Module: "eval", Command: "./gen/cmd/shop-evals"}, branch, base, nil)
+		require.NoError(t, err)
+		require.Len(t, v.Findings, 1)
+		assert.Equal(t, FindingWorkingCopy, v.Findings[0].Kind)
+		assert.Contains(t, v.Findings[0].Message, "Your working copy (.surla-tests) is on branch 'side-work'.")
+		assert.Contains(t, v.Findings[0].Message, "Put your test files on surla/tests-1, uncommitted (Surla commits what it accepts), and report again.")
+	})
+
+	t.Run("copy has a merge in progress", func(t *testing.T) {
+		mergeHead := filepath.Join(wc.gitDir, "MERGE_HEAD")
+		require.NoError(t, os.WriteFile(mergeHead, []byte(base+"\n"), 0o600))
+		t.Cleanup(func() { require.NoError(t, os.Remove(mergeHead)) })
+		v, err := testChecker.Check(t.Context(), wc, Suite{Module: "eval", Command: "./gen/cmd/shop-evals"}, branch, base, nil)
+		require.NoError(t, err)
+		require.Len(t, v.Findings, 1)
+		assert.Equal(t, FindingWorkingCopy, v.Findings[0].Kind)
+		assert.Contains(t, v.Findings[0].Message, "Your working copy (.surla-tests) is on branch surla/tests-1 with a git merge in progress.")
+		assert.Contains(t, v.Findings[0].Message, "A merge is in progress in your working copy: abort it, then put your test files on surla/tests-1, uncommitted (Surla commits what it accepts), and report again.")
+		assert.NotContains(t, v.Findings[0].Message, "Finish")
+	})
+}
+
+// TestWorkingCopyFindingText checks the finding's prose against 9.9(4) and
+// rule 13(b): paths plain, the lock step when index.lock is present, and abort
+// for the test writer when an operation is in progress.
+func TestWorkingCopyFindingText(t *testing.T) {
+	t.Parallel()
+	repo, _ := newProject(t, map[string]string{"README.md": "shop\n", "eval/go.mod": "module example.com/shop/eval\n"})
+	base := runGit(t, repo, "rev-parse", "HEAD")
+	branch := TestsRole.Branch(1)
+	wc, err := MakeCopy(t.Context(), repo, TestsRole, branch, base)
+	require.NoError(t, err)
+	runGit(t, wc.Dir(), "switch", "--quiet", "-c", "side-work")
+	writeFiles(t, wc.Dir(), map[string]string{"eval/refund_test.go": "package eval\n"})
+	writeFiles(t, wc.gitDir, map[string]string{"index.lock": ""})
+	t.Cleanup(func() { _ = os.Remove(filepath.Join(wc.gitDir, "index.lock")) })
+	v, err := testChecker.Check(t.Context(), wc, Suite{Module: "eval", Command: "./gen/cmd/shop-evals"}, branch, base, nil)
+	require.NoError(t, err)
+	require.Len(t, v.Findings, 1)
+	msg := v.Findings[0].Message
+	assert.Contains(t, msg, "eval/refund_test.go", "path shown")
+	assert.NotContains(t, msg, "'eval/refund_test.go'", "9.9(4): prose shows paths plain")
+	assert.Contains(t, msg, "index.lock", "9.9(4): prose carries the lock step when a lock exists")
+
+	require.NoError(t, os.Remove(filepath.Join(wc.gitDir, "index.lock")))
+	runGit(t, wc.Dir(), "switch", "--quiet", branch)
+	writeFiles(t, wc.gitDir, map[string]string{"index.lock": ""})
+	v, err = testChecker.Check(t.Context(), wc, Suite{Module: "eval", Command: "./gen/cmd/shop-evals"}, branch, base, nil)
+	require.NoError(t, err)
+	for _, f := range v.Findings {
+		assert.NotEqual(t, FindingWorkingCopy, f.Kind, "index.lock on the build's branch with no operation in progress is not a working_copy finding")
+	}
+	require.NoError(t, os.Remove(filepath.Join(wc.gitDir, "index.lock")))
+
+	writeFiles(t, wc.gitDir, map[string]string{"MERGE_HEAD": base + "\n"})
+	v, err = testChecker.Check(t.Context(), wc, Suite{Module: "eval", Command: "./gen/cmd/shop-evals"}, branch, base, nil)
+	require.NoError(t, err)
+	require.Len(t, v.Findings, 1)
+	assert.NotContains(t, v.Findings[0].Message, "Finish", "rule 13(b): the test writer aborts, since finishing commits")
 }

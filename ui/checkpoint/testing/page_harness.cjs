@@ -122,6 +122,10 @@ async function openPage(origin, { link, hidden } = {}) {
     runScripts: "dangerously",
     pretendToBeVisual: true,
     beforeParse(win) {
+      // jsdom has no layout. These interaction checks use a desktop media
+      // observation; real-browser tests own viewport and reflow evidence.
+      win.matchMedia = (query) => ({ matches: false, media: query, onchange: null,
+        addEventListener() {}, removeEventListener() {} });
       Object.defineProperty(win.document, "hidden", { configurable: true, get: () => isHidden });
       Object.defineProperty(win.document, "visibilityState", {
         configurable: true,

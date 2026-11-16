@@ -1,18 +1,11 @@
 // This file prepares the required tests in a working copy, judges the copy
-// against a Story, and records an accepted copy as a commit.
+// against a Story, and records an accepted copy as a commit on its build
+// branch.
 //
-// Only files inside the test module may change. A check measures the copy's
-// changes from its base, the merge base of the surla/tests branch and the
-// project's HEAD (copyBase), so the test writer's own commits on the branch
-// count as changes too. Both refs are read through the project's repository,
-// though they are not a trust boundary: any program of the same user can
-// move a branch, so this is a separation of duties, not isolation. When the
-// project's history is rewritten (rebased, squashed or replaced), the merge
-// base moves back to an older commit, or disappears, and the check names
-// files outside the test module the test writer never touched, or stops with
-// ErrNoCommonBase. The user's step is then to delete the project's
-// .surla-tests folder and its surla/tests branch and build again, which
-// starts a new working copy at the project's commit.
+// Only files inside the test module may change. A check requires the copy to
+// have the build's tests branch checked out with no Git operation in progress,
+// and measures the copy's changes from the build's base commit, so the test
+// writer's own commits on the branch count as changes too.
 package testwriter
 
 import (
@@ -42,7 +35,6 @@ import (
 	"github.com/goadesign/surla/internal/designeval"
 	"github.com/goadesign/surla/internal/genpublish"
 	"github.com/goadesign/surla/internal/procgroup"
-	"github.com/goadesign/surla/internal/shquote"
 	"github.com/goadesign/surla/verify/candidate"
 	"github.com/goadesign/surla/verify/suite"
 )
@@ -73,7 +65,7 @@ type (
 		// share. The owner removes it.
 		workDir string
 		// build and list run a check's two steps that compile and run the
-		// author's code: candidate.Build and candidate.Output, each through
+		// author's code: candidate.BuildModule and candidate.Output, each through
 		// runInGroup. Tests wrap them with stand-ins that sleep.
 		build func(context.Context, candidate.BuildSpec, func(*exec.Cmd) error) error
 		list  func(context.Context, candidate.Artifact, candidate.Spec, int, func(*exec.Cmd) error) ([]byte, error)
@@ -113,14 +105,11 @@ type (
 	// FindingKind names the step of the check that failed.
 	FindingKind string
 
-	// AuthorError is a failure of Prepare that the working copy's author
-	// caused and can fix: the suite module cannot be opened (for example
-	// because a folder on its path is a symbolic link) or read, or its
-	// generation failed while working on the module's own files
-	// (designeval.FailedOnModule), such as a design that does not compile.
-	// Finding says what to change, worded as Check words the same failure.
-	// Callers find it with errors.As; any other error from Prepare is a
-	// failure the author cannot fix.
+	// AuthorError is a failure of Prepare or Record that the working copy's
+	// author can fix: generation failed on module files, a module path cannot
+	// be opened/read, or the copy's branch/checked tip changed before recording.
+	// Finding states the recovery with paths relative to the working copy.
+	// Callers find it with errors.As; other errors retain operational causes.
 	AuthorError struct {
 		// Finding is what the author must change, with paths relative to the
 		// working copy.
@@ -161,11 +150,17 @@ const (
 	FindingMissingScenario FindingKind = "missing_scenario"
 	// FindingOutsideModule means a file outside the test module differs
 	// from the copy's base. The message names the file, the base commit and
-	// the step that undoes the change.
+	// the required working-copy contents without a Git recipe.
 	FindingOutsideModule FindingKind = "outside_module"
 	// FindingHiddenTag means a declared scenario is tagged holdout. Tests in
 	// files the builder can read are not hidden.
 	FindingHiddenTag FindingKind = "hidden_tag"
+	// FindingWorkingCopy means the test writer's working copy is not on the
+	// build's tests branch, has a Git operation in progress, or its tip no
+	// longer belongs to that build. The message names the copy's state and
+	// tells the test writer to put its test
+	// files uncommitted on the build's tests branch and report again.
+	FindingWorkingCopy FindingKind = "working_copy"
 
 	// buildProgramLimit bounds one build of the test program. It
 	// compiles the test module and its dependencies with an empty or warm
@@ -192,13 +187,6 @@ const (
 	// exit, and how long its process group may take to empty.
 	groupStopGrace = 10 * time.Second
 )
-
-// ErrNoCommonBase reports a check that cannot measure the copy's changes: the
-// tests branch and the project's commit share no history, for example because
-// the project's history was rewritten from its first commit. The user's step
-// is to delete the .surla-tests folder and the surla/tests branch, then build
-// again.
-var ErrNoCommonBase = errors.New("the tests branch and the project share no history")
 
 // ErrGeneration and ErrWriteGenerated mark the two steps of Prepare and Check
 // that write the required tests, for a failure the copy's author cannot fix.
@@ -255,7 +243,7 @@ func NewChecker(evaluator *designeval.Evaluator, workDir string) *Checker {
 	return &Checker{
 		evaluator:  evaluator,
 		workDir:    workDir,
-		build:      candidate.Build,
+		build:      candidate.BuildModule,
 		list:       candidate.Output,
 		download:   downloadDependencies,
 		buildLimit: buildProgramLimit,
@@ -264,24 +252,52 @@ func NewChecker(evaluator *designeval.Evaluator, workDir string) *Checker {
 }
 
 // Record commits an accepted verdict's tree, exactly the files Check built
-// and described, on the working copy's branch with message and the user's own
-// git identity, never signed and with hooks disabled, and returns the commit. The message is
-// the commit message; it carries no attribution. When the branch already
-// holds that tree, as when the copy did not change since the last record, it
-// returns the branch's commit and makes none. Edits made in the copy after
-// the check are not recorded; they show as changes in the copy. A verdict
-// with findings or not made by Check, or an empty message, is refused.
-func Record(ctx context.Context, v Verdict, message string) (string, error) {
+// and described, on branch in the working copy's repository with message and
+// the user's own git identity, never signed and with hooks disabled, and
+// returns the commit. checkedTip is the full commit ID the caller checked
+// with CheckBuildCommit; the commit uses exactly that parent, or refuses if
+// the branch changed. The message carries no attribution. When the branch
+// already holds that tree, as when the copy did not change since the last
+// record, it returns the branch's commit and makes
+// none, after confirming that the tip still equals checkedTip. Edits made
+// after Check are not recorded. AuthorError marks a changed tip/branch or a
+// Git operation the author can fix. Other errors preserve operational causes;
+// if the reference was published but its index could not be updated, both the
+// returned commit and error name that publication. Empty branch, checkedTip
+// or message, and a verdict not made by Check or with findings are refused.
+func Record(
+	ctx context.Context, v Verdict, branch, checkedTip, message string,
+) (string, error) {
 	if !v.Accepted() {
 		return "", errors.New("record: the verdict has findings; only an accepted working copy is recorded")
 	}
 	if v.tree == "" {
 		return "", errors.New("record: the verdict did not come from Check")
 	}
+	if strings.TrimSpace(branch) == "" {
+		return "", errors.New("record: the branch is empty")
+	}
+	if strings.TrimSpace(checkedTip) == "" {
+		return "", errors.New("record: the checked tip is empty")
+	}
 	if strings.TrimSpace(message) == "" {
 		return "", errors.New("record: the commit message is empty")
 	}
-	return commitTree(ctx, v.copy, v.tree, message)
+	tip, err := v.copy.requireCommit(ctx, checkedTip)
+	if err != nil {
+		return "", err
+	}
+	if tip != checkedTip {
+		return "", errors.New("record: the checked tip must be a full commit ID")
+	}
+	rawBranch, facts, err := v.copy.readFacts(ctx)
+	if err != nil {
+		return "", err
+	}
+	if facts.Detached || rawBranch != branch || facts.Operation != "none" {
+		return "", &AuthorError{Finding: workingCopyFinding(branch, facts)}
+	}
+	return commitTree(ctx, v.copy, "refs/heads/"+branch, v.tree, checkedTip, message)
 }
 
 // WithoutAbsolutePaths replaces every absolute file path in text with
@@ -293,68 +309,86 @@ func WithoutAbsolutePaths(text string) string {
 	return absolutePath.ReplaceAllString(text, "${1}<absolute path>")
 }
 
-// Prepare writes the required tests for stories into the working copy: it
-// renders the copy's suite module's Story table (designeval.StoryTestsPath)
-// from stories, runs the design evaluator's generator on the module with it,
-// and writes the table and replaces the module's gen/ folder (and its
-// AGENTS_QUICKSTART.md) with the result. The table is a source file of the module's design, so the test
-// writer's own regeneration of the module keeps the required tests. It
-// returns the required scenarios, one per finished flow, named as
-// designeval.StoryScenarios names them. The project folder is not touched:
-// the module is opened one real folder at a time from the project folder
-// through the copy, and a symbolic link on the way is refused, naming it,
-// before anything is read or written.
+// Prepare writes the required tests for stories into the working copy on
+// branch at base: it first verifies that the copy has branch checked out with
+// no Git operation in progress, then renders the copy's
+// suite module's Story table (designeval.StoryTestsPath) from stories, runs
+// the design evaluator's generator on the module with it (comparing any
+// dependency failure against base), and writes the table and replaces the
+// module's gen/ folder (and its AGENTS_QUICKSTART.md) with the result. The
+// table is a source file of the module's design, so the test writer's own
+// regeneration of the module keeps the required tests. It returns the required
+// scenarios, one per finished flow, named as designeval.StoryScenarios names
+// them. The project folder is not touched: the module is opened one real
+// folder at a time from the project folder through the copy, and a symbolic
+// link on the way is refused, naming it, before anything is read or written.
 //
 // A failure the copy's author can fix is an *AuthorError carrying the finding
-// Check would give, worded relative to the copy; a symbolic link on the way
-// also wraps ErrLinkedFolder. Any other error is a failure the author cannot
-// fix. Two are marked so a caller can say what failed: ErrGeneration, when
-// the generator failed (the context ended, or it failed while preparing
-// its own files), and ErrWriteGenerated, when the generated folder could not
-// be written. A third is ErrDependencies: generation failed while loading the
+// Check would give, worded relative to the copy (including FindingWorkingCopy
+// when the copy is off branch or has a Git operation in progress); a symbolic
+// link on the way also wraps ErrLinkedFolder. Any
+// other error is a failure the author cannot fix. Two are marked so a caller
+// can say what failed: ErrGeneration, when the generator failed (the context
+// ended, or it failed while preparing its own files), and ErrWriteGenerated,
+// when the generated folder could not be written. A third is ErrDependencies: generation failed while loading the
 // module's dependencies, and they cannot be downloaded where Surla runs for a
-// cause outside the author's changes (loadFailure). A staging folder that an
-// interrupted publication left in the module is removed and never a failure
-// (publish).
+// cause outside the author's changes since base (loadFailure). A staging
+// folder that an interrupted publication left in the module is removed and
+// never a failure (publish).
 func (c *Checker) Prepare(
-	ctx context.Context, wc WorkingCopy, s Suite, stories []designeval.StorySummary,
+	ctx context.Context, wc WorkingCopy, s Suite, branch, base string, stories []designeval.StorySummary,
 ) ([]designeval.StoryScenario, error) {
 	if err := errors.Join(wc.opened(), s.validate()); err != nil {
 		return nil, err
+	}
+	if strings.TrimSpace(branch) == "" {
+		return nil, errors.New("prepare: the build's tests branch is empty")
+	}
+	baseCommit, err := wc.requireCommit(ctx, base)
+	if err != nil {
+		return nil, err
+	}
+	rawBranch, facts, err := wc.readFacts(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if facts.Detached || rawBranch != branch || facts.Operation != "none" {
+		return nil, &AuthorError{Finding: workingCopyFinding(branch, facts)}
 	}
 	rel, err := filepath.Rel(wc.dir, wc.project)
 	if err != nil {
 		return nil, err
 	}
 	modulePath := path.Join(filepath.ToSlash(rel), s.Module)
-	return c.generate(ctx, wc, filepath.Dir(wc.dir), filepath.Base(wc.dir), modulePath, s, stories)
+	return c.generate(ctx, wc, baseCommit, filepath.Dir(wc.dir), filepath.Base(wc.dir), modulePath, s, stories)
 }
 
-// Check judges the working copy against stories without trusting its author.
-// It snapshots the copy's files as a commit would hold them into a private
-// folder, compares them with the copy's base (copyBase), writes the suite
-// module's Story table there again from the stories (so the author cannot
-// change what is required) and generates its folder with it, downloads the
-// module's dependencies, compiles the generated suite command with
-// candidate.Build, lists the scenarios it declares by running its --describe
+// Check judges the working copy on branch against stories and base without
+// trusting its author. It first verifies that the copy has branch checked out
+// with no Git operation in progress, then snapshots the copy's files as a
+// commit would hold them into a private folder, compares them with base,
+// writes the suite module's Story table there again from the stories (so the
+// author cannot change what is required) and generates its folder with it,
+// downloads the module's dependencies, compiles the generated suite command with
+// candidate.BuildModule, lists the scenarios it declares by running its --describe
 // with candidate.Output, reading standard output alone, each in its own
 // process group, and compares them with the required ones by the generator's
 // own names.
 //
 // The verdict is accepted, or carries findings for the first step the
-// author's files failed: each file changed outside the test module, the
-// generation (including a module that does not declare exactly one
+// author's files failed: a working copy not on branch or with a Git operation
+// in progress (FindingWorkingCopy), each file changed outside the test module,
+// the generation (including a module that does not declare exactly one
 // evaluation suite), dependencies, the build (quoting the compiler, which
 // names a missing hook method), the listing, or each declared scenario
 // tagged holdout and each required scenario not declared. A build that does
 // not finish within buildProgramLimit, or a listing within listTestsLimit,
 // is a finding too. No finding holds an absolute path
 // (WithoutAbsolutePaths). The working copy itself is not written. Errors are
-// failures that say nothing about the author's work: ctx ended, the copy and
-// the project share no history (ErrNoCommonBase), the module's dependencies
-// cannot be downloaded where Surla runs for a cause outside the author's
-// changes (ErrDependencies), or git, the file system or the cleanup of the
-// build's or the listing's processes failed. ctx bounds the whole check.
+// failures that say nothing about the author's work: ctx ended, the module's
+// dependencies cannot be downloaded where Surla runs for a cause outside the
+// author's changes (ErrDependencies), or git, the file system or the build's
+// process cleanup failed. ctx bounds the whole check.
 //
 // The author's code runs as an ordinary process of the user, with the user's
 // file and network access. In its own folders, only time bounds what it
@@ -365,10 +399,24 @@ func (c *Checker) Prepare(
 // standard error and state, is removed when Check returns; the build cache
 // stays until the owner removes the Checker's folder.
 func (c *Checker) Check(
-	ctx context.Context, wc WorkingCopy, s Suite, stories []designeval.StorySummary,
+	ctx context.Context, wc WorkingCopy, s Suite, branch, base string, stories []designeval.StorySummary,
 ) (_ Verdict, err error) {
 	if err := errors.Join(wc.opened(), s.validate()); err != nil {
 		return Verdict{}, err
+	}
+	if strings.TrimSpace(branch) == "" {
+		return Verdict{}, errors.New("check: the build's tests branch is empty")
+	}
+	baseCommit, err := wc.requireCommit(ctx, base)
+	if err != nil {
+		return Verdict{}, err
+	}
+	rawBranch, facts, err := wc.readFacts(ctx)
+	if err != nil {
+		return Verdict{}, err
+	}
+	if facts.Detached || rawBranch != branch || facts.Operation != "none" {
+		return Verdict{Findings: []Finding{workingCopyFinding(branch, facts)}, copy: wc}, nil
 	}
 	if err := os.MkdirAll(c.workDir, 0o700); err != nil {
 		return Verdict{}, fmt.Errorf("create the check folder: %w", err)
@@ -394,18 +442,14 @@ func (c *Checker) Check(
 		return Verdict{}, err
 	}
 	modulePath := path.Join(filepath.ToSlash(rel), s.Module)
-	base, err := copyBase(ctx, wc)
+	changed, err := changedSince(ctx, wc, index, baseCommit)
 	if err != nil {
 		return Verdict{}, err
 	}
-	changed, err := changedSince(ctx, wc, index, base)
-	if err != nil {
-		return Verdict{}, err
-	}
-	if findings := outsideModule(changed, modulePath, base); len(findings) > 0 {
+	if findings := outsideModule(changed, modulePath, baseCommit); len(findings) > 0 {
 		return Verdict{Findings: findings, copy: wc}, nil
 	}
-	required, err := c.generate(ctx, wc, src, ".", modulePath, s, stories)
+	required, err := c.generate(ctx, wc, baseCommit, src, ".", modulePath, s, stories)
 	if author := (*AuthorError)(nil); errors.As(err, &author) {
 		return Verdict{Findings: []Finding{author.Finding}, copy: wc}, nil
 	}
@@ -416,7 +460,7 @@ func (c *Checker) Check(
 	if err != nil {
 		return Verdict{}, err
 	}
-	declared, findings, err := c.listScenarios(ctx, wc, tmp, src, modulePath, s.Command, &keep)
+	declared, findings, err := c.listScenarios(ctx, wc, baseCommit, tmp, src, modulePath, s.Command, &keep)
 	if err != nil {
 		return Verdict{}, err
 	}
@@ -610,17 +654,45 @@ func limitText(d time.Duration) string {
 	}
 }
 
-// outsideModule returns one finding per changed path that lies outside the
-// test module at modulePath, naming at most maxOutsideFindings and counting
-// the rest in one more finding. The module's own folder counts as inside: a
-// link put in its place is refused when the module is opened, with its own
-// finding. Each finding names base, the commit the copy's changes are measured
-// from, and the step that undoes the change whether or not the author
-// committed it in the copy: the git command that restores a file base has,
-// which names the file from the copy's root and literally, so it works from
-// any folder of the copy and for any file name, or deleting a file base does
-// not have. Restoring from the copy's own HEAD would bring a committed change
-// back, so the finding never leaves the commit unnamed.
+// workingCopyFinding words a FindingWorkingCopy for a test writer's working
+// copy that is not on branch or has a Git operation in progress.
+func workingCopyFinding(branch string, facts CopyFacts) Finding {
+	where := fmt.Sprintf("is on branch %s", ShownBranch(facts.Branch))
+	if facts.Detached {
+		where = "is on a detached HEAD"
+	}
+	var opClause string
+	if facts.Operation != "none" {
+		opClause = fmt.Sprintf(" with a git %s in progress", strings.ReplaceAll(facts.Operation, "_", "-"))
+	}
+	var uncommittedClause string
+	if facts.UncommittedCount > 0 {
+		listed := strings.Join(facts.Uncommitted, ", ")
+		if extra := facts.UncommittedCount - len(facts.Uncommitted); extra > 0 {
+			listed = fmt.Sprintf("%s, and %d more", listed, extra)
+		}
+		uncommittedClause = fmt.Sprintf(" Uncommitted files (%d): %s.", facts.UncommittedCount, listed)
+	}
+	goal := fmt.Sprintf("Put your test files on %s, uncommitted (Surla commits what it accepts), and report again.", branch)
+	if facts.Operation != "none" {
+		goal = fmt.Sprintf(
+			"A %s is in progress in your working copy: abort it, then put your test files on %s, uncommitted (Surla commits what it accepts), and report again.",
+			strings.ReplaceAll(facts.Operation, "_", "-"),
+			branch,
+		)
+	}
+	if facts.IndexLock != "" {
+		goal += " " + IndexLockStep("report_tests_finished", facts.IndexLock)
+	}
+	msg := fmt.Sprintf("Your working copy (%s) %s%s.%s %s",
+		TestsRole.Folder, where, opClause, uncommittedClause, goal)
+	return Finding{Kind: FindingWorkingCopy, Message: WithoutAbsolutePaths(msg)}
+}
+
+// outsideModule names changed paths outside the test module, bounded by
+// maxOutsideFindings plus one remainder count. Recovery states the required
+// working-copy contents relative to base, without prescribing Git commands or
+// deleting the copy/branch. A file absent from base must be absent from the copy.
 func outsideModule(changed []changedPath, modulePath, base string) []Finding {
 	var outside []changedPath
 	for _, c := range changed {
@@ -636,18 +708,14 @@ func outsideModule(changed []changedPath, modulePath, base string) []Finding {
 				len(outside)-i, modulePath, base)})
 			break
 		}
-		undo := fmt.Sprintf("restore it to commit %s, the base your working copy is measured from, by running "+
-			"git restore --source=%s --staged --worktree -- %s in your working copy, then report again.",
-			base, base, shquote.Quote(":(top,literal)"+c.path))
+		goal := fmt.Sprintf("make it match its version in commit %s, the build's base", base)
 		if c.added {
-			undo = fmt.Sprintf("commit %s, the base your working copy is measured from, does not have this file: "+
-				"delete it, then report again.", base)
+			goal = fmt.Sprintf("commit %s, the build's base, has no such file: make your working copy match that absence", base)
 		}
 		findings = append(findings, Finding{Kind: FindingOutsideModule, Message: WithoutAbsolutePaths(fmt.Sprintf(
-			"%s is changed outside the test module %s. Only files inside the test module may change: %s "+
-				"If you never changed it, the project's history was rewritten since your working copy was made: "+
-				"ask the user to delete the project's .surla-tests folder and its surla/tests branch, then build again.",
-			c.path, modulePath, undo))})
+			"%s is changed outside the test module %s. Only files inside the test module may change: %s; "+
+				"keep your own tests inside %s uncommitted (Surla commits what it accepts), then report again.",
+			c.path, modulePath, goal, modulePath))})
 	}
 	return findings
 }
@@ -772,7 +840,7 @@ func openFolder(dir *os.Root, name, walked string) (*os.Root, error) {
 // the author made to wc, which is an error wrapping ErrDependencies
 // (loadFailure).
 func (c *Checker) generate(
-	ctx context.Context, wc WorkingCopy, top, copyDir, modulePath string, s Suite,
+	ctx context.Context, wc WorkingCopy, base, top, copyDir, modulePath string, s Suite,
 	stories []designeval.StorySummary,
 ) (_ []designeval.StoryScenario, err error) {
 	copyRoot := filepath.Join(top, filepath.FromSlash(copyDir))
@@ -829,7 +897,7 @@ func (c *Checker) generate(
 			// The load may have failed because the dependencies cannot be
 			// downloaded where Surla runs, which is not the author's to fix
 			// unless the author's own lists are what cannot be downloaded.
-			depErr := c.loadFailure(ctx, wc, modulePath, files)
+			depErr := c.loadFailure(ctx, wc, base, modulePath, files)
 			switch {
 			case errors.Is(depErr, ErrDependencies):
 				return nil, depErr
@@ -891,8 +959,8 @@ func writeStoryTests(root *os.Root, table []byte) (err error) {
 }
 
 // listScenarios builds the suite command of the module at the slash path
-// modulePath of the snapshot src within c.buildLimit, runs its --describe
-// within c.listLimit, each in its own process group, and returns the
+// modulePath of the snapshot src with workspaces off within c.buildLimit,
+// runs its --describe within c.listLimit, each in its own process group, and returns the
 // scenarios it declares, or findings when the module's dependencies, its build
 // or its listing fail or reach their limit. Dependencies that cannot be
 // downloaded for a cause outside the author's changes to wc are an error
@@ -900,7 +968,7 @@ func writeStoryTests(root *os.Root, table []byte) (err error) {
 // private folder; keep is set when processes the build or the listing started
 // may still use it.
 func (c *Checker) listScenarios(
-	ctx context.Context, wc WorkingCopy, tmp, src, modulePath, command string, keep *bool,
+	ctx context.Context, wc WorkingCopy, baseCommit, tmp, src, modulePath, command string, keep *bool,
 ) ([]suite.DeclaredScenario, []Finding, error) {
 	moduleDir := filepath.Join(src, filepath.FromSlash(modulePath))
 	finding := func(kind FindingKind, message string) []Finding {
@@ -918,7 +986,7 @@ func (c *Checker) listScenarios(
 		if err != nil {
 			return nil, nil, err
 		}
-		base, err := c.dependencyFailure(ctx, wc, tc.goBin(), modulePath, lists)
+		base, err := c.dependencyFailure(ctx, wc, baseCommit, tc.goBin(), modulePath, lists)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -951,12 +1019,13 @@ func (c *Checker) listScenarios(
 	reached, err := withinLimit(ctx, time.Now, c.buildLimit, func(ctx context.Context) error {
 		return c.build(ctx, candidate.BuildSpec{
 			SourceDir: src, ModuleDir: moduleDir, Package: command, Out: bin,
-			GOROOT: tc.goroot, ModCache: modCache, WorkDir: buildHome, LogFile: buildLog,
+			GOROOT: tc.goroot, ModCache: modCache, WorkDir: buildHome, BuildCacheDir: filepath.Join(buildHome, "gocache"), LogFile: buildLog,
 		}, runInGroup(keep))
 	})
 	if reached && !*keep {
 		return nil, finding(FindingBuild, fmt.Sprintf("The test program did not finish building within %s. "+
-			"Make the test module build faster, for example with fewer or smaller dependencies, then report again.",
+			"Report again: the retained build cache can reuse compilation that completed. "+
+			"If it still does not finish, make the test module build faster, for example with fewer or smaller dependencies.",
 			limitText(c.buildLimit))), nil
 	}
 	if err != nil {

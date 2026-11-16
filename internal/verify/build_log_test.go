@@ -76,7 +76,7 @@ func TestPrepareNamesTheBuildLogOnlyInThePrivateError(t *testing.T) {
 				SuiteCommand:    "./cmd/suite",
 				WorkDir:         workDir,
 				Tests:           TestsEvaluator,
-			})
+			}, t.TempDir())
 			var stage *StageError
 			require.True(t, errors.As(err, &stage), "error %v is not a *StageError", err)
 			assert.Equal(t, StageBuild, stage.Stage)
