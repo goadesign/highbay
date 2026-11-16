@@ -558,7 +558,8 @@ func (c *Client) GetStoryRefresh(ctx context.Context) (res *StoryRefreshResult, 
 
 // UpdateDraft calls the "update_draft" endpoint of the "surla" service.
 // UpdateDraft may return the following errors:
-//   - "unprocessable" (type *goa.ServiceError): The project folder holds no go.mod, so there is no draft (run init_project or create go.mod), or a file there could not be read; the message names it.
+//   - "unprocessable" (type *goa.ServiceError): Surla could not read what the update needs; the message names the file or folder. The project folder holds no go.mod, so there is no draft (run init_project or create go.mod), or was replaced after startup; the draft is a link or a file rather than a folder, its .gitignore lacks Surla's draft marker, or its made-from list is missing; the draft or its made-from list changed while Surla was first making the draft; the go.mod of the draft or of the project folder is missing, or a go.mod, go.sum or design file there is not a regular file, cannot be read or is not valid UTF-8; or a design file in the project's current commit cannot be parsed as Go or is a link. The guide corrects a file of its draft and asks the user to correct one of the project folder or of its commit, then calls update_draft again.
+//   - "conflict" (type *goa.ServiceError): The project's commit, the draft, the project's go.mod, go.sum or design files, or the draft's made-from list changed while Surla prepared the update. Surla brought no change into the draft; call update_draft again.
 //   - "not_implemented" (type *goa.ServiceError): No workspace directory is bound to this control plane; start Surla from a project directory.
 //   - "unavailable" (type *goa.ServiceError): The control plane is shutting down.
 //   - "forbidden" (type *goa.ServiceError): The authenticated caller may not perform this operation or does not own the resource.

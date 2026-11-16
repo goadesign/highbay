@@ -117,7 +117,9 @@ For each change:
 
 1. The guide calls `update_draft` before drafting a new change, writes only
    in the draft folder it returns and corrects the files it reports as needing
-   correction. It calls `update_draft` again until none remain, then calls
+   correction there. When a file to correct is in the project folder, the
+   guide tells you what to correct and waits: it never edits the project
+   folder. It calls `update_draft` again until none remain, then calls
    `refresh_story`, waits for success and uses that evaluated draft with
    `propose_change`, or `revise_change` when the change is refined.
    You confirm it on the views page, which

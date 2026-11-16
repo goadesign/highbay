@@ -39,6 +39,10 @@ const (
 	draftMarkerPrefix = "# surla draft "
 )
 
+// errCommittedDesignNotRegular marks a committed design path that is a link
+// or a submodule, which the user removes or replaces with a regular file.
+var errCommittedDesignNotRegular = errors.New("is a link or submodule")
+
 // Error preserves the original diagnostic text for existing draft consumers.
 func (e *committedDesignCanonicalError) Error() string { return e.cause.Error() }
 
@@ -642,7 +646,7 @@ func committedDesignFiles(ctx context.Context, dir, repo, prefix, commit string)
 			continue
 		}
 		if entries[file] == "120000" || entries[file] == "160000" {
-			return nil, fmt.Errorf("committed design %s is a link or submodule", file)
+			return nil, fmt.Errorf("committed design %s %w", file, errCommittedDesignNotRegular)
 		}
 		if !strings.HasSuffix(file, ".go") || strings.HasSuffix(file, "_test.go") {
 			continue

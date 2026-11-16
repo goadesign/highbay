@@ -915,8 +915,8 @@ type UpdateDraftResponseBody struct {
 	// Design files where the project folder's change and the draft's edits merged
 	// without conflict, in path order.
 	Merged []string `form:"merged" json:"merged" xml:"merged"`
-	// Files to correct in the draft before refreshing, in path order; empty when
-	// none.
+	// Files to correct before refreshing, each in the folder it names, in path
+	// order; empty when none.
 	ToCorrect []*DraftCorrectionResponseBody `form:"to_correct" json:"to_correct" xml:"to_correct"`
 }
 
@@ -3339,6 +3339,24 @@ type UpdateDraftUnprocessableResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// UpdateDraftConflictResponseBody is the type of the "surla" service
+// "update_draft" endpoint HTTP response body for the "conflict" error.
+type UpdateDraftConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // UpdateDraftNotImplementedResponseBody is the type of the "surla" service
 // "update_draft" endpoint HTTP response body for the "not_implemented" error.
 type UpdateDraftNotImplementedResponseBody struct {
@@ -5001,13 +5019,22 @@ type TraceSpanResponseBody struct {
 
 // DraftCorrectionResponseBody is used to define fields on response body types.
 type DraftCorrectionResponseBody struct {
-	// Path relative to the draft folder, such as design/types.go or go.mod.
+	// Path relative to the folder that folder names, such as design/types.go or
+	// go.mod.
 	Path string `form:"path" json:"path" xml:"path"`
-	// What to correct: conflict markers where the draft and the project folder
-	// changed the same lines; a file removed on one side and changed on the other;
-	// a draft file Go cannot parse, with its line; or a module the project's
-	// go.mod requires at another version than the draft's, or that the draft's
-	// lacks, including differing replace directives.
+	// Which folder holds the file to correct: draft_folder is the guide's draft,
+	// at the result's draft_folder; project_folder is the user's project folder,
+	// which holds the draft.
+	Folder string `form:"folder" json:"folder" xml:"folder"`
+	// What to correct. In the draft: conflict markers where the draft and the
+	// project folder changed the same lines; a file removed on one side and
+	// changed on the other; a draft file Go cannot parse, with its line; a file
+	// whose project change Surla took without merging, or was writing when it
+	// stopped, to check that it holds the intended edits once; or a module the
+	// project's go.mod requires at another version than the draft's, or that the
+	// draft's lacks, including differing replace directives and a differing module
+	// path. In the project folder: a design file or go.mod there that cannot be
+	// parsed, with its line, or a go.mod that declares no module.
 	Problem string `form:"problem" json:"problem" xml:"problem"`
 }
 
@@ -5104,9 +5131,10 @@ type StartedBuildResponseBody struct {
 	RequiredTestCount int `form:"required_test_count" json:"required_test_count" xml:"required_test_count"`
 	// Whether the user has taken this build: building until a verification of it
 	// passes; passed with the commits to merge; merged once the branch checked out
-	// in the project folder holds both commits of one passed run; dropped once the
-	// user dropped it. A project has one open build, and another change is built
-	// only once it is merged or dropped.
+	// in the project folder holds the commits of one passed run, the builder's
+	// and, for written tests, the tests'; dropped once the user dropped it. A
+	// project has one open build, and another change is built only once it is
+	// merged or dropped.
 	Taking BuildTakingResponseBody `form:"taking" json:"taking" xml:"taking"`
 }
 
@@ -11185,6 +11213,20 @@ func NewGetStoryRefreshForbiddenResponseBody(res *goa.ServiceError) *GetStoryRef
 // the result of the "update_draft" endpoint of the "surla" service.
 func NewUpdateDraftUnprocessableResponseBody(res *goa.ServiceError) *UpdateDraftUnprocessableResponseBody {
 	body := &UpdateDraftUnprocessableResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdateDraftConflictResponseBody builds the HTTP response body from the
+// result of the "update_draft" endpoint of the "surla" service.
+func NewUpdateDraftConflictResponseBody(res *goa.ServiceError) *UpdateDraftConflictResponseBody {
+	body := &UpdateDraftConflictResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,

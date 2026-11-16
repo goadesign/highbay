@@ -915,8 +915,8 @@ type UpdateDraftResponseBody struct {
 	// Design files where the project folder's change and the draft's edits merged
 	// without conflict, in path order.
 	Merged []string `form:"merged,omitempty" json:"merged,omitempty" xml:"merged,omitempty"`
-	// Files to correct in the draft before refreshing, in path order; empty when
-	// none.
+	// Files to correct before refreshing, each in the folder it names, in path
+	// order; empty when none.
 	ToCorrect []*DraftCorrectionResponseBody `form:"to_correct,omitempty" json:"to_correct,omitempty" xml:"to_correct,omitempty"`
 }
 
@@ -3339,6 +3339,24 @@ type UpdateDraftUnprocessableResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
+// UpdateDraftConflictResponseBody is the type of the "surla" service
+// "update_draft" endpoint HTTP response body for the "conflict" error.
+type UpdateDraftConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
 // UpdateDraftNotImplementedResponseBody is the type of the "surla" service
 // "update_draft" endpoint HTTP response body for the "not_implemented" error.
 type UpdateDraftNotImplementedResponseBody struct {
@@ -5001,13 +5019,22 @@ type TraceSpanResponseBody struct {
 
 // DraftCorrectionResponseBody is used to define fields on response body types.
 type DraftCorrectionResponseBody struct {
-	// Path relative to the draft folder, such as design/types.go or go.mod.
+	// Path relative to the folder that folder names, such as design/types.go or
+	// go.mod.
 	Path *string `form:"path,omitempty" json:"path,omitempty" xml:"path,omitempty"`
-	// What to correct: conflict markers where the draft and the project folder
-	// changed the same lines; a file removed on one side and changed on the other;
-	// a draft file Go cannot parse, with its line; or a module the project's
-	// go.mod requires at another version than the draft's, or that the draft's
-	// lacks, including differing replace directives.
+	// Which folder holds the file to correct: draft_folder is the guide's draft,
+	// at the result's draft_folder; project_folder is the user's project folder,
+	// which holds the draft.
+	Folder *string `form:"folder,omitempty" json:"folder,omitempty" xml:"folder,omitempty"`
+	// What to correct. In the draft: conflict markers where the draft and the
+	// project folder changed the same lines; a file removed on one side and
+	// changed on the other; a draft file Go cannot parse, with its line; a file
+	// whose project change Surla took without merging, or was writing when it
+	// stopped, to check that it holds the intended edits once; or a module the
+	// project's go.mod requires at another version than the draft's, or that the
+	// draft's lacks, including differing replace directives and a differing module
+	// path. In the project folder: a design file or go.mod there that cannot be
+	// parsed, with its line, or a go.mod that declares no module.
 	Problem *string `form:"problem,omitempty" json:"problem,omitempty" xml:"problem,omitempty"`
 }
 
@@ -5104,9 +5131,10 @@ type StartedBuildResponseBody struct {
 	RequiredTestCount *int `form:"required_test_count,omitempty" json:"required_test_count,omitempty" xml:"required_test_count,omitempty"`
 	// Whether the user has taken this build: building until a verification of it
 	// passes; passed with the commits to merge; merged once the branch checked out
-	// in the project folder holds both commits of one passed run; dropped once the
-	// user dropped it. A project has one open build, and another change is built
-	// only once it is merged or dropped.
+	// in the project folder holds the commits of one passed run, the builder's
+	// and, for written tests, the tests'; dropped once the user dropped it. A
+	// project has one open build, and another change is built only once it is
+	// merged or dropped.
 	Taking *BuildTakingResponseBody `form:"taking,omitempty" json:"taking,omitempty" xml:"taking,omitempty"`
 }
 
@@ -11020,6 +11048,21 @@ func NewUpdateDraftUnprocessable(body *UpdateDraftUnprocessableResponseBody) *go
 	return v
 }
 
+// NewUpdateDraftConflict builds a surla service update_draft endpoint conflict
+// error.
+func NewUpdateDraftConflict(body *UpdateDraftConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
 // NewUpdateDraftNotImplemented builds a surla service update_draft endpoint
 // not_implemented error.
 func NewUpdateDraftNotImplemented(body *UpdateDraftNotImplementedResponseBody) *goa.ServiceError {
@@ -16685,6 +16728,30 @@ func ValidateUpdateDraftUnprocessableResponseBody(body *UpdateDraftUnprocessable
 	return
 }
 
+// ValidateUpdateDraftConflictResponseBody runs the validations defined on
+// UpdateDraftConflictResponseBody
+func ValidateUpdateDraftConflictResponseBody(body *UpdateDraftConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
 // ValidateUpdateDraftNotImplementedResponseBody runs the validations defined
 // on UpdateDraftNotImplementedResponseBody
 func ValidateUpdateDraftNotImplementedResponseBody(body *UpdateDraftNotImplementedResponseBody) (err error) {
@@ -19895,8 +19962,16 @@ func ValidateDraftCorrectionResponseBody(body *DraftCorrectionResponseBody) (err
 	if body.Path == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("path", "body"))
 	}
+	if body.Folder == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("folder", "body"))
+	}
 	if body.Problem == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("problem", "body"))
+	}
+	if body.Folder != nil {
+		if !(*body.Folder == "draft_folder" || *body.Folder == "project_folder") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.folder", *body.Folder, []any{"draft_folder", "project_folder"}))
+		}
 	}
 	return
 }
@@ -19907,8 +19982,16 @@ func validateDraftCorrectionResponseBody(body *DraftCorrectionResponseBody, path
 	if body.Path == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("path", path))
 	}
+	if body.Folder == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("folder", path))
+	}
 	if body.Problem == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("problem", path))
+	}
+	if body.Folder != nil {
+		if !(*body.Folder == "draft_folder" || *body.Folder == "project_folder") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError(path+".folder", *body.Folder, []any{"draft_folder", "project_folder"}))
+		}
 	}
 	return
 }
