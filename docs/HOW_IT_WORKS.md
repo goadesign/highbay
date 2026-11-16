@@ -194,10 +194,10 @@ manager approves it."
      the test writer's working copies (`.surla-build` and `.surla-tests`).
    - In a project made another way, the design can import the Story language
      only when the draft's `go.mod` requires its module. When it does not,
-     the failed evaluation names the step: in the folder that holds that
-     `go.mod`, run `go get github.com/goadesign/surla/story@<version>`, at the
-     version Surla's own `go.mod` requires, commit `go.mod` and `go.sum`, then
-     try again.
+     the failed evaluation names the step: “`In the folder that holds that
+     go.mod, run: go get github.com/goadesign/surla/story@<version>, then try
+     again.`” The version is the one Surla's own `go.mod` requires. The guide
+     runs the command in its draft, whose `go.mod` was evaluated.
 2. **The guide proposes the change.** It calls `propose_change` with your
    request, its analysis and the Story refresh it made, which a project with a
    `go.mod` requires. Surla runs no model for this step. It checks the analysis's shape,
@@ -279,7 +279,7 @@ The reference gives the exact contract of
    (`previous_change_open`), when rebuilding an unfinished open build without
    confirming replacement (`unfinished_build_open`), when the revision was
    drafted before a drop (`drafted_before_drop`) or a design file at the
-   project's commit was changed outside Surla (`design_changed_outside`), when
+   build's base commit was changed outside Surla (`design_changed_outside`), when
    the card is not confirmed or the revision is not the agreed one, or when
    the project lacks a Git repository with at least one commit, a Git name and
    address, the test module `surla init` makes (`eval/` in the project folder,

@@ -104,6 +104,7 @@ await control(origin, "reply", { key: "GET /team", status: 503, body: { name: "u
 page.$("#surla-team-refresh").click();
 await until(() => page.$("#surla-team-read-error"), "read failure was not shown");
 expect(page.text("#surla-team-read-error") === "Could not read the project team. Team owner unavailable.", "Team did not name the failed read before the raw diagnostic: " + page.text("#surla-team-read-error"));
+expect(page.$("#surla-team-read-error").getAttribute("role") === "alert", "the failed Team read is not announced as an alert");
 expect(page.text("#surla-team-stale").includes("Last-read"), "retained facts are presented as current");
 expect(page.text("#surla-team-attention-builder").includes("Last read:"), "global attention is presented as current after read failure");
 expect(page.$("#surla-team-role-builder").dataset.state === "needs_you", "failed read discarded known facts");

@@ -225,7 +225,7 @@ func init() { time.Sleep(30 * time.Second) }`, 1)
 	require.NoError(t, err, "the limit is reached during the marking read")
 	failure, ok := assignment.Progress.Tests.AsCouldNotRun()
 	require.True(t, ok)
-	assert.Equal(t, "The build-start time limit ended before the required tests could be prepared.", failure.Reason)
+	assert.Equal(t, "The time limit for reading the test writer's assignment ended before the required tests could be prepared.", failure.Reason)
 	assert.Equal(t, "Build this change again on the views page.", failure.Step)
 }
 

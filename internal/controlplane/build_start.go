@@ -399,7 +399,7 @@ func confirmedAnswers(card *gensurla.ChangeCardResult) []*gensurla.ConfirmedAnsw
 
 // preparationFailure returns the reason and the user's step saved when a
 // build's required tests could not be prepared for a cause the test writer
-// cannot fix. ctx is the start's limit and err what the preparation returned.
+// cannot fix. ctx is the assignment read's limit and err what preparation returned.
 // The reason says which step failed: the limit or a server stop, a download
 // of the test module's dependencies that fails for a cause outside the test
 // writer's changes (testwriter.ErrDependencies, whose step has the user run
@@ -408,12 +408,12 @@ func confirmedAnswers(card *gensurla.ChangeCardResult) []*gensurla.ConfirmedAnsw
 // generated folder, whose cause is quoted without absolute paths and whose
 // step names what to repair before building again.
 // Any other failure has no text safe to show: its reason points at the server
-// trace, where StartBuild records the cause.
+// trace of the test writer's assignment read, which records the cause.
 func preparationFailure(ctx context.Context, err error) (reason, step string) {
 	const buildAgain = "Build this change again on the views page."
 	switch {
 	case errors.Is(ctx.Err(), context.DeadlineExceeded):
-		return "The build-start time limit ended before the required tests could be prepared.", buildAgain
+		return "The time limit for reading the test writer's assignment ended before the required tests could be prepared.", buildAgain
 	case errors.Is(ctx.Err(), context.Canceled):
 		return "The server stopped before the required tests could be prepared.", buildAgain
 	case errors.Is(err, testwriter.ErrDependencies):
@@ -426,7 +426,7 @@ func preparationFailure(ctx context.Context, err error) (reason, step string) {
 			testwriter.WithoutAbsolutePaths(err.Error()), stepWriteCopy + ", then build this change again on the views page."
 	default:
 		return "Surla could not prepare the required tests, for a cause outside the test module. " +
-			"The server trace of this build start has the details.", buildAgain
+			"The server trace of the test writer's assignment read has the details.", buildAgain
 	}
 }
 
