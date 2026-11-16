@@ -201,40 +201,44 @@ const open = async (changeId) => {
 const refresh = async () => {
   const reads = page.sent("GET", "/changes/chg-approved").length;
   page.$("#surla-cp5-refresh-approval").click();
-  await until(() => page.sent("GET", "/changes/chg-approved").length > reads && !page.$("#surla-confirm-submit").disabled, "checking the approval did not finish");
+  await until(() => page.sent("GET", "/changes/chg-approved").length > reads && !page.$("#surla-cp5-refresh-approval").disabled, "checking the approval did not finish");
 };
 await until(() => page.$("#surla-change-list"), "the page did not list the changes");
 
 // State 1: no record.
 await open("chg-unapproved");
-expect(!page.$("#surla-cp5-approval") && !page.$("#surla-cp5-unverified-approval"), "State 1 (no record) must not render an approval");
+expect(!page.$("#surla-cp5-approval"), "State 1 (no record) must not render an approval");
 
 // State 2: a current approval.
 await open("chg-approved");
-expect(page.$("#surla-cp5-approval") && !page.$("#surla-cp5-unverified-approval"), "State 2 (current) must render #surla-cp5-approval only");
+page.$("#surla-review-approval").click();
+await until(() => page.$("#surla-cp5-approval"), "the saved approval did not open");
+expect(page.$('#surla-cp5-approval[data-approval-state="recorded"]'), "State 2 (current) must render #surla-cp5-approval only");
 
 // State 3: changed inputs hide the approval.
 await control(origin, "act", { key: "inputs-changed" });
 await refresh();
-expect(!page.$("#surla-cp5-approval") && !page.$("#surla-cp5-unverified-approval"), "State 3 (changed inputs) must render neither approval");
+expect(!page.$("#surla-cp5-approval"), "State 3 (changed inputs) must render neither approval");
 
 // State 4: inputs the target cannot report give an honest, path-free unverified approval.
 await control(origin, "act", { key: "inputs-unreadable" });
 await open("chg-unapproved");
 await open("chg-approved");
+page.$("#surla-review-approval").click();
+await until(() => page.$("#surla-cp5-approval"), "the saved approval did not open");
 const reason = page.text("#surla-cp5-unverified-approval-reason");
-expect(!page.$("#surla-cp5-approval") && page.$("#surla-cp5-unverified-approval") && reason.includes("because the release binaries could not be read") && reason.includes("in a folder named after the commit") && reason.includes("Check current approval") && !reason.includes("/") && !reason.includes("/var/lib/surla") && page.$("#surla-cp5-unverified-approval-details") && page.$("#surla-cp5-refresh-approval"), "State 4 (unavailable target) did not render an honest path-free #surla-cp5-unverified-approval: " + reason);
+expect(page.$('#surla-cp5-approval[data-approval-state="unverified"]') && reason.includes("because the release binaries could not be read") && reason.includes("in a folder named after the commit") && reason.includes("Check current approval") && !reason.includes("/") && !reason.includes("/var/lib/surla") && page.$("#surla-cp5-refresh-approval"), "State 4 (unavailable target) did not render an honest path-free #surla-cp5-unverified-approval: " + reason);
 
 // State 5: removing promotion settings or restoring the release binaries recovers #surla-cp5-approval through the check control.
 await control(origin, "act", { key: "absent" });
 await refresh();
-expect(page.$("#surla-cp5-approval") && !page.$("#surla-cp5-unverified-approval"), "State 5 (absent target) did not keep #surla-cp5-approval without promotion settings");
+expect(page.$('#surla-cp5-approval[data-approval-state="recorded"]'), "State 5 (absent target) did not keep #surla-cp5-approval without promotion settings");
 await control(origin, "act", { key: "inputs-unreadable" });
 await refresh();
-expect(!page.$("#surla-cp5-approval") && page.$("#surla-cp5-unverified-approval"), "returning to unreadable binaries did not show #surla-cp5-unverified-approval");
+expect(page.$('#surla-cp5-approval[data-approval-state="unverified"]'), "returning to unreadable binaries did not show #surla-cp5-unverified-approval");
 await control(origin, "act", { key: "restored" });
 await refresh();
-expect(page.$("#surla-cp5-approval") && !page.$("#surla-cp5-unverified-approval"), "checking after the target recovered did not show #surla-cp5-approval");
+expect(page.$('#surla-cp5-approval[data-approval-state="recorded"]'), "checking after the target recovered did not show #surla-cp5-approval");
 page.close();
 `)
 }

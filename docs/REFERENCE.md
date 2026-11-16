@@ -404,7 +404,7 @@ that differs from the binary the run verified, prevents approval; the
 refusal names no folder path and ends with the step "publish the binaries
 the run built, whose folder the run's Proof view shows, into the release
 folder that the promotion settings name, in a folder named after the commit,
-or remove the promotion settings". The Proof view shows the selected run's
+or remove the promotion settings". The Check view shows the selected run's
 actual source folder under **Binaries built by this run**, as selectable code;
 the approval error panel repeats it. Without promotion settings, an approval
 records no release binaries. A stored file the server cannot accept, such
@@ -1442,7 +1442,7 @@ For a completed run, get and list responses also include optional
 `candidate_binaries_dir` when the caller is the user and the server has
 promotion settings. It names the actual folder of binaries built by that
 run, read from its recorded plan, rather than a reconstructed run layout.
-Agents never receive this path. The Proof view shows it under **Binaries
+Agents never receive this path. The Check view shows it under **Binaries
 built by this run**, as selectable code, and repeats it in the approval
 error panel for that selected run.
 
@@ -1475,8 +1475,11 @@ Returns the same run status and builder-safe report fields as
 the current build, selected tests, report, candidate membership and configured
 release artifacts. It is not a reservation: `approve_merge` rechecks and may
 refuse a change that happens after the read. A failed observation withholds
-approval and explains recovery. Reading records no approval, merge or deployment
-and changes no assignment or build state. Run IDs and authorization are checked
+approval and explains recovery. If current promotion settings cannot be read,
+this read retains the saved run evidence and omits promotion-only binary-folder
+metadata; the shared `get_verification` read retains its existing failure
+behavior. Reading records no approval, merge or deployment and changes no
+assignment or build state. Run IDs and authorization are checked
 by the same owner as `get_verification`; unknown runs return `not_found` (`404`).
 
 #### `list_verifications`
@@ -1550,8 +1553,8 @@ status, including `unset`, which does not prove success. `unprocessable`
 
 ## Builds and assignments
 
-**Input:** the user's start button in the Build section of the Decisions &
-Approval view, such as **Build this change** for a first build.
+**Input:** the user's start button in Build, such as **Build this change**
+for a first build.
 **Who acts:** the server saves the agreed revision's Story and design, with
 the answers, examples and preserved behaviors the user confirmed for it,
 creates any missing `.surla-build` and `.surla-tests` working copies, gives the
@@ -2143,14 +2146,15 @@ holds it beside them (**Switch to Incoming Card**).
 
 | View | What it shows and does |
 | --- | --- |
-| **Changes** | The project's changes ([`list_changes`](#list_changes)), opening directly on the only one. With none: `This project has no changes yet. Ask the guide to propose a change; it appears here by itself.` A change with a waiting proposed revision is marked **New revision proposed**. Each change shows its latest saved run, such as **Latest saved run: passed**, or **No saved runs**, and under a run what `inputs_current` says: `Matches the agreed revision and selected tests.` or `Earlier inputs or no current test selection. Ask the builder for a check of the agreed revision and selected tests.` |
+| **Describe** | The project's changes ([`list_changes`](#list_changes)), opening directly on the only one. With none: `This project has no changes yet. Ask the guide to propose a change; it appears here by itself.` A change with a waiting proposed revision is marked **New revision proposed**. Each change shows its latest saved run, such as **Latest saved run: passed**, or **No saved runs**, and under a run what `inputs_current` says: `Matches the agreed revision and selected tests.` or `Earlier inputs or no current test selection. Ask the builder for a check of the agreed revision and selected tests.` |
 | **Team** | Each registered role's state, its Chorus watcher, and its assignment status (**No assignments** for the guide, and **Assignment unread**, **No unread assignment**, **No work now** or **Assignment status unknown** for a worker role), with a **Show … pane** action per role, such as **Show guide pane**, and **Start agents**, which says what it returned and when. With no role: `No agents are registered. Start agents prepares the guide; building adds the required roles.` Nothing runs on a refresh. |
 | **Story** | The Story saved with the shown revision, one row of step cards per flow: a finished flow is marked **will be tested end to end**, others **draft: not tested** with the reasons. Below it, the current Story evaluation ([`get_story_refresh`](#get_story_refresh)): none, running, failed, or succeeded, and how it differs from the change's Story; a draft is not part of the change until the guide revises the change with it and the user confirms. |
 | **Live target** | Whether a live target is starting, running, ended unexpectedly or not confirmed stopped. A running target shows its commit, address, accepted prompt versions (never the text), and **Stop live target**, which asks first. An ended target shows its commit, launch and observed-end times, and the builder's recovery step. Below it, the model live targets started afterwards use and a form whose **Apply** sends [`configure_model`](#configure_model); a refusal names a missing key's variable. |
-| **Decisions & Approval** | The Change Card: questions to answer, examples, preserved behaviors, and **Confirm Intent & Lock Examples** (on an agreed card, **Refine Confirmed Answers & Examples**). A proposed revision appears above the agreed one with everything adopting it would confirm (changed request and summary, questions and examples marked **New**, **Edited**, **Kept** or **Removed**, Story and design changes), **Adopt this revision** and **Decline**. A stale submission offers **Load Latest Card**. On a confirmed card the **Build** section comes first, with the saved agreement below it under **Agreed:** and the request. **Agreement details** and **Refine agreed answers and examples** remain available for review and refinement; an active edit stays open. After approval, the recorded approval names the builder's commit and the tests commit. |
+| **Agree** | The Change Card: questions to answer, examples, preserved behaviors, and **Confirm Intent & Lock Examples** (on an agreed card, **Refine Confirmed Answers & Examples**). A proposed revision appears above the agreed one with everything adopting it would confirm (changed request and summary, questions and examples marked **New**, **Edited**, **Kept** or **Removed**, Story and design changes), **Adopt this revision** and **Decline**. A stale submission offers **Load Latest Card**. On a confirmed card the **Build** section comes first, with the saved agreement below it under **Agreed:** and the request. **Agreement details** and **Refine agreed answers and examples** remain available for review and refinement; an active edit stays open. **Review saved approval** opens the record in Approve. **Build** opens the same saved build section directly. |
 | **Architecture** | [`preview_architecture`](#preview_architecture) for the revision shown. |
-| **Proof** | The change's verification runs and each report's scenario outcomes, hidden scenarios anonymous, with **Approve this result** for a matching passed run. **Check started** shows the request's start time in local time, not a completion time; the exact recorded timestamp stays in details. A single saved run needs no selector. With promotion settings, a completed run shows its actual binary folder under **Binaries built by this run**, as selectable code; the approval error panel repeats the selected run's folder. A run of written tests shows the `notice` of its `test_source`. **Candidate and run details** shows the run's candidate commit and its tests commit, labeled **Accepted tests commit** for written tests and **Evaluator commit** for an evaluator named in stored verification settings. |
-| **Traces** | A drawer listing recorded errors, with **All statuses** and **Without error status**, older pages, and **Retry from newest** after a failed read. |
+| **Check** | The change's verification runs and each report's scenario outcomes, hidden scenarios anonymous. **Check started** shows the request's start time in local time, not a completion time; the exact recorded timestamp stays in details. A single saved run needs no selector. With promotion settings, a completed run shows its actual binary folder under **Binaries built by this run**, as selectable code; the approval error panel repeats the selected run's folder. A run of written tests shows the `notice` of its `test_source`. **Candidate and run details** shows the run's candidate commit and its tests commit, labeled **Accepted tests commit** for written tests and **Evaluator commit** for an evaluator named in stored verification settings. |
+| **Approve** | The exact selected run’s recorded Story flows, required tests and outcomes; excluded drafts and unknown mapping; test source, human judgment limits and verified commits. **Test details and saved runs** discloses the safe report and history. **Verified inputs and digests** discloses full bindings. Next owns the single approval action, based on [`review_verification`](#review_verification); blocked or unverified records retain the owner’s reason. Unsaved Agree edits remain available on return. |
+| **Diagnostics** | A drawer listing recorded errors, with **All statuses** and **Without error status**, older pages, and **Retry from newest** after a failed read. |
 
 **The Build section.** It appears once the change is confirmed or has a
 saved build, and then always offers **View team**. While the agreed
@@ -2209,7 +2213,7 @@ start, not as current health.
 
 When tests need changes, the test writer is the actor that fixes and reports
 them; **Read findings** opens **What Surla told the test writer**. A matching
-passed check gives the build **Review and approve**, opening that exact run.
+passed check gives the build **Review result**, opening that exact run.
 The selected run refreshes its input match when the agreement or build
 changes, including when it is older than the latest run. A stale, pending or
 unreadable match disables approval while keeping the saved report and any
@@ -2228,15 +2232,25 @@ verification keeps using those settings. When the page could not read the
 build, it gives the same warning for any existing build. A confirmation that
 changes nothing keeps the revision and its build.
 
-**Approval on the page.** The recorded approval shows **Builder's commit**
-and **Tests' commit**; while the open build's `taking.state` is `passed` and
-the approval's run is an eligible run of that build, it shows **To take this
-change, run in the project folder:** with `git merge <candidate_commit>`
-(verified on `surla/build-<n>`) first and then, for written tests,
-`git merge <tests_commit>` (verified on `surla/tests-<n>`). When the change's
-build is `dropped`, **Approve this result** is hidden. When the server cannot
-record approvals, **Approval is unavailable on this server** replaces
-**Approve this result**.
+**Approval on the page.** The frame shows the project, journey, agreed change,
+what needs you and one Next action. On a phone, Next moves to a bottom surface
+with reserved document space. Approve presents the run’s recorded evidence;
+**Refresh result** reads the owner’s current requirements. Only an `available`
+observation enables **Approve this result**. Pending or failed reads keep the
+evidence and disable submission. A refusal stays on the same stage with its
+reason; success shows the recorded approval and moves focus to it. A saved
+approval without a readable run remains available through **Review saved
+approval**, with **Check current approval** to read the card again.
+
+The recorded approval shows **Builder's commit** and **Tests' commit**. While
+the current agreement’s open build has `taking.state: passed` and the run is
+an eligible result of that build, it shows **To take this change, run in the
+project folder:** with `git merge <candidate_commit>` first and, for written
+tests, a separate `git merge <tests_commit>`. The branch labels show where
+those commits were verified. An earlier agreement’s build receives no merge
+instruction on Approve; its commit bindings remain readable. Existing Check
+history preserves older results. Approval records permission and never merges
+or deploys. An unverified saved record remains explicitly unverified.
 
 **What the page never shows or does.** It never shows prompt text or
 structural `diff` results, and it starts no live target and sends no prompt

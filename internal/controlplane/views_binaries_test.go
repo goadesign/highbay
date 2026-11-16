@@ -32,7 +32,7 @@ type binariesPageFixture struct {
 }
 
 // TestViewsPageBinariesGuidanceUsesTheSelectedRun follows saved source paths
-// through Proof, a release-file refusal, and selection between equivalent
+// through Test details, owner preflight refusal, and selection between equivalent
 // reports. Without promotion settings, neither view exposes a private path.
 func TestViewsPageBinariesGuidanceUsesTheSelectedRun(t *testing.T) {
 	for _, promotion := range []bool{true, false} {
@@ -53,38 +53,36 @@ func TestViewsPageBinariesGuidanceUsesTheSelectedRun(t *testing.T) {
 const page = await openPage(origin, { link: input.link });
 await until(() => page.$("#surla-build-review-check") && !page.$("#surla-build-review-check").disabled, "the saved current check did not settle");
 page.$("#surla-build-review-check").click();
-await until(() => page.$("#surla-result-view").dataset.runId === input.newer && page.$("#surla-cp5-approve") && !page.$("#surla-cp5-approve").disabled && page.$("#surla-cp4-run-" + input.older), "the latest proof and selection did not settle");
+const settled = (id) => page.$("#surla-result-view").dataset.runId === id && !page.$("#surla-cp5-observation-status") &&
+  (input.promotion ? page.$("#surla-cp5-approve-blocked") : page.$("#surla-cp5-approve") && !page.$("#surla-cp5-approve").disabled);
+await until(() => settled(input.newer) && page.$("#surla-cp4-run-" + input.older), "the latest result and selection did not settle");
 const folder = () => page.$("#surla-cp4-binaries-dir code")?.textContent;
-if (input.promotion) expect(folder() === input.newerDir, "Proof did not show the latest run's recorded output folder");
+if (input.promotion) expect(folder() === input.newerDir, "Test details did not show the latest run's recorded output folder");
 else expect(!page.$("#surla-cp4-binaries-dir"), "a project without promotion settings exposed a private output folder");
 page.$("#surla-cp4-run-" + input.older).click();
-await until(() => page.$("#surla-result-view").dataset.runId === input.older && !page.$("#surla-cp5-approve").disabled, "the older selected proof did not settle");
+await until(() => settled(input.older), "the older selected result did not settle");
 if (!input.promotion) {
-  expect(!page.$("#surla-cp4-binaries-dir") && !page.$("#surla-cp5-binaries-dir"), "selection exposed an output folder without promotion settings");
+  expect(!page.$("#surla-cp4-binaries-dir"), "selection exposed an output folder without promotion settings");
   page.close();
   return;
 }
 expect(folder() === input.olderDir && !page.text("#surla-cp4-binaries-dir").includes(input.newerDir), "an equivalent report selected another execution's folder");
-page.$("#surla-cp5-approve").click();
-await until(() => page.$("#surla-cp5-approve-error") && !page.$("#surla-cp5-approve").disabled, "the changed release binaries did not show an approval refusal");
-expect(page.text("#surla-cp5-approve-error").includes("whose folder the run's Proof view shows") && page.$("#surla-cp5-binaries-dir code").textContent === input.olderDir, "the refusal did not identify this selected run's output folder");
-expect(!page.text("#surla-cp5-approve-error").includes(input.newerDir), "the refusal named the newest execution instead of the selected one");
-const posted = page.sent("POST", "/changes/approve");
-expect(posted.length === 1 && posted[0].status === 422 && posted[0].body.report_digest === input.digest && Object.keys(posted[0].body).length === 4, "publication guidance changed the approval identity contract");
+expect(page.text("#surla-cp5-approve-blocked").includes("whose folder the run's Proof view shows") && !page.$("#surla-cp5-approve"), "owner preflight did not explain the changed release binaries before approval");
+expect(page.sent("POST", "/changes/approve").length === 0, "blocked owner preflight submitted approval");
 page.$("#surla-cp4-run-" + input.newer).click();
-await until(() => page.$("#surla-result-view").dataset.runId === input.newer && !page.$("#surla-cp5-approve").disabled, "the newer run did not settle after the refusal");
+await until(() => settled(input.newer), "the newer run did not settle after the refusal");
 expect(folder() === input.newerDir && !page.$("#surla-cp5-approve-error"), "selection carried another run's refusal or output folder");
 page.$("#surla-cp4-run-" + input.older).click();
-await until(() => page.$("#surla-result-view").dataset.runId === input.older && page.$("#surla-cp5-binaries-dir"), "returning to the selected refusal lost its guidance");
-expect(folder() === input.olderDir && page.$("#surla-cp5-binaries-dir code").textContent === input.olderDir, "returning to saved proof mixed execution paths");
-expect(page.sent("POST", "/changes/approve").length === 1, "reading source guidance retried approval");
+await until(() => settled(input.older), "returning to the selected refusal lost its guidance");
+expect(folder() === input.olderDir, "returning to saved evidence mixed execution paths");
 const verdict = page.text("#surla-cp4-title");
 const listPath = "/changes/chg-selected-inputs/verifications";
 const lists = page.sent("GET", listPath).length;
 await control(origin, "act", { key: "remove-promotion" });
 page.$("#surla-load-verifications").click();
-await until(() => page.sent("GET", listPath).slice(lists).some((r) => r.status === 200) && !page.$("#surla-load-verifications").disabled && !page.$("#surla-cp4-binaries-dir"), "a fresh owner read did not remove promotion-only metadata from the retained report");
-expect(!page.$("#surla-cp5-binaries-dir") && page.text("#surla-cp4-title") === verdict && page.$("#surla-result-view").dataset.runId === input.older, "metadata refresh replaced the selected report or retained a private output path");
+await until(() => page.sent("GET", listPath).slice(lists).some((r) => r.status === 200) && !page.$("#surla-load-verifications").disabled && !page.$("#surla-cp4-binaries-dir") && page.$("#surla-cp5-approve") && !page.$("#surla-cp5-approve").disabled, "a fresh owner read did not remove promotion-only metadata and restore availability");
+expect(page.text("#surla-cp4-title") === verdict && page.$("#surla-result-view").dataset.runId === input.older, "metadata refresh replaced the selected report");
+expect(page.sent("POST", "/changes/approve").length === 0, "reading source guidance attempted approval");
 page.close();
 `)
 		})
@@ -96,11 +94,11 @@ page.close();
 // simulated; no binary is executed or published.
 func newBinariesPageFixture(t *testing.T, promotion bool) binariesPageFixture {
 	t.Helper()
-	cp, card, runsDir := selectedInputsFixture(t)
+	cp, card, runsDir, candidate := selectedInputsFixture(t)
 	f := binariesPageFixture{cp: cp, older: strings.Repeat("1", 32), newer: strings.Repeat("2", 32)}
 	for i, runID := range []string{f.older, f.newer} {
-		writeListedRun(t, runsDir, pageOwner, card, runID,
-			time.Date(2026, 11, 13, 9+i, 0, 0, 0, time.UTC), true)
+		writeListedRunAt(t, runsDir, pageOwner, card, runID,
+			time.Date(2026, 11, 13, 9+i, 0, 0, 0, time.UTC), true, candidate)
 		setListedRunSource(t, runsDir, runID, verify.TestsWritten)
 		workDir := filepath.Join(t.TempDir(), "Retained outputs with spaces", runID)
 		editVerificationRequest(t, runsDir, runID, func(req *verifyrun.Request) {

@@ -91,10 +91,12 @@ to $50 get instant store credit; larger ones wait for a manager":
    that the server starts from a commit. The builder then asks Surla to
    verify its commit. Surla builds that commit and runs the
    tests accepted for that exact revision against it. It refuses to verify
-   until those tests are accepted. The result appears in the page's **Proof**
+   until those tests are accepted. The result appears in the page's **Check**
    view.
-8. **Approve and merge.** On the page, press **Approve this result** for a
-   passed run. Surla checks that the run passed and ran the tests accepted
+8. **Approve and merge.** Open the run in **Approve** to review its recorded
+   Story flows, test outcomes, excluded drafts and unknown coverage. When the
+   server says approval is available, Next offers **Approve this result**.
+   Surla checks that the run passed and ran the tests accepted
    for the agreed revision, then records the approval with the builder's
    commit, the tests commit and the report. While the build shows **Passed**,
    the recorded approval and the Build section on the page show both commits
@@ -140,7 +142,7 @@ by job, not walled off from each other. Surla runs the code the agents write
 test program) as ordinary processes with your file and network access. The
 page states the second limit next to **Build this change**. Each verification
 run records where its tests came from. For the test writer's tests, the
-**Proof** view shows with the run, and the agents read in its result, the
+**Check** view shows with the run, and the agents read in its result, the
 server's notice that the tests were written by a separate agent on this
 machine and are not isolated from the builder.
 
@@ -353,9 +355,10 @@ See [`start_live_target`](docs/REFERENCE.md#start_live_target),
 
 The page lists the project's changes and shows each one's Story, questions,
 build, team, verification runs and approval, and updates itself without
-losing what you typed. Its **Traces** drawer shows safe summaries of what the
-agents and the server did. See the [views page](docs/REFERENCE.md#views-page)
-and [operation diagnostics](docs/REFERENCE.md#operation-diagnostics).
+losing what you typed. The frame names Describe, Agree, Build, Check and
+Approve. The approval decision appears in Next. The **Diagnostics** drawer
+shows safe summaries of what the agents and the server did. See the
+[views page](docs/REFERENCE.md#views-page) and [operation diagnostics](docs/REFERENCE.md#operation-diagnostics).
 
 > **Why the name "Surla"?** Named after **Tambdi Surla** in Goa, home to the
 > carved basalt Mahadeva temple beside the Surla River. In Surla
