@@ -103,7 +103,7 @@ expect(page.sent("POST", "/team/agents").length === 0, "opening Team started age
 await control(origin, "reply", { key: "GET /team", status: 503, body: { name: "unavailable", id: "team-read", message: "Team owner unavailable.", temporary: true, timeout: false, fault: false } });
 page.$("#surla-team-refresh").click();
 await until(() => page.$("#surla-team-read-error"), "read failure was not shown");
-expect(page.text("#surla-team-read-error").includes("Team owner unavailable."), "Team lost the raw diagnostic");
+expect(page.text("#surla-team-read-error") === "Could not read the project team. Team owner unavailable.", "Team did not name the failed read before the raw diagnostic: " + page.text("#surla-team-read-error"));
 expect(page.text("#surla-team-stale").includes("Last-read"), "retained facts are presented as current");
 expect(page.text("#surla-team-attention-builder").includes("Last read:"), "global attention is presented as current after read failure");
 expect(page.$("#surla-team-role-builder").dataset.state === "needs_you", "failed read discarded known facts");
@@ -190,6 +190,7 @@ await control(origin, "reply", { key: "GET /team", status: 401, body: { name: "u
 page.$("#surla-team-refresh").click();
 await until(() => page.$("#surla-checkpoint-root").dataset.session === "ended", "the refused session remained active");
 expect(page.text("#surla-team-attention-builder").includes("Last read:"), "ended session shows retained attention as current");
+expect(page.text("#surla-team-read-error") === "The session ended; these are last-read facts.", "ended session is presented as a failed team read: " + page.text("#surla-team-read-error"));
 for (const button of page.$$("#surla-team-stage button, #surla-team-attention button")) {
   expect(button.disabled, "ended session left an active Team control: " + button.id);
 }
