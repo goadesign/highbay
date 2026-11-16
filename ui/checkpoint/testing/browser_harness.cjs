@@ -643,6 +643,11 @@ async function approvalScenario(input, facts, views) {
     await views.dt.send("Emulation.setDeviceMetricsOverride", { width, height, deviceScaleFactor: scale, mobile: width < 600 }, views.sessionId);
     await views.dt.send("Emulation.setEmulatedMedia", { features: [{ name: "prefers-color-scheme", value: name === "dark" ? "dark" : "light" }] }, views.sessionId);
     await evaluate(views, "window.scrollTo(0, 0), new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))");
+    // Two paint frames can still fall inside the incumbent 150ms color
+    // transition. Measure rest only after finite animations settle, bounded
+    // by the same deadline as every other browser observation.
+    const settled = await until(views, "document.getAnimations().every((animation) => animation.effect?.getTiming().iterations === Infinity || animation.playState !== 'running')");
+    if (settled.timed_out) throw new Error("approval colors did not settle at " + name);
     const primaryAtRest = await evaluate(views, "(" + function measureRestingAction() {
       const action = document.getElementById("surla-cp5-approve");
       if (action === null) return true;
