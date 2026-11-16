@@ -236,6 +236,9 @@ func Start(
 	if buildCacheDir == "" {
 		return 0, errors.New("build cache directory is required")
 	}
+	if !filepath.IsAbs(buildCacheDir) {
+		return 0, errors.New("build cache directory must be absolute")
+	}
 	if !runIDPattern.MatchString(req.RunID) {
 		return 0, fmt.Errorf("run ID %q is not 32 lowercase hex characters", req.RunID)
 	}
