@@ -509,7 +509,8 @@ async function phoneScenario(input, facts, views) {
   await evaluate(views, "document.getElementById('surla-nav-changes').click(), true");
   await until(views, "document.getElementById('surla-open-change-phone-build') !== null");
   await evaluate(views, "document.getElementById('surla-open-change-phone-build').click(), true");
-  await until(views, "document.querySelector('#surla-build-test-writer[data-state=could_not_run]') !== null && !document.getElementById('surla-build-again').disabled");
+  const blockedBuild = await until(views, "document.querySelector('#surla-build-test-writer[data-state=could_not_run]') !== null && document.getElementById('surla-build-again')?.disabled === false");
+  if (blockedBuild.timed_out) throw new Error("the recorded build verdict did not render");
   await evaluate(views, "document.getElementById('surla-build-details').open = true");
   facts.phone.build = await phoneView(views, "#surla-build-section");
   await evaluate(views, "document.getElementById('surla-build-again').focus(), true");
@@ -526,11 +527,17 @@ async function phoneScenario(input, facts, views) {
   await evaluate(views, "document.getElementById('surla-open-change-phone-findings').click(), true");
   const findings = await until(views, "document.querySelectorAll('#surla-build-findings li').length === 4 && document.querySelector('#surla-build-findings summary') !== null");
   if (findings.timed_out) throw new Error("the user findings did not render");
-  // Use native keyboard activation to expand the disclosure before measuring.
+  // Findings initially open. Close and reopen them with native keyboard
+  // activation so the test observes the disclosure's actual initial state.
   await evaluate(views, "document.querySelector('#surla-build-findings summary').focus(), true");
   await views.dt.send("Input.dispatchKeyEvent", { type: "keyDown", key: "Enter", code: "Enter", windowsVirtualKeyCode: 13, text: "\r", unmodifiedText: "\r" }, views.sessionId);
   await views.dt.send("Input.dispatchKeyEvent", { type: "keyUp", key: "Enter", code: "Enter", windowsVirtualKeyCode: 13 }, views.sessionId);
-  facts.phone.findings_disclosure_opened = await evaluate(views, "document.querySelector('#surla-build-findings details').open");
+  const collapsed = await until(views, "document.querySelector('#surla-build-findings details').open === false");
+  if (collapsed.timed_out) throw new Error("Enter did not close the findings disclosure");
+  await views.dt.send("Input.dispatchKeyEvent", { type: "keyDown", key: "Enter", code: "Enter", windowsVirtualKeyCode: 13, text: "\r", unmodifiedText: "\r" }, views.sessionId);
+  await views.dt.send("Input.dispatchKeyEvent", { type: "keyUp", key: "Enter", code: "Enter", windowsVirtualKeyCode: 13 }, views.sessionId);
+  const expanded = await until(views, "document.querySelector('#surla-build-findings details').open === true");
+  facts.phone.findings_disclosure_opened = !expanded.timed_out;
   await evaluate(views, "document.getElementById('surla-build-details').open = true");
   facts.phone.findings = await phoneView(views, "#surla-build-section");
   facts.phone.rendered_findings = await evaluate(views, "Array.from(document.querySelectorAll('#surla-build-findings li'), (node) => node.textContent)");
