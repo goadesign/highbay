@@ -2393,9 +2393,11 @@ The [CI workflow](../.github/workflows/ci.yml) runs 15 Linux jobs on every
 pull request. It executes complete ordinary tests, without `-short`, plus
 product linking, every added build profile and generated-contract checks.
 [Integration](../.github/workflows/integration.yml) adds one macOS job on pull
-requests into `team-start` and `main` and pushes to `main`, `team-start` and
-`builder-copy`. It exercises native process and filesystem contracts. The complete
-14-job macOS ordinary suite runs nightly at 07:17 UTC and on manual full runs.
+requests into `team-start` and `main`, exercising native process and filesystem
+contracts. Pushes to `main`, `team-start` and `builder-copy` run the complete
+pipeline: all 14 macOS ordinary jobs, the Linux checks, tagged journeys,
+browser/Herdr suites and Docker checks. Nightly runs at 07:17 UTC and manual
+full runs execute that same pipeline once the workflow is on the default branch.
 
 | Linux PR owner | Work |
 | --- | --- |
@@ -2406,13 +2408,13 @@ requests into `team-start` and `main` and pushes to `main`, `team-start` and
 | Generated contracts | Formatting, concurrency-owner checks, TypeScript, root/target-prompt/example Goa regeneration, page consistency and Node consumer tests. |
 
 [The root selector](../.github/scripts/test-root.sh) owns the complete Linux
-partitions and the full macOS nightly/manual partitions. New roots, examples and
+partitions and the full macOS push/nightly/manual partitions. New roots, examples and
 fuzz seeds belong to complementary groups. [The native selector](../.github/scripts/test-native.sh)
-owns the macOS PR/push cases: process groups and signals, executable and descriptor
+owns the macOS integration PR cases: process groups and signals, executable and descriptor
 identity, physical paths and aliases, permissions, atomic rename, locks, staging,
 and project-server start/stop. Its package owners and exact names keep portable
 rendering, design, Story, test-writing and prompt logic on Linux for PRs; full
-macOS nightly/manual execution still covers them. When a native boundary gains or
+macOS push/nightly/manual execution still covers them. When a native boundary gains or
 renames a test, update that selector in the same change. New packages retain an
 owner in the complete suites, including packages without tests. Project page tests stay with the project package; control-plane page
 names belong only to the page groups. Separating the other plain packages
@@ -2431,9 +2433,9 @@ The integration workflow reuses the Linux workflow on pushes, nightly and
 manual runs; integration PRs already receive those Linux jobs from their PR
 workflow. The selected native macOS job runs before integration, including
 Darwin-selected process, filesystem-alias and browser-opener behavior. Complete native root groups,
-both nested-module jobs, generated checks and browser-profile vet run only nightly
-and on manual full runs. Nightly/manual events run only the complete native
-owners, keeping execution separate from the selected PR/push job.
+both nested-module jobs, generated checks and browser-profile vet run on pushes,
+nightly and on manual full runs. Those events run only the complete native
+owners, keeping execution separate from the selected PR job.
 
 The trusted native compiler producers run only outside pull requests. Native
 integration PR checks use restored archives directly; they do not wait for a
@@ -2561,12 +2563,12 @@ Replace the versions above with the new root requirements and commit the
 updated module files and checksums. Run both tests with fetching disabled to
 check the actual evaluators against the updated inputs.
 
-All tagged full suites run nightly at 07:17 UTC and on a manual **Run workflow**
-request (`CI=true gh workflow run integration.yml --ref <branch> </dev/null`).
+All tagged full suites run on integration-branch pushes, nightly at 07:17 UTC
+and on a manual **Run workflow** request (`CI=true gh workflow run integration.yml --ref <branch> </dev/null`).
 Manual dispatch requires `integration.yml` to exist on the repository's default
-branch, even when `--ref` names another branch. Until the workflow reaches the
-default branch, a full run comes from a push to an integration branch named by
-its trigger, or a rerun of that push run.
+branch, even when `--ref` names another branch. Scheduled runs also require the
+workflow on that branch and execute its latest commit. Until then, full coverage
+comes from an integration-branch push or a rerun of that push run.
 This runs the verifier, generation, starter, whole-project journey and Orders
 acceptance suites alongside complete native ordinary coverage. Once manual
 dispatch is available, it can check a candidate head before merging. Tagged jobs
@@ -2593,8 +2595,8 @@ go test -race -count=1 -timeout 60m -tags scaffold ./internal/scaffold
 ```
 
 The **Full / opt-in (Linux)** job runs the named native browser tests and the
-isolated Herdr server lifecycle nightly and on manual full runs. The Linux PR
-profile job compiles and vets both tagged profiles. The scheduled job requires
+isolated Herdr server lifecycle on integration-branch pushes, nightly and on
+manual full runs. The Linux PR profile job compiles and vets both tagged profiles. The scheduled job requires
 hosted Chrome, Node 26 and digest-checked Herdr Core 0.1.21; missing tools fail setup.
 Its explicit browser roots cover page policy and sessions, phone layout, build
 and test review, keyboard access, and browser cleanup after its parent ends.
@@ -2621,7 +2623,7 @@ go test -race -count=1 -timeout 5m -tags browser -run '^TestTeamAndBuildAtPhoneW
 ```text
 .
 ├── .github/workflows/ci.yml     # Complete Linux PR checks, reused by integration
-├── .github/workflows/integration.yml # Native integration coverage and full nightly/manual journeys
+├── .github/workflows/integration.yml # Native PR coverage and full push/nightly/manual journeys
 ├── cmd/surla/                   # The surla command: project start and stop, settings, init, preview, diff, gen, verify, approve
 ├── design/                      # Goa design of the server's contract
 │   ├── design.go                # Change Cards, checks, live target, verification, approval

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Run the native process and filesystem contracts on integration PRs/pushes.
-# Full native ordinary coverage has its separate nightly/manual owners.
+# Run the native process and filesystem contracts on integration PRs.
+# Full native ordinary coverage has its separate push/nightly/manual owners.
 set -euo pipefail
 exec </dev/null
 
