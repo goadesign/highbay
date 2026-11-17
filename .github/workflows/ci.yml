@@ -9,6 +9,10 @@ on:
 permissions:
   contents: read
 
+defaults:
+  run:
+    shell: bash
+
 concurrency:
   # Keep this distinct from the caller so a reusable run cannot cancel it.
   group: linux-ci-${{ github.ref }}-${{ github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' }}
@@ -62,7 +66,9 @@ jobs:
       - name: Run the full root group
         env:
           ROOT_GROUP: ${{ matrix.group }}
-        run: bash .github/scripts/test-root.sh "$ROOT_GROUP" </dev/null
+        run: |
+          bash .github/scripts/test-root.sh "$ROOT_GROUP" </dev/null \
+            | go run "$GITHUB_WORKSPACE/.github/scripts/testcheck/main.go"
 
   small-modules:
     name: Linux / Story and Orders evaluator
@@ -86,9 +92,6 @@ jobs:
         with:
           go-version-file: examples/orders-eval/go.mod
           cache: false
-      - uses: ./.github/actions/go-cache
-        with:
-          go-version: ${{ steps.evaluator-go.outputs.go-version }}
       - name: Run all ordinary Orders evaluator tests
         working-directory: examples/orders-eval
         run: bash "$GITHUB_WORKSPACE/.github/scripts/go-test.sh" -vet=all -count=1 -timeout 20m -json -- ./... </dev/null
@@ -160,6 +163,7 @@ jobs:
           bash .github/scripts/go-test_test.sh </dev/null
           go run ./.github/scripts/racecheck </dev/null
           go test -count=1 ./.github/scripts/racecheck </dev/null
+          go test -count=1 -timeout 1m ./.github/scripts/testcheck </dev/null
       - name: Check formatting
         run: |
           unformatted=$(gofmt -l $(git ls-files '*.go'))

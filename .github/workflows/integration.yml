@@ -15,6 +15,10 @@ on:
 permissions:
   contents: read
 
+defaults:
+  run:
+    shell: bash
+
 concurrency:
   group: native-ci-${{ github.ref }}-${{ github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' }}
   cancel-in-progress: true
@@ -130,7 +134,9 @@ jobs:
       - name: Run the full root group
         env:
           ROOT_GROUP: ${{ matrix.group }}
-        run: bash .github/scripts/test-root.sh "$ROOT_GROUP" </dev/null
+        run: |
+          bash .github/scripts/test-root.sh "$ROOT_GROUP" </dev/null \
+            | go run "$GITHUB_WORKSPACE/.github/scripts/testcheck/main.go"
 
   native-small-modules:
     name: macOS / Story and Orders evaluator
@@ -156,9 +162,6 @@ jobs:
         with:
           go-version-file: examples/orders-eval/go.mod
           cache: false
-      - uses: ./.github/actions/go-cache
-        with:
-          go-version: ${{ steps.evaluator-go.outputs.go-version }}
       - name: Run all ordinary Orders evaluator tests
         working-directory: examples/orders-eval
         run: bash "$GITHUB_WORKSPACE/.github/scripts/go-test.sh" -vet=all -count=1 -timeout 20m -json -- ./... </dev/null
@@ -210,6 +213,7 @@ jobs:
           bash .github/scripts/go-test_test.sh </dev/null
           go run ./.github/scripts/racecheck </dev/null
           go test -count=1 ./.github/scripts/racecheck </dev/null
+          go test -count=1 -timeout 1m ./.github/scripts/testcheck </dev/null
       - name: Check formatting
         run: |
           unformatted=$(gofmt -l $(git ls-files '*.go'))
@@ -257,14 +261,15 @@ jobs:
         run: docker version
       - name: Run the dependency-repair journey
         run: |
-          git grep -q '^func TestCheckProjectRepairsDependenciesOnOneServer(' -- cmd/surla/check_journey_e2e_test.go
-          go test -race -count=1 -timeout 40m -json -tags=e2e,docker -run '^TestCheckProjectRepairsDependenciesOnOneServer$' ./cmd/surla </dev/null
+          go test -race -count=1 -timeout 40m -json -tags=e2e,docker -run '^TestCheckProjectRepairsDependenciesOnOneServer$' ./cmd/surla </dev/null \
+            | go run "$GITHUB_WORKSPACE/.github/scripts/testcheck/main.go"
       - name: Run the container owner's execution and lifecycle contracts
         # These tagged roots exercise the real engine, not the check helper's
         # stand-ins. The journey above ensures their pinned image is available.
         run: |
           go test -race -count=1 -timeout 20m -json -tags=e2e,docker \
-            -run '^(TestContainerEngineEndToEnd|TestLocalEngineContainerLifecycleFacts)$' ./verify/candidate </dev/null
+            -run '^(TestContainerEngineEndToEnd|TestLocalEngineContainerLifecycleFacts)$' ./verify/candidate </dev/null \
+              | go run "$GITHUB_WORKSPACE/.github/scripts/testcheck/main.go"
 
 
   opt-in:
@@ -311,14 +316,16 @@ jobs:
         # The harness uses Node's built-in modules and needs no npm packages.
         run: |
           go test -race -count=1 -timeout 5m -json -tags browser \
-            -run "$BROWSER_TESTS" ./internal/project </dev/null
+            -run "$BROWSER_TESTS" ./internal/project </dev/null \
+              | go run "$GITHUB_WORKSPACE/.github/scripts/testcheck/main.go"
       - name: Run the isolated Herdr server lifecycle
         # Require setup explicitly so a missing executable cannot become a skip.
         run: |
           command -v hc
           hc --version </dev/null
           go test -race -count=1 -timeout 5m -json -tags herdr \
-            -run '^TestHC$' ./cmd/surla </dev/null
+            -run '^TestHC$' ./cmd/surla </dev/null \
+              | go run "$GITHUB_WORKSPACE/.github/scripts/testcheck/main.go"
 
 
   full:
@@ -412,10 +419,12 @@ jobs:
             verifier|verifier-linux)
               # The verifier owns no production goroutines, sync or channels;
               # its supervising and candidate packages retain race coverage.
-              go test -count=1 -timeout ${{ matrix.test_timeout }} -json ${{ matrix.args }} </dev/null
+              go test -count=1 -timeout ${{ matrix.test_timeout }} -json ${{ matrix.args }} </dev/null \
+                | go run "$GITHUB_WORKSPACE/.github/scripts/testcheck/main.go"
               ;;
             *)
               # Preserve E2E race coverage until paired warm measurements exist.
-              go test -race -count=1 -timeout ${{ matrix.test_timeout }} -json ${{ matrix.args }} </dev/null
+              go test -race -count=1 -timeout ${{ matrix.test_timeout }} -json ${{ matrix.args }} </dev/null \
+                | go run "$GITHUB_WORKSPACE/.github/scripts/testcheck/main.go"
               ;;
           esac

@@ -2393,6 +2393,13 @@ from concurrency owners removes the old serial job phase without reducing
 race coverage. Every command uses `-count=1` and full vet. No job reruns the
 same ordinary roots under an added tag.
 
+Selected test runs must emit at least one named Go test, example or fuzz-seed
+event. The [output guard](../.github/scripts/testcheck/main.go) preserves the original JSON stream and fails
+when a stale selector runs nothing; packages without tests may still share a
+run with tested packages. Explicit Bash pipeline failure handling preserves
+the test command's own failures. Compiler-input preparation intentionally
+compiles with no test execution and does not use this guard.
+
 The integration workflow reuses the Linux workflow on pushes, nightly and
 manual runs; integration PRs already receive those Linux jobs from their PR
 workflow. Native macOS root groups, both nested-module jobs, generated checks
