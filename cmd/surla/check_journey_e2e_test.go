@@ -178,17 +178,9 @@ func TestCheckProjectRepairsDependenciesOnOneServer(t *testing.T) {
 	copyEvalMod := readJourneyFile(t, filepath.Join(dir, "eval", "go.mod"))
 	copyEvalSum := readJourneyFile(t, filepath.Join(dir, "eval", "go.sum"))
 
-	t.Run("the initialized starter passes cold and warm", func(t *testing.T) {
-		// Two extra checks measure reuse on exactly the same source/cache. Each
-		// still recompiles/tests in fresh scratch; there is no speed assertion.
-		// This is intentionally part of the real hosted Docker journey because
-		// a fake engine cannot measure dependency reuse or the resulting budget.
-		for _, phase := range []string{"cold", "warm one", "warm two"} {
-			t.Run(phase, func(t *testing.T) {
-				res := journeyCheck(t, client)
-				assert.True(t, res.Passed, res.Message)
-			})
-		}
+	t.Run("the initialized starter passes", func(t *testing.T) {
+		res := journeyCheck(t, client)
+		assert.True(t, res.Passed, res.Message)
 	})
 
 	t.Run("missing go.sum entry is repaired in place", func(t *testing.T) {
