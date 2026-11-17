@@ -107,7 +107,9 @@ func (op *checkOperation) updateDependencies(ctx context.Context) (*gensurla.Upd
 	}
 	if op.hasGoWork() {
 		for _, mod := range op.copy.modules {
-			if f, ok, err := op.runGo(ctx, mod, "download", "bridge", false, op.goProxyEnv, "list", "-deps", "-test", "./..."); err != nil {
+			// Resolve workspace sums without a package listing that could
+			// displace Go's diagnostics from the bounded failure message.
+			if f, ok, err := op.runGo(ctx, mod, "download", "bridge", false, op.goProxyEnv, "list", "-deps", "-test", `-f={{""}}`, "./..."); err != nil {
 				return nil, op.finish(err)
 			} else if !ok {
 				failures = append(failures, f)

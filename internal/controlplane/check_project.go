@@ -294,7 +294,9 @@ func (op *checkOperation) checkProject(ctx context.Context) (*gensurla.CheckProj
 	}
 	var failures []moduleOutcome
 	for _, mod := range op.copy.modules {
-		if f, ok, err := op.runGo(ctx, mod, "download", "bridge", true, op.goProxyEnv, "list", "-deps", "-test", "./..."); err != nil {
+		// Preparation needs no package listing: it can bury Go's earlier
+		// diagnostics outside the bounded failure message.
+		if f, ok, err := op.runGo(ctx, mod, "download", "bridge", true, op.goProxyEnv, "list", "-deps", "-test", `-f={{""}}`, "./..."); err != nil {
 			return nil, op.finish(err)
 		} else if !ok {
 			failures = append(failures, f)
