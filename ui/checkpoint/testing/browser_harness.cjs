@@ -591,7 +591,7 @@ async function takingScenario(input, facts, views) {
     const measured = await evaluate(views, "(" + function measure() {
       const region = document.getElementById("surla-build-section");
       return {
-        width: document.documentElement.clientWidth,
+        width: window.innerWidth,
         document_width: document.documentElement.scrollWidth,
         commands: Array.from(region.querySelectorAll(".surla-build-merge pre"), (node) => node.textContent),
         commands_usable: Array.from(region.querySelectorAll(".surla-build-merge pre")).every((node) => {
@@ -606,7 +606,8 @@ async function takingScenario(input, facts, views) {
         no_start: document.getElementById("surla-build-start") === null,
         enabling_step: document.getElementById("surla-build-enabling-step")?.textContent.includes("This agreement was drafted before a build was dropped") === true && document.getElementById("surla-build-again") === null,
         rewrite_warning: region.textContent.includes("commit where this build started") && region.textContent.includes("these merges bring that history back"),
-        overflowing: [region, ...region.querySelectorAll("*")].filter((node) => {
+        overflowing: [document.documentElement, region, ...region.querySelectorAll("*")].filter((node) => {
+          if (node === document.documentElement) return node.scrollWidth > node.clientWidth;
           // Exact command lines intentionally scroll inside their focusable pre.
           if (!node.getClientRects().length || node.closest(".surla-build-merge pre")) return false;
           const box = node.getBoundingClientRect();
