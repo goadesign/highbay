@@ -135,11 +135,12 @@ func TestCheckProjectRepairsDependenciesOnOneServer(t *testing.T) {
 	opts.Team = &controlplane.TeamBinding{Owner: "operator@example.com", Service: team}
 	cp, err := controlplane.New(opts)
 	require.NoError(t, err)
-	_, err = cp.ConfigureModel(controlplane.WithPrincipal(t.Context(), controlplane.Principal{ID: "operator@example.com", CallerID: "user", Kind: controlplane.CallerUser}), &gensurla.ConfigureModelPayload{GatewayAddr: &gatewayAddr})
-	require.NoError(t, err)
+	registerCheckModuleCacheCleanup(t, opts.CheckModuleCacheDir)
 	// Registered after the temporary directories, so it runs before they
 	// are removed.
 	t.Cleanup(func() { closeRetaining(cp, workspace, opts.CardsDir) })
+	_, err = cp.ConfigureModel(controlplane.WithPrincipal(t.Context(), controlplane.Principal{ID: "operator@example.com", CallerID: "user", Kind: controlplane.CallerUser}), &gensurla.ConfigureModelPayload{GatewayAddr: &gatewayAddr})
+	require.NoError(t, err)
 	srv := httptest.NewServer(controlplane.NewHTTPHandler(cp, workflowAuthenticator(map[string]controlplane.Principal{
 		"test-token": {ID: "operator@example.com"},
 	})))
@@ -177,9 +178,17 @@ func TestCheckProjectRepairsDependenciesOnOneServer(t *testing.T) {
 	copyEvalMod := readJourneyFile(t, filepath.Join(dir, "eval", "go.mod"))
 	copyEvalSum := readJourneyFile(t, filepath.Join(dir, "eval", "go.sum"))
 
-	t.Run("the initialized starter passes", func(t *testing.T) {
-		res := journeyCheck(t, client)
-		assert.True(t, res.Passed, res.Message)
+	t.Run("the initialized starter passes cold and warm", func(t *testing.T) {
+		// Two extra checks measure reuse on exactly the same source/cache. Each
+		// still recompiles/tests in fresh scratch; there is no speed assertion.
+		// This is intentionally part of the real hosted Docker journey because
+		// a fake engine cannot measure dependency reuse or the resulting budget.
+		for _, phase := range []string{"cold", "warm one", "warm two"} {
+			t.Run(phase, func(t *testing.T) {
+				res := journeyCheck(t, client)
+				assert.True(t, res.Passed, res.Message)
+			})
+		}
 	})
 
 	t.Run("missing go.sum entry is repaired in place", func(t *testing.T) {
@@ -317,8 +326,10 @@ func journeyCall(
 // journeyCheck calls check_project.
 func journeyCheck(t *testing.T, client *genmcpsurla.Client) *gensurla.CheckProjectResult {
 	t.Helper()
+	started := time.Now()
 	res, err := gensurla.DecodeCheckProjectResult(journeyCall(t, client, "check_project", []byte("{}"), journeyCheckTimeout))
 	require.NoError(t, err)
+	t.Logf("check_project op_id=%s passed=%t elapsed=%s", res.OpID, res.Passed, time.Since(started))
 	return res
 }
 

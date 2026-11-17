@@ -66,6 +66,7 @@ func TestServeOptionsBindsTheCheckHelperOnEveryServePath(t *testing.T) {
 		{name: "verification config"},
 		{name: "workspace starter"},
 	}
+	var previousCache string
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			isolateServeWorkspace(t)
@@ -76,6 +77,17 @@ func TestServeOptionsBindsTheCheckHelperOnEveryServePath(t *testing.T) {
 			require.NoError(t, err)
 			require.NotNil(t, opts.Checker)
 			require.NotNil(t, opts.CheckHelper)
+			cache := opts.CheckModuleCacheDir
+			assert.Equal(t, filepath.Join(filepath.Dir(opts.CardsDir), "check-modcache"), cache)
+			assert.NoError(t, validateOperatorPrivateDir(cache))
+			assert.NotEqual(t, previousCache, cache, "projects keep separate dependency inputs")
+			previousCache = cache
+			marker := filepath.Join(cache, "retained")
+			require.NoError(t, os.WriteFile(marker, []byte("input"), 0o600))
+			again, err := serveOptions(nil)
+			require.NoError(t, err)
+			assert.Equal(t, cache, again.CheckModuleCacheDir)
+			assert.FileExists(t, marker, "recomposing the server preserves dependency inputs")
 			cmd := opts.CheckHelper()
 			assert.Equal(t, self[0], cmd.Path)
 			assert.Equal(t, []string{self[0], "check-run"}, cmd.Args)

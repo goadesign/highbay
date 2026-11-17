@@ -487,6 +487,15 @@ test writer: the builder leaves `eval/` untouched, `check_project` and
 (`design/story.go`) or the test module's contract needs to change, the builder
 asks you so the guide can draft and you can confirm a revision.
 
+Before committing, the builder calls `check_project` on its current working
+files. Surla prepares dependencies, then runs its tests without network access
+in Linux containers. Each project retains its own downloaded dependencies
+between calls and server restarts; tests read those inputs through a read-only
+mount and receive fresh compiler and temporary directories. Every call still
+checks the current files. If module or workspace checksums need repair, the
+builder calls `update_dependencies` and checks again; see
+[`check_project`](REFERENCE.md#check_project).
+
 The builder commits its code in `.surla-build` on `surla/build-<n>` and calls
 `verify_change` with the change, the revision from its assignment and its
 commit. The server refuses before running anything when the revision has no

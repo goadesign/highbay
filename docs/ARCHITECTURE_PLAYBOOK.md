@@ -223,6 +223,22 @@ selected source would not produce. This joins the trusted module cache, toolchai
 Surla's files. Deleting the build cache forces recompilation but does not
 authenticate those other inputs.
 
+For Docker `check_project` and `update_dependencies`, the project composition
+derives a separate private `check-modcache/` under project state and injects it
+as `controlplane.Options.CheckModuleCacheDir`. The control plane validates its
+ownership, permissions and separation from source and operation storage, then
+sends it only in the check helper's transient stdin specification. No model
+input or durable operation record contains the path. The helper validates that
+process input before Docker admission. Dependency preparation and tidy mount
+the cache writable; test containers mount it read-only, with network disabled
+and `GOPROXY=off`. Compiler cache, HOME, TMPDIR and work remain fresh for each
+command. The retained directory survives cancellation, cleanup and restart;
+recovery removes only operation-owned scratch. Embedded checkers that omit the
+option keep an operation-local module cache and need no `BuildCacheDir`.
+Go's recorded download checks do not rehash extracted cached source. The
+read-only test mount preserves the dependency write boundary; it does not
+confine other same-user host processes.
+
 ### Operation diagnostics
 
 The control plane records each of its operations as an OpenTelemetry span and saves a bounded, safe view of each one in one history file, `traces.jsonl` in the Change Card folder. The history belongs to the project's owner: every caller (the user's page, the management credential and each agent) acts for that owner, and each record names its caller and the caller's kind, such as `user`, `management` or the agent's role. The server's composition root, `projectRuntime.serve` in [`project_server.go`](../cmd/surla/project_server.go), owns the tracer provider, and exports full spans over OTLP when an OTLP endpoint is set in the server's environment. The exported spans carry no added identity. The user's page reads that succeed or are refused, and its waiting read, are not saved, so the page's repeated reads do not fill the history. Spans that end after the control plane closes are not saved. [Operation diagnostics](REFERENCE.md#operation-diagnostics) gives the caller's view.

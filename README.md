@@ -161,7 +161,9 @@ Surla needs:
   user.name` and `user.email`). Surla records accepted tests as commits under
   your identity, and a build is refused until Git has one.
 - **Docker Desktop**, or another local Docker engine. The builder builds and
-  tests its work in Linux containers.
+  tests its work in Linux containers. Each project retains downloaded
+  dependencies across checks; tests mount them read-only and run offline with
+  fresh compiler scratch. See [`check_project`](docs/REFERENCE.md#check_project).
 - **Herdr core** (the `herdr-core` and `hc` commands) and the **Herdr app**
   (`herdr-app`).
 - **Chorus v0.11.0** or newer.

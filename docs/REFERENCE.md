@@ -191,7 +191,8 @@ outside the folder, in
 the user's configuration folder (on macOS, `~/Library/Application Support`).
 It holds the owner's account identity, one saved `127.0.0.1` port, the Change
 Cards and builds (`cards/`), verification runs (`runs/`), reports
-(`reports/`), the Go build cache (`build-cache/`), agent credentials
+(`reports/`), the Go build cache (`build-cache/`), Docker dependency inputs
+(`check-modcache/`), agent credentials
 (`agents/`), stored settings, and the running server's record. A new project
 saves a free port that no other project of this account saved, running or not,
 and keeps it. No caller chooses an
@@ -1112,6 +1113,17 @@ tests pass. `message` (at most 16 KiB) names the first failure; read the full
 output with [`read_check_output`](#read_check_output). When the message says
 `go.sum` or `go.work.sum` needs entries or `go.mod` needs an update, call
 [`update_dependencies`](#update_dependencies).
+
+The project retains downloaded modules and toolchains in its private
+`check-modcache/` directory across checks, dependency updates and server
+restarts. Only dependency preparation and tidy may write this cache. Test
+containers mount it read-only, with `GOPROXY=off` and no network; their compiler
+cache, home and temporary files stay private to each command. Every call still
+loads the current module/workspace manifests and runs the tests. Cached downloads
+do not supply missing or replace incorrect `go.sum` or `go.work.sum` entries.
+Go checks recorded download identity; reuse does not rehash extracted cached
+files or authenticate changes made by other same-user host programs. Operation
+cleanup never removes the retained directory. Projects keep separate caches.
 
 | Refusal | When |
 | --- | --- |
@@ -2536,10 +2548,14 @@ check the actual evaluators against the updated inputs.
 
 All tagged full suites run nightly at 07:17 UTC and on a manual **Run workflow**
 request (`CI=true gh workflow run integration.yml --ref <branch> </dev/null`).
+Manual dispatch requires `integration.yml` to exist on the repository's default
+branch, even when `--ref` names another branch. Until the workflow reaches the
+default branch, a full run comes from a push to an integration branch named by
+its trigger, or a rerun of that push run.
 This runs the verifier, generation, starter, whole-project journey and Orders
-acceptance suites alongside complete native ordinary coverage. The lead can
-dispatch this workflow on a candidate head when tagged execution is needed
-before merging. Tagged jobs select only their named roots: ordinary CLI, verifier and scaffold tests belong to the full
+acceptance suites alongside complete native ordinary coverage. Once manual
+dispatch is available, it can check a candidate head before merging. Tagged jobs
+select only their named roots: ordinary CLI, verifier and scaffold tests belong to the full
 root partitions, and ordinary acceptance budget and hook tests belong to
 the ordinary Orders evaluator owner. The separate journey job owns the
 whole-project journey; the verifier retains its macOS and Linux profiles. The workflow lists
