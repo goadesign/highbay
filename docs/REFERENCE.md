@@ -2382,7 +2382,7 @@ walkthrough.
 
 ### Repository checks
 
-The [CI workflow](../.github/workflows/ci.yml) runs 12 Linux jobs on every
+The [CI workflow](../.github/workflows/ci.yml) runs 15 Linux jobs on every
 pull request. It executes complete ordinary tests, without `-short`, plus
 product linking, every added build profile and generated-contract checks.
 [Integration](../.github/workflows/integration.yml) adds native macOS coverage
@@ -2391,7 +2391,7 @@ on pull requests into `team-start` and `main`. It runs on pushes to `main`,
 
 | Linux PR owner | Work |
 | --- | --- |
-| Eight root groups | Two complementary control-plane page groups; other control-plane tests; design evaluator; the Story-table generator CLI test and its complement; other packages outside/inside the concurrency-owner list. |
+| Eleven root groups | Two complementary control-plane page groups; two complementary groups of other control-plane tests; selected compiler tests from the test writer and design evaluator, plus each package's remaining tests; the Story-table generator CLI test and its complement; other packages outside/inside the concurrency-owner list. |
 | Story and Orders evaluator | All ordinary tests of both modules, selecting each module's own Go toolchain. |
 | Orders | All ordinary Orders tests with its module toolchain. |
 | Build profiles | Ordinary product linking, then build and full vet for `e2e`, `scaffold`, `herdr`, `browser` and `e2e,docker`. The combined Docker profile includes its container tests; `docker` alone adds none. |
