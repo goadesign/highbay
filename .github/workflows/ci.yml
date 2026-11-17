@@ -1,4 +1,5 @@
-# Pushes run the short checks and partitioned full root suites in parallel.
+# Pushes run short checks alongside native compiler-input producers.
+# Full root partitions restore after those producers finish.
 # Nightly and manually requested runs also keep every native journey.
 # All model calls use scripted providers; these jobs need no model credentials.
 # The Docker dependency-repair journey runs on an Ubuntu host with its engine.
@@ -301,6 +302,7 @@ jobs:
           cache-dependency-path: ui/checkpoint/package-lock.json
       - name: Check production concurrency ownership
         run: |
+          bash .github/scripts/go-test_test.sh </dev/null
           go run ./.github/scripts/racecheck </dev/null
           go test -count=1 ./.github/scripts/racecheck </dev/null
       - name: Check formatting
@@ -326,9 +328,61 @@ jobs:
       - name: Test generated page contract consumers
         run: node --test ui/checkpoint/build_test.mjs </dev/null
 
+  compiler-inputs:
+    name: Full / compiler-inputs (${{ matrix.os }})
+    if: github.event_name == 'push' || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ${{ matrix.os }}
+    # Cold preparation has taken up to fourteen minutes before setup/save.
+    # Bound it separately from the unchanged full-test jobs.
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, ubuntu-latest]
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
+        id: go
+        with:
+          go-version-file: go.mod
+          cache: false
+      - uses: ./.github/actions/go-cache
+        id: compiler-cache
+        with:
+          go-version: ${{ steps.go.outputs.go-version }}
+      - name: Prepare the complete native compiler closure on a cold producer
+        if: steps.compiler-cache.outputs.build-hit != 'true' || steps.compiler-cache.outputs.modules-hit != 'true'
+        run: |
+          bash "$GITHUB_WORKSPACE/.github/scripts/go-test.sh" -count=1 -run '^$' -- ./... </dev/null
+          CGO_ENABLED=0 go build ./... </dev/null
+          go build -o "$RUNNER_TEMP/goa-cache-primer" goa.design/goa/v3/cmd/goa </dev/null
+          # Nested modules select their own dependency versions and test
+          # profiles. Root ./... never visits these compilation closures.
+          for module in story examples/orders examples/orders-eval; do
+            (
+              cd "$module"
+              bash "$GITHUB_WORKSPACE/.github/scripts/go-test.sh" -vet=all -count=1 -run '^$' -- ./... </dev/null
+            )
+          done
+          # The scheduled acceptance owner adds files under its e2e tag.
+          go -C examples/orders-eval test -race -count=1 -run '^$' -tags=e2e ./acceptance </dev/null
+      - name: Save the prepared module archive
+        if: steps.compiler-cache.outputs.modules-hit != 'true'
+        uses: actions/cache/save@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
+        with:
+          path: ${{ steps.compiler-cache.outputs.modules-dir }}
+          key: ${{ steps.compiler-cache.outputs.modules-key }}
+      - name: Save the prepared compiler archive
+        if: steps.compiler-cache.outputs.build-hit != 'true'
+        uses: actions/cache/save@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
+        with:
+          path: ${{ steps.compiler-cache.outputs.build-dir }}
+          key: ${{ steps.compiler-cache.outputs.build-key }}
+
   full-root:
     name: Full / root-${{ matrix.suite }} (${{ matrix.os }})
     if: github.event_name == 'push' || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    needs: compiler-inputs
     runs-on: ${{ matrix.os }}
     # Isolate the expensive owners; package alarms exclude setup/compilation.
     # Hosted full runs, rather than short PR checks, establish these budgets.
@@ -349,13 +403,6 @@ jobs:
         id: compiler-cache
         with:
           go-version: ${{ steps.go.outputs.go-version }}
-          publish: ${{ matrix.suite == 'remaining' && github.event_name != 'pull_request' }}
-      - name: Prepare the complete native compiler closure on a cold producer
-        if: matrix.suite == 'remaining' && github.event_name != 'pull_request' && steps.compiler-cache.outputs.build-hit != 'true'
-        run: |
-          bash "$GITHUB_WORKSPACE/.github/scripts/go-test.sh" -count=1 -run '^$' -- ./... </dev/null
-          CGO_ENABLED=0 go build ./... </dev/null
-          go build -o "$RUNNER_TEMP/goa-cache-primer" goa.design/goa/v3/cmd/goa </dev/null
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         if: matrix.suite != 'designeval'
         with:
