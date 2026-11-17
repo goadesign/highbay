@@ -74,6 +74,9 @@ type (
 		WorkspaceIno uint64 `json:"workspace_ino"`
 		// GoProxyEnv is the operator's module proxy settings.
 		GoProxyEnv []string `json:"go_proxy_env"`
+		// ModuleCacheDir is the optional server-owned retained dependency cache.
+		// It is transient helper input, never part of the operation record.
+		ModuleCacheDir string `json:"module_cache_dir,omitempty"`
 		// CheckTimeout is the configured check timeout, named in messages.
 		CheckTimeout time.Duration `json:"check_timeout"`
 		// StoredEvaluator is true when the project verifies with stored
@@ -273,6 +276,7 @@ func openCheckHelperOperation(spec checkHelperSpec, runner *candidate.ContainerR
 		checker:         runner,
 		checkTimeout:    spec.CheckTimeout,
 		goProxyEnv:      spec.GoProxyEnv,
+		moduleCacheDir:  spec.ModuleCacheDir,
 		storedEvaluator: spec.StoredEvaluator,
 	}
 	return op, os.NewFile(checkHelperDirFD, spec.Dir), nil
@@ -368,6 +372,7 @@ func (c *ControlPlane) runCheckHelper(ctx context.Context, tool string) (res che
 		WorkspaceDev:    op.workspaceID.dev,
 		WorkspaceIno:    op.workspaceID.ino,
 		GoProxyEnv:      c.goProxyEnv,
+		ModuleCacheDir:  c.checkModuleCacheDir,
 		CheckTimeout:    c.checkTimeout,
 		StoredEvaluator: c.storedEvaluator(),
 		TraceContext:    map[string]string{},
@@ -482,6 +487,9 @@ func (s checkHelperSpec) validate() error {
 		return fmt.Errorf("check helper workspace %q is not inside the grant", s.WorkspaceRel)
 	case s.CheckTimeout <= 0:
 		return fmt.Errorf("check helper timeout %s must be positive", s.CheckTimeout)
+	}
+	if s.ModuleCacheDir != "" {
+		return validateCheckModuleCacheDir(s.ModuleCacheDir, s.GrantRoot, filepath.Dir(s.Dir))
 	}
 	return nil
 }

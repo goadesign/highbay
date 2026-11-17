@@ -400,7 +400,7 @@ func prepareCheckProjectFixture(t *testing.T, workspace string) {
 }
 
 // openCheckCP opens a ControlPlane configured with ContainerRunner without t.Cleanup.
-func openCheckCP(t *testing.T, cardsDir, workspace string) *ControlPlane {
+func openCheckCP(t *testing.T, cardsDir, workspace string, moduleCache ...string) *ControlPlane {
 	t.Helper()
 	opts := Options{
 		CardsDir:     cardsDir,
@@ -408,6 +408,9 @@ func openCheckCP(t *testing.T, cardsDir, workspace string) *ControlPlane {
 		Checker:      candidate.NewContainerRunner(),
 		CheckHelper:  testCheckHelper(t),
 		CheckTimeout: 30 * time.Second,
+	}
+	if len(moduleCache) != 0 {
+		opts.CheckModuleCacheDir = moduleCache[0]
 	}
 	cp, err := New(opts)
 	require.NoError(t, err)

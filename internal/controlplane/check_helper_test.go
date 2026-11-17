@@ -135,14 +135,25 @@ func TestCheckHelperWithoutASpecMakesNoDockerCall(t *testing.T) {
 	installFakeDocker(t)
 	daemon := newFakeDockerDaemon(t)
 	t.Setenv("DOCKER_HOST", daemon.hostURI)
-	for _, stdin := range []string{"", `{"tool":"check_project","op_id":`} {
+	id := strings.Repeat("ab", 16)
+	invalidCache, err := json.Marshal(checkHelperSpec{
+		Tool: checkToolProject, OpID: id, Dir: filepath.Join(realTempDir(t), id),
+		GrantRoot: realTempDir(t), WorkspaceRel: ".", CheckTimeout: time.Minute,
+		ModuleCacheDir: "relative",
+	})
+	require.NoError(t, err)
+	for _, tc := range []struct{ stdin, want string }{
+		{"", "read the check helper spec"},
+		{`{"tool":"check_project","op_id":`, "read the check helper spec"},
+		{string(invalidCache), "check module cache directory"},
+	} {
 		cmd := testCheckHelper(t)()
-		cmd.Stdin = strings.NewReader(stdin)
+		cmd.Stdin = strings.NewReader(tc.stdin)
 		out, err := cmd.CombinedOutput()
 		var exitErr *exec.ExitError
 		require.ErrorAs(t, err, &exitErr, string(out))
 		assert.Equal(t, 1, exitErr.ExitCode())
-		assert.Contains(t, string(out), "read the check helper spec")
+		assert.Contains(t, string(out), tc.want)
 	}
 	assert.Zero(t, daemon.calls.Load())
 }
@@ -196,7 +207,9 @@ func TestCanceledCreateIsAnsweredAndItsContainerRemoved(t *testing.T) {
 	daemon := newFakeDockerDaemon(t)
 	t.Setenv("DOCKER_HOST", daemon.hostURI)
 	cards := filepath.Join(realTempDir(t), "cards")
-	cp := openCheckCP(t, cards, newShopModule(t, nil))
+	moduleCache := newCheckModuleCache(t)
+	assert.NoError(t, os.WriteFile(filepath.Join(moduleCache, "retained"), []byte("input"), 0o600))
+	cp := openCheckCP(t, cards, newShopModule(t, nil), moduleCache)
 	defer func() { assert.NoError(t, cp.Close()) }()
 	readCheckBuilderFixture(t, cp)
 	wait, cancelWait := context.WithTimeout(t.Context(), lifecycleWaitTimeout)
@@ -251,6 +264,7 @@ func TestCanceledCreateIsAnsweredAndItsContainerRemoved(t *testing.T) {
 	opDir := onlyOperationDir(t, cards)
 	assert.Empty(t, readOwnerRecord(t, opDir).Containers)
 	assert.NoDirExists(t, filepath.Join(opDir, "src"))
+	assertFileContent(t, filepath.Join(moduleCache, "retained"), "input")
 }
 
 // TestUnansweredCreateKeepsItsPendingRecord fails create: the engine did not

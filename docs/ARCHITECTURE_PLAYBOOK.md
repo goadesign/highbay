@@ -205,6 +205,22 @@ the test-report checker. Their scratch and outputs remain independently owned;
 closing an evaluator or removing check scratch never removes the project cache.
 Direct evaluator and checker constructors retain their private cache defaults.
 
+For Docker `check_project` and `update_dependencies`, the project composition
+derives a separate private `check-modcache/` under project state and injects it
+as `controlplane.Options.CheckModuleCacheDir`. The control plane validates its
+ownership, permissions and separation from source and operation storage, then
+sends it only in the check helper's transient stdin specification. No model
+input or durable operation record contains the path. The helper validates that
+process input before Docker admission. Dependency preparation and tidy mount
+the cache writable; test containers mount it read-only, with network disabled
+and `GOPROXY=off`. Compiler cache, HOME, TMPDIR and work remain fresh for each
+command. The retained directory survives cancellation, cleanup and restart;
+recovery removes only operation-owned scratch. Embedded checkers that omit the
+option keep an operation-local module cache and need no `BuildCacheDir`.
+Go's recorded download checks do not rehash extracted cached source. The
+read-only test mount preserves the dependency write boundary; it does not
+confine other same-user host processes.
+
 The project cache survives Stop, Close, restart and run pruning. Go maintains
 entries; canceled compiler scratch stays with the operation's cleanup owner.
 Concurrent processes may share the cache on one machine using a local

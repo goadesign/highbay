@@ -165,6 +165,9 @@ func TestContainerEngineEndToEnd(t *testing.T) {
 		assert.Zero(t, code, output)
 		assert.Contains(t, output, "PASS: TestWorkspace")
 	})
+	t.Run("warm_downloads_preserve_checksum_refusals_and_repair", func(t *testing.T) {
+		testWarmModuleChecksums(t, ctx, engine)
+	})
 	t.Run("operator_docker_proxy_values_are_not_injected", func(t *testing.T) {
 		operatorConfig := containerTempDir(t)
 		require.NoError(t, os.WriteFile(filepath.Join(operatorConfig, "config.json"), []byte(`{"proxies":{"default":{"httpProxy":"http://private-proxy.invalid:8080","httpsProxy":"http://private-proxy.invalid:8080","ftpProxy":"http://private-proxy.invalid:8080","allProxy":"http://private-proxy.invalid:8080","noProxy":"private.example"}}}`), 0o600))
@@ -178,6 +181,78 @@ func TestContainerEngineEndToEnd(t *testing.T) {
 		code, output := basic.run(t, ctx, ".", "none", false, "test", "-count=1", "-run", "^TestBehavior$", "./...")
 		assert.Zero(t, code, output)
 	})
+}
+
+// testWarmModuleChecksums uses the real Go command because a fake engine cannot
+// prove cached downloads still honor current manifests. Ten small list/tidy
+// commands cover both checksum owners without compiling another test program;
+// the application journey separately proves their publication into the builder
+// copy. Existing vendor/toolchain cases keep their independent Go-default proof.
+func testWarmModuleChecksums(t *testing.T, ctx context.Context, engine *Engine) {
+	t.Helper()
+	for _, tc := range []struct {
+		manifest string
+		files    map[string]string
+		prepare  []string
+	}{
+		{
+			manifest: "go.sum",
+			files: map[string]string{
+				"go.mod":   "module example.com/sums\n\ngo 1.27.3\n\nrequire rsc.io/qr v0.2.0\n",
+				"value.go": "package sums\nimport \"rsc.io/qr\"\nvar Level = qr.L\n",
+			},
+			prepare: []string{"mod", "tidy"},
+		},
+		{
+			manifest: "go.work.sum",
+			files: map[string]string{
+				"go.mod":             "module example.com/sums\n\ngo 1.27.3\n\nrequire example.com/dep v0.0.0\nreplace example.com/dep => ./base\n",
+				"value.go":           "package sums\nimport \"example.com/dep\"\nvar Level = dep.Level\n",
+				"base/go.mod":        "module example.com/dep\n\ngo 1.27.3\n",
+				"base/value.go":      "package dep\nconst Level = 0\n",
+				"workspace/go.mod":   "module example.com/dep\n\ngo 1.27.3\n\nrequire rsc.io/qr v0.2.0\n",
+				"workspace/value.go": "package dep\nimport \"rsc.io/qr\"\nvar Level = qr.L\n",
+				"go.work":            "go 1.27.3\n\nuse .\n\nreplace example.com/dep => ./workspace\n",
+			},
+			prepare: []string{"list", "-deps", "-test", `-f={{""}}`, "./..."},
+		},
+	} {
+		t.Run(tc.manifest, func(t *testing.T) {
+			fixture := newContainerFixture(t, engine, tc.files)
+			code, output := fixture.run(t, ctx, ".", "bridge", false, tc.prepare...)
+			require.Zero(t, code, output)
+			manifest := filepath.Join(fixture.source, tc.manifest)
+			valid, err := os.ReadFile(manifest)
+			require.NoError(t, err)
+			require.Contains(t, string(valid), "rsc.io/qr v0.2.0 h1:")
+			for _, state := range []string{"missing", "incorrect"} {
+				t.Run(state, func(t *testing.T) {
+					require.NoError(t, os.Remove(manifest))
+					if state == "incorrect" {
+						wrong := "rsc.io/qr v0.2.0 h1:" + strings.Repeat("A", 43) + "=\n"
+						require.NoError(t, os.WriteFile(manifest, []byte(wrong), 0o600))
+					}
+					code, output := fixture.run(t, ctx, ".", "bridge", true, "list", "-deps", "-test", `-f={{""}}`, "./...")
+					assert.NotZero(t, code, output)
+					if state == "incorrect" {
+						assert.Contains(t, output, "checksum mismatch")
+					} else {
+						assert.Contains(t, output, tc.manifest)
+					}
+				})
+				// The next refusal starts from the original complete manifest.
+				require.NoError(t, os.WriteFile(manifest, valid, 0o600))
+			}
+			require.NoError(t, os.Remove(manifest))
+			code, output = fixture.run(t, ctx, ".", "bridge", false, tc.prepare...)
+			require.Zero(t, code, output)
+			repaired, err := os.ReadFile(manifest)
+			require.NoError(t, err)
+			assert.Equal(t, string(valid), string(repaired))
+			code, output = fixture.run(t, ctx, ".", "bridge", true, "list", "-deps", "-test", `-f={{""}}`, "./...")
+			assert.Zero(t, code, output)
+		})
+	}
 }
 
 // newContainerFixture writes trusted test data but never runs it on the host.

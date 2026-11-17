@@ -567,6 +567,7 @@ func projectServeOptions(state *project.State, environ []string) (controlplane.O
 		Verification:           ws.verification,
 		RunsDir:                ws.runsDir,
 		BuildCacheDir:          ws.buildCacheDir,
+		CheckModuleCacheDir:    ws.checkModuleCacheDir,
 		WrittenTestRuns:        ws.writtenTestRuns,
 		PromotionTarget:        ws.promotionTarget,
 		ResolvePromotionTarget: ws.resolvePromotionTarget,
