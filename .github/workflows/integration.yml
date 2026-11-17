@@ -88,12 +88,39 @@ jobs:
     needs: compiler-inputs
     uses: ./.github/workflows/ci.yml
 
+  native-platform:
+    name: macOS / process and filesystem contracts
+    runs-on: macos-latest
+    needs: compiler-inputs
+    if: ${{ !cancelled() && (github.event_name == 'pull_request' || github.event_name == 'push') && (github.event_name == 'pull_request' || needs.compiler-inputs.result == 'success') }}
+    # This remains a cold/hang backstop; warm execution is measured separately.
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
+        id: go
+        with:
+          go-version-file: go.mod
+          cache: false
+      - uses: ./.github/actions/go-cache
+        with:
+          go-version: ${{ steps.go.outputs.go-version }}
+      - name: Prefetch fixed compiler fixture inputs
+        run: |
+          GOWORK=off go mod download </dev/null
+          GOWORK=off go -C internal/testmodule/testdata/goa-goaai-dsl mod download all </dev/null
+          GOWORK=off go -C internal/testmodule/testdata/goa-goaai-evaluator mod download all </dev/null
+          GOWORK=off go -C internal/project/testdata/story-fixture mod download all </dev/null
+          GOWORK=off go -C internal/project/testdata/story-evaluator mod download all </dev/null
+      - name: Run the native process and filesystem contracts
+        run: bash .github/scripts/test-native.sh </dev/null
+
   native-root:
     name: macOS / root-${{ matrix.group }}
     runs-on: macos-latest
     # Existing full-root bounds remain cold/hang backstops, not timing claims.
     needs: compiler-inputs
-    if: ${{ !cancelled() && (github.event_name == 'pull_request' || needs.compiler-inputs.result == 'success') }}
+    if: ${{ !cancelled() && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && needs.compiler-inputs.result == 'success' }}
     timeout-minutes: 30
     strategy:
       fail-fast: false
@@ -142,7 +169,7 @@ jobs:
     name: macOS / Story and Orders evaluator
     runs-on: macos-latest
     needs: compiler-inputs
-    if: ${{ !cancelled() && (github.event_name == 'pull_request' || needs.compiler-inputs.result == 'success') }}
+    if: ${{ !cancelled() && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && needs.compiler-inputs.result == 'success' }}
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
@@ -170,7 +197,7 @@ jobs:
     name: macOS / Orders
     runs-on: macos-latest
     needs: compiler-inputs
-    if: ${{ !cancelled() && (github.event_name == 'pull_request' || needs.compiler-inputs.result == 'success') }}
+    if: ${{ !cancelled() && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && needs.compiler-inputs.result == 'success' }}
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
@@ -190,7 +217,7 @@ jobs:
     name: macOS / generated contracts
     runs-on: macos-latest
     needs: compiler-inputs
-    if: ${{ !cancelled() && (github.event_name == 'pull_request' || needs.compiler-inputs.result == 'success') }}
+    if: ${{ !cancelled() && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && needs.compiler-inputs.result == 'success' }}
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2

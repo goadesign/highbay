@@ -2392,9 +2392,10 @@ walkthrough.
 The [CI workflow](../.github/workflows/ci.yml) runs 15 Linux jobs on every
 pull request. It executes complete ordinary tests, without `-short`, plus
 product linking, every added build profile and generated-contract checks.
-[Integration](../.github/workflows/integration.yml) adds native macOS coverage
-on pull requests into `team-start` and `main`. It runs on pushes to `main`,
-`team-start` and `builder-copy`, nightly at 07:17 UTC, and manual full runs.
+[Integration](../.github/workflows/integration.yml) adds one macOS job on pull
+requests into `team-start` and `main` and pushes to `main`, `team-start` and
+`builder-copy`. It exercises native process and filesystem contracts. The complete
+14-job macOS ordinary suite runs nightly at 07:17 UTC and on manual full runs.
 
 | Linux PR owner | Work |
 | --- | --- |
@@ -2404,10 +2405,16 @@ on pull requests into `team-start` and `main`. It runs on pushes to `main`,
 | Build profiles | Ordinary product linking, then build and full vet for `e2e`, `scaffold`, `herdr`, `browser` and `e2e,docker`. The combined Docker profile includes its container tests; `docker` alone adds none. |
 | Generated contracts | Formatting, concurrency-owner checks, TypeScript, root/target-prompt/example Goa regeneration, page consistency and Node consumer tests. |
 
-[The root selector](../.github/scripts/test-root.sh) owns the same full-root
-partitions on Linux and macOS. New roots, examples and fuzz seeds belong to
-complementary groups. New packages retain an owner, including packages without
-tests. Project page tests stay with the project package; control-plane page
+[The root selector](../.github/scripts/test-root.sh) owns the complete Linux
+partitions and the full macOS nightly/manual partitions. New roots, examples and
+fuzz seeds belong to complementary groups. [The native selector](../.github/scripts/test-native.sh)
+owns the macOS PR/push cases: process groups and signals, executable and descriptor
+identity, physical paths and aliases, permissions, atomic rename, locks, staging,
+and project-server start/stop. Its package owners and exact names keep portable
+rendering, design, Story, test-writing and prompt logic on Linux for PRs; full
+macOS nightly/manual execution still covers them. When a native boundary gains or
+renames a test, update that selector in the same change. New packages retain an
+owner in the complete suites, including packages without tests. Project page tests stay with the project package; control-plane page
 names belong only to the page groups. Separating the other plain packages
 from concurrency owners removes the old serial job phase without reducing
 race coverage. Every command uses `-count=1` and full vet. No job reruns the
@@ -2422,10 +2429,11 @@ compiles with no test execution and does not use this guard.
 
 The integration workflow reuses the Linux workflow on pushes, nightly and
 manual runs; integration PRs already receive those Linux jobs from their PR
-workflow. Native macOS root groups, both nested-module jobs, generated checks
-and browser-profile vet run before integration, including Darwin-selected
-process, filesystem-alias and browser-opener behavior. Thus ordinary feature
-PRs use Linux, while integration PRs also exercise native macOS code.
+workflow. The selected native macOS job runs before integration, including
+Darwin-selected process, filesystem-alias and browser-opener behavior. Complete native root groups,
+both nested-module jobs, generated checks and browser-profile vet run only nightly
+and on manual full runs. Nightly/manual events run only the complete native
+owners, keeping execution separate from the selected PR/push job.
 
 The trusted native compiler producers run only outside pull requests. Native
 integration PR checks use restored archives directly; they do not wait for a
