@@ -2548,10 +2548,14 @@ check the actual evaluators against the updated inputs.
 
 All tagged full suites run nightly at 07:17 UTC and on a manual **Run workflow**
 request (`CI=true gh workflow run integration.yml --ref <branch> </dev/null`).
+Manual dispatch requires `integration.yml` to exist on the repository's default
+branch, even when `--ref` names another branch. Until the workflow reaches the
+default branch, a full run comes from a push to an integration branch named by
+its trigger, or a rerun of that push run.
 This runs the verifier, generation, starter, whole-project journey and Orders
-acceptance suites alongside complete native ordinary coverage. The lead can
-dispatch this workflow on a candidate head when tagged execution is needed
-before merging. Tagged jobs select only their named roots: ordinary CLI, verifier and scaffold tests belong to the full
+acceptance suites alongside complete native ordinary coverage. Once manual
+dispatch is available, it can check a candidate head before merging. Tagged jobs
+select only their named roots: ordinary CLI, verifier and scaffold tests belong to the full
 root partitions, and ordinary acceptance budget and hook tests belong to
 the ordinary Orders evaluator owner. The separate journey job owns the
 whole-project journey; the verifier retains its macOS and Linux profiles. The workflow lists
