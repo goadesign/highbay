@@ -136,11 +136,11 @@ func TestCheckProjectRepairsDependenciesOnOneServer(t *testing.T) {
 	cp, err := controlplane.New(opts)
 	require.NoError(t, err)
 	registerCheckModuleCacheCleanup(t, opts.CheckModuleCacheDir)
-	_, err = cp.ConfigureModel(controlplane.WithPrincipal(t.Context(), controlplane.Principal{ID: "operator@example.com", CallerID: "user", Kind: controlplane.CallerUser}), &gensurla.ConfigureModelPayload{GatewayAddr: &gatewayAddr})
-	require.NoError(t, err)
 	// Registered after the temporary directories, so it runs before they
 	// are removed.
 	t.Cleanup(func() { closeRetaining(cp, workspace, opts.CardsDir) })
+	_, err = cp.ConfigureModel(controlplane.WithPrincipal(t.Context(), controlplane.Principal{ID: "operator@example.com", CallerID: "user", Kind: controlplane.CallerUser}), &gensurla.ConfigureModelPayload{GatewayAddr: &gatewayAddr})
+	require.NoError(t, err)
 	srv := httptest.NewServer(controlplane.NewHTTPHandler(cp, workflowAuthenticator(map[string]controlplane.Principal{
 		"test-token": {ID: "operator@example.com"},
 	})))
