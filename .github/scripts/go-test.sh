@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Run every supplied package, instrumenting the declared production concurrency
-# owners. Untagged Go test flags precede --; package patterns follow it. E2E measurements
-# invoke go test directly so their race/plain comparison remains explicit.
+# owners when they have tests. Untagged Go test flags precede --; package patterns
+# follow it. E2E measurements invoke go test directly so their race/plain
+# comparison remains explicit.
 set -eo pipefail
 exec </dev/null
 
@@ -26,15 +27,15 @@ repository=${GITHUB_WORKSPACE:-$(git rev-parse --show-toplevel)}
 owners="$repository/.github/race-packages.txt"
 test -f "$owners"
 owner_names=$(tr -d '\r' < "$owners")
-packages=$(go list "$@")
+packages=$(go list -f '{{.ImportPath}} {{if or .TestGoFiles .XTestGoFiles}}true{{else}}false{{end}}' "$@")
 if [ -z "$packages" ]; then
   echo 'no Go packages selected' >&2
   exit 1
 fi
 race=()
 plain=()
-while IFS= read -r package; do
-  if grep -Fxq -- "$package" <<< "$owner_names"; then
+while read -r package has_tests; do
+  if [ "$has_tests" = true ] && grep -Fxq -- "$package" <<< "$owner_names"; then
     race+=("$package")
   else
     plain+=("$package")
