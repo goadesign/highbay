@@ -14546,6 +14546,19 @@ paths:
                                 name: forbidden
                                 temporary: false
                                 timeout: false
+                "501":
+                    description: 'not_implemented: No team is bound to this control plane; start this project with surla to use its team.'
+                    content:
+                        application/vnd.goa.error:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                            example:
+                                fault: false
+                                id: 123abc
+                                message: parameter 'p' must be an integer
+                                name: not_implemented
+                                temporary: false
+                                timeout: false
     /team/agents:
         post:
             tags:
@@ -14617,6 +14630,19 @@ paths:
                                         name: window_busy
                                         temporary: false
                                         timeout: false
+                "501":
+                    description: 'not_implemented: No team is bound to this control plane; start this project with surla to use its team.'
+                    content:
+                        application/vnd.goa.error:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                            example:
+                                fault: false
+                                id: 123abc
+                                message: parameter 'p' must be an integer
+                                name: not_implemented
+                                temporary: false
+                                timeout: false
                 "503":
                     description: 'team_unavailable: The project team could not be prepared.'
                     content:
@@ -14688,6 +14714,19 @@ paths:
                                         name: window_busy
                                         temporary: false
                                         timeout: false
+                "501":
+                    description: 'not_implemented: No team is bound to this control plane; start this project with surla to use its team.'
+                    content:
+                        application/vnd.goa.error:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                            example:
+                                fault: false
+                                id: 123abc
+                                message: parameter 'p' must be an integer
+                                name: not_implemented
+                                temporary: false
+                                timeout: false
                 "503":
                     description: 'team_unavailable: Herdr could not establish the owned pane.'
                     content:

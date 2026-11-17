@@ -1934,6 +1934,10 @@ saves none of it. The user's views page reads it and acts on it with
 cannot call these three, and none is an MCP tool. The `surla` command
 prepares the same team with the management operation `ensure_team`.
 
+If no team is bound to the server, all three user operations return
+`not_implemented` (`501`) with the enabling step:
+`Start this project with surla to use its team.`
+
 ### `get_team`
 
 `GET /team`. **Output:** `TeamSnapshot` (`team`, `roles`). Registered roles
@@ -1950,6 +1954,7 @@ creates nothing and marks nothing read. Each role has:
 When Herdr sends no heartbeat or event for 45 seconds, every role reads
 `unknown` until fresh facts arrive. A failed assignment read never reads as
 `nothing_owed` or `no_work`. `wait_for_changes` also covers these facts.
+For an unbound team, see [the shared refusal](#team-supervision).
 
 ### `show_team_pane`
 
@@ -1958,6 +1963,7 @@ that role's pane, only when the user asks.
 
 | Refusal | When |
 | --- | --- |
+| `not_implemented` (`501`) | No team is bound; see [the shared refusal](#team-supervision). |
 | `window_busy` (`409`) | A Herdr dialog is open; close it first. Nothing in the window changed. |
 | `pane_unavailable` (`409`) | The role has no pane Surla can identify. |
 | `team_unavailable` (`503`) | Herdr could not establish the pane: `Herdr did not complete a team command; open the Herdr app, then try again`. |
@@ -1969,9 +1975,10 @@ that role's pane, only when the user asks.
 `surla` runs, opening the Chorus dialog when the guide, or a worker role that
 has work on the open build (or any listed role when the assignment read fails),
 is not running.
-Refusals: `ambiguous_space` (`409`, close the duplicate Herdr spaces, then
-start the agents), `window_busy` (`409`) and `team_unavailable` (`503`), whose
-message is the views page's step for its cause (see
+Refusals: `not_implemented` (`501`, no team is bound; see
+[the shared refusal](#team-supervision)), `ambiguous_space` (`409`, close the
+duplicate Herdr spaces, then start the agents), `window_busy` (`409`) and
+`team_unavailable` (`503`), whose message is the views page's step for its cause (see
 [`ensure_team`](#ensure_team-management)). `team_unavailable` can come after
 the server saved the team's name and space, registered the guide and wrote
 the roster; they stay saved, and the next start reuses them.
