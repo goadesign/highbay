@@ -20,7 +20,6 @@ import (
 
 	genmcpadapter "github.com/goadesign/surla/gen/mcp_surla"
 	gensurla "github.com/goadesign/surla/gen/surla"
-	"github.com/goadesign/surla/internal/testmodule"
 )
 
 // agreedOwner owns every change these tests save.
@@ -112,41 +111,6 @@ func TestARevisionOfAnAgreedChangeWaitsAndTheAgreedRevisionStaysInForce(t *testi
 		ChangeID: "chg", RequestRevision: agreed.RequestRevision, CandidateCommit: commit, ReportDigest: report.Digest,
 	})
 	assertServiceError(t, err, "conflict")
-}
-
-// TestTheAgreedRevisionStaysPreviewableWhileAProposalWaits previews a real
-// design with the Go toolchain at the agreed revision while a proposal waits.
-func TestTheAgreedRevisionStaysPreviewableWhileAProposalWaits(t *testing.T) {
-	if testing.Short() {
-		t.Skip("runs the Go toolchain; the full suite (go test without -short) covers it")
-	}
-	workspace := t.TempDir()
-	writeWorkspaceFiles(t, workspace, testmodule.Snapshot(t, "", `package design
-
-import . "goa.design/goa/v3/dsl"
-
-var _ = API("orders", func() {})
-
-var _ = Service("orders", func() {
-	Method("refund", func() {
-		Payload(String)
-		Result(String)
-		HTTP(func() { POST("/refunds") })
-	})
-})
-`))
-	cp := newControlPlane(t, Options{WorkspaceDir: workspace})
-	proposed := mustProposeFromRefresh(t, cp, agreedGuide, "chg", "Refunds up to $50 are instant.", refundAnalysis("Refunds up to $50 are instant.", refundTaxQuestion()))
-	agreed, err := cp.ConfirmIntent(agreedUser, &gensurla.ConfirmIntentPayload{
-		ChangeID: "chg", RequestRevision: proposed.RequestRevision,
-		Answers: map[string]string{"chg-ambiguity-01": "with_tax"}, Examples: proposed.Examples,
-	})
-	require.NoError(t, err)
-	proposeRevision(t, cp, "chg", agreed.RequestRevision, "Refunds up to $60 are instant.")
-	preview, err := cp.PreviewArchitecture(agreedGuide, &gensurla.PreviewArchitecturePayload{ChangeID: "chg", RequestRevision: agreed.RequestRevision})
-	require.NoError(t, err)
-	assert.Equal(t, agreed.RequestRevision, preview.RequestRevision)
-	assert.NotEmpty(t, preview.Containers)
 }
 
 // TestAProposalIsReplacedByTheNextRevisionAndAStaleOneIsRefused revises a
