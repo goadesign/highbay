@@ -184,6 +184,7 @@ func TestContainerEngineEndToEnd(t *testing.T) {
 func newContainerFixture(t *testing.T, engine *Engine, files map[string]string) *containerFixture {
 	t.Helper()
 	root := containerTempDir(t)
+	cache := filepath.Join(root, "cache")
 	var id [16]byte
 	_, err := rand.Read(id[:])
 	require.NoError(t, err)
@@ -191,9 +192,10 @@ func newContainerFixture(t *testing.T, engine *Engine, files map[string]string) 
 		engine: engine, root: root, source: filepath.Join(root, "src, quoted\""),
 		id: hex.EncodeToString(id[:]), toolchain: "auto",
 	}
-	for _, dir := range []string{f.source, filepath.Join(root, "cache")} {
+	for _, dir := range []string{f.source, cache} {
 		require.NoError(t, os.MkdirAll(dir, 0o700))
 	}
+	registerContainerCacheCleanup(t, cache)
 	for name, text := range files {
 		dest := filepath.Join(f.source, filepath.FromSlash(name))
 		require.NoError(t, os.MkdirAll(filepath.Dir(dest), 0o700))

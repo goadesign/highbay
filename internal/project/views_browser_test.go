@@ -5,7 +5,7 @@
 // Content-Security-Policy and framing rule, itself sends the Sec-Fetch-Site
 // mark every session request depends on, and lays the page out as its
 // stylesheet says, such as the Live target view at a phone's width. It is
-// opt-in:
+// run nightly and on manual full CI runs, and may be selected locally:
 //
 //	CI=true go test -race -count=1 -tags browser ./internal/project </dev/null
 //
@@ -20,7 +20,6 @@ package project
 import (
 	"bytes"
 	"context"
-	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"html"
@@ -334,6 +333,15 @@ type (
 	// under this layout fixture's explicit snapshot lifetime.
 	phoneTeamOwner struct{ *Server }
 
+	// phoneBuildService serves immutable presentation facts through the generated
+	// HTTP boundary. The real service owns cards, credentials and Team state.
+	phoneBuildService struct {
+		gensurla.Service
+		// builds and findings are populated before the browser starts reading.
+		builds   map[string]*gensurla.ChangeBuild
+		findings *gensurla.TestFindings
+	}
+
 	// phoneFacts records real layout and keyboard observations, not worker execution.
 	phoneFacts struct {
 		Team  phoneViewFacts `json:"team"`
@@ -430,13 +438,16 @@ func TestViewsPageInARealBrowser(t *testing.T) {
 	vp := startViewsProject(t, controlplane.Options{WorkspaceDir: longStoryWorkspace(t)})
 	origin := vp.state.Origin()
 	guide := vp.agent(t, "guide")
-	target := proposeChange(t, origin, guide, "chg-refunds", "")
+	// Every card in an initialized module selects the guide's succeeded,
+	// immutable refresh snapshot. One evaluation can supply all three cards.
+	storyOp := evaluateStory(t, origin, guide)
+	target := proposeChange(t, origin, guide, "chg-refunds", storyOp)
 	confirmBody, err := gensurla.EncodeConfirmIntentPayload(&gensurla.ConfirmIntentPayload{
 		ChangeID: target.ChangeID, RequestRevision: target.RequestRevision, Answers: map[string]string{}, Examples: target.Examples,
 	})
 	require.NoError(t, err)
-	proposeChange(t, origin, guide, "chg-invoices", "")
-	proposeChange(t, origin, guide, "chg-story", evaluateStory(t, origin, guide))
+	proposeChange(t, origin, guide, "chg-invoices", storyOp)
+	proposeChange(t, origin, guide, "chg-story", storyOp)
 	changeIDs := []string{"chg-refunds", "chg-invoices", "chg-story"}
 	link, err := vp.link()
 	require.NoError(t, err)
@@ -658,6 +669,27 @@ func (o *phoneTeamOwner) Supervise(ctx context.Context, _ controlplane.Assignmen
 	return nil
 }
 
+// GetBuild returns a recorded layout state, retaining the real reader for any
+// change outside this fixture.
+func (s *phoneBuildService) GetBuild(
+	ctx context.Context, p *gensurla.GetBuildPayload,
+) (*gensurla.ChangeBuild, error) {
+	if build, ok := s.builds[p.ChangeID]; ok {
+		return build, nil
+	}
+	return s.Service.GetBuild(ctx, p)
+}
+
+// GetTestFindings binds long finding text to the fixture's exact verdict.
+func (s *phoneBuildService) GetTestFindings(
+	ctx context.Context, p *gensurla.GetTestFindingsPayload,
+) (*gensurla.TestFindings, error) {
+	if p.ChangeID == s.findings.ChangeID {
+		return s.findings, nil
+	}
+	return s.Service.GetTestFindings(ctx, p)
+}
+
 // TestTeamAndBuildAtPhoneWidth proves layout against the real server and generated
 // HTTP handlers. Terminal observations and saved verdicts are bounded fixtures;
 // this does not establish real worker execution, judgment or test acceptance.
@@ -678,9 +710,10 @@ func TestTeamAndBuildAtPhoneWidth(t *testing.T) {
 		Team:     &controlplane.TeamBinding{Owner: vp.state.Record.Owner, Service: &phoneTeamOwner{Server: server}},
 	})
 	require.NoError(t, err)
+	service := &phoneBuildService{Service: cp, builds: make(map[string]*gensurla.ChangeBuild)}
 	application := http.NewServeMux()
 	application.Handle("GET /views", controlplane.ViewsPage())
-	application.Handle("/", controlplane.NewHTTPHandler(cp, server.Authenticate))
+	application.Handle("/", controlplane.NewHTTPHandler(service, server.Authenticate))
 	handler := server.Handler(application)
 	vp.cp.Store(cp)
 	vp.handler.Store(&handler)
@@ -719,6 +752,7 @@ func TestTeamAndBuildAtPhoneWidth(t *testing.T) {
 			strings.Repeat("Exercise the preserved behavior before reporting the tests again. ", 3))
 	}
 	longReason := strings.Repeat("compilerdiagnostic", 24) + ": the recorded compiler result needs the project owner's attention."
+	at := now.UTC().Format(time.RFC3339Nano)
 	for _, id := range []string{"phone-build", "phone-findings"} {
 		card := proposeChange(t, vp.state.Origin(), guide, id, "")
 		user := controlplane.WithPrincipal(t.Context(), controlplane.Principal{ID: vp.state.Record.Owner, CallerID: "phone-user", Kind: controlplane.CallerUser})
@@ -726,27 +760,29 @@ func TestTeamAndBuildAtPhoneWidth(t *testing.T) {
 			ChangeID: id, RequestRevision: card.RequestRevision, Answers: map[string]string{}, Examples: card.Examples,
 		})
 		require.NoError(t, err)
-		writer := map[string]any{
-			"state": "could_not_run", "read": true, "working_folder": vp.state.Record.Directory,
-			"findings": []string{}, "commit": "", "reason": longReason,
-			"step": strings.Repeat("Review the recorded project configuration before retrying. ", 7), "checked_at": now.UTC(),
-		}
+		tests := gensurla.NewTestsCouldNotRun(&gensurla.TestsCouldNotRun{
+			Reason: longReason, CheckedAt: at,
+			Step: strings.Repeat("Review the recorded project configuration before retrying. ", 7),
+		})
 		if id == "phone-findings" {
-			writer = map[string]any{
-				"state": "needs_changes", "read": true, "working_folder": vp.state.Record.Directory,
-				"findings": findingTexts, "commit": "", "checked_at": now.UTC(),
+			tests = gensurla.NewTestsNeedsChanges(&gensurla.TestsNeedChanges{
+				FindingCount: len(findingTexts), CheckedAt: at,
+			})
+			service.findings = &gensurla.TestFindings{
+				ChangeID: id, RequestRevision: confirmed.RequestRevision,
+				StartedAt: at, CheckedAt: at, Report: 3, Findings: findingTexts,
 			}
 		}
-		// Seed the strict owner format only before the browser starts reading. The
-		// normal get_build HTTP handler decodes and validates this fixture.
-		raw, err := json.Marshal(map[string]any{
-			"change_id": id, "request_revision": confirmed.RequestRevision, "started_at": now.UTC(),
-			"roles": "builder_and_test_writer", "stories": []any{}, "design_source": "",
-			"builder": map[string]any{"read": true}, "test_writer": writer, "report_number": 3,
-		})
-		require.NoError(t, err)
-		sum := sha256.Sum256([]byte(id))
-		require.NoError(t, os.WriteFile(filepath.Join(vp.state.CardsDir(), fmt.Sprintf("%x.build.json", sum)), raw, 0o600))
+		service.builds[id] = &gensurla.ChangeBuild{
+			ChangeID: id,
+			Build: gensurla.NewBuildStarted(&gensurla.StartedBuild{
+				RequestRevision: confirmed.RequestRevision, StartedAt: at, InForce: true,
+				RequiredTests: []*gensurla.RequiredTest{},
+				Builder:       &gensurla.BuilderProgress{Read: true},
+				TestWriter:    &gensurla.TestWriterProgress{Read: true, Report: 3, Tests: tests},
+				Taking:        gensurla.NewBuildTakingBuilding(&gensurla.BuildBuilding{}),
+			}),
+		}
 	}
 	link, err := vp.link()
 	require.NoError(t, err)
@@ -794,7 +830,7 @@ func TestTeamAndBuildAtPhoneWidth(t *testing.T) {
 	assert.Equal(t, findingTexts, facts.Phone.RenderedFindings, "expanded findings list")
 	assert.True(t, facts.Phone.FindingsWrapped, "each long finding must wrap")
 	assert.True(t, facts.Phone.FindingsDisclosureOpened, "Enter did not open the findings disclosure")
-	assert.Contains(t, facts.Phone.Findings.KeyboardControls, "SUMMARY:Read 4 findings")
+	assert.Contains(t, facts.Phone.Findings.KeyboardControls, "SUMMARY:4 findings")
 	for _, id := range []string{"surla-build-view-team", "surla-build-again"} {
 		assert.Contains(t, facts.Phone.Findings.Controls, id)
 		assert.Contains(t, facts.Phone.Findings.KeyboardControls, id)

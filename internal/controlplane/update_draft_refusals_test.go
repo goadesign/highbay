@@ -108,6 +108,18 @@ func TestUpdateDraftWithoutAProjectFolderNamesTheStepThatEnablesIt(t *testing.T)
 	assert.Equal(t, err.Error(), shown, "the guide reads the message, which names the enabling step")
 }
 
+// TestUpdateDraftUnavailableAfterServerStops refuses a bound workspace before
+// reading its files or creating a draft when the server has closed.
+func TestUpdateDraftUnavailableAfterServerStops(t *testing.T) {
+	workspace := realTempDir(t)
+	cp := newControlPlane(t, Options{WorkspaceDir: workspace})
+	require.NoError(t, cp.Close())
+	_, err := cp.UpdateDraft(asCaller("alice@example.com", CallerGuide))
+	assertServiceError(t, err, "unavailable")
+	assert.ErrorContains(t, err, "the control plane is shutting down")
+	assert.NoDirExists(t, filepath.Join(workspace, draftFolderName))
+}
+
 // TestUpdateDraftAnswersConflictWhenItsInputsChange changes each input
 // UpdateDraft rechecks while it reads the project's commit without its lock.
 // The guide receives the declared conflict, nothing is brought into the

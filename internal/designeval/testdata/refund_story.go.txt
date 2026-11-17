@@ -1,0 +1,28 @@
+package design
+
+import . "github.com/goadesign/surla/story/dsl"
+
+var _ = Story("Order Refunds", func() {
+	Description("Domain timeline for customer refund requests.")
+	Actor("customer", "Customer", func() {
+		Description("Places orders and requests refunds.")
+	})
+	Actor("manager", "Support Manager")
+
+	Flow("instant-refund", "Instant refund under the limit", func() {
+		Description("Refunds under $50 complete automatically.")
+		StartsWith("request-refund", "customer", "Customer requests a $25 refund")
+		Outcome("refund-paid", "customer", "Store credit is issued immediately")
+	})
+
+	Flow("high-value-refund", "Refund over the limit", func() {
+		StartsWith("request-high-refund", "customer", "Customer requests a $120 refund", func() {
+			Question("limit-boundary", "Is $50.00 itself instant or manager-reviewed?", func() {
+				Description("Boundary rule at $50.00.")
+				Option("Instant at $50.00")
+				Option("Manager review at $50.00")
+			})
+		})
+		Step("review-refund", "manager", "Manager reviews the refund request")
+	})
+})

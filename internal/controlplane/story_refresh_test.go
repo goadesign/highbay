@@ -606,52 +606,14 @@ func TestStoryRefreshOwnerIsolation(t *testing.T) {
 	assert.Equal(t, *aliceOp.OpID, *aliceStatus.OpID)
 }
 
-// TestStoryRefreshEvaluatesStoryOnlyAndNonStoryDesignsWhilePreviewRejectsStoryOnly
-// exercises the full evaluator through MCP and service calls on a
-// Story-only design and a design without the Story module, and verifies that
-// preview_architecture still rejects a Story-only design.
-func TestStoryRefreshEvaluatesStoryOnlyAndNonStoryDesignsWhilePreviewRejectsStoryOnly(t *testing.T) {
-	if testing.Short() {
-		t.Skip("runs the Go toolchain; the full suite (go test without -short) covers it")
-	}
+// TestStoryRefreshAdoptsStoryOnlyAndNonStorySnapshotsWhilePreviewRejectsStoryOnly
+// preserves MCP refresh reuse and adoption from verified saved evaluation facts.
+func TestStoryRefreshAdoptsStoryOnlyAndNonStorySnapshotsWhilePreviewRejectsStoryOnly(t *testing.T) {
 	alice := WithPrincipal(context.Background(), Principal{ID: "alice@example.com", CallerID: "alice@example.com", Kind: CallerUser})
 	wsDir := t.TempDir()
 
-	storyOnlyDesign := `package design
-
-import . "github.com/goadesign/surla/story/dsl"
-
-var _ = Story("Order Refunds", func() {
-	Description("Domain timeline for customer refund requests.")
-	Actor("customer", "Customer", func() {
-		Description("Places orders and requests refunds.")
-	})
-	Actor("manager", "Support Manager")
-
-	Flow("instant-refund", "Instant refund under the limit", func() {
-		Description("Refunds under $50 complete automatically.")
-		StartsWith("request-refund", "customer", "Customer requests a $25 refund")
-		Outcome("refund-paid", "customer", "Store credit is issued immediately")
-	})
-
-	Flow("high-value-refund", "Refund over the limit", func() {
-		StartsWith("request-high-refund", "customer", "Customer requests a $120 refund", func() {
-			Question("limit-boundary", "Is $50.00 itself instant or manager-reviewed?", func() {
-				Description("Boundary rule at $50.00.")
-				Option("Instant at $50.00")
-				Option("Manager review at $50.00")
-			})
-		})
-		Step("review-refund", "manager", "Manager reviews the refund request")
-	})
-})
-`
-	storySnapshot := testmodule.Tidy(t, map[string]string{
-		"go.mod": "module example.com/story-design\n\ngo 1.27.3\n\nrequire (\n" +
-			"\tgithub.com/goadesign/surla/story v0.0.0-20261111183703-4568fcf5bb85\n" +
-			"\tgoa.design/goa/v3 " + testmodule.SurlaVersion(t, "goa.design/goa/v3") + "\n)\n",
-		"design/design.go": storyOnlyDesign,
-	})
+	storySnapshot, stories := refundStoryFixtureForTest(t)
+	require.Equal(t, sampleAdoptedStories(), stories, "the seeded Story fixture matches the real owner-verified result")
 	writeWorkspaceFiles(t, wsDir, storySnapshot)
 	wantStoryDigest := designeval.SnapshotDigest(storySnapshot)
 
@@ -700,8 +662,10 @@ var _ = Story("Order Refunds", func() {
 		return last
 	}
 
+	storyOp := seedStoryRefreshForTest(t, cp, "alice@example.com", storyRefreshStateSucceeded, stories, "")
 	started := callMCP("refresh_story")
 	require.NotNil(t, started.OpID)
+	assert.Equal(t, storyOp, *started.OpID, "MCP refresh reuses the verified saved result")
 	require.NotNil(t, started.SnapshotDigest)
 	assert.Equal(t, wantStoryDigest, *started.SnapshotDigest)
 
@@ -790,12 +754,14 @@ var _ = Service("orders", func() {
 	})
 })
 `
-	nonStorySnapshot := testmodule.Snapshot(t, "", nonStoryDesign)
+	nonStorySnapshot := goaGoaAIDSLFixture(t, nonStoryDesign)
 	writeWorkspaceFiles(t, filepath.Join(wsDir, draftFolderName), nonStorySnapshot)
 	wantNonStoryDigest := designeval.SnapshotDigest(nonStorySnapshot)
 
+	nonStoryOp := seedStoryRefreshForTest(t, cp, "alice@example.com", storyRefreshStateSucceeded, nil, "")
 	nonStoryStarted := callMCP("refresh_story")
 	require.NotNil(t, nonStoryStarted.OpID)
+	assert.Equal(t, nonStoryOp, *nonStoryStarted.OpID, "MCP refresh reuses the saved no-Story result")
 	assert.NotEqual(t, *succeeded.OpID, *nonStoryStarted.OpID)
 	assert.Equal(t, wantNonStoryDigest, *nonStoryStarted.SnapshotDigest)
 

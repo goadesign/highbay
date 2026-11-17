@@ -112,7 +112,13 @@ func TestTeamShowPaneOverlayAndOwnership(t *testing.T) {
 				assert.Equal(t, []string{"overlays", "spaces", "focus"}, host.calls)
 				assert.Equal(t, []string{"terminal"}, f.reads)
 			} else {
-				require.Error(t, err)
+				var refusal *goa.ServiceError
+				require.ErrorAs(t, err, &refusal)
+				want := "pane_unavailable"
+				if scenario == "launcher" || scenario == "other overlay" {
+					want = "window_busy"
+				}
+				assert.Equal(t, want, refusal.Name)
 				assert.NotContains(t, host.calls, "focus")
 				assert.Empty(t, host.focused.ID)
 			}
@@ -164,7 +170,9 @@ func TestTeamUserStartReusesPreparation(t *testing.T) {
 			require.NoError(t, err)
 			assert.Equal(t, "already_open", result.Dialog)
 		} else {
-			assert.Error(t, err)
+			var refusal *goa.ServiceError
+			require.ErrorAs(t, err, &refusal)
+			assert.Equal(t, "window_busy", refusal.Name)
 		}
 		assert.NotContains(t, host.calls, "focus")
 		assert.NotContains(t, host.calls, "open")
