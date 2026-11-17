@@ -117,6 +117,7 @@ type (
 
 // fakeDockerSource is a standalone Go binary compiled into t.TempDir and placed
 // on PATH so candidate.NewContainerRunner resolves and runs a real executable.
+// It writes stderr first, as go list does before listing dependency packages.
 const fakeDockerSource = `package main
 import ("bytes"; "encoding/json"; "fmt"; "net/http"; "os"; "path/filepath"; "strings")
 func must(err error) { if err != nil { fmt.Fprintln(os.Stderr, err); os.Exit(1) } }
@@ -132,8 +133,8 @@ func main() {
 	defer resp.Body.Close()
 	var out struct{ Stdout, Stderr []byte; ExitCode int }
 	must(json.NewDecoder(resp.Body).Decode(&out))
-	_, err = os.Stdout.Write(out.Stdout); must(err)
 	_, err = os.Stderr.Write(out.Stderr); must(err)
+	_, err = os.Stdout.Write(out.Stdout); must(err)
 	os.Exit(out.ExitCode)
 }
 `

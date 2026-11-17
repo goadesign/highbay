@@ -1102,9 +1102,10 @@ belong to the test writer)`) on the current files in `.surla-build`, uncommitted
 edits included, without changing them. The server copies
 the files (leaving out `.git` and `.surla*`, never following a link) into a
 private folder, then runs each module in two Linux containers from
-`golang:1.27.3`: first downloading dependencies with your `GOPROXY`,
+`golang:1.27.3`: first preparing dependencies with your `GOPROXY`,
 `GOSUMDB`, `GOPRIVATE`, `GONOPROXY`, `GONOSUMDB` and `GOINSECURE` and no
-credentials, then testing with no network. A helper process, `surla
+credentials, then testing with no network. Dependency preparation omits package
+names so they cannot displace Go's errors from the failure message. A helper process, `surla
 check-run`, owns the containers and finishes removing them even when the call
 is canceled or the server stops. `passed` is true only when every module's
 tests pass. `message` (at most 16 KiB) names the first failure; read the full
