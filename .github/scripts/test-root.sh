@@ -11,7 +11,9 @@ fi
 cd "$(cd "$(dirname "$0")/../.." && pwd)"
 
 pages='^Test(ViewsPage|Checkpoint)'
-first_pages='^Test(Checkpoint|ViewsPage[A-L])'
+first_pages='^TestViewsPageFollowsRealTestReports$'
+first_controlplane='^Test(GenerateCodeHTTPMCPAndIteration|ProjectCompilerCacheOutlivesEvaluators|GenerateCodeKeepsTheStoryTablesTests|CheckFailuresReturnReadableOutput|CheckProjectLifecycle|UpdateDependenciesLifecycle)$'
+first_compiler='^Test(CheckJudgesTheWorkingCopy|EvaluationAndGenerationUseTheExplicitParent)$'
 first_cli='^TestGenKeepsTheStoryTablesTests$'
 run=.
 skip=
@@ -26,11 +28,24 @@ case "$1" in
     skip=$first_pages
     packages=(./internal/controlplane)
     ;;
-  controlplane)
-    skip=$pages
+  controlplane-first)
+    run=$first_controlplane
     packages=(./internal/controlplane)
     ;;
+  controlplane-remaining)
+    skip="$pages|$first_controlplane"
+    packages=(./internal/controlplane)
+    ;;
+  compiler-first)
+    run=$first_compiler
+    packages=(./internal/testwriter ./internal/designeval)
+    ;;
+  testwriter-remaining)
+    skip=$first_compiler
+    packages=(./internal/testwriter)
+    ;;
   designeval)
+    skip=$first_compiler
     packages=(./internal/designeval)
     ;;
   cli-first)
@@ -48,7 +63,7 @@ case "$1" in
     listed=$(go list ./...)
     while IFS= read -r package; do
       case "$package" in
-        github.com/goadesign/surla/internal/controlplane|github.com/goadesign/surla/internal/designeval|github.com/goadesign/surla/cmd/surla)
+        github.com/goadesign/surla/internal/controlplane|github.com/goadesign/surla/internal/designeval|github.com/goadesign/surla/internal/testwriter|github.com/goadesign/surla/cmd/surla)
           continue
           ;;
       esac

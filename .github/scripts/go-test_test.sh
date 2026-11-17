@@ -10,7 +10,7 @@ scratch=$(mktemp -d)
 trap 'rm -rf "$scratch"' EXIT
 fixture="$scratch/fixture"
 mkdir -p "$scratch/bin" "$fixture/.github"
-printf 'module example.com/partition\n\ngo 1.20\n' > "$fixture/go.mod"
+printf 'module github.com/goadesign/surla\n\ngo 1.20\n' > "$fixture/go.mod"
 for package in external owned plain uncovered; do
   mkdir -p "$fixture/$package"
   printf 'package %s\n' "$package" > "$fixture/$package/source.go"
@@ -18,8 +18,8 @@ done
 printf 'package owned\n' > "$fixture/owned/source_test.go"
 printf 'package external_test\n' > "$fixture/external/source_test.go"
 printf 'package plain\n' > "$fixture/plain/source_test.go"
-printf '%s\n' example.com/partition/external example.com/partition/owned \
-  example.com/partition/uncovered > "$fixture/.github/race-packages.txt"
+printf '%s\n' github.com/goadesign/surla/external github.com/goadesign/surla/owned \
+  github.com/goadesign/surla/uncovered > "$fixture/.github/race-packages.txt"
 
 # Only test execution is recorded; go list uses the actual selected toolchain.
 cat > "$scratch/bin/go" <<'SH'
@@ -27,7 +27,7 @@ cat > "$scratch/bin/go" <<'SH'
 set -euo pipefail
 if [ "$1" = list ]; then
   if [ "${WRAPPER_TEST_LIST_FAILURE:-}" = true ]; then
-    printf '%s\n' example.com/partition/plain
+    printf '%s\n' github.com/goadesign/surla/plain
     printf '%s\n' 'fixture metadata failure' >&2
     exit 23
   fi
@@ -45,10 +45,10 @@ cd "$fixture"
 bash "$repository/.github/scripts/go-test.sh" -short -count=1 -run '^Test(One|Two)$' -- ./...
 {
   printf '%s\0' test -short -count=1 -run '^Test(One|Two)$' \
-    example.com/partition/plain example.com/partition/uncovered
+    github.com/goadesign/surla/plain github.com/goadesign/surla/uncovered
   printf '\n'
   printf '%s\0' test -race -short -count=1 -run '^Test(One|Two)$' \
-    example.com/partition/external example.com/partition/owned
+    github.com/goadesign/surla/external github.com/goadesign/surla/owned
   printf '\n'
 } > "$scratch/expected"
 cmp "$scratch/expected" "$WRAPPER_TEST_CALLS"
@@ -58,17 +58,22 @@ printf 'package uncovered_test\n' > "$fixture/uncovered/source_test.go"
 : > "$WRAPPER_TEST_CALLS"
 bash "$repository/.github/scripts/go-test.sh" -short -count=1 -run '^Test(One|Two)$' -- ./...
 {
-  printf '%s\0' test -short -count=1 -run '^Test(One|Two)$' example.com/partition/plain
+  printf '%s\0' test -short -count=1 -run '^Test(One|Two)$' github.com/goadesign/surla/plain
   printf '\n'
   printf '%s\0' test -race -short -count=1 -run '^Test(One|Two)$' \
-    example.com/partition/external example.com/partition/owned example.com/partition/uncovered
+    github.com/goadesign/surla/external github.com/goadesign/surla/owned github.com/goadesign/surla/uncovered
   printf '\n'
 } > "$scratch/expected"
 cmp "$scratch/expected" "$WRAPPER_TEST_CALLS"
 printf 'PASS: plain, internal-test, external-test and first-test package selection\n'
 
 # Full-root cohorts share this metadata owner and fail closed on partial lists.
-mkdir -p "$fixture/.github/scripts"
+mkdir -p "$fixture/.github/scripts" "$fixture/internal/testwriter" "$fixture/internal/designeval"
+printf 'package testwriter\n' > "$fixture/internal/testwriter/source.go"
+printf 'package testwriter\n' > "$fixture/internal/testwriter/source_test.go"
+printf 'package designeval\n' > "$fixture/internal/designeval/source.go"
+printf 'package designeval\n' > "$fixture/internal/designeval/source_test.go"
+printf '%s\n' github.com/goadesign/surla/internal/designeval >> "$fixture/.github/race-packages.txt"
 cp "$repository/.github/scripts/go-test.sh" "$fixture/.github/scripts/"
 cp "$repository/.github/scripts/test-root.sh" "$fixture/.github/scripts/"
 : > "$WRAPPER_TEST_CALLS"
@@ -76,10 +81,33 @@ bash "$fixture/.github/scripts/test-root.sh" other-plain
 bash "$fixture/.github/scripts/test-root.sh" other-concurrency
 {
   printf '%s\0' test -vet=all -count=1 -timeout 20m -json -run . -skip '' \
-    example.com/partition/plain
+    github.com/goadesign/surla/plain
   printf '\n'
   printf '%s\0' test -race -vet=all -count=1 -timeout 20m -json -run . -skip '' \
-    example.com/partition/external example.com/partition/owned example.com/partition/uncovered
+    github.com/goadesign/surla/external github.com/goadesign/surla/owned github.com/goadesign/surla/uncovered
+  printf '\n'
+} > "$scratch/expected"
+cmp "$scratch/expected" "$WRAPPER_TEST_CALLS"
+
+# Dedicated compiler selections preserve each package's instrumentation and
+# keep the complementary roots out of the dynamic other-package batch.
+compiler_tests='^Test(CheckJudgesTheWorkingCopy|EvaluationAndGenerationUseTheExplicitParent)$'
+: > "$WRAPPER_TEST_CALLS"
+bash "$fixture/.github/scripts/test-root.sh" compiler-first
+bash "$fixture/.github/scripts/test-root.sh" testwriter-remaining
+bash "$fixture/.github/scripts/test-root.sh" designeval
+{
+  printf '%s\0' test -vet=all -count=1 -timeout 20m -json -run "$compiler_tests" -skip '' \
+    github.com/goadesign/surla/internal/testwriter
+  printf '\n'
+  printf '%s\0' test -race -vet=all -count=1 -timeout 20m -json -run "$compiler_tests" -skip '' \
+    github.com/goadesign/surla/internal/designeval
+  printf '\n'
+  printf '%s\0' test -vet=all -count=1 -timeout 20m -json -run . -skip "$compiler_tests" \
+    github.com/goadesign/surla/internal/testwriter
+  printf '\n'
+  printf '%s\0' test -race -vet=all -count=1 -timeout 20m -json -run . -skip "$compiler_tests" \
+    github.com/goadesign/surla/internal/designeval
   printf '\n'
 } > "$scratch/expected"
 cmp "$scratch/expected" "$WRAPPER_TEST_CALLS"

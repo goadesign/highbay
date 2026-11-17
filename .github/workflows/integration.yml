@@ -98,7 +98,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        group: [pages-first, pages-remaining, controlplane, designeval, cli-first, cli-remaining, other-plain, other-concurrency]
+        group: [pages-first, pages-remaining, controlplane-first, controlplane-remaining, compiler-first, testwriter-remaining, designeval, cli-first, cli-remaining, other-plain, other-concurrency]
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
       - uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
@@ -119,12 +119,12 @@ jobs:
         if: matrix.group != 'designeval'
         run: npm ci --prefix ui/checkpoint --no-audit --no-fund </dev/null
       - name: Prefetch fixed compiler fixture inputs
-        if: matrix.group == 'controlplane' || matrix.group == 'other-concurrency'
+        if: matrix.group == 'controlplane-first' || matrix.group == 'controlplane-remaining' || matrix.group == 'other-concurrency'
         env:
           ROOT_GROUP: ${{ matrix.group }}
         run: |
           GOWORK=off go mod download </dev/null
-          if [ "$ROOT_GROUP" = controlplane ]; then
+          if [ "$ROOT_GROUP" = controlplane-first ] || [ "$ROOT_GROUP" = controlplane-remaining ]; then
             GOWORK=off go -C internal/testmodule/testdata/goa-goaai-dsl mod download all </dev/null
             GOWORK=off go -C internal/testmodule/testdata/goa-goaai-evaluator mod download all </dev/null
           else
