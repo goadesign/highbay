@@ -2534,7 +2534,13 @@ check the actual evaluators against the updated inputs.
 All full suites run nightly at 07:17 UTC and on a manual **Run workflow**
 request (`CI=true gh workflow run ci.yml --ref <branch> </dev/null`). This adds
 the other modules' complete tests and the verifier, generation, starter and
-orders acceptance suites as parallel jobs. **Full / generation** uses a
+orders acceptance suites as parallel jobs. Tagged jobs select only their named
+tagged test roots: ordinary CLI, verifier and scaffold tests belong to the full
+root partitions, and ordinary acceptance budget and hook tests belong to
+**Full / unit-evaluator**. The separate journey job owns the whole-project
+journey; the verifier retains its macOS and Linux profiles. The workflow lists
+each selected set explicitly, so adding a build tag does not rerun ordinary
+tests in another job. **Full / generation** uses a
 60-minute package alarm and a 70-minute job backstop for the suite's project
 compilations on slow runners, including cold builds. The job limit also
 covers setup and downloads. These are execution bounds, not measured

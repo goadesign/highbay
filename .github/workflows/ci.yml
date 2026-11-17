@@ -561,19 +561,19 @@ jobs:
             job_timeout: 30
           - suite: verifier
             module: .
-            args: -tags=e2e ./internal/verify
+            args: -tags=e2e -run '^Test(RunVerifiesTheOrdersReference|RunGivesWrittenTestsOnlyTheirRunsEnvironment|PrepareUsesCommittedNestedWorkspace|PrepareWrittenSuiteIgnoresBothWorkspaces)$' ./internal/verify
             test_timeout: 20m
             job_timeout: 25
           - suite: verifier-linux
             os: ubuntu-latest
             module: .
-            args: -tags=e2e ./internal/verify
+            args: -tags=e2e -run '^Test(RunVerifiesTheOrdersReference|RunGivesWrittenTestsOnlyTheirRunsEnvironment|PrepareUsesCommittedNestedWorkspace|PrepareWrittenSuiteIgnoresBothWorkspaces)$' ./internal/verify
             test_timeout: 20m
             job_timeout: 25
           - suite: generation
             module: .
-            # The whole-journey test has its own entry, journey, below.
-            args: -tags=e2e -skip '^TestWholeJourneyThroughTheProjectServer$' ./cmd/surla
+            # Ordinary CLI tests belong to full-root; journey owns its tagged root.
+            args: -tags=e2e -run '^Test(GenMatchesGoaGenByteForByte|GenOnAFreshStarterChangesNothingAndKeepsModulesApart|OrdersLiveCopyAppliesADraftThroughTheProjectServer|ProjectBuildCacheNativeLifecycle)$' ./cmd/surla
             test_timeout: 60m
             job_timeout: 70
           - suite: journey
@@ -593,12 +593,12 @@ jobs:
             job_timeout: 50
           - suite: starter
             module: .
-            args: -tags=scaffold ./internal/scaffold
+            args: -tags=scaffold -run '^Test(StarterLiveTargetAppliesADraftToTheNextModelRequest|InitSendsRegisteredPromptReferences|InitBuildsForNamesThatCollideWithTemplatesOrGo|InitCreatesAProjectWhoseSuitePasses)$' ./internal/scaffold
             test_timeout: 60m
             job_timeout: 65
           - suite: orders-acceptance
             module: examples/orders-eval
-            args: -tags=e2e ./acceptance
+            args: -tags=e2e -run '^Test(AcceptanceSuite|SeededPayloadBloatFailsTheBudget)$' ./acceptance
             test_timeout: 10m
             job_timeout: 15
     defaults:
