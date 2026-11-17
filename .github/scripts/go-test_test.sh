@@ -26,6 +26,11 @@ cat > "$scratch/bin/go" <<'SH'
 #!/usr/bin/env bash
 set -euo pipefail
 if [ "$1" = list ]; then
+  if [ "${WRAPPER_TEST_LIST_FAILURE:-}" = true ]; then
+    printf '%s\n' example.com/partition/plain
+    printf '%s\n' 'fixture metadata failure' >&2
+    exit 23
+  fi
   exec "$WRAPPER_TEST_GO" "$@"
 fi
 printf '%s\0' "$@" >> "$WRAPPER_TEST_CALLS"
@@ -61,3 +66,35 @@ bash "$repository/.github/scripts/go-test.sh" -short -count=1 -run '^Test(One|Tw
 } > "$scratch/expected"
 cmp "$scratch/expected" "$WRAPPER_TEST_CALLS"
 printf 'PASS: plain, internal-test, external-test and first-test package selection\n'
+
+# Full-root cohorts share this metadata owner and fail closed on partial lists.
+mkdir -p "$fixture/.github/scripts"
+cp "$repository/.github/scripts/go-test.sh" "$fixture/.github/scripts/"
+cp "$repository/.github/scripts/test-root.sh" "$fixture/.github/scripts/"
+: > "$WRAPPER_TEST_CALLS"
+bash "$fixture/.github/scripts/test-root.sh" other-plain
+bash "$fixture/.github/scripts/test-root.sh" other-concurrency
+{
+  printf '%s\0' test -vet=all -count=1 -timeout 20m -json -run . -skip '' \
+    example.com/partition/plain
+  printf '\n'
+  printf '%s\0' test -race -vet=all -count=1 -timeout 20m -json -run . -skip '' \
+    example.com/partition/external example.com/partition/owned example.com/partition/uncovered
+  printf '\n'
+} > "$scratch/expected"
+cmp "$scratch/expected" "$WRAPPER_TEST_CALLS"
+
+for arguments in '' unknown 'pages-first extra'; do
+  if bash "$fixture/.github/scripts/test-root.sh" $arguments > "$scratch/output" 2>&1; then
+    echo "Root selection accepted invalid arguments: $arguments" >&2
+    exit 1
+  fi
+done
+: > "$WRAPPER_TEST_CALLS"
+if WRAPPER_TEST_LIST_FAILURE=true bash "$fixture/.github/scripts/test-root.sh" other-plain > "$scratch/output" 2>&1; then
+  echo 'Root selection accepted partial package metadata' >&2
+  exit 1
+fi
+test ! -s "$WRAPPER_TEST_CALLS"
+grep -Fq 'fixture metadata failure' "$scratch/output"
+printf 'PASS: full-root cohorts, invalid groups and failed package enumeration\n'
