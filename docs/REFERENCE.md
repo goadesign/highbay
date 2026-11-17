@@ -2369,127 +2369,122 @@ walkthrough.
 
 ### Repository checks
 
-The [CI workflow](../.github/workflows/ci.yml) runs its short checks on pull
-requests and on pushes to the branches its `push` trigger names: `main`, and
-an integration branch for as long as pull requests target one. The short
-checks are:
+The [CI workflow](../.github/workflows/ci.yml) runs 12 Linux jobs on every
+pull request. It executes complete ordinary tests, without `-short`, plus
+product linking, every added build profile and generated-contract checks.
+[Integration](../.github/workflows/integration.yml) adds native macOS coverage
+on pull requests into `team-start` and `main`. It runs on pushes to `main`,
+`team-start` and `builder-copy`, nightly at 07:17 UTC, and manual full runs.
 
-- Vet and short tests of each Go module: the root,
-  [`story`](../story/README.md), `examples/orders` and `examples/orders-eval`.
-  The other modules run on macOS. The root module's short tests run in five
-  jobs. **Go (., page tests)** runs only `internal/controlplane` and
-  `internal/project` on macOS, selecting `TestViewsPage…` and
-  `TestCheckpoint…` in two sequential commands. Both commands name both
-  packages: the first selects `^Test(Checkpoint|ViewsPage[A-L])`, and the
-  second selects every remaining page test by applying the full page pattern
-  and skipping the first group. Each command gives each package its own
-  three-minute alarm, so smaller groups replace the whole page suite's
-  aggregate alarm. The page job keeps its ten-minute backstop; its commands
-  share setup and the restored compiler cache. This split preserves
-  the total test work and does not guarantee a faster job.
-  **Go (., control plane, A-L)** runs non-page tests whose
-  names start with `TestA` through `TestL`, on Linux.
-  **Go (., control plane, remaining)** runs every other non-page test,
-  including examples and fuzz seeds, also on Linux. **Go (.)** runs on macOS,
-  derives every other package with tests and skips page tests. These four
-  owners cover every root short test. **Go (., control plane, macOS-platform)**
-  additionally runs nine explicitly named non-page tests on macOS: failed
-  live-target cleanup and stop ownership, filesystem aliases, and opening
-  entries through the Darwin backend. Its static name check fails if a listed
-  test disappears. Pull requests do not execute the other generic non-page
-  control-plane tests on macOS; they still compile and receive full vet there
-  through the page job. Full macOS execution remains in the root control-plane
-  job on pushes to `main`, `team-start` and `builder-copy`, nightly runs and
-  manual full runs, alongside the Linux full job. Each of
-  these jobs restores the shared native compiler archives described below.
-  The module-matrix jobs retain a 12-minute cold-run backstop and the same
-  three-minute package alarms. Package groups and their platform coverage are
-  unchanged by cache selection.
+| Linux PR owner | Work |
+| --- | --- |
+| Eight root groups | Two complementary control-plane page groups; other control-plane tests; design evaluator; the Story-table generator CLI test and its complement; other packages outside/inside the concurrency-owner list. |
+| Story and Orders evaluator | All ordinary tests of both modules, selecting each module's own Go toolchain. |
+| Orders | All ordinary Orders tests with its module toolchain. |
+| Build profiles | Ordinary product linking, then build and full vet for `e2e`, `scaffold`, `herdr`, `browser` and `e2e,docker`. The combined Docker profile includes its container tests; `docker` alone adds none. |
+| Generated contracts | Formatting, concurrency-owner checks, TypeScript, root/target-prompt/example Goa regeneration, page consistency and Node consumer tests. |
 
-  One **Full / compiler-inputs** job per operating system prepares and publishes
-  module and compiler archives without running tests. The full root partitions
-  wait for these producers, then restore their inputs; pull-request short checks
-  remain independent read-only consumers. A missing module or
-  compiler archive triggers preparation of the declared race/plain compilation,
-  CGO-free product dependencies and pinned Goa generator, then compiles Story,
-  Orders and Orders Eval with their own dependency versions and plain/race
-  selections, including the tagged acceptance tests. Only trusted non-pull-request
-  runs publish missing archives. A later test failure or timeout does not
-  invalidate these compiler inputs or prevent their reuse; checks still run
-  in their existing jobs. Producers have a separate 20-minute backstop; the full
-  root jobs keep their 30-minute backstop and package alarms. Preparation and
-  tests no longer consume one shared job budget. These bounds are not measured
-  completion times. The archive version changes when this declared closure
-  changes; an immutable archive cannot gain missing inputs after an exact hit.
-  No arbitrary first-finishing shard can save an incomplete common
-  closure. Archive keys include the exact Go toolchain, operating system and
-  architecture, module inputs, starter templates and published fixture versions;
-  compiler keys also include the hosted OS image family and race profile. Module
-  archives remain separate from compiled-package archives. Base-branch pushes
-  populate archives that pull requests can restore; private project state and
-  credentials are never cached.
+[The root selector](../.github/scripts/test-root.sh) owns the same full-root
+partitions on Linux and macOS. New roots, examples and fuzz seeds belong to
+complementary groups. New packages retain an owner, including packages without
+tests. Project page tests stay with the project package; control-plane page
+names belong only to the page groups. Separating the other plain packages
+from concurrency owners removes the old serial job phase without reducing
+race coverage. Every command uses `-count=1` and full vet. No job reruns the
+same ordinary roots under an added tag.
 
-  The producer's macOS and Linux dependency lists contain only standard-library
-  native inputs: `net`, `os/user`, `runtime/cgo` and the race runtime. Orders'
-  `modernc.org/sqlite` dependency is pure Go. Go's own action keys include the
-  Go toolchain, compiler options and C compiler identity. The archive uses the
-  OS image family (`ImageOS`), allowing concurrently served weekly image builds
-  with the same system ABI to share it. Go does not detect arbitrary external
-  C-library changes; adding such a dependency requires reviewing its native
-  profile and archive key before sharing compiled inputs across image builds.
+The integration workflow reuses the Linux workflow on pushes, nightly and
+manual runs; integration PRs already receive those Linux jobs from their PR
+workflow. Native macOS root groups, both nested-module jobs, generated checks
+and browser-profile vet run before integration, including Darwin-selected
+process, filesystem-alias and browser-opener behavior. Thus ordinary feature
+PRs use Linux, while integration PRs also exercise native macOS code.
 
-  Each job summary reports module and build archive hits separately. Missing
-  inputs, dependency/toolchain/template/image changes, expiry or eviction can
-  cause a cold or partial restore; those durations are reported separately.
-  Cache restoration never skips a check. Both pull-request short checks and
-  full suites use `-count=1`, while retaining Go's compiled-package cache.
+The trusted native compiler producers run only outside pull requests. Native
+integration PR checks use restored archives directly; they do not wait for a
+producer skipped by that event. Push/nightly/manual consumers wait for successful
+producers. Parent and reused-workflow concurrency groups are distinct, so the
+Linux workflow cannot cancel its integration caller.
 
-  Race instrumentation follows
-  [the production concurrency owners](../.github/race-packages.txt).
-  The wrapper uses Go's active `TestGoFiles` and `XTestGoFiles` metadata to
-  instrument listed packages with tests. A listed package without tests still
-  builds and vets in the plain group; adding its first test automatically
-  selects race instrumentation. The cold producer uses the same selection.
-  [The syntax check](../.github/scripts/racecheck/main.go) rejects handwritten
-  production goroutines, synchronization imports or channel operations outside
-  that list, and rejects listed owners that no longer contain them. It checks
-  platform-specific files too, excluding generated code, test programs and
-  fixtures. Other packages run without instrumentation. Generation, starter,
-  whole-journey and Docker e2e jobs retain `-race` until comparable warm
-  measurements justify a change. Verification's orchestration package has no
-  production concurrency; its supervisor, candidate and suite owners retain
-  race coverage.
-- A Linux build and vet of the root module, once without build tags and once
-  with each of `e2e`, `scaffold`, `herdr`, `browser` and `docker`, and the
-  Linux short tests.
-- Formatting, generated-code and views page type checks.
+One **Full / compiler-inputs** job per operating system prepares and publishes
+module and compiler archives without running tests. Outside pull requests,
+full-root groups wait for these producers, then restore their inputs; PR checks
+remain independent read-only consumers. A missing module or compiler archive
+triggers preparation of the declared race/plain compilation,
+CGO-free product dependencies and pinned Goa generator, then compiles Story,
+Orders and Orders Eval with their own dependency versions and plain/race
+selections, including the tagged acceptance tests. Only trusted non-pull-request
+runs publish missing archives. A later test failure or timeout does not
+invalidate these compiler inputs or prevent their reuse; checks still run
+in their existing jobs. Producers have a separate 20-minute backstop; the full
+root jobs keep their 30-minute backstop and package alarms. Preparation and
+tests no longer consume one shared job budget. These bounds are not measured
+completion times. The archive version changes when this declared closure
+changes; an immutable archive cannot gain missing inputs after an exact hit.
+No arbitrary first-finishing shard can save an incomplete common
+closure. Archive keys include the exact Go toolchain, operating system and
+architecture, module inputs, starter templates and published fixture versions;
+compiler keys also include the hosted OS image family and race profile. Module
+archives remain separate from compiled-package archives. Base-branch pushes
+populate archives that pull requests can restore; private project state and
+credentials are never cached.
 
-To run the short tests locally, run `go test -race -short ./...` in each
-module.
+The producer's macOS and Linux dependency lists contain only standard-library
+native inputs: `net`, `os/user`, `runtime/cgo` and the race runtime. Orders'
+`modernc.org/sqlite` dependency is pure Go. Go's own action keys include the
+Go toolchain, compiler options and C compiler identity. The archive uses the
+OS image family (`ImageOS`), allowing concurrently served weekly image builds
+with the same system ABI to share it. Go does not detect arbitrary external
+C-library changes; adding such a dependency requires reviewing its native
+profile and archive key before sharing compiled inputs across image builds.
 
-The root module's full tests also run on pushes to `main`, `team-start` and
-`builder-copy`, on both macOS and Linux. Each operating system has separate
-jobs for the control plane's page tests, its other tests, the design evaluator,
-and the remaining root packages. The page partition uses the same test-name
-pattern as the short checks; the remaining packages still run their own page
-tests.
+Each job summary reports module and build archive hits separately. Missing
+inputs, dependency/toolchain/template/image changes, expiry or eviction can
+cause a cold or partial restore; those durations are reported separately.
+Cache restoration never skips a check. Both pull-request Linux checks and
+full suites use `-count=1`, while retaining Go's compiled-package cache.
 
-The **Full / docker-check** job also runs on pushes to `main`, `team-start`
-and `builder-copy`, nightly and on manual runs, on Ubuntu with its Docker
-engine. It executes the dependency-repair journey through one project server:
-the initialized builder copy passes, missing `go.sum` entries are repaired,
-and workspace-only checksums are repaired into `go.work.sum`, while the user's
-project stays unchanged. It uses `-tags=e2e,docker` and selects
-`TestCheckProjectRepairsDependenciesOnOneServer`. It then executes the container
-owner's `TestContainerEngineEndToEnd` and `TestLocalEngineContainerLifecycleFacts`
-with the same tags, covering real execution, isolation and cleanup. Pull requests
-do not run this job. The journey's package alarm is 40 minutes, the container
-owner's is 20 minutes, and the job backstop is 50 minutes, including
-cold compilation and downloads. These are execution bounds, not measured
-completion times. To run the journey locally with a running Docker engine:
+Race instrumentation follows
+[the production concurrency owners](../.github/race-packages.txt).
+The wrapper uses Go's active `TestGoFiles` and `XTestGoFiles` metadata to
+instrument listed packages with tests. A listed package without tests still
+builds and vets in the plain group; adding its first test automatically
+selects race instrumentation. The cold producer uses the same selection.
+[The syntax check](../.github/scripts/racecheck/main.go) rejects handwritten
+production goroutines, synchronization imports or channel operations outside
+that list, and rejects listed owners that no longer contain them. It checks
+platform-specific files too, excluding generated code, test programs and
+fixtures. Other packages run without instrumentation. Generation, starter,
+whole-journey and Docker e2e jobs retain `-race` until comparable warm
+measurements justify a change. Verification's orchestration package has no
+production concurrency; its supervisor, candidate and suite owners retain
+race coverage.
 
-```bash
-go test -race -count=1 -timeout 40m -tags=e2e,docker -run '^TestCheckProjectRepairsDependenciesOnOneServer$' ./cmd/surla
+The five-minute warm target includes setup, restore, tests and scheduling
+rather than test output alone. The full-root 20-minute package alarms and
+30-minute job bounds remain cold/hang backstops; generated checks retain their
+five-minute bound and profile compilation its ten-minute bound. These are
+execution limits, not measured completion times. Cold measurements and warm
+runs must be reported separately; a restored archive never substitutes for a
+check or proves five-minute feedback.
+
+To run one full-root group locally:
+
+```sh
+CI=true bash .github/scripts/test-root.sh cli-first </dev/null
+```
+
+The **Full / docker-check** job stays in the integration workflow on trusted
+pushes, nightly and manual runs. On Ubuntu with its Docker engine, it runs the
+intact dependency-repair journey through one server, then the container owner's
+`TestContainerEngineEndToEnd` and `TestLocalEngineContainerLifecycleFacts`.
+It keeps `-tags=e2e,docker`, race instrumentation, the journey's 40-minute
+package alarm, the container owner's 20-minute alarm and the 50-minute job
+backstop. Pull requests do not execute this job automatically. To run the
+journey locally with a running Docker engine:
+
+```sh
+go test -race -count=1 -timeout 40m -tags=e2e,docker -run '^TestCheckProjectRepairsDependenciesOnOneServer$' ./cmd/surla </dev/null
 ```
 
 ### Committed test module profiles
@@ -2531,24 +2526,25 @@ Replace the versions above with the new root requirements and commit the
 updated module files and checksums. Run both tests with fetching disabled to
 check the actual evaluators against the updated inputs.
 
-All full suites run nightly at 07:17 UTC and on a manual **Run workflow**
-request (`CI=true gh workflow run ci.yml --ref <branch> </dev/null`). This adds
-the other modules' complete tests and the verifier, generation, starter and
-orders acceptance suites as parallel jobs. Tagged jobs select only their named
-tagged test roots: ordinary CLI, verifier and scaffold tests belong to the full
+All tagged full suites run nightly at 07:17 UTC and on a manual **Run workflow**
+request (`CI=true gh workflow run integration.yml --ref <branch> </dev/null`).
+This runs the verifier, generation, starter, whole-project journey and Orders
+acceptance suites alongside complete native ordinary coverage. The lead can
+dispatch this workflow on a candidate head when tagged execution is needed
+before merging. Tagged jobs select only their named roots: ordinary CLI, verifier and scaffold tests belong to the full
 root partitions, and ordinary acceptance budget and hook tests belong to
-**Full / unit-evaluator**. The separate journey job owns the whole-project
-journey; the verifier retains its macOS and Linux profiles. The workflow lists
+the ordinary Orders evaluator owner. The separate journey job owns the
+whole-project journey; the verifier retains its macOS and Linux profiles. The workflow lists
 each selected set explicitly, so adding a build tag does not rerun ordinary
 tests in another job. **Full / generation** uses a
 60-minute package alarm and a 70-minute job backstop for the suite's project
 compilations on slow runners, including cold builds. The job limit also
 covers setup and downloads. These are execution bounds, not measured
 completion times or a reduction in compilation work.
-A passing short run does not prove
-paths that build and run agent-written code; changes to candidate execution
-or starter generation need the full suite. On macOS, with the Temporal CLI
-for the first three:
+Passing ordinary checks or compiling tagged files does not prove the tagged
+paths that build and execute candidate code. Changes to candidate execution
+or starter generation need the applicable full suite. On macOS, with the
+Temporal CLI for the first three:
 
 ```bash
 (cd examples/orders-eval && go test -race -tags e2e ./acceptance)
@@ -2558,9 +2554,9 @@ go test -race -count=1 -timeout 60m -tags scaffold ./internal/scaffold
 ```
 
 The **Full / opt-in (Linux)** job runs the named native browser tests and the
-isolated Herdr server lifecycle nightly and on manual full runs. Short CI still
-compiles and vets both tagged profiles. The scheduled job requires hosted Chrome,
-Node 26 and digest-checked Herdr Core 0.1.21; missing tools fail setup.
+isolated Herdr server lifecycle nightly and on manual full runs. The Linux PR
+profile job compiles and vets both tagged profiles. The scheduled job requires
+hosted Chrome, Node 26 and digest-checked Herdr Core 0.1.21; missing tools fail setup.
 Its explicit browser roots cover page policy and sessions, phone layout, build
 and test review, keyboard access, and browser cleanup after its parent ends.
 They execute independently of ordinary project tests. The Herdr root, `TestHC`,
@@ -2568,7 +2564,7 @@ runs the real headless Core and Surla server with isolated state and fixture
 window and team effects; it starts no coding agent or model. Each package command
 has a five-minute alarm and the job has a ten-minute backstop. These bounds are
 not measured completion times. The complete selected set is in
-[the workflow](../.github/workflows/ci.yml).
+[the integration workflow](../.github/workflows/integration.yml).
 The page-policy journey also checks that a session ends on reload, browser
 storage stays empty, long Story rows scroll within the Story view, and Live
 fits a 375-pixel-wide screen.
@@ -2585,7 +2581,8 @@ go test -race -count=1 -timeout 5m -tags browser -run '^TestTeamAndBuildAtPhoneW
 
 ```text
 .
-├── .github/workflows/ci.yml     # Short PR checks, full root tests on integration pushes, all suites nightly or on request
+├── .github/workflows/ci.yml     # Complete Linux PR checks, reused by integration
+├── .github/workflows/integration.yml # Native integration coverage and full nightly/manual journeys
 ├── cmd/surla/                   # The surla command: project start and stop, settings, init, preview, diff, gen, verify, approve
 ├── design/                      # Goa design of the server's contract
 │   ├── design.go                # Change Cards, checks, live target, verification, approval
