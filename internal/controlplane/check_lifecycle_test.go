@@ -214,7 +214,7 @@ func TestCheckProjectLifecycle(t *testing.T) {
 				assert.NoError(t, os.WriteFile(filepath.Join(srcMount.Source, "go.sum"), []byte("repaired-sum\n"), 0o644))
 			}
 			return "tidied\n", "", 0
-		case slices.Equal(c.Args, []string{"list", "-deps", "-test", "./..."}):
+		case len(c.Args) > 0 && c.Args[0] == "list":
 			assert.Equal(t, "bridge", c.Network)
 			assert.True(t, srcMount.ReadOnly)
 			assert.False(t, modMount.ReadOnly)
@@ -222,7 +222,14 @@ func TestCheckProjectLifecycle(t *testing.T) {
 			if !isEval {
 				sum, rerr := os.ReadFile(filepath.Join(srcMount.Source, "go.sum"))
 				if rerr != nil || string(sum) != "repaired-sum\n" {
-					return "", "go: updates to go.mod needed; to update it:\n\tgo mod tidy\n", 1
+					// Go reports errors before printing dependency package names.
+					// Only an explicitly empty template prevents those names from
+					// pushing the error outside the bounded failure message.
+					stdout := ""
+					if !slices.Contains(c.Args, `-f={{""}}`) {
+						stdout = strings.Repeat("example.com/shop/dependency\n", 1500)
+					}
+					return stdout, "go: updates to go.mod needed; to update it:\n\tgo mod tidy\n", 1
 				}
 			}
 			assert.NoError(t, os.WriteFile(filepath.Join(modMount.Source, marker), []byte("ok"), 0o600))
@@ -257,7 +264,7 @@ func TestCheckProjectLifecycle(t *testing.T) {
 		assert.Equal(t, wantDir, created[i].WorkDir)
 		assert.True(t, created[i].Removed)
 	}
-	assert.Equal(t, []string{"list", "-deps", "-test", "./..."}, created[0].Args)
+	assert.Equal(t, []string{"list", "-deps", "-test", `-f={{""}}`, "./..."}, created[0].Args)
 	assert.Equal(t, []string{"test", "./..."}, created[1].Args)
 	assert.NoFileExists(t, filepath.Join(workspace, "test_scratch.tmp"))
 	assertFileContent(t, filepath.Join(workspace, "reports", "public-fixture.json"), "public fixture\n")
@@ -272,6 +279,8 @@ func TestCheckProjectLifecycle(t *testing.T) {
 	assert.False(t, resDownloadFail.Passed)
 	assert.Contains(t, resDownloadFail.Message, "Dependencies for . could not be prepared (go list exited 1)")
 	assert.Contains(t, resDownloadFail.Message, "call update_dependencies and check again")
+	assert.Contains(t, resDownloadFail.Message, "go: updates to go.mod needed; to update it:")
+	assert.NotContains(t, resDownloadFail.Message, "example.com/shop/dependency")
 	assert.Equal(t, int64(1), daemon.pulls.Load())
 	assert.GreaterOrEqual(t, daemon.contextInspects.Load(), int64(2))
 	created = daemon.createdContainers()
@@ -499,7 +508,7 @@ func TestUpdateDependenciesLifecycle(t *testing.T) {
 				assert.NoError(t, os.WriteFile(filepath.Join(srcMount.Source, "services", "shop", "go.sum"), []byte("tidied-shop-sum\n"), 0o644))
 				return "", "", 0
 			}
-			assert.Equal(t, []string{"list", "-deps", "-test", "./..."}, c.Args)
+			assert.Equal(t, []string{"list", "-deps", "-test", `-f={{""}}`, "./..."}, c.Args)
 			assert.NoError(t, os.WriteFile(filepath.Join(srcMount.Source, "go.work.sum"), []byte("work-sum-from-list\n"), 0o644))
 			return "", "", 0
 		})
@@ -512,6 +521,26 @@ func TestUpdateDependenciesLifecycle(t *testing.T) {
 		assertFileContent(t, filepath.Join(grant, "go.work.sum"), "work-sum-from-list\n")
 		assertFileContent(t, filepath.Join(project, "go.sum"), "old-sum\n")
 		assert.NoFileExists(t, filepath.Join(projectGrant, "go.work.sum"))
+
+		// A later workspace preparation failure keeps the reason visible and
+		// leaves the manifests unchanged, even with a large package graph.
+		daemon.setOnStart(func(c *recordedContainer) (string, string, int) {
+			if slices.Equal(c.Args, []string{"mod", "tidy"}) {
+				return "", "", 0
+			}
+			stdout := ""
+			if !slices.Contains(c.Args, `-f={{""}}`) {
+				stdout = strings.Repeat("example.com/shop/dependency\n", 1500)
+			}
+			return stdout, "go: example.com/dependency: module proxy unavailable\n", 1
+		})
+		failed, err := clients.httpClient.UpdateDependencies(ctx)
+		require.NoError(t, err)
+		assert.Empty(t, failed.FilesWritten)
+		assert.Contains(t, failed.Message, "go: example.com/dependency: module proxy unavailable")
+		assert.NotContains(t, failed.Message, "example.com/shop/dependency")
+		assertFileContent(t, filepath.Join(workspace, "go.sum"), "tidied-shop-sum\n")
+		assertFileContent(t, filepath.Join(grant, "go.work.sum"), "work-sum-from-list\n")
 	})
 
 	// Direct callers use the same required-array contract as the generated
