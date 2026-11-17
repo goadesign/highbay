@@ -577,6 +577,7 @@ func (c *Client) UpdateDraft(ctx context.Context) (res *DraftUpdateResult, err e
 
 // GetTeam calls the "get_team" endpoint of the "surla" service.
 // GetTeam may return the following errors:
+//   - "not_implemented" (type *goa.ServiceError): No team is bound to this control plane; start this project with surla to use its team.
 //   - "forbidden" (type *goa.ServiceError): The authenticated caller may not perform this operation or does not own the resource.
 //   - error: internal error
 func (c *Client) GetTeam(ctx context.Context) (res *TeamSnapshot, err error) {
@@ -590,6 +591,7 @@ func (c *Client) GetTeam(ctx context.Context) (res *TeamSnapshot, err error) {
 
 // ShowTeamPane calls the "show_team_pane" endpoint of the "surla" service.
 // ShowTeamPane may return the following errors:
+//   - "not_implemented" (type *goa.ServiceError): No team is bound to this control plane; start this project with surla to use its team.
 //   - "window_busy" (type *goa.ServiceError): Close the open Herdr dialog before showing a pane.
 //   - "pane_unavailable" (type *goa.ServiceError): The requested registered role has no owned pane to show.
 //   - "team_unavailable" (type *goa.ServiceError): Herdr could not establish the owned pane.
@@ -603,6 +605,7 @@ func (c *Client) ShowTeamPane(ctx context.Context, p *ShowTeamPanePayload) (err 
 // StartTeamAgents calls the "start_team_agents" endpoint of the "surla"
 // service.
 // StartTeamAgents may return the following errors:
+//   - "not_implemented" (type *goa.ServiceError): No team is bound to this control plane; start this project with surla to use its team.
 //   - "ambiguous_space" (type *goa.ServiceError): Several spaces match the project; close the duplicates before starting agents again.
 //   - "window_busy" (type *goa.ServiceError): Close the open Herdr dialog before starting agents.
 //   - "team_unavailable" (type *goa.ServiceError): The project team could not be prepared.

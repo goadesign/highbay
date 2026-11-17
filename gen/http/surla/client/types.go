@@ -3446,9 +3446,45 @@ type UpdateDraftForbiddenResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
+// GetTeamNotImplementedResponseBody is the type of the "surla" service
+// "get_team" endpoint HTTP response body for the "not_implemented" error.
+type GetTeamNotImplementedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
 // GetTeamForbiddenResponseBody is the type of the "surla" service "get_team"
 // endpoint HTTP response body for the "forbidden" error.
 type GetTeamForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ShowTeamPaneNotImplementedResponseBody is the type of the "surla" service
+// "show_team_pane" endpoint HTTP response body for the "not_implemented" error.
+type ShowTeamPaneNotImplementedResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -3523,6 +3559,25 @@ type ShowTeamPaneTeamUnavailableResponseBody struct {
 // ShowTeamPaneForbiddenResponseBody is the type of the "surla" service
 // "show_team_pane" endpoint HTTP response body for the "forbidden" error.
 type ShowTeamPaneForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// StartTeamAgentsNotImplementedResponseBody is the type of the "surla" service
+// "start_team_agents" endpoint HTTP response body for the "not_implemented"
+// error.
+type StartTeamAgentsNotImplementedResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -11899,8 +11954,38 @@ func NewGetTeamTeamSnapshotOK(body *GetTeamResponseBody) *surla.TeamSnapshot {
 	return v
 }
 
+// NewGetTeamNotImplemented builds a surla service get_team endpoint
+// not_implemented error.
+func NewGetTeamNotImplemented(body *GetTeamNotImplementedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
 // NewGetTeamForbidden builds a surla service get_team endpoint forbidden error.
 func NewGetTeamForbidden(body *GetTeamForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewShowTeamPaneNotImplemented builds a surla service show_team_pane endpoint
+// not_implemented error.
+func NewShowTeamPaneNotImplemented(body *ShowTeamPaneNotImplementedResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -11989,6 +12074,21 @@ func NewStartTeamAgentsProjectTeamOK(body *StartTeamAgentsResponseBody) *surla.P
 			continue
 		}
 		v.Roles[i] = unmarshalProjectTeamRoleResponseBodyToSurlaProjectTeamRole(val)
+	}
+
+	return v
+}
+
+// NewStartTeamAgentsNotImplemented builds a surla service start_team_agents
+// endpoint not_implemented error.
+func NewStartTeamAgentsNotImplemented(body *StartTeamAgentsNotImplementedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
 	}
 
 	return v
@@ -17806,9 +17906,57 @@ func ValidateUpdateDraftForbiddenResponseBody(body *UpdateDraftForbiddenResponse
 	return
 }
 
+// ValidateGetTeamNotImplementedResponseBody runs the validations defined on
+// GetTeamNotImplementedResponseBody
+func ValidateGetTeamNotImplementedResponseBody(body *GetTeamNotImplementedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
 // ValidateGetTeamForbiddenResponseBody runs the validations defined on
 // GetTeamForbiddenResponseBody
 func ValidateGetTeamForbiddenResponseBody(body *GetTeamForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateShowTeamPaneNotImplementedResponseBody runs the validations defined
+// on ShowTeamPaneNotImplementedResponseBody
+func ValidateShowTeamPaneNotImplementedResponseBody(body *ShowTeamPaneNotImplementedResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -17905,6 +18053,30 @@ func ValidateShowTeamPaneTeamUnavailableResponseBody(body *ShowTeamPaneTeamUnava
 // ValidateShowTeamPaneForbiddenResponseBody runs the validations defined on
 // ShowTeamPaneForbiddenResponseBody
 func ValidateShowTeamPaneForbiddenResponseBody(body *ShowTeamPaneForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateStartTeamAgentsNotImplementedResponseBody runs the validations
+// defined on StartTeamAgentsNotImplementedResponseBody
+func ValidateStartTeamAgentsNotImplementedResponseBody(body *StartTeamAgentsNotImplementedResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}

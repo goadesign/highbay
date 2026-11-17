@@ -3446,9 +3446,45 @@ type UpdateDraftForbiddenResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// GetTeamNotImplementedResponseBody is the type of the "surla" service
+// "get_team" endpoint HTTP response body for the "not_implemented" error.
+type GetTeamNotImplementedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // GetTeamForbiddenResponseBody is the type of the "surla" service "get_team"
 // endpoint HTTP response body for the "forbidden" error.
 type GetTeamForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ShowTeamPaneNotImplementedResponseBody is the type of the "surla" service
+// "show_team_pane" endpoint HTTP response body for the "not_implemented" error.
+type ShowTeamPaneNotImplementedResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -3523,6 +3559,25 @@ type ShowTeamPaneTeamUnavailableResponseBody struct {
 // ShowTeamPaneForbiddenResponseBody is the type of the "surla" service
 // "show_team_pane" endpoint HTTP response body for the "forbidden" error.
 type ShowTeamPaneForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// StartTeamAgentsNotImplementedResponseBody is the type of the "surla" service
+// "start_team_agents" endpoint HTTP response body for the "not_implemented"
+// error.
+type StartTeamAgentsNotImplementedResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -12124,10 +12179,38 @@ func NewUpdateDraftForbiddenResponseBody(res *goa.ServiceError) *UpdateDraftForb
 	return body
 }
 
+// NewGetTeamNotImplementedResponseBody builds the HTTP response body from the
+// result of the "get_team" endpoint of the "surla" service.
+func NewGetTeamNotImplementedResponseBody(res *goa.ServiceError) *GetTeamNotImplementedResponseBody {
+	body := &GetTeamNotImplementedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewGetTeamForbiddenResponseBody builds the HTTP response body from the
 // result of the "get_team" endpoint of the "surla" service.
 func NewGetTeamForbiddenResponseBody(res *goa.ServiceError) *GetTeamForbiddenResponseBody {
 	body := &GetTeamForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewShowTeamPaneNotImplementedResponseBody builds the HTTP response body from
+// the result of the "show_team_pane" endpoint of the "surla" service.
+func NewShowTeamPaneNotImplementedResponseBody(res *goa.ServiceError) *ShowTeamPaneNotImplementedResponseBody {
+	body := &ShowTeamPaneNotImplementedResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -12184,6 +12267,20 @@ func NewShowTeamPaneTeamUnavailableResponseBody(res *goa.ServiceError) *ShowTeam
 // result of the "show_team_pane" endpoint of the "surla" service.
 func NewShowTeamPaneForbiddenResponseBody(res *goa.ServiceError) *ShowTeamPaneForbiddenResponseBody {
 	body := &ShowTeamPaneForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewStartTeamAgentsNotImplementedResponseBody builds the HTTP response body
+// from the result of the "start_team_agents" endpoint of the "surla" service.
+func NewStartTeamAgentsNotImplementedResponseBody(res *goa.ServiceError) *StartTeamAgentsNotImplementedResponseBody {
+	body := &StartTeamAgentsNotImplementedResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
