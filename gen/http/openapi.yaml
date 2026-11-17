@@ -2074,6 +2074,18 @@ paths:
                             name: forbidden
                             temporary: false
                             timeout: false
+                "501":
+                    description: 'not_implemented: No team is bound to this control plane; start this project with surla to use its team.'
+                    schema:
+                        $ref: '#/definitions/SurlaGetTeamNotImplementedResponseBody'
+                    examples:
+                        application/vnd.goa.error:
+                            fault: false
+                            id: 123abc
+                            message: parameter 'p' must be an integer
+                            name: not_implemented
+                            temporary: false
+                            timeout: false
             schemes:
                 - http
     /team/agents:
@@ -2119,6 +2131,18 @@ paths:
                             id: 123abc
                             message: parameter 'p' must be an integer
                             name: ambiguous_space
+                            temporary: false
+                            timeout: false
+                "501":
+                    description: 'not_implemented: No team is bound to this control plane; start this project with surla to use its team.'
+                    schema:
+                        $ref: '#/definitions/SurlaStartTeamAgentsNotImplementedResponseBody'
+                    examples:
+                        application/vnd.goa.error:
+                            fault: false
+                            id: 123abc
+                            message: parameter 'p' must be an integer
+                            name: not_implemented
                             temporary: false
                             timeout: false
                 "503":
@@ -2178,6 +2202,18 @@ paths:
                             id: 123abc
                             message: parameter 'p' must be an integer
                             name: window_busy
+                            temporary: false
+                            timeout: false
+                "501":
+                    description: 'not_implemented: No team is bound to this control plane; start this project with surla to use its team.'
+                    schema:
+                        $ref: '#/definitions/SurlaShowTeamPaneNotImplementedResponseBody'
+                    examples:
+                        application/vnd.goa.error:
+                            fault: false
+                            id: 123abc
+                            message: parameter 'p' must be an integer
+                            name: not_implemented
                             temporary: false
                             timeout: false
                 "503":
@@ -4184,6 +4220,23 @@ definitions:
                     in_force: true
                     request_revision: Facilis nam.
                     required_test_count: 3718558671237355663
+                    required_tests:
+                        - flow_key: Officia eligendi error accusamus.
+                          hook: Repellat facere.
+                          scenario: Corporis eos ad esse a fugiat cupiditate.
+                          story: Recusandae minima voluptatum.
+                        - flow_key: Officia eligendi error accusamus.
+                          hook: Repellat facere.
+                          scenario: Corporis eos ad esse a fugiat cupiditate.
+                          story: Recusandae minima voluptatum.
+                        - flow_key: Officia eligendi error accusamus.
+                          hook: Repellat facere.
+                          scenario: Corporis eos ad esse a fugiat cupiditate.
+                          story: Recusandae minima voluptatum.
+                        - flow_key: Officia eligendi error accusamus.
+                          hook: Repellat facere.
+                          scenario: Corporis eos ad esse a fugiat cupiditate.
+                          story: Recusandae minima voluptatum.
                     started_at: "2011-11-02T08:04:42Z"
                     state: started
                     taking:
@@ -4222,6 +4275,24 @@ definitions:
                             example: 1692722586442644519
                             format: int64
                             minimum: 0
+                        required_tests:
+                            type: array
+                            items:
+                                $ref: '#/definitions/RequiredTest'
+                            description: Tests required by this build's saved Story, in declaration order; unfinished flows require none. Empty when no finished flow requires a test.
+                            example:
+                                - flow_key: Officia eligendi error accusamus.
+                                  hook: Repellat facere.
+                                  scenario: Corporis eos ad esse a fugiat cupiditate.
+                                  story: Recusandae minima voluptatum.
+                                - flow_key: Officia eligendi error accusamus.
+                                  hook: Repellat facere.
+                                  scenario: Corporis eos ad esse a fugiat cupiditate.
+                                  story: Recusandae minima voluptatum.
+                                - flow_key: Officia eligendi error accusamus.
+                                  hook: Repellat facere.
+                                  scenario: Corporis eos ad esse a fugiat cupiditate.
+                                  story: Recusandae minima voluptatum.
                         started_at:
                             type: string
                             description: When the user started this build.
@@ -4353,6 +4424,7 @@ definitions:
                         - builder
                         - test_writer
                         - required_test_count
+                        - required_tests
                         - taking
                         - state
             change_id:
@@ -4371,6 +4443,23 @@ definitions:
                 in_force: true
                 request_revision: Facilis nam.
                 required_test_count: 3718558671237355663
+                required_tests:
+                    - flow_key: Officia eligendi error accusamus.
+                      hook: Repellat facere.
+                      scenario: Corporis eos ad esse a fugiat cupiditate.
+                      story: Recusandae minima voluptatum.
+                    - flow_key: Officia eligendi error accusamus.
+                      hook: Repellat facere.
+                      scenario: Corporis eos ad esse a fugiat cupiditate.
+                      story: Recusandae minima voluptatum.
+                    - flow_key: Officia eligendi error accusamus.
+                      hook: Repellat facere.
+                      scenario: Corporis eos ad esse a fugiat cupiditate.
+                      story: Recusandae minima voluptatum.
+                    - flow_key: Officia eligendi error accusamus.
+                      hook: Repellat facere.
+                      scenario: Corporis eos ad esse a fugiat cupiditate.
+                      story: Recusandae minima voluptatum.
                 started_at: "2011-11-02T08:04:42Z"
                 state: started
                 taking:
@@ -7804,6 +7893,23 @@ definitions:
                 in_force: true
                 request_revision: Facilis nam.
                 required_test_count: 3718558671237355663
+                required_tests:
+                    - flow_key: Officia eligendi error accusamus.
+                      hook: Repellat facere.
+                      scenario: Corporis eos ad esse a fugiat cupiditate.
+                      story: Recusandae minima voluptatum.
+                    - flow_key: Officia eligendi error accusamus.
+                      hook: Repellat facere.
+                      scenario: Corporis eos ad esse a fugiat cupiditate.
+                      story: Recusandae minima voluptatum.
+                    - flow_key: Officia eligendi error accusamus.
+                      hook: Repellat facere.
+                      scenario: Corporis eos ad esse a fugiat cupiditate.
+                      story: Recusandae minima voluptatum.
+                    - flow_key: Officia eligendi error accusamus.
+                      hook: Repellat facere.
+                      scenario: Corporis eos ad esse a fugiat cupiditate.
+                      story: Recusandae minima voluptatum.
                 started_at: "2011-11-02T08:04:42Z"
                 taking:
                     state: merged
@@ -10580,6 +10686,23 @@ definitions:
                 in_force: true
                 request_revision: Facilis nam.
                 required_test_count: 3718558671237355663
+                required_tests:
+                    - flow_key: Officia eligendi error accusamus.
+                      hook: Repellat facere.
+                      scenario: Corporis eos ad esse a fugiat cupiditate.
+                      story: Recusandae minima voluptatum.
+                    - flow_key: Officia eligendi error accusamus.
+                      hook: Repellat facere.
+                      scenario: Corporis eos ad esse a fugiat cupiditate.
+                      story: Recusandae minima voluptatum.
+                    - flow_key: Officia eligendi error accusamus.
+                      hook: Repellat facere.
+                      scenario: Corporis eos ad esse a fugiat cupiditate.
+                      story: Recusandae minima voluptatum.
+                    - flow_key: Officia eligendi error accusamus.
+                      hook: Repellat facere.
+                      scenario: Corporis eos ad esse a fugiat cupiditate.
+                      story: Recusandae minima voluptatum.
                 started_at: "2011-11-02T08:04:42Z"
                 taking:
                     state: merged
@@ -10637,6 +10760,28 @@ definitions:
                 example: 3718558671237355663
                 format: int64
                 minimum: 0
+            required_tests:
+                type: array
+                items:
+                    $ref: '#/definitions/RequiredTest'
+                description: Tests required by this build's saved Story, in declaration order; unfinished flows require none. Empty when no finished flow requires a test.
+                example:
+                    - flow_key: Officia eligendi error accusamus.
+                      hook: Repellat facere.
+                      scenario: Corporis eos ad esse a fugiat cupiditate.
+                      story: Recusandae minima voluptatum.
+                    - flow_key: Officia eligendi error accusamus.
+                      hook: Repellat facere.
+                      scenario: Corporis eos ad esse a fugiat cupiditate.
+                      story: Recusandae minima voluptatum.
+                    - flow_key: Officia eligendi error accusamus.
+                      hook: Repellat facere.
+                      scenario: Corporis eos ad esse a fugiat cupiditate.
+                      story: Recusandae minima voluptatum.
+                    - flow_key: Officia eligendi error accusamus.
+                      hook: Repellat facere.
+                      scenario: Corporis eos ad esse a fugiat cupiditate.
+                      story: Recusandae minima voluptatum.
             started_at:
                 type: string
                 description: When the user started this build.
@@ -10756,6 +10901,23 @@ definitions:
             in_force: true
             request_revision: Facilis nam.
             required_test_count: 3718558671237355663
+            required_tests:
+                - flow_key: Officia eligendi error accusamus.
+                  hook: Repellat facere.
+                  scenario: Corporis eos ad esse a fugiat cupiditate.
+                  story: Recusandae minima voluptatum.
+                - flow_key: Officia eligendi error accusamus.
+                  hook: Repellat facere.
+                  scenario: Corporis eos ad esse a fugiat cupiditate.
+                  story: Recusandae minima voluptatum.
+                - flow_key: Officia eligendi error accusamus.
+                  hook: Repellat facere.
+                  scenario: Corporis eos ad esse a fugiat cupiditate.
+                  story: Recusandae minima voluptatum.
+                - flow_key: Officia eligendi error accusamus.
+                  hook: Repellat facere.
+                  scenario: Corporis eos ad esse a fugiat cupiditate.
+                  story: Recusandae minima voluptatum.
             started_at: "2011-11-02T08:04:42Z"
             taking:
                 state: merged
@@ -10773,6 +10935,7 @@ definitions:
             - builder
             - test_writer
             - required_test_count
+            - required_tests
             - taking
     StopLiveTargetResult:
         title: StopLiveTargetResult
@@ -15540,6 +15703,49 @@ definitions:
             - temporary
             - timeout
             - fault
+    SurlaGetTeamNotImplementedResponseBody:
+        title: 'Mediatype identifier: application/vnd.goa.error; view=default'
+        type: object
+        properties:
+            fault:
+                type: boolean
+                description: Is the error a server-side fault?
+                example: false
+            id:
+                type: string
+                description: ID is a unique identifier for this particular occurrence of the problem.
+                example: 123abc
+            message:
+                type: string
+                description: Message is a human-readable explanation specific to this occurrence of the problem.
+                example: parameter 'p' must be an integer
+            name:
+                type: string
+                description: Name is the name of this class of errors.
+                example: bad_request
+            temporary:
+                type: boolean
+                description: Is the error temporary?
+                example: true
+            timeout:
+                type: boolean
+                description: Is the error a timeout?
+                example: false
+        description: Error response result type (default view)
+        example:
+            fault: false
+            id: 123abc
+            message: parameter 'p' must be an integer
+            name: bad_request
+            temporary: true
+            timeout: false
+        required:
+            - name
+            - id
+            - message
+            - temporary
+            - timeout
+            - fault
     SurlaGetTestFindingsConflictResponseBody:
         title: 'Mediatype identifier: application/vnd.goa.error; view=default'
         type: object
@@ -18004,6 +18210,49 @@ definitions:
             - temporary
             - timeout
             - fault
+    SurlaShowTeamPaneNotImplementedResponseBody:
+        title: 'Mediatype identifier: application/vnd.goa.error; view=default'
+        type: object
+        properties:
+            fault:
+                type: boolean
+                description: Is the error a server-side fault?
+                example: false
+            id:
+                type: string
+                description: ID is a unique identifier for this particular occurrence of the problem.
+                example: 123abc
+            message:
+                type: string
+                description: Message is a human-readable explanation specific to this occurrence of the problem.
+                example: parameter 'p' must be an integer
+            name:
+                type: string
+                description: Name is the name of this class of errors.
+                example: bad_request
+            temporary:
+                type: boolean
+                description: Is the error temporary?
+                example: true
+            timeout:
+                type: boolean
+                description: Is the error a timeout?
+                example: true
+        description: Error response result type (default view)
+        example:
+            fault: false
+            id: 123abc
+            message: parameter 'p' must be an integer
+            name: bad_request
+            temporary: true
+            timeout: true
+        required:
+            - name
+            - id
+            - message
+            - temporary
+            - timeout
+            - fault
     SurlaShowTeamPanePaneUnavailableResponseBody:
         title: 'Mediatype identifier: application/vnd.goa.error; view=default'
         type: object
@@ -19234,6 +19483,49 @@ definitions:
             message: parameter 'p' must be an integer
             name: bad_request
             temporary: true
+            timeout: true
+        required:
+            - name
+            - id
+            - message
+            - temporary
+            - timeout
+            - fault
+    SurlaStartTeamAgentsNotImplementedResponseBody:
+        title: 'Mediatype identifier: application/vnd.goa.error; view=default'
+        type: object
+        properties:
+            fault:
+                type: boolean
+                description: Is the error a server-side fault?
+                example: true
+            id:
+                type: string
+                description: ID is a unique identifier for this particular occurrence of the problem.
+                example: 123abc
+            message:
+                type: string
+                description: Message is a human-readable explanation specific to this occurrence of the problem.
+                example: parameter 'p' must be an integer
+            name:
+                type: string
+                description: Name is the name of this class of errors.
+                example: bad_request
+            temporary:
+                type: boolean
+                description: Is the error temporary?
+                example: false
+            timeout:
+                type: boolean
+                description: Is the error a timeout?
+                example: true
+        description: Error response result type (default view)
+        example:
+            fault: true
+            id: 123abc
+            message: parameter 'p' must be an integer
+            name: bad_request
+            temporary: false
             timeout: true
         required:
             - name

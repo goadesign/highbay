@@ -126,7 +126,7 @@ func TestViewsPageUnboundTeamNamesTheEnablingStep(t *testing.T) {
 	ps := startPageServer(t, cp)
 	runPageScript(t, ps, nil, `
 const page = await openPage(origin, { link: input.link });
-await until(() => page.sent("GET", "/team").some((r) => r.status === 400), "unbound Team read did not return its real refusal");
+await until(() => page.sent("GET", "/team").some((r) => r.status === 501), "unbound Team read did not return its real refusal");
 await until(() => page.text("#surla-checkpoint-status") === "Start this project with surla to use its team.", "header did not show the single owner instruction");
 page.$("#surla-nav-team").click();
 await until(() => page.$("#surla-team-read-error"), "Team did not show its diagnostic");

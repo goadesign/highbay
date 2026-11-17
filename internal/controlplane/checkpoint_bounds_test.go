@@ -37,7 +37,7 @@ func TestViewsPageRejectsOutOfBoundsBuild(t *testing.T) {
 			runPageScript(t, ps, map[string]any{"field": field, "revision": card.RequestRevision}, `
 const path = "/changes/chg/build";
 const build = { state: "started", request_revision: input.revision, started_at: "2026-11-13T00:00:00Z", in_force: true, taking: { state: "building" },
-  required_test_count: 0, builder: { read: false }, test_writer: { read: false, report: 0, tests: { state: "assigned" } } };
+  required_test_count: 0, required_tests: [], builder: { read: false }, test_writer: { read: false, report: 0, tests: { state: "assigned" } } };
 if (input.field === "finding_count") build.test_writer.tests = { state: "needs_changes", finding_count: 0, checked_at: "2026-11-13T00:00:00Z" };
 else if (input.field === "report") build.test_writer.report = -1;
 else build.required_test_count = -1;

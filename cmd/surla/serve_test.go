@@ -42,7 +42,6 @@ func TestServeOptionsDerivesLiveTargetsFromVerification(t *testing.T) {
 	require.NoError(t, runProjectSettings("verification", []string{"set", path}, io.Discard))
 	opts, err := serveOptions([]string{"PATH=/bin"})
 	require.NoError(t, err)
-	defer closeServeOptions(t, opts)
 	assert.Nil(t, opts.WrittenTestRuns, "stored verification settings leave no runs of written tests")
 	require.NotNil(t, opts.Live)
 	assert.Equal(t, opts.Verification.Command, opts.Live.Command)
@@ -67,6 +66,7 @@ func TestServeOptionsBindsTheCheckHelperOnEveryServePath(t *testing.T) {
 		{name: "verification config"},
 		{name: "workspace starter"},
 	}
+	var previousCache string
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			isolateServeWorkspace(t)
@@ -75,9 +75,19 @@ func TestServeOptionsBindsTheCheckHelperOnEveryServePath(t *testing.T) {
 			}
 			opts, err := serveOptions(nil)
 			require.NoError(t, err)
-			defer closeServeOptions(t, opts)
 			require.NotNil(t, opts.Checker)
 			require.NotNil(t, opts.CheckHelper)
+			cache := opts.CheckModuleCacheDir
+			assert.Equal(t, filepath.Join(filepath.Dir(opts.CardsDir), "check-modcache"), cache)
+			assert.NoError(t, validateOperatorPrivateDir(cache))
+			assert.NotEqual(t, previousCache, cache, "projects keep separate dependency inputs")
+			previousCache = cache
+			marker := filepath.Join(cache, "retained")
+			require.NoError(t, os.WriteFile(marker, []byte("input"), 0o600))
+			again, err := serveOptions(nil)
+			require.NoError(t, err)
+			assert.Equal(t, cache, again.CheckModuleCacheDir)
+			assert.FileExists(t, marker, "recomposing the server preserves dependency inputs")
 			cmd := opts.CheckHelper()
 			assert.Equal(t, self[0], cmd.Path)
 			assert.Equal(t, []string{self[0], "check-run"}, cmd.Args)
@@ -93,7 +103,6 @@ func TestServeOptionsStartLiveTargetsWithoutAModel(t *testing.T) {
 	isolateServeWorkspace(t)
 	opts, err := serveOptions([]string{"PATH=/bin"})
 	require.NoError(t, err)
-	defer closeServeOptions(t, opts)
 	assert.Nil(t, opts.Verification)
 	assert.NotNil(t, opts.WrittenTestRuns)
 	require.NotNil(t, opts.Live)

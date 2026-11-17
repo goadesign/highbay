@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -31,13 +32,18 @@ type processDiagnosticCase struct {
 	Exit    int
 }
 
-// processDiagnosticCases reads the shared inventory used by every real consumer.
-func processDiagnosticCases(t *testing.T) []processDiagnosticCase {
+// processDiagnosticSmokeCases selects the two forwarding shapes; verify's
+// TestProcessDiagnosticsStayPrivate owns the complete failure matrix.
+func processDiagnosticSmokeCases(t *testing.T) []processDiagnosticCase {
 	t.Helper()
 	data, err := os.ReadFile(filepath.Join(processDiagnosticData(t), "process_diagnostics.json"))
 	require.NoError(t, err)
 	var cases []processDiagnosticCase
 	require.NoError(t, json.Unmarshal(data, &cases))
+	cases = slices.DeleteFunc(cases, func(tc processDiagnosticCase) bool {
+		return tc.Name != "clone-candidate" && tc.Name != "go-env-malformed-candidate"
+	})
+	require.Len(t, cases, 2, "both forwarding cases must remain in the owner's inventory")
 	return cases
 }
 
@@ -87,12 +93,6 @@ func assertProcessDiagnosticFiles(t *testing.T, plan verify.Plan, tc processDiag
 	data, err := os.ReadFile(private + filepath.Ext(tc.File))
 	require.NoError(t, err)
 	assert.Contains(t, string(data), "FAKE_", "the actual failing child wrote the planted value")
-	if base == "describe" && tc.Name == "describe" || base == "suite" {
-		stderr, err := os.ReadFile(private + ".stderr")
-		require.NoError(t, err)
-		assert.Contains(t, string(stderr), "FAKE_SERVER_VALUE_521")
-		assert.Contains(t, string(stderr), "FAKE_PROVIDER_VALUE_521", "stored evaluators retain the supplied provider environment")
-	}
 
 	for _, folder := range []string{plan.WorkDir, plan.ReportDir} {
 		require.NoError(t, filepath.WalkDir(folder, func(name string, entry fs.DirEntry, err error) error {
@@ -116,14 +116,9 @@ func assertProcessDiagnosticFiles(t *testing.T, plan verify.Plan, tc processDiag
 
 // TestProcessDiagnosticsStayPrivateInSpans records actual errors without suppressing failure status.
 func TestProcessDiagnosticsStayPrivateInSpans(t *testing.T) {
-	for _, tc := range processDiagnosticCases(t) {
+	for _, tc := range processDiagnosticSmokeCases(t) {
 		t.Run(tc.Name, func(t *testing.T) {
 			plan := processDiagnosticPlan(t, tc.Name)
-			// Written suites select standalone preparation directly, including
-			// when an evaluator would retain its checkout's workspace.
-			if tc.Name == "go-env-suite" || tc.Name == "go-env-malformed-suite" {
-				plan.Tests = verify.TestsWritten
-			}
 			_, err := verify.Run(t.Context(), plan, os.Environ(), t.TempDir())
 			var stage *verify.StageError
 			require.ErrorAs(t, err, &stage)
@@ -152,10 +147,7 @@ func TestProcessDiagnosticsStayPrivateInSpans(t *testing.T) {
 
 // TestProcessDiagnosticsStayPrivateInLiveEvents uses real Prepare and the live log-tail event.
 func TestProcessDiagnosticsStayPrivateInLiveEvents(t *testing.T) {
-	for _, tc := range processDiagnosticCases(t) {
-		if tc.Stage != "checkout" && tc.Stage != "build" {
-			continue
-		}
+	for _, tc := range processDiagnosticSmokeCases(t) {
 		t.Run(tc.Name, func(t *testing.T) {
 			plan := processDiagnosticPlan(t, tc.Name)
 			recorder := tracetest.NewSpanRecorder()

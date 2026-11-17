@@ -3,6 +3,7 @@
 package designeval
 
 import (
+	"encoding/json"
 	"maps"
 	"os"
 	"path/filepath"
@@ -50,9 +51,16 @@ func TestEvaluateObservesStoryOnlyAndCombinedDesigns(t *testing.T) {
 		t.Skip("runs the Go toolchain; the full suite (go test without -short) covers it")
 	}
 	ctx := t.Context()
+	refundSource, err := os.ReadFile(filepath.Join("testdata", "refund_story.go.txt"))
+	require.NoError(t, err)
+	refundData, err := os.ReadFile(filepath.Join("testdata", "refund_story.json"))
+	require.NoError(t, err)
+	var refunds []StorySummary
+	require.NoError(t, json.Unmarshal(refundData, &refunds))
 
 	t.Run("story_only_with_helper_package_and_unfinished_drafts", func(t *testing.T) {
 		files := storySnapshot(t, preCompleteSourcesGoa, map[string]string{
+			"design/z_refunds.go": string(refundSource),
 			"storyhelpers/actors.go": `package storyhelpers
 
 import . "github.com/goadesign/surla/story/dsl"
@@ -308,12 +316,16 @@ var _ = Story("Carrier Settlements", func() {
 				},
 			},
 		}
+		// The consumer fixture shares its exact source and complete expected
+		// summaries with this existing real evaluation, without another build.
+		want = append(want, refunds...)
 		assert.Equal(t, want, res.Stories)
 	})
 
 	t.Run("combined_story_and_goa_service", func(t *testing.T) {
 		files := storySnapshot(t, completeSourcesGoa, map[string]string{
-			"design/design.go": minimalDesign,
+			"design/design.go":    minimalDesign,
+			"design/z_refunds.go": string(refundSource),
 			"design/story.go": `package design
 
 import . "github.com/goadesign/surla/story/dsl"
@@ -333,10 +345,11 @@ var _ = Story("Order Lookup", func() {
 		assert.Equal(t, "orders", res.SystemName)
 		assert.Contains(t, res.Declarations, "API:orders")
 		assert.Contains(t, res.Declarations, "Service:orders/Method:get_order")
-		require.Len(t, res.Stories, 1)
+		require.Len(t, res.Stories, 1+len(refunds))
 		assert.Equal(t, "Order Lookup", res.Stories[0].Name)
 		require.Len(t, res.Stories[0].Flows, 1)
 		assert.True(t, res.Stories[0].Flows[0].Complete)
+		assert.Equal(t, refunds, res.Stories[1:], "the consumer fixture matches the complete-source Goa profile too")
 
 		generated, err := testEvaluator.Generate(ctx, files)
 		require.NoError(t, err)

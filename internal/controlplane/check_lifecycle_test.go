@@ -180,7 +180,9 @@ func TestCheckProjectLifecycle(t *testing.T) {
 		"reports/public-fixture.json": "public fixture\n",
 	})
 	runGitForTest(t, workspace, "init", "-q")
-	clients := newCheckTestServer(t, Options{BuildCacheDir: t.TempDir(),
+	moduleCache := newCheckModuleCache(t)
+	expectedModuleCache := moduleCache
+	clients := newCheckTestServer(t, Options{BuildCacheDir: t.TempDir(), CheckModuleCacheDir: moduleCache,
 		WorkspaceDir: workspace,
 		Verification: &VerificationConfig{RunsDir: realTempDir(t)},
 		GoProxyEnv:   []string{"GOPROXY=https://proxy.example.test", "GOPRIVATE=example.com/*"},
@@ -200,6 +202,14 @@ func TestCheckProjectLifecycle(t *testing.T) {
 	var failEvalTest atomic.Bool
 	daemon.setOnStart(func(c *recordedContainer) (string, string, int) {
 		srcMount, modMount := findMount(t, c, workspace), findMount(t, c, containerModCache)
+		if expectedModuleCache != "" {
+			assert.Equal(t, expectedModuleCache, modMount.Source)
+		} else {
+			assert.Equal(t, filepath.Join(filepath.Dir(srcMount.Source), "modcache"), modMount.Source)
+		}
+		work := findMount(t, c, containerWork).Source
+		assert.Equal(t, filepath.Dir(srcMount.Source), filepath.Dir(work))
+		assert.Subset(t, c.Env, []string{"HOME=/work", "TMPDIR=/work/tmp", "GOCACHE=/work/gocache", "GOPATH=/work/gopath"})
 		assert.False(t, findMount(t, c, containerWork).ReadOnly)
 		assert.NoFileExists(t, filepath.Join(srcMount.Source, ".git", "HEAD"))
 		assert.NoFileExists(t, filepath.Join(srcMount.Source, ".surla", "cards", "c1.json"))
@@ -214,7 +224,7 @@ func TestCheckProjectLifecycle(t *testing.T) {
 				assert.NoError(t, os.WriteFile(filepath.Join(srcMount.Source, "go.sum"), []byte("repaired-sum\n"), 0o644))
 			}
 			return "tidied\n", "", 0
-		case slices.Equal(c.Args, []string{"list", "-deps", "-test", "./..."}):
+		case len(c.Args) > 0 && c.Args[0] == "list":
 			assert.Equal(t, "bridge", c.Network)
 			assert.True(t, srcMount.ReadOnly)
 			assert.False(t, modMount.ReadOnly)
@@ -222,7 +232,14 @@ func TestCheckProjectLifecycle(t *testing.T) {
 			if !isEval {
 				sum, rerr := os.ReadFile(filepath.Join(srcMount.Source, "go.sum"))
 				if rerr != nil || string(sum) != "repaired-sum\n" {
-					return "", "go: updates to go.mod needed; to update it:\n\tgo mod tidy\n", 1
+					// Go reports errors before printing dependency package names.
+					// Only an explicitly empty template prevents those names from
+					// pushing the error outside the bounded failure message.
+					stdout := ""
+					if !slices.Contains(c.Args, `-f={{""}}`) {
+						stdout = strings.Repeat("example.com/shop/dependency\n", 1500)
+					}
+					return stdout, "go: updates to go.mod needed; to update it:\n\tgo mod tidy\n", 1
 				}
 			}
 			assert.NoError(t, os.WriteFile(filepath.Join(modMount.Source, marker), []byte("ok"), 0o600))
@@ -257,11 +274,13 @@ func TestCheckProjectLifecycle(t *testing.T) {
 		assert.Equal(t, wantDir, created[i].WorkDir)
 		assert.True(t, created[i].Removed)
 	}
-	assert.Equal(t, []string{"list", "-deps", "-test", "./..."}, created[0].Args)
+	assert.Equal(t, []string{"list", "-deps", "-test", `-f={{""}}`, "./..."}, created[0].Args)
 	assert.Equal(t, []string{"test", "./..."}, created[1].Args)
 	assert.NoFileExists(t, filepath.Join(workspace, "test_scratch.tmp"))
 	assertFileContent(t, filepath.Join(workspace, "reports", "public-fixture.json"), "public fixture\n")
 	assert.ElementsMatch(t, []string{outputFile, outputMetaFile, ownerFile}, dirEntryNames(t, filepath.Join(clients.cp.checkWorkDir, res.OpID)))
+	assert.FileExists(t, filepath.Join(moduleCache, filepath.Base(workspace)+"-cached"))
+	assert.NotEqual(t, findMount(t, &created[0], containerWork).Source, findMount(t, &created[1], containerWork).Source)
 
 	// 2. Stale go.sum fails Phase 1 on ".", skips Phase 2 for "." while still
 	// testing "eval", then repairs via update_dependencies on the same server.
@@ -272,6 +291,8 @@ func TestCheckProjectLifecycle(t *testing.T) {
 	assert.False(t, resDownloadFail.Passed)
 	assert.Contains(t, resDownloadFail.Message, "Dependencies for . could not be prepared (go list exited 1)")
 	assert.Contains(t, resDownloadFail.Message, "call update_dependencies and check again")
+	assert.Contains(t, resDownloadFail.Message, "go: updates to go.mod needed; to update it:")
+	assert.NotContains(t, resDownloadFail.Message, "example.com/shop/dependency")
 	assert.Equal(t, int64(1), daemon.pulls.Load())
 	assert.GreaterOrEqual(t, daemon.contextInspects.Load(), int64(2))
 	created = daemon.createdContainers()
@@ -323,6 +344,27 @@ func TestCheckProjectLifecycle(t *testing.T) {
 	require.NoError(t, err)
 	assert.LessOrEqual(t, len(httpPage.Text), maxCheckMessageBytes)
 	assert.NotEmpty(t, httpPage.Text)
+
+	// Retained dependency inputs survive Close and are selected again after
+	// restart; the same persisted build and builder assignment remain usable.
+	require.NoError(t, clients.cp.Close())
+	assert.DirExists(t, moduleCache)
+	reopened, err := New(Options{
+		CardsDir: clients.cp.cards.dir, WorkspaceDir: project, CheckModuleCacheDir: moduleCache,
+		Checker: clients.cp.checker, CheckHelper: testCheckHelper(t), CheckTimeout: 30 * time.Second,
+		GoProxyEnv: clients.cp.goProxyEnv, Verification: verifierRuns(clients.cp.verifier),
+		BuildCacheDir: clients.cp.buildCacheDir,
+	})
+	require.NoError(t, err)
+	t.Cleanup(func() { assert.NoError(t, reopened.Close()) })
+	failEvalTest.Store(false)
+	restarted, err := reopened.CheckProject(WithPrincipal(ctx, Principal{ID: "alice@example.com", CallerID: "alice@example.com", Kind: CallerUser}))
+	require.NoError(t, err)
+	assert.True(t, restarted.Passed)
+	assert.DirExists(t, moduleCache)
+	require.NoError(t, reopened.Close())
+	failEvalTest.Store(true)
+	expectedModuleCache = ""
 
 	// 4. On a server that runs written tests (WrittenTestRuns), check_project
 	// leaves the starter test module eval out and says so in its result and
@@ -499,7 +541,7 @@ func TestUpdateDependenciesLifecycle(t *testing.T) {
 				assert.NoError(t, os.WriteFile(filepath.Join(srcMount.Source, "services", "shop", "go.sum"), []byte("tidied-shop-sum\n"), 0o644))
 				return "", "", 0
 			}
-			assert.Equal(t, []string{"list", "-deps", "-test", "./..."}, c.Args)
+			assert.Equal(t, []string{"list", "-deps", "-test", `-f={{""}}`, "./..."}, c.Args)
 			assert.NoError(t, os.WriteFile(filepath.Join(srcMount.Source, "go.work.sum"), []byte("work-sum-from-list\n"), 0o644))
 			return "", "", 0
 		})
@@ -512,6 +554,26 @@ func TestUpdateDependenciesLifecycle(t *testing.T) {
 		assertFileContent(t, filepath.Join(grant, "go.work.sum"), "work-sum-from-list\n")
 		assertFileContent(t, filepath.Join(project, "go.sum"), "old-sum\n")
 		assert.NoFileExists(t, filepath.Join(projectGrant, "go.work.sum"))
+
+		// A later workspace preparation failure keeps the reason visible and
+		// leaves the manifests unchanged, even with a large package graph.
+		daemon.setOnStart(func(c *recordedContainer) (string, string, int) {
+			if slices.Equal(c.Args, []string{"mod", "tidy"}) {
+				return "", "", 0
+			}
+			stdout := ""
+			if !slices.Contains(c.Args, `-f={{""}}`) {
+				stdout = strings.Repeat("example.com/shop/dependency\n", 1500)
+			}
+			return stdout, "go: example.com/dependency: module proxy unavailable\n", 1
+		})
+		failed, err := clients.httpClient.UpdateDependencies(ctx)
+		require.NoError(t, err)
+		assert.Empty(t, failed.FilesWritten)
+		assert.Contains(t, failed.Message, "go: example.com/dependency: module proxy unavailable")
+		assert.NotContains(t, failed.Message, "example.com/shop/dependency")
+		assertFileContent(t, filepath.Join(workspace, "go.sum"), "tidied-shop-sum\n")
+		assertFileContent(t, filepath.Join(grant, "go.work.sum"), "work-sum-from-list\n")
 	})
 
 	// Direct callers use the same required-array contract as the generated
@@ -587,11 +649,17 @@ func TestCheckOperationsRecoveryAndRetainedOwner(t *testing.T) {
 		recordedDaemon, otherDaemon := newFakeDockerDaemon(t), newFakeDockerDaemon(t)
 		workspace := newShopModule(t, nil)
 		cardsA, cardsB := filepath.Join(realTempDir(t), "cards-a"), filepath.Join(realTempDir(t), "cards-b")
+		moduleCache := newCheckModuleCache(t)
+		assert.NoError(t, os.WriteFile(filepath.Join(moduleCache, "retained"), []byte("input"), 0o600))
+		cachedModule := filepath.Join(moduleCache, "example.com", "module@v1.0.0")
+		require.NoError(t, os.MkdirAll(cachedModule, 0o700))
+		require.NoError(t, os.Chmod(cachedModule, 0o555))
+		t.Cleanup(func() { assert.NoError(t, os.Chmod(cachedModule, 0o700)) })
 
 		t.Setenv("DOCKER_HOST", recordedDaemon.hostURI)
-		pA := runPinned(t, workspace, cardsA, recordedDaemon)
+		pA := runPinned(t, workspace, cardsA, recordedDaemon, moduleCache)
 		opID := filepath.Base(pA.opDir)
-		for _, sub := range []string{"src", "modcache", "work-0", "docker-config"} {
+		for _, sub := range []string{"src", "work-0", "docker-config"} {
 			assert.DirExists(t, filepath.Join(pA.opDir, sub))
 		}
 		assert.Equal(t, checkOwner{Version: ownerVersion, Docker: dockerBin, Host: recordedDaemon.hostURI, Containers: []ownedContainer{{Name: pA.name, State: stateCreationAnswered}}}, readOwnerRecord(t, pA.opDir))
@@ -615,6 +683,10 @@ func TestCheckOperationsRecoveryAndRetainedOwner(t *testing.T) {
 		assert.Zero(t, otherDaemon.removes.Load())
 		assert.Equal(t, 2, recordedDaemon.removeCount(pA.name))
 		assert.DirExists(t, filepath.Join(pA.opDir, "src"))
+		assertFileContent(t, filepath.Join(moduleCache, "retained"), "input")
+		cacheInfo, err := os.Stat(cachedModule)
+		require.NoError(t, err)
+		assert.Equal(t, os.FileMode(0o555), cacheInfo.Mode().Perm(), "cleanup never chmods retained inputs")
 
 		_, err = pA.cp.CheckProject(authCtx)
 		assertServiceError(t, err, "unavailable")
@@ -626,12 +698,13 @@ func TestCheckOperationsRecoveryAndRetainedOwner(t *testing.T) {
 		// otherDaemon: startup recovery contacts recordedDaemon, cleans scratch,
 		// clears owner.Containers, and preserves ReadCheckOutput.
 		recordedDaemon.setFailRemove(pA.name, false)
-		cpA2 := openCheckCP(t, cardsA, workspace)
+		cpA2 := openCheckCP(t, cardsA, workspace, moduleCache)
 		defer func() { assert.NoError(t, cpA2.Close()) }()
 		assert.Zero(t, otherDaemon.removes.Load())
 		assert.Equal(t, 3, recordedDaemon.removeCount(pA.name))
 		assert.ElementsMatch(t, []string{outputFile, outputMetaFile, ownerFile}, dirEntryNames(t, pA.opDir))
 		assert.Empty(t, readOwnerRecord(t, pA.opDir).Containers)
+		assertFileContent(t, filepath.Join(moduleCache, "retained"), "input")
 
 		page, err := cpA2.ReadCheckOutput(authCtx, &gensurla.ReadCheckOutputPayload{OpID: opID})
 		require.NoError(t, err)
@@ -770,8 +843,9 @@ func testIndependentServerUpdates(t *testing.T, daemon *fakeDockerDaemon) {
 	t.Helper()
 	projectA := newShopModule(t, map[string]string{"go.sum": "initial-sum\n"})
 	projectB := newShopModule(t, map[string]string{"go.sum": "initial-sum\n"})
-	srvA := newCheckTestServer(t, Options{WorkspaceDir: projectA})
-	srvB := newCheckTestServer(t, Options{WorkspaceDir: projectB})
+	cacheA, cacheB := newCheckModuleCache(t), newCheckModuleCache(t)
+	srvA := newCheckTestServer(t, Options{WorkspaceDir: projectA, CheckModuleCacheDir: cacheA})
+	srvB := newCheckTestServer(t, Options{WorkspaceDir: projectB, CheckModuleCacheDir: cacheB})
 	ctx, cancel := context.WithTimeout(t.Context(), lifecycleWaitTimeout)
 	bothTidying := make(chan struct{})
 	srvADone, srvBDone := make(chan struct{}), make(chan struct{})
@@ -803,9 +877,12 @@ func testIndependentServerUpdates(t *testing.T, daemon *fakeDockerDaemon) {
 			return "", "context canceled waiting for tidy barrier\n", 1
 		}
 		value := "sum-from-a\n"
+		cache := cacheA
 		if c.WorkDir == srvB.workingFolder {
 			value = "sum-from-b\n"
+			cache = cacheB
 		}
+		assert.Equal(t, cache, findMount(t, c, containerModCache).Source)
 		mount := findMount(t, c, c.WorkDir)
 		assert.NoError(t, os.WriteFile(filepath.Join(mount.Source, "go.sum"), []byte(value), 0o644))
 		return "tidied own copy\n", "", 0
@@ -841,9 +918,9 @@ func testIndependentServerUpdates(t *testing.T, daemon *fakeDockerDaemon) {
 
 // runPinned starts a ControlPlane at cards and runs one CheckProject call whose
 // first container fails docker rm -f, returning the retained pinnedCheck.
-func runPinned(t *testing.T, ws, cards string, d *fakeDockerDaemon) pinnedCheck {
+func runPinned(t *testing.T, ws, cards string, d *fakeDockerDaemon, moduleCache ...string) pinnedCheck {
 	t.Helper()
-	cp := openCheckCP(t, cards, ws)
+	cp := openCheckCP(t, cards, ws, moduleCache...)
 	readCheckBuilderFixture(t, cp)
 	var pinned atomic.Value
 	d.setOnStart(func(c *recordedContainer) (string, string, int) {

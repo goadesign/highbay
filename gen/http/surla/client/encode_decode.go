@@ -4134,6 +4134,7 @@ func (c *Client) BuildGetTeamRequest(ctx context.Context, v any) (*http.Request,
 // get_team endpoint. restoreBody controls whether the response body should be
 // restored after having been read.
 // DecodeGetTeamResponse may return the following errors:
+//   - "not_implemented" (type *goa.ServiceError): http.StatusNotImplemented
 //   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
 //   - error: internal error
 func DecodeGetTeamResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
@@ -4172,6 +4173,20 @@ func DecodeGetTeamResponse(decoder func(*http.Response) goahttp.Decoder, restore
 			}
 			res := NewGetTeamTeamSnapshotOK(&body)
 			return res, nil
+		case http.StatusNotImplemented:
+			var (
+				body GetTeamNotImplementedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("surla", "get_team", err)
+			}
+			err = ValidateGetTeamNotImplementedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("surla", "get_team", err)
+			}
+			return nil, NewGetTeamNotImplemented(&body)
 		case http.StatusForbidden:
 			var (
 				body GetTeamForbiddenResponseBody
@@ -4231,6 +4246,7 @@ func EncodeShowTeamPaneRequest(encoder func(*http.Request) goahttp.Encoder) func
 // surla show_team_pane endpoint. restoreBody controls whether the response
 // body should be restored after having been read.
 // DecodeShowTeamPaneResponse may return the following errors:
+//   - "not_implemented" (type *goa.ServiceError): http.StatusNotImplemented
 //   - "window_busy" (type *goa.ServiceError): http.StatusConflict
 //   - "pane_unavailable" (type *goa.ServiceError): http.StatusConflict
 //   - "team_unavailable" (type *goa.ServiceError): http.StatusServiceUnavailable
@@ -4259,6 +4275,20 @@ func DecodeShowTeamPaneResponse(decoder func(*http.Response) goahttp.Decoder, re
 		switch resp.StatusCode {
 		case http.StatusNoContent:
 			return nil, nil
+		case http.StatusNotImplemented:
+			var (
+				body ShowTeamPaneNotImplementedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("surla", "show_team_pane", err)
+			}
+			err = ValidateShowTeamPaneNotImplementedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("surla", "show_team_pane", err)
+			}
+			return nil, NewShowTeamPaneNotImplemented(&body)
 		case http.StatusConflict:
 			en := resp.Header.Get("goa-error")
 			switch en {
@@ -4354,6 +4384,7 @@ func (c *Client) BuildStartTeamAgentsRequest(ctx context.Context, v any) (*http.
 // the surla start_team_agents endpoint. restoreBody controls whether the
 // response body should be restored after having been read.
 // DecodeStartTeamAgentsResponse may return the following errors:
+//   - "not_implemented" (type *goa.ServiceError): http.StatusNotImplemented
 //   - "ambiguous_space" (type *goa.ServiceError): http.StatusConflict
 //   - "window_busy" (type *goa.ServiceError): http.StatusConflict
 //   - "team_unavailable" (type *goa.ServiceError): http.StatusServiceUnavailable
@@ -4395,6 +4426,20 @@ func DecodeStartTeamAgentsResponse(decoder func(*http.Response) goahttp.Decoder,
 			}
 			res := NewStartTeamAgentsProjectTeamOK(&body)
 			return res, nil
+		case http.StatusNotImplemented:
+			var (
+				body StartTeamAgentsNotImplementedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("surla", "start_team_agents", err)
+			}
+			err = ValidateStartTeamAgentsNotImplementedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("surla", "start_team_agents", err)
+			}
+			return nil, NewStartTeamAgentsNotImplemented(&body)
 		case http.StatusConflict:
 			en := resp.Header.Get("goa-error")
 			switch en {
@@ -7400,6 +7445,14 @@ func unmarshalStartedBuildResponseBodyToSurlaStartedBuild(v *StartedBuildRespons
 	}
 	res.Builder = unmarshalBuilderProgressResponseBodyToSurlaBuilderProgress(v.Builder)
 	res.TestWriter = unmarshalTestWriterProgressResponseBodyToSurlaTestWriterProgress(v.TestWriter)
+	res.RequiredTests = make([]*surla.RequiredTest, len(v.RequiredTests))
+	for i, val := range v.RequiredTests {
+		if val == nil {
+			res.RequiredTests[i] = nil
+			continue
+		}
+		res.RequiredTests[i] = unmarshalRequiredTestResponseBodyToSurlaRequiredTest(val)
+	}
 	switch string(v.Taking.Kind()) {
 	case "building":
 		actual, _ := v.Taking.AsBuilding()
@@ -7577,6 +7630,19 @@ func unmarshalTestsCouldNotRunResponseBodyToSurlaTestsCouldNotRun(v *TestsCouldN
 		Reason:    *v.Reason,
 		Step:      *v.Step,
 		CheckedAt: *v.CheckedAt,
+	}
+
+	return res
+}
+
+// unmarshalRequiredTestResponseBodyToSurlaRequiredTest builds a value of type
+// *surla.RequiredTest from a value of type *RequiredTestResponseBody.
+func unmarshalRequiredTestResponseBodyToSurlaRequiredTest(v *RequiredTestResponseBody) *surla.RequiredTest {
+	res := &surla.RequiredTest{
+		Story:    *v.Story,
+		FlowKey:  *v.FlowKey,
+		Scenario: *v.Scenario,
+		Hook:     *v.Hook,
 	}
 
 	return res
@@ -7783,19 +7849,6 @@ func unmarshalTestWriterAssignmentItemResponseBodyToSurlaTestWriterAssignmentIte
 		InForce:         *v.InForce,
 	}
 	res.Progress = unmarshalTestWriterProgressResponseBodyToSurlaTestWriterProgress(v.Progress)
-
-	return res
-}
-
-// unmarshalRequiredTestResponseBodyToSurlaRequiredTest builds a value of type
-// *surla.RequiredTest from a value of type *RequiredTestResponseBody.
-func unmarshalRequiredTestResponseBodyToSurlaRequiredTest(v *RequiredTestResponseBody) *surla.RequiredTest {
-	res := &surla.RequiredTest{
-		Story:    *v.Story,
-		FlowKey:  *v.FlowKey,
-		Scenario: *v.Scenario,
-		Hook:     *v.Hook,
-	}
 
 	return res
 }

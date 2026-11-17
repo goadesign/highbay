@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/goadesign/surla/internal/procgroup"
+	"github.com/goadesign/surla/internal/testmodule"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -903,6 +904,7 @@ func TestBuildRunsWithoutHomeOrTelemetry(t *testing.T) {
 	require.NoError(t, os.RemoveAll(shared))
 
 	failSpec := testBuildSpec(t, mod, mod, filepath.Join(t.TempDir(), "out"), filepath.Join(t.TempDir(), "build.log"))
+	failSpec.BuildCacheDir = filepath.Join(failSpec.WorkDir, "gocache")
 	require.NoError(t, os.WriteFile(filepath.Join(failSpec.WorkDir, "gocache"), []byte("not a directory"), 0o600))
 	require.Error(t, Build(t.Context(), failSpec, (*exec.Cmd).Run))
 	logText, err := os.ReadFile(failSpec.LogFile)
@@ -913,7 +915,9 @@ func TestBuildRunsWithoutHomeOrTelemetry(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
-	assert.ErrorIs(t, Build(ctx, testBuildSpec(t, mod, mod, filepath.Join(t.TempDir(), "out"), filepath.Join(t.TempDir(), "build.log")), (*exec.Cmd).Run), context.Canceled)
+	canceled := testBuildSpec(t, mod, mod, filepath.Join(t.TempDir(), "out"), filepath.Join(t.TempDir(), "build.log"))
+	canceled.BuildCacheDir = filepath.Join(canceled.WorkDir, "gocache")
+	assert.ErrorIs(t, Build(ctx, canceled, (*exec.Cmd).Run), context.Canceled)
 }
 
 // TestBuildTestBinaryRunsUnderExec builds a test binary and runs it through
@@ -988,12 +992,12 @@ func writeModule(t *testing.T, files map[string]string) string {
 }
 
 // testBuildSpec returns a BuildSpec for package "." of moduleDir in the source
-// root sourceDir with the host's toolchain and module cache and a fresh work
-// directory.
+// root sourceDir with trusted shared compiler inputs and a fresh work directory.
+// Tests of cache contents or lifetime explicitly select their own cache.
 func testBuildSpec(t *testing.T, sourceDir, moduleDir, out, log string) BuildSpec {
 	t.Helper()
 	work := t.TempDir()
-	return BuildSpec{BuildCacheDir: filepath.Join(work, "gocache"),
+	return BuildSpec{BuildCacheDir: testmodule.CompilerCache(t),
 		SourceDir: sourceDir, ModuleDir: moduleDir, Package: ".", Out: out,
 		GOROOT: goEnv(t, "GOROOT"), ModCache: goEnv(t, "GOMODCACHE"), WorkDir: work, LogFile: log,
 	}

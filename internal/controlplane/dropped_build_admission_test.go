@@ -8,17 +8,15 @@ import (
 	"testing"
 
 	gensurla "github.com/goadesign/surla/gen/surla"
-	"github.com/goadesign/surla/internal/designeval"
-	"github.com/goadesign/surla/internal/testmodule"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-// TestDroppedBuildSameRevisionRecovery uses actual refresh, revision, adoption,
-// Drop and StartBuild owners. Only the team is simulated; no pass is seeded.
+// TestDroppedBuildSameRevisionRecovery uses saved compiler results while real
+// refresh reuse, revision, adoption, Drop and StartBuild own draft provenance.
 func TestDroppedBuildSameRevisionRecovery(t *testing.T) {
 	workspace := t.TempDir()
-	snapshot := testmodule.Snapshot(t, "", generationDesign)
+	snapshot := goaGoaAIDSLFixture(t, generationDesign)
 	writeGenerationFiles(t, workspace, snapshot)
 	evalSnapshot := maps.Clone(snapshot)
 	evalSnapshot["go.mod"] = strings.Replace(snapshot["go.mod"], "module example.com/design", "module example.com/design/eval", 1)
@@ -26,12 +24,15 @@ func TestDroppedBuildSameRevisionRecovery(t *testing.T) {
 	commitGenerationProject(t, workspace)
 	cp := newControlPlane(t, Options{
 		WorkspaceDir: workspace, CardsDir: t.TempDir(),
-		Team:      &TeamBinding{Owner: "developer@example.com", Service: &teamServiceFixture{}},
-		Evaluator: designeval.NewEvaluatorInDir(t.TempDir()),
+		Team: &TeamBinding{Owner: "developer@example.com", Service: &teamServiceFixture{}},
 	})
 	guide := asCaller("developer@example.com", CallerGuide)
 	user := asCaller("developer@example.com", CallerUser)
+	opID := seedStoryRefreshForTest(t, cp, "developer@example.com", storyRefreshStateSucceeded, nil, "")
 	card, _ := generationNativeBuild(t, cp)
+	observed, err := cp.GetStoryRefresh(guide)
+	require.NoError(t, err)
+	require.Equal(t, &opID, observed.OpID, "build setup reuses the saved compiler result")
 	cp.mu.RLock()
 	original, found, err := cp.cards.loadOpenBuild()
 	cp.mu.RUnlock()
@@ -93,8 +94,10 @@ func TestDroppedBuildSameRevisionRecovery(t *testing.T) {
 		ChangeID: card.ChangeID, RequestRevision: card.RequestRevision,
 	})
 	assertRefused(t, err, "drafted_before_drop")
-	// A real post-drop refresh can update provenance without changing content.
+	// A saved post-drop evaluation carries the real draft's new provenance.
+	opID = seedStoryRefreshForTest(t, cp, "developer@example.com", storyRefreshStateSucceeded, nil, "")
 	refreshed := generationRefresh(t, cp)
+	require.Equal(t, &opID, refreshed.OpID, "post-drop refresh reuses the current saved result")
 	revised := revise(refreshed.OpID)
 	read(true) // A refreshed proposal still waits beside the stale agreement.
 	adopt(revised)

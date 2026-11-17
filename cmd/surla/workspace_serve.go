@@ -32,11 +32,13 @@ type (
 		// initStageDir is the operator-owned staging parent directory for
 		// init_project.
 		initStageDir string
-		// evalWorkDir is the operator-owned temporary parent directory for
-		// designeval.Evaluator.
+		// evalWorkDir is protected temporary storage for reading the operator's
+		// Go proxy configuration before binding the project server.
 		evalWorkDir string
 		// buildCacheDir holds compiled packages retained across project operations.
 		buildCacheDir string
+		// checkModuleCacheDir retains trusted dependency inputs for Docker checks.
+		checkModuleCacheDir string
 		// runsDir is the protected verification runs directory.
 		runsDir string
 		// verification is the stored evaluator, from the project's stored
@@ -92,18 +94,19 @@ func configureProjectWorkspaceWithTimeout(
 	if err != nil {
 		return workspaceServeConfig{}, fmt.Errorf("%w; check that Git can read the workspace, then run surla again", err)
 	}
-	for _, name := range []string{"cards", "runs", "reports", "designeval-work", "build-cache"} {
+	for _, name := range []string{"cards", "runs", "reports", "designeval-work", "build-cache", "check-modcache"} {
 		if err := markOperatorPrivateDir(filepath.Join(state.Dir, name)); err != nil {
 			return workspaceServeConfig{}, err
 		}
 	}
 	ws := workspaceServeConfig{
-		workspaceDir:  initial,
-		cardsDir:      state.CardsDir(),
-		runsDir:       filepath.Join(state.Dir, "runs"),
-		buildCacheDir: filepath.Join(state.Dir, "build-cache"),
-		initStageDir:  filepath.Join(state.Dir, "init-stage"),
-		evalWorkDir:   filepath.Join(state.Dir, "designeval-work"),
+		workspaceDir:        initial,
+		cardsDir:            state.CardsDir(),
+		runsDir:             filepath.Join(state.Dir, "runs"),
+		buildCacheDir:       filepath.Join(state.Dir, "build-cache"),
+		checkModuleCacheDir: filepath.Join(state.Dir, "check-modcache"),
+		initStageDir:        filepath.Join(state.Dir, "init-stage"),
+		evalWorkDir:         filepath.Join(state.Dir, "designeval-work"),
 	}
 	reports := filepath.Join(state.Dir, "reports")
 	// Read snapshots only at startup: later management writes apply after restart.

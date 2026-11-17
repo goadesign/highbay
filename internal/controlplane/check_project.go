@@ -47,6 +47,9 @@ type (
 		id string
 		// dir is <cards dir>/check-work/<id>.
 		dir string
+		// moduleCacheDir is retained project input when supplied by the server;
+		// otherwise start creates it inside dir for operation-local cleanup.
+		moduleCacheDir string
 		// grantRoot is the live grant's path when the operation started. It
 		// names the source mount point inside containers and nothing else.
 		grantRoot string
@@ -294,7 +297,9 @@ func (op *checkOperation) checkProject(ctx context.Context) (*gensurla.CheckProj
 	}
 	var failures []moduleOutcome
 	for _, mod := range op.copy.modules {
-		if f, ok, err := op.runGo(ctx, mod, "download", "bridge", true, op.goProxyEnv, "list", "-deps", "-test", "./..."); err != nil {
+		// Preparation needs no package listing: it can bury Go's earlier
+		// diagnostics outside the bounded failure message.
+		if f, ok, err := op.runGo(ctx, mod, "download", "bridge", true, op.goProxyEnv, "list", "-deps", "-test", `-f={{""}}`, "./..."); err != nil {
 			return nil, op.finish(err)
 		} else if !ok {
 			failures = append(failures, f)
@@ -323,7 +328,12 @@ func (op *checkOperation) checkProject(ctx context.Context) (*gensurla.CheckProj
 // are the caller-facing errors; once the output exists they come from
 // finish.
 func (op *checkOperation) start(ctx context.Context) error {
-	for _, d := range []string{op.path("src"), op.path("modcache"), op.path("docker-config")} {
+	dirs := []string{op.path("src"), op.path("docker-config")}
+	if op.moduleCacheDir == "" {
+		op.moduleCacheDir = op.path("modcache")
+		dirs = append(dirs, op.moduleCacheDir)
+	}
+	for _, d := range dirs {
 		if err := os.Mkdir(d, 0o700); err != nil {
 			return errors.Join(fmt.Errorf("create check directory %s: %w", d, err), op.closeLive())
 		}
@@ -410,7 +420,7 @@ func (op *checkOperation) runGo(ctx context.Context, mod, step, network string, 
 		WorkDir:   filepath.Join(op.grantRoot, filepath.FromSlash(op.moduleGrantRel(mod))),
 		Mounts: []candidate.Mount{
 			{Source: op.path("src"), Target: op.grantRoot, ReadOnly: srcReadOnly},
-			{Source: op.path("modcache"), Target: containerModCache, ReadOnly: step == "test"},
+			{Source: op.moduleCacheDir, Target: containerModCache, ReadOnly: step == "test"},
 			{Source: work, Target: containerWork},
 		},
 		Env:  env,

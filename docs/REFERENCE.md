@@ -191,21 +191,26 @@ outside the folder, in
 the user's configuration folder (on macOS, `~/Library/Application Support`).
 It holds the owner's account identity, one saved `127.0.0.1` port, the Change
 Cards and builds (`cards/`), verification runs (`runs/`), reports
-(`reports/`), the Go build cache (`build-cache/`), agent credentials
+(`reports/`), the Go build cache (`build-cache/`), Docker dependency inputs
+(`check-modcache/`), agent credentials
 (`agents/`), stored settings, and the running server's record. A new project
 saves a free port that no other project of this account saved, running or not,
 and keeps it. No caller chooses an
 identity, address, token or storage path.
 
-Live starts and verifications share this project's compiled Go packages in
-`build-cache/`. Every operation still checks out the selected commits, builds
-new output binaries, measures their digests and runs its test program; a cache
-hit is not a passed verification. Scratch, staging, checkouts, outputs and
+Through the project server, Story evaluation and generation during refreshes
+and initialization,
+test-report checks, live starts and verifications share this project's compiled
+Go packages in `build-cache/`. Every operation still processes its current
+inputs and runs its checks; a cache hit is never a passed check. Live starts
+and verifications still check out the selected commits, build new output
+binaries and measure their digests, and verification runs its test program.
+Scratch, staging, checkouts, outputs and
 evidence stay in each operation's work directory; reports are published in
 the project's shared `reports/` folder. The cache survives Stop, server restart
 and pruning individual runs. Go maintains its cache entries. Use it on a local
 filesystem on one machine; sharing it across machines or a network filesystem
-is unsupported. When no live start or verification is running, you can delete
+is unsupported. When none of these compiler operations is running, you can delete
 `build-cache/`; the next operation recreates it and builds cold.
 
 The retained packages are trusted compiler inputs, like the Go module cache,
@@ -1098,15 +1103,27 @@ belong to the test writer)`) on the current files in `.surla-build`, uncommitted
 edits included, without changing them. The server copies
 the files (leaving out `.git` and `.surla*`, never following a link) into a
 private folder, then runs each module in two Linux containers from
-`golang:1.27.3`: first downloading dependencies with your `GOPROXY`,
+`golang:1.27.3`: first preparing dependencies with your `GOPROXY`,
 `GOSUMDB`, `GOPRIVATE`, `GONOPROXY`, `GONOSUMDB` and `GOINSECURE` and no
-credentials, then testing with no network. A helper process, `surla
+credentials, then testing with no network. Dependency preparation omits package
+names so they cannot displace Go's errors from the failure message. A helper process, `surla
 check-run`, owns the containers and finishes removing them even when the call
 is canceled or the server stops. `passed` is true only when every module's
 tests pass. `message` (at most 16 KiB) names the first failure; read the full
 output with [`read_check_output`](#read_check_output). When the message says
 `go.sum` or `go.work.sum` needs entries or `go.mod` needs an update, call
 [`update_dependencies`](#update_dependencies).
+
+The project retains downloaded modules and toolchains in its private
+`check-modcache/` directory across checks, dependency updates and server
+restarts. Only dependency preparation and tidy may write this cache. Test
+containers mount it read-only, with `GOPROXY=off` and no network; their compiler
+cache, home and temporary files stay private to each command. Every call still
+loads the current module/workspace manifests and runs the tests. Cached downloads
+do not supply missing or replace incorrect `go.sum` or `go.work.sum` entries.
+Go checks recorded download identity; reuse does not rehash extracted cached
+files or authenticate changes made by other same-user host programs. Operation
+cleanup never removes the retained directory. Projects keep separate caches.
 
 | Refusal | When |
 | --- | --- |
@@ -1784,8 +1801,14 @@ returns the same required fact in its `ChangeBuild` result.
 | `in_force` | `true` while that revision is the agreed one, including while a proposed revision waits; `false` when adoption or confirmation changes the agreed `request_revision`. Adopting a refreshed draft with unchanged content can keep it `true`. The build is not redone by itself. |
 | `taking` | How the open build stands with the project folder's branch: `building`, `passed` (with `run_id`, `candidate_commit`, `candidate_branch` `surla/build-<n>`, `tests`—`evaluator` or `written_tests` with `commit` and `branch` `surla/tests-<n>`—and `base_in_branch`), `merged`, or `dropped` (with `kept_branches`). |
 | `required_test_count` | Finished flows in the saved Story; `0` means no test was required. It counts entries; it does not judge what the tests assert. |
+| `required_tests` | Required for every caller: one `RequiredTest` per finished flow in the saved build Story, in declaration order (`story`, `flow_key`, `scenario`, `hook`); empty when none. Later agreement edits do not replace this list. It names requirements, not a mapping from findings to tests or proof of evaluator coverage. |
 | `builder.read` | Whether the builder read its assignment. |
 | `test_writer` | `read`, `report` (0 until the first report, one more with each) and `tests`. |
+
+`required_tests` also appears in other responses carrying `StartedBuild`,
+including build start and drop. Regenerate validating clients for this required
+field and update the server and embedded page together. Existing saved builds
+need no conversion; the server derives the list from their saved Story.
 
 `taking.state` becomes `merged` when the project folder's checked-out branch
 holds the commits of one passed run: the builder's commit and, for written
@@ -1911,6 +1934,10 @@ saves none of it. The user's views page reads it and acts on it with
 cannot call these three, and none is an MCP tool. The `surla` command
 prepares the same team with the management operation `ensure_team`.
 
+If no team is bound to the server, all three user operations return
+`not_implemented` (`501`) with the enabling step:
+`Start this project with surla to use its team.`
+
 ### `get_team`
 
 `GET /team`. **Output:** `TeamSnapshot` (`team`, `roles`). Registered roles
@@ -1927,6 +1954,7 @@ creates nothing and marks nothing read. Each role has:
 When Herdr sends no heartbeat or event for 45 seconds, every role reads
 `unknown` until fresh facts arrive. A failed assignment read never reads as
 `nothing_owed` or `no_work`. `wait_for_changes` also covers these facts.
+For an unbound team, see [the shared refusal](#team-supervision).
 
 ### `show_team_pane`
 
@@ -1935,6 +1963,7 @@ that role's pane, only when the user asks.
 
 | Refusal | When |
 | --- | --- |
+| `not_implemented` (`501`) | No team is bound; see [the shared refusal](#team-supervision). |
 | `window_busy` (`409`) | A Herdr dialog is open; close it first. Nothing in the window changed. |
 | `pane_unavailable` (`409`) | The role has no pane Surla can identify. |
 | `team_unavailable` (`503`) | Herdr could not establish the pane: `Herdr did not complete a team command; open the Herdr app, then try again`. |
@@ -1946,9 +1975,10 @@ that role's pane, only when the user asks.
 `surla` runs, opening the Chorus dialog when the guide, or a worker role that
 has work on the open build (or any listed role when the assignment read fails),
 is not running.
-Refusals: `ambiguous_space` (`409`, close the duplicate Herdr spaces, then
-start the agents), `window_busy` (`409`) and `team_unavailable` (`503`), whose
-message is the views page's step for its cause (see
+Refusals: `not_implemented` (`501`, no team is bound; see
+[the shared refusal](#team-supervision)), `ambiguous_space` (`409`, close the
+duplicate Herdr spaces, then start the agents), `window_busy` (`409`) and
+`team_unavailable` (`503`), whose message is the views page's step for its cause (see
 [`ensure_team`](#ensure_team-management)). `team_unavailable` can come after
 the server saved the team's name and space, registered the guide and wrote
 the roster; they stay saved, and the next start reuses them.
@@ -2359,85 +2389,139 @@ walkthrough.
 
 ### Repository checks
 
-The [CI workflow](../.github/workflows/ci.yml) runs its short checks on pull
-requests and on pushes to the branches its `push` trigger names: `main`, and
-an integration branch for as long as pull requests target one. The short
-checks are:
+The [CI workflow](../.github/workflows/ci.yml) runs 15 Linux jobs on every
+pull request. It executes complete ordinary tests, without `-short`, plus
+product linking, every added build profile and generated-contract checks.
+[Integration](../.github/workflows/integration.yml) adds one macOS job on pull
+requests into `team-start` and `main`, exercising native process and filesystem
+contracts. Pushes to `main`, `team-start` and `builder-copy` run the complete
+pipeline: all 14 macOS ordinary jobs, the Linux checks, tagged journeys,
+browser/Herdr suites and Docker checks. Nightly runs at 07:17 UTC and manual
+full runs execute that same pipeline once the workflow is on the default branch.
 
-- Vet and short race tests of each Go module: the root,
-  [`story`](../story/README.md), `examples/orders` and `examples/orders-eval`.
-  The other modules run on macOS. The root module's short tests run in five
-  jobs. **Go (., page tests)** runs only `internal/controlplane` and
-  `internal/project` on macOS, selecting `TestViewsPage…` and
-  `TestCheckpoint…` in two sequential commands. Both commands name both
-  packages: the first selects `^Test(Checkpoint|ViewsPage[A-L])`, and the
-  second selects every remaining page test by applying the full page pattern
-  and skipping the first group. Each command gives each package its own
-  three-minute alarm, so smaller groups replace the whole page suite's
-  aggregate alarm. The page job keeps its ten-minute backstop and one cache
-  owner; the commands reuse setup and the build cache. This split preserves
-  the total test work and does not guarantee a faster job.
-  **Go (., control plane, A-L)** runs non-page tests whose
-  names start with `TestA` through `TestL`, on Linux.
-  **Go (., control plane, remaining)** runs every other non-page test,
-  including examples and fuzz seeds, also on Linux. **Go (.)** runs on macOS,
-  derives every other package with tests and skips page tests. These four
-  owners cover every root short test. **Go (., control plane, macOS-platform)**
-  additionally runs nine explicitly named non-page tests on macOS: failed
-  live-target cleanup and stop ownership, filesystem aliases, and opening
-  entries through the Darwin backend. Its static name check fails if a listed
-  test disappears. Pull requests do not execute the other generic non-page
-  control-plane tests on macOS; they still compile and receive full vet there
-  through the page job. Full macOS execution remains in the root control-plane
-  job on pushes to `main`, `team-start` and `builder-copy`, nightly runs and
-  manual full runs, alongside the Linux full job. Each of
-  these jobs saves and restores its own Go build and module cache key,
-  qualified by operating system, architecture, Go version and root dependency
-  files. The two Linux groups keep separate owner keys, and the macOS platform
-  subset has its own key. The module-matrix jobs use a 12-minute backstop to
-  finish cold checks and post-run cache saves, with the same three-minute
-  package alarms, race detection and vet checks.
-  Pushes to `main`, `team-start` and `builder-copy` run all five jobs with the
-  same three-minute package alarm and
-  save missing caches after success, making them available to pull requests
-  targeting those branches. Each job targets five minutes with an exact
-  cache hit; cold durations are recorded separately. On a miss, its job
-  summary says `dependency cache miss: this run compiles all dependencies`.
-  Dependency or toolchain changes, or cache expiry or eviction, can cause a
-  miss; a base-branch push does not guarantee a hit for every pull request.
-  Pull-request short checks may reuse Go's cached test results for packages
-  whose inputs did not change. On pushes to those three branches, the short
-  checks use `-count=1` to execute their selected tests again. Full suites
-  also always use `-count=1`. These runs still reuse Go's build cache, which
-  avoids recompiling unchanged code.
-- A Linux build and vet of the root module, once without build tags and once
-  with each of `e2e`, `scaffold`, `herdr`, `browser` and `docker`, and the
-  Linux short tests.
-- Formatting, generated-code and views page type checks.
+| Linux PR owner | Work |
+| --- | --- |
+| Eleven root groups | Two complementary control-plane page groups; two complementary groups of other control-plane tests; selected compiler tests from the test writer and design evaluator, plus each package's remaining tests; the Story-table generator CLI test and its complement; other packages outside/inside the concurrency-owner list. |
+| Story and Orders evaluator | All ordinary tests of both modules, selecting each module's own Go toolchain. |
+| Orders | All ordinary Orders tests with its module toolchain. |
+| Build profiles | Ordinary product linking, then build and full vet for `e2e`, `scaffold`, `herdr`, `browser` and `e2e,docker`. The combined Docker profile includes its container tests; `docker` alone adds none. |
+| Generated contracts | Formatting, concurrency-owner checks, TypeScript, root/target-prompt/example Goa regeneration, page consistency and Node consumer tests. |
 
-To run the short tests locally, run `go test -race -short ./...` in each
-module.
+[The root selector](../.github/scripts/test-root.sh) owns the complete Linux
+partitions and the full macOS push/nightly/manual partitions. New roots, examples and
+fuzz seeds belong to complementary groups. [The native selector](../.github/scripts/test-native.sh)
+owns the macOS integration PR cases: process groups and signals, executable and descriptor
+identity, physical paths and aliases, permissions, atomic rename, locks, staging,
+and project-server start/stop. Its package owners and exact names keep portable
+rendering, design, Story, test-writing and prompt logic on Linux for PRs; full
+macOS push/nightly/manual execution still covers them. When a native boundary gains or
+renames a test, update that selector in the same change. New packages retain an
+owner in the complete suites, including packages without tests. Project page tests stay with the project package; control-plane page
+names belong only to the page groups. Separating the other plain packages
+from concurrency owners removes the old serial job phase without reducing
+race coverage. Every command uses `-count=1` and full vet. No job reruns the
+same ordinary roots under an added tag.
 
-The root module's full tests also run on pushes to `main`, `team-start` and
-`builder-copy`, on both macOS and Linux. Each operating system has separate
-jobs for the control plane's page tests, its other tests, the design evaluator,
-and the remaining root packages. The page partition uses the same test-name
-pattern as the short checks; the remaining packages still run their own page
-tests.
+Selected test runs must emit at least one named Go test, example or fuzz-seed
+event. The [output guard](../.github/scripts/testcheck/main.go) preserves the original JSON stream and fails
+when a stale selector runs nothing; packages without tests may still share a
+run with tested packages. Explicit Bash pipeline failure handling preserves
+the test command's own failures. Compiler-input preparation intentionally
+compiles with no test execution and does not use this guard.
 
-The **Full / docker-check** job also runs on pushes to `main`, `team-start`
-and `builder-copy`, nightly and on manual runs, on Ubuntu with its Docker
-engine. It executes the dependency-repair journey through one project server:
-the initialized builder copy passes, missing `go.sum` entries are repaired,
-and workspace-only checksums are repaired into `go.work.sum`, while the user's
-project stays unchanged. It uses `-tags=e2e,docker` and selects
-`TestCheckProjectRepairsDependenciesOnOneServer`; pull requests do not run it.
-The package alarm is 40 minutes and the job backstop is 50 minutes, including
-cold compilation and downloads. These are execution bounds, not measured
-completion times. To run the journey locally with a running Docker engine:
+The integration workflow reuses the Linux workflow on pushes, nightly and
+manual runs; integration PRs already receive those Linux jobs from their PR
+workflow. The selected native macOS job runs before integration, including
+Darwin-selected process, filesystem-alias and browser-opener behavior. Complete native root groups,
+both nested-module jobs, generated checks and browser-profile vet run on pushes,
+nightly and on manual full runs. Those events run only the complete native
+owners, keeping execution separate from the selected PR job.
 
-```bash
-go test -race -count=1 -timeout 40m -tags=e2e,docker -run '^TestCheckProjectRepairsDependenciesOnOneServer$' ./cmd/surla
+The trusted native compiler producers run only outside pull requests. Native
+integration PR checks use restored archives directly; they do not wait for a
+producer skipped by that event. Push/nightly/manual consumers wait for successful
+producers. Parent and reused-workflow concurrency groups are distinct, so the
+Linux workflow cannot cancel its integration caller.
+
+One **Full / compiler-inputs** job per operating system prepares and publishes
+module and compiler archives without running tests. Outside pull requests,
+full-root groups wait for these producers, then restore their inputs; PR checks
+remain independent read-only consumers. A missing module or compiler archive
+triggers preparation of the declared race/plain compilation,
+CGO-free product dependencies and pinned Goa generator, then compiles Story,
+Orders and Orders Eval with their own dependency versions and plain/race
+selections, including the tagged acceptance tests. Only trusted non-pull-request
+runs publish missing archives. A later test failure or timeout does not
+invalidate these compiler inputs or prevent their reuse; checks still run
+in their existing jobs. Producers have a separate 20-minute backstop; the full
+root jobs keep their 30-minute backstop and package alarms. Preparation and
+tests no longer consume one shared job budget. These bounds are not measured
+completion times. The archive version changes when this declared closure
+changes; an immutable archive cannot gain missing inputs after an exact hit.
+No arbitrary first-finishing shard can save an incomplete common
+closure. Archive keys include the exact Go toolchain, operating system and
+architecture, module inputs, starter templates and published fixture versions;
+compiler keys also include the hosted OS image family and race profile. Module
+archives remain separate from compiled-package archives. Base-branch pushes
+populate archives that pull requests can restore; private project state and
+credentials are never cached.
+
+The producer's macOS and Linux dependency lists contain only standard-library
+native inputs: `net`, `os/user`, `runtime/cgo` and the race runtime. Orders'
+`modernc.org/sqlite` dependency is pure Go. Go's own action keys include the
+Go toolchain, compiler options and C compiler identity. The archive uses the
+OS image family (`ImageOS`), allowing concurrently served weekly image builds
+with the same system ABI to share it. Go does not detect arbitrary external
+C-library changes; adding such a dependency requires reviewing its native
+profile and archive key before sharing compiled inputs across image builds.
+
+Each job summary reports module and build archive hits separately. Missing
+inputs, dependency/toolchain/template/image changes, expiry or eviction can
+cause a cold or partial restore; those durations are reported separately.
+Cache restoration never skips a check. Both pull-request Linux checks and
+full suites use `-count=1`, while retaining Go's compiled-package cache.
+
+Race instrumentation follows
+[the production concurrency owners](../.github/race-packages.txt).
+The wrapper uses Go's active `TestGoFiles` and `XTestGoFiles` metadata to
+instrument listed packages with tests. A listed package without tests still
+builds and vets in the plain group; adding its first test automatically
+selects race instrumentation. The cold producer uses the same selection.
+[The syntax check](../.github/scripts/racecheck/main.go) rejects handwritten
+production goroutines, synchronization imports or channel operations outside
+that list, and rejects listed owners that no longer contain them. It checks
+platform-specific files too, excluding generated code, test programs and
+fixtures. Other packages run without instrumentation. Generation, starter,
+whole-journey and Docker e2e jobs retain `-race` until comparable warm
+measurements justify a change. Verification's orchestration package has no
+production concurrency; its supervisor, candidate and suite owners retain
+race coverage.
+
+The five-minute warm target includes setup, restore, tests and scheduling
+rather than test output alone. The full-root 20-minute package alarms and
+30-minute job bounds remain cold/hang backstops; generated checks retain their
+five-minute bound and profile compilation its ten-minute bound. These are
+execution limits, not measured completion times. Cold measurements and warm
+runs must be reported separately; a restored archive never substitutes for a
+check or proves five-minute feedback.
+
+To run one full-root group locally:
+
+```sh
+CI=true bash .github/scripts/test-root.sh cli-first </dev/null
+```
+
+The **Full / docker-check** job stays in the integration workflow on trusted
+pushes, nightly and manual runs. On Ubuntu with its Docker engine, it runs the
+intact dependency-repair journey through one server, then the container owner's
+`TestContainerEngineEndToEnd` and `TestLocalEngineContainerLifecycleFacts`.
+It keeps `-tags=e2e,docker`, race instrumentation, the journey's 40-minute
+package alarm, the container owner's 20-minute alarm and the 50-minute job
+backstop. Pull requests do not execute this job automatically. To run the
+journey locally with a running Docker engine:
+
+```sh
+go test -race -count=1 -timeout 40m -tags=e2e,docker -run '^TestCheckProjectRepairsDependenciesOnOneServer$' ./cmd/surla </dev/null
 ```
 
 ### Committed test module profiles
@@ -2479,18 +2563,29 @@ Replace the versions above with the new root requirements and commit the
 updated module files and checksums. Run both tests with fetching disabled to
 check the actual evaluators against the updated inputs.
 
-All full suites run nightly at 07:17 UTC and on a manual **Run workflow**
-request (`CI=true gh workflow run ci.yml --ref <branch> </dev/null`). This adds
-the other modules' complete tests and the verifier, generation, starter and
-orders acceptance suites as parallel jobs. **Full / generation** uses a
+All tagged full suites run on integration-branch pushes, nightly at 07:17 UTC
+and on a manual **Run workflow** request (`CI=true gh workflow run integration.yml --ref <branch> </dev/null`).
+Manual dispatch requires `integration.yml` to exist on the repository's default
+branch, even when `--ref` names another branch. Scheduled runs also require the
+workflow on that branch and execute its latest commit. Until then, full coverage
+comes from an integration-branch push or a rerun of that push run.
+This runs the verifier, generation, starter, whole-project journey and Orders
+acceptance suites alongside complete native ordinary coverage. Once manual
+dispatch is available, it can check a candidate head before merging. Tagged jobs
+select only their named roots: ordinary CLI, verifier and scaffold tests belong to the full
+root partitions, and ordinary acceptance budget and hook tests belong to
+the ordinary Orders evaluator owner. The separate journey job owns the
+whole-project journey; the verifier retains its macOS and Linux profiles. The workflow lists
+each selected set explicitly, so adding a build tag does not rerun ordinary
+tests in another job. **Full / generation** uses a
 60-minute package alarm and a 70-minute job backstop for the suite's project
 compilations on slow runners, including cold builds. The job limit also
 covers setup and downloads. These are execution bounds, not measured
 completion times or a reduction in compilation work.
-A passing short run does not prove
-paths that build and run agent-written code; changes to candidate execution
-or starter generation need the full suite. On macOS, with the Temporal CLI
-for the first three:
+Passing ordinary checks or compiling tagged files does not prove the tagged
+paths that build and execute candidate code. Changes to candidate execution
+or starter generation need the applicable full suite. On macOS, with the
+Temporal CLI for the first three:
 
 ```bash
 (cd examples/orders-eval && go test -race -tags e2e ./acceptance)
@@ -2499,22 +2594,36 @@ go test -race -count=1 -tags e2e ./cmd/surla
 go test -race -count=1 -timeout 60m -tags scaffold ./internal/scaffold
 ```
 
-The views page's real-browser check runs only on request; CI compiles it but
-never runs it. It needs Chrome or Chromium and Node 22 or later; set
-`SURLA_TEST_BROWSER` to the browser when it is not in a standard place. It
-checks that the browser enforces the page's policy, that the session ends on
-reload and nothing is stored, that a long row of Story steps scrolls inside
-the Story view, and that the Live target view fits a 375-pixel-wide screen:
+The **Full / opt-in (Linux)** job runs the named native browser tests and the
+isolated Herdr server lifecycle on integration-branch pushes, nightly and on
+manual full runs. The Linux PR profile job compiles and vets both tagged profiles. The scheduled job requires
+hosted Chrome, Node 26 and digest-checked Herdr Core 0.1.21; missing tools fail setup.
+Its explicit browser roots cover page policy and sessions, phone layout, build
+and test review, keyboard access, and browser cleanup after its parent ends.
+They execute independently of ordinary project tests. The Herdr root, `TestHC`,
+runs the real headless Core and Surla server with isolated state and fixture
+window and team effects; it starts no coding agent or model. Each package command
+has a five-minute alarm and the job has a ten-minute backstop. These bounds are
+not measured completion times. The complete selected set is in
+[the integration workflow](../.github/workflows/integration.yml).
+The page-policy journey also checks that a session ends on reload, browser
+storage stays empty, long Story rows scroll within the Story view, and Live
+fits a 375-pixel-wide screen.
+
+Local native checks need Chrome or Chromium and Node 22 or later. Set
+`SURLA_TEST_BROWSER` when the browser is not installed in a standard place.
+For example, run the phone layout contract with:
 
 ```bash
-go test -race -count=1 -tags browser ./internal/project
+go test -race -count=1 -timeout 5m -tags browser -run '^TestTeamAndBuildAtPhoneWidth$' ./internal/project </dev/null
 ```
 
 ### Project layout
 
 ```text
 .
-├── .github/workflows/ci.yml     # Short PR checks, full root tests on integration pushes, all suites nightly or on request
+├── .github/workflows/ci.yml     # Complete Linux PR checks, reused by integration
+├── .github/workflows/integration.yml # Native PR coverage and full push/nightly/manual journeys
 ├── cmd/surla/                   # The surla command: project start and stop, settings, init, preview, diff, gen, verify, approve
 ├── design/                      # Goa design of the server's contract
 │   ├── design.go                # Change Cards, checks, live target, verification, approval

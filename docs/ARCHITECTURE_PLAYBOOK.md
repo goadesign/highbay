@@ -164,6 +164,13 @@ The views page keeps one waiting read (`wait_for_changes`) open. Its answer is a
 
 One function, `testsChoice` in [`verification_plan.go`](../internal/controlplane/verification_plan.go), chooses which tests judge a change: the suite named in the stored verification settings, or the tests accepted for the change's build at its revision. Verification runs those tests, `approve_merge` requires the approved report to have run them, and a saved approval is shown only while they stay the same; `verificationPlan` builds a run's configuration from that choice. The builder names only the change, the revision and its commit.
 
+The build read returns `required_tests` for every caller, derived from its
+saved Story with `designeval.StoryScenarios`. Build, assignment and run-review
+reads share one conversion to the generated `RequiredTest` type; the count is
+the list length. The page presents these requirements beside the independently
+correlated findings strings, without inferring a relation between them. The
+list is derived on read, so existing saved build records need no new field.
+
 At acceptance, the control plane copies the open build's agreed Story and build
 identity into the immutable request owned by `internal/verifyrun`. This evidence
 survives later revisions and builds; runs without recorded context never borrow
@@ -192,8 +199,11 @@ requests, live records and verification plans contain no cache path.
 `verify.Prepare` passes it as `candidate.BuildSpec.BuildCacheDir` for candidate
 and test-program compilation; `WorkDir` keeps only operation-owned scratch and
 staging. The standalone `surla verify` composition root instead supplies a cache
-under its own work directory. Design evaluation and test checking keep their
-existing separate cache lifetimes.
+under its own work directory. The control-plane composition also supplies the
+project cache to its design evaluator, each fresh initialization generator and
+the test-report checker. Their scratch and outputs remain independently owned;
+closing an evaluator or removing check scratch never removes the project cache.
+Direct evaluator and checker constructors retain their private cache defaults.
 
 The project cache survives Stop, Close, restart and run pruning. Go maintains
 entries; canceled compiler scratch stays with the operation's cleanup owner.
@@ -201,6 +211,9 @@ Concurrent processes may share the cache on one machine using a local
 filesystem. The user may delete it while no operation is running; the next
 build recreates it. No cache entry skips checkout, output publication, digest
 measurement or test execution.
+A cache hit is never a passed check: refreshes still evaluate the design,
+initialization still generates and checks the starter, and report checking still
+builds and lists the test program against its required tests.
 
 Cache ownership provides no confinement. Go checks existence and recorded size
 when reading cached package files, not compiled contents against selected
@@ -209,6 +222,22 @@ into the candidate or test program, so its report can bind a binary the
 selected source would not produce. This joins the trusted module cache, toolchain, executable search path and
 Surla's files. Deleting the build cache forces recompilation but does not
 authenticate those other inputs.
+
+For Docker `check_project` and `update_dependencies`, the project composition
+derives a separate private `check-modcache/` under project state and injects it
+as `controlplane.Options.CheckModuleCacheDir`. The control plane validates its
+ownership, permissions and separation from source and operation storage, then
+sends it only in the check helper's transient stdin specification. No model
+input or durable operation record contains the path. The helper validates that
+process input before Docker admission. Dependency preparation and tidy mount
+the cache writable; test containers mount it read-only, with network disabled
+and `GOPROXY=off`. Compiler cache, HOME, TMPDIR and work remain fresh for each
+command. The retained directory survives cancellation, cleanup and restart;
+recovery removes only operation-owned scratch. Embedded checkers that omit the
+option keep an operation-local module cache and need no `BuildCacheDir`.
+Go's recorded download checks do not rehash extracted cached source. The
+read-only test mount preserves the dependency write boundary; it does not
+confine other same-user host processes.
 
 ### Operation diagnostics
 

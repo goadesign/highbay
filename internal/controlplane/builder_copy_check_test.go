@@ -92,7 +92,7 @@ func TestBuilderCopyCheckPublishesOnlyInItsCopy(t *testing.T) {
 // TestBuilderCopyCheckRefusesBeforeStarting preserves the builder and project
 // when readiness, branch ownership or exclusive use fails.
 func TestBuilderCopyCheckRefusesBeforeStarting(t *testing.T) {
-	for _, state := range []string{"unread", "dropped", "off branch", "busy", "nested link"} {
+	for _, state := range []string{"unread", "dropped", "off branch", "busy", "nested link", "missing folder"} {
 		t.Run(state, func(t *testing.T) {
 			project, cp, card, assignment := buildGenerationFixture(t, "apps/shop")
 			configureBuilderCopyCheck(t, cp)
@@ -132,11 +132,19 @@ func TestBuilderCopyCheckRefusesBeforeStarting(t *testing.T) {
 				require.NoError(t, os.Rename(parent, filepath.Join(t.TempDir(), "saved-apps")))
 				require.NoError(t, os.Symlink(filepath.Dir(project), parent))
 				want = "unprocessable"
+			case "missing folder":
+				require.NoError(t, os.RemoveAll(assignment.WorkingFolder))
+				want = "working_folder_missing"
 			}
 			ctx := asCaller("alice@example.com", CallerBuilder)
 			_, err := cp.CheckProject(ctx)
 			_, updateErr := cp.UpdateDependencies(ctx)
-			for _, refusal := range []error{err, updateErr} {
+			refusals := []error{err, updateErr}
+			if state == "missing folder" {
+				_, generationErr := cp.GenerateCode(ctx, &gensurla.GenerateCodePayload{})
+				refusals = append(refusals, generationErr)
+			}
+			for _, refusal := range refusals {
 				if want == "copy_off_branch" {
 					var offBranch *gensurla.CopyOffBranch
 					require.ErrorAs(t, refusal, &offBranch)

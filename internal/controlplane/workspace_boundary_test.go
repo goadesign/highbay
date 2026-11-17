@@ -81,7 +81,8 @@ func TestBoundControlPlaneDefaultEvaluatorAndGeneratorIgnoreWorkspaceTMPDIRAndCl
 	evalWorkName := entriesAfterEval[0].Name()
 	assert.True(t, strings.HasPrefix(evalWorkName, "surla-designeval-work-"))
 
-	initGen := cp.makeInitGenerator(evalParent)
+	initGen, err := cp.makeInitGenerator(evalParent)
+	require.NoError(t, err)
 	_, err = initGen.Generate(context.Background(), map[string]string{})
 	require.Error(t, err)
 	entriesDuringInitGen, err := os.ReadDir(evalParent)

@@ -146,6 +146,7 @@ var StartedBuild = Type("StartedBuild", func() {
 	Attribute("builder", BuilderProgress, "The builder's assignment.")
 	Attribute("test_writer", TestWriterProgress, "The test writer's assignment.")
 	Attribute("required_test_count", Int, "Number of finished flows in the agreed Story. Zero means no test of this change's Story was required.", func() { Minimum(0) })
+	Attribute("required_tests", ArrayOf(RequiredTest), "Tests required by this build's saved Story, in declaration order; unfinished flows require none. Empty when no finished flow requires a test.")
 	OneOf("taking", "Whether the user has taken this build: building until a verification of it passes; passed with the commits to merge; merged once the branch checked out in the project folder holds the commits of one passed run, the builder's and, for written tests, the tests'; dropped once the user dropped it. A project has one open build, and another change is built only once it is merged or dropped.", func() {
 		Meta("oneof:json:flatten")
 		Meta("oneof:type:field", "state")
@@ -155,7 +156,7 @@ var StartedBuild = Type("StartedBuild", func() {
 		Attribute("merged", BuildMerged)
 		Attribute("dropped", BuildDropped)
 	})
-	Required("request_revision", "started_at", "in_force", "builder", "test_writer", "required_test_count", "taking")
+	Required("request_revision", "started_at", "in_force", "builder", "test_writer", "required_test_count", "required_tests", "taking")
 })
 
 // BuildNotStarted says the change has no usable build for its current test source.

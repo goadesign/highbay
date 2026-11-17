@@ -4681,6 +4681,72 @@ var getBuildResultFields = []tools.FieldMetadata{
 		},
 	},
 	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("required_tests")},
+		JSONType:    "array",
+		Description: "Tests required by this build's saved Story, in declaration order; unfinished flows require none. Empty when no finished flow requires a test.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("state")},
+				Value:         "started",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("required_tests"), tools.DynamicField{}},
+		JSONType:    "object",
+		Description: "Tests required by this build's saved Story, in declaration order; unfinished flows require none. Empty when no finished flow requires a test.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("state")},
+				Value:         "started",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("required_tests"), tools.DynamicField{}, tools.FixedField("story")},
+		JSONType:    "string",
+		Description: "Name of the Story the flow belongs to.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("state")},
+				Value:         "started",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("required_tests"), tools.DynamicField{}, tools.FixedField("flow_key")},
+		JSONType:    "string",
+		Description: "Key of the finished flow.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("state")},
+				Value:         "started",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("required_tests"), tools.DynamicField{}, tools.FixedField("scenario")},
+		JSONType:    "string",
+		Description: "Scenario name the evaluation suite declares for the flow.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("state")},
+				Value:         "started",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("required_tests"), tools.DynamicField{}, tools.FixedField("hook")},
+		JSONType:    "string",
+		Description: "Hook method the test writer implements for the scenario.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("state")},
+				Value:         "started",
+			},
+		},
+	},
+	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("taking")},
 		JSONType:    "object",
 		Description: "Whether the user has taken this build: building until a verification of it passes; passed with the commits to merge; merged once the branch checked out in the project folder holds the commits of one passed run, the builder's and, for written tests, the tests'; dropped once the user dropped it. A project has one open build, and another change is built only once it is merged or dropped.",
@@ -26619,6 +26685,13 @@ func validateGetBuildResultStartedBuildTransportJSONValue(path string, value any
 			); err != nil {
 				return err
 			}
+		case "required_tests":
+			if err := validateGetBuildResultStartedBuildTransportRequiredTestsJSONValue(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Tests required by this build's saved Story, in declaration order; unfinished flows require none. Empty when no finished flow requires a test.",
+			); err != nil {
+				return err
+			}
 		case "started_at":
 			if err := validateStringJSONValue(
 				generatedJSONChildPath(path, key, false),
@@ -26646,6 +26719,7 @@ func validateGetBuildResultStartedBuildTransportJSONValue(path string, value any
 				"in_force",
 				"request_revision",
 				"required_test_count",
+				"required_tests",
 				"started_at",
 				"taking",
 				"test_writer",
@@ -26685,6 +26759,90 @@ func validateGetBuildResultBuilderProgressTransportJSONValue(path string, value 
 		default:
 			return unknownJSONFieldError(path, key, []string{
 				"read",
+			})
+		}
+	}
+	return nil
+}
+
+// validateGetBuildResultStartedBuildTransportRequiredTestsJSONValue checks one value whose JSON shape is fixed by the generated Goa type.
+func validateGetBuildResultStartedBuildTransportRequiredTestsJSONValue(path string, value any, description string) error {
+	field := path
+	if field == "" {
+		field = "$payload"
+	}
+	if value == nil {
+		return invalidGeneratedFieldTypeError(field, "array", "null", description)
+	}
+	typed, ok := value.([]any)
+	if !ok {
+		return invalidGeneratedFieldTypeError(field, "array", decodedJSONType(value), description)
+	}
+	for index, item := range typed {
+		if err := validateGetBuildResultRequiredTestTransportJSONValue(
+			generatedJSONChildPath(path, strconv.Itoa(index), true),
+			item, description,
+		); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// validateGetBuildResultRequiredTestTransportJSONValue checks one value whose JSON shape is fixed by the generated Goa type.
+func validateGetBuildResultRequiredTestTransportJSONValue(path string, value any, description string) error {
+	field := path
+	if field == "" {
+		field = "$payload"
+	}
+	if value == nil {
+		return invalidGeneratedFieldTypeError(field, "object", "null", description)
+	}
+	typed, ok := value.(map[string]any)
+	if !ok {
+		return invalidGeneratedFieldTypeError(field, "object", decodedJSONType(value), description)
+	}
+	keys := make([]string, 0, len(typed))
+	for key := range typed {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		switch key {
+		case "flow_key":
+			if err := validateStringJSONValue(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Key of the finished flow.",
+			); err != nil {
+				return err
+			}
+		case "hook":
+			if err := validateStringJSONValue(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Hook method the test writer implements for the scenario.",
+			); err != nil {
+				return err
+			}
+		case "scenario":
+			if err := validateStringJSONValue(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Scenario name the evaluation suite declares for the flow.",
+			); err != nil {
+				return err
+			}
+		case "story":
+			if err := validateStringJSONValue(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Name of the Story the flow belongs to.",
+			); err != nil {
+				return err
+			}
+		default:
+			return unknownJSONFieldError(path, key, []string{
+				"flow_key",
+				"hook",
+				"scenario",
+				"story",
 			})
 		}
 	}
@@ -27609,7 +27767,7 @@ func validateGetTestWriterAssignmentResultJSONValue(path string, value any, desc
 				return err
 			}
 		case "required_tests":
-			if err := validateGetTestWriterAssignmentResultRootRequiredTestsJSONValue(
+			if err := validateGetBuildResultStartedBuildTransportRequiredTestsJSONValue(
 				generatedJSONChildPath(path, key, false),
 				typed[key], "One test per finished flow of stories, in declaration order; unfinished flows require none.",
 			); err != nil {
@@ -27719,90 +27877,6 @@ func validateGetTestWriterAssignmentResultConfirmedAnswerTransportJSONValue(path
 				"answer",
 				"id",
 				"question",
-			})
-		}
-	}
-	return nil
-}
-
-// validateGetTestWriterAssignmentResultRootRequiredTestsJSONValue checks one value whose JSON shape is fixed by the generated Goa type.
-func validateGetTestWriterAssignmentResultRootRequiredTestsJSONValue(path string, value any, description string) error {
-	field := path
-	if field == "" {
-		field = "$payload"
-	}
-	if value == nil {
-		return invalidGeneratedFieldTypeError(field, "array", "null", description)
-	}
-	typed, ok := value.([]any)
-	if !ok {
-		return invalidGeneratedFieldTypeError(field, "array", decodedJSONType(value), description)
-	}
-	for index, item := range typed {
-		if err := validateGetTestWriterAssignmentResultRequiredTestTransportJSONValue(
-			generatedJSONChildPath(path, strconv.Itoa(index), true),
-			item, description,
-		); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-// validateGetTestWriterAssignmentResultRequiredTestTransportJSONValue checks one value whose JSON shape is fixed by the generated Goa type.
-func validateGetTestWriterAssignmentResultRequiredTestTransportJSONValue(path string, value any, description string) error {
-	field := path
-	if field == "" {
-		field = "$payload"
-	}
-	if value == nil {
-		return invalidGeneratedFieldTypeError(field, "object", "null", description)
-	}
-	typed, ok := value.(map[string]any)
-	if !ok {
-		return invalidGeneratedFieldTypeError(field, "object", decodedJSONType(value), description)
-	}
-	keys := make([]string, 0, len(typed))
-	for key := range typed {
-		keys = append(keys, key)
-	}
-	sort.Strings(keys)
-	for _, key := range keys {
-		switch key {
-		case "flow_key":
-			if err := validateStringJSONValue(
-				generatedJSONChildPath(path, key, false),
-				typed[key], "Key of the finished flow.",
-			); err != nil {
-				return err
-			}
-		case "hook":
-			if err := validateStringJSONValue(
-				generatedJSONChildPath(path, key, false),
-				typed[key], "Hook method the test writer implements for the scenario.",
-			); err != nil {
-				return err
-			}
-		case "scenario":
-			if err := validateStringJSONValue(
-				generatedJSONChildPath(path, key, false),
-				typed[key], "Scenario name the evaluation suite declares for the flow.",
-			); err != nil {
-				return err
-			}
-		case "story":
-			if err := validateStringJSONValue(
-				generatedJSONChildPath(path, key, false),
-				typed[key], "Name of the Story the flow belongs to.",
-			); err != nil {
-				return err
-			}
-		default:
-			return unknownJSONFieldError(path, key, []string{
-				"flow_key",
-				"hook",
-				"scenario",
-				"story",
 			})
 		}
 	}
@@ -28236,7 +28310,7 @@ func validateReviewVerificationResultRunStoryMappingTransportJSONValue(path stri
 	for _, key := range keys {
 		switch key {
 		case "required_tests":
-			if err := validateGetTestWriterAssignmentResultRootRequiredTestsJSONValue(
+			if err := validateGetBuildResultStartedBuildTransportRequiredTestsJSONValue(
 				generatedJSONChildPath(path, key, false),
 				typed[key], "One test per finished flow, in declaration order.",
 			); err != nil {
@@ -28882,6 +28956,14 @@ func decodeStartedBuildTransportToStartedBuild(v *toolhttp.StartedBuildTransport
 	}
 	res.Builder = decodeBuilderProgressTransportToBuilderProgress(v.Builder)
 	res.TestWriter = decodeTestWriterProgressTransportToTestWriterProgress(v.TestWriter)
+	res.RequiredTests = make([]*RequiredTest, len(v.RequiredTests))
+	for i, val := range v.RequiredTests {
+		if val == nil {
+			res.RequiredTests[i] = nil
+			continue
+		}
+		res.RequiredTests[i] = decodeRequiredTestTransportToRequiredTest(val)
+	}
 	switch string(v.Taking.Kind()) {
 	case "building":
 		actual, _ := v.Taking.AsBuilding()
@@ -29035,6 +29117,16 @@ func decodeTestsCouldNotRunTransportToTestsCouldNotRun(v *toolhttp.TestsCouldNot
 
 	return res
 }
+func decodeRequiredTestTransportToRequiredTest(v *toolhttp.RequiredTestTransport) *RequiredTest {
+	res := &RequiredTest{
+		Story:    *v.Story,
+		FlowKey:  *v.FlowKey,
+		Scenario: *v.Scenario,
+		Hook:     *v.Hook,
+	}
+
+	return res
+}
 func decodeBuildBuildingTransportToBuildBuilding(v *toolhttp.BuildBuildingTransport) *BuildBuilding {
 	res := &BuildBuilding{}
 
@@ -29106,6 +29198,14 @@ func encodeStartedBuildToStartedBuildTransport(v *StartedBuild) *toolhttp.Starte
 	}
 	res.Builder = encodeBuilderProgressToBuilderProgressTransport(v.Builder)
 	res.TestWriter = encodeTestWriterProgressToTestWriterProgressTransport(v.TestWriter)
+	res.RequiredTests = make([]*toolhttp.RequiredTestTransport, len(v.RequiredTests))
+	for i, val := range v.RequiredTests {
+		if val == nil {
+			res.RequiredTests[i] = nil
+			continue
+		}
+		res.RequiredTests[i] = encodeRequiredTestToRequiredTestTransport(val)
+	}
 	var takingValue toolhttp.BuildTaking
 	switch string(v.Taking.Kind()) {
 	case "building":
@@ -29259,6 +29359,16 @@ func encodeTestsCouldNotRunToTestsCouldNotRunTransport(v *TestsCouldNotRun) *too
 		Reason:    &v.Reason,
 		Step:      &v.Step,
 		CheckedAt: &v.CheckedAt,
+	}
+
+	return res
+}
+func encodeRequiredTestToRequiredTestTransport(v *RequiredTest) *toolhttp.RequiredTestTransport {
+	res := &toolhttp.RequiredTestTransport{
+		Story:    &v.Story,
+		FlowKey:  &v.FlowKey,
+		Scenario: &v.Scenario,
+		Hook:     &v.Hook,
 	}
 
 	return res
@@ -29446,31 +29556,11 @@ func encodeLiveTargetEndedToLiveTargetEndedTransport(v *LiveTargetEnded) *toolht
 
 	return res
 }
-func decodeRequiredTestTransportToRequiredTest(v *toolhttp.RequiredTestTransport) *RequiredTest {
-	res := &RequiredTest{
-		Story:    *v.Story,
-		FlowKey:  *v.FlowKey,
-		Scenario: *v.Scenario,
-		Hook:     *v.Hook,
-	}
-
-	return res
-}
 func decodeConfirmedAnswerTransportToConfirmedAnswer(v *toolhttp.ConfirmedAnswerTransport) *ConfirmedAnswer {
 	res := &ConfirmedAnswer{
 		ID:       *v.ID,
 		Question: *v.Question,
 		Answer:   *v.Answer,
-	}
-
-	return res
-}
-func encodeRequiredTestToRequiredTestTransport(v *RequiredTest) *toolhttp.RequiredTestTransport {
-	res := &toolhttp.RequiredTestTransport{
-		Story:    &v.Story,
-		FlowKey:  &v.FlowKey,
-		Scenario: &v.Scenario,
-		Hook:     &v.Hook,
 	}
 
 	return res

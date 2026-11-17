@@ -22,6 +22,8 @@ type (
 		temporary string
 		// work is the evaluator-owned compiler workspace.
 		work string
+		// buildCache is the selected private or owner-retained compiler cache.
+		buildCache string
 		// goroot is the exact compiler toolchain directory.
 		goroot string
 		// modCache is the operator's read-only module cache.
@@ -191,7 +193,7 @@ func (e *commandOutputError) Unwrap() error { return e.err }
 func (p diagnosticPaths) forCaller(output string) string {
 	for _, mapping := range []struct{ from, to string }{
 		{p.source, "."}, {p.temporary, "<generation>"}, {p.work, "<compiler>"},
-		{p.goroot, "<toolchain>"}, {p.modCache, "<modules>"},
+		{p.buildCache, "<build-cache>"}, {p.goroot, "<toolchain>"}, {p.modCache, "<modules>"},
 	} {
 		if mapping.from != "" {
 			from := filepath.Clean(mapping.from)

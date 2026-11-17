@@ -29,9 +29,11 @@ tests; Surla itself judges those tests and runs them against the code, which
 it builds and runs as ordinary processes on your machine, with your file and
 network access. You agree what is built
 and approve the result in your browser. Surla deploys nothing and merges
-nothing. Live starts and verification runs reuse the project's compiled Go
-packages while rebuilding outputs and running tests each time. The cache is a
-trusted compiler input that programs running as you can change; see
+nothing. The project server reuses compiled Go packages for Story refreshes,
+starter initialization, test-report checks, live starts and verification runs.
+Each operation still builds its outputs and runs its checks; a cache hit is never a
+passed check. The cache is a trusted compiler input that programs running as
+you can change; see
 [project storage and cache trust](docs/REFERENCE.md#project-state-folder).
 
 ## One change from start to finish
@@ -81,7 +83,8 @@ to $50 get instant store credit; larger ones wait for a manager":
    take its word for it: it writes the required tests into the copy again,
    checks that nothing changed outside the test module (the project's `eval/`
    folder), and builds and lists the test program. Problems go
-   back to the test writer as findings, which you can also read on the page.
+   back to the test writer as findings. Build shows them beside the saved
+   required tests; Next names the test writer’s next step.
    When the tests pass the check, Surla accepts them at one commit on
    `surla/tests-<n>`.
 7. **Code and verify.** Meanwhile the builder writes the code, builds and
@@ -158,7 +161,9 @@ Surla needs:
   user.name` and `user.email`). Surla records accepted tests as commits under
   your identity, and a build is refused until Git has one.
 - **Docker Desktop**, or another local Docker engine. The builder builds and
-  tests its work in Linux containers.
+  tests its work in Linux containers. Each project retains downloaded
+  dependencies across checks; tests mount them read-only and run offline with
+  fresh compiler scratch. See [`check_project`](docs/REFERENCE.md#check_project).
 - **Herdr core** (the `herdr-core` and `hc` commands) and the **Herdr app**
   (`herdr-app`).
 - **Chorus v0.11.0** or newer.

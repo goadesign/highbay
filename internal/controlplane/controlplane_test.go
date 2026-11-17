@@ -628,6 +628,16 @@ var _ = Service("orders", func() {
 		assert.Equal(t, want, string(got), "evaluation preserves the fixture input")
 	}
 
+	// Pin the cheap consumer fixture to the real evaluator's complete output
+	// for its exact design, which omits this journey's extra history/cache policy.
+	writeWorkspaceFiles(t, filepath.Join(workspace, draftFolderName),
+		goaGoaAIDSLFixture(t, architectureTestDesign))
+	fixtureCard := mustProposeFromRefresh(t, cp, ctx, "chg-architecture-fixture",
+		"Preserve the architecture fixture.", clearAnalysis)
+	actual := loadMetadataRecord(t, cp, fixtureCard.ChangeID).latest().architecture
+	require.NotNil(t, actual)
+	assert.Equal(t, architectureSnapshotForTest(actual.DesignDigest, "orders"), actual,
+		"the saved consumer fixture must match its real evaluated design")
 }
 
 // goaGoaAIDSLFixture returns private workspace values for the committed
@@ -845,6 +855,9 @@ func newControlPlane(t *testing.T, opts Options) *ControlPlane {
 	t.Helper()
 	if opts.CardsDir == "" {
 		opts.CardsDir = t.TempDir()
+	}
+	if opts.BuildCacheDir == "" {
+		opts.BuildCacheDir = testmodule.CompilerCache(t)
 	}
 	cp, err := New(opts)
 	require.NoError(t, err)

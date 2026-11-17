@@ -124,14 +124,15 @@ type (
 		// diff. When nil, New constructs a default designeval.Evaluator (using
 		// <CardsDir>/designeval as its protected temporary parent when
 		// WorkspaceDir is set). When a host supplies Evaluator for a bound
-		// workspace, it must construct it with designeval.NewEvaluatorInDir
-		// using a protected directory outside WorkspaceDir.
+		// workspace, it must use a protected directory outside WorkspaceDir.
+		// The default uses BuildCacheDir when supplied; embedded hosts can pass
+		// it through designeval.NewEvaluatorWithCache too.
 		Evaluator *designeval.Evaluator
 		// NewGenerator constructs a fresh scaffold.Generator for each
 		// init_project call. When nil, InitProject constructs a fresh
-		// designeval.NewEvaluatorInDir("<CardsDir>/designeval") per call. When
-		// a host supplies NewGenerator, each returned generator must use a
-		// protected directory outside WorkspaceDir.
+		// evaluator under "<CardsDir>/designeval" per call, sharing BuildCacheDir
+		// when supplied. When a host supplies NewGenerator, each generator must
+		// use a protected directory outside WorkspaceDir.
 		NewGenerator func() scaffold.Generator
 		// InitRunner runs external commands (`git`, `go`) during init_project.
 		// When nil, scaffold.RunCommand is used.
@@ -159,10 +160,19 @@ type (
 		// get_verification, list_verifications, and init_project when
 		// Verification is nil. WrittenTestRuns requires it.
 		RunsDir string
-		// BuildCacheDir is the required retained Go package cache when Verification
-		// or WrittenTestRuns is configured. It must lie outside the workspace.
-		// Concurrent operations share it on one machine using a local filesystem.
+		// BuildCacheDir is the retained Go package cache for project design
+		// evaluation, initialization, test-report checking, live targets and
+		// verification. Verification or WrittenTestRuns requires it. It must lie
+		// outside the workspace. Concurrent operations share it on one machine
+		// using a local filesystem; operation cleanup never removes it.
 		BuildCacheDir string
+		// CheckModuleCacheDir is an optional retained Go module cache for Docker
+		// checks and dependency updates. Supply an existing, private 0700 directory
+		// owned by this account, outside source and operation storage. Only trusted
+		// preparation/tidy containers may write it; tests mount it read-only.
+		// Cleanup never removes it. Empty keeps the operation-local cache default;
+		// Checker alone requires neither this directory nor BuildCacheDir.
+		CheckModuleCacheDir string
 		// WrittenTestRuns lets verify_change run, in RunsDir, the tests
 		// accepted for each change's build, in a project without a stored
 		// evaluator. start_live_target uses the same accepted tests, both
@@ -301,6 +311,8 @@ type (
 		runsDir string
 		// buildCacheDir is the project-owned package cache, independent of run cleanup.
 		buildCacheDir string
+		// checkModuleCacheDir is retained dependency input, never operation scratch.
+		checkModuleCacheDir string
 		// evaluator evaluates designs for preview_architecture and diff. It
 		// creates its build workspace on the first evaluation, and Close
 		// removes it.
@@ -505,9 +517,31 @@ func newWithWorkspaceGitTimeout(
 			return nil, errors.Join(fmt.Errorf("resolve build cache directory: %w", err), cleanupFailedNew())
 		}
 	}
+	if opts.CheckModuleCacheDir != "" {
+		info, err := os.Lstat(opts.CheckModuleCacheDir)
+		if err != nil {
+			return nil, errors.Join(fmt.Errorf("inspect check module cache directory: %w", err), cleanupFailedNew())
+		}
+		if info.Mode()&os.ModeSymlink != 0 {
+			return nil, errors.Join(errors.New("check module cache directory must not be a symlink"), cleanupFailedNew())
+		}
+		opts.CheckModuleCacheDir, err = abspath.Eval(opts.CheckModuleCacheDir)
+		if err != nil {
+			return nil, errors.Join(fmt.Errorf("resolve check module cache directory: %w", err), cleanupFailedNew())
+		}
+	}
 	runsDir, initStageDir, verif, protectedDirs, err := normalizeAndValidateStartupPaths(opts, wsRoot, withTimeout)
 	if err != nil {
 		return nil, errors.Join(err, cleanupFailedNew())
+	}
+	if opts.CheckModuleCacheDir != "" {
+		excluded := append([]string{opts.CardsDir, runsDir, initStageDir, opts.BuildCacheDir}, protectedDirs...)
+		if cfg := verifierRuns(verif); cfg != nil {
+			excluded = append(excluded, cfg.RunsDir, cfg.Plan.ReportDir)
+		}
+		if err := validateCheckModuleCacheDir(opts.CheckModuleCacheDir, excluded...); err != nil {
+			return nil, errors.Join(err, cleanupFailedNew())
+		}
 	}
 	cards, err := openCardStore(opts.CardsDir)
 	if err != nil {
@@ -519,10 +553,17 @@ func newWithWorkspaceGitTimeout(
 	}
 	eval := opts.Evaluator
 	if eval == nil {
+		parent := ""
 		if wsRoot != "" {
-			eval = designeval.NewEvaluatorInDir(filepath.Join(cards.dir, "designeval"))
+			parent = filepath.Join(cards.dir, "designeval")
+		}
+		if opts.BuildCacheDir != "" {
+			eval, err = designeval.NewEvaluatorWithCache(parent, opts.BuildCacheDir)
+			if err != nil {
+				return nil, errors.Join(err, traces.Close(), cards.close(), cleanupFailedNew())
+			}
 		} else {
-			eval = designeval.NewEvaluator()
+			eval = designeval.NewEvaluatorInDir(parent)
 		}
 	}
 	cp := &ControlPlane{
@@ -536,6 +577,7 @@ func newWithWorkspaceGitTimeout(
 		verifier:               verif,
 		runsDir:                runsDir,
 		buildCacheDir:          opts.BuildCacheDir,
+		checkModuleCacheDir:    opts.CheckModuleCacheDir,
 		evaluator:              eval,
 		initialWorkspaceRoot:   wsRoot,
 		protectedDirs:          protectedDirs,

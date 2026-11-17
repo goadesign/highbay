@@ -41,8 +41,21 @@ func TestMain(m *testing.M) {
 		fmt.Fprintln(os.Stderr, "create the test folder:", err)
 		os.Exit(1)
 	}
-	testEvaluator = designeval.NewEvaluatorInDir(filepath.Join(testDir, "evaluator"))
-	testChecker = NewChecker(testEvaluator, filepath.Join(testDir, "checks"))
+	cache := os.Getenv("SURLA_TEST_BUILD_CACHE")
+	if cache == "" {
+		cache = filepath.Join(testDir, "packages")
+	}
+	testEvaluator, err = designeval.NewEvaluatorWithCache(filepath.Join(testDir, "evaluator"), cache)
+	if err == nil {
+		testChecker, err = NewCheckerWithCache(testEvaluator, filepath.Join(testDir, "checks"), cache)
+	}
+	if err != nil {
+		if testEvaluator != nil {
+			err = errors.Join(err, testEvaluator.Close())
+		}
+		fmt.Fprintln(os.Stderr, "select test compiler cache:", errors.Join(err, os.RemoveAll(testDir)))
+		os.Exit(1)
+	}
 	code := m.Run()
 	if err := errors.Join(testEvaluator.Close(), os.RemoveAll(testDir)); err != nil {
 		fmt.Fprintln(os.Stderr, "clean up the test folder:", err)

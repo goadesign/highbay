@@ -136,6 +136,9 @@ for (const [operation, name] of [["start_build", "previous_change_open"], ["drop
         builder: { read: false },
         test_writer: { tests: { state: "assigned" }, read: false, report: 0 },
         required_test_count: 1,
+        required_tests: [
+          { story: "Refunds", flow_key: "refund_accepted", scenario: "refund_accepted", hook: "RefundAccepted" },
+        ],
         taking: { state: "building" },
       },
     };
@@ -151,6 +154,9 @@ for (const [operation, name] of [["start_build", "previous_change_open"], ["drop
     const missingTaking = structuredClone(body);
     delete missingTaking.build.taking;
     assert.equal(generated.ROUTES[operation].decodeFailure(409, missingTaking), false);
+    const missingRequiredTests = structuredClone(body);
+    delete missingRequiredTests.build.required_tests;
+    assert.equal(generated.ROUTES[operation].decodeFailure(409, missingRequiredTests), false);
     assert.equal(generated.ROUTES[operation].decodeFailure(409, { ...body, build: undefined }), false);
   });
 }

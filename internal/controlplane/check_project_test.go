@@ -772,6 +772,8 @@ func TestNewNeedsNoCheckHelperWithoutAChecker(t *testing.T) {
 	assertServiceError(t, err, "not_implemented")
 	_, err = cp.UpdateDependencies(ctx)
 	assertServiceError(t, err, "not_implemented")
+	_, err = cp.GenerateCode(asCaller("alice@example.com", CallerBuilder), &gensurla.GenerateCodePayload{})
+	assertServiceError(t, err, "not_implemented")
 }
 
 func TestCapWriterReportsWriteFailure(t *testing.T) {

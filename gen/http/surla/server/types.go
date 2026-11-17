@@ -3446,9 +3446,45 @@ type UpdateDraftForbiddenResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// GetTeamNotImplementedResponseBody is the type of the "surla" service
+// "get_team" endpoint HTTP response body for the "not_implemented" error.
+type GetTeamNotImplementedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // GetTeamForbiddenResponseBody is the type of the "surla" service "get_team"
 // endpoint HTTP response body for the "forbidden" error.
 type GetTeamForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ShowTeamPaneNotImplementedResponseBody is the type of the "surla" service
+// "show_team_pane" endpoint HTTP response body for the "not_implemented" error.
+type ShowTeamPaneNotImplementedResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -3523,6 +3559,25 @@ type ShowTeamPaneTeamUnavailableResponseBody struct {
 // ShowTeamPaneForbiddenResponseBody is the type of the "surla" service
 // "show_team_pane" endpoint HTTP response body for the "forbidden" error.
 type ShowTeamPaneForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// StartTeamAgentsNotImplementedResponseBody is the type of the "surla" service
+// "start_team_agents" endpoint HTTP response body for the "not_implemented"
+// error.
+type StartTeamAgentsNotImplementedResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -5219,6 +5274,9 @@ type StartedBuildResponseBody struct {
 	// Number of finished flows in the agreed Story. Zero means no test of this
 	// change's Story was required.
 	RequiredTestCount int `form:"required_test_count" json:"required_test_count" xml:"required_test_count"`
+	// Tests required by this build's saved Story, in declaration order; unfinished
+	// flows require none. Empty when no finished flow requires a test.
+	RequiredTests []*RequiredTestResponseBody `form:"required_tests" json:"required_tests" xml:"required_tests"`
 	// Whether the user has taken this build: building until a verification of it
 	// passes; passed with the commits to merge; merged once the branch checked out
 	// in the project folder holds the commits of one passed run, the builder's
@@ -5291,6 +5349,18 @@ type TestsCouldNotRunResponseBody struct {
 	Step string `form:"step" json:"step" xml:"step"`
 	// When Surla's check stopped.
 	CheckedAt string `form:"checked_at" json:"checked_at" xml:"checked_at"`
+}
+
+// RequiredTestResponseBody is used to define fields on response body types.
+type RequiredTestResponseBody struct {
+	// Name of the Story the flow belongs to.
+	Story string `form:"story" json:"story" xml:"story"`
+	// Key of the finished flow.
+	FlowKey string `form:"flow_key" json:"flow_key" xml:"flow_key"`
+	// Scenario name the evaluation suite declares for the flow.
+	Scenario string `form:"scenario" json:"scenario" xml:"scenario"`
+	// Hook method the test writer implements for the scenario.
+	Hook string `form:"hook" json:"hook" xml:"hook"`
 }
 
 // BuildBuildingResponseBody is used to define fields on response body types.
@@ -5429,18 +5499,6 @@ type TestWriterAssignmentItemResponseBody struct {
 	InForce bool `form:"in_force" json:"in_force" xml:"in_force"`
 	// Where this assignment stands.
 	Progress *TestWriterProgressResponseBody `form:"progress" json:"progress" xml:"progress"`
-}
-
-// RequiredTestResponseBody is used to define fields on response body types.
-type RequiredTestResponseBody struct {
-	// Name of the Story the flow belongs to.
-	Story string `form:"story" json:"story" xml:"story"`
-	// Key of the finished flow.
-	FlowKey string `form:"flow_key" json:"flow_key" xml:"flow_key"`
-	// Scenario name the evaluation suite declares for the flow.
-	Scenario string `form:"scenario" json:"scenario" xml:"scenario"`
-	// Hook method the test writer implements for the scenario.
-	Hook string `form:"hook" json:"hook" xml:"hook"`
 }
 
 // ConfirmedAnswerResponseBody is used to define fields on response body types.
@@ -12121,10 +12179,38 @@ func NewUpdateDraftForbiddenResponseBody(res *goa.ServiceError) *UpdateDraftForb
 	return body
 }
 
+// NewGetTeamNotImplementedResponseBody builds the HTTP response body from the
+// result of the "get_team" endpoint of the "surla" service.
+func NewGetTeamNotImplementedResponseBody(res *goa.ServiceError) *GetTeamNotImplementedResponseBody {
+	body := &GetTeamNotImplementedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewGetTeamForbiddenResponseBody builds the HTTP response body from the
 // result of the "get_team" endpoint of the "surla" service.
 func NewGetTeamForbiddenResponseBody(res *goa.ServiceError) *GetTeamForbiddenResponseBody {
 	body := &GetTeamForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewShowTeamPaneNotImplementedResponseBody builds the HTTP response body from
+// the result of the "show_team_pane" endpoint of the "surla" service.
+func NewShowTeamPaneNotImplementedResponseBody(res *goa.ServiceError) *ShowTeamPaneNotImplementedResponseBody {
+	body := &ShowTeamPaneNotImplementedResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -12181,6 +12267,20 @@ func NewShowTeamPaneTeamUnavailableResponseBody(res *goa.ServiceError) *ShowTeam
 // result of the "show_team_pane" endpoint of the "surla" service.
 func NewShowTeamPaneForbiddenResponseBody(res *goa.ServiceError) *ShowTeamPaneForbiddenResponseBody {
 	body := &ShowTeamPaneForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewStartTeamAgentsNotImplementedResponseBody builds the HTTP response body
+// from the result of the "start_team_agents" endpoint of the "surla" service.
+func NewStartTeamAgentsNotImplementedResponseBody(res *goa.ServiceError) *StartTeamAgentsNotImplementedResponseBody {
+	body := &StartTeamAgentsNotImplementedResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,

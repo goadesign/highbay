@@ -9,8 +9,9 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/stretchr/testify/require"
+
 	gensurla "github.com/goadesign/surla/gen/surla"
-	"github.com/goadesign/surla/internal/testmodule"
 )
 
 // checkpointUIProposal is the guide's analysis the editor tests start from.
@@ -204,14 +205,16 @@ page.close();
 // the exact confirmed revision shown, and checks the drawing it renders. An
 // unconfirmed card shows the server's own refusal.
 func TestCheckpointUIArchitecturePreviewOfTheBoundDesign(t *testing.T) {
-	if testing.Short() {
-		t.Skip("runs the Go toolchain; the full suite (go test without -short) covers it")
-	}
 	workspace := t.TempDir()
-	writeWorkspaceFiles(t, workspace, testmodule.Snapshot(t, "", architectureTestDesign))
+	writeWorkspaceFiles(t, workspace, goaGoaAIDSLFixture(t, architectureTestDesign))
 	cp := pageControlPlane(t, Options{WorkspaceDir: workspace})
 	guide := WithPrincipal(context.Background(), Principal{ID: pageOwner, CallerID: "guide", Kind: CallerGuide})
-	mustProposeFromRefresh(t, cp, guide, "chg-arch", "Route refunds >= $50 to manager approval.", checkpointUIProposal())
+	refreshed := seedArchitectureRefreshForTest(t, cp, guide, "orders")
+	_, err := cp.ProposeChange(guide, &gensurla.ProposeChangePayload{
+		ChangeID: "chg-arch", Prompt: "Route refunds >= $50 to manager approval.",
+		Analysis: checkpointUIProposal(), StoryRefreshOpID: refreshed.OpID,
+	})
+	require.NoError(t, err)
 	ps := startPageServer(t, cp)
 	runPageScript(t, ps, nil, `
 const page = await openPage(origin, { link: input.link });

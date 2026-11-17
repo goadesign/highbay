@@ -26,7 +26,6 @@ import (
 	"github.com/goadesign/surla/internal/designeval"
 	"github.com/goadesign/surla/internal/diff"
 	"github.com/goadesign/surla/internal/project"
-	"github.com/goadesign/surla/internal/scaffold"
 	"github.com/goadesign/surla/internal/verify"
 	"github.com/goadesign/surla/internal/verifyrun"
 	"github.com/goadesign/surla/verify/candidate"
@@ -564,12 +563,11 @@ func projectServeOptions(state *project.State, environ []string) (controlplane.O
 		CardsDir:               ws.cardsDir,
 		WorkspaceDir:           ws.workspaceDir,
 		InitStageDir:           ws.initStageDir,
-		Evaluator:              designeval.NewEvaluatorInDir(ws.evalWorkDir),
-		NewGenerator:           func() scaffold.Generator { return designeval.NewEvaluatorInDir(ws.evalWorkDir) },
 		SurlaVersion:           surlaBuildVersion(),
 		Verification:           ws.verification,
 		RunsDir:                ws.runsDir,
 		BuildCacheDir:          ws.buildCacheDir,
+		CheckModuleCacheDir:    ws.checkModuleCacheDir,
 		WrittenTestRuns:        ws.writtenTestRuns,
 		PromotionTarget:        ws.promotionTarget,
 		ResolvePromotionTarget: ws.resolvePromotionTarget,

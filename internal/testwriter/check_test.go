@@ -41,8 +41,7 @@ var refundStories = []designeval.StorySummary{{
 	},
 }}
 
-// fixture holds the prepared project files. Preparation generates and tidies
-// the module and warms the checker's build cache; tests clone the files.
+// fixture holds the generated and tidied project files; tests clone the files.
 var fixture struct {
 	mu sync.Mutex
 	// files is the project's tree keyed by slash path, nil until built.
@@ -467,12 +466,14 @@ func TestCheckLimitsTheBuildAndTheListing(t *testing.T) {
 	t.Run("completed build cache survives a timeout", func(t *testing.T) {
 		c := *testChecker
 		c.workDir = t.TempDir()
+		c.buildCacheDir = t.TempDir()
 		c.buildLimit, c.listLimit = limit, limit
 		c.list = sleepThenList(0, complete)
 		var home string
 		c.build = func(ctx context.Context, spec candidate.BuildSpec, _ func(*exec.Cmd) error) error {
 			home = spec.WorkDir
-			cache := filepath.Join(home, "gocache")
+			require.Equal(t, c.buildCacheDir, spec.BuildCacheDir)
+			cache := spec.BuildCacheDir
 			if err := os.MkdirAll(cache, 0o700); err != nil {
 				return err
 			}
@@ -492,7 +493,7 @@ func TestCheckLimitsTheBuildAndTheListing(t *testing.T) {
 			v.Findings[0].Message)
 		c.build = func(_ context.Context, spec candidate.BuildSpec, _ func(*exec.Cmd) error) error {
 			assert.Equal(t, home, spec.WorkDir)
-			content, err := os.ReadFile(filepath.Join(spec.WorkDir, "gocache", "completed-entry"))
+			content, err := os.ReadFile(filepath.Join(spec.BuildCacheDir, "completed-entry"))
 			if err != nil {
 				return err
 			}
@@ -527,8 +528,7 @@ const publishedSurla = "v0.0.0-20261115014514-02c792da3ded"
 // under eval/, as a test writer would start from: generated without a Story,
 // so with the generated program, and with an acceptance package providing the
 // five names the program calls. The module requires publishedSurla for the
-// suite contract the program uses. The first preparation also builds the
-// valid program in testChecker's build home to prepare its compiler cache.
+// suite contract the program uses. The checks compile their own changed copies.
 func fixtureProject(t *testing.T) map[string]string {
 	t.Helper()
 	fixture.mu.Lock()
@@ -548,29 +548,6 @@ func fixtureProject(t *testing.T) map[string]string {
 		module["go.mod"] = strings.Replace(module["go.mod"], "require (",
 			"require (\n\tgithub.com/goadesign/surla "+publishedSurla, 1)
 		module = testmodule.Tidy(t, module)
-		// Compile the valid baseline once in the checker's own build home.
-		// Only the compiler's normal cache survives; the source and binary do not.
-		tmp := t.TempDir()
-		moduleDir := filepath.Join(tmp, "module")
-		writeFiles(t, moduleDir, module)
-		tc, err := resolveToolchain(t.Context(), tmp)
-		require.NoError(t, err)
-		home := filepath.Join(testChecker.workDir, "build-home")
-		require.NoError(t, os.MkdirAll(home, 0o700))
-		log := filepath.Join(tmp, "build.log")
-		ctx, cancel := context.WithTimeout(t.Context(), 10*time.Minute)
-		var keep bool
-		err = candidate.BuildModule(ctx, candidate.BuildSpec{BuildCacheDir: filepath.Join(home, "gocache"),
-			SourceDir: tmp, ModuleDir: moduleDir, Package: fixtureSuite.Command,
-			Out: filepath.Join(tmp, "suite"), GOROOT: tc.goroot, ModCache: tc.modCache,
-			WorkDir: home, LogFile: log,
-		}, runInGroup(&keep))
-		cancel()
-		if err != nil {
-			output, readErr := os.ReadFile(log)
-			t.Fatalf("warm fixture build: %v; build log: %s (read error: %v)", err, output, readErr)
-		}
-		require.NoError(t, os.RemoveAll(tmp))
 		files := map[string]string{"README.md": "shop\n"}
 		for p, content := range module {
 			files["eval/"+p] = content

@@ -1,0 +1,81 @@
+name: Surla Go compiler inputs
+description: Restore compiler inputs with one native producer per platform.
+inputs:
+  go-version:
+    description: Exact toolchain selected by setup-go.
+    required: true
+outputs:
+  modules-hit:
+    description: Whether the module archive was restored.
+    value: ${{ steps.module-reader.outputs.cache-hit }}
+  build-hit:
+    description: Whether the complete compiler archive was restored.
+    value: ${{ steps.build-reader.outputs.cache-hit }}
+  modules-dir:
+    description: Module input directory selected for restoration and publication.
+    value: ${{ steps.paths.outputs.modules }}
+  modules-key:
+    description: Resolved primary key used to restore the module archive.
+    value: ${{ steps.module-reader.outputs.cache-primary-key }}
+  build-key:
+    description: Resolved primary key used to restore the compiler archive.
+    value: ${{ steps.build-reader.outputs.cache-primary-key }}
+  build-dir:
+    description: Explicit local compiler cache for outer Go commands and test compositions.
+    value: ${{ steps.paths.outputs.build }}
+runs:
+  using: composite
+  steps:
+    # v3 replaces immutable v2 archives whose producer omitted nested modules.
+    # Change this version when the declared producer closure changes.
+    - name: Locate compiler storage and fixture versions
+      id: paths
+      shell: bash
+      working-directory: ${{ github.workspace }}
+      run: |
+        exec </dev/null
+        build="$RUNNER_TEMP/surla-go-build"
+        mkdir -p "$build"
+        chmod 700 "$build"
+        echo "build=$build" >> "$GITHUB_OUTPUT"
+        echo "modules=$(go env GOMODCACHE)" >> "$GITHUB_OUTPUT"
+        # This closure's native dependencies are Go's standard library and
+        # race runtime. ImageOS bounds the system ABI; Go keys compiler changes.
+        # Weekly image builds coexist and must be able to restore this family.
+        : "${ImageOS:?hosted runner image family is required}"
+        echo "image=$ImageOS" >> "$GITHUB_OUTPUT"
+        # Hash version declarations rather than unrelated test assertions.
+        versions=$(git grep -h -E '^const (published|publishedSurla|starterSurlaVersion) = ' -- \
+          cmd/surla/gen_e2e_test.go internal/scaffold/scaffold_test.go \
+          internal/scaffold/live_integration_test.go internal/testwriter/check_test.go \
+          | shasum -a 256 | cut -d ' ' -f 1)
+        echo "versions=$versions" >> "$GITHUB_OUTPUT"
+        echo "GOCACHE=$build" >> "$GITHUB_ENV"
+        echo "SURLA_TEST_BUILD_CACHE=$build" >> "$GITHUB_ENV"
+    - name: Restore modules
+      id: module-reader
+      uses: actions/cache/restore@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
+      with:
+        path: ${{ steps.paths.outputs.modules }}
+        key: surla-go-v3-modules-${{ runner.os }}-${{ runner.arch }}-${{ inputs.go-version }}-${{ hashFiles('**/go.mod', '**/go.sum', 'internal/scaffold/templates/**') }}-${{ steps.paths.outputs.versions }}
+    - name: Restore compiled packages
+      id: build-reader
+      uses: actions/cache/restore@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
+      with:
+        path: ${{ steps.paths.outputs.build }}
+        key: surla-go-v3-native-race-plain-${{ runner.os }}-${{ runner.arch }}-${{ steps.paths.outputs.image }}-${{ inputs.go-version }}-${{ hashFiles('**/go.mod', '**/go.sum', 'internal/scaffold/templates/**', '.github/race-packages.txt') }}-${{ steps.paths.outputs.versions }}
+    - name: Report compiler cache state
+      shell: bash
+      working-directory: ${{ github.workspace }}
+      env:
+        BUILD_HIT: ${{ steps.build-reader.outputs.cache-hit }}
+        MODULES_HIT: ${{ steps.module-reader.outputs.cache-hit }}
+      run: |
+        exec </dev/null
+        if [ "$BUILD_HIT" = true ] && [ "$MODULES_HIT" = true ]; then
+          echo "Go compiler inputs: warm archives restored; checks still execute." >> "$GITHUB_STEP_SUMMARY"
+        else
+          echo "Go compiler inputs: cold or partial restore; report this job's whole duration separately." >> "$GITHUB_STEP_SUMMARY"
+        fi
+        echo "Build archive hit: $BUILD_HIT. Module archive hit: $MODULES_HIT." >> "$GITHUB_STEP_SUMMARY"
+        echo "Native race/plain profile; restoring inputs never skips a check." >> "$GITHUB_STEP_SUMMARY"

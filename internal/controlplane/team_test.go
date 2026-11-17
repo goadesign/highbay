@@ -4,6 +4,7 @@ package controlplane
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -31,7 +32,8 @@ type teamServiceFixture struct {
 	calls     []string
 	bound     AssignmentReader
 	supervise func(context.Context, AssignmentReader) error
-	// Registration and start hooks observe the real start boundary without a window.
+	// Action hooks return owner refusals without a window or external process.
+	show     func(context.Context, string) error
 	register func(context.Context, BuildFolders) error
 	start    func(context.Context) (*gensurla.ProjectTeam, error)
 }
@@ -46,10 +48,14 @@ func (f *teamServiceFixture) ReadTeam(context.Context) (*gensurla.TeamSnapshot, 
 }
 
 // ShowPane records the authorized requested role.
-func (f *teamServiceFixture) ShowPane(_ context.Context, role string) error {
+func (f *teamServiceFixture) ShowPane(ctx context.Context, role string) error {
 	f.mu.Lock()
-	defer f.mu.Unlock()
 	f.calls = append(f.calls, "show:"+role)
+	show := f.show
+	f.mu.Unlock()
+	if show != nil {
+		return show(ctx, role)
+	}
 	return nil
 }
 
@@ -104,8 +110,31 @@ func TestTeamBindingValidation(t *testing.T) {
 }
 
 // TestTeamUserTransport enforces user-only access before the owner sees a call,
-// including management, and validates the role with the generated decoder.
+// including management, validates the role with the generated decoder, and maps
+// an unbound team to its declared refusal without any outside effect.
 func TestTeamUserTransport(t *testing.T) {
+	t.Run("unbound", func(t *testing.T) {
+		cp := newControlPlane(t, Options{})
+		handler := NewHTTPHandler(cp, func(*http.Request) (Principal, error) {
+			return Principal{ID: "owner", Kind: CallerUser}, nil
+		})
+		for _, route := range []struct{ method, path, body string }{
+			{http.MethodGet, "/team", ""},
+			{http.MethodPost, "/team/pane", `{"role":"builder"}`},
+			{http.MethodPost, "/team/agents", ""},
+		} {
+			t.Run(route.path, func(t *testing.T) {
+				response := httptest.NewRecorder()
+				handler.ServeHTTP(response, httptest.NewRequest(route.method, route.path, strings.NewReader(route.body)))
+				assert.Equal(t, http.StatusNotImplemented, response.Code, response.Body.String())
+				assert.Equal(t, "not_implemented", response.Header().Get("goa-error"))
+				var refusal struct{ Name, Message string }
+				require.NoError(t, json.Unmarshal(response.Body.Bytes(), &refusal))
+				assert.Equal(t, "not_implemented", refusal.Name)
+				assert.Equal(t, "Start this project with surla to use its team.", refusal.Message)
+			})
+		}
+	})
 	for _, kind := range []CallerKind{CallerUser, CallerGuide, CallerBuilder, CallerTestWriter, CallerManagement} {
 		t.Run(string(kind), func(t *testing.T) {
 			f := &teamServiceFixture{snapshot: gensurla.TeamSnapshot{Team: "team", Roles: []*gensurla.TeamRoleState{}}}
@@ -128,6 +157,40 @@ func TestTeamUserTransport(t *testing.T) {
 			response := httptest.NewRecorder()
 			handler.ServeHTTP(response, httptest.NewRequest("POST", "/team/pane", strings.NewReader(`{"role":"other"}`)))
 			assert.Equal(t, 400, response.Code)
+		})
+	}
+	for _, tc := range []struct {
+		name, path, body, call string
+		status                 int
+		owner                  *teamServiceFixture
+	}{
+		{
+			name: "window_busy", path: "/team/pane", body: `{"role":"builder"}`,
+			call: "show:builder", status: http.StatusConflict,
+			owner: &teamServiceFixture{show: func(context.Context, string) error {
+				return gensurla.MakeWindowBusy(errors.New("close the open Herdr dialog before showing a pane"))
+			}},
+		},
+		{
+			name: "team_unavailable", path: "/team/agents", call: "start", status: http.StatusServiceUnavailable,
+			owner: &teamServiceFixture{start: func(context.Context) (*gensurla.ProjectTeam, error) {
+				return nil, gensurla.MakeTeamUnavailable(errors.New("open the Herdr app, then try again"))
+			}},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			cp := newControlPlane(t, Options{Team: &TeamBinding{Owner: "owner", Service: tc.owner}})
+			handler := NewHTTPHandler(cp, func(*http.Request) (Principal, error) {
+				return Principal{ID: "owner", Kind: CallerUser}, nil
+			})
+			response := httptest.NewRecorder()
+			handler.ServeHTTP(response, httptest.NewRequest(http.MethodPost, tc.path, strings.NewReader(tc.body)))
+			assert.Equal(t, tc.status, response.Code, response.Body.String())
+			assert.Equal(t, tc.name, response.Header().Get("goa-error"))
+			var refusal struct{ Name string }
+			require.NoError(t, json.Unmarshal(response.Body.Bytes(), &refusal))
+			assert.Equal(t, tc.name, refusal.Name)
+			assert.Equal(t, []string{tc.call}, tc.owner.calls)
 		})
 	}
 }

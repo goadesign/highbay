@@ -91,16 +91,6 @@ func isolateServeWorkspace(t *testing.T) string {
 	return wsDir
 }
 
-// closeServeOptions closes the evaluator owned by opts
-// when a test constructs serveOptions without handing opts to
-// controlplane.New.
-func closeServeOptions(t *testing.T, opts controlplane.Options) {
-	t.Helper()
-	if opts.Evaluator != nil {
-		assert.NoError(t, opts.Evaluator.Close())
-	}
-}
-
 // assertOutsideDirectory verifies storage exclusion without hiding filesystem errors.
 func assertOutsideDirectory(t *testing.T, child, root string) {
 	t.Helper()

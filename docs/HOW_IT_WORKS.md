@@ -25,9 +25,11 @@ Each has its own credential, so the server always knows who is calling.
 
 Surla runs the code the agents write (the design at each refresh, the
 builder's programs and the test writer's tests) as ordinary processes on this
-machine, with your file and network access. Live starts and verifications keep
-compiled Go packages for the project; each operation still builds its outputs
-and runs its tests. Code running as you can change retained compiler inputs
+machine, with your file and network access. Through the project server, Story
+refreshes, starter initialization, test-report checks, live starts and verifications
+share the project's compiled Go packages. Each operation still builds its outputs and
+runs its checks; a cache hit is never a passed check. Code running as you can
+change retained compiler inputs
 and affect later results. See [project storage and cache trust](REFERENCE.md#project-state-folder)
 for lifetime and cleanup.
 
@@ -406,7 +408,7 @@ unread, so it reads it again.
 
 | Verdict on the page | What happened | Who acts |
 | --- | --- | --- |
-| Needs changes | Surla found problems, including when building the test program hits the 10-minute limit (`The test program did not finish building within 10 minutes. Report again: the retained build cache can reuse compilation that completed. If it still does not finish, make the test module build faster, for example with fewer or smaller dependencies.`) or listing hits the 60-second limit. The page shows their number; **Read findings** shows their text. | The test writer reads them in its assignment, fixes them and reports again. |
+| Needs changes | Surla found problems, including when building the test program hits the 10-minute limit (`The test program did not finish building within 10 minutes. Report again: the retained build cache can reuse compilation that completed. If it still does not finish, make the test module build faster, for example with fewer or smaller dependencies.`) or listing hits the 60-second limit. Build shows the saved required tests beside Surla’s findings, including the exact scenario and hook for each finished flow. Next says that the test writer corrects and reports again; the verdict alone asks for no user decision. A failed findings read retains the count and offers **Retry findings read**. | The test writer reads them in its assignment, fixes them and reports again. |
 | Accepted | Surla committed exactly the checked files on `surla/tests-<n>`, with your Git identity and the message `Add the tests Surla accepted for change <id>, report <n>`. The build details show that commit. The builder's assignment is marked unread too. | The builder can verify or start a live target with the chosen model. |
 | Could not run | The check stopped for a cause the test writer cannot fix, such as the 15-minute whole-check time limit, Git trouble, or dependencies that cannot be downloaded where Surla runs. The page shows the reason and your step. | You take the step; it says whether the test writer then reports again or you build again. |
 
@@ -484,6 +486,15 @@ test writer: the builder leaves `eval/` untouched, `check_project` and
 `update_dependencies` leave `eval/` out and say so, and if the Story
 (`design/story.go`) or the test module's contract needs to change, the builder
 asks you so the guide can draft and you can confirm a revision.
+
+Before committing, the builder calls `check_project` on its current working
+files. Surla prepares dependencies, then runs its tests without network access
+in Linux containers. Each project retains its own downloaded dependencies
+between calls and server restarts; tests read those inputs through a read-only
+mount and receive fresh compiler and temporary directories. Every call still
+checks the current files. If module or workspace checksums need repair, the
+builder calls `update_dependencies` and checks again; see
+[`check_project`](REFERENCE.md#check_project).
 
 The builder commits its code in `.surla-build` on `surla/build-<n>` and calls
 `verify_change` with the change, the revision from its assignment and its

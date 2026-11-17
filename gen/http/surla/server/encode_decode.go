@@ -2979,6 +2979,19 @@ func EncodeGetTeamError(encoder func(context.Context, http.ResponseWriter) goaht
 			return encodeError(ctx, w, v)
 		}
 		switch en.GoaErrorName() {
+		case "not_implemented":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetTeamNotImplementedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusNotImplemented)
+			return enc.Encode(body)
 		case "forbidden":
 			var res *goa.ServiceError
 			errors.As(v, &res)
@@ -3047,6 +3060,19 @@ func EncodeShowTeamPaneError(encoder func(context.Context, http.ResponseWriter) 
 			return encodeError(ctx, w, v)
 		}
 		switch en.GoaErrorName() {
+		case "not_implemented":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewShowTeamPaneNotImplementedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusNotImplemented)
+			return enc.Encode(body)
 		case "window_busy":
 			var res *goa.ServiceError
 			errors.As(v, &res)
@@ -3127,6 +3153,19 @@ func EncodeStartTeamAgentsError(encoder func(context.Context, http.ResponseWrite
 			return encodeError(ctx, w, v)
 		}
 		switch en.GoaErrorName() {
+		case "not_implemented":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewStartTeamAgentsNotImplementedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusNotImplemented)
+			return enc.Encode(body)
 		case "ambiguous_space":
 			var res *goa.ServiceError
 			errors.As(v, &res)
@@ -5465,6 +5504,18 @@ func marshalSurlaStartedBuildToStartedBuildResponseBody(v *surla.StartedBuild) *
 	if v.TestWriter != nil {
 		res.TestWriter = marshalSurlaTestWriterProgressToTestWriterProgressResponseBody(v.TestWriter)
 	}
+	if v.RequiredTests != nil {
+		res.RequiredTests = make([]*RequiredTestResponseBody, len(v.RequiredTests))
+		for i, val := range v.RequiredTests {
+			if val == nil {
+				res.RequiredTests[i] = nil
+				continue
+			}
+			res.RequiredTests[i] = marshalSurlaRequiredTestToRequiredTestResponseBody(val)
+		}
+	} else {
+		res.RequiredTests = []*RequiredTestResponseBody{}
+	}
 	if v.Taking.Kind() != "" {
 		switch string(v.Taking.Kind()) {
 		case "building":
@@ -5646,6 +5697,19 @@ func marshalSurlaTestsCouldNotRunToTestsCouldNotRunResponseBody(v *surla.TestsCo
 		Reason:    v.Reason,
 		Step:      v.Step,
 		CheckedAt: v.CheckedAt,
+	}
+
+	return res
+}
+
+// marshalSurlaRequiredTestToRequiredTestResponseBody builds a value of type
+// *RequiredTestResponseBody from a value of type *surla.RequiredTest.
+func marshalSurlaRequiredTestToRequiredTestResponseBody(v *surla.RequiredTest) *RequiredTestResponseBody {
+	res := &RequiredTestResponseBody{
+		Story:    v.Story,
+		FlowKey:  v.FlowKey,
+		Scenario: v.Scenario,
+		Hook:     v.Hook,
 	}
 
 	return res
@@ -5865,19 +5929,6 @@ func marshalSurlaTestWriterAssignmentItemToTestWriterAssignmentItemResponseBody(
 	}
 	if v.Progress != nil {
 		res.Progress = marshalSurlaTestWriterProgressToTestWriterProgressResponseBody(v.Progress)
-	}
-
-	return res
-}
-
-// marshalSurlaRequiredTestToRequiredTestResponseBody builds a value of type
-// *RequiredTestResponseBody from a value of type *surla.RequiredTest.
-func marshalSurlaRequiredTestToRequiredTestResponseBody(v *surla.RequiredTest) *RequiredTestResponseBody {
-	res := &RequiredTestResponseBody{
-		Story:    v.Story,
-		FlowKey:  v.FlowKey,
-		Scenario: v.Scenario,
-		Hook:     v.Hook,
 	}
 
 	return res

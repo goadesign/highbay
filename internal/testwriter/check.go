@@ -61,9 +61,12 @@ type (
 		// evaluator generates the required tests; its owner closes it.
 		evaluator *designeval.Evaluator
 		// workDir is the owner's private folder, outside every project, that
-		// holds each check's temporary folder and the build cache checks
-		// share. The owner removes it.
+		// holds check scratch and, by default, the checks' private compiler
+		// cache. The owner removes it after the last call.
 		workDir string
+		// buildCacheDir is supplied by the project owner, or empty for the
+		// private cache under workDir. Removing check scratch never removes it.
+		buildCacheDir string
 		// build and list run a check's two steps that compile and run the
 		// author's code: candidate.BuildModule and candidate.Output, each through
 		// runInGroup. Tests wrap them with stand-ins that sleep.
@@ -249,6 +252,26 @@ func NewChecker(evaluator *designeval.Evaluator, workDir string) *Checker {
 		buildLimit: buildProgramLimit,
 		listLimit:  listTestsLimit,
 	}
+}
+
+// NewCheckerWithCache returns a checker with independent scratch and an
+// owner-retained Go package cache. The owner supplies an absolute trusted cache
+// outside source and scratch folders, shared only on one local filesystem.
+// Removing workDir after the last check leaves the cache intact. Construction
+// creates no files and rejects an empty or unresolved cache path.
+func NewCheckerWithCache(
+	evaluator *designeval.Evaluator, workDir, buildCacheDir string,
+) (*Checker, error) {
+	if !filepath.IsAbs(buildCacheDir) {
+		return nil, errors.New("test compiler build cache directory must be absolute")
+	}
+	cache, err := abspath.EvalMissing(buildCacheDir)
+	if err != nil {
+		return nil, fmt.Errorf("resolve test compiler build cache directory: %w", err)
+	}
+	c := NewChecker(evaluator, workDir)
+	c.buildCacheDir = cache
+	return c, nil
 }
 
 // Record commits an accepted verdict's tree, exactly the files Check built
@@ -1009,6 +1032,10 @@ func (c *Checker) listScenarios(
 		return nil, nil, fmt.Errorf("resolve the module cache: %w", err)
 	}
 	buildHome := filepath.Join(c.workDir, "build-home")
+	buildCacheDir := c.buildCacheDir
+	if buildCacheDir == "" {
+		buildCacheDir = filepath.Join(buildHome, "gocache")
+	}
 	binDir := filepath.Join(tmp, "bin")
 	for _, d := range []string{buildHome, binDir, filepath.Join(tmp, "state")} {
 		if err := os.MkdirAll(d, 0o700); err != nil {
@@ -1019,7 +1046,7 @@ func (c *Checker) listScenarios(
 	reached, err := withinLimit(ctx, time.Now, c.buildLimit, func(ctx context.Context) error {
 		return c.build(ctx, candidate.BuildSpec{
 			SourceDir: src, ModuleDir: moduleDir, Package: command, Out: bin,
-			GOROOT: tc.goroot, ModCache: modCache, WorkDir: buildHome, BuildCacheDir: filepath.Join(buildHome, "gocache"), LogFile: buildLog,
+			GOROOT: tc.goroot, ModCache: modCache, WorkDir: buildHome, BuildCacheDir: buildCacheDir, LogFile: buildLog,
 		}, runInGroup(keep))
 	})
 	if reached && !*keep {

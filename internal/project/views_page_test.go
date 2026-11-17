@@ -6,7 +6,6 @@ package project
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -206,7 +205,7 @@ func TestViewsPageReadsNeedTheSameOriginMark(t *testing.T) {
 // instead of proceeding with nil servers or acknowledging a failed HTTP restart.
 func TestViewsProjectRestartReportsStartupFailure(t *testing.T) {
 	t.Run("initial construction", func(t *testing.T) {
-		vp := &viewsProject{opts: controlplane.Options{SurlaVersion: "invalid"}}
+		vp := &viewsProject{state: testState(t), opts: controlplane.Options{SurlaVersion: "invalid"}}
 		err := vp.restart()
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "start the control plane: surla version")
@@ -284,13 +283,17 @@ func (vp *viewsProject) restart() error {
 			return fmt.Errorf("stop the control plane: %w", err)
 		}
 	}
-	cp, err := controlplane.New(vp.opts)
-	if err != nil {
-		return fmt.Errorf("start the control plane: %w", err)
-	}
 	server, err := NewServer(vp.state, func() {}, fixtureTeamDependencies(vp.state))
 	if err != nil {
-		return errors.Join(fmt.Errorf("start the project server: %w", err), cp.Close())
+		return fmt.Errorf("start the project server: %w", err)
+	}
+	// Match project startup: even an unprepared team has a bound reader that
+	// returns its registered roles, rather than an unavailable capability.
+	opts := vp.opts
+	opts.Team = &controlplane.TeamBinding{Owner: vp.state.Record.Owner, Service: server}
+	cp, err := controlplane.New(opts)
+	if err != nil {
+		return fmt.Errorf("start the control plane: %w", err)
 	}
 	application := http.NewServeMux()
 	application.Handle("GET /views", controlplane.ViewsPage())

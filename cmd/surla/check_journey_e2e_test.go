@@ -135,11 +135,12 @@ func TestCheckProjectRepairsDependenciesOnOneServer(t *testing.T) {
 	opts.Team = &controlplane.TeamBinding{Owner: "operator@example.com", Service: team}
 	cp, err := controlplane.New(opts)
 	require.NoError(t, err)
-	_, err = cp.ConfigureModel(controlplane.WithPrincipal(t.Context(), controlplane.Principal{ID: "operator@example.com", CallerID: "user", Kind: controlplane.CallerUser}), &gensurla.ConfigureModelPayload{GatewayAddr: &gatewayAddr})
-	require.NoError(t, err)
+	registerCheckModuleCacheCleanup(t, opts.CheckModuleCacheDir)
 	// Registered after the temporary directories, so it runs before they
 	// are removed.
 	t.Cleanup(func() { closeRetaining(cp, workspace, opts.CardsDir) })
+	_, err = cp.ConfigureModel(controlplane.WithPrincipal(t.Context(), controlplane.Principal{ID: "operator@example.com", CallerID: "user", Kind: controlplane.CallerUser}), &gensurla.ConfigureModelPayload{GatewayAddr: &gatewayAddr})
+	require.NoError(t, err)
 	srv := httptest.NewServer(controlplane.NewHTTPHandler(cp, workflowAuthenticator(map[string]controlplane.Principal{
 		"test-token": {ID: "operator@example.com"},
 	})))
@@ -317,8 +318,10 @@ func journeyCall(
 // journeyCheck calls check_project.
 func journeyCheck(t *testing.T, client *genmcpsurla.Client) *gensurla.CheckProjectResult {
 	t.Helper()
+	started := time.Now()
 	res, err := gensurla.DecodeCheckProjectResult(journeyCall(t, client, "check_project", []byte("{}"), journeyCheckTimeout))
 	require.NoError(t, err)
+	t.Logf("check_project op_id=%s passed=%t elapsed=%s", res.OpID, res.Passed, time.Since(started))
 	return res
 }
 

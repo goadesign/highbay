@@ -3446,9 +3446,45 @@ type UpdateDraftForbiddenResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
+// GetTeamNotImplementedResponseBody is the type of the "surla" service
+// "get_team" endpoint HTTP response body for the "not_implemented" error.
+type GetTeamNotImplementedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
 // GetTeamForbiddenResponseBody is the type of the "surla" service "get_team"
 // endpoint HTTP response body for the "forbidden" error.
 type GetTeamForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ShowTeamPaneNotImplementedResponseBody is the type of the "surla" service
+// "show_team_pane" endpoint HTTP response body for the "not_implemented" error.
+type ShowTeamPaneNotImplementedResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -3523,6 +3559,25 @@ type ShowTeamPaneTeamUnavailableResponseBody struct {
 // ShowTeamPaneForbiddenResponseBody is the type of the "surla" service
 // "show_team_pane" endpoint HTTP response body for the "forbidden" error.
 type ShowTeamPaneForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// StartTeamAgentsNotImplementedResponseBody is the type of the "surla" service
+// "start_team_agents" endpoint HTTP response body for the "not_implemented"
+// error.
+type StartTeamAgentsNotImplementedResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -5219,6 +5274,9 @@ type StartedBuildResponseBody struct {
 	// Number of finished flows in the agreed Story. Zero means no test of this
 	// change's Story was required.
 	RequiredTestCount *int `form:"required_test_count,omitempty" json:"required_test_count,omitempty" xml:"required_test_count,omitempty"`
+	// Tests required by this build's saved Story, in declaration order; unfinished
+	// flows require none. Empty when no finished flow requires a test.
+	RequiredTests []*RequiredTestResponseBody `form:"required_tests,omitempty" json:"required_tests,omitempty" xml:"required_tests,omitempty"`
 	// Whether the user has taken this build: building until a verification of it
 	// passes; passed with the commits to merge; merged once the branch checked out
 	// in the project folder holds the commits of one passed run, the builder's
@@ -5291,6 +5349,18 @@ type TestsCouldNotRunResponseBody struct {
 	Step *string `form:"step,omitempty" json:"step,omitempty" xml:"step,omitempty"`
 	// When Surla's check stopped.
 	CheckedAt *string `form:"checked_at,omitempty" json:"checked_at,omitempty" xml:"checked_at,omitempty"`
+}
+
+// RequiredTestResponseBody is used to define fields on response body types.
+type RequiredTestResponseBody struct {
+	// Name of the Story the flow belongs to.
+	Story *string `form:"story,omitempty" json:"story,omitempty" xml:"story,omitempty"`
+	// Key of the finished flow.
+	FlowKey *string `form:"flow_key,omitempty" json:"flow_key,omitempty" xml:"flow_key,omitempty"`
+	// Scenario name the evaluation suite declares for the flow.
+	Scenario *string `form:"scenario,omitempty" json:"scenario,omitempty" xml:"scenario,omitempty"`
+	// Hook method the test writer implements for the scenario.
+	Hook *string `form:"hook,omitempty" json:"hook,omitempty" xml:"hook,omitempty"`
 }
 
 // BuildBuildingResponseBody is used to define fields on response body types.
@@ -5429,18 +5499,6 @@ type TestWriterAssignmentItemResponseBody struct {
 	InForce *bool `form:"in_force,omitempty" json:"in_force,omitempty" xml:"in_force,omitempty"`
 	// Where this assignment stands.
 	Progress *TestWriterProgressResponseBody `form:"progress,omitempty" json:"progress,omitempty" xml:"progress,omitempty"`
-}
-
-// RequiredTestResponseBody is used to define fields on response body types.
-type RequiredTestResponseBody struct {
-	// Name of the Story the flow belongs to.
-	Story *string `form:"story,omitempty" json:"story,omitempty" xml:"story,omitempty"`
-	// Key of the finished flow.
-	FlowKey *string `form:"flow_key,omitempty" json:"flow_key,omitempty" xml:"flow_key,omitempty"`
-	// Scenario name the evaluation suite declares for the flow.
-	Scenario *string `form:"scenario,omitempty" json:"scenario,omitempty" xml:"scenario,omitempty"`
-	// Hook method the test writer implements for the scenario.
-	Hook *string `form:"hook,omitempty" json:"hook,omitempty" xml:"hook,omitempty"`
 }
 
 // ConfirmedAnswerResponseBody is used to define fields on response body types.
@@ -11896,8 +11954,38 @@ func NewGetTeamTeamSnapshotOK(body *GetTeamResponseBody) *surla.TeamSnapshot {
 	return v
 }
 
+// NewGetTeamNotImplemented builds a surla service get_team endpoint
+// not_implemented error.
+func NewGetTeamNotImplemented(body *GetTeamNotImplementedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
 // NewGetTeamForbidden builds a surla service get_team endpoint forbidden error.
 func NewGetTeamForbidden(body *GetTeamForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewShowTeamPaneNotImplemented builds a surla service show_team_pane endpoint
+// not_implemented error.
+func NewShowTeamPaneNotImplemented(body *ShowTeamPaneNotImplementedResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -11986,6 +12074,21 @@ func NewStartTeamAgentsProjectTeamOK(body *StartTeamAgentsResponseBody) *surla.P
 			continue
 		}
 		v.Roles[i] = unmarshalProjectTeamRoleResponseBodyToSurlaProjectTeamRole(val)
+	}
+
+	return v
+}
+
+// NewStartTeamAgentsNotImplemented builds a surla service start_team_agents
+// endpoint not_implemented error.
+func NewStartTeamAgentsNotImplemented(body *StartTeamAgentsNotImplementedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
 	}
 
 	return v
@@ -17803,9 +17906,57 @@ func ValidateUpdateDraftForbiddenResponseBody(body *UpdateDraftForbiddenResponse
 	return
 }
 
+// ValidateGetTeamNotImplementedResponseBody runs the validations defined on
+// GetTeamNotImplementedResponseBody
+func ValidateGetTeamNotImplementedResponseBody(body *GetTeamNotImplementedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
 // ValidateGetTeamForbiddenResponseBody runs the validations defined on
 // GetTeamForbiddenResponseBody
 func ValidateGetTeamForbiddenResponseBody(body *GetTeamForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateShowTeamPaneNotImplementedResponseBody runs the validations defined
+// on ShowTeamPaneNotImplementedResponseBody
+func ValidateShowTeamPaneNotImplementedResponseBody(body *ShowTeamPaneNotImplementedResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -17902,6 +18053,30 @@ func ValidateShowTeamPaneTeamUnavailableResponseBody(body *ShowTeamPaneTeamUnava
 // ValidateShowTeamPaneForbiddenResponseBody runs the validations defined on
 // ShowTeamPaneForbiddenResponseBody
 func ValidateShowTeamPaneForbiddenResponseBody(body *ShowTeamPaneForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateStartTeamAgentsNotImplementedResponseBody runs the validations
+// defined on StartTeamAgentsNotImplementedResponseBody
+func ValidateStartTeamAgentsNotImplementedResponseBody(body *StartTeamAgentsNotImplementedResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -21313,6 +21488,9 @@ func ValidateStartedBuildResponseBody(body *StartedBuildResponseBody) (err error
 	if body.RequiredTestCount == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("required_test_count", "body"))
 	}
+	if body.RequiredTests == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("required_tests", "body"))
+	}
 	if body.Taking == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("taking", "body"))
 	}
@@ -21332,6 +21510,13 @@ func ValidateStartedBuildResponseBody(body *StartedBuildResponseBody) (err error
 	if body.RequiredTestCount != nil {
 		if *body.RequiredTestCount < 0 {
 			err = goa.MergeErrors(err, goa.InvalidRangeError("body.required_test_count", *body.RequiredTestCount, 0, true))
+		}
+	}
+	for _, e := range body.RequiredTests {
+		if e != nil {
+			if err2 := validateRequiredTestResponseBody(e, "body.required_tests[*]"); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
 		}
 	}
 	if body.Taking != nil {
@@ -21382,6 +21567,9 @@ func validateStartedBuildResponseBody(body *StartedBuildResponseBody, path strin
 	if body.RequiredTestCount == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("required_test_count", path))
 	}
+	if body.RequiredTests == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("required_tests", path))
+	}
 	if body.Taking == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("taking", path))
 	}
@@ -21401,6 +21589,13 @@ func validateStartedBuildResponseBody(body *StartedBuildResponseBody, path strin
 	if body.RequiredTestCount != nil {
 		if *body.RequiredTestCount < 0 {
 			err = goa.MergeErrors(err, goa.InvalidRangeError(path+".required_test_count", *body.RequiredTestCount, 0, true))
+		}
+	}
+	for _, e := range body.RequiredTests {
+		if e != nil {
+			if err2 := validateRequiredTestResponseBody(e, path+".required_tests[*]"); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
 		}
 	}
 	if body.Taking != nil {
@@ -21706,6 +21901,41 @@ func validateTestsCouldNotRunResponseBody(body *TestsCouldNotRunResponseBody, pa
 	}
 	if body.CheckedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat(path+".checked_at", *body.CheckedAt, goa.FormatDateTime))
+	}
+	return
+}
+
+// ValidateRequiredTestResponseBody runs the validations defined on RequiredTest
+func ValidateRequiredTestResponseBody(body *RequiredTestResponseBody) (err error) {
+	if body.Story == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("story", "body"))
+	}
+	if body.FlowKey == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("flow_key", "body"))
+	}
+	if body.Scenario == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("scenario", "body"))
+	}
+	if body.Hook == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("hook", "body"))
+	}
+	return
+}
+
+// validateRequiredTestResponseBody checks RequiredTest and reports errors
+// using the path supplied by its caller
+func validateRequiredTestResponseBody(body *RequiredTestResponseBody, path string) (err error) {
+	if body.Story == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("story", path))
+	}
+	if body.FlowKey == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("flow_key", path))
+	}
+	if body.Scenario == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("scenario", path))
+	}
+	if body.Hook == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("hook", path))
 	}
 	return
 }
@@ -22173,41 +22403,6 @@ func validateTestWriterAssignmentItemResponseBody(body *TestWriterAssignmentItem
 		if err2 := validateTestWriterProgressResponseBody(body.Progress, path+".progress"); err2 != nil {
 			err = goa.MergeErrors(err, err2)
 		}
-	}
-	return
-}
-
-// ValidateRequiredTestResponseBody runs the validations defined on RequiredTest
-func ValidateRequiredTestResponseBody(body *RequiredTestResponseBody) (err error) {
-	if body.Story == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("story", "body"))
-	}
-	if body.FlowKey == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("flow_key", "body"))
-	}
-	if body.Scenario == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("scenario", "body"))
-	}
-	if body.Hook == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("hook", "body"))
-	}
-	return
-}
-
-// validateRequiredTestResponseBody checks RequiredTest and reports errors
-// using the path supplied by its caller
-func validateRequiredTestResponseBody(body *RequiredTestResponseBody, path string) (err error) {
-	if body.Story == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("story", path))
-	}
-	if body.FlowKey == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("flow_key", path))
-	}
-	if body.Scenario == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("scenario", path))
-	}
-	if body.Hook == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("hook", path))
 	}
 	return
 }
