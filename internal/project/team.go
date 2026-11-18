@@ -193,9 +193,6 @@ func (s *Server) ensureTeam(ctx context.Context) (result *genproject.ProjectTeam
 	if err != nil {
 		return nil, teamUnavailable(ctx, "chorus_status", "chorus")
 	}
-	s.team.observationMu.Lock()
-	s.team.connection = connection
-	s.team.observationMu.Unlock()
 	host := s.team.dependencies.Host
 	// Observe dialogs before any space creation or focus change: opening the launcher is a toggle.
 	overlays, err := host.Overlays(ctx)
@@ -224,10 +221,16 @@ func (s *Server) ensureTeam(ctx context.Context) (result *genproject.ProjectTeam
 	var space TeamSpace
 	for _, candidate := range spaces {
 		if candidate.ID == record.Space && record.Space != "" {
+			if !safeSpaceID(record.Space) {
+				return nil, teamUnavailable(ctx, "saved_space", "saved_space")
+			}
 			space = candidate
 			break
 		}
 	}
+	s.team.observationMu.Lock()
+	s.team.connection = connection
+	s.team.observationMu.Unlock()
 	if space.ID == "" {
 		matches := 0
 		for _, candidate := range spaces {
@@ -454,6 +457,12 @@ func teamName(prefix, id string) string {
 	return base[:min(len(base), 19)] + "-" + suffix
 }
 
+// localSpaceID restricts stored space names to local filenames without path separators
+// so records written before the stricter space-ID rule still load.
+func localSpaceID(id string) bool {
+	return id != "" && id != "." && id != ".." && !strings.ContainsAny(id, "/\\\x00")
+}
+
 // safeSpaceID restricts managed space identifiers to 1–64 ASCII characters of
 // [A-Za-z0-9_.-] other than "." and "..".
 func safeSpaceID(id string) bool {
@@ -539,9 +548,8 @@ func teamUnavailable(ctx context.Context, step, cause string) error {
 // reads its rows when it opens; an already open dialog rereads a rewritten roster
 // only when the user clicks its existing Reload team action.
 func teamNextStep(dialog, space string) string {
-	// Quote the actual owner-returned ID as shell data so both user surfaces
-	// supply copyable commands, including when an external ID contains punctuation.
-	quotedSpace := "'" + strings.ReplaceAll(space, "'", "'\\''") + "'"
+	// Quote the validated space ID so both user surfaces supply copyable commands.
+	quotedSpace := "'" + space + "'"
 	terminal := "From a terminal, run chorus team inspect --space " + quotedSpace +
 		" to see the roles (add --choices choices.json for models and permission effects), then chorus team launch with the same --space and --choices choices.json (--choices - reads stdin; see chorus team launch --help)."
 	switch dialog {

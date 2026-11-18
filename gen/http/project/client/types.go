@@ -176,10 +176,11 @@ type EnsureTeamTeamUnavailableResponseBody struct {
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// What could not be used: stopping (the server is shutting down), chorus (the
 	// managed Chorus server or its settings are unavailable), herdr (a Herdr
-	// command failed), roster_folder (Herdr's launcher roster folder could not be
-	// written), project_state (the project's private record or an agent credential
-	// could not be read or written), or role_folder (a role's working folder could
-	// not be read).
+	// command failed), saved_space (the project's saved Herdr space has an ID this
+	// version of Surla no longer accepts and is still open), roster_folder
+	// (Herdr's launcher roster folder could not be written), project_state (the
+	// project's private record or an agent credential could not be read or
+	// written), or role_folder (a role's working folder could not be read).
 	Cause *string `form:"cause,omitempty" json:"cause,omitempty" xml:"cause,omitempty"`
 }
 
@@ -805,8 +806,8 @@ func ValidateEnsureTeamTeamUnavailableResponseBody(body *EnsureTeamTeamUnavailab
 		err = goa.MergeErrors(err, goa.MissingFieldError("cause", "body"))
 	}
 	if body.Cause != nil {
-		if !(*body.Cause == "stopping" || *body.Cause == "chorus" || *body.Cause == "herdr" || *body.Cause == "roster_folder" || *body.Cause == "project_state" || *body.Cause == "role_folder") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.cause", *body.Cause, []any{"stopping", "chorus", "herdr", "roster_folder", "project_state", "role_folder"}))
+		if !(*body.Cause == "stopping" || *body.Cause == "chorus" || *body.Cause == "herdr" || *body.Cause == "saved_space" || *body.Cause == "roster_folder" || *body.Cause == "project_state" || *body.Cause == "role_folder") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.cause", *body.Cause, []any{"stopping", "chorus", "herdr", "saved_space", "roster_folder", "project_state", "role_folder"}))
 		}
 	}
 	return

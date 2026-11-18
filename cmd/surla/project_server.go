@@ -758,6 +758,8 @@ func teamUnavailableStep(state *project.State, cause string) string {
 		return "Chorus is not running or its settings are invalid. Run chorus up (or chorus status to see the error), then start the agents again (Start agents on the page, or run surla)."
 	case "herdr":
 		return "Herdr did not complete a team command; open the Herdr app, " + retry
+	case "saved_space":
+		return "This project's saved Herdr space has an ID this version of Surla no longer accepts. Close that space in Herdr (its agents stop with it), then start the agents again; Surla will prepare a replacement space."
 	case "roster_folder":
 		return "Herdr's launcher roster folder could not be written; make data/chorus-launcher/rosters in Herdr's app folder (~/.config/herdr-app unless HERDR_APP_HOME is set) writable by this account, " + retry
 	case "project_state":

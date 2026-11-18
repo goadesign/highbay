@@ -179,14 +179,51 @@ func TestEnsureTeamAdoptionConflictAndAccess(t *testing.T) {
 		deps := fixtureTeamDependencies(state)
 		host := deps.Host.(*teamFixture)
 		name := teamName(filepath.Base(state.Record.Directory), state.Record.ID)
+		state.Record.Team = name
+		state.Record.Space = "sp'quoted"
+		require.NoError(t, state.save())
+		require.NoError(t, os.MkdirAll(deps.RosterDirectory, 0o700))
+		oldRoster := filepath.Join(deps.RosterDirectory, "sp'quoted.json")
+		require.NoError(t, os.WriteFile(oldRoster, []byte("{}"), 0o600))
+
+		loaded, err := Discover(filepath.Dir(state.Dir), state.Record.Directory)
+		require.NoError(t, err)
+		assert.Equal(t, "sp'quoted", loaded.Record.Space)
+		opened, err := Open(state.Dir)
+		require.NoError(t, err)
+		assert.Equal(t, "sp'quoted", opened.Record.Space)
+
 		for _, id := range []string{"sp'quoted", ".", "..", strings.Repeat("a", 65), "remote/sp"} {
 			host.spaces = append(host.spaces, TeamSpace{ID: id, Name: name, Folder: state.Record.Directory, Tabs: []TeamTab{{ID: "tab", Terminals: []TeamPane{{Terminal: "terminal"}}}}})
 		}
-		s, err := NewServer(state, func() {}, deps)
+		s, err := NewServer(opened, func() {}, deps)
 		require.NoError(t, err)
-		result, err := s.EnsureTeam(teamContext(state))
+		_, err = s.EnsureTeam(teamContext(opened))
+		var unavailable *genproject.TeamUnavailable
+		require.ErrorAs(t, err, &unavailable)
+		assert.Equal(t, "saved_space", unavailable.Cause)
+		assert.Empty(t, s.teamSelection().connection.Endpoint, "supervision sees no new connection on open legacy-space refusal")
+		assert.Zero(t, host.creates)
+		assert.Equal(t, "sp'quoted", opened.Record.Space)
+		assert.FileExists(t, oldRoster)
+
+		host.spaces = host.spaces[1:]
+		result, err := s.EnsureTeam(teamContext(opened))
 		require.NoError(t, err)
 		assert.Equal(t, "space-1", result.Space)
+		assert.Equal(t, "space-1", opened.Record.Space)
+		assert.Equal(t, "http://chorus.test", s.teamSelection().connection.Endpoint)
+		assert.Equal(t, 1, host.creates)
+		_, err = os.Stat(oldRoster)
+		assert.ErrorIs(t, err, os.ErrNotExist)
+
+		opened.Record.Space = "free'form-2"
+		require.NoError(t, opened.save())
+		host.spaces = append(host.spaces, TeamSpace{ID: "adopted-1", Name: name, Folder: state.Record.Directory, Tabs: []TeamTab{{ID: "tab", Terminals: []TeamPane{{Terminal: "terminal"}}}}})
+		result, err = s.EnsureTeam(teamContext(opened))
+		require.NoError(t, err)
+		assert.Equal(t, "adopted-1", result.Space)
+		assert.Equal(t, "adopted-1", opened.Record.Space)
 		assert.Equal(t, 1, host.creates)
 	})
 }
@@ -481,7 +518,6 @@ func TestTeamResultNextStep(t *testing.T) {
 			assert.Equal(t, team.Step, userTeam.Step, "the user operation must carry the owner's step unchanged")
 		})
 	}
-	assert.Contains(t, teamNextStep("opened", "sp'quoted"), "--space 'sp'\\''quoted'")
 }
 
 // TestEnsureTeamCountsOnlyGuideAndRolesWithWork checks that EnsureTeam counts

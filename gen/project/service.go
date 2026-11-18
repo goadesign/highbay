@@ -144,10 +144,11 @@ type TeamUnavailable struct {
 	Name string
 	// What could not be used: stopping (the server is shutting down), chorus (the
 	// managed Chorus server or its settings are unavailable), herdr (a Herdr
-	// command failed), roster_folder (Herdr's launcher roster folder could not be
-	// written), project_state (the project's private record or an agent credential
-	// could not be read or written), or role_folder (a role's working folder could
-	// not be read).
+	// command failed), saved_space (the project's saved Herdr space has an ID this
+	// version of Surla no longer accepts and is still open), roster_folder
+	// (Herdr's launcher roster folder could not be written), project_state (the
+	// project's private record or an agent credential could not be read or
+	// written), or role_folder (a role's working folder could not be read).
 	Cause string
 }
 
@@ -369,10 +370,11 @@ type jsonTeamUnavailableTransport struct {
 	Name *string `json:"name"`
 	// What could not be used: stopping (the server is shutting down), chorus (the
 	// managed Chorus server or its settings are unavailable), herdr (a Herdr
-	// command failed), roster_folder (Herdr's launcher roster folder could not be
-	// written), project_state (the project's private record or an agent credential
-	// could not be read or written), or role_folder (a role's working folder could
-	// not be read).
+	// command failed), saved_space (the project's saved Herdr space has an ID this
+	// version of Surla no longer accepts and is still open), roster_folder
+	// (Herdr's launcher roster folder could not be written), project_state (the
+	// project's private record or an agent credential could not be read or
+	// written), or role_folder (a role's working folder could not be read).
 	Cause *string `json:"cause"`
 }
 
@@ -388,8 +390,8 @@ func validatejsonTeamUnavailableTransport(value *jsonTeamUnavailableTransport) (
 		err = goa.MergeErrors(err, goa.MissingFieldError("cause", "body"))
 	}
 	if value.Cause != nil {
-		if !(*value.Cause == "stopping" || *value.Cause == "chorus" || *value.Cause == "herdr" || *value.Cause == "roster_folder" || *value.Cause == "project_state" || *value.Cause == "role_folder") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.cause", *value.Cause, []any{"stopping", "chorus", "herdr", "roster_folder", "project_state", "role_folder"}))
+		if !(*value.Cause == "stopping" || *value.Cause == "chorus" || *value.Cause == "herdr" || *value.Cause == "saved_space" || *value.Cause == "roster_folder" || *value.Cause == "project_state" || *value.Cause == "role_folder") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.cause", *value.Cause, []any{"stopping", "chorus", "herdr", "saved_space", "roster_folder", "project_state", "role_folder"}))
 		}
 	}
 	return err
@@ -473,8 +475,8 @@ func validateTeamSpaceConflictOriginal(value *TeamSpaceConflict) (err error) {
 
 // validateTeamUnavailableOriginal checks the original typed value before JSON conversion.
 func validateTeamUnavailableOriginal(value *TeamUnavailable) (err error) {
-	if !(value.Cause == "stopping" || value.Cause == "chorus" || value.Cause == "herdr" || value.Cause == "roster_folder" || value.Cause == "project_state" || value.Cause == "role_folder") {
-		err = goa.MergeErrors(err, goa.InvalidEnumValueError("value.cause", value.Cause, []any{"stopping", "chorus", "herdr", "roster_folder", "project_state", "role_folder"}))
+	if !(value.Cause == "stopping" || value.Cause == "chorus" || value.Cause == "herdr" || value.Cause == "saved_space" || value.Cause == "roster_folder" || value.Cause == "project_state" || value.Cause == "role_folder") {
+		err = goa.MergeErrors(err, goa.InvalidEnumValueError("value.cause", value.Cause, []any{"stopping", "chorus", "herdr", "saved_space", "roster_folder", "project_state", "role_folder"}))
 	}
 	return err
 }
@@ -1292,7 +1294,7 @@ func validateTeamUnavailableJSONValue(path string, value any, description string
 		case "cause":
 			if err := validateProjectIdentityJSONValue2(
 				generatedJSONChildPath(path, key, false),
-				typed[key], "What could not be used: stopping (the server is shutting down), chorus (the managed Chorus server or its settings are unavailable), herdr (a Herdr command failed), roster_folder (Herdr's launcher roster folder could not be written), project_state (the project's private record or an agent credential could not be read or written), or role_folder (a role's working folder could not be read).",
+				typed[key], "What could not be used: stopping (the server is shutting down), chorus (the managed Chorus server or its settings are unavailable), herdr (a Herdr command failed), saved_space (the project's saved Herdr space has an ID this version of Surla no longer accepts and is still open), roster_folder (Herdr's launcher roster folder could not be written), project_state (the project's private record or an agent credential could not be read or written), or role_folder (a role's working folder could not be read).",
 			); err != nil {
 				return err
 			}
