@@ -571,7 +571,7 @@ export function bootstrapViewsPage() {
   // Failed reads retain facts, visibly labeled as last read.
   let teamSnapshot: TeamSnapshot | null = null;
   // teamReadError keeps the last read error and whether its message needs
-  // the failed-read label; an unbound team's instruction stands alone.
+  // the failed-read label; session and update notices stand alone.
   let teamReadError: TeamFactsError | null = null;
   let teamReadAgain = false;
   let teamStartReceipt: TeamStageProps["startReceipt"] = null;
@@ -1498,14 +1498,12 @@ export function bootstrapViewsPage() {
         teamReadError = null;
         done();
       },
-      (message, failure) => {
+      (message) => {
         if (sessionState !== "active") return;
         const firstFailure = teamReadError === null;
-        const unbound = failure.kind === "server" && failure.body?.name === "not_implemented";
-        teamReadError = { readFailed: !unbound, message };
+        teamReadError = { readFailed: true, message };
         if (firstFailure) {
-          statusEl.textContent = unbound
-            ? message : "Could not read the project team. Open Team to see the error and retry.";
+          statusEl.textContent = "Could not read the project team. Open Team to see the error and retry.";
         }
         done();
       }

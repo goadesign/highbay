@@ -677,8 +677,9 @@ func TestEnsureTeamCountsOnlyGuideAndRolesWithWork(t *testing.T) {
 	freshServer, err := NewServer(freshState, func() {}, freshDeps)
 	require.NoError(t, err)
 	cp, err := controlplane.New(controlplane.Options{
-		CardsDir: t.TempDir(),
-		Team:     &controlplane.TeamBinding{Owner: freshState.Record.Owner, Service: freshServer},
+		CardsDir:     freshState.CardsDir(),
+		WorkspaceDir: freshState.Record.Directory,
+		Team:         &controlplane.TeamBinding{Owner: freshState.Record.Owner, Service: freshServer},
 	})
 	require.NoError(t, err)
 	t.Cleanup(func() { assert.NoError(t, cp.Close()) })

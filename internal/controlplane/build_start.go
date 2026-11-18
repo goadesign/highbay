@@ -106,9 +106,6 @@ func (c *ControlPlane) StartBuild(
 	if err != nil {
 		return nil, recordBuildError(span, buildStartError(work, "", err), "read test source")
 	}
-	if workspace == "" {
-		return nil, gensurla.MakeNotImplemented(errors.New("No project working folder is bound. Start this project with surla to build it."))
-	}
 	repo, prefix, err := resolveStarterRepo(work, workspace)
 	if err != nil {
 		return nil, recordBuildError(span, buildStartError(work, workspace, err), "read the project repository")

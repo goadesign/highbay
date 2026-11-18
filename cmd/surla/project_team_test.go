@@ -16,7 +16,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/goadesign/surla/internal/controlplane"
 	"github.com/goadesign/surla/internal/project"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -364,7 +363,7 @@ func TestStartOpensViewsWhenTeamFails(t *testing.T) {
 			isolateProviderFamilies(t)
 			state, err := fixtureProjectState("")
 			require.NoError(t, err)
-			cp, err := controlplane.New(controlplane.Options{CardsDir: state.CardsDir()})
+			cp, err := openFixtureProjectCards(state)
 			require.NoError(t, err)
 			t.Cleanup(func() { assert.NoError(t, cp.Close()) })
 			url := state.Origin() + "/views#link=" + strings.Repeat("a", 64)

@@ -754,12 +754,12 @@ func TestTeamAndBuildAtPhoneWidth(t *testing.T) {
 	require.NoError(t, err)
 	vp := startViewsProject(t, controlplane.Options{})
 	server := vp.server.Load()
-	// This older views fixture leaves Team unbound. Recompose its control plane
-	// with the same owner as production, replacing only the observation driver.
+	// Keep the project owner and replace its observation driver for this test.
 	require.NoError(t, vp.cp.Load().Close())
 	cp, err := controlplane.New(controlplane.Options{
-		CardsDir: vp.state.CardsDir(),
-		Team:     &controlplane.TeamBinding{Owner: vp.state.Record.Owner, Service: &phoneTeamOwner{Server: server}},
+		CardsDir:     vp.state.CardsDir(),
+		WorkspaceDir: vp.state.Record.Directory,
+		Team:         &controlplane.TeamBinding{Owner: vp.state.Record.Owner, Service: &phoneTeamOwner{Server: server}},
 	})
 	require.NoError(t, err)
 	service := &phoneBuildService{Service: cp, builds: make(map[string]*gensurla.ChangeBuild)}

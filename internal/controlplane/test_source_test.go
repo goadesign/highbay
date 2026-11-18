@@ -34,15 +34,14 @@ func TestProjectTestSourceHasThreeAnswers(t *testing.T) {
 		prepare   func(t *testing.T, ws string)
 		stored    bool
 		written   bool
-		unbound   bool
 		want      testSource
 		wantError string
 	}{
-		{name: "stored settings", stored: true, unbound: true, want: testSourceStoredEvaluator},
+		{name: "stored settings in an empty workspace", stored: true, want: testSourceStoredEvaluator},
 		{name: "stored settings in a starter project", files: starter, stored: true, want: testSourceStoredEvaluator},
 		{name: "starter project, no stored settings", files: starter, written: true, want: testSourceStarterLayout},
 		{name: "starter project, nothing configured", files: starter, want: testSourceStarterLayout},
-		{name: "no workspace", unbound: true, want: testSourceNone},
+		{name: "empty workspace", want: testSourceNone},
 		{name: "no go.mod", files: map[string]string{"eval/go.mod": testGoMod}, want: testSourceNone},
 		{name: "no test module", files: map[string]string{"go.mod": goMod}, want: testSourceNone},
 		{name: "test module of another service", files: map[string]string{
@@ -82,11 +81,8 @@ func TestProjectTestSourceHasThreeAnswers(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			opts := Options{}
-			if !tc.unbound {
-				opts.WorkspaceDir = t.TempDir()
-				writeWorkspaceFiles(t, opts.WorkspaceDir, tc.files)
-			}
+			opts := Options{WorkspaceDir: t.TempDir()}
+			writeWorkspaceFiles(t, opts.WorkspaceDir, tc.files)
 			if tc.stored {
 				opts.BuildCacheDir = t.TempDir()
 				opts.Verification = &VerificationConfig{RunsDir: t.TempDir()}

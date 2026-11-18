@@ -332,7 +332,6 @@ func readCheckBuilderFixture(t *testing.T, cp *ControlPlane) string {
 	t.Helper()
 	workspace := cp.currentWorkspaceDir()
 	prepareCheckProjectFixture(t, workspace)
-	cp.team = &TeamBinding{Owner: "alice@example.com", Service: &teamServiceFixture{}}
 	card := buildableChange(t, cp, "check-builder")
 	_, err := cp.StartBuild(asCaller("alice@example.com", CallerUser), &gensurla.StartBuildPayload{
 		ChangeID: card.ChangeID, RequestRevision: card.RequestRevision,
@@ -405,6 +404,7 @@ func openCheckCP(t *testing.T, cardsDir, workspace string, moduleCache ...string
 	opts := Options{
 		CardsDir:     cardsDir,
 		WorkspaceDir: workspace,
+		Team:         testTeamBinding(),
 		Checker:      candidate.NewContainerRunner(),
 		CheckHelper:  testCheckHelper(t),
 		CheckTimeout: 30 * time.Second,

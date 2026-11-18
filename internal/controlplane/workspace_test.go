@@ -56,6 +56,7 @@ func TestNewValidatesSurlaVersionAndWorkspaceSeparation(t *testing.T) {
 
 	// Invalid SurlaVersion is rejected at startup.
 	_, err := New(Options{
+		Team:         testTeamBinding(),
 		CardsDir:     filepath.Join(root, "cards-bad-ver"),
 		WorkspaceDir: wsDir,
 		SurlaVersion: "(devel)",
@@ -64,6 +65,7 @@ func TestNewValidatesSurlaVersionAndWorkspaceSeparation(t *testing.T) {
 
 	// CardsDir inside WorkspaceDir is rejected at startup.
 	_, err = New(Options{
+		Team:         testTeamBinding(),
 		CardsDir:     filepath.Join(wsDir, ".surla", "cards"),
 		WorkspaceDir: wsDir,
 		SurlaVersion: testSurlaVersion,
@@ -104,6 +106,7 @@ func TestWorkspaceWALReconciliationStates(t *testing.T) {
 		require.NoError(t, os.WriteFile(filepath.Join(cardsDir, workspaceRecordFile), walBytes, 0o600))
 
 		cp, err := New(Options{
+			Team:         testTeamBinding(),
 			CardsDir:     cardsDir,
 			WorkspaceDir: wsDir,
 			InitStageDir: stageParent,
@@ -146,6 +149,7 @@ func TestWorkspaceWALReconciliationStates(t *testing.T) {
 		require.NoError(t, os.WriteFile(filepath.Join(cardsDir, workspaceRecordFile), walBytes, 0o600))
 
 		cp, err := New(Options{
+			Team:         testTeamBinding(),
 			CardsDir:     cardsDir,
 			WorkspaceDir: wsDir,
 			InitStageDir: stageParent,
@@ -183,6 +187,7 @@ func TestWorkspaceWALReconciliationStates(t *testing.T) {
 		require.NoError(t, os.WriteFile(filepath.Join(cardsDir, workspaceRecordFile), walBytes, 0o600))
 
 		cp, err := New(Options{
+			Team:         testTeamBinding(),
 			CardsDir:     cardsDir,
 			WorkspaceDir: wsDir,
 			InitStageDir: stageParent,
@@ -233,6 +238,7 @@ func TestWorkspaceWALReconciliationStates(t *testing.T) {
 		require.NoError(t, os.WriteFile(filepath.Join(cardsDir, workspaceRecordFile), walBytes, 0o600))
 
 		cp, err := New(Options{
+			Team:         testTeamBinding(),
 			CardsDir:     cardsDir,
 			WorkspaceDir: wsDir,
 			InitStageDir: stageParent,
@@ -274,6 +280,7 @@ func TestWorkspaceWALReconciliationStates(t *testing.T) {
 		require.NoError(t, os.WriteFile(filepath.Join(cardsDir, workspaceRecordFile), walBytes, 0o600))
 
 		_, err = New(Options{
+			Team:         testTeamBinding(),
 			CardsDir:     cardsDir,
 			WorkspaceDir: wsDir,
 			SurlaVersion: testSurlaVersion,
@@ -303,6 +310,7 @@ func TestWorkspaceWALReconciliationStates(t *testing.T) {
 		require.NoError(t, os.WriteFile(filepath.Join(cardsDir, workspaceRecordFile), walBytes, 0o600))
 
 		_, err = New(Options{
+			Team:         testTeamBinding(),
 			CardsDir:     cardsDir,
 			WorkspaceDir: wsDir,
 			SurlaVersion: testSurlaVersion,
@@ -340,6 +348,7 @@ func TestWorkspaceWALReconciliationStates(t *testing.T) {
 		require.NoError(t, os.WriteFile(filepath.Join(cardsDir, workspaceRecordFile), walBytes, 0o600))
 
 		cp, err := New(Options{
+			Team:         testTeamBinding(),
 			CardsDir:     cardsDir,
 			WorkspaceDir: wsDir,
 			InitStageDir: stageParent,
@@ -374,13 +383,14 @@ func TestInitProjectErrorAndSpanClassificationAndEndToEndTransition(t *testing.T
 		return exp
 	}
 
-	t.Run("capability_unavailable_when_workspace_or_version_unset", func(t *testing.T) {
+	t.Run("capability_unavailable_when_version_unset", func(t *testing.T) {
 		exp := withTrackedSpans(t)
 		root := t.TempDir()
 		wsDir := filepath.Join(root, "ws")
 		require.NoError(t, os.MkdirAll(wsDir, 0o755))
 
 		cp, err := New(Options{
+			Team:         testTeamBinding(),
 			CardsDir:     filepath.Join(root, "cards"),
 			WorkspaceDir: wsDir,
 		})
@@ -404,6 +414,7 @@ func TestInitProjectErrorAndSpanClassificationAndEndToEndTransition(t *testing.T
 		wsDir := filepath.Join(root, "ws")
 		require.NoError(t, os.MkdirAll(wsDir, 0o755))
 		cp, err := New(Options{
+			Team:         testTeamBinding(),
 			CardsDir:     filepath.Join(root, "cards"),
 			WorkspaceDir: wsDir,
 			InitStageDir: filepath.Join(root, "stage"),
@@ -452,6 +463,7 @@ func TestInitProjectErrorAndSpanClassificationAndEndToEndTransition(t *testing.T
 		cardsDir := filepath.Join(root, "cards")
 		require.NoError(t, os.MkdirAll(wsDir, 0o755))
 		cp, err := New(Options{
+			Team:         testTeamBinding(),
 			CardsDir:     cardsDir,
 			WorkspaceDir: wsDir,
 			InitStageDir: filepath.Join(root, "stage"),
@@ -487,6 +499,7 @@ func TestInitProjectErrorAndSpanClassificationAndEndToEndTransition(t *testing.T
 			secretTail    = "SECRET_COMPILER_TAIL_TOKEN_98765"
 		)
 		cp, err := New(Options{
+			Team:         testTeamBinding(),
 			CardsDir:     cardsDir,
 			WorkspaceDir: wsDir,
 			InitStageDir: stageDir,
@@ -574,6 +587,7 @@ func TestInitProjectErrorAndSpanClassificationAndEndToEndTransition(t *testing.T
 		require.NoError(t, os.MkdirAll(wsDir, 0o755))
 
 		cp, err := New(Options{
+			Team:         testTeamBinding(),
 			CardsDir:     cardsDir,
 			WorkspaceDir: wsDir,
 			InitStageDir: stageDir,
@@ -620,6 +634,7 @@ func TestInitProjectErrorAndSpanClassificationAndEndToEndTransition(t *testing.T
 		require.NoError(t, os.MkdirAll(wsDir, 0o755))
 
 		cp, err := New(Options{
+			Team:         testTeamBinding(),
 			CardsDir:     cardsDir,
 			WorkspaceDir: wsDir,
 			InitStageDir: stageDir,
@@ -726,6 +741,7 @@ func TestCloseDrainsAndCancelsInFlightInitProjectBeforeReleasingLocks(t *testing
 		var runnerDone atomic.Bool
 
 		cp, err := New(Options{
+			Team:         testTeamBinding(),
 			CardsDir:     cardsDir,
 			WorkspaceDir: wsDir,
 			InitStageDir: stageDir,
@@ -794,6 +810,7 @@ func TestCloseDrainsAndCancelsInFlightInitProjectBeforeReleasingLocks(t *testing
 		t.Cleanup(releaseBarrier)
 
 		cp, err := New(Options{
+			Team:         testTeamBinding(),
 			CardsDir:     cardsDir,
 			WorkspaceDir: wsDir,
 			InitStageDir: stageDir,
@@ -859,7 +876,7 @@ func TestCloseDrainsAndCancelsInFlightInitProjectBeforeReleasingLocks(t *testing
 		}
 
 		// The actual card lock is available only after publication and cleanup.
-		reopened, err := New(Options{CardsDir: cardsDir, WorkspaceDir: wsDir})
+		reopened, err := New(Options{Team: testTeamBinding(), CardsDir: cardsDir, WorkspaceDir: wsDir})
 		require.NoError(t, err)
 		defer reopened.Close()
 		physicalProject, err := filepath.EvalSymlinks(filepath.Join(wsDir, "shop"))

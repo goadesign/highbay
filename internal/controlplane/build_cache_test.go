@@ -17,7 +17,7 @@ import (
 func TestNewRequiresBuildCacheForExecution(t *testing.T) {
 	for _, source := range []string{"stored", "written"} {
 		t.Run(source, func(t *testing.T) {
-			opts := Options{CardsDir: t.TempDir(), WorkspaceDir: t.TempDir(), RunsDir: t.TempDir()}
+			opts := Options{CardsDir: t.TempDir(), WorkspaceDir: t.TempDir(), RunsDir: t.TempDir(), Team: testTeamBinding()}
 			if source == "stored" {
 				opts.Verification = &VerificationConfig{RunsDir: opts.RunsDir}
 			} else {

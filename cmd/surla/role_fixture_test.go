@@ -138,7 +138,11 @@ func TestWorkflowAuthorizationUsesGeneratedMCPRequests(t *testing.T) {
 
 // TestGeneratedMCPClientRetainsCallerRole reaches the real policy wrapper without invoking a compiler.
 func TestGeneratedMCPClientRetainsCallerRole(t *testing.T) {
-	cp, err := controlplane.New(controlplane.Options{CardsDir: t.TempDir()})
+	cp, err := controlplane.New(controlplane.Options{
+		CardsDir:     t.TempDir(),
+		WorkspaceDir: t.TempDir(),
+		Team:         fixtureWorkflowTeam("owner"),
+	})
 	require.NoError(t, err)
 	t.Cleanup(func() { require.NoError(t, cp.Close()) })
 	auth := workflowAuthenticator(map[string]controlplane.Principal{"test-token": {ID: "owner"}})
@@ -153,12 +157,15 @@ func TestGeneratedMCPClientRetainsCallerRole(t *testing.T) {
 	require.NoError(t, err)
 	transport := genmcpclient.NewClient(address.Scheme, address.Host, &bearerDoer{client: server.Client(), token: "test-token"}, goahttp.RequestEncoder, goahttp.ResponseDecoder, false)
 	client := &genmcp.Client{ToolsCallEndpoint: transport.ToolsCall()}
-	result, err := client.ToolsCall(t.Context(), &genmcp.ToolsCallPayload{Name: "init_project", Arguments: json.RawMessage(`{"module_path":"example.com/shop"}`)})
+	result, err := client.ToolsCall(t.Context(), &genmcp.ToolsCallPayload{
+		Name:      "init_project",
+		Arguments: json.RawMessage(`{"module_path":"example.com/shop","dir":"nested/shop"}`),
+	})
 	require.NoError(t, err)
 	complete, ok := result.Outcome.AsComplete()
 	require.True(t, ok)
 	raw, err := json.Marshal(complete.Content)
 	require.NoError(t, err)
 	require.NotContains(t, string(raw), "may not call")
-	require.Contains(t, string(raw), "workspace")
+	require.Contains(t, string(raw), "init_project creates a direct child directory inside the workspace")
 }

@@ -3899,19 +3899,6 @@ paths:
                                 name: unprocessable
                                 temporary: false
                                 timeout: false
-                "501":
-                    description: 'not_implemented: Start this project with surla to bind the team; nothing was saved.'
-                    content:
-                        application/vnd.goa.error:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                            example:
-                                fault: false
-                                id: 123abc
-                                message: parameter 'p' must be an integer
-                                name: not_implemented
-                                temporary: false
-                                timeout: false
                 "503":
                     description: 'unavailable: The server is stopping or the start''s time limit ended before saving; call again on a running server. Nothing was saved.'
                     content:
@@ -4164,19 +4151,6 @@ paths:
                                 id: 123abc
                                 message: parameter 'p' must be an integer
                                 name: conflict
-                                temporary: false
-                                timeout: false
-                "501":
-                    description: 'not_implemented: Start this project with surla to bind the team; nothing changed.'
-                    content:
-                        application/vnd.goa.error:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                            example:
-                                fault: false
-                                id: 123abc
-                                message: parameter 'p' must be an integer
-                                name: not_implemented
                                 temporary: false
                                 timeout: false
     /changes/{change_id}/build/findings:
@@ -14874,19 +14848,6 @@ paths:
                                 name: forbidden
                                 temporary: false
                                 timeout: false
-                "501":
-                    description: 'not_implemented: No team is bound to this control plane; start this project with surla to use its team.'
-                    content:
-                        application/vnd.goa.error:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                            example:
-                                fault: false
-                                id: 123abc
-                                message: parameter 'p' must be an integer
-                                name: not_implemented
-                                temporary: false
-                                timeout: false
     /team/agents:
         post:
             tags:
@@ -14958,19 +14919,6 @@ paths:
                                         name: window_busy
                                         temporary: false
                                         timeout: false
-                "501":
-                    description: 'not_implemented: No team is bound to this control plane; start this project with surla to use its team.'
-                    content:
-                        application/vnd.goa.error:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                            example:
-                                fault: false
-                                id: 123abc
-                                message: parameter 'p' must be an integer
-                                name: not_implemented
-                                temporary: false
-                                timeout: false
                 "503":
                     description: 'team_unavailable: The project team could not be prepared.'
                     content:
@@ -15042,19 +14990,6 @@ paths:
                                         name: window_busy
                                         temporary: false
                                         timeout: false
-                "501":
-                    description: 'not_implemented: No team is bound to this control plane; start this project with surla to use its team.'
-                    content:
-                        application/vnd.goa.error:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                            example:
-                                fault: false
-                                id: 123abc
-                                message: parameter 'p' must be an integer
-                                name: not_implemented
-                                temporary: false
-                                timeout: false
                 "503":
                     description: 'team_unavailable: Herdr could not establish the owned pane.'
                     content:
@@ -15548,7 +15483,7 @@ paths:
                                 temporary: false
                                 timeout: false
                 "501":
-                    description: 'not_implemented: No workspace directory is bound to this control plane.'
+                    description: 'not_implemented: This control plane has no check runner configured.'
                     content:
                         application/vnd.goa.error:
                             schema:
@@ -15750,7 +15685,7 @@ paths:
                                 temporary: false
                                 timeout: false
                 "501":
-                    description: 'not_implemented: No workspace directory is bound to this control plane.'
+                    description: 'not_implemented: This control plane has no check runner configured.'
                     content:
                         application/vnd.goa.error:
                             schema:
@@ -15844,19 +15779,6 @@ paths:
                                 id: 123abc
                                 message: parameter 'p' must be an integer
                                 name: unprocessable
-                                temporary: false
-                                timeout: false
-                "501":
-                    description: 'not_implemented: No workspace directory is bound to this control plane; start Surla from a project directory.'
-                    content:
-                        application/vnd.goa.error:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                            example:
-                                fault: false
-                                id: 123abc
-                                message: parameter 'p' must be an integer
-                                name: not_implemented
                                 temporary: false
                                 timeout: false
                 "503":
@@ -16017,19 +15939,6 @@ paths:
                                         name: unprocessable
                                         temporary: false
                                         timeout: false
-                "501":
-                    description: 'not_implemented: No workspace directory is bound to this control plane.'
-                    content:
-                        application/vnd.goa.error:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                            example:
-                                fault: false
-                                id: 123abc
-                                message: parameter 'p' must be an integer
-                                name: not_implemented
-                                temporary: false
-                                timeout: false
     /workspace/init:
         post:
             tags:
@@ -16099,7 +16008,7 @@ paths:
                                 temporary: false
                                 timeout: false
                 "501":
-                    description: 'not_implemented: This control plane has no bound workspace or starter generator configured.'
+                    description: 'not_implemented: This control plane has no exact Surla module version configured for starter generation.'
                     content:
                         application/vnd.goa.error:
                             schema:
@@ -17234,19 +17143,6 @@ paths:
                                 name: forbidden
                                 temporary: false
                                 timeout: false
-                "501":
-                    description: 'not_implemented: No workspace directory is bound to this control plane; start Surla from a project directory.'
-                    content:
-                        application/vnd.goa.error:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                            example:
-                                fault: false
-                                id: 123abc
-                                message: parameter 'p' must be an integer
-                                name: not_implemented
-                                temporary: false
-                                timeout: false
         post:
             tags:
                 - surla
@@ -17836,19 +17732,6 @@ paths:
                                 id: 123abc
                                 message: parameter 'p' must be an integer
                                 name: unprocessable
-                                temporary: false
-                                timeout: false
-                "501":
-                    description: 'not_implemented: No workspace directory is bound to this control plane; start Surla from a project directory.'
-                    content:
-                        application/vnd.goa.error:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                            example:
-                                fault: false
-                                id: 123abc
-                                message: parameter 'p' must be an integer
-                                name: not_implemented
                                 temporary: false
                                 timeout: false
                 "503":

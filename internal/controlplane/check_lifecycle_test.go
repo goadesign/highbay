@@ -350,6 +350,7 @@ func TestCheckProjectLifecycle(t *testing.T) {
 	require.NoError(t, clients.cp.Close())
 	assert.DirExists(t, moduleCache)
 	reopened, err := New(Options{
+		Team:     testTeamBinding(),
 		CardsDir: clients.cp.cards.dir, WorkspaceDir: project, CheckModuleCacheDir: moduleCache,
 		Checker: clients.cp.checker, CheckHelper: testCheckHelper(t), CheckTimeout: 30 * time.Second,
 		GoProxyEnv: clients.cp.goProxyEnv, Verification: verifierRuns(clients.cp.verifier),

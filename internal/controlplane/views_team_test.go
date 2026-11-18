@@ -169,22 +169,6 @@ page.close();
 `)
 }
 
-// TestViewsPageUnboundTeamNamesTheEnablingStep checks the real owner refusal.
-func TestViewsPageUnboundTeamNamesTheEnablingStep(t *testing.T) {
-	cp := pageControlPlane(t, Options{})
-	ps := startPageServer(t, cp)
-	runPageScript(t, ps, nil, `
-const page = await openPage(origin, { link: input.link });
-await until(() => page.sent("GET", "/team").some((r) => r.status === 501), "unbound Team read did not return its real refusal");
-await until(() => page.text("#surla-checkpoint-status") === "Start this project with surla to use its team.", "header did not show the single owner instruction");
-page.$("#surla-nav-team").click();
-await until(() => page.$("#surla-team-read-error"), "Team did not show its diagnostic");
-expect(page.text("#surla-team-read-error") === "Start this project with surla to use its team.", "Team duplicated or changed the owner instruction");
-expect(page.sent("POST", "/team/agents").length === 0, "opening Team started agents");
-page.close();
-`)
-}
-
 // TestViewsPageTeamAndBuildUpdatesPreserveTheModelDraft keeps all four model
 // inputs through the new update reasons and navigation without applying them.
 // A rejected session then leaves the team facts labeled and its actions inert.

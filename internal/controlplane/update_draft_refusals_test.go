@@ -77,37 +77,6 @@ const (
 	updateBaseDesign = "package design\n\nvar A = 0\n"
 )
 
-// TestUpdateDraftWithoutAProjectFolderNamesTheStepThatEnablesIt verifies that
-// a server bound to no project folder answers the declared not_implemented,
-// worded as refresh_story words it, over the Go service, HTTP and MCP.
-func TestUpdateDraftWithoutAProjectFolderNamesTheStepThatEnablesIt(t *testing.T) {
-	exporter := tracetest.NewInMemoryExporter()
-	provider := sdktrace.NewTracerProvider(sdktrace.WithSyncer(exporter))
-	t.Cleanup(func() { assert.NoError(t, provider.Shutdown(context.Background())) })
-	cp := newControlPlane(t, Options{TracerProvider: provider})
-	guide := asCaller("alice@example.com", CallerGuide)
-
-	_, err := cp.UpdateDraft(guide)
-	assertServiceError(t, err, "not_implemented")
-	assert.ErrorContains(t, err, "start Surla from a project directory")
-	_, refreshErr := cp.RefreshStory(guide)
-	assertServiceError(t, refreshErr, "not_implemented")
-	assert.Equal(t, refreshErr.Error(), err.Error(), "both draft tools say it one way")
-
-	url := serveUpdateDraft(t, cp)
-	exporter.Reset()
-	answer := postUpdateDraft(t, url)
-	assert.Equal(t, http.StatusNotImplemented, answer.status, answer.body)
-	assert.Equal(t, "not_implemented", answer.name)
-	assert.Equal(t, "not_implemented", answer.failure.Name)
-	assert.Equal(t, err.Error(), answer.failure.Message)
-	assert.Equal(t, map[string]bool{updateDraftRequestSpan: false}, endedUpdateDraftSpans(exporter))
-
-	shown, result := mcpToolCall(t, url, updateGuideToken, "update_draft", `{}`)
-	assert.Empty(t, result)
-	assert.Equal(t, err.Error(), shown, "the guide reads the message, which names the enabling step")
-}
-
 // TestUpdateDraftUnavailableAfterServerStops refuses a bound workspace before
 // reading its files or creating a draft when the server has closed.
 func TestUpdateDraftUnavailableAfterServerStops(t *testing.T) {

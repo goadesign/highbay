@@ -48,7 +48,7 @@ func TestNewRejectsAliasedWorkspaceStorage(t *testing.T) {
 						if exists {
 							require.NoError(t, os.Mkdir(store, 0o700))
 						}
-						opts := Options{WorkspaceDir: ws, CardsDir: filepath.Join(base, "cards")}
+						opts := Options{WorkspaceDir: ws, CardsDir: filepath.Join(base, "cards"), Team: testTeamBinding()}
 						switch field {
 						case "cards":
 							opts.CardsDir = store

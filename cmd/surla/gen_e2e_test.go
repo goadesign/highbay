@@ -93,7 +93,7 @@ func TestGenOnAFreshStarterChangesNothingAndKeepsModulesApart(t *testing.T) {
 	opts.BuildCacheDir = buildCache
 	// A test executable has no released module version in its build info.
 	opts.SurlaVersion = starterSurlaVersion
-	opts.Team = &controlplane.TeamBinding{Owner: "operator@example.com", Service: &promotionTeamFixture{}}
+	opts.Team = fixtureWorkflowTeam("operator@example.com")
 	cp, err := controlplane.New(opts)
 	require.NoError(t, err)
 	_, err = cp.ConfigureModel(controlplane.WithPrincipal(t.Context(), controlplane.Principal{ID: "operator@example.com", CallerID: "user", Kind: controlplane.CallerUser}), &gensurla.ConfigureModelPayload{GatewayAddr: &gatewayAddr})
@@ -209,7 +209,7 @@ func TestGenOnAFreshStarterChangesNothingAndKeepsModulesApart(t *testing.T) {
 	opts.BuildCacheDir = buildCache
 	assert.Equal(t, state.CardsDir(), opts.CardsDir)
 	opts.SurlaVersion = starterSurlaVersion
-	opts.Team = &controlplane.TeamBinding{Owner: "operator@example.com", Service: &promotionTeamFixture{}}
+	opts.Team = fixtureWorkflowTeam("operator@example.com")
 	cp, err = controlplane.New(opts)
 	require.NoError(t, err)
 	_, err = cp.ConfigureModel(controlplane.WithPrincipal(t.Context(), controlplane.Principal{ID: "operator@example.com", CallerID: "user", Kind: controlplane.CallerUser}), &gensurla.ConfigureModelPayload{GatewayAddr: &gatewayAddr})

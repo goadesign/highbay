@@ -331,9 +331,6 @@ func (c *ControlPlane) runCheckHelper(ctx context.Context, tool string) (res che
 	c.workspaceMu.RLock()
 	defer c.workspaceMu.RUnlock()
 	wsDir := c.activeWorkspaceDir
-	if wsDir == "" {
-		return checkHelperResult{}, gensurla.MakeNotImplemented(errors.New("no workspace directory is bound to this control plane"))
-	}
 	if err := ctx.Err(); err != nil {
 		return checkHelperResult{}, err
 	}

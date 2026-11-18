@@ -25,9 +25,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// promotionTeamFixture exercises the public build prerequisite without claiming
-// that this release-target test starts agents or verifies candidate execution.
-type promotionTeamFixture struct {
+// workflowTeamFixture accepts build-role registration without starting agents.
+type workflowTeamFixture struct {
 	// registered records the actual StartBuild admission of its worker folders.
 	registered atomic.Bool
 }
@@ -189,7 +188,7 @@ var _ = Service("orders", func() {
 	runTestGit(t, project, "config", "user.email", "test@example.com")
 	gitCommitAll(t, project, "Create the release approval project")
 	cardsDir := t.TempDir()
-	team := &promotionTeamFixture{}
+	team := &workflowTeamFixture{}
 	opts := controlplane.Options{BuildCacheDir: t.TempDir(),
 		CardsDir: cardsDir, WorkspaceDir: project,
 		Verification: &controlplane.VerificationConfig{Plan: verify.Plan{SuiteCommit: suiteCommit}},
@@ -287,31 +286,31 @@ var _ = Service("orders", func() {
 }
 
 // ReadTeam returns this test host's empty roster without contacting a launcher.
-func (f *promotionTeamFixture) ReadTeam(context.Context) (*gensurla.TeamSnapshot, error) {
-	return &gensurla.TeamSnapshot{Team: "release-approval", Roles: []*gensurla.TeamRoleState{}}, nil
+func (f *workflowTeamFixture) ReadTeam(context.Context) (*gensurla.TeamSnapshot, error) {
+	return &gensurla.TeamSnapshot{Team: "test-workflow", Roles: []*gensurla.TeamRoleState{}}, nil
 }
 
 // ShowPane refuses window work that this fixture does not own.
-func (f *promotionTeamFixture) ShowPane(context.Context, string) error {
+func (f *workflowTeamFixture) ShowPane(context.Context, string) error {
 	return errors.New("the test host has no agent windows")
 }
 
 // StartAgents reports the actual unavailable host rather than fabricating work.
-func (f *promotionTeamFixture) StartAgents(context.Context) (*gensurla.ProjectTeam, error) {
+func (f *workflowTeamFixture) StartAgents(context.Context) (*gensurla.ProjectTeam, error) {
 	return nil, errors.New("the test host does not launch agents")
 }
 
 // RegisterBuildRoles records admission through the existing public team seam.
-func (f *promotionTeamFixture) RegisterBuildRoles(context.Context, controlplane.BuildFolders) error {
+func (f *workflowTeamFixture) RegisterBuildRoles(context.Context, controlplane.BuildFolders) error {
 	f.registered.Store(true)
 	return nil
 }
 
 // BindAssignments accepts the control plane's assignment reader before supervision starts.
-func (f *promotionTeamFixture) BindAssignments(controlplane.AssignmentReader) {}
+func (f *workflowTeamFixture) BindAssignments(controlplane.AssignmentReader) {}
 
 // Supervise ends with its owning control plane and starts no background worker.
-func (f *promotionTeamFixture) Supervise(ctx context.Context, _ controlplane.AssignmentReader) error {
+func (f *workflowTeamFixture) Supervise(ctx context.Context, _ controlplane.AssignmentReader) error {
 	<-ctx.Done()
 	return nil
 }
