@@ -509,8 +509,8 @@ export function BuildTakingView({ changeId, build, disabled, dropping, onDrop, o
         testsCommit={taking.tests.source === "written_tests" ? taking.tests.commit : null}
         onFocusedControlRemoved={onFocusedControlRemoved} /> : null}
       {taking.state === "merged" ? <p>It is in your branch. {build.test_writer.tests.state === "not_used"
-        ? "Surla verified a passed run's commit before you merged it; it has not checked your branch since, and your branch may also hold other changes merged after this build started."
-        : "Surla verified a passed run's commits before you merged them; it has not run the tests on your branch since, and your branch may also hold other changes merged after this build started."} {build.in_force ? "Build another change or refine this one when there is more to do." : "Build the current agreed revision to implement the new agreement."} No role has work on this build.</p> : null}
+        ? "Surla's verification covered a passed run's commit before you merged it, not your branch after the merge, which may also hold other changes merged after this build started."
+        : "Surla's verification covered a passed run's commits before you merged them, not your branch after the merge, which may also hold other changes merged after this build started."} {build.in_force ? "Build another change or refine this one when there is more to do." : "Build the current agreed revision to implement the new agreement."} No role has work on this build.</p> : null}
       {taking.state === "dropped" ? <>
         {taking.kept_branches.length > 0 ? <ul>{taking.kept_branches.map((branch) => <li key={branch}><code>{branch}</code> — <code>git log {branch}</code> shows it.</li>)}</ul> : null}
         <p>Surla builds nothing on it, and it no longer blocks another build. No role has work on this build.</p>
@@ -608,9 +608,7 @@ export function SavedResultCommits({ changeId, candidateCommit, testsCommit, bui
     This saved result names the builder’s commit <code>{candidateCommit}</code>
     {testsCommit !== null ? <> and the tests’ commit <code>{testsCommit}</code></> : null}.
     {taking?.state === "merged"
-      ? testsCommit !== null
-        ? " This build is merged into your branch; Surla has not run the tests on your branch since."
-        : " This build is merged into your branch; Surla has not checked your branch since."
+      ? " This build is merged into your branch; this verification covered these commits, not your branch after the merge."
       : " Review the current build’s taking state before merging."}
   </p>;
 }

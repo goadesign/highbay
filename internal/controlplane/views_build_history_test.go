@@ -158,12 +158,12 @@ if (input.eligible) {
   expect(ownCommands(page.$(".surla-approval-basis") ?? page.$("#surla-cp5-approval")).length === 0, "unknown or prior-start approval claimed current-build membership");
   if (input.mode === "merged_evaluator") {
     expect(page.text("#surla-frame-next").includes("Describe the next change when you are ready"), "merged evaluator run did not show next-change guidance");
-    expect(page.text(".surla-approval-basis").includes("This saved result names the builder’s commit " + input.candidate + ". This build is merged into your branch; Surla has not checked your branch since."), "merged evaluator run lost its no-tests merged explanation");
+    expect(page.text(".surla-approval-basis").includes("This saved result names the builder’s commit " + input.candidate + ". This build is merged into your branch; this verification covered these commits, not your branch after the merge."), "merged evaluator run lost its no-tests merged explanation");
     expect(!page.text(".surla-approval-basis").includes("Review the current build’s taking state before merging."), "merged evaluator run kept the pre-merge fallback");
   } else {
     expect(!page.text("#surla-frame-next").includes("Merge the verified commits") && !page.text("#surla-frame-next").includes("Describe the next change"), "unrelated historical evidence borrowed the current build's next step");
     if (input.mode === "prior_start_merged") {
-      expect(page.text(".surla-approval-basis").includes("This saved result names the builder’s commit " + input.candidate + " and the tests’ commit " + "2".repeat(40) + ". This build is merged into your branch; Surla has not run the tests on your branch since."), "prior-start run on a merged build lost the build-level merged state");
+      expect(page.text(".surla-approval-basis").includes("This saved result names the builder’s commit " + input.candidate + " and the tests’ commit " + "2".repeat(40) + ". This build is merged into your branch; this verification covered these commits, not your branch after the merge."), "prior-start run on a merged build lost the build-level merged state");
       expect(!page.text(".surla-approval-basis").includes("This run verified"), "prior-start run on a merged build claimed its own run was merged");
     } else if (input.mode !== "history_failure") {
       expect(page.text(".surla-approval-basis").includes("This saved result names the builder’s commit " + input.candidate + " and the tests’ commit " + "2".repeat(40) + ". Review the current build’s taking state before merging."), "unmerged run lost its fallback");
@@ -200,10 +200,10 @@ if (input.mode !== "history_failure") {
   expect((commands.length > 0) === input.eligible, "old pass membership did not follow its saved start");
   if (input.eligible) expect(JSON.stringify(commands) === JSON.stringify(expected), "older pass did not keep its own C then T");
   if (input.mode === "merged_evaluator") {
-    expect(page.text("#surla-cp4-details").includes("This saved result names the builder’s commit " + input.candidate + ". This build is merged into your branch; Surla has not checked your branch since."), "check view lost the no-tests merged explanation");
+    expect(page.text("#surla-cp4-details").includes("This saved result names the builder’s commit " + input.candidate + ". This build is merged into your branch; this verification covered these commits, not your branch after the merge."), "check view lost the no-tests merged explanation");
   }
   if (input.mode === "prior_start_merged") {
-    expect(page.text("#surla-cp4-details").includes("This saved result names the builder’s commit " + input.candidate + " and the tests’ commit " + "2".repeat(40) + ". This build is merged into your branch; Surla has not run the tests on your branch since."), "check view lost the build-level merged state");
+    expect(page.text("#surla-cp4-details").includes("This saved result names the builder’s commit " + input.candidate + " and the tests’ commit " + "2".repeat(40) + ". This build is merged into your branch; this verification covered these commits, not your branch after the merge."), "check view lost the build-level merged state");
   }
   if (input.mode === "prior_start") {
     expect(page.text("#surla-cp4-details").includes("This saved result names the builder’s commit " + input.candidate + " and the tests’ commit " + "2".repeat(40) + ". Review the current build’s taking state before merging."), "check view lost the unmerged fallback");
@@ -297,8 +297,8 @@ await until(() => page.$("#surla-review-approval"), "saved approval did not load
 page.$("#surla-review-approval").click();
 await until(() => page.$("#surla-cp5-approval") && page.text("#surla-frame-next").includes("Merge the verified commits shown below"), "approval did not show the open build's merge step");
 const record = page.text("#surla-cp5-approval");
-const mergedBasis = "This saved result names the builder’s commit " + input.candidate + " and the tests’ commit " + input.tests + ". This build is merged into your branch; Surla has not run the tests on your branch since.";
-const otherMergedBasis = "This saved result names the builder’s commit " + input.otherCandidate + " and the tests’ commit " + input.tests + ". This build is merged into your branch; Surla has not run the tests on your branch since.";
+const mergedBasis = "This saved result names the builder’s commit " + input.candidate + " and the tests’ commit " + input.tests + ". This build is merged into your branch; this verification covered these commits, not your branch after the merge.";
+const otherMergedBasis = "This saved result names the builder’s commit " + input.otherCandidate + " and the tests’ commit " + input.tests + ". This build is merged into your branch; this verification covered these commits, not your branch after the merge.";
 const fallbackBasis = "This saved result names the builder’s commit " + input.candidate + " and the tests’ commit " + input.tests + ". Review the current build’s taking state before merging.";
 await control(origin, "act", { key: "merge-builder" });
 await control(origin, "act", { key: "merge-tests" });
