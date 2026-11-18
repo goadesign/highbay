@@ -4,10 +4,9 @@ name: Integration
 
 on:
   pull_request:
-    branches: [team-start, main]
+    branches: [main]
   push:
-    # Remove integration branches after they land in their parent.
-    branches: [main, team-start, builder-copy]
+    branches: [main]
   schedule:
     - cron: '17 7 * * *'
   workflow_dispatch:

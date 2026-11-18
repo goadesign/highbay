@@ -2567,11 +2567,11 @@ The [CI workflow](../.github/workflows/ci.yml) runs 15 Linux jobs on every
 pull request. It executes complete ordinary tests, without `-short`, plus
 product linking, every added build profile and generated-contract checks.
 [Integration](../.github/workflows/integration.yml) adds one macOS job on pull
-requests into `team-start` and `main`, exercising native process and filesystem
-contracts. Pushes to `main`, `team-start` and `builder-copy` run the complete
+requests into `main`, exercising native process and filesystem
+contracts. Pushes to `main` run the complete
 pipeline: all 14 macOS ordinary jobs, the Linux checks, tagged journeys,
 browser/Herdr suites and Docker checks. Nightly runs at 07:17 UTC and manual
-full runs execute that same pipeline once the workflow is on the default branch.
+full runs execute that same pipeline.
 
 | Linux PR owner | Work |
 | --- | --- |
