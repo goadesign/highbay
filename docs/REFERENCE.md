@@ -2310,6 +2310,12 @@ reason; success shows the recorded approval and moves focus to it. A saved
 approval without a readable run remains available through **Review saved
 approval**, with **Check current approval** to read the card again.
 
+After the approved result's current build is merged, Next points to describing
+the next change. The selected approval keeps its own evidence. An unrelated
+historical result does not borrow the current build's completion; a pending or
+failed build read withholds merge/completion guidance, and **Read current
+build** retries that owner read.
+
 The recorded approval shows **Builder's commit** and **Tests' commit**. While
 the current agreement’s open build has `taking.state: passed` and the run is
 an eligible result of that build, it shows **To take this change, run in the

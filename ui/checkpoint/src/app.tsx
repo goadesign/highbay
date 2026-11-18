@@ -2251,17 +2251,38 @@ export function bootstrapViewsPage() {
     if (onApproval) {
       attention = review?.approval.state === "blocked" ? "Approval unavailable."
         : review?.approval.state === "unverified" ? "Saved approval needs checking." : review?.approval.state === "recorded"
-        ? "Your approval is recorded. Take the verified commits when you are ready."
+        ? "Your approval is recorded."
         : fresh ? "Decide whether this verified result may be promoted." : "Check the owner’s current approval requirements.";
       next = review?.approval.state === "available" && run !== null
         ? <><Button id="surla-cp5-approve" variant="primary" disabled={!fresh || editorBusy}
           aria-describedby={!fresh ? "surla-cp5-observation-status" : undefined}
           onClick={() => handleApprove(run)}>{editorBusy ? "Approving…" : "Approve this result"}</Button>
           <span className="surla-frame-action-binding">Run {run.run_id.slice(0, 12)}</span></>
-        : review?.approval.state === "recorded" ? <span>Merge the verified commits shown below.</span>
+        : review?.approval.state === "recorded" ? <span>Review the current build before merging.</span>
         : review?.approval.state === "blocked"
         ? <Button onClick={() => focusResult("#surla-cp5-approve-blocked")}>Review requirements</Button>
         : review?.approval.state === "unverified" ? <span>Check current approval.</span> : <span>Read current requirements.</span>;
+      if (review?.approval.state === "recorded" && run !== null) {
+        const build = knownTakingBuild(run.change_id);
+        if (build === null) {
+          next = <Button disabled={editorBusy || hasPending("get_build", run.change_id)}
+            onClick={() => readBuild(run.change_id)}>Read current build</Button>;
+        } else if (build.in_force && runBelongsToBuild(run.change_id, build, run)) {
+          switch (build.taking.state) {
+            case "merged":
+              attention = "The approved build is merged.";
+              next = <span>Describe the next change when you are ready.</span>;
+              break;
+            case "passed":
+              next = <span>Merge the verified commits shown below.</span>;
+              break;
+            case "dropped":
+              attention = "This build was dropped. Your saved approval remains readable.";
+              next = <span>Review the current agreement before building again.</span>;
+              break;
+          }
+        }
+      }
       const newer = run !== null ? newerCheckFor(run) : null;
       if (newer !== null) {
         if (review?.approval.state === "blocked") attention = "A newer check is available.";
