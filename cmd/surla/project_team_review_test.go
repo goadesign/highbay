@@ -50,7 +50,7 @@ func TestProductionTeamPreflightRejectsOldChorus(t *testing.T) {
 	runtime.openViews = func(context.Context, string) error { t.Fatal("old Chorus must not open a browser"); return nil }
 	var output bytes.Buffer
 	err := runtime.start(&output)
-	require.ErrorContains(t, err, "Chorus v0.12.0 or newer is required; update with: chorus update -yes")
+	require.ErrorContains(t, err, "Chorus v0.13.0 or newer is required; update with: chorus update -yes")
 	assert.Empty(t, output.String())
 	_, err = os.Stat(effects)
 	assert.ErrorIs(t, err, os.ErrNotExist)

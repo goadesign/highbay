@@ -435,6 +435,8 @@ func TestTeamResultNextStep(t *testing.T) {
 			assert.Contains(t, team.Step, tc.step)
 			if tc.dialog != "not_needed" {
 				assert.Contains(t, team.Step, "chorus team inspect --space '"+first.Space+"'")
+				assert.Contains(t, team.Step, "chorus team inspect --space '"+first.Space+"' --choices choices.json")
+				assert.Contains(t, team.Step, "model options and permission effects")
 				assert.Contains(t, team.Step, "chorus team launch --space '"+first.Space+"' --choices choices.json")
 				assert.Contains(t, team.Step, "--choices -")
 				assert.NotContains(t, team.Step, "<id>")

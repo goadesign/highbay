@@ -514,8 +514,10 @@ func teamNextStep(dialog, space string) string {
 	// supply copyable commands, including when an external ID contains punctuation.
 	quotedSpace := "'" + strings.ReplaceAll(space, "'", "'\\''") + "'"
 	terminal := "From a terminal, run chorus team inspect --space " + quotedSpace +
-		", then chorus team launch --space " + quotedSpace + " --choices choices.json. " +
-		"Use chorus team launch --help for the role choices JSON; --choices - reads standard input."
+		". Use chorus team launch --help for the role choices JSON; --choices - reads standard input. " +
+		"Run chorus team inspect --space " + quotedSpace +
+		" --choices choices.json to list the chosen programs' model options and permission effects. " +
+		"Then run chorus team launch --space " + quotedSpace + " --choices choices.json."
 	switch dialog {
 	case "opened":
 		return "Choose an agent for each role in the open Chorus dialog in Herdr. " + terminal

@@ -59,7 +59,9 @@ starts or attaches to the same project and prints `{ "url": "...", "expires_at":
 "..." }` JSON instead of opening a browser. Open that one-use URL in your
 controlled browser. The team instructions give commands with the actual Herdr
 space ID: `chorus team inspect` shows the roles, and `chorus team launch` accepts
-your explicit program/model choices. See [terminal operation](docs/REFERENCE.md#terminal-and-browser-automation)
+your explicit program/model choices. Add `--choices choices.json` to the printed
+inspection command to see your chosen programs' model options and permission
+effects before launching. See [terminal operation](docs/REFERENCE.md#terminal-and-browser-automation)
 for input, recovery and link handling. The dialog remains available.
 
 Here is one change, for example a refund assistant whose rule is "refunds up
@@ -179,7 +181,7 @@ Surla needs:
   fresh compiler scratch. See [`check_project`](docs/REFERENCE.md#check_project).
 - **Herdr core** (the `herdr-core` and `hc` commands) and the **Herdr app**
   (`herdr-app`).
-- **Chorus v0.12.0** or newer.
+- **Chorus v0.13.0** or newer.
 - A coding agent that the Chorus dialog or terminal command can start for each role.
 
 To install the Surla described by this README, clone this repository and check

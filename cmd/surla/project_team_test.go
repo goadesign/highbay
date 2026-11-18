@@ -97,15 +97,23 @@ func TestTeamPreflightVersionAndPrograms(t *testing.T) {
 			assert.Zero(t, calls)
 		})
 	}
-	for _, version := range []string{"v0.10.1", "v0.11.0", "v0.12.0", "invalid", "v0.11.0-rc.1"} {
-		t.Run(version, func(t *testing.T) {
+	for _, tc := range []struct {
+		version string
+		valid   bool
+	}{
+		{version: "v0.10.1"}, {version: "v0.11.0"}, {version: "v0.12.0"},
+		{version: "v0.11.0-rc.1"},
+		{version: "v0.13.0-rc.1"}, {version: "invalid"},
+		{version: "v0.13.0", valid: true}, {version: "v0.13.1", valid: true},
+	} {
+		t.Run(tc.version, func(t *testing.T) {
 			commands := teamCommands{chorus: "chorus", run: func(_ context.Context, _ []string, name string, args ...string) ([]byte, error) {
 				assert.Equal(t, "chorus", name)
 				assert.Equal(t, []string{"version"}, args)
-				return []byte("chorus " + version + "\n"), nil
+				return []byte("chorus " + tc.version + "\n"), nil
 			}}
 			err := preflightTeam(commands)
-			if version == "v0.12.0" {
+			if tc.valid {
 				assert.NoError(t, err)
 			} else {
 				assert.ErrorContains(t, err, "chorus update -yes")

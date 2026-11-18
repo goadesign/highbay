@@ -65,7 +65,7 @@ func TestProductionProjectGitPreflight(t *testing.T) {
 			bin := t.TempDir()
 			effects := filepath.Join(bin, "unexpected-effects")
 			calls := filepath.Join(bin, "git-calls")
-			dependency := "#!/bin/sh\nif [ \"$1\" = version ]; then printf 'chorus v0.12.0\\n'; else printf unexpected > \"$SURLA_TEST_GIT_EFFECTS\"; fi\n"
+			dependency := "#!/bin/sh\nif [ \"$1\" = version ]; then printf 'chorus v0.13.0\\n'; else printf unexpected > \"$SURLA_TEST_GIT_EFFECTS\"; fi\n"
 			for _, name := range []string{"chorus", "herdr-core", "herdr-app", "hc", "open", "xdg-open"} {
 				require.NoError(t, os.WriteFile(filepath.Join(bin, name), []byte(dependency), 0o700))
 			}
