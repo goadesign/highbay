@@ -74,6 +74,12 @@ export interface LiveTargetStageProps {
   // onDraft records one change to the model form's input; the page merges
   // it into the draft it keeps.
   onDraft: (change: Partial<ModelDraft>) => void;
+  // draftDirty enables a local discard while unsent model input is retained.
+  draftDirty: boolean;
+  // draftReset changes only on discard, resetting the uncontrolled form.
+  draftReset: number;
+  // onDiscardDraft clears unsent input without changing the connection.
+  onDiscardDraft: () => void;
 }
 
 // LiveTargetStageView shows the live target and the model connection.
@@ -368,8 +374,9 @@ function RunningBody({ target }: { target: RunningCase }) {
 // form that changes it. The page keeps the form's input, so what the user
 // typed survives every refresh and leaving the view: the text fields are
 // uncontrolled, start from the kept input when the view opens, and record
-// each change. The form opens on the kind of the current choice until the
-// user picks one, and both kinds' fields stay mounted.
+// each change. A local discard remounts only the form. It opens on the kind
+// of the current choice until the user picks one, and both kinds' fields
+// stay mounted.
 function ModelSection({
   model,
   modelLoading,
@@ -380,6 +387,9 @@ function ModelSection({
   onApply,
   draft,
   onDraft,
+  draftDirty,
+  draftReset,
+  onDiscardDraft,
 }: LiveTargetStageProps) {
   const currentKind = model !== null && model.connection.kind === "gateway" ? "gateway" : "direct";
   const kind = draft.kind ?? currentKind;
@@ -402,7 +412,7 @@ function ModelSection({
 
   return (
     <section id="surla-model" aria-labelledby="surla-model-title">
-      <h3 id="surla-model-title">Model connection</h3>
+      <h3 id="surla-model-title" tabIndex={-1}>Model connection</h3>
       {modelError !== null ? (
         <Alert id="surla-model-error" variant="destructive" role="alert">
           <strong>Could not read the model connection. </strong>
@@ -431,7 +441,7 @@ function ModelSection({
         {" "}The choice applies to live targets started afterwards. A running live target keeps its
         model, and verification is not affected.
       </p>
-      <form id="surla-model-form" onSubmit={submit}>
+      <form id="surla-model-form" key={draftReset} onSubmit={submit}>
         <fieldset disabled={applying}>
           <legend>Change the model connection</legend>
           <div className="surla-field-row" role="radiogroup" aria-label="Kind of model connection">
@@ -500,6 +510,9 @@ function ModelSection({
           <div className="surla-field-row">
             <Button id="surla-model-apply" type="submit" variant="primary">
               {applying ? "Applying..." : "Apply"}
+            </Button>
+            <Button id="surla-model-discard" disabled={!draftDirty} onClick={onDiscardDraft}>
+              Discard model edits
             </Button>
           </div>
         </fieldset>

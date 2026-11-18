@@ -272,6 +272,9 @@ is open: reloading it, closing it or opening it in another tab needs a new
 link, which `surla` gives when you run it again (or `surla --print-link` to
 print the link as JSON without opening a browser; see
 [terminal operation](docs/REFERENCE.md#terminal-and-browser-automation)).
+You can open a fresh link in the same tab. If there are unsaved edits, the page
+keeps them and offers **Open link** after you save or discard them; the link's
+two-minute expiry still starts when it was printed.
 Running `surla` from a
 subfolder finds the same project. `surla stop` shuts the project's server
 down. After you install another build of `surla`, run `surla stop`, then

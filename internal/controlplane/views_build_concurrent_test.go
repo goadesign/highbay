@@ -30,6 +30,13 @@ type pagePendingBuildRead struct {
 // This proves page/HTTP behavior, not candidate execution or real window effects.
 func TestViewsPageBuildIgnoresAReadCapturedDuringPendingReplacement(t *testing.T) {
 	team := &teamServiceFixture{snapshot: pageTeamSnapshot("working")}
+	team.start = func(context.Context) (*gensurla.ProjectTeam, error) {
+		return &gensurla.ProjectTeam{
+			Team: "page-team", Space: "page-space", Dialog: "opened",
+			Step:  "Choose the builder in the open team dialog.",
+			Roles: []*gensurla.ProjectTeamRole{{Role: "builder", Handle: "page-builder", Running: false}},
+		}, nil
+	}
 	cp := newBuildControlPlane(t, Options{Team: &TeamBinding{Owner: pageOwner, Service: team}})
 	cp.changesWait = 400 * time.Millisecond
 	cp.changesPoll = 20 * time.Millisecond
@@ -104,7 +111,10 @@ await until(() => replacement.status === 200 && !page.$("#surla-build-starting")
 const newStarted = JSON.parse(replacement.answer).build.started_at;
 expect(newStarted !== oldStarted && page.text("#surla-build-details").includes(newStarted), "the replacement did not display its new saved start");
 const teamReceipt = page.text("#surla-build-start-team-receipt");
-expect(teamReceipt.includes("the team was ready"), "the replacement team receipt is missing");
+expect(teamReceipt.includes("returned: «") && !teamReceipt.includes("the team was ready"), "the replacement team receipt did not quote the owner's start outcome");
+const startTeam = JSON.parse(replacement.answer).team;
+expect(startTeam.state === "ready" && startTeam.dialog === "opened" && startTeam.roles[0].running === false, "the fixture did not exercise a ready result with a chooser still waiting");
+expect(teamReceipt.includes("«" + startTeam.step + "»"), "the receipt replaced the owner's chooser instruction with an inferred readiness claim");
 const regressions = [];
 const observe = () => {
   if (page.text("#surla-build-details").includes(oldStarted)) regressions.push("previous started_at flashed");
