@@ -29,17 +29,17 @@ const published = testmodule.PublishedSurlaVersion
 
 func TestValidVersionAcceptsOnlyExactVersions(t *testing.T) {
 	for v, want := range map[string]bool{
-		"v1.2.3":     true,
-		"v1.2.3-pre": true,
-		published:    true,
-		"v0.0.0-20261115014514-02c792da3ded+dirty": false,
-		"latest":  false,
-		"main":    false,
-		"8ec6e09": false,
-		"(devel)": false,
-		"":        false,
-		"v1.2":    false,
-		"1.2.3":   false,
+		"v1.2.3":             true,
+		"v1.2.3-pre":         true,
+		published:            true,
+		published + "+dirty": false,
+		"latest":             false,
+		"main":               false,
+		"8ec6e09":            false,
+		"(devel)":            false,
+		"":                   false,
+		"v1.2":               false,
+		"1.2.3":              false,
 	} {
 		assert.Equal(t, want, ValidVersion(v), v)
 	}

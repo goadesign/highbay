@@ -10,15 +10,16 @@ import (
 	"syscall"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"golang.org/x/sys/unix"
 
 	"github.com/goadesign/surla/internal/abspath"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
+	"github.com/goadesign/surla/internal/testmodule"
 )
 
 // starterVersionForWorkTest is parsed by the CLI but never downloaded.
-const starterVersionForWorkTest = "v0.0.0-20261115014514-02c792da3ded"
+const starterVersionForWorkTest = testmodule.PublishedSurlaVersion
 
 // TestLocalWorkStaysOutsideStartupAndTargets includes a builder-writable
 // TMPDIR and an arbitrary CLI target unrelated to the startup directory.
