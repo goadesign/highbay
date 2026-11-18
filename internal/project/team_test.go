@@ -175,7 +175,7 @@ func TestEnsureTeamAdoptionConflictAndAccess(t *testing.T) {
 		})
 	}
 	t.Run("skip_non_conforming", func(t *testing.T) {
-		state := testState(t)
+		state := initializedState(t, physicalTempDir(t), physicalTempDir(t))
 		deps := fixtureTeamDependencies(state)
 		host := deps.Host.(*teamFixture)
 		name := teamName(filepath.Base(state.Record.Directory), state.Record.ID)
@@ -198,32 +198,49 @@ func TestEnsureTeamAdoptionConflictAndAccess(t *testing.T) {
 		}
 		s, err := NewServer(opened, func() {}, deps)
 		require.NoError(t, err)
+		// Open legacy space takes precedence over window_busy overlays and causes no effects.
+		for _, overlays := range [][]string{nil, {"frame-palette"}, {"chorus-launcher"}} {
+			host.overlays = overlays
+			_, err = s.EnsureTeam(teamContext(opened))
+			var unavailable *genproject.TeamUnavailable
+			require.ErrorAs(t, err, &unavailable)
+			assert.Equal(t, "saved_space", unavailable.Cause)
+			assert.Empty(t, s.teamSelection().connection.Endpoint, "supervision sees no new connection on open legacy-space refusal")
+			assert.Zero(t, host.creates)
+			assert.Equal(t, "sp'quoted", opened.Record.Space)
+			assert.FileExists(t, oldRoster)
+		}
+
+		// Closed legacy space with a matching conforming space still refuses window_busy
+		// when chorus-launcher is open for the old space, before rebinding or removing the old roster.
+		host.spaces = append(host.spaces[1:], TeamSpace{ID: "adopted-1", Name: name, Folder: state.Record.Directory, Tabs: []TeamTab{{ID: "tab", Terminals: []TeamPane{{Terminal: "terminal"}}}}})
+		host.overlays = []string{"chorus-launcher"}
 		_, err = s.EnsureTeam(teamContext(opened))
-		var unavailable *genproject.TeamUnavailable
-		require.ErrorAs(t, err, &unavailable)
-		assert.Equal(t, "saved_space", unavailable.Cause)
-		assert.Empty(t, s.teamSelection().connection.Endpoint, "supervision sees no new connection on open legacy-space refusal")
+		require.Error(t, err)
+		assert.Empty(t, s.teamSelection().connection.Endpoint)
 		assert.Zero(t, host.creates)
 		assert.Equal(t, "sp'quoted", opened.Record.Space)
 		assert.FileExists(t, oldRoster)
 
-		host.spaces = host.spaces[1:]
+		// Once the old dialog is closed, the closed legacy space rebinds to the single conforming match.
+		host.overlays = nil
 		result, err := s.EnsureTeam(teamContext(opened))
-		require.NoError(t, err)
-		assert.Equal(t, "space-1", result.Space)
-		assert.Equal(t, "space-1", opened.Record.Space)
-		assert.Equal(t, "http://chorus.test", s.teamSelection().connection.Endpoint)
-		assert.Equal(t, 1, host.creates)
-		_, err = os.Stat(oldRoster)
-		assert.ErrorIs(t, err, os.ErrNotExist)
-
-		opened.Record.Space = "free'form-2"
-		require.NoError(t, opened.save())
-		host.spaces = append(host.spaces, TeamSpace{ID: "adopted-1", Name: name, Folder: state.Record.Directory, Tabs: []TeamTab{{ID: "tab", Terminals: []TeamPane{{Terminal: "terminal"}}}}})
-		result, err = s.EnsureTeam(teamContext(opened))
 		require.NoError(t, err)
 		assert.Equal(t, "adopted-1", result.Space)
 		assert.Equal(t, "adopted-1", opened.Record.Space)
+		assert.Equal(t, "http://chorus.test", s.teamSelection().connection.Endpoint)
+		assert.Zero(t, host.creates)
+		_, err = os.Stat(oldRoster)
+		assert.ErrorIs(t, err, os.ErrNotExist)
+
+		// When no conforming space matches, Surla creates its own space.
+		opened.Record.Space = "free'form-2"
+		require.NoError(t, opened.save())
+		host.spaces = host.spaces[:len(host.spaces)-1]
+		result, err = s.EnsureTeam(teamContext(opened))
+		require.NoError(t, err)
+		assert.Equal(t, "space-1", result.Space)
+		assert.Equal(t, "space-1", opened.Record.Space)
 		assert.Equal(t, 1, host.creates)
 	})
 }

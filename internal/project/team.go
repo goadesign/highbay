@@ -199,17 +199,20 @@ func (s *Server) ensureTeam(ctx context.Context) (result *genproject.ProjectTeam
 	if err != nil {
 		return nil, teamUnavailable(ctx, "overlays", "herdr")
 	}
-	launcherOpen := false
-	for _, overlay := range overlays {
-		if overlay == "chorus-launcher" {
-			launcherOpen = true
-		} else {
-			return nil, genproject.MakeWindowBusy(errors.New("close the open Herdr dialog and run surla again"))
-		}
-	}
 	s.state.mu.Lock()
 	record := s.state.Record
 	s.state.mu.Unlock()
+	legacySavedSpace := record.Space != "" && !safeSpaceID(record.Space)
+	launcherOpen := false
+	if !legacySavedSpace {
+		for _, overlay := range overlays {
+			if overlay == "chorus-launcher" {
+				launcherOpen = true
+			} else {
+				return nil, genproject.MakeWindowBusy(errors.New("close the open Herdr dialog and run surla again"))
+			}
+		}
+	}
 	team := record.Team
 	if team == "" {
 		team = teamName(filepath.Base(record.Directory), record.ID)
@@ -221,12 +224,15 @@ func (s *Server) ensureTeam(ctx context.Context) (result *genproject.ProjectTeam
 	var space TeamSpace
 	for _, candidate := range spaces {
 		if candidate.ID == record.Space && record.Space != "" {
-			if !safeSpaceID(record.Space) {
+			if legacySavedSpace {
 				return nil, teamUnavailable(ctx, "saved_space", "saved_space")
 			}
 			space = candidate
 			break
 		}
+	}
+	if legacySavedSpace && len(overlays) > 0 {
+		return nil, genproject.MakeWindowBusy(errors.New("close the open Herdr dialog and run surla again"))
 	}
 	s.team.observationMu.Lock()
 	s.team.connection = connection
