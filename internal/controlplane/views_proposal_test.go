@@ -14,6 +14,50 @@ import (
 	"github.com/goadesign/surla/internal/designeval"
 )
 
+// TestViewsPageProposalChoicesGuardAReplacementLink protects unadopted choices
+// independently of CP1 edits and discards them locally without declining.
+func TestViewsPageProposalChoicesGuardAReplacementLink(t *testing.T) {
+	ps, _ := proposalPage(t)
+	runPageScript(t, ps, nil, `
+const page = await openPage(origin, { link: input.link });
+await until(() => page.$("#surla-confirm-submit"), "the agreed card did not open");
+expect(!page.beforeUnload(), "a saved agreement unexpectedly blocked leaving");
+await control(origin, "act", { key: "propose" });
+await until(() => page.$('#surla-proposal [data-option="with_tax"]'), "the proposed question did not arrive");
+page.$('#surla-proposal [data-option="with_tax"]').click();
+expect(page.beforeUnload(), "an unadopted proposal answer did not guard leaving");
+page.win.location.hash = "link=pending-proposal-link";
+await until(() => page.$("#surla-pending-link") && page.win.location.hash === "", "proposal choices did not defer the replacement link");
+expect(page.$("#surla-open-pending-link").disabled, "unadopted choices allowed the replacement link");
+page.$("#surla-discard-draft").click();
+await until(() => !page.$("#surla-open-pending-link").disabled, "local discard did not resolve the proposal choices");
+expect(!page.beforeUnload() && page.$("#surla-proposal"), "local discard removed the proposal or retained its choices");
+expect(page.sent("POST", "/changes/confirm").length === 0 && page.sent("POST", "/changes/decline").length === 0, "local discard changed the saved agreement or proposal");
+page.close();
+`)
+}
+
+// TestViewsPagePendingEditDefersAReplacementLink protects an outstanding save
+// even when the submitted values have no local differences from the card.
+func TestViewsPagePendingEditDefersAReplacementLink(t *testing.T) {
+	ps, _ := proposalPage(t)
+	runPageScript(t, ps, nil, `
+const page = await openPage(origin, { link: input.link });
+await until(() => page.$("#surla-confirm-submit"), "the agreed card did not open");
+expect(!page.beforeUnload(), "a clean card unexpectedly blocked leaving");
+await control(origin, "hold", { key: "POST /changes/confirm" });
+page.$("#surla-confirm-submit").click();
+await until(() => page.sent("POST", "/changes/confirm").some((r) => r.status === undefined), "the edit request was not held pending");
+page.win.location.hash = "link=pending-save-link";
+await until(() => page.$("#surla-pending-link") && page.win.location.hash === "", "an outstanding edit did not defer the link");
+expect(page.beforeUnload() && page.$("#surla-open-pending-link").disabled, "the pending edit did not guard both exit paths");
+await control(origin, "release", { key: "POST /changes/confirm" });
+await until(() => !page.$("#surla-open-pending-link").disabled, "a completed save did not release the pending link");
+expect(!page.beforeUnload(), "a completed unchanged save still blocked leaving");
+page.close();
+`)
+}
+
 // TestViewsPageAdoptsAndDeclinesAProposedRevision opens an agreed change with
 // a Story and a typed edit. The guide's revision appears as a proposal
 // without a reload, keeping the edit; the page shows every part that would

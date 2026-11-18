@@ -561,6 +561,12 @@ export function bootstrapViewsPage() {
   // modelDraft is the model form's unsent input, kept here so it survives
   // refreshes and leaving the Live target view.
   let modelDraft: ModelDraft = { kind: null, provider: "anthropic", modelName: "", gatewayAddr: "" };
+  // modelDraftDirty records edits since the last successful Apply or local discard.
+  let modelDraftDirty = false;
+  // modelDraftReset remounts only the uncontrolled model form on local discard.
+  let modelDraftReset = 0;
+  // pendingLinkFragment stays in memory until all unsaved input is resolved.
+  let pendingLinkFragment: string | null = null;
   // teamSnapshot is shared by the Team stage and notices on every stage.
   // Failed reads retain facts, visibly labeled as last read.
   let teamSnapshot: TeamSnapshot | null = null;
@@ -1343,6 +1349,21 @@ export function bootstrapViewsPage() {
     );
   }
 
+  // hasUnsavedPageInput protects all input that reloading this document loses.
+  // Agreement warnings continue to use the narrower CP1 draft predicate.
+  function hasUnsavedPageInput(): boolean {
+    return hasUnsavedEdits() || editorBusy || modelDraftDirty ||
+      (activeEditor !== null && Object.keys(activeEditor.proposalAnswers).length > 0);
+  }
+
+  // openPendingLink re-enters the normal bootstrap after saving or discarding.
+  // replaceState avoids queuing another hashchange before the reload.
+  function openPendingLink() {
+    if (pendingLinkFragment === null || hasUnsavedPageInput()) return;
+    history.replaceState(null, "", window.location.pathname + window.location.search + pendingLinkFragment);
+    window.location.reload();
+  }
+
   // hasUnsavedEditorState identifies work that a different stage must leave
   // available for the user to recover or continue editing.
   function hasUnsavedEditorState(): boolean {
@@ -1990,13 +2011,24 @@ export function bootstrapViewsPage() {
     readLiveTarget();
   }
 
-  // updateModelDraft records one change to the model form's input. Only a
-  // change of kind redraws the view; the text fields hold their own text.
+  // updateModelDraft records input and refreshes discard and pending-link
+  // controls. The uncontrolled text fields retain focus and selection.
   function updateModelDraft(change: Partial<ModelDraft>) {
     modelDraft = { ...modelDraft, ...change };
-    if (change.kind !== undefined) {
-      syncResultRegion();
-    }
+    modelDraftDirty = true;
+    syncResultRegion();
+    syncNoticeRegion();
+  }
+
+  // discardModelDraft clears unsent model input locally, including after the
+  // session ends, without changing the server's model connection.
+  function discardModelDraft() {
+    if (hasPending("configure_model", "")) return;
+    modelDraft = { kind: null, provider: "anthropic", modelName: "", gatewayAddr: "" };
+    modelDraftDirty = false;
+    modelDraftReset++;
+    syncAllRegions();
+    document.getElementById("surla-model-title")?.focus();
   }
 
   // applyModel asks the server to use choice for live targets started
@@ -2011,6 +2043,7 @@ export function bootstrapViewsPage() {
       choice,
       "",
       (result) => {
+        modelDraftDirty = false;
         modelApplyOutcome = { message: describeApplied(result), refused: false };
         readModelConnection();
       },
@@ -2433,6 +2466,15 @@ export function bootstrapViewsPage() {
     flushSync(() => {
       noticeRoot.render(
         <>
+        {pendingLinkFragment !== null ? (
+          <Alert id="surla-pending-link" role="status">
+            <p>You opened a new Surla link in this tab. Save or discard your edits, then choose Open link.</p>
+            <p>The link expires two minutes after it was printed, even while you finish your edits.</p>
+            <Button id="surla-open-pending-link" disabled={hasUnsavedPageInput()} onClick={openPendingLink}>
+              Open link
+            </Button>
+          </Alert>
+        ) : null}
         {sessionState === "ended" ? (
           <SessionEndedNotice
             unsavedLines={
@@ -2732,6 +2774,9 @@ export function bootstrapViewsPage() {
             onApply={applyModel}
             draft={modelDraft}
             onDraft={updateModelDraft}
+            draftDirty={modelDraftDirty}
+            draftReset={modelDraftReset}
+            onDiscardDraft={discardModelDraft}
           />
         );
       });
@@ -3682,10 +3727,24 @@ export function bootstrapViewsPage() {
 
   // Leaving the page loses edits the server never saved, so the browser asks first.
   window.addEventListener("beforeunload", (event) => {
-    if (hasUnsavedEdits()) {
+    if (hasUnsavedPageInput()) {
       event.preventDefault();
       event.returnValue = "";
     }
+  });
+
+  // Pasting another one-use link in this tab must run the same first-load
+  // exchange, but never discard unsaved input or leave a deferred link in history.
+  window.addEventListener("hashchange", () => {
+    const fragment = window.location.hash;
+    if (readLinkFromFragment(fragment) === null) return;
+    if (!hasUnsavedPageInput()) {
+      window.location.reload();
+      return;
+    }
+    history.replaceState(null, "", window.location.pathname + window.location.search);
+    pendingLinkFragment = fragment;
+    syncNoticeRegion();
   });
 
   syncAllRegions();

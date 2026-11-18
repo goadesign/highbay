@@ -1777,6 +1777,9 @@ the test writer's next report.
 - `team.state` is `ready` (the team result with its `step`), `window_busy`,
   `ambiguous_space` (with the `count`) or `unavailable`, each with a `step`.
   A team warning still means the build was saved.
+  `ready` means team preparation completed; its `step` can still ask the user
+  to choose agents in an open dialog. It does not establish that agents are
+  running. The page quotes that start's instruction as a dated receipt.
 
 Every refusal below saves no build and registers no role.
 
@@ -2306,10 +2309,18 @@ after a failed read of the changes or the team, a lost update connection or
 an ended session, it names the recovery instead, such as
 `Reconnecting: shop`. Before the exchange succeeds, the title is `Surla`.
 Reloading or closing the tab ends the session; run `surla` for a fresh link.
+Opening a fresh link in the same tab reloads the page through the normal link
+exchange. If there are unsaved CP1 edits, unadopted proposal answers, Model-form
+edits, or a pending edit request, the page removes the link from the address
+and holds it only in memory. Save or discard those inputs, then choose **Open
+link**. A failed save keeps the inputs and the guard. **Discard model edits**
+clears only unsent Model-form input, without changing the saved connection.
+The link still expires two minutes after it was printed, not after it was
+pasted. Obtain another link if it expires while you finish editing.
 A used or expired link is reported as such. When the server answers `401`, as
 it does after a restart, the page keeps everything typed visible and
 copyable and says to run `surla` again. Leaving with unsaved edits asks the
-browser to confirm.
+browser to confirm, including for unadopted proposal answers and Model-form edits.
 
 **Every view.** The frame previews at most two lines of the confirmed
 agreement's summary. **Read full summary** opens Agree, expands **Agreement

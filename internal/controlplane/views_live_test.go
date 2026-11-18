@@ -411,11 +411,15 @@ for (const id of ["#surla-model-provider", "#surla-model-name", "#surla-model-ga
   expect(page.$(id).classList.contains("surla-input") && page.$(id).closest("label").classList.contains("surla-field-label"), id + " does not use the shared field styles");
 }
 const apply = page.$("#surla-model-apply");
+expect(!page.beforeUnload(), "a loaded model form without edits blocked leaving");
 expect(apply.tagName === "BUTTON" && apply.type === "submit" && apply.classList.contains("shadcn-btn-primary"), "Apply is not the view's primary submit button");
 const select = page.$("#surla-model-provider");
 select.value = "openai";
 select.dispatchEvent(new page.win.Event("change", { bubbles: true }));
 page.type(page.$("#surla-model-name"), "gpt-5.4-mini");
+page.win.location.hash = "link=pending-model-link";
+await until(() => page.$("#surla-pending-link") && page.win.location.hash === "", "a model draft did not defer and scrub a same-tab link");
+expect(page.beforeUnload() && page.$("#surla-open-pending-link").disabled, "model input did not protect unload and pending-link opening");
 page.$("#surla-nav-story").click();
 await until(() => page.state() === "story" && !page.$("#surla-model-form"), "the Story view did not open");
 page.$("#surla-nav-live").click();
@@ -426,6 +430,7 @@ await until(() => page.$("#surla-model-outcome"), "the refusal was not shown");
 expect(page.text("#surla-model-outcome").includes("provider openai needs OPENAI_API_KEY: export it, with any OPENAI_ request settings it needs, in a shell and run surla there; the project server keeps running. Or choose a model gateway."), "the refusal is not shown verbatim: " + page.text("#surla-model-outcome"));
 expect(page.$("#surla-model-outcome").getAttribute("role") === "alert", "the refusal is not an alert");
 expect(page.text("#surla-model-current").includes("anthropic / claude-sonnet-4-6"), "a refused change replaced the shown choice");
+expect(page.beforeUnload() && page.$("#surla-open-pending-link").disabled, "a refused model Apply cleared its unsaved guard");
 
 page.$("input[name='surla-model-kind'][value='gateway']").click();
 await until(() => shown(page, "#surla-model-gateway-fields"), "the gateway fields were not displayed");
@@ -443,6 +448,13 @@ page.$("#surla-model-apply").click();
 await until(() => page.text("#surla-model-outcome") === "Live targets started from now on use the model gateway at 127.0.0.1:9090.", "the accepted change was not shown: " + page.text("#surla-model-outcome"));
 await until(() => page.text("#surla-model-current").includes("the model gateway at 127.0.0.1:9090"), "the new choice was not read again");
 expect(page.sent("POST", "/cp1/model").length === 3, "each Apply should send one request");
+expect(!page.beforeUnload() && !page.$("#surla-open-pending-link").disabled, "a successful Apply did not release its saved model input");
+page.type(page.$("#surla-model-gateway"), "127.0.0.1:9876");
+expect(page.beforeUnload() && page.$("#surla-open-pending-link").disabled, "editing after Apply did not guard the next draft");
+page.$("#surla-model-discard").click();
+expect(!page.beforeUnload() && !page.$("#surla-open-pending-link").disabled && page.$("#surla-model-gateway").value === "", "local Model discard did not resolve only unsent input");
+expect(page.doc.activeElement === page.$("#surla-model-title"), "discarding a remounted model form lost keyboard focus");
+expect(page.text("#surla-model-current").includes("127.0.0.1:9090") && page.sent("POST", "/cp1/model").length === 3, "local discard changed the owner's connection");
 
 const second = await openPage(origin, { link: input.link + "-2" });
 await openLive(second);

@@ -132,11 +132,25 @@ func TestViewsPageSessionLifecycle(t *testing.T) {
 
   // After a restart the old session is refused; typed edits stay and the page says how to continue.
   await control(origin, "restart");
+  const fresh = await (await fetch(origin + "/__test/link", { method: "POST" })).text();
+  field.focus();
+  field.setSelectionRange(2, 8);
+  page.win.location.hash = "link=" + fresh;
+  await until(() => page.$("#surla-pending-link") && page.win.location.hash === "", "a new same-tab link was not scrubbed and deferred");
+  expect(page.$("#surla-open-pending-link").disabled && page.beforeUnload(), "unsaved CP1 input did not guard both link opening and unload");
+  expect(page.$('textarea[data-field="expected_outcome"]') === field && field.value === "Typed before the restart" && page.doc.activeElement === field && field.selectionStart === 2 && field.selectionEnd === 8, "deferring a link changed the draft, focus or selection");
+  expect(page.sent("POST", "/project/browser-session").length === 1, "a deferred link was exchanged before edits were resolved");
+  expect(page.text("#surla-pending-link").includes("two minutes after it was printed"), "the deferred notice did not explain the link's original expiry");
   page.$("#surla-confirm-submit").click();
   await until(() => page.$("#surla-session-ended"), "the page did not say its session ended");
   expect(page.text("#surla-session-ended").includes("Run surla in your project folder"), "the page did not say how to continue");
   expect(page.$('textarea[data-field="expected_outcome"]').value === "Typed before the restart", "typed edits were lost");
   expect(page.text("#surla-session-ended-edits").includes("Typed before the restart"), "the unsaved edits are not shown for copying");
+  expect(page.$("#surla-open-pending-link").disabled && page.beforeUnload(), "a failed save released unsaved input");
+  page.$("#surla-discard-draft").click();
+  await until(() => !page.$("#surla-open-pending-link").disabled, "local discard after session end did not enable the pending link");
+  expect(!page.beforeUnload(), "discarded CP1 input still blocked leaving");
+  expect(page.win.localStorage.length === 0 && page.win.sessionStorage.length === 0, "the pending link was persisted in browser storage");
   const afterRestart = await fetch(origin + "/changes", { headers: { Authorization: session, "Sec-Fetch-Site": "same-origin" } });
   expect(afterRestart.status === 401, "a session from before the restart answered " + afterRestart.status);
   page.close();

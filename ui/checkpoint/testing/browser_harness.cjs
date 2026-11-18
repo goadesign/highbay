@@ -1130,6 +1130,67 @@ async function main(input, facts) {
       data_request_status: status,
       data_request: views.requests.filter((r) => r.url === probeURL),
     };
+
+    // (i) Native same-tab fragment navigation must trigger the page's reload,
+    // with the original bootstrap owning exchange and used-link rejection.
+    const mint = async () => {
+      const response = await fetch(input.origin + "/__test/link", { method: "POST" });
+      if (!response.ok) throw new Error("minting a replacement link: " + response.status);
+      return response.text();
+    };
+    const expectReload = () => dt.waitForEvent(
+      (message) => message.sessionId === views.sessionId && message.method === "Page.loadEventFired",
+      "the page's same-tab link reload"
+    );
+    let fresh = await mint();
+    let since = views.requests.length;
+    await evaluate(views, "window.__surlaOldDocument = true");
+    let loaded = expectReload();
+    await dt.send("Page.navigate", { url: input.origin + "/views#link=" + fresh }, views.sessionId);
+    await loaded;
+    await until(views, "document.getElementById('surla-change-list')");
+    await settle(views, to(input.origin, "POST", "/project/browser-session"), 2);
+    facts.link_recovery = {
+      clean_reload: await evaluate(views, "window.__surlaOldDocument === undefined && location.hash === ''"),
+      clean_requests: views.requests.slice(since).filter(server).map((r) => ({ ...r })),
+      notice_widths: [], notice_fits: [],
+    };
+    await evaluate(views, "document.getElementById('surla-open-change-chg-refunds').click()");
+    await until(views, "document.querySelector('textarea[data-field=expected_outcome]')");
+    await evaluate(views, "document.querySelector('textarea[data-field=expected_outcome]').focus()");
+    await dt.send("Input.insertText", { text: "Unsent replacement-link edit" }, views.sessionId);
+    await evaluate(views, "document.querySelector('textarea[data-field=expected_outcome]').setSelectionRange(2, 8), window.__surlaOldDocument = true");
+    fresh = await mint();
+    since = views.requests.length;
+    await dt.send("Page.navigate", { url: input.origin + "/views#link=" + fresh }, views.sessionId);
+    await until(views, "document.getElementById('surla-pending-link') && location.hash === ''");
+    facts.link_recovery.deferred = await evaluate(views, "window.__surlaOldDocument === true && document.getElementById('surla-open-pending-link').disabled");
+    facts.link_recovery.draft_preserved = await evaluate(views, "(() => { const field = document.querySelector('textarea[data-field=expected_outcome]'); return field.value.includes('Unsent replacement-link edit') && document.activeElement === field && field.selectionStart === 2 && field.selectionEnd === 8; })()");
+    facts.link_recovery.no_early_exchange = !views.requests.slice(since).some(to(input.origin, "POST", "/project/browser-session"));
+    await dt.send("Target.activateTarget", { targetId: views.targetId });
+    for (const width of [1280, 375]) {
+      await dt.send("Emulation.setDeviceMetricsOverride", { width, height: 800, deviceScaleFactor: 1, mobile: false }, views.sessionId);
+      await evaluate(views, "window.scrollTo(0, 0), new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))");
+      facts.link_recovery.notice_widths.push(width);
+      facts.link_recovery.notice_fits.push(await evaluate(views, "(() => { const notice = document.getElementById('surla-pending-link').getBoundingClientRect(); const button = document.getElementById('surla-open-pending-link').getBoundingClientRect(); return document.documentElement.scrollWidth <= innerWidth && button.left >= notice.left && button.right <= notice.right; })()"));
+      const screenshot = await dt.send("Page.captureScreenshot", { format: "png", captureBeyondViewport: false }, views.sessionId);
+      fs.writeFileSync(require("node:path").join(input.capture_directory, "pending-link-" + width + ".png"), Buffer.from(screenshot.data, "base64"));
+    }
+    await evaluate(views, "document.getElementById('surla-discard-draft').click()");
+    await until(views, "!document.getElementById('surla-open-pending-link').disabled");
+    since = views.requests.length;
+    loaded = expectReload();
+    await evaluate(views, "document.getElementById('surla-open-pending-link').click()");
+    await loaded;
+    await until(views, "document.getElementById('surla-change-list')");
+    await settle(views, to(input.origin, "POST", "/project/browser-session"), 3);
+    facts.link_recovery.resolved_reload = await evaluate(views, "window.__surlaOldDocument === undefined && location.hash === ''");
+    facts.link_recovery.resolved_requests = views.requests.slice(since).filter(server).map((r) => ({ ...r }));
+    loaded = expectReload();
+    await dt.send("Page.navigate", { url: input.origin + "/views#link=" + input.link }, views.sessionId);
+    await loaded;
+    await until(views, "document.getElementById('surla-link-used')");
+    facts.link_recovery.used_link_reported = await evaluate(views, "location.hash === '' && document.getElementById('surla-link-used').textContent.includes('already used')");
     facts.views.console = views.console;
   } finally {
     dt.close();

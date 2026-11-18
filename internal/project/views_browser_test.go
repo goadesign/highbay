@@ -120,6 +120,22 @@ type (
 		TestReview []testReviewViewFacts `json:"test_review"`
 		// Reload is the views page after a reload.
 		Reload reloadFacts `json:"reload"`
+		// LinkRecovery observes same-tab fragment navigation and deferred reload.
+		LinkRecovery linkRecoveryFacts `json:"link_recovery"`
+	}
+
+	// linkRecoveryFacts covers native reloads; layout-free tests own input guards.
+	linkRecoveryFacts struct {
+		CleanReload      bool              `json:"clean_reload"`
+		CleanRequests    []observedRequest `json:"clean_requests"`
+		Deferred         bool              `json:"deferred"`
+		DraftPreserved   bool              `json:"draft_preserved"`
+		NoEarlyExchange  bool              `json:"no_early_exchange"`
+		ResolvedReload   bool              `json:"resolved_reload"`
+		ResolvedRequests []observedRequest `json:"resolved_requests"`
+		UsedLinkReported bool              `json:"used_link_reported"`
+		NoticeWidths     []int             `json:"notice_widths"`
+		NoticeFits       []bool            `json:"notice_fits"`
 	}
 
 	// testReviewViewFacts contains native layout and keyboard observations only.
@@ -461,16 +477,22 @@ func TestViewsPageInARealBrowser(t *testing.T) {
 	started := time.Now()
 	browser := startBrowser(t, executable, t.TempDir())
 	listening := time.Now()
+	capture := os.Getenv("SURLA_TEST_LINK_CAPTURE_DIR")
+	if capture == "" {
+		capture = t.TempDir()
+	}
+	require.NoError(t, os.MkdirAll(capture, 0o700))
 	facts := driveBrowser(t, node, harness, browserInput{
-		DevTools:        browser.devtools,
-		Origin:          origin,
-		SameSiteOrigin:  other.sameSite,
-		CrossSiteOrigin: other.crossSite,
-		Link:            link,
-		ChangeIDs:       changeIDs,
-		StoryChangeID:   "chg-story",
-		StoryFlow:       longStoryFlow,
-		ConfirmBody:     string(confirmBody),
+		DevTools:         browser.devtools,
+		Origin:           origin,
+		SameSiteOrigin:   other.sameSite,
+		CrossSiteOrigin:  other.crossSite,
+		Link:             link,
+		ChangeIDs:        changeIDs,
+		StoryChangeID:    "chg-story",
+		StoryFlow:        longStoryFlow,
+		ConfirmBody:      string(confirmBody),
+		CaptureDirectory: capture,
 	})
 	targetAfter := readChange(t, origin, guide, target.ChangeID)
 	t.Logf("browser: %s (DevTools protocol %s); listening after %s, scenario took %s",
@@ -660,6 +682,25 @@ func TestViewsPageInARealBrowser(t *testing.T) {
 		assert.Empty(t, story.Violations, "opening the Story stage raised policy violations")
 		t.Logf("story row: %d steps, scroll width %d in %d, scrolled to %.0f, row right %.0f, stage right %.0f; page %d in viewport %d",
 			story.Steps, story.RowScrollWidth, story.RowClientWidth, story.ScrolledTo, story.RowRight, story.StageRight, story.DocumentScrollWidth, story.ViewportWidth)
+	})
+
+	t.Run("fresh links in the same tab reload only after edits are resolved", func(t *testing.T) {
+		got := facts.LinkRecovery
+		assert.True(t, got.CleanReload, "a clean fragment navigation did not start a new document")
+		assert.True(t, got.Deferred, "dirty input did not defer and scrub the fresh link")
+		assert.True(t, got.DraftPreserved, "the deferred link changed input, focus or selection")
+		assert.True(t, got.NoEarlyExchange, "a deferred link exchanged before discard")
+		assert.True(t, got.ResolvedReload, "Open link did not reload after local discard")
+		assert.True(t, got.UsedLinkReported, "same-tab reload bypassed one-use link rejection")
+		for _, requests := range [][]observedRequest{got.CleanRequests, got.ResolvedRequests} {
+			exchanges := requestsTo(requests, http.MethodPost, "/project/browser-session")
+			if assert.Len(t, exchanges, 1) {
+				assert.Equal(t, http.StatusCreated, exchanges[0].Status)
+				assert.NotContains(t, exchanges[0].SentHeaders, "authorization", "reloaded exchange reused the old session")
+			}
+		}
+		assert.Equal(t, []int{1280, 375}, got.NoticeWidths)
+		assert.Equal(t, []bool{true, true}, got.NoticeFits, "the notice widened the page or its controls overflowed")
 	})
 
 	t.Run("browser ended and left nothing", func(t *testing.T) {
