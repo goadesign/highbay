@@ -14,7 +14,7 @@ import (
 	"testing"
 	"time"
 
-	genproject "github.com/goadesign/surla/gen/project"
+	genprojectserver "github.com/goadesign/surla/gen/http/project/server"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -33,8 +33,11 @@ func TestPrintedProjectLinksStartsAndReattaches(t *testing.T) {
 	for index := range 2 {
 		var output, diagnostics bytes.Buffer
 		require.NoError(t, runtime.printLink(&output, &diagnostics))
-		var link genproject.BrowserLinkResult
+		var link genprojectserver.BrowserLinkResponseBody
 		require.NoError(t, json.Unmarshal(output.Bytes(), &link))
+		var fields map[string]string
+		require.NoError(t, json.Unmarshal(output.Bytes(), &fields))
+		assert.Equal(t, map[string]string{"url": link.URL, "expires_at": link.ExpiresAt}, fields)
 		assert.NotEqual(t, previous, link.URL)
 		previous = link.URL
 		expires, err := time.Parse(time.RFC3339Nano, link.ExpiresAt)
@@ -68,7 +71,7 @@ func TestPrintedProjectLinksStartsAndReattaches(t *testing.T) {
 	runtime.startTeamPrograms = func(context.Context) error { return errors.New("team fixture unavailable") }
 	var partial, diagnostics bytes.Buffer
 	assert.ErrorContains(t, runtime.printLink(&partial, &diagnostics), "team fixture unavailable")
-	var usable genproject.BrowserLinkResult
+	var usable genprojectserver.BrowserLinkResponseBody
 	require.NoError(t, json.Unmarshal(partial.Bytes(), &usable))
 	assert.Contains(t, usable.URL, "/views#link=")
 	runtime.startTeamPrograms = startTeam

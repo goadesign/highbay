@@ -25,6 +25,7 @@ import (
 	"unicode/utf8"
 
 	genprojectclient "github.com/goadesign/surla/gen/http/project/client"
+	genprojectserver "github.com/goadesign/surla/gen/http/project/server"
 	gensurlaclient "github.com/goadesign/surla/gen/http/surla/client"
 	genproject "github.com/goadesign/surla/gen/project"
 	"github.com/goadesign/surla/internal/controlplane"
@@ -235,7 +236,7 @@ func (runtime projectRuntime) startProject(stdout, diagnostics io.Writer, openBr
 		if err := runtime.openViews(linkCtx, link.URL); err != nil {
 			return errors.Join(fmt.Errorf("open project views: %w", err), teamErr)
 		}
-	} else if err := json.NewEncoder(stdout).Encode(link); err != nil {
+	} else if err := json.NewEncoder(stdout).Encode(genprojectserver.NewBrowserLinkResponseBody(link)); err != nil {
 		return errors.Join(fmt.Errorf("write project views link: %w", err), teamErr)
 	}
 	_, err = fmt.Fprintf(diagnostics, "Surla is running for %s at %s\n", state.Record.Directory, state.Origin())

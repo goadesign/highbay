@@ -80,7 +80,7 @@ and the Herdr app when they are not running, prepares the project's team of
 agents in Herdr and opens the views page. The server runs in its own
 parentless Herdr terminal.
 
-Use --print-link to start or attach and print only {"url","expires_at"} JSON on
+Use --print-link to start or attach and print {"url":"...","expires_at":"..."} JSON on
 stdout instead of opening a browser. Notices and team instructions go to stderr;
 no browser opener is required. The link grants user-page access to its first
 consumer for two minutes: keep it out of shared logs. Run the command again for
