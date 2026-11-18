@@ -540,11 +540,6 @@ function CompletedReport({ report }: { report: BuilderVerificationReport }) {
           </li>
         ))}
       </ul>
-      <h3>Not tested</h3>
-      <p>
-        Behavior outside the suite&apos;s declared scenarios. Adding an example
-        to the Change Card does not add it to this report.
-      </p>
     </>
   );
 }

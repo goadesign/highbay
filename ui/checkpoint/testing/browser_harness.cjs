@@ -676,6 +676,17 @@ async function approvalScenario(input, facts, views) {
         const shown = await views.dt.send("Page.captureScreenshot", { format: "png", captureBeyondViewport: false }, views.sessionId);
         fs.writeFileSync(require("node:path").join(input.capture_directory, "current-" + name + "-build-coverage.png"), Buffer.from(shown.data, "base64"));
       }
+      await evaluate(views, "document.getElementById('surla-nav-cp4').click(), true");
+      const checked = await until(views, "document.getElementById('surla-cp4-coverage') !== null && !document.getElementById('surla-cp4-verification').hasAttribute('aria-busy')");
+      if (checked.timed_out) throw new Error("Check did not load the selected run's saved coverage");
+      const checkedCoverage = await evaluate(views, "(" + coverageFacts.toString() + ")('surla-cp4-coverage')");
+      if (JSON.stringify(builtCoverage) !== JSON.stringify(checkedCoverage)) {
+        throw new Error("Check changed the build's recorded coverage statements");
+      }
+      const checkedLimits = await evaluate(views, "document.getElementById('surla-cp4-evidence-limits').textContent");
+      if (!/no separate.*check_project.*attached/i.test(checkedLimits)) {
+        throw new Error("Check lost the separate builder-check evidence limit");
+      }
       await evaluate(views, "document.getElementById('surla-nav-cp5').click(), true");
       const reviewed = await until(views, "document.getElementById('surla-approval-coverage') !== null && !document.getElementById('surla-cp5-observation-status')");
       if (reviewed.timed_out) throw new Error("recorded approval coverage did not appear");

@@ -46,7 +46,7 @@ export function RunEvidenceLimits({ id, run, review }: {
         <p>Expected: {example.expected_outcome}</p>
       </li>)}</ul>
     </> : coverage?.state !== "recorded" ? <p>
-      {context === undefined ? "Reading this run’s saved agreement evidence…" :
+      {context === undefined ? "Saved agreement evidence is unavailable here. Example-level coverage is unknown." :
         "Agreed examples were not recorded for this run. Their example-level coverage is unknown."}
     </p> : null}
     <p>Verification runs the selected suite’s declared scenarios; it does not separately execute the card’s examples.
