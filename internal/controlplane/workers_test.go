@@ -128,8 +128,8 @@ func TestAssignmentReadRefusesBusyAndDroppedBuilds(t *testing.T) {
 	srv := roleServer(t, cp)
 	builderDir := filepath.Join(project, testwriter.BuilderRole.Folder)
 	testsDir := filepath.Join(project, testwriter.TestsRole.Folder)
-	reportBody := fmt.Sprintf(`{"request_revision":%q}`, c1.RequestRevision)
-	reportArgs := fmt.Sprintf(`{"change_id":"c1","request_revision":%q}`, c1.RequestRevision)
+	reportBody := fmt.Sprintf(`{"request_revision":%q,"coverage_statements":[]}`, c1.RequestRevision)
+	reportArgs := fmt.Sprintf(`{"change_id":"c1","request_revision":%q,"coverage_statements":[]}`, c1.RequestRevision)
 	const wantDropMsg = "The user dropped change c1: stop work on it; make no more edits or commits for it. The user starts builds on the views page."
 
 	for _, tc := range []struct {
@@ -222,7 +222,7 @@ func TestWorkerRefusalsCoverUnreadMissingAndOffBranch(t *testing.T) {
 	_, err = cp.builderCopyReady(builder, project, "generate_code")
 	assertRefused(t, err, "assignment_unread")
 	assert.EqualError(t, err, "Change c1's build started after your last read: stop your current work, then call get_builder_assignment for c1.")
-	_, err = cp.ReportTestsFinished(writer, &gensurla.ReportTestsFinishedPayload{ChangeID: "c1", RequestRevision: c1.RequestRevision})
+	_, err = cp.ReportTestsFinished(writer, &gensurla.ReportTestsFinishedPayload{ChangeID: "c1", RequestRevision: c1.RequestRevision, CoverageStatements: []*gensurla.TestCoverageStatement{}})
 	assertRefused(t, err, "assignment_unread")
 	assert.EqualError(t, err, "Change c1's build started after your last read: stop your current work, then call get_test_writer_assignment for c1.")
 
@@ -268,7 +268,7 @@ func TestWorkerRefusalsCoverUnreadMissingAndOffBranch(t *testing.T) {
 	lockFile := filepath.Join(testsGitDir, "index.lock")
 	require.NoError(t, os.WriteFile(lockFile, nil, 0o600))
 	beforeLockBuild := readBuildFile(t, cp, "c1")
-	_, err = cp.ReportTestsFinished(writer, &gensurla.ReportTestsFinishedPayload{ChangeID: "c1", RequestRevision: c1.RequestRevision})
+	_, err = cp.ReportTestsFinished(writer, &gensurla.ReportTestsFinishedPayload{ChangeID: "c1", RequestRevision: c1.RequestRevision, CoverageStatements: []*gensurla.TestCoverageStatement{}})
 	var lockRefusal *gensurla.CopyOffBranch
 	require.ErrorAs(t, err, &lockRefusal)
 	require.NotNil(t, lockRefusal.Branch)
@@ -302,7 +302,7 @@ func TestWorkerRefusalsCoverUnreadMissingAndOffBranch(t *testing.T) {
 	// refuses with CopyOffBranch where Branch is nil and BuildBranch is "surla/tests-1".
 	runGitForTest(t, testsDir, "switch", "--quiet", "--detach", "HEAD")
 	require.NoError(t, os.WriteFile(filepath.Join(testsDir, "eval", "t_test.go"), []byte("package eval\n"), 0o600))
-	_, err = cp.ReportTestsFinished(writer, &gensurla.ReportTestsFinishedPayload{ChangeID: "c1", RequestRevision: c1.RequestRevision})
+	_, err = cp.ReportTestsFinished(writer, &gensurla.ReportTestsFinishedPayload{ChangeID: "c1", RequestRevision: c1.RequestRevision, CoverageStatements: []*gensurla.TestCoverageStatement{}})
 	offBranch = nil
 	require.ErrorAs(t, err, &offBranch)
 	assert.Nil(t, offBranch.Branch, "detached HEAD has no Branch")
@@ -512,7 +512,7 @@ func TestAssignmentReadEditedDuringJoinAndStoppedBeforeOrAfterSwitch(t *testing.
 
 	runGitForTest(t, testsDir, "switch", "--quiet", "-c", "surla/tests-3", b3)
 	require.False(t, mustOpenBuildFile(t, cp).TestWriter.Read)
-	_, err = cp.ReportTestsFinished(writer, &gensurla.ReportTestsFinishedPayload{ChangeID: "c3", RequestRevision: c3.RequestRevision})
+	_, err = cp.ReportTestsFinished(writer, &gensurla.ReportTestsFinishedPayload{ChangeID: "c3", RequestRevision: c3.RequestRevision, CoverageStatements: []*gensurla.TestCoverageStatement{}})
 	assertRefused(t, err, "assignment_unread")
 
 	var preparedOnRetry bool
@@ -532,7 +532,7 @@ func TestAssignmentReadEditedDuringJoinAndStoppedBeforeOrAfterSwitch(t *testing.
 	runGitForTest(t, testsDir, "switch", "--quiet", "-c", "agent-tests")
 	require.NoError(t, os.WriteFile(filepath.Join(testsDir, "eval", "http_test.go"), []byte("package eval\n"), 0o600))
 	srv := roleServer(t, cp)
-	status, raw := httpCall(t, srv.URL, "tests", http.MethodPost, "/assignments/test-writer/c3/finished", fmt.Sprintf(`{"request_revision":%q}`, c3.RequestRevision))
+	status, raw := httpCall(t, srv.URL, "tests", http.MethodPost, "/assignments/test-writer/c3/finished", fmt.Sprintf(`{"request_revision":%q,"coverage_statements":[]}`, c3.RequestRevision))
 	assert.Equal(t, http.StatusConflict, status)
 	var body struct {
 		Name, Message, Operation string
@@ -551,7 +551,7 @@ func TestAssignmentReadEditedDuringJoinAndStoppedBeforeOrAfterSwitch(t *testing.
 	assert.Equal(t, []string{"eval/http_test.go"}, body.Uncommitted)
 	assert.Equal(t, 1, body.UncommittedCount)
 	assert.Contains(t, body.Message, "Your working copy is on branch 'agent-tests'; change c3 is built on surla/tests-3.")
-	mcpErr, _ := mcpToolCall(t, srv.URL, "tests", "report_tests_finished", fmt.Sprintf(`{"change_id":"c3","request_revision":%q}`, c3.RequestRevision))
+	mcpErr, _ := mcpToolCall(t, srv.URL, "tests", "report_tests_finished", fmt.Sprintf(`{"change_id":"c3","request_revision":%q,"coverage_statements":[]}`, c3.RequestRevision))
 	assert.Contains(t, mcpErr, "Your working copy is on branch 'agent-tests'; change c3 is built on surla/tests-3.")
 	assert.Contains(t, mcpErr, "call report_tests_finished again.")
 
@@ -651,7 +651,7 @@ func TestReviewN1N2(t *testing.T) {
 			_, err = cp.builderCopyReady(builder, project, "verify_change")
 			assertRefused(t, err, "assignment_unread")
 			assert.Equal(t, wantBuilderBranchBeforeY, productionBuildGit(t, builderDir, "symbolic-ref", "--short", "HEAD"))
-			_, err = cp.ReportTestsFinished(writer, &gensurla.ReportTestsFinishedPayload{ChangeID: "cy", RequestRevision: cy.RequestRevision})
+			_, err = cp.ReportTestsFinished(writer, &gensurla.ReportTestsFinishedPayload{ChangeID: "cy", RequestRevision: cy.RequestRevision, CoverageStatements: []*gensurla.TestCoverageStatement{}})
 			assertRefused(t, err, "assignment_unread")
 			assert.Equal(t, "surla/tests-1", productionBuildGit(t, testsDir, "symbolic-ref", "--short", "HEAD"))
 
@@ -758,7 +758,7 @@ func TestReviewReportRefusalsWriteNothing(t *testing.T) {
 	_, err := cp.StartBuild(user, &gensurla.StartBuildPayload{ChangeID: "c1", RequestRevision: c1.RequestRevision})
 	require.NoError(t, err)
 	report := func() error {
-		_, err := cp.ReportTestsFinished(writer, &gensurla.ReportTestsFinishedPayload{ChangeID: "c1", RequestRevision: c1.RequestRevision})
+		_, err := cp.ReportTestsFinished(writer, &gensurla.ReportTestsFinishedPayload{ChangeID: "c1", RequestRevision: c1.RequestRevision, CoverageStatements: []*gensurla.TestCoverageStatement{}})
 		return err
 	}
 	before := readBuildFile(t, cp, "c1")

@@ -1944,13 +1944,34 @@ when the open build was dropped), `copy_off_branch` (`409`),
 ### `report_tests_finished`
 
 `POST /assignments/test-writer/{change_id}/finished`. **Input:** `change_id`,
-`request_revision`. **Output:** `TestWriterAssignmentItem`.
+`request_revision`, `coverage_statements` (required array; `[]` means **Not
+stated**). **Output:** `TestWriterAssignmentItem`.
+
+Each statement has `scenario` (the exact declared test name), `question_ids`
+(from the assignment's `answers[].id`), `example_ids` (from `examples[].id`),
+and `explanation` (what the writer says its interaction or assertion exercises).
+Both ID arrays are required, and at least one must name a requirement. One
+scenario has one statement; a requirement may be named by several scenarios.
+The server rejects duplicate or foreign requirement references before saving
+a report. It checks scenario names against the test program it already lists,
+including extra declared tests, without a second compilation or listing.
+An unknown scenario produces a finding to correct the report statement.
+
+Statements are the test writer's account; Surla does not judge them. Missing
+statements on older saved reports read as **Not stated**. The assignment keeps
+the latest submitted statements for correction after findings or a check that
+could not run. Build shows the accepted report's statements with the built
+answers and examples. Approve keeps that same evidence for its selected run,
+independent of later revisions, builds or reports; old runs and configured
+evaluators without this evidence say **Not stated**. Existing test acceptance
+and approval requirements remain in force.
 
 Records `reported` from any state, raises `report` by one, clears an earlier
 verdict, returns at once and wakes the report checker.
 
 | Refusal | When |
 | --- | --- |
+| `invalid_coverage` (`400`) | A statement repeats a scenario or reference, names no requirement, or refers to a question/example outside the built agreement. Nothing is saved. |
 | `no_build` (`409`) | The open build was dropped. |
 | `assignment_unread` (`409`) | The test writer has not read the open build's assignment; call `get_test_writer_assignment` first. |
 | `copy_off_branch` (`409`) | `.surla-tests` is not on `surla/tests-<n>` or has a Git operation in progress. |

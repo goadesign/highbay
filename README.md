@@ -97,7 +97,9 @@ to $50 get instant store credit; larger ones wait for a manager":
    back to the test writer as findings. Build shows them beside the saved
    required tests; Next names the test writer’s next step.
    When the tests pass the check, Surla accepts them at one commit on
-   `surla/tests-<n>`.
+   `surla/tests-<n>`. Build shows which agreed answers and examples the test
+   writer says each scenario covers. Surla validates those references but does
+   not judge the statements; anything without one says **Not stated**.
 8. **Code and verify.** Meanwhile the builder writes the code, builds and
    tests it, and commits. If the application calls a model, the builder can
    try prompt wording after Surla accepts the tests, using a *live target*:

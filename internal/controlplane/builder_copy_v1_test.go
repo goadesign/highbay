@@ -333,6 +333,7 @@ func builderCopyV1Fixture(t *testing.T, stored bool) (
 	build.Builder.Read = true
 	if !stored {
 		build.Roles = buildRolesBuilderAndTestWriter
+		build.ReportNumber = 1
 		build.TestWriter = testWriterAssignment{State: testsAccepted, Read: true, Commit: build.Base, CheckedAt: time.Now().UTC()}
 	}
 	require.NoError(t, cp.cards.saveOpenBuild(build))

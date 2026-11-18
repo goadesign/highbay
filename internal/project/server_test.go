@@ -481,7 +481,7 @@ func policyHTTPRequests(card *gensurla.ChangeCardResult, propose, confirm string
 		{"get_builder_assignment", "GET", "/assignments/builder/change", ""},
 		{"list_test_writer_assignments", "GET", "/assignments/test-writer", ""},
 		{"get_test_writer_assignment", "GET", "/assignments/test-writer/change", ""},
-		{"report_tests_finished", "POST", "/assignments/test-writer/change/finished", fmt.Sprintf(`{"request_revision":%q}`, revision)},
+		{"report_tests_finished", "POST", "/assignments/test-writer/change/finished", fmt.Sprintf(`{"request_revision":%q,"coverage_statements":[]}`, revision)},
 		{"decline_revision", "POST", "/changes/decline", fmt.Sprintf(`{"change_id":"change","request_revision":%q}`, revision)},
 	}
 }

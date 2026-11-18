@@ -142,6 +142,7 @@ func TestApprovalFrameAndEvidenceAtDesktopAndPhoneWidth(t *testing.T) {
 				assert.True(t, view.ApproveEnabled)
 				assert.True(t, view.KeyboardReachedAction)
 				assert.True(t, view.FocusVisible)
+				assert.True(t, view.CoverageLinked, "the native display journey must retain the same statements from Build to Approve")
 			} else {
 				assert.Zero(t, view.ApproveCount, "only the owner-available state offers approval")
 			}
@@ -191,6 +192,11 @@ func browserApprovalFixture(
 	for _, scenario := range projected.Scenarios {
 		report.Scenarios = append(report.Scenarios, &gensurla.VerificationScenario{ID: scenario.ID, Outcome: string(scenario.Outcome)})
 	}
+	coverage := &gensurla.RecordedTestCoverage{
+		Report: 1, Answers: []*gensurla.ConfirmedAnswer{{ID: "cancel_before_dispatch", Question: "May a buyer cancel before dispatch?", Answer: "Yes"}},
+		Examples:           []*gensurla.ExampleItem{{ID: "check_01", Scenario: "Cancel an order before dispatch", InputSummary: "An order awaiting dispatch", ExpectedOutcome: "Cancellation and refund confirmed", VerificationKind: "deterministic"}},
+		CoverageStatements: []*gensurla.TestCoverageStatement{{Scenario: "cancel_order", QuestionIds: []gensurla.TestCoverageReference{"cancel_before_dispatch"}, ExampleIds: []gensurla.TestCoverageReference{"check_01"}, Explanation: "The buyer cancels the waiting order and the test asserts the cancellation and refund confirmation."}},
+	}
 	review := &gensurla.VerificationReviewResult{RunID: strings.Repeat("1", 32), ChangeID: card.ChangeID,
 		RequestRevision: card.RequestRevision, CandidateCommit: candidate, SuiteCommit: tests, AcceptedAt: at,
 		InputsCurrent: true, TestSource: gensurla.NewTestSourceWrittenTests(&gensurla.AgentWrittenTests{
@@ -198,10 +204,12 @@ func browserApprovalFixture(
 		}), State: gensurla.NewStateCompleted(&gensurla.VerificationCompleted{SuiteID: "orders_acceptance", Environment: "sim", Report: report}),
 		Review: &gensurla.VerificationReview{Approval: gensurla.NewApprovalAvailable(&gensurla.RunApprovalAvailable{}),
 			StoryContext: gensurla.NewStoryContextRecorded(&gensurla.RecordedRunStory{BuildNumber: 7,
+				TestCoverage:   gensurla.NewTestCoverageRecorded(coverage),
 				BuildStartedAt: start, Stories: []*gensurla.StorySummaryItem{{Name: "Orders", Flows: flows,
 					Actors: []*gensurla.StoryActorItem{{Key: "buyer", Title: "Buyer"}}}},
 				Mapping: gensurla.NewMappingMapped(&gensurla.RunStoryMapping{RequiredTests: required})})}}
 	build := &gensurla.StartedBuild{RequestRevision: card.RequestRevision, StartedAt: start, InForce: true,
+		Answers: coverage.Answers, Examples: coverage.Examples, CoverageStatements: coverage.CoverageStatements,
 		RequiredTestCount: len(required), RequiredTests: required, Builder: &gensurla.BuilderProgress{Read: true},
 		TestWriter: &gensurla.TestWriterProgress{Read: true, Report: 1, Tests: gensurla.NewTestsAccepted(&gensurla.TestsAccepted{
 			Commit: tests, CheckedAt: at, NotJudged: "Surla checked that these tests build into the generated test program and declare every required scenario; it did not judge what they assert.",

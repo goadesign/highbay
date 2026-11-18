@@ -514,6 +514,10 @@ type (
 		// copied when this build started; empty when it names none. The tests must
 		// hold the service to each.
 		PreservedBehaviors []string
+		// Statements submitted with the latest report, retained for correction after
+		// findings or a check that could not run; empty before any report or when none
+		// were stated.
+		CoverageStatements []*TestCoverageStatement
 	}
 	// GetVerificationPayload defines the JSON payload for the surla.get_verification tool.
 	GetVerificationPayload = struct {
@@ -790,6 +794,10 @@ type (
 		ChangeID string
 		// request_revision of your test assignment.
 		RequestRevision string
+		// Your stated scenario coverage of this assignment's answers and examples; use
+		// [] when none is stated. Surla validates references but does not judge
+		// assertion meaning.
+		CoverageStatements []*TestCoverageStatement
 	}
 	// ReportTestsFinishedResult defines the JSON result for the surla.report_tests_finished tool.
 	ReportTestsFinishedResult = struct {
@@ -1454,6 +1462,20 @@ type (
 		// The owner's exact required-test mapping for written tests, or the explicit
 		// absence of such a mapping for an operator evaluator.
 		Mapping Mapping
+		// The writer's immutable statements for this run, or explicit missing
+		// historical/operator evidence.
+		TestCoverage TestCoverage
+	}
+	// RecordedTestCoverage is a nested type used by the generated JSON contract.
+	RecordedTestCoverage = struct {
+		// Accepted test-writer report number.
+		Report int
+		// Answers saved for the built agreement, in question order.
+		Answers []*ConfirmedAnswer
+		// Examples saved for the built agreement, in confirmation order.
+		Examples []*ExampleItem
+		// Writer statements for this report; empty means Not stated.
+		CoverageStatements []*TestCoverageStatement
 	}
 	// RequiredTest is a nested type used by the generated JSON contract.
 	RequiredTest = struct {
@@ -1520,6 +1542,14 @@ type (
 		// Tests required by this build's saved Story, in declaration order; unfinished
 		// flows require none. Empty when no finished flow requires a test.
 		RequiredTests []*RequiredTest
+		// Confirmed answers saved when this build started; later revisions do not
+		// replace them.
+		Answers []*ConfirmedAnswer
+		// Examples saved when this build started; later revisions do not replace them.
+		Examples []*ExampleItem
+		// The accepted report's writer statements; empty before acceptance or when
+		// none were stated. Surla did not judge them.
+		CoverageStatements []*TestCoverageStatement
 		// Whether the user has taken this build: building until a verification of it
 		// passes; passed with the commits to merge; merged once the branch checked out
 		// in the project folder holds the commits of one passed run, the builder's
@@ -1589,6 +1619,24 @@ type (
 		Actors []*StoryActorItem
 		// Timeline paths declared in the Story in declaration order.
 		Flows []*StoryFlowItem
+	}
+	// TestCoverageNotRecorded is a nested type used by the generated JSON contract.
+	TestCoverageNotRecorded = struct {
+	}
+	// TestCoverageReference is a nested type used by the generated JSON contract.
+	TestCoverageReference = string
+	// TestCoverageStatement is a nested type used by the generated JSON contract.
+	TestCoverageStatement = struct {
+		// Exact declared scenario identifier.
+		Scenario TestCoverageReference
+		// Question IDs from the assignment's answers[].id; empty when this statement
+		// names only examples.
+		QuestionIds []TestCoverageReference
+		// Example IDs from the assignment's examples[].id; empty when this statement
+		// names only answers.
+		ExampleIds []TestCoverageReference
+		// Interaction or assertion the writer says exercises these requirements.
+		Explanation string
 	}
 	// TestWriterAssignmentItem is a nested type used by the generated JSON contract.
 	TestWriterAssignmentItem = struct {

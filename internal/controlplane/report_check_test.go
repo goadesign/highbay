@@ -199,7 +199,7 @@ func TestASecondReportDuringACheckIsJudgedAfterIt(t *testing.T) {
 				checking <- call
 				<-release
 				if accept {
-					return testwriter.Verdict{}, nil
+					return testwriter.Verdict{DeclaredScenarios: []string{"refund_case"}}, nil
 				}
 				return needsChanges(fmt.Sprintf("finding of check %d", call)), nil
 			}, record: func(_ context.Context, call int, _ string) (string, error) {
@@ -209,15 +209,27 @@ func TestASecondReportDuringACheckIsJudgedAfterIt(t *testing.T) {
 			cp, revision := newReportFixture(t, Options{}, tests)
 			readBothAssignments(t, cp)
 
-			reportTests(t, cp, revision)
+			basis := mustOpenBuildFile(t, cp)
+			report := func(explanation string) {
+				_, err := cp.ReportTestsFinished(asCaller("alice@example.com", CallerTestWriter), &gensurla.ReportTestsFinishedPayload{
+					ChangeID: "chg", RequestRevision: revision,
+					CoverageStatements: []*gensurla.TestCoverageStatement{{Scenario: "refund_case",
+						QuestionIds: []gensurla.TestCoverageReference{},
+						ExampleIds:  []gensurla.TestCoverageReference{gensurla.TestCoverageReference(basis.Examples[0].ID)},
+						Explanation: explanation}},
+				})
+				require.NoError(t, err)
+			}
+			report("Statement from report one")
 			require.Equal(t, 1, receive(t, checking))
-			reportTests(t, cp, revision)
+			report("Statement from report two")
 			release <- struct{}{}
 			require.Equal(t, 2, receive(t, checking), "the second report is checked after the first")
 			build := mustStartedBuild(t, cp, asCaller("alice@example.com", CallerUser), "chg")
 			assert.Equal(t, gensurla.TestsKindReported, build.TestWriter.Tests.Kind(), "nothing was saved for the first report")
 			assert.Equal(t, 2, build.TestWriter.Report)
 			assert.Empty(t, tests.recorded(), "nothing was recorded for the first report")
+			assert.Empty(t, build.CoverageStatements, "pending statements are not accepted coverage")
 			release <- struct{}{}
 			if accept {
 				build = waitForTests(t, cp, gensurla.TestsKindAccepted)
@@ -227,6 +239,8 @@ func TestASecondReportDuringACheckIsJudgedAfterIt(t *testing.T) {
 				accepted, _ := build.TestWriter.Tests.AsAccepted()
 				assert.Equal(t, strings.Repeat("1", 40), accepted.Commit,
 					"the tests branch is where the one record, for report 2, put it")
+				require.Len(t, build.CoverageStatements, 1)
+				assert.Equal(t, "Statement from report two", build.CoverageStatements[0].Explanation)
 				return
 			}
 			waitForTests(t, cp, gensurla.TestsKindNeedsChanges)
@@ -234,6 +248,10 @@ func TestASecondReportDuringACheckIsJudgedAfterIt(t *testing.T) {
 			require.NoError(t, err)
 			assert.Equal(t, 2, findings.Report)
 			assert.Equal(t, []string{"finding of check 2"}, findings.Findings)
+			assignment, err := cp.GetTestWriterAssignment(asCaller("alice@example.com", CallerTestWriter), &gensurla.GetTestWriterAssignmentPayload{ChangeID: "chg"})
+			require.NoError(t, err)
+			require.Len(t, assignment.CoverageStatements, 1)
+			assert.Equal(t, "Statement from report two", assignment.CoverageStatements[0].Explanation)
 		})
 	}
 }
@@ -258,8 +276,7 @@ func TestAReportDuringRecordWaitsAndKeepsItsNumber(t *testing.T) {
 	reported := make(chan *gensurla.TestWriterAssignmentItem, 1)
 	go func() {
 		item, err := cp.ReportTestsFinished(asCaller("alice@example.com", CallerTestWriter), &gensurla.ReportTestsFinishedPayload{
-			ChangeID: "chg", RequestRevision: revision,
-		})
+			ChangeID: "chg", RequestRevision: revision, CoverageStatements: []*gensurla.TestCoverageStatement{}})
 		assert.NoError(t, err)
 		reported <- item
 	}()
@@ -712,7 +729,7 @@ func TestACheckThatCannotRunNamesTheUsersStep(t *testing.T) {
 func TestStoredEvaluatorProjectsNeverJudge(t *testing.T) {
 	cp, revision := newReportFixture(t, Options{BuildCacheDir: t.TempDir(), Verification: &VerificationConfig{RunsDir: t.TempDir()}}, &standInCopy{})
 	tests := asCaller("alice@example.com", CallerTestWriter)
-	report := &gensurla.ReportTestsFinishedPayload{ChangeID: "chg", RequestRevision: revision}
+	report := &gensurla.ReportTestsFinishedPayload{ChangeID: "chg", RequestRevision: revision, CoverageStatements: []*gensurla.TestCoverageStatement{}}
 	before := readBuildFile(t, cp, "chg")
 	_, err := cp.ReportTestsFinished(tests, report)
 	assertRefused(t, err, "not_found")
@@ -1041,8 +1058,7 @@ func newReportFixture(t *testing.T, opts Options, copy *standInCopy) (*ControlPl
 func reportTests(t *testing.T, cp *ControlPlane, revision string) *gensurla.TestWriterAssignmentItem {
 	t.Helper()
 	item, err := cp.ReportTestsFinished(asCaller("alice@example.com", CallerTestWriter), &gensurla.ReportTestsFinishedPayload{
-		ChangeID: "chg", RequestRevision: revision,
-	})
+		ChangeID: "chg", RequestRevision: revision, CoverageStatements: []*gensurla.TestCoverageStatement{}})
 	require.NoError(t, err)
 	return item
 }

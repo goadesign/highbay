@@ -239,6 +239,9 @@ func TestCheckJudgesTheWorkingCopy(t *testing.T) {
 		assertNoAbsolutePath(t, v.Findings)
 		if step.wantKind == "" {
 			require.True(t, v.Accepted(), "%s: %+v", step.name, v.Findings)
+			assert.Contains(t, v.DeclaredScenarios, "prices_tea", "extra authored scenarios remain visible to the report owner")
+			assert.Contains(t, v.DeclaredScenarios, "refund_over_limit")
+			assert.Contains(t, v.DeclaredScenarios, "store_credit_within_limit")
 			accepted = v
 			continue
 		}

@@ -121,7 +121,7 @@ func (c *ControlPlane) VerifyChange(ctx context.Context, p *gensurla.VerifyChang
 	if err != nil {
 		return nil, verificationStartInputError(span, p.ChangeID, err)
 	}
-	verCfg, err := c.verificationPlan(ctx, principal, p.ChangeID, p.RequestRevision, p.CandidateCommit)
+	verCfg, coverage, err := c.verificationPlan(ctx, principal, p.ChangeID, p.RequestRevision, p.CandidateCommit)
 	if err != nil {
 		return nil, err
 	}
@@ -142,6 +142,7 @@ func (c *ControlPlane) VerifyChange(ctx context.Context, p *gensurla.VerifyChang
 			BuildNumber:    held.file.Number,
 			BuildStartedAt: held.file.StartedAt,
 			Stories:        held.file.Stories,
+			TestCoverage:   coverage,
 		},
 	}
 	// Observe the selected inputs before accepting work. A later edit can

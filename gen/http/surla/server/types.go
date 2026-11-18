@@ -233,6 +233,10 @@ type DropBuildRequestBody struct {
 type ReportTestsFinishedRequestBody struct {
 	// request_revision of your test assignment.
 	RequestRevision *string `form:"request_revision,omitempty" json:"request_revision,omitempty" xml:"request_revision,omitempty"`
+	// Your stated scenario coverage of this assignment's answers and examples; use
+	// [] when none is stated. Surla validates references but does not judge
+	// assertion meaning.
+	CoverageStatements []*TestCoverageStatementRequestBody `form:"coverage_statements,omitempty" json:"coverage_statements,omitempty" xml:"coverage_statements,omitempty"`
 }
 
 // ProposeChangeResponseBody is the type of the "surla" service
@@ -1129,6 +1133,10 @@ type GetTestWriterAssignmentResponseBody struct {
 	// copied when this build started; empty when it names none. The tests must
 	// hold the service to each.
 	PreservedBehaviors []string `form:"preserved_behaviors" json:"preserved_behaviors" xml:"preserved_behaviors"`
+	// Statements submitted with the latest report, retained for correction after
+	// findings or a check that could not run; empty before any report or when none
+	// were stated.
+	CoverageStatements []*TestCoverageStatementResponseBody `form:"coverage_statements" json:"coverage_statements" xml:"coverage_statements"`
 }
 
 // ReportTestsFinishedResponseBody is the type of the "surla" service
@@ -4463,6 +4471,25 @@ type GetTestWriterAssignmentForbiddenResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// ReportTestsFinishedInvalidCoverageResponseBody is the type of the "surla"
+// service "report_tests_finished" endpoint HTTP response body for the
+// "invalid_coverage" error.
+type ReportTestsFinishedInvalidCoverageResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // ReportTestsFinishedNoBuildResponseBody is the type of the "surla" service
 // "report_tests_finished" endpoint HTTP response body for the "no_build" error.
 type ReportTestsFinishedNoBuildResponseBody struct {
@@ -5277,6 +5304,14 @@ type StartedBuildResponseBody struct {
 	// Tests required by this build's saved Story, in declaration order; unfinished
 	// flows require none. Empty when no finished flow requires a test.
 	RequiredTests []*RequiredTestResponseBody `form:"required_tests" json:"required_tests" xml:"required_tests"`
+	// Confirmed answers saved when this build started; later revisions do not
+	// replace them.
+	Answers []*ConfirmedAnswerResponseBody `form:"answers" json:"answers" xml:"answers"`
+	// Examples saved when this build started; later revisions do not replace them.
+	Examples []*ExampleItemResponseBody `form:"examples" json:"examples" xml:"examples"`
+	// The accepted report's writer statements; empty before acceptance or when
+	// none were stated. Surla did not judge them.
+	CoverageStatements []*TestCoverageStatementResponseBody `form:"coverage_statements" json:"coverage_statements" xml:"coverage_statements"`
 	// Whether the user has taken this build: building until a verification of it
 	// passes; passed with the commits to merge; merged once the branch checked out
 	// in the project folder holds the commits of one passed run, the builder's
@@ -5361,6 +5396,31 @@ type RequiredTestResponseBody struct {
 	Scenario string `form:"scenario" json:"scenario" xml:"scenario"`
 	// Hook method the test writer implements for the scenario.
 	Hook string `form:"hook" json:"hook" xml:"hook"`
+}
+
+// ConfirmedAnswerResponseBody is used to define fields on response body types.
+type ConfirmedAnswerResponseBody struct {
+	// Question identifier on the Change Card.
+	ID string `form:"id" json:"id" xml:"id"`
+	// The question as the user answered it.
+	Question string `form:"question" json:"question" xml:"question"`
+	// The option the user confirmed, exactly as confirmed.
+	Answer string `form:"answer" json:"answer" xml:"answer"`
+}
+
+// TestCoverageStatementResponseBody is used to define fields on response body
+// types.
+type TestCoverageStatementResponseBody struct {
+	// Exact declared scenario identifier.
+	Scenario string `form:"scenario" json:"scenario" xml:"scenario"`
+	// Question IDs from the assignment's answers[].id; empty when this statement
+	// names only examples.
+	QuestionIds []string `form:"question_ids" json:"question_ids" xml:"question_ids"`
+	// Example IDs from the assignment's examples[].id; empty when this statement
+	// names only answers.
+	ExampleIds []string `form:"example_ids" json:"example_ids" xml:"example_ids"`
+	// Interaction or assertion the writer says exercises these requirements.
+	Explanation string `form:"explanation" json:"explanation" xml:"explanation"`
 }
 
 // BuildBuildingResponseBody is used to define fields on response body types.
@@ -5501,16 +5561,6 @@ type TestWriterAssignmentItemResponseBody struct {
 	Progress *TestWriterProgressResponseBody `form:"progress" json:"progress" xml:"progress"`
 }
 
-// ConfirmedAnswerResponseBody is used to define fields on response body types.
-type ConfirmedAnswerResponseBody struct {
-	// Question identifier on the Change Card.
-	ID string `form:"id" json:"id" xml:"id"`
-	// The question as the user answered it.
-	Question string `form:"question" json:"question" xml:"question"`
-	// The option the user confirmed, exactly as confirmed.
-	Answer string `form:"answer" json:"answer" xml:"answer"`
-}
-
 // VerificationReviewResponseBody is used to define fields on response body
 // types.
 type VerificationReviewResponseBody struct {
@@ -5533,6 +5583,9 @@ type RecordedRunStoryResponseBody struct {
 	// The owner's exact required-test mapping for written tests, or the explicit
 	// absence of such a mapping for an operator evaluator.
 	Mapping MappingResponseBody `form:"mapping" json:"mapping" xml:"mapping"`
+	// The writer's immutable statements for this run, or explicit missing
+	// historical/operator evidence.
+	TestCoverage TestCoverageResponseBody `form:"test_coverage" json:"test_coverage" xml:"test_coverage"`
 }
 
 // RunStoryMappingResponseBody is used to define fields on response body types.
@@ -5544,6 +5597,24 @@ type RunStoryMappingResponseBody struct {
 // RunEvaluatorMappingUnknownResponseBody is used to define fields on response
 // body types.
 type RunEvaluatorMappingUnknownResponseBody struct {
+}
+
+// RecordedTestCoverageResponseBody is used to define fields on response body
+// types.
+type RecordedTestCoverageResponseBody struct {
+	// Accepted test-writer report number.
+	Report int `form:"report" json:"report" xml:"report"`
+	// Answers saved for the built agreement, in question order.
+	Answers []*ConfirmedAnswerResponseBody `form:"answers" json:"answers" xml:"answers"`
+	// Examples saved for the built agreement, in confirmation order.
+	Examples []*ExampleItemResponseBody `form:"examples" json:"examples" xml:"examples"`
+	// Writer statements for this report; empty means Not stated.
+	CoverageStatements []*TestCoverageStatementResponseBody `form:"coverage_statements" json:"coverage_statements" xml:"coverage_statements"`
+}
+
+// TestCoverageNotRecordedResponseBody is used to define fields on response
+// body types.
+type TestCoverageNotRecordedResponseBody struct {
 }
 
 // RunStoryNotRecordedResponseBody is used to define fields on response body
@@ -5695,6 +5766,21 @@ type ReplacedBuildRequestBody struct {
 	// started_at of the open build the page showed, exactly as get_build reported
 	// it.
 	StartedAt *string `form:"started_at,omitempty" json:"started_at,omitempty" xml:"started_at,omitempty"`
+}
+
+// TestCoverageStatementRequestBody is used to define fields on request body
+// types.
+type TestCoverageStatementRequestBody struct {
+	// Exact declared scenario identifier.
+	Scenario *string `form:"scenario,omitempty" json:"scenario,omitempty" xml:"scenario,omitempty"`
+	// Question IDs from the assignment's answers[].id; empty when this statement
+	// names only examples.
+	QuestionIds []*string `form:"question_ids,omitempty" json:"question_ids,omitempty" xml:"question_ids,omitempty"`
+	// Example IDs from the assignment's examples[].id; empty when this statement
+	// names only answers.
+	ExampleIds []*string `form:"example_ids,omitempty" json:"example_ids,omitempty" xml:"example_ids,omitempty"`
+	// Interaction or assertion the writer says exercises these requirements.
+	Explanation *string `form:"explanation,omitempty" json:"explanation,omitempty" xml:"explanation,omitempty"`
 }
 
 // ApprovalResponseBody holds exactly one of its branch values.
@@ -8126,6 +8212,188 @@ func (u *TeamResponseBody) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+// TestCoverageResponseBody holds exactly one of its branch values.
+type TestCoverageResponseBody struct {
+	kind        TestCoverageResponseBodyKind
+	recorded    *RecordedTestCoverageResponseBody
+	notRecorded *TestCoverageNotRecordedResponseBody
+}
+
+// TestCoverageResponseBodyKind records which TestCoverageResponseBody branch is selected.
+type TestCoverageResponseBodyKind string
+
+const (
+	// TestCoverageResponseBodyKindRecorded identifies the recorded branch.
+	TestCoverageResponseBodyKindRecorded TestCoverageResponseBodyKind = "recorded"
+	// TestCoverageResponseBodyKindNotRecorded identifies the not_recorded branch.
+	TestCoverageResponseBodyKindNotRecorded TestCoverageResponseBodyKind = "not_recorded"
+)
+
+// Kind returns the selected branch.
+func (u TestCoverageResponseBody) Kind() TestCoverageResponseBodyKind {
+	return u.kind
+}
+
+// NewTestCoverageResponseBodyRecorded constructs TestCoverageResponseBody with the recorded branch set.
+func NewTestCoverageResponseBodyRecorded(v *RecordedTestCoverageResponseBody) TestCoverageResponseBody {
+	return TestCoverageResponseBody{
+		kind:     TestCoverageResponseBodyKindRecorded,
+		recorded: v,
+	}
+}
+
+// AsRecorded returns the value when the recorded branch is selected.
+func (u TestCoverageResponseBody) AsRecorded() (_ *RecordedTestCoverageResponseBody, ok bool) {
+	if u.kind != TestCoverageResponseBodyKindRecorded {
+		return
+	}
+	return u.recorded, true
+}
+
+// SetRecorded selects the recorded branch and stores v.
+func (u *TestCoverageResponseBody) SetRecorded(v *RecordedTestCoverageResponseBody) {
+	*u = TestCoverageResponseBody{
+		kind:     TestCoverageResponseBodyKindRecorded,
+		recorded: v,
+	}
+}
+
+// NewTestCoverageResponseBodyNotRecorded constructs TestCoverageResponseBody with the not_recorded branch set.
+func NewTestCoverageResponseBodyNotRecorded(v *TestCoverageNotRecordedResponseBody) TestCoverageResponseBody {
+	return TestCoverageResponseBody{
+		kind:        TestCoverageResponseBodyKindNotRecorded,
+		notRecorded: v,
+	}
+}
+
+// AsNotRecorded returns the value when the not_recorded branch is selected.
+func (u TestCoverageResponseBody) AsNotRecorded() (_ *TestCoverageNotRecordedResponseBody, ok bool) {
+	if u.kind != TestCoverageResponseBodyKindNotRecorded {
+		return
+	}
+	return u.notRecorded, true
+}
+
+// SetNotRecorded selects the not_recorded branch and stores v.
+func (u *TestCoverageResponseBody) SetNotRecorded(v *TestCoverageNotRecordedResponseBody) {
+	*u = TestCoverageResponseBody{
+		kind:        TestCoverageResponseBodyKindNotRecorded,
+		notRecorded: v,
+	}
+}
+
+// Validate ensures exactly one valid branch is selected.
+func (u TestCoverageResponseBody) Validate() error {
+	_, err := u.Value()
+	return err
+}
+
+// Value returns the selected branch value, or the same selection error as Validate.
+// Go templates can read this method directly; an invalid selection stops execution.
+func (u TestCoverageResponseBody) Value() (any, error) {
+	switch u.kind {
+	case "":
+		return nil, goa.InvalidEnumValueError("state", "", []any{
+			string(TestCoverageResponseBodyKindRecorded),
+			string(TestCoverageResponseBodyKindNotRecorded),
+		})
+	case TestCoverageResponseBodyKindRecorded:
+		if u.recorded == nil {
+			return nil, goa.MissingFieldError("value", "TestCoverageResponseBody")
+		}
+		return u.recorded, nil
+	case TestCoverageResponseBodyKindNotRecorded:
+		if u.notRecorded == nil {
+			return nil, goa.MissingFieldError("value", "TestCoverageResponseBody")
+		}
+		return u.notRecorded, nil
+	default:
+		return nil, goa.InvalidEnumValueError("state", u.kind, []any{
+			string(TestCoverageResponseBodyKindRecorded),
+			string(TestCoverageResponseBodyKindNotRecorded),
+		})
+	}
+}
+
+// MarshalJSON writes the selected object branch beside its discriminator.
+func (u TestCoverageResponseBody) MarshalJSON() ([]byte, error) {
+	value, err := u.Value()
+	if err != nil {
+		return nil, err
+	}
+	data, err := json.Marshal(value)
+	if err != nil {
+		return nil, err
+	}
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(data, &fields); err != nil {
+		return nil, err
+	}
+	if fields == nil {
+		return nil, goa.InvalidFieldTypeError("state", nil, "non-null JSON object")
+	}
+	if _, exists := fields["state"]; exists {
+		return nil, fmt.Errorf("TestCoverageResponseBody branch already contains discriminator %q", "state")
+	}
+	tag, err := json.Marshal(string(u.kind))
+	if err != nil {
+		return nil, err
+	}
+	fields["state"] = tag
+	return json.Marshal(fields)
+}
+
+// UnmarshalJSON reads the discriminator and decodes its declared object branch.
+func (u *TestCoverageResponseBody) UnmarshalJSON(data []byte) error {
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(data, &fields); err != nil {
+		return err
+	}
+	tag, exists := fields["state"]
+	if !exists {
+		return goa.MissingFieldError("state", "TestCoverageResponseBody")
+	}
+	if bytes.Equal(bytes.TrimSpace(tag), []byte("null")) {
+		return goa.InvalidFieldTypeError("state", nil, "JSON string")
+	}
+	var raw struct {
+		Type  string
+		Value json.RawMessage
+	}
+	if err := json.Unmarshal(tag, &raw.Type); err != nil {
+		return err
+	}
+	delete(fields, "state")
+	value, err := json.Marshal(fields)
+	if err != nil {
+		return err
+	}
+	raw.Value = value
+	switch raw.Type {
+	case string(TestCoverageResponseBodyKindRecorded):
+		var v *RecordedTestCoverageResponseBody
+		if err := json.Unmarshal(raw.Value, &v); err != nil {
+			return err
+		}
+		u.SetRecorded(v)
+	case string(TestCoverageResponseBodyKindNotRecorded):
+		var v *TestCoverageNotRecordedResponseBody
+		if err := json.Unmarshal(raw.Value, &v); err != nil {
+			return err
+		}
+		u.SetNotRecorded(v)
+	default:
+		if raw.Type == "" {
+			return goa.MissingFieldError("state", "TestCoverageResponseBody")
+		}
+		return goa.InvalidEnumValueError("state", raw.Type, []any{
+			string(TestCoverageResponseBodyKindRecorded),
+			string(TestCoverageResponseBodyKindNotRecorded),
+		})
+	}
+	return nil
+}
+
 // TestSourceResponseBody holds exactly one of its branch values.
 type TestSourceResponseBody struct {
 	kind         TestSourceResponseBodyKind
@@ -10335,6 +10603,18 @@ func NewGetTestWriterAssignmentResponseBody(res *surla.TestWriterAssignment) *Ge
 		}
 	} else {
 		body.PreservedBehaviors = []string{}
+	}
+	if res.CoverageStatements != nil {
+		body.CoverageStatements = make([]*TestCoverageStatementResponseBody, len(res.CoverageStatements))
+		for i, val := range res.CoverageStatements {
+			if val == nil {
+				body.CoverageStatements[i] = nil
+				continue
+			}
+			body.CoverageStatements[i] = marshalSurlaTestCoverageStatementToTestCoverageStatementResponseBody(val)
+		}
+	} else {
+		body.CoverageStatements = []*TestCoverageStatementResponseBody{}
 	}
 	return body
 }
@@ -12979,6 +13259,21 @@ func NewGetTestWriterAssignmentForbiddenResponseBody(res *goa.ServiceError) *Get
 	return body
 }
 
+// NewReportTestsFinishedInvalidCoverageResponseBody builds the HTTP response
+// body from the result of the "report_tests_finished" endpoint of the "surla"
+// service.
+func NewReportTestsFinishedInvalidCoverageResponseBody(res *goa.ServiceError) *ReportTestsFinishedInvalidCoverageResponseBody {
+	body := &ReportTestsFinishedInvalidCoverageResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewReportTestsFinishedNoBuildResponseBody builds the HTTP response body from
 // the result of the "report_tests_finished" endpoint of the "surla" service.
 func NewReportTestsFinishedNoBuildResponseBody(res *goa.ServiceError) *ReportTestsFinishedNoBuildResponseBody {
@@ -13447,6 +13742,14 @@ func NewReportTestsFinishedPayload(body *ReportTestsFinishedRequestBody, changeI
 	v := &surla.ReportTestsFinishedPayload{
 		RequestRevision: *body.RequestRevision,
 	}
+	v.CoverageStatements = make([]*surla.TestCoverageStatement, len(body.CoverageStatements))
+	for i, val := range body.CoverageStatements {
+		if val == nil {
+			v.CoverageStatements[i] = nil
+			continue
+		}
+		v.CoverageStatements[i] = unmarshalTestCoverageStatementRequestBodyToSurlaTestCoverageStatement(val)
+	}
 	v.ChangeID = changeID
 
 	return v
@@ -13792,9 +14095,22 @@ func ValidateReportTestsFinishedRequestBody(body *ReportTestsFinishedRequestBody
 	if body.RequestRevision == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("request_revision", "body"))
 	}
+	if body.CoverageStatements == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("coverage_statements", "body"))
+	}
 	if body.RequestRevision != nil {
 		if utf8.RuneCountInString(*body.RequestRevision) < 1 {
 			err = goa.MergeErrors(err, goa.InvalidLengthError("body.request_revision", *body.RequestRevision, utf8.RuneCountInString(*body.RequestRevision), 1, true))
+		}
+	}
+	for _, e := range body.CoverageStatements {
+		if e == nil {
+			err = goa.MergeErrors(err, goa.MissingFieldError("body.coverage_statements", "[*]"))
+		}
+		if e != nil {
+			if err2 := validateTestCoverageStatementRequestBody(e, "body.coverage_statements[*]"); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
 		}
 	}
 	return
@@ -14329,6 +14645,102 @@ func validateReplacedBuildRequestBody(body *ReplacedBuildRequestBody, path strin
 	}
 	if body.StartedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat(path+".started_at", *body.StartedAt, goa.FormatDateTime))
+	}
+	return
+}
+
+// ValidateTestCoverageStatementRequestBody runs the validations defined on
+// TestCoverageStatement
+func ValidateTestCoverageStatementRequestBody(body *TestCoverageStatementRequestBody) (err error) {
+	if body.Scenario == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("scenario", "body"))
+	}
+	if body.QuestionIds == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("question_ids", "body"))
+	}
+	if body.ExampleIds == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("example_ids", "body"))
+	}
+	if body.Explanation == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("explanation", "body"))
+	}
+	if body.Scenario != nil {
+		if utf8.RuneCountInString(*body.Scenario) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.scenario", *body.Scenario, utf8.RuneCountInString(*body.Scenario), 1, true))
+		}
+	}
+	for _, e := range body.QuestionIds {
+		if e == nil {
+			err = goa.MergeErrors(err, goa.MissingFieldError("body.question_ids", "[*]"))
+		}
+		if e != nil {
+			if utf8.RuneCountInString(*e) < 1 {
+				err = goa.MergeErrors(err, goa.InvalidLengthError("body.question_ids[*]", *e, utf8.RuneCountInString(*e), 1, true))
+			}
+		}
+	}
+	for _, e := range body.ExampleIds {
+		if e == nil {
+			err = goa.MergeErrors(err, goa.MissingFieldError("body.example_ids", "[*]"))
+		}
+		if e != nil {
+			if utf8.RuneCountInString(*e) < 1 {
+				err = goa.MergeErrors(err, goa.InvalidLengthError("body.example_ids[*]", *e, utf8.RuneCountInString(*e), 1, true))
+			}
+		}
+	}
+	if body.Explanation != nil {
+		if utf8.RuneCountInString(*body.Explanation) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.explanation", *body.Explanation, utf8.RuneCountInString(*body.Explanation), 1, true))
+		}
+	}
+	return
+}
+
+// validateTestCoverageStatementRequestBody checks TestCoverageStatement and
+// reports errors using the path supplied by its caller
+func validateTestCoverageStatementRequestBody(body *TestCoverageStatementRequestBody, path string) (err error) {
+	if body.Scenario == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("scenario", path))
+	}
+	if body.QuestionIds == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("question_ids", path))
+	}
+	if body.ExampleIds == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("example_ids", path))
+	}
+	if body.Explanation == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("explanation", path))
+	}
+	if body.Scenario != nil {
+		if utf8.RuneCountInString(*body.Scenario) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError(path+".scenario", *body.Scenario, utf8.RuneCountInString(*body.Scenario), 1, true))
+		}
+	}
+	for _, e := range body.QuestionIds {
+		if e == nil {
+			err = goa.MergeErrors(err, goa.MissingFieldError(path+".question_ids", "[*]"))
+		}
+		if e != nil {
+			if utf8.RuneCountInString(*e) < 1 {
+				err = goa.MergeErrors(err, goa.InvalidLengthError(path+".question_ids[*]", *e, utf8.RuneCountInString(*e), 1, true))
+			}
+		}
+	}
+	for _, e := range body.ExampleIds {
+		if e == nil {
+			err = goa.MergeErrors(err, goa.MissingFieldError(path+".example_ids", "[*]"))
+		}
+		if e != nil {
+			if utf8.RuneCountInString(*e) < 1 {
+				err = goa.MergeErrors(err, goa.InvalidLengthError(path+".example_ids[*]", *e, utf8.RuneCountInString(*e), 1, true))
+			}
+		}
+	}
+	if body.Explanation != nil {
+		if utf8.RuneCountInString(*body.Explanation) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError(path+".explanation", *body.Explanation, utf8.RuneCountInString(*body.Explanation), 1, true))
+		}
 	}
 	return
 }

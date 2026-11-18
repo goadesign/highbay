@@ -170,6 +170,18 @@ The views page keeps one waiting read (`wait_for_changes`) open. Its answer is a
 
 ### Verification runs and the live target
 
+The test writer submits stated scenario coverage of the built answers and
+examples with its report. The control plane validates those requirement IDs
+before report mutation, checks scenario IDs using the program's existing
+listing, and saves statements with the matching report and accepted commit.
+Build exposes accepted statements only. Verification selects the report and
+its tests commit in the same locked read and copies the agreed basis and
+statements into its immutable request. Approve reads that snapshot; it never
+substitutes today's card or newer report. Old-run absence and configured
+evaluators remain explicitly not recorded. These are writer statements, not
+Surla's judgment of assertion meaning; see
+[the report contract](REFERENCE.md#report_tests_finished).
+
 One function, `testsChoice` in [`verification_plan.go`](../internal/controlplane/verification_plan.go), chooses which tests judge a change: the suite named in the stored verification settings, or the tests accepted for the change's build at its revision. Verification runs those tests, `approve_merge` requires the approved report to have run them, and a saved approval is shown only while they stay the same; `verificationPlan` builds a run's configuration from that choice. The builder names only the change, the revision and its commit.
 
 The build read returns `required_tests` for every caller, derived from its

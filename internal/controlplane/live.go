@@ -331,9 +331,9 @@ func (c *ControlPlane) livePlan(
 		return VerificationConfig{}, err
 	}
 	revision := record.card.RequestRevision
-	testsCommit, _, err := c.testsChoice(principal, changeID, revision)
+	selection, err := c.testsChoice(principal, changeID, revision)
 	c.mu.RUnlock()
-	return c.verificationPlanForTests(ctx, candidateCommit, revision, testsCommit, err)
+	return c.verificationPlanForTests(ctx, candidateCommit, revision, selection.commit, err)
 }
 
 // StopLiveTarget stops the running live target, if any.

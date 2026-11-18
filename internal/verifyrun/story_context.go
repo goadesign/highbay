@@ -25,6 +25,9 @@ type (
 		BuildStartedAt time.Time `json:"build_started_at,omitzero"`
 		// Stories is the immutable agreed Story; an empty recorded list is valid.
 		Stories []designeval.StorySummary `json:"stories,omitempty"`
+		// TestCoverage freezes the selected accepted writer report; old and
+		// operator-evaluator requests omit it rather than invent a statement.
+		TestCoverage *TestCoverageSnapshot `json:"test_coverage,omitempty"`
 	}
 
 	// StoryContextState is a closed persistence enum; zero has explicit meaning.
@@ -74,6 +77,9 @@ func (s *StoryContext) UnmarshalJSON(raw []byte) error {
 	value := struct {
 		*plain
 		State *StoryContextState `json:"state"`
+		// Keep presence until the snapshot's generated codec owns decoding;
+		// a malformed explicit value is not missing historical evidence.
+		TestCoverage json.RawMessage `json:"test_coverage"`
 	}{plain: new(plain)}
 	decoder := json.NewDecoder(bytes.NewReader(raw))
 	decoder.DisallowUnknownFields()
@@ -87,6 +93,13 @@ func (s *StoryContext) UnmarshalJSON(raw []byte) error {
 		return errors.New("Story context state is required")
 	}
 	value.plain.State = *value.State
+	if len(value.TestCoverage) > 0 {
+		var coverage TestCoverageSnapshot
+		if err := coverage.UnmarshalJSON(value.TestCoverage); err != nil {
+			return fmt.Errorf("test coverage: %w", err)
+		}
+		value.plain.TestCoverage = &coverage
+	}
 	*s = StoryContext(*value.plain)
 	return s.check()
 }
@@ -95,7 +108,7 @@ func (s *StoryContext) UnmarshalJSON(raw []byte) error {
 func (s StoryContext) check() error {
 	switch s.State {
 	case StoryNotRecorded:
-		if s.BuildNumber != 0 || !s.BuildStartedAt.IsZero() || len(s.Stories) != 0 {
+		if s.BuildNumber != 0 || !s.BuildStartedAt.IsZero() || len(s.Stories) != 0 || s.TestCoverage != nil {
 			return errors.New("not-recorded Story context must not carry build evidence")
 		}
 	case StoryRecorded:

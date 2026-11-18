@@ -233,6 +233,10 @@ type DropBuildRequestBody struct {
 type ReportTestsFinishedRequestBody struct {
 	// request_revision of your test assignment.
 	RequestRevision string `form:"request_revision" json:"request_revision" xml:"request_revision"`
+	// Your stated scenario coverage of this assignment's answers and examples; use
+	// [] when none is stated. Surla validates references but does not judge
+	// assertion meaning.
+	CoverageStatements []*TestCoverageStatementRequestBody `form:"coverage_statements" json:"coverage_statements" xml:"coverage_statements"`
 }
 
 // ProposeChangeResponseBody is the type of the "surla" service
@@ -1129,6 +1133,10 @@ type GetTestWriterAssignmentResponseBody struct {
 	// copied when this build started; empty when it names none. The tests must
 	// hold the service to each.
 	PreservedBehaviors []string `form:"preserved_behaviors,omitempty" json:"preserved_behaviors,omitempty" xml:"preserved_behaviors,omitempty"`
+	// Statements submitted with the latest report, retained for correction after
+	// findings or a check that could not run; empty before any report or when none
+	// were stated.
+	CoverageStatements []*TestCoverageStatementResponseBody `form:"coverage_statements,omitempty" json:"coverage_statements,omitempty" xml:"coverage_statements,omitempty"`
 }
 
 // ReportTestsFinishedResponseBody is the type of the "surla" service
@@ -4463,6 +4471,25 @@ type GetTestWriterAssignmentForbiddenResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
+// ReportTestsFinishedInvalidCoverageResponseBody is the type of the "surla"
+// service "report_tests_finished" endpoint HTTP response body for the
+// "invalid_coverage" error.
+type ReportTestsFinishedInvalidCoverageResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
 // ReportTestsFinishedNoBuildResponseBody is the type of the "surla" service
 // "report_tests_finished" endpoint HTTP response body for the "no_build" error.
 type ReportTestsFinishedNoBuildResponseBody struct {
@@ -5277,6 +5304,14 @@ type StartedBuildResponseBody struct {
 	// Tests required by this build's saved Story, in declaration order; unfinished
 	// flows require none. Empty when no finished flow requires a test.
 	RequiredTests []*RequiredTestResponseBody `form:"required_tests,omitempty" json:"required_tests,omitempty" xml:"required_tests,omitempty"`
+	// Confirmed answers saved when this build started; later revisions do not
+	// replace them.
+	Answers []*ConfirmedAnswerResponseBody `form:"answers,omitempty" json:"answers,omitempty" xml:"answers,omitempty"`
+	// Examples saved when this build started; later revisions do not replace them.
+	Examples []*ExampleItemResponseBody `form:"examples,omitempty" json:"examples,omitempty" xml:"examples,omitempty"`
+	// The accepted report's writer statements; empty before acceptance or when
+	// none were stated. Surla did not judge them.
+	CoverageStatements []*TestCoverageStatementResponseBody `form:"coverage_statements,omitempty" json:"coverage_statements,omitempty" xml:"coverage_statements,omitempty"`
 	// Whether the user has taken this build: building until a verification of it
 	// passes; passed with the commits to merge; merged once the branch checked out
 	// in the project folder holds the commits of one passed run, the builder's
@@ -5361,6 +5396,31 @@ type RequiredTestResponseBody struct {
 	Scenario *string `form:"scenario,omitempty" json:"scenario,omitempty" xml:"scenario,omitempty"`
 	// Hook method the test writer implements for the scenario.
 	Hook *string `form:"hook,omitempty" json:"hook,omitempty" xml:"hook,omitempty"`
+}
+
+// ConfirmedAnswerResponseBody is used to define fields on response body types.
+type ConfirmedAnswerResponseBody struct {
+	// Question identifier on the Change Card.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// The question as the user answered it.
+	Question *string `form:"question,omitempty" json:"question,omitempty" xml:"question,omitempty"`
+	// The option the user confirmed, exactly as confirmed.
+	Answer *string `form:"answer,omitempty" json:"answer,omitempty" xml:"answer,omitempty"`
+}
+
+// TestCoverageStatementResponseBody is used to define fields on response body
+// types.
+type TestCoverageStatementResponseBody struct {
+	// Exact declared scenario identifier.
+	Scenario *string `form:"scenario,omitempty" json:"scenario,omitempty" xml:"scenario,omitempty"`
+	// Question IDs from the assignment's answers[].id; empty when this statement
+	// names only examples.
+	QuestionIds []*string `form:"question_ids,omitempty" json:"question_ids,omitempty" xml:"question_ids,omitempty"`
+	// Example IDs from the assignment's examples[].id; empty when this statement
+	// names only answers.
+	ExampleIds []*string `form:"example_ids,omitempty" json:"example_ids,omitempty" xml:"example_ids,omitempty"`
+	// Interaction or assertion the writer says exercises these requirements.
+	Explanation *string `form:"explanation,omitempty" json:"explanation,omitempty" xml:"explanation,omitempty"`
 }
 
 // BuildBuildingResponseBody is used to define fields on response body types.
@@ -5501,16 +5561,6 @@ type TestWriterAssignmentItemResponseBody struct {
 	Progress *TestWriterProgressResponseBody `form:"progress,omitempty" json:"progress,omitempty" xml:"progress,omitempty"`
 }
 
-// ConfirmedAnswerResponseBody is used to define fields on response body types.
-type ConfirmedAnswerResponseBody struct {
-	// Question identifier on the Change Card.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// The question as the user answered it.
-	Question *string `form:"question,omitempty" json:"question,omitempty" xml:"question,omitempty"`
-	// The option the user confirmed, exactly as confirmed.
-	Answer *string `form:"answer,omitempty" json:"answer,omitempty" xml:"answer,omitempty"`
-}
-
 // VerificationReviewResponseBody is used to define fields on response body
 // types.
 type VerificationReviewResponseBody struct {
@@ -5533,6 +5583,9 @@ type RecordedRunStoryResponseBody struct {
 	// The owner's exact required-test mapping for written tests, or the explicit
 	// absence of such a mapping for an operator evaluator.
 	Mapping *MappingResponseBody `form:"mapping,omitempty" json:"mapping,omitempty" xml:"mapping,omitempty"`
+	// The writer's immutable statements for this run, or explicit missing
+	// historical/operator evidence.
+	TestCoverage *TestCoverageResponseBody `form:"test_coverage,omitempty" json:"test_coverage,omitempty" xml:"test_coverage,omitempty"`
 }
 
 // RunStoryMappingResponseBody is used to define fields on response body types.
@@ -5544,6 +5597,24 @@ type RunStoryMappingResponseBody struct {
 // RunEvaluatorMappingUnknownResponseBody is used to define fields on response
 // body types.
 type RunEvaluatorMappingUnknownResponseBody struct {
+}
+
+// RecordedTestCoverageResponseBody is used to define fields on response body
+// types.
+type RecordedTestCoverageResponseBody struct {
+	// Accepted test-writer report number.
+	Report *int `form:"report,omitempty" json:"report,omitempty" xml:"report,omitempty"`
+	// Answers saved for the built agreement, in question order.
+	Answers []*ConfirmedAnswerResponseBody `form:"answers,omitempty" json:"answers,omitempty" xml:"answers,omitempty"`
+	// Examples saved for the built agreement, in confirmation order.
+	Examples []*ExampleItemResponseBody `form:"examples,omitempty" json:"examples,omitempty" xml:"examples,omitempty"`
+	// Writer statements for this report; empty means Not stated.
+	CoverageStatements []*TestCoverageStatementResponseBody `form:"coverage_statements,omitempty" json:"coverage_statements,omitempty" xml:"coverage_statements,omitempty"`
+}
+
+// TestCoverageNotRecordedResponseBody is used to define fields on response
+// body types.
+type TestCoverageNotRecordedResponseBody struct {
 }
 
 // RunStoryNotRecordedResponseBody is used to define fields on response body
@@ -5695,6 +5766,21 @@ type ReplacedBuildRequestBody struct {
 	// started_at of the open build the page showed, exactly as get_build reported
 	// it.
 	StartedAt string `form:"started_at" json:"started_at" xml:"started_at"`
+}
+
+// TestCoverageStatementRequestBody is used to define fields on request body
+// types.
+type TestCoverageStatementRequestBody struct {
+	// Exact declared scenario identifier.
+	Scenario string `form:"scenario" json:"scenario" xml:"scenario"`
+	// Question IDs from the assignment's answers[].id; empty when this statement
+	// names only examples.
+	QuestionIds []string `form:"question_ids" json:"question_ids" xml:"question_ids"`
+	// Example IDs from the assignment's examples[].id; empty when this statement
+	// names only answers.
+	ExampleIds []string `form:"example_ids" json:"example_ids" xml:"example_ids"`
+	// Interaction or assertion the writer says exercises these requirements.
+	Explanation string `form:"explanation" json:"explanation" xml:"explanation"`
 }
 
 // ApprovalResponseBody holds exactly one of its branch values.
@@ -8126,6 +8212,188 @@ func (u *TeamResponseBody) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+// TestCoverageResponseBody holds exactly one of its branch values.
+type TestCoverageResponseBody struct {
+	kind        TestCoverageResponseBodyKind
+	recorded    *RecordedTestCoverageResponseBody
+	notRecorded *TestCoverageNotRecordedResponseBody
+}
+
+// TestCoverageResponseBodyKind records which TestCoverageResponseBody branch is selected.
+type TestCoverageResponseBodyKind string
+
+const (
+	// TestCoverageResponseBodyKindRecorded identifies the recorded branch.
+	TestCoverageResponseBodyKindRecorded TestCoverageResponseBodyKind = "recorded"
+	// TestCoverageResponseBodyKindNotRecorded identifies the not_recorded branch.
+	TestCoverageResponseBodyKindNotRecorded TestCoverageResponseBodyKind = "not_recorded"
+)
+
+// Kind returns the selected branch.
+func (u TestCoverageResponseBody) Kind() TestCoverageResponseBodyKind {
+	return u.kind
+}
+
+// NewTestCoverageResponseBodyRecorded constructs TestCoverageResponseBody with the recorded branch set.
+func NewTestCoverageResponseBodyRecorded(v *RecordedTestCoverageResponseBody) TestCoverageResponseBody {
+	return TestCoverageResponseBody{
+		kind:     TestCoverageResponseBodyKindRecorded,
+		recorded: v,
+	}
+}
+
+// AsRecorded returns the value when the recorded branch is selected.
+func (u TestCoverageResponseBody) AsRecorded() (_ *RecordedTestCoverageResponseBody, ok bool) {
+	if u.kind != TestCoverageResponseBodyKindRecorded {
+		return
+	}
+	return u.recorded, true
+}
+
+// SetRecorded selects the recorded branch and stores v.
+func (u *TestCoverageResponseBody) SetRecorded(v *RecordedTestCoverageResponseBody) {
+	*u = TestCoverageResponseBody{
+		kind:     TestCoverageResponseBodyKindRecorded,
+		recorded: v,
+	}
+}
+
+// NewTestCoverageResponseBodyNotRecorded constructs TestCoverageResponseBody with the not_recorded branch set.
+func NewTestCoverageResponseBodyNotRecorded(v *TestCoverageNotRecordedResponseBody) TestCoverageResponseBody {
+	return TestCoverageResponseBody{
+		kind:        TestCoverageResponseBodyKindNotRecorded,
+		notRecorded: v,
+	}
+}
+
+// AsNotRecorded returns the value when the not_recorded branch is selected.
+func (u TestCoverageResponseBody) AsNotRecorded() (_ *TestCoverageNotRecordedResponseBody, ok bool) {
+	if u.kind != TestCoverageResponseBodyKindNotRecorded {
+		return
+	}
+	return u.notRecorded, true
+}
+
+// SetNotRecorded selects the not_recorded branch and stores v.
+func (u *TestCoverageResponseBody) SetNotRecorded(v *TestCoverageNotRecordedResponseBody) {
+	*u = TestCoverageResponseBody{
+		kind:        TestCoverageResponseBodyKindNotRecorded,
+		notRecorded: v,
+	}
+}
+
+// Validate ensures exactly one valid branch is selected.
+func (u TestCoverageResponseBody) Validate() error {
+	_, err := u.Value()
+	return err
+}
+
+// Value returns the selected branch value, or the same selection error as Validate.
+// Go templates can read this method directly; an invalid selection stops execution.
+func (u TestCoverageResponseBody) Value() (any, error) {
+	switch u.kind {
+	case "":
+		return nil, goa.InvalidEnumValueError("state", "", []any{
+			string(TestCoverageResponseBodyKindRecorded),
+			string(TestCoverageResponseBodyKindNotRecorded),
+		})
+	case TestCoverageResponseBodyKindRecorded:
+		if u.recorded == nil {
+			return nil, goa.MissingFieldError("value", "TestCoverageResponseBody")
+		}
+		return u.recorded, nil
+	case TestCoverageResponseBodyKindNotRecorded:
+		if u.notRecorded == nil {
+			return nil, goa.MissingFieldError("value", "TestCoverageResponseBody")
+		}
+		return u.notRecorded, nil
+	default:
+		return nil, goa.InvalidEnumValueError("state", u.kind, []any{
+			string(TestCoverageResponseBodyKindRecorded),
+			string(TestCoverageResponseBodyKindNotRecorded),
+		})
+	}
+}
+
+// MarshalJSON writes the selected object branch beside its discriminator.
+func (u TestCoverageResponseBody) MarshalJSON() ([]byte, error) {
+	value, err := u.Value()
+	if err != nil {
+		return nil, err
+	}
+	data, err := json.Marshal(value)
+	if err != nil {
+		return nil, err
+	}
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(data, &fields); err != nil {
+		return nil, err
+	}
+	if fields == nil {
+		return nil, goa.InvalidFieldTypeError("state", nil, "non-null JSON object")
+	}
+	if _, exists := fields["state"]; exists {
+		return nil, fmt.Errorf("TestCoverageResponseBody branch already contains discriminator %q", "state")
+	}
+	tag, err := json.Marshal(string(u.kind))
+	if err != nil {
+		return nil, err
+	}
+	fields["state"] = tag
+	return json.Marshal(fields)
+}
+
+// UnmarshalJSON reads the discriminator and decodes its declared object branch.
+func (u *TestCoverageResponseBody) UnmarshalJSON(data []byte) error {
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(data, &fields); err != nil {
+		return err
+	}
+	tag, exists := fields["state"]
+	if !exists {
+		return goa.MissingFieldError("state", "TestCoverageResponseBody")
+	}
+	if bytes.Equal(bytes.TrimSpace(tag), []byte("null")) {
+		return goa.InvalidFieldTypeError("state", nil, "JSON string")
+	}
+	var raw struct {
+		Type  string
+		Value json.RawMessage
+	}
+	if err := json.Unmarshal(tag, &raw.Type); err != nil {
+		return err
+	}
+	delete(fields, "state")
+	value, err := json.Marshal(fields)
+	if err != nil {
+		return err
+	}
+	raw.Value = value
+	switch raw.Type {
+	case string(TestCoverageResponseBodyKindRecorded):
+		var v *RecordedTestCoverageResponseBody
+		if err := json.Unmarshal(raw.Value, &v); err != nil {
+			return err
+		}
+		u.SetRecorded(v)
+	case string(TestCoverageResponseBodyKindNotRecorded):
+		var v *TestCoverageNotRecordedResponseBody
+		if err := json.Unmarshal(raw.Value, &v); err != nil {
+			return err
+		}
+		u.SetNotRecorded(v)
+	default:
+		if raw.Type == "" {
+			return goa.MissingFieldError("state", "TestCoverageResponseBody")
+		}
+		return goa.InvalidEnumValueError("state", raw.Type, []any{
+			string(TestCoverageResponseBodyKindRecorded),
+			string(TestCoverageResponseBodyKindNotRecorded),
+		})
+	}
+	return nil
+}
+
 // TestSourceResponseBody holds exactly one of its branch values.
 type TestSourceResponseBody struct {
 	kind         TestSourceResponseBodyKind
@@ -9110,6 +9378,18 @@ func NewDropBuildRequestBody(p *surla.DropBuildPayload) *DropBuildRequestBody {
 func NewReportTestsFinishedRequestBody(p *surla.ReportTestsFinishedPayload) *ReportTestsFinishedRequestBody {
 	body := &ReportTestsFinishedRequestBody{
 		RequestRevision: p.RequestRevision,
+	}
+	if p.CoverageStatements != nil {
+		body.CoverageStatements = make([]*TestCoverageStatementRequestBody, len(p.CoverageStatements))
+		for i, val := range p.CoverageStatements {
+			if val == nil {
+				body.CoverageStatements[i] = nil
+				continue
+			}
+			body.CoverageStatements[i] = marshalSurlaTestCoverageStatementToTestCoverageStatementRequestBody(val)
+		}
+	} else {
+		body.CoverageStatements = []*TestCoverageStatementRequestBody{}
 	}
 	return body
 }
@@ -12991,6 +13271,14 @@ func NewGetTestWriterAssignmentTestWriterAssignmentOK(body *GetTestWriterAssignm
 	for i, val := range body.PreservedBehaviors {
 		v.PreservedBehaviors[i] = val
 	}
+	v.CoverageStatements = make([]*surla.TestCoverageStatement, len(body.CoverageStatements))
+	for i, val := range body.CoverageStatements {
+		if val == nil {
+			v.CoverageStatements[i] = nil
+			continue
+		}
+		v.CoverageStatements[i] = unmarshalTestCoverageStatementResponseBodyToSurlaTestCoverageStatement(val)
+	}
 
 	return v
 }
@@ -13098,6 +13386,21 @@ func NewReportTestsFinishedTestWriterAssignmentItemOK(body *ReportTestsFinishedR
 		InForce:         *body.InForce,
 	}
 	v.Progress = unmarshalTestWriterProgressResponseBodyToSurlaTestWriterProgress(body.Progress)
+
+	return v
+}
+
+// NewReportTestsFinishedInvalidCoverage builds a surla service
+// report_tests_finished endpoint invalid_coverage error.
+func NewReportTestsFinishedInvalidCoverage(body *ReportTestsFinishedInvalidCoverageResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
 
 	return v
 }
@@ -14782,6 +15085,9 @@ func ValidateGetTestWriterAssignmentResponseBody(body *GetTestWriterAssignmentRe
 	if body.PreservedBehaviors == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("preserved_behaviors", "body"))
 	}
+	if body.CoverageStatements == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("coverage_statements", "body"))
+	}
 	if body.Progress != nil {
 		if err2 := validateTestWriterProgressResponseBody(body.Progress, "body.progress"); err2 != nil {
 			err = goa.MergeErrors(err, err2)
@@ -14811,6 +15117,16 @@ func ValidateGetTestWriterAssignmentResponseBody(body *GetTestWriterAssignmentRe
 	for _, e := range body.Examples {
 		if e != nil {
 			if err2 := validateExampleItemResponseBody(e, "body.examples[*]"); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	for _, e := range body.CoverageStatements {
+		if e == nil {
+			err = goa.MergeErrors(err, goa.MissingFieldError("body.coverage_statements", "[*]"))
+		}
+		if e != nil {
+			if err2 := validateTestCoverageStatementResponseBody(e, "body.coverage_statements[*]"); err2 != nil {
 				err = goa.MergeErrors(err, err2)
 			}
 		}
@@ -19244,6 +19560,30 @@ func ValidateGetTestWriterAssignmentForbiddenResponseBody(body *GetTestWriterAss
 	return
 }
 
+// ValidateReportTestsFinishedInvalidCoverageResponseBody runs the validations
+// defined on ReportTestsFinishedInvalidCoverageResponseBody
+func ValidateReportTestsFinishedInvalidCoverageResponseBody(body *ReportTestsFinishedInvalidCoverageResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
 // ValidateReportTestsFinishedNoBuildResponseBody runs the validations defined
 // on ReportTestsFinishedNoBuildResponseBody
 func ValidateReportTestsFinishedNoBuildResponseBody(body *ReportTestsFinishedNoBuildResponseBody) (err error) {
@@ -21491,6 +21831,15 @@ func ValidateStartedBuildResponseBody(body *StartedBuildResponseBody) (err error
 	if body.RequiredTests == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("required_tests", "body"))
 	}
+	if body.Answers == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("answers", "body"))
+	}
+	if body.Examples == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("examples", "body"))
+	}
+	if body.CoverageStatements == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("coverage_statements", "body"))
+	}
 	if body.Taking == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("taking", "body"))
 	}
@@ -21515,6 +21864,36 @@ func ValidateStartedBuildResponseBody(body *StartedBuildResponseBody) (err error
 	for _, e := range body.RequiredTests {
 		if e != nil {
 			if err2 := validateRequiredTestResponseBody(e, "body.required_tests[*]"); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	for _, e := range body.Answers {
+		if e == nil {
+			err = goa.MergeErrors(err, goa.MissingFieldError("body.answers", "[*]"))
+		}
+		if e != nil {
+			if err2 := validateConfirmedAnswerResponseBody(e, "body.answers[*]"); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	for _, e := range body.Examples {
+		if e == nil {
+			err = goa.MergeErrors(err, goa.MissingFieldError("body.examples", "[*]"))
+		}
+		if e != nil {
+			if err2 := validateExampleItemResponseBody(e, "body.examples[*]"); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	for _, e := range body.CoverageStatements {
+		if e == nil {
+			err = goa.MergeErrors(err, goa.MissingFieldError("body.coverage_statements", "[*]"))
+		}
+		if e != nil {
+			if err2 := validateTestCoverageStatementResponseBody(e, "body.coverage_statements[*]"); err2 != nil {
 				err = goa.MergeErrors(err, err2)
 			}
 		}
@@ -21570,6 +21949,15 @@ func validateStartedBuildResponseBody(body *StartedBuildResponseBody, path strin
 	if body.RequiredTests == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("required_tests", path))
 	}
+	if body.Answers == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("answers", path))
+	}
+	if body.Examples == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("examples", path))
+	}
+	if body.CoverageStatements == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("coverage_statements", path))
+	}
 	if body.Taking == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("taking", path))
 	}
@@ -21594,6 +21982,36 @@ func validateStartedBuildResponseBody(body *StartedBuildResponseBody, path strin
 	for _, e := range body.RequiredTests {
 		if e != nil {
 			if err2 := validateRequiredTestResponseBody(e, path+".required_tests[*]"); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	for _, e := range body.Answers {
+		if e == nil {
+			err = goa.MergeErrors(err, goa.MissingFieldError(path+".answers", "[*]"))
+		}
+		if e != nil {
+			if err2 := validateConfirmedAnswerResponseBody(e, path+".answers[*]"); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	for _, e := range body.Examples {
+		if e == nil {
+			err = goa.MergeErrors(err, goa.MissingFieldError(path+".examples", "[*]"))
+		}
+		if e != nil {
+			if err2 := validateExampleItemResponseBody(e, path+".examples[*]"); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	for _, e := range body.CoverageStatements {
+		if e == nil {
+			err = goa.MergeErrors(err, goa.MissingFieldError(path+".coverage_statements", "[*]"))
+		}
+		if e != nil {
+			if err2 := validateTestCoverageStatementResponseBody(e, path+".coverage_statements[*]"); err2 != nil {
 				err = goa.MergeErrors(err, err2)
 			}
 		}
@@ -21936,6 +22354,132 @@ func validateRequiredTestResponseBody(body *RequiredTestResponseBody, path strin
 	}
 	if body.Hook == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("hook", path))
+	}
+	return
+}
+
+// ValidateConfirmedAnswerResponseBody runs the validations defined on
+// ConfirmedAnswer
+func ValidateConfirmedAnswerResponseBody(body *ConfirmedAnswerResponseBody) (err error) {
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Question == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("question", "body"))
+	}
+	if body.Answer == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("answer", "body"))
+	}
+	return
+}
+
+// validateConfirmedAnswerResponseBody checks ConfirmedAnswer and reports
+// errors using the path supplied by its caller
+func validateConfirmedAnswerResponseBody(body *ConfirmedAnswerResponseBody, path string) (err error) {
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", path))
+	}
+	if body.Question == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("question", path))
+	}
+	if body.Answer == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("answer", path))
+	}
+	return
+}
+
+// ValidateTestCoverageStatementResponseBody runs the validations defined on
+// TestCoverageStatement
+func ValidateTestCoverageStatementResponseBody(body *TestCoverageStatementResponseBody) (err error) {
+	if body.Scenario == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("scenario", "body"))
+	}
+	if body.QuestionIds == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("question_ids", "body"))
+	}
+	if body.ExampleIds == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("example_ids", "body"))
+	}
+	if body.Explanation == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("explanation", "body"))
+	}
+	if body.Scenario != nil {
+		if utf8.RuneCountInString(*body.Scenario) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.scenario", *body.Scenario, utf8.RuneCountInString(*body.Scenario), 1, true))
+		}
+	}
+	for _, e := range body.QuestionIds {
+		if e == nil {
+			err = goa.MergeErrors(err, goa.MissingFieldError("body.question_ids", "[*]"))
+		}
+		if e != nil {
+			if utf8.RuneCountInString(*e) < 1 {
+				err = goa.MergeErrors(err, goa.InvalidLengthError("body.question_ids[*]", *e, utf8.RuneCountInString(*e), 1, true))
+			}
+		}
+	}
+	for _, e := range body.ExampleIds {
+		if e == nil {
+			err = goa.MergeErrors(err, goa.MissingFieldError("body.example_ids", "[*]"))
+		}
+		if e != nil {
+			if utf8.RuneCountInString(*e) < 1 {
+				err = goa.MergeErrors(err, goa.InvalidLengthError("body.example_ids[*]", *e, utf8.RuneCountInString(*e), 1, true))
+			}
+		}
+	}
+	if body.Explanation != nil {
+		if utf8.RuneCountInString(*body.Explanation) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.explanation", *body.Explanation, utf8.RuneCountInString(*body.Explanation), 1, true))
+		}
+	}
+	return
+}
+
+// validateTestCoverageStatementResponseBody checks TestCoverageStatement and
+// reports errors using the path supplied by its caller
+func validateTestCoverageStatementResponseBody(body *TestCoverageStatementResponseBody, path string) (err error) {
+	if body.Scenario == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("scenario", path))
+	}
+	if body.QuestionIds == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("question_ids", path))
+	}
+	if body.ExampleIds == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("example_ids", path))
+	}
+	if body.Explanation == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("explanation", path))
+	}
+	if body.Scenario != nil {
+		if utf8.RuneCountInString(*body.Scenario) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError(path+".scenario", *body.Scenario, utf8.RuneCountInString(*body.Scenario), 1, true))
+		}
+	}
+	for _, e := range body.QuestionIds {
+		if e == nil {
+			err = goa.MergeErrors(err, goa.MissingFieldError(path+".question_ids", "[*]"))
+		}
+		if e != nil {
+			if utf8.RuneCountInString(*e) < 1 {
+				err = goa.MergeErrors(err, goa.InvalidLengthError(path+".question_ids[*]", *e, utf8.RuneCountInString(*e), 1, true))
+			}
+		}
+	}
+	for _, e := range body.ExampleIds {
+		if e == nil {
+			err = goa.MergeErrors(err, goa.MissingFieldError(path+".example_ids", "[*]"))
+		}
+		if e != nil {
+			if utf8.RuneCountInString(*e) < 1 {
+				err = goa.MergeErrors(err, goa.InvalidLengthError(path+".example_ids[*]", *e, utf8.RuneCountInString(*e), 1, true))
+			}
+		}
+	}
+	if body.Explanation != nil {
+		if utf8.RuneCountInString(*body.Explanation) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError(path+".explanation", *body.Explanation, utf8.RuneCountInString(*body.Explanation), 1, true))
+		}
 	}
 	return
 }
@@ -22407,36 +22951,6 @@ func validateTestWriterAssignmentItemResponseBody(body *TestWriterAssignmentItem
 	return
 }
 
-// ValidateConfirmedAnswerResponseBody runs the validations defined on
-// ConfirmedAnswer
-func ValidateConfirmedAnswerResponseBody(body *ConfirmedAnswerResponseBody) (err error) {
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Question == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("question", "body"))
-	}
-	if body.Answer == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("answer", "body"))
-	}
-	return
-}
-
-// validateConfirmedAnswerResponseBody checks ConfirmedAnswer and reports
-// errors using the path supplied by its caller
-func validateConfirmedAnswerResponseBody(body *ConfirmedAnswerResponseBody, path string) (err error) {
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", path))
-	}
-	if body.Question == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("question", path))
-	}
-	if body.Answer == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("answer", path))
-	}
-	return
-}
-
 // ValidateVerificationReviewResponseBody runs the validations defined on
 // VerificationReview
 func ValidateVerificationReviewResponseBody(body *VerificationReviewResponseBody) (err error) {
@@ -22572,6 +23086,9 @@ func ValidateRecordedRunStoryResponseBody(body *RecordedRunStoryResponseBody) (e
 	if body.Mapping == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("mapping", "body"))
 	}
+	if body.TestCoverage == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("test_coverage", "body"))
+	}
 	if body.BuildNumber != nil {
 		if *body.BuildNumber < 1 {
 			err = goa.MergeErrors(err, goa.InvalidRangeError("body.build_number", *body.BuildNumber, 1, true))
@@ -22604,6 +23121,23 @@ func ValidateRecordedRunStoryResponseBody(body *RecordedRunStoryResponseBody) (e
 		}
 
 	}
+	if body.TestCoverage != nil {
+
+		if err2 := body.TestCoverage.Validate(); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		} else {
+			switch string(body.TestCoverage.Kind()) {
+			case "recorded":
+				actual, _ := body.TestCoverage.AsRecorded()
+				if actual != nil {
+					if err2 := validateRecordedTestCoverageResponseBody(actual, "body.test_coverage.value"); err2 != nil {
+						err = goa.MergeErrors(err, err2)
+					}
+				}
+			}
+		}
+
+	}
 	return
 }
 
@@ -22621,6 +23155,9 @@ func validateRecordedRunStoryResponseBody(body *RecordedRunStoryResponseBody, pa
 	}
 	if body.Mapping == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("mapping", path))
+	}
+	if body.TestCoverage == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("test_coverage", path))
 	}
 	if body.BuildNumber != nil {
 		if *body.BuildNumber < 1 {
@@ -22647,6 +23184,23 @@ func validateRecordedRunStoryResponseBody(body *RecordedRunStoryResponseBody, pa
 				actual, _ := body.Mapping.AsMapped()
 				if actual != nil {
 					if err2 := validateRunStoryMappingResponseBody(actual, path+".mapping.value"); err2 != nil {
+						err = goa.MergeErrors(err, err2)
+					}
+				}
+			}
+		}
+
+	}
+	if body.TestCoverage != nil {
+
+		if err2 := body.TestCoverage.Validate(); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		} else {
+			switch string(body.TestCoverage.Kind()) {
+			case "recorded":
+				actual, _ := body.TestCoverage.AsRecorded()
+				if actual != nil {
+					if err2 := validateRecordedTestCoverageResponseBody(actual, path+".test_coverage.value"); err2 != nil {
 						err = goa.MergeErrors(err, err2)
 					}
 				}
@@ -22682,6 +23236,112 @@ func validateRunStoryMappingResponseBody(body *RunStoryMappingResponseBody, path
 	for _, e := range body.RequiredTests {
 		if e != nil {
 			if err2 := validateRequiredTestResponseBody(e, path+".required_tests[*]"); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	return
+}
+
+// ValidateRecordedTestCoverageResponseBody runs the validations defined on
+// RecordedTestCoverage
+func ValidateRecordedTestCoverageResponseBody(body *RecordedTestCoverageResponseBody) (err error) {
+	if body.Report == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("report", "body"))
+	}
+	if body.Answers == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("answers", "body"))
+	}
+	if body.Examples == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("examples", "body"))
+	}
+	if body.CoverageStatements == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("coverage_statements", "body"))
+	}
+	if body.Report != nil {
+		if *body.Report < 1 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.report", *body.Report, 1, true))
+		}
+	}
+	for _, e := range body.Answers {
+		if e == nil {
+			err = goa.MergeErrors(err, goa.MissingFieldError("body.answers", "[*]"))
+		}
+		if e != nil {
+			if err2 := validateConfirmedAnswerResponseBody(e, "body.answers[*]"); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	for _, e := range body.Examples {
+		if e == nil {
+			err = goa.MergeErrors(err, goa.MissingFieldError("body.examples", "[*]"))
+		}
+		if e != nil {
+			if err2 := validateExampleItemResponseBody(e, "body.examples[*]"); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	for _, e := range body.CoverageStatements {
+		if e == nil {
+			err = goa.MergeErrors(err, goa.MissingFieldError("body.coverage_statements", "[*]"))
+		}
+		if e != nil {
+			if err2 := validateTestCoverageStatementResponseBody(e, "body.coverage_statements[*]"); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	return
+}
+
+// validateRecordedTestCoverageResponseBody checks RecordedTestCoverage and
+// reports errors using the path supplied by its caller
+func validateRecordedTestCoverageResponseBody(body *RecordedTestCoverageResponseBody, path string) (err error) {
+	if body.Report == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("report", path))
+	}
+	if body.Answers == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("answers", path))
+	}
+	if body.Examples == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("examples", path))
+	}
+	if body.CoverageStatements == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("coverage_statements", path))
+	}
+	if body.Report != nil {
+		if *body.Report < 1 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError(path+".report", *body.Report, 1, true))
+		}
+	}
+	for _, e := range body.Answers {
+		if e == nil {
+			err = goa.MergeErrors(err, goa.MissingFieldError(path+".answers", "[*]"))
+		}
+		if e != nil {
+			if err2 := validateConfirmedAnswerResponseBody(e, path+".answers[*]"); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	for _, e := range body.Examples {
+		if e == nil {
+			err = goa.MergeErrors(err, goa.MissingFieldError(path+".examples", "[*]"))
+		}
+		if e != nil {
+			if err2 := validateExampleItemResponseBody(e, path+".examples[*]"); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	for _, e := range body.CoverageStatements {
+		if e == nil {
+			err = goa.MergeErrors(err, goa.MissingFieldError(path+".coverage_statements", "[*]"))
+		}
+		if e != nil {
+			if err2 := validateTestCoverageStatementResponseBody(e, path+".coverage_statements[*]"); err2 != nil {
 				err = goa.MergeErrors(err, err2)
 			}
 		}
@@ -23043,5 +23703,61 @@ func validateReplacedBuildRequestBody(body *ReplacedBuildRequestBody, path strin
 		err = goa.MergeErrors(err, goa.InvalidLengthError(path+".change_id", body.ChangeID, utf8.RuneCountInString(body.ChangeID), 1, true))
 	}
 	err = goa.MergeErrors(err, goa.ValidateFormat(path+".started_at", body.StartedAt, goa.FormatDateTime))
+	return
+}
+
+// ValidateTestCoverageStatementRequestBody runs the validations defined on
+// TestCoverageStatement
+func ValidateTestCoverageStatementRequestBody(body *TestCoverageStatementRequestBody) (err error) {
+	if body.QuestionIds == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("question_ids", "body"))
+	}
+	if body.ExampleIds == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("example_ids", "body"))
+	}
+	if utf8.RuneCountInString(body.Scenario) < 1 {
+		err = goa.MergeErrors(err, goa.InvalidLengthError("body.scenario", body.Scenario, utf8.RuneCountInString(body.Scenario), 1, true))
+	}
+	for _, e := range body.QuestionIds {
+		if utf8.RuneCountInString(e) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.question_ids[*]", e, utf8.RuneCountInString(e), 1, true))
+		}
+	}
+	for _, e := range body.ExampleIds {
+		if utf8.RuneCountInString(e) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.example_ids[*]", e, utf8.RuneCountInString(e), 1, true))
+		}
+	}
+	if utf8.RuneCountInString(body.Explanation) < 1 {
+		err = goa.MergeErrors(err, goa.InvalidLengthError("body.explanation", body.Explanation, utf8.RuneCountInString(body.Explanation), 1, true))
+	}
+	return
+}
+
+// validateTestCoverageStatementRequestBody checks TestCoverageStatement and
+// reports errors using the path supplied by its caller
+func validateTestCoverageStatementRequestBody(body *TestCoverageStatementRequestBody, path string) (err error) {
+	if body.QuestionIds == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("question_ids", path))
+	}
+	if body.ExampleIds == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("example_ids", path))
+	}
+	if utf8.RuneCountInString(body.Scenario) < 1 {
+		err = goa.MergeErrors(err, goa.InvalidLengthError(path+".scenario", body.Scenario, utf8.RuneCountInString(body.Scenario), 1, true))
+	}
+	for _, e := range body.QuestionIds {
+		if utf8.RuneCountInString(e) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError(path+".question_ids[*]", e, utf8.RuneCountInString(e), 1, true))
+		}
+	}
+	for _, e := range body.ExampleIds {
+		if utf8.RuneCountInString(e) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError(path+".example_ids[*]", e, utf8.RuneCountInString(e), 1, true))
+		}
+	}
+	if utf8.RuneCountInString(body.Explanation) < 1 {
+		err = goa.MergeErrors(err, goa.InvalidLengthError(path+".explanation", body.Explanation, utf8.RuneCountInString(body.Explanation), 1, true))
+	}
 	return
 }

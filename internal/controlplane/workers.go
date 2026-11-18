@@ -357,6 +357,7 @@ func (c *ControlPlane) GetTestWriterAssignment(
 		Answers:            held.file.Answers,
 		Examples:           held.file.Examples,
 		PreservedBehaviors: held.file.PreservedBehaviors,
+		CoverageStatements: cloneCoverageStatements(held.file.TestWriter.CoverageStatements),
 	}, nil
 }
 
@@ -483,10 +484,14 @@ func (c *ControlPlane) ReportTestsFinished(
 			held.file.ChangeID, held.file.ChangeID,
 		)), "check assignment read")
 	}
+	if err := testwriter.ValidateCoverageReferences(p.CoverageStatements, held.file.Answers, held.file.Examples); err != nil {
+		return nil, gensurla.MakeInvalidCoverage(err)
+	}
 	held.file.ReportNumber++
 	held.file.TestWriter = testWriterAssignment{
-		State: testsReported,
-		Read:  held.file.TestWriter.Read,
+		State:              testsReported,
+		Read:               held.file.TestWriter.Read,
+		CoverageStatements: cloneCoverageStatements(p.CoverageStatements),
 	}
 	if err := c.cards.saveOpenBuild(held.file); err != nil {
 		return nil, recordBuildError(span, err, "save build")

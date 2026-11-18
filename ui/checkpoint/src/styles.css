@@ -836,6 +836,11 @@ html { scroll-padding-block-start: calc(var(--surla-frame-height, 120px) + 16px)
 .surla-build-test-review .surla-details > summary { display: list-item; padding: 4px 0; }
 #surla-build-details > summary, #surla-agreement-details > summary { display: list-item; padding: 4px 0; }
 .surla-build-test-review :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.surla-test-coverage { margin-block-start: 24px; padding-block-start: 8px; border-block-start: 1px solid var(--border); overflow-wrap: anywhere; }
+.surla-test-coverage dt { margin-block-start: 16px; font-weight: 600; }
+.surla-test-coverage dd { margin: 4px 0 0; }
+.surla-test-coverage p { margin-block: 4px; max-inline-size: 75ch; }
+.surla-test-coverage ul { padding-inline-start: 20px; }
 @media (max-width: 720px) {
   .surla-build-test-evidence { grid-template-columns: minmax(0, 1fr); gap: 16px; }
 }

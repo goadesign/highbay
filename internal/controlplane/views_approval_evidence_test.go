@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	gensurla "github.com/goadesign/surla/gen/surla"
 	"github.com/goadesign/surla/internal/designeval"
 	"github.com/goadesign/surla/internal/verify"
 	"github.com/goadesign/surla/internal/verifyrun"
@@ -31,6 +32,9 @@ func TestViewsPageApprovalEvidencePreservesCoverageMeaning(t *testing.T) {
 					BuildNumber: 1, BuildStartedAt: req.AcceptedAt.Add(-time.Minute),
 					Stories: []designeval.StorySummary{}}
 				if mode == "empty" {
+					req.StoryContext.TestCoverage = &verifyrun.TestCoverageSnapshot{Report: 1,
+						Answers: []*gensurla.ConfirmedAnswer{}, Examples: []*gensurla.ExampleItem{},
+						CoverageStatements: []*gensurla.TestCoverageStatement{}}
 					return
 				}
 				story := designeval.StorySummary{Name: "Recorded orders"}
@@ -45,6 +49,11 @@ func TestViewsPageApprovalEvidencePreservesCoverageMeaning(t *testing.T) {
 				req.StoryContext.Stories = append(req.StoryContext.Stories, story)
 				if mode == "evaluator" {
 					req.Plan.Tests = verify.TestsEvaluator
+				} else {
+					req.StoryContext.TestCoverage = &verifyrun.TestCoverageSnapshot{Report: 1,
+						Answers:            []*gensurla.ConfirmedAnswer{{ID: "tax", Question: "Does the limit include tax?", Answer: "No"}, {ID: "destination", Question: "Where does the refund go?", Answer: "Original payment"}},
+						Examples:           []*gensurla.ExampleItem{{ID: "check_01", Scenario: "Refund at the limit", InputSummary: "$50 before tax", ExpectedOutcome: "Refund", VerificationKind: "deterministic"}},
+						CoverageStatements: []*gensurla.TestCoverageStatement{{Scenario: "a", QuestionIds: []gensurla.TestCoverageReference{"tax"}, ExampleIds: []gensurla.TestCoverageReference{"check_01"}, Explanation: "Checks the agreed refund limit."}}}
 				}
 			})
 			ps := startPageServer(t, cp)
@@ -58,14 +67,18 @@ if (input.mode === "not_recorded") {
   expect(stage.includes("Story context was not recorded for this run") && !page.$(".surla-flow-evidence"), "missing run context was backfilled from current state");
 } else if (input.mode === "empty") {
   expect(stage.includes("This agreement recorded no Story flows") && !stage.includes("Story context was not recorded"), "recorded empty Story was treated as absent");
+  expect(page.text("#surla-approval-coverage").includes("This agreement has no confirmed answers or examples."), "recorded empty coverage basis was treated as absent");
 } else {
   const rows = page.$$(".surla-flow-evidence tbody tr");
   expect(rows.length === 2 && stage.includes("Recorded draft") && stage.includes("Draft, no required test"), "finished/draft coverage was lost");
   if (input.mode === "evaluator") {
     expect(rows.every((row) => row.textContent.includes("Mapping not recorded for this evaluator") && row.textContent.includes("Coverage not recorded")), "evaluator results invented flow coverage");
     expect(stage.includes("A passed test does not prove that a particular Story flow was covered"), "unknown mapping lost its explanation");
+    expect(page.text("#surla-approval-coverage").includes("configured evaluator. Test-writer coverage: Not stated."), "operator tests acquired invented writer statements");
   } else {
     expect(rows[0].textContent.includes("Passed") && rows[1].textContent.includes("Not reported"), "missing expected scenario was presented as a pass or exclusion");
+    const coverage = page.text("#surla-approval-coverage");
+    expect(coverage.includes("Test writer's stated coverage") && coverage.includes("Surla did not judge them") && coverage.includes("Checks the agreed refund limit.") && coverage.includes("Run result: Passed") && coverage.includes("Original payment") && coverage.includes("Not stated"), "writer attribution, outcome or unclaimed requirement was lost");
   }
 }
 const otherIds = page.$$(".surla-approval-test-list code").map((node) => node.textContent);

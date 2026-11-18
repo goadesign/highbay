@@ -1957,6 +1957,188 @@ func (u *StoryContext) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+// TestCoverage holds exactly one of its branch values.
+type TestCoverage struct {
+	kind        TestCoverageKind
+	recorded    *RecordedTestCoverageTransport
+	notRecorded *TestCoverageNotRecordedTransport
+}
+
+// TestCoverageKind records which TestCoverage branch is selected.
+type TestCoverageKind string
+
+const (
+	// TestCoverageKindRecorded identifies the recorded branch.
+	TestCoverageKindRecorded TestCoverageKind = "recorded"
+	// TestCoverageKindNotRecorded identifies the not_recorded branch.
+	TestCoverageKindNotRecorded TestCoverageKind = "not_recorded"
+)
+
+// Kind returns the selected branch.
+func (u TestCoverage) Kind() TestCoverageKind {
+	return u.kind
+}
+
+// NewTestCoverageRecorded constructs TestCoverage with the recorded branch set.
+func NewTestCoverageRecorded(v *RecordedTestCoverageTransport) TestCoverage {
+	return TestCoverage{
+		kind:     TestCoverageKindRecorded,
+		recorded: v,
+	}
+}
+
+// AsRecorded returns the value when the recorded branch is selected.
+func (u TestCoverage) AsRecorded() (_ *RecordedTestCoverageTransport, ok bool) {
+	if u.kind != TestCoverageKindRecorded {
+		return
+	}
+	return u.recorded, true
+}
+
+// SetRecorded selects the recorded branch and stores v.
+func (u *TestCoverage) SetRecorded(v *RecordedTestCoverageTransport) {
+	*u = TestCoverage{
+		kind:     TestCoverageKindRecorded,
+		recorded: v,
+	}
+}
+
+// NewTestCoverageNotRecorded constructs TestCoverage with the not_recorded branch set.
+func NewTestCoverageNotRecorded(v *TestCoverageNotRecordedTransport) TestCoverage {
+	return TestCoverage{
+		kind:        TestCoverageKindNotRecorded,
+		notRecorded: v,
+	}
+}
+
+// AsNotRecorded returns the value when the not_recorded branch is selected.
+func (u TestCoverage) AsNotRecorded() (_ *TestCoverageNotRecordedTransport, ok bool) {
+	if u.kind != TestCoverageKindNotRecorded {
+		return
+	}
+	return u.notRecorded, true
+}
+
+// SetNotRecorded selects the not_recorded branch and stores v.
+func (u *TestCoverage) SetNotRecorded(v *TestCoverageNotRecordedTransport) {
+	*u = TestCoverage{
+		kind:        TestCoverageKindNotRecorded,
+		notRecorded: v,
+	}
+}
+
+// Validate ensures exactly one valid branch is selected.
+func (u TestCoverage) Validate() error {
+	_, err := u.Value()
+	return err
+}
+
+// Value returns the selected branch value, or the same selection error as Validate.
+// Go templates can read this method directly; an invalid selection stops execution.
+func (u TestCoverage) Value() (any, error) {
+	switch u.kind {
+	case "":
+		return nil, goa.InvalidEnumValueError("state", "", []any{
+			string(TestCoverageKindRecorded),
+			string(TestCoverageKindNotRecorded),
+		})
+	case TestCoverageKindRecorded:
+		if u.recorded == nil {
+			return nil, goa.MissingFieldError("value", "TestCoverage")
+		}
+		return u.recorded, nil
+	case TestCoverageKindNotRecorded:
+		if u.notRecorded == nil {
+			return nil, goa.MissingFieldError("value", "TestCoverage")
+		}
+		return u.notRecorded, nil
+	default:
+		return nil, goa.InvalidEnumValueError("state", u.kind, []any{
+			string(TestCoverageKindRecorded),
+			string(TestCoverageKindNotRecorded),
+		})
+	}
+}
+
+// MarshalJSON writes the selected object branch beside its discriminator.
+func (u TestCoverage) MarshalJSON() ([]byte, error) {
+	value, err := u.Value()
+	if err != nil {
+		return nil, err
+	}
+	data, err := json.Marshal(value)
+	if err != nil {
+		return nil, err
+	}
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(data, &fields); err != nil {
+		return nil, err
+	}
+	if fields == nil {
+		return nil, goa.InvalidFieldTypeError("state", nil, "non-null JSON object")
+	}
+	if _, exists := fields["state"]; exists {
+		return nil, fmt.Errorf("TestCoverage branch already contains discriminator %q", "state")
+	}
+	tag, err := json.Marshal(string(u.kind))
+	if err != nil {
+		return nil, err
+	}
+	fields["state"] = tag
+	return json.Marshal(fields)
+}
+
+// UnmarshalJSON reads the discriminator and decodes its declared object branch.
+func (u *TestCoverage) UnmarshalJSON(data []byte) error {
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(data, &fields); err != nil {
+		return err
+	}
+	tag, exists := fields["state"]
+	if !exists {
+		return goa.MissingFieldError("state", "TestCoverage")
+	}
+	if bytes.Equal(bytes.TrimSpace(tag), []byte("null")) {
+		return goa.InvalidFieldTypeError("state", nil, "JSON string")
+	}
+	var raw struct {
+		Type  string
+		Value json.RawMessage
+	}
+	if err := json.Unmarshal(tag, &raw.Type); err != nil {
+		return err
+	}
+	delete(fields, "state")
+	value, err := json.Marshal(fields)
+	if err != nil {
+		return err
+	}
+	raw.Value = value
+	switch raw.Type {
+	case string(TestCoverageKindRecorded):
+		var v *RecordedTestCoverageTransport
+		if err := json.Unmarshal(raw.Value, &v); err != nil {
+			return err
+		}
+		u.SetRecorded(v)
+	case string(TestCoverageKindNotRecorded):
+		var v *TestCoverageNotRecordedTransport
+		if err := json.Unmarshal(raw.Value, &v); err != nil {
+			return err
+		}
+		u.SetNotRecorded(v)
+	default:
+		if raw.Type == "" {
+			return goa.MissingFieldError("state", "TestCoverage")
+		}
+		return goa.InvalidEnumValueError("state", raw.Type, []any{
+			string(TestCoverageKindRecorded),
+			string(TestCoverageKindNotRecorded),
+		})
+	}
+	return nil
+}
+
 // TestSource holds exactly one of its branch values.
 type TestSource struct {
 	kind         TestSourceKind

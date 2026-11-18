@@ -2,6 +2,7 @@
 import React, { useLayoutEffect, useRef } from "react";
 import type { StartedBuild } from "../types";
 import { Alert, Button } from "./shadcn";
+import { TestCoverage } from "./test-coverage";
 
 // TestWriterFacts separates assignment observations, test acceptance and verification.
 // Finding text is already correlated with the exact build/verdict by the page.
@@ -89,5 +90,8 @@ export function TestWriterFacts({ build, findingTexts, loading, error, disabled,
         </> : null}
       </div> : null}
     </div> : null}
+    {tests.state === "accepted" ? <TestCoverage id="surla-build-coverage" heading="h5"
+      answers={build.answers} examples={build.examples} statements={build.coverage_statements} report={null} /> :
+      tests.state !== "not_used" ? <p>No accepted tests for this report yet.</p> : null}
   </section>;
 }

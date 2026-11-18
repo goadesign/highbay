@@ -244,6 +244,9 @@ func Start(
 	if err := req.StoryContext.check(); err != nil {
 		return 0, err
 	}
+	if req.StoryContext.TestCoverage != nil && req.Plan.Tests != verify.TestsWritten {
+		return 0, errors.New("only written-test runs may carry test-writer coverage evidence")
+	}
 	if !runIDPattern.MatchString(req.RunID) {
 		return 0, fmt.Errorf("run ID %q is not 32 lowercase hex characters", req.RunID)
 	}
@@ -663,6 +666,9 @@ func decodeRequest(wantRunID string, raw []byte) (Request, error) {
 	}
 	if err := req.Plan.Tests.Check(); err != nil {
 		return req, fmt.Errorf("decode run request: %w", err)
+	}
+	if req.StoryContext.TestCoverage != nil && req.Plan.Tests != verify.TestsWritten {
+		return req, errors.New("decode run request: only written-test runs may carry test-writer coverage evidence")
 	}
 	return req, nil
 }

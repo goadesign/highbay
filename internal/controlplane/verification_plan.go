@@ -22,9 +22,19 @@ import (
 	"github.com/goadesign/surla/internal/scaffold"
 	"github.com/goadesign/surla/internal/testwriter"
 	"github.com/goadesign/surla/internal/verify"
+	"github.com/goadesign/surla/internal/verifyrun"
 )
 
 type (
+	// testSelection keeps one locked tests choice and its accepted report
+	// together. build is populated for written tests; stored evaluators have
+	// no writer report. Other consumers retain the same commit/source facts.
+	testSelection struct {
+		commit string
+		source verify.TestsSource
+		build  buildFile
+	}
+
 	// WrittenTestRuns says where and how the project server runs verification
 	// of the tests accepted for each change, in a project without a stored
 	// evaluator. Runs are kept in Options.RunsDir. The composition root binds
@@ -237,11 +247,19 @@ func (c *ControlPlane) verificationPlan(
 	ctx context.Context,
 	principal Principal,
 	changeID, revision, candidateCommit string,
-) (VerificationConfig, error) {
+) (VerificationConfig, *verifyrun.TestCoverageSnapshot, error) {
 	c.mu.RLock()
-	testsCommit, _, err := c.testsChoice(principal, changeID, revision)
+	selection, err := c.testsChoice(principal, changeID, revision)
 	c.mu.RUnlock()
-	return c.verificationPlanForTests(ctx, candidateCommit, revision, testsCommit, err)
+	cfg, err := c.verificationPlanForTests(ctx, candidateCommit, revision, selection.commit, err)
+	if err != nil {
+		return VerificationConfig{}, nil, err
+	}
+	var coverage *verifyrun.TestCoverageSnapshot
+	if selection.source == verify.TestsWritten {
+		coverage = testCoverageSnapshot(selection.build)
+	}
+	return cfg, coverage, nil
 }
 
 // verificationBuild requires the current owned, undropped build at the entry
@@ -482,7 +500,8 @@ func (c *ControlPlane) verificationPlanForTests(
 	}
 }
 
-// testsChoice returns the commit and source of the tests that judge changeID
+// testsChoice selects the tests that judge changeID, keeping a written-test
+// commit together with the accepted report that supplied it. It selects tests
 // at revision for principal, which its caller has already authorized as the
 // change's owner. It is the only function that chooses which tests a
 // verification or live target uses, which tests approve_merge requires a report to have
@@ -502,30 +521,30 @@ func (c *ControlPlane) verificationPlanForTests(
 func (c *ControlPlane) testsChoice(
 	principal Principal,
 	changeID, revision string,
-) (commit string, source verify.TestsSource, err error) {
+) (testSelection, error) {
 	switch v := c.verifier.(type) {
 	case storedVerification:
-		return v.cfg.Plan.SuiteCommit, verify.TestsEvaluator, nil
+		return testSelection{commit: v.cfg.Plan.SuiteCommit, source: verify.TestsEvaluator}, nil
 	case writtenTestVerification:
 		held, err := c.ownedBuild(principal, changeID)
 		var missing *goa.ServiceError
 		switch {
 		case errors.As(err, &missing) && missing.Name == "not_found":
 			// The caller checked the change, so what is missing is its build.
-			return "", "", refuseNoBuild(changeID, revision, buildFile{}, false)
+			return testSelection{}, refuseNoBuild(changeID, revision, buildFile{}, false)
 		case err != nil:
-			return "", "", err
+			return testSelection{}, err
 		}
 		build := held.file
 		if build.RequestRevision != revision {
-			return "", "", refuseNoBuild(changeID, revision, build, true)
+			return testSelection{}, refuseNoBuild(changeID, revision, build, true)
 		}
 		if build.TestWriter.State != testsAccepted {
-			return "", "", testsNotAccepted{saved: build.TestWriter}
+			return testSelection{}, testsNotAccepted{saved: build.TestWriter}
 		}
-		return build.TestWriter.Commit, verify.TestsWritten, nil
+		return testSelection{commit: build.TestWriter.Commit, source: verify.TestsWritten, build: build}, nil
 	default:
-		return "", "", gensurla.MakeNotImplemented(errVerificationUnavailable)
+		return testSelection{}, gensurla.MakeNotImplemented(errVerificationUnavailable)
 	}
 }
 
