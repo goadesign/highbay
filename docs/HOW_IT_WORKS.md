@@ -118,8 +118,8 @@ Git on `PATH` supports `--no-lazy-fetch` (Git 2.45 or newer). An unsupported
 Git is named by its version; install a newer Git and run `surla` again. This
 check works in an empty folder, before you make a Git repository.
 
-1. **The server starts.** The first time, `surla` prints `Created a new,
-   empty Surla project. Moving or renaming this folder starts a new project.`
+1. **The server starts.** The first time, `surla` prints `Started a Surla project
+   for this folder. Moving or renaming this folder starts a new project.`
    It starts the server in its own Herdr terminal, labelled
    `surla_project=<id>`, and tells it the private state folder it found for
    this project. That folder belongs to your account and lies outside the

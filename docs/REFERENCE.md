@@ -126,7 +126,7 @@ the folder's server, or attaches to the one already running, then prepares the
 team and opens the views page. **What the user sees**, in order:
 
 ```text
-Created a new, empty Surla project. Moving or renaming this folder starts a new project.
+Started a Surla project for this folder. Moving or renaming this folder starts a new project.
 Team shop-3f9c1a2b4d5e.
 Choose an agent for each role in the open Chorus dialog in Herdr.
 Surla is running for /path/to/shop at http://127.0.0.1:52011

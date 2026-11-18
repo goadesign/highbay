@@ -169,7 +169,7 @@ func (s *Server) Handler(application http.Handler) http.Handler {
 		navigation := shell && r.Header.Get("Sec-Fetch-Mode") == "navigate" &&
 			r.Header.Get("Sec-Fetch-Dest") == "document"
 		if site != "" && site != "same-origin" && !navigation && !(shell && (site == "none" || site == "same-site")) {
-			writeAccessError(w, r, http.StatusForbidden, "forbidden", "request must come from the project's own page")
+			writeAccessError(w, r, http.StatusForbidden, "forbidden", "request must come from the project's own page; run surla in your project folder to open it, or surla --print-link to get a link without opening a browser")
 			return
 		}
 		if strings.HasPrefix(r.URL.Path, "/project/") {

@@ -258,7 +258,7 @@ func validateProjectViewsLink(state *project.State, address string) error {
 
 // writeProjectCreatedNotice explains the folder-identity rule whenever the CLI creates a project.
 func writeProjectCreatedNotice(stdout io.Writer) error {
-	_, err := fmt.Fprintln(stdout, "Created a new, empty Surla project. Moving or renaming this folder starts a new project.")
+	_, err := fmt.Fprintln(stdout, "Started a Surla project for this folder. Moving or renaming this folder starts a new project.")
 	return err
 }
 
