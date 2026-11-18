@@ -2621,7 +2621,9 @@ One **Full / compiler-inputs** job per operating system prepares and publishes
 module and compiler archives without running tests. Outside pull requests,
 full-root groups wait for these producers, then restore their inputs; PR checks
 remain independent read-only consumers. A missing module or compiler archive
-triggers preparation of the declared race/plain compilation,
+triggers preparation of the committed and synthetic test-module closures (including
+`sum.golang.org` verification tiles via `go mod tidy` without an initial `go.sum`),
+the declared race/plain compilation,
 CGO-free product dependencies and pinned Goa generator, then compiles Story,
 Orders and Orders Eval with their own dependency versions and plain/race
 selections, including the tagged acceptance tests. Only trusted non-pull-request

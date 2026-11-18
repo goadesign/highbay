@@ -16,10 +16,6 @@ import (
 	"github.com/goadesign/surla/internal/testmodule"
 )
 
-// publishedStoryVersion is the module version of github.com/goadesign/surla/story
-// used by target snapshots in Story observation tests.
-const publishedStoryVersion = "v0.0.0-20261111183703-4568fcf5bb85"
-
 func TestEvaluateProgramSpecializesStoryLoading(t *testing.T) {
 	withoutStory := evaluateProgram(map[string]bool{
 		harnessGoaModule: true,
@@ -489,7 +485,7 @@ func storySnapshot(t *testing.T, goaVersion string, files map[string]string) map
 	t.Helper()
 	out := maps.Clone(files)
 	out["go.mod"] = "module example.com/story-design\n\ngo 1.27.3\n\nrequire (\n" +
-		"\t" + harnessStoryModule + " " + publishedStoryVersion + "\n" +
+		"\t" + harnessStoryModule + " " + testmodule.SurlaVersion(t, harnessStoryModule) + "\n" +
 		"\t" + harnessGoaModule + " " + goaVersion + "\n)\n"
 	return testmodule.Tidy(t, out)
 }

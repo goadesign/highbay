@@ -30,6 +30,7 @@ import (
 	genmcpsurla "github.com/goadesign/surla/gen/mcp_surla"
 	gensurla "github.com/goadesign/surla/gen/surla"
 	"github.com/goadesign/surla/internal/controlplane"
+	"github.com/goadesign/surla/internal/testmodule"
 	"github.com/goadesign/surla/internal/verify"
 )
 
@@ -47,7 +48,7 @@ const (
 // with no go.sum entry yet.
 const (
 	regexpModule  = "rsc.io/binaryregexp"
-	regexpRequire = "\nrequire rsc.io/binaryregexp v0.2.0\n"
+	regexpRequire = "\nrequire rsc.io/binaryregexp " + testmodule.BinaryRegexpVersion + "\n"
 	regexpTest    = `package dependencycheck
 
 import (
@@ -197,7 +198,7 @@ func TestCheckProjectRepairsDependenciesOnOneServer(t *testing.T) {
 
 		repaired := journeyUpdate(t, client)
 		assert.Contains(t, repaired.FilesWritten, "go.sum", repaired.Message)
-		assert.Contains(t, readJourneyFile(t, filepath.Join(dir, "go.sum")), regexpModule+" v0.2.0 h1:")
+		assert.Contains(t, readJourneyFile(t, filepath.Join(dir, "go.sum")), regexpModule+" "+testmodule.BinaryRegexpVersion+" h1:")
 
 		passed := journeyCheck(t, client)
 		assert.True(t, passed.Passed, passed.Message)
@@ -207,7 +208,7 @@ func TestCheckProjectRepairsDependenciesOnOneServer(t *testing.T) {
 	t.Run("workspace-only checksums are repaired into go.work.sum", func(t *testing.T) {
 		writeJourneyFile(t, filepath.Join(dir, "testdata", "deps", "base", "go.mod"), workdepModule)
 		writeJourneyFile(t, filepath.Join(dir, "testdata", "deps", "base", "workdep.go"), workdepBase)
-		writeJourneyFile(t, filepath.Join(dir, "testdata", "deps", "workspace", "go.mod"), workdepModule+"\nrequire rsc.io/qr v0.2.0\n")
+		writeJourneyFile(t, filepath.Join(dir, "testdata", "deps", "workspace", "go.mod"), workdepModule+"\nrequire rsc.io/qr "+testmodule.QRVersion+"\n")
 		writeJourneyFile(t, filepath.Join(dir, "testdata", "deps", "workspace", "workdep.go"), workdepWorkspace)
 		appendFile(t, filepath.Join(dir, "go.mod"), workdepRequire+"\nreplace example.com/workdep => ./testdata/deps/base\n")
 		writeJourneyFile(t, filepath.Join(dir, "workdepcheck", "name_test.go"), workdepTest)

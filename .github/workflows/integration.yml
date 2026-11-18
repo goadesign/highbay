@@ -55,6 +55,7 @@ jobs:
       - name: Prepare the complete native compiler closure on a cold producer
         if: steps.compiler-cache.outputs.build-hit != 'true' || steps.compiler-cache.outputs.modules-hit != 'true'
         run: |
+          go run ./.github/scripts/modprime </dev/null
           bash "$GITHUB_WORKSPACE/.github/scripts/go-test.sh" -count=1 -run '^$' -- ./... </dev/null
           CGO_ENABLED=0 go build ./... </dev/null
           go build -o "$RUNNER_TEMP/goa-cache-primer" goa.design/goa/v3/cmd/goa </dev/null
@@ -241,6 +242,7 @@ jobs:
           go run ./.github/scripts/racecheck </dev/null
           go test -count=1 ./.github/scripts/racecheck </dev/null
           go test -count=1 -timeout 1m ./.github/scripts/testcheck </dev/null
+          go test -count=1 -timeout 1m ./.github/scripts/modprime </dev/null
       - name: Check formatting
         run: |
           unformatted=$(gofmt -l $(git ls-files '*.go'))
