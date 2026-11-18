@@ -161,6 +161,7 @@ func TestStoredVerificationSupportsIndependentEvaluatorRepositories(t *testing.T
 	require.NoError(t, err)
 	assert.Equal(t, filepath.Join(expectedSuite, "eval-repo"), opts.Verification.Plan.SuiteRepo)
 	assert.Equal(t, 15*time.Minute, opts.Verification.Timeout)
+	opts.Team = fixtureWorkflowTeam("alice@example.com")
 	cp, err := controlplane.New(opts)
 	require.NoError(t, err)
 	t.Cleanup(func() { assert.NoError(t, cp.Close()) })

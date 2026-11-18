@@ -289,7 +289,7 @@ func testBuild(t *testing.T) string {
 // field, as servers built before it did. Stop requests release the store.
 func serveFixtureIdentity(t *testing.T, state *project.State, build string) {
 	t.Helper()
-	cp, err := controlplane.New(controlplane.Options{CardsDir: state.CardsDir()})
+	cp, err := openFixtureProjectCards(state)
 	require.NoError(t, err)
 	var closeOnce sync.Once
 	closeStore := func() { closeOnce.Do(func() { assert.NoError(t, cp.Close()) }) }
@@ -376,9 +376,6 @@ func TestCLIAlreadyOpenAndCredentialNonleak(t *testing.T) {
 	isolateProviderFamilies(t)
 	state, err := fixtureProjectState("")
 	require.NoError(t, err)
-	cp, err := controlplane.New(controlplane.Options{CardsDir: state.CardsDir()})
-	require.NoError(t, err)
-	t.Cleanup(func() { assert.NoError(t, cp.Close()) })
 	var calls []string
 	var space *project.TeamSpace
 	var overlays []string
@@ -413,6 +410,9 @@ func TestCLIAlreadyOpenAndCredentialNonleak(t *testing.T) {
 	deps.Host = commands
 	server, err := project.NewServer(state, func() {}, deps)
 	require.NoError(t, err)
+	cp, err := controlplane.New(fixtureProjectOptions(state, server))
+	require.NoError(t, err)
+	t.Cleanup(func() { assert.NoError(t, cp.Close()) })
 	overlays = []string{}
 	ctx := controlplane.WithPrincipal(t.Context(), controlplane.Principal{ID: state.Record.Owner, CallerID: "management", Kind: controlplane.CallerManagement})
 	_, err = server.EnsureTeam(ctx)

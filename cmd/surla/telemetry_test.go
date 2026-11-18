@@ -77,7 +77,10 @@ func TestStandaloneTelemetryKeepsFullOTLPAndSafeDiagnostics(t *testing.T) {
 		assert.NoError(t, tp.Shutdown(ctx))
 	})
 	cp, err := controlplane.New(controlplane.Options{
-		CardsDir: cardsDir, TracerProvider: tp,
+		CardsDir:       cardsDir,
+		WorkspaceDir:   t.TempDir(),
+		TracerProvider: tp,
+		Team:           fixtureWorkflowTeam("alice@example.com"),
 	})
 	require.NoError(t, err)
 	t.Cleanup(func() { assert.NoError(t, cp.Close()) })

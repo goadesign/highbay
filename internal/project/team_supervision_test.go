@@ -641,10 +641,18 @@ func TestTeamTextsAndSpans(t *testing.T) {
 			assert.Empty(t, event.Attributes)
 		}
 	}
-	cp, err := controlplane.New(controlplane.Options{CardsDir: t.TempDir(), TracerProvider: provider})
+	state := testState(t)
+	server, err := NewServer(state, func() {}, fixtureTeamDependencies(state))
+	require.NoError(t, err)
+	cp, err := controlplane.New(controlplane.Options{
+		CardsDir:       state.CardsDir(),
+		WorkspaceDir:   state.Record.Directory,
+		TracerProvider: provider,
+		Team:           &controlplane.TeamBinding{Owner: state.Record.Owner, Service: server},
+	})
 	require.NoError(t, err)
 	t.Cleanup(func() { assert.NoError(t, cp.Close()) })
-	user := controlplane.WithPrincipal(t.Context(), controlplane.Principal{ID: "owner", Kind: controlplane.CallerUser})
+	user := controlplane.WithPrincipal(t.Context(), controlplane.Principal{ID: state.Record.Owner, Kind: controlplane.CallerUser})
 	o.publish(user, now, true)
 	history, err := cp.ListTraces(user, &gensurla.ListTracesPayload{Status: "all", Limit: 100})
 	require.NoError(t, err)

@@ -131,7 +131,7 @@ func TestCheckProjectRepairsDependenciesOnOneServer(t *testing.T) {
 	require.NoError(t, err)
 	// A test executable has no released module version in its build info.
 	opts.SurlaVersion = starterSurlaVersion
-	team := &promotionTeamFixture{}
+	team := &workflowTeamFixture{}
 	opts.Team = &controlplane.TeamBinding{Owner: "operator@example.com", Service: team}
 	cp, err := controlplane.New(opts)
 	require.NoError(t, err)

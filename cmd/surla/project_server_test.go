@@ -39,12 +39,11 @@ func TestProjectStartSerializesAndRecovers(t *testing.T) {
 	var active *project.State
 	launch := func(ctx context.Context, state *project.State) (string, error) {
 		starts.Add(1)
-		var err error
-		cp, err = controlplane.New(controlplane.Options{CardsDir: state.CardsDir()})
+		management, err := project.NewServer(state, func() {}, fixtureTeamDependencies(state))
 		if err != nil {
 			return "", err
 		}
-		management, err := project.NewServer(state, func() {}, fixtureTeamDependencies(state))
+		cp, err = controlplane.New(fixtureProjectOptions(state, management))
 		if err != nil {
 			return "", err
 		}
@@ -109,7 +108,7 @@ func TestProjectStartRefusesTakenPortAndHeldUnansweringStore(t *testing.T) {
 				require.NoError(t, err)
 				defer func() { require.NoError(t, ln.Close()) }()
 			} else {
-				cp, err := controlplane.New(controlplane.Options{CardsDir: state.CardsDir()})
+				cp, err := openFixtureProjectCards(state)
 				require.NoError(t, err)
 				defer func() { require.NoError(t, cp.Close()) }()
 			}
@@ -143,7 +142,7 @@ func TestTakenPortNamesHolderAndStep(t *testing.T) {
 				require.NoError(t, err)
 				require.NoError(t, os.WriteFile(filepath.Join(other.Dir, "project.json"), raw, 0o600))
 				if holder == "another project" {
-					cp, err := controlplane.New(controlplane.Options{CardsDir: other.CardsDir()})
+					cp, err := openFixtureProjectCards(other)
 					require.NoError(t, err)
 					defer func() { assert.NoError(t, cp.Close()) }()
 				}
@@ -231,10 +230,14 @@ func TestPromotionSettingsSurviveRestart(t *testing.T) {
 	require.NoError(t, runProjectSettings("promotion", []string{"set", file}, &output))
 	assert.Contains(t, output.String(), "next time")
 	load := func() map[string]string {
-		config, err := configureServeWorkspace()
+		state, err := fixtureProjectState("")
+		require.NoError(t, err)
+		config, err := configureProjectWorkspace(state)
 		require.NoError(t, err)
 		require.NotNil(t, config.promotionTarget)
-		cp, err := controlplane.New(controlplane.Options{CardsDir: config.cardsDir, PromotionTarget: config.promotionTarget})
+		opts := fixtureProjectOptions(state, &workflowTeamFixture{})
+		opts.PromotionTarget = config.promotionTarget
+		cp, err := controlplane.New(opts)
 		require.NoError(t, err)
 		artifacts, err := config.promotionTarget.CurrentArtifacts(t.Context(), commit)
 		require.NoError(t, err)

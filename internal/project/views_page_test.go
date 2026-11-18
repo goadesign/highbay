@@ -303,7 +303,6 @@ func TestViewsProjectRestartReportsStartupFailure(t *testing.T) {
 func startViewsProject(t *testing.T, opts controlplane.Options) *viewsProject {
 	t.Helper()
 	state := testState(t)
-	opts.CardsDir = state.CardsDir()
 	vp := &viewsProject{state: state, opts: opts}
 	require.NoError(t, vp.restart())
 	t.Cleanup(func() {
@@ -357,9 +356,12 @@ func (vp *viewsProject) restart() error {
 	if err != nil {
 		return fmt.Errorf("start the project server: %w", err)
 	}
-	// Match project startup: even an unprepared team has a bound reader that
-	// returns its registered roles, rather than an unavailable capability.
+	// Use the project's directory unless the test supplies a workspace with a Story.
 	opts := vp.opts
+	opts.CardsDir = vp.state.CardsDir()
+	if opts.WorkspaceDir == "" {
+		opts.WorkspaceDir = vp.state.Record.Directory
+	}
 	opts.Team = &controlplane.TeamBinding{Owner: vp.state.Record.Owner, Service: server}
 	cp, err := controlplane.New(opts)
 	if err != nil {

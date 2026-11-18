@@ -401,7 +401,11 @@ func projectDispatchRuntime(t *testing.T) projectRuntime {
 	starts, opens := 0, 0
 	runtime.startTerminal = func(ctx context.Context, state *project.State) (string, error) {
 		starts++
-		cp, err := controlplane.New(controlplane.Options{CardsDir: state.CardsDir()})
+		management, err := project.NewServer(state, func() {}, fixtureTeamDependencies(state))
+		if err != nil {
+			return "", err
+		}
+		cp, err := controlplane.New(fixtureProjectOptions(state, management))
 		if err != nil {
 			return "", err
 		}
@@ -410,8 +414,6 @@ func projectDispatchRuntime(t *testing.T) projectRuntime {
 		if err != nil {
 			return "", err
 		}
-		management, err := project.NewServer(state, func() {}, fixtureTeamDependencies(state))
-		require.NoError(t, err)
 		require.NoError(t, management.PublishRunning(os.Getpid(), "stand-in"))
 		server := &http.Server{Handler: management.Handler(controlplane.NewHTTPHandler(cp, management.Authenticate)), ReadHeaderTimeout: time.Second}
 		t.Cleanup(func() { assert.NoError(t, server.Close()) })
