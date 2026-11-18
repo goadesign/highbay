@@ -21,10 +21,11 @@ import (
 
 	"github.com/goadesign/surla/internal/designeval"
 	"github.com/goadesign/surla/internal/gitenv"
+	"github.com/goadesign/surla/internal/testmodule"
 )
 
 // published is a Surla version that exists on the module proxy.
-const published = "v0.0.0-20261115014514-02c792da3ded"
+const published = testmodule.PublishedSurlaVersion
 
 func TestValidVersionAcceptsOnlyExactVersions(t *testing.T) {
 	for v, want := range map[string]bool{

@@ -406,9 +406,7 @@ func TestLiveTargetStartFailuresAreTyped(t *testing.T) {
 	require.NoError(t, err)
 	assert.Empty(t, dirs)
 
-	unconfigured, err := New(Options{CardsDir: t.TempDir()})
-	require.NoError(t, err)
-	t.Cleanup(func() { assert.NoError(t, unconfigured.Close()) })
+	unconfigured := newControlPlane(t, Options{})
 	_, err = unconfigured.StartLiveTarget(alice, &gensurla.StartLiveTargetPayload{ChangeID: liveTestChangeID, CandidateCommit: strings.Repeat("a", 40)})
 	assert.Equal(t, "live_target_unavailable", goaErrorName(err))
 
@@ -608,8 +606,8 @@ func TestAFailedStopKeepsTheOwnerAndStartsNoOtherTarget(t *testing.T) {
 	again := cp.Close()
 	require.Error(t, again, "a later Close returns the same stop failure")
 	assert.Equal(t, err.Error(), again.Error())
-	_, err = New(Options{CardsDir: cardsDir})
-	require.Error(t, err, "the cards directory, which holds the live root, stays locked")
+	_, err = New(Options{CardsDir: cardsDir, WorkspaceDir: cp.initialWorkspaceRoot, Team: testTeamBinding()})
+	require.ErrorContains(t, err, "is in use by another process", "the cards directory, which holds the live root, stays locked")
 	_, err = cp.Diff(alice, &gensurla.DiffPayload{
 		Old: &gensurla.DesignSnapshot{Files: map[string]string{}}, New: &gensurla.DesignSnapshot{Files: map[string]string{}},
 	})
@@ -835,8 +833,8 @@ func TestAStartThatFailsBeforeReadyAndCannotBeCleanedUpKeepsItsOwner(t *testing.
 	_, err = cp.StopLiveTarget(alice)
 	assert.Equal(t, "live_target_stop_failed", goaErrorName(err), "the owner is still known")
 	require.Error(t, cp.Close())
-	_, err = New(Options{CardsDir: cardsDir})
-	require.Error(t, err, "the cards directory stays locked")
+	_, err = New(Options{CardsDir: cardsDir, WorkspaceDir: cp.initialWorkspaceRoot, Team: testTeamBinding()})
+	require.ErrorContains(t, err, "is in use by another process", "the cards directory stays locked")
 }
 
 func TestAStartThatTimesOutSaysSo(t *testing.T) {

@@ -92,8 +92,8 @@ type (
 		// not_implemented. The host shuts down this provider after Close, or
 		// if New fails; the control plane never shuts it down.
 		TracerProvider *sdktrace.TracerProvider
-		// WorkspaceDir is the initial filesystem workspace bound to this
-		// control plane. When set, cards, runs, and reports must live outside
+		// WorkspaceDir is the required initial filesystem workspace bound to this
+		// control plane. Cards, runs, and reports must live outside
 		// it, and CP1/CP2/CP3/CP4/CP5 can read or derive project inputs from
 		// the bound workspace.
 		WorkspaceDir string
@@ -122,9 +122,8 @@ type (
 		GoProxyEnv []string
 		// Evaluator evaluates Goa design snapshots for refresh_story and
 		// diff. When nil, New constructs a default designeval.Evaluator (using
-		// <CardsDir>/designeval as its protected temporary parent when
-		// WorkspaceDir is set). When a host supplies Evaluator for a bound
-		// workspace, it must use a protected directory outside WorkspaceDir.
+		// <CardsDir>/designeval as its protected temporary parent). A host-supplied
+		// Evaluator must use a protected directory outside WorkspaceDir.
 		// The default uses BuildCacheDir when supplied; embedded hosts can pass
 		// it through designeval.NewEvaluatorWithCache too.
 		Evaluator *designeval.Evaluator
@@ -184,7 +183,8 @@ type (
 		// <CardsDir>/live. Without it, or without Verification or
 		// WrittenTestRuns, start_live_target fails.
 		Live *LiveConfig
-		// Team is the project owner composed before this control plane; nil leaves team operations unavailable.
+		// Team is the required project owner and service composed before this
+		// control plane. New validates and copies the binding before serving.
 		Team *TeamBinding
 	}
 
@@ -321,7 +321,7 @@ type (
 		// boundWorkspaceDev and boundWorkspaceIno.
 		workspaceMu sync.RWMutex
 		// initialWorkspaceRoot is the cleaned physical path of
-		// Options.WorkspaceDir at startup, or empty when unbound.
+		// Options.WorkspaceDir at startup.
 		initialWorkspaceRoot string
 		// protectedDirs holds the deduplicated physical paths of
 		// initialWorkspaceRoot and its enclosing Git working tree root,
@@ -418,7 +418,7 @@ type (
 		// It has room for one value; report_tests_finished sends without
 		// waiting, and a full channel already says the same.
 		reportWake chan struct{}
-		// reports is the project's report checker, nil without a bound team;
+		// reports is the project's report checker;
 		// reportWorker runs it and drains before stores close.
 		reports      *reportChecker
 		reportWorker sync.WaitGroup
@@ -428,7 +428,7 @@ type (
 		// buildStartWithTimeout injects the phase deadline in deterministic tests.
 		buildStartWithTimeout func(context.Context, time.Duration) (context.Context, context.CancelFunc)
 		// team is the single injected owner; teamWorker drains before stores close.
-		team       *TeamBinding
+		team       TeamBinding
 		teamWorker sync.WaitGroup
 	}
 )
@@ -466,7 +466,9 @@ func PrincipalFromContext(ctx context.Context) (Principal, bool) {
 }
 
 // New constructs a ControlPlane that saves its Change Cards under
-// opts.CardsDir, so cards written by an earlier process are served again. It
+// opts.CardsDir, so cards written by an earlier process are served again. Team
+// and a physical WorkspaceDir are required; invalid bindings fail before the
+// card store is opened or created. New copies the validated Team binding. It
 // creates the directory when missing and holds its lock until Close; it fails
 // when CardsDir is empty or another process holds the lock.
 func New(opts Options) (*ControlPlane, error) {
@@ -486,6 +488,12 @@ func newWithWorkspaceGitTimeout(
 		}
 		return evalErr
 	}
+	if opts.Team == nil {
+		return nil, errors.Join(errors.New("Team is required"), cleanupFailedNew())
+	}
+	if opts.Team.Owner == "" || opts.Team.Service == nil {
+		return nil, errors.Join(errors.New("Team requires an owner and service"), cleanupFailedNew())
+	}
 	surlaVersion := strings.TrimSpace(opts.SurlaVersion)
 	if surlaVersion != "" && !scaffold.ValidVersion(surlaVersion) {
 		err := fmt.Errorf("surla version %q must be a canonical semantic version such as v0.1.0", opts.SurlaVersion)
@@ -501,10 +509,6 @@ func newWithWorkspaceGitTimeout(
 	}
 	if opts.WrittenTestRuns != nil && opts.RunsDir == "" {
 		err := errors.New("WrittenTestRuns requires RunsDir, where its runs are kept")
-		return nil, errors.Join(err, cleanupFailedNew())
-	}
-	if opts.WrittenTestRuns != nil && opts.WorkspaceDir == "" {
-		err := errors.New("WrittenTestRuns requires WorkspaceDir, whose repository holds the commits it verifies")
 		return nil, errors.Join(err, cleanupFailedNew())
 	}
 	if (opts.Verification != nil || opts.WrittenTestRuns != nil) && opts.BuildCacheDir == "" {
@@ -553,10 +557,7 @@ func newWithWorkspaceGitTimeout(
 	}
 	eval := opts.Evaluator
 	if eval == nil {
-		parent := ""
-		if wsRoot != "" {
-			parent = filepath.Join(cards.dir, "designeval")
-		}
+		parent := filepath.Join(cards.dir, "designeval")
 		if opts.BuildCacheDir != "" {
 			eval, err = designeval.NewEvaluatorWithCache(parent, opts.BuildCacheDir)
 			if err != nil {
@@ -598,7 +599,7 @@ func newWithWorkspaceGitTimeout(
 		builderCopyTurn:        make(chan struct{}, 1),
 		workingCopyTurn:        make(chan struct{}, 1),
 		reportWake:             make(chan struct{}, 1),
-		team:                   opts.Team,
+		team:                   *opts.Team,
 	}
 	if err := cp.restoreWorkspace(); err != nil {
 		return nil, errors.Join(err, cp.Close())
@@ -622,9 +623,6 @@ func newWithWorkspaceGitTimeout(
 		// Close and the next start, and its span records the failure, so it
 		// does not stop this server from starting.
 		cp.recoverCheckOperations()
-	}
-	if cp.team != nil && (cp.team.Owner == "" || cp.team.Service == nil) {
-		return nil, errors.Join(errors.New("team binding requires its owner and service"), cp.Close())
 	}
 	cp.startTeamSupervisor()
 	cp.startReportChecker()

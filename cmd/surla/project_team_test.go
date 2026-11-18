@@ -16,7 +16,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/goadesign/surla/internal/controlplane"
 	"github.com/goadesign/surla/internal/project"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -335,6 +334,12 @@ func TestStartOpensViewsWhenTeamFails(t *testing.T) {
 			want:   "open the Herdr app, then click Start agents on the views page",
 		},
 		{
+			name:   "saved space",
+			status: http.StatusServiceUnavailable,
+			body:   `{"name":"team_unavailable","cause":"saved_space"}`,
+			want:   "This project's saved Herdr space has an ID this version of Surla no longer accepts. Close that space in Herdr (its agents stop with it), then start the agents again; Surla will prepare a replacement space.",
+		},
+		{
 			name:   "roster folder",
 			status: http.StatusServiceUnavailable,
 			body:   `{"name":"team_unavailable","cause":"roster_folder"}`,
@@ -358,7 +363,7 @@ func TestStartOpensViewsWhenTeamFails(t *testing.T) {
 			isolateProviderFamilies(t)
 			state, err := fixtureProjectState("")
 			require.NoError(t, err)
-			cp, err := controlplane.New(controlplane.Options{CardsDir: state.CardsDir()})
+			cp, err := openFixtureProjectCards(state)
 			require.NoError(t, err)
 			t.Cleanup(func() { assert.NoError(t, cp.Close()) })
 			url := state.Origin() + "/views#link=" + strings.Repeat("a", 64)

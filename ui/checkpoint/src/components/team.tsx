@@ -12,8 +12,8 @@ type Role = TeamRoleState["role"];
 // failed read is named by the view in fixed words; the other messages are
 // complete sentences and stand alone.
 export interface TeamFactsError {
-  // readFailed adds the failed-read label. An unbound team's instruction or
-  // a notice that updates stopped is already a complete message.
+  // readFailed adds the owner-read failure label. Session and update notices
+  // are already complete messages.
   readFailed: boolean;
   // message is the server's diagnostic or the page's reason, shown unchanged.
   message: string;

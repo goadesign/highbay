@@ -174,7 +174,11 @@ func (s *Server) teamSelection() TeamSelection {
 	s.state.mu.Lock()
 	defer s.state.mu.Unlock()
 	record := s.state.Record
-	selection := TeamSelection{Root: record.Directory, Space: record.Space, Team: record.Team}
+	space := record.Space
+	if !safeSpaceID(space) {
+		space = ""
+	}
+	selection := TeamSelection{Root: record.Directory, Space: space, Team: record.Team}
 	s.team.observationMu.RLock()
 	selection.connection = s.team.connection
 	s.team.observationMu.RUnlock()
@@ -226,6 +230,8 @@ func userTeamStep(cause string) string {
 		// Starting agents and showing a pane both fail with this cause, so the step
 		// retries whichever action the user took.
 		return "Herdr did not complete a team command; open the Herdr app, then try again"
+	case "saved_space":
+		return "This project's saved Herdr space has an ID this version of Surla no longer accepts. Close that space in Herdr (its agents stop with it), then start the agents again; Surla will prepare a replacement space."
 	case "roster_folder":
 		return "Herdr's launcher roster folder could not be written; make data/chorus-launcher/rosters in Herdr's app folder (~/.config/herdr-app unless HERDR_APP_HOME is set) writable by this account, then start the agents again"
 	case "project_state":

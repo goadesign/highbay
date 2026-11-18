@@ -109,6 +109,7 @@ func TestServeOptionsStartLiveTargetsWithoutAModel(t *testing.T) {
 	assert.Len(t, opts.Live.Command, 1)
 	assert.Equal(t, defaultProjectVerifyTimeout, opts.Live.StartTimeout)
 	assert.Equal(t, []string{"PATH=/bin"}, opts.Live.Env)
+	opts.Team = fixtureWorkflowTeam("alice@example.com")
 	cp, err := controlplane.New(opts)
 	require.NoError(t, err)
 	t.Cleanup(func() { require.NoError(t, cp.Close()) })
@@ -128,6 +129,7 @@ func TestServeProposesWithoutAModelAndConfigureModelSwitchesTheLiveTargetModel(t
 	opts, err := serveOptions([]string{"PATH=/bin"})
 	require.NoError(t, err)
 
+	opts.Team = fixtureWorkflowTeam("operator@example.com")
 	cp, err := controlplane.New(opts)
 	require.NoError(t, err)
 	t.Cleanup(func() { assert.NoError(t, cp.Close()) })

@@ -276,7 +276,7 @@ func TestRefusedHandOverStopsStartBeforeTheTeam(t *testing.T) {
 			// The held card store makes start attach to the answering server,
 			// which reports this test binary's build, as a server of this
 			// surla does.
-			cp, err := controlplane.New(controlplane.Options{CardsDir: state.CardsDir()})
+			cp, err := openFixtureProjectCards(state)
 			require.NoError(t, err)
 			t.Cleanup(func() { assert.NoError(t, cp.Close()) })
 			build := testBuild(t)
@@ -392,11 +392,11 @@ func TestCLIChildrenReceiveTheShellsProviderVariablesOnlyWhereAllowed(t *testing
 // request body, and publishes its management credential.
 func startRecordingProjectServer(t *testing.T, state *project.State) (*controlplane.ControlPlane, *[]string) {
 	t.Helper()
-	cp, err := controlplane.New(controlplane.Options{CardsDir: state.CardsDir()})
-	require.NoError(t, err)
-	t.Cleanup(func() { assert.NoError(t, cp.Close()) })
 	management, err := project.NewServer(state, func() {}, fixtureTeamDependencies(state))
 	require.NoError(t, err)
+	cp, err := controlplane.New(fixtureProjectOptions(state, management))
+	require.NoError(t, err)
+	t.Cleanup(func() { assert.NoError(t, cp.Close()) })
 	var bodies []string
 	handler := management.Handler(controlplane.NewHTTPHandler(cp, management.Authenticate))
 	recorder := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

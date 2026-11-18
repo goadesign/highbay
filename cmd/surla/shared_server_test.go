@@ -48,6 +48,7 @@ func startSharedServerSession(t *testing.T, principal string) *sharedServerSessi
 	provider, err := newTraceProvider(context.Background(), io.Discard, func(string) string { return "" })
 	require.NoError(t, err)
 	opts.TracerProvider = provider
+	opts.Team = fixtureWorkflowTeam("operator@example.com")
 	cp, err := controlplane.New(opts)
 	require.NoError(t, err)
 	server := httptest.NewServer(controlplane.NewHTTPHandler(cp, workflowAuthenticator(map[string]controlplane.Principal{"test-token": {ID: principal}})))

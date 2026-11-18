@@ -740,18 +740,6 @@ func TestAdoptStoryRefreshRejectionsLeaveCardStorageUnchanged(t *testing.T) {
 			want: `has state "failed", not succeeded; wait for get_story_refresh to report succeeded or call refresh_story again`,
 		},
 		{
-			name: "no workspace bound",
-			setup: func(t *testing.T) (*ControlPlane, string, *string, *gensurla.ChangeCardResult) {
-				_, cp, card := newWS(t)
-				opID := seedStoryRefreshForTest(t, cp, "alice@example.com", storyRefreshStateSucceeded, sampleAdoptedStories(), "")
-				cp.workspaceMu.Lock()
-				cp.activeWorkspaceDir, cp.boundWorkspaceDev, cp.boundWorkspaceIno = "", 0, 0
-				cp.workspaceMu.Unlock()
-				return cp, opID, nil, card
-			},
-			want: "no workspace directory is bound to this control plane; start Surla from a project directory, then call refresh_story",
-		},
-		{
 			name: "different workspace bound after refresh_story",
 			setup: func(t *testing.T) (*ControlPlane, string, *string, *gensurla.ChangeCardResult) {
 				_, cp, card := newWS(t)

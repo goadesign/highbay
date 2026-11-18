@@ -23,9 +23,8 @@ import (
 
 type (
 	// reportChecker is the one worker per project that judges the test
-	// writer's reports. New starts its run on the server's context for a
-	// project with a bound team, the only kind whose builds have a test
-	// writer, and Close ends it before the stores close. run judges every
+	// writer's reports. New starts its run on the server's context, and
+	// Close ends it before the stores close. run judges every
 	// build found reported when it starts, then those each report wakes it
 	// for. Each judgment opens the test writer's working copy as a build
 	// start does (openReportCopy), runs in the project's working-copy turn
@@ -161,11 +160,8 @@ func (e *openCopyError) Unwrap() error {
 }
 
 // startReportChecker starts the report checker on the server's context for a
-// project with a bound team; Close ends it before the stores close.
+// project; Close ends it before the stores close.
 func (c *ControlPlane) startReportChecker() {
-	if c.team == nil {
-		return
-	}
 	c.reports = newReportChecker(c)
 	c.reportWorker.Go(func() { c.reports.run(c.serverCtx) })
 }

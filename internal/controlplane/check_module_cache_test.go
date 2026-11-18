@@ -58,7 +58,7 @@ func TestCheckModuleCacheAdmission(t *testing.T) {
 			require.NoError(t, os.Mkdir(workspace, 0o700))
 			cards := filepath.Join(realTempDir(t), "cards")
 			cache := tc.path(t, workspace, cards)
-			cp, err := New(Options{CardsDir: cards, WorkspaceDir: workspace, CheckModuleCacheDir: cache})
+			cp, err := New(Options{Team: testTeamBinding(), CardsDir: cards, WorkspaceDir: workspace, CheckModuleCacheDir: cache})
 			if tc.want != "" {
 				assert.ErrorContains(t, err, tc.want)
 				if tc.name != "operation storage" {

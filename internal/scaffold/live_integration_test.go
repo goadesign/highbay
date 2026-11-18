@@ -54,7 +54,7 @@ type starterWindowHost struct{ project.TeamHost }
 
 // published is the Surla version the starter's go.mod pins; it exists on the
 // module proxy. It matches the internal tests' fixture of the same name.
-const published = "v0.0.0-20261115014514-02c792da3ded"
+const published = testmodule.PublishedSurlaVersion
 
 // TestStarterLiveTargetAppliesADraftToTheNextModelRequest creates and commits
 // one real starter, then clones that immutable seed for two independent

@@ -99,42 +99,16 @@ func (f *teamServiceFixture) Supervise(ctx context.Context, read AssignmentReade
 	return nil
 }
 
-// TestTeamBindingValidation refuses partial bindings without leaking the owner.
-func TestTeamBindingValidation(t *testing.T) {
-	for _, binding := range []*TeamBinding{{Owner: "private-owner"}, {Service: &teamServiceFixture{}}} {
-		cp, err := New(Options{CardsDir: t.TempDir(), Team: binding})
-		assert.Nil(t, cp)
-		assert.Error(t, err)
-		assert.NotContains(t, err.Error(), "private-owner")
-	}
+// testTeamBinding supplies an independent team with no roles assigned yet.
+func testTeamBinding() *TeamBinding {
+	return &TeamBinding{Owner: "alice@example.com", Service: &teamServiceFixture{
+		snapshot: gensurla.TeamSnapshot{Team: "test-team", Roles: []*gensurla.TeamRoleState{}},
+	}}
 }
 
 // TestTeamUserTransport enforces user-only access before the owner sees a call,
-// including management, validates the role with the generated decoder, and maps
-// an unbound team to its declared refusal without any outside effect.
+// including management, and validates the role with the generated decoder.
 func TestTeamUserTransport(t *testing.T) {
-	t.Run("unbound", func(t *testing.T) {
-		cp := newControlPlane(t, Options{})
-		handler := NewHTTPHandler(cp, func(*http.Request) (Principal, error) {
-			return Principal{ID: "owner", Kind: CallerUser}, nil
-		})
-		for _, route := range []struct{ method, path, body string }{
-			{http.MethodGet, "/team", ""},
-			{http.MethodPost, "/team/pane", `{"role":"builder"}`},
-			{http.MethodPost, "/team/agents", ""},
-		} {
-			t.Run(route.path, func(t *testing.T) {
-				response := httptest.NewRecorder()
-				handler.ServeHTTP(response, httptest.NewRequest(route.method, route.path, strings.NewReader(route.body)))
-				assert.Equal(t, http.StatusNotImplemented, response.Code, response.Body.String())
-				assert.Equal(t, "not_implemented", response.Header().Get("goa-error"))
-				var refusal struct{ Name, Message string }
-				require.NoError(t, json.Unmarshal(response.Body.Bytes(), &refusal))
-				assert.Equal(t, "not_implemented", refusal.Name)
-				assert.Equal(t, "Start this project with surla to use its team.", refusal.Message)
-			})
-		}
-	})
 	for _, kind := range []CallerKind{CallerUser, CallerGuide, CallerBuilder, CallerTestWriter, CallerManagement} {
 		t.Run(string(kind), func(t *testing.T) {
 			f := &teamServiceFixture{snapshot: gensurla.TeamSnapshot{Team: "team", Roles: []*gensurla.TeamRoleState{}}}
@@ -436,7 +410,7 @@ func TestTeamSupervisorOwnedShutdown(t *testing.T) {
 				close(stopped)
 				return nil
 			}
-			cp, err := New(Options{CardsDir: t.TempDir(), Team: &TeamBinding{Owner: "owner", Service: f}})
+			cp, err := New(Options{CardsDir: t.TempDir(), WorkspaceDir: realTempDir(t), Team: &TeamBinding{Owner: "owner", Service: f}})
 			require.NoError(t, err)
 			select {
 			case <-started:
@@ -551,7 +525,7 @@ func TestTeamBindAssignmentsBeforeSupervise(t *testing.T) {
 		<-ctx.Done()
 		return nil
 	}
-	cp, err := New(Options{CardsDir: t.TempDir(), Team: &TeamBinding{Owner: "alice@example.com", Service: f}})
+	cp, err := New(Options{CardsDir: t.TempDir(), WorkspaceDir: realTempDir(t), Team: &TeamBinding{Owner: "alice@example.com", Service: f}})
 	require.NoError(t, err)
 	t.Cleanup(func() {
 		close(superviseGate)

@@ -44,11 +44,15 @@ func (d headerDoer) Do(r *http.Request) (*http.Response, error) {
 // TestProjectIdentitySessionsAndRoles exercises real generated HTTP and MCP consumers without starting agents or models.
 func TestProjectIdentitySessionsAndRoles(t *testing.T) {
 	state := testState(t)
-	cp, err := controlplane.New(controlplane.Options{CardsDir: state.CardsDir()})
-	require.NoError(t, err)
-	t.Cleanup(func() { require.NoError(t, cp.Close()) })
 	server, err := NewServer(state, func() {}, fixtureTeamDependencies(state))
 	require.NoError(t, err)
+	cp, err := controlplane.New(controlplane.Options{
+		CardsDir:     state.CardsDir(),
+		WorkspaceDir: state.Record.Directory,
+		Team:         &controlplane.TeamBinding{Owner: state.Record.Owner, Service: server},
+	})
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, cp.Close()) })
 	api := httptest.NewUnstartedServer(server.Handler(controlplane.NewHTTPHandler(cp, server.Authenticate)))
 	require.NoError(t, api.Listener.Close())
 	api.Listener, err = net.Listen("tcp", state.Address())

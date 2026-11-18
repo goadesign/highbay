@@ -49,11 +49,6 @@ func (c *ControlPlane) UpdateDraft(ctx context.Context) (*gensurla.DraftUpdateRe
 		return nil, errors.New("authenticated principal is required")
 	}
 	wsDir, dev, ino := c.currentWorkspaceTarget()
-	if wsDir == "" {
-		return nil, gensurla.MakeNotImplemented(errors.New(
-			"no workspace directory is bound to this control plane; start Surla from a project directory",
-		))
-	}
 	ctx, span := c.tracer("surla/controlplane").Start(ctx, "surla.controlplane.update_draft")
 	defer span.End()
 	result := &gensurla.DraftUpdateResult{DraftFolder: filepath.Join(wsDir, draftFolderName), Taken: []string{}, Merged: []string{}, ToCorrect: []*gensurla.DraftCorrection{}}

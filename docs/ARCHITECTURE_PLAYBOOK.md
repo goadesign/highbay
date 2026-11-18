@@ -85,6 +85,14 @@ Each change is saved as a Change Card: the record of the request, its open quest
 
 ### The server and its state
 
+The executable binds the project's owner and team service and its physical
+workspace directory before constructing the control plane or opening the
+listener. Construction rejects either missing binding before opening the card
+store. Team operations and build operations therefore always have their
+project owner; unavailable Herdr or Chorus services remain ordinary team
+refusals. An empty project folder and a team with no registered or running
+agents are valid states.
+
 A project is one physical folder. `surla` looks for the nearest folder that has a project record and otherwise creates a new, empty project, so moving or renaming the folder starts a new project. Each project has one private state folder under the user's configuration folder, outside the project. It holds the project record (its ID, folder, owning operating-system account, port, team name and Herdr space, and each registered agent's role and working folder), one credential file per agent, the Change Card folder, verification runs and reports, one retained Go build cache, and the stored verification and promotion settings. A new project saves a free loopback port that no other project of the account saved, and keeps it, because its agents' connections and the Chorus roster name that address. When `surla` cannot use a project's record, it names the project folder, the record's path and the repair; when it cannot use a state folder, it names that folder and the repair.
 
 When the user runs `surla`:
@@ -122,9 +130,9 @@ previous binding and the available views page.
 
 Herdr is the terminal program the agents run in, one pane per agent. Chorus is the messaging service the agents use, and its dialog in Herdr lets the user pick which installed agent app plays each role. Its terminal commands also accept explicit program/model choices for roster roles.
 
-Before creating any state, `surla` checks that Herdr core (`herdr-core` and `hc`), the Herdr app (`herdr-app`), Chorus v0.14.0 or newer (`chorus`) and the browser opener are installed. For a missing Herdr or Chorus program it names the install command, or the folder to add to the path when the program is in `~/.local/bin`; for a missing browser opener it names the program. Once the server answers, `surla` starts Chorus and the Herdr app when they are not running, then asks the server to prepare the team. When either step fails, `surla` still opens the views page, where confirming and approving need no agent, and then reports the failure. A failure of the server's team preparation names only its cause (`stopping`, `chorus`, `herdr`, `roster_folder`, `project_state` or `role_folder`), never its own text, and `surla` and the views page each turn that cause into a fixed step. The server:
+Before creating any state, `surla` checks that Herdr core (`herdr-core` and `hc`), the Herdr app (`herdr-app`), Chorus v0.14.0 or newer (`chorus`) and the browser opener are installed. For a missing Herdr or Chorus program it names the install command, or the folder to add to the path when the program is in `~/.local/bin`; for a missing browser opener it names the program. Once the server answers, `surla` starts Chorus and the Herdr app when they are not running, then asks the server to prepare the team. When either step fails, `surla` still opens the views page, where confirming and approving need no agent, and then reports the failure. A failure of the server's team preparation names only its cause (`stopping`, `chorus`, `herdr`, `saved_space`, `roster_folder`, `project_state` or `role_folder`), never its own text, and `surla` and the views page each turn that cause into a fixed step. The server:
 
-1. adopts the project's saved Herdr space, or the single space with the team's name and the project's folder, or creates one; several matching spaces are refused, and the user closes the duplicates;
+1. adopts the project's saved Herdr space when its ID is 1–64 characters of `[A-Za-z0-9_.-]` (not `.` or `..`), refusing if an older saved space outside that rule is still open, or when closed adopts the single conforming space with the team's name and the project's folder, or creates one; several matching spaces are refused, and the user closes the duplicates;
 2. registers the guide, working in the project folder;
 3. writes the Chorus roster: one row per registered role whose folder exists, with that folder, its first message, and a connection to the server's MCP endpoint that names the role's credential file, never the credential itself;
 4. opens the Chorus dialog when the guide, or a worker role that has work on the open build (or any listed role when the assignment read fails), is not running.

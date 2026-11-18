@@ -193,26 +193,26 @@ func (s *Server) ensureTeam(ctx context.Context) (result *genproject.ProjectTeam
 	if err != nil {
 		return nil, teamUnavailable(ctx, "chorus_status", "chorus")
 	}
-	s.team.observationMu.Lock()
-	s.team.connection = connection
-	s.team.observationMu.Unlock()
 	host := s.team.dependencies.Host
 	// Observe dialogs before any space creation or focus change: opening the launcher is a toggle.
 	overlays, err := host.Overlays(ctx)
 	if err != nil {
 		return nil, teamUnavailable(ctx, "overlays", "herdr")
 	}
-	launcherOpen := false
-	for _, overlay := range overlays {
-		if overlay == "chorus-launcher" {
-			launcherOpen = true
-		} else {
-			return nil, genproject.MakeWindowBusy(errors.New("close the open Herdr dialog and run surla again"))
-		}
-	}
 	s.state.mu.Lock()
 	record := s.state.Record
 	s.state.mu.Unlock()
+	legacySavedSpace := record.Space != "" && !safeSpaceID(record.Space)
+	launcherOpen := false
+	if !legacySavedSpace {
+		for _, overlay := range overlays {
+			if overlay == "chorus-launcher" {
+				launcherOpen = true
+			} else {
+				return nil, genproject.MakeWindowBusy(errors.New("close the open Herdr dialog and run surla again"))
+			}
+		}
+	}
 	team := record.Team
 	if team == "" {
 		team = teamName(filepath.Base(record.Directory), record.ID)
@@ -224,13 +224,25 @@ func (s *Server) ensureTeam(ctx context.Context) (result *genproject.ProjectTeam
 	var space TeamSpace
 	for _, candidate := range spaces {
 		if candidate.ID == record.Space && record.Space != "" {
+			if legacySavedSpace {
+				return nil, teamUnavailable(ctx, "saved_space", "saved_space")
+			}
 			space = candidate
 			break
 		}
 	}
+	if legacySavedSpace && len(overlays) > 0 {
+		return nil, genproject.MakeWindowBusy(errors.New("close the open Herdr dialog and run surla again"))
+	}
+	s.team.observationMu.Lock()
+	s.team.connection = connection
+	s.team.observationMu.Unlock()
 	if space.ID == "" {
 		matches := 0
 		for _, candidate := range spaces {
+			if !safeSpaceID(candidate.ID) {
+				continue
+			}
 			if candidate.Name == team && candidate.Folder == record.Directory {
 				space = candidate
 				matches++
@@ -451,9 +463,25 @@ func teamName(prefix, id string) string {
 	return base[:min(len(base), 19)] + "-" + suffix
 }
 
-// safeSpaceID restricts roster filenames to local identifiers accepted by Chorus.
-func safeSpaceID(id string) bool {
+// localSpaceID restricts stored space names to local filenames without path separators
+// so records written before the stricter space-ID rule still load.
+func localSpaceID(id string) bool {
 	return id != "" && id != "." && id != ".." && !strings.ContainsAny(id, "/\\\x00")
+}
+
+// safeSpaceID restricts managed space identifiers to 1–64 ASCII characters of
+// [A-Za-z0-9_.-] other than "." and "..".
+func safeSpaceID(id string) bool {
+	if len(id) == 0 || len(id) > 64 || id == "." || id == ".." {
+		return false
+	}
+	for i := 0; i < len(id); i++ {
+		c := id[i]
+		if (c < 'a' || c > 'z') && (c < 'A' || c > 'Z') && (c < '0' || c > '9') && c != '_' && c != '.' && c != '-' {
+			return false
+		}
+	}
+	return true
 }
 
 // roleRunning reports whether a terminal is running an agent rather than an idle shell.
@@ -526,13 +554,10 @@ func teamUnavailable(ctx context.Context, step, cause string) error {
 // reads its rows when it opens; an already open dialog rereads a rewritten roster
 // only when the user clicks its existing Reload team action.
 func teamNextStep(dialog, space string) string {
-	// Quote the actual owner-returned ID as shell data so both user surfaces
-	// supply copyable commands, including when an external ID contains punctuation.
-	quotedSpace := "'" + strings.ReplaceAll(space, "'", "'\\''") + "'"
-	terminal := "Run chorus team inspect --space " + quotedSpace +
-		"; chorus team launch --help; models and permission effects: chorus team inspect --space " + quotedSpace +
-		" --choices choices.json; chorus team launch --space " + quotedSpace +
-		" --choices choices.json. Stdin: --choices -."
+	// Quote the validated space ID so both user surfaces supply copyable commands.
+	quotedSpace := "'" + space + "'"
+	terminal := "From a terminal, run chorus team inspect --space " + quotedSpace +
+		" to see the roles (add --choices choices.json for models and permission effects), then chorus team launch with the same --space and --choices choices.json (--choices - reads stdin; see chorus team launch --help)."
 	switch dialog {
 	case "opened":
 		return "Choose an agent for each role in the open Chorus dialog in Herdr. " + terminal

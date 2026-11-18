@@ -30,7 +30,7 @@ type starterEvalFixture struct {
 // preCompleteSourcesGoa is goa-ai's minimum Goa version, which lacks
 // generator.CompleteSources. Tests use it to verify generation rejection and
 // evaluation with a target version older than Surla's own.
-const preCompleteSourcesGoa = "v3.35.1-0.20261102054348-8481e49a6c89"
+const preCompleteSourcesGoa = testmodule.MinimumGoaAIGoaVersion
 
 var (
 	// starterEvalOnce prepares the identical baseline at most once per test binary.
@@ -839,7 +839,8 @@ func prepareStarterEvalModule(
 		"go.mod": "module example.com/shop/eval\n\ngo 1.24\n\nrequire (\n" +
 			"\tgithub.com/goadesign/surla v0.0.0\n" +
 			"\tgoa.design/goa/v3 " + testmodule.SurlaVersion(t, "goa.design/goa/v3") + "\n" +
-			"\tgoa.design/goa-ai " + testmodule.SurlaVersion(t, "goa.design/goa-ai") + "\n)\n\n" +
+			"\tgoa.design/goa-ai " + testmodule.SurlaVersion(t, "goa.design/goa-ai") + "\n" +
+			"\tgithub.com/kr/text " + testmodule.KRTextVersion + "\n)\n\n" +
 			"replace github.com/goadesign/surla => " + repoRoot + "\n",
 		"design/design.go":         designSrc,
 		"acceptance/acceptance.go": readRendered("acceptance/acceptance.go.tmpl"),

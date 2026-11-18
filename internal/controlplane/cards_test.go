@@ -87,11 +87,14 @@ func TestCardsSurviveANewControlPlane(t *testing.T) {
 // plane cannot open a directory that one already holds.
 func TestCardsDirectoryIsHeldByOneControlPlane(t *testing.T) {
 	dir := t.TempDir()
-	newControlPlane(t, Options{CardsDir: dir})
-	_, err := New(Options{CardsDir: dir})
+	opts := Options{CardsDir: dir, WorkspaceDir: realTempDir(t), Team: testTeamBinding()}
+	newControlPlane(t, opts)
+	opts.Team = testTeamBinding()
+	_, err := New(opts)
 	assert.ErrorContains(t, err, "is in use by another process")
 
-	_, err = New(Options{})
+	opts.CardsDir = ""
+	_, err = New(opts)
 	assert.ErrorContains(t, err, "cards directory is required")
 }
 
@@ -511,13 +514,13 @@ func confirmedCardFile(t *testing.T) string {
 // plane still serves the saved card and that the next save succeeds.
 func TestAnUnfinishedSaveIsHarmless(t *testing.T) {
 	dir := t.TempDir()
-	first, err := New(Options{CardsDir: dir})
-	require.NoError(t, err)
+	workspace := realTempDir(t)
+	first := newControlPlane(t, Options{CardsDir: dir, WorkspaceDir: workspace})
 	card := saveCard(t, first, nil)
 	require.NoError(t, first.Close())
 	require.NoError(t, os.WriteFile(filepath.Join(dir, stagingFile), []byte(`{"card":`), 0o600))
 
-	next := newControlPlane(t, Options{CardsDir: dir})
+	next := newControlPlane(t, Options{CardsDir: dir, WorkspaceDir: workspace})
 	alice := WithPrincipal(context.Background(), Principal{ID: "alice@example.com", CallerID: "alice@example.com", Kind: CallerUser})
 	got, err := next.GetChange(alice, &gensurla.GetChangePayload{ChangeID: "chg"})
 	require.NoError(t, err)
@@ -602,23 +605,18 @@ func TestPrincipalIDsMustBeValidUTF8(t *testing.T) {
 // never evaluates creates no design evaluator workspace, that one that did
 // removes it on Close, and that it refuses evaluations afterwards.
 func TestCloseRemovesTheEvaluatorWorkspace(t *testing.T) {
-	tmp := t.TempDir()
-	t.Setenv("TMPDIR", tmp)
 	alice := WithPrincipal(context.Background(), Principal{ID: "alice@example.com", CallerID: "alice@example.com", Kind: CallerUser})
 	incomplete := &gensurla.DesignSnapshot{Files: map[string]string{"design/design.go": "package design\n"}}
 
-	idle, err := New(Options{CardsDir: t.TempDir()})
-	require.NoError(t, err)
-	require.NoError(t, idle.Close())
-	assert.Empty(t, workspaces(t, tmp), "a control plane that never evaluates creates no workspace")
-
-	cp, err := New(Options{CardsDir: t.TempDir()})
-	require.NoError(t, err)
-	_, err = cp.Diff(alice, &gensurla.DiffPayload{Old: incomplete, New: incomplete})
+	cards := t.TempDir()
+	cp := newControlPlane(t, Options{CardsDir: cards})
+	evalParent := filepath.Join(cards, "designeval")
+	assert.Empty(t, workspaces(t, evalParent), "a control plane that never evaluates creates no evaluator workspace")
+	_, err := cp.Diff(alice, &gensurla.DiffPayload{Old: incomplete, New: incomplete})
 	require.Error(t, err)
-	require.Len(t, workspaces(t, tmp), 1)
+	require.Len(t, workspaces(t, evalParent), 1)
 	require.NoError(t, cp.Close())
-	assert.Empty(t, workspaces(t, tmp))
+	assert.Empty(t, workspaces(t, evalParent))
 	_, err = cp.Diff(alice, &gensurla.DiffPayload{Old: incomplete, New: incomplete})
 	require.ErrorContains(t, err, "design evaluator is closed")
 	require.NoError(t, cp.Close(), "closing again repeats the same results")

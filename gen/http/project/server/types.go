@@ -176,10 +176,11 @@ type EnsureTeamTeamUnavailableResponseBody struct {
 	Name string `form:"name" json:"name" xml:"name"`
 	// What could not be used: stopping (the server is shutting down), chorus (the
 	// managed Chorus server or its settings are unavailable), herdr (a Herdr
-	// command failed), roster_folder (Herdr's launcher roster folder could not be
-	// written), project_state (the project's private record or an agent credential
-	// could not be read or written), or role_folder (a role's working folder could
-	// not be read).
+	// command failed), saved_space (the project's saved Herdr space has an ID this
+	// version of Surla no longer accepts and is still open), roster_folder
+	// (Herdr's launcher roster folder could not be written), project_state (the
+	// project's private record or an agent credential could not be read or
+	// written), or role_folder (a role's working folder could not be read).
 	Cause string `form:"cause" json:"cause" xml:"cause"`
 }
 

@@ -22,9 +22,9 @@ import (
 )
 
 // TestStoryRefreshPreconditionsAndExpectedAbsence verifies authentication,
-// unbound-workspace errors, missing-go.mod errors without "pass design in the
-// request" advice, expected absence ("none") before any refresh and after a
-// server restart, and replaced-workspace rejection.
+// missing-go.mod errors without "pass design in the request" advice, expected
+// absence ("none") before any refresh and after a server restart, and
+// replaced-workspace rejection.
 func TestStoryRefreshPreconditionsAndExpectedAbsence(t *testing.T) {
 	alice := WithPrincipal(context.Background(), Principal{ID: "alice@example.com", CallerID: "alice@example.com", Kind: CallerUser})
 
@@ -36,20 +36,7 @@ func TestStoryRefreshPreconditionsAndExpectedAbsence(t *testing.T) {
 		require.ErrorContains(t, err, "authenticated principal is required")
 	})
 
-	t.Run("no bound workspace returns not_implemented naming the enabling step", func(t *testing.T) {
-		cp := newControlPlane(t, Options{})
-		_, err := cp.RefreshStory(alice)
-		assertServiceError(t, err, "not_implemented")
-		assert.ErrorContains(t, err, "start Surla from a project directory")
-		assert.NotContains(t, err.Error(), "pass design in the request")
-
-		_, err = cp.GetStoryRefresh(alice)
-		assertServiceError(t, err, "not_implemented")
-		assert.ErrorContains(t, err, "start Surla from a project directory")
-		assert.NotContains(t, err.Error(), "pass design in the request")
-	})
-
-	t.Run("bound workspace without go.mod returns none on get and unprocessable on refresh", func(t *testing.T) {
+	t.Run("workspace without go.mod returns none on get and unprocessable on refresh", func(t *testing.T) {
 		wsDir := t.TempDir()
 		cp := newControlPlane(t, Options{WorkspaceDir: wsDir})
 		srv := httptest.NewServer(NewHTTPHandler(cp, workflowAuthenticator(map[string]Principal{
@@ -121,7 +108,7 @@ func TestStoryRefreshPreconditionsAndExpectedAbsence(t *testing.T) {
 		writeWorkspaceFiles(t, wsDir, map[string]string{
 			"go.mod": "module example.com/orders\n\ngo 1.24\n",
 		})
-		cp1, err := New(Options{CardsDir: cardsDir, WorkspaceDir: wsDir})
+		cp1, err := New(Options{Team: testTeamBinding(), CardsDir: cardsDir, WorkspaceDir: wsDir})
 		require.NoError(t, err)
 		started, err := cp1.RefreshStory(alice)
 		require.NoError(t, err)
@@ -143,7 +130,7 @@ func TestStoryRefreshPreconditionsAndExpectedAbsence(t *testing.T) {
 		require.NoError(t, err)
 		assert.Empty(t, evalEntries, "Close removes the designeval build workspace")
 
-		cp2, err := New(Options{CardsDir: cardsDir, WorkspaceDir: wsDir})
+		cp2, err := New(Options{Team: testTeamBinding(), CardsDir: cardsDir, WorkspaceDir: wsDir})
 		require.NoError(t, err)
 		t.Cleanup(func() { require.NoError(t, cp2.Close()) })
 		afterRestart, err := cp2.GetStoryRefresh(alice)
@@ -286,7 +273,7 @@ func TestStoryRefreshCloseCancelsWaitsAndWritesNothingAfterwards(t *testing.T) {
 	startedFile := filepath.Join(markerDir, "started")
 	installFakeGo(t, "#!/bin/sh\n: > "+startedFile+"\nexec sleep 600\n")
 
-	cp, err := New(Options{CardsDir: cardsDir, WorkspaceDir: wsDir})
+	cp, err := New(Options{Team: testTeamBinding(), CardsDir: cardsDir, WorkspaceDir: wsDir})
 	require.NoError(t, err)
 
 	res, err := cp.RefreshStory(alice)

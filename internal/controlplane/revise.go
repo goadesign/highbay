@@ -32,8 +32,9 @@ import (
 // design/*.go snapshot from that succeeded refresh_story operation; when it
 // is omitted on a revision with saved snapshot metadata, the whole snapshot
 // carries over, including when it declares no Stories. Older revisions with
-// Stories keep their Stories and design source together; otherwise the design
-// source is read from the bound workspace, or kept when no workspace is bound.
+// Stories keep their Stories and design source together. Without a saved
+// design source, an initialized Go module requires a succeeded refresh_story
+// before revision; a folder without go.mod can still hold intent alone.
 //
 // A card that was never confirmed is replaced by the new revision. Beside a
 // confirmed card the new revision is saved as the proposal, replacing any

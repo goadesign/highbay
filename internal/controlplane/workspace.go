@@ -68,7 +68,7 @@ var commitIDPattern = regexp.MustCompile(`^([0-9a-f]{40}|[0-9a-f]{64})$`)
 // its cleaned physical path, device ID, and inode number.
 func openWorkspaceRootAndStat(dir string) (string, uint64, uint64, error) {
 	if dir == "" {
-		return "", 0, 0, nil
+		return "", 0, 0, errors.New("WorkspaceDir is required")
 	}
 	lstatInfo, err := os.Lstat(dir)
 	if err != nil {
@@ -126,9 +126,6 @@ func (c *ControlPlane) restoreWorkspace() (err error) {
 	wf, ok, err := c.readWorkspaceRecord()
 	if err != nil || !ok {
 		return err
-	}
-	if c.initialWorkspaceRoot == "" {
-		return errors.New("cards directory contains workspace.json, but no workspace directory is configured")
 	}
 	if err := validateInitDirName(wf.Dir); err != nil {
 		return fmt.Errorf("invalid dir %q in workspace.json: %w", wf.Dir, err)
@@ -390,9 +387,6 @@ func (c *ControlPlane) removeWorkspaceRecord() error {
 // `designeval.OpenModuleRoot` and verifies on the opened handle itself
 // (`root.Stat(".")`) that its `(dev, ino)` matches `(expectedDev, expectedIno)`.
 func openModuleRootWithIdentity(dir string, expectedDev, expectedIno uint64) (string, *os.Root, error) {
-	if dir == "" {
-		return "", nil, gensurla.MakeUnprocessable(errors.New("no workspace directory is bound to this control plane"))
-	}
 	if expectedDev == 0 || expectedIno == 0 {
 		return "", nil, gensurla.MakeUnprocessable(fmt.Errorf("bound workspace directory %s has no recorded device/inode identity", dir))
 	}

@@ -419,7 +419,7 @@ func (c *Client) HandOverModelSettings(ctx context.Context, p *HandOverModelSett
 // InitProject may return the following errors:
 //   - "conflict" (type *goa.ServiceError): The workspace or target directory is already initialized.
 //   - "unprocessable" (type *goa.ServiceError): The module path or child directory name is invalid.
-//   - "not_implemented" (type *goa.ServiceError): This control plane has no bound workspace or starter generator configured.
+//   - "not_implemented" (type *goa.ServiceError): This control plane has no exact Surla module version configured for starter generation.
 //   - "forbidden" (type *goa.ServiceError): The authenticated caller may not perform this operation or does not own the resource.
 //   - error: internal error
 func (c *Client) InitProject(ctx context.Context, p *InitProjectPayload) (res *InitProjectResult, err error) {
@@ -441,7 +441,6 @@ func (c *Client) InitProject(ctx context.Context, p *InitProjectPayload) (res *I
 //   - "conflict" (type *goa.ServiceError): The open build is for a revision that is no longer the change's revision in force; the user builds again.
 //   - "missing_modules" (type *goa.ServiceError): The builder's go.mod lacks a module the agreed design imports, requires an older version than the revision was made with, or has a differing replace directive. design/ was written and gen/ was not; the message names each required go get, go mod tidy or replacement correction in the working folder.
 //   - "unprocessable" (type *goa.ServiceError): The selected module of the working folder is absent, replaced, or invalid; correct its files and call again.
-//   - "not_implemented" (type *goa.ServiceError): No workspace directory is bound to this control plane.
 //   - "forbidden" (type *goa.ServiceError): The authenticated caller may not perform this operation or does not own the resource.
 //   - error: internal error
 func (c *Client) GenerateCode(ctx context.Context, p *GenerateCodePayload) (res *GenerateCodeResult, err error) {
@@ -461,7 +460,7 @@ func (c *Client) GenerateCode(ctx context.Context, p *GenerateCodePayload) (res 
 //   - "copy_off_branch" (type *CopyOffBranch): Your working copy is not on the build's branch: the message states its branch, the build's branch and what is uncommitted, and the goal. Put your work there with git, commit it, and call again.
 //   - "working_folder_missing" (type *goa.ServiceError): Your working folder is missing; ask the user to build this change again on the views page.
 //   - "unprocessable" (type *goa.ServiceError): The working folder contains no Go module.
-//   - "not_implemented" (type *goa.ServiceError): No workspace directory is bound to this control plane.
+//   - "not_implemented" (type *goa.ServiceError): This control plane has no check runner configured.
 //   - "unavailable" (type *goa.ServiceError): No local Docker engine is usable: docker is missing, the engine does not answer or is not local, or the Go image cannot be pulled.
 //   - "forbidden" (type *goa.ServiceError): The authenticated caller may not perform this operation or does not own the resource.
 //   - error: internal error
@@ -483,7 +482,7 @@ func (c *Client) CheckProject(ctx context.Context) (res *CheckProjectResult, err
 //   - "copy_off_branch" (type *CopyOffBranch): Your working copy is not on the build's branch: the message states its branch, the build's branch and what is uncommitted, and the goal. Put your work there with git, commit it, and call again.
 //   - "working_folder_missing" (type *goa.ServiceError): Your working folder is missing; ask the user to build this change again on the views page.
 //   - "unprocessable" (type *goa.ServiceError): The working folder contains no Go module.
-//   - "not_implemented" (type *goa.ServiceError): No workspace directory is bound to this control plane.
+//   - "not_implemented" (type *goa.ServiceError): This control plane has no check runner configured.
 //   - "unavailable" (type *goa.ServiceError): No local Docker engine is usable: docker is missing, the engine does not answer or is not local, or the Go image cannot be pulled.
 //   - "forbidden" (type *goa.ServiceError): The authenticated caller may not perform this operation or does not own the resource.
 //   - error: internal error
@@ -530,7 +529,6 @@ func (c *Client) ListTraces(ctx context.Context, p *ListTracesPayload) (res *Tra
 // RefreshStory calls the "refresh_story" endpoint of the "surla" service.
 // RefreshStory may return the following errors:
 //   - "unprocessable" (type *goa.ServiceError): The project folder holds no go.mod (run init_project or create go.mod), a draft file Go cannot parse or that imports the project outside design/ (the message names the file and line), or the draft is a link or a file rather than a folder.
-//   - "not_implemented" (type *goa.ServiceError): No workspace directory is bound to this control plane; start Surla from a project directory.
 //   - "unavailable" (type *goa.ServiceError): The control plane is shutting down and is no longer starting Story refresh operations.
 //   - "forbidden" (type *goa.ServiceError): The authenticated caller may not perform this operation or does not own the resource.
 //   - error: internal error
@@ -546,7 +544,6 @@ func (c *Client) RefreshStory(ctx context.Context) (res *StoryRefreshResult, err
 // GetStoryRefresh calls the "get_story_refresh" endpoint of the "surla"
 // service.
 // GetStoryRefresh may return the following errors:
-//   - "not_implemented" (type *goa.ServiceError): No workspace directory is bound to this control plane; start Surla from a project directory.
 //   - "forbidden" (type *goa.ServiceError): The authenticated caller may not perform this operation or does not own the resource.
 //   - error: internal error
 func (c *Client) GetStoryRefresh(ctx context.Context) (res *StoryRefreshResult, err error) {
@@ -562,7 +559,6 @@ func (c *Client) GetStoryRefresh(ctx context.Context) (res *StoryRefreshResult, 
 // UpdateDraft may return the following errors:
 //   - "unprocessable" (type *goa.ServiceError): Surla could not read what the update needs; the message names the file or folder. The project folder holds no go.mod, so there is no draft (run init_project or create go.mod), or was replaced after startup; the draft is a link or a file rather than a folder, its .gitignore lacks Surla's draft marker, or its made-from list is missing; the draft or its made-from list changed while Surla was first making the draft; the go.mod of the draft or of the project folder is missing, or a go.mod, go.sum or design file there is not a regular file, cannot be read or is not valid UTF-8; or a design file in the project's current commit cannot be parsed as Go or is a link. The guide corrects a file of its draft and asks the user to correct one of the project folder or of its commit, then calls update_draft again.
 //   - "conflict" (type *goa.ServiceError): The project's commit, the draft, the project's go.mod, go.sum or design files, or the draft's made-from list changed while Surla prepared the update. Surla brought no change into the draft; call update_draft again.
-//   - "not_implemented" (type *goa.ServiceError): No workspace directory is bound to this control plane; start Surla from a project directory.
 //   - "unavailable" (type *goa.ServiceError): The control plane is shutting down.
 //   - "forbidden" (type *goa.ServiceError): The authenticated caller may not perform this operation or does not own the resource.
 //   - error: internal error
@@ -577,7 +573,6 @@ func (c *Client) UpdateDraft(ctx context.Context) (res *DraftUpdateResult, err e
 
 // GetTeam calls the "get_team" endpoint of the "surla" service.
 // GetTeam may return the following errors:
-//   - "not_implemented" (type *goa.ServiceError): No team is bound to this control plane; start this project with surla to use its team.
 //   - "forbidden" (type *goa.ServiceError): The authenticated caller may not perform this operation or does not own the resource.
 //   - error: internal error
 func (c *Client) GetTeam(ctx context.Context) (res *TeamSnapshot, err error) {
@@ -591,7 +586,6 @@ func (c *Client) GetTeam(ctx context.Context) (res *TeamSnapshot, err error) {
 
 // ShowTeamPane calls the "show_team_pane" endpoint of the "surla" service.
 // ShowTeamPane may return the following errors:
-//   - "not_implemented" (type *goa.ServiceError): No team is bound to this control plane; start this project with surla to use its team.
 //   - "window_busy" (type *goa.ServiceError): Close the open Herdr dialog before showing a pane.
 //   - "pane_unavailable" (type *goa.ServiceError): The requested registered role has no owned pane to show.
 //   - "team_unavailable" (type *goa.ServiceError): Herdr could not establish the owned pane.
@@ -605,7 +599,6 @@ func (c *Client) ShowTeamPane(ctx context.Context, p *ShowTeamPanePayload) (err 
 // StartTeamAgents calls the "start_team_agents" endpoint of the "surla"
 // service.
 // StartTeamAgents may return the following errors:
-//   - "not_implemented" (type *goa.ServiceError): No team is bound to this control plane; start this project with surla to use its team.
 //   - "ambiguous_space" (type *goa.ServiceError): Several spaces match the project; close the duplicates before starting agents again.
 //   - "window_busy" (type *goa.ServiceError): Close the open Herdr dialog before starting agents.
 //   - "team_unavailable" (type *goa.ServiceError): The project team could not be prepared.
@@ -659,7 +652,6 @@ func (c *Client) WaitForChanges(ctx context.Context, p *WaitForChangesPayload) (
 //   - "unfinished_build_open" (type *OpenBuildRefusal): Building this change again replaces its open build, which no verification has passed, and replaces does not name that build; nothing was saved. The page asks the user first, then sends replaces naming the build it showed.
 //   - "drafted_before_drop" (type *goa.ServiceError): The agreed revision was drafted before the user dropped another change, so its design can hold that change's design; nothing was saved. The guide revises the change from its draft; the user adopts the revision, then builds.
 //   - "design_changed_outside" (type *goa.ServiceError): A design file at the build's base commit is not a version the agreed revision was made from: it was changed outside Surla; nothing was saved. The message names the file and the commit. When the change is uncommitted, commit the design change in the project folder first; then the guide calls update_draft, refresh_story and revise_change, and the user adopts the revision and builds.
-//   - "not_implemented" (type *goa.ServiceError): Start this project with surla to bind the team; nothing was saved.
 //   - "unavailable" (type *goa.ServiceError): The server is stopping or the start's time limit ended before saving; call again on a running server. Nothing was saved.
 //   - "not_found" (type *goa.ServiceError): No Change Card exists with this change_id.
 //   - "conflict" (type *goa.ServiceError): The Change Card is not confirmed or request_revision is not its agreed revision (a waiting proposal's revision cannot be built), or the agreed revision records no design to build from; nothing changed.
@@ -680,7 +672,6 @@ func (c *Client) StartBuild(ctx context.Context, p *StartBuildPayload) (res *Sta
 //   - "not_found" (type *goa.ServiceError): No Change Card exists with this change_id, or the project has no open build.
 //   - "build_changed" (type *OpenBuildRefusal): The open build is not the one the page showed: a second tab built or dropped meanwhile. Nothing changed; the body names the open build.
 //   - "conflict" (type *goa.ServiceError): The build was already dropped; nothing changed.
-//   - "not_implemented" (type *goa.ServiceError): Start this project with surla to bind the team; nothing changed.
 //   - "forbidden" (type *goa.ServiceError): The authenticated caller may not perform this operation or does not own the resource.
 //   - error: internal error
 func (c *Client) DropBuild(ctx context.Context, p *DropBuildPayload) (res *ChangeBuild, err error) {

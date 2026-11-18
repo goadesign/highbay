@@ -1061,7 +1061,7 @@ var _ = Service("surla", func() {
 		Result(InitProjectResult)
 		Error("conflict", ErrorResult, "The workspace or target directory is already initialized.")
 		Error("unprocessable", ErrorResult, "The module path or child directory name is invalid.")
-		Error("not_implemented", ErrorResult, "This control plane has no bound workspace or starter generator configured.")
+		Error("not_implemented", ErrorResult, "This control plane has no exact Surla module version configured for starter generation.")
 		Tool("init_project", "Initialize a new Surla starter project inside the bound workspace directory, create its initial Git commit, and switch the server's active workspace to that project. Returns the created commit ID in commit for start_live_target and verify_change.")
 		HTTP(func() {
 			POST("/workspace/init")
@@ -1080,7 +1080,6 @@ var _ = Service("surla", func() {
 		Error("conflict", ErrorResult, "The open build is for a revision that is no longer the change's revision in force; the user builds again.")
 		Error("missing_modules", ErrorResult, "The builder's go.mod lacks a module the agreed design imports, requires an older version than the revision was made with, or has a differing replace directive. design/ was written and gen/ was not; the message names each required go get, go mod tidy or replacement correction in the working folder.")
 		Error("unprocessable", ErrorResult, "The selected module of the working folder is absent, replaced, or invalid; correct its files and call again.")
-		Error("not_implemented", ErrorResult, "No workspace directory is bound to this control plane.")
 		Tool("generate_code", "Write the agreed design of your build into design/ of your working folder and regenerate gen/. Your open build names the change. Never edit design/ or gen/ yourself. When it names go get and go mod tidy, run exactly what it names in your working folder, then call generate_code again. Use target eval only to regenerate the eval/ module. This compiles the design only; run check_project before verify_change.")
 		HTTP(func() {
 			POST("/workspace/generate")
@@ -1089,7 +1088,6 @@ var _ = Service("surla", func() {
 			Response("conflict", StatusConflict)
 			Response("missing_modules", StatusUnprocessableEntity)
 			Response("unprocessable", StatusUnprocessableEntity)
-			Response("not_implemented", StatusNotImplemented)
 		})
 	})
 
@@ -1098,7 +1096,7 @@ var _ = Service("surla", func() {
 		Result(CheckProjectResult)
 		builderCopyRefusals()
 		Error("unprocessable", ErrorResult, "The working folder contains no Go module.")
-		Error("not_implemented", ErrorResult, "No workspace directory is bound to this control plane.")
+		Error("not_implemented", ErrorResult, "This control plane has no check runner configured.")
 		Error("unavailable", ErrorResult, "No local Docker engine is usable: docker is missing, the engine does not answer or is not local, or the Go image cannot be pulled.")
 		Tool("check_project", "Run your working folder's Go tests on the current uncommitted files in an isolated Linux container (without stored verification settings, leaving out the starter test module whose tests the test writer writes, and saying so). No input. Returns passed and a message with the first failure; when it says the output was cut, read the rest with read_check_output(op_id). If the message says go.sum or go.work.sum needs entries or go.mod needs an update, call update_dependencies and check again. It reads only the builder's working copy, never the project folder. It refuses as generate_code does when no build is open, the build was dropped, the assignment was not read since the build started, or the copy is off its branch.")
 		HTTP(func() {
@@ -1116,7 +1114,7 @@ var _ = Service("surla", func() {
 		Result(UpdateDependenciesResult)
 		builderCopyRefusals()
 		Error("unprocessable", ErrorResult, "The working folder contains no Go module.")
-		Error("not_implemented", ErrorResult, "No workspace directory is bound to this control plane.")
+		Error("not_implemented", ErrorResult, "This control plane has no check runner configured.")
 		Error("unavailable", ErrorResult, "No local Docker engine is usable: docker is missing, the engine does not answer or is not local, or the Go image cannot be pulled.")
 		Tool("update_dependencies", "Add missing requirements and checksums for your working folder's Go modules (go mod tidy; without stored verification settings, leaving out the starter test module whose tests the test writer writes, and saying so) and write the changed go.mod, go.sum and go.work.sum. No input. Call it when check_project reports a missing go.sum or go.work.sum entry or a needed go.mod update, then call check_project again. It reads only the builder's working copy, never the project folder. It refuses as generate_code does when no build is open, the build was dropped, the assignment was not read since the build started, or the copy is off its branch.")
 		HTTP(func() {

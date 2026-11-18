@@ -68,9 +68,6 @@ func (f *buildCopyFixture) Record(
 // The real source decision still reads a starter layout from temporary files.
 func newBuildControlPlane(t *testing.T, opts Options) *ControlPlane {
 	t.Helper()
-	if opts.Team == nil {
-		opts.Team = &TeamBinding{Owner: "alice@example.com", Service: &teamServiceFixture{}}
-	}
 	opts = buildFixtureOptions(t, opts)
 	cp := newControlPlane(t, opts)
 	cp.buildIdentityCheck = func(context.Context, string) error { return nil }
@@ -83,13 +80,16 @@ func newBuildControlPlane(t *testing.T, opts Options) *ControlPlane {
 	return cp
 }
 
-// buildFixtureOptions supplies a real temporary Git project without installing
-// a team, runtime seams, or cleanup. Stored consumer and lifecycle tests retain
-// their own constructor, supervision and Close assertions.
+// buildFixtureOptions supplies a real temporary Git project and an idle team.
+// Stored consumer and lifecycle tests retain their own constructor,
+// supervision, and Close assertions.
 func buildFixtureOptions(t *testing.T, opts Options) Options {
 	t.Helper()
 	if opts.WorkspaceDir == "" {
 		opts.WorkspaceDir = t.TempDir()
+	}
+	if opts.Team == nil {
+		opts.Team = testTeamBinding()
 	}
 	goMod := filepath.Join(opts.WorkspaceDir, "go.mod")
 	data, err := os.ReadFile(goMod)

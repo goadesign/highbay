@@ -306,7 +306,7 @@ func TestStartBuildRefusalsReachTheHTTPConsumer(t *testing.T) {
 }
 
 // TestStartBuildOwnerPrecedesTheTurn denies another owner even while the owner
-// is busy, and an unbound server names its enabling step without saving.
+// is busy, without saving a build.
 func TestStartBuildOwnerPrecedesTheTurn(t *testing.T) {
 	cp := newBuildControlPlane(t, Options{})
 	card := buildableChange(t, cp, "chg")
@@ -314,13 +314,6 @@ func TestStartBuildOwnerPrecedesTheTurn(t *testing.T) {
 	_, err := cp.StartBuild(asCaller("bob@example.com", CallerUser), &gensurla.StartBuildPayload{ChangeID: "chg", RequestRevision: card.RequestRevision})
 	assertRefused(t, err, "forbidden")
 	<-cp.workingCopyTurn
-	unbound := newControlPlane(t, Options{})
-	_, err = unbound.StartBuild(asCaller("alice@example.com", CallerUser), &gensurla.StartBuildPayload{ChangeID: "chg", RequestRevision: card.RequestRevision})
-	assertRefused(t, err, "not_implemented")
-	assert.ErrorContains(t, err, "Start this project with surla to use its team.")
-	_, err = unbound.DropBuild(asCaller("alice@example.com", CallerUser), &gensurla.DropBuildPayload{ChangeID: "chg"})
-	assertRefused(t, err, "not_implemented")
-	assert.ErrorContains(t, err, "Start this project with surla to use its team.")
 	assertNoBuildSaved(t, cp, "chg")
 }
 

@@ -22,6 +22,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/goadesign/surla/internal/testmodule"
 )
 
 type (
@@ -198,7 +200,7 @@ func testWarmModuleChecksums(t *testing.T, ctx context.Context, engine *Engine) 
 		{
 			manifest: "go.sum",
 			files: map[string]string{
-				"go.mod":   "module example.com/sums\n\ngo 1.27.3\n\nrequire rsc.io/qr v0.2.0\n",
+				"go.mod":   "module example.com/sums\n\ngo 1.27.3\n\nrequire rsc.io/qr " + testmodule.QRVersion + "\n",
 				"value.go": "package sums\nimport \"rsc.io/qr\"\nvar Level = qr.L\n",
 			},
 			prepare: []string{"mod", "tidy"},
@@ -210,7 +212,7 @@ func testWarmModuleChecksums(t *testing.T, ctx context.Context, engine *Engine) 
 				"value.go":           "package sums\nimport \"example.com/dep\"\nvar Level = dep.Level\n",
 				"base/go.mod":        "module example.com/dep\n\ngo 1.27.3\n",
 				"base/value.go":      "package dep\nconst Level = 0\n",
-				"workspace/go.mod":   "module example.com/dep\n\ngo 1.27.3\n\nrequire rsc.io/qr v0.2.0\n",
+				"workspace/go.mod":   "module example.com/dep\n\ngo 1.27.3\n\nrequire rsc.io/qr " + testmodule.QRVersion + "\n",
 				"workspace/value.go": "package dep\nimport \"rsc.io/qr\"\nvar Level = qr.L\n",
 				"go.work":            "go 1.27.3\n\nuse .\n\nreplace example.com/dep => ./workspace\n",
 			},
@@ -224,12 +226,12 @@ func testWarmModuleChecksums(t *testing.T, ctx context.Context, engine *Engine) 
 			manifest := filepath.Join(fixture.source, tc.manifest)
 			valid, err := os.ReadFile(manifest)
 			require.NoError(t, err)
-			require.Contains(t, string(valid), "rsc.io/qr v0.2.0 h1:")
+			require.Contains(t, string(valid), "rsc.io/qr "+testmodule.QRVersion+" h1:")
 			for _, state := range []string{"missing", "incorrect"} {
 				t.Run(state, func(t *testing.T) {
 					require.NoError(t, os.Remove(manifest))
 					if state == "incorrect" {
-						wrong := "rsc.io/qr v0.2.0 h1:" + strings.Repeat("A", 43) + "=\n"
+						wrong := "rsc.io/qr " + testmodule.QRVersion + " h1:" + strings.Repeat("A", 43) + "=\n"
 						require.NoError(t, os.WriteFile(manifest, []byte(wrong), 0o600))
 					}
 					code, output := fixture.run(t, ctx, ".", "bridge", true, "list", "-deps", "-test", `-f={{""}}`, "./...")

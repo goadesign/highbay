@@ -2863,7 +2863,6 @@ func EncodeGenerateCodeRequest(encoder func(*http.Request) goahttp.Encoder) func
 //   - "copy_off_branch" (type *surla.CopyOffBranch): http.StatusConflict
 //   - "missing_modules" (type *goa.ServiceError): http.StatusUnprocessableEntity
 //   - "unprocessable" (type *goa.ServiceError): http.StatusUnprocessableEntity
-//   - "not_implemented" (type *goa.ServiceError): http.StatusNotImplemented
 //   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
 //   - error: internal error
 func DecodeGenerateCodeResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
@@ -3034,20 +3033,6 @@ func DecodeGenerateCodeResponse(decoder func(*http.Response) goahttp.Decoder, re
 				}
 				return nil, goahttp.ErrInvalidResponse("surla", "generate_code", resp.StatusCode, string(body))
 			}
-		case http.StatusNotImplemented:
-			var (
-				body GenerateCodeNotImplementedResponseBody
-				err  error
-			)
-			err = decoder(resp).Decode(&body)
-			if err != nil {
-				return nil, goahttp.ErrDecodingError("surla", "generate_code", err)
-			}
-			err = ValidateGenerateCodeNotImplementedResponseBody(&body)
-			if err != nil {
-				return nil, goahttp.ErrValidationError("surla", "generate_code", err)
-			}
-			return nil, NewGenerateCodeNotImplemented(&body)
 		case http.StatusForbidden:
 			var (
 				body GenerateCodeForbiddenResponseBody
@@ -3772,7 +3757,6 @@ func (c *Client) BuildRefreshStoryRequest(ctx context.Context, v any) (*http.Req
 // should be restored after having been read.
 // DecodeRefreshStoryResponse may return the following errors:
 //   - "unprocessable" (type *goa.ServiceError): http.StatusUnprocessableEntity
-//   - "not_implemented" (type *goa.ServiceError): http.StatusNotImplemented
 //   - "unavailable" (type *goa.ServiceError): http.StatusServiceUnavailable
 //   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
 //   - error: internal error
@@ -3826,20 +3810,6 @@ func DecodeRefreshStoryResponse(decoder func(*http.Response) goahttp.Decoder, re
 				return nil, goahttp.ErrValidationError("surla", "refresh_story", err)
 			}
 			return nil, NewRefreshStoryUnprocessable(&body)
-		case http.StatusNotImplemented:
-			var (
-				body RefreshStoryNotImplementedResponseBody
-				err  error
-			)
-			err = decoder(resp).Decode(&body)
-			if err != nil {
-				return nil, goahttp.ErrDecodingError("surla", "refresh_story", err)
-			}
-			err = ValidateRefreshStoryNotImplementedResponseBody(&body)
-			if err != nil {
-				return nil, goahttp.ErrValidationError("surla", "refresh_story", err)
-			}
-			return nil, NewRefreshStoryNotImplemented(&body)
 		case http.StatusServiceUnavailable:
 			var (
 				body RefreshStoryUnavailableResponseBody
@@ -3897,7 +3867,6 @@ func (c *Client) BuildGetStoryRefreshRequest(ctx context.Context, v any) (*http.
 // the surla get_story_refresh endpoint. restoreBody controls whether the
 // response body should be restored after having been read.
 // DecodeGetStoryRefreshResponse may return the following errors:
-//   - "not_implemented" (type *goa.ServiceError): http.StatusNotImplemented
 //   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
 //   - error: internal error
 func DecodeGetStoryRefreshResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
@@ -3936,20 +3905,6 @@ func DecodeGetStoryRefreshResponse(decoder func(*http.Response) goahttp.Decoder,
 			}
 			res := NewGetStoryRefreshResultOK(&body)
 			return res, nil
-		case http.StatusNotImplemented:
-			var (
-				body GetStoryRefreshNotImplementedResponseBody
-				err  error
-			)
-			err = decoder(resp).Decode(&body)
-			if err != nil {
-				return nil, goahttp.ErrDecodingError("surla", "get_story_refresh", err)
-			}
-			err = ValidateGetStoryRefreshNotImplementedResponseBody(&body)
-			if err != nil {
-				return nil, goahttp.ErrValidationError("surla", "get_story_refresh", err)
-			}
-			return nil, NewGetStoryRefreshNotImplemented(&body)
 		case http.StatusForbidden:
 			var (
 				body GetStoryRefreshForbiddenResponseBody
@@ -3995,7 +3950,6 @@ func (c *Client) BuildUpdateDraftRequest(ctx context.Context, v any) (*http.Requ
 // DecodeUpdateDraftResponse may return the following errors:
 //   - "unprocessable" (type *goa.ServiceError): http.StatusUnprocessableEntity
 //   - "conflict" (type *goa.ServiceError): http.StatusConflict
-//   - "not_implemented" (type *goa.ServiceError): http.StatusNotImplemented
 //   - "unavailable" (type *goa.ServiceError): http.StatusServiceUnavailable
 //   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
 //   - error: internal error
@@ -4063,20 +4017,6 @@ func DecodeUpdateDraftResponse(decoder func(*http.Response) goahttp.Decoder, res
 				return nil, goahttp.ErrValidationError("surla", "update_draft", err)
 			}
 			return nil, NewUpdateDraftConflict(&body)
-		case http.StatusNotImplemented:
-			var (
-				body UpdateDraftNotImplementedResponseBody
-				err  error
-			)
-			err = decoder(resp).Decode(&body)
-			if err != nil {
-				return nil, goahttp.ErrDecodingError("surla", "update_draft", err)
-			}
-			err = ValidateUpdateDraftNotImplementedResponseBody(&body)
-			if err != nil {
-				return nil, goahttp.ErrValidationError("surla", "update_draft", err)
-			}
-			return nil, NewUpdateDraftNotImplemented(&body)
 		case http.StatusServiceUnavailable:
 			var (
 				body UpdateDraftUnavailableResponseBody
@@ -4134,7 +4074,6 @@ func (c *Client) BuildGetTeamRequest(ctx context.Context, v any) (*http.Request,
 // get_team endpoint. restoreBody controls whether the response body should be
 // restored after having been read.
 // DecodeGetTeamResponse may return the following errors:
-//   - "not_implemented" (type *goa.ServiceError): http.StatusNotImplemented
 //   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
 //   - error: internal error
 func DecodeGetTeamResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
@@ -4173,20 +4112,6 @@ func DecodeGetTeamResponse(decoder func(*http.Response) goahttp.Decoder, restore
 			}
 			res := NewGetTeamTeamSnapshotOK(&body)
 			return res, nil
-		case http.StatusNotImplemented:
-			var (
-				body GetTeamNotImplementedResponseBody
-				err  error
-			)
-			err = decoder(resp).Decode(&body)
-			if err != nil {
-				return nil, goahttp.ErrDecodingError("surla", "get_team", err)
-			}
-			err = ValidateGetTeamNotImplementedResponseBody(&body)
-			if err != nil {
-				return nil, goahttp.ErrValidationError("surla", "get_team", err)
-			}
-			return nil, NewGetTeamNotImplemented(&body)
 		case http.StatusForbidden:
 			var (
 				body GetTeamForbiddenResponseBody
@@ -4246,7 +4171,6 @@ func EncodeShowTeamPaneRequest(encoder func(*http.Request) goahttp.Encoder) func
 // surla show_team_pane endpoint. restoreBody controls whether the response
 // body should be restored after having been read.
 // DecodeShowTeamPaneResponse may return the following errors:
-//   - "not_implemented" (type *goa.ServiceError): http.StatusNotImplemented
 //   - "window_busy" (type *goa.ServiceError): http.StatusConflict
 //   - "pane_unavailable" (type *goa.ServiceError): http.StatusConflict
 //   - "team_unavailable" (type *goa.ServiceError): http.StatusServiceUnavailable
@@ -4275,20 +4199,6 @@ func DecodeShowTeamPaneResponse(decoder func(*http.Response) goahttp.Decoder, re
 		switch resp.StatusCode {
 		case http.StatusNoContent:
 			return nil, nil
-		case http.StatusNotImplemented:
-			var (
-				body ShowTeamPaneNotImplementedResponseBody
-				err  error
-			)
-			err = decoder(resp).Decode(&body)
-			if err != nil {
-				return nil, goahttp.ErrDecodingError("surla", "show_team_pane", err)
-			}
-			err = ValidateShowTeamPaneNotImplementedResponseBody(&body)
-			if err != nil {
-				return nil, goahttp.ErrValidationError("surla", "show_team_pane", err)
-			}
-			return nil, NewShowTeamPaneNotImplemented(&body)
 		case http.StatusConflict:
 			en := resp.Header.Get("goa-error")
 			switch en {
@@ -4384,7 +4294,6 @@ func (c *Client) BuildStartTeamAgentsRequest(ctx context.Context, v any) (*http.
 // the surla start_team_agents endpoint. restoreBody controls whether the
 // response body should be restored after having been read.
 // DecodeStartTeamAgentsResponse may return the following errors:
-//   - "not_implemented" (type *goa.ServiceError): http.StatusNotImplemented
 //   - "ambiguous_space" (type *goa.ServiceError): http.StatusConflict
 //   - "window_busy" (type *goa.ServiceError): http.StatusConflict
 //   - "team_unavailable" (type *goa.ServiceError): http.StatusServiceUnavailable
@@ -4426,20 +4335,6 @@ func DecodeStartTeamAgentsResponse(decoder func(*http.Response) goahttp.Decoder,
 			}
 			res := NewStartTeamAgentsProjectTeamOK(&body)
 			return res, nil
-		case http.StatusNotImplemented:
-			var (
-				body StartTeamAgentsNotImplementedResponseBody
-				err  error
-			)
-			err = decoder(resp).Decode(&body)
-			if err != nil {
-				return nil, goahttp.ErrDecodingError("surla", "start_team_agents", err)
-			}
-			err = ValidateStartTeamAgentsNotImplementedResponseBody(&body)
-			if err != nil {
-				return nil, goahttp.ErrValidationError("surla", "start_team_agents", err)
-			}
-			return nil, NewStartTeamAgentsNotImplemented(&body)
 		case http.StatusConflict:
 			en := resp.Header.Get("goa-error")
 			switch en {
@@ -4754,7 +4649,6 @@ func EncodeStartBuildRequest(encoder func(*http.Request) goahttp.Encoder) func(*
 //   - "previous_change_open" (type *surla.OpenBuildRefusal): http.StatusConflict
 //   - "unfinished_build_open" (type *surla.OpenBuildRefusal): http.StatusConflict
 //   - "unprocessable" (type *goa.ServiceError): http.StatusUnprocessableEntity
-//   - "not_implemented" (type *goa.ServiceError): http.StatusNotImplemented
 //   - "unavailable" (type *goa.ServiceError): http.StatusServiceUnavailable
 //   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
 //   - error: internal error
@@ -5000,20 +4894,6 @@ func DecodeStartBuildResponse(decoder func(*http.Response) goahttp.Decoder, rest
 				return nil, goahttp.ErrValidationError("surla", "start_build", err)
 			}
 			return nil, NewStartBuildUnprocessable(&body)
-		case http.StatusNotImplemented:
-			var (
-				body StartBuildNotImplementedResponseBody
-				err  error
-			)
-			err = decoder(resp).Decode(&body)
-			if err != nil {
-				return nil, goahttp.ErrDecodingError("surla", "start_build", err)
-			}
-			err = ValidateStartBuildNotImplementedResponseBody(&body)
-			if err != nil {
-				return nil, goahttp.ErrValidationError("surla", "start_build", err)
-			}
-			return nil, NewStartBuildNotImplemented(&body)
 		case http.StatusServiceUnavailable:
 			var (
 				body StartBuildUnavailableResponseBody
@@ -5102,7 +4982,6 @@ func EncodeDropBuildRequest(encoder func(*http.Request) goahttp.Encoder) func(*h
 //   - "not_found" (type *goa.ServiceError): http.StatusNotFound
 //   - "conflict" (type *goa.ServiceError): http.StatusConflict
 //   - "build_changed" (type *surla.OpenBuildRefusal): http.StatusConflict
-//   - "not_implemented" (type *goa.ServiceError): http.StatusNotImplemented
 //   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
 //   - error: internal error
 func DecodeDropBuildResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
@@ -5193,20 +5072,6 @@ func DecodeDropBuildResponse(decoder func(*http.Response) goahttp.Decoder, resto
 				}
 				return nil, goahttp.ErrInvalidResponse("surla", "drop_build", resp.StatusCode, string(body))
 			}
-		case http.StatusNotImplemented:
-			var (
-				body DropBuildNotImplementedResponseBody
-				err  error
-			)
-			err = decoder(resp).Decode(&body)
-			if err != nil {
-				return nil, goahttp.ErrDecodingError("surla", "drop_build", err)
-			}
-			err = ValidateDropBuildNotImplementedResponseBody(&body)
-			if err != nil {
-				return nil, goahttp.ErrValidationError("surla", "drop_build", err)
-			}
-			return nil, NewDropBuildNotImplemented(&body)
 		case http.StatusForbidden:
 			var (
 				body DropBuildForbiddenResponseBody

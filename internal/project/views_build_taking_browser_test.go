@@ -52,8 +52,9 @@ func TestBuildTakingAtDesktopAndPhoneWidth(t *testing.T) {
 	// Bind a stand-in team for Build-state captures without starting workers.
 	require.NoError(t, vp.cp.Load().Close())
 	cp, err := controlplane.New(controlplane.Options{
-		CardsDir: vp.state.CardsDir(),
-		Team:     &controlplane.TeamBinding{Owner: vp.state.Record.Owner, Service: &phoneTeamOwner{Server: server}},
+		CardsDir:     vp.state.CardsDir(),
+		WorkspaceDir: vp.state.Record.Directory,
+		Team:         &controlplane.TeamBinding{Owner: vp.state.Record.Owner, Service: &phoneTeamOwner{Server: server}},
 	})
 	require.NoError(t, err)
 	vp.cp.Store(cp)

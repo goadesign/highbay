@@ -110,9 +110,9 @@ program explicitly: the command has no Herdr program catalog or saved
 preferences. The dialog retains those features. Roles with Surla MCP connections
 support `"client": "claude"` or `"client": "codex"`; `"program"` is a single
 executable name, path or shell function name, not shell code or arguments.
-Before launching, run the
-printed `chorus team inspect --space ... --choices choices.json` command to see
-the chosen programs' model options, thinking levels and permission effects.
+Before launching, add `--choices choices.json` to the printed
+`chorus team inspect --space ...` command to see the chosen programs' model
+options, thinking levels and permission effects.
 It validates the choices without opening panes or changing saved preferences and
 adds `client_options`, one entry per distinct chosen `client` and `program`
 (`models`, `efforts`, `model_supported`, `thinking_supported`, `note`, `error`,
@@ -176,15 +176,15 @@ team and opens the views page. **What the user sees**, in order:
 ```text
 Started a Surla project for this folder. Moving or renaming this folder starts a new project.
 Team shop-3f9c1a2b4d5e.
-Choose an agent for each role in the open Chorus dialog in Herdr. Run chorus team inspect --space '<space>'; chorus team launch --help; models and permission effects: chorus team inspect --space '<space>' --choices choices.json; chorus team launch --space '<space>' --choices choices.json. Stdin: --choices -.
+Choose an agent for each role in the open Chorus dialog in Herdr. From a terminal, run chorus team inspect --space '<space>' to see the roles (add --choices choices.json for models and permission effects), then chorus team launch with the same --space and --choices choices.json (--choices - reads stdin; see chorus team launch --help).
 Surla is running for /path/to/shop at http://127.0.0.1:52011
 ```
 
 The first line appears only when the folder had no project. The second names
 the team, after the folder and the first 12 characters of the project's
 identifier. The third is the user's next step, chosen by the server (the first
-two states also append the `chorus team inspect` and `chorus team launch`
-commands above with the space's quoted ID):
+two states also append the `chorus team inspect` command with the space's
+quoted ID and the `chorus team launch` step above):
 
 | Chorus dialog | Step printed |
 | --- | --- |
@@ -243,9 +243,12 @@ an agent app and a model for each role. A worker role without work stays in the
 roster, and when every role that has work is running, no dialog opens. The
 guide's pane is on the left of the team's tab; the builder's pane
 is to its right, and the test writer's below the builder's. Starting again
-reuses the guide and the saved space. If the space was closed, the server
-adopts the one local space that matches its team name and folder, or creates
-one; when several match, it refuses with their count, and the user closes the
+reuses the guide and the saved space. Surla manages spaces whose ID is 1–64
+characters of `[A-Za-z0-9_.-]` (not `.` or `..`). If a saved space has an ID
+outside that rule and is still open in Herdr, Surla refuses until you close
+that space; once the saved space is closed, the server adopts the one
+conforming local space that matches its team name and folder, or creates one;
+when several match, it refuses with their count, and the user closes the
 duplicates. Team preparation needs no Git repository; startup still requires
 the Git executable and capability listed under [Prerequisites](#prerequisites).
 
@@ -1145,7 +1148,6 @@ calls `update_draft` again until `to_correct` is empty, then calls
 | Refusal | When |
 | --- | --- |
 | `unprocessable` (`422`) | The project folder was replaced; `.surla-draft` is a link or a file rather than a folder, its `.gitignore` has no Surla draft marker, or its provenance is missing; the draft or provenance changed while Surla first made the draft; the draft's or project folder's `go.mod` is missing, or a `go.mod`, `go.sum` or design file there is not regular, cannot be read or is not valid UTF-8; or a design file in the project's current commit cannot be parsed as Go or is a link or submodule. The message names the file or folder and who corrects it. The guide corrects its draft, or asks the user to correct the project file (and commit a correction to committed design), then calls again. |
-| `not_implemented` (`501`) | No project folder is bound: `no workspace directory is bound to this control plane; start Surla from a project directory`. |
 | `conflict` (`409`) | The project's commit, the draft, the project files or the design provenance changed while preparing the update (`The project's commit changed while preparing the draft update; call update_draft again.` or `The draft, project files or design provenance changed while preparing the update; call update_draft again.`). |
 | `unavailable` (`503`) | The server is stopping. |
 
@@ -1777,6 +1779,9 @@ the test writer's next report.
 - `team.state` is `ready` (the team result with its `step`), `window_busy`,
   `ambiguous_space` (with the `count`) or `unavailable`, each with a `step`.
   A team warning still means the build was saved.
+  `ready` means team preparation completed; its `step` can still ask the user
+  to choose agents in an open dialog. It does not establish that agents are
+  running. The page quotes that start's instruction as a dated receipt.
 
 Every refusal below saves no build and registers no role.
 
@@ -1796,7 +1801,6 @@ Every refusal below saves no build and registers no role.
 | `copy_folder_in_use` | 409 | Move the project's `.surla-build` or `.surla-tests` entry, which is not Surla's working copy, out of the project. |
 | `tests_branch_in_use` | 409 | Another working copy holds `surla/build-<n>` or `surla/tests-<n>`; the message names it and the step. |
 | `working_copy_busy` | 409 | Build again when the current build start, assignment read or report check has ended. |
-| `not_implemented` | 501 | The server has no team; start the project with `surla`. |
 | `unavailable` | 503 | The server is stopping or the start ran out of time; build again. |
 
 ### `drop_build`
@@ -1823,7 +1827,6 @@ start checks still apply.
 | `not_found` | 404 | No card has this `change_id`, or the project has no open build. |
 | `build_changed` | 409 | The open build (`OpenBuildRefusal`) belongs to another change or has a different `started_at` than named. |
 | `conflict` | 409 | The build was already dropped. |
-| `not_implemented` | 501 | The server has no team; start the project with `surla`. |
 
 ### Judging reports
 
@@ -2079,10 +2082,6 @@ it has facts from that server. A failed address check changes no team state
 or window and leaves the views page available. It reports:
 `Chorus is not running or its settings are invalid. Run chorus up (or chorus status to see the error), then start the agents again (Start agents on the page, or run surla).`
 
-If no team is bound to the server, all three user operations return
-`not_implemented` (`501`) with the enabling step:
-`Start this project with surla to use its team.`
-
 ### `get_team`
 
 `GET /team`. **Output:** `TeamSnapshot` (`team`, `roles`). Registered roles
@@ -2099,7 +2098,6 @@ creates nothing and marks nothing read. Each role has:
 When Herdr sends no heartbeat or event for 45 seconds, every role reads
 `unknown` until fresh facts arrive. A failed assignment read never reads as
 `nothing_owed` or `no_work`. `wait_for_changes` also covers these facts.
-For an unbound team, see [the shared refusal](#team-supervision).
 
 ### `show_team_pane`
 
@@ -2108,7 +2106,6 @@ that role's pane, only when the user asks.
 
 | Refusal | When |
 | --- | --- |
-| `not_implemented` (`501`) | No team is bound; see [the shared refusal](#team-supervision). |
 | `window_busy` (`409`) | A Herdr dialog is open; close it first. Nothing in the window changed. |
 | `pane_unavailable` (`409`) | The role has no pane Surla can identify. |
 | `team_unavailable` (`503`) | Herdr could not establish the pane: `Herdr did not complete a team command; open the Herdr app, then try again`. |
@@ -2120,8 +2117,7 @@ that role's pane, only when the user asks.
 `surla` runs, opening the Chorus dialog when the guide, or a worker role that
 has work on the open build (or any listed role when the assignment read fails),
 is not running.
-Refusals: `not_implemented` (`501`, no team is bound; see
-[the shared refusal](#team-supervision)), `ambiguous_space` (`409`, close the
+Refusals: `ambiguous_space` (`409`, close the
 duplicate Herdr spaces, then start the agents), `window_busy` (`409`) and
 `team_unavailable` (`503`), whose message is the views page's step for its cause (see
 [`ensure_team`](#ensure_team-management)). `team_unavailable` can come after
@@ -2149,6 +2145,7 @@ which opens anyway:
 | `stopping` | The server is shutting down. | `the project server is stopping; run surla again` | `the project server is stopping; run surla in the project folder to start it again` |
 | `chorus` | The managed Chorus server or its settings are unavailable. | `Chorus is not running or its settings are invalid. Run chorus up (or chorus status to see the error), then start the agents again (Start agents on the page, or run surla).` | The same step. |
 | `herdr` | A Herdr command did not complete. | `Herdr did not complete a team command; open the Herdr app, then click Start agents on the views page` | `Herdr did not complete a team command; open the Herdr app, then try again` |
+| `saved_space` | The project's saved Herdr space has an ID this version of Surla no longer accepts and is still open. | `This project's saved Herdr space has an ID this version of Surla no longer accepts. Close that space in Herdr (its agents stop with it), then start the agents again; Surla will prepare a replacement space.` | The same step. |
 | `roster_folder` | Herdr's launcher roster folder could not be written. | `Herdr's launcher roster folder could not be written; make data/chorus-launcher/rosters in Herdr's app folder (~/.config/herdr-app unless HERDR_APP_HOME is set) writable by this account, then click Start agents on the views page` | The same, ending `then start the agents again` |
 | `project_state` | The project's record or an agent credential could not be read or written. | `this project's private state in <state folder> could not be read or written; make that folder and the folders in it private to this account (chmod 700) and its files too (chmod 600), then click Start agents on the views page` | `this project's private state could not be read or written; run surla in the project folder to see which folder to repair` |
 | `role_folder` | A role's working folder could not be read. | `a team role's working folder could not be read; make sure this account can open the project folder <project folder> and its build working folders, then click Start agents on the views page` | `a team role's working folder could not be read; make sure this account can open the project folder and its build working folders, then start the agents again` |
@@ -2306,10 +2303,18 @@ after a failed read of the changes or the team, a lost update connection or
 an ended session, it names the recovery instead, such as
 `Reconnecting: shop`. Before the exchange succeeds, the title is `Surla`.
 Reloading or closing the tab ends the session; run `surla` for a fresh link.
+Opening a fresh link in the same tab reloads the page through the normal link
+exchange. If there are unsaved CP1 edits, unadopted proposal answers, Model-form
+edits, or a pending edit request, the page removes the link from the address
+and holds it only in memory. Save or discard those inputs, then choose **Open
+link**. A failed save keeps the inputs and the guard. **Discard model edits**
+clears only unsent Model-form input, without changing the saved connection.
+The link still expires two minutes after it was printed, not after it was
+pasted. Obtain another link if it expires while you finish editing.
 A used or expired link is reported as such. When the server answers `401`, as
 it does after a restart, the page keeps everything typed visible and
 copyable and says to run `surla` again. Leaving with unsaved edits asks the
-browser to confirm.
+browser to confirm, including for unadopted proposal answers and Model-form edits.
 
 **Every view.** The frame previews at most two lines of the confirmed
 agreement's summary. **Read full summary** opens Agree, expands **Agreement
@@ -2616,7 +2621,13 @@ One **Full / compiler-inputs** job per operating system prepares and publishes
 module and compiler archives without running tests. Outside pull requests,
 full-root groups wait for these producers, then restore their inputs; PR checks
 remain independent read-only consumers. A missing module or compiler archive
-triggers preparation of the declared race/plain compilation,
+triggers preparation of the committed and synthetic test-module closures (including
+`sum.golang.org` verification tiles via `go mod tidy` without an initial `go.sum`)
+for the ordinary partitions (`internal/testmodule` callers in `internal/testwriter`,
+`cmd/surla`, `internal/designeval`, `internal/diff`, and `internal/controlplane`;
+real networked starter-template initialization in `surla init` stays owned by
+**Full / starter** and **Full / generation**),
+the declared race/plain compilation,
 CGO-free product dependencies and pinned Goa generator, then compiles Story,
 Orders and Orders Eval with their own dependency versions and plain/race
 selections, including the tagged acceptance tests. Only trusted non-pull-request

@@ -26,7 +26,8 @@ outputs:
 runs:
   using: composite
   steps:
-    # v3 replaces immutable v2 archives whose producer omitted nested modules.
+    # v4 replaces immutable v3 archives whose producer omitted synthetic
+    # test-module closures and sum.golang.org verification tiles.
     # Change this version when the declared producer closure changes.
     - name: Locate compiler storage and fixture versions
       id: paths
@@ -44,10 +45,8 @@ runs:
         # Weekly image builds coexist and must be able to restore this family.
         : "${ImageOS:?hosted runner image family is required}"
         echo "image=$ImageOS" >> "$GITHUB_OUTPUT"
-        # Hash version declarations rather than unrelated test assertions.
-        versions=$(git grep -h -E '^const (published|publishedSurla|starterSurlaVersion) = ' -- \
-          cmd/surla/gen_e2e_test.go internal/scaffold/scaffold_test.go \
-          internal/scaffold/live_integration_test.go internal/testwriter/check_test.go \
+        # Hash the shared fixture version declarations and primer profiles.
+        versions=$(shasum -a 256 internal/testmodule/testmodule.go internal/testmodule/prime.go \
           | shasum -a 256 | cut -d ' ' -f 1)
         echo "versions=$versions" >> "$GITHUB_OUTPUT"
         echo "GOCACHE=$build" >> "$GITHUB_ENV"
@@ -57,13 +56,13 @@ runs:
       uses: actions/cache/restore@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
       with:
         path: ${{ steps.paths.outputs.modules }}
-        key: surla-go-v3-modules-${{ runner.os }}-${{ runner.arch }}-${{ inputs.go-version }}-${{ hashFiles('**/go.mod', '**/go.sum', 'internal/scaffold/templates/**') }}-${{ steps.paths.outputs.versions }}
+        key: surla-go-v4-modules-${{ runner.os }}-${{ runner.arch }}-${{ inputs.go-version }}-${{ hashFiles('**/go.mod', '**/go.sum', 'internal/scaffold/templates/**') }}-${{ steps.paths.outputs.versions }}
     - name: Restore compiled packages
       id: build-reader
       uses: actions/cache/restore@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
       with:
         path: ${{ steps.paths.outputs.build }}
-        key: surla-go-v3-native-race-plain-${{ runner.os }}-${{ runner.arch }}-${{ steps.paths.outputs.image }}-${{ inputs.go-version }}-${{ hashFiles('**/go.mod', '**/go.sum', 'internal/scaffold/templates/**', '.github/race-packages.txt') }}-${{ steps.paths.outputs.versions }}
+        key: surla-go-v4-native-race-plain-${{ runner.os }}-${{ runner.arch }}-${{ steps.paths.outputs.image }}-${{ inputs.go-version }}-${{ hashFiles('**/go.mod', '**/go.sum', 'internal/scaffold/templates/**', '.github/race-packages.txt') }}-${{ steps.paths.outputs.versions }}
     - name: Report compiler cache state
       shell: bash
       working-directory: ${{ github.workspace }}

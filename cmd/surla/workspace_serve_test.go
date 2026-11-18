@@ -135,7 +135,12 @@ func TestConfigureServeWorkspaceKeepsHistoryAcrossSpellingsOfTheWorkspace(t *tes
 				}
 				ws, err := configureServeWorkspace()
 				require.NoError(t, err, st)
-				cp, err := controlplane.New(controlplane.Options{CardsDir: ws.cardsDir, WorkspaceDir: ws.workspaceDir, RunsDir: ws.runsDir})
+				cp, err := controlplane.New(controlplane.Options{
+					CardsDir:     ws.cardsDir,
+					WorkspaceDir: ws.workspaceDir,
+					RunsDir:      ws.runsDir,
+					Team:         fixtureWorkflowTeam("alice@example.com"),
+				})
 				require.NoError(t, err, st)
 				if i == 0 {
 					first = ws

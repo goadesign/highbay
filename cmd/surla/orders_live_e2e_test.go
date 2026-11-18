@@ -87,6 +87,7 @@ func TestOrdersLiveCopyAppliesADraftThroughTheProjectServer(t *testing.T) {
 	opts, err := serveOptions(os.Environ(), workspace)
 	require.NoError(t, err)
 	opts.BuildCacheDir = testmodule.CompilerCache(t)
+	opts.Team = fixtureWorkflowTeam("operator@example.com")
 	cp, err := controlplane.New(opts)
 	require.NoError(t, err)
 	// Registered after the temporary directories, so it runs before they

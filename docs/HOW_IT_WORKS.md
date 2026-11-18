@@ -154,9 +154,14 @@ check works in an empty folder, before you make a Git repository.
 
 You can make the same choices through a terminal and browser automation. Run
 `surla --print-link` to receive a one-use page URL and expiry as JSON, with
-startup notices on stderr, then open it in your controlled browser. The team
-next step gives `chorus team inspect` and `chorus team launch` commands with
-your actual space ID. Name each missing role's program in the choices JSON;
+startup notices on stderr, then open it in your controlled browser. If you
+paste a fresh link into the same tab, the page reloads immediately when there
+are no unsaved inputs. Otherwise save or
+discard your edits, then choose **Open link**. The two-minute expiry starts
+when the link was printed, so obtain another if it expires while you edit.
+
+The team next step gives `chorus team inspect` and `chorus team launch` commands
+with your actual space ID. Name each missing role's program in the choices JSON;
 null model/thinking use its defaults. Before launching, add
 `--choices choices.json` to the printed inspect command to see those programs' model
 options and permission effects. The command shares the dialog's discovery and

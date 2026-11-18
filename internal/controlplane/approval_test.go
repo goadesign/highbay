@@ -445,11 +445,6 @@ func TestApproveMergeRecordsApprovalOnlyForTheCheckedRevision(t *testing.T) {
 		isStale        bool
 		wantHTTPStatus int
 	}{
-		{"verification is not configured", aliceCtx, "alice-token", func(cp *ControlPlane, target *promotionTargetStub, _ *gensurla.ChangeCardResult) string {
-			cp.promotionTarget = nil
-			cp.verifier = noVerification{}
-			return target.report.Digest
-		}, "verification is not configured", false, http.StatusNotImplemented},
 		{"caller does not own the card", bobCtx, "bob-token", func(_ *ControlPlane, target *promotionTargetStub, _ *gensurla.ChangeCardResult) string {
 			return target.report.Digest
 		}, "is not the owner", false, http.StatusForbidden},
@@ -510,6 +505,43 @@ func TestApproveMergeRecordsApprovalOnlyForTheCheckedRevision(t *testing.T) {
 			assert.Nil(t, read.Approval)
 		})
 	}
+}
+
+// TestApproveMergeWithoutVerification exercises the refusal on a control
+// plane started without a verifier and confirms that it leaves the card intact.
+func TestApproveMergeWithoutVerification(t *testing.T) {
+	cp := newControlPlane(t, Options{})
+	card := saveCard(t, cp, nil)
+	alice := asCaller("alice@example.com", CallerUser)
+	payload := &gensurla.ApproveMergePayload{
+		ChangeID:        card.ChangeID,
+		RequestRevision: card.RequestRevision,
+		CandidateCommit: strings.Repeat("a", 40),
+		ReportDigest:    strings.Repeat("0", 64),
+	}
+	_, err := cp.ApproveMerge(alice, payload)
+	assertServiceError(t, err, "not_implemented")
+	require.ErrorContains(t, err, "verification is not configured")
+
+	handler := NewHTTPHandler(cp, workflowAuthenticator(map[string]Principal{"alice-token": {ID: "alice@example.com"}}))
+	body, err := json.Marshal(map[string]string{
+		"change_id":        payload.ChangeID,
+		"request_revision": payload.RequestRevision,
+		"candidate_commit": payload.CandidateCommit,
+		"report_digest":    payload.ReportDigest,
+	})
+	require.NoError(t, err)
+	req := httptest.NewRequest(http.MethodPost, "/changes/approve", bytes.NewReader(body))
+	workflowAuthorization(req, "alice-token")
+	req.Header.Set("Content-Type", "application/json")
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, req)
+	assert.Equal(t, http.StatusNotImplemented, response.Code)
+	assert.Contains(t, response.Body.String(), "verification is not configured")
+
+	read, err := cp.GetChange(alice, &gensurla.GetChangePayload{ChangeID: card.ChangeID})
+	require.NoError(t, err)
+	assert.Nil(t, read.Approval)
 }
 
 // TestApproveMergeChecksTheChosenTestsCommit verifies Proof clause 1 across
