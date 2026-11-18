@@ -8,6 +8,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -136,7 +137,7 @@ func TestBuildingAgainReplacesTheBuildAndClearsReads(t *testing.T) {
 		return testwriter.Verdict{Findings: []testwriter.Finding{{Kind: testwriter.FindingBuild, Message: "RefundOverLimit is not implemented"}}}, nil
 	}}
 	cp.buildCopyFactory = func(context.Context, string, scaffold.Layout) (buildCopy, error) { return checked, nil }
-	_, err = cp.ReportTestsFinished(tests, &gensurla.ReportTestsFinishedPayload{ChangeID: "chg", RequestRevision: first.RequestRevision})
+	_, err = cp.ReportTestsFinished(tests, &gensurla.ReportTestsFinishedPayload{ChangeID: "chg", RequestRevision: first.RequestRevision, CoverageStatements: []*gensurla.TestCoverageStatement{}})
 	require.NoError(t, err)
 	build = mustStartedBuild(t, cp, user, "chg")
 	assert.True(t, build.TestWriter.Read)
@@ -239,7 +240,7 @@ func TestAssignmentsSayWhetherTheirBuildIsInForce(t *testing.T) {
 			return full.InForce, nil
 		}},
 		{name: "test writer report", read: func() (bool, error) {
-			item, err := cp.ReportTestsFinished(tests, &gensurla.ReportTestsFinishedPayload{ChangeID: "chg", RequestRevision: first.RequestRevision})
+			item, err := cp.ReportTestsFinished(tests, &gensurla.ReportTestsFinishedPayload{ChangeID: "chg", RequestRevision: first.RequestRevision, CoverageStatements: []*gensurla.TestCoverageStatement{}})
 			if err != nil {
 				return false, err
 			}
@@ -376,13 +377,13 @@ func TestReportForAnotherRevisionIsRefused(t *testing.T) {
 			if tc.refusal == "forbidden" {
 				ctx = asCaller("bob@example.com", CallerTestWriter)
 			}
-			_, err := cp.ReportTestsFinished(ctx, &gensurla.ReportTestsFinishedPayload{ChangeID: tc.changeID, RequestRevision: tc.revision})
+			_, err := cp.ReportTestsFinished(ctx, &gensurla.ReportTestsFinishedPayload{ChangeID: tc.changeID, RequestRevision: tc.revision, CoverageStatements: []*gensurla.TestCoverageStatement{}})
 			assertRefused(t, err, tc.refusal)
 			assert.Equal(t, before, readBuildFile(t, cp, "chg"), "a refused report changes nothing")
 		})
 	}
 	for report := 1; report <= 2; report++ {
-		reported, err := cp.ReportTestsFinished(tests, &gensurla.ReportTestsFinishedPayload{ChangeID: "chg", RequestRevision: card.RequestRevision})
+		reported, err := cp.ReportTestsFinished(tests, &gensurla.ReportTestsFinishedPayload{ChangeID: "chg", RequestRevision: card.RequestRevision, CoverageStatements: []*gensurla.TestCoverageStatement{}})
 		require.NoError(t, err)
 		assert.Equal(t, gensurla.TestsKindReported, reported.Progress.Tests.Kind())
 		assert.Equal(t, report, reported.Progress.Report, "every report is counted, even when already reported")
@@ -630,8 +631,8 @@ func TestBuildOperationsFollowTheRoleTable(t *testing.T) {
 		{name: "get_builder_assignment", method: http.MethodGet, path: "/assignments/builder/chg", arguments: `{"change_id":"chg"}`, callers: []string{"builder"}},
 		{name: "list_test_writer_assignments", method: http.MethodGet, path: "/assignments/test-writer", arguments: `{}`, callers: []string{"tests"}},
 		{name: "get_test_writer_assignment", method: http.MethodGet, path: "/assignments/test-writer/chg", arguments: `{"change_id":"chg"}`, callers: []string{"tests"}},
-		{name: "report_tests_finished", method: http.MethodPost, path: "/assignments/test-writer/chg/finished", body: revision,
-			arguments: `{"change_id":"chg","request_revision":"` + card.RequestRevision + `"}`, callers: []string{"tests"}},
+		{name: "report_tests_finished", method: http.MethodPost, path: "/assignments/test-writer/chg/finished", body: fmt.Sprintf(`{"request_revision":%q,"coverage_statements":[]}`, card.RequestRevision),
+			arguments: `{"change_id":"chg","request_revision":"` + card.RequestRevision + `","coverage_statements":[]}`, callers: []string{"tests"}},
 	}
 	for _, token := range []string{"user", "guide", "builder", "tests"} {
 		t.Run(token, func(t *testing.T) {

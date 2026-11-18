@@ -650,6 +650,44 @@ async function approvalScenario(input, facts, views) {
   for (const [name, width, height, scale] of sizes) {
     await views.dt.send("Emulation.setDeviceMetricsOverride", { width, height, deviceScaleFactor: scale, mobile: width < 600 }, views.sessionId);
     await views.dt.send("Emulation.setEmulatedMedia", { features: [{ name: "prefers-color-scheme", value: name === "dark" ? "dark" : "light" }] }, views.sessionId);
+    let coverageLinked = false;
+    if (input.approval_state === "current") {
+      await evaluate(views, "document.getElementById('surla-nav-build').click(), true");
+      const buildReady = await until(views, "document.getElementById('surla-build-coverage') !== null");
+      if (buildReady.timed_out) throw new Error("accepted Build coverage did not appear");
+      await evaluate(views, "(" + function revealBuildCoverage() {
+        for (let parent = document.getElementById("surla-build-coverage").parentElement; parent; parent = parent.parentElement) {
+          if (parent.tagName === "DETAILS") parent.open = true;
+        }
+      }.toString() + ")()");
+      const buildVisible = await until(views, "document.getElementById('surla-build-coverage').getBoundingClientRect().height > 0");
+      if (buildVisible.timed_out) throw new Error("accepted Build coverage stayed hidden");
+      const coverageFacts = function coverageFacts(id) {
+        const section = document.getElementById(id);
+        return {
+          requirements: Array.from(section.querySelectorAll('dt'), (node) => node.textContent),
+          scenarios: Array.from(section.querySelectorAll('li code'), (node) => node.textContent),
+          explanations: Array.from(section.querySelectorAll('li > p:last-child'), (node) => node.textContent),
+        };
+      };
+      const builtCoverage = await evaluate(views, "(" + coverageFacts.toString() + ")('surla-build-coverage')");
+      if (name === "desktop" || name === "phone") {
+        await evaluate(views, "document.getElementById('surla-build-coverage').scrollIntoView({block: 'start'}), new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))");
+        const shown = await views.dt.send("Page.captureScreenshot", { format: "png", captureBeyondViewport: false }, views.sessionId);
+        fs.writeFileSync(require("node:path").join(input.capture_directory, "current-" + name + "-build-coverage.png"), Buffer.from(shown.data, "base64"));
+      }
+      await evaluate(views, "document.getElementById('surla-nav-cp5').click(), true");
+      const reviewed = await until(views, "document.getElementById('surla-approval-coverage') !== null && !document.getElementById('surla-cp5-observation-status')");
+      if (reviewed.timed_out) throw new Error("recorded approval coverage did not appear");
+      const recordedCoverage = await evaluate(views, "(" + coverageFacts.toString() + ")('surla-approval-coverage')");
+      coverageLinked = builtCoverage.requirements.length > 0 && builtCoverage.scenarios.length > 0 &&
+        JSON.stringify(builtCoverage) === JSON.stringify(recordedCoverage);
+      if (name === "desktop" || name === "phone") {
+        await evaluate(views, "document.getElementById('surla-approval-coverage').scrollIntoView({block: 'start'}), new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))");
+        const shown = await views.dt.send("Page.captureScreenshot", { format: "png", captureBeyondViewport: false }, views.sessionId);
+        fs.writeFileSync(require("node:path").join(input.capture_directory, "current-" + name + "-approval-coverage.png"), Buffer.from(shown.data, "base64"));
+      }
+    }
     await evaluate(views, "window.scrollTo(0, 0), new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))");
     // Two paint frames can still fall inside the incumbent 150ms color
     // transition. Measure rest only after finite animations settle, bounded
@@ -712,6 +750,7 @@ async function approvalScenario(input, facts, views) {
     }.toString() + ")()");
     measured.name = name;
     measured.primary_at_rest = primaryAtRest;
+    measured.coverage_linked = coverageLinked;
     measured.keyboard_reached_action = reached;
     measured.flow_lines_readable = true;
     const capture = await views.dt.send("Page.captureScreenshot", { format: "png", captureBeyondViewport: true }, views.sessionId);

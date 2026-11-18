@@ -382,10 +382,20 @@ test writer reports to have it generated again or runs
 `surla gen -dir eval` in its working copy first. It checks
 its work with `go build ./...` in `eval/`, which fails naming any required
 method not yet written.
-Then it calls `report_tests_finished`. The report returns at once with the
+Then it calls `report_tests_finished`, including which agreed answers and
+examples each scenario is stated to cover and an explanation; an empty
+statement list means **Not stated**. The report returns at once with the
 report's number; the build shows the test writer as **Reported**. In a
 starter project the test of the starter's own flow, the method `PricesCookie`
 in `eval/acceptance`, is already written and shows the form to follow.
+
+After acceptance, Build shows **Test writer's stated coverage** against your
+agreed answers and examples. Surla validates the references and checks that the
+tests build and declare their required scenarios; it does not judge the
+writer's coverage statements. Approve shows the same recorded statements
+beside the selected run's results, even after later changes. An answer or
+example without a statement says **Not stated**, which does not establish
+whether it was tested.
 
 ### Surla checks the tests
 

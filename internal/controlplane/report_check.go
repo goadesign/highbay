@@ -291,6 +291,9 @@ func (r *reportChecker) judge(ctx context.Context, changeID string) {
 	defer cancel()
 	branch := testwriter.TestsRole.Branch(saved.Number)
 	copy, v, err := r.check(checkCtx, branch, saved.Base, saved.Stories)
+	if err == nil && v.Accepted() {
+		v.Findings = coverageScenarioFindings(saved.TestWriter.CoverageStatements, v.DeclaredScenarios)
+	}
 	if ctx.Err() != nil {
 		span.AddEvent("stopped before a verdict; the build stays reported")
 		return
@@ -531,6 +534,7 @@ func (r *reportChecker) saveVerdict(id reportIdentity, verdict testWriterAssignm
 		return buildFile{}, false, nil
 	}
 	verdict.CheckedAt = r.now().UTC()
+	verdict.CoverageStatements = cloneCoverageStatements(saved.TestWriter.CoverageStatements)
 	saved.TestWriter = verdict
 	if verdict.State == testsAccepted {
 		saved.Builder.Read = false

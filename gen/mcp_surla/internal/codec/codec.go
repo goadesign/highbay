@@ -2625,6 +2625,77 @@ func ValidateGetBuildResultBuilderProgressTransport(value *GetBuildResultBuilder
 	return err
 }
 
+// GetBuildResultConfirmedAnswerTransport stores JSON fields until they have been validated.
+type GetBuildResultConfirmedAnswerTransport struct {
+	// Question identifier on the Change Card.
+	ID *string `json:"id"`
+	// The question as the user answered it.
+	Question *string `json:"question"`
+	// The option the user confirmed, exactly as confirmed.
+	Answer *string `json:"answer"`
+}
+
+// ValidateGetBuildResultConfirmedAnswerTransport checks decoded JSON before it becomes a service value.
+func ValidateGetBuildResultConfirmedAnswerTransport(value *GetBuildResultConfirmedAnswerTransport) (err error) {
+	if value == nil {
+		return goa.MissingFieldError("body", "JSON value")
+	}
+	if value.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if value.Question == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("question", "body"))
+	}
+	if value.Answer == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("answer", "body"))
+	}
+	return err
+}
+
+// GetBuildResultExampleItemTransport stores JSON fields until they have been validated.
+type GetBuildResultExampleItemTransport struct {
+	// Stable example identifier. Default code-assigned IDs use check_01, check_02,
+	// ... (valid goa-ai/eval Scenario names). confirm_intent preserves
+	// caller-chosen IDs.
+	ID *string `json:"id"`
+	// Plain-English scenario description.
+	Scenario *string `json:"scenario"`
+	// Representative user request and domain fixture state.
+	InputSummary *string `json:"input_summary"`
+	// Expected side effect and response behavior.
+	ExpectedOutcome *string `json:"expected_outcome"`
+	// Evaluator check classification (deterministic or model_judged).
+	VerificationKind *string `json:"verification_kind"`
+}
+
+// ValidateGetBuildResultExampleItemTransport checks decoded JSON before it becomes a service value.
+func ValidateGetBuildResultExampleItemTransport(value *GetBuildResultExampleItemTransport) (err error) {
+	if value == nil {
+		return goa.MissingFieldError("body", "JSON value")
+	}
+	if value.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if value.Scenario == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("scenario", "body"))
+	}
+	if value.InputSummary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("input_summary", "body"))
+	}
+	if value.ExpectedOutcome == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("expected_outcome", "body"))
+	}
+	if value.VerificationKind == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("verification_kind", "body"))
+	}
+	if value.VerificationKind != nil {
+		if !(*value.VerificationKind == "deterministic" || *value.VerificationKind == "model_judged") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.verification_kind", *value.VerificationKind, []any{"deterministic", "model_judged"}))
+		}
+	}
+	return err
+}
+
 // GetBuildResultOperatorEvaluatorTestsTransport stores JSON fields until they have been validated.
 type GetBuildResultOperatorEvaluatorTestsTransport struct {
 }
@@ -2693,6 +2764,14 @@ type GetBuildResultStartedBuildTransport struct {
 	// Tests required by this build's saved Story, in declaration order; unfinished
 	// flows require none. Empty when no finished flow requires a test.
 	RequiredTests []*GetBuildResultRequiredTestTransport `json:"required_tests"`
+	// Confirmed answers saved when this build started; later revisions do not
+	// replace them.
+	Answers []*GetBuildResultConfirmedAnswerTransport `json:"answers"`
+	// Examples saved when this build started; later revisions do not replace them.
+	Examples []*GetBuildResultExampleItemTransport `json:"examples"`
+	// The accepted report's writer statements; empty before acceptance or when
+	// none were stated. Surla did not judge them.
+	CoverageStatements []*GetBuildResultTestCoverageStatementTransport `json:"coverage_statements"`
 	// Whether the user has taken this build: building until a verification of it
 	// passes; passed with the commits to merge; merged once the branch checked out
 	// in the project folder holds the commits of one passed run, the builder's
@@ -2728,6 +2807,15 @@ func ValidateGetBuildResultStartedBuildTransport(value *GetBuildResultStartedBui
 	if value.RequiredTests == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("required_tests", "body"))
 	}
+	if value.Answers == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("answers", "body"))
+	}
+	if value.Examples == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("examples", "body"))
+	}
+	if value.CoverageStatements == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("coverage_statements", "body"))
+	}
 	if value.Taking == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("taking", "body"))
 	}
@@ -2756,6 +2844,36 @@ func ValidateGetBuildResultStartedBuildTransport(value *GetBuildResultStartedBui
 			}
 		}
 	}
+	for _, e := range value.Answers {
+		if e == nil {
+			err = goa.MergeErrors(err, goa.MissingFieldError("body.answers", "[*]"))
+		}
+		if e != nil {
+			if err2 := ValidateGetBuildResultConfirmedAnswerTransport(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	for _, e := range value.Examples {
+		if e == nil {
+			err = goa.MergeErrors(err, goa.MissingFieldError("body.examples", "[*]"))
+		}
+		if e != nil {
+			if err2 := ValidateGetBuildResultExampleItemTransport(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	for _, e := range value.CoverageStatements {
+		if e == nil {
+			err = goa.MergeErrors(err, goa.MissingFieldError("body.coverage_statements", "[*]"))
+		}
+		if e != nil {
+			if err2 := ValidateGetBuildResultTestCoverageStatementTransport(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
 	if value.Taking != nil {
 
 		if err2 := value.Taking.Validate(); err2 != nil {
@@ -2779,6 +2897,81 @@ func ValidateGetBuildResultStartedBuildTransport(value *GetBuildResultStartedBui
 			}
 		}
 
+	}
+	return err
+}
+
+// GetBuildResultTestCoverageReferenceTransport stores JSON fields until they have been validated.
+type GetBuildResultTestCoverageReferenceTransport string
+
+// ValidateGetBuildResultTestCoverageReferenceTransport checks decoded JSON before it becomes a service value.
+func ValidateGetBuildResultTestCoverageReferenceTransport(value GetBuildResultTestCoverageReferenceTransport) (err error) {
+	if utf8.RuneCountInString(string(value)) < 1 {
+		err = goa.MergeErrors(err, goa.InvalidLengthError("body", string(value), utf8.RuneCountInString(string(value)), 1, true))
+	}
+	return err
+}
+
+// GetBuildResultTestCoverageStatementTransport stores JSON fields until they have been validated.
+type GetBuildResultTestCoverageStatementTransport struct {
+	// Exact declared scenario identifier.
+	Scenario *GetBuildResultTestCoverageReferenceTransport `json:"scenario"`
+	// Question IDs from the assignment's answers[].id; empty when this statement
+	// names only examples.
+	QuestionIds []*GetBuildResultTestCoverageReferenceTransport `json:"question_ids"`
+	// Example IDs from the assignment's examples[].id; empty when this statement
+	// names only answers.
+	ExampleIds []*GetBuildResultTestCoverageReferenceTransport `json:"example_ids"`
+	// Interaction or assertion the writer says exercises these requirements.
+	Explanation *string `json:"explanation"`
+}
+
+// ValidateGetBuildResultTestCoverageStatementTransport checks decoded JSON before it becomes a service value.
+func ValidateGetBuildResultTestCoverageStatementTransport(value *GetBuildResultTestCoverageStatementTransport) (err error) {
+	if value == nil {
+		return goa.MissingFieldError("body", "JSON value")
+	}
+	if value.Scenario == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("scenario", "body"))
+	}
+	if value.QuestionIds == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("question_ids", "body"))
+	}
+	if value.ExampleIds == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("example_ids", "body"))
+	}
+	if value.Explanation == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("explanation", "body"))
+	}
+	if value.Scenario != nil {
+		if utf8.RuneCountInString(string(*value.Scenario)) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.scenario", string(*value.Scenario), utf8.RuneCountInString(string(*value.Scenario)), 1, true))
+		}
+	}
+	for _, e := range value.QuestionIds {
+		if e == nil {
+			err = goa.MergeErrors(err, goa.MissingFieldError("body.question_ids", "[*]"))
+		}
+		if e != nil {
+			if utf8.RuneCountInString(string(*e)) < 1 {
+				err = goa.MergeErrors(err, goa.InvalidLengthError("body.question_ids[*]", string(*e), utf8.RuneCountInString(string(*e)), 1, true))
+			}
+		}
+	}
+	for _, e := range value.ExampleIds {
+		if e == nil {
+			err = goa.MergeErrors(err, goa.MissingFieldError("body.example_ids", "[*]"))
+		}
+		if e != nil {
+			if utf8.RuneCountInString(string(*e)) < 1 {
+				err = goa.MergeErrors(err, goa.InvalidLengthError("body.example_ids[*]", string(*e), utf8.RuneCountInString(string(*e)), 1, true))
+			}
+		}
+	}
+	if value.Explanation != nil {
+		if utf8.RuneCountInString(*value.Explanation) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.explanation", *value.Explanation, utf8.RuneCountInString(*value.Explanation), 1, true))
+		}
 	}
 	return err
 }
@@ -4712,6 +4905,81 @@ func ValidateGetTestWriterAssignmentResultStorySummaryItemTransport(value *GetTe
 	return err
 }
 
+// GetTestWriterAssignmentResultTestCoverageReferenceTransport stores JSON fields until they have been validated.
+type GetTestWriterAssignmentResultTestCoverageReferenceTransport string
+
+// ValidateGetTestWriterAssignmentResultTestCoverageReferenceTransport checks decoded JSON before it becomes a service value.
+func ValidateGetTestWriterAssignmentResultTestCoverageReferenceTransport(value GetTestWriterAssignmentResultTestCoverageReferenceTransport) (err error) {
+	if utf8.RuneCountInString(string(value)) < 1 {
+		err = goa.MergeErrors(err, goa.InvalidLengthError("body", string(value), utf8.RuneCountInString(string(value)), 1, true))
+	}
+	return err
+}
+
+// GetTestWriterAssignmentResultTestCoverageStatementTransport stores JSON fields until they have been validated.
+type GetTestWriterAssignmentResultTestCoverageStatementTransport struct {
+	// Exact declared scenario identifier.
+	Scenario *GetTestWriterAssignmentResultTestCoverageReferenceTransport `json:"scenario"`
+	// Question IDs from the assignment's answers[].id; empty when this statement
+	// names only examples.
+	QuestionIds []*GetTestWriterAssignmentResultTestCoverageReferenceTransport `json:"question_ids"`
+	// Example IDs from the assignment's examples[].id; empty when this statement
+	// names only answers.
+	ExampleIds []*GetTestWriterAssignmentResultTestCoverageReferenceTransport `json:"example_ids"`
+	// Interaction or assertion the writer says exercises these requirements.
+	Explanation *string `json:"explanation"`
+}
+
+// ValidateGetTestWriterAssignmentResultTestCoverageStatementTransport checks decoded JSON before it becomes a service value.
+func ValidateGetTestWriterAssignmentResultTestCoverageStatementTransport(value *GetTestWriterAssignmentResultTestCoverageStatementTransport) (err error) {
+	if value == nil {
+		return goa.MissingFieldError("body", "JSON value")
+	}
+	if value.Scenario == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("scenario", "body"))
+	}
+	if value.QuestionIds == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("question_ids", "body"))
+	}
+	if value.ExampleIds == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("example_ids", "body"))
+	}
+	if value.Explanation == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("explanation", "body"))
+	}
+	if value.Scenario != nil {
+		if utf8.RuneCountInString(string(*value.Scenario)) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.scenario", string(*value.Scenario), utf8.RuneCountInString(string(*value.Scenario)), 1, true))
+		}
+	}
+	for _, e := range value.QuestionIds {
+		if e == nil {
+			err = goa.MergeErrors(err, goa.MissingFieldError("body.question_ids", "[*]"))
+		}
+		if e != nil {
+			if utf8.RuneCountInString(string(*e)) < 1 {
+				err = goa.MergeErrors(err, goa.InvalidLengthError("body.question_ids[*]", string(*e), utf8.RuneCountInString(string(*e)), 1, true))
+			}
+		}
+	}
+	for _, e := range value.ExampleIds {
+		if e == nil {
+			err = goa.MergeErrors(err, goa.MissingFieldError("body.example_ids", "[*]"))
+		}
+		if e != nil {
+			if utf8.RuneCountInString(string(*e)) < 1 {
+				err = goa.MergeErrors(err, goa.InvalidLengthError("body.example_ids[*]", string(*e), utf8.RuneCountInString(string(*e)), 1, true))
+			}
+		}
+	}
+	if value.Explanation != nil {
+		if utf8.RuneCountInString(*value.Explanation) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.explanation", *value.Explanation, utf8.RuneCountInString(*value.Explanation), 1, true))
+		}
+	}
+	return err
+}
+
 // GetTestWriterAssignmentResultTestWriterProgressTransport stores JSON fields until they have been validated.
 type GetTestWriterAssignmentResultTestWriterProgressTransport struct {
 	// The tests' state: not_used when the project has stored verification
@@ -4980,6 +5248,10 @@ type GetTestWriterAssignmentResultTransport struct {
 	// copied when this build started; empty when it names none. The tests must
 	// hold the service to each.
 	PreservedBehaviors []string `json:"preserved_behaviors"`
+	// Statements submitted with the latest report, retained for correction after
+	// findings or a check that could not run; empty before any report or when none
+	// were stated.
+	CoverageStatements []*GetTestWriterAssignmentResultTestCoverageStatementTransport `json:"coverage_statements"`
 }
 
 // ValidateGetTestWriterAssignmentResultTransport checks decoded JSON before it becomes a service value.
@@ -5023,6 +5295,9 @@ func ValidateGetTestWriterAssignmentResultTransport(value *GetTestWriterAssignme
 	if value.PreservedBehaviors == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("preserved_behaviors", "body"))
 	}
+	if value.CoverageStatements == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("coverage_statements", "body"))
+	}
 	if value.Progress != nil {
 		if err2 := ValidateGetTestWriterAssignmentResultTestWriterProgressTransport(value.Progress); err2 != nil {
 			err = goa.MergeErrors(err, err2)
@@ -5052,6 +5327,16 @@ func ValidateGetTestWriterAssignmentResultTransport(value *GetTestWriterAssignme
 	for _, e := range value.Examples {
 		if e != nil {
 			if err2 := ValidateGetTestWriterAssignmentResultExampleItemTransport(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	for _, e := range value.CoverageStatements {
+		if e == nil {
+			err = goa.MergeErrors(err, goa.MissingFieldError("body.coverage_statements", "[*]"))
+		}
+		if e != nil {
+			if err2 := ValidateGetTestWriterAssignmentResultTestCoverageStatementTransport(e); err2 != nil {
 				err = goa.MergeErrors(err, err2)
 			}
 		}
@@ -8233,12 +8518,91 @@ func ValidateRefreshStoryResultTransport(value *RefreshStoryResultTransport) (er
 	return err
 }
 
+// ReportTestsFinishedPayloadTestCoverageReferenceTransport stores JSON fields until they have been validated.
+type ReportTestsFinishedPayloadTestCoverageReferenceTransport string
+
+// ValidateReportTestsFinishedPayloadTestCoverageReferenceTransport checks decoded JSON before it becomes a service value.
+func ValidateReportTestsFinishedPayloadTestCoverageReferenceTransport(value ReportTestsFinishedPayloadTestCoverageReferenceTransport) (err error) {
+	if utf8.RuneCountInString(string(value)) < 1 {
+		err = goa.MergeErrors(err, goa.InvalidLengthError("body", string(value), utf8.RuneCountInString(string(value)), 1, true))
+	}
+	return err
+}
+
+// ReportTestsFinishedPayloadTestCoverageStatementTransport stores JSON fields until they have been validated.
+type ReportTestsFinishedPayloadTestCoverageStatementTransport struct {
+	// Exact declared scenario identifier.
+	Scenario *ReportTestsFinishedPayloadTestCoverageReferenceTransport `json:"scenario"`
+	// Question IDs from the assignment's answers[].id; empty when this statement
+	// names only examples.
+	QuestionIds []*ReportTestsFinishedPayloadTestCoverageReferenceTransport `json:"question_ids"`
+	// Example IDs from the assignment's examples[].id; empty when this statement
+	// names only answers.
+	ExampleIds []*ReportTestsFinishedPayloadTestCoverageReferenceTransport `json:"example_ids"`
+	// Interaction or assertion the writer says exercises these requirements.
+	Explanation *string `json:"explanation"`
+}
+
+// ValidateReportTestsFinishedPayloadTestCoverageStatementTransport checks decoded JSON before it becomes a service value.
+func ValidateReportTestsFinishedPayloadTestCoverageStatementTransport(value *ReportTestsFinishedPayloadTestCoverageStatementTransport) (err error) {
+	if value == nil {
+		return goa.MissingFieldError("body", "JSON value")
+	}
+	if value.Scenario == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("scenario", "body"))
+	}
+	if value.QuestionIds == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("question_ids", "body"))
+	}
+	if value.ExampleIds == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("example_ids", "body"))
+	}
+	if value.Explanation == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("explanation", "body"))
+	}
+	if value.Scenario != nil {
+		if utf8.RuneCountInString(string(*value.Scenario)) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.scenario", string(*value.Scenario), utf8.RuneCountInString(string(*value.Scenario)), 1, true))
+		}
+	}
+	for _, e := range value.QuestionIds {
+		if e == nil {
+			err = goa.MergeErrors(err, goa.MissingFieldError("body.question_ids", "[*]"))
+		}
+		if e != nil {
+			if utf8.RuneCountInString(string(*e)) < 1 {
+				err = goa.MergeErrors(err, goa.InvalidLengthError("body.question_ids[*]", string(*e), utf8.RuneCountInString(string(*e)), 1, true))
+			}
+		}
+	}
+	for _, e := range value.ExampleIds {
+		if e == nil {
+			err = goa.MergeErrors(err, goa.MissingFieldError("body.example_ids", "[*]"))
+		}
+		if e != nil {
+			if utf8.RuneCountInString(string(*e)) < 1 {
+				err = goa.MergeErrors(err, goa.InvalidLengthError("body.example_ids[*]", string(*e), utf8.RuneCountInString(string(*e)), 1, true))
+			}
+		}
+	}
+	if value.Explanation != nil {
+		if utf8.RuneCountInString(*value.Explanation) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.explanation", *value.Explanation, utf8.RuneCountInString(*value.Explanation), 1, true))
+		}
+	}
+	return err
+}
+
 // ReportTestsFinishedPayloadTransport stores JSON fields until they have been validated.
 type ReportTestsFinishedPayloadTransport struct {
 	// Change Card identifier from your test assignment.
 	ChangeID *string `json:"change_id"`
 	// request_revision of your test assignment.
 	RequestRevision *string `json:"request_revision"`
+	// Your stated scenario coverage of this assignment's answers and examples; use
+	// [] when none is stated. Surla validates references but does not judge
+	// assertion meaning.
+	CoverageStatements []*ReportTestsFinishedPayloadTestCoverageStatementTransport `json:"coverage_statements"`
 }
 
 // ValidateReportTestsFinishedPayloadTransport checks decoded JSON before it becomes a service value.
@@ -8252,6 +8616,9 @@ func ValidateReportTestsFinishedPayloadTransport(value *ReportTestsFinishedPaylo
 	if value.RequestRevision == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("request_revision", "body"))
 	}
+	if value.CoverageStatements == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("coverage_statements", "body"))
+	}
 	if value.ChangeID != nil {
 		if utf8.RuneCountInString(*value.ChangeID) < 1 {
 			err = goa.MergeErrors(err, goa.InvalidLengthError("body.change_id", *value.ChangeID, utf8.RuneCountInString(*value.ChangeID), 1, true))
@@ -8260,6 +8627,16 @@ func ValidateReportTestsFinishedPayloadTransport(value *ReportTestsFinishedPaylo
 	if value.RequestRevision != nil {
 		if utf8.RuneCountInString(*value.RequestRevision) < 1 {
 			err = goa.MergeErrors(err, goa.InvalidLengthError("body.request_revision", *value.RequestRevision, utf8.RuneCountInString(*value.RequestRevision), 1, true))
+		}
+	}
+	for _, e := range value.CoverageStatements {
+		if e == nil {
+			err = goa.MergeErrors(err, goa.MissingFieldError("body.coverage_statements", "[*]"))
+		}
+		if e != nil {
+			if err2 := ValidateReportTestsFinishedPayloadTestCoverageStatementTransport(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
 		}
 	}
 	return err
@@ -8700,6 +9077,77 @@ func ValidateReviewVerificationResultBuilderVerificationReportTransport(value *R
 	return err
 }
 
+// ReviewVerificationResultConfirmedAnswerTransport stores JSON fields until they have been validated.
+type ReviewVerificationResultConfirmedAnswerTransport struct {
+	// Question identifier on the Change Card.
+	ID *string `json:"id"`
+	// The question as the user answered it.
+	Question *string `json:"question"`
+	// The option the user confirmed, exactly as confirmed.
+	Answer *string `json:"answer"`
+}
+
+// ValidateReviewVerificationResultConfirmedAnswerTransport checks decoded JSON before it becomes a service value.
+func ValidateReviewVerificationResultConfirmedAnswerTransport(value *ReviewVerificationResultConfirmedAnswerTransport) (err error) {
+	if value == nil {
+		return goa.MissingFieldError("body", "JSON value")
+	}
+	if value.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if value.Question == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("question", "body"))
+	}
+	if value.Answer == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("answer", "body"))
+	}
+	return err
+}
+
+// ReviewVerificationResultExampleItemTransport stores JSON fields until they have been validated.
+type ReviewVerificationResultExampleItemTransport struct {
+	// Stable example identifier. Default code-assigned IDs use check_01, check_02,
+	// ... (valid goa-ai/eval Scenario names). confirm_intent preserves
+	// caller-chosen IDs.
+	ID *string `json:"id"`
+	// Plain-English scenario description.
+	Scenario *string `json:"scenario"`
+	// Representative user request and domain fixture state.
+	InputSummary *string `json:"input_summary"`
+	// Expected side effect and response behavior.
+	ExpectedOutcome *string `json:"expected_outcome"`
+	// Evaluator check classification (deterministic or model_judged).
+	VerificationKind *string `json:"verification_kind"`
+}
+
+// ValidateReviewVerificationResultExampleItemTransport checks decoded JSON before it becomes a service value.
+func ValidateReviewVerificationResultExampleItemTransport(value *ReviewVerificationResultExampleItemTransport) (err error) {
+	if value == nil {
+		return goa.MissingFieldError("body", "JSON value")
+	}
+	if value.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if value.Scenario == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("scenario", "body"))
+	}
+	if value.InputSummary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("input_summary", "body"))
+	}
+	if value.ExpectedOutcome == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("expected_outcome", "body"))
+	}
+	if value.VerificationKind == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("verification_kind", "body"))
+	}
+	if value.VerificationKind != nil {
+		if !(*value.VerificationKind == "deterministic" || *value.VerificationKind == "model_judged") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.verification_kind", *value.VerificationKind, []any{"deterministic", "model_judged"}))
+		}
+	}
+	return err
+}
+
 // ReviewVerificationResultOperatorEvaluatorTestsTransport stores JSON fields until they have been validated.
 type ReviewVerificationResultOperatorEvaluatorTestsTransport struct {
 }
@@ -8725,6 +9173,9 @@ type ReviewVerificationResultRecordedRunStoryTransport struct {
 	// The owner's exact required-test mapping for written tests, or the explicit
 	// absence of such a mapping for an operator evaluator.
 	Mapping *ReviewVerificationResultmappingTransport `json:"mapping"`
+	// The writer's immutable statements for this run, or explicit missing
+	// historical/operator evidence.
+	TestCoverage *ReviewVerificationResulttestCoverageTransport `json:"test_coverage"`
 }
 
 // ValidateReviewVerificationResultRecordedRunStoryTransport checks decoded JSON before it becomes a service value.
@@ -8743,6 +9194,9 @@ func ValidateReviewVerificationResultRecordedRunStoryTransport(value *ReviewVeri
 	}
 	if value.Mapping == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("mapping", "body"))
+	}
+	if value.TestCoverage == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("test_coverage", "body"))
 	}
 	if value.BuildNumber != nil {
 		if *value.BuildNumber < 1 {
@@ -8775,6 +9229,90 @@ func ValidateReviewVerificationResultRecordedRunStoryTransport(value *ReviewVeri
 			}
 		}
 
+	}
+	if value.TestCoverage != nil {
+
+		if err2 := value.TestCoverage.Validate(); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		} else {
+			switch string(value.TestCoverage.Kind()) {
+			case "recorded":
+				actual, _ := value.TestCoverage.AsRecorded()
+				if actual != nil {
+					if err2 := ValidateReviewVerificationResultRecordedTestCoverageTransport(actual); err2 != nil {
+						err = goa.MergeErrors(err, err2)
+					}
+				}
+			}
+		}
+
+	}
+	return err
+}
+
+// ReviewVerificationResultRecordedTestCoverageTransport stores JSON fields until they have been validated.
+type ReviewVerificationResultRecordedTestCoverageTransport struct {
+	// Accepted test-writer report number.
+	Report *int `json:"report"`
+	// Answers saved for the built agreement, in question order.
+	Answers []*ReviewVerificationResultConfirmedAnswerTransport `json:"answers"`
+	// Examples saved for the built agreement, in confirmation order.
+	Examples []*ReviewVerificationResultExampleItemTransport `json:"examples"`
+	// Writer statements for this report; empty means Not stated.
+	CoverageStatements []*ReviewVerificationResultTestCoverageStatementTransport `json:"coverage_statements"`
+}
+
+// ValidateReviewVerificationResultRecordedTestCoverageTransport checks decoded JSON before it becomes a service value.
+func ValidateReviewVerificationResultRecordedTestCoverageTransport(value *ReviewVerificationResultRecordedTestCoverageTransport) (err error) {
+	if value == nil {
+		return goa.MissingFieldError("body", "JSON value")
+	}
+	if value.Report == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("report", "body"))
+	}
+	if value.Answers == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("answers", "body"))
+	}
+	if value.Examples == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("examples", "body"))
+	}
+	if value.CoverageStatements == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("coverage_statements", "body"))
+	}
+	if value.Report != nil {
+		if *value.Report < 1 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.report", *value.Report, 1, true))
+		}
+	}
+	for _, e := range value.Answers {
+		if e == nil {
+			err = goa.MergeErrors(err, goa.MissingFieldError("body.answers", "[*]"))
+		}
+		if e != nil {
+			if err2 := ValidateReviewVerificationResultConfirmedAnswerTransport(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	for _, e := range value.Examples {
+		if e == nil {
+			err = goa.MergeErrors(err, goa.MissingFieldError("body.examples", "[*]"))
+		}
+		if e != nil {
+			if err2 := ValidateReviewVerificationResultExampleItemTransport(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	for _, e := range value.CoverageStatements {
+		if e == nil {
+			err = goa.MergeErrors(err, goa.MissingFieldError("body.coverage_statements", "[*]"))
+		}
+		if e != nil {
+			if err2 := ValidateReviewVerificationResultTestCoverageStatementTransport(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
 	}
 	return err
 }
@@ -9092,6 +9630,94 @@ func ValidateReviewVerificationResultStorySummaryItemTransport(value *ReviewVeri
 			if err2 := ValidateReviewVerificationResultStoryFlowItemTransport(e); err2 != nil {
 				err = goa.MergeErrors(err, err2)
 			}
+		}
+	}
+	return err
+}
+
+// ReviewVerificationResultTestCoverageNotRecordedTransport stores JSON fields until they have been validated.
+type ReviewVerificationResultTestCoverageNotRecordedTransport struct {
+}
+
+// ValidateReviewVerificationResultTestCoverageNotRecordedTransport checks decoded JSON before it becomes a service value.
+func ValidateReviewVerificationResultTestCoverageNotRecordedTransport(value *ReviewVerificationResultTestCoverageNotRecordedTransport) (err error) {
+	if value == nil {
+		return goa.MissingFieldError("body", "JSON value")
+	}
+
+	return err
+}
+
+// ReviewVerificationResultTestCoverageReferenceTransport stores JSON fields until they have been validated.
+type ReviewVerificationResultTestCoverageReferenceTransport string
+
+// ValidateReviewVerificationResultTestCoverageReferenceTransport checks decoded JSON before it becomes a service value.
+func ValidateReviewVerificationResultTestCoverageReferenceTransport(value ReviewVerificationResultTestCoverageReferenceTransport) (err error) {
+	if utf8.RuneCountInString(string(value)) < 1 {
+		err = goa.MergeErrors(err, goa.InvalidLengthError("body", string(value), utf8.RuneCountInString(string(value)), 1, true))
+	}
+	return err
+}
+
+// ReviewVerificationResultTestCoverageStatementTransport stores JSON fields until they have been validated.
+type ReviewVerificationResultTestCoverageStatementTransport struct {
+	// Exact declared scenario identifier.
+	Scenario *ReviewVerificationResultTestCoverageReferenceTransport `json:"scenario"`
+	// Question IDs from the assignment's answers[].id; empty when this statement
+	// names only examples.
+	QuestionIds []*ReviewVerificationResultTestCoverageReferenceTransport `json:"question_ids"`
+	// Example IDs from the assignment's examples[].id; empty when this statement
+	// names only answers.
+	ExampleIds []*ReviewVerificationResultTestCoverageReferenceTransport `json:"example_ids"`
+	// Interaction or assertion the writer says exercises these requirements.
+	Explanation *string `json:"explanation"`
+}
+
+// ValidateReviewVerificationResultTestCoverageStatementTransport checks decoded JSON before it becomes a service value.
+func ValidateReviewVerificationResultTestCoverageStatementTransport(value *ReviewVerificationResultTestCoverageStatementTransport) (err error) {
+	if value == nil {
+		return goa.MissingFieldError("body", "JSON value")
+	}
+	if value.Scenario == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("scenario", "body"))
+	}
+	if value.QuestionIds == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("question_ids", "body"))
+	}
+	if value.ExampleIds == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("example_ids", "body"))
+	}
+	if value.Explanation == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("explanation", "body"))
+	}
+	if value.Scenario != nil {
+		if utf8.RuneCountInString(string(*value.Scenario)) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.scenario", string(*value.Scenario), utf8.RuneCountInString(string(*value.Scenario)), 1, true))
+		}
+	}
+	for _, e := range value.QuestionIds {
+		if e == nil {
+			err = goa.MergeErrors(err, goa.MissingFieldError("body.question_ids", "[*]"))
+		}
+		if e != nil {
+			if utf8.RuneCountInString(string(*e)) < 1 {
+				err = goa.MergeErrors(err, goa.InvalidLengthError("body.question_ids[*]", string(*e), utf8.RuneCountInString(string(*e)), 1, true))
+			}
+		}
+	}
+	for _, e := range value.ExampleIds {
+		if e == nil {
+			err = goa.MergeErrors(err, goa.MissingFieldError("body.example_ids", "[*]"))
+		}
+		if e != nil {
+			if utf8.RuneCountInString(string(*e)) < 1 {
+				err = goa.MergeErrors(err, goa.InvalidLengthError("body.example_ids[*]", string(*e), utf8.RuneCountInString(string(*e)), 1, true))
+			}
+		}
+	}
+	if value.Explanation != nil {
+		if utf8.RuneCountInString(*value.Explanation) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.explanation", *value.Explanation, utf8.RuneCountInString(*value.Explanation), 1, true))
 		}
 	}
 	return err
@@ -14506,6 +15132,120 @@ func (u ReviewVerificationResultstoryContextTransport) MarshalJSON() ([]byte, er
 	return json.Marshal(fields)
 }
 
+// ReviewVerificationResulttestCoverageTransport stores exactly one selected Goa OneOf branch.
+type ReviewVerificationResulttestCoverageTransport struct {
+	kind        ReviewVerificationResulttestCoverageTransportKind
+	Recorded    *ReviewVerificationResultRecordedTestCoverageTransport
+	NotRecorded *ReviewVerificationResultTestCoverageNotRecordedTransport
+}
+
+// ReviewVerificationResulttestCoverageTransportKind identifies the selected branch of ReviewVerificationResulttestCoverageTransport.
+type ReviewVerificationResulttestCoverageTransportKind string
+
+const (
+	ReviewVerificationResulttestCoverageTransportKindRecorded    ReviewVerificationResulttestCoverageTransportKind = "recorded"
+	ReviewVerificationResulttestCoverageTransportKindNotRecorded ReviewVerificationResulttestCoverageTransportKind = "not_recorded"
+)
+
+// Kind returns the selected branch.
+func (u ReviewVerificationResulttestCoverageTransport) Kind() ReviewVerificationResulttestCoverageTransportKind {
+	return u.kind
+}
+
+// NewReviewVerificationResulttestCoverageTransportRecorded creates ReviewVerificationResulttestCoverageTransport with its recorded branch selected.
+func NewReviewVerificationResulttestCoverageTransportRecorded(value *ReviewVerificationResultRecordedTestCoverageTransport) ReviewVerificationResulttestCoverageTransport {
+	return ReviewVerificationResulttestCoverageTransport{kind: ReviewVerificationResulttestCoverageTransportKindRecorded, Recorded: value}
+}
+
+// AsRecorded returns the recorded branch when it is selected.
+func (u ReviewVerificationResulttestCoverageTransport) AsRecorded() (_ *ReviewVerificationResultRecordedTestCoverageTransport, ok bool) {
+	if u.kind != ReviewVerificationResulttestCoverageTransportKindRecorded {
+		return
+	}
+	return u.Recorded, true
+}
+
+// SetRecorded selects the recorded branch.
+func (u *ReviewVerificationResulttestCoverageTransport) SetRecorded(value *ReviewVerificationResultRecordedTestCoverageTransport) {
+	u.kind = ReviewVerificationResulttestCoverageTransportKindRecorded
+	u.Recorded = value
+}
+
+// NewReviewVerificationResulttestCoverageTransportNotRecorded creates ReviewVerificationResulttestCoverageTransport with its not_recorded branch selected.
+func NewReviewVerificationResulttestCoverageTransportNotRecorded(value *ReviewVerificationResultTestCoverageNotRecordedTransport) ReviewVerificationResulttestCoverageTransport {
+	return ReviewVerificationResulttestCoverageTransport{kind: ReviewVerificationResulttestCoverageTransportKindNotRecorded, NotRecorded: value}
+}
+
+// AsNotRecorded returns the not_recorded branch when it is selected.
+func (u ReviewVerificationResulttestCoverageTransport) AsNotRecorded() (_ *ReviewVerificationResultTestCoverageNotRecordedTransport, ok bool) {
+	if u.kind != ReviewVerificationResulttestCoverageTransportKindNotRecorded {
+		return
+	}
+	return u.NotRecorded, true
+}
+
+// SetNotRecorded selects the not_recorded branch.
+func (u *ReviewVerificationResulttestCoverageTransport) SetNotRecorded(value *ReviewVerificationResultTestCoverageNotRecordedTransport) {
+	u.kind = ReviewVerificationResulttestCoverageTransportKindNotRecorded
+	u.NotRecorded = value
+}
+
+// Validate checks that one complete branch is selected.
+func (u ReviewVerificationResulttestCoverageTransport) Validate() error {
+	switch u.kind {
+	case ReviewVerificationResulttestCoverageTransportKindRecorded:
+		if u.Recorded == nil {
+			return goa.MissingFieldError("value", "ReviewVerificationResulttestCoverageTransport")
+		}
+		return nil
+	case ReviewVerificationResulttestCoverageTransportKindNotRecorded:
+		if u.NotRecorded == nil {
+			return goa.MissingFieldError("value", "ReviewVerificationResulttestCoverageTransport")
+		}
+		return nil
+	case "":
+		return goa.MissingFieldError("state", "ReviewVerificationResulttestCoverageTransport")
+	default:
+		return goa.InvalidEnumValueError("state", u.kind, []any{string(ReviewVerificationResulttestCoverageTransportKindRecorded), string(ReviewVerificationResulttestCoverageTransportKindNotRecorded)})
+	}
+}
+
+// MarshalJSON writes the selected branch name and value.
+func (u ReviewVerificationResulttestCoverageTransport) MarshalJSON() ([]byte, error) {
+	if err := u.Validate(); err != nil {
+		return nil, err
+	}
+	var value any
+	switch u.kind {
+	case ReviewVerificationResulttestCoverageTransportKindRecorded:
+		value = u.Recorded
+	case ReviewVerificationResulttestCoverageTransportKindNotRecorded:
+		value = u.NotRecorded
+	default:
+		return nil, fmt.Errorf("unexpected ReviewVerificationResulttestCoverageTransport branch %q", u.kind)
+	}
+	data, err := json.Marshal(value)
+	if err != nil {
+		return nil, err
+	}
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(data, &fields); err != nil {
+		return nil, err
+	}
+	if fields == nil {
+		return nil, goa.InvalidFieldTypeError("state", nil, "non-null JSON object")
+	}
+	if _, exists := fields["state"]; exists {
+		return nil, fmt.Errorf("ReviewVerificationResulttestCoverageTransport branch already contains discriminator %q", "state")
+	}
+	tag, err := json.Marshal(string(u.kind))
+	if err != nil {
+		return nil, err
+	}
+	fields["state"] = tag
+	return json.Marshal(fields)
+}
+
 // ReviewVerificationResulttestSourceTransport stores exactly one selected Goa OneOf branch.
 type ReviewVerificationResulttestSourceTransport struct {
 	kind         ReviewVerificationResulttestSourceTransportKind
@@ -15937,6 +16677,14 @@ func EncodeGetTestWriterAssignmentResult(in *surla.TestWriterAssignment) ([]byte
 		for i, val := range in.PreservedBehaviors {
 			body.PreservedBehaviors[i] = val
 		}
+		body.CoverageStatements = make([]*GetTestWriterAssignmentResultTestCoverageStatementTransport, len(in.CoverageStatements))
+		for i, val := range in.CoverageStatements {
+			if val == nil {
+				body.CoverageStatements[i] = nil
+				continue
+			}
+			body.CoverageStatements[i] = encodeTestCoverageStatementToGetTestWriterAssignmentResultTestCoverageStatementTransport(val)
+		}
 	}
 	if err := ValidateGetTestWriterAssignmentResultTransport(body); err != nil {
 		return nil, fmt.Errorf("validate GetTestWriterAssignmentResult JSON: %w", err)
@@ -16571,6 +17319,14 @@ func DecodeReportTestsFinishedPayload(data []byte) (out *surla.ReportTestsFinish
 			ChangeID:        *body.ChangeID,
 			RequestRevision: *body.RequestRevision,
 		}
+		out.CoverageStatements = make([]*surla.TestCoverageStatement, len(body.CoverageStatements))
+		for i, val := range body.CoverageStatements {
+			if val == nil {
+				out.CoverageStatements[i] = nil
+				continue
+			}
+			out.CoverageStatements[i] = decodeReportTestsFinishedPayloadTestCoverageStatementTransportToTestCoverageStatement(val)
+		}
 	}
 	return out, nil
 }
@@ -17114,6 +17870,23 @@ func decodeProposeChangePayloadCP1AnalysisTransportToCP1Analysis(v *ProposeChang
 	res.PreservedBehaviors = make([]string, len(v.PreservedBehaviors))
 	for i, val := range v.PreservedBehaviors {
 		res.PreservedBehaviors[i] = *val
+	}
+
+	return res
+}
+
+func decodeReportTestsFinishedPayloadTestCoverageStatementTransportToTestCoverageStatement(v *ReportTestsFinishedPayloadTestCoverageStatementTransport) *surla.TestCoverageStatement {
+	res := &surla.TestCoverageStatement{
+		Scenario:    surla.TestCoverageReference(*v.Scenario),
+		Explanation: *v.Explanation,
+	}
+	res.QuestionIds = make([]surla.TestCoverageReference, len(v.QuestionIds))
+	for i, val := range v.QuestionIds {
+		res.QuestionIds[i] = surla.TestCoverageReference(*val)
+	}
+	res.ExampleIds = make([]surla.TestCoverageReference, len(v.ExampleIds))
+	for i, val := range v.ExampleIds {
+		res.ExampleIds[i] = surla.TestCoverageReference(*val)
 	}
 
 	return res
@@ -18332,8 +19105,28 @@ func encodeChangeListItemToListChangesResultChangeListItemTransport(v *surla.Cha
 	return res
 }
 
+func encodeConfirmedAnswerToGetBuildResultConfirmedAnswerTransport(v *surla.ConfirmedAnswer) *GetBuildResultConfirmedAnswerTransport {
+	res := &GetBuildResultConfirmedAnswerTransport{
+		ID:       &v.ID,
+		Question: &v.Question,
+		Answer:   &v.Answer,
+	}
+
+	return res
+}
+
 func encodeConfirmedAnswerToGetTestWriterAssignmentResultConfirmedAnswerTransport(v *surla.ConfirmedAnswer) *GetTestWriterAssignmentResultConfirmedAnswerTransport {
 	res := &GetTestWriterAssignmentResultConfirmedAnswerTransport{
+		ID:       &v.ID,
+		Question: &v.Question,
+		Answer:   &v.Answer,
+	}
+
+	return res
+}
+
+func encodeConfirmedAnswerToReviewVerificationResultConfirmedAnswerTransport(v *surla.ConfirmedAnswer) *ReviewVerificationResultConfirmedAnswerTransport {
+	res := &ReviewVerificationResultConfirmedAnswerTransport{
 		ID:       &v.ID,
 		Question: &v.Question,
 		Answer:   &v.Answer,
@@ -18424,6 +19217,18 @@ func encodeExampleItemToDeclineRevisionResultExampleItemTransport2(v *surla.Exam
 	return res
 }
 
+func encodeExampleItemToGetBuildResultExampleItemTransport(v *surla.ExampleItem) *GetBuildResultExampleItemTransport {
+	res := &GetBuildResultExampleItemTransport{
+		ID:               &v.ID,
+		Scenario:         &v.Scenario,
+		InputSummary:     &v.InputSummary,
+		ExpectedOutcome:  &v.ExpectedOutcome,
+		VerificationKind: &v.VerificationKind,
+	}
+
+	return res
+}
+
 func encodeExampleItemToGetChangeResultExampleItemTransport(v *surla.ExampleItem) *GetChangeResultExampleItemTransport {
 	res := &GetChangeResultExampleItemTransport{
 		ID:               &v.ID,
@@ -18474,6 +19279,18 @@ func encodeExampleItemToProposeChangeResultExampleItemTransport(v *surla.Example
 
 func encodeExampleItemToProposeChangeResultExampleItemTransport2(v *surla.ExampleItem) *ProposeChangeResultExampleItemTransport {
 	res := &ProposeChangeResultExampleItemTransport{
+		ID:               &v.ID,
+		Scenario:         &v.Scenario,
+		InputSummary:     &v.InputSummary,
+		ExpectedOutcome:  &v.ExpectedOutcome,
+		VerificationKind: &v.VerificationKind,
+	}
+
+	return res
+}
+
+func encodeExampleItemToReviewVerificationResultExampleItemTransport(v *surla.ExampleItem) *ReviewVerificationResultExampleItemTransport {
+	res := &ReviewVerificationResultExampleItemTransport{
 		ID:               &v.ID,
 		Scenario:         &v.Scenario,
 		InputSummary:     &v.InputSummary,
@@ -19006,6 +19823,60 @@ func encodeRecordedRunStoryToReviewVerificationResultRecordedRunStoryTransport(v
 		mappingValue = u
 	}
 	res.Mapping = &mappingValue
+	var testCoverageValue ReviewVerificationResulttestCoverageTransport
+	switch string(v.TestCoverage.Kind()) {
+	case "recorded":
+		actual, _ := v.TestCoverage.AsRecorded()
+		var obj *ReviewVerificationResultRecordedTestCoverageTransport
+		if actual != nil {
+			obj = encodeRecordedTestCoverageToReviewVerificationResultRecordedTestCoverageTransport(actual)
+		}
+		u := testCoverageValue
+		u.SetRecorded((*ReviewVerificationResultRecordedTestCoverageTransport)(obj))
+		testCoverageValue = u
+	case "not_recorded":
+		actual, _ := v.TestCoverage.AsNotRecorded()
+		var obj *ReviewVerificationResultTestCoverageNotRecordedTransport
+		if actual != nil {
+			obj = encodeTestCoverageNotRecordedToReviewVerificationResultTestCoverageNotRecordedTransport(actual)
+		}
+		u := testCoverageValue
+		u.SetNotRecorded((*ReviewVerificationResultTestCoverageNotRecordedTransport)(obj))
+		testCoverageValue = u
+	}
+	res.TestCoverage = &testCoverageValue
+
+	return res
+}
+
+func encodeRecordedTestCoverageToReviewVerificationResultRecordedTestCoverageTransport(v *surla.RecordedTestCoverage) *ReviewVerificationResultRecordedTestCoverageTransport {
+	res := &ReviewVerificationResultRecordedTestCoverageTransport{
+		Report: &v.Report,
+	}
+	res.Answers = make([]*ReviewVerificationResultConfirmedAnswerTransport, len(v.Answers))
+	for i, val := range v.Answers {
+		if val == nil {
+			res.Answers[i] = nil
+			continue
+		}
+		res.Answers[i] = encodeConfirmedAnswerToReviewVerificationResultConfirmedAnswerTransport(val)
+	}
+	res.Examples = make([]*ReviewVerificationResultExampleItemTransport, len(v.Examples))
+	for i, val := range v.Examples {
+		if val == nil {
+			res.Examples[i] = nil
+			continue
+		}
+		res.Examples[i] = encodeExampleItemToReviewVerificationResultExampleItemTransport(val)
+	}
+	res.CoverageStatements = make([]*ReviewVerificationResultTestCoverageStatementTransport, len(v.CoverageStatements))
+	for i, val := range v.CoverageStatements {
+		if val == nil {
+			res.CoverageStatements[i] = nil
+			continue
+		}
+		res.CoverageStatements[i] = encodeTestCoverageStatementToReviewVerificationResultTestCoverageStatementTransport(val)
+	}
 
 	return res
 }
@@ -19117,6 +19988,30 @@ func encodeStartedBuildToGetBuildResultStartedBuildTransport(v *surla.StartedBui
 			continue
 		}
 		res.RequiredTests[i] = encodeRequiredTestToGetBuildResultRequiredTestTransport(val)
+	}
+	res.Answers = make([]*GetBuildResultConfirmedAnswerTransport, len(v.Answers))
+	for i, val := range v.Answers {
+		if val == nil {
+			res.Answers[i] = nil
+			continue
+		}
+		res.Answers[i] = encodeConfirmedAnswerToGetBuildResultConfirmedAnswerTransport(val)
+	}
+	res.Examples = make([]*GetBuildResultExampleItemTransport, len(v.Examples))
+	for i, val := range v.Examples {
+		if val == nil {
+			res.Examples[i] = nil
+			continue
+		}
+		res.Examples[i] = encodeExampleItemToGetBuildResultExampleItemTransport(val)
+	}
+	res.CoverageStatements = make([]*GetBuildResultTestCoverageStatementTransport, len(v.CoverageStatements))
+	for i, val := range v.CoverageStatements {
+		if val == nil {
+			res.CoverageStatements[i] = nil
+			continue
+		}
+		res.CoverageStatements[i] = encodeTestCoverageStatementToGetBuildResultTestCoverageStatementTransport(val)
 	}
 	var takingValue GetBuildResultBuildTakingTransport
 	switch string(v.Taking.Kind()) {
@@ -20917,6 +21812,78 @@ func encodeStorySummaryItemToReviseChangeResultStorySummaryItemTransport2(v *sur
 			continue
 		}
 		res.Flows[i] = encodeStoryFlowItemToReviseChangeResultStoryFlowItemTransport2(val)
+	}
+
+	return res
+}
+
+func encodeTestCoverageNotRecordedToReviewVerificationResultTestCoverageNotRecordedTransport(v *surla.TestCoverageNotRecorded) *ReviewVerificationResultTestCoverageNotRecordedTransport {
+	res := &ReviewVerificationResultTestCoverageNotRecordedTransport{}
+
+	return res
+}
+
+func encodeTestCoverageStatementToGetBuildResultTestCoverageStatementTransport(v *surla.TestCoverageStatement) *GetBuildResultTestCoverageStatementTransport {
+	res := &GetBuildResultTestCoverageStatementTransport{
+		Explanation: &v.Explanation,
+	}
+	scenario := GetBuildResultTestCoverageReferenceTransport(v.Scenario)
+	res.Scenario = &scenario
+	res.QuestionIds = make([]*GetBuildResultTestCoverageReferenceTransport, len(v.QuestionIds))
+	for i, val := range v.QuestionIds {
+		var transformed GetBuildResultTestCoverageReferenceTransport
+		transformed = GetBuildResultTestCoverageReferenceTransport(val)
+		res.QuestionIds[i] = &transformed
+	}
+	res.ExampleIds = make([]*GetBuildResultTestCoverageReferenceTransport, len(v.ExampleIds))
+	for i, val := range v.ExampleIds {
+		var transformed GetBuildResultTestCoverageReferenceTransport
+		transformed = GetBuildResultTestCoverageReferenceTransport(val)
+		res.ExampleIds[i] = &transformed
+	}
+
+	return res
+}
+
+func encodeTestCoverageStatementToGetTestWriterAssignmentResultTestCoverageStatementTransport(v *surla.TestCoverageStatement) *GetTestWriterAssignmentResultTestCoverageStatementTransport {
+	res := &GetTestWriterAssignmentResultTestCoverageStatementTransport{
+		Explanation: &v.Explanation,
+	}
+	scenario := GetTestWriterAssignmentResultTestCoverageReferenceTransport(v.Scenario)
+	res.Scenario = &scenario
+	res.QuestionIds = make([]*GetTestWriterAssignmentResultTestCoverageReferenceTransport, len(v.QuestionIds))
+	for i, val := range v.QuestionIds {
+		var transformed GetTestWriterAssignmentResultTestCoverageReferenceTransport
+		transformed = GetTestWriterAssignmentResultTestCoverageReferenceTransport(val)
+		res.QuestionIds[i] = &transformed
+	}
+	res.ExampleIds = make([]*GetTestWriterAssignmentResultTestCoverageReferenceTransport, len(v.ExampleIds))
+	for i, val := range v.ExampleIds {
+		var transformed GetTestWriterAssignmentResultTestCoverageReferenceTransport
+		transformed = GetTestWriterAssignmentResultTestCoverageReferenceTransport(val)
+		res.ExampleIds[i] = &transformed
+	}
+
+	return res
+}
+
+func encodeTestCoverageStatementToReviewVerificationResultTestCoverageStatementTransport(v *surla.TestCoverageStatement) *ReviewVerificationResultTestCoverageStatementTransport {
+	res := &ReviewVerificationResultTestCoverageStatementTransport{
+		Explanation: &v.Explanation,
+	}
+	scenario := ReviewVerificationResultTestCoverageReferenceTransport(v.Scenario)
+	res.Scenario = &scenario
+	res.QuestionIds = make([]*ReviewVerificationResultTestCoverageReferenceTransport, len(v.QuestionIds))
+	for i, val := range v.QuestionIds {
+		var transformed ReviewVerificationResultTestCoverageReferenceTransport
+		transformed = ReviewVerificationResultTestCoverageReferenceTransport(val)
+		res.QuestionIds[i] = &transformed
+	}
+	res.ExampleIds = make([]*ReviewVerificationResultTestCoverageReferenceTransport, len(v.ExampleIds))
+	for i, val := range v.ExampleIds {
+		var transformed ReviewVerificationResultTestCoverageReferenceTransport
+		transformed = ReviewVerificationResultTestCoverageReferenceTransport(val)
+		res.ExampleIds[i] = &transformed
 	}
 
 	return res

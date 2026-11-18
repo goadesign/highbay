@@ -116,7 +116,7 @@ func TestStartBuildKeepsPostSaveOutcomes(t *testing.T) {
 					return errors.New("private setup failure")
 				}
 				if scenario == "reported during generation" {
-					_, err := cp.ReportTestsFinished(asCaller("alice@example.com", CallerTestWriter), &gensurla.ReportTestsFinishedPayload{ChangeID: "chg", RequestRevision: card.RequestRevision})
+					_, err := cp.ReportTestsFinished(asCaller("alice@example.com", CallerTestWriter), &gensurla.ReportTestsFinishedPayload{ChangeID: "chg", RequestRevision: card.RequestRevision, CoverageStatements: []*gensurla.TestCoverageStatement{}})
 					require.NoError(t, err)
 				}
 				return &testwriter.AuthorError{Finding: testwriter.Finding{Kind: testwriter.FindingGeneration, Message: "The test design does not compile."}}

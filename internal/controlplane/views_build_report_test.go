@@ -179,7 +179,7 @@ async function agent(method, path, body, token) {
 async function version(stage) { await control(origin, "act", { key: "version-" + stage }); }
 async function report(number) {
   await control(origin, "act", { key: "hold-check" });
-  const out = await agent("POST", writerPath + "/finished", { request_revision: input.revision }, input.testWriter);
+  const out = await agent("POST", writerPath + "/finished", { request_revision: input.revision, coverage_statements: [] }, input.testWriter);
   expect(out.progress.tests.state === "reported" && out.progress.report === number, "the real report did not return reported: " + JSON.stringify(out));
   await until(() => shownBuild("reported", number), "the page did not follow report " + number);
   await version("reported-" + number);

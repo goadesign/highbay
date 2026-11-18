@@ -25,6 +25,7 @@ import (
 	genmcpclient "github.com/goadesign/surla/gen/jsonrpc/mcp_surla/client"
 	genmcpsurla "github.com/goadesign/surla/gen/mcp_surla"
 	gensurla "github.com/goadesign/surla/gen/surla"
+	gensurlatools "github.com/goadesign/surla/gen/surla/toolsets/surla"
 	"github.com/goadesign/surla/internal/testwriter"
 )
 
@@ -90,8 +91,8 @@ func journeyChangeArgs(change string) []byte {
 // of change.
 func journeyReportArgs(t *testing.T, change, revision string) []byte {
 	t.Helper()
-	raw, err := json.Marshal(map[string]string{
-		"change_id": change, "request_revision": revision,
+	raw, err := gensurlatools.MarshalReportTestsFinishedPayload(&gensurlatools.ReportTestsFinishedPayload{
+		ChangeID: change, RequestRevision: revision, CoverageStatements: []*gensurlatools.TestCoverageStatement{},
 	})
 	require.NoError(t, err)
 	return raw

@@ -797,6 +797,7 @@ func (c *Client) GetTestWriterAssignment(ctx context.Context, p *GetTestWriterAs
 //   - "copy_off_branch" (type *CopyOffBranch): Your working copy cannot join or serve this build: the message states its branch, the build's branch, any Git operation and what is uncommitted, and the goal. Put your test files on the build's branch, uncommitted, because Surla commits what it accepts; then call again.
 //   - "working_folder_missing" (type *goa.ServiceError): Your working folder is missing; ask the user to build this change again on the views page.
 //   - "assignment_unread" (type *goa.ServiceError): A build started after your last read of your assignment: stop your current work, then call get_test_writer_assignment for its change.
+//   - "invalid_coverage" (type *goa.ServiceError): A supplied coverage statement repeats a scenario or reference, names no requirement, or names a question/example outside the built agreement. Nothing changed.
 //   - "forbidden" (type *goa.ServiceError): The authenticated caller may not perform this operation or does not own the resource.
 //   - error: internal error
 func (c *Client) ReportTestsFinished(ctx context.Context, p *ReportTestsFinishedPayload) (res *TestWriterAssignmentItem, err error) {

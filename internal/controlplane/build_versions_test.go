@@ -86,7 +86,7 @@ func TestChangeVersionFollowsBuildReadsAndReports(t *testing.T) {
 		// Reporting comes last: the real worker then owns the copy turn while
 		// this test's stand-in waits for Close; restarting is proved above.
 		{name: "report", changed: true, run: func() error {
-			_, err := cp.ReportTestsFinished(writer, &gensurla.ReportTestsFinishedPayload{ChangeID: "chg", RequestRevision: card.RequestRevision})
+			_, err := cp.ReportTestsFinished(writer, &gensurla.ReportTestsFinishedPayload{ChangeID: "chg", RequestRevision: card.RequestRevision, CoverageStatements: []*gensurla.TestCoverageStatement{}})
 			return err
 		}},
 	}

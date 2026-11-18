@@ -86,6 +86,10 @@ type (
 		// Findings lists what the test writer must change, in the order the
 		// check found them; it is empty exactly when the copy is accepted.
 		Findings []Finding
+		// DeclaredScenarios are the exact IDs listed from the checked tree,
+		// set when the structural check succeeds. The report owner uses them
+		// to validate writer statements without another program execution.
+		DeclaredScenarios []string
 		// copy is the working copy that was judged.
 		copy WorkingCopy
 		// tree is the git tree that was built and described: the copy's
@@ -151,6 +155,9 @@ const (
 	// scenario the Story requires. The message names the scenario, its flow
 	// and its hook method.
 	FindingMissingScenario FindingKind = "missing_scenario"
+	// FindingCoverageReference means a report statement names a scenario
+	// absent from the exact test program the check listed.
+	FindingCoverageReference FindingKind = "coverage_reference"
 	// FindingOutsideModule means a file outside the test module differs
 	// from the copy's base. The message names the file, the base commit and
 	// the required working-copy contents without a Git recipe.
@@ -510,7 +517,7 @@ func (c *Checker) Check(
 	if len(findings) > 0 {
 		return Verdict{Findings: findings, copy: wc}, nil
 	}
-	return Verdict{copy: wc, tree: tree}, nil
+	return Verdict{copy: wc, tree: tree, DeclaredScenarios: ids}, nil
 }
 
 // Error returns the finding's message.

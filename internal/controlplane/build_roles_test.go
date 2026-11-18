@@ -69,7 +69,7 @@ func TestBuilderOnlyBuildRequiresStoredSettings(t *testing.T) {
 				assertRefused(t, err, "not_found")
 				_, err = reopened.GetTestWriterAssignment(writer, &gensurla.GetTestWriterAssignmentPayload{ChangeID: "chg"})
 				assertRefused(t, err, "not_found")
-				_, err = reopened.ReportTestsFinished(writer, &gensurla.ReportTestsFinishedPayload{ChangeID: "chg"})
+				_, err = reopened.ReportTestsFinished(writer, &gensurla.ReportTestsFinishedPayload{ChangeID: "chg", CoverageStatements: []*gensurla.TestCoverageStatement{}})
 				assertRefused(t, err, "not_found")
 				return
 			}

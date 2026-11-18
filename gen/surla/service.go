@@ -1674,6 +1674,23 @@ type RecordedRunStory struct {
 	// The owner's exact required-test mapping for written tests, or the explicit
 	// absence of such a mapping for an operator evaluator.
 	Mapping Mapping
+	// The writer's immutable statements for this run, or explicit missing
+	// historical/operator evidence.
+	TestCoverage TestCoverage
+}
+
+// The accepted writer report's statements and built answers/examples, copied
+// with the exact tests selection for this run. Later reports and revisions
+// cannot replace this evidence.
+type RecordedTestCoverage struct {
+	// Accepted test-writer report number.
+	Report int
+	// Answers saved for the built agreement, in question order.
+	Answers []*ConfirmedAnswer
+	// Examples saved for the built agreement, in confirmation order.
+	Examples []*ExampleItem
+	// Writer statements for this report; empty means Not stated.
+	CoverageStatements []*TestCoverageStatement
 }
 
 // The open build of this same change that the page showed the user when the
@@ -1695,6 +1712,10 @@ type ReportTestsFinishedPayload struct {
 	ChangeID string
 	// request_revision of your test assignment.
 	RequestRevision string
+	// Your stated scenario coverage of this assignment's answers and examples; use
+	// [] when none is stated. Surla validates references but does not judge
+	// assertion meaning.
+	CoverageStatements []*TestCoverageStatement
 }
 
 // One test the agreed Story requires: the evaluation scenario Surla generates
@@ -1839,6 +1860,14 @@ type StartedBuild struct {
 	// Tests required by this build's saved Story, in declaration order; unfinished
 	// flows require none. Empty when no finished flow requires a test.
 	RequiredTests []*RequiredTest
+	// Confirmed answers saved when this build started; later revisions do not
+	// replace them.
+	Answers []*ConfirmedAnswer
+	// Examples saved when this build started; later revisions do not replace them.
+	Examples []*ExampleItem
+	// The accepted report's writer statements; empty before acceptance or when
+	// none were stated. Surla did not judge them.
+	CoverageStatements []*TestCoverageStatement
 	// Whether the user has taken this build: building until a verification of it
 	// passes; passed with the commits to merge; merged once the branch checked out
 	// in the project folder holds the commits of one passed run, the builder's
@@ -1988,6 +2017,29 @@ type TeamSnapshot struct {
 	Roles []*TeamRoleState
 }
 
+// No test-writer coverage snapshot was recorded. Never infer it from today's
+// agreement or accepted report.
+type TestCoverageNotRecorded struct {
+}
+
+type TestCoverageReference string
+
+// The test writer's statement that one declared scenario exercises particular
+// agreed answers or examples. Surla validates references, not whether the
+// tests assert the stated behavior.
+type TestCoverageStatement struct {
+	// Exact declared scenario identifier.
+	Scenario TestCoverageReference
+	// Question IDs from the assignment's answers[].id; empty when this statement
+	// names only examples.
+	QuestionIds []TestCoverageReference
+	// Example IDs from the assignment's examples[].id; empty when this statement
+	// names only answers.
+	ExampleIds []TestCoverageReference
+	// Interaction or assertion the writer says exercises these requirements.
+	Explanation string
+}
+
 // TestFindings is the result type of the surla service get_test_findings
 // method.
 type TestFindings struct {
@@ -2053,6 +2105,10 @@ type TestWriterAssignment struct {
 	// copied when this build started; empty when it names none. The tests must
 	// hold the service to each.
 	PreservedBehaviors []string
+	// Statements submitted with the latest report, retained for correction after
+	// findings or a check that could not run; empty before any report or when none
+	// were stated.
+	CoverageStatements []*TestCoverageStatement
 }
 
 // TestWriterAssignmentItem is the result type of the surla service
@@ -2653,6 +2709,11 @@ func MakeCopyFolderInUse(err error) *goa.ServiceError {
 // MakeTestsBranchInUse builds a goa.ServiceError from an error.
 func MakeTestsBranchInUse(err error) *goa.ServiceError {
 	return goa.NewServiceError(err, "tests_branch_in_use", false, false, false)
+}
+
+// MakeInvalidCoverage builds a goa.ServiceError from an error.
+func MakeInvalidCoverage(err error) *goa.ServiceError {
+	return goa.NewServiceError(err, "invalid_coverage", false, false, false)
 }
 
 // agentPolicyItemIntTransport stores JSON fields until they have been validated.
@@ -5749,6 +5810,9 @@ type jsonRecordedRunStoryTransport struct {
 	// The owner's exact required-test mapping for written tests, or the explicit
 	// absence of such a mapping for an operator evaluator.
 	Mapping *jsonMappingTransport `json:"mapping"`
+	// The writer's immutable statements for this run, or explicit missing
+	// historical/operator evidence.
+	TestCoverage *jsonTestCoverageTransport `json:"test_coverage"`
 }
 
 // validatejsonRecordedRunStoryTransport checks decoded JSON before it becomes a service value.
@@ -5767,6 +5831,9 @@ func validatejsonRecordedRunStoryTransport(value *jsonRecordedRunStoryTransport)
 	}
 	if value.Mapping == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("mapping", "body"))
+	}
+	if value.TestCoverage == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("test_coverage", "body"))
 	}
 	if value.BuildNumber != nil {
 		if int(*value.BuildNumber) < 1 {
@@ -5799,6 +5866,90 @@ func validatejsonRecordedRunStoryTransport(value *jsonRecordedRunStoryTransport)
 			}
 		}
 
+	}
+	if value.TestCoverage != nil {
+
+		if err2 := value.TestCoverage.Validate(); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		} else {
+			switch string(value.TestCoverage.Kind()) {
+			case "recorded":
+				actual, _ := value.TestCoverage.AsRecorded()
+				if actual != nil {
+					if err2 := validatejsonRecordedTestCoverageTransport(actual); err2 != nil {
+						err = goa.MergeErrors(err, err2)
+					}
+				}
+			}
+		}
+
+	}
+	return err
+}
+
+// jsonRecordedTestCoverageTransport stores JSON fields until they have been validated.
+type jsonRecordedTestCoverageTransport struct {
+	// Accepted test-writer report number.
+	Report *recordedRunStoryIntTransport `json:"report"`
+	// Answers saved for the built agreement, in question order.
+	Answers []*jsonConfirmedAnswerTransport `json:"answers"`
+	// Examples saved for the built agreement, in confirmation order.
+	Examples []*jsonExampleItemTransport `json:"examples"`
+	// Writer statements for this report; empty means Not stated.
+	CoverageStatements []*jsonTestCoverageStatementTransport `json:"coverage_statements"`
+}
+
+// validatejsonRecordedTestCoverageTransport checks decoded JSON before it becomes a service value.
+func validatejsonRecordedTestCoverageTransport(value *jsonRecordedTestCoverageTransport) (err error) {
+	if value == nil {
+		return goa.MissingFieldError("body", "JSON value")
+	}
+	if value.Report == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("report", "body"))
+	}
+	if value.Answers == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("answers", "body"))
+	}
+	if value.Examples == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("examples", "body"))
+	}
+	if value.CoverageStatements == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("coverage_statements", "body"))
+	}
+	if value.Report != nil {
+		if int(*value.Report) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.report", int(*value.Report), 1, true))
+		}
+	}
+	for _, e := range value.Answers {
+		if e == nil {
+			err = goa.MergeErrors(err, goa.MissingFieldError("body.answers", "[*]"))
+		}
+		if e != nil {
+			if err2 := validatejsonConfirmedAnswerTransport(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	for _, e := range value.Examples {
+		if e == nil {
+			err = goa.MergeErrors(err, goa.MissingFieldError("body.examples", "[*]"))
+		}
+		if e != nil {
+			if err2 := validatejsonExampleItemTransport(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	for _, e := range value.CoverageStatements {
+		if e == nil {
+			err = goa.MergeErrors(err, goa.MissingFieldError("body.coverage_statements", "[*]"))
+		}
+		if e != nil {
+			if err2 := validatejsonTestCoverageStatementTransport(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
 	}
 	return err
 }
@@ -6159,6 +6310,14 @@ type jsonStartedBuildTransport struct {
 	// Tests required by this build's saved Story, in declaration order; unfinished
 	// flows require none. Empty when no finished flow requires a test.
 	RequiredTests []*jsonRequiredTestTransport `json:"required_tests"`
+	// Confirmed answers saved when this build started; later revisions do not
+	// replace them.
+	Answers []*jsonConfirmedAnswerTransport `json:"answers"`
+	// Examples saved when this build started; later revisions do not replace them.
+	Examples []*jsonExampleItemTransport `json:"examples"`
+	// The accepted report's writer statements; empty before acceptance or when
+	// none were stated. Surla did not judge them.
+	CoverageStatements []*jsonTestCoverageStatementTransport `json:"coverage_statements"`
 	// Whether the user has taken this build: building until a verification of it
 	// passes; passed with the commits to merge; merged once the branch checked out
 	// in the project folder holds the commits of one passed run, the builder's
@@ -6194,6 +6353,15 @@ func validatejsonStartedBuildTransport(value *jsonStartedBuildTransport) (err er
 	if value.RequiredTests == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("required_tests", "body"))
 	}
+	if value.Answers == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("answers", "body"))
+	}
+	if value.Examples == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("examples", "body"))
+	}
+	if value.CoverageStatements == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("coverage_statements", "body"))
+	}
 	if value.Taking == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("taking", "body"))
 	}
@@ -6218,6 +6386,36 @@ func validatejsonStartedBuildTransport(value *jsonStartedBuildTransport) (err er
 	for _, e := range value.RequiredTests {
 		if e != nil {
 			if err2 := validatejsonRequiredTestTransport(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	for _, e := range value.Answers {
+		if e == nil {
+			err = goa.MergeErrors(err, goa.MissingFieldError("body.answers", "[*]"))
+		}
+		if e != nil {
+			if err2 := validatejsonConfirmedAnswerTransport(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	for _, e := range value.Examples {
+		if e == nil {
+			err = goa.MergeErrors(err, goa.MissingFieldError("body.examples", "[*]"))
+		}
+		if e != nil {
+			if err2 := validatejsonExampleItemTransport(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	for _, e := range value.CoverageStatements {
+		if e == nil {
+			err = goa.MergeErrors(err, goa.MissingFieldError("body.coverage_statements", "[*]"))
+		}
+		if e != nil {
+			if err2 := validatejsonTestCoverageStatementTransport(e); err2 != nil {
 				err = goa.MergeErrors(err, err2)
 			}
 		}
@@ -6638,6 +6836,94 @@ func validatejsonTeamSnapshotTransport(value *jsonTeamSnapshotTransport) (err er
 	return err
 }
 
+// jsonTestCoverageNotRecordedTransport stores JSON fields until they have been validated.
+type jsonTestCoverageNotRecordedTransport struct {
+}
+
+// validatejsonTestCoverageNotRecordedTransport checks decoded JSON before it becomes a service value.
+func validatejsonTestCoverageNotRecordedTransport(value *jsonTestCoverageNotRecordedTransport) (err error) {
+	if value == nil {
+		return goa.MissingFieldError("body", "JSON value")
+	}
+
+	return err
+}
+
+// jsonTestCoverageReferenceTransport stores JSON fields until they have been validated.
+type jsonTestCoverageReferenceTransport string
+
+// validatejsonTestCoverageReferenceTransport checks decoded JSON before it becomes a service value.
+func validatejsonTestCoverageReferenceTransport(value jsonTestCoverageReferenceTransport) (err error) {
+	if utf8.RuneCountInString(string(value)) < 1 {
+		err = goa.MergeErrors(err, goa.InvalidLengthError("body", string(value), utf8.RuneCountInString(string(value)), 1, true))
+	}
+	return err
+}
+
+// jsonTestCoverageStatementTransport stores JSON fields until they have been validated.
+type jsonTestCoverageStatementTransport struct {
+	// Exact declared scenario identifier.
+	Scenario *jsonTestCoverageReferenceTransport `json:"scenario"`
+	// Question IDs from the assignment's answers[].id; empty when this statement
+	// names only examples.
+	QuestionIds []*jsonTestCoverageReferenceTransport `json:"question_ids"`
+	// Example IDs from the assignment's examples[].id; empty when this statement
+	// names only answers.
+	ExampleIds []*jsonTestCoverageReferenceTransport `json:"example_ids"`
+	// Interaction or assertion the writer says exercises these requirements.
+	Explanation *string `json:"explanation"`
+}
+
+// validatejsonTestCoverageStatementTransport checks decoded JSON before it becomes a service value.
+func validatejsonTestCoverageStatementTransport(value *jsonTestCoverageStatementTransport) (err error) {
+	if value == nil {
+		return goa.MissingFieldError("body", "JSON value")
+	}
+	if value.Scenario == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("scenario", "body"))
+	}
+	if value.QuestionIds == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("question_ids", "body"))
+	}
+	if value.ExampleIds == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("example_ids", "body"))
+	}
+	if value.Explanation == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("explanation", "body"))
+	}
+	if value.Scenario != nil {
+		if utf8.RuneCountInString(string(*value.Scenario)) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.scenario", string(*value.Scenario), utf8.RuneCountInString(string(*value.Scenario)), 1, true))
+		}
+	}
+	for _, e := range value.QuestionIds {
+		if e == nil {
+			err = goa.MergeErrors(err, goa.MissingFieldError("body.question_ids", "[*]"))
+		}
+		if e != nil {
+			if utf8.RuneCountInString(string(*e)) < 1 {
+				err = goa.MergeErrors(err, goa.InvalidLengthError("body.question_ids[*]", string(*e), utf8.RuneCountInString(string(*e)), 1, true))
+			}
+		}
+	}
+	for _, e := range value.ExampleIds {
+		if e == nil {
+			err = goa.MergeErrors(err, goa.MissingFieldError("body.example_ids", "[*]"))
+		}
+		if e != nil {
+			if utf8.RuneCountInString(string(*e)) < 1 {
+				err = goa.MergeErrors(err, goa.InvalidLengthError("body.example_ids[*]", string(*e), utf8.RuneCountInString(string(*e)), 1, true))
+			}
+		}
+	}
+	if value.Explanation != nil {
+		if utf8.RuneCountInString(*value.Explanation) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.explanation", *value.Explanation, utf8.RuneCountInString(*value.Explanation), 1, true))
+		}
+	}
+	return err
+}
+
 // jsonTestFindingsTransport stores JSON fields until they have been validated.
 type jsonTestFindingsTransport struct {
 	// Change Card identifier.
@@ -6807,6 +7093,10 @@ type jsonTestWriterAssignmentTransport struct {
 	// copied when this build started; empty when it names none. The tests must
 	// hold the service to each.
 	PreservedBehaviors []string `json:"preserved_behaviors"`
+	// Statements submitted with the latest report, retained for correction after
+	// findings or a check that could not run; empty before any report or when none
+	// were stated.
+	CoverageStatements []*jsonTestCoverageStatementTransport `json:"coverage_statements"`
 }
 
 // validatejsonTestWriterAssignmentTransport checks decoded JSON before it becomes a service value.
@@ -6850,6 +7140,9 @@ func validatejsonTestWriterAssignmentTransport(value *jsonTestWriterAssignmentTr
 	if value.PreservedBehaviors == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("preserved_behaviors", "body"))
 	}
+	if value.CoverageStatements == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("coverage_statements", "body"))
+	}
 	if value.Progress != nil {
 		if err2 := validatejsonTestWriterProgressTransport(value.Progress); err2 != nil {
 			err = goa.MergeErrors(err, err2)
@@ -6879,6 +7172,16 @@ func validatejsonTestWriterAssignmentTransport(value *jsonTestWriterAssignmentTr
 	for _, e := range value.Examples {
 		if e != nil {
 			if err2 := validatejsonExampleItemTransport(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	for _, e := range value.CoverageStatements {
+		if e == nil {
+			err = goa.MergeErrors(err, goa.MissingFieldError("body.coverage_statements", "[*]"))
+		}
+		if e != nil {
+			if err2 := validatejsonTestCoverageStatementTransport(e); err2 != nil {
 				err = goa.MergeErrors(err, err2)
 			}
 		}
@@ -8492,6 +8795,15 @@ func validateStartedBuildOriginal(value *StartedBuild) (err error) {
 	if value.RequiredTests == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("required_tests", "value"))
 	}
+	if value.Answers == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("answers", "value"))
+	}
+	if value.Examples == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("examples", "value"))
+	}
+	if value.CoverageStatements == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("coverage_statements", "value"))
+	}
 	if value.Taking.Kind() == "" {
 		err = goa.MergeErrors(err, goa.MissingFieldError("taking", "value"))
 	}
@@ -8503,6 +8815,31 @@ func validateStartedBuildOriginal(value *StartedBuild) (err error) {
 	}
 	if value.RequiredTestCount < 0 {
 		err = goa.MergeErrors(err, goa.InvalidRangeError("value.required_test_count", value.RequiredTestCount, 0, true))
+	}
+	for _, e := range value.Answers {
+		if e == nil {
+			err = goa.MergeErrors(err, goa.MissingFieldError("value.answers", "[*]"))
+		}
+	}
+	for _, e := range value.Examples {
+		if e == nil {
+			err = goa.MergeErrors(err, goa.MissingFieldError("value.examples", "[*]"))
+		}
+		if e != nil {
+			if err2 := validateExampleItemOriginal(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	for _, e := range value.CoverageStatements {
+		if e == nil {
+			err = goa.MergeErrors(err, goa.MissingFieldError("value.coverage_statements", "[*]"))
+		}
+		if e != nil {
+			if err2 := validateTestCoverageStatementOriginal(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
 	}
 
 	if err2 := value.Taking.Validate(); err2 != nil {
@@ -8596,6 +8933,41 @@ func validateTestsCouldNotRunOriginal(value *TestsCouldNotRun) (err error) {
 	return err
 }
 
+// validateExampleItemOriginal checks the original typed value before JSON conversion.
+func validateExampleItemOriginal(value *ExampleItem) (err error) {
+	if !(value.VerificationKind == "deterministic" || value.VerificationKind == "model_judged") {
+		err = goa.MergeErrors(err, goa.InvalidEnumValueError("value.verification_kind", value.VerificationKind, []any{"deterministic", "model_judged"}))
+	}
+	return err
+}
+
+// validateTestCoverageStatementOriginal checks the original typed value before JSON conversion.
+func validateTestCoverageStatementOriginal(value *TestCoverageStatement) (err error) {
+	if value.QuestionIds == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("question_ids", "value"))
+	}
+	if value.ExampleIds == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("example_ids", "value"))
+	}
+	if utf8.RuneCountInString(string(value.Scenario)) < 1 {
+		err = goa.MergeErrors(err, goa.InvalidLengthError("value.scenario", string(value.Scenario), utf8.RuneCountInString(string(value.Scenario)), 1, true))
+	}
+	for _, e := range value.QuestionIds {
+		if utf8.RuneCountInString(string(e)) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("value.question_ids[*]", string(e), utf8.RuneCountInString(string(e)), 1, true))
+		}
+	}
+	for _, e := range value.ExampleIds {
+		if utf8.RuneCountInString(string(e)) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("value.example_ids[*]", string(e), utf8.RuneCountInString(string(e)), 1, true))
+		}
+	}
+	if utf8.RuneCountInString(value.Explanation) < 1 {
+		err = goa.MergeErrors(err, goa.InvalidLengthError("value.explanation", value.Explanation, utf8.RuneCountInString(value.Explanation), 1, true))
+	}
+	return err
+}
+
 // validateChangeCardResultOriginal checks the original typed value before JSON conversion.
 func validateChangeCardResultOriginal(value *ChangeCardResult) (err error) {
 	if value.Examples == nil {
@@ -8642,14 +9014,6 @@ func validateChangeCardResultOriginal(value *ChangeCardResult) (err error) {
 		if err2 := validateProposedRevisionItemOriginal(value.ProposedRevision); err2 != nil {
 			err = goa.MergeErrors(err, err2)
 		}
-	}
-	return err
-}
-
-// validateExampleItemOriginal checks the original typed value before JSON conversion.
-func validateExampleItemOriginal(value *ExampleItem) (err error) {
-	if !(value.VerificationKind == "deterministic" || value.VerificationKind == "model_judged") {
-		err = goa.MergeErrors(err, goa.InvalidEnumValueError("value.verification_kind", value.VerificationKind, []any{"deterministic", "model_judged"}))
 	}
 	return err
 }
@@ -9288,6 +9652,9 @@ func validateRecordedRunStoryOriginal(value *RecordedRunStory) (err error) {
 	if value.Mapping.Kind() == "" {
 		err = goa.MergeErrors(err, goa.MissingFieldError("mapping", "value"))
 	}
+	if value.TestCoverage.Kind() == "" {
+		err = goa.MergeErrors(err, goa.MissingFieldError("test_coverage", "value"))
+	}
 	if value.BuildNumber < 1 {
 		err = goa.MergeErrors(err, goa.InvalidRangeError("value.build_number", value.BuildNumber, 1, true))
 	}
@@ -9314,6 +9681,20 @@ func validateRecordedRunStoryOriginal(value *RecordedRunStory) (err error) {
 		}
 	}
 
+	if err2 := value.TestCoverage.Validate(); err2 != nil {
+		err = goa.MergeErrors(err, err2)
+	} else {
+		switch string(value.TestCoverage.Kind()) {
+		case "recorded":
+			actual, _ := value.TestCoverage.AsRecorded()
+			if actual != nil {
+				if err2 := validateRecordedTestCoverageOriginal(actual); err2 != nil {
+					err = goa.MergeErrors(err, err2)
+				}
+			}
+		}
+	}
+
 	return err
 }
 
@@ -9321,6 +9702,48 @@ func validateRecordedRunStoryOriginal(value *RecordedRunStory) (err error) {
 func validateRunStoryMappingOriginal(value *RunStoryMapping) (err error) {
 	if value.RequiredTests == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("required_tests", "value"))
+	}
+	return err
+}
+
+// validateRecordedTestCoverageOriginal checks the original typed value before JSON conversion.
+func validateRecordedTestCoverageOriginal(value *RecordedTestCoverage) (err error) {
+	if value.Answers == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("answers", "value"))
+	}
+	if value.Examples == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("examples", "value"))
+	}
+	if value.CoverageStatements == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("coverage_statements", "value"))
+	}
+	if value.Report < 1 {
+		err = goa.MergeErrors(err, goa.InvalidRangeError("value.report", value.Report, 1, true))
+	}
+	for _, e := range value.Answers {
+		if e == nil {
+			err = goa.MergeErrors(err, goa.MissingFieldError("value.answers", "[*]"))
+		}
+	}
+	for _, e := range value.Examples {
+		if e == nil {
+			err = goa.MergeErrors(err, goa.MissingFieldError("value.examples", "[*]"))
+		}
+		if e != nil {
+			if err2 := validateExampleItemOriginal(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	for _, e := range value.CoverageStatements {
+		if e == nil {
+			err = goa.MergeErrors(err, goa.MissingFieldError("value.coverage_statements", "[*]"))
+		}
+		if e != nil {
+			if err2 := validateTestCoverageStatementOriginal(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
 	}
 	return err
 }
@@ -9469,6 +9892,14 @@ func validateTeamSnapshotOriginal(value *TeamSnapshot) (err error) {
 	return err
 }
 
+// validateTestCoverageReferenceOriginal checks the original typed value before JSON conversion.
+func validateTestCoverageReferenceOriginal(value TestCoverageReference) (err error) {
+	if utf8.RuneCountInString(string(value)) < 1 {
+		err = goa.MergeErrors(err, goa.InvalidLengthError("value", string(value), utf8.RuneCountInString(string(value)), 1, true))
+	}
+	return err
+}
+
 // validateTestFindingsOriginal checks the original typed value before JSON conversion.
 func validateTestFindingsOriginal(value *TestFindings) (err error) {
 	if value.Findings == nil {
@@ -9508,6 +9939,9 @@ func validateTestWriterAssignmentOriginal(value *TestWriterAssignment) (err erro
 	if value.PreservedBehaviors == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("preserved_behaviors", "value"))
 	}
+	if value.CoverageStatements == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("coverage_statements", "value"))
+	}
 	if value.Progress != nil {
 		if err2 := validateTestWriterProgressOriginal(value.Progress); err2 != nil {
 			err = goa.MergeErrors(err, err2)
@@ -9523,6 +9957,16 @@ func validateTestWriterAssignmentOriginal(value *TestWriterAssignment) (err erro
 	for _, e := range value.Examples {
 		if e != nil {
 			if err2 := validateExampleItemOriginal(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	for _, e := range value.CoverageStatements {
+		if e == nil {
+			err = goa.MergeErrors(err, goa.MissingFieldError("value.coverage_statements", "[*]"))
+		}
+		if e != nil {
+			if err2 := validateTestCoverageStatementOriginal(e); err2 != nil {
 				err = goa.MergeErrors(err, err2)
 			}
 		}
@@ -12009,6 +12453,171 @@ func (u *jsonTeamTransport) UnmarshalJSON(data []byte) error {
 		u.Unavailable = value
 	default:
 		return goa.InvalidEnumValueError("state", raw.Type, []any{string(jsonTeamTransportKindReady), string(jsonTeamTransportKindWindowBusy), string(jsonTeamTransportKindAmbiguousSpace), string(jsonTeamTransportKindUnavailable)})
+	}
+	return u.Validate()
+}
+
+// jsonTestCoverageTransport stores exactly one selected Goa OneOf branch.
+type jsonTestCoverageTransport struct {
+	kind        jsonTestCoverageTransportKind
+	Recorded    *jsonRecordedTestCoverageTransport
+	NotRecorded *jsonTestCoverageNotRecordedTransport
+}
+
+// jsonTestCoverageTransportKind identifies the selected branch of jsonTestCoverageTransport.
+type jsonTestCoverageTransportKind string
+
+const (
+	jsonTestCoverageTransportKindRecorded    jsonTestCoverageTransportKind = "recorded"
+	jsonTestCoverageTransportKindNotRecorded jsonTestCoverageTransportKind = "not_recorded"
+)
+
+// Kind returns the selected branch.
+func (u jsonTestCoverageTransport) Kind() jsonTestCoverageTransportKind {
+	return u.kind
+}
+
+// newjsonTestCoverageTransportRecorded creates jsonTestCoverageTransport with its recorded branch selected.
+func newjsonTestCoverageTransportRecorded(value *jsonRecordedTestCoverageTransport) jsonTestCoverageTransport {
+	return jsonTestCoverageTransport{kind: jsonTestCoverageTransportKindRecorded, Recorded: value}
+}
+
+// AsRecorded returns the recorded branch when it is selected.
+func (u jsonTestCoverageTransport) AsRecorded() (_ *jsonRecordedTestCoverageTransport, ok bool) {
+	if u.kind != jsonTestCoverageTransportKindRecorded {
+		return
+	}
+	return u.Recorded, true
+}
+
+// SetRecorded selects the recorded branch.
+func (u *jsonTestCoverageTransport) SetRecorded(value *jsonRecordedTestCoverageTransport) {
+	u.kind = jsonTestCoverageTransportKindRecorded
+	u.Recorded = value
+}
+
+// newjsonTestCoverageTransportNotRecorded creates jsonTestCoverageTransport with its not_recorded branch selected.
+func newjsonTestCoverageTransportNotRecorded(value *jsonTestCoverageNotRecordedTransport) jsonTestCoverageTransport {
+	return jsonTestCoverageTransport{kind: jsonTestCoverageTransportKindNotRecorded, NotRecorded: value}
+}
+
+// AsNotRecorded returns the not_recorded branch when it is selected.
+func (u jsonTestCoverageTransport) AsNotRecorded() (_ *jsonTestCoverageNotRecordedTransport, ok bool) {
+	if u.kind != jsonTestCoverageTransportKindNotRecorded {
+		return
+	}
+	return u.NotRecorded, true
+}
+
+// SetNotRecorded selects the not_recorded branch.
+func (u *jsonTestCoverageTransport) SetNotRecorded(value *jsonTestCoverageNotRecordedTransport) {
+	u.kind = jsonTestCoverageTransportKindNotRecorded
+	u.NotRecorded = value
+}
+
+// Validate checks that one complete branch is selected.
+func (u jsonTestCoverageTransport) Validate() error {
+	switch u.kind {
+	case jsonTestCoverageTransportKindRecorded:
+		if u.Recorded == nil {
+			return goa.MissingFieldError("value", "jsonTestCoverageTransport")
+		}
+		return nil
+	case jsonTestCoverageTransportKindNotRecorded:
+		if u.NotRecorded == nil {
+			return goa.MissingFieldError("value", "jsonTestCoverageTransport")
+		}
+		return nil
+	case "":
+		return goa.MissingFieldError("state", "jsonTestCoverageTransport")
+	default:
+		return goa.InvalidEnumValueError("state", u.kind, []any{string(jsonTestCoverageTransportKindRecorded), string(jsonTestCoverageTransportKindNotRecorded)})
+	}
+}
+
+// MarshalJSON writes the selected branch name and value.
+func (u jsonTestCoverageTransport) MarshalJSON() ([]byte, error) {
+	if err := u.Validate(); err != nil {
+		return nil, err
+	}
+	var value any
+	switch u.kind {
+	case jsonTestCoverageTransportKindRecorded:
+		value = u.Recorded
+	case jsonTestCoverageTransportKindNotRecorded:
+		value = u.NotRecorded
+	default:
+		return nil, fmt.Errorf("unexpected jsonTestCoverageTransport branch %q", u.kind)
+	}
+	data, err := json.Marshal(value)
+	if err != nil {
+		return nil, err
+	}
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(data, &fields); err != nil {
+		return nil, err
+	}
+	if fields == nil {
+		return nil, goa.InvalidFieldTypeError("state", nil, "non-null JSON object")
+	}
+	if _, exists := fields["state"]; exists {
+		return nil, fmt.Errorf("jsonTestCoverageTransport branch already contains discriminator %q", "state")
+	}
+	tag, err := json.Marshal(string(u.kind))
+	if err != nil {
+		return nil, err
+	}
+	fields["state"] = tag
+	return json.Marshal(fields)
+}
+
+// UnmarshalJSON reads one complete branch name and value.
+func (u *jsonTestCoverageTransport) UnmarshalJSON(data []byte) error {
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(data, &fields); err != nil {
+		return err
+	}
+	tag, exists := fields["state"]
+	if !exists {
+		return goa.MissingFieldError("state", "jsonTestCoverageTransport")
+	}
+	if bytes.Equal(bytes.TrimSpace(tag), []byte("null")) {
+		return goa.InvalidFieldTypeError("state", nil, "JSON string")
+	}
+	var raw struct {
+		Type  string
+		Value json.RawMessage
+	}
+	if err := json.Unmarshal(tag, &raw.Type); err != nil {
+		return err
+	}
+	delete(fields, "state")
+	value, err := json.Marshal(fields)
+	if err != nil {
+		return err
+	}
+	raw.Value = value
+	switch raw.Type {
+	case string(jsonTestCoverageTransportKindRecorded):
+		var value *jsonRecordedTestCoverageTransport
+		decoder := json.NewDecoder(bytes.NewReader(raw.Value))
+		decoder.DisallowUnknownFields()
+		if err := decoder.Decode(&value); err != nil {
+			return err
+		}
+		u.kind = jsonTestCoverageTransportKindRecorded
+		u.Recorded = value
+	case string(jsonTestCoverageTransportKindNotRecorded):
+		var value *jsonTestCoverageNotRecordedTransport
+		decoder := json.NewDecoder(bytes.NewReader(raw.Value))
+		decoder.DisallowUnknownFields()
+		if err := decoder.Decode(&value); err != nil {
+			return err
+		}
+		u.kind = jsonTestCoverageTransportKindNotRecorded
+		u.NotRecorded = value
+	default:
+		return goa.InvalidEnumValueError("state", raw.Type, []any{string(jsonTestCoverageTransportKindRecorded), string(jsonTestCoverageTransportKindNotRecorded)})
 	}
 	return u.Validate()
 }
@@ -16721,7 +17330,7 @@ func DecodeConfirmedAnswer(data []byte) (out *ConfirmedAnswer, err error) {
 	if err != nil {
 		return out, fmt.Errorf("decode ConfirmedAnswer JSON: %w", err)
 	}
-	if err := validateConfirmedAnswerJSONValue("", root, ""); err != nil {
+	if err := validateChangeBuildJSONValue15("", root, ""); err != nil {
 		return out, fmt.Errorf("decode ConfirmedAnswer JSON: %w", err)
 	}
 	var body *jsonConfirmedAnswerTransport
@@ -17719,7 +18328,7 @@ func DecodeExampleItem(data []byte) (out *ExampleItem, err error) {
 	if err != nil {
 		return out, fmt.Errorf("decode ExampleItem JSON: %w", err)
 	}
-	if err := validateChangeCardResultJSONValue21("", root, ""); err != nil {
+	if err := validateChangeBuildJSONValue3("", root, ""); err != nil {
 		return out, fmt.Errorf("decode ExampleItem JSON: %w", err)
 	}
 	var body *jsonExampleItemTransport
@@ -20775,7 +21384,7 @@ func DecodeProposedRevisionItem(data []byte) (out *ProposedRevisionItem, err err
 	if err != nil {
 		return out, fmt.Errorf("decode ProposedRevisionItem JSON: %w", err)
 	}
-	if err := validateChangeCardResultJSONValue23("", root, ""); err != nil {
+	if err := validateChangeCardResultJSONValue21("", root, ""); err != nil {
 		return out, fmt.Errorf("decode ProposedRevisionItem JSON: %w", err)
 	}
 	var body *jsonProposedRevisionItemTransport
@@ -20967,6 +21576,28 @@ func EncodeRecordedRunStory(in *RecordedRunStory) ([]byte, error) {
 			mappingValue = u
 		}
 		body.Mapping = &mappingValue
+		var testCoverageValue jsonTestCoverageTransport
+		switch string(in.TestCoverage.Kind()) {
+		case "recorded":
+			actual, _ := in.TestCoverage.AsRecorded()
+			var obj *jsonRecordedTestCoverageTransport
+			if actual != nil {
+				obj = encodeRecordedTestCoverageToRecordedTestCoverageTransport(actual)
+			}
+			u := testCoverageValue
+			u.SetRecorded((*jsonRecordedTestCoverageTransport)(obj))
+			testCoverageValue = u
+		case "not_recorded":
+			actual, _ := in.TestCoverage.AsNotRecorded()
+			var obj *jsonTestCoverageNotRecordedTransport
+			if actual != nil {
+				obj = encodeTestCoverageNotRecordedToTestCoverageNotRecordedTransport(actual)
+			}
+			u := testCoverageValue
+			u.SetNotRecorded((*jsonTestCoverageNotRecordedTransport)(obj))
+			testCoverageValue = u
+		}
+		body.TestCoverage = &testCoverageValue
 	}
 	if err := validatejsonRecordedRunStoryTransport(body); err != nil {
 		return nil, fmt.Errorf("validate RecordedRunStory JSON: %w", err)
@@ -21030,6 +21661,28 @@ func ValidateRecordedRunStoryValue(in *RecordedRunStory) error {
 			mappingValue = u
 		}
 		body.Mapping = &mappingValue
+		var testCoverageValue jsonTestCoverageTransport
+		switch string(in.TestCoverage.Kind()) {
+		case "recorded":
+			actual, _ := in.TestCoverage.AsRecorded()
+			var obj *jsonRecordedTestCoverageTransport
+			if actual != nil {
+				obj = encodeRecordedTestCoverageToRecordedTestCoverageTransport(actual)
+			}
+			u := testCoverageValue
+			u.SetRecorded((*jsonRecordedTestCoverageTransport)(obj))
+			testCoverageValue = u
+		case "not_recorded":
+			actual, _ := in.TestCoverage.AsNotRecorded()
+			var obj *jsonTestCoverageNotRecordedTransport
+			if actual != nil {
+				obj = encodeTestCoverageNotRecordedToTestCoverageNotRecordedTransport(actual)
+			}
+			u := testCoverageValue
+			u.SetNotRecorded((*jsonTestCoverageNotRecordedTransport)(obj))
+			testCoverageValue = u
+		}
+		body.TestCoverage = &testCoverageValue
 	}
 	if err := validatejsonRecordedRunStoryTransport(body); err != nil {
 		return fmt.Errorf("validate RecordedRunStory value: %w", err)
@@ -21093,6 +21746,181 @@ func DecodeRecordedRunStory(data []byte) (out *RecordedRunStory, err error) {
 			u := out.Mapping
 			u.SetNotRecordedForEvaluator((*RunEvaluatorMappingUnknown)(obj))
 			out.Mapping = u
+		}
+		switch string(body.TestCoverage.Kind()) {
+		case "recorded":
+			actual, _ := body.TestCoverage.AsRecorded()
+			var obj *RecordedTestCoverage
+			if actual != nil {
+				obj = decodeRecordedTestCoverageTransportToRecordedTestCoverage(actual)
+			}
+			u := out.TestCoverage
+			u.SetRecorded((*RecordedTestCoverage)(obj))
+			out.TestCoverage = u
+		case "not_recorded":
+			actual, _ := body.TestCoverage.AsNotRecorded()
+			var obj *TestCoverageNotRecorded
+			if actual != nil {
+				obj = decodeTestCoverageNotRecordedTransportToTestCoverageNotRecorded(actual)
+			}
+			u := out.TestCoverage
+			u.SetNotRecorded((*TestCoverageNotRecorded)(obj))
+			out.TestCoverage = u
+		}
+	}
+	return out, nil
+}
+
+// EncodeRecordedTestCoverage turns a service value into JSON using the field names in the Goa design.
+func EncodeRecordedTestCoverage(in *RecordedTestCoverage) ([]byte, error) {
+	if err := checkRecordedTestCoverageValue(in); err != nil {
+		return nil, fmt.Errorf("encode RecordedTestCoverage JSON: %w", err)
+	}
+	if err := validateRecordedTestCoverageOriginal(in); err != nil {
+		return nil, fmt.Errorf("validate RecordedTestCoverage value: %w", err)
+	}
+	var body *jsonRecordedTestCoverageTransport
+	{
+		body = &jsonRecordedTestCoverageTransport{}
+		report := recordedRunStoryIntTransport(in.Report)
+		body.Report = &report
+		body.Answers = make([]*jsonConfirmedAnswerTransport, len(in.Answers))
+		for i, val := range in.Answers {
+			if val == nil {
+				body.Answers[i] = nil
+				continue
+			}
+			body.Answers[i] = encodeConfirmedAnswerToConfirmedAnswerTransport(val)
+		}
+		body.Examples = make([]*jsonExampleItemTransport, len(in.Examples))
+		for i, val := range in.Examples {
+			if val == nil {
+				body.Examples[i] = nil
+				continue
+			}
+			body.Examples[i] = encodeExampleItemToExampleItemTransport(val)
+		}
+		body.CoverageStatements = make([]*jsonTestCoverageStatementTransport, len(in.CoverageStatements))
+		for i, val := range in.CoverageStatements {
+			if val == nil {
+				body.CoverageStatements[i] = nil
+				continue
+			}
+			body.CoverageStatements[i] = encodeTestCoverageStatementToTestCoverageStatementTransport(val)
+		}
+	}
+	if err := validatejsonRecordedTestCoverageTransport(body); err != nil {
+		return nil, fmt.Errorf("validate RecordedTestCoverage JSON: %w", err)
+	}
+	data, err := json.Marshal(body)
+	if err != nil {
+		return nil, fmt.Errorf("encode RecordedTestCoverage JSON: %w", err)
+	}
+	return data, nil
+}
+
+// ValidateRecordedTestCoverageValue checks the original Go fields against their declared constraints.
+// It returns validation errors without encoding the value as JSON.
+
+func ValidateRecordedTestCoverageValue(in *RecordedTestCoverage) error {
+	if err := checkRecordedTestCoverageValue(in); err != nil {
+		return fmt.Errorf("validate RecordedTestCoverage value: %w", err)
+	}
+	if err := validateRecordedTestCoverageOriginal(in); err != nil {
+		return fmt.Errorf("validate RecordedTestCoverage value: %w", err)
+	}
+
+	if in == nil {
+		return goa.MissingFieldError("result", "RecordedTestCoverage")
+	}
+
+	var body *jsonRecordedTestCoverageTransport
+	{
+		body = &jsonRecordedTestCoverageTransport{}
+		report := recordedRunStoryIntTransport(in.Report)
+		body.Report = &report
+		body.Answers = make([]*jsonConfirmedAnswerTransport, len(in.Answers))
+		for i, val := range in.Answers {
+			if val == nil {
+				body.Answers[i] = nil
+				continue
+			}
+			body.Answers[i] = encodeConfirmedAnswerToConfirmedAnswerTransport(val)
+		}
+		body.Examples = make([]*jsonExampleItemTransport, len(in.Examples))
+		for i, val := range in.Examples {
+			if val == nil {
+				body.Examples[i] = nil
+				continue
+			}
+			body.Examples[i] = encodeExampleItemToExampleItemTransport(val)
+		}
+		body.CoverageStatements = make([]*jsonTestCoverageStatementTransport, len(in.CoverageStatements))
+		for i, val := range in.CoverageStatements {
+			if val == nil {
+				body.CoverageStatements[i] = nil
+				continue
+			}
+			body.CoverageStatements[i] = encodeTestCoverageStatementToTestCoverageStatementTransport(val)
+		}
+	}
+	if err := validatejsonRecordedTestCoverageTransport(body); err != nil {
+		return fmt.Errorf("validate RecordedTestCoverage value: %w", err)
+	}
+	return nil
+}
+
+// DecodeRecordedTestCoverage checks JSON field names from the Goa design and returns a service value.
+func DecodeRecordedTestCoverage(data []byte) (out *RecordedTestCoverage, err error) {
+	root, err := readStrictJSON(data)
+	if err != nil {
+		return out, fmt.Errorf("decode RecordedTestCoverage JSON: %w", err)
+	}
+	if err := validateRecordedRunStoryJSONValue10("", root, ""); err != nil {
+		return out, fmt.Errorf("decode RecordedTestCoverage JSON: %w", err)
+	}
+	var body *jsonRecordedTestCoverageTransport
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&body); err != nil {
+		return out, fmt.Errorf("decode RecordedTestCoverage JSON: %w", err)
+	}
+	if err := decoder.Decode(&struct{}{}); err != io.EOF {
+		if err == nil {
+			return out, fmt.Errorf("decode RecordedTestCoverage JSON: multiple JSON values")
+		}
+		return out, fmt.Errorf("decode RecordedTestCoverage JSON after first value: %w", err)
+	}
+	if err := validatejsonRecordedTestCoverageTransport(body); err != nil {
+		return out, fmt.Errorf("validate RecordedTestCoverage JSON: %w", err)
+	}
+	{
+		out = &RecordedTestCoverage{
+			Report: int(*body.Report),
+		}
+		out.Answers = make([]*ConfirmedAnswer, len(body.Answers))
+		for i, val := range body.Answers {
+			if val == nil {
+				out.Answers[i] = nil
+				continue
+			}
+			out.Answers[i] = decodeConfirmedAnswerTransportToConfirmedAnswer(val)
+		}
+		out.Examples = make([]*ExampleItem, len(body.Examples))
+		for i, val := range body.Examples {
+			if val == nil {
+				out.Examples[i] = nil
+				continue
+			}
+			out.Examples[i] = decodeExampleItemTransportToExampleItem(val)
+		}
+		out.CoverageStatements = make([]*TestCoverageStatement, len(body.CoverageStatements))
+		for i, val := range body.CoverageStatements {
+			if val == nil {
+				out.CoverageStatements[i] = nil
+				continue
+			}
+			out.CoverageStatements[i] = decodeTestCoverageStatementTransportToTestCoverageStatement(val)
 		}
 	}
 	return out, nil
@@ -21241,7 +22069,7 @@ func DecodeRequiredTest(data []byte) (out *RequiredTest, err error) {
 	if err != nil {
 		return out, fmt.Errorf("decode RequiredTest JSON: %w", err)
 	}
-	if err := validateChangeBuildJSONValue7("", root, ""); err != nil {
+	if err := validateChangeBuildJSONValue5("", root, ""); err != nil {
 		return out, fmt.Errorf("decode RequiredTest JSON: %w", err)
 	}
 	var body *jsonRequiredTestTransport
@@ -21566,7 +22394,7 @@ func DecodeRunEvaluatorMappingUnknown(data []byte) (out *RunEvaluatorMappingUnkn
 	if err != nil {
 		return out, fmt.Errorf("decode RunEvaluatorMappingUnknown JSON: %w", err)
 	}
-	if err := validateRecordedRunStoryJSONValue5("", root, ""); err != nil {
+	if err := validateRecordedRunStoryJSONValue7("", root, ""); err != nil {
 		return out, fmt.Errorf("decode RunEvaluatorMappingUnknown JSON: %w", err)
 	}
 	var body *jsonRunEvaluatorMappingUnknownTransport
@@ -21659,7 +22487,7 @@ func DecodeRunStoryMapping(data []byte) (out *RunStoryMapping, err error) {
 	if err != nil {
 		return out, fmt.Errorf("decode RunStoryMapping JSON: %w", err)
 	}
-	if err := validateRecordedRunStoryJSONValue3("", root, ""); err != nil {
+	if err := validateRecordedRunStoryJSONValue5("", root, ""); err != nil {
 		return out, fmt.Errorf("decode RunStoryMapping JSON: %w", err)
 	}
 	var body *jsonRunStoryMappingTransport
@@ -22186,6 +23014,30 @@ func EncodeStartedBuild(in *StartedBuild) ([]byte, error) {
 			}
 			body.RequiredTests[i] = encodeRequiredTestToRequiredTestTransport(val)
 		}
+		body.Answers = make([]*jsonConfirmedAnswerTransport, len(in.Answers))
+		for i, val := range in.Answers {
+			if val == nil {
+				body.Answers[i] = nil
+				continue
+			}
+			body.Answers[i] = encodeConfirmedAnswerToConfirmedAnswerTransport(val)
+		}
+		body.Examples = make([]*jsonExampleItemTransport, len(in.Examples))
+		for i, val := range in.Examples {
+			if val == nil {
+				body.Examples[i] = nil
+				continue
+			}
+			body.Examples[i] = encodeExampleItemToExampleItemTransport(val)
+		}
+		body.CoverageStatements = make([]*jsonTestCoverageStatementTransport, len(in.CoverageStatements))
+		for i, val := range in.CoverageStatements {
+			if val == nil {
+				body.CoverageStatements[i] = nil
+				continue
+			}
+			body.CoverageStatements[i] = encodeTestCoverageStatementToTestCoverageStatementTransport(val)
+		}
 		var takingValue jsonBuildTakingTransport
 		switch string(in.Taking.Kind()) {
 		case "building":
@@ -22271,6 +23123,30 @@ func ValidateStartedBuildValue(in *StartedBuild) error {
 			}
 			body.RequiredTests[i] = encodeRequiredTestToRequiredTestTransport(val)
 		}
+		body.Answers = make([]*jsonConfirmedAnswerTransport, len(in.Answers))
+		for i, val := range in.Answers {
+			if val == nil {
+				body.Answers[i] = nil
+				continue
+			}
+			body.Answers[i] = encodeConfirmedAnswerToConfirmedAnswerTransport(val)
+		}
+		body.Examples = make([]*jsonExampleItemTransport, len(in.Examples))
+		for i, val := range in.Examples {
+			if val == nil {
+				body.Examples[i] = nil
+				continue
+			}
+			body.Examples[i] = encodeExampleItemToExampleItemTransport(val)
+		}
+		body.CoverageStatements = make([]*jsonTestCoverageStatementTransport, len(in.CoverageStatements))
+		for i, val := range in.CoverageStatements {
+			if val == nil {
+				body.CoverageStatements[i] = nil
+				continue
+			}
+			body.CoverageStatements[i] = encodeTestCoverageStatementToTestCoverageStatementTransport(val)
+		}
 		var takingValue jsonBuildTakingTransport
 		switch string(in.Taking.Kind()) {
 		case "building":
@@ -22324,7 +23200,7 @@ func DecodeStartedBuild(data []byte) (out *StartedBuild, err error) {
 	if err != nil {
 		return out, fmt.Errorf("decode StartedBuild JSON: %w", err)
 	}
-	if err := validateChangeBuildJSONValue5("", root, ""); err != nil {
+	if err := validateChangeBuildJSONValue13("", root, ""); err != nil {
 		return out, fmt.Errorf("decode StartedBuild JSON: %w", err)
 	}
 	var body *jsonStartedBuildTransport
@@ -22358,6 +23234,30 @@ func DecodeStartedBuild(data []byte) (out *StartedBuild, err error) {
 				continue
 			}
 			out.RequiredTests[i] = decodeRequiredTestTransportToRequiredTest(val)
+		}
+		out.Answers = make([]*ConfirmedAnswer, len(body.Answers))
+		for i, val := range body.Answers {
+			if val == nil {
+				out.Answers[i] = nil
+				continue
+			}
+			out.Answers[i] = decodeConfirmedAnswerTransportToConfirmedAnswer(val)
+		}
+		out.Examples = make([]*ExampleItem, len(body.Examples))
+		for i, val := range body.Examples {
+			if val == nil {
+				out.Examples[i] = nil
+				continue
+			}
+			out.Examples[i] = decodeExampleItemTransportToExampleItem(val)
+		}
+		out.CoverageStatements = make([]*TestCoverageStatement, len(body.CoverageStatements))
+		for i, val := range body.CoverageStatements {
+			if val == nil {
+				out.CoverageStatements[i] = nil
+				continue
+			}
+			out.CoverageStatements[i] = decodeTestCoverageStatementTransportToTestCoverageStatement(val)
 		}
 		switch string(body.Taking.Kind()) {
 		case "building":
@@ -22536,7 +23436,7 @@ func DecodeStoryActorItem(data []byte) (out *StoryActorItem, err error) {
 	if err != nil {
 		return out, fmt.Errorf("decode StoryActorItem JSON: %w", err)
 	}
-	if err := validateChangeCardResultJSONValue7("", root, ""); err != nil {
+	if err := validateChangeCardResultJSONValue6("", root, ""); err != nil {
 		return out, fmt.Errorf("decode StoryActorItem JSON: %w", err)
 	}
 	var body *jsonStoryActorItemTransport
@@ -22659,7 +23559,7 @@ func DecodeStoryFlowItem(data []byte) (out *StoryFlowItem, err error) {
 	if err != nil {
 		return out, fmt.Errorf("decode StoryFlowItem JSON: %w", err)
 	}
-	if err := validateChangeCardResultJSONValue9("", root, ""); err != nil {
+	if err := validateChangeCardResultJSONValue8("", root, ""); err != nil {
 		return out, fmt.Errorf("decode StoryFlowItem JSON: %w", err)
 	}
 	var body *jsonStoryFlowItemTransport
@@ -22773,7 +23673,7 @@ func DecodeStoryQuestionItem(data []byte) (out *StoryQuestionItem, err error) {
 	if err != nil {
 		return out, fmt.Errorf("decode StoryQuestionItem JSON: %w", err)
 	}
-	if err := validateChangeCardResultJSONValue11("", root, ""); err != nil {
+	if err := validateChangeCardResultJSONValue10("", root, ""); err != nil {
 		return out, fmt.Errorf("decode StoryQuestionItem JSON: %w", err)
 	}
 	var body *jsonStoryQuestionItemTransport
@@ -23008,7 +23908,7 @@ func DecodeStoryStepItem(data []byte) (out *StoryStepItem, err error) {
 	if err != nil {
 		return out, fmt.Errorf("decode StoryStepItem JSON: %w", err)
 	}
-	if err := validateChangeCardResultJSONValue15("", root, ""); err != nil {
+	if err := validateChangeCardResultJSONValue14("", root, ""); err != nil {
 		return out, fmt.Errorf("decode StoryStepItem JSON: %w", err)
 	}
 	var body *jsonStoryStepItemTransport
@@ -23137,7 +24037,7 @@ func DecodeStorySummaryItem(data []byte) (out *StorySummaryItem, err error) {
 	if err != nil {
 		return out, fmt.Errorf("decode StorySummaryItem JSON: %w", err)
 	}
-	if err := validateChangeCardResultJSONValue5("", root, ""); err != nil {
+	if err := validateChangeCardResultJSONValue4("", root, ""); err != nil {
 		return out, fmt.Errorf("decode StorySummaryItem JSON: %w", err)
 	}
 	var body *jsonStorySummaryItemTransport
@@ -23385,6 +24285,270 @@ func DecodeTeamSnapshot(data []byte) (out *TeamSnapshot, err error) {
 	return out, nil
 }
 
+// EncodeTestCoverageNotRecorded turns a service value into JSON using the field names in the Goa design.
+func EncodeTestCoverageNotRecorded(in *TestCoverageNotRecorded) ([]byte, error) {
+	if err := checkTestCoverageNotRecordedValue(in); err != nil {
+		return nil, fmt.Errorf("encode TestCoverageNotRecorded JSON: %w", err)
+	}
+	var body *jsonTestCoverageNotRecordedTransport
+	{
+		body = &jsonTestCoverageNotRecordedTransport{}
+	}
+	if err := validatejsonTestCoverageNotRecordedTransport(body); err != nil {
+		return nil, fmt.Errorf("validate TestCoverageNotRecorded JSON: %w", err)
+	}
+	data, err := json.Marshal(body)
+	if err != nil {
+		return nil, fmt.Errorf("encode TestCoverageNotRecorded JSON: %w", err)
+	}
+	return data, nil
+}
+
+// ValidateTestCoverageNotRecordedValue checks the original Go fields against their declared constraints.
+// It returns validation errors without encoding the value as JSON.
+
+func ValidateTestCoverageNotRecordedValue(in *TestCoverageNotRecorded) error {
+	if err := checkTestCoverageNotRecordedValue(in); err != nil {
+		return fmt.Errorf("validate TestCoverageNotRecorded value: %w", err)
+	}
+
+	if in == nil {
+		return goa.MissingFieldError("result", "TestCoverageNotRecorded")
+	}
+
+	var body *jsonTestCoverageNotRecordedTransport
+	{
+		body = &jsonTestCoverageNotRecordedTransport{}
+	}
+	if err := validatejsonTestCoverageNotRecordedTransport(body); err != nil {
+		return fmt.Errorf("validate TestCoverageNotRecorded value: %w", err)
+	}
+	return nil
+}
+
+// DecodeTestCoverageNotRecorded checks JSON field names from the Goa design and returns a service value.
+func DecodeTestCoverageNotRecorded(data []byte) (out *TestCoverageNotRecorded, err error) {
+	root, err := readStrictJSON(data)
+	if err != nil {
+		return out, fmt.Errorf("decode TestCoverageNotRecorded JSON: %w", err)
+	}
+	if err := validateRecordedRunStoryJSONValue4("", root, ""); err != nil {
+		return out, fmt.Errorf("decode TestCoverageNotRecorded JSON: %w", err)
+	}
+	var body *jsonTestCoverageNotRecordedTransport
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&body); err != nil {
+		return out, fmt.Errorf("decode TestCoverageNotRecorded JSON: %w", err)
+	}
+	if err := decoder.Decode(&struct{}{}); err != io.EOF {
+		if err == nil {
+			return out, fmt.Errorf("decode TestCoverageNotRecorded JSON: multiple JSON values")
+		}
+		return out, fmt.Errorf("decode TestCoverageNotRecorded JSON after first value: %w", err)
+	}
+	if err := validatejsonTestCoverageNotRecordedTransport(body); err != nil {
+		return out, fmt.Errorf("validate TestCoverageNotRecorded JSON: %w", err)
+	}
+	{
+		out = &TestCoverageNotRecorded{}
+	}
+	return out, nil
+}
+
+// EncodeTestCoverageReference turns a service value into JSON using the field names in the Goa design.
+func EncodeTestCoverageReference(in TestCoverageReference) ([]byte, error) {
+	if err := checkTestCoverageReferenceValue(in); err != nil {
+		return nil, fmt.Errorf("encode TestCoverageReference JSON: %w", err)
+	}
+	if err := validateTestCoverageReferenceOriginal(in); err != nil {
+		return nil, fmt.Errorf("validate TestCoverageReference value: %w", err)
+	}
+	var body jsonTestCoverageReferenceTransport
+	{
+		body = jsonTestCoverageReferenceTransport(in)
+	}
+	if err := validatejsonTestCoverageReferenceTransport(body); err != nil {
+		return nil, fmt.Errorf("validate TestCoverageReference JSON: %w", err)
+	}
+	data, err := json.Marshal(body)
+	if err != nil {
+		return nil, fmt.Errorf("encode TestCoverageReference JSON: %w", err)
+	}
+	return data, nil
+}
+
+// ValidateTestCoverageReferenceValue checks the original Go fields against their declared constraints.
+// It returns validation errors without encoding the value as JSON.
+
+func ValidateTestCoverageReferenceValue(in TestCoverageReference) error {
+	if err := checkTestCoverageReferenceValue(in); err != nil {
+		return fmt.Errorf("validate TestCoverageReference value: %w", err)
+	}
+	if err := validateTestCoverageReferenceOriginal(in); err != nil {
+		return fmt.Errorf("validate TestCoverageReference value: %w", err)
+	}
+
+	var body jsonTestCoverageReferenceTransport
+	{
+		body = jsonTestCoverageReferenceTransport(in)
+	}
+	if err := validatejsonTestCoverageReferenceTransport(body); err != nil {
+		return fmt.Errorf("validate TestCoverageReference value: %w", err)
+	}
+	return nil
+}
+
+// DecodeTestCoverageReference checks JSON field names from the Goa design and returns a service value.
+func DecodeTestCoverageReference(data []byte) (out TestCoverageReference, err error) {
+	root, err := readStrictJSON(data)
+	if err != nil {
+		return out, fmt.Errorf("decode TestCoverageReference JSON: %w", err)
+	}
+	if err := validateAgentPolicyItemJSONValue2("", root, ""); err != nil {
+		return out, fmt.Errorf("decode TestCoverageReference JSON: %w", err)
+	}
+	var body jsonTestCoverageReferenceTransport
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&body); err != nil {
+		return out, fmt.Errorf("decode TestCoverageReference JSON: %w", err)
+	}
+	if err := decoder.Decode(&struct{}{}); err != io.EOF {
+		if err == nil {
+			return out, fmt.Errorf("decode TestCoverageReference JSON: multiple JSON values")
+		}
+		return out, fmt.Errorf("decode TestCoverageReference JSON after first value: %w", err)
+	}
+	if err := validatejsonTestCoverageReferenceTransport(body); err != nil {
+		return out, fmt.Errorf("validate TestCoverageReference JSON: %w", err)
+	}
+	{
+		out = TestCoverageReference(body)
+	}
+	return out, nil
+}
+
+// EncodeTestCoverageStatement turns a service value into JSON using the field names in the Goa design.
+func EncodeTestCoverageStatement(in *TestCoverageStatement) ([]byte, error) {
+	if err := checkTestCoverageStatementValue(in); err != nil {
+		return nil, fmt.Errorf("encode TestCoverageStatement JSON: %w", err)
+	}
+	if err := validateTestCoverageStatementOriginal(in); err != nil {
+		return nil, fmt.Errorf("validate TestCoverageStatement value: %w", err)
+	}
+	var body *jsonTestCoverageStatementTransport
+	{
+		body = &jsonTestCoverageStatementTransport{
+			Explanation: &in.Explanation,
+		}
+		scenario := jsonTestCoverageReferenceTransport(in.Scenario)
+		body.Scenario = &scenario
+		body.QuestionIds = make([]*jsonTestCoverageReferenceTransport, len(in.QuestionIds))
+		for i, val := range in.QuestionIds {
+			var transformed jsonTestCoverageReferenceTransport
+			transformed = jsonTestCoverageReferenceTransport(val)
+			body.QuestionIds[i] = &transformed
+		}
+		body.ExampleIds = make([]*jsonTestCoverageReferenceTransport, len(in.ExampleIds))
+		for i, val := range in.ExampleIds {
+			var transformed jsonTestCoverageReferenceTransport
+			transformed = jsonTestCoverageReferenceTransport(val)
+			body.ExampleIds[i] = &transformed
+		}
+	}
+	if err := validatejsonTestCoverageStatementTransport(body); err != nil {
+		return nil, fmt.Errorf("validate TestCoverageStatement JSON: %w", err)
+	}
+	data, err := json.Marshal(body)
+	if err != nil {
+		return nil, fmt.Errorf("encode TestCoverageStatement JSON: %w", err)
+	}
+	return data, nil
+}
+
+// ValidateTestCoverageStatementValue checks the original Go fields against their declared constraints.
+// It returns validation errors without encoding the value as JSON.
+
+func ValidateTestCoverageStatementValue(in *TestCoverageStatement) error {
+	if err := checkTestCoverageStatementValue(in); err != nil {
+		return fmt.Errorf("validate TestCoverageStatement value: %w", err)
+	}
+	if err := validateTestCoverageStatementOriginal(in); err != nil {
+		return fmt.Errorf("validate TestCoverageStatement value: %w", err)
+	}
+
+	if in == nil {
+		return goa.MissingFieldError("result", "TestCoverageStatement")
+	}
+
+	var body *jsonTestCoverageStatementTransport
+	{
+		body = &jsonTestCoverageStatementTransport{
+			Explanation: &in.Explanation,
+		}
+		scenario := jsonTestCoverageReferenceTransport(in.Scenario)
+		body.Scenario = &scenario
+		body.QuestionIds = make([]*jsonTestCoverageReferenceTransport, len(in.QuestionIds))
+		for i, val := range in.QuestionIds {
+			var transformed jsonTestCoverageReferenceTransport
+			transformed = jsonTestCoverageReferenceTransport(val)
+			body.QuestionIds[i] = &transformed
+		}
+		body.ExampleIds = make([]*jsonTestCoverageReferenceTransport, len(in.ExampleIds))
+		for i, val := range in.ExampleIds {
+			var transformed jsonTestCoverageReferenceTransport
+			transformed = jsonTestCoverageReferenceTransport(val)
+			body.ExampleIds[i] = &transformed
+		}
+	}
+	if err := validatejsonTestCoverageStatementTransport(body); err != nil {
+		return fmt.Errorf("validate TestCoverageStatement value: %w", err)
+	}
+	return nil
+}
+
+// DecodeTestCoverageStatement checks JSON field names from the Goa design and returns a service value.
+func DecodeTestCoverageStatement(data []byte) (out *TestCoverageStatement, err error) {
+	root, err := readStrictJSON(data)
+	if err != nil {
+		return out, fmt.Errorf("decode TestCoverageStatement JSON: %w", err)
+	}
+	if err := validateChangeBuildJSONValue17("", root, ""); err != nil {
+		return out, fmt.Errorf("decode TestCoverageStatement JSON: %w", err)
+	}
+	var body *jsonTestCoverageStatementTransport
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&body); err != nil {
+		return out, fmt.Errorf("decode TestCoverageStatement JSON: %w", err)
+	}
+	if err := decoder.Decode(&struct{}{}); err != io.EOF {
+		if err == nil {
+			return out, fmt.Errorf("decode TestCoverageStatement JSON: multiple JSON values")
+		}
+		return out, fmt.Errorf("decode TestCoverageStatement JSON after first value: %w", err)
+	}
+	if err := validatejsonTestCoverageStatementTransport(body); err != nil {
+		return out, fmt.Errorf("validate TestCoverageStatement JSON: %w", err)
+	}
+	{
+		out = &TestCoverageStatement{
+			Scenario:    TestCoverageReference(*body.Scenario),
+			Explanation: *body.Explanation,
+		}
+		out.QuestionIds = make([]TestCoverageReference, len(body.QuestionIds))
+		for i, val := range body.QuestionIds {
+			out.QuestionIds[i] = TestCoverageReference(*val)
+		}
+		out.ExampleIds = make([]TestCoverageReference, len(body.ExampleIds))
+		for i, val := range body.ExampleIds {
+			out.ExampleIds[i] = TestCoverageReference(*val)
+		}
+	}
+	return out, nil
+}
+
 // EncodeTestFindings turns a service value into JSON using the field names in the Goa design.
 func EncodeTestFindings(in *TestFindings) ([]byte, error) {
 	if err := checkTestFindingsValue(in); err != nil {
@@ -23552,6 +24716,14 @@ func EncodeTestWriterAssignment(in *TestWriterAssignment) ([]byte, error) {
 		for i, val := range in.PreservedBehaviors {
 			body.PreservedBehaviors[i] = val
 		}
+		body.CoverageStatements = make([]*jsonTestCoverageStatementTransport, len(in.CoverageStatements))
+		for i, val := range in.CoverageStatements {
+			if val == nil {
+				body.CoverageStatements[i] = nil
+				continue
+			}
+			body.CoverageStatements[i] = encodeTestCoverageStatementToTestCoverageStatementTransport(val)
+		}
 	}
 	if err := validatejsonTestWriterAssignmentTransport(body); err != nil {
 		return nil, fmt.Errorf("validate TestWriterAssignment JSON: %w", err)
@@ -23627,6 +24799,14 @@ func ValidateTestWriterAssignmentValue(in *TestWriterAssignment) error {
 		body.PreservedBehaviors = make([]string, len(in.PreservedBehaviors))
 		for i, val := range in.PreservedBehaviors {
 			body.PreservedBehaviors[i] = val
+		}
+		body.CoverageStatements = make([]*jsonTestCoverageStatementTransport, len(in.CoverageStatements))
+		for i, val := range in.CoverageStatements {
+			if val == nil {
+				body.CoverageStatements[i] = nil
+				continue
+			}
+			body.CoverageStatements[i] = encodeTestCoverageStatementToTestCoverageStatementTransport(val)
 		}
 	}
 	if err := validatejsonTestWriterAssignmentTransport(body); err != nil {
@@ -23707,6 +24887,14 @@ func DecodeTestWriterAssignment(data []byte) (out *TestWriterAssignment, err err
 		out.PreservedBehaviors = make([]string, len(body.PreservedBehaviors))
 		for i, val := range body.PreservedBehaviors {
 			out.PreservedBehaviors[i] = val
+		}
+		out.CoverageStatements = make([]*TestCoverageStatement, len(body.CoverageStatements))
+		for i, val := range body.CoverageStatements {
+			if val == nil {
+				out.CoverageStatements[i] = nil
+				continue
+			}
+			out.CoverageStatements[i] = decodeTestCoverageStatementTransportToTestCoverageStatement(val)
 		}
 	}
 	return out, nil
@@ -24082,7 +25270,7 @@ func DecodeTestWriterProgress(data []byte) (out *TestWriterProgress, err error) 
 	if err != nil {
 		return out, fmt.Errorf("decode TestWriterProgress JSON: %w", err)
 	}
-	if err := validateChangeBuildJSONValue9("", root, ""); err != nil {
+	if err := validateChangeBuildJSONValue7("", root, ""); err != nil {
 		return out, fmt.Errorf("decode TestWriterProgress JSON: %w", err)
 	}
 	var body *jsonTestWriterProgressTransport
@@ -24301,7 +25489,7 @@ func DecodeTestsAssigned(data []byte) (out *TestsAssigned, err error) {
 	if err != nil {
 		return out, fmt.Errorf("decode TestsAssigned JSON: %w", err)
 	}
-	if err := validateChangeBuildJSONValue11("", root, ""); err != nil {
+	if err := validateChangeBuildJSONValue9("", root, ""); err != nil {
 		return out, fmt.Errorf("decode TestsAssigned JSON: %w", err)
 	}
 	var body *jsonTestsAssignedTransport
@@ -24386,7 +25574,7 @@ func DecodeTestsCouldNotRun(data []byte) (out *TestsCouldNotRun, err error) {
 	if err != nil {
 		return out, fmt.Errorf("decode TestsCouldNotRun JSON: %w", err)
 	}
-	if err := validateChangeBuildJSONValue4("", root, ""); err != nil {
+	if err := validateChangeBuildJSONValue12("", root, ""); err != nil {
 		return out, fmt.Errorf("decode TestsCouldNotRun JSON: %w", err)
 	}
 	var body *jsonTestsCouldNotRunTransport
@@ -24475,7 +25663,7 @@ func DecodeTestsNeedChanges(data []byte) (out *TestsNeedChanges, err error) {
 	if err != nil {
 		return out, fmt.Errorf("decode TestsNeedChanges JSON: %w", err)
 	}
-	if err := validateChangeBuildJSONValue3("", root, ""); err != nil {
+	if err := validateChangeBuildJSONValue11("", root, ""); err != nil {
 		return out, fmt.Errorf("decode TestsNeedChanges JSON: %w", err)
 	}
 	var body *jsonTestsNeedChangesTransport
@@ -24691,7 +25879,7 @@ func DecodeTestsReported(data []byte) (out *TestsReported, err error) {
 	if err != nil {
 		return out, fmt.Errorf("decode TestsReported JSON: %w", err)
 	}
-	if err := validateChangeBuildJSONValue12("", root, ""); err != nil {
+	if err := validateChangeBuildJSONValue10("", root, ""); err != nil {
 		return out, fmt.Errorf("decode TestsReported JSON: %w", err)
 	}
 	var body *jsonTestsReportedTransport
@@ -25243,7 +26431,7 @@ func DecodeUICompositionItem(data []byte) (out *UICompositionItem, err error) {
 	if err != nil {
 		return out, fmt.Errorf("decode UICompositionItem JSON: %w", err)
 	}
-	if err := validateChangeCardResultJSONValue17("", root, ""); err != nil {
+	if err := validateChangeCardResultJSONValue16("", root, ""); err != nil {
 		return out, fmt.Errorf("decode UICompositionItem JSON: %w", err)
 	}
 	var body *jsonUICompositionItemTransport
@@ -25329,7 +26517,7 @@ func DecodeUnverifiedApprovalItem(data []byte) (out *UnverifiedApprovalItem, err
 	if err != nil {
 		return out, fmt.Errorf("decode UnverifiedApprovalItem JSON: %w", err)
 	}
-	if err := validateChangeCardResultJSONValue19("", root, ""); err != nil {
+	if err := validateChangeCardResultJSONValue18("", root, ""); err != nil {
 		return out, fmt.Errorf("decode UnverifiedApprovalItem JSON: %w", err)
 	}
 	var body *jsonUnverifiedApprovalItemTransport
@@ -27602,6 +28790,58 @@ func decodeRecordedRunStoryTransportToRecordedRunStory(v *jsonRecordedRunStoryTr
 		u.SetNotRecordedForEvaluator((*RunEvaluatorMappingUnknown)(obj))
 		res.Mapping = u
 	}
+	switch string(v.TestCoverage.Kind()) {
+	case "recorded":
+		actual, _ := v.TestCoverage.AsRecorded()
+		var obj *RecordedTestCoverage
+		if actual != nil {
+			obj = decodeRecordedTestCoverageTransportToRecordedTestCoverage(actual)
+		}
+		u := res.TestCoverage
+		u.SetRecorded((*RecordedTestCoverage)(obj))
+		res.TestCoverage = u
+	case "not_recorded":
+		actual, _ := v.TestCoverage.AsNotRecorded()
+		var obj *TestCoverageNotRecorded
+		if actual != nil {
+			obj = decodeTestCoverageNotRecordedTransportToTestCoverageNotRecorded(actual)
+		}
+		u := res.TestCoverage
+		u.SetNotRecorded((*TestCoverageNotRecorded)(obj))
+		res.TestCoverage = u
+	}
+
+	return res
+}
+
+func decodeRecordedTestCoverageTransportToRecordedTestCoverage(v *jsonRecordedTestCoverageTransport) *RecordedTestCoverage {
+	res := &RecordedTestCoverage{
+		Report: int(*v.Report),
+	}
+	res.Answers = make([]*ConfirmedAnswer, len(v.Answers))
+	for i, val := range v.Answers {
+		if val == nil {
+			res.Answers[i] = nil
+			continue
+		}
+		res.Answers[i] = decodeConfirmedAnswerTransportToConfirmedAnswer(val)
+	}
+	res.Examples = make([]*ExampleItem, len(v.Examples))
+	for i, val := range v.Examples {
+		if val == nil {
+			res.Examples[i] = nil
+			continue
+		}
+		res.Examples[i] = decodeExampleItemTransportToExampleItem(val)
+	}
+	res.CoverageStatements = make([]*TestCoverageStatement, len(v.CoverageStatements))
+	for i, val := range v.CoverageStatements {
+		if val == nil {
+			res.CoverageStatements[i] = nil
+			continue
+		}
+		res.CoverageStatements[i] = decodeTestCoverageStatementTransportToTestCoverageStatement(val)
+	}
 
 	return res
 }
@@ -27691,6 +28931,30 @@ func decodeStartedBuildTransportToStartedBuild(v *jsonStartedBuildTransport) *St
 			continue
 		}
 		res.RequiredTests[i] = decodeRequiredTestTransportToRequiredTest(val)
+	}
+	res.Answers = make([]*ConfirmedAnswer, len(v.Answers))
+	for i, val := range v.Answers {
+		if val == nil {
+			res.Answers[i] = nil
+			continue
+		}
+		res.Answers[i] = decodeConfirmedAnswerTransportToConfirmedAnswer(val)
+	}
+	res.Examples = make([]*ExampleItem, len(v.Examples))
+	for i, val := range v.Examples {
+		if val == nil {
+			res.Examples[i] = nil
+			continue
+		}
+		res.Examples[i] = decodeExampleItemTransportToExampleItem(val)
+	}
+	res.CoverageStatements = make([]*TestCoverageStatement, len(v.CoverageStatements))
+	for i, val := range v.CoverageStatements {
+		if val == nil {
+			res.CoverageStatements[i] = nil
+			continue
+		}
+		res.CoverageStatements[i] = decodeTestCoverageStatementTransportToTestCoverageStatement(val)
 	}
 	switch string(v.Taking.Kind()) {
 	case "building":
@@ -27838,6 +29102,29 @@ func decodeTeamRoleStateTransportToTeamRoleState(v *jsonTeamRoleStateTransport) 
 		Attention:  *v.Attention,
 		Watcher:    *v.Watcher,
 		Assignment: *v.Assignment,
+	}
+
+	return res
+}
+
+func decodeTestCoverageNotRecordedTransportToTestCoverageNotRecorded(v *jsonTestCoverageNotRecordedTransport) *TestCoverageNotRecorded {
+	res := &TestCoverageNotRecorded{}
+
+	return res
+}
+
+func decodeTestCoverageStatementTransportToTestCoverageStatement(v *jsonTestCoverageStatementTransport) *TestCoverageStatement {
+	res := &TestCoverageStatement{
+		Scenario:    TestCoverageReference(*v.Scenario),
+		Explanation: *v.Explanation,
+	}
+	res.QuestionIds = make([]TestCoverageReference, len(v.QuestionIds))
+	for i, val := range v.QuestionIds {
+		res.QuestionIds[i] = TestCoverageReference(*val)
+	}
+	res.ExampleIds = make([]TestCoverageReference, len(v.ExampleIds))
+	for i, val := range v.ExampleIds {
+		res.ExampleIds[i] = TestCoverageReference(*val)
 	}
 
 	return res
@@ -28984,6 +30271,60 @@ func encodeRecordedRunStoryToRecordedRunStoryTransport(v *RecordedRunStory) *jso
 		mappingValue = u
 	}
 	res.Mapping = &mappingValue
+	var testCoverageValue jsonTestCoverageTransport
+	switch string(v.TestCoverage.Kind()) {
+	case "recorded":
+		actual, _ := v.TestCoverage.AsRecorded()
+		var obj *jsonRecordedTestCoverageTransport
+		if actual != nil {
+			obj = encodeRecordedTestCoverageToRecordedTestCoverageTransport(actual)
+		}
+		u := testCoverageValue
+		u.SetRecorded((*jsonRecordedTestCoverageTransport)(obj))
+		testCoverageValue = u
+	case "not_recorded":
+		actual, _ := v.TestCoverage.AsNotRecorded()
+		var obj *jsonTestCoverageNotRecordedTransport
+		if actual != nil {
+			obj = encodeTestCoverageNotRecordedToTestCoverageNotRecordedTransport(actual)
+		}
+		u := testCoverageValue
+		u.SetNotRecorded((*jsonTestCoverageNotRecordedTransport)(obj))
+		testCoverageValue = u
+	}
+	res.TestCoverage = &testCoverageValue
+
+	return res
+}
+
+func encodeRecordedTestCoverageToRecordedTestCoverageTransport(v *RecordedTestCoverage) *jsonRecordedTestCoverageTransport {
+	res := &jsonRecordedTestCoverageTransport{}
+	report := recordedRunStoryIntTransport(v.Report)
+	res.Report = &report
+	res.Answers = make([]*jsonConfirmedAnswerTransport, len(v.Answers))
+	for i, val := range v.Answers {
+		if val == nil {
+			res.Answers[i] = nil
+			continue
+		}
+		res.Answers[i] = encodeConfirmedAnswerToConfirmedAnswerTransport(val)
+	}
+	res.Examples = make([]*jsonExampleItemTransport, len(v.Examples))
+	for i, val := range v.Examples {
+		if val == nil {
+			res.Examples[i] = nil
+			continue
+		}
+		res.Examples[i] = encodeExampleItemToExampleItemTransport(val)
+	}
+	res.CoverageStatements = make([]*jsonTestCoverageStatementTransport, len(v.CoverageStatements))
+	for i, val := range v.CoverageStatements {
+		if val == nil {
+			res.CoverageStatements[i] = nil
+			continue
+		}
+		res.CoverageStatements[i] = encodeTestCoverageStatementToTestCoverageStatementTransport(val)
+	}
 
 	return res
 }
@@ -29075,6 +30416,30 @@ func encodeStartedBuildToStartedBuildTransport(v *StartedBuild) *jsonStartedBuil
 		}
 		res.RequiredTests[i] = encodeRequiredTestToRequiredTestTransport(val)
 	}
+	res.Answers = make([]*jsonConfirmedAnswerTransport, len(v.Answers))
+	for i, val := range v.Answers {
+		if val == nil {
+			res.Answers[i] = nil
+			continue
+		}
+		res.Answers[i] = encodeConfirmedAnswerToConfirmedAnswerTransport(val)
+	}
+	res.Examples = make([]*jsonExampleItemTransport, len(v.Examples))
+	for i, val := range v.Examples {
+		if val == nil {
+			res.Examples[i] = nil
+			continue
+		}
+		res.Examples[i] = encodeExampleItemToExampleItemTransport(val)
+	}
+	res.CoverageStatements = make([]*jsonTestCoverageStatementTransport, len(v.CoverageStatements))
+	for i, val := range v.CoverageStatements {
+		if val == nil {
+			res.CoverageStatements[i] = nil
+			continue
+		}
+		res.CoverageStatements[i] = encodeTestCoverageStatementToTestCoverageStatementTransport(val)
+	}
 	var takingValue jsonBuildTakingTransport
 	switch string(v.Taking.Kind()) {
 	case "building":
@@ -29137,6 +30502,30 @@ func encodeStartedBuildToStartedBuildTransport2(v *StartedBuild) *jsonStartedBui
 		}
 		res.RequiredTests[i] = encodeRequiredTestToRequiredTestTransport(val)
 	}
+	res.Answers = make([]*jsonConfirmedAnswerTransport, len(v.Answers))
+	for i, val := range v.Answers {
+		if val == nil {
+			res.Answers[i] = nil
+			continue
+		}
+		res.Answers[i] = encodeConfirmedAnswerToConfirmedAnswerTransport(val)
+	}
+	res.Examples = make([]*jsonExampleItemTransport, len(v.Examples))
+	for i, val := range v.Examples {
+		if val == nil {
+			res.Examples[i] = nil
+			continue
+		}
+		res.Examples[i] = encodeExampleItemToExampleItemTransport(val)
+	}
+	res.CoverageStatements = make([]*jsonTestCoverageStatementTransport, len(v.CoverageStatements))
+	for i, val := range v.CoverageStatements {
+		if val == nil {
+			res.CoverageStatements[i] = nil
+			continue
+		}
+		res.CoverageStatements[i] = encodeTestCoverageStatementToTestCoverageStatementTransport(val)
+	}
 	var takingValue jsonBuildTakingTransport
 	switch string(v.Taking.Kind()) {
 	case "building":
@@ -29198,6 +30587,30 @@ func encodeStartedBuildToStartedBuildTransport3(v *StartedBuild) *jsonStartedBui
 			continue
 		}
 		res.RequiredTests[i] = encodeRequiredTestToRequiredTestTransport(val)
+	}
+	res.Answers = make([]*jsonConfirmedAnswerTransport, len(v.Answers))
+	for i, val := range v.Answers {
+		if val == nil {
+			res.Answers[i] = nil
+			continue
+		}
+		res.Answers[i] = encodeConfirmedAnswerToConfirmedAnswerTransport(val)
+	}
+	res.Examples = make([]*jsonExampleItemTransport, len(v.Examples))
+	for i, val := range v.Examples {
+		if val == nil {
+			res.Examples[i] = nil
+			continue
+		}
+		res.Examples[i] = encodeExampleItemToExampleItemTransport(val)
+	}
+	res.CoverageStatements = make([]*jsonTestCoverageStatementTransport, len(v.CoverageStatements))
+	for i, val := range v.CoverageStatements {
+		if val == nil {
+			res.CoverageStatements[i] = nil
+			continue
+		}
+		res.CoverageStatements[i] = encodeTestCoverageStatementToTestCoverageStatementTransport(val)
 	}
 	var takingValue jsonBuildTakingTransport
 	switch string(v.Taking.Kind()) {
@@ -29347,6 +30760,34 @@ func encodeTeamRoleStateToTeamRoleStateTransport(v *TeamRoleState) *jsonTeamRole
 		Attention:  &v.Attention,
 		Watcher:    &v.Watcher,
 		Assignment: &v.Assignment,
+	}
+
+	return res
+}
+
+func encodeTestCoverageNotRecordedToTestCoverageNotRecordedTransport(v *TestCoverageNotRecorded) *jsonTestCoverageNotRecordedTransport {
+	res := &jsonTestCoverageNotRecordedTransport{}
+
+	return res
+}
+
+func encodeTestCoverageStatementToTestCoverageStatementTransport(v *TestCoverageStatement) *jsonTestCoverageStatementTransport {
+	res := &jsonTestCoverageStatementTransport{
+		Explanation: &v.Explanation,
+	}
+	scenario := jsonTestCoverageReferenceTransport(v.Scenario)
+	res.Scenario = &scenario
+	res.QuestionIds = make([]*jsonTestCoverageReferenceTransport, len(v.QuestionIds))
+	for i, val := range v.QuestionIds {
+		var transformed jsonTestCoverageReferenceTransport
+		transformed = jsonTestCoverageReferenceTransport(val)
+		res.QuestionIds[i] = &transformed
+	}
+	res.ExampleIds = make([]*jsonTestCoverageReferenceTransport, len(v.ExampleIds))
+	for i, val := range v.ExampleIds {
+		var transformed jsonTestCoverageReferenceTransport
+		transformed = jsonTestCoverageReferenceTransport(val)
+		res.ExampleIds[i] = &transformed
 	}
 
 	return res
@@ -32546,14 +33987,14 @@ func validateChangeBuildJSONValue2(path string, value any, description string) e
 	case "not_started":
 		return validateBuildNotStartedJSONValue(path, branch, "")
 	case "started":
-		return validateChangeBuildJSONValue5(path, branch, "")
+		return validateChangeBuildJSONValue13(path, branch, "")
 	default:
 		return fmt.Errorf("%s: unknown union discriminator %q", field, discriminator)
 	}
 }
 
-// validateChangeBuildJSONValue5 checks one value whose JSON shape is fixed by the generated Goa type.
-func validateChangeBuildJSONValue5(path string, value any, description string) error {
+// validateChangeBuildJSONValue13 checks one value whose JSON shape is fixed by the generated Goa type.
+func validateChangeBuildJSONValue13(path string, value any, description string) error {
 	field := path
 	if field == "" {
 		field = "$payload"
@@ -32572,10 +34013,31 @@ func validateChangeBuildJSONValue5(path string, value any, description string) e
 	sort.Strings(keys)
 	for _, key := range keys {
 		switch key {
+		case "answers":
+			if err := validateChangeBuildJSONValue14(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Confirmed answers saved when this build started; later revisions do not replace them.",
+			); err != nil {
+				return err
+			}
 		case "builder":
 			if err := validateBuilderProgressJSONValue(
 				generatedJSONChildPath(path, key, false),
 				typed[key], "The builder's assignment.",
+			); err != nil {
+				return err
+			}
+		case "coverage_statements":
+			if err := validateChangeBuildJSONValue16(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "The accepted report's writer statements; empty before acceptance or when none were stated. Surla did not judge them.",
+			); err != nil {
+				return err
+			}
+		case "examples":
+			if err := validateChangeBuildJSONValue20(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Examples saved when this build started; later revisions do not replace them.",
 			); err != nil {
 				return err
 			}
@@ -32601,7 +34063,7 @@ func validateChangeBuildJSONValue5(path string, value any, description string) e
 				return err
 			}
 		case "required_tests":
-			if err := validateChangeBuildJSONValue6(
+			if err := validateChangeBuildJSONValue4(
 				generatedJSONChildPath(path, key, false),
 				typed[key], "Tests required by this build's saved Story, in declaration order; unfinished flows require none. Empty when no finished flow requires a test.",
 			); err != nil {
@@ -32615,14 +34077,14 @@ func validateChangeBuildJSONValue5(path string, value any, description string) e
 				return err
 			}
 		case "taking":
-			if err := validateChangeBuildJSONValue8(
+			if err := validateChangeBuildJSONValue6(
 				generatedJSONChildPath(path, key, false),
 				typed[key], "Whether the user has taken this build: building until a verification of it passes; passed with the commits to merge; merged once the branch checked out in the project folder holds the commits of one passed run, the builder's and, for written tests, the tests'; dropped once the user dropped it. A project has one open build, and another change is built only once it is merged or dropped.",
 			); err != nil {
 				return err
 			}
 		case "test_writer":
-			if err := validateChangeBuildJSONValue9(
+			if err := validateChangeBuildJSONValue7(
 				generatedJSONChildPath(path, key, false),
 				typed[key], "The test writer's assignment.",
 			); err != nil {
@@ -32630,7 +34092,10 @@ func validateChangeBuildJSONValue5(path string, value any, description string) e
 			}
 		default:
 			return unknownJSONFieldError(path, key, []string{
+				"answers",
 				"builder",
+				"coverage_statements",
+				"examples",
 				"in_force",
 				"request_revision",
 				"required_test_count",
@@ -32644,8 +34109,308 @@ func validateChangeBuildJSONValue5(path string, value any, description string) e
 	return nil
 }
 
-// validateChangeBuildJSONValue6 checks one value whose JSON shape is fixed by the generated Goa type.
-func validateChangeBuildJSONValue6(path string, value any, description string) error {
+// validateChangeBuildJSONValue14 checks one value whose JSON shape is fixed by the generated Goa type.
+func validateChangeBuildJSONValue14(path string, value any, description string) error {
+	field := path
+	if field == "" {
+		field = "$payload"
+	}
+	if value == nil {
+		return invalidGeneratedFieldTypeError(field, "array", "null", description)
+	}
+	typed, ok := value.([]any)
+	if !ok {
+		return invalidGeneratedFieldTypeError(field, "array", decodedJSONType(value), description)
+	}
+	for index, item := range typed {
+		if err := validateChangeBuildJSONValue15(
+			generatedJSONChildPath(path, strconv.Itoa(index), true),
+			item, description,
+		); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// validateChangeBuildJSONValue15 checks one value whose JSON shape is fixed by the generated Goa type.
+func validateChangeBuildJSONValue15(path string, value any, description string) error {
+	field := path
+	if field == "" {
+		field = "$payload"
+	}
+	if value == nil {
+		return invalidGeneratedFieldTypeError(field, "object", "null", description)
+	}
+	typed, ok := value.(map[string]any)
+	if !ok {
+		return invalidGeneratedFieldTypeError(field, "object", decodedJSONType(value), description)
+	}
+	keys := make([]string, 0, len(typed))
+	for key := range typed {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		switch key {
+		case "answer":
+			if err := validateAgentPolicyItemJSONValue2(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "The option the user confirmed, exactly as confirmed.",
+			); err != nil {
+				return err
+			}
+		case "id":
+			if err := validateAgentPolicyItemJSONValue2(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Question identifier on the Change Card.",
+			); err != nil {
+				return err
+			}
+		case "question":
+			if err := validateAgentPolicyItemJSONValue2(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "The question as the user answered it.",
+			); err != nil {
+				return err
+			}
+		default:
+			return unknownJSONFieldError(path, key, []string{
+				"answer",
+				"id",
+				"question",
+			})
+		}
+	}
+	return nil
+}
+
+// validateChangeBuildJSONValue16 checks one value whose JSON shape is fixed by the generated Goa type.
+func validateChangeBuildJSONValue16(path string, value any, description string) error {
+	field := path
+	if field == "" {
+		field = "$payload"
+	}
+	if value == nil {
+		return invalidGeneratedFieldTypeError(field, "array", "null", description)
+	}
+	typed, ok := value.([]any)
+	if !ok {
+		return invalidGeneratedFieldTypeError(field, "array", decodedJSONType(value), description)
+	}
+	for index, item := range typed {
+		if err := validateChangeBuildJSONValue17(
+			generatedJSONChildPath(path, strconv.Itoa(index), true),
+			item, description,
+		); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// validateChangeBuildJSONValue17 checks one value whose JSON shape is fixed by the generated Goa type.
+func validateChangeBuildJSONValue17(path string, value any, description string) error {
+	field := path
+	if field == "" {
+		field = "$payload"
+	}
+	if value == nil {
+		return invalidGeneratedFieldTypeError(field, "object", "null", description)
+	}
+	typed, ok := value.(map[string]any)
+	if !ok {
+		return invalidGeneratedFieldTypeError(field, "object", decodedJSONType(value), description)
+	}
+	keys := make([]string, 0, len(typed))
+	for key := range typed {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		switch key {
+		case "example_ids":
+			if err := validateChangeBuildJSONValue18(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Example IDs from the assignment's examples[].id; empty when this statement names only answers.",
+			); err != nil {
+				return err
+			}
+		case "explanation":
+			if err := validateAgentPolicyItemJSONValue2(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Interaction or assertion the writer says exercises these requirements.",
+			); err != nil {
+				return err
+			}
+		case "question_ids":
+			if err := validateChangeBuildJSONValue19(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Question IDs from the assignment's answers[].id; empty when this statement names only examples.",
+			); err != nil {
+				return err
+			}
+		case "scenario":
+			if err := validateAgentPolicyItemJSONValue2(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Exact declared scenario identifier.",
+			); err != nil {
+				return err
+			}
+		default:
+			return unknownJSONFieldError(path, key, []string{
+				"example_ids",
+				"explanation",
+				"question_ids",
+				"scenario",
+			})
+		}
+	}
+	return nil
+}
+
+// validateChangeBuildJSONValue18 checks one value whose JSON shape is fixed by the generated Goa type.
+func validateChangeBuildJSONValue18(path string, value any, description string) error {
+	field := path
+	if field == "" {
+		field = "$payload"
+	}
+	if value == nil {
+		return invalidGeneratedFieldTypeError(field, "array", "null", description)
+	}
+	typed, ok := value.([]any)
+	if !ok {
+		return invalidGeneratedFieldTypeError(field, "array", decodedJSONType(value), description)
+	}
+	for index, item := range typed {
+		if err := validateAgentPolicyItemJSONValue2(
+			generatedJSONChildPath(path, strconv.Itoa(index), true),
+			item, description,
+		); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// validateChangeBuildJSONValue19 checks one value whose JSON shape is fixed by the generated Goa type.
+func validateChangeBuildJSONValue19(path string, value any, description string) error {
+	field := path
+	if field == "" {
+		field = "$payload"
+	}
+	if value == nil {
+		return invalidGeneratedFieldTypeError(field, "array", "null", description)
+	}
+	typed, ok := value.([]any)
+	if !ok {
+		return invalidGeneratedFieldTypeError(field, "array", decodedJSONType(value), description)
+	}
+	for index, item := range typed {
+		if err := validateAgentPolicyItemJSONValue2(
+			generatedJSONChildPath(path, strconv.Itoa(index), true),
+			item, description,
+		); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// validateChangeBuildJSONValue20 checks one value whose JSON shape is fixed by the generated Goa type.
+func validateChangeBuildJSONValue20(path string, value any, description string) error {
+	field := path
+	if field == "" {
+		field = "$payload"
+	}
+	if value == nil {
+		return invalidGeneratedFieldTypeError(field, "array", "null", description)
+	}
+	typed, ok := value.([]any)
+	if !ok {
+		return invalidGeneratedFieldTypeError(field, "array", decodedJSONType(value), description)
+	}
+	for index, item := range typed {
+		if err := validateChangeBuildJSONValue3(
+			generatedJSONChildPath(path, strconv.Itoa(index), true),
+			item, description,
+		); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// validateChangeBuildJSONValue3 checks one value whose JSON shape is fixed by the generated Goa type.
+func validateChangeBuildJSONValue3(path string, value any, description string) error {
+	field := path
+	if field == "" {
+		field = "$payload"
+	}
+	if value == nil {
+		return invalidGeneratedFieldTypeError(field, "object", "null", description)
+	}
+	typed, ok := value.(map[string]any)
+	if !ok {
+		return invalidGeneratedFieldTypeError(field, "object", decodedJSONType(value), description)
+	}
+	keys := make([]string, 0, len(typed))
+	for key := range typed {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		switch key {
+		case "expected_outcome":
+			if err := validateAgentPolicyItemJSONValue2(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Expected side effect and response behavior.",
+			); err != nil {
+				return err
+			}
+		case "id":
+			if err := validateAgentPolicyItemJSONValue2(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Stable example identifier. Default code-assigned IDs use check_01, check_02, ... (valid goa-ai/eval Scenario names). confirm_intent preserves caller-chosen IDs.",
+			); err != nil {
+				return err
+			}
+		case "input_summary":
+			if err := validateAgentPolicyItemJSONValue2(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Representative user request and domain fixture state.",
+			); err != nil {
+				return err
+			}
+		case "scenario":
+			if err := validateAgentPolicyItemJSONValue2(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Plain-English scenario description.",
+			); err != nil {
+				return err
+			}
+		case "verification_kind":
+			if err := validateAgentPolicyItemJSONValue2(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Evaluator check classification (deterministic or model_judged).",
+			); err != nil {
+				return err
+			}
+		default:
+			return unknownJSONFieldError(path, key, []string{
+				"expected_outcome",
+				"id",
+				"input_summary",
+				"scenario",
+				"verification_kind",
+			})
+		}
+	}
+	return nil
+}
+
+// validateChangeBuildJSONValue4 checks one value whose JSON shape is fixed by the generated Goa type.
+func validateChangeBuildJSONValue4(path string, value any, description string) error {
 	field := path
 	if field == "" {
 		field = "$payload"
@@ -32661,7 +34426,7 @@ func validateChangeBuildJSONValue6(path string, value any, description string) e
 		if item == nil {
 			continue
 		}
-		if err := validateChangeBuildJSONValue7(
+		if err := validateChangeBuildJSONValue5(
 			generatedJSONChildPath(path, strconv.Itoa(index), true),
 			item, description,
 		); err != nil {
@@ -32671,8 +34436,8 @@ func validateChangeBuildJSONValue6(path string, value any, description string) e
 	return nil
 }
 
-// validateChangeBuildJSONValue7 checks one value whose JSON shape is fixed by the generated Goa type.
-func validateChangeBuildJSONValue7(path string, value any, description string) error {
+// validateChangeBuildJSONValue5 checks one value whose JSON shape is fixed by the generated Goa type.
+func validateChangeBuildJSONValue5(path string, value any, description string) error {
 	field := path
 	if field == "" {
 		field = "$payload"
@@ -32731,8 +34496,8 @@ func validateChangeBuildJSONValue7(path string, value any, description string) e
 	return nil
 }
 
-// validateChangeBuildJSONValue8 checks one value whose JSON shape is fixed by the generated Goa type.
-func validateChangeBuildJSONValue8(path string, value any, description string) error {
+// validateChangeBuildJSONValue6 checks one value whose JSON shape is fixed by the generated Goa type.
+func validateChangeBuildJSONValue6(path string, value any, description string) error {
 	field := path
 	if field == "" {
 		field = "$payload"
@@ -32768,8 +34533,8 @@ func validateChangeBuildJSONValue8(path string, value any, description string) e
 	}
 }
 
-// validateChangeBuildJSONValue9 checks one value whose JSON shape is fixed by the generated Goa type.
-func validateChangeBuildJSONValue9(path string, value any, description string) error {
+// validateChangeBuildJSONValue7 checks one value whose JSON shape is fixed by the generated Goa type.
+func validateChangeBuildJSONValue7(path string, value any, description string) error {
 	field := path
 	if field == "" {
 		field = "$payload"
@@ -32803,7 +34568,7 @@ func validateChangeBuildJSONValue9(path string, value any, description string) e
 				return err
 			}
 		case "tests":
-			if err := validateChangeBuildJSONValue10(
+			if err := validateChangeBuildJSONValue8(
 				generatedJSONChildPath(path, key, false),
 				typed[key], "The tests' state: not_used when the project has stored verification settings; otherwise assigned, reported, needs_changes with the number of Surla's findings, accepted with the commit Surla recorded, or could_not_run with the reason and the user's step. Each verdict carries the time Surla reached it.",
 			); err != nil {
@@ -32820,8 +34585,8 @@ func validateChangeBuildJSONValue9(path string, value any, description string) e
 	return nil
 }
 
-// validateChangeBuildJSONValue10 checks one value whose JSON shape is fixed by the generated Goa type.
-func validateChangeBuildJSONValue10(path string, value any, description string) error {
+// validateChangeBuildJSONValue8 checks one value whose JSON shape is fixed by the generated Goa type.
+func validateChangeBuildJSONValue8(path string, value any, description string) error {
 	field := path
 	if field == "" {
 		field = "$payload"
@@ -32847,76 +34612,76 @@ func validateChangeBuildJSONValue10(path string, value any, description string) 
 	case "not_used":
 		return validateBuilderAssignmentJSONValue3(path, branch, "")
 	case "assigned":
-		return validateChangeBuildJSONValue11(path, branch, "")
+		return validateChangeBuildJSONValue9(path, branch, "")
 	case "reported":
-		return validateChangeBuildJSONValue12(path, branch, "")
+		return validateChangeBuildJSONValue10(path, branch, "")
 	case "needs_changes":
-		return validateChangeBuildJSONValue3(path, branch, "")
+		return validateChangeBuildJSONValue11(path, branch, "")
 	case "accepted":
 		return validateBuilderAssignmentJSONValue5(path, branch, "")
 	case "could_not_run":
-		return validateChangeBuildJSONValue4(path, branch, "")
+		return validateChangeBuildJSONValue12(path, branch, "")
 	default:
 		return fmt.Errorf("%s: unknown union discriminator %q", field, discriminator)
 	}
 }
 
+// validateChangeBuildJSONValue9 checks one value whose JSON shape is fixed by the generated Goa type.
+func validateChangeBuildJSONValue9(path string, value any, description string) error {
+	field := path
+	if field == "" {
+		field = "$payload"
+	}
+	if value == nil {
+		return invalidGeneratedFieldTypeError(field, "object", "null", description)
+	}
+	typed, ok := value.(map[string]any)
+	if !ok {
+		return invalidGeneratedFieldTypeError(field, "object", decodedJSONType(value), description)
+	}
+	keys := make([]string, 0, len(typed))
+	for key := range typed {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		switch key {
+		default:
+			return unknownJSONFieldError(path, key, []string{})
+		}
+	}
+	return nil
+}
+
+// validateChangeBuildJSONValue10 checks one value whose JSON shape is fixed by the generated Goa type.
+func validateChangeBuildJSONValue10(path string, value any, description string) error {
+	field := path
+	if field == "" {
+		field = "$payload"
+	}
+	if value == nil {
+		return invalidGeneratedFieldTypeError(field, "object", "null", description)
+	}
+	typed, ok := value.(map[string]any)
+	if !ok {
+		return invalidGeneratedFieldTypeError(field, "object", decodedJSONType(value), description)
+	}
+	keys := make([]string, 0, len(typed))
+	for key := range typed {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		switch key {
+		default:
+			return unknownJSONFieldError(path, key, []string{})
+		}
+	}
+	return nil
+}
+
 // validateChangeBuildJSONValue11 checks one value whose JSON shape is fixed by the generated Goa type.
 func validateChangeBuildJSONValue11(path string, value any, description string) error {
-	field := path
-	if field == "" {
-		field = "$payload"
-	}
-	if value == nil {
-		return invalidGeneratedFieldTypeError(field, "object", "null", description)
-	}
-	typed, ok := value.(map[string]any)
-	if !ok {
-		return invalidGeneratedFieldTypeError(field, "object", decodedJSONType(value), description)
-	}
-	keys := make([]string, 0, len(typed))
-	for key := range typed {
-		keys = append(keys, key)
-	}
-	sort.Strings(keys)
-	for _, key := range keys {
-		switch key {
-		default:
-			return unknownJSONFieldError(path, key, []string{})
-		}
-	}
-	return nil
-}
-
-// validateChangeBuildJSONValue12 checks one value whose JSON shape is fixed by the generated Goa type.
-func validateChangeBuildJSONValue12(path string, value any, description string) error {
-	field := path
-	if field == "" {
-		field = "$payload"
-	}
-	if value == nil {
-		return invalidGeneratedFieldTypeError(field, "object", "null", description)
-	}
-	typed, ok := value.(map[string]any)
-	if !ok {
-		return invalidGeneratedFieldTypeError(field, "object", decodedJSONType(value), description)
-	}
-	keys := make([]string, 0, len(typed))
-	for key := range typed {
-		keys = append(keys, key)
-	}
-	sort.Strings(keys)
-	for _, key := range keys {
-		switch key {
-		default:
-			return unknownJSONFieldError(path, key, []string{})
-		}
-	}
-	return nil
-}
-
-// validateChangeBuildJSONValue3 checks one value whose JSON shape is fixed by the generated Goa type.
-func validateChangeBuildJSONValue3(path string, value any, description string) error {
 	field := path
 	if field == "" {
 		field = "$payload"
@@ -32959,8 +34724,8 @@ func validateChangeBuildJSONValue3(path string, value any, description string) e
 	return nil
 }
 
-// validateChangeBuildJSONValue4 checks one value whose JSON shape is fixed by the generated Goa type.
-func validateChangeBuildJSONValue4(path string, value any, description string) error {
+// validateChangeBuildJSONValue12 checks one value whose JSON shape is fixed by the generated Goa type.
+func validateChangeBuildJSONValue12(path string, value any, description string) error {
 	field := path
 	if field == "" {
 		field = "$payload"
@@ -33067,14 +34832,14 @@ func validateChangeCardResultJSONValue(path string, value any, description strin
 				return err
 			}
 		case "examples":
-			if err := validateChangeCardResultJSONValue20(
+			if err := validateChangeCardResultJSONValue19(
 				generatedJSONChildPath(path, key, false),
 				typed[key], "Concrete examples mapped to evaluator checks.",
 			); err != nil {
 				return err
 			}
 		case "preserved_behaviors":
-			if err := validateChangeCardResultJSONValue22(
+			if err := validateChangeCardResultJSONValue20(
 				generatedJSONChildPath(path, key, false),
 				typed[key], "Existing contract invariants preserved by this change.",
 			); err != nil {
@@ -33088,7 +34853,7 @@ func validateChangeCardResultJSONValue(path string, value any, description strin
 				return err
 			}
 		case "proposed_revision":
-			if err := validateChangeCardResultJSONValue23(
+			if err := validateChangeCardResultJSONValue21(
 				generatedJSONChildPath(path, key, false),
 				typed[key], "The revision the guide proposed beside this confirmed revision, while it waits for the user to adopt or decline it; absent otherwise. This card's own fields describe the revision in force.",
 			); err != nil {
@@ -33109,7 +34874,7 @@ func validateChangeCardResultJSONValue(path string, value any, description strin
 				return err
 			}
 		case "stories":
-			if err := validateChangeCardResultJSONValue18(
+			if err := validateChangeCardResultJSONValue17(
 				generatedJSONChildPath(path, key, false),
 				typed[key], "Evaluated domain Stories adopted from refresh_story for this Change Card revision in declaration order; omitted when the card has no Stories. Included in request_revision.",
 			); err != nil {
@@ -33123,14 +34888,14 @@ func validateChangeCardResultJSONValue(path string, value any, description strin
 				return err
 			}
 		case "ui_composition":
-			if err := validateChangeCardResultJSONValue17(
+			if err := validateChangeCardResultJSONValue16(
 				generatedJSONChildPath(path, key, false),
 				typed[key], "Decision view the caller composed for this revision in its analysis, when it sent one. A confirm_intent that changes answers or examples returns the new revision without it.",
 			); err != nil {
 				return err
 			}
 		case "unverified_approval":
-			if err := validateChangeCardResultJSONValue19(
+			if err := validateChangeCardResultJSONValue18(
 				generatedJSONChildPath(path, key, false),
 				typed[key], "Saved Checkpoint 5 approval of this revision when suite_commit still matches the chosen tests' commit and promotion settings are configured, but the staged binaries could not be verified on this read. At most one of approval or unverified_approval is set. It is never saved to disk or hashed into request_revision.",
 			); err != nil {
@@ -33215,8 +34980,8 @@ func validateChangeCardResultJSONValue13(path string, value any, description str
 	return nil
 }
 
-// validateChangeCardResultJSONValue20 checks one value whose JSON shape is fixed by the generated Goa type.
-func validateChangeCardResultJSONValue20(path string, value any, description string) error {
+// validateChangeCardResultJSONValue19 checks one value whose JSON shape is fixed by the generated Goa type.
+func validateChangeCardResultJSONValue19(path string, value any, description string) error {
 	field := path
 	if field == "" {
 		field = "$payload"
@@ -33232,7 +34997,31 @@ func validateChangeCardResultJSONValue20(path string, value any, description str
 		if item == nil {
 			continue
 		}
-		if err := validateChangeCardResultJSONValue21(
+		if err := validateChangeBuildJSONValue3(
+			generatedJSONChildPath(path, strconv.Itoa(index), true),
+			item, description,
+		); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// validateChangeCardResultJSONValue20 checks one value whose JSON shape is fixed by the generated Goa type.
+func validateChangeCardResultJSONValue20(path string, value any, description string) error {
+	field := path
+	if field == "" {
+		field = "$payload"
+	}
+	if value == nil {
+		return invalidGeneratedFieldTypeError(field, "array", "null", description)
+	}
+	typed, ok := value.([]any)
+	if !ok {
+		return invalidGeneratedFieldTypeError(field, "array", decodedJSONType(value), description)
+	}
+	for index, item := range typed {
+		if err := validateAgentPolicyItemJSONValue2(
 			generatedJSONChildPath(path, strconv.Itoa(index), true),
 			item, description,
 		); err != nil {
@@ -33262,121 +35051,29 @@ func validateChangeCardResultJSONValue21(path string, value any, description str
 	sort.Strings(keys)
 	for _, key := range keys {
 		switch key {
-		case "expected_outcome":
-			if err := validateAgentPolicyItemJSONValue2(
-				generatedJSONChildPath(path, key, false),
-				typed[key], "Expected side effect and response behavior.",
-			); err != nil {
-				return err
-			}
-		case "id":
-			if err := validateAgentPolicyItemJSONValue2(
-				generatedJSONChildPath(path, key, false),
-				typed[key], "Stable example identifier. Default code-assigned IDs use check_01, check_02, ... (valid goa-ai/eval Scenario names). confirm_intent preserves caller-chosen IDs.",
-			); err != nil {
-				return err
-			}
-		case "input_summary":
-			if err := validateAgentPolicyItemJSONValue2(
-				generatedJSONChildPath(path, key, false),
-				typed[key], "Representative user request and domain fixture state.",
-			); err != nil {
-				return err
-			}
-		case "scenario":
-			if err := validateAgentPolicyItemJSONValue2(
-				generatedJSONChildPath(path, key, false),
-				typed[key], "Plain-English scenario description.",
-			); err != nil {
-				return err
-			}
-		case "verification_kind":
-			if err := validateAgentPolicyItemJSONValue2(
-				generatedJSONChildPath(path, key, false),
-				typed[key], "Evaluator check classification (deterministic or model_judged).",
-			); err != nil {
-				return err
-			}
-		default:
-			return unknownJSONFieldError(path, key, []string{
-				"expected_outcome",
-				"id",
-				"input_summary",
-				"scenario",
-				"verification_kind",
-			})
-		}
-	}
-	return nil
-}
-
-// validateChangeCardResultJSONValue22 checks one value whose JSON shape is fixed by the generated Goa type.
-func validateChangeCardResultJSONValue22(path string, value any, description string) error {
-	field := path
-	if field == "" {
-		field = "$payload"
-	}
-	if value == nil {
-		return invalidGeneratedFieldTypeError(field, "array", "null", description)
-	}
-	typed, ok := value.([]any)
-	if !ok {
-		return invalidGeneratedFieldTypeError(field, "array", decodedJSONType(value), description)
-	}
-	for index, item := range typed {
-		if err := validateAgentPolicyItemJSONValue2(
-			generatedJSONChildPath(path, strconv.Itoa(index), true),
-			item, description,
-		); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-// validateChangeCardResultJSONValue23 checks one value whose JSON shape is fixed by the generated Goa type.
-func validateChangeCardResultJSONValue23(path string, value any, description string) error {
-	field := path
-	if field == "" {
-		field = "$payload"
-	}
-	if value == nil {
-		return invalidGeneratedFieldTypeError(field, "object", "null", description)
-	}
-	typed, ok := value.(map[string]any)
-	if !ok {
-		return invalidGeneratedFieldTypeError(field, "object", decodedJSONType(value), description)
-	}
-	keys := make([]string, 0, len(typed))
-	for key := range typed {
-		keys = append(keys, key)
-	}
-	sort.Strings(keys)
-	for _, key := range keys {
-		switch key {
 		case "ambiguities":
-			if err := validateChangeCardResultJSONValue24(
+			if err := validateChangeCardResultJSONValue22(
 				generatedJSONChildPath(path, key, false),
 				typed[key], "Domain questions the user answers when adopting this revision.",
 			); err != nil {
 				return err
 			}
 		case "changed_design_files":
-			if err := validateChangeCardResultJSONValue25(
+			if err := validateChangeCardResultJSONValue23(
 				generatedJSONChildPath(path, key, false),
 				typed[key], "Paths of the design/*.go files that differ between the design source the confirmed revision was made from and the one this revision was made from (added, removed or changed), in path order; empty when both were made from the same design files. Adopting the revision binds it to its own design source.",
 			); err != nil {
 				return err
 			}
 		case "examples":
-			if err := validateChangeCardResultJSONValue26(
+			if err := validateChangeCardResultJSONValue24(
 				generatedJSONChildPath(path, key, false),
 				typed[key], "Concrete examples mapped to evaluator checks.",
 			); err != nil {
 				return err
 			}
 		case "preserved_behaviors":
-			if err := validateChangeCardResultJSONValue3(
+			if err := validateChangeCardResultJSONValue25(
 				generatedJSONChildPath(path, key, false),
 				typed[key], "Existing contract invariants preserved by this change.",
 			); err != nil {
@@ -33397,7 +35094,7 @@ func validateChangeCardResultJSONValue23(path string, value any, description str
 				return err
 			}
 		case "stories":
-			if err := validateChangeCardResultJSONValue4(
+			if err := validateChangeCardResultJSONValue3(
 				generatedJSONChildPath(path, key, false),
 				typed[key], "Evaluated domain Stories of this revision in declaration order; omitted when it has none. Included in its request_revision.",
 			); err != nil {
@@ -33411,7 +35108,7 @@ func validateChangeCardResultJSONValue23(path string, value any, description str
 				return err
 			}
 		case "ui_composition":
-			if err := validateChangeCardResultJSONValue17(
+			if err := validateChangeCardResultJSONValue16(
 				generatedJSONChildPath(path, key, false),
 				typed[key], "Decision view the guide composed for this revision in its analysis, when it sent one.",
 			); err != nil {
@@ -33434,6 +35131,57 @@ func validateChangeCardResultJSONValue23(path string, value any, description str
 	return nil
 }
 
+// validateChangeCardResultJSONValue22 checks one value whose JSON shape is fixed by the generated Goa type.
+func validateChangeCardResultJSONValue22(path string, value any, description string) error {
+	field := path
+	if field == "" {
+		field = "$payload"
+	}
+	if value == nil {
+		return invalidGeneratedFieldTypeError(field, "array", "null", description)
+	}
+	typed, ok := value.([]any)
+	if !ok {
+		return invalidGeneratedFieldTypeError(field, "array", decodedJSONType(value), description)
+	}
+	for index, item := range typed {
+		if item == nil {
+			continue
+		}
+		if err := validateAmbiguityQuestionJSONValue(
+			generatedJSONChildPath(path, strconv.Itoa(index), true),
+			item, description,
+		); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// validateChangeCardResultJSONValue23 checks one value whose JSON shape is fixed by the generated Goa type.
+func validateChangeCardResultJSONValue23(path string, value any, description string) error {
+	field := path
+	if field == "" {
+		field = "$payload"
+	}
+	if value == nil {
+		return invalidGeneratedFieldTypeError(field, "array", "null", description)
+	}
+	typed, ok := value.([]any)
+	if !ok {
+		return invalidGeneratedFieldTypeError(field, "array", decodedJSONType(value), description)
+	}
+	for index, item := range typed {
+		if err := validateAgentPolicyItemJSONValue2(
+			generatedJSONChildPath(path, strconv.Itoa(index), true),
+			item, description,
+		); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // validateChangeCardResultJSONValue24 checks one value whose JSON shape is fixed by the generated Goa type.
 func validateChangeCardResultJSONValue24(path string, value any, description string) error {
 	field := path
@@ -33451,7 +35199,7 @@ func validateChangeCardResultJSONValue24(path string, value any, description str
 		if item == nil {
 			continue
 		}
-		if err := validateAmbiguityQuestionJSONValue(
+		if err := validateChangeBuildJSONValue3(
 			generatedJSONChildPath(path, strconv.Itoa(index), true),
 			item, description,
 		); err != nil {
@@ -33485,33 +35233,6 @@ func validateChangeCardResultJSONValue25(path string, value any, description str
 	return nil
 }
 
-// validateChangeCardResultJSONValue26 checks one value whose JSON shape is fixed by the generated Goa type.
-func validateChangeCardResultJSONValue26(path string, value any, description string) error {
-	field := path
-	if field == "" {
-		field = "$payload"
-	}
-	if value == nil {
-		return invalidGeneratedFieldTypeError(field, "array", "null", description)
-	}
-	typed, ok := value.([]any)
-	if !ok {
-		return invalidGeneratedFieldTypeError(field, "array", decodedJSONType(value), description)
-	}
-	for index, item := range typed {
-		if item == nil {
-			continue
-		}
-		if err := validateChangeCardResultJSONValue21(
-			generatedJSONChildPath(path, strconv.Itoa(index), true),
-			item, description,
-		); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
 // validateChangeCardResultJSONValue3 checks one value whose JSON shape is fixed by the generated Goa type.
 func validateChangeCardResultJSONValue3(path string, value any, description string) error {
 	field := path
@@ -33526,7 +35247,10 @@ func validateChangeCardResultJSONValue3(path string, value any, description stri
 		return invalidGeneratedFieldTypeError(field, "array", decodedJSONType(value), description)
 	}
 	for index, item := range typed {
-		if err := validateAgentPolicyItemJSONValue2(
+		if item == nil {
+			continue
+		}
+		if err := validateChangeCardResultJSONValue4(
 			generatedJSONChildPath(path, strconv.Itoa(index), true),
 			item, description,
 		); err != nil {
@@ -33538,33 +35262,6 @@ func validateChangeCardResultJSONValue3(path string, value any, description stri
 
 // validateChangeCardResultJSONValue4 checks one value whose JSON shape is fixed by the generated Goa type.
 func validateChangeCardResultJSONValue4(path string, value any, description string) error {
-	field := path
-	if field == "" {
-		field = "$payload"
-	}
-	if value == nil {
-		return invalidGeneratedFieldTypeError(field, "array", "null", description)
-	}
-	typed, ok := value.([]any)
-	if !ok {
-		return invalidGeneratedFieldTypeError(field, "array", decodedJSONType(value), description)
-	}
-	for index, item := range typed {
-		if item == nil {
-			continue
-		}
-		if err := validateChangeCardResultJSONValue5(
-			generatedJSONChildPath(path, strconv.Itoa(index), true),
-			item, description,
-		); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-// validateChangeCardResultJSONValue5 checks one value whose JSON shape is fixed by the generated Goa type.
-func validateChangeCardResultJSONValue5(path string, value any, description string) error {
 	field := path
 	if field == "" {
 		field = "$payload"
@@ -33584,7 +35281,7 @@ func validateChangeCardResultJSONValue5(path string, value any, description stri
 	for _, key := range keys {
 		switch key {
 		case "actors":
-			if err := validateChangeCardResultJSONValue6(
+			if err := validateChangeCardResultJSONValue5(
 				generatedJSONChildPath(path, key, false),
 				typed[key], "Domain roles declared in the Story in declaration order.",
 			); err != nil {
@@ -33598,7 +35295,7 @@ func validateChangeCardResultJSONValue5(path string, value any, description stri
 				return err
 			}
 		case "flows":
-			if err := validateChangeCardResultJSONValue8(
+			if err := validateChangeCardResultJSONValue7(
 				generatedJSONChildPath(path, key, false),
 				typed[key], "Timeline paths declared in the Story in declaration order.",
 			); err != nil {
@@ -33623,8 +35320,8 @@ func validateChangeCardResultJSONValue5(path string, value any, description stri
 	return nil
 }
 
-// validateChangeCardResultJSONValue6 checks one value whose JSON shape is fixed by the generated Goa type.
-func validateChangeCardResultJSONValue6(path string, value any, description string) error {
+// validateChangeCardResultJSONValue5 checks one value whose JSON shape is fixed by the generated Goa type.
+func validateChangeCardResultJSONValue5(path string, value any, description string) error {
 	field := path
 	if field == "" {
 		field = "$payload"
@@ -33640,7 +35337,7 @@ func validateChangeCardResultJSONValue6(path string, value any, description stri
 		if item == nil {
 			continue
 		}
-		if err := validateChangeCardResultJSONValue7(
+		if err := validateChangeCardResultJSONValue6(
 			generatedJSONChildPath(path, strconv.Itoa(index), true),
 			item, description,
 		); err != nil {
@@ -33650,8 +35347,8 @@ func validateChangeCardResultJSONValue6(path string, value any, description stri
 	return nil
 }
 
-// validateChangeCardResultJSONValue7 checks one value whose JSON shape is fixed by the generated Goa type.
-func validateChangeCardResultJSONValue7(path string, value any, description string) error {
+// validateChangeCardResultJSONValue6 checks one value whose JSON shape is fixed by the generated Goa type.
+func validateChangeCardResultJSONValue6(path string, value any, description string) error {
 	field := path
 	if field == "" {
 		field = "$payload"
@@ -33702,8 +35399,8 @@ func validateChangeCardResultJSONValue7(path string, value any, description stri
 	return nil
 }
 
-// validateChangeCardResultJSONValue8 checks one value whose JSON shape is fixed by the generated Goa type.
-func validateChangeCardResultJSONValue8(path string, value any, description string) error {
+// validateChangeCardResultJSONValue7 checks one value whose JSON shape is fixed by the generated Goa type.
+func validateChangeCardResultJSONValue7(path string, value any, description string) error {
 	field := path
 	if field == "" {
 		field = "$payload"
@@ -33719,7 +35416,7 @@ func validateChangeCardResultJSONValue8(path string, value any, description stri
 		if item == nil {
 			continue
 		}
-		if err := validateChangeCardResultJSONValue9(
+		if err := validateChangeCardResultJSONValue8(
 			generatedJSONChildPath(path, strconv.Itoa(index), true),
 			item, description,
 		); err != nil {
@@ -33729,8 +35426,8 @@ func validateChangeCardResultJSONValue8(path string, value any, description stri
 	return nil
 }
 
-// validateChangeCardResultJSONValue9 checks one value whose JSON shape is fixed by the generated Goa type.
-func validateChangeCardResultJSONValue9(path string, value any, description string) error {
+// validateChangeCardResultJSONValue8 checks one value whose JSON shape is fixed by the generated Goa type.
+func validateChangeCardResultJSONValue8(path string, value any, description string) error {
 	field := path
 	if field == "" {
 		field = "$payload"
@@ -33771,14 +35468,14 @@ func validateChangeCardResultJSONValue9(path string, value any, description stri
 				return err
 			}
 		case "questions":
-			if err := validateChangeCardResultJSONValue10(
+			if err := validateChangeCardResultJSONValue9(
 				generatedJSONChildPath(path, key, false),
 				typed[key], "Unresolved flow-level decisions in declaration order.",
 			); err != nil {
 				return err
 			}
 		case "steps":
-			if err := validateChangeCardResultJSONValue14(
+			if err := validateChangeCardResultJSONValue12(
 				generatedJSONChildPath(path, key, false),
 				typed[key], "Starting, intermediate, and outcome steps in declaration order.",
 			); err != nil {
@@ -33805,8 +35502,8 @@ func validateChangeCardResultJSONValue9(path string, value any, description stri
 	return nil
 }
 
-// validateChangeCardResultJSONValue10 checks one value whose JSON shape is fixed by the generated Goa type.
-func validateChangeCardResultJSONValue10(path string, value any, description string) error {
+// validateChangeCardResultJSONValue9 checks one value whose JSON shape is fixed by the generated Goa type.
+func validateChangeCardResultJSONValue9(path string, value any, description string) error {
 	field := path
 	if field == "" {
 		field = "$payload"
@@ -33822,7 +35519,7 @@ func validateChangeCardResultJSONValue10(path string, value any, description str
 		if item == nil {
 			continue
 		}
-		if err := validateChangeCardResultJSONValue11(
+		if err := validateChangeCardResultJSONValue10(
 			generatedJSONChildPath(path, strconv.Itoa(index), true),
 			item, description,
 		); err != nil {
@@ -33832,8 +35529,8 @@ func validateChangeCardResultJSONValue10(path string, value any, description str
 	return nil
 }
 
-// validateChangeCardResultJSONValue11 checks one value whose JSON shape is fixed by the generated Goa type.
-func validateChangeCardResultJSONValue11(path string, value any, description string) error {
+// validateChangeCardResultJSONValue10 checks one value whose JSON shape is fixed by the generated Goa type.
+func validateChangeCardResultJSONValue10(path string, value any, description string) error {
 	field := path
 	if field == "" {
 		field = "$payload"
@@ -33867,7 +35564,7 @@ func validateChangeCardResultJSONValue11(path string, value any, description str
 				return err
 			}
 		case "options":
-			if err := validateChangeCardResultJSONValue12(
+			if err := validateChangeCardResultJSONValue11(
 				generatedJSONChildPath(path, key, false),
 				typed[key], "Suggested choices in declaration order.",
 			); err != nil {
@@ -33892,8 +35589,8 @@ func validateChangeCardResultJSONValue11(path string, value any, description str
 	return nil
 }
 
-// validateChangeCardResultJSONValue12 checks one value whose JSON shape is fixed by the generated Goa type.
-func validateChangeCardResultJSONValue12(path string, value any, description string) error {
+// validateChangeCardResultJSONValue11 checks one value whose JSON shape is fixed by the generated Goa type.
+func validateChangeCardResultJSONValue11(path string, value any, description string) error {
 	field := path
 	if field == "" {
 		field = "$payload"
@@ -33916,8 +35613,8 @@ func validateChangeCardResultJSONValue12(path string, value any, description str
 	return nil
 }
 
-// validateChangeCardResultJSONValue14 checks one value whose JSON shape is fixed by the generated Goa type.
-func validateChangeCardResultJSONValue14(path string, value any, description string) error {
+// validateChangeCardResultJSONValue12 checks one value whose JSON shape is fixed by the generated Goa type.
+func validateChangeCardResultJSONValue12(path string, value any, description string) error {
 	field := path
 	if field == "" {
 		field = "$payload"
@@ -33933,7 +35630,7 @@ func validateChangeCardResultJSONValue14(path string, value any, description str
 		if item == nil {
 			continue
 		}
-		if err := validateChangeCardResultJSONValue15(
+		if err := validateChangeCardResultJSONValue14(
 			generatedJSONChildPath(path, strconv.Itoa(index), true),
 			item, description,
 		); err != nil {
@@ -33943,8 +35640,8 @@ func validateChangeCardResultJSONValue14(path string, value any, description str
 	return nil
 }
 
-// validateChangeCardResultJSONValue15 checks one value whose JSON shape is fixed by the generated Goa type.
-func validateChangeCardResultJSONValue15(path string, value any, description string) error {
+// validateChangeCardResultJSONValue14 checks one value whose JSON shape is fixed by the generated Goa type.
+func validateChangeCardResultJSONValue14(path string, value any, description string) error {
 	field := path
 	if field == "" {
 		field = "$payload"
@@ -33992,7 +35689,7 @@ func validateChangeCardResultJSONValue15(path string, value any, description str
 				return err
 			}
 		case "questions":
-			if err := validateChangeCardResultJSONValue16(
+			if err := validateChangeCardResultJSONValue15(
 				generatedJSONChildPath(path, key, false),
 				typed[key], "Unresolved step-level decisions in declaration order.",
 			); err != nil {
@@ -34019,8 +35716,8 @@ func validateChangeCardResultJSONValue15(path string, value any, description str
 	return nil
 }
 
-// validateChangeCardResultJSONValue16 checks one value whose JSON shape is fixed by the generated Goa type.
-func validateChangeCardResultJSONValue16(path string, value any, description string) error {
+// validateChangeCardResultJSONValue15 checks one value whose JSON shape is fixed by the generated Goa type.
+func validateChangeCardResultJSONValue15(path string, value any, description string) error {
 	field := path
 	if field == "" {
 		field = "$payload"
@@ -34036,7 +35733,7 @@ func validateChangeCardResultJSONValue16(path string, value any, description str
 		if item == nil {
 			continue
 		}
-		if err := validateChangeCardResultJSONValue11(
+		if err := validateChangeCardResultJSONValue10(
 			generatedJSONChildPath(path, strconv.Itoa(index), true),
 			item, description,
 		); err != nil {
@@ -34046,8 +35743,8 @@ func validateChangeCardResultJSONValue16(path string, value any, description str
 	return nil
 }
 
-// validateChangeCardResultJSONValue17 checks one value whose JSON shape is fixed by the generated Goa type.
-func validateChangeCardResultJSONValue17(path string, value any, description string) error {
+// validateChangeCardResultJSONValue16 checks one value whose JSON shape is fixed by the generated Goa type.
+func validateChangeCardResultJSONValue16(path string, value any, description string) error {
 	field := path
 	if field == "" {
 		field = "$payload"
@@ -34090,8 +35787,8 @@ func validateChangeCardResultJSONValue17(path string, value any, description str
 	return nil
 }
 
-// validateChangeCardResultJSONValue18 checks one value whose JSON shape is fixed by the generated Goa type.
-func validateChangeCardResultJSONValue18(path string, value any, description string) error {
+// validateChangeCardResultJSONValue17 checks one value whose JSON shape is fixed by the generated Goa type.
+func validateChangeCardResultJSONValue17(path string, value any, description string) error {
 	field := path
 	if field == "" {
 		field = "$payload"
@@ -34107,7 +35804,7 @@ func validateChangeCardResultJSONValue18(path string, value any, description str
 		if item == nil {
 			continue
 		}
-		if err := validateChangeCardResultJSONValue5(
+		if err := validateChangeCardResultJSONValue4(
 			generatedJSONChildPath(path, strconv.Itoa(index), true),
 			item, description,
 		); err != nil {
@@ -34117,8 +35814,8 @@ func validateChangeCardResultJSONValue18(path string, value any, description str
 	return nil
 }
 
-// validateChangeCardResultJSONValue19 checks one value whose JSON shape is fixed by the generated Goa type.
-func validateChangeCardResultJSONValue19(path string, value any, description string) error {
+// validateChangeCardResultJSONValue18 checks one value whose JSON shape is fixed by the generated Goa type.
+func validateChangeCardResultJSONValue18(path string, value any, description string) error {
 	field := path
 	if field == "" {
 		field = "$payload"
@@ -34698,63 +36395,11 @@ func validateConfirmIntentPayloadJSONValue3(path string, value any, description 
 		if item == nil {
 			continue
 		}
-		if err := validateChangeCardResultJSONValue21(
+		if err := validateChangeBuildJSONValue3(
 			generatedJSONChildPath(path, strconv.Itoa(index), true),
 			item, description,
 		); err != nil {
 			return err
-		}
-	}
-	return nil
-}
-
-// validateConfirmedAnswerJSONValue checks one value whose JSON shape is fixed by the generated Goa type.
-func validateConfirmedAnswerJSONValue(path string, value any, description string) error {
-	field := path
-	if field == "" {
-		field = "$payload"
-	}
-	if value == nil {
-		return invalidGeneratedFieldTypeError(field, "object", "null", description)
-	}
-	typed, ok := value.(map[string]any)
-	if !ok {
-		return invalidGeneratedFieldTypeError(field, "object", decodedJSONType(value), description)
-	}
-	keys := make([]string, 0, len(typed))
-	for key := range typed {
-		keys = append(keys, key)
-	}
-	sort.Strings(keys)
-	for _, key := range keys {
-		switch key {
-		case "answer":
-			if err := validateAgentPolicyItemJSONValue2(
-				generatedJSONChildPath(path, key, false),
-				typed[key], "The option the user confirmed, exactly as confirmed.",
-			); err != nil {
-				return err
-			}
-		case "id":
-			if err := validateAgentPolicyItemJSONValue2(
-				generatedJSONChildPath(path, key, false),
-				typed[key], "Question identifier on the Change Card.",
-			); err != nil {
-				return err
-			}
-		case "question":
-			if err := validateAgentPolicyItemJSONValue2(
-				generatedJSONChildPath(path, key, false),
-				typed[key], "The question as the user answered it.",
-			); err != nil {
-				return err
-			}
-		default:
-			return unknownJSONFieldError(path, key, []string{
-				"answer",
-				"id",
-				"question",
-			})
 		}
 	}
 	return nil
@@ -36786,7 +38431,7 @@ func validateOpenBuildRefusalJSONValue(path string, value any, description strin
 	for _, key := range keys {
 		switch key {
 		case "build":
-			if err := validateChangeBuildJSONValue5(
+			if err := validateChangeBuildJSONValue13(
 				generatedJSONChildPath(path, key, false),
 				typed[key], "The open build as get_build reports it, with the commits to merge once a verification of it passed; drop_build takes its started_at.",
 			); err != nil {
@@ -37162,9 +38807,16 @@ func validateRecordedRunStoryJSONValue(path string, value any, description strin
 				return err
 			}
 		case "stories":
-			if err := validateRecordedRunStoryJSONValue6(
+			if err := validateRecordedRunStoryJSONValue8(
 				generatedJSONChildPath(path, key, false),
 				typed[key], "Stories as agreed for this run, in declaration order; empty when the agreement declares none.",
+			); err != nil {
+				return err
+			}
+		case "test_coverage":
+			if err := validateRecordedRunStoryJSONValue9(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "The writer's immutable statements for this run, or explicit missing historical/operator evidence.",
 			); err != nil {
 				return err
 			}
@@ -37174,6 +38826,7 @@ func validateRecordedRunStoryJSONValue(path string, value any, description strin
 				"build_started_at",
 				"mapping",
 				"stories",
+				"test_coverage",
 			})
 		}
 	}
@@ -37205,16 +38858,16 @@ func validateRecordedRunStoryJSONValue2(path string, value any, description stri
 	}
 	switch discriminator {
 	case "mapped":
-		return validateRecordedRunStoryJSONValue3(path, branch, "")
-	case "not_recorded_for_evaluator":
 		return validateRecordedRunStoryJSONValue5(path, branch, "")
+	case "not_recorded_for_evaluator":
+		return validateRecordedRunStoryJSONValue7(path, branch, "")
 	default:
 		return fmt.Errorf("%s: unknown union discriminator %q", field, discriminator)
 	}
 }
 
-// validateRecordedRunStoryJSONValue3 checks one value whose JSON shape is fixed by the generated Goa type.
-func validateRecordedRunStoryJSONValue3(path string, value any, description string) error {
+// validateRecordedRunStoryJSONValue5 checks one value whose JSON shape is fixed by the generated Goa type.
+func validateRecordedRunStoryJSONValue5(path string, value any, description string) error {
 	field := path
 	if field == "" {
 		field = "$payload"
@@ -37234,7 +38887,7 @@ func validateRecordedRunStoryJSONValue3(path string, value any, description stri
 	for _, key := range keys {
 		switch key {
 		case "required_tests":
-			if err := validateRecordedRunStoryJSONValue4(
+			if err := validateRecordedRunStoryJSONValue6(
 				generatedJSONChildPath(path, key, false),
 				typed[key], "One test per finished flow, in declaration order.",
 			); err != nil {
@@ -37249,8 +38902,8 @@ func validateRecordedRunStoryJSONValue3(path string, value any, description stri
 	return nil
 }
 
-// validateRecordedRunStoryJSONValue4 checks one value whose JSON shape is fixed by the generated Goa type.
-func validateRecordedRunStoryJSONValue4(path string, value any, description string) error {
+// validateRecordedRunStoryJSONValue6 checks one value whose JSON shape is fixed by the generated Goa type.
+func validateRecordedRunStoryJSONValue6(path string, value any, description string) error {
 	field := path
 	if field == "" {
 		field = "$payload"
@@ -37266,7 +38919,7 @@ func validateRecordedRunStoryJSONValue4(path string, value any, description stri
 		if item == nil {
 			continue
 		}
-		if err := validateChangeBuildJSONValue7(
+		if err := validateChangeBuildJSONValue5(
 			generatedJSONChildPath(path, strconv.Itoa(index), true),
 			item, description,
 		); err != nil {
@@ -37276,8 +38929,8 @@ func validateRecordedRunStoryJSONValue4(path string, value any, description stri
 	return nil
 }
 
-// validateRecordedRunStoryJSONValue5 checks one value whose JSON shape is fixed by the generated Goa type.
-func validateRecordedRunStoryJSONValue5(path string, value any, description string) error {
+// validateRecordedRunStoryJSONValue7 checks one value whose JSON shape is fixed by the generated Goa type.
+func validateRecordedRunStoryJSONValue7(path string, value any, description string) error {
 	field := path
 	if field == "" {
 		field = "$payload"
@@ -37303,8 +38956,8 @@ func validateRecordedRunStoryJSONValue5(path string, value any, description stri
 	return nil
 }
 
-// validateRecordedRunStoryJSONValue6 checks one value whose JSON shape is fixed by the generated Goa type.
-func validateRecordedRunStoryJSONValue6(path string, value any, description string) error {
+// validateRecordedRunStoryJSONValue8 checks one value whose JSON shape is fixed by the generated Goa type.
+func validateRecordedRunStoryJSONValue8(path string, value any, description string) error {
 	field := path
 	if field == "" {
 		field = "$payload"
@@ -37320,11 +38973,203 @@ func validateRecordedRunStoryJSONValue6(path string, value any, description stri
 		if item == nil {
 			continue
 		}
-		if err := validateChangeCardResultJSONValue5(
+		if err := validateChangeCardResultJSONValue4(
 			generatedJSONChildPath(path, strconv.Itoa(index), true),
 			item, description,
 		); err != nil {
 			return err
+		}
+	}
+	return nil
+}
+
+// validateRecordedRunStoryJSONValue9 checks one value whose JSON shape is fixed by the generated Goa type.
+func validateRecordedRunStoryJSONValue9(path string, value any, description string) error {
+	field := path
+	if field == "" {
+		field = "$payload"
+	}
+	if value == nil {
+		return invalidGeneratedFieldTypeError(field, "object", "null", description)
+	}
+	typed, ok := value.(map[string]any)
+	if !ok {
+		return invalidGeneratedFieldTypeError(field, "object", decodedJSONType(value), description)
+	}
+	discriminator, ok := typed["state"].(string)
+	if !ok {
+		return fmt.Errorf("%s: missing or invalid union discriminator", field)
+	}
+	branch := make(map[string]any, len(typed)-1)
+	for key, item := range typed {
+		if key != "state" {
+			branch[key] = item
+		}
+	}
+	switch discriminator {
+	case "recorded":
+		return validateRecordedRunStoryJSONValue10(path, branch, "")
+	case "not_recorded":
+		return validateRecordedRunStoryJSONValue4(path, branch, "")
+	default:
+		return fmt.Errorf("%s: unknown union discriminator %q", field, discriminator)
+	}
+}
+
+// validateRecordedRunStoryJSONValue10 checks one value whose JSON shape is fixed by the generated Goa type.
+func validateRecordedRunStoryJSONValue10(path string, value any, description string) error {
+	field := path
+	if field == "" {
+		field = "$payload"
+	}
+	if value == nil {
+		return invalidGeneratedFieldTypeError(field, "object", "null", description)
+	}
+	typed, ok := value.(map[string]any)
+	if !ok {
+		return invalidGeneratedFieldTypeError(field, "object", decodedJSONType(value), description)
+	}
+	keys := make([]string, 0, len(typed))
+	for key := range typed {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		switch key {
+		case "answers":
+			if err := validateRecordedRunStoryJSONValue11(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Answers saved for the built agreement, in question order.",
+			); err != nil {
+				return err
+			}
+		case "coverage_statements":
+			if err := validateRecordedRunStoryJSONValue12(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Writer statements for this report; empty means Not stated.",
+			); err != nil {
+				return err
+			}
+		case "examples":
+			if err := validateRecordedRunStoryJSONValue3(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Examples saved for the built agreement, in confirmation order.",
+			); err != nil {
+				return err
+			}
+		case "report":
+			if err := validateAgentPolicyItemJSONValue4(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Accepted test-writer report number.",
+			); err != nil {
+				return err
+			}
+		default:
+			return unknownJSONFieldError(path, key, []string{
+				"answers",
+				"coverage_statements",
+				"examples",
+				"report",
+			})
+		}
+	}
+	return nil
+}
+
+// validateRecordedRunStoryJSONValue11 checks one value whose JSON shape is fixed by the generated Goa type.
+func validateRecordedRunStoryJSONValue11(path string, value any, description string) error {
+	field := path
+	if field == "" {
+		field = "$payload"
+	}
+	if value == nil {
+		return invalidGeneratedFieldTypeError(field, "array", "null", description)
+	}
+	typed, ok := value.([]any)
+	if !ok {
+		return invalidGeneratedFieldTypeError(field, "array", decodedJSONType(value), description)
+	}
+	for index, item := range typed {
+		if err := validateChangeBuildJSONValue15(
+			generatedJSONChildPath(path, strconv.Itoa(index), true),
+			item, description,
+		); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// validateRecordedRunStoryJSONValue12 checks one value whose JSON shape is fixed by the generated Goa type.
+func validateRecordedRunStoryJSONValue12(path string, value any, description string) error {
+	field := path
+	if field == "" {
+		field = "$payload"
+	}
+	if value == nil {
+		return invalidGeneratedFieldTypeError(field, "array", "null", description)
+	}
+	typed, ok := value.([]any)
+	if !ok {
+		return invalidGeneratedFieldTypeError(field, "array", decodedJSONType(value), description)
+	}
+	for index, item := range typed {
+		if err := validateChangeBuildJSONValue17(
+			generatedJSONChildPath(path, strconv.Itoa(index), true),
+			item, description,
+		); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// validateRecordedRunStoryJSONValue3 checks one value whose JSON shape is fixed by the generated Goa type.
+func validateRecordedRunStoryJSONValue3(path string, value any, description string) error {
+	field := path
+	if field == "" {
+		field = "$payload"
+	}
+	if value == nil {
+		return invalidGeneratedFieldTypeError(field, "array", "null", description)
+	}
+	typed, ok := value.([]any)
+	if !ok {
+		return invalidGeneratedFieldTypeError(field, "array", decodedJSONType(value), description)
+	}
+	for index, item := range typed {
+		if err := validateChangeBuildJSONValue3(
+			generatedJSONChildPath(path, strconv.Itoa(index), true),
+			item, description,
+		); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// validateRecordedRunStoryJSONValue4 checks one value whose JSON shape is fixed by the generated Goa type.
+func validateRecordedRunStoryJSONValue4(path string, value any, description string) error {
+	field := path
+	if field == "" {
+		field = "$payload"
+	}
+	if value == nil {
+		return invalidGeneratedFieldTypeError(field, "object", "null", description)
+	}
+	typed, ok := value.(map[string]any)
+	if !ok {
+		return invalidGeneratedFieldTypeError(field, "object", decodedJSONType(value), description)
+	}
+	keys := make([]string, 0, len(typed))
+	for key := range typed {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		switch key {
+		default:
+			return unknownJSONFieldError(path, key, []string{})
 		}
 	}
 	return nil
@@ -37553,7 +39398,7 @@ func validateStartBuildResultJSONValue(path string, value any, description strin
 	for _, key := range keys {
 		switch key {
 		case "build":
-			if err := validateChangeBuildJSONValue5(
+			if err := validateChangeBuildJSONValue13(
 				generatedJSONChildPath(path, key, false),
 				typed[key], "The build saved before Surla made any missing working copy and admitted the team.",
 			); err != nil {
@@ -37802,7 +39647,7 @@ func validateStoryRefreshResultJSONValue2(path string, value any, description st
 		if item == nil {
 			continue
 		}
-		if err := validateChangeCardResultJSONValue5(
+		if err := validateChangeCardResultJSONValue4(
 			generatedJSONChildPath(path, strconv.Itoa(index), true),
 			item, description,
 		); err != nil {
@@ -38093,6 +39938,13 @@ func validateTestWriterAssignmentJSONValue(path string, value any, description s
 			); err != nil {
 				return err
 			}
+		case "coverage_statements":
+			if err := validateTestWriterAssignmentJSONValue3(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Statements submitted with the latest report, retained for correction after findings or a check that could not run; empty before any report or when none were stated.",
+			); err != nil {
+				return err
+			}
 		case "design_source":
 			if err := validateAgentPolicyItemJSONValue2(
 				generatedJSONChildPath(path, key, false),
@@ -38101,14 +39953,14 @@ func validateTestWriterAssignmentJSONValue(path string, value any, description s
 				return err
 			}
 		case "examples":
-			if err := validateTestWriterAssignmentJSONValue3(
+			if err := validateTestWriterAssignmentJSONValue4(
 				generatedJSONChildPath(path, key, false),
 				typed[key], "The confirmation examples as agreed at request_revision, exactly as the user confirmed them, copied when this build started. The tests must hold the service to each expected outcome.",
 			); err != nil {
 				return err
 			}
 		case "findings":
-			if err := validateTestWriterAssignmentJSONValue4(
+			if err := validateTestWriterAssignmentJSONValue5(
 				generatedJSONChildPath(path, key, false),
 				typed[key], "Surla's findings, one problem per item, with no absolute path: as many as progress gives in finding_count when its state is needs_changes, and none in any other state. Fix them in working_folder, then report again.",
 			); err != nil {
@@ -38122,14 +39974,14 @@ func validateTestWriterAssignmentJSONValue(path string, value any, description s
 				return err
 			}
 		case "preserved_behaviors":
-			if err := validateTestWriterAssignmentJSONValue5(
+			if err := validateTestWriterAssignmentJSONValue6(
 				generatedJSONChildPath(path, key, false),
 				typed[key], "The existing behaviors the change as agreed at request_revision keeps, copied when this build started; empty when it names none. The tests must hold the service to each.",
 			); err != nil {
 				return err
 			}
 		case "progress":
-			if err := validateChangeBuildJSONValue9(
+			if err := validateChangeBuildJSONValue7(
 				generatedJSONChildPath(path, key, false),
 				typed[key], "Where this assignment stands.",
 			); err != nil {
@@ -38143,14 +39995,14 @@ func validateTestWriterAssignmentJSONValue(path string, value any, description s
 				return err
 			}
 		case "required_tests":
-			if err := validateTestWriterAssignmentJSONValue6(
+			if err := validateTestWriterAssignmentJSONValue7(
 				generatedJSONChildPath(path, key, false),
 				typed[key], "One test per finished flow of stories, in declaration order; unfinished flows require none.",
 			); err != nil {
 				return err
 			}
 		case "stories":
-			if err := validateTestWriterAssignmentJSONValue7(
+			if err := validateTestWriterAssignmentJSONValue8(
 				generatedJSONChildPath(path, key, false),
 				typed[key], "The Story as agreed at request_revision, in declaration order. It does not change when the change is revised later.",
 			); err != nil {
@@ -38167,6 +40019,7 @@ func validateTestWriterAssignmentJSONValue(path string, value any, description s
 			return unknownJSONFieldError(path, key, []string{
 				"answers",
 				"change_id",
+				"coverage_statements",
 				"design_source",
 				"examples",
 				"findings",
@@ -38200,7 +40053,7 @@ func validateTestWriterAssignmentJSONValue2(path string, value any, description 
 		if item == nil {
 			continue
 		}
-		if err := validateConfirmedAnswerJSONValue(
+		if err := validateChangeBuildJSONValue15(
 			generatedJSONChildPath(path, strconv.Itoa(index), true),
 			item, description,
 		); err != nil {
@@ -38224,10 +40077,7 @@ func validateTestWriterAssignmentJSONValue3(path string, value any, description 
 		return invalidGeneratedFieldTypeError(field, "array", decodedJSONType(value), description)
 	}
 	for index, item := range typed {
-		if item == nil {
-			continue
-		}
-		if err := validateChangeCardResultJSONValue21(
+		if err := validateChangeBuildJSONValue17(
 			generatedJSONChildPath(path, strconv.Itoa(index), true),
 			item, description,
 		); err != nil {
@@ -38251,7 +40101,10 @@ func validateTestWriterAssignmentJSONValue4(path string, value any, description 
 		return invalidGeneratedFieldTypeError(field, "array", decodedJSONType(value), description)
 	}
 	for index, item := range typed {
-		if err := validateAgentPolicyItemJSONValue2(
+		if item == nil {
+			continue
+		}
+		if err := validateChangeBuildJSONValue3(
 			generatedJSONChildPath(path, strconv.Itoa(index), true),
 			item, description,
 		); err != nil {
@@ -38299,10 +40152,7 @@ func validateTestWriterAssignmentJSONValue6(path string, value any, description 
 		return invalidGeneratedFieldTypeError(field, "array", decodedJSONType(value), description)
 	}
 	for index, item := range typed {
-		if item == nil {
-			continue
-		}
-		if err := validateChangeBuildJSONValue7(
+		if err := validateAgentPolicyItemJSONValue2(
 			generatedJSONChildPath(path, strconv.Itoa(index), true),
 			item, description,
 		); err != nil {
@@ -38329,7 +40179,34 @@ func validateTestWriterAssignmentJSONValue7(path string, value any, description 
 		if item == nil {
 			continue
 		}
-		if err := validateChangeCardResultJSONValue5(
+		if err := validateChangeBuildJSONValue5(
+			generatedJSONChildPath(path, strconv.Itoa(index), true),
+			item, description,
+		); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// validateTestWriterAssignmentJSONValue8 checks one value whose JSON shape is fixed by the generated Goa type.
+func validateTestWriterAssignmentJSONValue8(path string, value any, description string) error {
+	field := path
+	if field == "" {
+		field = "$payload"
+	}
+	if value == nil {
+		return invalidGeneratedFieldTypeError(field, "array", "null", description)
+	}
+	typed, ok := value.([]any)
+	if !ok {
+		return invalidGeneratedFieldTypeError(field, "array", decodedJSONType(value), description)
+	}
+	for index, item := range typed {
+		if item == nil {
+			continue
+		}
+		if err := validateChangeCardResultJSONValue4(
 			generatedJSONChildPath(path, strconv.Itoa(index), true),
 			item, description,
 		); err != nil {
@@ -38374,7 +40251,7 @@ func validateTestWriterAssignmentItemJSONValue(path string, value any, descripti
 				return err
 			}
 		case "progress":
-			if err := validateChangeBuildJSONValue9(
+			if err := validateChangeBuildJSONValue7(
 				generatedJSONChildPath(path, key, false),
 				typed[key], "Where this assignment stands.",
 			); err != nil {
@@ -39227,7 +41104,7 @@ func validateVerificationReviewJSONValue2(path string, value any, description st
 	case "recorded":
 		return validateApprovalItemJSONValue(path, branch, "")
 	case "unverified":
-		return validateChangeCardResultJSONValue19(path, branch, "")
+		return validateChangeCardResultJSONValue18(path, branch, "")
 	default:
 		return fmt.Errorf("%s: unknown union discriminator %q", field, discriminator)
 	}
@@ -40959,6 +42836,27 @@ func checkChangeBuildStartedBuildValue(in *StartedBuild, field string, active ma
 				return err
 			}
 		}
+		for index1, item1 := range in.Answers {
+			_ = index1
+			_ = item1
+			if err := checkChangeBuildConfirmedAnswerValue(item1, generatedJSONChildPath(generatedJSONChildPath(field, "answers", false), strconv.Itoa(index1), true), active); err != nil {
+				return err
+			}
+		}
+		for index1, item1 := range in.Examples {
+			_ = index1
+			_ = item1
+			if err := checkChangeBuildExampleItemValue(item1, generatedJSONChildPath(generatedJSONChildPath(field, "examples", false), strconv.Itoa(index1), true), active); err != nil {
+				return err
+			}
+		}
+		for index1, item1 := range in.CoverageStatements {
+			_ = index1
+			_ = item1
+			if err := checkChangeBuildTestCoverageStatementValue(item1, generatedJSONChildPath(generatedJSONChildPath(field, "coverage_statements", false), strconv.Itoa(index1), true), active); err != nil {
+				return err
+			}
+		}
 		if branch1, ok := in.Taking.AsBuilding(); ok {
 			_ = branch1
 			if branch1 != nil {
@@ -41157,6 +43055,103 @@ func checkChangeBuildRequiredTestValue(in *RequiredTest, field string, active ma
 	return nil
 }
 
+// checkChangeBuildConfirmedAnswerValue checks one generated value on the active path.
+func checkChangeBuildConfirmedAnswerValue(in *ConfirmedAnswer, field string, active map[any]bool) error {
+	if in == nil {
+		return nil
+	}
+	if active[in] {
+		return fmt.Errorf("%s: cyclic Go value", field)
+	}
+	active[in] = true
+	defer delete(active, in)
+	if in != nil {
+		if !utf8.ValidString(string(in.ID)) {
+			return fmt.Errorf("%s: invalid UTF-8", generatedJSONChildPath(field, "id", false))
+		}
+		if !utf8.ValidString(string(in.Question)) {
+			return fmt.Errorf("%s: invalid UTF-8", generatedJSONChildPath(field, "question", false))
+		}
+		if !utf8.ValidString(string(in.Answer)) {
+			return fmt.Errorf("%s: invalid UTF-8", generatedJSONChildPath(field, "answer", false))
+		}
+	}
+	return nil
+}
+
+// checkChangeBuildExampleItemValue checks one generated value on the active path.
+func checkChangeBuildExampleItemValue(in *ExampleItem, field string, active map[any]bool) error {
+	if in == nil {
+		return nil
+	}
+	if active[in] {
+		return fmt.Errorf("%s: cyclic Go value", field)
+	}
+	active[in] = true
+	defer delete(active, in)
+	if in != nil {
+		if !utf8.ValidString(string(in.ID)) {
+			return fmt.Errorf("%s: invalid UTF-8", generatedJSONChildPath(field, "id", false))
+		}
+		if !utf8.ValidString(string(in.Scenario)) {
+			return fmt.Errorf("%s: invalid UTF-8", generatedJSONChildPath(field, "scenario", false))
+		}
+		if !utf8.ValidString(string(in.InputSummary)) {
+			return fmt.Errorf("%s: invalid UTF-8", generatedJSONChildPath(field, "input_summary", false))
+		}
+		if !utf8.ValidString(string(in.ExpectedOutcome)) {
+			return fmt.Errorf("%s: invalid UTF-8", generatedJSONChildPath(field, "expected_outcome", false))
+		}
+		if !utf8.ValidString(string(in.VerificationKind)) {
+			return fmt.Errorf("%s: invalid UTF-8", generatedJSONChildPath(field, "verification_kind", false))
+		}
+	}
+	return nil
+}
+
+// checkChangeBuildTestCoverageStatementValue checks one generated value on the active path.
+func checkChangeBuildTestCoverageStatementValue(in *TestCoverageStatement, field string, active map[any]bool) error {
+	if in == nil {
+		return nil
+	}
+	if active[in] {
+		return fmt.Errorf("%s: cyclic Go value", field)
+	}
+	active[in] = true
+	defer delete(active, in)
+	if in != nil {
+		if err := checkChangeBuildTestCoverageReferenceValue(in.Scenario, generatedJSONChildPath(field, "scenario", false), active); err != nil {
+			return err
+		}
+		for index1, item1 := range in.QuestionIds {
+			_ = index1
+			_ = item1
+			if err := checkChangeBuildTestCoverageReferenceValue(item1, generatedJSONChildPath(generatedJSONChildPath(field, "question_ids", false), strconv.Itoa(index1), true), active); err != nil {
+				return err
+			}
+		}
+		for index1, item1 := range in.ExampleIds {
+			_ = index1
+			_ = item1
+			if err := checkChangeBuildTestCoverageReferenceValue(item1, generatedJSONChildPath(generatedJSONChildPath(field, "example_ids", false), strconv.Itoa(index1), true), active); err != nil {
+				return err
+			}
+		}
+		if !utf8.ValidString(string(in.Explanation)) {
+			return fmt.Errorf("%s: invalid UTF-8", generatedJSONChildPath(field, "explanation", false))
+		}
+	}
+	return nil
+}
+
+// checkChangeBuildTestCoverageReferenceValue checks one generated value on the active path.
+func checkChangeBuildTestCoverageReferenceValue(in TestCoverageReference, field string, active map[any]bool) error {
+	if !utf8.ValidString(string(in)) {
+		return fmt.Errorf("%s: invalid UTF-8", field)
+	}
+	return nil
+}
+
 // checkChangeCardResultValue checks text and cycles before conversion.
 func checkChangeCardResultValue(in *ChangeCardResult) error {
 	if in == nil {
@@ -41211,7 +43206,7 @@ func checkChangeCardResultChangeCardResultValue(in *ChangeCardResult, field stri
 		for index1, item1 := range in.Examples {
 			_ = index1
 			_ = item1
-			if err := checkChangeCardResultExampleItemValue(item1, generatedJSONChildPath(generatedJSONChildPath(field, "examples", false), strconv.Itoa(index1), true), active); err != nil {
+			if err := checkChangeBuildExampleItemValue(item1, generatedJSONChildPath(generatedJSONChildPath(field, "examples", false), strconv.Itoa(index1), true), active); err != nil {
 				return err
 			}
 		}
@@ -41248,36 +43243,6 @@ func checkChangeCardResultChangeCardResultValue(in *ChangeCardResult, field stri
 		}
 		if err := checkChangeCardResultProposedRevisionItemValue(in.ProposedRevision, generatedJSONChildPath(field, "proposed_revision", false), active); err != nil {
 			return err
-		}
-	}
-	return nil
-}
-
-// checkChangeCardResultExampleItemValue checks one generated value on the active path.
-func checkChangeCardResultExampleItemValue(in *ExampleItem, field string, active map[any]bool) error {
-	if in == nil {
-		return nil
-	}
-	if active[in] {
-		return fmt.Errorf("%s: cyclic Go value", field)
-	}
-	active[in] = true
-	defer delete(active, in)
-	if in != nil {
-		if !utf8.ValidString(string(in.ID)) {
-			return fmt.Errorf("%s: invalid UTF-8", generatedJSONChildPath(field, "id", false))
-		}
-		if !utf8.ValidString(string(in.Scenario)) {
-			return fmt.Errorf("%s: invalid UTF-8", generatedJSONChildPath(field, "scenario", false))
-		}
-		if !utf8.ValidString(string(in.InputSummary)) {
-			return fmt.Errorf("%s: invalid UTF-8", generatedJSONChildPath(field, "input_summary", false))
-		}
-		if !utf8.ValidString(string(in.ExpectedOutcome)) {
-			return fmt.Errorf("%s: invalid UTF-8", generatedJSONChildPath(field, "expected_outcome", false))
-		}
-		if !utf8.ValidString(string(in.VerificationKind)) {
-			return fmt.Errorf("%s: invalid UTF-8", generatedJSONChildPath(field, "verification_kind", false))
 		}
 	}
 	return nil
@@ -41527,7 +43492,7 @@ func checkChangeCardResultProposedRevisionItemValue(in *ProposedRevisionItem, fi
 		for index1, item1 := range in.Examples {
 			_ = index1
 			_ = item1
-			if err := checkChangeCardResultExampleItemValue(item1, generatedJSONChildPath(generatedJSONChildPath(field, "examples", false), strconv.Itoa(index1), true), active); err != nil {
+			if err := checkChangeBuildExampleItemValue(item1, generatedJSONChildPath(generatedJSONChildPath(field, "examples", false), strconv.Itoa(index1), true), active); err != nil {
 				return err
 			}
 		}
@@ -41851,7 +43816,7 @@ func checkConfirmIntentPayloadConfirmIntentPayloadValue(in *ConfirmIntentPayload
 		for index1, item1 := range in.Examples {
 			_ = index1
 			_ = item1
-			if err := checkChangeCardResultExampleItemValue(item1, generatedJSONChildPath(generatedJSONChildPath(field, "examples", false), strconv.Itoa(index1), true), active); err != nil {
+			if err := checkChangeBuildExampleItemValue(item1, generatedJSONChildPath(generatedJSONChildPath(field, "examples", false), strconv.Itoa(index1), true), active); err != nil {
 				return err
 			}
 		}
@@ -41865,32 +43830,8 @@ func checkConfirmedAnswerValue(in *ConfirmedAnswer) error {
 		return fmt.Errorf("missing root value")
 	}
 	active := make(map[any]bool)
-	if err := checkConfirmedAnswerConfirmedAnswerValue(in, "$", active); err != nil {
+	if err := checkChangeBuildConfirmedAnswerValue(in, "$", active); err != nil {
 		return err
-	}
-	return nil
-}
-
-// checkConfirmedAnswerConfirmedAnswerValue checks one generated value on the active path.
-func checkConfirmedAnswerConfirmedAnswerValue(in *ConfirmedAnswer, field string, active map[any]bool) error {
-	if in == nil {
-		return nil
-	}
-	if active[in] {
-		return fmt.Errorf("%s: cyclic Go value", field)
-	}
-	active[in] = true
-	defer delete(active, in)
-	if in != nil {
-		if !utf8.ValidString(string(in.ID)) {
-			return fmt.Errorf("%s: invalid UTF-8", generatedJSONChildPath(field, "id", false))
-		}
-		if !utf8.ValidString(string(in.Question)) {
-			return fmt.Errorf("%s: invalid UTF-8", generatedJSONChildPath(field, "question", false))
-		}
-		if !utf8.ValidString(string(in.Answer)) {
-			return fmt.Errorf("%s: invalid UTF-8", generatedJSONChildPath(field, "answer", false))
-		}
 	}
 	return nil
 }
@@ -42274,7 +44215,7 @@ func checkExampleItemValue(in *ExampleItem) error {
 		return fmt.Errorf("missing root value")
 	}
 	active := make(map[any]bool)
-	if err := checkChangeCardResultExampleItemValue(in, "$", active); err != nil {
+	if err := checkChangeBuildExampleItemValue(in, "$", active); err != nil {
 		return err
 	}
 	return nil
@@ -43461,6 +45402,22 @@ func checkRecordedRunStoryRecordedRunStoryValue(in *RecordedRunStory, field stri
 				return err
 			}
 		}
+		if branch1, ok := in.TestCoverage.AsRecorded(); ok {
+			_ = branch1
+			if branch1 != nil {
+			}
+			if err := checkRecordedRunStoryRecordedTestCoverageValue(branch1, generatedJSONChildPath(field, "test_coverage", false), active); err != nil {
+				return err
+			}
+		}
+		if branch1, ok := in.TestCoverage.AsNotRecorded(); ok {
+			_ = branch1
+			if branch1 != nil {
+			}
+			if err := checkRecordedRunStoryTestCoverageNotRecordedValue(branch1, generatedJSONChildPath(field, "test_coverage", false), active); err != nil {
+				return err
+			}
+		}
 	}
 	return nil
 }
@@ -43498,6 +45455,69 @@ func checkRecordedRunStoryRunEvaluatorMappingUnknownValue(in *RunEvaluatorMappin
 	active[in] = true
 	defer delete(active, in)
 	if in != nil {
+	}
+	return nil
+}
+
+// checkRecordedRunStoryRecordedTestCoverageValue checks one generated value on the active path.
+func checkRecordedRunStoryRecordedTestCoverageValue(in *RecordedTestCoverage, field string, active map[any]bool) error {
+	if in == nil {
+		return nil
+	}
+	if active[in] {
+		return fmt.Errorf("%s: cyclic Go value", field)
+	}
+	active[in] = true
+	defer delete(active, in)
+	if in != nil {
+		for index1, item1 := range in.Answers {
+			_ = index1
+			_ = item1
+			if err := checkChangeBuildConfirmedAnswerValue(item1, generatedJSONChildPath(generatedJSONChildPath(field, "answers", false), strconv.Itoa(index1), true), active); err != nil {
+				return err
+			}
+		}
+		for index1, item1 := range in.Examples {
+			_ = index1
+			_ = item1
+			if err := checkChangeBuildExampleItemValue(item1, generatedJSONChildPath(generatedJSONChildPath(field, "examples", false), strconv.Itoa(index1), true), active); err != nil {
+				return err
+			}
+		}
+		for index1, item1 := range in.CoverageStatements {
+			_ = index1
+			_ = item1
+			if err := checkChangeBuildTestCoverageStatementValue(item1, generatedJSONChildPath(generatedJSONChildPath(field, "coverage_statements", false), strconv.Itoa(index1), true), active); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+// checkRecordedRunStoryTestCoverageNotRecordedValue checks one generated value on the active path.
+func checkRecordedRunStoryTestCoverageNotRecordedValue(in *TestCoverageNotRecorded, field string, active map[any]bool) error {
+	if in == nil {
+		return nil
+	}
+	if active[in] {
+		return fmt.Errorf("%s: cyclic Go value", field)
+	}
+	active[in] = true
+	defer delete(active, in)
+	if in != nil {
+	}
+	return nil
+}
+
+// checkRecordedTestCoverageValue checks text and cycles before conversion.
+func checkRecordedTestCoverageValue(in *RecordedTestCoverage) error {
+	if in == nil {
+		return fmt.Errorf("missing root value")
+	}
+	active := make(map[any]bool)
+	if err := checkRecordedRunStoryRecordedTestCoverageValue(in, "$", active); err != nil {
+		return err
 	}
 	return nil
 }
@@ -44048,6 +46068,39 @@ func checkTeamSnapshotTeamSnapshotValue(in *TeamSnapshot, field string, active m
 	return nil
 }
 
+// checkTestCoverageNotRecordedValue checks text and cycles before conversion.
+func checkTestCoverageNotRecordedValue(in *TestCoverageNotRecorded) error {
+	if in == nil {
+		return fmt.Errorf("missing root value")
+	}
+	active := make(map[any]bool)
+	if err := checkRecordedRunStoryTestCoverageNotRecordedValue(in, "$", active); err != nil {
+		return err
+	}
+	return nil
+}
+
+// checkTestCoverageReferenceValue checks text and cycles before conversion.
+func checkTestCoverageReferenceValue(in TestCoverageReference) error {
+	active := make(map[any]bool)
+	if err := checkChangeBuildTestCoverageReferenceValue(in, "$", active); err != nil {
+		return err
+	}
+	return nil
+}
+
+// checkTestCoverageStatementValue checks text and cycles before conversion.
+func checkTestCoverageStatementValue(in *TestCoverageStatement) error {
+	if in == nil {
+		return fmt.Errorf("missing root value")
+	}
+	active := make(map[any]bool)
+	if err := checkChangeBuildTestCoverageStatementValue(in, "$", active); err != nil {
+		return err
+	}
+	return nil
+}
+
 // checkTestFindingsValue checks text and cycles before conversion.
 func checkTestFindingsValue(in *TestFindings) error {
 	if in == nil {
@@ -44156,14 +46209,14 @@ func checkTestWriterAssignmentTestWriterAssignmentValue(in *TestWriterAssignment
 		for index1, item1 := range in.Answers {
 			_ = index1
 			_ = item1
-			if err := checkConfirmedAnswerConfirmedAnswerValue(item1, generatedJSONChildPath(generatedJSONChildPath(field, "answers", false), strconv.Itoa(index1), true), active); err != nil {
+			if err := checkChangeBuildConfirmedAnswerValue(item1, generatedJSONChildPath(generatedJSONChildPath(field, "answers", false), strconv.Itoa(index1), true), active); err != nil {
 				return err
 			}
 		}
 		for index1, item1 := range in.Examples {
 			_ = index1
 			_ = item1
-			if err := checkChangeCardResultExampleItemValue(item1, generatedJSONChildPath(generatedJSONChildPath(field, "examples", false), strconv.Itoa(index1), true), active); err != nil {
+			if err := checkChangeBuildExampleItemValue(item1, generatedJSONChildPath(generatedJSONChildPath(field, "examples", false), strconv.Itoa(index1), true), active); err != nil {
 				return err
 			}
 		}
@@ -44172,6 +46225,13 @@ func checkTestWriterAssignmentTestWriterAssignmentValue(in *TestWriterAssignment
 			_ = item1
 			if !utf8.ValidString(string(item1)) {
 				return fmt.Errorf("%s: invalid UTF-8", generatedJSONChildPath(generatedJSONChildPath(field, "preserved_behaviors", false), strconv.Itoa(index1), true))
+			}
+		}
+		for index1, item1 := range in.CoverageStatements {
+			_ = index1
+			_ = item1
+			if err := checkChangeBuildTestCoverageStatementValue(item1, generatedJSONChildPath(generatedJSONChildPath(field, "coverage_statements", false), strconv.Itoa(index1), true), active); err != nil {
+				return err
 			}
 		}
 	}
