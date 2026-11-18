@@ -54,14 +54,14 @@ func (stoppedLiveListener) Close() error { return nil }
 // Addr keeps the listener's address within loopback for grpc's server setup.
 func (stoppedLiveListener) Addr() net.Addr { return &net.TCPAddr{IP: net.IPv4(127, 0, 0, 1)} }
 
-// callFakeLiveModel is a suite-side consumer of the real generated gateway.
-// Its mode arrives in artifact flags, since written tests receive no test-only
-// executor environment. Errors are not printed: the parent checks process
-// outcome and the executor's protected private diagnostic tail.
-func callFakeLiveModel(mode string) int {
+// callFakeLiveModel calls the real generated gateway from either the fake
+// suite or the parent test. The parent triggers post-ready failures only after
+// AwaitReady returns; pre-ready failures and held streams remain suite calls.
+// Errors are not printed: the parent checks the process and private log.
+func callFakeLiveModel(mode, address string) int {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	conn, err := grpc.NewClient(os.Getenv(verify.LiveModelGatewayEnv),
+	conn, err := grpc.NewClient(address,
 		grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		return 2
@@ -129,6 +129,13 @@ func TestLiveModelGatewayEndsWithItsExecutor(t *testing.T) {
 			address := ""
 			if tc.mode != "gateway-constructor-fails" {
 				address = gatewayAddress(t, p.Dir())
+			}
+			// The executor must have relayed readiness before the parent
+			// triggers its deliberate failure. The suite cannot establish
+			// that ordering merely by writing the ready line to its pipe.
+			switch tc.mode {
+			case "gateway-panic", "gateway-stream-panic", "gateway-serve-ends":
+				assert.Equal(t, 0, callFakeLiveModel(tc.mode, address))
 			}
 			if tc.mode == "gateway-hold" {
 				require.Eventually(t, func() bool {
