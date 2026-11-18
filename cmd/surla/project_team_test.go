@@ -334,6 +334,12 @@ func TestStartOpensViewsWhenTeamFails(t *testing.T) {
 			want:   "open the Herdr app, then click Start agents on the views page",
 		},
 		{
+			name:   "saved space",
+			status: http.StatusServiceUnavailable,
+			body:   `{"name":"team_unavailable","cause":"saved_space"}`,
+			want:   "This project's saved Herdr space has an ID this version of Surla no longer accepts. Close that space in Herdr (its agents stop with it), then start the agents again; Surla will prepare a replacement space.",
+		},
+		{
 			name:   "roster folder",
 			status: http.StatusServiceUnavailable,
 			body:   `{"name":"team_unavailable","cause":"roster_folder"}`,

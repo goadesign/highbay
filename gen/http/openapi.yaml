@@ -8630,7 +8630,10 @@ definitions:
             space:
                 type: string
                 description: Local Herdr space identifier.
-                example: Ut et aut a tempora possimus.
+                example: j8
+                pattern: ^(?:[A-Za-z0-9_-][A-Za-z0-9_.-]{0,63}|\.[A-Za-z0-9_-][A-Za-z0-9_.-]{0,62}|\.\.[A-Za-z0-9_.-]{1,62})$
+                minLength: 1
+                maxLength: 64
             step:
                 type: string
                 description: What the user does next for the prepared team.
@@ -8654,7 +8657,7 @@ definitions:
                 - handle: Quo a est cumque quae quod velit.
                   role: builder
                   running: true
-            space: Ut et aut a tempora possimus.
+            space: j8
             step: uk
             team: P
         required:
@@ -10703,7 +10706,10 @@ definitions:
                         space:
                             type: string
                             description: Local Herdr space identifier.
-                            example: A modi cumque omnis commodi ea a.
+                            example: z
+                            pattern: ^(?:[A-Za-z0-9_-][A-Za-z0-9_.-]{0,63}|\.[A-Za-z0-9_-][A-Za-z0-9_.-]{0,62}|\.\.[A-Za-z0-9_.-]{1,62})$
+                            minLength: 1
+                            maxLength: 64
                         state:
                             type: string
                             enum:
@@ -20909,12 +20915,13 @@ definitions:
         properties:
             cause:
                 type: string
-                description: 'What could not be used: stopping (the server is shutting down), chorus (the managed Chorus server or its settings are unavailable), herdr (a Herdr command failed), roster_folder (Herdr''s launcher roster folder could not be written), project_state (the project''s private record or an agent credential could not be read or written), or role_folder (a role''s working folder could not be read).'
-                example: chorus
+                description: 'What could not be used: stopping (the server is shutting down), chorus (the managed Chorus server or its settings are unavailable), herdr (a Herdr command failed), saved_space (the project''s saved Herdr space has an ID this version of Surla no longer accepts and is still open), roster_folder (Herdr''s launcher roster folder could not be written), project_state (the project''s private record or an agent credential could not be read or written), or role_folder (a role''s working folder could not be read).'
+                example: project_state
                 enum:
                     - stopping
                     - chorus
                     - herdr
+                    - saved_space
                     - roster_folder
                     - project_state
                     - role_folder
@@ -20923,7 +20930,7 @@ definitions:
                 description: Error name.
                 example: Aut velit ea sunt placeat possimus.
         example:
-            cause: chorus
+            cause: project_state
             name: Aut velit ea sunt placeat possimus.
         required:
             - name

@@ -448,7 +448,7 @@ func validateRecord(r Record, directory string) error {
 	if r.Team != "" && !validTeamName(r.Team) {
 		return errors.New("invalid project team name")
 	}
-	if r.Space != "" && !safeSpaceID(r.Space) {
+	if r.Space != "" && !localSpaceID(r.Space) {
 		return errors.New("invalid project space")
 	}
 	seenRoles := map[string]bool{}

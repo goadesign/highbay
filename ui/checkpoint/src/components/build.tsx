@@ -691,7 +691,7 @@ function StartReceipts({ receipt }: { receipt: BuildStartReceipt }) {
   const team = receipt.team;
   let teamText = "";
   switch (team.state) {
-    case "ready": teamText = "the team was ready"; break;
+    case "ready": break;
     case "window_busy": teamText = "the build was saved and the team window was busy"; break;
     case "ambiguous_space": teamText = team.count + " matching team spaces"; break;
     case "unavailable": teamText = "the build was saved and team startup was unavailable"; break;
@@ -699,8 +699,9 @@ function StartReceipts({ receipt }: { receipt: BuildStartReceipt }) {
   return (
     <div id="surla-build-start-receipts">
       <p id="surla-build-start-team-receipt">
-        This start (begun <time dateTime={receipt.at}>{receipt.at}</time>) found {teamText}.
-        {" "}The instruction returned then was: «{team.step}»
+        This start (begun <time dateTime={receipt.at}>{receipt.at}</time>)
+        {team.state === "ready" ? " returned: " : <> found {teamText}. The instruction returned then was: </>}
+        «{team.step}»
       </p>
     </div>
   );

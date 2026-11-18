@@ -115,6 +115,7 @@ func TestBuildTeamOutcomeGivesEachCauseItsStep(t *testing.T) {
 		{name: "stopping", cause: "stopping", repair: "Run surla in the project folder to start it again"},
 		{name: "herdr", cause: "herdr", repair: "Open the Herdr app"},
 		{name: "chorus", cause: "chorus", repair: "Run chorus up"},
+		{name: "saved space", cause: "saved_space", repair: "This project's saved Herdr space has an ID this version of Surla no longer accepts. Close that space in Herdr (its agents stop with it), then start the agents again; Surla will prepare a replacement space."},
 		{name: "roster folder", cause: "roster_folder", repair: "Make data/chorus-launcher/rosters"},
 		{name: "project state", cause: "project_state", repair: "Run surla in the project folder to see which folder to repair"},
 		{name: "role folder", cause: "role_folder", repair: "Make sure this account can open the project folder and its build working folders"},
@@ -131,7 +132,9 @@ func TestBuildTeamOutcomeGivesEachCauseItsStep(t *testing.T) {
 			require.True(t, ok)
 			step := string(unavailable.Step)
 			assert.Contains(t, step, tc.repair)
-			assert.True(t, strings.HasSuffix(step, "the team agents for this saved build."), step)
+			if tc.cause != "saved_space" {
+				assert.True(t, strings.HasSuffix(step, "the team agents for this saved build."), step)
+			}
 			assert.NotContains(t, step, "Check that Herdr is available")
 			assert.NotContains(t, step, "private external reply")
 			assert.True(t, boundedText(step, maxCheckStep), "the step fits the contract")

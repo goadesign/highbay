@@ -14460,6 +14460,15 @@ func ValidateStartTeamAgentsResponseBody(body *StartTeamAgentsResponseBody) (err
 	if body.Team != nil {
 		err = goa.MergeErrors(err, goa.ValidatePattern("body.team", *body.Team, "^[A-Za-z0-9][A-Za-z0-9_-]{0,31}$"))
 	}
+	if body.Space != nil {
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.space", *body.Space, "^(?:[A-Za-z0-9_-][A-Za-z0-9_.-]{0,63}|\\.[A-Za-z0-9_-][A-Za-z0-9_.-]{0,62}|\\.\\.[A-Za-z0-9_.-]{1,62})$"))
+		if utf8.RuneCountInString(*body.Space) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.space", *body.Space, utf8.RuneCountInString(*body.Space), 1, true))
+		}
+		if utf8.RuneCountInString(*body.Space) > 64 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.space", *body.Space, utf8.RuneCountInString(*body.Space), 64, false))
+		}
+	}
 	for _, e := range body.Roles {
 		if e != nil {
 			if err2 := validateProjectTeamRoleResponseBody(e, "body.roles[*]"); err2 != nil {
@@ -22117,6 +22126,15 @@ func ValidateProjectTeamResponseBody(body *ProjectTeamResponseBody) (err error) 
 	if body.Team != nil {
 		err = goa.MergeErrors(err, goa.ValidatePattern("body.team", *body.Team, "^[A-Za-z0-9][A-Za-z0-9_-]{0,31}$"))
 	}
+	if body.Space != nil {
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.space", *body.Space, "^(?:[A-Za-z0-9_-][A-Za-z0-9_.-]{0,63}|\\.[A-Za-z0-9_-][A-Za-z0-9_.-]{0,62}|\\.\\.[A-Za-z0-9_.-]{1,62})$"))
+		if utf8.RuneCountInString(*body.Space) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.space", *body.Space, utf8.RuneCountInString(*body.Space), 1, true))
+		}
+		if utf8.RuneCountInString(*body.Space) > 64 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.space", *body.Space, utf8.RuneCountInString(*body.Space), 64, false))
+		}
+	}
 	for _, e := range body.Roles {
 		if e != nil {
 			if err2 := validateProjectTeamRoleResponseBody(e, "body.roles[*]"); err2 != nil {
@@ -22160,6 +22178,15 @@ func validateProjectTeamResponseBody(body *ProjectTeamResponseBody, path string)
 	}
 	if body.Team != nil {
 		err = goa.MergeErrors(err, goa.ValidatePattern(path+".team", *body.Team, "^[A-Za-z0-9][A-Za-z0-9_-]{0,31}$"))
+	}
+	if body.Space != nil {
+		err = goa.MergeErrors(err, goa.ValidatePattern(path+".space", *body.Space, "^(?:[A-Za-z0-9_-][A-Za-z0-9_.-]{0,63}|\\.[A-Za-z0-9_-][A-Za-z0-9_.-]{0,62}|\\.\\.[A-Za-z0-9_.-]{1,62})$"))
+		if utf8.RuneCountInString(*body.Space) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError(path+".space", *body.Space, utf8.RuneCountInString(*body.Space), 1, true))
+		}
+		if utf8.RuneCountInString(*body.Space) > 64 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError(path+".space", *body.Space, utf8.RuneCountInString(*body.Space), 64, false))
+		}
 	}
 	for _, e := range body.Roles {
 		if e != nil {

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	genproject "github.com/goadesign/surla/gen/project"
@@ -173,6 +174,75 @@ func TestEnsureTeamAdoptionConflictAndAccess(t *testing.T) {
 			assert.Zero(t, host.creates)
 		})
 	}
+	t.Run("skip_non_conforming", func(t *testing.T) {
+		state := initializedState(t, physicalTempDir(t), physicalTempDir(t))
+		deps := fixtureTeamDependencies(state)
+		host := deps.Host.(*teamFixture)
+		name := teamName(filepath.Base(state.Record.Directory), state.Record.ID)
+		state.Record.Team = name
+		state.Record.Space = "sp'quoted"
+		require.NoError(t, state.save())
+		require.NoError(t, os.MkdirAll(deps.RosterDirectory, 0o700))
+		oldRoster := filepath.Join(deps.RosterDirectory, "sp'quoted.json")
+		require.NoError(t, os.WriteFile(oldRoster, []byte("{}"), 0o600))
+
+		loaded, err := Discover(filepath.Dir(state.Dir), state.Record.Directory)
+		require.NoError(t, err)
+		assert.Equal(t, "sp'quoted", loaded.Record.Space)
+		opened, err := Open(state.Dir)
+		require.NoError(t, err)
+		assert.Equal(t, "sp'quoted", opened.Record.Space)
+
+		for _, id := range []string{"sp'quoted", ".", "..", strings.Repeat("a", 65), "remote/sp"} {
+			host.spaces = append(host.spaces, TeamSpace{ID: id, Name: name, Folder: state.Record.Directory, Tabs: []TeamTab{{ID: "tab", Terminals: []TeamPane{{Terminal: "terminal"}}}}})
+		}
+		s, err := NewServer(opened, func() {}, deps)
+		require.NoError(t, err)
+		// Open legacy space takes precedence over window_busy overlays and causes no effects.
+		for _, overlays := range [][]string{nil, {"frame-palette"}, {"chorus-launcher"}} {
+			host.overlays = overlays
+			_, err = s.EnsureTeam(teamContext(opened))
+			var unavailable *genproject.TeamUnavailable
+			require.ErrorAs(t, err, &unavailable)
+			assert.Equal(t, "saved_space", unavailable.Cause)
+			assert.Empty(t, s.teamSelection().connection.Endpoint, "supervision sees no new connection on open legacy-space refusal")
+			assert.Zero(t, host.creates)
+			assert.Equal(t, "sp'quoted", opened.Record.Space)
+			assert.FileExists(t, oldRoster)
+		}
+
+		// Closed legacy space with a matching conforming space still refuses window_busy
+		// when chorus-launcher is open for the old space, before rebinding or removing the old roster.
+		host.spaces = append(host.spaces[1:], TeamSpace{ID: "adopted-1", Name: name, Folder: state.Record.Directory, Tabs: []TeamTab{{ID: "tab", Terminals: []TeamPane{{Terminal: "terminal"}}}}})
+		host.overlays = []string{"chorus-launcher"}
+		_, err = s.EnsureTeam(teamContext(opened))
+		require.Error(t, err)
+		assert.Empty(t, s.teamSelection().connection.Endpoint)
+		assert.Zero(t, host.creates)
+		assert.Equal(t, "sp'quoted", opened.Record.Space)
+		assert.FileExists(t, oldRoster)
+
+		// Once the old dialog is closed, the closed legacy space rebinds to the single conforming match.
+		host.overlays = nil
+		result, err := s.EnsureTeam(teamContext(opened))
+		require.NoError(t, err)
+		assert.Equal(t, "adopted-1", result.Space)
+		assert.Equal(t, "adopted-1", opened.Record.Space)
+		assert.Equal(t, "http://chorus.test", s.teamSelection().connection.Endpoint)
+		assert.Zero(t, host.creates)
+		_, err = os.Stat(oldRoster)
+		assert.ErrorIs(t, err, os.ErrNotExist)
+
+		// When no conforming space matches, Surla creates its own space.
+		opened.Record.Space = "free'form-2"
+		require.NoError(t, opened.save())
+		host.spaces = host.spaces[:len(host.spaces)-1]
+		result, err = s.EnsureTeam(teamContext(opened))
+		require.NoError(t, err)
+		assert.Equal(t, "space-1", result.Space)
+		assert.Equal(t, "space-1", opened.Record.Space)
+		assert.Equal(t, 1, host.creates)
+	})
 }
 
 // TestEnsureTeamOtherDialog verifies the server or command contract using only temporary state and stand-ins.
@@ -436,30 +506,35 @@ func TestTeamResultNextStep(t *testing.T) {
 			assert.Equal(t, tc.dialog, team.Dialog)
 			assert.Contains(t, team.Step, tc.step)
 			if tc.dialog != "not_needed" {
-				assert.Contains(t, team.Step, "chorus team inspect --space '"+first.Space+"'")
-				assert.Contains(t, team.Step, "chorus team inspect --space '"+first.Space+"' --choices choices.json")
-				assert.Contains(t, team.Step, "models and permission effects")
-				assert.Contains(t, team.Step, "chorus team launch --space '"+first.Space+"' --choices choices.json")
-				assert.Contains(t, team.Step, "--choices -")
+				assert.Contains(t, team.Step, "From a terminal, run chorus team inspect --space '"+first.Space+"' to see the roles")
+				assert.Contains(t, team.Step, "add --choices choices.json for models and permission effects")
+				assert.Contains(t, team.Step, "then chorus team launch with the same --space and --choices choices.json")
+				assert.Contains(t, team.Step, "--choices - reads stdin; see chorus team launch --help")
 				assert.NotContains(t, team.Step, "<id>")
 			} else {
 				assert.Equal(t, tc.step, team.Step)
 			}
-			// The generated response bound must hold for quoted IDs and wider
-			// identifiers, not just the short stand-in returned by this host.
-			for _, id := range []string{"sp'quoted", "12345678-1234-1234-1234-123456789012",
-				"123456781234567812345678123456781234567812345678"} {
+			// The generated response bound must hold up to the 64-character space ID
+			// limit and reject non-conforming space IDs.
+			for _, id := range []string{"12345678-1234-1234-1234-123456789012",
+				"123456781234567812345678123456781234567812345678",
+				strings.Repeat("a", 64), ".a", "..a"} {
 				response := *team
 				response.Space, response.Step = id, teamNextStep(tc.dialog, id)
 				_, err := genproject.EncodeProjectTeam(&response)
 				assert.NoError(t, err, "dialog %s with space %q must encode", tc.dialog, id)
+			}
+			for _, invalid := range []string{"sp'quoted", ".", "..", strings.Repeat("a", 65), "remote/sp"} {
+				response := *team
+				response.Space, response.Step = invalid, teamNextStep(tc.dialog, invalid)
+				_, err := genproject.EncodeProjectTeam(&response)
+				assert.Error(t, err, "dialog %s with invalid space %q must be refused", tc.dialog, invalid)
 			}
 			userTeam, err := server.StartAgents(t.Context())
 			require.NoError(t, err)
 			assert.Equal(t, team.Step, userTeam.Step, "the user operation must carry the owner's step unchanged")
 		})
 	}
-	assert.Contains(t, teamNextStep("opened", "sp'quoted"), "--space 'sp'\\''quoted'")
 }
 
 // TestEnsureTeamCountsOnlyGuideAndRolesWithWork checks that EnsureTeam counts
