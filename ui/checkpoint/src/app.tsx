@@ -1238,6 +1238,16 @@ export function bootstrapViewsPage() {
     return id === undefined ? null : runsById.get(id) ?? null;
   }
 
+  // newerCheckFor offers only the latest identity agreed by both owner reads.
+  // Their ordered history must place the displayed run after it; a delayed
+  // list cannot describe a more recently selected run as older.
+  function newerCheckFor(run: VerificationStatusResult): VerificationStatusResult | null {
+    const latest = latestVerificationFor(run.change_id);
+    const history = lastLoadedListByChangeId.get(run.change_id);
+    return latest !== null && history?.[0] === latest.run_id && history.indexOf(run.run_id) > 0
+      ? latest : null;
+  }
+
   // reviewSavedCheck opens the exact result whose action the user selected.
   function reviewSavedCheck(run: VerificationStatusResult) {
     selectedVerificationChangeId = run.change_id;
@@ -2252,6 +2262,13 @@ export function bootstrapViewsPage() {
         : review?.approval.state === "blocked"
         ? <Button onClick={() => focusResult("#surla-cp5-approve-blocked")}>Review requirements</Button>
         : review?.approval.state === "unverified" ? <span>Check current approval.</span> : <span>Read current requirements.</span>;
+      const newer = run !== null ? newerCheckFor(run) : null;
+      if (newer !== null) {
+        if (review?.approval.state === "blocked") attention = "A newer check is available.";
+        next = <><Button id="surla-cp5-review-latest"
+          variant={review?.approval.state === "available" ? "default" : "primary"}
+          disabled={editorBusy} onClick={() => reviewSavedCheck(newer)}>Review latest check</Button>{next}</>;
+      }
     } else if (cp1Active && editorStage === "build" && activeEditor !== null) {
       const build = buildChangeId === activeEditor.card.change_id && buildSnapshot?.state === "started"
         ? buildSnapshot : null;
@@ -2771,7 +2788,8 @@ export function bootstrapViewsPage() {
       }
       flushSync(() => resultRoot.render(<ApprovalStage
         rawDetails={verificationDetailsView(run, selectedVerificationChangeId ?? "")}
-        run={run} review={displayedApprovalReview()} fresh={run !== null && approvalReviewFresh(run)}
+        run={run} newerCheck={run !== null && newerCheckFor(run) !== null}
+        review={displayedApprovalReview()} fresh={run !== null && approvalReviewFresh(run)}
         loading={run !== null && hasPending("review_verification", run.run_id)} busy={editorBusy}
         error={run !== null ? runRequestErrors.get(run.run_id) ?? null : cardLoadErrors.get(selectedVerificationChangeId ?? "") ?? null}
         historyLoading={hasPending("list_verifications", selectedVerificationChangeId ?? "")}

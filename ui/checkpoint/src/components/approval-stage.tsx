@@ -11,6 +11,7 @@ import { Alert, Button } from "./shadcn";
 // ApprovalStageProps binds evidence and currentness to one selected run.
 export interface ApprovalStageProps {
   run: VerificationStatusResult | null;
+  newerCheck: boolean;
   review: VerificationReview | null;
   fresh: boolean;
   loading: boolean;
@@ -84,6 +85,8 @@ export function ApprovalStage(props: ApprovalStageProps) {
           onClick={props.onRefresh}>Refresh result</Button>
       </div>
     </div>
+    {props.newerCheck ? <p role="status">A newer check is available. Review the latest check to see its result;
+      this saved result remains selected until you do.</p> : null}
     <dl className="surla-approval-binding">
       <div><dt>Agreement</dt><dd><code>{run.request_revision.slice(0, 12)}</code></dd></div>
       <div><dt>Builder’s commit</dt><dd><code>{run.candidate_commit.slice(0, 12)}</code></dd></div>
@@ -157,7 +160,6 @@ export function ApprovalStage(props: ApprovalStageProps) {
         <p>The run’s evidence and commit bindings stay fixed when you change the agreement or choose new tests.</p>
         {saved !== null ? <section id="surla-cp5-approval" data-approval-state={approval?.state} tabIndex={-1} aria-label="Recorded promotion approval">
           <h4>{approval?.state === "unverified" ? "Saved approval, unverified" : "Approval recorded"}</h4>
-          <p>Approved by <code>{saved.approved_by}</code>.</p>
           <p>Approval records permission to promote these verified inputs.</p>
           <details><summary>Approval record and artifacts</summary>
             <dl><dt>Environment</dt><dd><code>{saved.environment}</code></dd>
@@ -204,7 +206,6 @@ function SavedApprovalRecord({ record }: { record: NonNullable<ApprovalStageProp
     {record.reason !== null ? <Alert id="surla-cp5-unverified-approval-reason" variant="warning" role="status">{record.reason}</Alert> : null}
     <p>Approval records permission to promote the inputs below. Surla did not merge or deploy anything.</p>
     <dl>
-      <dt>Approved by</dt><dd><code>{approval.approved_by}</code></dd>
       <dt>Agreement</dt><dd><code>{record.requestRevision}</code></dd>
       <dt>Builder’s commit</dt><dd><code>{approval.candidate_commit}</code></dd>
       <dt>Tests’ commit</dt><dd><code>{approval.suite_commit}</code></dd>
