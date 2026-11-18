@@ -132,6 +132,16 @@ roles that are not running to `chorus team launch --space ... --choices ...` (a
 choice for a role outside the space's current roster, such as `test_writer`
 when verification settings are stored, is refused). Success prints
 `{ "tab": "...", "created": 1, "reused": 0 }`.
+
+Chorus v0.15.0 or later also returns each inspected role's `terminal` ID
+(null when no pane is running) and reported `status`: Herdr's `state` and
+`kind`, or null when the pane has not reported status. A missing kind is null.
+After a successful launch, those versions print a next step to stderr while
+keeping stdout as the success JSON: inspect the same space, run
+`hc read <terminal>` for each new pane, and answer what it displays before
+sending other text or keys. `running: true` does not mean a pane is ready for
+input, and unreported status does not prove that a question is open.
+
 A refusal prints a reason and exits nonzero; inspect and retry after partial
 failure to reuse completed panes. If Herdr's installed Chorus launcher files are
 missing or older than the `chorus` binary, `chorus team` refuses with
