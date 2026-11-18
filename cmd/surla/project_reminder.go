@@ -74,9 +74,6 @@ type (
 )
 
 const (
-	// teamChorusURL is the local Chorus server that both the view reader and the
-	// reminder sender call.
-	teamChorusURL = "http://127.0.0.1:9440"
 	// teamPostTimeout bounds each reminder post, connection to last byte. Two roles
 	// with two posts each hold the supervisor at most 20 seconds, under its
 	// 45-second stream stall bound.
@@ -106,13 +103,13 @@ func (s teamChorusSender) Send(ctx context.Context, reminder project.TeamReminde
 }
 
 // newTeamChorusSender returns the production sender with its own bounded client.
-func newTeamChorusSender() teamChorusSender {
+func newTeamChorusSender(baseURL string) teamChorusSender {
 	return teamChorusSender{
 		client: &http.Client{
 			Timeout:       teamPostTimeout,
 			CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
 		},
-		chorusURL: teamChorusURL,
+		chorusURL: baseURL,
 	}
 }
 

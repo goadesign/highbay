@@ -54,7 +54,7 @@ func (o *teamSupervisor) run(ctx context.Context, assignments controlplane.Assig
 			// One owner read scans all cards and their build files; do it when
 			// selection changes, never on the one-second display/registry tick.
 			o.assignments(ctx, assignments)
-			if o.selection.Space != "" && len(o.selection.Roles) > 0 && o.server.team.dependencies.Observer != nil {
+			if o.selection.Space != "" && len(o.selection.Roles) > 0 && o.selection.connection.Observer != nil {
 				readers = o.startReaders(ctx, events, watchers)
 			}
 		}
@@ -72,7 +72,7 @@ func (o *teamSupervisor) run(ctx context.Context, assignments controlplane.Assig
 			if !waitTeamReader(ctx) {
 				return nil
 			}
-			if o.selection.Space != "" && len(o.selection.Roles) > 0 && o.server.team.dependencies.Observer != nil {
+			if o.selection.Space != "" && len(o.selection.Roles) > 0 && o.selection.connection.Observer != nil {
 				readers = o.startReaders(ctx, events, watchers)
 			}
 			continue
@@ -113,7 +113,7 @@ func (o *teamSupervisor) startReaders(ctx context.Context, events chan<- TeamEve
 	ctx, cancel := context.WithCancel(ctx)
 	readers := &teamReaders{cancel: cancel}
 	selection := o.selection
-	observer := o.server.team.dependencies.Observer
+	observer := selection.connection.Observer
 	readers.workers.Go(func() { followTeam(ctx, observer, selection, events) })
 	readers.workers.Go(func() { followWatchers(ctx, observer, selection, watchers) })
 	return readers

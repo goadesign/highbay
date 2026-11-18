@@ -23,6 +23,8 @@ type (
 	TeamSelection struct {
 		Root, Space, Team string
 		Roles             []TeamRole
+		// connection belongs to this reader lifetime, never a mutable process default.
+		connection TeamConnection
 	}
 	// TeamStatus excludes messages, titles, application names and other free text.
 	TeamStatus struct {
@@ -68,8 +70,8 @@ type (
 	TeamSendFailure struct{ Post, Kind string }
 	// roleObservation is the small published snapshot with ownership identity.
 	roleObservation struct {
-		handle, space string
-		public        gensurla.TeamRoleState
+		handle, space, endpoint string
+		public                  gensurla.TeamRoleState
 	}
 	// supervisedRole keeps only current terminals and current owed generations.
 	// Unknown reads preserve latches; only a known clear removes a generation.
@@ -152,9 +154,11 @@ func (selection TeamSelection) owns(t TeamTerminal, handle string) bool {
 		t.Labels["herdr.space"] == selection.Space && t.Labels["chorus.handle"] == handle
 }
 
-// syncSelection preserves latches for unchanged registered handles when another role joins.
+// syncSelection preserves assignment latches for unchanged registered handles,
+// while invalidating watcher facts when the Chorus endpoint changes.
 func (o *teamSupervisor) syncSelection(selection TeamSelection) bool {
-	if selection.Root == o.selection.Root && selection.Space == o.selection.Space && selection.Team == o.selection.Team && slices.Equal(selection.Roles, o.selection.Roles) {
+	endpointChanged := selection.connection.Endpoint != o.selection.connection.Endpoint
+	if selection.Root == o.selection.Root && selection.Space == o.selection.Space && selection.Team == o.selection.Team && !endpointChanged && slices.Equal(selection.Roles, o.selection.Roles) {
 		return false
 	}
 	next := make(map[string]*supervisedRole, len(selection.Roles))
@@ -168,6 +172,9 @@ func (o *teamSupervisor) syncSelection(selection TeamSelection) bool {
 		current.terminals = map[string]TeamTerminal{}
 		current.watchKnown = false
 		current.absentSince = time.Time{}
+		if endpointChanged {
+			current.listedSince = time.Time{}
+		}
 		next[role.Role] = current
 	}
 	o.selection, o.roles = selection, next
@@ -280,7 +287,7 @@ func (o *teamSupervisor) refresh(ctx context.Context, role *supervisedRole) {
 			continue
 		}
 		readCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
-		terminal, err := o.server.team.dependencies.Observer.ReadTerminal(readCtx, address)
+		terminal, err := o.selection.connection.Observer.ReadTerminal(readCtx, address)
 		cancel()
 		if err != nil {
 			role.fresh = false
@@ -339,7 +346,7 @@ func (o *teamSupervisor) publish(ctx context.Context, now time.Time, periodic bo
 			teamStateSpan(ctx, "surla.team.observed", value, "", "observed").End()
 		}
 		role.public = value
-		observed[role.role.Role] = roleObservation{handle: role.role.Handle, space: o.selection.Space, public: value}
+		observed[role.role.Role] = roleObservation{handle: role.role.Handle, space: o.selection.Space, endpoint: o.selection.connection.Endpoint, public: value}
 	}
 	o.server.team.observationMu.Lock()
 	o.server.team.observed = observed
@@ -478,7 +485,7 @@ func (role *supervisedRole) idleUnread(value gensurla.TeamRoleState, now time.Ti
 // generation the attempt covered, so no generation is ever tried twice. A post
 // that fails after ctx ended, as when the server stops, records nothing either.
 func (o *teamSupervisor) remind(ctx context.Context, now time.Time) {
-	sender := o.server.team.dependencies.Sender
+	sender := o.selection.connection.Sender
 	if sender == nil {
 		return
 	}

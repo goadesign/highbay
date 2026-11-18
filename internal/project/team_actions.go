@@ -31,7 +31,7 @@ func (s *Server) ReadTeam(ctx context.Context) (*gensurla.TeamSnapshot, error) {
 		if role.Role == "guide" {
 			value.Assignment = "nothing_owed"
 		}
-		if observation, ok := s.team.observed[role.Role]; ok && observation.handle == role.Handle && observation.space == selection.Space {
+		if observation, ok := s.team.observed[role.Role]; ok && observation.handle == role.Handle && observation.space == selection.Space && observation.endpoint == selection.connection.Endpoint {
 			value = observation.public
 		}
 		result.Roles = append(result.Roles, &value)
@@ -121,11 +121,11 @@ func (s *Server) ShowPane(ctx context.Context, role string) error {
 	if handle == "" || selection.Space == "" {
 		return gensurla.MakePaneUnavailable(errors.New("this role has no owned pane to show; start its agent"))
 	}
-	if s.team.dependencies.Observer == nil {
+	if selection.connection.Observer == nil {
 		return gensurla.MakeTeamUnavailable(errors.New("team observations are unavailable"))
 	}
 	// Discover through all three labels before reading any terminal facts.
-	terminals, err := s.team.dependencies.Observer.FindTerminals(ctx, TeamSelection{Root: selection.Root, Space: selection.Space, Team: selection.Team, Roles: []TeamRole{{Role: role, Handle: handle}}})
+	terminals, err := selection.connection.Observer.FindTerminals(ctx, TeamSelection{Root: selection.Root, Space: selection.Space, Team: selection.Team, Roles: []TeamRole{{Role: role, Handle: handle}}})
 	if err != nil {
 		return userTeamError(teamUnavailable(ctx, "terminals", "herdr"))
 	}
@@ -153,7 +153,7 @@ func (s *Server) ShowPane(ctx context.Context, role string) error {
 		for _, tab := range space.Tabs {
 			for _, pane := range tab.Terminals {
 				if pane.Terminal == address {
-					fresh, err := s.team.dependencies.Observer.ReadTerminal(ctx, address)
+					fresh, err := selection.connection.Observer.ReadTerminal(ctx, address)
 					if err != nil || !selection.owns(fresh, handle) || fresh.State != "live" {
 						return gensurla.MakePaneUnavailable(errors.New("the requested pane changed; read the team again"))
 					}
@@ -175,6 +175,9 @@ func (s *Server) teamSelection() TeamSelection {
 	defer s.state.mu.Unlock()
 	record := s.state.Record
 	selection := TeamSelection{Root: record.Directory, Space: record.Space, Team: record.Team}
+	s.team.observationMu.RLock()
+	selection.connection = s.team.connection
+	s.team.observationMu.RUnlock()
 	if selection.Team == "" {
 		selection.Team = teamName(filepath.Base(record.Directory), record.ID)
 	}
@@ -217,6 +220,8 @@ func userTeamStep(cause string) string {
 	switch cause {
 	case "stopping":
 		return "the project server is stopping; run surla in the project folder to start it again"
+	case "chorus":
+		return "Chorus is not running or its settings are invalid. Run chorus up (or chorus status to see the error), then start the agents again (Start agents on the page, or run surla)."
 	case "herdr":
 		// Starting agents and showing a pane both fail with this cause, so the step
 		// retries whichever action the user took.

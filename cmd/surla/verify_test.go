@@ -451,7 +451,9 @@ func TestDefaultProjectEffectsAreBlocked(t *testing.T) {
 	state, err := fixtureProjectState(t.TempDir())
 	require.NoError(t, err)
 	dependencies := fixtureTeamDependencies(state)
-	assert.Nil(t, dependencies.Observer)
-	assert.Nil(t, dependencies.Sender)
+	connection, err := dependencies.Connect(t.Context())
+	require.NoError(t, err)
+	assert.Nil(t, connection.Observer)
+	assert.Nil(t, connection.Sender)
 	require.ErrorContains(t, run(nil, io.Discard), "cannot start real")
 }

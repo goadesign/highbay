@@ -43,8 +43,8 @@ var TeamSpaceConflict = Type("TeamSpaceConflict", func() {
 // that part's own recovery step without printing peer-authored error text.
 var TeamUnavailable = Type("TeamUnavailable", func() {
 	Attribute("name", String, "Error name.", func() { Meta("struct:error:name") })
-	Attribute("cause", String, "What could not be used: stopping (the server is shutting down), herdr (a Herdr command failed), roster_folder (Herdr's launcher roster folder could not be written), project_state (the project's private record or an agent credential could not be read or written), or role_folder (a role's working folder could not be read).", func() {
-		Enum("stopping", "herdr", "roster_folder", "project_state", "role_folder")
+	Attribute("cause", String, "What could not be used: stopping (the server is shutting down), chorus (the managed Chorus server or its settings are unavailable), herdr (a Herdr command failed), roster_folder (Herdr's launcher roster folder could not be written), project_state (the project's private record or an agent credential could not be read or written), or role_folder (a role's working folder could not be read).", func() {
+		Enum("stopping", "chorus", "herdr", "roster_folder", "project_state", "role_folder")
 	})
 	Required("name", "cause")
 })

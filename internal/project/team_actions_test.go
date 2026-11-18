@@ -283,6 +283,12 @@ func TestTeamFailureNamesItsCause(t *testing.T) {
 		damage            func(*State, *TeamDependencies)
 	}{
 		{
+			name: "chorus address", cause: "chorus", page: "Run chorus up",
+			damage: func(_ *State, deps *TeamDependencies) {
+				deps.Connect = func(context.Context) (TeamConnection, error) { return TeamConnection{}, assert.AnError }
+			},
+		},
+		{
 			name: "herdr command", cause: "herdr", page: "open the Herdr app",
 			damage: func(_ *State, deps *TeamDependencies) {
 				deps.Host = failingOverlays{&teamFixture{}}

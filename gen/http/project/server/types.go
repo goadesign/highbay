@@ -174,11 +174,12 @@ type EnsureTeamUnprocessableResponseBody struct {
 type EnsureTeamTeamUnavailableResponseBody struct {
 	// Error name.
 	Name string `form:"name" json:"name" xml:"name"`
-	// What could not be used: stopping (the server is shutting down), herdr (a
-	// Herdr command failed), roster_folder (Herdr's launcher roster folder could
-	// not be written), project_state (the project's private record or an agent
-	// credential could not be read or written), or role_folder (a role's working
-	// folder could not be read).
+	// What could not be used: stopping (the server is shutting down), chorus (the
+	// managed Chorus server or its settings are unavailable), herdr (a Herdr
+	// command failed), roster_folder (Herdr's launcher roster folder could not be
+	// written), project_state (the project's private record or an agent credential
+	// could not be read or written), or role_folder (a role's working folder could
+	// not be read).
 	Cause string `form:"cause" json:"cause" xml:"cause"`
 }
 
