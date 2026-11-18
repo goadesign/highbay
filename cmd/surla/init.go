@@ -64,7 +64,7 @@ func (runtime projectRuntime) init(args []string, stdout io.Writer) error {
 	if *version == "" {
 		*version = surlaBuildVersion()
 		if !scaffold.ValidVersion(*version) {
-			return fmt.Errorf("this surla binary has no exact module version (%q); pass -surla-version with a published version such as v0.0.0-20261115014514-02c792da3ded", buildVersion())
+			return fmt.Errorf("this surla binary has no exact module version (%q); pass -surla-version with a published version such as v0.0.0-20261118203415-bec57123a61f", buildVersion())
 		}
 	}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)

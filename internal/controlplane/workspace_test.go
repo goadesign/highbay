@@ -29,6 +29,7 @@ import (
 	gensurla "github.com/goadesign/surla/gen/surla"
 	"github.com/goadesign/surla/internal/abspath"
 	"github.com/goadesign/surla/internal/scaffold"
+	"github.com/goadesign/surla/internal/testmodule"
 )
 
 type (
@@ -41,7 +42,7 @@ type (
 
 const (
 	// testSurlaVersion is a canonical Surla module pseudo-version used in workspace unit tests.
-	testSurlaVersion = "v0.0.0-20261115014514-02c792da3ded"
+	testSurlaVersion = testmodule.PublishedSurlaVersion
 	// fakeInitialCommit is the synthetic initial Git commit hash returned by fakeInitRunner.
 	fakeInitialCommit = "1111111111111111111111111111111111111111"
 )

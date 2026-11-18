@@ -325,7 +325,7 @@ surla diff --old-dir examples/orders --new-dir examples/orders
 
 From a checkout you can also run `go run ./cmd/surla`; `go run ./cmd/surla init`
 then needs `-surla-version` with a published version, such as
-`-surla-version v0.0.0-20261115014514-02c792da3ded`.
+`-surla-version v0.0.0-20261118203415-bec57123a61f`.
 
 After you edit a module's `design/`, `surla gen -dir <module>` regenerates its
 `gen/` and replaces it in one step. It needs `goa.design/goa/v3`

@@ -19,7 +19,7 @@ const (
 	// PublishedSurlaVersion is the published github.com/goadesign/surla
 	// module version that starter, test-writer, and build-report fixtures
 	// require on the module proxy.
-	PublishedSurlaVersion = "v0.0.0-20261115014514-02c792da3ded"
+	PublishedSurlaVersion = "v0.0.0-20261118203415-bec57123a61f"
 
 	// CompleteSourcesGoaVersion is the first goa.design/goa/v3 version
 	// with generator.CompleteSources.
