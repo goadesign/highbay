@@ -55,7 +55,12 @@ func (f *fixtureTeamHost) OpenLauncher(context.Context) error { return nil }
 
 // fixtureTeamDependencies binds only the caller's temporary state directory and recorded effects.
 func fixtureTeamDependencies(state *project.State) project.TeamDependencies {
-	return project.TeamDependencies{Lifetime: context.Background(), Host: &fixtureTeamHost{}, RosterDirectory: filepath.Join(state.Dir, "fixture-rosters"), Shell: "/bin/zsh"}
+	return project.TeamDependencies{Lifetime: context.Background(), Host: &fixtureTeamHost{}, RosterDirectory: filepath.Join(state.Dir, "fixture-rosters"), Shell: "/bin/zsh", Connect: fixtureTeamConnection}
+}
+
+// fixtureTeamConnection leaves observations unknown without starting Chorus.
+func fixtureTeamConnection(context.Context) (project.TeamConnection, error) {
+	return project.TeamConnection{Endpoint: "http://chorus.test"}, nil
 }
 
 // bindFixtureTeamEffects explicitly opts a journey into test-owned team effects.
@@ -77,7 +82,7 @@ func bindFixtureTeamEffects(runtime *projectRuntime) {
 		if err != nil {
 			return project.TeamDependencies{}, err
 		}
-		return project.TeamDependencies{Lifetime: ctx, Host: &fixtureTeamHost{}, RosterDirectory: filepath.Join(root, "fixture-rosters"), Shell: "/bin/zsh"}, nil
+		return project.TeamDependencies{Lifetime: ctx, Host: &fixtureTeamHost{}, RosterDirectory: filepath.Join(root, "fixture-rosters"), Shell: "/bin/zsh", Connect: fixtureTeamConnection}, nil
 	}
 }
 
@@ -104,7 +109,8 @@ func TestTeamPreflightVersionAndPrograms(t *testing.T) {
 		{version: "v0.10.1"}, {version: "v0.11.0"}, {version: "v0.12.0"},
 		{version: "v0.11.0-rc.1"},
 		{version: "v0.13.0-rc.1"}, {version: "invalid"},
-		{version: "v0.13.0", valid: true}, {version: "v0.13.1", valid: true},
+		{version: "v0.13.0"}, {version: "v0.13.1"}, {version: "v0.14.0-rc.1"},
+		{version: "v0.14.0", valid: true}, {version: "v0.14.1", valid: true},
 	} {
 		t.Run(tc.version, func(t *testing.T) {
 			commands := teamCommands{chorus: "chorus", run: func(_ context.Context, _ []string, name string, args ...string) ([]byte, error) {
@@ -315,6 +321,12 @@ func TestStartOpensViewsWhenTeamFails(t *testing.T) {
 			name:     "team programs",
 			programs: errors.New("chorus up could not start; run chorus up, then run surla again"),
 			want:     "run chorus up, then run surla again",
+		},
+		{
+			name:   "chorus address",
+			status: http.StatusServiceUnavailable,
+			body:   `{"name":"team_unavailable","cause":"chorus"}`,
+			want:   "Run chorus up (or chorus status to see the error)",
 		},
 		{
 			name:   "herdr command",

@@ -595,7 +595,7 @@ func TestServeReadsOnlyItsStateFolder(t *testing.T) {
 	// test binds its own rosters folder and leaves the configuration folder unreachable.
 	rosters := t.TempDir()
 	runtime.teamDependencies = func(ctx context.Context, _ []string) (project.TeamDependencies, error) {
-		return project.TeamDependencies{Lifetime: ctx, Host: &fixtureTeamHost{}, RosterDirectory: rosters, Shell: "/bin/zsh"}, nil
+		return project.TeamDependencies{Lifetime: ctx, Host: &fixtureTeamHost{}, RosterDirectory: rosters, Shell: "/bin/zsh", Connect: fixtureTeamConnection}, nil
 	}
 	runtime.configRoot = func() (string, error) {
 		t.Error("serve must not resolve a configuration folder")

@@ -142,6 +142,10 @@ check works in an empty folder, before you make a Git repository.
 3. **The page opens.** `surla` opens the page in your browser through a
    single-use link and prints `Surla is running for <folder> at <address>`.
    To open the page again later, run `surla` again in the same folder.
+
+   Chorus's address comes from its managed settings. Use `chorus up -addr :9550`
+   for another address, then **Start agents** or run `surla` again. A failed
+   Chorus check leaves the page available and names the recovery step.
 4. **You choose the agents.** The Chorus dialog lists one row per role Surla
    registered. On the first start that is the guide alone. You pick which
    installed agent plays it. The guide's pane opens in the project's Herdr

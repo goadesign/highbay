@@ -26,7 +26,7 @@ type (
 		sends    []TeamReminder
 		sendErr  error
 		follow   func(context.Context, TeamSelection, func(TeamEvent)) error
-		watch    func(context.Context) (TeamWatcherView, error)
+		watch    func(context.Context, string) (TeamWatcherView, error)
 	}
 )
 
@@ -51,9 +51,9 @@ func (f *supervisionFixture) Follow(ctx context.Context, selection TeamSelection
 }
 
 // ReadWatchers ends with its owner; no real Chorus view is read.
-func (f *supervisionFixture) ReadWatchers(ctx context.Context, _, _ string, _ []TeamRole) (TeamWatcherView, error) {
+func (f *supervisionFixture) ReadWatchers(ctx context.Context, _, version string, _ []TeamRole) (TeamWatcherView, error) {
 	if f.watch != nil {
-		return f.watch(ctx)
+		return f.watch(ctx, version)
 	}
 	<-ctx.Done()
 	return TeamWatcherView{}, ctx.Err()
@@ -75,9 +75,11 @@ func newSupervisionFixture(t *testing.T) (*teamSupervisor, *supervisionFixture, 
 	f := &supervisionFixture{}
 	f.terminal = TeamTerminal{Address: "terminal", State: "live", Reported: true, Status: &TeamStatus{State: "idle"}, Foreground: &TeamForeground{Argv: []string{"codex"}}, Labels: map[string]string{"chorus.project": state.Record.Directory, "herdr.space": "space", "chorus.handle": "builder-example"}}
 	deps := fixtureTeamDependencies(state)
-	deps.Observer, deps.Sender = f, f
+	connection := TeamConnection{Endpoint: "http://chorus.test", Observer: f, Sender: f}
+	deps.Connect = func(context.Context) (TeamConnection, error) { return connection, nil }
 	s, err := NewServer(state, func() {}, deps)
 	require.NoError(t, err)
+	s.team.connection = connection
 	_, err = registerTestAgent(s, "builder-example", "builder", state.Record.Directory)
 	require.NoError(t, err)
 	now := time.Unix(1000, 0)
@@ -346,7 +348,7 @@ func TestTeamReminderSettleTime(t *testing.T) {
 			{Version: "v1", Held: map[string]bool{"builder-example": false}},
 			{Version: "v1", Unchanged: true},
 		}
-		f.watch = func(ctx context.Context) (TeamWatcherView, error) {
+		f.watch = func(ctx context.Context, _ string) (TeamWatcherView, error) {
 			if len(views) == 0 {
 				<-ctx.Done()
 				return TeamWatcherView{}, ctx.Err()
@@ -694,7 +696,7 @@ func TestTeamSupervisorLifetime(t *testing.T) {
 				joined <- "herdr"
 				return ctx.Err()
 			}
-			f.watch = func(ctx context.Context) (TeamWatcherView, error) {
+			f.watch = func(ctx context.Context, _ string) (TeamWatcherView, error) {
 				started <- "chorus"
 				<-ctx.Done()
 				joined <- "chorus"

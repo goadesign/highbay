@@ -39,10 +39,18 @@ type (
 		RosterDirectory string
 		// Shell is the server login shell used by the shared running predicate.
 		Shell string
-		// Observer follows only the registered selection. Nil refuses all observations.
+		// Connect resolves the running Chorus owner at each accepted team start.
+		// Failure happens before any team state or window changes.
+		Connect func(context.Context) (TeamConnection, error)
+	}
+	// TeamConnection binds an immutable observer/sender pair to one Chorus endpoint.
+	// The executable constructs it from Chorus status; it is never persisted.
+	TeamConnection struct {
+		// Endpoint identifies the server whose watcher facts permit reminders.
+		Endpoint string
+		// Observer follows only the registered selection; nil leaves facts unknown.
 		Observer TeamObserver
-		// Sender posts reminders to Chorus as direct messages; nil sends nothing.
-		// Nothing is ever typed into a terminal.
+		// Sender posts fixed direct reminders; nil sends nothing. It never types into a terminal.
 		Sender TeamSender
 	}
 	// TeamSpace is a local space and its tab-to-terminal mapping reported by Herdr.
@@ -84,9 +92,10 @@ type (
 		assignments controlplane.AssignmentReader
 		// withTimeout privately injects the accepted-operation deadline; nil uses context.WithTimeout.
 		withTimeout func(context.Context, time.Duration) (context.Context, context.CancelFunc)
-		// observationMu protects only the small public snapshot, never external replies.
+		// observationMu protects the immutable connection and small public snapshot.
 		observationMu sync.RWMutex
 		observed      map[string]roleObservation
+		connection    TeamConnection
 	}
 	// launcherRoster mirrors Chorus load_roster's exact closed schema.
 	launcherRoster struct {
@@ -180,6 +189,13 @@ func (s *Server) ensureTeam(ctx context.Context) (result *genproject.ProjectTeam
 	if err := ctx.Err(); err != nil {
 		return nil, teamUnavailable(ctx, "lifetime", "stopping")
 	}
+	connection, err := s.team.dependencies.Connect(ctx)
+	if err != nil {
+		return nil, teamUnavailable(ctx, "chorus_status", "chorus")
+	}
+	s.team.observationMu.Lock()
+	s.team.connection = connection
+	s.team.observationMu.Unlock()
 	host := s.team.dependencies.Host
 	// Observe dialogs before any space creation or focus change: opening the launcher is a toggle.
 	overlays, err := host.Overlays(ctx)

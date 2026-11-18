@@ -192,7 +192,7 @@ Surla needs:
   fresh compiler scratch. See [`check_project`](docs/REFERENCE.md#check_project).
 - **Herdr core** (the `herdr-core` and `hc` commands) and the **Herdr app**
   (`herdr-app`).
-- **Chorus v0.13.0** or newer.
+- **Chorus v0.14.0** or newer.
 - A coding agent that the Chorus dialog or terminal command can start for each role.
 
 To install the Surla described by this README, clone this repository and check
@@ -281,6 +281,11 @@ error. If the team cannot be prepared, `surla` still opens the page, then
 names what failed and the step that repairs it. When Chorus or the Herdr app could not be started, that step is to start it and run `surla` again; otherwise **Start agents** on the page
 tries again. See [`surla` and `surla stop`](docs/REFERENCE.md#surla-serve)
 for the project's state, settings and recovery.
+
+If Chorus uses another address, start it with `chorus up -addr :9550`.
+Surla uses that managed address when you start the team. After changing it,
+choose **Start agents** or run `surla` again. A foreground `chorus serve -addr`
+alone does not set the managed address. See the [team reference](docs/REFERENCE.md#team-supervision).
 
 ## Use the tools without a team
 
