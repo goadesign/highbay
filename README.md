@@ -124,7 +124,11 @@ to $50 get instant store credit; larger ones wait for a manager":
    `surla/tests-<n>`). The builder commits in `.surla-build` rather than in
    the project folder, so you merge the builder's commit first and then the
    tests' commit into the branch checked out in the project folder yourself.
-   Surla merges and deploys nothing. Approval needs no
+   Once your branch holds both commits' changes, the build shows **Merged**.
+   Detecting the merge runs no tests: the verification covered the passed
+   run's commits, not your branch after the merge, which may also hold other
+   changes merged after the build started. Surla
+   merges and deploys nothing. Approval needs no
    settings. A project that stores
    [promotion settings](docs/REFERENCE.md#surla-verification-and-surla-promotion)
    (a release folder and the names of its binaries) gets one more check at
