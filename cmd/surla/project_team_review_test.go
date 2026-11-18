@@ -50,7 +50,7 @@ func TestProductionTeamPreflightRejectsOldChorus(t *testing.T) {
 	runtime.openViews = func(context.Context, string) error { t.Fatal("old Chorus must not open a browser"); return nil }
 	var output bytes.Buffer
 	err := runtime.start(&output)
-	require.ErrorContains(t, err, "Chorus v0.11.0 or newer is required; update with: chorus update -yes")
+	require.ErrorContains(t, err, "Chorus v0.12.0 or newer is required; update with: chorus update -yes")
 	assert.Empty(t, output.String())
 	_, err = os.Stat(effects)
 	assert.ErrorIs(t, err, os.ErrNotExist)
@@ -430,7 +430,7 @@ func TestCLIAlreadyOpenAndCredentialNonleak(t *testing.T) {
 	calls = nil
 	runtime := testProjectRuntime()
 	bindFixtureTeamEffects(&runtime)
-	runtime.preflight = func() error { return nil }
+	runtime.preflight = func(bool) error { return nil }
 	runtime.startTeamPrograms = func(ctx context.Context) error {
 		_, hasDeadline := ctx.Deadline()
 		assert.False(t, hasDeadline, "machine phases own separate deadlines")

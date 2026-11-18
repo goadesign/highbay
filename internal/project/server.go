@@ -164,7 +164,11 @@ func (s *Server) Handler(application http.Handler) http.Handler {
 		}
 		site := r.Header.Get("Sec-Fetch-Site")
 		shell := r.Method == http.MethodGet && r.URL.Path == "/views"
-		if site != "" && site != "same-origin" && !(shell && (site == "none" || site == "same-site")) {
+		// Navigation can come from any site, including a browser extension.
+		// Only the fixed shell is public; its fragment exchange remains same-origin.
+		navigation := shell && r.Header.Get("Sec-Fetch-Mode") == "navigate" &&
+			r.Header.Get("Sec-Fetch-Dest") == "document"
+		if site != "" && site != "same-origin" && !navigation && !(shell && (site == "none" || site == "same-site")) {
 			writeAccessError(w, r, http.StatusForbidden, "forbidden", "request must come from the project's own page")
 			return
 		}

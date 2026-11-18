@@ -54,6 +54,14 @@ These words appear throughout:
 | **Change Card** | One change the guide proposes: the request, the Story, open questions, concrete examples and the behavior to preserve. |
 | **`request_revision`** | The digest of one saved revision of a Change Card. Previews, verification runs and approvals name the revision they belong to. |
 
+To work through a terminal and browser automation, run `surla --print-link`. It
+starts or attaches to the same project and prints `{ "url": "...", "expires_at":
+"..." }` JSON instead of opening a browser. Open that one-use URL in your
+controlled browser. The team instructions give commands with the actual Herdr
+space ID: `chorus team inspect` shows the roles, and `chorus team launch` accepts
+your explicit program/model choices. See [terminal operation](docs/REFERENCE.md#terminal-and-browser-automation)
+for input, recovery and link handling. The dialog remains available.
+
 Here is one change, for example a refund assistant whose rule is "refunds up
 to $50 get instant store credit; larger ones wait for a manager":
 
@@ -166,8 +174,8 @@ Surla needs:
   fresh compiler scratch. See [`check_project`](docs/REFERENCE.md#check_project).
 - **Herdr core** (the `herdr-core` and `hc` commands) and the **Herdr app**
   (`herdr-app`).
-- **Chorus v0.11.0** or newer.
-- A coding agent that the Chorus dialog can start for each role.
+- **Chorus v0.12.0** or newer.
+- A coding agent that the Chorus dialog or terminal command can start for each role.
 
 Install Surla, Herdr and Chorus:
 

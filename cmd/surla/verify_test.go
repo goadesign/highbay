@@ -396,7 +396,7 @@ func projectDispatchRuntime(t *testing.T) projectRuntime {
 	root := t.TempDir()
 	runtime := testProjectRuntimeAt(root)
 	bindFixtureTeamEffects(&runtime)
-	runtime.preflight = func() error { return nil }
+	runtime.preflight = func(bool) error { return nil }
 	runtime.waitTerminal = func(ctx context.Context, id string) (bool, error) { <-ctx.Done(); return false, nil }
 	starts, opens := 0, 0
 	runtime.startTerminal = func(ctx context.Context, state *project.State) (string, error) {

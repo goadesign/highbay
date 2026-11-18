@@ -432,12 +432,21 @@ func TestTeamResultNextStep(t *testing.T) {
 			team, err := server.EnsureTeam(teamContext(state))
 			require.NoError(t, err)
 			assert.Equal(t, tc.dialog, team.Dialog)
-			assert.Equal(t, tc.step, team.Step)
+			assert.Contains(t, team.Step, tc.step)
+			if tc.dialog != "not_needed" {
+				assert.Contains(t, team.Step, "chorus team inspect --space '"+first.Space+"'")
+				assert.Contains(t, team.Step, "chorus team launch --space '"+first.Space+"' --choices choices.json")
+				assert.Contains(t, team.Step, "--choices -")
+				assert.NotContains(t, team.Step, "<id>")
+			} else {
+				assert.Equal(t, tc.step, team.Step)
+			}
 			userTeam, err := server.StartAgents(t.Context())
 			require.NoError(t, err)
 			assert.Equal(t, team.Step, userTeam.Step, "the user operation must carry the owner's step unchanged")
 		})
 	}
+	assert.Contains(t, teamNextStep("opened", "sp'quoted"), "--space 'sp'\\''quoted'")
 }
 
 // TestEnsureTeamCountsOnlyGuideAndRolesWithWork checks that EnsureTeam counts

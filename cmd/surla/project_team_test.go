@@ -105,7 +105,7 @@ func TestTeamPreflightVersionAndPrograms(t *testing.T) {
 				return []byte("chorus " + version + "\n"), nil
 			}}
 			err := preflightTeam(commands)
-			if version == "v0.11.0" || version == "v0.12.0" {
+			if version == "v0.12.0" {
 				assert.NoError(t, err)
 			} else {
 				assert.ErrorContains(t, err, "chorus update -yes")
@@ -376,7 +376,7 @@ func TestStartOpensViewsWhenTeamFails(t *testing.T) {
 			require.NoError(t, state.SaveRunning(project.Running{ManagementCredential: strings.Repeat("b", 64)}))
 			runtime := testProjectRuntime()
 			bindFixtureTeamEffects(&runtime)
-			runtime.preflight = func() error { return nil }
+			runtime.preflight = func(bool) error { return nil }
 			runtime.startTeamPrograms = func(context.Context) error { return tc.programs }
 			opened := ""
 			runtime.openViews = func(_ context.Context, address string) error { opened = address; return nil }
@@ -403,7 +403,7 @@ func TestTeamPreflightHasNoStateEffects(t *testing.T) {
 				return "", nil
 			}
 			runtime.startTeamPrograms = func(context.Context) error { t.Fatal("preflight failure must not start services/windows"); return nil }
-			runtime.preflight = func() error {
+			runtime.preflight = func(bool) error {
 				commands, err := resolveTeamCommands(func(name string) (string, error) {
 					if name == scenario {
 						return "", assert.AnError

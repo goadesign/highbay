@@ -25,6 +25,7 @@ import (
 	"unicode/utf8"
 
 	genprojectclient "github.com/goadesign/surla/gen/http/project/client"
+	genprojectserver "github.com/goadesign/surla/gen/http/project/server"
 	gensurlaclient "github.com/goadesign/surla/gen/http/surla/client"
 	genproject "github.com/goadesign/surla/gen/project"
 	"github.com/goadesign/surla/internal/controlplane"
@@ -40,7 +41,7 @@ import (
 type projectRuntime struct {
 	// configRoot is supplied by the process composition root, never a package global.
 	configRoot     func() (string, error)
-	preflight      func() error
+	preflight      func(openBrowser bool) error
 	startTerminal  func(context.Context, *project.State) (string, error)
 	openViews      func(context.Context, string) error
 	waitTerminal   func(context.Context, string) (bool, error)
@@ -79,7 +80,7 @@ const (
 func productionProjectRuntime() projectRuntime {
 	return projectRuntime{
 		configRoot: os.UserConfigDir,
-		preflight: func() error {
+		preflight: func(openBrowser bool) error {
 			commands, err := cliTeamCommands()
 			if err != nil {
 				return err
@@ -87,7 +88,7 @@ func productionProjectRuntime() projectRuntime {
 			if err := preflightTeam(commands); err != nil {
 				return err
 			}
-			return preflightProjectStart(projectHerdrProgram)
+			return preflightProjectStart(projectHerdrProgram, openBrowser)
 		},
 		teamDependencies: projectTeamDependencies,
 		startTeamPrograms: func(ctx context.Context) error {
@@ -126,8 +127,20 @@ func cliTeamCommands() (teamCommands, error) {
 }
 
 // start serializes discovery and starts at most one server, then opens a one-use views link.
-func (runtime projectRuntime) start(stdout io.Writer) (err error) {
-	if err := runtime.preflight(); err != nil {
+func (runtime projectRuntime) start(stdout io.Writer) error {
+	return runtime.startProject(stdout, stdout, true)
+}
+
+// printLink delivers one fresh browser link as JSON, leaving all startup notices
+// on the diagnostic writer so an automation client can consume stdout directly.
+func (runtime projectRuntime) printLink(stdout, diagnostics io.Writer) error {
+	return runtime.startProject(stdout, diagnostics, false)
+}
+
+// startProject shares server/team ownership between the two link delivery routes.
+// Only the final delivery and its opener prerequisite differ.
+func (runtime projectRuntime) startProject(stdout, diagnostics io.Writer, openBrowser bool) (err error) {
+	if err := runtime.preflight(openBrowser); err != nil {
 		return err
 	}
 	state, err := runtime.discover()
@@ -179,7 +192,7 @@ func (runtime projectRuntime) start(stdout io.Writer) (err error) {
 		}
 	}
 	if created {
-		err = errors.Join(err, writeProjectCreatedNotice(stdout))
+		err = errors.Join(err, writeProjectCreatedNotice(diagnostics))
 	}
 	if err != nil {
 		return err
@@ -189,7 +202,7 @@ func (runtime projectRuntime) start(stdout io.Writer) (err error) {
 	// settings go to it before anything else; a refusal stops the start.
 	settingsCtx, stopSettings := context.WithTimeout(context.Background(), 5*time.Second)
 	defer stopSettings()
-	if err := handOverModelSettings(settingsCtx, state, modelsettings.Select(os.Environ()), stdout); err != nil {
+	if err := handOverModelSettings(settingsCtx, state, modelsettings.Select(os.Environ()), diagnostics); err != nil {
 		return err
 	}
 
@@ -202,7 +215,7 @@ func (runtime projectRuntime) start(stdout io.Writer) (err error) {
 		team, err := client.EnsureTeam(teamCtx)
 		if err != nil {
 			teamErr = err
-		} else if _, err := fmt.Fprintf(stdout, "Team %s.\n%s\n", team.Team, team.Step); err != nil {
+		} else if _, err := fmt.Fprintf(diagnostics, "Team %s.\n%s\n", team.Team, team.Step); err != nil {
 			return err
 		}
 	}
@@ -219,10 +232,14 @@ func (runtime projectRuntime) start(stdout io.Writer) (err error) {
 	if err := validateProjectViewsLink(state, link.URL); err != nil {
 		return errors.Join(err, teamErr)
 	}
-	if err := runtime.openViews(linkCtx, link.URL); err != nil {
-		return errors.Join(fmt.Errorf("open project views: %w", err), teamErr)
+	if openBrowser {
+		if err := runtime.openViews(linkCtx, link.URL); err != nil {
+			return errors.Join(fmt.Errorf("open project views: %w", err), teamErr)
+		}
+	} else if err := json.NewEncoder(stdout).Encode(genprojectserver.NewBrowserLinkResponseBody(link)); err != nil {
+		return errors.Join(fmt.Errorf("write project views link: %w", err), teamErr)
 	}
-	_, err = fmt.Fprintf(stdout, "Surla is running for %s at %s\n", state.Record.Directory, state.Origin())
+	_, err = fmt.Fprintf(diagnostics, "Surla is running for %s at %s\n", state.Record.Directory, state.Origin())
 	return errors.Join(err, teamErr)
 }
 
@@ -959,12 +976,14 @@ func projectHerdrProgram() (string, error) {
 }
 
 // preflightProjectStart refuses unavailable launch effects before creating project state.
-func preflightProjectStart(findHerdr func() (string, error)) error {
+func preflightProjectStart(findHerdr func() (string, error), openBrowser bool) error {
 	if _, err := findHerdr(); err != nil {
 		return err
 	}
-	if _, err := projectBrowserProgram(); err != nil {
-		return err
+	if openBrowser {
+		if _, err := projectBrowserProgram(); err != nil {
+			return err
+		}
 	}
 	return preflightProjectGit()
 }

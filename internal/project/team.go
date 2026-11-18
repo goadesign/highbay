@@ -174,7 +174,7 @@ func (s *Server) ensureTeam(ctx context.Context) (result *genproject.ProjectTeam
 	defer s.team.Unlock()
 	defer func() {
 		if result != nil {
-			result.Step = teamNextStep(result.Dialog)
+			result.Step = teamNextStep(result.Dialog, result.Space)
 		}
 	}()
 	if err := ctx.Err(); err != nil {
@@ -509,12 +509,18 @@ func teamUnavailable(ctx context.Context, step, cause string) error {
 // teamNextStep owns the user's next action after preparing a team. The launcher
 // reads its rows when it opens; an already open dialog rereads a rewritten roster
 // only when the user clicks its existing Reload team action.
-func teamNextStep(dialog string) string {
+func teamNextStep(dialog, space string) string {
+	// Quote the actual owner-returned ID as shell data so both user surfaces
+	// supply copyable commands, including when an external ID contains punctuation.
+	quotedSpace := "'" + strings.ReplaceAll(space, "'", "'\\''") + "'"
+	terminal := "From a terminal, run chorus team inspect --space " + quotedSpace +
+		", then chorus team launch --space " + quotedSpace + " --choices choices.json. " +
+		"Use chorus team launch --help for the role choices JSON; --choices - reads standard input."
 	switch dialog {
 	case "opened":
-		return "Choose an agent for each role in the open Chorus dialog in Herdr."
+		return "Choose an agent for each role in the open Chorus dialog in Herdr. " + terminal
 	case "already_open":
-		return "If the open Chorus dialog is for this project, click \"Reload team\", then choose the agents. If it is for another project, close it, then start the agents again (Start agents on the views page, or run surla)."
+		return "If the open Chorus dialog is for this project, click \"Reload team\", then choose the agents. If it is for another project, close it, then start the agents again (Start agents on the views page, or run surla). " + terminal
 	case "not_needed":
 		return "Every listed role is running."
 	}
