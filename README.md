@@ -79,7 +79,10 @@ to $50 get instant store credit; larger ones wait for a manager":
    confirm. No agent can confirm for you. If the guide later revises the
    change, its proposed revision waits beside the agreed revision until you
    adopt or decline it; the agreed revision stays in force until then.
-5. **Build.** Press **Build this change** on the page. Surla saves the agreed
+5. **Review the architecture.** Open **Architecture** on the page to inspect
+   the agreed revision's saved design. If it needs a change, ask the guide to
+   revise the change, then review and adopt its proposal before building.
+6. **Build.** Press **Build this change** on the page. Surla saves the agreed
    revision, and the Chorus dialog asks you for agents for two more roles: the
    builder and the test writer. The builder gets its own working copy of the
    project in `.surla-build` on the branch `surla/build-<n>`, and the test
@@ -87,7 +90,7 @@ to $50 get instant store credit; larger ones wait for a manager":
    branch `surla/tests-<n>`, one required test per finished flow of the Story,
    and your answers, examples and preserved behaviors, which its tests must
    also hold the service to. Draft flows require no test.
-6. **Tests.** The test writer writes those tests and reports. Surla does not
+7. **Tests.** The test writer writes those tests and reports. Surla does not
    take its word for it: it writes the required tests into the copy again,
    checks that nothing changed outside the test module (the project's `eval/`
    folder), and builds and lists the test program. Problems go
@@ -95,7 +98,7 @@ to $50 get instant store credit; larger ones wait for a manager":
    required tests; Next names the test writer’s next step.
    When the tests pass the check, Surla accepts them at one commit on
    `surla/tests-<n>`.
-7. **Code and verify.** Meanwhile the builder writes the code, builds and
+8. **Code and verify.** Meanwhile the builder writes the code, builds and
    tests it, and commits. If the application calls a model, the builder can
    try prompt wording after Surla accepts the tests, using a *live target*:
    a running copy of the application
@@ -104,7 +107,7 @@ to $50 get instant store credit; larger ones wait for a manager":
    tests accepted for that exact revision against it. It refuses to verify
    until those tests are accepted. The result appears in the page's **Check**
    view.
-8. **Approve and merge.** Open the run in **Approve** to review its recorded
+9. **Approve and merge.** Open the run in **Approve** to review its recorded
    Story flows, test outcomes, excluded drafts and unknown coverage. When the
    server says approval is available, Next offers **Approve this result**.
    Surla checks that the run passed and ran the tests accepted
@@ -243,7 +246,7 @@ folder inside it and make its first commit, without a restart.
 `surla` prints what it did and your next step, for example:
 
 ```text
-Created a new, empty Surla project. Moving or renaming this folder starts a new project.
+Started a Surla project for this folder. Moving or renaming this folder starts a new project.
 Team <name>.
 Choose an agent for each role in the open Chorus dialog in Herdr.
 Surla is running for <project folder> at <address>

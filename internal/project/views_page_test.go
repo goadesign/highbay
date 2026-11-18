@@ -151,6 +151,7 @@ func TestViewsPageShellNavigation(t *testing.T) {
 		name, method, path, site, mode, destination string
 		want                                        int
 	}{
+		{"bare address", "GET", "/", "none", "navigate", "document", http.StatusForbidden},
 		{"extension navigation", "GET", "/views", "cross-site", "navigate", "document", http.StatusOK},
 		{"address bar", "GET", "/views", "none", "navigate", "document", http.StatusOK},
 		{"same-site navigation", "GET", "/views", "same-site", "navigate", "document", http.StatusOK},
@@ -176,9 +177,14 @@ func TestViewsPageShellNavigation(t *testing.T) {
 				assert.Contains(t, response.Header.Get("Content-Security-Policy"), "frame-ancestors 'none'")
 				assert.Equal(t, "nosniff", response.Header.Get("X-Content-Type-Options"))
 			}
-			_, err = io.Copy(io.Discard, response.Body)
+			body, err := io.ReadAll(response.Body)
 			require.NoError(t, err)
 			require.NoError(t, response.Body.Close())
+			if tc.name == "bare address" {
+				assert.Contains(t, string(body), "request must come from the project's own page")
+				assert.Contains(t, string(body), "run surla in your project folder to open it")
+				assert.Contains(t, string(body), "surla --print-link to get a link without opening a browser")
+			}
 		})
 	}
 	link, err := vp.link()

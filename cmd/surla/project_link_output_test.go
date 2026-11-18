@@ -23,6 +23,7 @@ import (
 // links and actual browser exchange without starting Herdr, a browser or a model.
 func TestPrintedProjectLinksStartsAndReattaches(t *testing.T) {
 	t.Chdir(t.TempDir())
+	require.NoError(t, os.WriteFile("README.md", []byte("Existing project files.\n"), 0o600))
 	isolateProviderFamilies(t)
 	runtime := projectDispatchRuntime(t)
 	runtime.preflight = func(openBrowser bool) error {
@@ -46,9 +47,9 @@ func TestPrintedProjectLinksStartsAndReattaches(t *testing.T) {
 		assert.Contains(t, diagnostics.String(), "Surla is running for")
 		assert.NotContains(t, diagnostics.String(), "#link=")
 		if index == 0 {
-			assert.Contains(t, diagnostics.String(), "Created a new, empty Surla project")
+			assert.Contains(t, diagnostics.String(), "Started a Surla project for this folder. Moving or renaming this folder starts a new project.")
 		} else {
-			assert.NotContains(t, diagnostics.String(), "Created a new, empty Surla project")
+			assert.NotContains(t, diagnostics.String(), "Started a Surla project for this folder")
 		}
 		address, err := url.Parse(link.URL)
 		require.NoError(t, err)
@@ -66,6 +67,9 @@ func TestPrintedProjectLinksStartsAndReattaches(t *testing.T) {
 			require.NoError(t, response.Body.Close())
 		}
 	}
+	kept, err := os.ReadFile("README.md")
+	require.NoError(t, err)
+	assert.Equal(t, "Existing project files.\n", string(kept))
 	// Team failure preserves the usable page link and the existing nonzero result.
 	startTeam := runtime.startTeamPrograms
 	runtime.startTeamPrograms = func(context.Context) error { return errors.New("team fixture unavailable") }
