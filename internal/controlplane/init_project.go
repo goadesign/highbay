@@ -91,10 +91,6 @@ func (c *ControlPlane) InitProject(
 			err,
 		))
 	}
-	if c.initialWorkspaceRoot == "" {
-		recordInitRefused(span, "workspace_unavailable")
-		return nil, gensurla.MakeNotImplemented(errors.New("no workspace directory is bound to this control plane"))
-	}
 	if !scaffold.ValidVersion(c.surlaVersion) {
 		recordInitRefused(span, "surla_version_unavailable")
 		return nil, gensurla.MakeNotImplemented(errors.New(

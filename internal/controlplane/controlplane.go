@@ -92,8 +92,8 @@ type (
 		// not_implemented. The host shuts down this provider after Close, or
 		// if New fails; the control plane never shuts it down.
 		TracerProvider *sdktrace.TracerProvider
-		// WorkspaceDir is the initial filesystem workspace bound to this
-		// control plane. When set, cards, runs, and reports must live outside
+		// WorkspaceDir is the required initial filesystem workspace bound to this
+		// control plane. Cards, runs, and reports must live outside
 		// it, and CP1/CP2/CP3/CP4/CP5 can read or derive project inputs from
 		// the bound workspace.
 		WorkspaceDir string
@@ -184,7 +184,8 @@ type (
 		// <CardsDir>/live. Without it, or without Verification or
 		// WrittenTestRuns, start_live_target fails.
 		Live *LiveConfig
-		// Team is the project owner composed before this control plane; nil leaves team operations unavailable.
+		// Team is the required project owner and service composed before this
+		// control plane. New validates and copies the binding before serving.
 		Team *TeamBinding
 	}
 
@@ -321,7 +322,7 @@ type (
 		// boundWorkspaceDev and boundWorkspaceIno.
 		workspaceMu sync.RWMutex
 		// initialWorkspaceRoot is the cleaned physical path of
-		// Options.WorkspaceDir at startup, or empty when unbound.
+		// Options.WorkspaceDir at startup.
 		initialWorkspaceRoot string
 		// protectedDirs holds the deduplicated physical paths of
 		// initialWorkspaceRoot and its enclosing Git working tree root,
@@ -428,7 +429,7 @@ type (
 		// buildStartWithTimeout injects the phase deadline in deterministic tests.
 		buildStartWithTimeout func(context.Context, time.Duration) (context.Context, context.CancelFunc)
 		// team is the single injected owner; teamWorker drains before stores close.
-		team       *TeamBinding
+		team       TeamBinding
 		teamWorker sync.WaitGroup
 	}
 )
@@ -486,6 +487,12 @@ func newWithWorkspaceGitTimeout(
 		}
 		return evalErr
 	}
+	if opts.Team == nil {
+		return nil, errors.Join(errors.New("Team is required"), cleanupFailedNew())
+	}
+	if opts.Team.Owner == "" || opts.Team.Service == nil {
+		return nil, errors.Join(errors.New("Team requires an owner and service"), cleanupFailedNew())
+	}
 	surlaVersion := strings.TrimSpace(opts.SurlaVersion)
 	if surlaVersion != "" && !scaffold.ValidVersion(surlaVersion) {
 		err := fmt.Errorf("surla version %q must be a canonical semantic version such as v0.1.0", opts.SurlaVersion)
@@ -501,10 +508,6 @@ func newWithWorkspaceGitTimeout(
 	}
 	if opts.WrittenTestRuns != nil && opts.RunsDir == "" {
 		err := errors.New("WrittenTestRuns requires RunsDir, where its runs are kept")
-		return nil, errors.Join(err, cleanupFailedNew())
-	}
-	if opts.WrittenTestRuns != nil && opts.WorkspaceDir == "" {
-		err := errors.New("WrittenTestRuns requires WorkspaceDir, whose repository holds the commits it verifies")
 		return nil, errors.Join(err, cleanupFailedNew())
 	}
 	if (opts.Verification != nil || opts.WrittenTestRuns != nil) && opts.BuildCacheDir == "" {
@@ -598,7 +601,7 @@ func newWithWorkspaceGitTimeout(
 		builderCopyTurn:        make(chan struct{}, 1),
 		workingCopyTurn:        make(chan struct{}, 1),
 		reportWake:             make(chan struct{}, 1),
-		team:                   opts.Team,
+		team:                   *opts.Team,
 	}
 	if err := cp.restoreWorkspace(); err != nil {
 		return nil, errors.Join(err, cp.Close())
@@ -622,9 +625,6 @@ func newWithWorkspaceGitTimeout(
 		// Close and the next start, and its span records the failure, so it
 		// does not stop this server from starting.
 		cp.recoverCheckOperations()
-	}
-	if cp.team != nil && (cp.team.Owner == "" || cp.team.Service == nil) {
-		return nil, errors.Join(errors.New("team binding requires its owner and service"), cp.Close())
 	}
 	cp.startTeamSupervisor()
 	cp.startReportChecker()

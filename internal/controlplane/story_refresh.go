@@ -129,11 +129,6 @@ func (c *ControlPlane) RefreshStory(ctx context.Context) (*gensurla.StoryRefresh
 		return nil, errors.New("authenticated principal is required")
 	}
 	wsDir, wsDev, wsIno := c.currentWorkspaceTarget()
-	if wsDir == "" {
-		return nil, gensurla.MakeNotImplemented(errors.New(
-			"no workspace directory is bound to this control plane; start Surla from a project directory",
-		))
-	}
 	files, madeFrom, err := c.readDraftSnapshot(ctx, wsDir, wsDev, wsIno)
 	if err != nil {
 		return nil, err
@@ -233,11 +228,6 @@ func (c *ControlPlane) GetStoryRefresh(ctx context.Context) (*gensurla.StoryRefr
 		return nil, errors.New("authenticated principal is required")
 	}
 	wsDir, wsDev, wsIno := c.currentWorkspaceTarget()
-	if wsDir == "" {
-		return nil, gensurla.MakeNotImplemented(errors.New(
-			"no workspace directory is bound to this control plane; start Surla from a project directory",
-		))
-	}
 	key := storyRefreshKey{
 		owner:        principal.ID,
 		workspaceDir: wsDir,
@@ -256,9 +246,6 @@ func (c *ControlPlane) GetStoryRefresh(ctx context.Context) (*gensurla.StoryRefr
 // GetStoryRefresh reads, without starting anything.
 func (c *ControlPlane) storyEvaluation(owner string) storyEvaluationVersion {
 	wsDir, wsDev, wsIno := c.currentWorkspaceTarget()
-	if wsDir == "" {
-		return storyEvaluationVersion{}
-	}
 	key := storyRefreshKey{owner: owner, workspaceDir: wsDir, workspaceDev: wsDev, workspaceIno: wsIno}
 	c.storyRefreshMu.Lock()
 	defer c.storyRefreshMu.Unlock()
@@ -341,12 +328,6 @@ func (c *ControlPlane) adoptStoryRefresh(
 		))
 	}
 	wsDir, wsDev, wsIno := c.currentWorkspaceTarget()
-	if wsDir == "" {
-		return refreshedSnapshot{}, gensurla.MakeUnprocessable(fmt.Errorf(
-			"cannot adopt story_refresh_op_id %q because no workspace directory is bound to this control plane; start Surla from a project directory, then call refresh_story",
-			opID,
-		))
-	}
 	c.workspaceMu.RLock()
 	defer c.workspaceMu.RUnlock()
 	key := storyRefreshKey{
@@ -381,9 +362,6 @@ func (c *ControlPlane) adoptStoryRefresh(
 // invents a snapshot for an initialized module. Only go.mod's existence is read.
 func (c *ControlPlane) requireRefreshForModule() error {
 	wsDir, wsDev, wsIno := c.currentWorkspaceTarget()
-	if wsDir == "" {
-		return nil
-	}
 	_, root, err := openModuleRootWithIdentity(wsDir, wsDev, wsIno)
 	if err != nil {
 		return err

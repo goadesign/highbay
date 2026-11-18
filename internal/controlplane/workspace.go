@@ -68,7 +68,7 @@ var commitIDPattern = regexp.MustCompile(`^([0-9a-f]{40}|[0-9a-f]{64})$`)
 // its cleaned physical path, device ID, and inode number.
 func openWorkspaceRootAndStat(dir string) (string, uint64, uint64, error) {
 	if dir == "" {
-		return "", 0, 0, nil
+		return "", 0, 0, errors.New("WorkspaceDir is required")
 	}
 	lstatInfo, err := os.Lstat(dir)
 	if err != nil {
@@ -126,9 +126,6 @@ func (c *ControlPlane) restoreWorkspace() (err error) {
 	wf, ok, err := c.readWorkspaceRecord()
 	if err != nil || !ok {
 		return err
-	}
-	if c.initialWorkspaceRoot == "" {
-		return errors.New("cards directory contains workspace.json, but no workspace directory is configured")
 	}
 	if err := validateInitDirName(wf.Dir); err != nil {
 		return fmt.Errorf("invalid dir %q in workspace.json: %w", wf.Dir, err)

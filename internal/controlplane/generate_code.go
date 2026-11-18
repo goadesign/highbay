@@ -57,10 +57,6 @@ func (c *ControlPlane) GenerateCode(
 	if err := errors.Join(genCtx.Err(), c.serverCtx.Err()); err != nil {
 		return nil, failGenerateFault(span, "code generation was canceled; call again on a running server", err)
 	}
-	if c.activeWorkspaceDir == "" {
-		span.AddEvent("generation_refused", trace.WithAttributes(attribute.String("reason", "no_workspace")))
-		return nil, gensurla.MakeNotImplemented(errors.New("no workspace is bound; start Surla from the local project directory"))
-	}
 	select {
 	case c.builderCopyTurn <- struct{}{}:
 	default:

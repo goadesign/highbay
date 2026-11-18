@@ -46,7 +46,7 @@ const (
 //     service name and the test module's path is that path followed by
 //     /eval. The project server reads the same two files, at a commit, and
 //     passes them to the same function to verify a starter project.
-//  3. Neither, including when no workspace is bound, or either file is
+//  3. Neither, when either file is
 //     absent, is not a regular file there (a symbolic link at the file or at
 //     eval, a directory, a FIFO), is larger than the bound, or StarterLayout
 //     refuses them: the user can change any of those.
@@ -69,9 +69,6 @@ func (c *ControlPlane) projectTestLayout(
 	wsDir, wsDev, wsIno := c.currentWorkspaceTarget()
 	if c.storedEvaluator() {
 		return testSourceStoredEvaluator, scaffold.Layout{}, wsDir, nil
-	}
-	if wsDir == "" {
-		return testSourceNone, scaffold.Layout{}, wsDir, nil
 	}
 	_, root, err := openModuleRootWithIdentity(wsDir, wsDev, wsIno)
 	if err != nil {

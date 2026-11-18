@@ -149,9 +149,6 @@ func (BuilderAndTestWriter) buildFolders() {}
 // of the generated endpoint's caller-purpose policy. Internal observation reads
 // already belong to the fixed project owner and perform no repeated authorization.
 func (c *ControlPlane) ownedTeam(ctx context.Context) (Team, error) {
-	if c.team == nil {
-		return nil, gensurla.MakeNotImplemented(errors.New("Start this project with surla to use its team."))
-	}
 	principal, ok := PrincipalFromContext(ctx)
 	if !ok || principal.ID != c.team.Owner {
 		return nil, gensurla.MakeForbidden(errors.New("caller may not access this project team"))
@@ -163,9 +160,6 @@ func (c *ControlPlane) ownedTeam(ctx context.Context) (Team, error) {
 // returns (and before the server listens) and admits the one lifetime worker
 // only after all stores and fields are ready.
 func (c *ControlPlane) startTeamSupervisor() {
-	if c.team == nil {
-		return
-	}
 	c.team.Service.BindAssignments(c.assignmentGenerations)
 	c.teamWorker.Go(c.superviseTeam)
 }

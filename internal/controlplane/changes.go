@@ -195,7 +195,7 @@ func (c *ControlPlane) changeList(ctx context.Context, span trace.Span, owner st
 	_, noVerif := c.verifier.(noVerification)
 	approvalAvailable := err == nil && !noVerif
 	var team *gensurla.TeamSnapshot
-	if c.team != nil && c.team.Owner == owner {
+	if c.team.Owner == owner {
 		team, err = c.team.Service.ReadTeam(ctx)
 		if err != nil {
 			return nil, err
