@@ -77,7 +77,10 @@ of their version label.
 
 Run `surla --print-link` in the project folder to start or attach and receive one
 JSON object on stdout: `{ "url": "...", "expires_at": "..." }`. Startup notices,
-team instructions and the nonsecret origin go to stderr. This route does not
+team instructions and the nonsecret origin go to stderr. `--print-link` takes no
+other arguments (apart from `help`, `-h`, `-help` or `--help`); extra arguments
+are refused with `surla: --print-link accepts no additional arguments; use surla
+--help`. This route does not
 require or call `open`/`xdg-open`; ordinary `surla` keeps opening the browser.
 The URL grants user-page access to whoever exchanges it first within two
 minutes. Avoid shared terminal/log captures and open it in the browser you
@@ -88,7 +91,14 @@ stderr: user decisions on the page do not require an agent.
 
 The shared team next step names the dialog and copyable Chorus commands with
 the actual space ID. Run the printed `chorus team inspect --space ...` to see
-roles, then `chorus team launch --space ... --choices choices.json`, or
+roles: bare inspection prints `{ "root": "...", "swarm": "...", "roles": [...] }`
+with each role's `role`, `title`, `handle`, `running` (`true` or `false`),
+`client`, `model`, `thinking` and `yolo` (`null` when not recorded), never
+credentials, without running client discovery. Before the project's first
+build, `roles` lists only `guide`; pressing **Build this change** on the views
+page adds `builder` and, unless verification settings are stored, `test_writer`
+to the same space's roster (registered worker roles stay in the roster across
+later builds). Run `chorus team launch --space ... --choices choices.json`, or
 `--choices -` to read the same JSON from stdin. Choices are keyed by role:
 
 ```json
@@ -97,10 +107,17 @@ roles, then `chorus team launch --space ... --choices choices.json`, or
 
 All fields are required; null model/thinking use client defaults. Name the
 program explicitly: the command has no Herdr program catalog or saved
-preferences. The dialog retains those features. Before launching, run the
+preferences. The dialog retains those features. Roles with Surla MCP connections
+support `"client": "claude"` or `"client": "codex"`; `"program"` is a single
+executable name, path or shell function name, not shell code or arguments.
+Before launching, run the
 printed `chorus team inspect --space ... --choices choices.json` command to see
 the chosen programs' model options, thinking levels and permission effects.
-It uses the dialog's discovery and keeps its notes or errors visible. A model
+It validates the choices without opening panes or changing saved preferences and
+adds `client_options`, one entry per distinct chosen `client` and `program`
+(`models`, `efforts`, `model_supported`, `thinking_supported`, `note`, `error`,
+`yolo_flag`, `yolo_effect` and per-role `choices`), using the dialog's discovery
+and keeping its notes or errors visible. A model
 outside the suggestions says
 `not listed by <program>; the client checks it at startup`;
 it is information, not a refusal of a custom model ID.
@@ -109,9 +126,17 @@ tool confirmations (Codex also disables command sandboxing). Inspection shows
 the exact supported flag and effect. The client family identifies
 its existing flags and connection support; program can name a wrapper. Every
 missing role needs a choice; running roles may be omitted or repeated with
-matching settings. Success prints `{ "tab": "...", "created": 1, "reused": 0 }`.
+matching settings. After starting a build on the page, run `chorus team inspect
+--space ...` again to see the current roster and pass choices for the listed
+roles that are not running to `chorus team launch --space ... --choices ...` (a
+choice for a role outside the space's current roster, such as `test_writer`
+when verification settings are stored, is refused). Success prints
+`{ "tab": "...", "created": 1, "reused": 0 }`.
 A refusal prints a reason and exits nonzero; inspect and retry after partial
-failure to reuse completed panes. See `chorus team launch --help` and the
+failure to reuse completed panes. If Herdr's installed Chorus launcher files are
+missing or older than the `chorus` binary, `chorus team` refuses with
+`Herdr's Chorus launcher needs this release's files; run chorus setup -global,
+then retry`. See `chorus team launch --help` and the
 [Chorus launcher reference](https://github.com/goadesign/chorus/blob/main/skills/herdr/chorus-launcher/README.md#choose-roles-from-a-terminal)
 for the owning contract. Surla requires Chorus v0.14.0 or newer.
 
@@ -130,20 +155,26 @@ list the commands`.
 <a id="surla-serve"></a>
 ### `surla` and `surla stop`
 
-**Input:** `surla`, run in a project folder. **Who acts:** the command starts
+**Input:** `surla`, run in a project folder (`surla --print-link` runs the same
+server and team steps without opening a browser, writing the link JSON to
+stdout and the lines below to stderr; see
+[Terminal and browser automation](#terminal-and-browser-automation)). **Who
+acts:** the command starts
 the folder's server, or attaches to the one already running, then prepares the
 team and opens the views page. **What the user sees**, in order:
 
 ```text
 Started a Surla project for this folder. Moving or renaming this folder starts a new project.
 Team shop-3f9c1a2b4d5e.
-Choose an agent for each role in the open Chorus dialog in Herdr.
+Choose an agent for each role in the open Chorus dialog in Herdr. Run chorus team inspect --space '<space>'; chorus team launch --help; models and permission effects: chorus team inspect --space '<space>' --choices choices.json; chorus team launch --space '<space>' --choices choices.json. Stdin: --choices -.
 Surla is running for /path/to/shop at http://127.0.0.1:52011
 ```
 
 The first line appears only when the folder had no project. The second names
 the team, after the folder and the first 12 characters of the project's
-identifier. The third is the user's next step, chosen by the server:
+identifier. The third is the user's next step, chosen by the server (the first
+two states also append the `chorus team inspect` and `chorus team launch`
+commands above with the space's quoted ID):
 
 | Chorus dialog | Step printed |
 | --- | --- |
@@ -527,35 +558,66 @@ module keeps the tests the table requires (see
 An operator tool that checks a commit without a server. It clones the
 committed application and evaluator into a private work folder, builds the
 application's binaries and the evaluator's program, runs
-the evaluator, writes the full report to `<report-dir>/<digest>.json`, and
+the evaluator with the caller's shell environment unchanged (unlike
+[`verify_change`](#verify_change) on written tests, which gives only `PATH` and
+`TMPDIR`), writes the full report to `<report-dir>/<digest>.json`, and
 prints the builder view of the report (hidden scenarios shown only as
 `holdout-N`) to standard output. Then it writes one summary line to standard
 error, such as
 `surla: verification report did not pass: 1/3 scenarios passed; failed: 1, not run: 1, harness errors: 0; not passing: "refund_over_limit", "slow_refund" (report 4f2c…)`.
+It exits 0 when the report completed and passed, and 1 otherwise.
 A report that did not pass is written and printed before the command exits
-non-zero; a setup or build failure prints no report.
+non-zero; a setup or build failure prints no report. Omitting a required flag
+fails with `surla: verify requires <flags>`.
+
+To verify the current commit of a Surla project (`shop`, with the test module in
+`eval/` and generated evaluator `./gen/cmd/shop-evals`) from its repository root:
+
+```sh
+VERIFY_DIR="$(mktemp -d)"
+WORK_DIR="$VERIFY_DIR/work"
+REPORT_DIR="$VERIFY_DIR/reports"
+surla verify \
+  -candidate-repo . -candidate-commit "$(git rev-parse HEAD)" -binary shop=./cmd/shop \
+  -suite-repo . -suite-commit "$(git rev-parse HEAD)" -suite-module eval -suite-command ./gen/cmd/shop-evals \
+  -request-revision starter -work-dir "$WORK_DIR" -report-dir "$REPORT_DIR" -builder-view
+```
+
+To verify your merged branch against the exact tests Surla accepted for a build
+(even if your branch also holds other changes to `eval/`), keep
+`-candidate-commit "$(git rev-parse HEAD)"` for the merged branch and pass the
+accepted `<tests_commit>` and `<request_revision>` shown in **Approve** (or
+**Build**) as `-suite-commit <tests_commit> -request-revision <request_revision>`.
 
 | Flag | Meaning |
 | --- | --- |
 | `-candidate-repo <path\|url>` *(required)* | Repository holding the application. |
 | `-candidate-commit <sha>` *(required)* | Full commit ID to build. |
 | `-candidate-module <dir>` | Module folder inside the repository (default `.`). |
-| `-binary <name=package>` *(repeatable, at least one)* | Binary name and package path, `.` or `./…`, such as `orders=./cmd/orders`. |
+| `-binary <name=package>` *(repeatable, at least one)* | Binary name and package path, `.` or `./…`, such as `shop=./cmd/shop` or `orders=./cmd/orders`. |
 | `-suite-repo <path\|url>` *(required)* | Repository holding the evaluator. |
 | `-suite-commit <sha>` *(required)* | Full commit ID of the evaluator. |
-| `-suite-module <dir>` | Evaluator module folder (default `.`). |
-| `-suite-command <package>` *(required)* | The evaluator program's package, such as `./cmd/orders_acceptance-evals`. |
+| `-suite-module <dir>` | Evaluator module folder (default `.`; `eval` for a Surla test module). |
+| `-suite-command <package>` *(required)* | The evaluator program's package, such as `./gen/cmd/shop-evals` for a Surla test module or `./cmd/orders_acceptance-evals`. |
 | `-request-revision <digest>` *(required)* | The `request_revision` recorded in the report. Without a Change Card, any label works if `surla approve` gets the same one. |
-| `-work-dir <path>` *(required)* | A missing or empty operator-owned folder for this operation's checkouts, scratch, outputs, evidence and Go build cache. Suite evidence can name hidden scenarios: keep this folder separate from builders' working copies and do not show it to builders. Programs running as you retain your file access. Relative paths resolve from the caller's directory. |
+| `-work-dir <path>` *(required)* | A missing or empty operator-owned folder for this operation's checkouts, scratch, outputs, evidence and Go build cache. It is kept after the run, so retrying or running again requires a new or emptied `-work-dir`. Suite evidence can name hidden scenarios: keep this folder separate from builders' working copies and do not show it to builders. Programs running as you retain your file access. Relative paths resolve from the caller's directory. |
 | `-report-dir <path>` *(required)* | Where the full report is written; keep it from the builder when scenarios are hidden. |
 | `-timeout <duration>` | Limit for the run (default `0`, no limit). A stopped run prints any partial report the evaluator saved and exits non-zero; a partial report can pass. |
 | `-builder-view` | Default `true`. `-builder-view=false` prints the full report and names hidden scenarios in the summary. Failures go to standard error in either view; do not show them to the builder. |
 
+When a run ends without completing (`checkout`, `build`, `describe`, `suite`,
+`report` or `supervise`), `surla verify` writes
+`surla: verification <failure> at stage <stage>: <summary>` followed by the
+run's `executor.log` to standard error (or `surla: read executor log: …` if the
+run stopped before creating `executor.log`) and exits 1 (when a canceled or
+timed-out run saved a partial report, it writes that report JSON to standard
+output and the summary line to standard error first, then exits 1).
 Failures during checkout, standalone dependency downloads and toolchain
 lookups, and the evaluator protocol name the failed operation, its process
 status when present, and the private evidence file. Their raw standard output
 and standard error remain under `<work-dir>/evidence/`, including after the
-command ends, so the operator can inspect the named file and retry. Workspace
+command ends, so the operator can inspect the named file, pass a new or emptied
+`-work-dir`, and retry. Workspace
 preparation diagnostics are discarded. Compiler failures still include bounded
 build-output excerpts.
 

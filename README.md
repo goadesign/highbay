@@ -86,7 +86,10 @@ to $50 get instant store credit; larger ones wait for a manager":
    revise the change, then review and adopt its proposal before building.
 6. **Build.** Press **Build this change** on the page. Surla saves the agreed
    revision, and the Chorus dialog asks you for agents for two more roles: the
-   builder and the test writer. The builder gets its own working copy of the
+   builder and the test writer (or inspect and launch them with `chorus team
+   inspect` and `chorus team launch`; see
+   [terminal operation](docs/REFERENCE.md#terminal-and-browser-automation)).
+   The builder gets its own working copy of the
    project in `.surla-build` on the branch `surla/build-<n>`, and the test
    writer gets its own working copy of the project in `.surla-tests` on the
    branch `surla/tests-<n>`, one required test per finished flow of the Story,
@@ -127,7 +130,11 @@ to $50 get instant store credit; larger ones wait for a manager":
    Once your branch holds both commits' changes, the build shows **Merged**.
    Detecting the merge runs no tests: the verification covered the passed
    run's commits, not your branch after the merge, which may also hold other
-   changes merged after the build started. Surla
+   changes merged after the build started. To run the accepted test suite
+   against the merged commit on your branch yourself, pass the full commit ID
+   of your branch's `HEAD` (`"$(git rev-parse HEAD)"`) as `-candidate-commit`
+   and the accepted `<tests_commit>` shown in **Approve** as `-suite-commit` to
+   [`surla verify`](docs/REFERENCE.md#surla-verify). Surla
    merges and deploys nothing. Approval needs no
    settings. A project that stores
    [promotion settings](docs/REFERENCE.md#surla-verification-and-surla-promotion)
@@ -262,7 +269,10 @@ Surla is running for <project folder> at <address>
 
 The page opens through a single-use link and keeps its session only while it
 is open: reloading it, closing it or opening it in another tab needs a new
-link, which `surla` gives when you run it again. Running `surla` from a
+link, which `surla` gives when you run it again (or `surla --print-link` to
+print the link as JSON without opening a browser; see
+[terminal operation](docs/REFERENCE.md#terminal-and-browser-automation)).
+Running `surla` from a
 subfolder finds the same project. `surla stop` shuts the project's server
 down. After you install another build of `surla`, run `surla stop`, then
 `surla`: `surla` does not use a server that another build started. If the
