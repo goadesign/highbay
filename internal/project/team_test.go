@@ -72,7 +72,9 @@ func (f *teamFixture) OpenLauncher(context.Context) error {
 
 // fixtureTeamDependencies prevents all external effects in server authentication/lifecycle tests.
 func fixtureTeamDependencies(state *State) TeamDependencies {
-	return TeamDependencies{Lifetime: context.Background(), Host: &teamFixture{}, RosterDirectory: filepath.Join(state.Dir, "test-rosters"), Shell: "/bin/zsh"}
+	return TeamDependencies{Lifetime: context.Background(), Host: &teamFixture{}, RosterDirectory: filepath.Join(state.Dir, "test-rosters"), Shell: "/bin/zsh", Connect: func(context.Context) (TeamConnection, error) {
+		return TeamConnection{Endpoint: "http://chorus.test"}, nil
+	}}
 }
 
 // teamContext grants management through the same trusted principal boundary used by HTTP.

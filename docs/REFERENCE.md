@@ -49,7 +49,7 @@ an operation, who may call it, what it returns and how it refuses.
 | **Surla** | The command itself. | From the root of the checkout whose README you are reading, run `go install ./cmd/surla`; see [Install](../README.md#install). `go install github.com/goadesign/surla/cmd/surla@latest` installs the latest module version available to Go, which may be older than this README and lack commands described here. When installing that version, follow its README. |
 | **Herdr core** (`herdr-core` and `hc`) | The server and every agent run in Herdr terminals. | `curl -fsSL https://releases.herdr.dev/core/install.sh \| sh` ([herdr.dev/core](https://herdr.dev/core/)) |
 | **Herdr app** (`herdr-app`) | The window that shows the team's panes. | `curl -fsSL https://releases.herdr.dev/app/install.sh \| sh` ([herdr.dev](https://herdr.dev/)) |
-| **Chorus v0.13.0 or later** | Agent messaging, the Chorus dialog and terminal client-option inspection. | `curl -fsSL https://raw.githubusercontent.com/goadesign/chorus/main/scripts/install.sh \| sh`; update with `chorus update -yes` |
+| **Chorus v0.14.0 or later** | Agent messaging, the Chorus dialog and terminal client-option inspection. | `curl -fsSL https://raw.githubusercontent.com/goadesign/chorus/main/scripts/install.sh \| sh`; update with `chorus update -yes` |
 | **A coding agent** that the Chorus dialog or terminal command can start | An agent app plays each role: the user picks one per role in the dialog or supplies terminal choices. | — |
 | **Git 2.45 or newer**, with a name and address | Startup requires support for `--no-lazy-fetch`, so Surla's Git reads do not download missing objects. Every build needs the project in a Git repository with a first commit and a Git name and address, with or without stored verification settings, and so does verification, which needs the build. Without stored verification settings, live targets need the repository too. Surla records accepted tests, and any uncommitted files a working copy holds when it joins a new build, as commits under your Git identity. | Install Git 2.45 or newer on `PATH`; `git config --global user.name …` and `user.email …` configure its identity. |
 | **Docker** (Docker Desktop, or another local engine on a `unix://` socket) | `check_project` and `update_dependencies` run Go in Linux containers. The first check pulls `golang:1.27.3`. | [docker.com](https://www.docker.com/) |
@@ -60,7 +60,7 @@ Before it creates any state, `surla` checks for `herdr-core`, `herdr-app` and
 missing. When that program is in `~/.local/bin`, where the installers put it,
 it says instead `<program> is installed in <folder>, which is not on PATH;
 add <folder> to PATH, then run surla again`. It then checks that Chorus is
-v0.13.0 or later (`chorus update -yes` updates it), that `hc` is on the path
+v0.14.0 or later (`chorus update -yes` updates it), that `hc` is on the path
 or in `~/.local/bin`, and, for ordinary startup, that the browser opener (`open` on macOS or
 `xdg-open` on Linux) is on the path. `--print-link` skips that opener check. A
 missing opener is named without an install command. Surla then probes the Git
@@ -113,7 +113,7 @@ matching settings. Success prints `{ "tab": "...", "created": 1, "reused": 0 }`.
 A refusal prints a reason and exits nonzero; inspect and retry after partial
 failure to reuse completed panes. See `chorus team launch --help` and the
 [Chorus launcher reference](https://github.com/goadesign/chorus/blob/main/skills/herdr/chorus-launcher/README.md#choose-roles-from-a-terminal)
-for the owning contract. Surla requires Chorus v0.13.0 or newer.
+for the owning contract. Surla requires Chorus v0.14.0 or newer.
 
 ## Commands
 
@@ -1998,6 +1998,15 @@ saves none of it. The user's views page reads it and acts on it with
 cannot call these three, and none is an MCP tool. The `surla` command
 prepares the same team with the management operation `ensure_team`.
 
+Each team start asks Chorus for its healthy managed address through
+`chorus status -json`. Use `chorus up -addr :9550` to select another address;
+a foreground `chorus serve -addr` alone does not set Surla's managed endpoint.
+After changing the managed address, choose **Start agents** or run `surla`
+again. Surla replaces the old connection and shows unknown watcher state until
+it has facts from that server. A failed address check changes no team state
+or window and leaves the views page available. It reports:
+`Chorus is not running or its settings are invalid. Run chorus up (or chorus status to see the error), then start the agents again (Start agents on the page, or run surla).`
+
 If no team is bound to the server, all three user operations return
 `not_implemented` (`501`) with the enabling step:
 `Start this project with surla to use its team.`
@@ -2066,6 +2075,7 @@ which opens anyway:
 | `cause` | What could not be used | `surla` prints | The views page shows |
 | --- | --- | --- | --- |
 | `stopping` | The server is shutting down. | `the project server is stopping; run surla again` | `the project server is stopping; run surla in the project folder to start it again` |
+| `chorus` | The managed Chorus server or its settings are unavailable. | `Chorus is not running or its settings are invalid. Run chorus up (or chorus status to see the error), then start the agents again (Start agents on the page, or run surla).` | The same step. |
 | `herdr` | A Herdr command did not complete. | `Herdr did not complete a team command; open the Herdr app, then click Start agents on the views page` | `Herdr did not complete a team command; open the Herdr app, then try again` |
 | `roster_folder` | Herdr's launcher roster folder could not be written. | `Herdr's launcher roster folder could not be written; make data/chorus-launcher/rosters in Herdr's app folder (~/.config/herdr-app unless HERDR_APP_HOME is set) writable by this account, then click Start agents on the views page` | The same, ending `then start the agents again` |
 | `project_state` | The project's record or an agent credential could not be read or written. | `this project's private state in <state folder> could not be read or written; make that folder and the folders in it private to this account (chmod 700) and its files too (chmod 600), then click Start agents on the views page` | `this project's private state could not be read or written; run surla in the project folder to see which folder to repair` |

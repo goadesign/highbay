@@ -21404,10 +21404,11 @@ definitions:
         properties:
             cause:
                 type: string
-                description: 'What could not be used: stopping (the server is shutting down), herdr (a Herdr command failed), roster_folder (Herdr''s launcher roster folder could not be written), project_state (the project''s private record or an agent credential could not be read or written), or role_folder (a role''s working folder could not be read).'
-                example: herdr
+                description: 'What could not be used: stopping (the server is shutting down), chorus (the managed Chorus server or its settings are unavailable), herdr (a Herdr command failed), roster_folder (Herdr''s launcher roster folder could not be written), project_state (the project''s private record or an agent credential could not be read or written), or role_folder (a role''s working folder could not be read).'
+                example: chorus
                 enum:
                     - stopping
+                    - chorus
                     - herdr
                     - roster_folder
                     - project_state
@@ -21417,7 +21418,7 @@ definitions:
                 description: Error name.
                 example: Aut velit ea sunt placeat possimus.
         example:
-            cause: herdr
+            cause: chorus
             name: Aut velit ea sunt placeat possimus.
         required:
             - name

@@ -754,6 +754,8 @@ func teamUnavailableStep(state *project.State, cause string) string {
 	switch cause {
 	case "stopping":
 		return "the project server is stopping; run surla again"
+	case "chorus":
+		return "Chorus is not running or its settings are invalid. Run chorus up (or chorus status to see the error), then start the agents again (Start agents on the page, or run surla)."
 	case "herdr":
 		return "Herdr did not complete a team command; open the Herdr app, " + retry
 	case "roster_folder":

@@ -114,6 +114,7 @@ func TestBuildTeamOutcomeGivesEachCauseItsStep(t *testing.T) {
 	for _, tc := range []struct{ name, cause, repair string }{
 		{name: "stopping", cause: "stopping", repair: "Run surla in the project folder to start it again"},
 		{name: "herdr", cause: "herdr", repair: "Open the Herdr app"},
+		{name: "chorus", cause: "chorus", repair: "Run chorus up"},
 		{name: "roster folder", cause: "roster_folder", repair: "Make data/chorus-launcher/rosters"},
 		{name: "project state", cause: "project_state", repair: "Run surla in the project folder to see which folder to repair"},
 		{name: "role folder", cause: "role_folder", repair: "Make sure this account can open the project folder and its build working folders"},

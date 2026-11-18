@@ -548,6 +548,8 @@ func buildTeamStep(cause string) string {
 	case "stopping":
 		return "The project server is stopping. Run surla in the project folder to start it again; " +
 			"that also starts the team agents for this saved build."
+	case "chorus":
+		return "Chorus is not running or its settings are invalid. Run chorus up (or chorus status to see the error), then use Start agents on the page or run surla to start the team agents for this saved build."
 	case "herdr":
 		return "Herdr did not complete a team command. Open the Herdr app, " + retry
 	case "roster_folder":

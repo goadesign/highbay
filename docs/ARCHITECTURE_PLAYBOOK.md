@@ -100,7 +100,7 @@ The management credential lets `surla` prepare the team, stop the server and ask
 but prints the generated URL and expiry as JSON instead of invoking the opener.
 Notices go to stderr. It adds no credential store or user-decision operation.
 The team owner derives the same next-step text for the CLI and page, including
-commands with the actual Herdr space ID. Chorus v0.13.0 or newer owns terminal
+commands with the actual Herdr space ID. Chorus v0.14.0 or newer owns terminal
 role choices and inspection of each explicitly named program's models and
 permission effects. It uses the dialog's discovery and backend for MCP
 configuration, pane placement, labels and replay; Surla does not copy Herdr's
@@ -110,9 +110,19 @@ program catalog or saved preferences.
 
 ### The team: Herdr and Chorus
 
+The executable constructs team dependencies offline. At each accepted team start,
+ensureTeam resolves the healthy managed endpoint with `chorus status -json` before
+any space, roster or window changes. One immutable observer/sender pair owns that
+endpoint for the binding. The endpoint is part of the supervisor's reader identity:
+a change cancels and joins old readers, drains queued observations, and clears
+watcher knowledge and listing age before a reminder can use the new server.
+Existing assignment-attempt latches remain owned by the supervisor. No endpoint
+is persisted or resolved during each poll. A failed resolution preserves the
+previous binding and the available views page.
+
 Herdr is the terminal program the agents run in, one pane per agent. Chorus is the messaging service the agents use, and its dialog in Herdr lets the user pick which installed agent app plays each role. Its terminal commands also accept explicit program/model choices for roster roles.
 
-Before creating any state, `surla` checks that Herdr core (`herdr-core` and `hc`), the Herdr app (`herdr-app`), Chorus v0.13.0 or newer (`chorus`) and the browser opener are installed. For a missing Herdr or Chorus program it names the install command, or the folder to add to the path when the program is in `~/.local/bin`; for a missing browser opener it names the program. Once the server answers, `surla` starts Chorus and the Herdr app when they are not running, then asks the server to prepare the team. When either step fails, `surla` still opens the views page, where confirming and approving need no agent, and then reports the failure. A failure of the server's team preparation names only its cause (`stopping`, `herdr`, `roster_folder`, `project_state` or `role_folder`), never its own text, and `surla` and the views page each turn that cause into a fixed step. The server:
+Before creating any state, `surla` checks that Herdr core (`herdr-core` and `hc`), the Herdr app (`herdr-app`), Chorus v0.14.0 or newer (`chorus`) and the browser opener are installed. For a missing Herdr or Chorus program it names the install command, or the folder to add to the path when the program is in `~/.local/bin`; for a missing browser opener it names the program. Once the server answers, `surla` starts Chorus and the Herdr app when they are not running, then asks the server to prepare the team. When either step fails, `surla` still opens the views page, where confirming and approving need no agent, and then reports the failure. A failure of the server's team preparation names only its cause (`stopping`, `chorus`, `herdr`, `roster_folder`, `project_state` or `role_folder`), never its own text, and `surla` and the views page each turn that cause into a fixed step. The server:
 
 1. adopts the project's saved Herdr space, or the single space with the team's name and the project's folder, or creates one; several matching spaces are refused, and the user closes the duplicates;
 2. registers the guide, working in the project folder;
