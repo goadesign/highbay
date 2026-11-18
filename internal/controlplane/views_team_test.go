@@ -20,6 +20,55 @@ func pageTeamSnapshot(state string) gensurla.TeamSnapshot {
 	}}
 }
 
+// TestViewsPageAttentionUsesOnlyTheCurrentLiveRegion follows permission,
+// question and recovery facts on empty Describe without overwriting unrelated
+// operation feedback. Herdr's done status is exposed by the owner as waiting.
+func TestViewsPageAttentionUsesOnlyTheCurrentLiveRegion(t *testing.T) {
+	f := &teamServiceFixture{snapshot: pageTeamSnapshot("working")}
+	cp := pageControlPlane(t, Options{Team: &TeamBinding{Owner: pageOwner, Service: f}})
+	ps := startPageServer(t, cp)
+	for _, transition := range []struct {
+		name, guideState, guideAttention, builderState, builderAttention string
+	}{
+		{"guide-permission", "needs_you", "permission", "working", "none"},
+		{"two-roles", "needs_you", "question", "needs_you", "auth"},
+		{"guide-done", "waiting", "none", "needs_you", "auth"},
+		{"all-done", "waiting", "none", "waiting", "none"},
+	} {
+		ps.act(transition.name, func() {
+			f.mu.Lock()
+			defer f.mu.Unlock()
+			next := pageTeamSnapshot(transition.builderState)
+			next.Roles[0].State, next.Roles[0].Attention = transition.guideState, transition.guideAttention
+			next.Roles[1].Attention = transition.builderAttention
+			f.snapshot = next
+		})
+	}
+	runPageScript(t, ps, nil, `
+const page = await openPage(origin, { link: input.link });
+await until(() => page.status() === "This project has no changes yet." && page.$("#surla-team-attention"), "empty Describe did not settle");
+const live = page.$("#surla-team-attention"), operation = page.status();
+expect(live.getAttribute("role") === "status" && live.getAttribute("aria-live") === "polite", "attention owner is not an announced live region");
+expect(live.textContent === "", "idle roles invented an attention state");
+await control(origin, "act", { key: "guide-permission" });
+await until(() => page.text("#surla-team-attention-guide").includes("Guide needs you: permission"), "real permission attention was suppressed");
+expect(page.$("#surla-team-attention") === live, "attention arrived in a newly mounted live region");
+expect(page.status() === operation, "team attention overwrote operation feedback");
+await control(origin, "act", { key: "two-roles" });
+await until(() => page.text("#surla-team-attention-guide").includes("question") && page.text("#surla-team-attention-builder").includes("sign-in required"), "changed and additional real blockers were not shown");
+expect(!live.textContent.includes("permission"), "replaced permission attention stayed stale");
+await control(origin, "act", { key: "guide-done" });
+await until(() => !page.$("#surla-team-attention-guide"), "done guide retained an attention line");
+expect(page.text("#surla-team-attention-builder").includes("Builder needs you: sign-in required"), "guide recovery hid another role's real blocker");
+await control(origin, "act", { key: "all-done" });
+await until(() => live.textContent === "", "recovered roles retained stale attention");
+expect(page.status() === operation && !page.status().includes("needs you"), "recovery left a duplicate stale status or replaced operation feedback");
+expect(page.$("#surla-team-attention") === live && live.getAttribute("aria-live") === "polite", "recovery removed the next attention announcement owner");
+expect(page.sent("POST", "/team/agents").length === 0 && page.sent("POST", "/team/pane").length === 0, "reading attention performed a team action");
+page.close();
+`)
+}
+
 // TestViewsPageTeamFollowsAttentionAndShowsPane proves that global attention
 // follows the one version chain, pane actions accept real empty 204 answers,
 // and a removed focused attention control returns focus to the current view.

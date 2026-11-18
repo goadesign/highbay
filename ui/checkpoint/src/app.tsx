@@ -1467,19 +1467,8 @@ export function bootstrapViewsPage() {
       "get_team", {}, "",
       (snapshot) => {
         if (sessionState !== "active") return;
-        const before = teamSnapshot;
-        const wasFailed = teamReadError !== null;
         teamSnapshot = snapshot;
         teamReadError = null;
-        const newlyNeedingUser = snapshot.roles.filter((role) => {
-          if (role.state !== "needs_you") return false;
-          const previous = before?.roles.find((item) => item.role === role.role && item.handle === role.handle);
-          return wasFailed || previous?.state !== "needs_you" || previous.attention !== role.attention;
-        });
-        if (newlyNeedingUser.length > 0) {
-          statusEl.textContent = (waitTroubleShown ? "Last read: " : "") +
-            newlyNeedingUser.map(teamAttentionText).join(". ");
-        }
         done();
       },
       (message, failure) => {
@@ -2436,8 +2425,8 @@ export function bootstrapViewsPage() {
     return step + ": " + projectName;
   }
 
-  // syncNoticeRegion keeps the tab title, session notice and role attention visible on
-  // every view. Announcements are emitted only by the event/read handlers.
+  // syncNoticeRegion keeps the tab title, session notice and live role attention
+  // visible on every view.
   function syncNoticeRegion() {
     document.title = projectTitle();
     flushSync(() => {

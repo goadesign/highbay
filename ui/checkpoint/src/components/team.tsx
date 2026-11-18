@@ -229,6 +229,7 @@ export function TeamStageView({
 
 // GlobalTeamAttention renders one line per needs-you role without announcing
 // repeated snapshots, moving focus or deriving attention from a start receipt.
+// Its empty live region stays mounted so later attention can be announced.
 export function GlobalTeamAttention({
   snapshot,
   lastRead,
@@ -238,11 +239,8 @@ export function GlobalTeamAttention({
   onFocusedControlRemoved,
 }: GlobalTeamAttentionProps) {
   const roles = snapshot?.roles.filter((role) => role.state === "needs_you") ?? [];
-  if (roles.length === 0) {
-    return null;
-  }
   return (
-    <div id="surla-team-attention">
+    <div id="surla-team-attention" role="status" aria-live="polite">
       {roles.map((role) => (
         <div key={role.role} className="surla-field-row" id={"surla-team-attention-" + role.role}>
           <span className="surla-live-wrap">
@@ -263,8 +261,8 @@ export function GlobalTeamAttention({
   );
 }
 
-// teamAttentionText supplies the same visible sentence to the global notice
-// and the page's once-only announcement. Callers select needs_you roles first.
+// teamAttentionText supplies the same sentence to the live global notice and
+// the project title. Callers select needs_you roles first.
 export function teamAttentionText(role: TeamRoleState): string {
   const reason = attentionLabels[role.attention];
   return roleLabels[role.role] + " needs you" + (reason !== "" ? ": " + reason : "");
