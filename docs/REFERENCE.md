@@ -110,9 +110,9 @@ program explicitly: the command has no Herdr program catalog or saved
 preferences. The dialog retains those features. Roles with Surla MCP connections
 support `"client": "claude"` or `"client": "codex"`; `"program"` is a single
 executable name, path or shell function name, not shell code or arguments.
-Before launching, run the
-printed `chorus team inspect --space ... --choices choices.json` command to see
-the chosen programs' model options, thinking levels and permission effects.
+Before launching, add `--choices choices.json` to the printed
+`chorus team inspect --space ...` command to see the chosen programs' model
+options, thinking levels and permission effects.
 It validates the choices without opening panes or changing saved preferences and
 adds `client_options`, one entry per distinct chosen `client` and `program`
 (`models`, `efforts`, `model_supported`, `thinking_supported`, `note`, `error`,
@@ -176,7 +176,7 @@ team and opens the views page. **What the user sees**, in order:
 ```text
 Started a Surla project for this folder. Moving or renaming this folder starts a new project.
 Team shop-3f9c1a2b4d5e.
-Choose an agent for each role in the open Chorus dialog in Herdr. Run chorus team inspect --space '<space>'; chorus team launch --help; models and permission effects: chorus team inspect --space '<space>' --choices choices.json; chorus team launch --space '<space>' --choices choices.json. Stdin: --choices -.
+Choose an agent for each role in the open Chorus dialog in Herdr. From a terminal, run chorus team inspect --space '<space>' to see the roles (add --choices choices.json to check models and permission effects), then run chorus team launch --space '<space>' --choices choices.json (or --choices - for stdin; see chorus team launch --help).
 Surla is running for /path/to/shop at http://127.0.0.1:52011
 ```
 
