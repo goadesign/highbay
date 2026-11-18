@@ -56,8 +56,9 @@ set reads a JSON file outside the project folder and its Git working tree,
 refuses unknown fields and stores a copy; the server uses it from its next
 start. Every field is required:
 
-  release_dir  folder outside the project folder holding one folder per
-               candidate commit, each published complete in one rename
+  release_dir  folder outside the project folder and its Git working tree,
+               holding one folder per candidate commit, each published
+               complete in one rename
   binaries     plain names of the binaries every commit folder holds
 
 Example:

@@ -259,16 +259,18 @@ Questions only you can answer
 
 `deterministic` means code can check the outcome directly; `model_judged`
 means checking it needs judgment. This is a label saved with the example, for
-you and the test writer: verification runs the test scenarios the accepted
-tests declare, not the card's examples, and the label does not choose how a
-scenario is run or whether it runs. Surla cannot tell whether the analysis is
+you and the test writer. Verification runs the scenarios of the selected test
+suite, not the card's examples: the tests Surla accepted for the build or,
+when verification settings are stored, the operator's evaluator. The label
+does not choose how a scenario is run or whether it runs. Surla cannot tell whether the analysis is
 complete or correct. You decide that when you confirm the card.
 
 The guide can revise the change at any time with `revise_change`. A revision
-restates the whole request as it now stands, so **Requested change** keeps the
-original intent with every requirement added since, and its **Revision note**
-says what this revision changed and why. Before you
-confirm, the revision replaces the card's content and waits for your answers.
+restates the whole request as it now stands, so **Requested change** holds
+every requirement that still applies, with additions, changes and removals
+applied, and its **Revision note** says what this revision changed and why.
+Before you confirm, the revision replaces the card's content and waits for
+your answers.
 After you confirm, it waits beside the agreed revision as a **proposed
 revision**; see [Going back](#going-back).
 

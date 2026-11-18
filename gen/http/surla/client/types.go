@@ -41,9 +41,11 @@ type ReviseChangeRequestBody struct {
 	// when the change shows one waiting (proposed_revision.request_revision),
 	// otherwise the change's own.
 	RequestRevision string `form:"request_revision" json:"request_revision" xml:"request_revision"`
-	// The change's complete feature request as it now stands: the original intent
-	// with every requirement added since, restated in full. Never only the
-	// difference; that goes in revision_note.
+	// The change's complete feature request as it now stands, restated in full:
+	// every requirement that still applies, with this and earlier revisions'
+	// additions, changes and removals applied, so a dropped or replaced
+	// requirement no longer appears. Never only the difference; that goes in
+	// revision_note.
 	Prompt string `form:"prompt" json:"prompt" xml:"prompt"`
 	// What this revision changes and why, in the user's terms, for example "Legal
 	// requires pre-approval before a listing goes live".

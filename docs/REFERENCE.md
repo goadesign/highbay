@@ -935,7 +935,7 @@ sends `analysis`:
 | --- | --- |
 | `summary` | The change in plain words. |
 | `ambiguities` | The questions only the user can answer, each a `question` with at least two distinct `options`; empty when nothing is open. |
-| `examples` | At least one concrete example: `scenario`, `input_summary`, `expected_outcome`, and `verification_kind` (`deterministic` or `model_judged`). `verification_kind` is a saved label for people and the test writer; verification runs the scenarios the accepted tests declare, and the label does not select how or whether one runs. |
+| `examples` | At least one concrete example: `scenario`, `input_summary`, `expected_outcome`, and `verification_kind` (`deterministic` or `model_judged`). `verification_kind` is a saved label for people and the test writer. Verification runs the scenarios of the selected suite, the tests Surla accepted for the build or, with stored [verification settings](#surla-verification-and-surla-promotion), the operator's evaluator; the label does not select how or whether one runs. |
 | `preserved_behaviors` | The behaviors the change must keep, possibly none. |
 | `ui_composition` *(optional)* | An illustration of the decision for the views page (see [MCP resources](#mcp-resources)). It is never checked, never part of `request_revision`, and is dropped when the user changes the answers or examples. |
 
@@ -965,9 +965,10 @@ that when confirming.
 `examples[].prior_id` and `removed_example_ids`). **Output:**
 `ChangeCardResult`.
 
-`prompt` is the change's complete feature request as it now stands: the
-original intent with every requirement added since, restated in full, never
-only the difference. `revision_note` says what this revision changes and why,
+`prompt` is the change's complete feature request as it now stands, restated
+in full: every requirement that still applies, with additions, changes and
+removals applied, so a dropped or replaced requirement no longer appears. It is
+never only the difference. `revision_note` says what this revision changes and why,
 for example "Legal requires pre-approval before a listing goes live". The card
 and a proposed revision return the note as `revision_note`, and the views page
 shows it as **Revision note**; confirming or adopting the revision keeps it. A

@@ -12429,7 +12429,7 @@ var reviseChangePayloadFields = []tools.FieldMetadata{
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("prompt")},
 		JSONType:    "string",
-		Description: "The change's complete feature request as it now stands: the original intent with every requirement added since, restated in full. Never only the difference; that goes in revision_note.",
+		Description: "The change's complete feature request as it now stands, restated in full: every requirement that still applies, with this and earlier revisions' additions, changes and removals applied, so a dropped or replaced requirement no longer appears. Never only the difference; that goes in revision_note.",
 	},
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("revision_note")},
@@ -23571,7 +23571,7 @@ func validateReviseChangePayloadJSONValue(path string, value any, description st
 		case "prompt":
 			if err := validateStringJSONValue(
 				generatedJSONChildPath(path, key, false),
-				typed[key], "The change's complete feature request as it now stands: the original intent with every requirement added since, restated in full. Never only the difference; that goes in revision_note.",
+				typed[key], "The change's complete feature request as it now stands, restated in full: every requirement that still applies, with this and earlier revisions' additions, changes and removals applied, so a dropped or replaced requirement no longer appears. Never only the difference; that goes in revision_note.",
 			); err != nil {
 				return err
 			}
