@@ -171,6 +171,15 @@ func TestViewsPageKeepsTypingWhenAnotherCallerSavesARevision(t *testing.T) {
 const card = await propose("chg-live", "Route refunds to a manager.", "Auto-approved");
 const page = await openPage(origin, { link: input.link });
 await until(() => page.$("#surla-cp1-editor").dataset.changeId === "chg-live", "the change did not open");
+const next = () => page.text("#surla-frame-next dd");
+expect(next().includes("then confirm the change"), "Agree did not guide confirmation");
+await control(origin, "hold", { key: "POST /changes/preview" });
+page.$("#surla-nav-cp2").click();
+expect(page.$("#surla-cp2-loading") && next().includes("Wait for Surla to evaluate the design"), "Architecture did not guide the pending preview");
+await control(origin, "release", { key: "POST /changes/preview" });
+await until(() => page.$("#surla-cp2-error"), "Architecture did not show its refusal");
+expect(next().includes("Open Agree to confirm the change"), "Architecture did not guide recovery from an unconfirmed request");
+page.$("#surla-nav-cp1").click();
 expect(!page.beforeUnload(), "the page asked to confirm leaving without unsaved edits");
 const field = page.$('textarea[data-field="expected_outcome"]');
 field.focus();
@@ -182,6 +191,7 @@ new page.win.MutationObserver(() => announced.push(page.status())).observe(page.
 
 await revise(card, "Route refunds over $50 to a manager.", "Manager approval");
 await until(() => page.$("#surla-replace-incoming-card"), "a revision saved by another caller did not appear without a reload");
+expect(next().includes("Switch to Incoming Card"), "the incoming revision did not name its existing review action");
 expect(page.$('textarea[data-field="expected_outcome"]') === field && field.value === "Typed but not saved", "the new revision discarded typed text");
 expect(page.doc.activeElement === field, "the new revision moved focus");
 expect(field.selectionStart === 5 && field.selectionEnd === 9, "the new revision moved the cursor");
@@ -277,6 +287,7 @@ for (const outcome of ["Manager approval", "Manager approval within a day", "Man
 }
 page.$("#surla-nav-live").click();
 await until(() => page.$("#surla-live-target") && page.$("#surla-live-target").dataset.state !== "unread", "the live target was never read");
+expect(page.text("#surla-frame-next dd").includes("Ask the builder to start a live target"), "Live target did not say who starts it");
 const targets = answered(page, "/live-target");
 for (const id of ["chg-other-1", "chg-other-2"]) {
   const reads = answered(page, "/live-target");

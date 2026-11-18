@@ -20,6 +20,63 @@ func pageTeamSnapshot(state string) gensurla.TeamSnapshot {
 	}}
 }
 
+// TestViewsPageDescribeGuideStatusControlsNext follows the same Team reads
+// as Describe and checks that their guidance yields to an existing card.
+func TestViewsPageDescribeGuideStatusControlsNext(t *testing.T) {
+	f := &teamServiceFixture{snapshot: gensurla.TeamSnapshot{
+		Team: "page-team", Roles: []*gensurla.TeamRoleState{},
+	}}
+	cp := pageControlPlane(t, Options{Team: &TeamBinding{Owner: pageOwner, Service: f}})
+	ps := startPageServer(t, cp)
+	for _, state := range []string{"unknown", "starting", "working", "ended"} {
+		ps.act(state, func() {
+			f.mu.Lock()
+			defer f.mu.Unlock()
+			next := pageTeamSnapshot("working")
+			next.Roles[0].State = state
+			f.snapshot = next
+		})
+	}
+	runPageScript(t, ps, nil, viewsPageScriptHelpers+`
+await control(origin, "hold", { key: "GET /team" });
+const page = await openPage(origin, { link: input.link });
+const next = () => page.text("#surla-frame-next dd");
+await until(() => page.$("#surla-change-list-empty") && page.sent("GET", "/team").length === 1, "empty Describe did not begin reading Team");
+expect(next() === "Wait for Team status.", "pending Team read was treated as an absent guide");
+await control(origin, "release", { key: "GET /team" });
+await until(() => next().includes("Start agents"), "a fresh Team read with no guide did not guide startup");
+page.$("#surla-nav-team").click();
+expect(next().includes("Start agents") && page.$("#surla-team-start"), "Team did not show its existing startup control");
+page.$("#surla-nav-changes").click();
+
+await control(origin, "reply", { key: "GET /team", status: 503, body: { name: "unavailable", message: "Team unavailable." } });
+await control(origin, "act", { key: "unknown" });
+await until(() => next().includes("Open Team to retry"), "a failed Team read still used its previous empty observation");
+page.$("#surla-nav-team").click();
+await until(() => page.$("#surla-team-role-guide")?.dataset.state === "unknown", "Team did not retry its failed read");
+page.$("#surla-nav-changes").click();
+expect(next().includes("refresh to check the guide’s status"), "unknown guide appeared ready or absent");
+await control(origin, "act", { key: "starting" });
+await until(() => next().includes("Wait for the guide to start"), "a starting guide did not tell the user to wait");
+await control(origin, "act", { key: "working" });
+await until(() => next().includes("Show guide pane and describe your change"), "a working guide did not lead to its existing pane");
+await control(origin, "act", { key: "ended" });
+await until(() => next().includes("Start agents"), "an ended guide did not lead to the existing startup control");
+
+await propose("chg-guide-next", "Route refunds to a manager.", "Auto-approved");
+await until(() => page.$("#surla-open-change-chg-guide-next"), "the existing card did not become available");
+expect(next().includes("Open a change"), "guide startup hid the existing card’s next step");
+await control(origin, "reply", { key: "GET /changes/chg-guide-next", status: 503, body: { name: "unavailable", message: "Card unavailable." } });
+page.$("#surla-open-change-chg-guide-next").click();
+await until(() => page.$("#surla-change-open-error"), "the failed card read did not appear");
+expect(next().includes("Try opening the change again"), "card recovery did not take precedence over ordinary guidance");
+page.$("#surla-open-change-chg-guide-next").click();
+await until(() => page.$("#surla-cp1-editor").dataset.changeId === "chg-guide-next", "the existing card remained unavailable without a running guide");
+expect(page.sent("POST", "/team/agents").length === 0 && page.sent("POST", "/team/pane").length === 0, "guidance performed an agent action");
+page.close();
+`)
+}
+
 // TestViewsPageAttentionUsesOnlyTheCurrentLiveRegion follows permission,
 // question and recovery facts on empty Describe without overwriting unrelated
 // operation feedback. Herdr's done status is exposed by the owner as waiting.
@@ -52,6 +109,7 @@ expect(live.getAttribute("role") === "status" && live.getAttribute("aria-live") 
 expect(live.textContent === "", "idle roles invented an attention state");
 await control(origin, "act", { key: "guide-permission" });
 await until(() => page.text("#surla-team-attention-guide").includes("Guide needs you: permission"), "real permission attention was suppressed");
+expect(page.text(".surla-frame-attention dd").includes("Guide needs you: permission") && page.text("#surla-frame-next dd").includes("Show guide pane"), "Describe did not surface the guide’s reported blocker and pane");
 expect(page.$("#surla-team-attention") === live, "attention arrived in a newly mounted live region");
 expect(page.status() === operation, "team attention overwrote operation feedback");
 await control(origin, "act", { key: "two-roles" });

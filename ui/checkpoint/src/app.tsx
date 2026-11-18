@@ -2283,8 +2283,8 @@ export function bootstrapViewsPage() {
     const review = displayedApprovalReview();
     const onApproval = activeResult?.kind === "cp5-approval";
     const fresh = run !== null && approvalReviewFresh(run);
-    let attention = "Review the current stage.";
-    let next: React.ReactNode = <span>Choose the step you need.</span>;
+    let attention = "Nothing now.";
+    let next: React.ReactNode = null;
     if (onApproval) {
       attention = review?.approval.state === "blocked" ? "Approval unavailable."
         : review?.approval.state === "unverified" ? "Saved approval needs checking." : review?.approval.state === "recorded"
@@ -2370,13 +2370,138 @@ export function bootstrapViewsPage() {
       next = <Button variant="primary" onClick={openApproval}>Review result</Button>;
       attention = "Read the saved test evidence, then review the result for approval.";
     }
-    const agreed = activeEditor?.card.status === "confirmed" ? activeEditor.card.summary : "No confirmed agreement opened";
+    const onDescribe = activeResult?.kind === "changes";
+    if (next === null) {
+      // Recovery takes precedence over guidance based on retained observations.
+      const teamError = teamFactsError();
+      const teamLoading = hasPending("get_team", "");
+      let step: string;
+      if (sessionState !== "active") {
+        attention = "The session ended.";
+        step = "Run surla in your project folder to reopen this project.";
+      } else if (listError !== null) {
+        attention = "The changes could not be read.";
+        step = onDescribe ? "Choose Read the changes again below." : "Open Describe to retry reading changes.";
+      } else if (waitTroubleShown) {
+        attention = "Updates are unavailable.";
+        step = "Wait for Surla to reconnect.";
+      } else if (teamError !== null) {
+        attention = "Team status could not be read.";
+        step = activeResult?.kind === "team" ? "Choose Retry team read below." : "Open Team to retry reading roles.";
+      } else if (lastOpenAttempt !== null && cardLoadErrors.has(lastOpenAttempt)) {
+        attention = "The Change Card could not be opened.";
+        step = onDescribe ? "Try opening the change again below." : "Open Describe and try opening the change again.";
+      } else if (onDescribe) {
+        if (editorRequest === "get_change") {
+          step = "Wait for the Change Card to open.";
+        } else if (changeList === null) {
+          step = "Wait for Surla to read the changes.";
+        } else if (changeList.changes.length > 0) {
+          step = "Open a change from the list below.";
+        } else if (hasPending("start_team_agents", "")) {
+          step = "Wait for the guide to start.";
+        } else if (teamLoading || teamSnapshot === null) {
+          step = "Wait for Team status.";
+        } else {
+          const guide = teamSnapshot.roles.find((role) => role.role === "guide");
+          if (guide === undefined || guide.state === "not_started" || guide.state === "ended") {
+            attention = "The guide is not running.";
+            step = "Open Team and choose Start agents.";
+          } else if (guide.state === "starting") {
+            step = "Wait for the guide to start.";
+          } else if (guide.state === "unknown" || guide.state === "error") {
+            attention = guide.state === "unknown" ? "Guide status unknown." : "The guide reported an error.";
+            step = "Open Team and refresh to check the guide’s status.";
+          } else if (guide.state === "needs_you") {
+            attention = teamAttentionText(guide);
+            step = "In Team, choose Show guide pane to address the guide’s request.";
+          } else {
+            step = "In Team, choose Show guide pane and describe your change.";
+          }
+        }
+      } else if (cp1Active && activeEditor !== null) {
+        const ed = activeEditor;
+        if (editorRequest !== null) {
+          step = "Wait for the current Change Card request.";
+        } else if (ed.incomingCard !== null) {
+          attention = "A newer saved revision is available.";
+          step = "Choose Switch to Incoming Card to review it and keep your unsaved edits.";
+        } else if (editorStage === "build") {
+          step = "Review the Build controls below for this change.";
+        } else if (ed.card.proposed_revision !== undefined) {
+          attention = "A proposed revision is waiting for your decision.";
+          step = "Review the proposal below, then choose Adopt or Decline.";
+        } else if (ed.formError !== null) {
+          attention = "The Change Card request failed.";
+          step = "Choose Load Latest Card to review the saved card alongside your edits.";
+        } else if (ed.card.status === "needs_confirmation") {
+          attention = "This change needs confirmation.";
+          step = "Review the questions and examples below, then confirm the change.";
+        } else if (ed.preservedDraft !== null) {
+          attention = "You have edits from an earlier revision.";
+          step = "Review the saved card and reapply any of the preserved edits you still need.";
+        } else if (hasUnsavedEdits()) {
+          attention = "You have unsaved refinements.";
+          step = "Save or discard your refinements below.";
+        } else {
+          step = "Review Agreement details, then open Build when you’re ready.";
+        }
+      } else if (activeResult?.kind === "cp2-architecture-preview" && activeEditor !== null) {
+        const card = activeEditor.card;
+        if (hasPending("preview_architecture", card.change_id)) {
+          step = "Wait for Surla to evaluate the design.";
+        } else if (previewErrors.has(card.change_id)) {
+          attention = "The architecture preview could not be loaded.";
+          step = card.status === "needs_confirmation" ? "Open Agree to confirm the change."
+            : "Use the Evaluate the design control below to try again.";
+        } else if (shownPreview?.request_revision === card.request_revision) {
+          step = "Review the architecture preview for this revision.";
+        } else {
+          step = "Evaluate the design below for the current revision.";
+        }
+      } else if (activeResult?.kind === "team") {
+        step = teamLoading || teamSnapshot === null ? "Wait for Team status."
+          : teamSnapshot.roles.length === 0 ? "Choose Start agents below to prepare the guide."
+          : "Review role status and use Show pane to contact an agent.";
+      } else if (activeResult?.kind === "story") {
+        if (storyEvaluationError !== null) {
+          attention = "The Story draft could not be read.";
+          step = "Choose Read the draft again below.";
+        } else {
+          step = storyEvaluation === null ? "Wait for Surla to read the Story draft."
+            : storyEvaluation.state === "none" ? "Ask the guide to refresh the Story."
+            : storyEvaluation.state === "running" ? "Wait for the Story evaluation."
+            : storyEvaluation.state === "failed" ? "Ask the guide to fix the Story and refresh it."
+            : "Review the current draft and any saved Story below.";
+        }
+      } else if (activeResult?.kind === "live") {
+        if (liveTargetError !== null || modelConnectionError !== null) {
+          attention = liveTargetError !== null ? "The live target could not be read." : "The model connection could not be read.";
+          step = liveTargetError !== null ? "Choose Read the live target again below."
+            : "Choose Read the model connection again below.";
+        } else {
+          const target = liveTarget?.live_target;
+          step = target === undefined ? "Wait for Surla to read the live target."
+            : target.state === "running" ? "Review the running service and its prompt drafts below."
+            : target.state === "starting" ? "Wait for the live target to start."
+            : target.state === "none" ? "Ask the builder to start a live target to try prompts."
+            : "Review the last live target’s status below.";
+        }
+      } else {
+        step = "Open Describe to find a change.";
+      }
+      next = <span>{step}</span>;
+    }
+
+    const agreedCard = (!onDescribe || editorOpen) && activeEditor?.card.status === "confirmed"
+      ? activeEditor.card : null;
     flushSync(() => {
       navRoot.render(
         <WorkspaceFrame project={projectName ?? "Project"}
           journey={tabs.filter((tab) => journeyIds.has(tab.id))}
           references={tabs.filter((tab) => !journeyIds.has(tab.id))}
-          agreed={agreed} onReadFullSummary={activeEditor?.card.status === "confirmed" ? handleReadFullSummary : null}
+          agreed={agreedCard?.summary ?? "No confirmed agreement opened"}
+          onReadFullSummary={agreedCard !== null ? handleReadFullSummary : null}
           attention={attention} next={next}
           diagnosticsOpen={traceOpen} onToggleDiagnostics={() => {
             traceOpen = !traceOpen;

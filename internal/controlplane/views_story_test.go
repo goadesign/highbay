@@ -111,6 +111,7 @@ const liveRegions = () => page.$$("#surla-story-draft [role=status]").length;
 expect(announced() === "" && liveRegions() === 1, "the none state was announced or the draft has several live regions");
 expect(!page.$("#surla-story-change"), "a Story of a change is shown with no change open");
 expect(page.text("#surla-story-draft-none").includes("Ask the guide to refresh the Story"), "the none state does not name the step to take");
+expect(page.text("#surla-frame-next dd").includes("Ask the guide to refresh the Story"), "Story did not surface the available next step");
 const context = page.text("#surla-workspace-context");
 expect(context.includes("Story") && context.includes("current draft none"), "the context strip does not name what is shown: " + context);
 
