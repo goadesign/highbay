@@ -276,8 +276,7 @@ A refused start saves nothing. A start is refused when:
   the project's repository (`copy_folder_in_use`), or a copy is missing and
   another folder has its branch checked out (`tests_branch_in_use`);
 - another operation holds a working copy's turn (`working_copy_busy`);
-- the change is unknown (`not_found`), the server was not started by `surla`
-  in a project folder (`not_implemented`), or the server stops or the
+- the change is unknown (`not_found`), or the server stops or the
   five-minute limit ends before the save (`unavailable`).
 
 The reference gives each refusal's recovery under
