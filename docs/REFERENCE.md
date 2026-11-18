@@ -2325,8 +2325,14 @@ illustration, not the Story.
 from [`ui/checkpoint/`](../ui/checkpoint/). It sends only the operations
 listed in `PAGE_OPERATIONS` in [`ui/checkpoint/build.mjs`](../ui/checkpoint/build.mjs),
 whose request types and result validators are generated from the OpenAPI
-description, and refuses an answer that does not match. Every page request
-must be same-origin. The server sends this `Content-Security-Policy`:
+description, and refuses an answer that does not match. A top-level browser
+navigation to `GET /views` may come from any site when marked
+`Sec-Fetch-Mode: navigate` and `Sec-Fetch-Dest: document`, including a browser
+extension opening the link. This serves only the fixed shell, with `no-store`;
+the one-use credential stays in the fragment. Cross-site iframe and fetch
+requests to the shell are refused. The address/Origin checks remain in force,
+and exchanging the link or using a browser session still requires
+`Sec-Fetch-Site: same-origin`. The server sends this `Content-Security-Policy`:
 
 | Directive | What the browser allows |
 | --- | --- |
