@@ -29,6 +29,7 @@ expect(page.beforeUnload(), "an unadopted proposal answer did not guard leaving"
 page.win.location.hash = "link=pending-proposal-link";
 await until(() => page.$("#surla-pending-link") && page.win.location.hash === "", "proposal choices did not defer the replacement link");
 expect(page.$("#surla-open-pending-link").disabled, "unadopted choices allowed the replacement link");
+expect(page.text("#surla-pending-link").includes("Adopt or Discard Unsaved Edits") && page.text("#surla-pending-link").includes("without declining"), "the notice did not name the local way to clear proposal answers");
 page.$("#surla-discard-draft").click();
 await until(() => !page.$("#surla-open-pending-link").disabled, "local discard did not resolve the proposal choices");
 expect(!page.beforeUnload() && page.$("#surla-proposal"), "local discard removed the proposal or retained its choices");
@@ -51,6 +52,7 @@ await until(() => page.sent("POST", "/changes/confirm").some((r) => r.status ===
 page.win.location.hash = "link=pending-save-link";
 await until(() => page.$("#surla-pending-link") && page.win.location.hash === "", "an outstanding edit did not defer the link");
 expect(page.beforeUnload() && page.$("#surla-open-pending-link").disabled, "the pending edit did not guard both exit paths");
+expect(page.text("#surla-pending-link").includes("Wait for the current save to finish"), "the pending-save notice did not tell the user to wait");
 await control(origin, "release", { key: "POST /changes/confirm" });
 await until(() => !page.$("#surla-open-pending-link").disabled, "a completed save did not release the pending link");
 expect(!page.beforeUnload(), "a completed unchanged save still blocked leaving");

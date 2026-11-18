@@ -136,6 +136,9 @@ type (
 		UsedLinkReported bool              `json:"used_link_reported"`
 		NoticeWidths     []int             `json:"notice_widths"`
 		NoticeFits       []bool            `json:"notice_fits"`
+		NoticeVisible    []bool            `json:"notice_visible"`
+		LinkAnnounced    []bool            `json:"link_announced"`
+		EditVisible      []bool            `json:"edit_visible"`
 	}
 
 	// testReviewViewFacts contains native layout and keyboard observations only.
@@ -701,6 +704,9 @@ func TestViewsPageInARealBrowser(t *testing.T) {
 		}
 		assert.Equal(t, []int{1280, 375}, got.NoticeWidths)
 		assert.Equal(t, []bool{true, true}, got.NoticeFits, "the notice widened the page or its controls overflowed")
+		assert.Equal(t, []bool{true, true}, got.EditVisible, "the scenario did not begin at the visible editing field")
+		assert.Equal(t, []bool{true, true}, got.NoticeVisible, "the page did not reveal the notice while preserving field focus and selection")
+		assert.Equal(t, []bool{true, true}, got.LinkAnnounced, "the existing live status did not announce the link")
 	})
 
 	t.Run("browser ended and left nothing", func(t *testing.T) {

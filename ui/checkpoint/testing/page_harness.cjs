@@ -126,6 +126,8 @@ async function openPage(origin, { link, hidden } = {}) {
       // observation; real-browser tests own viewport and reflow evidence.
       win.matchMedia = (query) => ({ matches: false, media: query, onchange: null,
         addEventListener() {}, removeEventListener() {} });
+      // jsdom has no scroll layout; the native browser owner proves visibility.
+      win.HTMLElement.prototype.scrollIntoView = () => {};
       Object.defineProperty(win.document, "hidden", { configurable: true, get: () => isHidden });
       Object.defineProperty(win.document, "visibilityState", {
         configurable: true,

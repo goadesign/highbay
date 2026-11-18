@@ -1153,7 +1153,7 @@ async function main(input, facts) {
     facts.link_recovery = {
       clean_reload: await evaluate(views, "window.__surlaOldDocument === undefined && location.hash === ''"),
       clean_requests: views.requests.slice(since).filter(server).map((r) => ({ ...r })),
-      notice_widths: [], notice_fits: [],
+      notice_widths: [], notice_fits: [], notice_visible: [], link_announced: [], edit_visible: [],
     };
     await evaluate(views, "document.getElementById('surla-open-change-chg-refunds').click()");
     await until(views, "document.querySelector('textarea[data-field=expected_outcome]')");
@@ -1170,9 +1170,18 @@ async function main(input, facts) {
     await dt.send("Target.activateTarget", { targetId: views.targetId });
     for (const width of [1280, 375]) {
       await dt.send("Emulation.setDeviceMetricsOverride", { width, height: 800, deviceScaleFactor: 1, mobile: false }, views.sessionId);
-      await evaluate(views, "window.scrollTo(0, 0), new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))");
+      // Start where the person is editing, then paste the link. Only the page
+      // may reveal its notice; scrolling to the top here would hide a defect.
+      await evaluate(views, "(() => { const field = document.querySelector('textarea[data-field=expected_outcome]'); field.scrollIntoView({ block: 'center' }); field.focus({ preventScroll: true }); field.setSelectionRange(2, 8); })()");
+      facts.link_recovery.edit_visible.push(await evaluate(views, "(() => { const box = document.activeElement.getBoundingClientRect(); return box.top >= 0 && box.bottom <= innerHeight; })()"));
+      fresh = await mint();
+      await dt.send("Page.navigate", { url: input.origin + "/views#link=" + fresh }, views.sessionId);
+      await until(views, "document.getElementById('surla-pending-link') && location.hash === ''");
+      await evaluate(views, "new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))");
       facts.link_recovery.notice_widths.push(width);
       facts.link_recovery.notice_fits.push(await evaluate(views, "(() => { const notice = document.getElementById('surla-pending-link').getBoundingClientRect(); const button = document.getElementById('surla-open-pending-link').getBoundingClientRect(); return document.documentElement.scrollWidth <= innerWidth && button.left >= notice.left && button.right <= notice.right; })()"));
+      facts.link_recovery.notice_visible.push(await evaluate(views, "(() => { const box = document.getElementById('surla-pending-link').getBoundingClientRect(); const nav = document.getElementById('surla-checkpoint-nav'); const top = getComputedStyle(nav).position === 'sticky' ? nav.getBoundingClientRect().bottom : 0; const field = document.querySelector('textarea[data-field=expected_outcome]'); return box.top >= top && box.bottom <= innerHeight && document.activeElement === field && field.selectionStart === 2 && field.selectionEnd === 8; })()"));
+      facts.link_recovery.link_announced.push(await evaluate(views, "document.getElementById('surla-checkpoint-status').textContent.includes('You opened a new Surla link')"));
       const screenshot = await dt.send("Page.captureScreenshot", { format: "png", captureBeyondViewport: false }, views.sessionId);
       fs.writeFileSync(require("node:path").join(input.capture_directory, "pending-link-" + width + ".png"), Buffer.from(screenshot.data, "base64"));
     }

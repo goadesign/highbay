@@ -2014,10 +2014,13 @@ export function bootstrapViewsPage() {
   // updateModelDraft records input and refreshes discard and pending-link
   // controls. The uncontrolled text fields retain focus and selection.
   function updateModelDraft(change: Partial<ModelDraft>) {
+    const redraw = !modelDraftDirty || change.kind !== undefined;
     modelDraft = { ...modelDraft, ...change };
     modelDraftDirty = true;
-    syncResultRegion();
-    syncNoticeRegion();
+    if (redraw) {
+      syncResultRegion();
+      syncNoticeRegion();
+    }
   }
 
   // discardModelDraft clears unsent model input locally, including after the
@@ -2469,6 +2472,11 @@ export function bootstrapViewsPage() {
         {pendingLinkFragment !== null ? (
           <Alert id="surla-pending-link" role="status">
             <p>You opened a new Surla link in this tab. Save or discard your edits, then choose Open link.</p>
+            {editorBusy ? <p>Wait for the current save to finish.</p> : null}
+            {activeEditor !== null && Object.keys(activeEditor.proposalAnswers).length > 0 ? (
+              <p>For proposal answers, choose Adopt or Discard Unsaved Edits. Discard clears your answers without declining the proposal.</p>
+            ) : null}
+            {modelDraftDirty ? <p>For the model choice, choose Apply or Discard model edits.</p> : null}
             <p>The link expires two minutes after it was printed, even while you finish your edits.</p>
             <Button id="surla-open-pending-link" disabled={hasUnsavedPageInput()} onClick={openPendingLink}>
               Open link
@@ -3744,7 +3752,9 @@ export function bootstrapViewsPage() {
     }
     history.replaceState(null, "", window.location.pathname + window.location.search);
     pendingLinkFragment = fragment;
+    statusEl.textContent = "You opened a new Surla link. Save or discard your edits, or wait for the save to finish, then choose Open link.";
     syncNoticeRegion();
+    document.getElementById("surla-pending-link")?.scrollIntoView({ block: "nearest" });
   });
 
   syncAllRegions();

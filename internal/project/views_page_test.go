@@ -141,6 +141,7 @@ func TestViewsPageSessionLifecycle(t *testing.T) {
   expect(page.$('textarea[data-field="expected_outcome"]') === field && field.value === "Typed before the restart" && page.doc.activeElement === field && field.selectionStart === 2 && field.selectionEnd === 8, "deferring a link changed the draft, focus or selection");
   expect(page.sent("POST", "/project/browser-session").length === 1, "a deferred link was exchanged before edits were resolved");
   expect(page.text("#surla-pending-link").includes("two minutes after it was printed"), "the deferred notice did not explain the link's original expiry");
+  expect(page.status().includes("You opened a new Surla link") && page.status().includes("Open link"), "the existing live status did not announce the deferred link");
   page.$("#surla-confirm-submit").click();
   await until(() => page.$("#surla-session-ended"), "the page did not say its session ended");
   expect(page.text("#surla-session-ended").includes("Run surla in your project folder"), "the page did not say how to continue");
