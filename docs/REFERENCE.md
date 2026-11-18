@@ -148,7 +148,7 @@ identifier. The third is the user's next step, chosen by the server:
 | Chorus dialog | Step printed |
 | --- | --- |
 | Opened for this project | `Choose an agent for each role in the open Chorus dialog in Herdr.` |
-| Already open | `If the open Chorus dialog is for this project, click "Reload team", then choose the agents. If it is for another project, close it, then start the agents again (Start agents on the views page, or run surla).` |
+| Already open | `If this is your project's dialog, click Reload team and choose agents. Otherwise close it; use Start agents on the page or run surla.` |
 | Not needed | `Every listed role is running.` |
 
 Then the browser opens the views page, and the last line prints. When the
