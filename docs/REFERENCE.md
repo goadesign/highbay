@@ -2299,7 +2299,11 @@ changes nothing keeps the revision and its build.
 **Approval on the page.** The frame shows the project, journey, agreed change,
 what needs you and one Next action. On a phone, Next moves to a bottom surface
 with reserved document space. Approve presents the run’s recorded evidence;
-**Refresh result** reads the owner’s current requirements. Only an `available`
+**Refresh result** reads the owner’s current requirements for that same run.
+When a newer check is available, **Review latest check** opens it for review;
+the shown result stays selected until you choose it. Earlier results remain
+selectable in **Test details and saved runs**, and a saved approval stays bound
+to its own verified inputs. Only an `available`
 observation enables **Approve this result**. Pending or failed reads keep the
 evidence and disable submission. A refusal stays on the same stage with its
 reason; success shows the recorded approval and moves focus to it. A saved

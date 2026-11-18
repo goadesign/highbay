@@ -604,6 +604,9 @@ Only you can approve. Next offers **Approve this result** when the owner’s
 current review says it is available. A blocked result keeps its evidence and
 explains the enabling step. A read failure retains evidence and withholds
 approval until recovery. Approval stays on this stage after it is recorded.
+If another check arrives while you review an earlier result, **Review latest
+check** opens it. **Refresh result** keeps reviewing the selected run; saved
+results and approvals retain their own evidence.
 The server reloads the run's report and derives it again from its evidence,
 checks that it passed and that it verified the agreed revision with the tests
 accepted for that revision, and records the approval on the Change Card:

@@ -103,7 +103,51 @@ await until(() => page.sent("GET", path).some((r) => r.status === 200), "held re
 expect(page.$("#surla-approval-stage").dataset.runId === input.latest && !page.$("#surla-cp5-approve"), "late available review replaced the selected run or its permission");
 page.$("#surla-cp4-run-" + input.older).click();
 await until(() => page.$("#surla-approval-stage").dataset.runId === input.older && page.$("#surla-cp5-approve") && !page.$("#surla-cp5-approve").disabled, "explicitly selecting the matching run did not recover");
+expect(page.$("#surla-cp5-review-latest") && !page.$("#surla-cp5-review-latest").classList.contains("shadcn-btn-primary"), "latest navigation removed the selected older run's available approval");
+page.$("#surla-cp5-review-latest").click();
+await until(() => page.$("#surla-approval-stage").dataset.runId === input.latest && page.$("#surla-cp5-approve-blocked"), "latest action did not review the owner's exact latest run");
 expect(page.sent("POST", "/changes/approve").length === 0, "selection submitted approval");
+page.close();
+`)
+}
+
+// TestViewsPageOffersANewerCheckWithoutReplacingTheSavedResult follows a new
+// passing run while the user reviews an earlier failure. Recorded fixtures and
+// the existing served-page consumer prove navigation without candidate execution.
+func TestViewsPageOffersANewerCheckWithoutReplacingTheSavedResult(t *testing.T) {
+	cp, card, runsDir, candidate := selectedInputsFixture(t)
+	older, latest := strings.Repeat("1", 32), strings.Repeat("2", 32)
+	accepted := time.Date(2026, 11, 13, 9, 0, 0, 0, time.UTC)
+	writeListedRunAt(t, runsDir, pageOwner, card, older, accepted, false, candidate)
+	setListedRunSource(t, runsDir, older, verify.TestsWritten)
+	ps := startPageServer(t, cp)
+	ps.act("save-passing-check", func() {
+		writeListedRunAt(t, runsDir, pageOwner, card, latest, accepted.Add(time.Minute), true, candidate)
+		setListedRunSource(t, runsDir, latest, verify.TestsWritten)
+	})
+	runPageScript(t, ps, map[string]any{"older": older, "latest": latest}, `
+const page = await openPage(origin, { link: input.link });
+await until(() => page.$("#surla-build-review-check") && !page.$("#surla-build-review-check").disabled, "failed check did not load");
+page.$("#surla-build-review-check").click();
+await until(() => page.$("#surla-approval-stage")?.dataset.runId === input.older && page.$("#surla-cp5-approve-blocked") && !page.$("#surla-cp5-observation-status"), "old failure did not settle");
+expect(!page.$("#surla-cp5-review-latest"), "the only check offered a newer result");
+await control(origin, "act", { key: "save-passing-check" });
+await until(() => page.$("#surla-cp5-review-latest"), "a new passing run did not offer a direct review action");
+expect(page.$("#surla-approval-stage").dataset.runId === input.older && page.$("#surla-cp5-approve-blocked"), "background latest discovery replaced historical evidence");
+expect(page.$("#surla-cp5-review-latest").classList.contains("shadcn-btn-primary"), "the failed run's next action does not lead to the latest check");
+const oldPath = "/verifications/" + input.older + "/review";
+await until(() => !page.$("#surla-cp5-refresh-approval").disabled, "background review did not settle before refresh");
+const reads = page.sent("GET", oldPath).length;
+page.$("#surla-cp5-refresh-approval").click();
+await until(() => page.sent("GET", oldPath).length > reads && !page.$("#surla-cp5-refresh-approval").disabled, "refresh did not reread the displayed failure");
+expect(page.$("#surla-approval-stage").dataset.runId === input.older, "refresh silently selected another check");
+page.$("#surla-cp5-review-latest").click();
+await until(() => page.$("#surla-approval-stage").dataset.runId === input.latest && page.$("#surla-cp5-approve") && !page.$("#surla-cp5-approve").disabled, "latest action did not load the passed run and owner review");
+expect(page.doc.activeElement === page.$("#surla-cp5-title"), "latest action did not focus the review destination");
+expect(!page.$("#surla-cp5-review-latest"), "latest check still offered itself as newer");
+page.$("#surla-cp4-run-" + input.older).click();
+await until(() => page.$("#surla-approval-stage").dataset.runId === input.older && page.$("#surla-cp5-approve-blocked"), "earlier failure was no longer selectable");
+expect(page.sent("POST", "/changes/approve").length === 0 && page.sent("POST", "/changes/verify").length === 0, "review navigation started work or approved it");
 page.close();
 `)
 }
