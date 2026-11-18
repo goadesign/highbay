@@ -783,6 +783,7 @@ func checkHost(cardsDir, workspace, tool string) int {
 		return 2
 	}
 	cp, err := New(Options{
+		Team:     testTeamBinding(),
 		CardsDir: cardsDir, WorkspaceDir: workspace, Checker: candidate.NewContainerRunner(),
 		CheckHelper:  func() *exec.Cmd { return exec.Command(self, "check-run") },
 		CheckTimeout: time.Minute,

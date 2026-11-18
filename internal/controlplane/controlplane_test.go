@@ -192,7 +192,6 @@ func TestProposeChangeRecordsTheDesignSourceItWasMadeAgainst(t *testing.T) {
 		workspace  string
 		wantSource string
 	}{
-		{"no design and no workspace", "", ""},
 		{"workspace without design files", emptyWorkspace, ""},
 		{"workspace design before a module exists is not read", designWorkspace, ""},
 	} {
@@ -848,13 +847,19 @@ func TestGetChangeLetsAStaleEditorRecover(t *testing.T) {
 	}
 }
 
-// newControlPlane returns a control plane that saves its cards in a fresh
-// temporary directory, or in opts.CardsDir when set, and closes it when the
-// test ends.
+// newControlPlane supplies an idle team and separate temporary directories
+// for the workspace and cards unless the test specifies them. It closes the
+// control plane when the test ends.
 func newControlPlane(t *testing.T, opts Options) *ControlPlane {
 	t.Helper()
 	if opts.CardsDir == "" {
 		opts.CardsDir = t.TempDir()
+	}
+	if opts.WorkspaceDir == "" {
+		opts.WorkspaceDir = realTempDir(t)
+	}
+	if opts.Team == nil {
+		opts.Team = testTeamBinding()
 	}
 	if opts.BuildCacheDir == "" {
 		opts.BuildCacheDir = testmodule.CompilerCache(t)

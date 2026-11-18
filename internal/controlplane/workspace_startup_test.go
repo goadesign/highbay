@@ -47,6 +47,7 @@ func TestNewWorkspaceGitAdmission(t *testing.T) {
 				return context.WithTimeout(ctx, allowance)
 			}
 			cp, err := newWithWorkspaceGitTimeout(Options{
+				Team:         testTeamBinding(),
 				WorkspaceDir: workspace,
 				CardsDir:     filepath.Join(root, "cards"),
 				RunsDir:      filepath.Join(root, "runs"),

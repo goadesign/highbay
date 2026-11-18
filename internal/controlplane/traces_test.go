@@ -64,6 +64,7 @@ func TestCloseKeepsTracingUntilCheckRequestEnds(t *testing.T) {
 	}
 	tp := sdktrace.NewTracerProvider(sdktrace.WithSyncer(exported))
 	cp, err := New(Options{
+		Team:     testTeamBinding(),
 		CardsDir: cardsDir, WorkspaceDir: newShopModule(t, nil),
 		Checker: candidate.NewContainerRunner(), CheckHelper: testCheckHelper(t), CheckTimeout: time.Minute,
 		TracerProvider: tp,
@@ -329,7 +330,7 @@ func TestTraceToolReadsSavedHistoryAfterRestart(t *testing.T) {
 	t.Parallel()
 	tp := sdktrace.NewTracerProvider()
 	t.Cleanup(func() { assert.NoError(t, tp.Shutdown(context.Background())) })
-	opts := Options{CardsDir: t.TempDir(), TracerProvider: tp}
+	opts := Options{CardsDir: t.TempDir(), WorkspaceDir: realTempDir(t), Team: testTeamBinding(), TracerProvider: tp}
 	first, err := New(opts)
 	require.NoError(t, err)
 	t.Cleanup(func() { assert.NoError(t, first.Close()) })

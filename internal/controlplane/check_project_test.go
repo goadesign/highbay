@@ -304,7 +304,11 @@ func TestCheckBindingAcceptsOtherSpellingsThroughTheStartupPipeline(t *testing.T
 			}
 			writeTree(t, parent, map[string]string{tc.stored + "/app/go.mod": "module example.com/app\n"})
 			runGitForTest(t, filepath.Join(parent, tc.stored), "init", "-q")
-			cp, err := New(Options{CardsDir: filepath.Join(realTempDir(t), "cards"), WorkspaceDir: filepath.Join(parent, tc.started)})
+			cp, err := New(Options{
+				CardsDir:     filepath.Join(realTempDir(t), "cards"),
+				WorkspaceDir: filepath.Join(parent, tc.started),
+				Team:         testTeamBinding(),
+			})
 			require.NoError(t, err)
 			defer func() { require.NoError(t, cp.Close()) }()
 
@@ -397,7 +401,14 @@ func TestOutputKeepsMultiByteCharactersWhole(t *testing.T) {
 
 func TestCheckAdmissionIsOrderedWithClose(t *testing.T) {
 	cardsDir := filepath.Join(realTempDir(t), "cards")
-	cp, err := New(Options{CardsDir: cardsDir, Checker: candidate.NewContainerRunner(), CheckHelper: testCheckHelper(t), CheckTimeout: time.Minute})
+	cp, err := New(Options{
+		CardsDir:     cardsDir,
+		WorkspaceDir: realTempDir(t),
+		Team:         testTeamBinding(),
+		Checker:      candidate.NewContainerRunner(),
+		CheckHelper:  testCheckHelper(t),
+		CheckTimeout: time.Minute,
+	})
 	require.NoError(t, err)
 
 	// An admission is in progress (it holds the read lock between its
@@ -675,7 +686,13 @@ func TestRecoverCheckOperationsRemovesScratchOfOperationsWithoutContainers(t *te
 
 func TestNewRejectsANonPositiveCheckTimeout(t *testing.T) {
 	for _, timeout := range []time.Duration{0, -time.Second} {
-		_, err := New(Options{CardsDir: filepath.Join(realTempDir(t), "cards"), Checker: candidate.NewContainerRunner(), CheckTimeout: timeout})
+		_, err := New(Options{
+			CardsDir:     filepath.Join(realTempDir(t), "cards"),
+			WorkspaceDir: realTempDir(t),
+			Team:         testTeamBinding(),
+			Checker:      candidate.NewContainerRunner(),
+			CheckTimeout: timeout,
+		})
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "check timeout must be positive")
 	}
@@ -757,7 +774,13 @@ func TestPublishManifestsStopsBeforeEachFileOnceCanceled(t *testing.T) {
 // TestNewRequiresACheckHelperWithAChecker checks that a control plane that
 // runs checks cannot be built without the launcher of its check helper.
 func TestNewRequiresACheckHelperWithAChecker(t *testing.T) {
-	_, err := New(Options{CardsDir: filepath.Join(realTempDir(t), "cards"), Checker: candidate.NewContainerRunner(), CheckTimeout: time.Minute})
+	_, err := New(Options{
+		CardsDir:     filepath.Join(realTempDir(t), "cards"),
+		WorkspaceDir: realTempDir(t),
+		Team:         testTeamBinding(),
+		Checker:      candidate.NewContainerRunner(),
+		CheckTimeout: time.Minute,
+	})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "check operations need Options.CheckHelper")
 }
@@ -771,8 +794,6 @@ func TestNewNeedsNoCheckHelperWithoutAChecker(t *testing.T) {
 	_, err := cp.CheckProject(ctx)
 	assertServiceError(t, err, "not_implemented")
 	_, err = cp.UpdateDependencies(ctx)
-	assertServiceError(t, err, "not_implemented")
-	_, err = cp.GenerateCode(asCaller("alice@example.com", CallerBuilder), &gensurla.GenerateCodePayload{})
 	assertServiceError(t, err, "not_implemented")
 }
 

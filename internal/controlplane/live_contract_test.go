@@ -381,7 +381,7 @@ func TestEndedLiveTargetRetainsOnlyItsPublicObservation(t *testing.T) {
 	require.Eventually(t, func() bool { return cp.liveTargetState().Kind() == gensurla.LiveTargetKindEnded },
 		30*time.Second, 20*time.Millisecond)
 	require.NoError(t, cp.Close())
-	reopened, err := New(Options{CardsDir: filepath.Dir(root)})
+	reopened, err := New(Options{CardsDir: filepath.Dir(root), WorkspaceDir: cp.initialWorkspaceRoot, Team: testTeamBinding()})
 	require.NoError(t, err)
 	t.Cleanup(func() { assert.NoError(t, reopened.Close()) })
 	assert.Equal(t, gensurla.LiveTargetKindNone, reopened.liveTargetState().Kind(), "an ended notice is not durable history")
@@ -461,12 +461,10 @@ func TestAcceptedReplacementDoesNotReviveTheOlderEnd(t *testing.T) {
 }
 
 // TestLiveWithoutVerificationKeepsItsUnavailableRefusal covers an embedding
-// that supplies a launch command but no verification profile or card store input.
+// that supplies a launch command but no verification profile.
 func TestLiveWithoutVerificationKeepsItsUnavailableRefusal(t *testing.T) {
-	cp, err := New(Options{CardsDir: t.TempDir(), Live: &LiveConfig{Command: []string{"unused"}}})
-	require.NoError(t, err)
-	t.Cleanup(func() { assert.NoError(t, cp.Close()) })
-	_, err = cp.StartLiveTarget(asCaller("alice@example.com", CallerBuilder), &gensurla.StartLiveTargetPayload{
+	cp := newControlPlane(t, Options{Live: &LiveConfig{Command: []string{"unused"}}})
+	_, err := cp.StartLiveTarget(asCaller("alice@example.com", CallerBuilder), &gensurla.StartLiveTargetPayload{
 		ChangeID: "unknown", CandidateCommit: strings.Repeat("a", 40),
 	})
 	assert.Equal(t, "live_target_unavailable", goaErrorName(err))
