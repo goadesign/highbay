@@ -3,7 +3,10 @@ module github.com/goadesign/surla
 go 1.27.3
 
 require (
+	github.com/anthropics/anthropic-sdk-go v1.84.0
+	github.com/goadesign/surla/story v0.0.0-20261111183703-4568fcf5bb85
 	github.com/google/uuid v1.6.0
+	github.com/openai/openai-go/v3 v3.91.0
 	github.com/stretchr/testify v1.12.1
 	github.com/yosida95/uritemplate/v3 v3.0.2
 	go.opentelemetry.io/otel v1.47.0
@@ -12,7 +15,7 @@ require (
 	go.opentelemetry.io/otel/trace v1.47.0
 	go.opentelemetry.io/proto/otlp v1.11.0
 	goa.design/goa-ai v0.90.1-0.20261111075239-0114fb9d40d3
-	goa.design/goa/v3 v3.35.1-0.20261103205041-35e789e8f9b1
+	goa.design/goa/v3 v3.35.1-0.20261114184515-dee88e893eb3
 	goa.design/model v1.16.11-0.20261030164016-5e17c2e932fb
 	golang.org/x/mod v0.42.0
 	golang.org/x/sys v0.49.0
@@ -25,7 +28,6 @@ require (
 	cloud.google.com/go/auth v0.24.2 // indirect
 	cloud.google.com/go/auth/oauth2adapt v0.3.1 // indirect
 	cloud.google.com/go/compute/metadata v0.10.0 // indirect
-	github.com/anthropics/anthropic-sdk-go v1.84.0 // indirect
 	github.com/aws/aws-sdk-go-v2 v1.47.5 // indirect
 	github.com/aws/aws-sdk-go-v2/aws/protocol/eventstream v1.7.25 // indirect
 	github.com/aws/aws-sdk-go-v2/config v1.33.13 // indirect
@@ -69,7 +71,6 @@ require (
 	github.com/nexus-rpc/nexus-proto-annotations v0.1.0 // indirect
 	github.com/nexus-rpc/sdk-go v0.7.0 // indirect
 	github.com/oklog/ulid/v2 v2.1.2 // indirect
-	github.com/openai/openai-go/v3 v3.91.0 // indirect
 	github.com/pb33f/go-yaml v0.1.1 // indirect
 	github.com/pb33f/ordered-map/v2 v2.3.2 // indirect
 	github.com/redis/go-redis/v9 v9.23.0 // indirect

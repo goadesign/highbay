@@ -1,0 +1,14 @@
+# Handwritten production concurrency owners. The syntax guard checks every
+# non-fixture Go source file, including platform-specific files.
+github.com/goadesign/surla/cmd/surla
+github.com/goadesign/surla/internal/controlplane
+github.com/goadesign/surla/internal/designeval
+github.com/goadesign/surla/internal/project
+github.com/goadesign/surla/internal/traceview
+github.com/goadesign/surla/internal/verifyrun
+github.com/goadesign/surla/verify/candidate
+github.com/goadesign/surla/verify/suite
+github.com/goadesign/surla/examples/orders/cmd/orders
+github.com/goadesign/surla/examples/orders-eval/acceptance
+github.com/goadesign/surla/examples/orders-eval/harness
+github.com/goadesign/surla/examples/orders-eval/sim

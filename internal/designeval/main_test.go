@@ -13,7 +13,16 @@ var testEvaluator *Evaluator
 
 // TestMain runs the package's tests with testEvaluator and then closes it.
 func TestMain(m *testing.M) {
-	testEvaluator = NewEvaluator()
+	if cache := os.Getenv("SURLA_TEST_BUILD_CACHE"); cache != "" {
+		var err error
+		testEvaluator, err = NewEvaluatorWithCache("", cache)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "select test compiler cache:", err)
+			os.Exit(1)
+		}
+	} else {
+		testEvaluator = NewEvaluator()
+	}
 	code := m.Run()
 	if err := testEvaluator.Close(); err != nil {
 		fmt.Fprintln(os.Stderr, "close test evaluator:", err)

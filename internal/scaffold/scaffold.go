@@ -4,7 +4,7 @@
 //
 // Init builds the whole project in the operator-provided work directory,
 // running `go mod tidy` in each module and generating its code with a
-// Generator (Surla's sandboxed Goa generator, the one `surla gen` uses), and
+// Generator (Surla's Goa generator, the one `surla gen` uses), and
 // renames the staging directory to the target only when every step
 // succeeded. A failed or canceled step removes the staging directory, so the
 // target is never left half-written. When child cleanup cannot be confirmed,
@@ -19,7 +19,6 @@ import (
 	"errors"
 	"fmt"
 	"go/format"
-	"go/token"
 	"io"
 	"io/fs"
 	"maps"
@@ -40,6 +39,8 @@ import (
 	"golang.org/x/mod/semver"
 
 	"github.com/goadesign/surla"
+	"github.com/goadesign/surla/internal/designeval"
+	"github.com/goadesign/surla/internal/gitenv"
 	"github.com/goadesign/surla/internal/procgroup"
 )
 
@@ -58,13 +59,14 @@ type (
 		Module string
 		// SurlaVersion is the exact github.com/goadesign/surla version the
 		// evaluator module requires, such as
-		// v0.0.0-20261110163737-d9beac313142.
+		// v0.0.0-20261115014514-02c792da3ded.
 		SurlaVersion string
 	}
 
-	// Layout names the command packages Init writes for one starter project,
-	// which `surla serve -project` builds: the candidate in the project
-	// directory and the evaluator suite in its SuiteDir module.
+	// Layout names the command packages of one starter project, which the
+	// project server builds: the candidate Init writes in the project
+	// directory, and the evaluator suite's program the generator writes in
+	// its SuiteDir module (GeneratedSuiteCommand).
 	Layout struct {
 		// Service is the candidate service and binary name, the last element
 		// of the module path, such as "shop".
@@ -72,9 +74,6 @@ type (
 		// CandidatePackage is the candidate command package relative to the
 		// project directory, such as "./cmd/shop".
 		CandidatePackage string
-		// SuiteCommand is the evaluator suite command package relative to
-		// SuiteDir, such as "./cmd/shop-evals".
-		SuiteCommand string
 	}
 
 	// Runner runs one command in dir, writing its combined output to the
@@ -112,6 +111,10 @@ type (
 		// GoaVersion, GoaAIVersion and ModelVersion are the versions
 		// Surla's own go.mod requires.
 		GoaVersion, GoaAIVersion, ModelVersion string
+		// StoryVersion is the github.com/goadesign/surla/story version
+		// Surla's own go.mod requires: the Story language this Surla
+		// evaluates, which the starter's design/story.go imports.
+		StoryVersion string
 	}
 
 	// moduleStep is one module of the project and the files it is built
@@ -152,16 +155,20 @@ type (
 )
 
 // SuiteDir is the directory, relative to the project directory, where Init
-// writes the evaluator suite's module <module>/eval. surla serve -project
-// reads that module's go.mod from there.
-const SuiteDir = "eval"
+// writes the evaluator suite's module <module>/eval. The project server
+// reads that module's go.mod from there. The generator recognizes the same
+// folder (designeval.TestModuleDir) when it writes the suite's program.
+const SuiteDir = designeval.TestModuleDir
 
 const (
-	// quickstartGuide is the one generated file outside gen/: goa-ai's guide
-	// for coding agents, written at the module root.
+	// quickstartGuide is the one file generation writes outside gen/:
+	// goa-ai's guide for coding agents, written at the module root.
 	quickstartGuide = "AGENTS_QUICKSTART.md"
 	// surlaModule is Surla's module path.
 	surlaModule = "github.com/goadesign/surla"
+	// storyModule is the path of the Story language's module, which the
+	// starter's design/story.go imports.
+	storyModule = "github.com/goadesign/surla/story"
 	// stopGrace is how long a canceled command's process group gets to exit
 	// after SIGTERM.
 	stopGrace = 5 * time.Second
@@ -179,14 +186,19 @@ var (
 	//go:embed all:templates
 	templatesFS embed.FS
 
-	// lowerAlnum is the form a service name must have: lowercase letters and
-	// digits starting with a letter, so Goa generates a Go package of the
-	// same name.
-	lowerAlnum = regexp.MustCompile(`^[a-z][a-z0-9]*$`)
-
 	// commitHexPattern matches a full 40- or 64-character lowercase hex Git
 	// commit ID.
 	commitHexPattern = regexp.MustCompile(`^([0-9a-f]{40}|[0-9a-f]{64})$`)
+
+	// starterStory summarizes the Story the starter ships in design/story.go
+	// (templates/candidate/design/story.go.tmpl) as an evaluation reports it:
+	// its one finished flow. Init renders the test module's Story table from
+	// it, as a build renders it from the evaluated Story, so the starter's
+	// generated test program equals what the first build prepares.
+	starterStory = []designeval.StorySummary{{
+		Name:  "Prices",
+		Flows: []designeval.StoryFlow{{Key: "prices-cookie", Title: "Price a cookie", Complete: true}},
+	}}
 )
 
 // Init creates the project described by o, running every command with run
@@ -278,23 +290,23 @@ func SurlaVersion(info *debug.BuildInfo) string {
 }
 
 // LayoutForModule validates a Go module path and returns the service and command
-// names Init writes for it. Starter generation and workspace initialization use
-// the same rule: the last path element must contain lowercase letters and digits,
-// start with a letter, and be neither a Go keyword nor main. For example,
-// example.com/shop returns service shop and candidate command ./cmd/shop.
-// Invalid module paths or service names return an error without running tooling.
+// names of its starter project. Starter generation, workspace initialization
+// and the generator use the same rule, designeval.ValidServiceName: the last
+// path element must contain lowercase letters and digits, start with a letter,
+// and be neither a Go keyword nor main. For example, example.com/shop returns
+// service shop and candidate command ./cmd/shop. Invalid module paths or
+// service names return an error without running tooling.
 func LayoutForModule(modulePath string) (Layout, error) {
 	if err := module.CheckPath(modulePath); err != nil {
 		return Layout{}, fmt.Errorf("%q: %w", modulePath, err)
 	}
 	name := path.Base(modulePath)
-	if !lowerAlnum.MatchString(name) || !token.IsIdentifier(name) || name == "main" {
+	if !designeval.ValidServiceName(name) {
 		return Layout{}, fmt.Errorf("%q must end in a service name of lowercase letters and digits starting with a letter, other than a Go keyword or main, such as example.com/shop", modulePath)
 	}
 	return Layout{
 		Service:          name,
 		CandidatePackage: "./cmd/" + name,
-		SuiteCommand:     "./cmd/" + name + "-evals",
 	}, nil
 }
 
@@ -328,6 +340,17 @@ func StarterLayout(rootGoMod, evalGoMod []byte) (Layout, error) {
 		return Layout{}, fmt.Errorf("%s declares module %q, want %q", evalFile, evalMod.Module.Mod.Path, want)
 	}
 	return layout, nil
+}
+
+// GeneratedSuiteCommand returns the package, relative to SuiteDir, of the
+// evaluator suite's program, which the generator writes with the test
+// module's gen/ folder: ./gen/cmd/<service>-evals, named by
+// designeval.SuiteCommandPackage, the rule the generator uses. It uses only
+// l.Service, so a Layout from LayoutForModule or StarterLayout gives the same
+// path. For example, the layout of example.com/shop gives
+// ./gen/cmd/shop-evals.
+func (l Layout) GeneratedSuiteCommand() string {
+	return designeval.SuiteCommandPackage(l.Service)
 }
 
 // Error describes the failed command and the end of its output.
@@ -421,14 +444,14 @@ func prepare(ctx context.Context, o Options, run Runner, gen Generator, commitRe
 }
 
 // newData validates o and returns the template data, with the Go, Goa,
-// Goa-AI and Model versions read from Surla's own go.mod.
+// Goa-AI, Model and Story versions read from Surla's own go.mod.
 func newData(o Options) (data, error) {
 	layout, err := LayoutForModule(o.Module)
 	if err != nil {
 		return data{}, fmt.Errorf("-module %w", err)
 	}
 	if !ValidVersion(o.SurlaVersion) {
-		return data{}, fmt.Errorf("Surla version %q is not an exact module version such as v0.0.0-20261110163737-d9beac313142", o.SurlaVersion)
+		return data{}, fmt.Errorf("Surla version %q is not an exact module version such as v0.0.0-20261115014514-02c792da3ded", o.SurlaVersion)
 	}
 	mod, err := modfile.Parse("go.mod", []byte(surla.GoMod()), nil)
 	if err != nil {
@@ -442,6 +465,7 @@ func newData(o Options) (data, error) {
 		{"goa.design/goa/v3", &d.GoaVersion},
 		{"goa.design/goa-ai", &d.GoaAIVersion},
 		{"goa.design/model", &d.ModelVersion},
+		{storyModule, &d.StoryVersion},
 	} {
 		for _, r := range mod.Require {
 			if r.Mod.Path == req.path {
@@ -456,14 +480,21 @@ func newData(o Options) (data, error) {
 }
 
 // build creates both modules under root. For each module it writes go.mod and
-// design/, resolves the design's dependencies, generates code with gen,
-// writes the remaining files, tidies again, vets, and runs `go test ./...`
+// design/ (for the test module with its Story table, writeStoryTests),
+// resolves the design's dependencies, writes the test module's
+// acceptance package, generates code with gen, writes the remaining files,
+// tidies again, vets, and runs `go test ./...`
 // (which compiles and checks every package in the candidate module and runs
 // the non-e2e package tests in the evaluator module without starting a live
 // model-backed CP4 verification run). The evaluator module pins the exact
 // Surla version with go get before generation: the final tidy then keeps that
 // version instead of picking another, and the code is generated with whatever
-// Goa versions it requires.
+// Goa versions it requires. The acceptance package is one of the facts that
+// make the test module a Surla test module, so the generator, which writes the
+// test program only for such a module, sees it: it is written with the
+// service package the service module's generation named, the package the
+// test module's design declares too, and the test module's own generation
+// must name the same one.
 func build(ctx context.Context, root, logs string, d data, run Runner, gen Generator) error {
 	for _, m := range []moduleStep{
 		{dir: ".", templates: "templates/candidate", path: d.Module},
@@ -473,6 +504,12 @@ func build(ctx context.Context, root, logs string, d data, run Runner, gen Gener
 		designFiles, err := render(dir, m.templates, d, isDesignFile)
 		if err != nil {
 			return err
+		}
+		if m.requireSurla {
+			if err := writeStoryTests(dir); err != nil {
+				return err
+			}
+			designFiles = append(designFiles, designeval.StoryTestsPath)
 		}
 		steps := [][]string{{"go", "mod", "tidy"}}
 		if m.requireSurla {
@@ -484,15 +521,28 @@ func build(ctx context.Context, root, logs string, d data, run Runner, gen Gener
 		if err := runAll(ctx, dir, m.dir, logs, steps, run); err != nil {
 			return err
 		}
-		if err := generate(ctx, dir, m.dir, designFiles, gen); err != nil {
+		inputs := designFiles
+		if m.requireSurla {
+			acceptance, err := render(dir, m.templates, d, isAcceptanceFile)
+			if err != nil {
+				return err
+			}
+			inputs = append(slices.Clone(designFiles), acceptance...)
+		}
+		if err := generate(ctx, dir, m.dir, inputs, gen); err != nil {
 			return err
 		}
 		pkg, err := generatedServicePackage(dir)
 		if err != nil {
 			return err
 		}
+		if m.requireSurla && pkg != d.Pkg {
+			return fmt.Errorf("the test module's generated service package %q is not the service module's %q, "+
+				"which its acceptance package was written with", pkg, d.Pkg)
+		}
 		d.Pkg = pkg
-		if _, err := render(dir, m.templates, d, func(p string) bool { return !isDesignFile(p) }); err != nil {
+		written := func(p string) bool { return !isDesignFile(p) && !(m.requireSurla && isAcceptanceFile(p)) }
+		if _, err := render(dir, m.templates, d, written); err != nil {
 			return err
 		}
 		steps = [][]string{{"go", "mod", "tidy"}, {"go", "vet", "./..."}, {"go", "test", "./..."}}
@@ -562,39 +612,19 @@ func commitScaffold(ctx context.Context, staging, logs string, run Runner) (stri
 	return commit, nil
 }
 
-// commandEnv returns os.Environ() with repository-, worktree-, index-, object-,
-// template-, and attribute-redirecting Git variables removed and isolated
-// Go/Git non-interactive settings appended, while preserving the operator's
-// Git identity and commit signing configuration.
+// commandEnv returns os.Environ() without the variables that would make git
+// act on another repository, work tree, index, object store or reference
+// store (gitenv.WithoutRedirects) and with isolated Go/Git non-interactive
+// settings appended, while preserving the operator's Git identity and commit
+// signing configuration. Beyond the redirects it drops GIT_TEMPLATE_DIR as a
+// second guard: the first commit's git init already passes --template=, which
+// ignores an inherited template folder. It also drops the five variables it
+// sets again below, so each holds only its isolated value.
 func commandEnv(logDir string) []string {
-	base := os.Environ()
-	env := make([]string, 0, len(base)+5)
-	for _, kv := range base {
-		key, _, _ := strings.Cut(kv, "=")
-		switch key {
-		case "GIT_DIR",
-			"GIT_WORK_TREE",
-			"GIT_INDEX_FILE",
-			"GIT_OBJECT_DIRECTORY",
-			"GIT_ALTERNATE_OBJECT_DIRECTORIES",
-			"GIT_COMMON_DIR",
-			"GIT_REPLACE_REF_BASE",
-			"GIT_TEMPLATE_DIR",
-			"GIT_NAMESPACE",
-			"GIT_CEILING_DIRECTORIES",
-			"GIT_DISCOVERY_ACROSS_FILESYSTEM",
-			"GIT_PREFIX",
-			"GIT_SUPER_PREFIX",
-			"GIT_SHALLOW_FILE",
-			"GIT_ATTR_NOSYSTEM",
-			"GIT_TERMINAL_PROMPT",
-			"GOWORK",
-			"TMPDIR",
-			"GOTMPDIR":
-			continue
-		}
-		env = append(env, kv)
-	}
+	env := gitenv.WithoutRedirects(os.Environ(),
+		"GIT_TEMPLATE_DIR",
+		"GIT_ATTR_NOSYSTEM", "GIT_TERMINAL_PROMPT", "GOWORK", "TMPDIR", "GOTMPDIR",
+	)
 	return append(env,
 		"GIT_TERMINAL_PROMPT=0",
 		"GIT_ATTR_NOSYSTEM=1",
@@ -627,15 +657,31 @@ func runAll(ctx context.Context, dir, moduleDir, logs string, steps [][]string, 
 	return nil
 }
 
+// writeStoryTests writes the Story table of the test module in dir, rendered
+// from starterStory with the package its rendered design files declare, before
+// the module is tidied and generated, so both see it. dir is a new,
+// unpublished module, so there is nothing to replace.
+func writeStoryTests(dir string) error {
+	table, _, err := designeval.StoryTests(os.DirFS(dir), starterStory)
+	if err != nil {
+		return fmt.Errorf("render the test module's Story table: %w", err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, filepath.FromSlash(designeval.StoryTestsPath)), table, 0o644); err != nil {
+		return fmt.Errorf("write the test module's Story table: %w", err)
+	}
+	return nil
+}
+
 // generate runs gen on the module in dir, whose files are exactly
-// designFiles (go.mod and design/, as rendered and then resolved) plus the
-// go.sum the resolution wrote, and writes the generated files into dir.
+// inputs (go.mod and design/, as rendered and then resolved, and the test
+// module's acceptance package) plus the go.sum the resolution wrote, and
+// writes the generated files into dir.
 // Every generated path is checked before anything is written: it must be
 // AGENTS_QUICKSTART.md or a clean relative path under gen/. dir is a new,
 // unpublished module, so there is nothing in it to keep or replace.
-func generate(ctx context.Context, dir, moduleDir string, designFiles []string, gen Generator) error {
+func generate(ctx context.Context, dir, moduleDir string, inputs []string, gen Generator) error {
 	files := map[string]string{}
-	for _, name := range append(slices.Clone(designFiles), "go.sum") {
+	for _, name := range append(slices.Clone(inputs), "go.sum") {
 		b, err := os.ReadFile(filepath.Join(dir, filepath.FromSlash(name)))
 		if err != nil {
 			return fmt.Errorf("generate code for module %s: %w", moduleDir, err)
@@ -729,6 +775,13 @@ func generatedServicePackage(dir string) (string, error) {
 // go.mod and the design package.
 func isDesignFile(p string) bool {
 	return p == "go.mod.tmpl" || strings.HasPrefix(p, "design/")
+}
+
+// isAcceptanceFile reports whether a template path belongs to the test
+// module's acceptance package, which is written before the test module's
+// generation.
+func isAcceptanceFile(p string) bool {
+	return strings.HasPrefix(p, designeval.AcceptancePackage+"/")
 }
 
 // render writes every template under root in templatesFS for which keep

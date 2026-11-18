@@ -3,9 +3,7 @@
 This page records what Surla is meant to be and the product decisions that
 follow from it. It describes direction, not shipped behavior:
 [`README.md`](../README.md) and [the reference](REFERENCE.md) describe what
-Surla does today. Where this page and an older planning document disagree
-(for example [`PRESS_RELEASE.md`](../PRESS_RELEASE.md) or
-[`PROPOSAL.md`](../PROPOSAL.md)), this page states the current intent.
+Surla does today.
 
 [Decisions](#decisions) are settled. [Open questions](#open-questions) are
 not.
@@ -26,8 +24,10 @@ not.
 4. **Out of scope.** A catalogue or console of cloud services, deploying
    or applying infrastructure, and an application builder for non-technical
    users.
-5. **Delivery.** An MCP App inside the assistant the user already works in,
-   with the same page served by `surla serve` for hosts that cannot show it.
+5. **Delivery.** The coding agents the user already has, working in
+   terminals Surla starts, and a views page the project's Surla server
+   serves to the user's browser, where the user agrees changes and approves
+   results under their own identity.
 
 ## Decisions
 
@@ -97,26 +97,28 @@ this step.
   does not use the method's own vocabulary.
 - **The user edits it first.** Before Surla proposes architecture, the
   user can add, change and remove notes on the timeline. They do it on the
-  timeline itself or by saying it to the guide, including from a chat
-  client that talks to Surla over MCP. Both ways change the same timeline,
-  and the architecture Surla proposes next follows the edited one.
+  timeline itself or by saying it to the guide in the guide's terminal
+  pane. Both ways change the same timeline, and the architecture Surla
+  proposes next follows the edited one.
 - **Its flows become end-to-end tests.** A flow on the timeline is a path
   from what starts it to an outcome — for example, a customer asks for a
   refund over the limit, a manager approves it, and the refund is paid.
   Each flow results in an end-to-end test of the built platform. An agent
-  that did not write the platform code writes the tests.
+  that did not write the platform code, the test writer, writes the tests.
 - **Finished flows are built; drafts wait.** Surla builds and tests the
   flows that are finished. A flow that is still a draft stays editable, is
   left out of that build, and is clearly shown as untested. A draft does
   not stop the finished flows from being built, and the user never has to
   delete a draft idea to build.
 - **Later edits wait until adopted.** Once a change is agreed, a later
-  Story edit stays a draft until the user adopts it. The agreed change, its
-  answers, confirmation, and test results stay valid for the Story that was
-  agreed, and the test writer and verifier read that frozen Story rather
-  than mutable workspace files (see the
-  [Story test engineering design](STORY_TEST_DESIGN.md#proposed-story-and-build-contract)).
-  Adopting the edited Story creates a new revision that needs confirmation.
+  edit of the timeline stays a draft until the user adopts it. The agreed
+  change, its answers, confirmation, and test results stay valid for the
+  timeline that was agreed, and the test writer's work is judged against
+  the copy of it saved with the build rather than the project's current
+  files (see
+  [Story flows and the tests a build requires](STORY_TEST_DESIGN.md#from-a-story-to-the-required-tests)).
+  Adopting the edited timeline creates a new revision that needs
+  confirmation.
 - **It leads to the architecture.** Open questions on the timeline become
   the choices Surla raises, unless the playbook already settles them. How
   the notes group suggests where boundaries could go; the user and the
@@ -125,17 +127,19 @@ this step.
   the architecture exists, and is meant to be linked to the diagrams.
 
 The timeline's source, called the Story, is written in a Go domain-specific
-language (DSL) and versioned in the platform's repository. A Goa plugin
-generates test scaffolds and pictures from that source. The plugin starts
-in Surla and must remain easy to move if it later needs its own home.
+language (DSL) and versioned in the platform's repository. Surla evaluates
+that source and, for each finished flow,
+generates a test scenario and the hook method the test writer implements
+for it; it writes no stub. This generation lives in Surla and must remain
+easy to move if it later needs its own home.
 
-When the user edits the Story through the timeline or chat, the guide
-changes its source code. Surla runs the changed Story code in the background
-and redraws the timeline. Drafts and incomplete flows must still run without
-errors so the user can refine them in place. Each step in a flow has an
-explicit stable key: a manager approval step can keep `approve-refund` when
-its label changes. Actors name roles such as a customer or manager, rather
-than architecture elements such as an API or worker.
+When the user edits the Story on the timeline or by telling the guide, the
+guide changes its source code. Surla runs the changed Story code in the
+background and redraws the timeline. Drafts and incomplete flows must still
+run without errors so the user can refine them in place. Each step in a flow
+has an explicit stable key: a manager approval step can keep `approve-refund`
+when its label changes. Actors name roles such as a customer or manager,
+rather than architecture elements such as an API or worker.
 
 ### Domain-driven design, without the vocabulary
 
@@ -191,9 +195,10 @@ well as application code.
 
 - **No cloud-specific knowledge.** Surla does not carry a catalogue of
   cloud services or map the platform onto one. The cloud is whatever the
-  user says. The coding agent writes the Terraform from the deployment
-  view, the same way it writes service code, and reuses the Terraform
-  conventions the repository already has.
+  user says. The builder, the coding agent that writes the platform's code,
+  writes the Terraform from the deployment view, the same way it writes
+  service code, and reuses the Terraform conventions the repository
+  already has.
 - **Surla can produce Terraform.** It is written the way service code is,
   and checked independently of the agent that wrote it.
 - **Deployment is separate and explicit.** Surla does not run
@@ -243,17 +248,16 @@ Surla validates the Terraform files and compares them with the deployment
 view, reporting an element with no resource and a resource missing from the
 diagram.
 
-### Delivered as an MCP App
+### Delivered as a page in the browser
 
-- **In the conversation,** a small card shows one moment — a proposal, a
-  decision, a verdict — with a small diagram and one action.
-- **Full screen,** the same app is the architecture workspace.
-- **State lives on the Surla server.** A view can then be rebuilt at any
-  time from what the server holds. The MCP Apps specification dated
-  2026-01-26 leaves it to the host how long a view stays mounted and lists
-  state persistence as future work, so Surla does not rely on a view
-  surviving between turns.
-- **Outside an MCP Apps host,** `surla serve` serves the same page.
+- **Served by the project's Surla server.** Running `surla` opens the page
+  with a one-time link; the page keeps its session only while it is open.
+- **The page is the architecture workspace,** and the only place where a
+  person agrees a change or approves a result. No agent holds the user's
+  identity.
+- **State lives on the Surla server.** A view can be rebuilt at any time
+  from what the server holds, so a reload or a restart loses only the
+  session, and the page updates itself when the server's state changes.
 
 ## Open questions
 
@@ -262,10 +266,11 @@ diagram.
   have real effects there, outside services are real instead of simulated,
   and Surla needs a way to call the platform's API in that environment.
   None of these is decided.
-- **Story vocabulary and links.** The Story's Go DSL vocabulary, what
-  marks the start and end of a flow, and how a step stays linked to the
-  design elements and tests that implement it are not decided.
+- **Linking a step to the design.** The [Story language](../story/README.md)
+  marks where a flow starts and its outcomes, and each finished flow is
+  linked to its test by name. How a step stays linked to the design
+  elements that implement it is not decided.
 - **How editing instructions reach the guide.** The guide edits source
-  for Story and architecture changes. Which diagram gestures Surla offers
-  and how the UI or an MCP client delivers those instructions are not
-  decided.
+  for Story and architecture changes, and the user talks to it in its
+  pane. Which diagram gestures the page offers, and how a gesture on the
+  page reaches the guide, are not decided.

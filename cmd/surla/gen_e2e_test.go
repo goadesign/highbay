@@ -4,10 +4,11 @@ package main
 
 import (
 	"bytes"
-	"context"
+	"encoding/json"
 	"io"
 	"maps"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -21,16 +22,24 @@ import (
 	"github.com/stretchr/testify/require"
 	goahttp "goa.design/goa/v3/http"
 
+	genhttpclient "github.com/goadesign/surla/gen/http/surla/client"
 	genmcpclient "github.com/goadesign/surla/gen/jsonrpc/mcp_surla/client"
 	genmcpsurla "github.com/goadesign/surla/gen/mcp_surla"
 	gensurla "github.com/goadesign/surla/gen/surla"
 	"github.com/goadesign/surla/internal/controlplane"
+	"github.com/goadesign/surla/internal/project"
 	"github.com/goadesign/surla/internal/testmodule"
+	"github.com/goadesign/surla/internal/verify"
 )
 
 // starterSurlaVersion is a published Surla version the starter's evaluator
 // module requires, as the scaffold tests use.
-const starterSurlaVersion = "v0.0.0-20261110163737-d9beac313142"
+const starterSurlaVersion = testmodule.PublishedSurlaVersion
+
+// starterInitWait bounds the init_project call that creates the starter. The
+// server sets no limit of its own on that call: it generates, builds, tests
+// and commits the starter for as long as the caller waits.
+const starterInitWait = 10 * time.Minute
 
 // headerCommand matches the command line Goa writes in generated file
 // headers, which names the program that generated them.
@@ -72,37 +81,34 @@ func TestGenOnAFreshStarterChangesNothingAndKeepsModulesApart(t *testing.T) {
 	t.Setenv("GIT_AUTHOR_EMAIL", "test@example.com")
 	t.Setenv("GIT_COMMITTER_NAME", "Surla Test")
 	t.Setenv("GIT_COMMITTER_EMAIL", "test@example.com")
-	for _, name := range []string{"ANTHROPIC_API_KEY", "OPENAI_API_KEY", liveModelGatewayEnv, liveModelProviderEnv, liveModelNameEnv} {
+	for _, name := range []string{"ANTHROPIC_API_KEY", "OPENAI_API_KEY", verify.LiveModelGatewayEnv, verify.LiveModelProviderEnv, verify.LiveModelNameEnv} {
 		t.Setenv(name, "")
 	}
 	provider := &scriptedModelProvider{}
 	gatewayAddr := startModelGateway(t, provider)
 	workspace := t.TempDir()
-	cfg := serveConfig{
-		checkTimeout:     defaultCheckTimeout,
-		projectDir:       workspace,
-		projectSet:       true,
-		cardsDir:         t.TempDir(),
-		cardsDirExplicit: true,
-		gatewayAddr:      gatewayAddr,
-	}
-	opts, err := serveOptions(cfg, func(string) string { return "" }, os.Environ())
+	buildCache := testmodule.CompilerCache(t)
+	opts, err := serveOptions(os.Environ(), workspace)
 	require.NoError(t, err)
+	opts.BuildCacheDir = buildCache
 	// A test executable has no released module version in its build info.
 	opts.SurlaVersion = starterSurlaVersion
+	opts.Team = fixtureWorkflowTeam("operator@example.com")
 	cp, err := controlplane.New(opts)
+	require.NoError(t, err)
+	_, err = cp.ConfigureModel(controlplane.WithPrincipal(t.Context(), controlplane.Principal{ID: "operator@example.com", CallerID: "user", Kind: controlplane.CallerUser}), &gensurla.ConfigureModelPayload{GatewayAddr: &gatewayAddr})
 	require.NoError(t, err)
 	// Registered after the temporary directories, so it runs before they
 	// are removed.
 	t.Cleanup(func() { closeRetaining(cp, workspace, opts.CardsDir, opts.RunsDir) })
-	auth := controlplane.NewTokenAuthenticator(map[string]controlplane.Principal{
+	auth := workflowAuthenticator(map[string]controlplane.Principal{
 		"test-token": {ID: "operator@example.com"},
 	})
 	srv := httptest.NewServer(controlplane.NewHTTPHandler(cp, auth))
 	t.Cleanup(srv.Close)
-	scheme, host, err := parseServerOrigin(srv.URL)
+	serverURL, err := url.Parse(srv.URL)
 	require.NoError(t, err)
-	transport := genmcpclient.NewClient(scheme, host,
+	transport := genmcpclient.NewClient(serverURL.Scheme, serverURL.Host,
 		&bearerDoer{client: srv.Client(), token: "test-token"},
 		goahttp.RequestEncoder, goahttp.ResponseDecoder, false)
 	client := &genmcpsurla.Client{ToolsCallEndpoint: transport.ToolsCall()}
@@ -110,14 +116,16 @@ func TestGenOnAFreshStarterChangesNothingAndKeepsModulesApart(t *testing.T) {
 		ModulePath: "example.com/shop",
 	})
 	require.NoError(t, err)
-	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Minute)
-	defer cancel()
 	call := &genmcpsurla.ToolsCallPayload{Name: "init_project", Arguments: args}
-	result, err := client.ToolsCall(ctx, call)
+	phaseStart := time.Now()
+	result, err := client.ToolsCall(stepContext(t, starterInitWait), call)
+	t.Logf("init_project: %s", time.Since(phaseStart))
 	require.NoError(t, err)
 	complete, ok := result.Outcome.AsComplete()
 	require.True(t, ok, "initialization completes in the same MCP call")
-	require.False(t, complete.IsError != nil && *complete.IsError, "%+v", complete.Content)
+	contentJSON, err := json.Marshal(complete.Content)
+	require.NoError(t, err)
+	require.False(t, complete.IsError != nil && *complete.IsError, "%s", contentJSON)
 	initialized, err := gensurla.DecodeInitProjectResult(complete.StructuredContent)
 	require.NoError(t, err)
 	physicalWorkspace, err := filepath.EvalSymlinks(workspace)
@@ -127,7 +135,7 @@ func TestGenOnAFreshStarterChangesNothingAndKeepsModulesApart(t *testing.T) {
 	assert.Equal(t, "example.com/shop", initialized.ModulePath)
 	assert.Equal(t, "shop", initialized.ServiceName)
 	assert.Regexp(t, "^([0-9a-f]{40}|[0-9a-f]{64})$", initialized.Commit)
-	headCmd := exec.CommandContext(ctx, "git", "-C", dir, "rev-parse", "--verify", "HEAD^{commit}")
+	headCmd := exec.CommandContext(stepContext(t, journeyQuickWait), "git", "-C", dir, "rev-parse", "--verify", "HEAD^{commit}")
 	headOut, err := headCmd.CombinedOutput()
 	require.NoError(t, err, string(headOut))
 	assert.Equal(t, initialized.Commit, strings.TrimSpace(string(headOut)))
@@ -138,7 +146,7 @@ func TestGenOnAFreshStarterChangesNothingAndKeepsModulesApart(t *testing.T) {
 
 	// A second call must observe the first call's active workspace without
 	// restarting the server or running another starter build.
-	result, err = client.ToolsCall(ctx, call)
+	result, err = client.ToolsCall(stepContext(t, journeyQuickWait), call)
 	require.NoError(t, err)
 	complete, ok = result.Outcome.AsComplete()
 	require.True(t, ok)
@@ -151,31 +159,84 @@ func TestGenOnAFreshStarterChangesNothingAndKeepsModulesApart(t *testing.T) {
 	created := files(t, dir, ".")
 	require.Contains(t, created, quickstartGuide, "the product design declares an agent, so goa-ai writes its guide")
 	assert.Contains(t, created["gen/shop/service.go"], "// $ surla gen", "surla init generates with the same generator")
+	require.Contains(t, created, "eval/design/story_tests.go", "the starter's test module holds its Story table")
+	assert.Contains(t, created["eval/gen/evals/shop_acceptance/suite.go"], "PricesCookie(context.Context) (eval.Result, error)",
+		"the starter's suite requires the test of its Story's finished flow")
 
 	for _, module := range []string{dir, evalDir} {
 		var out bytes.Buffer
+		phaseStart = time.Now()
 		require.NoError(t, runGen([]string{"-dir", module}, &out, io.Discard))
+		t.Logf("gen unchanged %s: %s", module, time.Since(phaseStart))
 		assert.Contains(t, out.String(), "added: 0\nchanged: 0\nremoved: 0\n", module)
 	}
 	assert.Equal(t, created, files(t, dir, "."), "regenerating an untouched starter changes no byte")
 
-	// One native journey proves the initializing server builds, starts and
-	// verifies the builder's later commit B against the evaluator commit A it
-	// pinned. Which commit a restarted or directly started server pins is a
-	// server decision made before any build, covered by the fast resolver and
-	// consumer tests (TestLiveAndVerificationUseTheWorkspacePinnedSuite and
-	// TestConfigureServeWorkspacePinsSuiteCommitAndRejectsSymlinkParentEscape).
+	// Without stored verification settings, the initializing server verifies
+	// only a change whose build has accepted tests, so a change nobody built
+	// is refused. One native journey then proves a server restarted with the
+	// operator's settings builds, starts and verifies the builder's later
+	// commit B against the evaluator at commit A. Which commits a run of
+	// accepted tests or a live copy uses is covered by the control plane's
+	// tests on a fixture repository.
 	commentPath := filepath.Join(evalDir, "design", "design.go")
 	source, err := os.ReadFile(commentPath)
 	require.NoError(t, err)
 	require.NoError(t, os.WriteFile(commentPath, append(source, []byte("\n// Builder-only comment; evaluator behavior stays unchanged.\n")...), 0o644))
 	candidateCommit := trustedSuiteCommit(t, dir)
 	require.NotEqual(t, initialized.Commit, candidateCommit)
+	phaseStart = time.Now()
+	assertVerifyRefusedWithoutBuild(t, client, opts.RunsDir, "operator@example.com", "unbuilt", candidateCommit)
+	t.Logf("initial refresh and refused verification: %s", time.Since(phaseStart))
 
-	// The operator adds promotion once the project and its pinned evaluator
-	// suite commit exist; the running server picks it up without a restart.
-	promotion := writeStarterPromotion(t, workspace, initialized.ServiceName, initialized.Commit)
-	assertTrustedSuiteJourney(t, client, opts.CardsDir, opts.RunsDir, candidateCommit, initialized.Commit, "initialized", promotion)
+	// The operator stores verification and promotion after initialization; a
+	// server restart adopts them.
+	writeStarterVerification(t, workspace, dir, initialized.ModulePath, initialized.Commit)
+	promotion := writeStarterPromotion(t, workspace, initialized.ServiceName)
+	state, err := fixtureProjectState(workspace)
+	require.NoError(t, err)
+	// init_project's real published child and its descendants find this same project record.
+	for _, folder := range []string{dir, filepath.Join(dir, "internal")} {
+		found, err := project.Discover(filepath.Dir(state.Dir), folder)
+		require.NoError(t, err)
+		assert.Equal(t, state.Record.ID, found.Record.ID)
+		assert.Equal(t, state.Dir, found.Dir)
+	}
+	srv.Close()
+	require.NoError(t, cp.Close())
+	opts, err = serveOptions(os.Environ(), dir)
+	require.NoError(t, err)
+	opts.BuildCacheDir = buildCache
+	assert.Equal(t, state.CardsDir(), opts.CardsDir)
+	opts.SurlaVersion = starterSurlaVersion
+	opts.Team = fixtureWorkflowTeam("operator@example.com")
+	cp, err = controlplane.New(opts)
+	require.NoError(t, err)
+	_, err = cp.ConfigureModel(controlplane.WithPrincipal(t.Context(), controlplane.Principal{ID: "operator@example.com", CallerID: "user", Kind: controlplane.CallerUser}), &gensurla.ConfigureModelPayload{GatewayAddr: &gatewayAddr})
+	require.NoError(t, err)
+	srv = httptest.NewServer(controlplane.NewHTTPHandler(cp, auth))
+	t.Cleanup(srv.Close)
+	serverURL, err = url.Parse(srv.URL)
+	require.NoError(t, err)
+	transport = genmcpclient.NewClient(serverURL.Scheme, serverURL.Host, &bearerDoer{client: srv.Client(), token: "test-token"}, goahttp.RequestEncoder, goahttp.ResponseDecoder, false)
+	client = &genmcpsurla.Client{ToolsCallEndpoint: transport.ToolsCall()}
+	userTransport := genhttpclient.NewClient(serverURL.Scheme, serverURL.Host,
+		&bearerDoer{client: srv.Client(), token: "test-token"},
+		goahttp.RequestEncoder, goahttp.ResponseDecoder, false)
+	user := &gensurla.Client{StartBuildEndpoint: userTransport.StartBuild()}
+	// The control-plane owner reloads the actual initialized child from workspace.json.
+	result, err = client.ToolsCall(stepContext(t, journeyQuickWait), call)
+	require.NoError(t, err)
+	complete, ok = result.Outcome.AsComplete()
+	require.True(t, ok)
+	require.NotNil(t, complete.IsError)
+	require.True(t, *complete.IsError)
+	require.NotEmpty(t, complete.Content)
+	require.NotNil(t, complete.Content[0].Text)
+	assert.Contains(t, *complete.Content[0].Text, "already initialized at "+dir)
+	phaseStart = time.Now()
+	assertTrustedSuiteJourney(t, client, user, dir, opts.CardsDir, opts.RunsDir, initialized.Commit, "initialized", promotion)
+	t.Logf("trusted suite journey: %s", time.Since(phaseStart))
 
 	edits := []struct {
 		// module is the module directory surla gen runs in.
@@ -199,7 +260,9 @@ func TestGenOnAFreshStarterChangesNothingAndKeepsModulesApart(t *testing.T) {
 		require.Contains(t, string(src), e.old)
 		require.NoError(t, os.WriteFile(path, []byte(strings.Replace(string(src), e.old, e.new, 1)), 0o644))
 		var out bytes.Buffer
+		phaseStart = time.Now()
 		require.NoError(t, runGen([]string{"-dir", e.module}, &out, io.Discard))
+		t.Logf("gen edited %s: %s", e.module, time.Since(phaseStart))
 		assert.NotContains(t, out.String(), "changed: 0\n", "the edit changes generated files in %s", e.module)
 		assert.Equal(t, before, files(t, dir, e.other), "regenerating %s leaves %s unchanged", e.module, e.other)
 	}

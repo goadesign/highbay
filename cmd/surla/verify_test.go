@@ -2,14 +2,23 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
+	"errors"
 	"io"
+	"net"
+	"net/http"
 	"os"
 	"strings"
 	"testing"
+	"time"
+
+	"github.com/goadesign/surla/internal/controlplane"
+	"github.com/goadesign/surla/internal/project"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"goa.design/goa-ai/eval"
 
 	"github.com/goadesign/surla/internal/verify"
 )
@@ -43,6 +52,7 @@ func TestParseVerifyFlagsBuildsTheExplicitPlan(t *testing.T) {
 		RequestRevision: "rev-1",
 		WorkDir:         "/private/work",
 		ReportDir:       "/private/reports",
+		Tests:           verify.TestsEvaluator,
 	}
 
 	cases := []struct {
@@ -135,6 +145,69 @@ func TestWriteVerifyReportPrintsBeforeFailing(t *testing.T) {
 			assert.Equal(t, tc.wantIDs, ids)
 			if tc.builderView {
 				assert.NotContains(t, out.String(), "cross_customer_refund_refused")
+			}
+		})
+	}
+
+	// A repair scenario whose record of the binaries it ran failed Surla's
+	// artifact check: the check's detail quotes what the test program
+	// reported, so only the full report prints it.
+	const planted = "FAKE_HOLDOUT_refund_over_limit_417"
+	mismatched, err := verify.Assemble(
+		verify.Binding{
+			CandidateCommit: "abc", RequestRevision: "rev-1", SuiteID: "orders_acceptance",
+			SuiteCommit: "suite-1", Artifacts: map[string]string{"orders": "d1"}, Environment: "sim",
+		},
+		verify.Suite{ID: "orders_acceptance", Environment: "sim", Scenarios: []verify.Scenario{{ID: "refund_within_limit"}}},
+		eval.Report{SuiteID: "orders_acceptance", Scenarios: []eval.ScenarioReport{{
+			ID: "refund_within_limit", StartedAt: time.Now(), Passed: true,
+			Result: &eval.Result{
+				Checks:    []eval.Check{{Name: "check", Passed: true}},
+				Artifacts: []eval.Artifact{{Name: "candidate:orders", URI: "sha256:" + planted}},
+			},
+		}}}, 0)
+	require.NoError(t, err)
+	views := []struct {
+		name        string
+		builderView bool
+		want        string
+		wantAbsent  []string
+	}{
+		{
+			name: "full report keeps the artifact check's detail",
+			want: "scenario executed orders with digest " + planted + ", bound d1",
+		},
+		{
+			name:        "builder view names the failed artifact check only",
+			builderView: true,
+			want: "The test program's record of the binaries it ran does not match what Surla built " +
+				"(it recorded a binary whose digest is not that of the binary Surla built), " +
+				"so no check of this scenario counts; the full detail is in the saved report named by report_digest.",
+			wantAbsent: []string{planted, "candidate:"},
+		},
+	}
+	for _, tc := range views {
+		t.Run(tc.name, func(t *testing.T) {
+			var out bytes.Buffer
+			err := writeVerifyReport(&out, mismatched, tc.builderView)
+			require.EqualError(t, err, "verification did not pass (report "+mismatched.Digest+")")
+			var printed struct {
+				Scenarios []struct {
+					Outcome string `json:"outcome"`
+					Error   string `json:"error"`
+					Detail  struct {
+						Error string `json:"error"`
+					} `json:"detail"`
+				} `json:"scenarios"`
+			}
+			require.NoError(t, json.Unmarshal(out.Bytes(), &printed))
+			require.Len(t, printed.Scenarios, 1)
+			assert.Equal(t, "harness_error", printed.Scenarios[0].Outcome)
+			// The builder view carries the error on the scenario; the full
+			// report carries it in the scenario's detail.
+			assert.Equal(t, tc.want, printed.Scenarios[0].Error+printed.Scenarios[0].Detail.Error)
+			for _, absent := range tc.wantAbsent {
+				assert.NotContains(t, out.String(), absent)
 			}
 		})
 	}
@@ -235,7 +308,7 @@ func TestRunPrintsHelpAndDispatchesCommands(t *testing.T) {
 		wantUsage bool
 		wantErr   string
 	}{
-		{name: "no arguments", args: nil, wantUsage: true},
+		{name: "no arguments", args: nil},
 		{name: "help", args: []string{"help"}, wantUsage: true},
 		{name: "-h", args: []string{"-h"}, wantUsage: true},
 		{name: "--help", args: []string{"--help"}, wantUsage: true},
@@ -252,27 +325,28 @@ func TestRunPrintsHelpAndDispatchesCommands(t *testing.T) {
 		{name: "init without flags", args: []string{"init"}, wantErr: "init requires -dir and -module"},
 		{name: "help for init", args: []string{"help", "init"}},
 		{name: "init with a mutable version", args: []string{"init", "-dir", "x", "-module", "example.com/x", "-surla-version", "latest"}, wantErr: "not an exact module version"},
-		{name: "help for mcp", args: []string{"help", "mcp"}},
-		{name: "mcp -h", args: []string{"mcp", "-h"}},
-		{name: "mcp with a blank principal", args: []string{"mcp", "-principal", "   "}, wantErr: "-principal must not be blank"},
-		{name: "mcp with a stray argument before a flag", args: []string{"mcp", "x", "-promotion-config", "p.json"}, wantErr: `unexpected arguments ["x" "-promotion-config" "p.json"]`},
-		{name: "serve without credentials", args: []string{"serve"}, wantErr: "serve requires -principal and -auth-token"},
-		{name: "serve with a stray argument before a flag", args: []string{"serve", "-principal", "op", "x", "-promotion-config", "p.json"}, wantErr: `unexpected arguments ["x" "-promotion-config" "p.json"]`},
+
 		{name: "diff with a stray argument", args: []string{"diff", "-old-dir", "a", "-new-dir", "b", "c"}, wantErr: `unexpected arguments ["c"]`},
 		{name: "preview with a bad flag", args: []string{"preview", "-nope"}, wantErr: "flag provided but not defined"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			t.Setenv("SURLA_AUTH_TOKEN", "")
 			var out bytes.Buffer
-			err := run(tc.args, &out)
+			var err error
+			if tc.args == nil {
+				err = runWithRuntime(tc.args, &out, projectDispatchRuntime(t))
+			} else {
+				err = run(tc.args, &out)
+			}
 			if tc.wantErr != "" {
 				require.Error(t, err)
 				assert.Contains(t, err.Error(), tc.wantErr)
 				return
 			}
 			require.NoError(t, err)
-			if tc.wantUsage {
+			if tc.args == nil {
+				assert.Contains(t, out.String(), "Surla is running for")
+			} else if tc.wantUsage {
 				assert.Equal(t, usage, out.String())
 			} else {
 				assert.Empty(t, out.String())
@@ -281,61 +355,6 @@ func TestRunPrintsHelpAndDispatchesCommands(t *testing.T) {
 	}
 }
 
-func TestShellQuoteMakesOneShellWord(t *testing.T) {
-	for in, want := range map[string]string{
-		"./shop":      `'./shop'`,
-		"my dir":      `'my dir'`,
-		"it's":        `'it'\''s'`,
-		"$(rm -rf /)": `'$(rm -rf /)'`,
-	} {
-		assert.Equal(t, want, shellQuote(in), in)
-	}
-}
-
-func TestResolveAuthTokenPrefersTheFlag(t *testing.T) {
-	cases := []struct {
-		name, flag, env, want string
-	}{
-		{name: "flag only", flag: "from-flag", want: "from-flag"},
-		{name: "environment only", env: "from-env", want: "from-env"},
-		{name: "flag beats environment", flag: "from-flag", env: "from-env", want: "from-flag"},
-		{name: "whitespace trimmed", env: "  from-env\n", want: "from-env"},
-		{name: "neither", want: ""},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			getenv := func(name string) string {
-				require.Equal(t, "SURLA_AUTH_TOKEN", name)
-				return tc.env
-			}
-			assert.Equal(t, tc.want, resolveAuthToken(tc.flag, getenv))
-		})
-	}
-}
-
-func TestServeHelpNeverPrintsTheEnvironmentToken(t *testing.T) {
-	const token = "synthetic-token-7f3a"
-	t.Setenv("SURLA_AUTH_TOKEN", token)
-	for _, args := range [][]string{{"serve", "-h"}, {"help", "serve"}} {
-		stderr := captureStderr(t, func() {
-			var stdout bytes.Buffer
-			require.NoError(t, run(args, &stdout))
-			assert.NotContains(t, stdout.String(), token)
-		})
-		assert.Contains(t, stderr, "-auth-token")
-		assert.NotContains(t, stderr, token, "help for %v", args)
-	}
-	// The environment token still satisfies serve's credential check, so
-	// serve gets past it and fails later, on the invalid listen address.
-	err := run([]string{"serve", "-addr", "256.0.0.1:0", "-principal", "op", "-cards-dir", t.TempDir()}, &bytes.Buffer{})
-	require.Error(t, err)
-	assert.NotContains(t, err.Error(), "requires -principal and -auth-token")
-}
-
-// captureStderr runs fn with os.Stderr redirected to a pipe and returns what
-// fn wrote. The pipe is read only after fn returns, so fn must write less than
-// the pipe buffer (about 16 KiB); help text is about 1 KiB. Tests using it
-// must not run in parallel because os.Stderr is process-wide.
 func captureStderr(t *testing.T, fn func()) string {
 	t.Helper()
 	r, w, err := os.Pipe()
@@ -368,4 +387,75 @@ func without(args []string, name string) []string {
 		out = append(out, args[i])
 	}
 	return out
+}
+
+// projectDispatchRuntime proves no-argument dispatch through actual management HTTP
+// while replacing terminal and browser effects and every state-root resolution.
+func projectDispatchRuntime(t *testing.T) projectRuntime {
+	t.Helper()
+	root := t.TempDir()
+	runtime := testProjectRuntimeAt(root)
+	bindFixtureTeamEffects(&runtime)
+	runtime.preflight = func(bool) error { return nil }
+	runtime.waitTerminal = func(ctx context.Context, id string) (bool, error) { <-ctx.Done(); return false, nil }
+	starts, opens := 0, 0
+	runtime.startTerminal = func(ctx context.Context, state *project.State) (string, error) {
+		starts++
+		management, err := project.NewServer(state, func() {}, fixtureTeamDependencies(state))
+		if err != nil {
+			return "", err
+		}
+		cp, err := controlplane.New(fixtureProjectOptions(state, management))
+		if err != nil {
+			return "", err
+		}
+		t.Cleanup(func() { assert.NoError(t, cp.Close()) })
+		listener, err := net.Listen("tcp", state.Address())
+		if err != nil {
+			return "", err
+		}
+		require.NoError(t, management.PublishRunning(os.Getpid(), "stand-in"))
+		server := &http.Server{Handler: management.Handler(controlplane.NewHTTPHandler(cp, management.Authenticate)), ReadHeaderTimeout: time.Second}
+		t.Cleanup(func() { assert.NoError(t, server.Close()) })
+		go func() {
+			if err := server.Serve(listener); !errors.Is(err, http.ErrServerClosed) {
+				assert.NoError(t, err)
+			}
+		}()
+		return "stand-in", nil
+	}
+	runtime.openViews = func(ctx context.Context, link string) error {
+		opens++
+		assert.Contains(t, link, "/views#link=")
+		return nil
+	}
+	t.Cleanup(func() { assert.Equal(t, 1, starts); assert.Equal(t, 1, opens) })
+	return runtime
+}
+
+// TestDefaultProjectEffectsAreBlocked prevents dispatch regressions from reaching
+// user config, real terminals, or the browser when a test omits its stand-ins.
+func TestDefaultProjectEffectsAreBlocked(t *testing.T) {
+	runtime := testProjectRuntime()
+	_, err := runtime.configRoot()
+	require.ErrorContains(t, err, "test-owned configuration directory")
+	_, err = runtime.startTerminal(t.Context(), nil)
+	require.ErrorContains(t, err, "cannot start real")
+	_, err = runtime.readTerminal(t.Context(), "unused")
+	require.ErrorContains(t, err, "cannot read real")
+	require.ErrorContains(t, runtime.openViews(t.Context(), "unused"), "cannot open real")
+	require.ErrorContains(t, runtime.startTeamPrograms(t.Context()), "cannot start real team")
+	_, err = runtime.teamDependencies(t.Context(), nil)
+	require.ErrorContains(t, err, "cannot resolve or change real project teams")
+	// The constructor fixtures bind neither reader nor sender: opting into startup
+	// stand-ins must never opt a test into terminal observations or Chorus reminders.
+	isolateServeWorkspace(t)
+	state, err := fixtureProjectState(t.TempDir())
+	require.NoError(t, err)
+	dependencies := fixtureTeamDependencies(state)
+	connection, err := dependencies.Connect(t.Context())
+	require.NoError(t, err)
+	assert.Nil(t, connection.Observer)
+	assert.Nil(t, connection.Sender)
+	require.ErrorContains(t, run(nil, io.Discard), "cannot start real")
 }

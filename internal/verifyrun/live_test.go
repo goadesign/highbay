@@ -18,6 +18,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/goadesign/surla/internal/modelsettings"
 	"github.com/goadesign/surla/internal/verify"
 	"github.com/goadesign/surla/verify/suite"
 )
@@ -35,8 +36,13 @@ const (
 	//   - "suite-bad-line": the suite starts a child, prints a diagnostic
 	//     instead of the ready line and keeps serving;
 	//   - "target-ends": the suite prints the line and exits 1s later,
-	//     leaving its child running, as a candidate a suite did not stop.
-	// Each started process records "pgid pid" lines in TMPDIR/pids.
+	//     leaving its child running, as a candidate a suite did not stop;
+	//   - "leak": the suite prints every provider variable it was given to
+	//     stderr and a first line whose unknown field is its anthropic key,
+	//     then waits to be killed.
+	// Each started process records "pgid pid" lines in TMPDIR/pids. Prepare
+	// and the suite always report, by names and booleans only, which
+	// provider variables they see (writeSettingsReport).
 	liveFakeEnv = "VERIFYRUN_TEST_LIVE"
 	// liveHostReady is printed by the fake host once its live target was ready, and
 	// liveHostEnded once the target reported that it ended.
@@ -47,6 +53,9 @@ const (
 // fakePrepare stands in for verify.Prepare: it returns this test binary as the
 // suite, which then acts as fakeSuiteLive.
 func fakePrepare(ctx context.Context, _ verify.Plan) (verify.Prepared, error) {
+	if err := writeSettingsReport(filepath.Join(os.TempDir(), "prepare-report"), os.Environ()); err != nil {
+		return verify.Prepared{}, err
+	}
 	switch os.Getenv(liveFakeEnv) {
 	case "prepare-fails-child":
 		if err := startRecordedChild(); err != nil {
@@ -57,12 +66,6 @@ func fakePrepare(ctx context.Context, _ verify.Plan) (verify.Prepared, error) {
 	case "prepare-fails":
 		return verify.Prepared{}, &verify.StageError{Stage: verify.StageBuild, Summary: "The candidate did not build.",
 			Err: errors.New("compile error in /private/secret/path")}
-	case "prepare-fails-exit71":
-		return verify.Prepared{}, &verify.StageError{
-			Stage:   verify.StageBuild,
-			Summary: "The sandboxed command exited with status 71. If Surla is running inside a restricted coding-agent shell, its sandbox may have been blocked; run Surla from an unrestricted host shell.",
-			Err:     errors.New("build candidate app: exit status 71 in /private/secret/path"),
-		}
 	case "prepare-hangs":
 		if err := startRecordedChild(); err != nil {
 			return verify.Prepared{}, err
@@ -75,19 +78,67 @@ func fakePrepare(ctx context.Context, _ verify.Plan) (verify.Prepared, error) {
 	if err != nil {
 		return verify.Prepared{}, err
 	}
-	return verify.Prepared{SuiteBin: self, ArtifactFlags: []string{"--artifact", "app=/nonexistent"}}, nil
+	flags := []string{"--artifact", "app=/nonexistent"}
+	if mode := os.Getenv(liveFakeEnv); strings.HasPrefix(mode, "gateway-") {
+		flags = append(flags, "--gateway-test="+mode)
+	}
+	return verify.Prepared{SuiteBin: self, ArtifactFlags: flags}, nil
 }
 
-// fakeSuiteLive acts as `<suite> --live`: it checks that the key arrived
-// through the environment, starts a child in its group as a candidate would
-// be, and behaves according to liveFakeEnv.
+// fakeSuiteLive acts as `<suite> --live`: it writes the environment it was
+// started with to TMPDIR/suite-env, checks that the key arrived through the
+// environment, starts a child in its group as a candidate would be, and
+// behaves according to liveFakeEnv, which a test program agents wrote does
+// not receive, so it then serves.
 func fakeSuiteLive() int {
+	env := strings.Join(os.Environ(), "\n") + "\n"
+	block, err := parentStartingBlock(os.Getppid())
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "read parent starting block:", err)
+		return 1
+	}
+	parentFamilies := map[string]bool{}
+	for _, provider := range modelsettings.Providers() {
+		parentFamilies[provider.Prefix] = strings.Contains(string(block), provider.Prefix)
+	}
+	encoded, err := json.Marshal(parentFamilies)
+	if err != nil {
+		return 1
+	}
+	if err := os.WriteFile(filepath.Join(os.TempDir(), "parent-families.json"), encoded, 0o600); err != nil {
+		return 1
+	}
+	if err := os.WriteFile(filepath.Join(os.TempDir(), "suite-env"), []byte(env), 0o600); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return 2
+	}
+	if err := writeSettingsReport(filepath.Join(os.TempDir(), "suite-report"), os.Environ()); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return 2
+	}
 	if os.Getenv(suite.LiveKeyEnv) != "secret-key" {
 		fmt.Fprintln(os.Stderr, "missing live key")
 		return 2
 	}
 	mode := os.Getenv(liveFakeEnv)
+	for _, argument := range os.Args {
+		if value, ok := strings.CutPrefix(argument, "--gateway-test="); ok {
+			mode = value
+		}
+	}
+	if mode == "gateway-before-panic" {
+		return callFakeLiveModel(mode, os.Getenv(verify.LiveModelGatewayEnv))
+	}
 	switch mode {
+	case "leak":
+		for _, kv := range os.Environ() {
+			if name, _, _ := strings.Cut(kv, "="); modelsettings.InFamily(name) {
+				fmt.Fprintln(os.Stderr, "suite configuration:", kv)
+			}
+		}
+		fmt.Printf("{%q:true}\n", os.Getenv("ANTHROPIC_API_KEY"))
+		time.Sleep(time.Hour)
+		return 0
 	case "suite-exits":
 		return 2
 	case "suite-unsupported":
@@ -117,7 +168,12 @@ func fakeSuiteLive() int {
 	if err := json.NewEncoder(os.Stdout).Encode(map[string]string{"url": "http://127.0.0.1:4100"}); err != nil {
 		return 2
 	}
-	if mode == "target-ends" {
+	if mode == "gateway-hold" {
+		if result := callFakeLiveModel(mode, os.Getenv(verify.LiveModelGatewayEnv)); result != 0 {
+			return result
+		}
+	}
+	if mode == "target-ends" || mode == "gateway-ends" {
 		time.Sleep(time.Second)
 		return 2
 	}
@@ -133,7 +189,19 @@ func liveHost(root string) int {
 	if err != nil {
 		return 2
 	}
-	p, err := startLive(context.Background(), root, verify.Plan{}, "secret-key", []string{self}, os.Environ())
+	plan := evaluatorPlan
+	env := os.Environ()
+	var settings []modelsettings.Settings
+	if strings.HasPrefix(os.Getenv(liveFakeEnv), "gateway-") {
+		plan.Tests = verify.TestsWritten
+		env = append(env, verify.LiveModelProviderEnv+"=anthropic", verify.LiveModelNameEnv+"=fixture")
+		held, err := modelsettings.New("anthropic", map[string]string{"ANTHROPIC_API_KEY": "sentinel-gateway-key"})
+		if err != nil {
+			return 2
+		}
+		settings = append(settings, held)
+	}
+	p, err := startLiveWith(context.Background(), root, plan, "secret-key", []string{self}, env, settings...)
 	if err != nil {
 		fmt.Println("start-error", err)
 		return 2
@@ -145,10 +213,29 @@ func liveHost(root string) int {
 	return 0
 }
 
-// startLive launches a live target and waits until it is ready, stopping it
-// when it does not become ready, as an owner of LaunchLive's process must.
+// startLive launches a live target without provider settings and waits until
+// it is ready, stopping it when it does not become ready, as an owner of
+// LaunchLive's process must.
 func startLive(ctx context.Context, root string, plan verify.Plan, key string, command, env []string) (*LiveProcess, error) {
-	p, err := LaunchLive(root, plan, key, command, env)
+	return startLiveWith(ctx, root, plan, key, command, env)
+}
+
+// startLiveWith is startLive giving the target settings.
+func startLiveWith(
+	ctx context.Context,
+	root string,
+	plan verify.Plan,
+	key string,
+	command, env []string,
+	settings ...modelsettings.Settings,
+) (*LiveProcess, error) {
+	// Like the composition root, supply an absolute cache independently of
+	// the live root's supported relative spelling.
+	cache, err := filepath.Abs(filepath.Join(root, "build-cache"))
+	if err != nil {
+		return nil, err
+	}
+	p, err := LaunchLive(root, plan, key, command, env, settings, cache)
 	if err != nil {
 		return nil, err
 	}
@@ -214,13 +301,116 @@ func onlyLiveDir(t *testing.T, root string) string {
 	return dirs[0]
 }
 
+// TestLiveGivesTheTestProgramOnlyItsSourcesEnvironment starts a live copy
+// from a server environment holding a variable of its own, inherited
+// provider family values and the chosen direct provider, with the chosen
+// provider's handed-over settings, and reads the environment the test
+// program started with. No inherited family value reaches it. A program
+// agents wrote sees only PATH, its TMPDIR, the live key and the gateway,
+// with no provider family in its own or its parent's starting block. The
+// operator's evaluator also sees the server's variable and chosen settings.
+func TestLiveGivesTheTestProgramOnlyItsSourcesEnvironment(t *testing.T) {
+	cases := []struct {
+		name       string
+		tests      verify.TestsSource
+		sees       []string
+		doesNotSee []string
+	}{
+		{
+			name: "operator's evaluator", tests: verify.TestsEvaluator,
+			sees: []string{
+				"SURLA_TEST_SERVER_VAR=present", "ANTHROPIC_API_KEY=ant-k", "ANTHROPIC_BASE_URL=https://gateway.invalid",
+				suite.LiveKeyEnv + "=secret-key",
+			},
+			doesNotSee: []string{"OPENAI_API_KEY", "ANTHROPIC_ADMIN_KEY"},
+		},
+		{
+			name: "test module agents wrote", tests: verify.TestsWritten,
+			sees: []string{
+				"PATH=" + os.Getenv("PATH"), suite.LiveKeyEnv + "=secret-key",
+			},
+			doesNotSee: []string{"SURLA_TEST_SERVER_VAR", "OPENAI_API_KEY", "ANTHROPIC_API_KEY", "ANTHROPIC_BASE_URL", "ANTHROPIC_ADMIN_KEY", verify.LiveModelProviderEnv, verify.LiveModelNameEnv, liveFakeEnv, "HOME"},
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Setenv(liveFakeEnv, "ready")
+			root := t.TempDir()
+			self, err := os.Executable()
+			require.NoError(t, err)
+			env := append(os.Environ(),
+				"SURLA_TEST_SERVER_VAR=present", "ANTHROPIC_API_KEY=inherited-k", "ANTHROPIC_ADMIN_KEY=inherited-admin", "OPENAI_API_KEY=oai-k",
+				verify.LiveModelProviderEnv+"=anthropic", verify.LiveModelNameEnv+"=claude",
+			)
+			anthropic, err := modelsettings.New("anthropic", map[string]string{"ANTHROPIC_API_KEY": "ant-k", "ANTHROPIC_BASE_URL": "https://gateway.invalid"})
+			require.NoError(t, err)
+
+			p, err := startLiveWith(t.Context(), root, verify.Plan{Tests: tc.tests}, "secret-key", []string{self}, env, anthropic)
+			require.NoError(t, err)
+			raw, readErr := os.ReadFile(filepath.Join(p.Dir(), liveTmpDir, "suite-env"))
+			tmp := filepath.Join(p.Dir(), liveTmpDir)
+			parentRaw, parentErr := os.ReadFile(filepath.Join(tmp, "parent-families.json"))
+			require.NoError(t, p.Stop())
+			require.NoError(t, parentErr)
+			var parentFamilies map[string]bool
+			require.NoError(t, json.Unmarshal(parentRaw, &parentFamilies))
+			assert.Equal(t, tc.tests == verify.TestsEvaluator, parentFamilies["ANTHROPIC_"])
+			assert.False(t, parentFamilies["OPENAI_"])
+			require.NoError(t, readErr)
+			seen := strings.Split(strings.TrimSpace(string(raw)), "\n")
+			if tc.tests == verify.TestsWritten {
+				gateway, ok := lookupEnv(seen, verify.LiveModelGatewayEnv)
+				assert.True(t, ok)
+				assert.True(t, strings.HasPrefix(gateway, "127.0.0.1:"))
+			}
+			for _, want := range append(tc.sees, "TMPDIR="+tmp) {
+				assert.Contains(t, seen, want)
+			}
+			for _, name := range tc.doesNotSee {
+				for _, kv := range seen {
+					assert.False(t, strings.HasPrefix(kv, name+"="), "the test program sees %s", kv)
+				}
+			}
+		})
+	}
+}
+
+// TestDecodeLiveRequestRefusesAPlanWithoutADeclaredTestSource checks that a
+// live.json whose plan names no test source, or one that is not declared, is
+// refused, and that each declared source is read.
+func TestDecodeLiveRequestRefusesAPlanWithoutADeclaredTestSource(t *testing.T) {
+	cases := []struct {
+		name    string
+		body    string
+		wantErr string
+	}{
+		{name: "operator's evaluator", body: `{"plan":{"Tests":"evaluator"}}`},
+		{name: "written tests", body: `{"plan":{"Tests":"written_tests"}}`},
+		{name: "no test source", body: `{"plan":{}}`, wantErr: `decode live request: unknown test source ""`},
+		{name: "unknown test source", body: `{"plan":{"Tests":"agents"}}`, wantErr: `decode live request: unknown test source "agents"`},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := t.TempDir()
+			require.NoError(t, os.WriteFile(filepath.Join(dir, liveRequestFile), []byte(tc.body), 0o600))
+			var req LiveRequest
+			err := decodeLiveRequest(dir, &req)
+			if tc.wantErr == "" {
+				assert.NoError(t, err)
+				return
+			}
+			assert.EqualError(t, err, tc.wantErr)
+		})
+	}
+}
+
 func TestStartLiveServesUntilStopAndThenRemovesEverything(t *testing.T) {
 	t.Setenv(liveFakeEnv, "ready")
 	root := t.TempDir()
 	self, err := os.Executable()
 	require.NoError(t, err)
 
-	p, err := startLive(t.Context(), root, verify.Plan{}, "secret-key", []string{self}, os.Environ())
+	p, err := startLive(t.Context(), root, evaluatorPlan, "secret-key", []string{self}, os.Environ())
 	require.NoError(t, err)
 	assert.Equal(t, "http://127.0.0.1:4100", p.URL)
 	pgid, pids := recordedPIDs(t, p.Dir(), 2)
@@ -271,7 +461,7 @@ func TestLaunchLiveResolvesItsRoot(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
 			defer cancel()
-			p, err := startLive(ctx, tc.root, verify.Plan{}, "secret-key", []string{self}, os.Environ())
+			p, err := startLive(ctx, tc.root, evaluatorPlan, "secret-key", []string{self}, os.Environ())
 			require.NoError(t, err)
 			t.Cleanup(func() { assert.NoError(t, p.Stop()) })
 			assert.True(t, filepath.IsAbs(p.Dir()))
@@ -297,7 +487,6 @@ func TestStartLiveReportsAndCleansUpEveryFailedStart(t *testing.T) {
 		wantErr string
 	}{
 		{mode: "prepare-fails", key: "secret-key", wantErr: "The candidate did not build."},
-		{mode: "prepare-fails-exit71", key: "secret-key", wantErr: "The sandboxed command exited with status 71. If Surla is running inside a restricted coding-agent shell, its sandbox may have been blocked; run Surla from an unrestricted host shell."},
 		{mode: "suite-exits", key: "secret-key", wantErr: summaryLiveSuite},
 		{mode: "ready", key: "", wantErr: "live target key is required"},
 	}
@@ -305,7 +494,7 @@ func TestStartLiveReportsAndCleansUpEveryFailedStart(t *testing.T) {
 		t.Run(tc.mode+"/"+tc.wantErr, func(t *testing.T) {
 			t.Setenv(liveFakeEnv, tc.mode)
 			root := t.TempDir()
-			_, err := startLive(t.Context(), root, verify.Plan{}, tc.key, []string{self}, os.Environ())
+			_, err := startLive(t.Context(), root, evaluatorPlan, tc.key, []string{self}, os.Environ())
 			require.Error(t, err)
 			assert.Contains(t, err.Error(), tc.wantErr)
 			assert.NotContains(t, err.Error(), "/private/secret/path", "only the safe summary reaches the caller")
@@ -326,7 +515,7 @@ func TestStartLiveStopsAStartThatIsCanceled(t *testing.T) {
 			ctx, cancel := context.WithCancel(t.Context())
 			errs := make(chan error, 1)
 			go func() {
-				_, err := startLive(ctx, root, verify.Plan{}, "secret-key", []string{self}, os.Environ())
+				_, err := startLive(ctx, root, evaluatorPlan, "secret-key", []string{self}, os.Environ())
 				errs <- err
 			}()
 			dir := onlyLiveDir(t, root)
@@ -345,7 +534,7 @@ func TestLiveTargetThatEndsIsReportedDone(t *testing.T) {
 	root := t.TempDir()
 	self, err := os.Executable()
 	require.NoError(t, err)
-	p, err := startLive(t.Context(), root, verify.Plan{}, "secret-key", []string{self}, os.Environ())
+	p, err := startLive(t.Context(), root, evaluatorPlan, "secret-key", []string{self}, os.Environ())
 	require.NoError(t, err)
 	pgid, _ := recordedPIDs(t, p.Dir(), 2)
 	select {
@@ -368,6 +557,7 @@ func TestLiveTargetDiesWithItsHostAtEveryStage(t *testing.T) {
 		{mode: "prepare-hangs"},
 		{mode: "suite-hangs"},
 		{mode: "ready", ready: true},
+		{mode: "gateway-ready", ready: true},
 	}
 	for _, tc := range cases {
 		t.Run(tc.mode, func(t *testing.T) {
@@ -394,8 +584,15 @@ func TestLiveTargetDiesWithItsHostAtEveryStage(t *testing.T) {
 			}
 			dir := onlyLiveDir(t, root)
 			pgid, pids := recordedPIDs(t, dir, 2)
+			address := ""
+			if tc.mode == "gateway-ready" {
+				address = gatewayAddress(t, dir)
+			}
 			require.NoError(t, host.Process.Signal(syscall.SIGKILL))
 			requireGroupGone(t, pgid)
+			if address != "" {
+				assertGatewayPortClosed(t, address)
+			}
 			for _, pid := range pids {
 				assert.ErrorIs(t, syscall.Kill(pid, 0), syscall.ESRCH, "process %d outlived its host", pid)
 			}
@@ -464,11 +661,11 @@ func TestLiveExecutorEndsItsWholeGroupOnATerminalEvent(t *testing.T) {
 			dir := t.TempDir()
 			tmp := filepath.Join(dir, liveTmpDir)
 			require.NoError(t, os.Mkdir(tmp, 0o700))
-			require.NoError(t, writeJSON(dir, liveRequestFile, LiveRequest{}))
+			require.NoError(t, writeJSON(dir, liveRequestFile, LiveRequest{Plan: evaluatorPlan}))
 			control, keep, err := os.Pipe()
 			require.NoError(t, err)
 			defer keep.Close()
-			cmd := exec.Command(self, "verify-run", "live", dir)
+			cmd := exec.Command(self, "verify-run", "live", dir, t.TempDir())
 			cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 			cmd.ExtraFiles = []*os.File{control}
 			cmd.Env = append(liveEnv(os.Environ()), "TMPDIR="+tmp, suite.LiveKeyEnv+"=secret-key")
@@ -497,7 +694,7 @@ func TestStartLiveFailsPromptlyOnABadReadyLine(t *testing.T) {
 	self, err := os.Executable()
 	require.NoError(t, err)
 	started := time.Now()
-	_, err = startLive(t.Context(), root, verify.Plan{}, "secret-key", []string{self}, os.Environ())
+	_, err = startLive(t.Context(), root, evaluatorPlan, "secret-key", []string{self}, os.Environ())
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), summaryLiveSuite)
 	assert.Less(t, time.Since(started), 10*time.Second, "a protocol failure is reported without waiting for the suite to exit")
@@ -513,7 +710,7 @@ func TestRepeatedLiveTargetsRetainNoDescriptors(t *testing.T) {
 	require.NoError(t, err)
 	start := openDescriptors(t)
 	for range 5 {
-		p, err := startLive(t.Context(), root, verify.Plan{}, "secret-key", []string{self}, os.Environ())
+		p, err := startLive(t.Context(), root, evaluatorPlan, "secret-key", []string{self}, os.Environ())
 		require.NoError(t, err)
 		require.NoError(t, p.Stop())
 	}
@@ -544,7 +741,7 @@ func TestLiveStartupKeepsTheSafeSummaryWhenTheOutputHasAlsoEnded(t *testing.T) {
 			for range 100 {
 				// The line is queued and the output has already ended, as
 				// when the executor writes its line and kills its group.
-				p := &LiveProcess{lines: make(chan liveLine, 1), ended: make(chan struct{})}
+				p := &LiveProcess{lines: make(chan liveLine, 1), ended: make(chan struct{}), summary: summaryLiveSuite}
 				p.lines <- tc.line
 				close(p.ended)
 				err := p.AwaitReady(t.Context())
@@ -574,7 +771,7 @@ func TestLiveStartFailuresStayDiagnosableAfterCleanup(t *testing.T) {
 		t.Run(tc.mode, func(t *testing.T) {
 			t.Setenv(liveFakeEnv, tc.mode)
 			root := t.TempDir()
-			_, err := startLive(t.Context(), root, verify.Plan{}, "secret-key", []string{self}, os.Environ())
+			_, err := startLive(t.Context(), root, evaluatorPlan, "secret-key", []string{self}, os.Environ())
 			var start *LiveStartError
 			require.ErrorAs(t, err, &start)
 			assert.Equal(t, summaryLiveSuite, start.Summary, "the public summary is the same safe text")
@@ -590,7 +787,7 @@ func TestAwaitReadyCapturesDetailOnTimeoutAndLeavesTheTargetToItsOwner(t *testin
 	t.Setenv(liveFakeEnv, "prepare-hangs")
 	self, err := os.Executable()
 	require.NoError(t, err)
-	p, err := LaunchLive(t.TempDir(), verify.Plan{}, "secret-key", []string{self}, os.Environ())
+	p, err := LaunchLive(t.TempDir(), evaluatorPlan, "secret-key", []string{self}, os.Environ(), nil, t.TempDir())
 	require.NoError(t, err)
 	pgid, _ := recordedPIDs(t, p.Dir(), 2)
 	ctx, cancel := context.WithTimeout(t.Context(), 300*time.Millisecond)

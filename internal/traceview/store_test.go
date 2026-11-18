@@ -41,14 +41,14 @@ func TestHistoryIsolationAndContinuation(t *testing.T) {
 		if i == 4 {
 			owner = "bob"
 		}
-		require.NoError(t, s.Record(owner, testSpan(i, codes.Error)))
+		require.NoError(t, s.Record(owner, "", "", testSpan(i, codes.Error)))
 	}
 	page, err = s.List("alice", "error", 2, nil)
 	require.NoError(t, err)
 	assert.Equal(t, []string{"operation-5", "operation-3"}, spanNames(page.Spans))
 	require.NotNil(t, page.NextCursor)
 	assert.True(t, page.HasMore)
-	require.NoError(t, s.Record("alice", testSpan(6, codes.Ok)))
+	require.NoError(t, s.Record("alice", "", "", testSpan(6, codes.Ok)))
 	older, err := s.List("alice", "error", 100, page.NextCursor)
 	require.NoError(t, err)
 	assert.Equal(t, []string{"operation-2", "operation-1", "operation-0"}, spanNames(older.Spans))
@@ -73,7 +73,7 @@ func TestHistoryIsolationAndContinuation(t *testing.T) {
 	require.NoError(t, s.Close())
 	_, err = s.List("alice", "all", 20, nil)
 	assert.ErrorIs(t, err, errClosed)
-	assert.NoError(t, s.Record("alice", testSpan(7, codes.Ok)), "late spans are discarded after Close")
+	assert.NoError(t, s.Record("alice", "", "", testSpan(7, codes.Ok)), "late spans are discarded after Close")
 
 	reopened, err := Open(dir)
 	require.NoError(t, err)
@@ -92,7 +92,7 @@ func TestSparseHistoryMakesBoundedProgress(t *testing.T) {
 	t.Cleanup(func() { assert.NoError(t, s.Close()) })
 	fixture := testSpan(1, codes.Ok)
 	for range 1200 {
-		require.NoError(t, s.Record("bob", fixture))
+		require.NoError(t, s.Record("bob", "", "", fixture))
 	}
 	info, err := s.file.Stat()
 	require.NoError(t, err)
@@ -157,7 +157,7 @@ func TestSafeRecordBoundsAndOriginalSpan(t *testing.T) {
 			stub.Attributes = []attribute.KeyValue{
 				attribute.String(SummaryAttribute, strings.Repeat("\x00", summaryBytes+delta)),
 			}
-			for _, key := range []string{"surla.change_id", "surla.run_id", "surla.cp1.rejection_kind", "surla.check.op_id", "surla.check.passed", "surla.generation.target"} {
+			for _, key := range []string{"surla.change_id", "surla.run_id", "surla.check.op_id", "surla.check.passed", "surla.generation.target"} {
 				stub.Attributes = append(stub.Attributes, attribute.String(key, strings.Repeat("\x00", valueBytes+delta)))
 			}
 			stub.Attributes = append(stub.Attributes, attribute.String("raw.secret", "/private/operator/key"))
@@ -167,7 +167,7 @@ func TestSafeRecordBoundsAndOriginalSpan(t *testing.T) {
 			assert.LessOrEqual(t, len(view.Name), nameBytes)
 			assert.LessOrEqual(t, len(view.Summary), summaryBytes)
 			assert.Equal(t, delta > 0, view.Shortened)
-			assert.Len(t, view.Attributes, 6)
+			assert.Len(t, view.Attributes, 5)
 			assert.Equal(t, stub.Name, original.Name())
 			assert.Equal(t, stub.Attributes, original.Attributes())
 			raw, err := json.Marshal(savedSpan{PrincipalHash: owner, Span: view})
@@ -191,7 +191,7 @@ func TestRestartRepairsOnlyInterruptedTail(t *testing.T) {
 	dir := t.TempDir()
 	s, err := Open(dir)
 	require.NoError(t, err)
-	require.NoError(t, s.Record("alice", testSpan(1, codes.Unset)))
+	require.NoError(t, s.Record("alice", "", "", testSpan(1, codes.Unset)))
 	require.NoError(t, s.Close())
 	path := filepath.Join(dir, "traces.jsonl")
 	before, err := os.ReadFile(path)
@@ -247,50 +247,10 @@ func TestUnknownAndTrailingStoredFieldsReject(t *testing.T) {
 		_, err := decodeSpan([]byte(line))
 		assert.Error(t, err)
 	}
-	assert.Error(t, s.Record("", testSpan(1, codes.Error)))
+	assert.Error(t, s.Record("", "", "", testSpan(1, codes.Error)))
 	require.NoError(t, s.Close())
-	assert.NoError(t, s.Record("alice", testSpan(1, codes.Error)))
+	assert.NoError(t, s.Record("alice", "", "", testSpan(1, codes.Error)))
 
-}
-
-// TestHistorySavedByAnEarlierServerStillLists opens a trace file that an
-// earlier server saved, holding a refused propose_change record with the
-// surla.cp1.rejection_kind attribute that no current operation writes, and
-// checks that the record still loads and is listed as saved, and that the
-// file keeps accepting new records.
-func TestHistorySavedByAnEarlierServerStillLists(t *testing.T) {
-	t.Parallel()
-	dir := t.TempDir()
-	// The record exactly as an earlier server wrote it when its model's
-	// response failed structured validation.
-	saved := `{"principal_hash":"` + principalHash("alice") + `","span":{` +
-		`"TraceID":"0af7651916cd43dd8448eb211c80319c","SpanID":"b7ad6b7169203331","ParentSpanID":"",` +
-		`"Name":"surla.controlplane.propose_change",` +
-		`"StartTime":"2026-11-01T12:00:00Z","EndTime":"2026-11-01T12:00:02.5Z","DurationMs":2500,"Status":"error",` +
-		`"Summary":"CP1 analysis rejected: model output failed structured validation (this request did not save a Change Card); retry propose_change.",` +
-		`"Attributes":{"surla.change_id":"chg-old","surla.cp1.rejection_kind":"structured_output"},"Shortened":false}}` + "\n"
-	require.NoError(t, os.WriteFile(filepath.Join(dir, "traces.jsonl"), []byte(saved), 0o600))
-
-	s, err := Open(dir)
-	require.NoError(t, err)
-	t.Cleanup(func() { assert.NoError(t, s.Close()) })
-	page, err := s.List("alice", "error", 20, nil)
-	require.NoError(t, err)
-	require.Len(t, page.Spans, 1)
-	assert.Equal(t, &gensurla.TraceSpan{
-		TraceID: "0af7651916cd43dd8448eb211c80319c", SpanID: "b7ad6b7169203331",
-		Name:      "surla.controlplane.propose_change",
-		StartTime: "2026-11-01T12:00:00Z", EndTime: "2026-11-01T12:00:02.5Z", DurationMs: 2500, Status: "error",
-		Summary:    "CP1 analysis rejected: model output failed structured validation (this request did not save a Change Card); retry propose_change.",
-		Attributes: map[string]string{"surla.change_id": "chg-old", "surla.cp1.rejection_kind": "structured_output"},
-	}, page.Spans[0])
-
-	require.NoError(t, s.Record("alice", testSpan(1, codes.Error)))
-	page, err = s.List("alice", "error", 20, nil)
-	require.NoError(t, err)
-	require.Len(t, page.Spans, 2, "the saved record and the new one are listed, newest first")
-	assert.Equal(t, "operation-1", page.Spans[0].Name)
-	assert.Equal(t, "surla.controlplane.propose_change", page.Spans[1].Name)
 }
 
 // TestFailedCheckResultKeepsItsOriginalStatus protects a valid negative result:
@@ -304,7 +264,7 @@ func TestFailedCheckResultKeepsItsOriginalStatus(t *testing.T) {
 	stub.Name = "surla.controlplane.check_project"
 	stub.Attributes = append(stub.Attributes, attribute.Bool("surla.check.passed", false))
 	original := stub.Snapshot()
-	require.NoError(t, s.Record("alice", original))
+	require.NoError(t, s.Record("alice", "", "", original))
 	failed, err := s.List("alice", "error", 20, nil)
 	require.NoError(t, err)
 	assert.Empty(t, failed.Spans)

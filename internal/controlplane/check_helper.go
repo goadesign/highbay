@@ -41,6 +41,7 @@ import (
 	"golang.org/x/sys/unix"
 
 	gensurla "github.com/goadesign/surla/gen/surla"
+	"github.com/goadesign/surla/internal/abspath"
 	"github.com/goadesign/surla/verify/candidate"
 )
 
@@ -69,14 +70,19 @@ type (
 		// WorkspaceRel is the workspace's slash path inside the grant.
 		WorkspaceRel string `json:"workspace_rel"`
 		// WorkspaceDev and WorkspaceIno identify the workspace, descriptor 5.
-		WorkspaceDev int32  `json:"workspace_dev"`
+		WorkspaceDev uint64 `json:"workspace_dev"`
 		WorkspaceIno uint64 `json:"workspace_ino"`
-		// ImportedReports are the original report paths the copy leaves out.
-		ImportedReports []string `json:"imported_reports"`
 		// GoProxyEnv is the operator's module proxy settings.
 		GoProxyEnv []string `json:"go_proxy_env"`
-		// CheckTimeout is the operator's -check-timeout, named in messages.
+		// ModuleCacheDir is the optional server-owned retained dependency cache.
+		// It is transient helper input, never part of the operation record.
+		ModuleCacheDir string `json:"module_cache_dir,omitempty"`
+		// CheckTimeout is the configured check timeout, named in messages.
 		CheckTimeout time.Duration `json:"check_timeout"`
+		// StoredEvaluator is true when the project verifies with stored
+		// verification settings, so check_project and update_dependencies
+		// include eval/.
+		StoredEvaluator bool `json:"stored_evaluator,omitempty"`
 		// TraceContext carries the W3C trace context of serve's request span,
 		// so the helper's spans are its children.
 		TraceContext map[string]string `json:"trace_context"`
@@ -248,7 +254,7 @@ func openCheckHelperOperation(spec checkHelperSpec, runner *candidate.ContainerR
 	if err := errors.Join(unix.Fstat(checkHelperDirFD, &held), unix.Lstat(spec.Dir, &named), unix.Fstat(checkHelperWorkspaceFD, &ws)); err != nil {
 		return nil, nil, fmt.Errorf("inspect the check helper's descriptors: %w", err)
 	}
-	grantRoot, err := fdPath(checkHelperGrantFD)
+	grantRoot, err := abspath.FDPath(checkHelperGrantFD)
 	switch {
 	case err != nil:
 		return nil, nil, fmt.Errorf("resolve the check helper's grant descriptor: %w", err)
@@ -256,7 +262,7 @@ func openCheckHelperOperation(spec checkHelperSpec, runner *candidate.ContainerR
 		return nil, nil, fmt.Errorf("descriptor %d is not the operation directory %s", checkHelperDirFD, spec.Dir)
 	case grantRoot != spec.GrantRoot:
 		return nil, nil, fmt.Errorf("descriptor %d is %s, not the grant %s", checkHelperGrantFD, grantRoot, spec.GrantRoot)
-	case ws.Dev != spec.WorkspaceDev || ws.Ino != spec.WorkspaceIno:
+	case uint64(ws.Dev) != spec.WorkspaceDev || ws.Ino != spec.WorkspaceIno:
 		return nil, nil, fmt.Errorf("descriptor %d is not the verified workspace", checkHelperWorkspaceFD)
 	}
 	op := &checkOperation{
@@ -270,7 +276,8 @@ func openCheckHelperOperation(spec checkHelperSpec, runner *candidate.ContainerR
 		checker:         runner,
 		checkTimeout:    spec.CheckTimeout,
 		goProxyEnv:      spec.GoProxyEnv,
-		importedReports: spec.ImportedReports,
+		moduleCacheDir:  spec.ModuleCacheDir,
+		storedEvaluator: spec.StoredEvaluator,
 	}
 	return op, os.NewFile(checkHelperDirFD, spec.Dir), nil
 }
@@ -314,22 +321,35 @@ func newCheckHelperError(err error) *checkHelperError {
 	return e
 }
 
-// runCheckHelper runs tool for the active workspace in a new check helper:
-// it binds the workspace's live grant, creates and locks the operation
-// directory, starts the helper, and returns its result. The helper's error
-// result is returned as the caller-facing error. Binding failures are the
-// errors they were before helpers existed (not_implemented, unprocessable).
+// runCheckHelper runs tool for the open build's builder copy. The workspace
+// lifetime gate and builder turn cover readiness, binding, the helper's whole
+// execution and cleanup, so assignment reads cannot move a copy still in use.
+// The helper receives held grant/workspace descriptors and returns its named
+// service error unchanged. Source copying and manifest publication stay in the
+// builder's copy rather than the user's project.
 func (c *ControlPlane) runCheckHelper(ctx context.Context, tool string) (res checkHelperResult, retErr error) {
-	wsDir, dev, ino := c.currentWorkspaceTarget()
-	if wsDir == "" {
-		return checkHelperResult{}, gensurla.MakeNotImplemented(errors.New("no workspace directory is bound to this control plane"))
+	c.workspaceMu.RLock()
+	defer c.workspaceMu.RUnlock()
+	wsDir := c.activeWorkspaceDir
+	if err := ctx.Err(); err != nil {
+		return checkHelperResult{}, err
 	}
-	_, wsRoot, err := openModuleRootWithIdentity(wsDir, dev, ino)
+	select {
+	case c.builderCopyTurn <- struct{}{}:
+	default:
+		return checkHelperResult{}, gensurla.MakeWorkingCopyBusy(fmt.Errorf("The builder's working copy is in use; call %s again when the current operation finishes.", tool))
+	}
+	defer func() { <-c.builderCopyTurn }()
+	ready, err := c.builderCopyReady(ctx, wsDir, tool)
+	if err != nil {
+		return checkHelperResult{}, err
+	}
+	_, project, err := openModuleRootWithIdentity(wsDir, c.boundWorkspaceDev, c.boundWorkspaceIno)
 	if err != nil {
 		return checkHelperResult{}, err
 	}
 	op := &checkOperation{id: newOperationID(), grantFD: -1, workspaceFD: -1}
-	if err := errors.Join(op.openLive(wsRoot, c.protectedDirs), wsRoot.Close()); err != nil {
+	if err := errors.Join(op.openBuilderLive(project, ready), project.Close()); err != nil {
 		return checkHelperResult{}, errors.Join(err, op.closeLive())
 	}
 	// The helper receives its own copies of the held directories.
@@ -348,13 +368,50 @@ func (c *ControlPlane) runCheckHelper(ctx context.Context, tool string) (res che
 		WorkspaceRel:    op.workspaceRel,
 		WorkspaceDev:    op.workspaceID.dev,
 		WorkspaceIno:    op.workspaceID.ino,
-		ImportedReports: c.importedReports,
 		GoProxyEnv:      c.goProxyEnv,
+		ModuleCacheDir:  c.checkModuleCacheDir,
 		CheckTimeout:    c.checkTimeout,
+		StoredEvaluator: c.storedEvaluator(),
 		TraceContext:    map[string]string{},
 	}
 	propagation.TraceContext{}.Inject(ctx, propagation.MapCarrier(spec.TraceContext))
 	return c.startCheckHelper(ctx, spec, lock, op)
+}
+
+// openBuilderLive holds the builder copy as grant and its module as workspace.
+// Both are reached from the identity-verified project without following links;
+// later copying and manifest publication use these descriptors, never a path
+// that could have been replaced after readiness.
+func (op *checkOperation) openBuilderLive(project *os.Root, ready builderReadyCopy) (retErr error) {
+	_, grant, err := openBuildGenerationRoot(project, ready.copyRoot)
+	if err != nil {
+		return gensurla.MakeUnprocessable(fmt.Errorf("open the builder's working copy: %w", err))
+	}
+	defer func() { retErr = errors.Join(retErr, grant.Close()) }()
+	held, err := grant.Open(".")
+	if err != nil {
+		return err
+	}
+	op.grantFD, err = unix.Openat(int(held.Fd()), ".", openDirFlags, 0)
+	if err := errors.Join(err, held.Close()); err != nil {
+		return err
+	}
+	rel, err := filepath.Rel(ready.copyRoot, ready.folder)
+	if err != nil || !filepath.IsLocal(rel) {
+		return gensurla.MakeUnprocessable(errors.New("the builder's module is outside its working copy"))
+	}
+	op.workspaceRel = filepath.ToSlash(rel)
+	op.workspaceFD, err = openDirAt(op.grantFD, op.workspaceRel)
+	if err != nil {
+		return gensurla.MakeUnprocessable(fmt.Errorf("open the builder's module: %w", err))
+	}
+	var st unix.Stat_t
+	if err := unix.Fstat(op.workspaceFD, &st); err != nil {
+		return err
+	}
+	op.workspaceID = fileID{dev: uint64(st.Dev), ino: st.Ino}
+	op.grantRoot, err = abspath.FDPath(op.grantFD)
+	return err
 }
 
 // startCheckHelper starts the helper for spec, handing it lock and copies
@@ -427,6 +484,9 @@ func (s checkHelperSpec) validate() error {
 		return fmt.Errorf("check helper workspace %q is not inside the grant", s.WorkspaceRel)
 	case s.CheckTimeout <= 0:
 		return fmt.Errorf("check helper timeout %s must be positive", s.CheckTimeout)
+	}
+	if s.ModuleCacheDir != "" {
+		return validateCheckModuleCacheDir(s.ModuleCacheDir, s.GrantRoot, filepath.Dir(s.Dir))
 	}
 	return nil
 }

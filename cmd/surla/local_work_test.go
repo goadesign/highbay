@@ -18,7 +18,7 @@ import (
 )
 
 // starterVersionForWorkTest is parsed by the CLI but never downloaded.
-const starterVersionForWorkTest = "v0.0.0-20261110163737-d9beac313142"
+const starterVersionForWorkTest = "v0.0.0-20261115014514-02c792da3ded"
 
 // TestLocalWorkStaysOutsideStartupAndTargets includes a builder-writable
 // TMPDIR and an arbitrary CLI target unrelated to the startup directory.
@@ -230,8 +230,6 @@ func TestRunInitKeepsFailedLogsOutsideTheWorkspace(t *testing.T) {
 func isolateLocalWork(t *testing.T) string {
 	t.Helper()
 	parent := t.TempDir()
-	prior := userConfigDir
-	userConfigDir = func() (string, error) { return parent, nil }
-	t.Cleanup(func() { userConfigDir = prior })
+	t.Setenv("SURLA_TEST_USER_CONFIG_DIR", parent)
 	return parent
 }

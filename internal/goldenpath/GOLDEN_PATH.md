@@ -4,10 +4,10 @@ Rules for agents building services with Goa, Goa-AI, Model, Pulse and Clue. Rule
 
 ## 0. Loop
 
-1. Change `design/` first. Regenerate with `surla gen -dir <module root>`, which runs Goa inside Surla's sandbox with the module's own dependency versions. Implement outside `gen/`. Build and test.
+1. The guide changes the design in its draft, refreshes it and proposes a revision for the user to adopt. The builder reads its assignment and calls `generate_code` in its working copy: Surla writes the agreed `design/` and regenerates `gen/`; the builder edits neither directory. Ask the guide about design changes. Implement in the hand-written code, then build and test with `check_project`. While a build runs with a test writer (without stored verification settings), `eval/` belongs to the test writer, which reports to regenerate it or runs `surla gen -dir eval` from a shell; outside such a build, the builder can regenerate `eval/` with `generate_code` and `target: "eval"`. The writer leaves Surla's Story table unchanged, runs every Go command with `GOWORK=off` and does not commit: Surla commits accepted tests. An operator can regenerate a local module with `surla gen -dir <module root>` from a shell, using that module's own dependency versions. Generation runs as an ordinary process with the user's file and network access.
 2. Never edit `gen/`. A compiler error in `gen/` means the design or the application code is wrong.
 3. `goa example` writes scaffolding once and never updates it. Port design changes into existing implementations by hand.
-4. `surla gen` refuses a design with gRPC transports, because protoc cannot run in its sandbox. Generate such a design with the `goa` command pinned to the module version, `go run goa.design/goa/v3/cmd/goa gen <module>/design`, never a separately installed `goa`.
+4. `surla gen` refuses a design with gRPC transports, because it runs Goa's generator without protoc. Generate such a design with the `goa` command pinned to the module version, `go run goa.design/goa/v3/cmd/goa gen <module>/design`, never a separately installed `goa`.
 5. After a signature change, regenerate, compile, and fix every caller the compiler reports. Then add behavior tests. Compiling proves types, not behavior.
 
 ## 1. Contract
@@ -74,7 +74,7 @@ Rules for agents building services with Goa, Goa-AI, Model, Pulse and Clue. Rule
 - Decisions code can derive belong in code: the authenticated caller, authorization, runtime IDs, cursors, pagination, valid state transitions. Leave semantic choices to the model.
 - Default acceptance check IDs to `check_01`, `check_02`, ... in `lower_snake_case` matching `goa-ai/eval` `validateID` so examples map directly to evaluator scenarios without identifier translation.
 - Account for every prior example when revising intent (`revise_change`): the analysis links surviving or edited checks via `prior_id` and lists dropped checks in `removed_example_ids`. Code preserves surviving IDs, prevents collision with removed IDs, and allocates brand-new checks to the lowest unused `check_NN` ID.
-- `confirm_intent` answers ambiguity questions from their declared options. When a domain decision requires an unlisted choice, route to `revise_change` with guidance in `prompt` and confirm the revised card.
+- The user answers each ambiguity question on the views page by choosing one of its declared options, then confirms the card with the page's Confirm action (`confirm_intent`), which a card without questions also needs; no agent confirms a card. When a domain decision requires a choice the options do not list, the guide calls `revise_change` with that guidance in `prompt`, and the user confirms the revised card.
 
 ## 6. Durability
 

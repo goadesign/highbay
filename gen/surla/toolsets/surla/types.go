@@ -27,7 +27,7 @@ type (
 		ChangeID string
 		// Checkpoint status (needs_confirmation or confirmed).
 		Status string
-		// Operator feature request for this revision.
+		// The user's feature request for this revision.
 		Prompt string
 		// Plain-English summary of the proposed change from propose_change or
 		// revise_change. confirm_intent does not rewrite this text; when status is
@@ -48,7 +48,7 @@ type (
 		// revision in declaration order; omitted when the card has no Stories.
 		// Included in request_revision.
 		Stories []*StorySummaryItem
-		// Authenticated principal that confirmed the Change Card.
+		// User who confirmed the Change Card.
 		ConfirmedBy *string
 		// SHA-256 digest of the canonical versioned Change Card.
 		RequestRevision string
@@ -56,18 +56,24 @@ type (
 		// sent one. A confirm_intent that changes answers or examples returns the new
 		// revision without it.
 		UIComposition *UICompositionItem
-		// Checkpoint 5 approval of this revision, present only while it is verified
-		// against the promotion target's current inputs on this read. It is absent
-		// before approve_merge succeeds, whenever the target's suite, environment or
-		// binary digests have changed since, and whenever current inputs cannot be
+		// Checkpoint 5 approval of this revision, present while suite_commit is still
+		// the tests' commit chosen for this revision and (when a promotion target is
+		// configured) the promotion target's current binary digests still equal
+		// artifacts on this read. It is absent before approve_merge succeeds, whenever
+		// the chosen tests' commit or the staged binary digests have changed since,
+		// and whenever a configured promotion target's staged binaries cannot be
 		// verified (see unverified_approval). It is never hashed into request_revision.
 		Approval *ApprovalItem
-		// Saved Checkpoint 5 approval of this revision when current promotion inputs
-		// could not be verified on this read (because no promotion target is
-		// configured or the target could not report its current inputs). At most one
-		// of approval or unverified_approval is set. It is never saved to disk or
-		// hashed into request_revision.
+		// Saved Checkpoint 5 approval of this revision when suite_commit still matches
+		// the chosen tests' commit and promotion settings are configured, but the
+		// staged binaries could not be verified on this read. At most one of approval
+		// or unverified_approval is set. It is never saved to disk or hashed into
+		// request_revision.
 		UnverifiedApproval *UnverifiedApprovalItem
+		// The revision the guide proposed beside this confirmed revision, while it
+		// waits for the user to adopt or decline it; absent otherwise. This card's own
+		// fields describe the revision in force.
+		ProposedRevision *ProposedRevisionItem
 	}
 	// CheckProjectPayload defines the JSON payload for the surla.check_project tool.
 	CheckProjectPayload = struct {
@@ -112,8 +118,9 @@ type (
 		RequestRevision string
 		// Selected resolution per ambiguity question ID. Answer every current
 		// question, and give each value exactly as one string from that question's
-		// options, character for character. To record a decision that no option
-		// expresses, call revise_change with that decision in prompt.
+		// options, character for character. A decision that no option expresses goes
+		// to the guide, which records it with revise_change; the user then confirms
+		// the resulting revision.
 		Answers map[string]string
 		// The complete confirmed example table, including examples you edited or
 		// added. Keep an existing example's id when you edit it, and give an example
@@ -126,7 +133,7 @@ type (
 		ChangeID string
 		// Checkpoint status (needs_confirmation or confirmed).
 		Status string
-		// Operator feature request for this revision.
+		// The user's feature request for this revision.
 		Prompt string
 		// Plain-English summary of the proposed change from propose_change or
 		// revise_change. confirm_intent does not rewrite this text; when status is
@@ -147,7 +154,7 @@ type (
 		// revision in declaration order; omitted when the card has no Stories.
 		// Included in request_revision.
 		Stories []*StorySummaryItem
-		// Authenticated principal that confirmed the Change Card.
+		// User who confirmed the Change Card.
 		ConfirmedBy *string
 		// SHA-256 digest of the canonical versioned Change Card.
 		RequestRevision string
@@ -155,18 +162,86 @@ type (
 		// sent one. A confirm_intent that changes answers or examples returns the new
 		// revision without it.
 		UIComposition *UICompositionItem
-		// Checkpoint 5 approval of this revision, present only while it is verified
-		// against the promotion target's current inputs on this read. It is absent
-		// before approve_merge succeeds, whenever the target's suite, environment or
-		// binary digests have changed since, and whenever current inputs cannot be
+		// Checkpoint 5 approval of this revision, present while suite_commit is still
+		// the tests' commit chosen for this revision and (when a promotion target is
+		// configured) the promotion target's current binary digests still equal
+		// artifacts on this read. It is absent before approve_merge succeeds, whenever
+		// the chosen tests' commit or the staged binary digests have changed since,
+		// and whenever a configured promotion target's staged binaries cannot be
 		// verified (see unverified_approval). It is never hashed into request_revision.
 		Approval *ApprovalItem
-		// Saved Checkpoint 5 approval of this revision when current promotion inputs
-		// could not be verified on this read (because no promotion target is
-		// configured or the target could not report its current inputs). At most one
-		// of approval or unverified_approval is set. It is never saved to disk or
-		// hashed into request_revision.
+		// Saved Checkpoint 5 approval of this revision when suite_commit still matches
+		// the chosen tests' commit and promotion settings are configured, but the
+		// staged binaries could not be verified on this read. At most one of approval
+		// or unverified_approval is set. It is never saved to disk or hashed into
+		// request_revision.
 		UnverifiedApproval *UnverifiedApprovalItem
+		// The revision the guide proposed beside this confirmed revision, while it
+		// waits for the user to adopt or decline it; absent otherwise. This card's own
+		// fields describe the revision in force.
+		ProposedRevision *ProposedRevisionItem
+	}
+	// DeclineRevisionPayload defines the JSON payload for the surla.decline_revision tool.
+	DeclineRevisionPayload = struct {
+		// Change identifier.
+		ChangeID string
+		// request_revision of the proposed revision being declined
+		// (proposed_revision.request_revision): 64 lowercase hex characters.
+		RequestRevision string
+	}
+	// DeclineRevisionResult defines the JSON result for the surla.decline_revision tool.
+	DeclineRevisionResult = struct {
+		// Change identifier.
+		ChangeID string
+		// Checkpoint status (needs_confirmation or confirmed).
+		Status string
+		// The user's feature request for this revision.
+		Prompt string
+		// Plain-English summary of the proposed change from propose_change or
+		// revise_change. confirm_intent does not rewrite this text; when status is
+		// confirmed, answers records the owner's resolutions for ambiguities.
+		Summary string
+		// Domain questions surfaced at CP1, retained for audit after confirmation.
+		Ambiguities []*AmbiguityQuestion
+		// Owner-confirmed answers keyed by ambiguity question ID when status is
+		// confirmed and ambiguities is non-empty (empty when a confirmed card has no
+		// ambiguity questions). Each answer equals one of its question's declared
+		// options and takes precedence over open phrasing in summary.
+		Answers map[string]string
+		// Concrete examples mapped to evaluator checks.
+		Examples []*ExampleItem
+		// Existing contract invariants preserved by this change.
+		PreservedBehaviors []string
+		// Evaluated domain Stories adopted from refresh_story for this Change Card
+		// revision in declaration order; omitted when the card has no Stories.
+		// Included in request_revision.
+		Stories []*StorySummaryItem
+		// User who confirmed the Change Card.
+		ConfirmedBy *string
+		// SHA-256 digest of the canonical versioned Change Card.
+		RequestRevision string
+		// Decision view the caller composed for this revision in its analysis, when it
+		// sent one. A confirm_intent that changes answers or examples returns the new
+		// revision without it.
+		UIComposition *UICompositionItem
+		// Checkpoint 5 approval of this revision, present while suite_commit is still
+		// the tests' commit chosen for this revision and (when a promotion target is
+		// configured) the promotion target's current binary digests still equal
+		// artifacts on this read. It is absent before approve_merge succeeds, whenever
+		// the chosen tests' commit or the staged binary digests have changed since,
+		// and whenever a configured promotion target's staged binaries cannot be
+		// verified (see unverified_approval). It is never hashed into request_revision.
+		Approval *ApprovalItem
+		// Saved Checkpoint 5 approval of this revision when suite_commit still matches
+		// the chosen tests' commit and promotion settings are configured, but the
+		// staged binaries could not be verified on this read. At most one of approval
+		// or unverified_approval is set. It is never saved to disk or hashed into
+		// request_revision.
+		UnverifiedApproval *UnverifiedApprovalItem
+		// The revision the guide proposed beside this confirmed revision, while it
+		// waits for the user to adopt or decline it; absent otherwise. This card's own
+		// fields describe the revision in force.
+		ProposedRevision *ProposedRevisionItem
 	}
 	// DiffPayload defines the JSON payload for the surla.diff tool.
 	DiffPayload = struct {
@@ -202,11 +277,12 @@ type (
 	}
 	// DraftOverrideResult defines the JSON result for the surla.draft_override tool.
 	DraftOverrideResult = struct {
-		// True when updated in the target platform's prompt.Store for 0s reload.
+		// True when the live target saved the prompt text in its prompt store for 0s
+		// reload.
 		AppliedInStore bool
 		// True when the change modifies a compiled Go business rule.
 		RequiresRebuild bool
-		// New prompt version digest returned by the target platform.
+		// Version of the accepted prompt text, as the live target returned it.
 		PromptVersion *string
 		// Operator-facing status explanation.
 		Message string
@@ -214,7 +290,7 @@ type (
 	// GenerateCodePayload defines the JSON payload for the surla.generate_code tool.
 	GenerateCodePayload = struct {
 		// Module to regenerate: candidate (the application, the default when omitted)
-		// or eval (the local eval/ module).
+		// or eval (the test module).
 		Target *string
 	}
 	// GenerateCodeResult defines the JSON result for the surla.generate_code tool.
@@ -228,6 +304,64 @@ type (
 		// or a guide that could not be written.
 		Warnings []string
 	}
+	// GetBuildPayload defines the JSON payload for the surla.get_build tool.
+	GetBuildPayload = struct {
+		// Change Card identifier.
+		ChangeID string
+	}
+	// GetBuildResult defines the JSON result for the surla.get_build tool.
+	GetBuildResult = struct {
+		// Change Card identifier.
+		ChangeID string
+		// True only when the current agreed revision’s saved record of how its design
+		// was drafted predates the current actual drop: start_build would refuse it
+		// with drafted_before_drop. It becomes true after that drop and false once the
+		// user adopts a revision drafted after the drop, even if its request_revision
+		// is unchanged. A waiting proposal does not change this fact; ask the guide to
+		// refresh_story and revise_change from that refresh, then adopt the revision
+		// before building. False says only that this refusal does not apply, not that
+		// every other build check will pass; it is also false without an agreed
+		// revision or saved record of its draft. start_build rechecks concurrent
+		// changes.
+		DraftedBeforeDrop bool
+		// not_started when the change has no usable build for the current test source;
+		// start a new build on the views page. Otherwise started with the usable build.
+		Build Build
+	}
+	// GetBuilderAssignmentPayload defines the JSON payload for the surla.get_builder_assignment tool.
+	GetBuilderAssignmentPayload = struct {
+		// Change Card identifier from list_builder_assignments.
+		ChangeID string
+	}
+	// GetBuilderAssignmentResult defines the JSON result for the surla.get_builder_assignment tool.
+	GetBuilderAssignmentResult = struct {
+		// Change Card to build; get_change takes it.
+		ChangeID string
+		// Change Card revision to build; verify_change takes it.
+		RequestRevision string
+		// True when request_revision is the change's agreed revision, the one in
+		// force, as get_build reports it. It stays true while a proposed revision
+		// waits and when a refreshed draft is adopted without changing
+		// request_revision. If adoption or confirmation changes the agreed
+		// request_revision, it becomes false; verify_change refuses this earlier
+		// revision, and the assignment stays as it is until the user builds again.
+		InForce bool
+		// True once you read this assignment in full with get_builder_assignment.
+		Read bool
+		// Where the test writer's tests for this build stand: not_used when no test
+		// writer is used because the project has stored verification settings;
+		// otherwise accepted, with the commit and time, when the build records
+		// accepted tests, and not_yet_accepted when it records none.
+		WrittenTests WrittenTests
+		// Absolute path of the folder to build in: the project's folder inside your
+		// working copy .surla-build, on the build's branch surla/build-<n>. Run git
+		// and go there, never in the project folder.
+		WorkingFolder string
+		// True when no go.work lies in working_folder or in a folder between it and
+		// the working copy's root: run every go command there as GOWORK=off go …, so a
+		// go.work of the project folder around your copy does not take it over.
+		GoworkOff bool
+	}
 	// GetChangePayload defines the JSON payload for the surla.get_change tool.
 	GetChangePayload = struct {
 		// Change identifier.
@@ -239,7 +373,7 @@ type (
 		ChangeID string
 		// Checkpoint status (needs_confirmation or confirmed).
 		Status string
-		// Operator feature request for this revision.
+		// The user's feature request for this revision.
 		Prompt string
 		// Plain-English summary of the proposed change from propose_change or
 		// revise_change. confirm_intent does not rewrite this text; when status is
@@ -260,7 +394,7 @@ type (
 		// revision in declaration order; omitted when the card has no Stories.
 		// Included in request_revision.
 		Stories []*StorySummaryItem
-		// Authenticated principal that confirmed the Change Card.
+		// User who confirmed the Change Card.
 		ConfirmedBy *string
 		// SHA-256 digest of the canonical versioned Change Card.
 		RequestRevision string
@@ -268,33 +402,56 @@ type (
 		// sent one. A confirm_intent that changes answers or examples returns the new
 		// revision without it.
 		UIComposition *UICompositionItem
-		// Checkpoint 5 approval of this revision, present only while it is verified
-		// against the promotion target's current inputs on this read. It is absent
-		// before approve_merge succeeds, whenever the target's suite, environment or
-		// binary digests have changed since, and whenever current inputs cannot be
+		// Checkpoint 5 approval of this revision, present while suite_commit is still
+		// the tests' commit chosen for this revision and (when a promotion target is
+		// configured) the promotion target's current binary digests still equal
+		// artifacts on this read. It is absent before approve_merge succeeds, whenever
+		// the chosen tests' commit or the staged binary digests have changed since,
+		// and whenever a configured promotion target's staged binaries cannot be
 		// verified (see unverified_approval). It is never hashed into request_revision.
 		Approval *ApprovalItem
-		// Saved Checkpoint 5 approval of this revision when current promotion inputs
-		// could not be verified on this read (because no promotion target is
-		// configured or the target could not report its current inputs). At most one
-		// of approval or unverified_approval is set. It is never saved to disk or
-		// hashed into request_revision.
+		// Saved Checkpoint 5 approval of this revision when suite_commit still matches
+		// the chosen tests' commit and promotion settings are configured, but the
+		// staged binaries could not be verified on this read. At most one of approval
+		// or unverified_approval is set. It is never saved to disk or hashed into
+		// request_revision.
 		UnverifiedApproval *UnverifiedApprovalItem
+		// The revision the guide proposed beside this confirmed revision, while it
+		// waits for the user to adopt or decline it; absent otherwise. This card's own
+		// fields describe the revision in force.
+		ProposedRevision *ProposedRevisionItem
+	}
+	// GetLiveTargetPayload defines the JSON payload for the surla.get_live_target tool.
+	GetLiveTargetPayload = struct {
+	}
+	// GetLiveTargetResult defines the JSON result for the surla.get_live_target tool.
+	GetLiveTargetResult = struct {
+		// none when no live target runs; starting while one is built and started;
+		// running with its commit, address, start time and the prompts whose drafts
+		// are in force; not_confirmed_stopped when its processes could not be
+		// confirmed stopped; ended when a ready target ended unexpectedly and cleanup
+		// is confirmed.
+		LiveTarget LiveTarget
 	}
 	// GetStoryRefreshPayload defines the JSON payload for the surla.get_story_refresh tool.
 	GetStoryRefreshPayload = struct {
 	}
 	// GetStoryRefreshResult defines the JSON result for the surla.get_story_refresh tool.
 	GetStoryRefreshResult = struct {
-		// Identifier of the caller's current Story refresh operation for the bound
-		// workspace; present when state is running, succeeded, or failed. Pass it as
+		// Absolute path intended for the guide's draft, .surla-draft in the project
+		// folder, whose go.mod, go.sum and design/ refresh_story reads. When state is
+		// none, this path does not mean the folder exists; refresh_story makes it when
+		// needed.
+		DraftFolder string
+		// Identifier of the owner's current Story refresh operation for the guide's
+		// draft; present when state is running, succeeded, or failed. Pass it as
 		// story_refresh_op_id to propose_change or revise_change once state is
 		// succeeded to adopt the evaluated Story into a Change Card.
 		OpID *string
 		// Current operation state: none, running, succeeded, or failed.
 		State string
-		// Canonical SHA-256 digest of the workspace module snapshot read when this
-		// refresh started; present when state is running, succeeded, or failed.
+		// Canonical SHA-256 digest of the draft snapshot read when this refresh
+		// started; present when state is running, succeeded, or failed.
 		SnapshotDigest *string
 		// Evaluated domain Stories in declaration order when state is succeeded (empty
 		// when the design declares no Stories or when state is none, running, or
@@ -302,8 +459,65 @@ type (
 		Stories []*StorySummaryItem
 		// Safe failure or timeout diagnostic when state is failed; omitted otherwise.
 		Diagnostic *string
-		// Summary of the current Story refresh state and next action.
+		// Summary of the current Story refresh state and next action. After a dropped
+		// build remakes the draft and until a revision is saved from it, begins by
+		// naming the dropped change and saying that edits made before then are gone.
 		Message string
+	}
+	// GetTestWriterAssignmentPayload defines the JSON payload for the surla.get_test_writer_assignment tool.
+	GetTestWriterAssignmentPayload = struct {
+		// Change Card identifier from list_test_writer_assignments.
+		ChangeID string
+	}
+	// GetTestWriterAssignmentResult defines the JSON result for the surla.get_test_writer_assignment tool.
+	GetTestWriterAssignmentResult = struct {
+		// Change Card the tests are for.
+		ChangeID string
+		// Change Card revision the tests are for; report_tests_finished takes it.
+		RequestRevision string
+		// True when request_revision is the change's agreed revision, the one in
+		// force, as get_build reports it. It stays true while a proposed revision
+		// waits and when a refreshed draft is adopted without changing
+		// request_revision. If adoption or confirmation changes the agreed
+		// request_revision, it becomes false; the assignment stays on the earlier
+		// revision until the user builds again.
+		InForce bool
+		// Where this assignment stands.
+		Progress *TestWriterProgress
+		// Surla's findings, one problem per item, with no absolute path: as many as
+		// progress gives in finding_count when its state is needs_changes, and none in
+		// any other state. Fix them in working_folder, then report again.
+		Findings []string
+		// Folder to write the tests in: your own working copy of the project,
+		// .surla-tests, on the build's branch surla/tests-<n>. Do not commit there:
+		// Surla commits what it accepts.
+		WorkingFolder string
+		// The canonical design source as agreed at request_revision, copied when this
+		// build started; later revisions do not change it.
+		DesignSource string
+		// The Story as agreed at request_revision, in declaration order. It does not
+		// change when the change is revised later.
+		Stories []*StorySummaryItem
+		// One test per finished flow of stories, in declaration order; unfinished
+		// flows require none.
+		RequiredTests []*RequiredTest
+		// Each question of the change as agreed at request_revision with the answer
+		// the user confirmed, in question order, copied when this build started; empty
+		// when the agreed revision asked none. The tests must hold the service to
+		// every answer.
+		Answers []*ConfirmedAnswer
+		// The confirmation examples as agreed at request_revision, exactly as the user
+		// confirmed them, copied when this build started. The tests must hold the
+		// service to each expected outcome.
+		Examples []*ExampleItem
+		// The existing behaviors the change as agreed at request_revision keeps,
+		// copied when this build started; empty when it names none. The tests must
+		// hold the service to each.
+		PreservedBehaviors []string
+		// Statements submitted with the latest report, retained for correction after
+		// findings or a check that could not run; empty before any report or when none
+		// were stated.
+		CoverageStatements []*TestCoverageStatement
 	}
 	// GetVerificationPayload defines the JSON payload for the surla.get_verification tool.
 	GetVerificationPayload = struct {
@@ -320,10 +534,24 @@ type (
 		RequestRevision string
 		// Candidate commit the run builds and verifies.
 		CandidateCommit string
-		// Evaluator suite commit the operator configured for the run.
+		// Commit of the tests the run uses: the operator's evaluator, or the tests
+		// accepted for the change's build.
 		SuiteCommit string
 		// When the run was accepted.
 		AcceptedAt string
+		// Whether this run's agreed revision and selected tests match the current
+		// Change Card and the usable build or the stored verification settings. This
+		// observation does not establish the current candidate working tree,
+		// deployment or approval.
+		InputsCurrent bool
+		// Absolute folder containing the binaries built by this completed run.
+		// Returned only to the user when promotion settings are configured, so the
+		// user can publish these exact binaries before approval. Agents never receive
+		// this private path.
+		CandidateBinariesDir *string
+		// Where the run's tests came from, recorded when the run started: evaluator,
+		// or written_tests with their commit and a notice.
+		TestSource TestSource
 		// Exactly one of running, completed or not_completed.
 		State State
 	}
@@ -348,6 +576,38 @@ type (
 		// repository (40 or 64 lowercase hex characters); start_live_target and
 		// verify_change take this commit ID.
 		Commit string
+	}
+	// ListBuilderAssignmentsPayload defines the JSON payload for the surla.list_builder_assignments tool.
+	ListBuilderAssignmentsPayload = struct {
+	}
+	// ListBuilderAssignmentsResult defines the JSON result for the surla.list_builder_assignments tool.
+	ListBuilderAssignmentsResult = struct {
+		// The open build's assignment while it needs this role; empty otherwise.
+		Assignments []*BuilderAssignment
+	}
+	// ListChangesPayload defines the JSON payload for the surla.list_changes tool.
+	ListChangesPayload = struct {
+	}
+	// ListChangesResult defines the JSON result for the surla.list_changes tool.
+	ListChangesResult = struct {
+		// Saved Change Cards, most recently saved first.
+		Changes []*ChangeListItem
+		// Opaque value for change detection. Compare it only for equality; the
+		// returned fields contain the facts this operation makes readable.
+		Version string
+		// Whether approve_merge can record approvals on this server: true when the
+		// server runs Checkpoint 4 verification, as every server surla starts does,
+		// and any stored promotion settings could be resolved; false when the server
+		// runs no verification or resolving the promotion target fails.
+		ApprovalAvailable bool
+	}
+	// ListTestWriterAssignmentsPayload defines the JSON payload for the surla.list_test_writer_assignments tool.
+	ListTestWriterAssignmentsPayload = struct {
+	}
+	// ListTestWriterAssignmentsResult defines the JSON result for the surla.list_test_writer_assignments tool.
+	ListTestWriterAssignmentsResult = struct {
+		// The open build's assignment while it needs this role; empty otherwise.
+		Assignments []*TestWriterAssignmentItem
 	}
 	// ListTracesPayload defines the JSON payload for the surla.list_traces tool.
 	ListTracesPayload = struct {
@@ -388,20 +648,6 @@ type (
 		ChangeID string
 		// Expected CP1 request_revision digest.
 		RequestRevision string
-		// Candidate module whose Goa and Goa-AI design is evaluated. When omitted on a
-		// server with a bound workspace, Surla reads the candidate module snapshot
-		// from the bound workspace.
-		Design *DesignSnapshot
-		// Optional explicit builder path scopes for proposing a Chorus build roster.
-		// When omitted, preview_architecture returns a solo preview with swarm.status
-		// unconfigured and no missing_roles.
-		Builders []*BuilderScopeItem
-		// Optional repository-relative path globs for an @architect role in the
-		// proposed Chorus roster (requires builders).
-		ArchitectPaths []string
-		// Optional repository or evaluator-workspace relative path globs for an
-		// @eval-author role in the proposed Chorus roster (requires builders).
-		EvalPaths []string
 	}
 	// PreviewArchitectureResult defines the JSON result for the surla.preview_architecture tool.
 	PreviewArchitectureResult = struct {
@@ -409,8 +655,8 @@ type (
 		ChangeID string
 		// Bound CP1 request_revision digest.
 		RequestRevision string
-		// SHA-256 digest of the evaluated design snapshot (sorted path and content
-		// pairs).
+		// SHA-256 digest of the design snapshot the revision's refresh evaluated
+		// (sorted path and content pairs).
 		DesignDigest string
 		// API or primary service name declared in the design.
 		SystemName string
@@ -422,8 +668,6 @@ type (
 		AgentPolicies []*AgentPolicyItem
 		// Evaluated Goa-AI tool contracts.
 		Tools []*ToolContractItem
-		// Proposed Chorus multi-agent role assignments and model-family routing.
-		Swarm *SwarmPlanItem
 		// Plain-English summary of topology and guardrails.
 		Banner string
 	}
@@ -431,21 +675,11 @@ type (
 	ProposeChangePayload = struct {
 		// Unique change identifier.
 		ChangeID string
-		// Operator feature request.
+		// The user's feature request.
 		Prompt string
-		// Goa design source the analysis was made against (the target's design/*.go
-		// files). Surla saves it with the card and includes it in request_revision; it
-		// does not interpret it. When omitted on a server with a bound workspace,
-		// Surla records design/*.go from the bound workspace; when omitted without a
-		// bound workspace, the card records no design. Cannot be combined with
-		// story_refresh_op_id.
-		DesignSource *string
-		// Optional op_id of a succeeded refresh_story operation for the bound
-		// workspace whose evaluated Stories this card adopts. When set, design_source
-		// must be omitted; Surla reads one workspace snapshot, requires its
-		// snapshot_digest to match the operation's, and records both the evaluated
-		// Stories and that snapshot's design/*.go on the card. Omit when the card has
-		// no Story.
+		// op_id of a succeeded refresh_story operation whose evaluated draft this card
+		// adopts: its design, Stories, architecture, go.mod and made-from list.
+		// Required when the project folder holds a go.mod; Surla reads no file.
 		StoryRefreshOpID *string
 		// Your analysis of prompt against the target's current design.
 		Analysis *CP1Analysis
@@ -456,7 +690,7 @@ type (
 		ChangeID string
 		// Checkpoint status (needs_confirmation or confirmed).
 		Status string
-		// Operator feature request for this revision.
+		// The user's feature request for this revision.
 		Prompt string
 		// Plain-English summary of the proposed change from propose_change or
 		// revise_change. confirm_intent does not rewrite this text; when status is
@@ -477,7 +711,7 @@ type (
 		// revision in declaration order; omitted when the card has no Stories.
 		// Included in request_revision.
 		Stories []*StorySummaryItem
-		// Authenticated principal that confirmed the Change Card.
+		// User who confirmed the Change Card.
 		ConfirmedBy *string
 		// SHA-256 digest of the canonical versioned Change Card.
 		RequestRevision string
@@ -485,18 +719,24 @@ type (
 		// sent one. A confirm_intent that changes answers or examples returns the new
 		// revision without it.
 		UIComposition *UICompositionItem
-		// Checkpoint 5 approval of this revision, present only while it is verified
-		// against the promotion target's current inputs on this read. It is absent
-		// before approve_merge succeeds, whenever the target's suite, environment or
-		// binary digests have changed since, and whenever current inputs cannot be
+		// Checkpoint 5 approval of this revision, present while suite_commit is still
+		// the tests' commit chosen for this revision and (when a promotion target is
+		// configured) the promotion target's current binary digests still equal
+		// artifacts on this read. It is absent before approve_merge succeeds, whenever
+		// the chosen tests' commit or the staged binary digests have changed since,
+		// and whenever a configured promotion target's staged binaries cannot be
 		// verified (see unverified_approval). It is never hashed into request_revision.
 		Approval *ApprovalItem
-		// Saved Checkpoint 5 approval of this revision when current promotion inputs
-		// could not be verified on this read (because no promotion target is
-		// configured or the target could not report its current inputs). At most one
-		// of approval or unverified_approval is set. It is never saved to disk or
-		// hashed into request_revision.
+		// Saved Checkpoint 5 approval of this revision when suite_commit still matches
+		// the chosen tests' commit and promotion settings are configured, but the
+		// staged binaries could not be verified on this read. At most one of approval
+		// or unverified_approval is set. It is never saved to disk or hashed into
+		// request_revision.
 		UnverifiedApproval *UnverifiedApprovalItem
+		// The revision the guide proposed beside this confirmed revision, while it
+		// waits for the user to adopt or decline it; absent otherwise. This card's own
+		// fields describe the revision in force.
+		ProposedRevision *ProposedRevisionItem
 	}
 	// ReadCheckOutputPayload defines the JSON payload for the surla.read_check_output tool.
 	ReadCheckOutputPayload = struct {
@@ -522,15 +762,20 @@ type (
 	}
 	// RefreshStoryResult defines the JSON result for the surla.refresh_story tool.
 	RefreshStoryResult = struct {
-		// Identifier of the caller's current Story refresh operation for the bound
-		// workspace; present when state is running, succeeded, or failed. Pass it as
+		// Absolute path intended for the guide's draft, .surla-draft in the project
+		// folder, whose go.mod, go.sum and design/ refresh_story reads. When state is
+		// none, this path does not mean the folder exists; refresh_story makes it when
+		// needed.
+		DraftFolder string
+		// Identifier of the owner's current Story refresh operation for the guide's
+		// draft; present when state is running, succeeded, or failed. Pass it as
 		// story_refresh_op_id to propose_change or revise_change once state is
 		// succeeded to adopt the evaluated Story into a Change Card.
 		OpID *string
 		// Current operation state: none, running, succeeded, or failed.
 		State string
-		// Canonical SHA-256 digest of the workspace module snapshot read when this
-		// refresh started; present when state is running, succeeded, or failed.
+		// Canonical SHA-256 digest of the draft snapshot read when this refresh
+		// started; present when state is running, succeeded, or failed.
 		SnapshotDigest *string
 		// Evaluated domain Stories in declaration order when state is succeeded (empty
 		// when the design declares no Stories or when state is none, running, or
@@ -538,33 +783,91 @@ type (
 		Stories []*StorySummaryItem
 		// Safe failure or timeout diagnostic when state is failed; omitted otherwise.
 		Diagnostic *string
-		// Summary of the current Story refresh state and next action.
+		// Summary of the current Story refresh state and next action. After a dropped
+		// build remakes the draft and until a revision is saved from it, begins by
+		// naming the dropped change and saying that edits made before then are gone.
 		Message string
+	}
+	// ReportTestsFinishedPayload defines the JSON payload for the surla.report_tests_finished tool.
+	ReportTestsFinishedPayload = struct {
+		// Change Card identifier from your test assignment.
+		ChangeID string
+		// request_revision of your test assignment.
+		RequestRevision string
+		// Your stated scenario coverage of this assignment's answers and examples; use
+		// [] when none is stated. Surla validates references but does not judge
+		// assertion meaning.
+		CoverageStatements []*TestCoverageStatement
+	}
+	// ReportTestsFinishedResult defines the JSON result for the surla.report_tests_finished tool.
+	ReportTestsFinishedResult = struct {
+		// Change Card the tests are for; get_test_writer_assignment takes it.
+		ChangeID string
+		// Change Card revision the tests are for.
+		RequestRevision string
+		// True when request_revision is the change's agreed revision, the one in
+		// force, as get_build reports it. It stays true while a proposed revision
+		// waits and when a refreshed draft is adopted without changing
+		// request_revision. If adoption or confirmation changes the agreed
+		// request_revision, it becomes false; the assignment stays on the earlier
+		// revision until the user builds again.
+		InForce bool
+		// Where this assignment stands.
+		Progress *TestWriterProgress
+	}
+	// ReviewVerificationPayload defines the JSON payload for the surla.review_verification tool.
+	ReviewVerificationPayload = struct {
+		// Verification run identifier returned by verify_change.
+		RunID string
+	}
+	// ReviewVerificationResult defines the JSON result for the surla.review_verification tool.
+	ReviewVerificationResult = struct {
+		// Immutable Story evidence and the owner's current approval observation.
+		Review *VerificationReview
+		// Verification run identifier; get_verification takes it.
+		RunID string
+		// Change Card the run verifies.
+		ChangeID string
+		// Change Card revision the run verifies.
+		RequestRevision string
+		// Candidate commit the run builds and verifies.
+		CandidateCommit string
+		// Commit of the tests the run uses: the operator's evaluator, or the tests
+		// accepted for the change's build.
+		SuiteCommit string
+		// When the run was accepted.
+		AcceptedAt string
+		// Whether this run's agreed revision and selected tests match the current
+		// Change Card and the usable build or the stored verification settings. This
+		// observation does not establish the current candidate working tree,
+		// deployment or approval.
+		InputsCurrent bool
+		// Absolute folder containing the binaries built by this completed run.
+		// Returned only to the user when promotion settings are configured, so the
+		// user can publish these exact binaries before approval. Agents never receive
+		// this private path.
+		CandidateBinariesDir *string
+		// Where the run's tests came from, recorded when the run started: evaluator,
+		// or written_tests with their commit and a notice.
+		TestSource TestSource
+		// Exactly one of running, completed or not_completed.
+		State State
 	}
 	// ReviseChangePayload defines the JSON payload for the surla.revise_change tool.
 	ReviseChangePayload = struct {
 		// Change identifier.
 		ChangeID string
-		// Current CP1 request_revision digest being revised.
+		// request_revision of the latest revision you read: the proposed revision's
+		// when the change shows one waiting (proposed_revision.request_revision),
+		// otherwise the change's own.
 		RequestRevision string
-		// Revised operator feature request.
+		// The user's revised feature request.
 		Prompt string
-		// Updated Goa design source the analysis was made against (the target's
-		// design/*.go files). Surla saves it with the card and includes it in
-		// request_revision; it does not interpret it. When omitted on a
-		// workspace-backed card without Stories and with a bound workspace, Surla
-		// records design/*.go from the bound workspace again; otherwise the card's
-		// saved design source is kept. Cannot be set when story_refresh_op_id is set
-		// or when the card already has adopted Stories.
-		DesignSource *string
-		// Optional op_id of a succeeded refresh_story operation for the bound
-		// workspace whose evaluated Stories this revision adopts. When set,
-		// design_source must be omitted and the card must not use a caller-supplied
-		// design_source; Surla reads one workspace snapshot, requires its
-		// snapshot_digest to match the operation's, and records both the evaluated
-		// Stories and that snapshot's design/*.go on the revised card. When omitted on
-		// a card that already has Stories, the card's saved Stories and saved
-		// design_source are kept together.
+		// op_id of a succeeded refresh_story operation whose evaluated draft this
+		// revision adopts. When omitted, the revision keeps every snapshot field of
+		// the revision it revises: design, Stories, architecture, go.mod and made-from
+		// list, even with zero Stories. A project with a go.mod refuses an omitted
+		// op_id when that revision has no design. Surla reads no file.
 		StoryRefreshOpID *string
 		// Your analysis of the revised prompt against the current card and the
 		// target's current design.
@@ -576,7 +879,7 @@ type (
 		ChangeID string
 		// Checkpoint status (needs_confirmation or confirmed).
 		Status string
-		// Operator feature request for this revision.
+		// The user's feature request for this revision.
 		Prompt string
 		// Plain-English summary of the proposed change from propose_change or
 		// revise_change. confirm_intent does not rewrite this text; when status is
@@ -597,7 +900,7 @@ type (
 		// revision in declaration order; omitted when the card has no Stories.
 		// Included in request_revision.
 		Stories []*StorySummaryItem
-		// Authenticated principal that confirmed the Change Card.
+		// User who confirmed the Change Card.
 		ConfirmedBy *string
 		// SHA-256 digest of the canonical versioned Change Card.
 		RequestRevision string
@@ -605,21 +908,29 @@ type (
 		// sent one. A confirm_intent that changes answers or examples returns the new
 		// revision without it.
 		UIComposition *UICompositionItem
-		// Checkpoint 5 approval of this revision, present only while it is verified
-		// against the promotion target's current inputs on this read. It is absent
-		// before approve_merge succeeds, whenever the target's suite, environment or
-		// binary digests have changed since, and whenever current inputs cannot be
+		// Checkpoint 5 approval of this revision, present while suite_commit is still
+		// the tests' commit chosen for this revision and (when a promotion target is
+		// configured) the promotion target's current binary digests still equal
+		// artifacts on this read. It is absent before approve_merge succeeds, whenever
+		// the chosen tests' commit or the staged binary digests have changed since,
+		// and whenever a configured promotion target's staged binaries cannot be
 		// verified (see unverified_approval). It is never hashed into request_revision.
 		Approval *ApprovalItem
-		// Saved Checkpoint 5 approval of this revision when current promotion inputs
-		// could not be verified on this read (because no promotion target is
-		// configured or the target could not report its current inputs). At most one
-		// of approval or unverified_approval is set. It is never saved to disk or
-		// hashed into request_revision.
+		// Saved Checkpoint 5 approval of this revision when suite_commit still matches
+		// the chosen tests' commit and promotion settings are configured, but the
+		// staged binaries could not be verified on this read. At most one of approval
+		// or unverified_approval is set. It is never saved to disk or hashed into
+		// request_revision.
 		UnverifiedApproval *UnverifiedApprovalItem
+		// The revision the guide proposed beside this confirmed revision, while it
+		// waits for the user to adopt or decline it; absent otherwise. This card's own
+		// fields describe the revision in force.
+		ProposedRevision *ProposedRevisionItem
 	}
 	// StartLiveTargetPayload defines the JSON payload for the surla.start_live_target tool.
 	StartLiveTargetPayload = struct {
+		// Owned, confirmed change from list_builder_assignments.
+		ChangeID string
 		// Full commit ID to build, in the candidate repository's object format.
 		CandidateCommit string
 	}
@@ -651,12 +962,29 @@ type (
 	UpdateDependenciesResult = struct {
 		// Operation identifier; pass it to read_check_output to read the full output.
 		OpID string
-		// Workspace-relative go.mod, go.sum and go.work.sum files whose bytes changed
-		// and were written.
+		// Working-folder-relative go.mod, go.sum and go.work.sum files whose bytes
+		// changed and were written.
 		FilesWritten []string
 		// At most 16 KiB: what was updated, and Go's message for any module that could
 		// not be.
 		Message string
+	}
+	// UpdateDraftPayload defines the JSON payload for the surla.update_draft tool.
+	UpdateDraftPayload = struct {
+	}
+	// UpdateDraftResult defines the JSON result for the surla.update_draft tool.
+	UpdateDraftResult = struct {
+		// Absolute path of the guide's draft folder.
+		DraftFolder string
+		// Design files the draft took from the project folder because it had not
+		// changed them, in path order.
+		Taken []string
+		// Design files where the project folder's change and the draft's edits merged
+		// without conflict, in path order.
+		Merged []string
+		// Files to correct before refreshing, each in the folder it names, in path
+		// order; empty when none.
+		ToCorrect []*DraftCorrection
 	}
 	// VerifyChangePayload defines the JSON payload for the surla.verify_change tool.
 	VerifyChangePayload = struct {
@@ -678,10 +1006,24 @@ type (
 		RequestRevision string
 		// Candidate commit the run builds and verifies.
 		CandidateCommit string
-		// Evaluator suite commit the operator configured for the run.
+		// Commit of the tests the run uses: the operator's evaluator, or the tests
+		// accepted for the change's build.
 		SuiteCommit string
 		// When the run was accepted.
 		AcceptedAt string
+		// Whether this run's agreed revision and selected tests match the current
+		// Change Card and the usable build or the stored verification settings. This
+		// observation does not establish the current candidate working tree,
+		// deployment or approval.
+		InputsCurrent bool
+		// Absolute folder containing the binaries built by this completed run.
+		// Returned only to the user when promotion settings are configured, so the
+		// user can publish these exact binaries before approval. Agents never receive
+		// this private path.
+		CandidateBinariesDir *string
+		// Where the run's tests came from, recorded when the run started: evaluator,
+		// or written_tests with their commit and a notice.
+		TestSource TestSource
 		// Exactly one of running, completed or not_completed.
 		State State
 	}
@@ -704,45 +1046,125 @@ type (
 		// True when prompt caching places a checkpoint after tool definitions.
 		CacheAfterTools bool
 	}
+	// AgentWrittenTests is a nested type used by the generated JSON contract.
+	AgentWrittenTests = struct {
+		// Commit Surla recorded the accepted tests at; the same as suite_commit.
+		Commit string
+		// Always: These tests were written by a separate agent on this machine and are
+		// not isolated from the builder.
+		Notice string
+	}
 	// AmbiguityQuestion is a nested type used by the generated JSON contract.
 	AmbiguityQuestion = struct {
 		// Stable question identifier.
 		ID string
-		// Plain-English question for the operator.
+		// Plain-English question for the user.
 		Question string
 		// Concrete resolution choices.
 		Options []string
 	}
 	// ApprovalItem is a nested type used by the generated JSON contract.
 	ApprovalItem = struct {
-		// Authenticated principal that owns the card and called approve_merge.
-		// Authentication does not prove that a human, rather than a coding agent, made
-		// the call.
+		// User who approved the result.
 		ApprovedBy string
 		// SHA-256 digest of the approved CP4 verification report.
 		ReportDigest string
 		// Candidate commit the report was checked against.
 		CandidateCommit string
-		// Evaluator suite the promotion target requires.
+		// Suite identifier the tests at suite_commit declared in the report (shown,
+		// not compared).
 		SuiteID string
-		// Evaluator suite commit the promotion target requires.
+		// Commit of the tests the report ran: the evaluator suite commit in the stored
+		// verification settings, or the tests Surla accepted for the change's build.
 		SuiteCommit string
-		// Dependency profile the promotion target requires, such as sim.
+		// Dependency profile the tests at suite_commit declared in the report, such as
+		// sim or scripted-model (shown, not compared).
 		Environment string
 		// SHA-256 digest of each candidate binary the promotion target measured, keyed
-		// by binary name.
+		// by binary name; empty when no promotion settings are configured.
 		Artifacts map[string]string
-		// Number of declared evaluator scenarios, every one of which passed.
+		// Number of declared scenarios in the report, every one of which passed.
 		ScenarioCount int
+		// Where the tests at suite_commit came from, derived on each read: evaluator,
+		// or written_tests with their commit and a notice.
+		TestSource ApprovalTestSource
 	}
-	// BuilderScopeItem is a nested type used by the generated JSON contract.
-	BuilderScopeItem = struct {
-		// Human-readable builder scope name (for example, orders or api).
-		Name string
-		// Repository-relative path globs owned by this builder.
-		Paths []string
-		// Optional preference selecting a server-configured authenticated profile ID.
-		PreferredProfileID *string
+	// BuildBuilding is a nested type used by the generated JSON contract.
+	BuildBuilding = struct {
+	}
+	// BuildDropped is a nested type used by the generated JSON contract.
+	BuildDropped = struct {
+		// The build's own branches that exist and hold a commit made after the build's
+		// base, where its work stays (git log <branch> shows it); empty when nothing
+		// was committed for it.
+		KeptBranches []string
+	}
+	// BuildMerged is a nested type used by the generated JSON contract.
+	BuildMerged = struct {
+	}
+	// BuildNotStarted is a nested type used by the generated JSON contract.
+	BuildNotStarted = struct {
+	}
+	// BuildPassed is a nested type used by the generated JSON contract.
+	BuildPassed = struct {
+		// The newest passed run; get_verification takes it.
+		RunID string
+		// The builder's commit the run passed.
+		CandidateCommit string
+		// The build's builder branch, surla/build-<n>, where this commit was verified.
+		CandidateBranch string
+		// written_tests with the accepted tests' commit to merge after the builder's;
+		// evaluator when the project verifies with its stored evaluator, whose tests
+		// are not merged.
+		Tests BuildPassedTestSource
+		// False when the branch checked out in the project folder no longer holds the
+		// commit this build started from, because its history was rewritten: merging
+		// these commits brings that history back, and dropping the build and building
+		// again starts from the branch as it is.
+		BaseInBranch bool
+	}
+	// BuildPassedTests is a nested type used by the generated JSON contract.
+	BuildPassedTests = struct {
+		// Commit Surla recorded the accepted tests at.
+		Commit string
+		// The build's test-writer branch, surla/tests-<n>, where this commit was
+		// verified.
+		Branch string
+	}
+	// BuilderAssignment is a nested type used by the generated JSON contract.
+	BuilderAssignment = struct {
+		// Change Card to build; get_change takes it.
+		ChangeID string
+		// Change Card revision to build; verify_change takes it.
+		RequestRevision string
+		// True when request_revision is the change's agreed revision, the one in
+		// force, as get_build reports it. It stays true while a proposed revision
+		// waits and when a refreshed draft is adopted without changing
+		// request_revision. If adoption or confirmation changes the agreed
+		// request_revision, it becomes false; verify_change refuses this earlier
+		// revision, and the assignment stays as it is until the user builds again.
+		InForce bool
+		// True once you read this assignment in full with get_builder_assignment.
+		Read bool
+		// Where the test writer's tests for this build stand: not_used when no test
+		// writer is used because the project has stored verification settings;
+		// otherwise accepted, with the commit and time, when the build records
+		// accepted tests, and not_yet_accepted when it records none.
+		WrittenTests WrittenTests
+		// Absolute path of the folder to build in: the project's folder inside your
+		// working copy .surla-build, on the build's branch surla/build-<n>. Run git
+		// and go there, never in the project folder.
+		WorkingFolder string
+		// True when no go.work lies in working_folder or in a folder between it and
+		// the working copy's root: run every go command there as GOWORK=off go …, so a
+		// go.work of the project folder around your copy does not take it over.
+		GoworkOff bool
+	}
+	// BuilderProgress is a nested type used by the generated JSON contract.
+	BuilderProgress = struct {
+		// True once the builder read this assignment in full with
+		// get_builder_assignment.
+		Read bool
 	}
 	// BuilderVerificationReport is a nested type used by the generated JSON contract.
 	BuilderVerificationReport = struct {
@@ -800,8 +1222,8 @@ type (
 		// questions, built only from the decision components the surla://golden-path
 		// resource lists. Refer to an ambiguity or example only by its 1-based
 		// position in this analysis (1 is the first); never invent identifiers. Surla
-		// saves it unchanged without checking it; the checkpoint viewer validates and
-		// renders it. Omit it when a plain card is clearer.
+		// saves it unchanged without checking it; the views page validates and renders
+		// it. Omit it when a plain card is clearer.
 		UIComposition *string
 	}
 	// CP1AnalysisAmbiguity is a nested type used by the generated JSON contract.
@@ -852,8 +1274,8 @@ type (
 		// questions, built only from the decision components the surla://golden-path
 		// resource lists. Refer to an ambiguity or example only by its 1-based
 		// position in this analysis (1 is the first); never invent identifiers. Surla
-		// saves it unchanged without checking it; the checkpoint viewer validates and
-		// renders it. Omit it when a plain card is clearer.
+		// saves it unchanged without checking it; the views page validates and renders
+		// it. Omit it when a plain card is clearer.
 		UIComposition *string
 	}
 	// CP1RevisionAnalysisExample is a nested type used by the generated JSON contract.
@@ -873,11 +1295,60 @@ type (
 		// checking it needs judgment.
 		VerificationKind string
 	}
+	// ChangeListItem is a nested type used by the generated JSON contract.
+	ChangeListItem = struct {
+		// Change Card identifier; get_change takes it.
+		ChangeID string
+		// Plain-English summary of the current revision.
+		Summary string
+		// Checkpoint status of the current revision.
+		Status string
+		// Current request_revision of the Change Card.
+		RequestRevision string
+		// The Change Card's most recently accepted verification run; absent when none
+		// was started.
+		LatestVerification *LatestVerificationItem
+		// request_revision of the revision the guide proposed beside this confirmed
+		// change, while it waits for the user to adopt or decline it; absent
+		// otherwise. status and request_revision describe the revision in force.
+		ProposedRevision *string
+		// When the Change Card was last saved. It is not part of request_revision.
+		SavedAt string
+	}
+	// ConfirmedAnswer is a nested type used by the generated JSON contract.
+	ConfirmedAnswer = struct {
+		// Question identifier on the Change Card.
+		ID string
+		// The question as the user answered it.
+		Question string
+		// The option the user confirmed, exactly as confirmed.
+		Answer string
+	}
 	// DesignSnapshot is a nested type used by the generated JSON contract.
 	DesignSnapshot = struct {
 		// File contents keyed by module-relative path, such as design/design.go or
 		// go.mod.
 		Files map[string]string
+	}
+	// DraftCorrection is a nested type used by the generated JSON contract.
+	DraftCorrection = struct {
+		// Path relative to the folder that folder names, such as design/types.go or
+		// go.mod.
+		Path string
+		// Which folder holds the file to correct: draft_folder is the guide's draft,
+		// at the result's draft_folder; project_folder is the user's project folder,
+		// which holds the draft.
+		Folder string
+		// What to correct. In the draft: conflict markers where the draft and the
+		// project folder changed the same lines; a file removed on one side and
+		// changed on the other; a draft file Go cannot parse, with its line; a file
+		// whose project change Surla took without merging, or was writing when it
+		// stopped, to check that it holds the intended edits once; or a module the
+		// project's go.mod requires at another version than the draft's, or that the
+		// draft's lacks, including differing replace directives and a differing module
+		// path. In the project folder: a design file or go.mod there that cannot be
+		// parsed, with its line, or a go.mod that declares no module.
+		Problem string
 	}
 	// ExampleItem is a nested type used by the generated JSON contract.
 	ExampleItem = struct {
@@ -893,6 +1364,199 @@ type (
 		ExpectedOutcome string
 		// Evaluator check classification (deterministic or model_judged).
 		VerificationKind string
+	}
+	// LatestVerificationItem is a nested type used by the generated JSON contract.
+	LatestVerificationItem = struct {
+		// Verification run identifier; get_verification takes it.
+		RunID string
+		// running while the run builds or evaluates the candidate; passed or failed
+		// when its report's verdict is known; not_completed when it stopped without a
+		// report.
+		State string
+		// Whether this run names the agreed request_revision and the tests selected
+		// now: the accepted test commit of the usable build in force, or the evaluator
+		// suite in the stored verification settings. It does not say whether the
+		// candidate working tree, deployment or approval is current.
+		InputsCurrent bool
+	}
+	// LivePromptItem is a nested type used by the generated JSON contract.
+	LivePromptItem = struct {
+		// Registered prompt identifier.
+		PromptID string
+		// Version of the text in force, as the live target returned it.
+		Version string
+		// When the live target first accepted the version in force. A later draft that
+		// the target answers with the same version, such as the same text sent again,
+		// keeps this time.
+		AcceptedAt string
+	}
+	// LiveTargetEnded is a nested type used by the generated JSON contract.
+	LiveTargetEnded = struct {
+		// The commit the ended target ran.
+		CandidateCommit string
+		// When that target became ready.
+		StartedAt string
+		// When the server observed that target ending.
+		EndedAt string
+		// Fixed explanation of what is known and the builder's next step.
+		Message string
+	}
+	// LiveTargetNone is a nested type used by the generated JSON contract.
+	LiveTargetNone = struct {
+	}
+	// LiveTargetNotConfirmedStopped is a nested type used by the generated JSON contract.
+	LiveTargetNotConfirmedStopped = struct {
+		// The commit it was built from.
+		CandidateCommit string
+		// What happened and what to do next.
+		Message string
+	}
+	// LiveTargetStarting is a nested type used by the generated JSON contract.
+	LiveTargetStarting = struct {
+		// The commit being built.
+		CandidateCommit string
+		// When the start began.
+		Since string
+	}
+	// OperatorEvaluatorTests is a nested type used by the generated JSON contract.
+	OperatorEvaluatorTests = struct {
+	}
+	// ProposedRevisionItem is a nested type used by the generated JSON contract.
+	ProposedRevisionItem = struct {
+		// The user's feature request for this revision.
+		Prompt string
+		// Plain-English summary of the proposed change.
+		Summary string
+		// Domain questions the user answers when adopting this revision.
+		Ambiguities []*AmbiguityQuestion
+		// Concrete examples mapped to evaluator checks.
+		Examples []*ExampleItem
+		// Existing contract invariants preserved by this change.
+		PreservedBehaviors []string
+		// Evaluated domain Stories of this revision in declaration order; omitted when
+		// it has none. Included in its request_revision.
+		Stories []*StorySummaryItem
+		// SHA-256 digest of this proposed revision: confirm_intent adopts it,
+		// decline_revision declines it, and revise_change replaces it when given this
+		// value.
+		RequestRevision string
+		// Decision view the guide composed for this revision in its analysis, when it
+		// sent one.
+		UIComposition *UICompositionItem
+		// Paths of the design/*.go files that differ between the design source the
+		// confirmed revision was made from and the one this revision was made from
+		// (added, removed or changed), in path order; empty when both were made from
+		// the same design files. Adopting the revision binds it to its own design
+		// source.
+		ChangedDesignFiles []string
+	}
+	// RecordedRunStory is a nested type used by the generated JSON contract.
+	RecordedRunStory = struct {
+		// Number of the build this run was accepted for.
+		BuildNumber int
+		// Accepted build's saved start time.
+		BuildStartedAt string
+		// Stories as agreed for this run, in declaration order; empty when the
+		// agreement declares none.
+		Stories []*StorySummaryItem
+		// The owner's exact required-test mapping for written tests, or the explicit
+		// absence of such a mapping for an operator evaluator.
+		Mapping Mapping
+		// The writer's immutable statements for this run, or explicit missing
+		// historical/operator evidence.
+		TestCoverage TestCoverage
+	}
+	// RecordedTestCoverage is a nested type used by the generated JSON contract.
+	RecordedTestCoverage = struct {
+		// Accepted test-writer report number.
+		Report int
+		// Answers saved for the built agreement, in question order.
+		Answers []*ConfirmedAnswer
+		// Examples saved for the built agreement, in confirmation order.
+		Examples []*ExampleItem
+		// Writer statements for this report; empty means Not stated.
+		CoverageStatements []*TestCoverageStatement
+	}
+	// RequiredTest is a nested type used by the generated JSON contract.
+	RequiredTest = struct {
+		// Name of the Story the flow belongs to.
+		Story string
+		// Key of the finished flow.
+		FlowKey string
+		// Scenario name the evaluation suite declares for the flow.
+		Scenario string
+		// Hook method the test writer implements for the scenario.
+		Hook string
+	}
+	// RunApprovalAvailable is a nested type used by the generated JSON contract.
+	RunApprovalAvailable = struct {
+	}
+	// RunApprovalBlocked is a nested type used by the generated JSON contract.
+	RunApprovalBlocked = struct {
+		// Owner's safe explanation and enabling step.
+		Reason string
+	}
+	// RunEvaluatorMappingUnknown is a nested type used by the generated JSON contract.
+	RunEvaluatorMappingUnknown = struct {
+	}
+	// RunStoryMapping is a nested type used by the generated JSON contract.
+	RunStoryMapping = struct {
+		// One test per finished flow, in declaration order.
+		RequiredTests []*RequiredTest
+	}
+	// RunStoryNotRecorded is a nested type used by the generated JSON contract.
+	RunStoryNotRecorded = struct {
+	}
+	// RunningLiveTarget is a nested type used by the generated JSON contract.
+	RunningLiveTarget = struct {
+		// The commit it was built from.
+		CandidateCommit string
+		// The origin it listens on, as its evaluator suite reported it.
+		URL string
+		// When it became ready.
+		StartedAt string
+		// One entry per prompt whose draft it accepted, sorted by prompt_id; empty
+		// when none.
+		Prompts []*LivePromptItem
+	}
+	// StartedBuild is a nested type used by the generated JSON contract.
+	StartedBuild = struct {
+		// Change Card revision the user built.
+		RequestRevision string
+		// When the user started this build.
+		StartedAt string
+		// True when request_revision is the change's agreed revision, the one in
+		// force, as get_build reports it. It stays true while a proposed revision
+		// waits and when a refreshed draft is adopted without changing
+		// request_revision. If adoption or confirmation changes the agreed
+		// request_revision, it becomes false; the assignments stay on the earlier
+		// revision until the user builds again.
+		InForce bool
+		// The builder's assignment.
+		Builder *BuilderProgress
+		// The test writer's assignment.
+		TestWriter *TestWriterProgress
+		// Number of finished flows in the agreed Story. Zero means no test of this
+		// change's Story was required.
+		RequiredTestCount int
+		// Tests required by this build's saved Story, in declaration order; unfinished
+		// flows require none. Empty when no finished flow requires a test.
+		RequiredTests []*RequiredTest
+		// Confirmed answers saved when this build started; later revisions do not
+		// replace them.
+		Answers []*ConfirmedAnswer
+		// Examples saved when this build started; later revisions do not replace them.
+		Examples []*ExampleItem
+		// The accepted report's writer statements; empty before acceptance or when
+		// none were stated. Surla did not judge them.
+		CoverageStatements []*TestCoverageStatement
+		// Whether the user has taken this build: building until a verification of it
+		// passes; passed with the commits to merge; merged once the branch checked out
+		// in the project folder holds the commits of one passed run, the builder's
+		// and, for written tests, the tests'; dropped once the user dropped it. A
+		// project has one open build, and another change is built only once it is
+		// merged or dropped.
+		Taking BuildTaking
 	}
 	// StoryActorItem is a nested type used by the generated JSON contract.
 	StoryActorItem = struct {
@@ -956,53 +1620,92 @@ type (
 		// Timeline paths declared in the Story in declaration order.
 		Flows []*StoryFlowItem
 	}
-	// SwarmPlanItem is a nested type used by the generated JSON contract.
-	SwarmPlanItem = struct {
-		// Roster configuration status.
-		Status string
-		// Deterministic role assignments when status is configured.
-		Assignments []*SwarmRoleItem
-		// True if and only if status is configured and the reviewer model family is
-		// disjoint from every assigned builder model family.
-		CrossFamilyReview bool
-		// True if and only if status is configured, an eval_author role is assigned,
-		// and the eval_author model family is disjoint from every assigned builder
-		// model family.
-		CrossFamilyEval bool
-		// True when status is configured and all assigned roles share one model family.
-		SingleFamily bool
-		// Requested roles lacking an authenticated capable profile when status is
-		// unconfigured (with builder scopes supplied) or missing_capability; omitted
-		// on solo previews with no builder scopes.
-		MissingRoles []string
-		// Plain-English summary of the proposed swarm roster and model-family posture.
-		Summary string
-		// Formatted Chorus collaboration manifest text when status is configured; does
-		// not claim publication until sent via Chorus.
-		Manifest *string
+	// TestCoverageNotRecorded is a nested type used by the generated JSON contract.
+	TestCoverageNotRecorded = struct {
 	}
-	// SwarmRoleItem is a nested type used by the generated JSON contract.
-	SwarmRoleItem = struct {
-		// Deterministic Chorus agent handle (without leading '@', at most 32
+	// TestCoverageReference is a nested type used by the generated JSON contract.
+	TestCoverageReference = string
+	// TestCoverageStatement is a nested type used by the generated JSON contract.
+	TestCoverageStatement = struct {
+		// Exact declared scenario identifier.
+		Scenario TestCoverageReference
+		// Question IDs from the assignment's answers[].id; empty when this statement
+		// names only examples.
+		QuestionIds []TestCoverageReference
+		// Example IDs from the assignment's examples[].id; empty when this statement
+		// names only answers.
+		ExampleIds []TestCoverageReference
+		// Interaction or assertion the writer says exercises these requirements.
+		Explanation string
+	}
+	// TestWriterAssignmentItem is a nested type used by the generated JSON contract.
+	TestWriterAssignmentItem = struct {
+		// Change Card the tests are for; get_test_writer_assignment takes it.
+		ChangeID string
+		// Change Card revision the tests are for.
+		RequestRevision string
+		// True when request_revision is the change's agreed revision, the one in
+		// force, as get_build reports it. It stays true while a proposed revision
+		// waits and when a refreshed draft is adopted without changing
+		// request_revision. If adoption or confirmation changes the agreed
+		// request_revision, it becomes false; the assignment stays on the earlier
+		// revision until the user builds again.
+		InForce bool
+		// Where this assignment stands.
+		Progress *TestWriterProgress
+	}
+	// TestWriterProgress is a nested type used by the generated JSON contract.
+	TestWriterProgress = struct {
+		// The tests' state: not_used when the project has stored verification
+		// settings; otherwise assigned, reported, needs_changes with the number of
+		// Surla's findings, accepted with the commit Surla recorded, or could_not_run
+		// with the reason and the user's step. Each verdict carries the time Surla
+		// reached it.
+		Tests Tests
+		// True once the test writer read this assignment in full with
+		// get_test_writer_assignment.
+		Read bool
+		// Number of the test writer's latest report of this build: 0 until its first
+		// report, and one more with each report_tests_finished.
+		Report int
+	}
+	// TestsAccepted is a nested type used by the generated JSON contract.
+	TestsAccepted = struct {
+		// Full commit ID Surla recorded the accepted tests at (40 or 64 lowercase hex
 		// characters).
-		Handle string
-		// Assigned swarm role kind.
-		Role string
-		// Human-readable scope label for this assignment.
-		ScopeName string
-		// Assigned server-configured provider profile ID.
-		ProfileID string
-		// Assigned coding-agent provider name.
-		Provider string
-		// Assigned model identifier.
-		Model string
-		// Canonical model family identifier.
-		Family string
-		// Repository or workspace path globs owned by this role for Chorus
-		// coordination.
-		OwnedPaths []string
-		// Operator-declared workspace coordination boundary for this role.
-		AccessMode string
+		Commit string
+		// When Surla's check reached this verdict.
+		CheckedAt string
+		// What Surla's check did not judge, always the same sentence.
+		NotJudged string
+	}
+	// TestsAssigned is a nested type used by the generated JSON contract.
+	TestsAssigned = struct {
+	}
+	// TestsCouldNotRun is a nested type used by the generated JSON contract.
+	TestsCouldNotRun = struct {
+		// Why the check could not run.
+		Reason string
+		// What the user does so the check can run.
+		Step string
+		// When Surla's check stopped.
+		CheckedAt string
+	}
+	// TestsNeedChanges is a nested type used by the generated JSON contract.
+	TestsNeedChanges = struct {
+		// Number of problems Surla found.
+		FindingCount int
+		// When Surla's check reached this verdict.
+		CheckedAt string
+	}
+	// TestsNotUsed is a nested type used by the generated JSON contract.
+	TestsNotUsed = struct {
+	}
+	// TestsNotYetAccepted is a nested type used by the generated JSON contract.
+	TestsNotYetAccepted = struct {
+	}
+	// TestsReported is a nested type used by the generated JSON contract.
+	TestsReported = struct {
 	}
 	// ToolContractItem is a nested type used by the generated JSON contract.
 	ToolContractItem = struct {
@@ -1070,8 +1773,8 @@ type (
 		Status string
 		// Safe operation summary, at most 2048 bytes; never a raw error message.
 		Summary string
-		// Selected operation identifiers and results; at most six values of 1024 bytes
-		// each.
+		// Selected operation identifiers, results, and private caller attribution; at
+		// most seven values of 1024 bytes each.
 		Attributes map[string]string
 		// True when text was shortened to fit this diagnostic record; use operator
 		// telemetry for the full values.
@@ -1080,9 +1783,9 @@ type (
 	// UICompositionItem is a nested type used by the generated JSON contract.
 	UICompositionItem = struct {
 		// OpenUI Lang program from the analysis's ui_composition, exactly as the
-		// caller sent it. The server does not check it; the checkpoint viewer
-		// validates it and shows its error state, with the rest of the card still
-		// usable, when the program is not a valid composition.
+		// caller sent it. The server does not check it; the views page validates it
+		// and shows its error state, with the rest of the card still usable, when the
+		// program is not a valid composition.
 		Program string
 		// request_revision of the Change Card this program was composed for.
 		ComposedForRevision string
@@ -1092,7 +1795,7 @@ type (
 		// Recorded promotion approval from the Change Card.
 		Approval *ApprovalItem
 		// Explanation of why the recorded approval could not be verified against
-		// current promotion inputs and how to recover.
+		// current release binaries and how to recover.
 		Reason string
 	}
 	// VerificationCheck is a nested type used by the generated JSON contract.
@@ -1136,6 +1839,14 @@ type (
 		// Builder-safe description of what stopped the run; never command output.
 		Summary string
 	}
+	// VerificationReview is a nested type used by the generated JSON contract.
+	VerificationReview = struct {
+		// The run's immutable Story context, or the explicit fact it was not recorded.
+		StoryContext StoryContext
+		// The owner's current observation for this exact report, independent of
+		// inputs_current.
+		Approval Approval
+	}
 	// VerificationRunning is a nested type used by the generated JSON contract.
 	VerificationRunning = struct {
 		// When the run was accepted.
@@ -1162,10 +1873,24 @@ type (
 		RequestRevision string
 		// Candidate commit the run builds and verifies.
 		CandidateCommit string
-		// Evaluator suite commit the operator configured for the run.
+		// Commit of the tests the run uses: the operator's evaluator, or the tests
+		// accepted for the change's build.
 		SuiteCommit string
 		// When the run was accepted.
 		AcceptedAt string
+		// Whether this run's agreed revision and selected tests match the current
+		// Change Card and the usable build or the stored verification settings. This
+		// observation does not establish the current candidate working tree,
+		// deployment or approval.
+		InputsCurrent bool
+		// Absolute folder containing the binaries built by this completed run.
+		// Returned only to the user when promotion settings are configured, so the
+		// user can publish these exact binaries before approval. Agents never receive
+		// this private path.
+		CandidateBinariesDir *string
+		// Where the run's tests came from, recorded when the run started: evaluator,
+		// or written_tests with their commit and a notice.
+		TestSource TestSource
 		// Exactly one of running, completed or not_completed.
 		State State
 	}

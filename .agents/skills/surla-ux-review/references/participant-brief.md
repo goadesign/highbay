@@ -33,13 +33,16 @@ You are taking part in a usability study of a developer tool called
   you want one, say so in your report, because that is useful evidence.
 - Run Surla itself the way the README shows, including `surla init`, which
   sets up your starter project.
+- Surla runs your product's code as ordinary processes with your file and
+  network access. Its working copies and process groups do not confine that
+  code. Any sandbox imposed by your coding-agent environment is a separate
+  environment restriction.
 - Do not compile, generate code from, or run your product's code yourself,
   for example with `goa gen`, `go build`, `go run`, or `go test` in your
   project. Your product's code runs only through Surla's commands, such as
-  `surla verify`, which run it inside Surla's sandbox. If Surla's README or
-  generated files tell you to run one of those commands yourself, or you
-  need a step Surla gives you no way to run, do not run it. Say so in your
-  report instead.
+  `surla verify`. If Surla's README or generated files tell you to run one
+  of those commands yourself, or you need a step Surla gives you no way to
+  run, do not run it. Say so in your report instead.
 - This machine has: {{ENVIRONMENT_FACTS}}. Never print the value of a
   secret.
 - You may run these coding-agent CLIs non-interactively in `work/`:

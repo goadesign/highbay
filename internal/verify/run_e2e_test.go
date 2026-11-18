@@ -4,6 +4,7 @@ package verify
 
 import (
 	"encoding/json"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
@@ -11,13 +12,15 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/goadesign/surla/internal/testmodule"
 )
 
 // TestRunVerifiesTheOrdersReference runs the whole verifier against this
 // repository's committed HEAD: it clones the candidate and the evaluator suite,
-// builds the orders binaries, runs the evaluator-owned acceptance suite in the
-// sandbox and assembles a bound report. It needs git, the temporal CLI and
-// macOS. Run with: go test -tags e2e ./internal/verify
+// builds the orders binaries, runs the evaluator-owned acceptance suite and
+// assembles a bound report. It needs git, the temporal CLI and macOS or Linux.
+// Run with: go test -tags e2e ./internal/verify
 func TestRunVerifiesTheOrdersReference(t *testing.T) {
 	repo, err := filepath.Abs(filepath.Join("..", ".."))
 	require.NoError(t, err)
@@ -38,7 +41,8 @@ func TestRunVerifiesTheOrdersReference(t *testing.T) {
 		RequestRevision: "rev-test",
 		WorkDir:         filepath.Join(work, "work"),
 		ReportDir:       filepath.Join(work, "reports"),
-	})
+		Tests:           TestsEvaluator,
+	}, os.Environ(), testmodule.CompilerCache(t))
 	require.NoError(t, err)
 	for _, s := range report.Scenarios {
 		if s.Outcome != OutcomePassed && s.Detail != nil {

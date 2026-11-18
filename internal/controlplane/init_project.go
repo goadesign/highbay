@@ -14,7 +14,6 @@ import (
 	"regexp"
 	"strings"
 	"time"
-	"unsafe"
 
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
@@ -25,6 +24,7 @@ import (
 	gensurla "github.com/goadesign/surla/gen/surla"
 	"github.com/goadesign/surla/internal/abspath"
 	"github.com/goadesign/surla/internal/designeval"
+	"github.com/goadesign/surla/internal/renameat"
 	"github.com/goadesign/surla/internal/scaffold"
 )
 
@@ -56,7 +56,7 @@ var (
 // InitProject initializes a new Surla starter project inside a direct child
 // directory of the server's bound initial workspace root, building the starter
 // inside an operator-owned staging directory outside the workspace and
-// publishing it atomically via `RenameatxNp(..., RENAME_EXCL)`.
+// publishing it atomically via `renameat.NoReplace`.
 func (c *ControlPlane) InitProject(
 	ctx context.Context,
 	p *gensurla.InitProjectPayload,
@@ -91,14 +91,10 @@ func (c *ControlPlane) InitProject(
 			err,
 		))
 	}
-	if c.initialWorkspaceRoot == "" {
-		recordInitRefused(span, "workspace_unavailable")
-		return nil, gensurla.MakeNotImplemented(errors.New("no workspace directory is bound to this control plane"))
-	}
 	if !scaffold.ValidVersion(c.surlaVersion) {
 		recordInitRefused(span, "surla_version_unavailable")
 		return nil, gensurla.MakeNotImplemented(errors.New(
-			"this server has no exact github.com/goadesign/surla module version configured for starter generation; build or install surla from a tagged or pseudo-versioned module release, pass -surla-version to surla init on the CLI, or set controlplane.Options.SurlaVersion in an embedding host",
+			"this server has no exact github.com/goadesign/surla module version configured for starter generation; build or install surla from a tagged or pseudo-versioned module release, or pass -surla-version to surla init on the CLI",
 		))
 	}
 
@@ -157,7 +153,7 @@ func (c *ControlPlane) InitProject(
 		}
 		return nil, failInitFault(span, "check workspace uninitialized failed", err)
 	}
-	if hasRuns, err := hasVerificationRuns(c.effectiveRunsDir()); err != nil {
+	if hasRuns, err := hasVerificationRuns(c.runsDir); err != nil {
 		return nil, failInitFault(span, "check verification runs failed", err)
 	} else if hasRuns {
 		recordInitRefused(span, "already_initialized")
@@ -181,7 +177,7 @@ func (c *ControlPlane) InitProject(
 	if err := validateCardsWorkspaceSeparation(c.cards.dir, c.protectedDirs...); err != nil {
 		return nil, failInitFault(span, "validate cards workspace separation failed", err)
 	}
-	if err := validateRunsDirWorkspaceSeparation(c.effectiveRunsDir(), c.protectedDirs...); err != nil {
+	if err := validateRunsDirWorkspaceSeparation(c.runsDir, c.protectedDirs...); err != nil {
 		return nil, failInitFault(span, "validate runs workspace separation failed", err)
 	}
 
@@ -197,12 +193,15 @@ func (c *ControlPlane) InitProject(
 	if err != nil {
 		return nil, failInitFault(span, "resolve cards directory failed", err)
 	}
-	gen := c.makeInitGenerator(filepath.Join(physCards, "designeval"))
+	gen, err := c.makeInitGenerator(filepath.Join(physCards, "designeval"))
+	if err != nil {
+		return nil, failInitFault(span, "prepare starter compiler failed", err)
+	}
 	run := c.initRunner
 	if run == nil {
 		run = scaffold.RunCommand
 	}
-	builtService, stagePath, suiteCommit, err := scaffold.Prepare(
+	builtService, stagePath, initialCommit, err := scaffold.Prepare(
 		initCtx,
 		scaffold.Options{
 			Dir:          targetPath,
@@ -216,12 +215,12 @@ func (c *ControlPlane) InitProject(
 	if err != nil {
 		return nil, failInitFault(span, "prepare starter project failed", err)
 	}
-	if !commitIDPattern.MatchString(suiteCommit) {
+	if !commitIDPattern.MatchString(initialCommit) {
 		return nil, failInitFault(
 			span,
 			"verify starter commit failed",
 			errors.Join(
-				fmt.Errorf("scaffold.Prepare returned invalid commit ID %q", suiteCommit),
+				fmt.Errorf("scaffold.Prepare returned invalid commit ID %q", initialCommit),
 				os.RemoveAll(stagePath),
 			),
 		)
@@ -254,7 +253,7 @@ func (c *ControlPlane) InitProject(
 			}
 		}
 	}()
-	if gotPath, err := fdPath(stageParentFD); err != nil || gotPath != stageParentDir {
+	if gotPath, err := abspath.FDPath(stageParentFD); err != nil || gotPath != stageParentDir {
 		return nil, failInitFault(span, "verify init stage parent path failed", fmt.Errorf("init stage parent %s changed path during initialization", stageParentDir))
 	}
 
@@ -313,12 +312,11 @@ func (c *ControlPlane) InitProject(
 	}
 
 	wal := workspaceFile{
-		Dir:         targetBase,
-		SuiteCommit: suiteCommit,
-		StageDir:    stageParentDir,
-		Staging:     stageName,
-		Dev:         stageDev,
-		Ino:         stageIno,
+		Dir:      targetBase,
+		StageDir: stageParentDir,
+		Staging:  stageName,
+		Dev:      stageDev,
+		Ino:      stageIno,
 	}
 	if err := c.writeWorkspaceRecord(wal); err != nil {
 		stageClosed = true
@@ -336,7 +334,7 @@ func (c *ControlPlane) InitProject(
 		c.initStepHook("after_wal")
 	}
 
-	if gotWSPath, err := fdPath(workspaceFD); err != nil || gotWSPath != c.initialWorkspaceRoot {
+	if gotWSPath, err := abspath.FDPath(workspaceFD); err != nil || gotWSPath != c.initialWorkspaceRoot {
 		stageClosed = true
 		return nil, failInitFault(
 			span,
@@ -375,7 +373,7 @@ func (c *ControlPlane) InitProject(
 		)
 	}
 
-	if err := unix.RenameatxNp(stageParentFD, stageName, workspaceFD, targetBase, unix.RENAME_EXCL); err != nil {
+	if err := renameat.NoReplace(stageParentFD, stageName, workspaceFD, targetBase); err != nil {
 		cleanErr := errors.Join(
 			c.removeWorkspaceRecord(),
 			removeOwnedStagingDir(stageParentFD, -1, stageParentDir, stageName, stageDev, stageIno),
@@ -410,23 +408,21 @@ func (c *ControlPlane) InitProject(
 	c.activeWorkspaceDir = targetPath
 	c.boundWorkspaceDev = stageDev
 	c.boundWorkspaceIno = stageIno
-	c.boundSuiteCommit = suiteCommit
 	if syncErr != nil {
 		return nil, failInitFault(
 			span,
 			"sync published project directory failed",
 			fmt.Errorf(
-				"project %s was published and bound in this server, and workspace.json retains its recovery record, but directory sync failed so restart surla serve to verify crash durability: %w",
+				"project %s was published and bound in this server, and workspace.json retains its recovery record, but directory sync failed so stop and start Surla to verify crash durability: %w",
 				targetPath,
 				syncErr,
 			),
 		)
 	}
 	if err := c.writeWorkspaceRecord(workspaceFile{
-		Dir:         targetBase,
-		SuiteCommit: suiteCommit,
-		Dev:         stageDev,
-		Ino:         stageIno,
+		Dir: targetBase,
+		Dev: stageDev,
+		Ino: stageIno,
 	}); err != nil {
 		recordWorkspaceCleanupFailure("surla.controlplane.finalize_init_project", err)
 	}
@@ -435,14 +431,14 @@ func (c *ControlPlane) InitProject(
 		"project_initialized",
 		trace.WithAttributes(
 			attribute.String("surla.init.service_name", builtService),
-			attribute.String("surla.init.suite_commit", suiteCommit),
+			attribute.String("surla.init.commit", initialCommit),
 		),
 	)
 	return &gensurla.InitProjectResult{
 		Dir:         targetPath,
 		ModulePath:  modulePath,
 		ServiceName: builtService,
-		Commit:      suiteCommit,
+		Commit:      initialCommit,
 	}, nil
 }
 
@@ -453,11 +449,14 @@ func (e foreignStagingError) Error() string {
 
 // makeInitGenerator returns a fresh scaffold.Generator for one `InitProject`
 // call without closing or sharing `c.evaluator`.
-func (c *ControlPlane) makeInitGenerator(defaultTempParent string) scaffold.Generator {
+func (c *ControlPlane) makeInitGenerator(defaultTempParent string) (scaffold.Generator, error) {
 	if c.newGenerator != nil {
-		return c.newGenerator()
+		return c.newGenerator(), nil
 	}
-	return designeval.NewEvaluatorInDir(defaultTempParent)
+	if c.buildCacheDir != "" {
+		return designeval.NewEvaluatorWithCache(defaultTempParent, c.buildCacheDir)
+	}
+	return designeval.NewEvaluatorInDir(defaultTempParent), nil
 }
 
 // validateInitDirName checks that name is a single direct child directory name
@@ -493,7 +492,7 @@ func openVerifiedDirFD(dir string, expectedDev, expectedIno uint64) (int, error)
 			unix.Close(fd),
 		)
 	}
-	gotPath, pathErr := fdPath(fd)
+	gotPath, pathErr := abspath.FDPath(fd)
 	if pathErr != nil || gotPath != dir || uint64(st.Dev) != expectedDev || st.Ino != expectedIno {
 		return -1, errors.Join(
 			fmt.Errorf("bound workspace directory %s was replaced or removed after startup", dir),
@@ -673,7 +672,7 @@ func validateInitStageParentDir(dir string, wsDev uint64, workspaceRoot string) 
 
 // verifyPublishedTarget performs a non-destructive open-descriptor check that
 // `(workspaceFD, targetBase)` still has `(expectedDev, expectedIno)` immediately
-// after `RenameatxNp` succeeds. It never moves or deletes any directory inside
+// after `renameat.NoReplace` succeeds. It never moves or deletes any directory inside
 // the workspace.
 func verifyPublishedTarget(workspaceFD int, targetBase string, expectedDev, expectedIno uint64) error {
 	pubFD, err := unix.Openat(workspaceFD, targetBase, unix.O_RDONLY|unix.O_DIRECTORY|unix.O_NOFOLLOW|unix.O_CLOEXEC, 0)
@@ -696,7 +695,7 @@ func verifyPublishedTarget(workspaceFD int, targetBase string, expectedDev, expe
 // exclusively through its open directory descriptor after verifying that its
 // `(dev, ino)` matches `(expectedDev, expectedIno)` and its kernel path matches
 // `filepath.Join(stageParentDir, stageName)`. It is used only before
-// `RenameatxNp` succeeds or during startup recovery cleanup.
+// `renameat.NoReplace` succeeds or during startup recovery cleanup.
 func removeOwnedStagingDir(
 	stageParentFD, stageFD int,
 	stageParentDir, stageName string,
@@ -760,7 +759,7 @@ func removeOwnedStagingDir(
 		}
 	}
 	expectedPath := filepath.Join(stageParentDir, stageName)
-	if gotPath, err := fdPath(ownFD); err != nil || gotPath != expectedPath {
+	if gotPath, err := abspath.FDPath(ownFD); err != nil || gotPath != expectedPath {
 		return foreignStagingError{
 			msg: fmt.Sprintf("staging entry %q is no longer at %s", stageName, expectedPath),
 		}
@@ -876,15 +875,6 @@ func syncDirTreeFD(dirFD int, expectedDev uint64) error {
 		}
 	}
 	return unix.Fsync(dirFD)
-}
-
-// fdPath returns the kernel path of open descriptor fd via F_GETPATH on Darwin.
-func fdPath(fd int) (string, error) {
-	buf := make([]byte, unix.PathMax)
-	if _, err := unix.FcntlInt(uintptr(fd), unix.F_GETPATH, int(uintptr(unsafe.Pointer(&buf[0])))); err != nil {
-		return "", err
-	}
-	return unix.ByteSliceToString(buf), nil
 }
 
 // recordInitRefused records a bounded refusal event on span without marking the

@@ -3,19 +3,25 @@
 package controlplane
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
+	"io/fs"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	genhttpclient "github.com/goadesign/surla/gen/http/surla/client"
+	gensurlahttp "github.com/goadesign/surla/gen/http/surla/server"
 	genmcpclient "github.com/goadesign/surla/gen/jsonrpc/mcp_surla/client"
 	genmcpsurla "github.com/goadesign/surla/gen/mcp_surla"
 	gensurla "github.com/goadesign/surla/gen/surla"
@@ -30,6 +36,7 @@ import (
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 	"go.opentelemetry.io/otel/trace"
+	"goa.design/goa/v3/codegen"
 	goahttp "goa.design/goa/v3/http"
 )
 
@@ -48,22 +55,26 @@ type blockedCheckExport struct {
 // TestCloseKeepsTracingUntilCheckRequestEnds proves that Close waits for a
 // check's final error span, even when setup fails before opening an engine.
 func TestCloseKeepsTracingUntilCheckRequestEnds(t *testing.T) {
-	deadline, cancel := context.WithTimeout(t.Context(), 5*time.Second)
-	defer cancel()
 	cardsDir := filepath.Join(t.TempDir(), "cards")
 	release := make(chan struct{})
 	exported := &blockedCheckExport{
 		InMemoryExporter: tracetest.NewInMemoryExporter(),
 		started:          make(chan struct{}),
 		release:          release,
-		deadline:         deadline,
 	}
 	tp := sdktrace.NewTracerProvider(sdktrace.WithSyncer(exported))
 	cp, err := New(Options{
-		CardsDir: cardsDir, Checker: candidate.NewContainerRunner(), CheckHelper: testCheckHelper(t), CheckTimeout: time.Minute,
+		Team:     testTeamBinding(),
+		CardsDir: cardsDir, WorkspaceDir: newShopModule(t, nil),
+		Checker: candidate.NewContainerRunner(), CheckHelper: testCheckHelper(t), CheckTimeout: time.Minute,
 		TracerProvider: tp,
 	})
 	require.NoError(t, err)
+	readCheckBuilderFixture(t, cp)
+	cp.checkHelper = func() *exec.Cmd { return exec.Command(filepath.Join(cardsDir, "missing-helper")) }
+	deadline, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+	defer cancel()
+	exported.deadline = deadline
 	previous := otel.GetTracerProvider()
 	otel.SetTracerProvider(tp)
 	t.Cleanup(func() {
@@ -73,7 +84,7 @@ func TestCloseKeepsTracingUntilCheckRequestEnds(t *testing.T) {
 	})
 	requestDone := make(chan error, 1)
 	go func() {
-		_, err := cp.CheckProject(WithPrincipal(deadline, Principal{ID: "alice@example.com"}))
+		_, err := cp.CheckProject(WithPrincipal(deadline, Principal{ID: "alice@example.com", CallerID: "test-user", Kind: CallerUser}))
 		requestDone <- err
 	}()
 	select {
@@ -96,7 +107,7 @@ func TestCloseKeepsTracingUntilCheckRequestEnds(t *testing.T) {
 	close(release)
 	select {
 	case err := <-requestDone:
-		assertServiceError(t, err, "not_implemented")
+		assert.ErrorContains(t, err, "start the check helper")
 	case <-deadline.Done():
 		t.Fatal("check did not finish")
 	}
@@ -106,7 +117,12 @@ func TestCloseKeepsTracingUntilCheckRequestEnds(t *testing.T) {
 	case <-deadline.Done():
 		t.Fatal("Close did not finish")
 	}
-	ended := exported.GetSpans()
+	var ended []tracetest.SpanStub
+	for _, span := range exported.GetSpans() {
+		if span.Name == "surla.controlplane.check_project" || span.Name == "surla.controlplane.recover_check_operations" {
+			ended = append(ended, span)
+		}
+	}
 	require.Len(t, ended, 3)
 	assert.Equal(t, "surla.controlplane.recover_check_operations", ended[0].Name)
 	assert.Equal(t, "surla.controlplane.check_project", ended[1].Name)
@@ -147,7 +163,7 @@ func TestTraceHistoryHTTPAndMCP(t *testing.T) {
 	)
 	t.Cleanup(func() { assert.NoError(t, tp.Shutdown(context.Background())) })
 	cp := newControlPlane(t, Options{TracerProvider: tp})
-	alice := WithPrincipal(t.Context(), Principal{ID: "alice@example.com"})
+	alice := WithPrincipal(t.Context(), Principal{ID: "alice@example.com", CallerID: "test-user", Kind: CallerUser})
 	parentCtx, parent := cp.tracer("surla/controlplane").Start(alice, "operation-parent")
 	_, failed := cp.tracer("surla/controlplane").Start(parentCtx, "operation-failed")
 	failed.SetAttributes(
@@ -159,14 +175,14 @@ func TestTraceHistoryHTTPAndMCP(t *testing.T) {
 	failed.SetStatus(codes.Error, "private storage content")
 	failed.End()
 	parent.End()
-	bob := WithPrincipal(t.Context(), Principal{ID: "bob@example.com"})
+	bob := WithPrincipal(t.Context(), Principal{ID: "bob@example.com", CallerID: "bob@example.com", Kind: CallerUser})
 	_, other := cp.tracer("surla/controlplane").Start(bob, "bob-operation")
 	other.SetStatus(codes.Error, "bob-private-error")
 	other.End()
 	_, unauthenticated := cp.tracer("surla/controlplane").Start(t.Context(), "no-authenticated-owner")
 	unauthenticated.End()
 
-	srv := httptest.NewServer(NewHTTPHandler(cp, NewTokenAuthenticator(map[string]Principal{
+	srv := httptest.NewServer(NewHTTPHandler(cp, workflowAuthenticator(map[string]Principal{
 		"generation-token": {ID: "alice@example.com"},
 		"bob-token":        {ID: "bob@example.com"},
 	})))
@@ -185,7 +201,7 @@ func TestTraceHistoryHTTPAndMCP(t *testing.T) {
 	assert.Equal(t, parent.SpanContext().TraceID().String(), view.TraceID)
 	assert.Equal(t, parent.SpanContext().SpanID().String(), view.ParentSpanID)
 	assert.Equal(t, "error", view.Status)
-	assert.Equal(t, map[string]string{"surla.change_id": "change-1"}, view.Attributes)
+	assert.Equal(t, map[string]string{"surla.change_id": "change-1", "surla.caller_id": "test-user", "surla.caller_kind": "user"}, view.Attributes)
 	assert.Equal(t, cp1SafeFaultSummary(false, cp1FaultStorageSave), view.Summary)
 	raw, err := json.Marshal(page)
 	require.NoError(t, err)
@@ -248,9 +264,9 @@ func TestTraceHistoryHTTPAndMCP(t *testing.T) {
 	}
 }
 
-// TestTraceToolEncodesEmptyDataWithoutUI verifies the generated data-tool
+// TestTraceToolEncodesEmptyData verifies the generated list_traces tool
 // contract without relying on HTTP's normalization of nil collections.
-func TestTraceToolEncodesEmptyDataWithoutUI(t *testing.T) {
+func TestTraceToolEncodesEmptyData(t *testing.T) {
 	t.Parallel()
 	tp := sdktrace.NewTracerProvider()
 	t.Cleanup(func() { assert.NoError(t, tp.Shutdown(context.Background())) })
@@ -262,11 +278,10 @@ func TestTraceToolEncodesEmptyDataWithoutUI(t *testing.T) {
 	for _, tool := range tools.Tools {
 		if tool.Name == "list_traces" {
 			found = true
-			assert.NotContains(t, string(tool.Meta), "resourceUri")
 		}
 	}
-	require.True(t, found, "the data tool must be discoverable without opening a viewer")
-	ctx := WithPrincipal(t.Context(), Principal{ID: "alice@example.com"})
+	require.True(t, found, "MCP ToolsList must include list_traces")
+	ctx := WithPrincipal(t.Context(), Principal{ID: "alice@example.com", CallerID: "test-user", Kind: CallerUser})
 	result, err := adapter.ToolsCall(ctx, &genmcpsurla.ToolsCallPayload{Name: "list_traces", Arguments: json.RawMessage(`{}`)})
 	require.NoError(t, err)
 	complete, ok := result.Outcome.AsComplete()
@@ -283,7 +298,7 @@ func TestTraceToolEncodesEmptyDataWithoutUI(t *testing.T) {
 func TestTraceToolExplainsMissingRecording(t *testing.T) {
 	t.Parallel()
 	cp := newControlPlane(t, Options{})
-	ctx := WithPrincipal(t.Context(), Principal{ID: "alice@example.com"})
+	ctx := WithPrincipal(t.Context(), Principal{ID: "alice@example.com", CallerID: "test-user", Kind: CallerUser})
 	_, err := cp.ListTraces(ctx, &gensurla.ListTracesPayload{Status: "all", Limit: 20})
 	assertServiceError(t, err, "not_implemented")
 	adapter := genmcpsurla.NewMCPAdapter(gensurla.NewEndpoints(cp), nil)
@@ -295,15 +310,14 @@ func TestTraceToolExplainsMissingRecording(t *testing.T) {
 	assert.True(t, *complete.IsError)
 	require.NotEmpty(t, complete.Content)
 	require.NotNil(t, complete.Content[0].Text)
-	assert.Contains(t, *complete.Content[0].Text, "Options.TracerProvider")
-	assert.Contains(t, *complete.Content[0].Text, "surla serve")
-	srv := httptest.NewServer(NewHTTPHandler(cp, NewTokenAuthenticator(map[string]Principal{
+	assert.Contains(t, *complete.Content[0].Text, "start the project with surla")
+	srv := httptest.NewServer(NewHTTPHandler(cp, workflowAuthenticator(map[string]Principal{
 		"generation-token": {ID: "alice@example.com"},
 	})))
 	t.Cleanup(srv.Close)
 	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, srv.URL+"/traces", nil)
 	require.NoError(t, err)
-	req.Header.Set("Authorization", "Bearer generation-token")
+	req.Header.Set("Authorization", "Bearer generation-token-builder")
 	response, err := srv.Client().Do(req)
 	require.NoError(t, err)
 	t.Cleanup(func() { assert.NoError(t, response.Body.Close()) })
@@ -316,11 +330,11 @@ func TestTraceToolReadsSavedHistoryAfterRestart(t *testing.T) {
 	t.Parallel()
 	tp := sdktrace.NewTracerProvider()
 	t.Cleanup(func() { assert.NoError(t, tp.Shutdown(context.Background())) })
-	opts := Options{CardsDir: t.TempDir(), TracerProvider: tp}
+	opts := Options{CardsDir: t.TempDir(), WorkspaceDir: realTempDir(t), Team: testTeamBinding(), TracerProvider: tp}
 	first, err := New(opts)
 	require.NoError(t, err)
 	t.Cleanup(func() { assert.NoError(t, first.Close()) })
-	ctx := WithPrincipal(t.Context(), Principal{ID: "alice@example.com"})
+	ctx := WithPrincipal(t.Context(), Principal{ID: "alice@example.com", CallerID: "test-user", Kind: CallerUser})
 	_, span := first.tracer("surla/controlplane").Start(ctx, "saved-before-restart")
 	span.End()
 	require.NoError(t, first.Close())
@@ -354,7 +368,7 @@ func TestCP1FailuresProduceSafeSavedRecovery(t *testing.T) {
 		assert.NoError(t, cp.Close())
 		assert.NoError(t, tp.Shutdown(context.Background()))
 	})
-	ctx := WithPrincipal(t.Context(), Principal{ID: "alice@example.com"})
+	ctx := WithPrincipal(t.Context(), Principal{ID: "alice@example.com", CallerID: "test-user", Kind: CallerUser})
 	seed, err := cp.ProposeChange(ctx, &gensurla.ProposeChangePayload{
 		ChangeID: "existing", Prompt: "private-feature-request", Analysis: refundAnalysis("private-analysis-summary"),
 	})
@@ -401,7 +415,7 @@ func TestCP1FailuresProduceSafeSavedRecovery(t *testing.T) {
 		seen[key] = span.Status
 		switch key {
 		case "surla.controlplane.propose_change existing":
-			assert.Equal(t, "Proposed Change Card (confirmed).", span.Summary)
+			assert.Equal(t, "Proposed Change Card (needs_confirmation).", span.Summary)
 		case "surla.controlplane.revise_change existing":
 			assert.NotEqual(t, "error", span.Status, "a broken revision rule is the caller's input, not a server failure")
 			assert.Contains(t, span.Summary, "retry revise_change")
@@ -433,7 +447,7 @@ func TestSharedProviderKeepsControlPlaneHistoriesSeparate(t *testing.T) {
 	t.Cleanup(func() { assert.NoError(t, tp.Shutdown(context.Background())) })
 	a := newControlPlane(t, Options{TracerProvider: tp})
 	b := newControlPlane(t, Options{TracerProvider: tp})
-	ctx := WithPrincipal(t.Context(), Principal{ID: "alice@example.com"})
+	ctx := WithPrincipal(t.Context(), Principal{ID: "alice@example.com", CallerID: "test-user", Kind: CallerUser})
 	_, host := tp.Tracer("surla/controlplane").Start(ctx, "private-host-operation")
 	host.SetAttributes(attribute.String("host.evidence", "original-host-evidence"))
 	host.End()
@@ -475,7 +489,7 @@ func TestDiagnosticTracingPreservesSDKParentAccounting(t *testing.T) {
 	tp := sdktrace.NewTracerProvider(sdktrace.WithSyncer(full))
 	t.Cleanup(func() { assert.NoError(t, tp.Shutdown(context.Background())) })
 	cp := newControlPlane(t, Options{TracerProvider: tp})
-	ctx := WithPrincipal(t.Context(), Principal{ID: "alice@example.com"})
+	ctx := WithPrincipal(t.Context(), Principal{ID: "alice@example.com", CallerID: "test-user", Kind: CallerUser})
 	ctx, parent := cp.tracer("surla/controlplane").Start(ctx, "parent")
 	_, child := tp.Tracer("host-child").Start(ctx, "child")
 	child.End()
@@ -500,7 +514,7 @@ func TestDiagnosticTracingPreservesSDKPanicEvidence(t *testing.T) {
 			tp := sdktrace.NewTracerProvider(sdktrace.WithSyncer(full))
 			t.Cleanup(func() { assert.NoError(t, tp.Shutdown(context.Background())) })
 			cp := newControlPlane(t, Options{TracerProvider: tp})
-			ctx := WithPrincipal(t.Context(), Principal{ID: "alice@example.com"})
+			ctx := WithPrincipal(t.Context(), Principal{ID: "alice@example.com", CallerID: "test-user", Kind: CallerUser})
 			plain := runDiagnosticPanic(ctx, tp.Tracer("surla/controlplane"), direct)
 			owned := runDiagnosticPanic(ctx, cp.tracer("surla/controlplane"), direct)
 			assert.Equal(t, "private-panic-evidence", plain)
@@ -531,4 +545,324 @@ func runDiagnosticPanic(ctx context.Context, tracer trace.Tracer, direct bool) (
 		defer func() { span.End() }()
 	}
 	panic("private-panic-evidence")
+}
+
+// TestWaitingReadBoundaryExportsWithoutRecording excludes periodic browser waits from private operation history.
+func TestWaitingReadBoundaryExportsWithoutRecording(t *testing.T) {
+	exported := tracetest.NewInMemoryExporter()
+	provider := sdktrace.NewTracerProvider(sdktrace.WithSyncer(exported))
+	t.Cleanup(func() { assert.NoError(t, provider.Shutdown(context.Background())) })
+	cp := newControlPlane(t, Options{TracerProvider: provider})
+	caller := WithPrincipal(t.Context(), Principal{ID: "owner", CallerID: "session", Kind: CallerUser})
+	_, span := cp.tracer("surla/requests").Start(caller, "surla.request.wait_for_changes")
+	span.End()
+	assert.Len(t, exported.GetSpans(), 1)
+	history, err := cp.traces.List("owner", "all", 20, nil)
+	require.NoError(t, err)
+	assert.Empty(t, history.Spans)
+}
+
+// TestHistoryLeavesOutOnlyTheUsersSuccessfulReads sends one call through the
+// real HTTP handler or MCP server and compares the records the history gains.
+// A read the user's session sends with GET adds none when it succeeds,
+// including reading the history itself, or is refused (not found, forbidden),
+// an expected answer without error status. A read by the user that faults or
+// panics, a change by the user, and a read by an agent over HTTP or MCP are
+// recorded.
+// The waiting read stays out even when it ends with an error. Every call
+// keeps its exported spans and their status.
+func TestHistoryLeavesOutOnlyTheUsersSuccessfulReads(t *testing.T) {
+	const (
+		owner = "alice@example.com"
+		// user, guide and builder are workflowAuthenticator's credentials;
+		// generationDoer sends builder.
+		user  = "generation-token"
+		guide = "generation-token-guide"
+		// historyPanic is the value a panicking read panics with.
+		historyPanic = "history-read-panic"
+	)
+	// get returns a call sending a GET for path with token.
+	get := func(path, token string) func(*testing.T, *ControlPlane, *httptest.Server, *gensurla.ChangeCardResult) int {
+		return func(t *testing.T, _ *ControlPlane, srv *httptest.Server, _ *gensurla.ChangeCardResult) int {
+			return sendHistoryRequest(t, t.Context(), srv, http.MethodGet, path, token, nil)
+		}
+	}
+	for _, test := range []struct {
+		name string
+		// panics makes the promotion target lookup every list_changes runs
+		// panic while the call is sent.
+		panics bool
+		// call sends the request and returns its HTTP status, or 0 when no
+		// answer arrived.
+		call       func(*testing.T, *ControlPlane, *httptest.Server, *gensurla.ChangeCardResult) int
+		wantStatus int
+		// saved lists the records the call adds as "name caller_kind status".
+		saved []string
+		// exported gives the status of each span the exporter must hold.
+		exported map[string]codes.Code
+	}{
+		{
+			name: "user reads a change", call: get("/changes/chg-history", user), wantStatus: http.StatusOK,
+			saved:    []string{},
+			exported: map[string]codes.Code{"surla.request.get_change": codes.Unset},
+		},
+		{
+			name: "user lists changes", call: get("/changes", user), wantStatus: http.StatusOK,
+			saved:    []string{},
+			exported: map[string]codes.Code{"surla.request.list_changes": codes.Unset, "surla.controlplane.list_changes": codes.Unset},
+		},
+		{
+			name: "user reads the history", call: get("/traces?status=all&limit=100", user), wantStatus: http.StatusOK,
+			saved:    []string{},
+			exported: map[string]codes.Code{"surla.request.list_traces": codes.Unset, "surla.controlplane.list_traces": codes.Unset},
+		},
+		{
+			name: "user read is refused as not found", call: get("/changes/chg-missing", user), wantStatus: http.StatusNotFound,
+			saved:    []string{},
+			exported: map[string]codes.Code{"surla.request.get_change": codes.Unset},
+		},
+		{
+			name: "user read is refused as forbidden", call: get("/assignments/builder", user), wantStatus: http.StatusForbidden,
+			saved:    []string{},
+			exported: map[string]codes.Code{"surla.request.list_builder_assignments": codes.Unset},
+		},
+		{
+			name: "user read faults",
+			call: func(t *testing.T, cp *ControlPlane, srv *httptest.Server, _ *gensurla.ChangeCardResult) int {
+				require.NoError(t, os.WriteFile(cp.cards.path("chg-broken"), []byte("{"), 0o600))
+				return sendHistoryRequest(t, t.Context(), srv, http.MethodGet, "/changes/chg-broken", user, nil)
+			},
+			wantStatus: http.StatusInternalServerError,
+			saved:      []string{"surla.request.get_change user error"},
+			exported:   map[string]codes.Code{"surla.request.get_change": codes.Error},
+		},
+		{
+			// The panic reaches net/http, which drops the connection, so no
+			// answer arrives; the SDK records it as an exception event only.
+			name: "user read panics", panics: true, call: get("/changes", user), wantStatus: 0,
+			saved:    []string{"surla.controlplane.list_changes user unset", "surla.request.list_changes user unset"},
+			exported: map[string]codes.Code{"surla.request.list_changes": codes.Unset, "surla.controlplane.list_changes": codes.Unset},
+		},
+		{
+			name: "user confirms a change",
+			call: func(t *testing.T, _ *ControlPlane, srv *httptest.Server, card *gensurla.ChangeCardResult) int {
+				raw, err := gensurla.EncodeConfirmIntentPayload(&gensurla.ConfirmIntentPayload{
+					ChangeID: card.ChangeID, RequestRevision: card.RequestRevision, Answers: map[string]string{}, Examples: card.Examples,
+				})
+				require.NoError(t, err)
+				return sendHistoryRequest(t, t.Context(), srv, http.MethodPost, "/changes/confirm", user, raw)
+			},
+			wantStatus: http.StatusOK,
+			saved:      []string{"surla.request.confirm_intent user unset"},
+			exported:   map[string]codes.Code{"surla.request.confirm_intent": codes.Unset},
+		},
+		{
+			name: "guide reads a change over HTTP", call: get("/changes/chg-history", guide), wantStatus: http.StatusOK,
+			saved:    []string{"surla.request.get_change guide unset"},
+			exported: map[string]codes.Code{"surla.request.get_change": codes.Unset},
+		},
+		{
+			name: "builder reads a change over MCP",
+			call: func(t *testing.T, _ *ControlPlane, srv *httptest.Server, card *gensurla.ChangeCardResult) int {
+				origin, err := url.Parse(srv.URL)
+				require.NoError(t, err)
+				transport := genmcpclient.NewClient(origin.Scheme, origin.Host, generationDoer{client: srv.Client()},
+					goahttp.RequestEncoder, goahttp.ResponseDecoder, false)
+				mcp := &genmcpsurla.Client{ToolsCallEndpoint: transport.ToolsCall()}
+				read := callMCPTool(t, mcp, "get_change", `{"change_id":"`+card.ChangeID+`"}`, gensurlatools.UnmarshalGetChangeResult)
+				assert.Equal(t, card.ChangeID, read.ChangeID)
+				return http.StatusOK
+			},
+			wantStatus: http.StatusOK,
+			saved:      []string{"surla.request.get_change builder unset"},
+			exported:   map[string]codes.Code{"surla.request.get_change": codes.Unset},
+		},
+		{
+			name: "user's waiting read ends with an error",
+			call: func(t *testing.T, cp *ControlPlane, srv *httptest.Server, _ *gensurla.ChangeCardResult) int {
+				// The current version keeps the read waiting; reading it starts no span.
+				list, err := cp.changeList(t.Context(), trace.SpanFromContext(t.Context()), owner)
+				require.NoError(t, err)
+				// The caller leaves while the server waits, as a closing page does.
+				ctx, cancel := context.WithTimeout(t.Context(), 200*time.Millisecond)
+				defer cancel()
+				return sendHistoryRequest(t, ctx, srv, http.MethodGet, "/change-updates?since="+list.Version, user, nil)
+			},
+			wantStatus: 0,
+			saved:      []string{},
+			exported:   map[string]codes.Code{"surla.request.wait_for_changes": codes.Error, waitForChangesSpan: codes.Unset},
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			exporter := tracetest.NewInMemoryExporter()
+			provider := sdktrace.NewTracerProvider(sdktrace.WithSyncer(exporter))
+			t.Cleanup(func() { assert.NoError(t, provider.Shutdown(context.Background())) })
+			// Unarmed, the lookup reports no promotion target, as when none is set.
+			var panicking atomic.Bool
+			cp := newControlPlane(t, Options{
+				TracerProvider: provider,
+				ResolvePromotionTarget: func(context.Context, string) (PromotionTarget, error) {
+					if panicking.Load() {
+						panic(historyPanic)
+					}
+					return nil, nil
+				},
+			})
+			card := mustPropose(t, cp, WithPrincipal(t.Context(), Principal{ID: owner, CallerID: "guide", Kind: CallerGuide}),
+				"chg-history", "Route refunds to a manager.", refundAnalysis("Route refunds to a manager."))
+			srv := httptest.NewServer(NewHTTPHandler(cp, workflowAuthenticator(map[string]Principal{user: {ID: owner}})))
+			t.Cleanup(srv.Close)
+			saved := func() map[string]string {
+				page, err := cp.traces.List(owner, "all", 100, nil)
+				require.NoError(t, err)
+				records := map[string]string{}
+				for _, span := range page.Spans {
+					records[span.SpanID] = span.Name + " " + span.Attributes["surla.caller_kind"] + " " + span.Status
+				}
+				return records
+			}
+			before := saved()
+
+			panicking.Store(test.panics)
+			assert.Equal(t, test.wantStatus, test.call(t, cp, srv, card))
+			// Close returns once every request's handler, and so every span, has ended.
+			srv.Close()
+
+			added := []string{}
+			for id, record := range saved() {
+				if _, ok := before[id]; !ok {
+					added = append(added, record)
+				}
+			}
+			assert.ElementsMatch(t, test.saved, added)
+			exported := map[string]codes.Code{}
+			for _, span := range exporter.GetSpans() {
+				if _, ok := test.exported[span.Name]; ok {
+					exported[span.Name] = span.Status.Code
+					if test.panics {
+						require.NotEmpty(t, span.Events, "%s does not carry the panic", span.Name)
+						assert.Equal(t, "exception", span.Events[0].Name)
+						assert.Contains(t, span.Events[0].Attributes, attribute.String("exception.message", historyPanic))
+					}
+				}
+			}
+			assert.Equal(t, test.exported, exported)
+		})
+	}
+}
+
+// TestMCPTransportFailureAppearsInHistory verifies that actual transport
+// failures are saved for the authenticated caller, including user sessions.
+func TestMCPTransportFailureAppearsInHistory(t *testing.T) {
+	for _, kind := range []CallerKind{CallerUser, CallerBuilder} {
+		t.Run(string(kind), func(t *testing.T) {
+			provider := sdktrace.NewTracerProvider()
+			t.Cleanup(func() { assert.NoError(t, provider.Shutdown(context.Background())) })
+			cp := newControlPlane(t, Options{TracerProvider: provider})
+			principal := Principal{ID: "owner", CallerID: "session", Kind: kind}
+			handler := NewHTTPHandler(cp, func(*http.Request) (Principal, error) { return principal, nil })
+			request := mcpTransportRequest(t, t.Context(), "/mcp", "")
+			request.Body = failingBody{readErr: errors.New("private-history-sentinel")}
+			handler.ServeHTTP(httptest.NewRecorder(), request)
+
+			page, err := cp.ListTraces(WithPrincipal(t.Context(), principal), &gensurla.ListTracesPayload{Status: "all", Limit: 20})
+			require.NoError(t, err)
+			require.Len(t, page.Spans, 1)
+			span := page.Spans[0]
+			assert.Equal(t, "surla.mcp.transport_error", span.Name)
+			assert.Equal(t, "error", span.Status)
+			assert.Equal(t, map[string]string{"surla.caller_id": "session", "surla.caller_kind": string(kind)}, span.Attributes)
+			assert.NotContains(t, span.Summary, "private-history-sentinel")
+		})
+	}
+}
+
+// TestUserGETRoutesOnlyRead checks the fact the history's rule for the user's
+// reads rests on, instead of trusting it: every GET route of the generated
+// HTTP server that the operation table allows to the user's session leaves the
+// project's saved files unchanged. The fixture holds a confirmed change whose
+// build has unread assignments, the state a read that records it was read
+// would save. Every request carries since, the only required query parameter
+// of a GET route the user may call; a route that cannot be decoded fails as
+// not run.
+func TestUserGETRoutesOnlyRead(t *testing.T) {
+	workspace := t.TempDir()
+	cp := newBuildControlPlane(t, Options{WorkspaceDir: workspace})
+	card := buildableChange(t, cp, "chg")
+	srv := httptest.NewServer(NewHTTPHandler(cp, fixtureCredentials(map[string]Principal{
+		"user": {ID: "alice@example.com", CallerID: "user", Kind: CallerUser},
+	})))
+	t.Cleanup(srv.Close)
+	status, body := httpCall(t, srv.URL, "user", http.MethodPost, "/changes/chg/build", `{"request_revision":"`+card.RequestRevision+`"}`)
+	require.Equal(t, http.StatusOK, status, body)
+	build := mustStartedBuild(t, cp, asCaller("alice@example.com", CallerUser), "chg")
+	require.False(t, build.Builder.Read || build.TestWriter.Read, "the fixture's assignments start unread")
+
+	// Mount points name the Go method; the operation table uses the design's name.
+	operations := map[string]string{}
+	for _, name := range gensurla.MethodNames {
+		operations[codegen.Goify(name, true)] = name
+	}
+	routes := gensurlahttp.New(gensurla.NewEndpoints(cp), goahttp.NewMuxer(), StrictJSONRequestDecoder,
+		goahttp.ResponseEncoder, nil, nil).Mounts
+	param := regexp.MustCompile(`\{[^}]+\}`)
+	var called []string
+	for _, route := range routes {
+		operation, ok := operations[route.Method]
+		require.True(t, ok, "mount point %s names no design method", route.Method)
+		if route.Verb != http.MethodGet || !OperationAllowed(CallerUser, operation) {
+			continue
+		}
+		called = append(called, operation)
+		before := savedProjectFiles(t, cp.cards.dir, workspace)
+		status, body := httpCall(t, srv.URL, "user", http.MethodGet, param.ReplaceAllString(route.Pattern, "chg")+"?since=unread", "")
+		assert.NotEqual(t, http.StatusBadRequest, status, "%s did not run: %s", operation, body)
+		assert.NotEqual(t, http.StatusForbidden, status, "%s refused the user: %s", operation, body)
+		assert.Equal(t, before, savedProjectFiles(t, cp.cards.dir, workspace), "the user's %s changed a saved file", operation)
+	}
+	assert.NotEmpty(t, called)
+	t.Logf("GET routes the user's session may call: %v", called)
+}
+
+// sendHistoryRequest sends one request with token to srv and returns its
+// status, or 0 when no answer arrived: ctx ended first, or the server dropped
+// the connection after a panic.
+func sendHistoryRequest(
+	t *testing.T,
+	ctx context.Context,
+	srv *httptest.Server,
+	method, path, token string,
+	body []byte,
+) int {
+	t.Helper()
+	request, err := http.NewRequestWithContext(ctx, method, srv.URL+path, bytes.NewReader(body))
+	require.NoError(t, err)
+	request.Header.Set("Authorization", "Bearer "+token)
+	request.Header.Set("Content-Type", "application/json")
+	response, err := srv.Client().Do(request)
+	if err != nil {
+		t.Logf("%s %s got no answer: %v", method, path, err)
+		return 0
+	}
+	assert.NoError(t, response.Body.Close())
+	return response.StatusCode
+}
+
+// savedProjectFiles returns the content of every regular file under dirs by
+// path, except the diagnostics history, whose records the history tests own.
+func savedProjectFiles(t *testing.T, dirs ...string) map[string]string {
+	t.Helper()
+	files := map[string]string{}
+	for _, dir := range dirs {
+		err := filepath.WalkDir(dir, func(path string, entry fs.DirEntry, err error) error {
+			if err != nil || !entry.Type().IsRegular() || entry.Name() == "traces.jsonl" {
+				return err
+			}
+			raw, err := os.ReadFile(path)
+			files[path] = string(raw)
+			return err
+		})
+		require.NoError(t, err)
+	}
+	return files
 }

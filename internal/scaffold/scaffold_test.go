@@ -2,9 +2,9 @@ package scaffold
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"go/format"
+	"io/fs"
 	"maps"
 	"os"
 	"path/filepath"
@@ -18,17 +18,21 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/goadesign/surla/internal/designeval"
+	"github.com/goadesign/surla/internal/gitenv"
+	"github.com/goadesign/surla/internal/testmodule"
 )
 
 // published is a Surla version that exists on the module proxy.
-const published = "v0.0.0-20261110163737-d9beac313142"
+const published = testmodule.PublishedSurlaVersion
 
 func TestValidVersionAcceptsOnlyExactVersions(t *testing.T) {
 	for v, want := range map[string]bool{
 		"v1.2.3":     true,
 		"v1.2.3-pre": true,
 		published:    true,
-		"v0.0.0-20261110163737-d9beac313142+dirty": false,
+		"v0.0.0-20261115014514-02c792da3ded+dirty": false,
 		"latest":  false,
 		"main":    false,
 		"8ec6e09": false,
@@ -115,11 +119,7 @@ func TestLayoutForModulePreservesStarterNames(t *testing.T) {
 			t.Parallel()
 			got, err := LayoutForModule("example.com/" + name)
 			require.NoError(t, err)
-			assert.Equal(t, Layout{
-				Service:          name,
-				CandidatePackage: "./cmd/" + name,
-				SuiteCommand:     "./cmd/" + name + "-evals",
-			}, got)
+			assert.Equal(t, Layout{Service: name, CandidatePackage: "./cmd/" + name}, got)
 		})
 	}
 	for _, modulePath := range []string{
@@ -291,9 +291,12 @@ func TestInitWritesTheProjectWithTheServiceName(t *testing.T) {
 		"go mod tidy", "go get github.com/goadesign/surla@" + published, "go mod tidy", "go vet ./...", "go test ./...",
 	}, ran, "no command generates code on the host")
 	require.Len(t, gen.inputs, 2, "one generation per module")
-	assert.Equal(t, []string{"design/design.go", "design/model.go", "go.mod", "go.sum"}, slices.Sorted(maps.Keys(gen.inputs[0])))
+	assert.Equal(t, []string{"design/design.go", "design/model.go", "design/story.go", "go.mod", "go.sum"}, slices.Sorted(maps.Keys(gen.inputs[0])))
 	assert.Contains(t, gen.inputs[0]["go.mod"], "module example.com/bakery\n")
-	assert.Equal(t, []string{"design/design.go", "go.mod", "go.sum"}, slices.Sorted(maps.Keys(gen.inputs[1])))
+	assert.Equal(t, []string{
+		"acceptance/acceptance.go", "acceptance/acceptance_test.go", "design/design.go",
+		"design/story_tests.go", "go.mod", "go.sum",
+	}, slices.Sorted(maps.Keys(gen.inputs[1])), "the test module is generated with its acceptance package and Story table")
 	assert.Contains(t, gen.inputs[1]["go.mod"], "module example.com/bakery/eval\n")
 	assert.Equal(t, 1, gen.closes)
 	rootGoMod, err := os.ReadFile(filepath.Join(dir, "go.mod"))
@@ -301,16 +304,13 @@ func TestInitWritesTheProjectWithTheServiceName(t *testing.T) {
 	evalGoMod, err := os.ReadFile(filepath.Join(dir, "eval", "go.mod"))
 	require.NoError(t, err)
 	layout, err := StarterLayout(rootGoMod, evalGoMod)
-	require.NoError(t, err, "surla serve -project accepts the modules Init writes")
-	for _, pkgDir := range []string{
-		filepath.Join(dir, filepath.FromSlash(layout.CandidatePackage)),
-		filepath.Join(dir, SuiteDir, filepath.FromSlash(layout.SuiteCommand)),
-	} {
-		info, err := os.Stat(pkgDir)
-		require.NoError(t, err, "Init writes the command directory the layout names")
-		assert.True(t, info.IsDir())
-	}
-	info, err := os.Stat(dir)
+	require.NoError(t, err, "the project server accepts the modules Init writes")
+	info, err := os.Stat(filepath.Join(dir, filepath.FromSlash(layout.CandidatePackage)))
+	require.NoError(t, err, "Init writes the candidate command directory the layout names")
+	assert.True(t, info.IsDir())
+	assert.NoDirExists(t, filepath.Join(dir, SuiteDir, "cmd"),
+		"the evaluator suite's only program is the generated one, "+layout.GeneratedSuiteCommand())
+	info, err = os.Stat(dir)
 	require.NoError(t, err)
 	assert.Equal(t, os.FileMode(0o755), info.Mode().Perm())
 	err = filepath.WalkDir(dir, func(p string, e os.DirEntry, err error) error {
@@ -333,7 +333,7 @@ func TestInitWritesTheProjectWithTheServiceName(t *testing.T) {
 		"go.mod", ".gitignore", "README.md", "design/design.go", "design/model.go",
 		"internal/helper/planner.go", "internal/service/service.go", "cmd/bakery/main.go",
 		"eval/go.mod", "eval/design/design.go", "eval/scripted/scripted.go",
-		"eval/acceptance/acceptance.go", "eval/cmd/bakery-evals/main.go",
+		"eval/acceptance/acceptance.go",
 		"gen/bakery/service.go", quickstartGuide, "eval/gen/bakery/service.go", "eval/" + quickstartGuide,
 	} {
 		assert.FileExists(t, filepath.Join(dir, f))
@@ -438,15 +438,10 @@ func TestInitLeavesNoProjectWhenGenerationFails(t *testing.T) {
 	}
 }
 
-// TestInitReadmeFirstRunSnippetsMatchTheProject verifies the starter README's
-// copy-and-run material against the project it describes: every scenario the
-// evaluator design declares is named, the verification configuration written
-// after the first commit is a JSON object with exactly the fields surla serve's
-// -verification-config requires, the Claude Code .mcp.json example is valid
-// JSON that names the default MCP endpoint and takes the bearer token from
-// SURLA_AUTH_TOKEN, the change-request step names propose_change's
-// design_source field with the project's design files, and .gitignore keeps
-// .mcp.json and .surla/ out of git.
+// TestInitReadmeFirstRunSnippetsMatchTheProject verifies the starter's declared
+// scenarios, a first run that ends by starting surla, the roles in the
+// build-before-commit tool journey, private verification reports, and the
+// ignore file.
 func TestInitReadmeFirstRunSnippetsMatchTheProject(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "bakery")
 	run := func(_ context.Context, moduleDir, _ string, args ...string) error {
@@ -468,54 +463,29 @@ func TestInitReadmeFirstRunSnippetsMatchTheProject(t *testing.T) {
 		assert.Contains(t, readme, "`"+m[1]+"`", "README names scenario %s", m[1])
 	}
 
-	rootGoMod, err := os.ReadFile(filepath.Join(dir, "go.mod"))
-	require.NoError(t, err)
-	evalGoMod, err := os.ReadFile(filepath.Join(dir, "eval", "go.mod"))
-	require.NoError(t, err)
-	layout, err := StarterLayout(rootGoMod, evalGoMod)
-	require.NoError(t, err)
-
-	config := between(t, readme, "cat > ../bakery-ops/verification.json <<EOF\n", "\nEOF\n")
-	assert.NotContains(t, config, "$PWD", "paths stay relative so any valid project path writes valid JSON")
-	config = strings.ReplaceAll(config, "$(git rev-parse HEAD)", strings.Repeat("a", 40))
-	var fields map[string]any
-	require.NoError(t, json.Unmarshal([]byte(config), &fields), config)
-	// These are the fields cmd/surla's verificationFile defines and
-	// loadVerificationConfig requires; keep them in step with that type.
-	assert.Equal(t, []string{
-		"binaries", "candidate_module", "candidate_repo", "report_dir", "runs_dir",
-		"suite_command", "suite_commit", "suite_module", "suite_repo", "timeout",
-	}, slices.Sorted(maps.Keys(fields)))
-	assert.Equal(t, map[string]any{layout.Service: layout.CandidatePackage}, fields["binaries"])
-	assert.Equal(t, layout.SuiteCommand, fields["suite_command"])
-	assert.Equal(t, SuiteDir, fields["suite_module"])
-	assert.Equal(t, "../bakery-ops/runs", fields["runs_dir"])
-	assert.Equal(t, "../bakery-ops/reports", fields["report_dir"])
-	assert.Equal(t, ".", fields["candidate_repo"])
-	assert.Equal(t, ".", fields["suite_repo"])
-	assert.Contains(t, readme, "-project .")
-	assert.Contains(t, readme, "-project . -verification-config ../bakery-ops/verification.json")
-	assert.Contains(t, readme, "operator-private\nstorage outside the repository")
-	assert.Contains(t, readme, "If you created this project over MCP with `init_project`")
-	assert.Contains(t, readme, "If you created this project from the CLI with `surla init`")
-	assert.Contains(t, readme, "restores\nthe initial suite commit saved in `workspace.json`")
-	assert.Contains(t, readme, "`\"services/bakery\"` and `\"services/bakery/eval\"`")
 	assert.Contains(t, readme, "REPORT_DIR=\"$VERIFY_DIR/reports\"")
 	assert.Contains(t, readme, "-report-dir \"$REPORT_DIR\" -builder-view")
 	assert.Contains(t, readme, "while `-builder-view` hides holdout scenario names and checks\nin the completed report JSON and summary line (if a run fails before writing a\nreport, `stderr` prints operator setup/execution failure diagnostics).")
-	assert.Contains(t, readme, "-model-provider openai -model-name \"$MODEL_NAME\"")
-	assert.Contains(t, readme, "surla://golden-path")
-	assert.Contains(t, readme, "http://127.0.0.1:8090/golden-path")
 	assert.Contains(t, readme, "planner.ToolFailureProvider")
-	// Each change is described, regenerated, built and tested uncommitted
-	// with check_project, committed, then verified, in that order; keeping a
-	// drafted prompt follows the same order.
-	steps := between(t, readme, "For each change, with `surla serve` running on this directory:", "## Connect")
-	assertInOrder(t, steps, "`propose_change`", "`confirm_intent`", "`generate_code`", "`check_project`", "`update_dependencies`", "`read_check_output`", "Commit,", "`verify_change`")
-	draft := between(t, readme, "To try prompt wording on a running", "`-request-revision`")
-	assertInOrder(t, draft, "`check_project`", "commit,", "`verify_change`")
-	cli := between(t, readme, "`surla verify` checks a commit.", "## Connect")
-	assertInOrder(t, cli, "`check_project`", "before you commit")
+	// A project created with surla init is committed and then started with
+	// surla, which opens the views page; the operator's surla verify comes
+	// after that, not as a first step.
+	first := between(t, readme, "## Next steps", "For each change:")
+	assertInOrder(t, first, "git commit -m", "\nsurla\n```", "views page")
+	assert.NotContains(t, first, "surla verify", "surla verify is an operator tool listed after the change steps")
+	// Each change is proposed by the guide and confirmed by the user on the
+	// views page, then regenerated, built and tested uncommitted with
+	// check_project, committed, and verified by the builder, in that order;
+	// keeping a drafted prompt follows the same order. Only the user's
+	// browser session may call confirm_intent, so the README never tells a
+	// reader to call it.
+	steps := between(t, readme, "For each change:", "## Change checkpoints")
+	assertInOrder(t, steps, "The guide", "`propose_change`", "You confirm it on the views page", "The builder", "`generate_code`", "`check_project`", "`update_dependencies`", "`read_check_output`", "The builder commits on its own branch,", "`verify_change`", "operator tools", "surla verify")
+	assert.NotContains(t, readme, "`confirm_intent`")
+	draft := between(t, readme, "To try prompt wording on a running", "the confirmed Change Card")
+	assertInOrder(t, draft, "builder calls `start_live_target`", "the builder writes", "`check_project`", "commits,", "`verify_change`")
+	cli := between(t, readme, "`surla verify` checks a commit.", "## Change checkpoints")
+	assertInOrder(t, cli, "The builder", "`check_project`", "before it commits")
 
 	candDesign, err := os.ReadFile(filepath.Join(dir, "design", "design.go"))
 	require.NoError(t, err)
@@ -526,31 +496,18 @@ func TestInitReadmeFirstRunSnippetsMatchTheProject(t *testing.T) {
 	require.NoError(t, err)
 	assert.Contains(t, string(evalAcceptance), `"missing_key_rejected"`)
 
-	mcpSection := between(t, readme, "Register the server with your coding agent.", "Other coding agents")
-	mcp := between(t, mcpSection, "```json\n", "\n```")
-	var mcpConfig struct {
-		MCPServers map[string]struct {
-			Type    string            `json:"type"`
-			URL     string            `json:"url"`
-			Headers map[string]string `json:"headers"`
-		} `json:"mcpServers"`
-	}
-	require.NoError(t, json.Unmarshal([]byte(mcp), &mcpConfig), mcp)
-	server := mcpConfig.MCPServers["surla"]
-	assert.Equal(t, "http", server.Type)
-	assert.Equal(t, "http://127.0.0.1:8090/mcp", server.URL)
-	assert.Equal(t, "Bearer ${SURLA_AUTH_TOKEN}", server.Headers["Authorization"])
-	assert.Contains(t, readme, "export SURLA_AUTH_TOKEN=")
+	assert.Contains(t, readme, "The guide writes only in the draft folder returned by `update_draft` or")
+	assert.Contains(t, readme, "The card saves that evaluated design\nand Story, not later project-folder edits.")
+	assert.Contains(t, readme, "The builder reads its new assignment before working in its own project")
+	assert.Contains(t, readme, "Surla commits the tests it accepts.")
+	assert.Contains(t, readme, "`story_refresh_op_id`")
+	assert.Contains(t, readme, "`request_revision`")
 
-	proposal := between(t, readme, "Then follow \"Next steps\" for each change.", "To try prompt wording")
-	assert.Contains(t, proposal, "`propose_change`")
-	assert.Contains(t, proposal, "automatically when `design_source` is omitted")
-	assert.Contains(t, proposal, "`request_revision`")
-
+	// Surla keeps project state outside the project, so the starter ignores
+	// only its own build and report output.
 	ignore, err := os.ReadFile(filepath.Join(dir, ".gitignore"))
 	require.NoError(t, err)
-	assert.Contains(t, strings.Split(string(ignore), "\n"), "/.surla/")
-	assert.Contains(t, strings.Split(string(ignore), "\n"), "/.mcp.json")
+	assert.Equal(t, "/bin/\n/reports/\n", string(ignore))
 }
 
 // TestPrepareCommitsInitialScaffoldAndStripsRedirectingGitEnv verifies that
@@ -602,6 +559,13 @@ func TestPrepareCommitsInitialScaffoldAndStripsRedirectingGitEnv(t *testing.T) {
 	t.Setenv("GIT_CONFIG_VALUE_5", attrFile)
 	t.Setenv("GIT_CONFIG_KEY_6", "filter.rot.clean")
 	t.Setenv("GIT_CONFIG_VALUE_6", "sh -c 'touch "+hookMarker+"; exit 1'")
+	// Every variable that would point git at another repository, work tree,
+	// index or object store names the poison repository; GIT_DIR and
+	// GIT_WORK_TREE, the ones git's hooks export, are set by name too, so
+	// this test holds even if the shared list lost them.
+	for _, name := range gitenv.Redirects() {
+		t.Setenv(name, filepath.Join(poisonRepo, ".git"))
+	}
 	t.Setenv("GIT_DIR", filepath.Join(poisonRepo, ".git"))
 	t.Setenv("GIT_WORK_TREE", poisonRepo)
 	t.Setenv("GIT_TEMPLATE_DIR", tmplDir)
@@ -645,7 +609,7 @@ func TestPrepareCommitsInitialScaffoldAndStripsRedirectingGitEnv(t *testing.T) {
 	_, err = os.Stat(filepath.Join(stagePath, ".git", "poison-template-file"))
 	assert.ErrorIs(t, err, os.ErrNotExist, "init.templateDir and GIT_TEMPLATE_DIR must not copy files into .git")
 	_, err = os.Stat(filepath.Join(poisonRepo, ".git"))
-	assert.ErrorIs(t, err, os.ErrNotExist, "RunCommand must strip inherited GIT_DIR and GIT_WORK_TREE")
+	assert.ErrorIs(t, err, os.ErrNotExist, "RunCommand must strip every inherited redirect")
 	_, err = os.Stat(filepath.Join(stagePath, ".git"))
 	require.NoError(t, err, "staged project has its own .git directory")
 }
@@ -722,21 +686,13 @@ func TestStarterLayoutValidatesModulesAndDerivesPaths(t *testing.T) {
 			name:      "standard starter module pair",
 			rootGoMod: "module example.com/shop\n\ngo 1.26\n",
 			evalGoMod: "module example.com/shop/eval\n\ngo 1.26\n",
-			want: Layout{
-				Service:          "shop",
-				CandidatePackage: "./cmd/shop",
-				SuiteCommand:     "./cmd/shop-evals",
-			},
+			want:      Layout{Service: "shop", CandidatePackage: "./cmd/shop"},
 		},
 		{
 			name:      "service name reserved in generated Go code",
 			rootGoMod: "module example.com/errors\n\ngo 1.26\n",
 			evalGoMod: "module example.com/errors/eval\n\ngo 1.26\n",
-			want: Layout{
-				Service:          "errors",
-				CandidatePackage: "./cmd/errors",
-				SuiteCommand:     "./cmd/errors-evals",
-			},
+			want:      Layout{Service: "errors", CandidatePackage: "./cmd/errors"},
 		},
 		{
 			name:      "missing root module directive",
@@ -776,6 +732,32 @@ func TestStarterLayoutValidatesModulesAndDerivesPaths(t *testing.T) {
 	}
 }
 
+// TestGeneratedSuiteCommandNamesTheGeneratedEntryPoint checks the path of the
+// test module's generated program from both layout readers: the package
+// designeval.SuiteCommandPackage names, the rule the generator writes it by.
+func TestGeneratedSuiteCommandNamesTheGeneratedEntryPoint(t *testing.T) {
+	cases := []struct {
+		module, want string
+	}{
+		{module: "example.com/shop", want: "./gen/cmd/shop-evals"},
+		{module: "github.com/acme/orders2", want: "./gen/cmd/orders2-evals"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.module, func(t *testing.T) {
+			fromModule, err := LayoutForModule(tc.module)
+			require.NoError(t, err)
+			fromFiles, err := StarterLayout(
+				[]byte("module "+tc.module+"\n\ngo 1.26\n"),
+				[]byte("module "+tc.module+"/"+SuiteDir+"\n\ngo 1.26\n"),
+			)
+			require.NoError(t, err)
+			assert.Equal(t, tc.want, fromModule.GeneratedSuiteCommand())
+			assert.Equal(t, tc.want, fromFiles.GeneratedSuiteCommand())
+			assert.Equal(t, designeval.SuiteCommandPackage(fromFiles.Service), fromFiles.GeneratedSuiteCommand())
+		})
+	}
+}
+
 // fakeGo stands in for the go command: `go mod tidy` writes the module's
 // go.sum, and every other command does nothing.
 func fakeGo(dir string, args []string) error {
@@ -785,7 +767,7 @@ func fakeGo(dir string, args []string) error {
 	return nil
 }
 
-// fakeGenerator stands in for Surla's sandboxed generator.
+// fakeGenerator stands in for Surla's generator.
 type fakeGenerator struct {
 	// pkgs are the service packages each Generate returns a service.go for.
 	pkgs []string
@@ -871,4 +853,24 @@ func between(t *testing.T, s, start, end string) string {
 	body, _, ok := strings.Cut(after, end)
 	require.True(t, ok, "missing %q after %q", end, start)
 	return body
+}
+
+// TestStarterHidesNoScenarioAndWritesNoProgram reads the starter's templates:
+// no scenario is tagged holdout, because tests in files a builder can read are
+// not hidden, and the evaluator module has no hand-written program, because
+// the generator writes its only one.
+func TestStarterHidesNoScenarioAndWritesNoProgram(t *testing.T) {
+	t.Parallel()
+	require.NoError(t, fs.WalkDir(templatesFS, "templates", func(p string, d fs.DirEntry, err error) error {
+		if err != nil || d.IsDir() {
+			return err
+		}
+		assert.False(t, strings.HasPrefix(p, "templates/eval/cmd/"), "%s is a hand-written evaluator program", p)
+		raw, err := templatesFS.ReadFile(p)
+		if err != nil {
+			return err
+		}
+		assert.NotContains(t, string(raw), `Tags("holdout")`, p)
+		return nil
+	}))
 }

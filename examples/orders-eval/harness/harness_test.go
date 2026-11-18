@@ -22,7 +22,7 @@ func TestTemporalStartupStopsWaitingWhenTheScenarioIsCanceled(t *testing.T) {
 	defer cancel()
 
 	started := time.Now()
-	_, _, err := p.startTemporal(ctx)
+	_, err := p.startTemporal(ctx)
 	require.Error(t, err)
 	assert.ErrorIs(t, err, context.DeadlineExceeded)
 	assert.Less(t, time.Since(started), 10*time.Second, "startup stops waiting when the scenario ends")

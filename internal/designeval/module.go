@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"go/parser"
+	"go/token"
 	"io"
 	"os"
 	"os/exec"
@@ -18,7 +20,7 @@ import (
 
 type (
 	// goCommand runs the go command of one toolchain: the toolchain the
-	// sandboxed build compiles with, so resolving a design's modules and
+	// build compiles with, so resolving a design's modules and
 	// compiling it agree on the Go version. A design whose go.mod needs a
 	// newer Go than that toolchain fails explicitly instead of switching.
 	goCommand struct {
@@ -59,7 +61,7 @@ const (
 // program against the target module staged in buildDir/target, using exactly
 // the dependency versions the target selects.
 //
-// Outside any sandbox, and without running target code, it:
+// With the operator's Go settings, and without running target code, it:
 //  1. checks the target is a complete module: its design packages load with
 //     -mod=readonly, so a go.mod or go.sum that is missing a dependency or a
 //     checksum fails here instead of being filled in, and records which
@@ -284,14 +286,14 @@ func (g goCommand) runTo(ctx context.Context, dir, logPath, outPath string, args
 	return nil
 }
 
-// goEnv is the environment for the evaluator's go commands outside the
-// sandbox.
+// goEnv is the environment of the evaluator's module commands: the operator's
+// Go settings, unlike a build's fixed environment.
 func goEnv() []string {
 	env := []string{
 		"PATH=" + os.Getenv("PATH"), "HOME=" + os.Getenv("HOME"),
 		"CGO_ENABLED=0", "GOWORK=off", "GOTOOLCHAIN=local", "GOFLAGS=",
 	}
-	for _, name := range []string{"GOMODCACHE", "GOCACHE", "GOPROXY", "GOSUMDB", "GOPRIVATE", "GONOPROXY", "GONOSUMDB"} {
+	for _, name := range []string{"GOPATH", "GOMODCACHE", "GOCACHE", "GOPROXY", "GOSUMDB", "GOPRIVATE", "GONOPROXY", "GONOSUMDB"} {
 		if v, ok := os.LookupEnv(name); ok {
 			env = append(env, name+"="+v)
 		}
@@ -310,6 +312,51 @@ func tail(logPath string) string {
 		b = b[len(b)-limit:]
 	}
 	return "\n" + strings.TrimSpace(string(b))
+}
+
+// withStoryRequirementStep returns err, a failure to load the dependencies of
+// the target's design, as a *storyRequirementError when the snapshot shows
+// why: a design file imports the Story language while the target's go.mod
+// does not require its module, so Go cannot resolve that import. The step it
+// carries names the Story version the evaluator's own go.mod (evalMod)
+// requires, the language this Surla is built and tested with. It decides from
+// files and target alone, because the module command's output, which holds
+// Go's own hint, is withheld from callers. Any other failure is returned
+// unchanged, including one whose target already requires the Story module at
+// another version: that requirement resolves, and the evaluation uses it.
+func withStoryRequirementStep(err error, files map[string]string, target, evalMod *modfile.File) error {
+	if _, ok := requiredVersion(target, harnessStoryModule); ok || !importsStoryLanguage(files) {
+		return err
+	}
+	version, ok := requiredVersion(evalMod, harnessStoryModule)
+	if !ok {
+		return errors.Join(err, fmt.Errorf("evaluator go.mod does not require %s", harnessStoryModule))
+	}
+	return &storyRequirementError{err: err, version: version}
+}
+
+// importsStoryLanguage reports whether a design file of the snapshot, a .go
+// file under design/ (the packages ./design/... names when the evaluator
+// loads them), imports a package of the Story module. A file Go cannot parse
+// is skipped: it fails to load for its own reason.
+func importsStoryLanguage(files map[string]string) bool {
+	fset := token.NewFileSet()
+	for name, src := range files {
+		if !strings.HasPrefix(name, "design/") || !strings.HasSuffix(name, ".go") || strings.HasSuffix(name, "_test.go") {
+			continue
+		}
+		f, err := parser.ParseFile(fset, name, src, parser.ImportsOnly)
+		if err != nil {
+			continue
+		}
+		for _, imp := range f.Imports {
+			if p, err := strconv.Unquote(imp.Path.Value); err == nil &&
+				(p == harnessStoryModule || strings.HasPrefix(p, harnessStoryModule+"/")) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // requiredVersion returns the version mod requires of path.

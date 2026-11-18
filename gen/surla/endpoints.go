@@ -15,80 +15,121 @@ import (
 
 // Endpoints wraps the "surla" service endpoints.
 type Endpoints struct {
-	CheckpointUI        goa.Endpoint
-	GoldenPath          goa.Endpoint
-	ProposeChange       goa.Endpoint
-	ReviseChange        goa.Endpoint
-	ConfirmIntent       goa.Endpoint
-	GetChange           goa.Endpoint
-	PreviewArchitecture goa.Endpoint
-	DraftOverride       goa.Endpoint
-	StartLiveTarget     goa.Endpoint
-	StopLiveTarget      goa.Endpoint
-	VerifyChange        goa.Endpoint
-	GetVerification     goa.Endpoint
-	ListVerifications   goa.Endpoint
-	ApproveMerge        goa.Endpoint
-	Diff                goa.Endpoint
-	ConfigureModel      goa.Endpoint
-	InitProject         goa.Endpoint
-	GenerateCode        goa.Endpoint
-	CheckProject        goa.Endpoint
-	UpdateDependencies  goa.Endpoint
-	ReadCheckOutput     goa.Endpoint
-	ListTraces          goa.Endpoint
-	RefreshStory        goa.Endpoint
-	GetStoryRefresh     goa.Endpoint
+	GoldenPath                goa.Endpoint
+	ProposeChange             goa.Endpoint
+	ReviseChange              goa.Endpoint
+	ConfirmIntent             goa.Endpoint
+	GetChange                 goa.Endpoint
+	DeclineRevision           goa.Endpoint
+	PreviewArchitecture       goa.Endpoint
+	DraftOverride             goa.Endpoint
+	StartLiveTarget           goa.Endpoint
+	StopLiveTarget            goa.Endpoint
+	GetLiveTarget             goa.Endpoint
+	VerifyChange              goa.Endpoint
+	GetVerification           goa.Endpoint
+	ListVerifications         goa.Endpoint
+	ApproveMerge              goa.Endpoint
+	Diff                      goa.Endpoint
+	ConfigureModel            goa.Endpoint
+	GetModelConnection        goa.Endpoint
+	HandOverModelSettings     goa.Endpoint
+	InitProject               goa.Endpoint
+	GenerateCode              goa.Endpoint
+	CheckProject              goa.Endpoint
+	UpdateDependencies        goa.Endpoint
+	ReadCheckOutput           goa.Endpoint
+	ListTraces                goa.Endpoint
+	RefreshStory              goa.Endpoint
+	GetStoryRefresh           goa.Endpoint
+	UpdateDraft               goa.Endpoint
+	GetTeam                   goa.Endpoint
+	ShowTeamPane              goa.Endpoint
+	StartTeamAgents           goa.Endpoint
+	ListChanges               goa.Endpoint
+	WaitForChanges            goa.Endpoint
+	StartBuild                goa.Endpoint
+	DropBuild                 goa.Endpoint
+	GetBuild                  goa.Endpoint
+	GetTestFindings           goa.Endpoint
+	ListBuilderAssignments    goa.Endpoint
+	GetBuilderAssignment      goa.Endpoint
+	ListTestWriterAssignments goa.Endpoint
+	GetTestWriterAssignment   goa.Endpoint
+	ReportTestsFinished       goa.Endpoint
+	ReviewVerification        goa.Endpoint
 }
 
 // NewEndpoints wraps the methods of the "surla" service with endpoints.
 func NewEndpoints(s Service) *Endpoints {
 	return &Endpoints{
-		CheckpointUI:        NewCheckpointUIEndpoint(s),
-		GoldenPath:          NewGoldenPathEndpoint(s),
-		ProposeChange:       NewProposeChangeEndpoint(s),
-		ReviseChange:        NewReviseChangeEndpoint(s),
-		ConfirmIntent:       NewConfirmIntentEndpoint(s),
-		GetChange:           NewGetChangeEndpoint(s),
-		PreviewArchitecture: NewPreviewArchitectureEndpoint(s),
-		DraftOverride:       NewDraftOverrideEndpoint(s),
-		StartLiveTarget:     NewStartLiveTargetEndpoint(s),
-		StopLiveTarget:      NewStopLiveTargetEndpoint(s),
-		VerifyChange:        NewVerifyChangeEndpoint(s),
-		GetVerification:     NewGetVerificationEndpoint(s),
-		ListVerifications:   NewListVerificationsEndpoint(s),
-		ApproveMerge:        NewApproveMergeEndpoint(s),
-		Diff:                NewDiffEndpoint(s),
-		ConfigureModel:      NewConfigureModelEndpoint(s),
-		InitProject:         NewInitProjectEndpoint(s),
-		GenerateCode:        NewGenerateCodeEndpoint(s),
-		CheckProject:        NewCheckProjectEndpoint(s),
-		UpdateDependencies:  NewUpdateDependenciesEndpoint(s),
-		ReadCheckOutput:     NewReadCheckOutputEndpoint(s),
-		ListTraces:          NewListTracesEndpoint(s),
-		RefreshStory:        NewRefreshStoryEndpoint(s),
-		GetStoryRefresh:     NewGetStoryRefreshEndpoint(s),
+		GoldenPath:                NewGoldenPathEndpoint(s),
+		ProposeChange:             NewProposeChangeEndpoint(s),
+		ReviseChange:              NewReviseChangeEndpoint(s),
+		ConfirmIntent:             NewConfirmIntentEndpoint(s),
+		GetChange:                 NewGetChangeEndpoint(s),
+		DeclineRevision:           NewDeclineRevisionEndpoint(s),
+		PreviewArchitecture:       NewPreviewArchitectureEndpoint(s),
+		DraftOverride:             NewDraftOverrideEndpoint(s),
+		StartLiveTarget:           NewStartLiveTargetEndpoint(s),
+		StopLiveTarget:            NewStopLiveTargetEndpoint(s),
+		GetLiveTarget:             NewGetLiveTargetEndpoint(s),
+		VerifyChange:              NewVerifyChangeEndpoint(s),
+		GetVerification:           NewGetVerificationEndpoint(s),
+		ListVerifications:         NewListVerificationsEndpoint(s),
+		ApproveMerge:              NewApproveMergeEndpoint(s),
+		Diff:                      NewDiffEndpoint(s),
+		ConfigureModel:            NewConfigureModelEndpoint(s),
+		GetModelConnection:        NewGetModelConnectionEndpoint(s),
+		HandOverModelSettings:     NewHandOverModelSettingsEndpoint(s),
+		InitProject:               NewInitProjectEndpoint(s),
+		GenerateCode:              NewGenerateCodeEndpoint(s),
+		CheckProject:              NewCheckProjectEndpoint(s),
+		UpdateDependencies:        NewUpdateDependenciesEndpoint(s),
+		ReadCheckOutput:           NewReadCheckOutputEndpoint(s),
+		ListTraces:                NewListTracesEndpoint(s),
+		RefreshStory:              NewRefreshStoryEndpoint(s),
+		GetStoryRefresh:           NewGetStoryRefreshEndpoint(s),
+		UpdateDraft:               NewUpdateDraftEndpoint(s),
+		GetTeam:                   NewGetTeamEndpoint(s),
+		ShowTeamPane:              NewShowTeamPaneEndpoint(s),
+		StartTeamAgents:           NewStartTeamAgentsEndpoint(s),
+		ListChanges:               NewListChangesEndpoint(s),
+		WaitForChanges:            NewWaitForChangesEndpoint(s),
+		StartBuild:                NewStartBuildEndpoint(s),
+		DropBuild:                 NewDropBuildEndpoint(s),
+		GetBuild:                  NewGetBuildEndpoint(s),
+		GetTestFindings:           NewGetTestFindingsEndpoint(s),
+		ListBuilderAssignments:    NewListBuilderAssignmentsEndpoint(s),
+		GetBuilderAssignment:      NewGetBuilderAssignmentEndpoint(s),
+		ListTestWriterAssignments: NewListTestWriterAssignmentsEndpoint(s),
+		GetTestWriterAssignment:   NewGetTestWriterAssignmentEndpoint(s),
+		ReportTestsFinished:       NewReportTestsFinishedEndpoint(s),
+		ReviewVerification:        NewReviewVerificationEndpoint(s),
 	}
 }
 
 // Use applies the given middleware to all the "surla" service endpoints.
 func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
-	e.CheckpointUI = m(e.CheckpointUI)
 	e.GoldenPath = m(e.GoldenPath)
 	e.ProposeChange = m(e.ProposeChange)
 	e.ReviseChange = m(e.ReviseChange)
 	e.ConfirmIntent = m(e.ConfirmIntent)
 	e.GetChange = m(e.GetChange)
+	e.DeclineRevision = m(e.DeclineRevision)
 	e.PreviewArchitecture = m(e.PreviewArchitecture)
 	e.DraftOverride = m(e.DraftOverride)
 	e.StartLiveTarget = m(e.StartLiveTarget)
 	e.StopLiveTarget = m(e.StopLiveTarget)
+	e.GetLiveTarget = m(e.GetLiveTarget)
 	e.VerifyChange = m(e.VerifyChange)
 	e.GetVerification = m(e.GetVerification)
 	e.ListVerifications = m(e.ListVerifications)
 	e.ApproveMerge = m(e.ApproveMerge)
 	e.Diff = m(e.Diff)
 	e.ConfigureModel = m(e.ConfigureModel)
+	e.GetModelConnection = m(e.GetModelConnection)
+	e.HandOverModelSettings = m(e.HandOverModelSettings)
 	e.InitProject = m(e.InitProject)
 	e.GenerateCode = m(e.GenerateCode)
 	e.CheckProject = m(e.CheckProject)
@@ -97,14 +138,22 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.ListTraces = m(e.ListTraces)
 	e.RefreshStory = m(e.RefreshStory)
 	e.GetStoryRefresh = m(e.GetStoryRefresh)
-}
-
-// NewCheckpointUIEndpoint returns an endpoint function that calls the method
-// "checkpoint_ui" of service "surla".
-func NewCheckpointUIEndpoint(s Service) goa.Endpoint {
-	return func(ctx context.Context, req any) (any, error) {
-		return s.CheckpointUI(ctx)
-	}
+	e.UpdateDraft = m(e.UpdateDraft)
+	e.GetTeam = m(e.GetTeam)
+	e.ShowTeamPane = m(e.ShowTeamPane)
+	e.StartTeamAgents = m(e.StartTeamAgents)
+	e.ListChanges = m(e.ListChanges)
+	e.WaitForChanges = m(e.WaitForChanges)
+	e.StartBuild = m(e.StartBuild)
+	e.DropBuild = m(e.DropBuild)
+	e.GetBuild = m(e.GetBuild)
+	e.GetTestFindings = m(e.GetTestFindings)
+	e.ListBuilderAssignments = m(e.ListBuilderAssignments)
+	e.GetBuilderAssignment = m(e.GetBuilderAssignment)
+	e.ListTestWriterAssignments = m(e.ListTestWriterAssignments)
+	e.GetTestWriterAssignment = m(e.GetTestWriterAssignment)
+	e.ReportTestsFinished = m(e.ReportTestsFinished)
+	e.ReviewVerification = m(e.ReviewVerification)
 }
 
 // NewGoldenPathEndpoint returns an endpoint function that calls the method
@@ -151,6 +200,15 @@ func NewGetChangeEndpoint(s Service) goa.Endpoint {
 	}
 }
 
+// NewDeclineRevisionEndpoint returns an endpoint function that calls the
+// method "decline_revision" of service "surla".
+func NewDeclineRevisionEndpoint(s Service) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*DeclineRevisionPayload)
+		return s.DeclineRevision(ctx, p)
+	}
+}
+
 // NewPreviewArchitectureEndpoint returns an endpoint function that calls the
 // method "preview_architecture" of service "surla".
 func NewPreviewArchitectureEndpoint(s Service) goa.Endpoint {
@@ -183,6 +241,14 @@ func NewStartLiveTargetEndpoint(s Service) goa.Endpoint {
 func NewStopLiveTargetEndpoint(s Service) goa.Endpoint {
 	return func(ctx context.Context, req any) (any, error) {
 		return s.StopLiveTarget(ctx)
+	}
+}
+
+// NewGetLiveTargetEndpoint returns an endpoint function that calls the method
+// "get_live_target" of service "surla".
+func NewGetLiveTargetEndpoint(s Service) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		return s.GetLiveTarget(ctx)
 	}
 }
 
@@ -237,6 +303,23 @@ func NewConfigureModelEndpoint(s Service) goa.Endpoint {
 	return func(ctx context.Context, req any) (any, error) {
 		p := req.(*ConfigureModelPayload)
 		return s.ConfigureModel(ctx, p)
+	}
+}
+
+// NewGetModelConnectionEndpoint returns an endpoint function that calls the
+// method "get_model_connection" of service "surla".
+func NewGetModelConnectionEndpoint(s Service) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		return s.GetModelConnection(ctx)
+	}
+}
+
+// NewHandOverModelSettingsEndpoint returns an endpoint function that calls the
+// method "hand_over_model_settings" of service "surla".
+func NewHandOverModelSettingsEndpoint(s Service) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*HandOverModelSettingsPayload)
+		return s.HandOverModelSettings(ctx, p)
 	}
 }
 
@@ -305,5 +388,143 @@ func NewRefreshStoryEndpoint(s Service) goa.Endpoint {
 func NewGetStoryRefreshEndpoint(s Service) goa.Endpoint {
 	return func(ctx context.Context, req any) (any, error) {
 		return s.GetStoryRefresh(ctx)
+	}
+}
+
+// NewUpdateDraftEndpoint returns an endpoint function that calls the method
+// "update_draft" of service "surla".
+func NewUpdateDraftEndpoint(s Service) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		return s.UpdateDraft(ctx)
+	}
+}
+
+// NewGetTeamEndpoint returns an endpoint function that calls the method
+// "get_team" of service "surla".
+func NewGetTeamEndpoint(s Service) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		return s.GetTeam(ctx)
+	}
+}
+
+// NewShowTeamPaneEndpoint returns an endpoint function that calls the method
+// "show_team_pane" of service "surla".
+func NewShowTeamPaneEndpoint(s Service) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*ShowTeamPanePayload)
+		return nil, s.ShowTeamPane(ctx, p)
+	}
+}
+
+// NewStartTeamAgentsEndpoint returns an endpoint function that calls the
+// method "start_team_agents" of service "surla".
+func NewStartTeamAgentsEndpoint(s Service) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		return s.StartTeamAgents(ctx)
+	}
+}
+
+// NewListChangesEndpoint returns an endpoint function that calls the method
+// "list_changes" of service "surla".
+func NewListChangesEndpoint(s Service) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		return s.ListChanges(ctx)
+	}
+}
+
+// NewWaitForChangesEndpoint returns an endpoint function that calls the method
+// "wait_for_changes" of service "surla".
+func NewWaitForChangesEndpoint(s Service) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*WaitForChangesPayload)
+		return s.WaitForChanges(ctx, p)
+	}
+}
+
+// NewStartBuildEndpoint returns an endpoint function that calls the method
+// "start_build" of service "surla".
+func NewStartBuildEndpoint(s Service) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*StartBuildPayload)
+		return s.StartBuild(ctx, p)
+	}
+}
+
+// NewDropBuildEndpoint returns an endpoint function that calls the method
+// "drop_build" of service "surla".
+func NewDropBuildEndpoint(s Service) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*DropBuildPayload)
+		return s.DropBuild(ctx, p)
+	}
+}
+
+// NewGetBuildEndpoint returns an endpoint function that calls the method
+// "get_build" of service "surla".
+func NewGetBuildEndpoint(s Service) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*GetBuildPayload)
+		return s.GetBuild(ctx, p)
+	}
+}
+
+// NewGetTestFindingsEndpoint returns an endpoint function that calls the
+// method "get_test_findings" of service "surla".
+func NewGetTestFindingsEndpoint(s Service) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*GetTestFindingsPayload)
+		return s.GetTestFindings(ctx, p)
+	}
+}
+
+// NewListBuilderAssignmentsEndpoint returns an endpoint function that calls
+// the method "list_builder_assignments" of service "surla".
+func NewListBuilderAssignmentsEndpoint(s Service) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		return s.ListBuilderAssignments(ctx)
+	}
+}
+
+// NewGetBuilderAssignmentEndpoint returns an endpoint function that calls the
+// method "get_builder_assignment" of service "surla".
+func NewGetBuilderAssignmentEndpoint(s Service) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*GetBuilderAssignmentPayload)
+		return s.GetBuilderAssignment(ctx, p)
+	}
+}
+
+// NewListTestWriterAssignmentsEndpoint returns an endpoint function that calls
+// the method "list_test_writer_assignments" of service "surla".
+func NewListTestWriterAssignmentsEndpoint(s Service) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		return s.ListTestWriterAssignments(ctx)
+	}
+}
+
+// NewGetTestWriterAssignmentEndpoint returns an endpoint function that calls
+// the method "get_test_writer_assignment" of service "surla".
+func NewGetTestWriterAssignmentEndpoint(s Service) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*GetTestWriterAssignmentPayload)
+		return s.GetTestWriterAssignment(ctx, p)
+	}
+}
+
+// NewReportTestsFinishedEndpoint returns an endpoint function that calls the
+// method "report_tests_finished" of service "surla".
+func NewReportTestsFinishedEndpoint(s Service) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*ReportTestsFinishedPayload)
+		return s.ReportTestsFinished(ctx, p)
+	}
+}
+
+// NewReviewVerificationEndpoint returns an endpoint function that calls the
+// method "review_verification" of service "surla".
+func NewReviewVerificationEndpoint(s Service) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*GetVerificationPayload)
+		return s.ReviewVerification(ctx, p)
 	}
 }

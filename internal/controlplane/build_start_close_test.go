@@ -1,0 +1,79 @@
+// This file proves shutdown drains generation after cancellation is observed.
+package controlplane
+
+import (
+	"context"
+	"errors"
+	"sync"
+	"testing"
+	"testing/synctest"
+
+	gensurla "github.com/goadesign/surla/gen/surla"
+	"github.com/goadesign/surla/internal/designeval"
+	"github.com/goadesign/surla/internal/scaffold"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+)
+
+// TestStartBuildCloseDrainsAfterCancellation holds the owner inside generation
+// after it acknowledges cancellation. Once every goroutine is durably blocked,
+// Close must still wait for explicit release; deleting its drain fails this test.
+func TestStartBuildCloseDrainsAfterCancellation(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		cards := t.TempDir()
+		cp := newBuildControlPlane(t, Options{CardsDir: cards})
+		card := buildableChange(t, cp, "chg")
+		entered, canceled := make(chan struct{}), make(chan struct{})
+		release := make(chan struct{})
+		releaseGeneration := sync.OnceFunc(func() { close(release) })
+		defer releaseGeneration()
+		copy := &buildCopyFixture{folder: fixtureTestWriterFolder(t, cp)}
+		copy.prepare = func(ctx context.Context, _ []designeval.StorySummary) error {
+			close(entered)
+			<-ctx.Done()
+			close(canceled)
+			<-release
+			return errors.New("generation subprocess exited after cancellation")
+		}
+		cp.buildCopyFactory = func(context.Context, string, scaffold.Layout) (buildCopy, error) { return copy, nil }
+		_, err := cp.StartBuild(asCaller("alice@example.com", CallerUser), &gensurla.StartBuildPayload{
+			ChangeID: "chg", RequestRevision: card.RequestRevision,
+		})
+		require.NoError(t, err)
+		type outcome struct {
+			result *gensurla.TestWriterAssignment
+			err    error
+		}
+		started := make(chan outcome, 1)
+		go func() {
+			result, err := cp.GetTestWriterAssignment(asCaller("alice@example.com", CallerTestWriter), &gensurla.GetTestWriterAssignmentPayload{
+				ChangeID: "chg",
+			})
+			started <- outcome{result: result, err: err}
+		}()
+		<-entered
+		closed := make(chan error, 1)
+		go func() { closed <- cp.Close() }()
+		<-canceled
+		synctest.Wait()
+		returned := false
+		select {
+		case err := <-closed:
+			returned = true
+			t.Errorf("Close returned while canceled generation was still held: %v", err)
+		default:
+		}
+		releaseGeneration()
+		got := <-started
+		require.NoError(t, got.err)
+		if !returned {
+			assert.NoError(t, <-closed)
+		}
+		failure, ok := got.result.Progress.Tests.AsCouldNotRun()
+		require.True(t, ok)
+		assert.Equal(t, "The server stopped before the required tests could be prepared.", failure.Reason)
+		reopened := newBuildControlPlane(t, Options{CardsDir: cards})
+		persisted := mustStartedBuild(t, reopened, asCaller("alice@example.com", CallerUser), "chg")
+		assert.Equal(t, got.result.Progress, persisted.TestWriter)
+	})
+}

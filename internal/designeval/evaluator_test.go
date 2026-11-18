@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/goadesign/surla/internal/shquote"
 	"github.com/goadesign/surla/internal/testmodule"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -70,11 +71,11 @@ func TestExplicitRelativeAndSymlinkParentsStorePhysicalWorkspace(t *testing.T) {
 	}
 }
 
-// TestEvaluationAndGenerationUseTheExplicitParent runs both sandboxed paths
+// TestEvaluationAndGenerationUseTheExplicitParent runs both program paths
 // with a design that checks where its evaluator output directory was allocated.
 func TestEvaluationAndGenerationUseTheExplicitParent(t *testing.T) {
 	if testing.Short() {
-		t.Skip("runs the sandboxed Go toolchain; the full suite (go test without -short) covers it")
+		t.Skip("runs the Go toolchain; the full suite (go test without -short) covers it")
 	}
 	tmp := isolatedTempDir(t)
 	parent := t.TempDir()
@@ -147,7 +148,7 @@ func TestEveryCloseReturnsTheOneCleanupResult(t *testing.T) {
 		}, want: "permission denied"},
 		{name: "kept for a stuck build", prepare: func(_ *testing.T, ev *Evaluator) {
 			ev.unsafe = true
-		}, want: "is kept because build processes may still use it"},
+		}, want: "is kept because an evaluation's processes may still use it"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -237,6 +238,44 @@ func TestCloseCancelsARunningEvaluationAndAFailureIsNotRemembered(t *testing.T) 
 	require.NoError(t, ev2.Close())
 }
 
+// TestCloseDuringAModulePhaseIsNotAFailureOfTheModule closes the evaluator
+// while an evaluation waits on the toolchain's go in a phase that works on
+// the module's own files. The command Close ends fails with an error that
+// does not mention Close and carries that phase; the evaluation's error says
+// the evaluator was closed, so FailedOnModule does not report it as the
+// module's failure.
+func TestCloseDuringAModulePhaseIsNotAFailureOfTheModule(t *testing.T) {
+	isolatedTempDir(t)
+	goroot, err := filepath.EvalSymlinks(t.TempDir())
+	require.NoError(t, err)
+	reached := filepath.Join(goroot, "reached")
+	require.NoError(t, os.Mkdir(filepath.Join(goroot, "bin"), 0o700))
+	// The toolchain's go records that it was started and then hangs, as a
+	// slow download of the module's dependencies would, until it is killed.
+	require.NoError(t, os.WriteFile(filepath.Join(goroot, "bin", "go"),
+		[]byte("#!/bin/sh\n: > "+shquote.Quote(reached)+"\nexec sleep 600\n"), 0o700))
+	// The go on PATH answers go env GOROOT GOMODCACHE with that toolchain.
+	fakeGo(t, "#!/bin/sh\nprintf '%s\\n' "+shquote.Quote(goroot)+" "+shquote.Quote(filepath.Join(goroot, "modcache"))+"\n")
+
+	ev := NewEvaluator()
+	done := make(chan error, 1)
+	go func() {
+		_, err := ev.Evaluate(context.Background(), validSnapshotStub())
+		done <- err
+	}()
+	require.Eventually(t, func() bool {
+		_, err := os.Stat(reached)
+		return err == nil
+	}, 20*time.Second, 10*time.Millisecond, "the evaluation reaches the toolchain's go")
+	require.NoError(t, ev.Close())
+	err = <-done
+	require.ErrorIs(t, err, errEvaluatorClosed, "the error says the evaluator was closed")
+	var operation *phaseError
+	require.ErrorAs(t, err, &operation)
+	assert.Contains(t, modulePhases, operation.phase, "the evaluation was in a phase that works on the module's files")
+	assert.False(t, FailedOnModule(err), "an evaluation that Close ended is not the module's failure")
+}
+
 func TestACanceledEvaluationDoesNotAffectTheNext(t *testing.T) {
 	isolatedTempDir(t)
 	fakeGo(t, "#!/bin/sh\nexec sleep 600\n")
@@ -269,16 +308,16 @@ func TestTwoEvaluatorsOwnSeparateWorkspaces(t *testing.T) {
 	assert.Empty(t, entries(t, tmp))
 }
 
-func TestAStuckBuildMarksTheEvaluatorUnsafeForGood(t *testing.T) {
+func TestAStuckGroupMarksTheEvaluatorUnsafeForGood(t *testing.T) {
 	isolatedTempDir(t)
 	ev := NewEvaluator()
 	_, err := ev.admit()
 	require.NoError(t, err)
-	// Evaluate's deferred bookkeeping, given a stuck build's error.
-	ev.finish(errors.Join(&stuckBuildError{err: errors.New("group did not empty")}))
+	// Evaluate's deferred bookkeeping, given a stuck group's error.
+	ev.finish(errors.Join(&stuckGroupError{err: errors.New("group did not empty")}))
 	_, err = ev.Evaluate(t.Context(), incomplete)
 	require.Error(t, err, "a later evaluation still runs")
-	require.ErrorContains(t, ev.Close(), "is kept because build processes may still use it", "a later evaluation does not clear the mark")
+	require.ErrorContains(t, ev.Close(), "is kept because an evaluation's processes may still use it", "a later evaluation does not clear the mark")
 }
 
 // isolatedTempDir points TMPDIR at an empty directory owned by the test and

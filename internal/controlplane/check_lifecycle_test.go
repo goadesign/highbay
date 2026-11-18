@@ -61,10 +61,11 @@ func TestCheckFailuresReturnReadableOutput(t *testing.T) {
 				t.Run(tool+"/"+transport+"/"+failure.name, func(t *testing.T) {
 					t.Setenv("DOCKER_HOST", daemon.hostURI)
 					workspace := newShopModule(t, nil)
-					if failure.name == "unprocessable" {
-						workspace = realTempDir(t)
-					}
 					clients := newCheckTestServer(t, Options{WorkspaceDir: workspace})
+					if failure.name == "unprocessable" {
+						require.NoError(t, os.Remove(filepath.Join(clients.workingFolder, "go.mod")))
+						require.NoError(t, os.Remove(filepath.Join(clients.workingFolder, "eval", "go.mod")))
+					}
 					if failure.name == "unavailable" {
 						t.Setenv("DOCKER_HOST", "tcp://remote.example.test:2375")
 					}
@@ -88,10 +89,10 @@ func TestCheckFailuresReturnReadableOutput(t *testing.T) {
 							route = "/workspace/dependencies"
 						}
 						req := httptest.NewRequest(http.MethodPost, route, nil)
-						req.Header.Set("Authorization", "Bearer generation-token")
+						req.Header.Set("Authorization", "Bearer generation-token-builder")
 						response := httptest.NewRecorder()
-						NewHTTPHandler(clients.cp, NewTokenAuthenticator(map[string]Principal{
-							"generation-token": {ID: "developer@example.com"},
+						NewHTTPHandler(clients.cp, workflowAuthenticator(map[string]Principal{
+							"generation-token": {ID: "alice@example.com"},
 						})).ServeHTTP(response, req)
 						require.Equal(t, failure.status, response.Code)
 						var body goahttp.ErrorResponse
@@ -176,15 +177,18 @@ func TestCheckProjectLifecycle(t *testing.T) {
 		"eval/eval_test.go":           "package eval\n",
 		"testdata/fixture/go.mod":     "module example.com/ignored\n",
 		".surla/cards/c1.json":        "{}\n",
-		"reports/" + reportName:       "secret holdout report\n",
 		"reports/public-fixture.json": "public fixture\n",
 	})
 	runGitForTest(t, workspace, "init", "-q")
-	clients := newCheckTestServer(t, Options{
-		WorkspaceDir:    workspace,
-		ImportedReports: []string{filepath.Join(workspace, "reports", reportName)},
-		GoProxyEnv:      []string{"GOPROXY=https://proxy.example.test", "GOPRIVATE=example.com/*"},
+	moduleCache := newCheckModuleCache(t)
+	expectedModuleCache := moduleCache
+	clients := newCheckTestServer(t, Options{BuildCacheDir: t.TempDir(), CheckModuleCacheDir: moduleCache,
+		WorkspaceDir: workspace,
+		Verification: &VerificationConfig{RunsDir: realTempDir(t)},
+		GoProxyEnv:   []string{"GOPROXY=https://proxy.example.test", "GOPRIVATE=example.com/*"},
 	})
+	project := workspace
+	workspace = clients.workingFolder
 
 	tools, err := clients.mcpClient.ToolsList(ctx, &genmcpsurla.ToolsListPayload{})
 	require.NoError(t, err)
@@ -198,10 +202,17 @@ func TestCheckProjectLifecycle(t *testing.T) {
 	var failEvalTest atomic.Bool
 	daemon.setOnStart(func(c *recordedContainer) (string, string, int) {
 		srcMount, modMount := findMount(t, c, workspace), findMount(t, c, containerModCache)
+		if expectedModuleCache != "" {
+			assert.Equal(t, expectedModuleCache, modMount.Source)
+		} else {
+			assert.Equal(t, filepath.Join(filepath.Dir(srcMount.Source), "modcache"), modMount.Source)
+		}
+		work := findMount(t, c, containerWork).Source
+		assert.Equal(t, filepath.Dir(srcMount.Source), filepath.Dir(work))
+		assert.Subset(t, c.Env, []string{"HOME=/work", "TMPDIR=/work/tmp", "GOCACHE=/work/gocache", "GOPATH=/work/gopath"})
 		assert.False(t, findMount(t, c, containerWork).ReadOnly)
 		assert.NoFileExists(t, filepath.Join(srcMount.Source, ".git", "HEAD"))
 		assert.NoFileExists(t, filepath.Join(srcMount.Source, ".surla", "cards", "c1.json"))
-		assert.NoFileExists(t, filepath.Join(srcMount.Source, "reports", reportName))
 		assert.FileExists(t, filepath.Join(srcMount.Source, "reports", "public-fixture.json"))
 		assert.FileExists(t, filepath.Join(srcMount.Source, "shop_test.go"))
 
@@ -213,7 +224,7 @@ func TestCheckProjectLifecycle(t *testing.T) {
 				assert.NoError(t, os.WriteFile(filepath.Join(srcMount.Source, "go.sum"), []byte("repaired-sum\n"), 0o644))
 			}
 			return "tidied\n", "", 0
-		case slices.Equal(c.Args, []string{"list", "-deps", "-test", "./..."}):
+		case len(c.Args) > 0 && c.Args[0] == "list":
 			assert.Equal(t, "bridge", c.Network)
 			assert.True(t, srcMount.ReadOnly)
 			assert.False(t, modMount.ReadOnly)
@@ -221,7 +232,14 @@ func TestCheckProjectLifecycle(t *testing.T) {
 			if !isEval {
 				sum, rerr := os.ReadFile(filepath.Join(srcMount.Source, "go.sum"))
 				if rerr != nil || string(sum) != "repaired-sum\n" {
-					return "", "go: updates to go.mod needed; to update it:\n\tgo mod tidy\n", 1
+					// Go reports errors before printing dependency package names.
+					// Only an explicitly empty template prevents those names from
+					// pushing the error outside the bounded failure message.
+					stdout := ""
+					if !slices.Contains(c.Args, `-f={{""}}`) {
+						stdout = strings.Repeat("example.com/shop/dependency\n", 1500)
+					}
+					return stdout, "go: updates to go.mod needed; to update it:\n\tgo mod tidy\n", 1
 				}
 			}
 			assert.NoError(t, os.WriteFile(filepath.Join(modMount.Source, marker), []byte("ok"), 0o600))
@@ -256,11 +274,13 @@ func TestCheckProjectLifecycle(t *testing.T) {
 		assert.Equal(t, wantDir, created[i].WorkDir)
 		assert.True(t, created[i].Removed)
 	}
-	assert.Equal(t, []string{"list", "-deps", "-test", "./..."}, created[0].Args)
+	assert.Equal(t, []string{"list", "-deps", "-test", `-f={{""}}`, "./..."}, created[0].Args)
 	assert.Equal(t, []string{"test", "./..."}, created[1].Args)
 	assert.NoFileExists(t, filepath.Join(workspace, "test_scratch.tmp"))
 	assertFileContent(t, filepath.Join(workspace, "reports", "public-fixture.json"), "public fixture\n")
 	assert.ElementsMatch(t, []string{outputFile, outputMetaFile, ownerFile}, dirEntryNames(t, filepath.Join(clients.cp.checkWorkDir, res.OpID)))
+	assert.FileExists(t, filepath.Join(moduleCache, filepath.Base(workspace)+"-cached"))
+	assert.NotEqual(t, findMount(t, &created[0], containerWork).Source, findMount(t, &created[1], containerWork).Source)
 
 	// 2. Stale go.sum fails Phase 1 on ".", skips Phase 2 for "." while still
 	// testing "eval", then repairs via update_dependencies on the same server.
@@ -271,6 +291,8 @@ func TestCheckProjectLifecycle(t *testing.T) {
 	assert.False(t, resDownloadFail.Passed)
 	assert.Contains(t, resDownloadFail.Message, "Dependencies for . could not be prepared (go list exited 1)")
 	assert.Contains(t, resDownloadFail.Message, "call update_dependencies and check again")
+	assert.Contains(t, resDownloadFail.Message, "go: updates to go.mod needed; to update it:")
+	assert.NotContains(t, resDownloadFail.Message, "example.com/shop/dependency")
 	assert.Equal(t, int64(1), daemon.pulls.Load())
 	assert.GreaterOrEqual(t, daemon.contextInspects.Load(), int64(2))
 	created = daemon.createdContainers()
@@ -280,6 +302,8 @@ func TestCheckProjectLifecycle(t *testing.T) {
 	repairRes := callMCPTool(t, clients.mcpClient, "update_dependencies", `{}`, gensurla.DecodeUpdateDependenciesResult)
 	assert.Equal(t, []string{"go.sum"}, repairRes.FilesWritten)
 	assert.True(t, callMCPTool(t, clients.mcpClient, "check_project", `{}`, gensurla.DecodeCheckProjectResult).Passed)
+	assertFileContent(t, filepath.Join(project, "go.sum"), "repaired-sum\n")
+	assertFileContent(t, filepath.Join(project, "reports", "public-fixture.json"), "public fixture\n")
 
 	// 3. Multi-page UTF-8 and invalid-byte failure output stays <= 16 KiB per
 	// decoded MCP Message and read_check_output page without splitting valid runes.
@@ -320,6 +344,69 @@ func TestCheckProjectLifecycle(t *testing.T) {
 	require.NoError(t, err)
 	assert.LessOrEqual(t, len(httpPage.Text), maxCheckMessageBytes)
 	assert.NotEmpty(t, httpPage.Text)
+
+	// Retained dependency inputs survive Close and are selected again after
+	// restart; the same persisted build and builder assignment remain usable.
+	require.NoError(t, clients.cp.Close())
+	assert.DirExists(t, moduleCache)
+	reopened, err := New(Options{
+		Team:     testTeamBinding(),
+		CardsDir: clients.cp.cards.dir, WorkspaceDir: project, CheckModuleCacheDir: moduleCache,
+		Checker: clients.cp.checker, CheckHelper: testCheckHelper(t), CheckTimeout: 30 * time.Second,
+		GoProxyEnv: clients.cp.goProxyEnv, Verification: verifierRuns(clients.cp.verifier),
+		BuildCacheDir: clients.cp.buildCacheDir,
+	})
+	require.NoError(t, err)
+	t.Cleanup(func() { assert.NoError(t, reopened.Close()) })
+	failEvalTest.Store(false)
+	restarted, err := reopened.CheckProject(WithPrincipal(ctx, Principal{ID: "alice@example.com", CallerID: "alice@example.com", Kind: CallerUser}))
+	require.NoError(t, err)
+	assert.True(t, restarted.Passed)
+	assert.DirExists(t, moduleCache)
+	require.NoError(t, reopened.Close())
+	failEvalTest.Store(true)
+	expectedModuleCache = ""
+
+	// 4. On a server that runs written tests (WrittenTestRuns), check_project
+	// leaves the starter test module eval out and says so in its result and
+	// captured output, so check_project -> update_dependencies -> check_project
+	// repairs "." without entering eval (even while failEvalTest is true).
+	writtenClients := newCheckTestServer(t, Options{BuildCacheDir: t.TempDir(),
+		WorkspaceDir:    project,
+		RunsDir:         realTempDir(t),
+		WrittenTestRuns: &WrittenTestRuns{ReportDir: realTempDir(t), Timeout: time.Minute},
+		GoProxyEnv:      []string{"GOPROXY=https://proxy.example.test", "GOPRIVATE=example.com/*"},
+	})
+	workspace = writtenClients.workingFolder
+	evalDir = filepath.Join(workspace, "eval")
+	daemon.resetContainers()
+	require.NoError(t, os.WriteFile(filepath.Join(workspace, "go.sum"), []byte("stale-sum\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(workspace, "eval", "go.sum"), []byte("broken-eval-sum\n"), 0o644))
+
+	writtenFail := callMCPTool(t, writtenClients.mcpClient, "check_project", `{}`, gensurla.DecodeCheckProjectResult)
+	assert.False(t, writtenFail.Passed)
+	assert.Contains(t, writtenFail.Message, "tested 1 module(s): .. Left test module eval out (tests belong to the test writer).")
+	assert.Contains(t, writtenFail.Message, "Dependencies for . could not be prepared (go list exited 1)")
+	assert.Contains(t, writtenFail.Message, "call update_dependencies and check again")
+	created = daemon.createdContainers()
+	require.Len(t, created, 1, "eval is not entered during check_project")
+	assert.Equal(t, workspace, created[0].WorkDir)
+
+	writtenRepair := callMCPTool(t, writtenClients.mcpClient, "update_dependencies", `{}`, gensurla.DecodeUpdateDependenciesResult)
+	assert.Equal(t, []string{"go.sum"}, writtenRepair.FilesWritten)
+	assert.Equal(t, "Wrote 1 file(s): go.sum. Left test module eval out (tests belong to the test writer).", writtenRepair.Message)
+	assertFileContent(t, filepath.Join(workspace, "eval", "go.sum"), "broken-eval-sum\n")
+
+	daemon.resetContainers()
+	writtenPass := callMCPTool(t, writtenClients.mcpClient, "check_project", `{}`, gensurla.DecodeCheckProjectResult)
+	assert.True(t, writtenPass.Passed)
+	assert.Equal(t, "tested 1 module(s): .. Left test module eval out (tests belong to the test writer). All passed.", writtenPass.Message)
+	created = daemon.createdContainers()
+	require.Len(t, created, 2, "only the root module runs list and test")
+	assert.Equal(t, []string{workspace, workspace}, []string{created[0].WorkDir, created[1].WorkDir})
+	writtenOut, err := writtenClients.httpClient.ReadCheckOutput(ctx, &gensurla.ReadCheckOutputPayload{OpID: writtenPass.OpID})
+	require.NoError(t, err)
+	assert.Contains(t, writtenOut.Text, "note: Left test module eval out (tests belong to the test writer)\n")
 }
 
 // TestUpdateDependenciesLifecycle verifies that update_dependencies runs
@@ -340,10 +427,13 @@ func TestUpdateDependenciesLifecycle(t *testing.T) {
 			"broken/go.mod": "module example.com/shop/broken\n\ngo 1.24\n",
 			"broken/go.sum": "keep-broken-sum\n",
 		})
-		clients := newCheckTestServer(t, Options{
+		clients := newCheckTestServer(t, Options{BuildCacheDir: t.TempDir(),
 			WorkspaceDir: workspace,
+			Verification: &VerificationConfig{RunsDir: realTempDir(t)},
 			GoProxyEnv:   []string{"GOPROXY=https://proxy.example.test"},
 		})
+		project := workspace
+		workspace = clients.workingFolder
 		daemon.setOnStart(func(c *recordedContainer) (string, string, int) {
 			srcMount := findMount(t, c, workspace)
 			assert.Equal(t, "bridge", c.Network)
@@ -374,6 +464,55 @@ func TestUpdateDependenciesLifecycle(t *testing.T) {
 		assertFileContent(t, filepath.Join(workspace, "go.sum"), "new-root-sum\n")
 		assertFileContent(t, filepath.Join(workspace, "eval", "go.sum"), "created-eval-sum\n")
 		assertFileContent(t, filepath.Join(workspace, "broken", "go.sum"), "keep-broken-sum\n")
+		assertFileContent(t, filepath.Join(project, "go.sum"), "old-root-sum\n")
+		assert.NoFileExists(t, filepath.Join(project, "eval", "go.sum"))
+	})
+
+	t.Run("written_test_verification_leaves_starter_test_module_untouched", func(t *testing.T) {
+		workspace := newShopModule(t, map[string]string{
+			"go.sum":        "old-root-sum\n",
+			"eval/go.mod":   "module example.com/shop/eval\n\ngo 1.24\n",
+			"eval/go.sum":   "keep-eval-sum\n",
+			"broken/go.mod": "module example.com/shop/broken\n\ngo 1.24\n",
+			"broken/go.sum": "keep-broken-sum\n",
+		})
+		clients := newCheckTestServer(t, Options{BuildCacheDir: t.TempDir(),
+			WorkspaceDir:    workspace,
+			RunsDir:         realTempDir(t),
+			WrittenTestRuns: &WrittenTestRuns{ReportDir: realTempDir(t), Timeout: time.Minute},
+			GoProxyEnv:      []string{"GOPROXY=https://proxy.example.test"},
+		})
+		project := workspace
+		workspace = clients.workingFolder
+		daemon.setOnStart(func(c *recordedContainer) (string, string, int) {
+			srcMount := findMount(t, c, workspace)
+			rel, err := filepath.Rel(workspace, c.WorkDir)
+			assert.NoError(t, err)
+			assert.NotEqual(t, "eval", filepath.ToSlash(rel), "go mod tidy must not run in eval")
+			stagedSum := filepath.Join(srcMount.Source, rel, "go.sum")
+			switch filepath.ToSlash(rel) {
+			case ".":
+				assert.NoError(t, os.WriteFile(stagedSum, []byte("new-root-sum\n"), 0o644))
+				// Even if a container mutated eval/go.sum in the copy,
+				// publishManifests must leave eval/ out.
+				assert.NoError(t, os.WriteFile(filepath.Join(srcMount.Source, "eval", "go.sum"), []byte("mutated-eval-sum\n"), 0o644))
+				return "tidied root\n", "", 0
+			default:
+				assert.NoError(t, os.WriteFile(stagedSum, []byte("corrupted-by-failed-tidy\n"), 0o644))
+				return "", "example.com/shop/broken: missing package\n", 1
+			}
+		})
+
+		res := callMCPTool(t, clients.mcpClient, "update_dependencies", `{}`, gensurla.DecodeUpdateDependenciesResult)
+		assert.Equal(t, []string{"go.sum"}, res.FilesWritten)
+		assert.Contains(t, res.Message, "Wrote 1 file(s): go.sum. Left test module eval out (tests belong to the test writer).")
+		assert.Contains(t, res.Message, "go tidy failed for broken (exit 1); its files were not written.")
+		assertFileContent(t, filepath.Join(workspace, "go.sum"), "new-root-sum\n")
+		assertFileContent(t, filepath.Join(workspace, "eval", "go.mod"), "module example.com/shop/eval\n\ngo 1.24\n")
+		assertFileContent(t, filepath.Join(workspace, "eval", "go.sum"), "keep-eval-sum\n")
+		assertFileContent(t, filepath.Join(workspace, "broken", "go.sum"), "keep-broken-sum\n")
+		assertFileContent(t, filepath.Join(project, "go.sum"), "old-root-sum\n")
+		assertFileContent(t, filepath.Join(project, "eval", "go.sum"), "keep-eval-sum\n")
 	})
 
 	t.Run("enclosing_grant_with_gowork_runs_list_and_publishes_gowork_sum", func(t *testing.T) {
@@ -390,6 +529,10 @@ func TestUpdateDependenciesLifecycle(t *testing.T) {
 			WorkspaceDir: workspace,
 			GoProxyEnv:   []string{"GOPROXY=https://proxy.example.test"},
 		})
+		project, projectGrant := workspace, grant
+		_, _, grant, err := builderCopyFolder(t.Context(), project)
+		require.NoError(t, err)
+		workspace = clients.workingFolder
 		daemon.setOnStart(func(c *recordedContainer) (string, string, int) {
 			srcMount := findMount(t, c, grant)
 			assert.Equal(t, "bridge", c.Network)
@@ -399,7 +542,7 @@ func TestUpdateDependenciesLifecycle(t *testing.T) {
 				assert.NoError(t, os.WriteFile(filepath.Join(srcMount.Source, "services", "shop", "go.sum"), []byte("tidied-shop-sum\n"), 0o644))
 				return "", "", 0
 			}
-			assert.Equal(t, []string{"list", "-deps", "-test", "./..."}, c.Args)
+			assert.Equal(t, []string{"list", "-deps", "-test", `-f={{""}}`, "./..."}, c.Args)
 			assert.NoError(t, os.WriteFile(filepath.Join(srcMount.Source, "go.work.sum"), []byte("work-sum-from-list\n"), 0o644))
 			return "", "", 0
 		})
@@ -408,6 +551,28 @@ func TestUpdateDependenciesLifecycle(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, []string{"../../go.work.sum", "go.sum"}, res.FilesWritten)
 		assert.Contains(t, res.Message, "Wrote 2 file(s): ../../go.work.sum, go.sum.")
+		assertFileContent(t, filepath.Join(workspace, "go.sum"), "tidied-shop-sum\n")
+		assertFileContent(t, filepath.Join(grant, "go.work.sum"), "work-sum-from-list\n")
+		assertFileContent(t, filepath.Join(project, "go.sum"), "old-sum\n")
+		assert.NoFileExists(t, filepath.Join(projectGrant, "go.work.sum"))
+
+		// A later workspace preparation failure keeps the reason visible and
+		// leaves the manifests unchanged, even with a large package graph.
+		daemon.setOnStart(func(c *recordedContainer) (string, string, int) {
+			if slices.Equal(c.Args, []string{"mod", "tidy"}) {
+				return "", "", 0
+			}
+			stdout := ""
+			if !slices.Contains(c.Args, `-f={{""}}`) {
+				stdout = strings.Repeat("example.com/shop/dependency\n", 1500)
+			}
+			return stdout, "go: example.com/dependency: module proxy unavailable\n", 1
+		})
+		failed, err := clients.httpClient.UpdateDependencies(ctx)
+		require.NoError(t, err)
+		assert.Empty(t, failed.FilesWritten)
+		assert.Contains(t, failed.Message, "go: example.com/dependency: module proxy unavailable")
+		assert.NotContains(t, failed.Message, "example.com/shop/dependency")
 		assertFileContent(t, filepath.Join(workspace, "go.sum"), "tidied-shop-sum\n")
 		assertFileContent(t, filepath.Join(grant, "go.work.sum"), "work-sum-from-list\n")
 	})
@@ -424,6 +589,8 @@ func TestUpdateDependenciesLifecycle(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			workspace := newShopModule(t, nil)
 			clients := newCheckTestServer(t, Options{WorkspaceDir: workspace})
+			project := workspace
+			workspace = clients.workingFolder
 			liveManifest := filepath.Join(workspace, "go.mod")
 			before, err := os.ReadFile(liveManifest)
 			require.NoError(t, err)
@@ -437,7 +604,7 @@ func TestUpdateDependenciesLifecycle(t *testing.T) {
 				}
 				return "tidied\n", "", 0
 			})
-			result, err := clients.cp.UpdateDependencies(WithPrincipal(ctx, Principal{ID: "alice@example.com"}))
+			result, err := clients.cp.UpdateDependencies(WithPrincipal(ctx, Principal{ID: "alice@example.com", CallerID: "alice@example.com", Kind: CallerUser}))
 			require.NoError(t, err)
 			assert.NotNil(t, result.FilesWritten)
 			assert.Empty(t, result.FilesWritten)
@@ -451,23 +618,22 @@ func TestUpdateDependenciesLifecycle(t *testing.T) {
 			} else {
 				assertFileContent(t, liveManifest, string(before))
 			}
+			assertFileContent(t, filepath.Join(project, "go.mod"), string(before))
 		})
 	}
 }
 
-// TestCheckOperationsConcurrentIsolation verifies disjoint per-operation
-// sandboxes and output cursors across concurrent check_project and
-// update_dependencies calls, plus live directory-lock serialization across two
-// servers updating dependencies on the same workspace.
+// TestCheckOperationsConcurrentIsolation verifies same-builder exclusion,
+// distinct operation snapshots/cursors, and concurrent independent servers.
 func TestCheckOperationsConcurrentIsolation(t *testing.T) {
 	installFakeDocker(t)
 	daemon := newFakeDockerDaemon(t)
 	t.Setenv("DOCKER_HOST", daemon.hostURI)
-	t.Run("check_and_update_use_disjoint_sandboxes", func(t *testing.T) {
+	t.Run("same_builder_waits_for_its_active_helper", func(t *testing.T) {
 		testConcurrentCheckAndUpdate(t, daemon)
 	})
-	t.Run("two_servers_serialize_live_directory_lock", func(t *testing.T) {
-		testTwoServerUpdateContention(t, daemon)
+	t.Run("independent_servers_keep_their_own_copies", func(t *testing.T) {
+		testIndependentServerUpdates(t, daemon)
 	})
 }
 
@@ -477,24 +643,31 @@ func TestCheckOperationsConcurrentIsolation(t *testing.T) {
 // across distinct CardsDir servers on the same workspace, and startup cleanup
 // of ownerless pre-container scratch.
 func TestCheckOperationsRecoveryAndRetainedOwner(t *testing.T) {
-	authCtx := WithPrincipal(t.Context(), Principal{ID: "alice@example.com"})
+	authCtx := WithPrincipal(t.Context(), Principal{ID: "alice@example.com", CallerID: "alice@example.com", Kind: CallerUser})
 	dockerBin := installFakeDocker(t)
 
 	t.Run("failed_close_isolates_peer_server_and_recovers_on_restart", func(t *testing.T) {
 		recordedDaemon, otherDaemon := newFakeDockerDaemon(t), newFakeDockerDaemon(t)
 		workspace := newShopModule(t, nil)
 		cardsA, cardsB := filepath.Join(realTempDir(t), "cards-a"), filepath.Join(realTempDir(t), "cards-b")
+		moduleCache := newCheckModuleCache(t)
+		assert.NoError(t, os.WriteFile(filepath.Join(moduleCache, "retained"), []byte("input"), 0o600))
+		cachedModule := filepath.Join(moduleCache, "example.com", "module@v1.0.0")
+		require.NoError(t, os.MkdirAll(cachedModule, 0o700))
+		require.NoError(t, os.Chmod(cachedModule, 0o555))
+		t.Cleanup(func() { assert.NoError(t, os.Chmod(cachedModule, 0o700)) })
 
 		t.Setenv("DOCKER_HOST", recordedDaemon.hostURI)
-		pA := runPinned(t, workspace, cardsA, recordedDaemon)
+		pA := runPinned(t, workspace, cardsA, recordedDaemon, moduleCache)
 		opID := filepath.Base(pA.opDir)
-		for _, sub := range []string{"src", "modcache", "work-0", "docker-config"} {
+		for _, sub := range []string{"src", "work-0", "docker-config"} {
 			assert.DirExists(t, filepath.Join(pA.opDir, sub))
 		}
 		assert.Equal(t, checkOwner{Version: ownerVersion, Docker: dockerBin, Host: recordedDaemon.hostURI, Containers: []ownedContainer{{Name: pA.name, State: stateCreationAnswered}}}, readOwnerRecord(t, pA.opDir))
 
 		// A separate server on cardsB sharing workspace never retries pA.cp's container.
 		cpB := openCheckCP(t, cardsB, workspace)
+		readCheckBuilderFixture(t, cpB)
 		resB, err := cpB.CheckProject(authCtx)
 		require.NoError(t, err)
 		assert.True(t, resB.Passed)
@@ -511,6 +684,10 @@ func TestCheckOperationsRecoveryAndRetainedOwner(t *testing.T) {
 		assert.Zero(t, otherDaemon.removes.Load())
 		assert.Equal(t, 2, recordedDaemon.removeCount(pA.name))
 		assert.DirExists(t, filepath.Join(pA.opDir, "src"))
+		assertFileContent(t, filepath.Join(moduleCache, "retained"), "input")
+		cacheInfo, err := os.Stat(cachedModule)
+		require.NoError(t, err)
+		assert.Equal(t, os.FileMode(0o555), cacheInfo.Mode().Perm(), "cleanup never chmods retained inputs")
 
 		_, err = pA.cp.CheckProject(authCtx)
 		assertServiceError(t, err, "unavailable")
@@ -522,12 +699,13 @@ func TestCheckOperationsRecoveryAndRetainedOwner(t *testing.T) {
 		// otherDaemon: startup recovery contacts recordedDaemon, cleans scratch,
 		// clears owner.Containers, and preserves ReadCheckOutput.
 		recordedDaemon.setFailRemove(pA.name, false)
-		cpA2 := openCheckCP(t, cardsA, workspace)
+		cpA2 := openCheckCP(t, cardsA, workspace, moduleCache)
 		defer func() { assert.NoError(t, cpA2.Close()) }()
 		assert.Zero(t, otherDaemon.removes.Load())
 		assert.Equal(t, 3, recordedDaemon.removeCount(pA.name))
 		assert.ElementsMatch(t, []string{outputFile, outputMetaFile, ownerFile}, dirEntryNames(t, pA.opDir))
 		assert.Empty(t, readOwnerRecord(t, pA.opDir).Containers)
+		assertFileContent(t, filepath.Join(moduleCache, "retained"), "input")
 
 		page, err := cpA2.ReadCheckOutput(authCtx, &gensurla.ReadCheckOutputPayload{OpID: opID})
 		require.NoError(t, err)
@@ -572,107 +750,81 @@ func TestCheckOperationsRecoveryAndRetainedOwner(t *testing.T) {
 	})
 }
 
-// testConcurrentCheckAndUpdate launches CheckProject and UpdateDependencies
-// concurrently against a bounded barrier in daemon.onStart, fails immediately
-// if either request exits before entering the sandbox, cancels and drains
-// blocked callbacks on every teardown path, edits live go.sum mid-flight, and
-// checks snapshot isolation, manifest-conflict refusal, and cross-op cursors.
+// testConcurrentCheckAndUpdate refuses a second operation on the same builder
+// until its helper has finished. Subsequent operations use distinct snapshots,
+// preserve concurrent editor changes, and keep output cursors operation-bound.
 func testConcurrentCheckAndUpdate(t *testing.T, daemon *fakeDockerDaemon) {
 	t.Helper()
-	workspace := newShopModule(t, map[string]string{"go.sum": "initial-sum\n"})
-	httpClient := newCheckTestServer(t, Options{WorkspaceDir: workspace}).httpClient
+	project := newShopModule(t, map[string]string{"go.sum": "initial-sum\n"})
+	clients := newCheckTestServer(t, Options{WorkspaceDir: project})
+	workspace, httpClient := clients.workingFolder, clients.httpClient
 	ctx, cancel := context.WithTimeout(t.Context(), lifecycleWaitTimeout)
-	bothEntered, releaseBoth := make(chan struct{}), make(chan struct{})
-	checkDone, updateDone := make(chan struct{}), make(chan struct{})
-	var (
-		enteredMu           sync.Mutex
-		active              []*recordedContainer
-		checkRes            *gensurla.CheckProjectResult
-		updateRes           *gensurla.UpdateDependenciesResult
-		checkErr, updateErr error
-		wg                  sync.WaitGroup
-	)
-	// Registered after newCheckTestServer so LIFO teardown cancels ctx (waking
-	// any blocked onStart callback) and waits for workers before srv.Close().
+	entered, release := make(chan struct{}), make(chan struct{})
+	checkDone := make(chan struct{})
+	releaseOnce := sync.OnceFunc(func() { close(release) })
+	var first sync.Once
+	var checkRes *gensurla.CheckProjectResult
+	var checkErr error
+	var wg sync.WaitGroup
 	t.Cleanup(func() {
 		cancel()
+		releaseOnce()
 		wg.Wait()
 	})
-
 	daemon.setOnStart(func(c *recordedContainer) (string, string, int) {
 		srcMount := findMount(t, c, workspace)
-		if slices.Equal(c.Args, []string{"list", "-deps", "-test", "./..."}) ||
-			slices.Equal(c.Args, []string{"mod", "tidy"}) {
-			enteredMu.Lock()
-			active = append(active, c)
-			if len(active) == 2 {
-				close(bothEntered)
-			}
-			enteredMu.Unlock()
+		first.Do(func() {
+			close(entered)
 			select {
-			case <-releaseBoth:
+			case <-release:
 			case <-ctx.Done():
-				return "", "context canceled at concurrent barrier\n", 1
 			}
-		}
+		})
 		if slices.Equal(c.Args, []string{"mod", "tidy"}) {
 			assert.NoError(t, os.WriteFile(filepath.Join(srcMount.Source, "go.sum"), []byte("tidy-staged-sum\n"), 0o644))
+			assert.NoError(t, os.WriteFile(filepath.Join(workspace, "go.sum"), []byte("concurrent-editor-edit\n"), 0o644))
 			return "tidy output " + strings.Repeat("x", maxCheckMessageBytes) + "\n", "", 0
 		}
 		assertFileContent(t, filepath.Join(srcMount.Source, "go.sum"), "initial-sum\n")
 		return "check step " + strings.Join(c.Args, " ") + "\n", "", 0
 	})
-
-	wg.Add(2)
+	wg.Add(1)
 	go func() {
 		defer wg.Done()
 		defer close(checkDone)
 		checkRes, checkErr = httpClient.CheckProject(ctx)
 	}()
-	go func() {
-		defer wg.Done()
-		defer close(updateDone)
-		updateRes, updateErr = httpClient.UpdateDependencies(ctx)
-	}()
-
 	select {
-	case <-bothEntered:
+	case <-entered:
 	case <-checkDone:
-		cancel()
-		require.FailNowf(t, "check_project exited before entering sandbox", "res=%+v err=%v", checkRes, checkErr)
-	case <-updateDone:
-		cancel()
-		require.FailNowf(t, "update_dependencies exited before entering sandbox", "res=%+v err=%v", updateRes, updateErr)
+		require.FailNowf(t, "check_project exited before entering its copy", "res=%+v err=%v", checkRes, checkErr)
 	case <-ctx.Done():
-		require.FailNowf(t, "timed out waiting for concurrent operations to enter sandbox", "ctx=%v", ctx.Err())
+		require.FailNow(t, "timed out waiting for the check helper")
 	}
-
-	enteredMu.Lock()
-	require.Len(t, active, 2)
-	c0, c1 := active[0], active[1]
-	enteredMu.Unlock()
-	assert.NotEqual(t, c0.Label, c1.Label)
-	assert.NotEqual(t, c0.DockerConfig, c1.DockerConfig)
-	for _, target := range []string{workspace, containerModCache, containerWork} {
-		assert.NotEqual(t, findMount(t, c0, target).Source, findMount(t, c1, target).Source)
-	}
-
-	require.NoError(t, os.WriteFile(filepath.Join(workspace, "go.sum"), []byte("concurrent-user-edit\n"), 0o644))
-	close(releaseBoth)
-	for _, done := range []<-chan struct{}{checkDone, updateDone} {
-		select {
-		case <-done:
-		case <-ctx.Done():
-			require.FailNowf(t, "timed out waiting for concurrent operations to finish", "ctx=%v", ctx.Err())
-		}
+	_, err := httpClient.UpdateDependencies(ctx)
+	assertServiceError(t, err, "working_copy_busy")
+	require.NoError(t, os.WriteFile(filepath.Join(workspace, "go.sum"), []byte("later-builder-edit\n"), 0o644))
+	releaseOnce()
+	select {
+	case <-checkDone:
+	case <-ctx.Done():
+		require.FailNow(t, "check helper did not finish")
 	}
 	require.NoError(t, checkErr)
-	require.NoError(t, updateErr)
 	assert.True(t, checkRes.Passed)
+	updateRes, err := httpClient.UpdateDependencies(ctx)
+	require.NoError(t, err)
 	assert.Empty(t, updateRes.FilesWritten)
 	assert.Contains(t, updateRes.Message, "go.sum was not written: manifest conflict: go.sum changed during update_dependencies; call again")
-	assertFileContent(t, filepath.Join(workspace, "go.sum"), "concurrent-user-edit\n")
-
+	assertFileContent(t, filepath.Join(workspace, "go.sum"), "concurrent-editor-edit\n")
+	assertFileContent(t, filepath.Join(project, "go.sum"), "initial-sum\n")
+	created := daemon.createdContainers()
+	require.Len(t, created, 3)
+	assert.NotEqual(t, created[0].Label, created[2].Label)
+	assert.NotEqual(t, created[0].DockerConfig, created[2].DockerConfig)
+	for _, target := range []string{workspace, containerModCache, containerWork} {
+		assert.NotEqual(t, findMount(t, &created[0], target).Source, findMount(t, &created[2], target).Source)
+	}
 	checkPage, err := httpClient.ReadCheckOutput(ctx, &gensurla.ReadCheckOutputPayload{OpID: checkRes.OpID})
 	require.NoError(t, err)
 	assert.Contains(t, checkPage.Text, "check step test ./...")
@@ -684,20 +836,17 @@ func testConcurrentCheckAndUpdate(t *testing.T, daemon *fakeDockerDaemon) {
 	assertServiceError(t, err, "unprocessable")
 }
 
-// testTwoServerUpdateContention runs UpdateDependencies concurrently on two
-// distinct servers bound to the same workspace, holding srvA's check helper
-// inside writeAtomic (while it holds the live directory flock) until srvB
-// attempts publication. The hold is the publish gate of TestMain's check-run
-// role. Every wait is bounded by ctx and early worker completion, and the
-// gate is released before the servers close.
-func testTwoServerUpdateContention(t *testing.T, daemon *fakeDockerDaemon) {
+// testIndependentServerUpdates keeps independent servers' copy reservations,
+// scratch, containers and writes separate while their helpers run concurrently.
+// Each server has its own project and numbered assignment: starting a second
+// build on one physical copy would move the first assignment's branch.
+func testIndependentServerUpdates(t *testing.T, daemon *fakeDockerDaemon) {
 	t.Helper()
-	workspace := newShopModule(t, map[string]string{"go.sum": "initial-sum\n"})
-	srvA := newCheckTestServer(t, Options{WorkspaceDir: workspace})
-	srvB := newCheckTestServer(t, Options{WorkspaceDir: workspace})
-	// Registered after the servers so LIFO teardown releases a held helper
-	// before the servers wait for their operations.
-	gate := newPublishGate(t)
+	projectA := newShopModule(t, map[string]string{"go.sum": "initial-sum\n"})
+	projectB := newShopModule(t, map[string]string{"go.sum": "initial-sum\n"})
+	cacheA, cacheB := newCheckModuleCache(t), newCheckModuleCache(t)
+	srvA := newCheckTestServer(t, Options{WorkspaceDir: projectA, CheckModuleCacheDir: cacheA})
+	srvB := newCheckTestServer(t, Options{WorkspaceDir: projectB, CheckModuleCacheDir: cacheB})
 	ctx, cancel := context.WithTimeout(t.Context(), lifecycleWaitTimeout)
 	bothTidying := make(chan struct{})
 	srvADone, srvBDone := make(chan struct{}), make(chan struct{})
@@ -710,12 +859,9 @@ func testTwoServerUpdateContention(t *testing.T, daemon *fakeDockerDaemon) {
 	)
 	t.Cleanup(func() {
 		cancel()
-		assert.NoError(t, gate.release())
 		wg.Wait()
 	})
-
 	daemon.setOnStart(func(c *recordedContainer) (string, string, int) {
-		srcMount := findMount(t, c, workspace)
 		tidyMu.Lock()
 		tidyEntered++
 		if tidyEntered == 2 {
@@ -731,20 +877,17 @@ func testTwoServerUpdateContention(t *testing.T, daemon *fakeDockerDaemon) {
 		case <-ctx.Done():
 			return "", "context canceled waiting for tidy barrier\n", 1
 		}
-		if strings.HasPrefix(srcMount.Source, srvA.cp.checkWorkDir) {
-			assert.NoError(t, os.WriteFile(filepath.Join(srcMount.Source, "go.sum"), []byte("sum-from-a\n"), 0o644))
-			return "tidied a\n", "", 0
+		value := "sum-from-a\n"
+		cache := cacheA
+		if c.WorkDir == srvB.workingFolder {
+			value = "sum-from-b\n"
+			cache = cacheB
 		}
-		assert.NoError(t, os.WriteFile(filepath.Join(srcMount.Source, "go.sum"), []byte("sum-from-b\n"), 0o644))
-		select {
-		case <-gate.held:
-		case <-srvADone:
-		case <-ctx.Done():
-			return "", "context canceled waiting for srvA write lock\n", 1
-		}
-		return "tidied b\n", "", 0
+		assert.Equal(t, cache, findMount(t, c, containerModCache).Source)
+		mount := findMount(t, c, c.WorkDir)
+		assert.NoError(t, os.WriteFile(filepath.Join(mount.Source, "go.sum"), []byte(value), 0o644))
+		return "tidied own copy\n", "", 0
 	})
-
 	wg.Add(2)
 	go func() {
 		defer wg.Done()
@@ -756,30 +899,30 @@ func testTwoServerUpdateContention(t *testing.T, daemon *fakeDockerDaemon) {
 		defer close(srvBDone)
 		resB, errB = srvB.httpClient.UpdateDependencies(ctx)
 	}()
-	select {
-	case <-srvBDone:
-	case <-ctx.Done():
-		require.FailNowf(t, "timed out waiting for srvB's contending update_dependencies call", "ctx=%v", ctx.Err())
-	}
-	require.NoError(t, gate.release())
-	select {
-	case <-srvADone:
-	case <-ctx.Done():
-		require.FailNowf(t, "timed out waiting for srvA's update_dependencies call", "ctx=%v", ctx.Err())
+	for _, done := range []<-chan struct{}{srvADone, srvBDone} {
+		select {
+		case <-done:
+		case <-ctx.Done():
+			require.FailNow(t, "independent update helpers did not finish")
+		}
 	}
 	require.NoError(t, errA)
 	require.NoError(t, errB)
 	assert.Equal(t, []string{"go.sum"}, resA.FilesWritten)
-	assert.Empty(t, resB.FilesWritten)
-	assert.Contains(t, resB.Message, "go.sum was not written: manifest conflict: another update_dependencies is writing the directory of go.sum; call again")
-	assertFileContent(t, filepath.Join(workspace, "go.sum"), "sum-from-a\n")
+	assert.Equal(t, []string{"go.sum"}, resB.FilesWritten)
+	assert.NotEqual(t, resA.OpID, resB.OpID)
+	assertFileContent(t, filepath.Join(srvA.workingFolder, "go.sum"), "sum-from-a\n")
+	assertFileContent(t, filepath.Join(srvB.workingFolder, "go.sum"), "sum-from-b\n")
+	assertFileContent(t, filepath.Join(projectA, "go.sum"), "initial-sum\n")
+	assertFileContent(t, filepath.Join(projectB, "go.sum"), "initial-sum\n")
 }
 
 // runPinned starts a ControlPlane at cards and runs one CheckProject call whose
 // first container fails docker rm -f, returning the retained pinnedCheck.
-func runPinned(t *testing.T, ws, cards string, d *fakeDockerDaemon) pinnedCheck {
+func runPinned(t *testing.T, ws, cards string, d *fakeDockerDaemon, moduleCache ...string) pinnedCheck {
 	t.Helper()
-	cp := openCheckCP(t, cards, ws)
+	cp := openCheckCP(t, cards, ws, moduleCache...)
+	readCheckBuilderFixture(t, cp)
 	var pinned atomic.Value
 	d.setOnStart(func(c *recordedContainer) (string, string, int) {
 		if pinned.CompareAndSwap(nil, c.Name) {
@@ -787,7 +930,7 @@ func runPinned(t *testing.T, ws, cards string, d *fakeDockerDaemon) pinnedCheck 
 		}
 		return "pinned check output\n", "", 0
 	})
-	_, err := cp.CheckProject(WithPrincipal(t.Context(), Principal{ID: "alice@example.com"}))
+	_, err := cp.CheckProject(WithPrincipal(t.Context(), Principal{ID: "alice@example.com", CallerID: "alice@example.com", Kind: CallerUser}))
 	require.Error(t, err)
 	name, ok := pinned.Load().(string)
 	require.True(t, ok)

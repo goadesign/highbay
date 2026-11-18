@@ -359,8 +359,8 @@ func runLive(ctx context.Context, c Command, artifacts []string, key string, std
 	}
 }
 
-// checkLiveURL requires an http origin on the IPv4 loopback address, the
-// only address a sandboxed candidate can listen on.
+// checkLiveURL requires an http origin on the IPv4 loopback address, so the
+// live target Surla links to is a service on this computer.
 func checkLiveURL(raw string) error {
 	u, err := url.Parse(raw)
 	if err != nil || u.Scheme != "http" || u.Hostname() != "127.0.0.1" || u.Port() == "" ||

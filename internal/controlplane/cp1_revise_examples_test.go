@@ -46,7 +46,7 @@ func withRevisionAnalysis(t *testing.T, p *gensurla.ReviseChangePayload, analysi
 // assigns check_01, check_02, ... IDs matching the goa-ai/eval validateID regex
 // even when change_id contains hyphens and digits.
 func TestProposeChangeAssignsDefaultExampleIDs_Decision2A(t *testing.T) {
-	aliceCtx := WithPrincipal(context.Background(), Principal{ID: "alice@example.com"})
+	aliceCtx := WithPrincipal(context.Background(), Principal{ID: "alice@example.com", CallerID: "alice@example.com", Kind: CallerUser})
 	proposalJSON := `{
 		"summary": "Process refunds under $50 instantly.",
 		"ambiguities": [],
@@ -78,7 +78,7 @@ func TestProposeChangeAssignsDefaultExampleIDs_Decision2A(t *testing.T) {
 // preserves surviving prior examples' exact IDs via prior_id (both code-assigned check_01
 // and caller-confirmed custom IDs like ex-search).
 func TestReviseChangePreservesSurvivingPriorExamples_Decision1A(t *testing.T) {
-	aliceCtx := WithPrincipal(context.Background(), Principal{ID: "alice@example.com"})
+	aliceCtx := WithPrincipal(context.Background(), Principal{ID: "alice@example.com", CallerID: "alice@example.com", Kind: CallerUser})
 	proposalJSON := `{
 		"summary": "Search products.",
 		"ambiguities": [{"question": "Include out of stock?", "options": ["yes", "no"]}],
@@ -143,7 +143,7 @@ func TestReviseChangePreservesSurvivingPriorExamples_Decision1A(t *testing.T) {
 // TestReviseChangeAllocatesLowestUnusedIDAbsentFromBothTables verifies that brand-new
 // examples in revise_change receive the lowest check_%02d absent from both input and output tables.
 func TestReviseChangeAllocatesLowestUnusedIDAbsentFromBothTables(t *testing.T) {
-	aliceCtx := WithPrincipal(context.Background(), Principal{ID: "alice@example.com"})
+	aliceCtx := WithPrincipal(context.Background(), Principal{ID: "alice@example.com", CallerID: "alice@example.com", Kind: CallerUser})
 
 	t.Run("surviving check_01 and check_05 allocate check_02 for new example", func(t *testing.T) {
 		proposalJSON := `{
@@ -198,6 +198,7 @@ func TestReviseChangeAllocatesLowestUnusedIDAbsentFromBothTables(t *testing.T) {
 			Prompt:          "Revised feature.",
 		}, revisionJSON))
 		require.NoError(t, err)
+		revised = proposalCard(t, revised)
 		require.Len(t, revised.Examples, 3)
 		assert.Equal(t, "check_01", revised.Examples[0].ID)
 		assert.Equal(t, "check_05", revised.Examples[1].ID)
@@ -252,7 +253,7 @@ func TestReviseChangeAllocatesLowestUnusedIDAbsentFromBothTables(t *testing.T) {
 // rejects any prior example omitted from both examples[*].prior_id and removed_example_ids
 // as unprocessable, leaving the saved card untouched.
 func TestReviseChangeRejectsOmittedPriorExampleID_Decision1A(t *testing.T) {
-	aliceCtx := WithPrincipal(context.Background(), Principal{ID: "alice@example.com"})
+	aliceCtx := WithPrincipal(context.Background(), Principal{ID: "alice@example.com", CallerID: "alice@example.com", Kind: CallerUser})
 	proposalJSON := `{
 		"summary": "Feature.",
 		"ambiguities": [],
@@ -298,7 +299,7 @@ func TestReviseChangeRejectsOmittedPriorExampleID_Decision1A(t *testing.T) {
 // rejects unknown prior_id, duplicate prior_id, unknown removed_example_ids, duplicate
 // removed_example_ids, ID in both lists, or a whitespace-only removed entry as unprocessable.
 func TestReviseChangeRejectsInvalidPriorAccounting_Decision1A(t *testing.T) {
-	aliceCtx := WithPrincipal(context.Background(), Principal{ID: "alice@example.com"})
+	aliceCtx := WithPrincipal(context.Background(), Principal{ID: "alice@example.com", CallerID: "alice@example.com", Kind: CallerUser})
 
 	cases := []struct {
 		name       string
@@ -420,80 +421,6 @@ func TestReviseChangeRejectsInvalidPriorAccounting_Decision1A(t *testing.T) {
 	}
 }
 
-// TestReviseChangeLegacySavedCardWithHyphenatedIDs verifies that a legacy on-disk card
-// with hyphenated IDs (e.g. feat-1-check-01) loads cleanly under DisallowUnknownFields,
-// preserves the legacy ID on surviving examples, and allocates check_01 for new examples.
-func TestReviseChangeLegacySavedCardWithHyphenatedIDs(t *testing.T) {
-	aliceCtx := WithPrincipal(context.Background(), Principal{ID: "alice@example.com"})
-	revisionJSON := `{
-		"summary": "Revised legacy feature.",
-		"ambiguities": [],
-		"examples": [
-			{"prior_id": "feat-1-check-01", "scenario": "Kept legacy check", "input_summary": "Legacy In", "expected_outcome": "Legacy Out", "verification_kind": "deterministic"},
-			{"scenario": "New check", "input_summary": "New In", "expected_outcome": "New Out", "verification_kind": "deterministic"}
-		],
-		"removed_example_ids": [],
-		"preserved_behaviors": []
-	}`
-	cp := newControlPlane(t, Options{})
-
-	// Construct and save a legacy card file with feat-1-check-01 on disk.
-	legacyCard := &gensurla.ChangeCardResult{
-		ChangeID:           "feat-legacy",
-		Status:             StatusConfirmed,
-		Prompt:             "Original legacy feature.",
-		Summary:            "Original legacy summary.",
-		Ambiguities:        []*gensurla.AmbiguityQuestion{},
-		Answers:            map[string]string{},
-		PreservedBehaviors: []string{"Preserved behavior."},
-		Examples: []*gensurla.ExampleItem{
-			{
-				ID:               "feat-1-check-01",
-				Scenario:         "Legacy check",
-				InputSummary:     "Legacy In",
-				ExpectedOutcome:  "Legacy Out",
-				VerificationKind: "deterministic",
-			},
-		},
-	}
-	rev, err := computeCanonicalRevision(legacyCard, "alice@example.com", "")
-	require.NoError(t, err)
-	legacyCard.RequestRevision = rev
-
-	// Save legacy card directly via cardStore.
-	err = cp.cards.save(storedChangeCard{
-		card:         legacyCard,
-		owner:        "alice@example.com",
-		designSource: "",
-	})
-	require.NoError(t, err)
-
-	// Verify it loads cleanly from disk under DisallowUnknownFields.
-	loaded, err := cp.GetChange(aliceCtx, &gensurla.GetChangePayload{ChangeID: "feat-legacy"})
-	require.NoError(t, err)
-	assert.Equal(t, rev, loaded.RequestRevision)
-	require.Len(t, loaded.Examples, 1)
-	assert.Equal(t, "feat-1-check-01", loaded.Examples[0].ID)
-
-	// Revise the legacy card.
-	revised, err := cp.ReviseChange(aliceCtx, withRevisionAnalysis(t, &gensurla.ReviseChangePayload{
-		ChangeID:        "feat-legacy",
-		RequestRevision: loaded.RequestRevision,
-		Prompt:          "Add another check to legacy feature.",
-	}, revisionJSON))
-	require.NoError(t, err)
-	require.Len(t, revised.Examples, 2)
-	assert.Equal(t, "feat-1-check-01", revised.Examples[0].ID, "surviving legacy example preserves its exact ID")
-	assert.Equal(t, "check_01", revised.Examples[1].ID, "brand-new example gets lowest unused check_NN (check_01)")
-
-	// Verify the newly revised card persists and loads cleanly from disk.
-	reloaded, err := cp.GetChange(aliceCtx, &gensurla.GetChangePayload{ChangeID: "feat-legacy"})
-	require.NoError(t, err)
-	assert.Equal(t, revised.RequestRevision, reloaded.RequestRevision)
-	assert.Equal(t, "feat-1-check-01", reloaded.Examples[0].ID)
-	assert.Equal(t, "check_01", reloaded.Examples[1].ID)
-}
-
 // TestReviseChangeWhitespaceManualIDRemovalAndCollision verifies that:
 //  1. A confirmed manual example ID with surrounding whitespace (" custom ") can be
 //     explicitly removed via removed_example_ids: [" custom "] without being rejected
@@ -505,7 +432,7 @@ func TestReviseChangeLegacySavedCardWithHyphenatedIDs(t *testing.T) {
 //     and a later revision (R4) after " check_01 " is no longer in the prior table can
 //     allocate "check_01" again.
 func TestReviseChangeWhitespaceManualIDRemovalAndCollision(t *testing.T) {
-	aliceCtx := WithPrincipal(context.Background(), Principal{ID: "alice@example.com"})
+	aliceCtx := WithPrincipal(context.Background(), Principal{ID: "alice@example.com", CallerID: "alice@example.com", Kind: CallerUser})
 	proposeR1JSON := `{
 		"summary": "Initial feature.",
 		"ambiguities": [],
@@ -589,6 +516,7 @@ func TestReviseChangeWhitespaceManualIDRemovalAndCollision(t *testing.T) {
 		Prompt:          "Remove custom and add a new row.",
 	}, reviseR2JSON))
 	require.NoError(t, err)
+	r2 = proposalCard(t, r2)
 	require.Len(t, r2.Examples, 2)
 	assert.Equal(t, " check_01 ", r2.Examples[0].ID, "kept example preserves exact whitespace-padded ID")
 	assert.Equal(t, "check_02", r2.Examples[1].ID, "allocator reserves trimmed 'check_01' so new row gets 'check_02'")
@@ -610,6 +538,7 @@ func TestReviseChangeWhitespaceManualIDRemovalAndCollision(t *testing.T) {
 		Prompt:          "Remove padded check_01 and add a row.",
 	}, reviseR3JSON))
 	require.NoError(t, err)
+	r3 = proposalCard(t, r3)
 	require.Len(t, r3.Examples, 2)
 	assert.Equal(t, "check_02", r3.Examples[0].ID)
 	assert.Equal(t, "check_03", r3.Examples[1].ID, "removed ' check_01 ' is reserved during R3 construction")
@@ -621,6 +550,7 @@ func TestReviseChangeWhitespaceManualIDRemovalAndCollision(t *testing.T) {
 		Prompt:          "Add another row in R4.",
 	}, reviseR4JSON))
 	require.NoError(t, err)
+	r4 = proposalCard(t, r4)
 	require.Len(t, r4.Examples, 3)
 	assert.Equal(t, "check_02", r4.Examples[0].ID)
 	assert.Equal(t, "check_03", r4.Examples[1].ID)

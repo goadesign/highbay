@@ -4,7 +4,6 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"testing"
 
@@ -16,14 +15,10 @@ import (
 // candidate or suite build returns a build-stage error whose private Err
 // carries the end of the compiler's output and names the build log Prepare
 // kept under WorkDir/evidence, while the Summary that builders see stays free
-// of paths and compiler output. It runs real sandboxed builds, so it needs
-// macOS.
+// of paths and compiler output. It runs real Go builds.
 func TestPrepareNamesTheBuildLogOnlyInThePrivateError(t *testing.T) {
 	if testing.Short() {
-		t.Skip("runs the sandboxed Go toolchain; the full suite (go test without -short) covers it")
-	}
-	if runtime.GOOS != "darwin" {
-		t.Skip("the build sandbox is implemented with sandbox-exec on macOS")
+		t.Skip("runs the Go toolchain; the full suite (go test without -short) covers it")
 	}
 	const (
 		goodMain = "package main\n\nfunc main() {}\n"
@@ -80,7 +75,8 @@ func TestPrepareNamesTheBuildLogOnlyInThePrivateError(t *testing.T) {
 				SuiteModule:     ".",
 				SuiteCommand:    "./cmd/suite",
 				WorkDir:         workDir,
-			})
+				Tests:           TestsEvaluator,
+			}, t.TempDir())
 			var stage *StageError
 			require.True(t, errors.As(err, &stage), "error %v is not a *StageError", err)
 			assert.Equal(t, StageBuild, stage.Stage)

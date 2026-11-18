@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"maps"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -40,9 +41,9 @@ type (
 
 const (
 	// testSurlaVersion is a canonical Surla module pseudo-version used in workspace unit tests.
-	testSurlaVersion = "v0.0.0-20261110163737-d9beac313142"
-	// fakeInitialSuiteCommit is the synthetic initial Git commit hash returned by fakeInitRunner.
-	fakeInitialSuiteCommit = "1111111111111111111111111111111111111111"
+	testSurlaVersion = "v0.0.0-20261115014514-02c792da3ded"
+	// fakeInitialCommit is the synthetic initial Git commit hash returned by fakeInitRunner.
+	fakeInitialCommit = "1111111111111111111111111111111111111111"
 )
 
 // TestNewValidatesSurlaVersionAndWorkspaceSeparation verifies that New rejects non-canonical
@@ -55,6 +56,7 @@ func TestNewValidatesSurlaVersionAndWorkspaceSeparation(t *testing.T) {
 
 	// Invalid SurlaVersion is rejected at startup.
 	_, err := New(Options{
+		Team:         testTeamBinding(),
 		CardsDir:     filepath.Join(root, "cards-bad-ver"),
 		WorkspaceDir: wsDir,
 		SurlaVersion: "(devel)",
@@ -63,6 +65,7 @@ func TestNewValidatesSurlaVersionAndWorkspaceSeparation(t *testing.T) {
 
 	// CardsDir inside WorkspaceDir is rejected at startup.
 	_, err = New(Options{
+		Team:         testTeamBinding(),
 		CardsDir:     filepath.Join(wsDir, ".surla", "cards"),
 		WorkspaceDir: wsDir,
 		SurlaVersion: testSurlaVersion,
@@ -93,17 +96,17 @@ func TestWorkspaceWALReconciliationStates(t *testing.T) {
 		require.NoError(t, unix.Lstat(stagedDir, &st))
 
 		walBytes, err := json.Marshal(workspaceFile{
-			Dir:         "shop",
-			SuiteCommit: fakeInitialSuiteCommit,
-			StageDir:    evalStageParent,
-			Staging:     ".surla-init-123",
-			Dev:         uint64(st.Dev),
-			Ino:         st.Ino,
+			Dir:      "shop",
+			StageDir: evalStageParent,
+			Staging:  ".surla-init-123",
+			Dev:      uint64(st.Dev),
+			Ino:      st.Ino,
 		})
 		require.NoError(t, err)
 		require.NoError(t, os.WriteFile(filepath.Join(cardsDir, workspaceRecordFile), walBytes, 0o600))
 
 		cp, err := New(Options{
+			Team:         testTeamBinding(),
 			CardsDir:     cardsDir,
 			WorkspaceDir: wsDir,
 			InitStageDir: stageParent,
@@ -113,7 +116,6 @@ func TestWorkspaceWALReconciliationStates(t *testing.T) {
 		defer cp.Close()
 
 		assert.Equal(t, "shop", filepath.Base(cp.activeWorkspaceDir))
-		assert.Equal(t, fakeInitialSuiteCommit, cp.boundSuiteCommit)
 		_, err = os.Stat(stagedDir)
 		assert.ErrorIs(t, err, os.ErrNotExist)
 		var wf workspaceFile
@@ -121,7 +123,6 @@ func TestWorkspaceWALReconciliationStates(t *testing.T) {
 		require.NoError(t, err)
 		require.NoError(t, json.Unmarshal(rawWAL, &wf))
 		assert.Equal(t, "shop", wf.Dir)
-		assert.Equal(t, fakeInitialSuiteCommit, wf.SuiteCommit)
 		assert.Empty(t, wf.Staging)
 	})
 
@@ -138,17 +139,17 @@ func TestWorkspaceWALReconciliationStates(t *testing.T) {
 		evalStageParent, err := abspath.Eval(stageParent)
 		require.NoError(t, err)
 		walBytes, err := json.Marshal(workspaceFile{
-			Dir:         "shop",
-			SuiteCommit: fakeInitialSuiteCommit,
-			StageDir:    evalStageParent,
-			Staging:     ".surla-init-missing",
-			Dev:         1,
-			Ino:         1,
+			Dir:      "shop",
+			StageDir: evalStageParent,
+			Staging:  ".surla-init-missing",
+			Dev:      1,
+			Ino:      1,
 		})
 		require.NoError(t, err)
 		require.NoError(t, os.WriteFile(filepath.Join(cardsDir, workspaceRecordFile), walBytes, 0o600))
 
 		cp, err := New(Options{
+			Team:         testTeamBinding(),
 			CardsDir:     cardsDir,
 			WorkspaceDir: wsDir,
 			InitStageDir: stageParent,
@@ -176,17 +177,17 @@ func TestWorkspaceWALReconciliationStates(t *testing.T) {
 		var st unix.Stat_t
 		require.NoError(t, unix.Lstat(targetDir, &st))
 		walBytes, err := json.Marshal(workspaceFile{
-			Dir:         "shop",
-			SuiteCommit: fakeInitialSuiteCommit,
-			StageDir:    stageParent,
-			Staging:     ".surla-init-456",
-			Dev:         uint64(st.Dev),
-			Ino:         st.Ino,
+			Dir:      "shop",
+			StageDir: stageParent,
+			Staging:  ".surla-init-456",
+			Dev:      uint64(st.Dev),
+			Ino:      st.Ino,
 		})
 		require.NoError(t, err)
 		require.NoError(t, os.WriteFile(filepath.Join(cardsDir, workspaceRecordFile), walBytes, 0o600))
 
 		cp, err := New(Options{
+			Team:         testTeamBinding(),
 			CardsDir:     cardsDir,
 			WorkspaceDir: wsDir,
 			InitStageDir: stageParent,
@@ -196,13 +197,11 @@ func TestWorkspaceWALReconciliationStates(t *testing.T) {
 		defer cp.Close()
 
 		assert.Equal(t, "shop", filepath.Base(cp.activeWorkspaceDir))
-		assert.Equal(t, fakeInitialSuiteCommit, cp.boundSuiteCommit)
 		var wf workspaceFile
 		rawWAL, err := os.ReadFile(filepath.Join(cardsDir, workspaceRecordFile))
 		require.NoError(t, err)
 		require.NoError(t, json.Unmarshal(rawWAL, &wf))
 		assert.Equal(t, "shop", wf.Dir)
-		assert.Equal(t, fakeInitialSuiteCommit, wf.SuiteCommit)
 		assert.Empty(t, wf.Staging)
 	})
 
@@ -229,17 +228,17 @@ func TestWorkspaceWALReconciliationStates(t *testing.T) {
 		var wsStat unix.Stat_t
 		require.NoError(t, unix.Lstat(wsDir, &wsStat))
 		walBytes, err := json.Marshal(workspaceFile{
-			Dir:         "shop",
-			SuiteCommit: fakeInitialSuiteCommit,
-			StageDir:    evalStageParent,
-			Staging:     ".surla-init-foreign",
-			Dev:         uint64(wsStat.Dev),
-			Ino:         wsStat.Ino, // matches neither targetDir nor foreignStageDir
+			Dir:      "shop",
+			StageDir: evalStageParent,
+			Staging:  ".surla-init-foreign",
+			Dev:      uint64(wsStat.Dev),
+			Ino:      wsStat.Ino, // matches neither targetDir nor foreignStageDir
 		})
 		require.NoError(t, err)
 		require.NoError(t, os.WriteFile(filepath.Join(cardsDir, workspaceRecordFile), walBytes, 0o600))
 
 		cp, err := New(Options{
+			Team:         testTeamBinding(),
 			CardsDir:     cardsDir,
 			WorkspaceDir: wsDir,
 			InitStageDir: stageParent,
@@ -273,15 +272,15 @@ func TestWorkspaceWALReconciliationStates(t *testing.T) {
 		var wsStat unix.Stat_t
 		require.NoError(t, unix.Lstat(wsDir, &wsStat))
 		walBytes, err := json.Marshal(workspaceFile{
-			Dir:         "shop",
-			SuiteCommit: fakeInitialSuiteCommit,
-			Dev:         uint64(wsStat.Dev),
-			Ino:         wsStat.Ino, // different inode from targetDir
+			Dir: "shop",
+			Dev: uint64(wsStat.Dev),
+			Ino: wsStat.Ino, // different inode from targetDir
 		})
 		require.NoError(t, err)
 		require.NoError(t, os.WriteFile(filepath.Join(cardsDir, workspaceRecordFile), walBytes, 0o600))
 
 		_, err = New(Options{
+			Team:         testTeamBinding(),
 			CardsDir:     cardsDir,
 			WorkspaceDir: wsDir,
 			SurlaVersion: testSurlaVersion,
@@ -303,15 +302,15 @@ func TestWorkspaceWALReconciliationStates(t *testing.T) {
 		var wsStat unix.Stat_t
 		require.NoError(t, unix.Lstat(wsDir, &wsStat))
 		walBytes, err := json.Marshal(workspaceFile{
-			Dir:         "shop",
-			SuiteCommit: fakeInitialSuiteCommit,
-			Dev:         uint64(wsStat.Dev),
-			Ino:         wsStat.Ino,
+			Dir: "shop",
+			Dev: uint64(wsStat.Dev),
+			Ino: wsStat.Ino,
 		})
 		require.NoError(t, err)
 		require.NoError(t, os.WriteFile(filepath.Join(cardsDir, workspaceRecordFile), walBytes, 0o600))
 
 		_, err = New(Options{
+			Team:         testTeamBinding(),
 			CardsDir:     cardsDir,
 			WorkspaceDir: wsDir,
 			SurlaVersion: testSurlaVersion,
@@ -339,17 +338,17 @@ func TestWorkspaceWALReconciliationStates(t *testing.T) {
 		var wsStat unix.Stat_t
 		require.NoError(t, unix.Lstat(wsDir, &wsStat))
 		walBytes, err := json.Marshal(workspaceFile{
-			Dir:         "shop",
-			SuiteCommit: fakeInitialSuiteCommit,
-			StageDir:    evalStageParent,
-			Staging:     ".surla-init-replaced",
-			Dev:         uint64(wsStat.Dev),
-			Ino:         wsStat.Ino, // does not match foreignStage
+			Dir:      "shop",
+			StageDir: evalStageParent,
+			Staging:  ".surla-init-replaced",
+			Dev:      uint64(wsStat.Dev),
+			Ino:      wsStat.Ino, // does not match foreignStage
 		})
 		require.NoError(t, err)
 		require.NoError(t, os.WriteFile(filepath.Join(cardsDir, workspaceRecordFile), walBytes, 0o600))
 
 		cp, err := New(Options{
+			Team:         testTeamBinding(),
 			CardsDir:     cardsDir,
 			WorkspaceDir: wsDir,
 			InitStageDir: stageParent,
@@ -369,7 +368,7 @@ func TestWorkspaceWALReconciliationStates(t *testing.T) {
 // TestInitProjectErrorAndSpanClassificationAndEndToEndTransition verifies InitProject's
 // error contracts, OpenTelemetry span status codes, and in-place workspace transition.
 func TestInitProjectErrorAndSpanClassificationAndEndToEndTransition(t *testing.T) {
-	aliceCtx := WithPrincipal(context.Background(), Principal{ID: "alice@example.com"})
+	aliceCtx := WithPrincipal(context.Background(), Principal{ID: "alice@example.com", CallerID: "alice@example.com", Kind: CallerUser})
 
 	withTrackedSpans := func(t *testing.T) *tracetest.InMemoryExporter {
 		t.Helper()
@@ -384,13 +383,14 @@ func TestInitProjectErrorAndSpanClassificationAndEndToEndTransition(t *testing.T
 		return exp
 	}
 
-	t.Run("capability_unavailable_when_workspace_or_version_unset", func(t *testing.T) {
+	t.Run("capability_unavailable_when_version_unset", func(t *testing.T) {
 		exp := withTrackedSpans(t)
 		root := t.TempDir()
 		wsDir := filepath.Join(root, "ws")
 		require.NoError(t, os.MkdirAll(wsDir, 0o755))
 
 		cp, err := New(Options{
+			Team:         testTeamBinding(),
 			CardsDir:     filepath.Join(root, "cards"),
 			WorkspaceDir: wsDir,
 		})
@@ -414,6 +414,7 @@ func TestInitProjectErrorAndSpanClassificationAndEndToEndTransition(t *testing.T
 		wsDir := filepath.Join(root, "ws")
 		require.NoError(t, os.MkdirAll(wsDir, 0o755))
 		cp, err := New(Options{
+			Team:         testTeamBinding(),
 			CardsDir:     filepath.Join(root, "cards"),
 			WorkspaceDir: wsDir,
 			InitStageDir: filepath.Join(root, "stage"),
@@ -462,6 +463,7 @@ func TestInitProjectErrorAndSpanClassificationAndEndToEndTransition(t *testing.T
 		cardsDir := filepath.Join(root, "cards")
 		require.NoError(t, os.MkdirAll(wsDir, 0o755))
 		cp, err := New(Options{
+			Team:         testTeamBinding(),
 			CardsDir:     cardsDir,
 			WorkspaceDir: wsDir,
 			InitStageDir: filepath.Join(root, "stage"),
@@ -497,6 +499,7 @@ func TestInitProjectErrorAndSpanClassificationAndEndToEndTransition(t *testing.T
 			secretTail    = "SECRET_COMPILER_TAIL_TOKEN_98765"
 		)
 		cp, err := New(Options{
+			Team:         testTeamBinding(),
 			CardsDir:     cardsDir,
 			WorkspaceDir: wsDir,
 			InitStageDir: stageDir,
@@ -518,7 +521,7 @@ func TestInitProjectErrorAndSpanClassificationAndEndToEndTransition(t *testing.T
 		defer cp.Close()
 
 		handler := NewHTTPHandler(cp, func(_ *http.Request) (Principal, error) {
-			return Principal{ID: "alice@example.com"}, nil
+			return Principal{ID: "alice@example.com", CallerID: "guide", Kind: CallerGuide}, nil
 		})
 
 		// 1. Verify HTTP POST /workspace/init returns 500 Fault without leaking Log or Tail.
@@ -584,6 +587,7 @@ func TestInitProjectErrorAndSpanClassificationAndEndToEndTransition(t *testing.T
 		require.NoError(t, os.MkdirAll(wsDir, 0o755))
 
 		cp, err := New(Options{
+			Team:         testTeamBinding(),
 			CardsDir:     cardsDir,
 			WorkspaceDir: wsDir,
 			InitStageDir: stageDir,
@@ -630,6 +634,7 @@ func TestInitProjectErrorAndSpanClassificationAndEndToEndTransition(t *testing.T
 		require.NoError(t, os.MkdirAll(wsDir, 0o755))
 
 		cp, err := New(Options{
+			Team:         testTeamBinding(),
 			CardsDir:     cardsDir,
 			WorkspaceDir: wsDir,
 			InitStageDir: stageDir,
@@ -649,16 +654,14 @@ func TestInitProjectErrorAndSpanClassificationAndEndToEndTransition(t *testing.T
 		assert.Equal(t, "shop", res.ServiceName)
 		assert.Equal(t, "example.com/shop", res.ModulePath)
 		assert.Equal(t, "shop", filepath.Base(res.Dir))
-		assert.Equal(t, fakeInitialSuiteCommit, res.Commit)
+		assert.Equal(t, fakeInitialCommit, res.Commit)
 		assert.Equal(t, res.Dir, cp.activeWorkspaceDir)
-		assert.Equal(t, fakeInitialSuiteCommit, cp.boundSuiteCommit)
 
 		var wf workspaceFile
 		rawWAL, err := os.ReadFile(filepath.Join(cardsDir, workspaceRecordFile))
 		require.NoError(t, err)
 		require.NoError(t, json.Unmarshal(rawWAL, &wf))
 		assert.Equal(t, "shop", wf.Dir)
-		assert.Equal(t, fakeInitialSuiteCommit, wf.SuiteCommit)
 		assert.Empty(t, wf.Staging)
 
 		spans := exp.GetSpans()
@@ -667,11 +670,64 @@ func TestInitProjectErrorAndSpanClassificationAndEndToEndTransition(t *testing.T
 	})
 }
 
+// TestInitProjectUsesSavedSourceToProtectAnExistingProject exercises the real
+// admission boundary after design files disappear, and permits a pre-init card.
+func TestInitProjectUsesSavedSourceToProtectAnExistingProject(t *testing.T) {
+	alice := WithPrincipal(context.Background(), Principal{ID: "alice@example.com", CallerID: "alice@example.com", Kind: CallerUser})
+	for _, withSource := range []bool{false, true} {
+		name := "empty pre-init card"
+		if withSource {
+			name = "saved design source"
+		}
+		t.Run(name, func(t *testing.T) {
+			root := t.TempDir()
+			workspace := filepath.Join(root, "workspace")
+			require.NoError(t, os.MkdirAll(workspace, 0o755))
+			if withSource {
+				require.NoError(t, os.Mkdir(filepath.Join(workspace, "design"), 0o755))
+				require.NoError(t, os.WriteFile(filepath.Join(workspace, "design", "design.go"), []byte("package design\n"), 0o644))
+			}
+			cp := newControlPlane(t, Options{
+				CardsDir: filepath.Join(root, "cards"), WorkspaceDir: workspace,
+				InitStageDir: filepath.Join(root, "stage"), SurlaVersion: testSurlaVersion,
+				InitRunner:   fakeInitRunner,
+				NewGenerator: func() scaffold.Generator { return &fakeInitGenerator{pkg: "shop"} },
+			})
+			if withSource {
+				// A legacy card can retain source captured by an older producer.
+				// Initialization must still protect that saved input.
+				saveDraftSourceCardFixture(t, cp, "chg", map[string]string{"design/design.go": "package design\n"})
+			} else {
+				_, err := cp.ProposeChange(alice, &gensurla.ProposeChangePayload{
+					ChangeID: "chg", Prompt: "Create a shop.", Analysis: refundAnalysis("Create a shop."),
+				})
+				require.NoError(t, err)
+			}
+			if withSource {
+				// The saved card is now the only evidence of prior design files.
+				require.NoError(t, os.Remove(filepath.Join(workspace, "design", "design.go")))
+				require.NoError(t, os.Remove(filepath.Join(workspace, "design")))
+			}
+			result, err := cp.InitProject(alice, &gensurla.InitProjectPayload{ModulePath: "example.com/shop"})
+			if withSource {
+				assertServiceError(t, err, "conflict")
+				assert.ErrorContains(t, err, "Change Cards that captured existing design files")
+				assert.NoDirExists(t, filepath.Join(workspace, "shop"))
+			} else {
+				require.NoError(t, err)
+				physicalProject, err := filepath.EvalSymlinks(filepath.Join(workspace, "shop"))
+				require.NoError(t, err)
+				assert.Equal(t, physicalProject, result.Dir)
+			}
+		})
+	}
+}
+
 // TestCloseDrainsAndCancelsInFlightInitProjectBeforeReleasingLocks verifies that Close cancels
-// and waits for an in-flight InitProject before releasing the project lock.
+// and waits for an in-flight InitProject before releasing the card store's lock.
 func TestCloseDrainsAndCancelsInFlightInitProjectBeforeReleasingLocks(t *testing.T) {
 	t.Parallel()
-	aliceCtx := WithPrincipal(context.Background(), Principal{ID: "alice@example.com"})
+	aliceCtx := WithPrincipal(context.Background(), Principal{ID: "alice@example.com", CallerID: "alice@example.com", Kind: CallerUser})
 
 	t.Run("close_during_prepare_cancels_context_and_waits_for_init_cleanup", func(t *testing.T) {
 		t.Parallel()
@@ -683,9 +739,9 @@ func TestCloseDrainsAndCancelsInFlightInitProjectBeforeReleasingLocks(t *testing
 
 		runnerStarted := make(chan struct{})
 		var runnerDone atomic.Bool
-		var lockReleasedBeforeRunnerDone atomic.Bool
 
 		cp, err := New(Options{
+			Team:         testTeamBinding(),
 			CardsDir:     cardsDir,
 			WorkspaceDir: wsDir,
 			InitStageDir: stageDir,
@@ -697,18 +753,16 @@ func TestCloseDrainsAndCancelsInFlightInitProjectBeforeReleasingLocks(t *testing
 					close(runnerStarted)
 				}
 				<-ctx.Done()
-				time.Sleep(20 * time.Millisecond)
+				unexpectedStore, lockErr := openCardStore(cardsDir)
+				if unexpectedStore != nil {
+					assert.NoError(t, unexpectedStore.close())
+				}
+				assert.ErrorContains(t, lockErr, "in use by another process")
 				runnerDone.Store(true)
 				return ctx.Err()
 			},
 			NewGenerator: func() scaffold.Generator {
 				return &fakeInitGenerator{pkg: "shop"}
-			},
-			CloseProjectLock: func() error {
-				if !runnerDone.Load() {
-					lockReleasedBeforeRunnerDone.Store(true)
-				}
-				return nil
 			},
 		})
 		require.NoError(t, err)
@@ -735,7 +789,6 @@ func TestCloseDrainsAndCancelsInFlightInitProjectBeforeReleasingLocks(t *testing
 		}
 		require.Error(t, initErr)
 		assert.True(t, runnerDone.Load(), "Close must wait for InitProject to finish before returning")
-		assert.False(t, lockReleasedBeforeRunnerDone.Load(), "Close must not release project lock while InitProject is still running")
 	})
 
 	t.Run("close_at_after_wal_waits_for_publication_and_wal_finalization", func(t *testing.T) {
@@ -756,10 +809,8 @@ func TestCloseDrainsAndCancelsInFlightInitProjectBeforeReleasingLocks(t *testing
 		}
 		t.Cleanup(releaseBarrier)
 
-		var lockSawFinalizedWAL atomic.Bool
-		var lockSawPublishedDir atomic.Bool
-
 		cp, err := New(Options{
+			Team:         testTeamBinding(),
 			CardsDir:     cardsDir,
 			WorkspaceDir: wsDir,
 			InitStageDir: stageDir,
@@ -768,28 +819,20 @@ func TestCloseDrainsAndCancelsInFlightInitProjectBeforeReleasingLocks(t *testing
 			NewGenerator: func() scaffold.Generator {
 				return &fakeInitGenerator{pkg: "shop"}
 			},
-			CloseProjectLock: func() error {
-				rawWAL, readErr := os.ReadFile(filepath.Join(cardsDir, workspaceRecordFile))
-				if readErr == nil {
-					var wf workspaceFile
-					if json.Unmarshal(rawWAL, &wf) == nil &&
-						wf.Dir == "shop" &&
-						wf.SuiteCommit == fakeInitialSuiteCommit &&
-						wf.Staging == "" {
-						lockSawFinalizedWAL.Store(true)
-					}
-				}
-				if info, statErr := os.Stat(filepath.Join(wsDir, "shop")); statErr == nil && info.IsDir() {
-					lockSawPublishedDir.Store(true)
-				}
-				return nil
-			},
 		})
 		require.NoError(t, err)
 		cp.initStepHook = func(step string) {
-			if step == "after_wal" {
+			switch step {
+			case "after_wal":
 				close(atAfterWAL)
 				<-releaseHook
+			case "after_rename":
+				// Shutdown has begun, but publication's WAL is not finalized yet.
+				unexpected, lockErr := openCardStore(cardsDir)
+				if unexpected != nil {
+					assert.NoError(t, unexpected.close())
+				}
+				assert.ErrorContains(t, lockErr, "in use by another process")
 			}
 		}
 
@@ -811,8 +854,13 @@ func TestCloseDrainsAndCancelsInFlightInitProjectBeforeReleasingLocks(t *testing
 			closeDone <- cp.Close()
 		}()
 
+		select {
+		case <-cp.serverCtx.Done():
+		case <-time.After(5 * time.Second):
+			t.Fatal("Close did not begin cancellation")
+		}
 		// Release the after_wal barrier so InitProject finishes rename + WAL finalization
-		// while Close waits to acquire workspaceMu before calling CloseProjectLock.
+		// while Close waits to acquire workspaceMu before releasing the card lock.
 		releaseBarrier()
 		select {
 		case err := <-initDone:
@@ -827,126 +875,105 @@ func TestCloseDrainsAndCancelsInFlightInitProjectBeforeReleasingLocks(t *testing
 			t.Fatal("timed out waiting for Close to complete")
 		}
 
-		assert.True(t, lockSawPublishedDir.Load(), "CloseProjectLock must run only after InitProject publishes the project directory")
-		assert.True(t, lockSawFinalizedWAL.Load(), "CloseProjectLock must run only after InitProject finalizes workspace.json")
+		// The actual card lock is available only after publication and cleanup.
+		reopened, err := New(Options{Team: testTeamBinding(), CardsDir: cardsDir, WorkspaceDir: wsDir})
+		require.NoError(t, err)
+		defer reopened.Close()
+		physicalProject, err := filepath.EvalSymlinks(filepath.Join(wsDir, "shop"))
+		require.NoError(t, err)
+		assert.Equal(t, physicalProject, reopened.activeWorkspaceDir)
+		raw, err := os.ReadFile(filepath.Join(cardsDir, workspaceRecordFile))
+		require.NoError(t, err)
+		var saved workspaceFile
+		require.NoError(t, json.Unmarshal(raw, &saved))
+		assert.Empty(t, saved.Staging)
 	})
 }
 
 // TestCP1WorkspaceDesignSourceProvenanceAcrossProposeReviseAndReopen verifies that
 // a workspace-derived Change Card records the bound workspace's design/*.go
 // and records the updated files again on ReviseChange after the control plane
-// is reopened, while a card proposed with design_source keeps that supplied
-// source across ReviseChange. The design source is saved and hashed into
-// request_revision; nothing interprets it.
+// is reopened. The design source is saved and hashed into
+// request_revision; nothing interprets it. The authored evaluated snapshot
+// isolates this persistence contract from the compiler's extraction contract.
 func TestCP1WorkspaceDesignSourceProvenanceAcrossProposeReviseAndReopen(t *testing.T) {
-	t.Parallel()
-	aliceCtx := WithPrincipal(context.Background(), Principal{ID: "alice@example.com"})
-	root := t.TempDir()
-	wsDir := filepath.Join(root, "ws")
-	cardsDir := filepath.Join(root, "cards")
-	designDir := filepath.Join(wsDir, "design")
-	require.NoError(t, os.MkdirAll(designDir, 0o755))
-
-	const designV1 = "package design\n// v1 workspace design\n"
-	const designV2 = "package design\n// v2 workspace design\n"
-	const suppliedDesign = "package design\n// explicit caller-supplied design\n"
-	require.NoError(t, os.WriteFile(filepath.Join(designDir, "design.go"), []byte(designV1), 0o644))
-
-	proposal := func(summary string) *gensurla.CP1Analysis {
-		return &gensurla.CP1Analysis{
-			Summary:     summary,
-			Ambiguities: []*gensurla.CP1AnalysisAmbiguity{},
-			Examples: []*gensurla.CP1AnalysisExample{{
-				Scenario: "Price an item", InputSummary: "1 item at $10.00", ExpectedOutcome: "Returns total $10.00", VerificationKind: "deterministic",
-			}},
-			PreservedBehaviors: []string{"Existing orders continue to price as before."},
-		}
-	}
-	revision := func(summary string) *gensurla.CP1RevisionAnalysis {
-		priorID := "check_01"
-		return &gensurla.CP1RevisionAnalysis{
-			Summary:     summary,
-			Ambiguities: []*gensurla.CP1AnalysisAmbiguity{},
-			Examples: []*gensurla.CP1RevisionAnalysisExample{{
-				PriorID: &priorID, Scenario: "Price an item", InputSummary: "1 item at $10.00", ExpectedOutcome: "Returns total $10.00", VerificationKind: "deterministic",
-			}},
-			RemovedExampleIds:  []string{},
-			PreservedBehaviors: []string{"Existing orders continue to price as before."},
-		}
-	}
-	savedSource := func(cp *ControlPlane, changeID string) (string, string) {
-		t.Helper()
-		rec, ok, err := cp.cards.load(changeID)
-		require.NoError(t, err)
-		require.True(t, ok)
-		return rec.designSource, rec.sourceOrigin
-	}
-
-	cp1, err := New(Options{
-		CardsDir:     cardsDir,
-		WorkspaceDir: wsDir,
+	project := t.TempDir()
+	opts := Options{WorkspaceDir: project, CardsDir: t.TempDir()}
+	guide, user := asCaller("alice@example.com", CallerGuide), asCaller("alice@example.com", CallerUser)
+	designV1 := "// v1 workspace design\n" + architectureTestDesign
+	designV2 := "// v2 workspace design\n" + strings.ReplaceAll(architectureTestDesign, `"orders"`, `"shipping"`)
+	files := goaGoaAIDSLFixture(t, designV1)
+	writeWorkspaceFiles(t, project, files)
+	first := newControlPlane(t, opts)
+	refreshed := seedArchitectureRefreshForTest(t, first, guide, "orders")
+	card, err := first.ProposeChange(guide, &gensurla.ProposeChangePayload{
+		ChangeID: "chg-workspace-origin", Prompt: "Route refunds under $50 automatically.",
+		Analysis: refundAnalysis("Route refunds under $50 automatically."), StoryRefreshOpID: refreshed.OpID,
 	})
 	require.NoError(t, err)
-
-	// 1. ProposeChange with nil DesignSource records design/design.go (v1) from the bound workspace.
-	wsCard, err := cp1.ProposeChange(aliceCtx, &gensurla.ProposeChangePayload{
-		ChangeID: "chg-workspace-origin",
-		Prompt:   "Add loyalty discount",
-		Analysis: proposal("Loyal customers get a discount."),
+	card, err = first.ConfirmIntent(user, &gensurla.ConfirmIntentPayload{
+		ChangeID: card.ChangeID, RequestRevision: card.RequestRevision, Answers: map[string]string{}, Examples: card.Examples,
 	})
 	require.NoError(t, err)
-	src, origin := savedSource(cp1, wsCard.ChangeID)
-	assert.Contains(t, src, "v1 workspace design")
-	assert.Equal(t, sourceOriginWorkspace, origin)
+	original := loadMetadataRecord(t, first, card.ChangeID)
+	assert.Contains(t, original.designSource, "v1 workspace design")
+	require.NotNil(t, original.architecture)
+	assert.Empty(t, original.stories, "a Goa-only design has zero Stories")
+	require.NoError(t, first.Close())
 
-	// 2. ProposeChange with explicit DesignSource records caller-supplied provenance.
-	suppliedCopy := suppliedDesign
-	supCard, err := cp1.ProposeChange(aliceCtx, &gensurla.ProposeChangePayload{
-		ChangeID:     "chg-supplied-origin",
-		Prompt:       "Add tax breakdown",
-		DesignSource: &suppliedCopy,
-		Analysis:     proposal("Receipts show tax separately."),
+	// Neither later project edits nor an unreadable draft can change the saved
+	// source, module, topology or history of a revision that omits a new op.
+	writeWorkspaceFiles(t, project, map[string]string{"go.mod": "broken module", "design/design.go": designV2})
+	writeWorkspaceFiles(t, filepath.Join(project, draftFolderName), map[string]string{"design/design.go": "not Go"})
+	second := newControlPlane(t, opts)
+	kept, err := second.ReviseChange(guide, revisionPayload(card.ChangeID, card.RequestRevision, "Route refunds with review", card.Examples[0].ID))
+	require.NoError(t, err)
+	require.NotNil(t, kept.ProposedRevision)
+	saved := loadMetadataRecord(t, second, card.ChangeID).latest()
+	assert.Equal(t, original.designSource, saved.designSource)
+	assert.Equal(t, original.stories, saved.stories)
+	assert.Equal(t, original.architecture, saved.architecture)
+	assert.Equal(t, original.goMod, saved.goMod)
+	assert.Equal(t, original.madeFrom, saved.madeFrom)
+	preview, err := second.PreviewArchitecture(guide, &gensurla.PreviewArchitecturePayload{ChangeID: card.ChangeID, RequestRevision: card.RequestRevision})
+	require.NoError(t, err)
+	assert.Equal(t, "orders", preview.SystemName, "the confirmed revision stays previewable beside its proposal")
+	assert.Equal(t, card.RequestRevision, preview.RequestRevision)
+	assert.NotEmpty(t, preview.Containers)
+
+	// An explicit new refresh replaces the whole group. Project files remain
+	// broken, and edits after that refresh still cannot alter its adoption.
+	nextFiles := maps.Clone(files)
+	nextFiles["design/design.go"] = designV2
+	nextFiles["go.mod"] += "\n// evaluated second snapshot\n"
+	writeWorkspaceFiles(t, filepath.Join(project, draftFolderName), nextFiles)
+	refreshed = seedArchitectureRefreshForTest(t, second, guide, "shipping")
+	writeWorkspaceFiles(t, filepath.Join(project, draftFolderName), map[string]string{"design/design.go": "not Go"})
+	next := revisionPayload(card.ChangeID, kept.ProposedRevision.RequestRevision, "Route shipping refunds with review", kept.ProposedRevision.Examples[0].ID)
+	next.StoryRefreshOpID = refreshed.OpID
+	revised, err := second.ReviseChange(guide, next)
+	require.NoError(t, err)
+	require.NotNil(t, revised.ProposedRevision)
+	replaced := loadMetadataRecord(t, second, card.ChangeID).latest()
+	assert.Contains(t, replaced.designSource, "v2 workspace design")
+	assert.Equal(t, "shipping", replaced.architecture.SystemName)
+	assert.Equal(t, *refreshed.SnapshotDigest, replaced.architecture.DesignDigest)
+	assert.Equal(t, nextFiles["go.mod"], replaced.goMod)
+	assert.NotEqual(t, original.goMod, replaced.goMod)
+	assert.NotEqual(t, original.madeFrom, replaced.madeFrom)
+	adopted, err := second.ConfirmIntent(user, &gensurla.ConfirmIntentPayload{
+		ChangeID: card.ChangeID, RequestRevision: revised.ProposedRevision.RequestRevision,
+		Answers: map[string]string{card.ChangeID + "-ambiguity-01": "with_tax"}, Examples: revised.ProposedRevision.Examples,
 	})
 	require.NoError(t, err)
-	src, origin = savedSource(cp1, supCard.ChangeID)
-	assert.Equal(t, suppliedDesign, src)
-	assert.Equal(t, sourceOriginSupplied, origin)
-
-	require.NoError(t, cp1.Close())
-
-	// Update workspace design/design.go on disk to v2 and reopen ControlPlane.
-	require.NoError(t, os.WriteFile(filepath.Join(designDir, "design.go"), []byte(designV2), 0o644))
-	cp2, err := New(Options{
-		CardsDir:     cardsDir,
-		WorkspaceDir: wsDir,
-	})
+	finalPreview, err := second.PreviewArchitecture(guide, &gensurla.PreviewArchitecturePayload{ChangeID: card.ChangeID, RequestRevision: adopted.RequestRevision})
 	require.NoError(t, err)
-	defer cp2.Close()
-
-	// 3. ReviseChange with nil DesignSource on the workspace-origin card records v2 from disk.
-	revisedWS, err := cp2.ReviseChange(aliceCtx, &gensurla.ReviseChangePayload{
-		ChangeID:        wsCard.ChangeID,
-		RequestRevision: wsCard.RequestRevision,
-		Prompt:          "Add loyalty discount with cap",
-		Analysis:        revision("Loyal customers get a discount capped at $20."),
-	})
+	assert.Equal(t, "shipping", finalPreview.SystemName)
+	require.NoError(t, second.Close())
+	third := newControlPlane(t, opts)
+	reopened, err := third.PreviewArchitecture(guide, &gensurla.PreviewArchitecturePayload{ChangeID: card.ChangeID, RequestRevision: adopted.RequestRevision})
 	require.NoError(t, err)
-	src, origin = savedSource(cp2, wsCard.ChangeID)
-	assert.Contains(t, src, "v2 workspace design")
-	assert.Equal(t, sourceOriginWorkspace, origin)
-	assert.Equal(t, "check_01", revisedWS.Examples[0].ID)
-
-	// 4. ReviseChange with nil DesignSource on the supplied-origin card preserves the caller-supplied design.
-	_, err = cp2.ReviseChange(aliceCtx, &gensurla.ReviseChangePayload{
-		ChangeID:        supCard.ChangeID,
-		RequestRevision: supCard.RequestRevision,
-		Prompt:          "Add tax breakdown with rounding",
-		Analysis:        revision("Receipts show tax separately, rounded half up."),
-	})
-	require.NoError(t, err)
-	src, origin = savedSource(cp2, supCard.ChangeID)
-	assert.Equal(t, suppliedDesign, src)
-	assert.Equal(t, sourceOriginSupplied, origin)
+	assert.Equal(t, finalPreview, reopened, "saved architecture survives restart with both folders still changed")
 }
 
 // Generate returns a single stub generated Go source file for g.pkg.
@@ -962,10 +989,10 @@ func (g *fakeInitGenerator) Close() error {
 }
 
 // fakeInitRunner writes a synthetic command log, creates go.sum on "go mod tidy"
-// invocations, and writes fakeInitialSuiteCommit on "git rev-parse".
+// invocations, and writes fakeInitialCommit on "git rev-parse".
 func fakeInitRunner(_ context.Context, dir, logPath string, args ...string) error {
 	if slices.Contains(args, "rev-parse") {
-		return os.WriteFile(logPath, []byte(fakeInitialSuiteCommit+"\n"), 0o600)
+		return os.WriteFile(logPath, []byte(fakeInitialCommit+"\n"), 0o600)
 	}
 	if err := os.WriteFile(logPath, []byte("ok\n"), 0o600); err != nil {
 		return err

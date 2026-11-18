@@ -1,8 +1,10 @@
 // Package designeval evaluates Go/Goa/Goa-AI/Model/Story design sources by compiling a
-// standalone evaluator binary and executing it inside verify/candidate.Exec's
-// OS-enforced single-process sandbox. Registered generators return source bytes;
-// the evaluator hashes those bytes and reads Goa-AI's existing tool catalogs.
-// Protobuf comparisons include Goa's .proto sources, without invoking protoc or
+// standalone evaluator binary and running it with verify/candidate.Run, each
+// command in its own process group. The design's code, its init functions and
+// the generators it loads, runs as an ordinary process with the user's file
+// and network access. Registered generators return source bytes; the evaluator
+// hashes those bytes and reads Goa-AI's existing tool catalogs. Protobuf
+// comparisons include Goa's .proto sources, without invoking protoc or
 // claiming that generated source equality proves runtime compatibility.
 package designeval
 
@@ -118,20 +120,6 @@ type (
 		Options []string `json:"options,omitempty"`
 	}
 
-	// StoryGeneration holds the generated file set and flow-to-scenario
-	// mapping returned by Evaluator.GenerateWithStories.
-	StoryGeneration struct {
-		// Files contains every generated path and its bytes, matching
-		// Evaluator.Generate's output format.
-		Files map[string][]byte
-		// Included lists the complete Story flows attached to the evaluation
-		// suite, in declaration order.
-		Included []StoryScenario
-		// Excluded lists the incomplete Story flows omitted from the
-		// evaluation suite, in declaration order.
-		Excluded []StoryDraft
-	}
-
 	// StoryScenario describes one complete Story flow mapped to an evaluation
 	// scenario and hook method.
 	StoryScenario struct {
@@ -160,10 +148,11 @@ type (
 
 	// Evaluator evaluates design snapshots for one owner, such as a
 	// ControlPlane or one `surla preview` or `surla diff` command. Its
-	// evaluations share one private build workspace (the evaluator build's
-	// TMPDIR and GOCACHE), so later evaluations reuse compiled
-	// dependencies. The workspace is created by the first admitted Evaluate,
-	// never by NewEvaluator, and Close removes it. Evaluate may be called
+	// evaluations share one private build workspace for compiler scratch. By
+	// default the package cache lives there too; NewEvaluatorWithCache instead
+	// selects retained storage supplied by the owner. The first admitted call
+	// creates the workspace; construction creates nothing. Close removes the
+	// workspace while preserving a supplied cache. Evaluate may be called
 	// concurrently. After Close, Evaluate fails and creates nothing. The owner
 	// must call Close; an unclosed Evaluator leaves its workspace behind.
 	Evaluator struct {
@@ -183,14 +172,18 @@ type (
 		mu sync.Mutex
 		// workDir is the shared build workspace, empty until first use.
 		workDir string
+		// buildCacheDir is an explicitly supplied compiler cache, or empty when
+		// the evaluator owns a private cache inside workDir. Close never removes
+		// an explicitly supplied cache.
+		buildCacheDir string
 		// tempParentDir is the owner's temporary storage parent; empty uses
 		// the host default for embedded callers without a workspace.
 		tempParentDir string
 		// closed is set when Close starts; later evaluations are refused.
 		closed bool
-		// unsafe is set, and never cleared, once an evaluation's build
-		// processes could not be confirmed stopped: they may still use
-		// workDir, so Close keeps it.
+		// unsafe is set, and never cleared, once an evaluation's processes
+		// could not be confirmed stopped: they may still use workDir, so Close
+		// keeps it.
 		unsafe bool
 	}
 
@@ -201,7 +194,7 @@ type (
 		goroot string
 		// modCache is the read-only Go module cache directory.
 		// Dependency preparation may create it; before a build it is resolved
-		// to the same physical directory the sandbox uses.
+		// to its physical directory, the spelling the build and its diagnostics use.
 		modCache string
 	}
 
@@ -216,38 +209,27 @@ type (
 	// buildError reports a harness program that did not compile. Its message
 	// carries the compiler's diagnostics unchanged.
 	buildError struct {
-		// err is the raw compile failure, including any sandbox output.
+		// err is the raw compile failure, including any compiler output.
 		err error
 	}
 
-	// stuckBuildError reports an evaluator build whose process group did not
-	// empty after the build ended. Its processes may still use the evaluation's
-	// temporary directory, so Evaluate keeps it.
-	stuckBuildError struct {
+	// stuckGroupError reports an evaluation command, its build or its design
+	// program, whose process group did not empty after the command ended. Its
+	// processes may still use the evaluation's temporary directory, so
+	// Evaluate keeps it.
+	stuckGroupError struct {
 		// err is procgroup.Run's stop error.
 		err error
 	}
 )
 
-// buildStopGrace bounds how long the evaluator build gets to exit after it
-// is killed, and how long its process group may take to empty.
-const buildStopGrace = 10 * time.Second
+// groupStopGrace bounds how long a canceled build or design program gets to
+// exit after it is killed, and how long its process group may take to empty.
+const groupStopGrace = 10 * time.Second
 
 // completeSourcesGoa is the first goa.design/goa/v3 version that provides
 // generator.CompleteSources, which Generate needs.
 const completeSourcesGoa = "v3.35.1-0.20261103205041-35e789e8f9b1"
-
-// sandboxExit71 is the exit status (EX_OSERR) /usr/bin/sandbox-exec returns
-// when macOS refuses to apply a sandbox profile (for example inside a nested
-// restricted coding-agent shell), and also when the sandboxed child itself
-// calls os.Exit(71).
-const sandboxExit71 = 71
-
-// exit71Guidance is appended to a non-canceled sandboxed build or evaluation
-// error whose command exited with status 71. It states the observed exit code
-// and gives conditional recovery advice without claiming the sandbox failed to
-// start.
-const exit71Guidance = "The sandboxed command exited with status 71. If Surla is running inside a restricted coding-agent shell, its sandbox may have been blocked; run Surla from an unrestricted host shell."
 
 // errEvaluatorClosed is the cause of an evaluation canceled by Close, and
 // the error Evaluate returns after Close.
@@ -264,12 +246,33 @@ func NewEvaluator() *Evaluator {
 // with read, write, and search permission for allocation and cleanup.
 // An empty parent preserves NewEvaluator's host-default behavior. Construction
 // creates nothing; the first operation creates the parent if needed, and Close
-// removes only this evaluator's temporary directories, keeping unsafe builds.
+// removes only this evaluator's temporary directories, keeping them when an
+// evaluation's processes may still use them.
 func NewEvaluatorInDir(tempParentDir string) *Evaluator {
 	ctx, cancel := context.WithCancel(context.Background())
 	e := &Evaluator{ctx: ctx, cancel: cancel, tempParentDir: tempParentDir}
 	e.closeResult = sync.OnceValue(e.close)
 	return e
+}
+
+// NewEvaluatorWithCache returns an evaluator with temporary files under
+// tempParentDir and a separate, owner-retained Go package cache. The cache
+// must be an absolute path outside the evaluator's temporary files and its
+// callers' source folders. The owner supplies trusted compiler storage on a
+// local filesystem; it may be shared by concurrent builds. Construction creates
+// no files, and Close removes only this evaluator's scratch, never the cache.
+// An empty or unresolved cache path is rejected before any evaluation starts.
+func NewEvaluatorWithCache(tempParentDir, buildCacheDir string) (*Evaluator, error) {
+	if !filepath.IsAbs(buildCacheDir) {
+		return nil, errors.New("design compiler build cache directory must be absolute")
+	}
+	cache, err := abspath.EvalMissing(buildCacheDir)
+	if err != nil {
+		return nil, fmt.Errorf("resolve design compiler build cache directory: %w", err)
+	}
+	e := NewEvaluatorInDir(tempParentDir)
+	e.buildCacheDir = cache
+	return e, nil
 }
 
 // Evaluate evaluates the Goa/Goa-AI/Model/Story design in a module snapshot
@@ -282,13 +285,14 @@ func NewEvaluatorInDir(tempParentDir string) *Evaluator {
 // names is read. Its dependencies are resolved only from its go.mod and
 // go.sum, and evaluation fails rather than use different versions (see
 // prepareHarnessModule). The evaluator program is then compiled with
-// candidate.Build and run with candidate.Exec, so neither compiling nor
-// running the design can read evaluator files or reach the network.
+// candidate.Build, offline, and run with candidate.Run, each in its own
+// process group. The design's code runs as an ordinary process with the
+// user's file and network access.
 func (e *Evaluator) Evaluate(ctx context.Context, files map[string]string) (Result, error) {
 	var res Result
 	err := e.admitted(ctx, func(ctx context.Context, workDir string) error {
 		var err error
-		res, err = evaluate(ctx, files, workDir)
+		res, err = evaluate(ctx, files, workDir, e.buildCacheDir)
 		return err
 	})
 	return res, err
@@ -297,10 +301,12 @@ func (e *Evaluator) Evaluate(ctx context.Context, files map[string]string) (Resu
 // Generate returns every path and its bytes that `goa gen` writes for the
 // design in a module snapshot, including gen/goa.json, with each generated
 // file's header naming "$ surla gen". It compiles and runs a generation
-// program inside the same sandbox as Evaluate, with the target module's own
+// program as Evaluate does, with the target module's own
 // dependency versions, and calls Goa's generator.CompleteSources, which fails
 // when a generated file would be changed after it is written, such as a gRPC
-// design's protobuf output.
+// design's protobuf output. A test module's Story table (StoryTestsPath) is a
+// source file of its design, so every caller generates the scenarios it
+// declares; no other input adds a scenario.
 //
 // The target must select a goa.design/goa/v3 that provides CompleteSources.
 // When the generation program does not compile, the error keeps the
@@ -311,31 +317,7 @@ func (e *Evaluator) Generate(ctx context.Context, files map[string]string) (map[
 	var out map[string][]byte
 	err := e.admitted(ctx, func(ctx context.Context, workDir string) error {
 		var err error
-		out, err = generate(ctx, files, workDir)
-		return err
-	})
-	return out, err
-}
-
-// GenerateWithStories runs Generate with complete flows from stories attached
-// to the target module's single Goa-AI evaluation suite. Incomplete flows are
-// recorded in Excluded and not added to the suite. When stories has no
-// complete flow, no suite-count rule is applied and Files matches Generate's
-// output for files.
-//
-// Each complete flow's key is mapped on the host to a scenario name via Goa's
-// codegen.SnakeCase and a hook method via codegen.Goify(scenario, true), with
-// the flow's title (or its key when the title is blank) as the scenario
-// description. Collisions between two complete flows are rejected before
-// compiling the harness, naming both source flows. Like Generate, it shares
-// the evaluator's workspace and fails at once after Close.
-func (e *Evaluator) GenerateWithStories(
-	ctx context.Context, files map[string]string, stories []StorySummary,
-) (StoryGeneration, error) {
-	var out StoryGeneration
-	err := e.admitted(ctx, func(ctx context.Context, workDir string) error {
-		var err error
-		out, err = generateWithStories(ctx, files, stories, workDir)
+		out, err = generate(ctx, files, workDir, e.buildCacheDir)
 		return err
 	})
 	return out, err
@@ -372,51 +354,28 @@ func (e *buildError) Unwrap() error {
 	return e.err
 }
 
-// Error describes the build processes left running.
-func (e *stuckBuildError) Error() string {
-	return "build processes did not exit: " + e.err.Error()
+// Error describes the processes left running.
+func (e *stuckGroupError) Error() string {
+	return "processes did not exit: " + e.err.Error()
 }
 
 // Unwrap returns procgroup.Run's stop error.
-func (e *stuckBuildError) Unwrap() error {
+func (e *stuckGroupError) Unwrap() error {
 	return e.err
 }
 
 // generate runs one generation in a temporary directory of its own, with
-// workDir as the build's shared TMPDIR and GOCACHE.
-func generate(ctx context.Context, files map[string]string, workDir string) (map[string][]byte, error) {
-	return runGenerate(ctx, files, workDir, nil)
-}
-
-// generateWithStories maps stories into included scenarios and excluded drafts,
-// then runs one sandboxed generation with the included scenarios rendered into
-// the harness program.
-func generateWithStories(
-	ctx context.Context, files map[string]string, stories []StorySummary, workDir string,
-) (StoryGeneration, error) {
-	included, excluded, specs, err := mapStoryFlows(stories)
-	if err != nil {
-		return StoryGeneration{}, err
-	}
-	generated, err := runGenerate(ctx, files, workDir, specs)
-	if err != nil {
-		return StoryGeneration{}, err
-	}
-	return StoryGeneration{
-		Files:    generated,
-		Included: included,
-		Excluded: excluded,
-	}, nil
-}
-
-// runGenerate compiles and runs the generation program with specs attached,
-// returning the generated files keyed by module-relative path.
-func runGenerate(
-	ctx context.Context, files map[string]string, workDir string, specs []storyScenarioSpec,
+// workDir as the build's TMPDIR and buildCacheDir as its package cache. It returns
+// generated files keyed by module-relative path. The program learns whether
+// the module has an acceptance package.
+func generate(
+	ctx context.Context, files map[string]string, workDir, buildCacheDir string,
 ) (map[string][]byte, error) {
 	var out map[string][]byte
-	goa, err := runSandboxed(ctx, files, workDir,
-		func(map[string]bool) map[string]string { return generateProgramWithStories(specs) },
+	goa, err := runProgram(ctx, files, workDir, buildCacheDir,
+		func(map[string]bool) map[string]string {
+			return generateProgram(HasAcceptancePackage(files))
+		},
 		func(stateDir string) []string {
 			// One literal argument, which Goa copies into generated headers.
 			return []string{"-sources", filepath.Join(stateDir, "sources.json"), "--cmd=$ surla gen"}
@@ -441,7 +400,7 @@ func runGenerate(
 }
 
 // mapStoryFlows maps observed Story summaries into included scenarios,
-// excluded drafts, and harness scenario specs. It rejects any two complete
+// excluded drafts, and the Story table's rows. It rejects any two complete
 // flows whose keys map to the same scenario name or hook method, naming both
 // source flows.
 func mapStoryFlows(stories []StorySummary) ([]StoryScenario, []StoryDraft, []storyScenarioSpec, error) {
@@ -545,10 +504,12 @@ func readSources(stateDir string) (_ map[string][]byte, err error) {
 }
 
 // evaluate runs one evaluation in a temporary directory of its own, with
-// workDir as the build's shared TMPDIR and GOCACHE.
-func evaluate(ctx context.Context, files map[string]string, workDir string) (Result, error) {
+// workDir as the build's TMPDIR and buildCacheDir as its package cache.
+func evaluate(
+	ctx context.Context, files map[string]string, workDir, buildCacheDir string,
+) (Result, error) {
 	var res Result
-	_, err := runSandboxed(ctx, files, workDir, evaluateProgram,
+	_, err := runProgram(ctx, files, workDir, buildCacheDir, evaluateProgram,
 		func(stateDir string) []string {
 			return []string{"-out", filepath.Join(stateDir, "evaluated.json")}
 		},
@@ -565,20 +526,25 @@ func evaluate(ctx context.Context, files map[string]string, workDir string) (Res
 	return res, err
 }
 
-// runSandboxed stages the module snapshot, compiles program (the main
+// runProgram stages the module snapshot, compiles program (the main
 // package's files by name for the target's loaded module set, whose
 // {{DESIGN_IMPORT}} and {{GEN_IMPORT}} name the target's packages) with
 // candidate.Build against the target's own dependency versions, and runs it
-// with candidate.Exec and args(stateDir). collect then reads the program's
-// output from stateDir. Everything happens in a temporary directory of its
-// own, with workDir as the build's shared TMPDIR and GOCACHE; releaseTemp
-// removes it, or keeps it after a stuck build. It returns the Goa module the
-// build selected, and a *buildError when the program does not compile.
-func runSandboxed(
-	ctx context.Context, files map[string]string, workDir string, program harnessProgram,
+// with candidate.Run and args(stateDir), each in its own process group
+// (runInGroup). collect then reads the program's output from stateDir.
+// Everything happens in a temporary directory of its own, with workDir as the
+// build's TMPDIR and buildCacheDir as its package cache. releaseTemp removes
+// scratch, or keeps it after a stuck build or program. It returns the selected
+// Goa module, and a *buildError when the program does not compile.
+func runProgram(
+	ctx context.Context, files map[string]string, workDir, buildCacheDir string,
+	program harnessProgram,
 	args func(stateDir string) []string, collect func(stateDir string) error,
 ) (goa listedModule, err error) {
-	phase := "checking the local module files"
+	if buildCacheDir == "" {
+		buildCacheDir = filepath.Join(workDir, "gocache")
+	}
+	phase := phaseCheckFiles
 	defer func() {
 		if err != nil {
 			err = &phaseError{phase: phase, err: err}
@@ -625,94 +591,95 @@ func runSandboxed(
 		return listedModule{}, err
 	}
 	gocmd := goCommand{bin: filepath.Join(tc.goroot, "bin", "go")}
-	phase = "loading the design module dependencies"
+	phase = phaseLoadModules
 	goa, err = prepareHarnessModule(ctx, gocmd, buildDir, logDir, target, evalMod, program)
 	if err != nil {
+		// A load that was canceled or timed out says nothing about the
+		// module's requirements.
+		if ctx.Err() == nil {
+			err = withStoryRequirementStep(err, files, target, evalMod)
+		}
 		return listedModule{}, err
 	}
 	// The dependency loader owns creation of a missing module cache. Resolve
 	// the directory it used before passing that fact to the build and its
-	// diagnostic output, whose sandbox uses physical paths.
+	// diagnostic output, which use physical paths.
 	tc.modCache, err = abspath.Eval(tc.modCache)
 	if err != nil {
 		return goa, fmt.Errorf("resolve compiler module cache: %w", err)
 	}
 	paths := diagnosticPaths{
-		source: filepath.Join(buildDir, "target"), temporary: tmpDir, work: workDir,
+		source: filepath.Join(buildDir, "target"), temporary: tmpDir, work: workDir, buildCache: buildCacheDir,
 		goroot: tc.goroot, modCache: tc.modCache,
 	}
 
 	rawBin := filepath.Join(outDir, "designeval-bin")
 	buildLog := filepath.Join(tmpDir, "build.log")
-	phase = "compiling the design"
+	phase = phaseCompile
 	if err := candidate.Build(ctx, candidate.BuildSpec{
-		SourceDir: buildDir,
-		ModuleDir: buildDir,
-		Package:   ".",
-		Out:       rawBin,
-		GOROOT:    tc.goroot,
-		ModCache:  tc.modCache,
-		WorkDir:   workDir,
-		LogFile:   buildLog,
-	}, runBuild); err != nil {
+		SourceDir:     buildDir,
+		ModuleDir:     buildDir,
+		Package:       ".",
+		Out:           rawBin,
+		GOROOT:        tc.goroot,
+		ModCache:      tc.modCache,
+		WorkDir:       workDir,
+		BuildCacheDir: buildCacheDir,
+		LogFile:       buildLog,
+	}, runInGroup); err != nil {
 		// A stuck build's processes may still be writing its log.
-		if stuck := (*stuckBuildError)(nil); errors.As(err, &stuck) {
+		if stuck := (*stuckGroupError)(nil); errors.As(err, &stuck) {
 			return goa, fmt.Errorf("compile Goa design: %w", err)
 		}
 		logBytes, readErr := os.ReadFile(buildLog)
 		if readErr != nil {
-			return goa, &buildError{err: withExit71Guidance(ctx, fmt.Errorf("compile Goa design: %w", err))}
+			return goa, &buildError{err: fmt.Errorf("compile Goa design: %w", err)}
 		}
-		return goa, &buildError{err: withExit71Guidance(ctx, &sandboxOutputError{
+		return goa, &buildError{err: &commandOutputError{
 			err: fmt.Errorf("compile Goa design: %w", err), output: strings.TrimSpace(string(logBytes)), paths: paths,
-		})}
+		}}
 	}
 
-	phase = "starting the sandboxed design generator"
+	phase = "starting the design generator"
 	art, err := candidate.Pin(storeDir, rawBin)
 	if err != nil {
 		return goa, fmt.Errorf("pin design evaluator binary: %w", err)
 	}
-	proc, err := candidate.Exec(ctx, art, candidate.Spec{
+	logPath := filepath.Join(tmpDir, "designeval.log")
+	// Run calls the runner only after admitting the artifact, so a failure
+	// before the program starts keeps the phase above.
+	evaluate := func(cmd *exec.Cmd) error {
+		phase = phaseEvaluateDSL
+		return runInGroup(cmd)
+	}
+	if err := candidate.Run(ctx, art, candidate.Spec{
 		Args:     args(stateDir),
 		StateDir: stateDir,
-		LogFile:  filepath.Join(tmpDir, "designeval.log"),
-	})
-	if err != nil {
-		return goa, fmt.Errorf("exec sandboxed design evaluator: %w", err)
-	}
-	phase = "evaluating the design and generating files"
-	if waitErr := proc.Wait(); waitErr != nil {
-		excerpt, _, exErr := proc.Excerpt(16 << 10)
-		if exErr != nil {
-			return goa, withExit71Guidance(ctx, fmt.Errorf("evaluate Goa design in sandbox: %w", waitErr))
+		LogFile:  logPath,
+	}, evaluate); err != nil {
+		// A stuck program's processes may still be writing its log.
+		if stuck := (*stuckGroupError)(nil); errors.As(err, &stuck) {
+			return goa, fmt.Errorf("evaluate Goa design: %w", err)
 		}
-		return goa, withExit71Guidance(ctx, &sandboxOutputError{
-			err: fmt.Errorf("evaluate Goa design in sandbox: %w", waitErr), output: strings.TrimSpace(excerpt), paths: paths,
-		})
+		excerpt, _, exErr := candidate.ExcerptFile(logPath, 16<<10)
+		if exErr != nil {
+			return goa, fmt.Errorf("evaluate Goa design: %w", err)
+		}
+		return goa, &commandOutputError{
+			err: fmt.Errorf("evaluate Goa design: %w", err), output: strings.TrimSpace(excerpt), paths: paths,
+		}
 	}
 	phase = "reading the generated output"
 	return goa, collect(stateDir)
 }
 
-// withExit71Guidance appends exit71Guidance to err when ctx was not canceled
-// and the sandboxed command exited with status 71.
-func withExit71Guidance(ctx context.Context, err error) error {
-	if ctx.Err() != nil {
-		return err
-	}
-	var exitErr *exec.ExitError
-	if errors.As(err, &exitErr) && exitErr.ExitCode() == sandboxExit71 {
-		return fmt.Errorf("%w\n%s", err, exit71Guidance)
-	}
-	return err
-}
-
 // resolveToolchainEnv reads the selected Go settings and resolves the toolchain
 // root before using its go binary. The selected module cache may not exist yet;
-// runSandboxed resolves it after dependency preparation. ctx bounds the command.
+// runProgram resolves it after dependency preparation. ctx bounds the command.
 func resolveToolchainEnv(ctx context.Context) (toolchainEnv, error) {
-	out, err := exec.CommandContext(ctx, "go", "env", "GOROOT", "GOMODCACHE").Output()
+	cmd := exec.CommandContext(ctx, "go", "env", "GOROOT", "GOMODCACHE")
+	cmd.Env = goEnv()
+	out, err := cmd.Output()
 	if err != nil {
 		return toolchainEnv{}, fmt.Errorf("resolve go env GOROOT GOMODCACHE: %w", err)
 	}
@@ -739,15 +706,16 @@ func evaluatorGoMod() (*modfile.File, error) {
 	return mod, nil
 }
 
-// runBuild runs the evaluator build in its own process group, the owning
-// boundary of this build: whatever ends it, the compiler, assembler and
-// linker it started are killed and waited for before Evaluate continues. A
-// group that does not empty is a *stuckBuildError, reported together with
-// the build's own error.
-func runBuild(cmd *exec.Cmd) error {
-	runErr, stopErr := procgroup.Run(cmd, syscall.SIGKILL, buildStopGrace, buildStopGrace)
+// runInGroup runs one command of an evaluation, the build or the design
+// program, in its own process group, the owning boundary of that command:
+// whatever ends it, every process it started that is still in the group is
+// killed and waited for before Evaluate continues. A group that does not
+// empty is a *stuckGroupError, reported together with the command's own error.
+// A process that leaves the group (setsid) is not stopped.
+func runInGroup(cmd *exec.Cmd) error {
+	runErr, stopErr := procgroup.Run(cmd, syscall.SIGKILL, groupStopGrace, groupStopGrace)
 	if stopErr != nil {
-		return errors.Join(&stuckBuildError{err: stopErr}, runErr)
+		return errors.Join(&stuckGroupError{err: stopErr}, runErr)
 	}
 	return runErr
 }
@@ -755,12 +723,11 @@ func runBuild(cmd *exec.Cmd) error {
 // releaseTemp owns the evaluation's temporary directory once Evaluate ends
 // with err. It removes the artifact store and then the whole directory and
 // reports their removal errors with err, unless err contains a
-// *stuckBuildError: build processes may then still use the directory, so it
-// is kept and err names it. The sandboxed evaluator needs no such check: its
-// sandbox forbids child processes and Evaluate waits for it before returning.
+// *stuckGroupError: processes of the build or the design program may then
+// still use the directory, so it is kept and err names it.
 func releaseTemp(tmpDir, storeDir string, err error) error {
-	if stuck := (*stuckBuildError)(nil); errors.As(err, &stuck) {
-		return fmt.Errorf("%w; the temporary directory %s is kept because build processes may still use it", err, tmpDir)
+	if stuck := (*stuckGroupError)(nil); errors.As(err, &stuck) {
+		return fmt.Errorf("%w; the temporary directory %s is kept because the evaluation's processes may still use it", err, tmpDir)
 	}
 	return errors.Join(err, candidate.RemoveStore(storeDir), os.RemoveAll(tmpDir))
 }
@@ -779,6 +746,12 @@ func (e *Evaluator) admitted(ctx context.Context, op func(ctx context.Context, w
 	// and marks the evaluation finished only after everything it started has
 	// been released.
 	defer func() {
+		// A command that Close ended fails in whatever phase it was in, with
+		// an error that does not mention Close. The evaluation failed because
+		// the evaluator stopped, so say so: FailedOnModule relies on it.
+		if err != nil && errors.Is(context.Cause(ctx), errEvaluatorClosed) && !errors.Is(err, errEvaluatorClosed) {
+			err = fmt.Errorf("%w: %w", errEvaluatorClosed, err)
+		}
 		stop()
 		cancel(nil)
 		e.finish(err)
@@ -818,10 +791,10 @@ func (e *Evaluator) admit() (string, error) {
 }
 
 // finish ends one admitted evaluation that returned err, after it released
-// its own files and context: a stuck build marks the evaluator unsafe for
-// good, and only then does the evaluation stop counting as active.
+// its own files and context: a stuck build or program marks the evaluator
+// unsafe for good, and only then does the evaluation stop counting as active.
 func (e *Evaluator) finish(err error) {
-	if stuck := (*stuckBuildError)(nil); errors.As(err, &stuck) {
+	if stuck := (*stuckGroupError)(nil); errors.As(err, &stuck) {
 		e.mu.Lock()
 		e.unsafe = true
 		e.mu.Unlock()
@@ -840,7 +813,7 @@ func (e *Evaluator) close() error {
 	e.active.Wait()
 	switch {
 	case e.unsafe:
-		return fmt.Errorf("design evaluator workspace %s is kept because build processes may still use it", e.workDir)
+		return fmt.Errorf("design evaluator workspace %s is kept because an evaluation's processes may still use it", e.workDir)
 	case e.workDir == "":
 		return nil
 	default:

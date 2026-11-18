@@ -27,11 +27,28 @@ var (
 	//go:embed quickstart.go
 	quickstartSource string
 
-	// storyScenariosSource is story_scenarios.go itself, compiled inside the
-	// generation program when complete Story flows are present.
+	// storyScenariosSource is story_scenarios.go itself, whose body
+	// StoryTests renders into each test module's Story table.
 	//
 	//go:embed story_scenarios.go
 	storyScenariosSource string
+
+	// testProgramSection is the section surlaSuiteCommand adds to a Surla
+	// test module's AGENTS_QUICKSTART.md: a Go template, executed with
+	// suiteCommandData, naming what the author's acceptance package must
+	// provide. Unlike quickstartSections it replaces no Goa-AI section.
+	//
+	//go:embed test_program.md
+	testProgramSection string
+
+	// testLayoutSource and suiteCommandSourceFile are test_layout.go and
+	// suite_command.go themselves, compiled again inside the generation
+	// program.
+	//
+	//go:embed test_layout.go
+	testLayoutSource string
+	//go:embed suite_command.go
+	suiteCommandSourceFile string
 )
 
 // mustQuickstartSections reads every embedded section text. The embed

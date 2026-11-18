@@ -2,7 +2,7 @@
 // operation on its own when the server that started it dies or cancels it:
 // containers are removed or kept recorded, the output is finished, the
 // directory lock is released and no manifest is published. It also covers
-// the owner.json versions, the helper's spec handling and its spans.
+// the current owner.json format, the helper's spec handling and its spans.
 package controlplane
 
 import (
@@ -135,14 +135,25 @@ func TestCheckHelperWithoutASpecMakesNoDockerCall(t *testing.T) {
 	installFakeDocker(t)
 	daemon := newFakeDockerDaemon(t)
 	t.Setenv("DOCKER_HOST", daemon.hostURI)
-	for _, stdin := range []string{"", `{"tool":"check_project","op_id":`} {
+	id := strings.Repeat("ab", 16)
+	invalidCache, err := json.Marshal(checkHelperSpec{
+		Tool: checkToolProject, OpID: id, Dir: filepath.Join(realTempDir(t), id),
+		GrantRoot: realTempDir(t), WorkspaceRel: ".", CheckTimeout: time.Minute,
+		ModuleCacheDir: "relative",
+	})
+	require.NoError(t, err)
+	for _, tc := range []struct{ stdin, want string }{
+		{"", "read the check helper spec"},
+		{`{"tool":"check_project","op_id":`, "read the check helper spec"},
+		{string(invalidCache), "check module cache directory"},
+	} {
 		cmd := testCheckHelper(t)()
-		cmd.Stdin = strings.NewReader(stdin)
+		cmd.Stdin = strings.NewReader(tc.stdin)
 		out, err := cmd.CombinedOutput()
 		var exitErr *exec.ExitError
 		require.ErrorAs(t, err, &exitErr, string(out))
 		assert.Equal(t, 1, exitErr.ExitCode())
-		assert.Contains(t, string(out), "read the check helper spec")
+		assert.Contains(t, string(out), tc.want)
 	}
 	assert.Zero(t, daemon.calls.Load())
 }
@@ -196,8 +207,11 @@ func TestCanceledCreateIsAnsweredAndItsContainerRemoved(t *testing.T) {
 	daemon := newFakeDockerDaemon(t)
 	t.Setenv("DOCKER_HOST", daemon.hostURI)
 	cards := filepath.Join(realTempDir(t), "cards")
-	cp := openCheckCP(t, cards, newShopModule(t, nil))
+	moduleCache := newCheckModuleCache(t)
+	assert.NoError(t, os.WriteFile(filepath.Join(moduleCache, "retained"), []byte("input"), 0o600))
+	cp := openCheckCP(t, cards, newShopModule(t, nil), moduleCache)
 	defer func() { assert.NoError(t, cp.Close()) }()
+	readCheckBuilderFixture(t, cp)
 	wait, cancelWait := context.WithTimeout(t.Context(), lifecycleWaitTimeout)
 	defer cancelWait()
 	blocked, release, senderGone := make(chan struct{}), make(chan struct{}), make(chan struct{})
@@ -215,7 +229,7 @@ func TestCanceledCreateIsAnsweredAndItsContainerRemoved(t *testing.T) {
 			close(senderGone)
 		}
 	})
-	ctx, cancel := context.WithCancel(WithPrincipal(t.Context(), Principal{ID: "alice@example.com"}))
+	ctx, cancel := context.WithCancel(WithPrincipal(t.Context(), Principal{ID: "alice@example.com", CallerID: "alice@example.com", Kind: CallerUser}))
 	defer cancel()
 	done := make(chan error, 1)
 	go func() {
@@ -250,6 +264,7 @@ func TestCanceledCreateIsAnsweredAndItsContainerRemoved(t *testing.T) {
 	opDir := onlyOperationDir(t, cards)
 	assert.Empty(t, readOwnerRecord(t, opDir).Containers)
 	assert.NoDirExists(t, filepath.Join(opDir, "src"))
+	assertFileContent(t, filepath.Join(moduleCache, "retained"), "input")
 }
 
 // TestUnansweredCreateKeepsItsPendingRecord fails create: the engine did not
@@ -264,8 +279,9 @@ func TestUnansweredCreateKeepsItsPendingRecord(t *testing.T) {
 	t.Setenv("DOCKER_HOST", daemon.hostURI)
 	daemon.setFailCreate(true)
 	cards := filepath.Join(realTempDir(t), "cards")
-	authCtx := WithPrincipal(t.Context(), Principal{ID: "alice@example.com"})
+	authCtx := WithPrincipal(t.Context(), Principal{ID: "alice@example.com", CallerID: "alice@example.com", Kind: CallerUser})
 	cp := openCheckCP(t, cards, newShopModule(t, nil))
+	readCheckBuilderFixture(t, cp)
 	_, err := cp.CheckProject(authCtx)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "mounts denied")
@@ -292,69 +308,6 @@ func TestUnansweredCreateKeepsItsPendingRecord(t *testing.T) {
 	require.True(t, ok)
 	assert.True(t, c.Removed)
 	assert.Empty(t, readOwnerRecord(t, opDir).Containers)
-}
-
-// TestRecoveryOfVersion1Records recovers version 1 records, whose names
-// are read as unknown: an earlier server may have created and started the
-// container, and a create of its may still be in flight. A listed container
-// is removed and, once a listing no longer shows it, cleared with its
-// scratch. A container no listing shows, or whose removal is not confirmed,
-// keeps its name and its scratch, because it may be running with the
-// operation's files mounted. Records are rewritten as version 2 and the
-// output stays readable.
-func TestRecoveryOfVersion1Records(t *testing.T) {
-	dockerBin := installFakeDocker(t)
-	cases := []struct {
-		name        string
-		listed      bool
-		failRemove  bool
-		wantCleared bool
-	}{
-		{name: "running container is removed", listed: true, wantCleared: true},
-		{name: "running container whose removal fails keeps its scratch", listed: true, failRemove: true},
-		{name: "container no listing shows keeps its scratch"},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			daemon := newFakeDockerDaemon(t)
-			t.Setenv("DOCKER_HOST", daemon.hostURI)
-			cards := filepath.Join(realTempDir(t), "cards")
-			id := strings.Repeat("ef", 16)
-			name := "surla-check-" + id + "-0"
-			opDir := filepath.Join(cards, "check-work", id)
-			if tc.listed {
-				daemon.addRunning(name, "surla.check="+id)
-			}
-			daemon.setFailRemove(name, tc.failRemove)
-			const saved = "==> modules: .\n"
-			writeTree(t, opDir, map[string]string{
-				"src/go.mod":   "module example.com/shop\n",
-				outputFile:     saved,
-				outputMetaFile: fmt.Sprintf(`{"captured":%d,"dropped":0}`, len(saved)),
-				ownerFile:      fmt.Sprintf(`{"docker":%q,"host":%q,"containers":[%q]}`, dockerBin, daemon.hostURI, name),
-			})
-
-			cp := openCheckCP(t, cards, newShopModule(t, nil))
-			raw, err := os.ReadFile(filepath.Join(opDir, ownerFile))
-			require.NoError(t, err)
-			assert.Contains(t, string(raw), `"version":2`, "recovery rewrote the record as version 2")
-			if tc.wantCleared {
-				c, ok := daemon.container(name)
-				require.True(t, ok)
-				assert.True(t, c.Removed, "recovery stopped and removed the running container")
-				assert.Empty(t, readOwnerRecord(t, opDir).Containers)
-				assert.NoDirExists(t, filepath.Join(opDir, "src"))
-			} else {
-				assert.Equal(t, []ownedContainer{{Name: name, State: stateUnknown}}, readOwnerRecord(t, opDir).Containers)
-				assert.DirExists(t, filepath.Join(opDir, "src"), "a container that may be running keeps its mounted files")
-			}
-			page, err := cp.ReadCheckOutput(WithPrincipal(t.Context(), Principal{ID: "alice@example.com"}), &gensurla.ReadCheckOutputPayload{OpID: id})
-			require.NoError(t, err)
-			assert.Equal(t, saved, page.Text)
-			daemon.setFailRemove(name, false)
-			assert.NoError(t, cp.Close())
-		})
-	}
 }
 
 // TestRecoveryAfterACrashInEachWindow recovers the record and engine state
@@ -460,7 +413,8 @@ func TestOwnerRecordIsWrittenBeforeEachStep(t *testing.T) {
 			})
 			cp := openCheckCP(t, cards, newShopModule(t, nil))
 			defer func() { assert.NoError(t, cp.Close()) }()
-			_, err := cp.CheckProject(WithPrincipal(t.Context(), Principal{ID: "alice@example.com"}))
+			readCheckBuilderFixture(t, cp)
+			_, err := cp.CheckProject(WithPrincipal(t.Context(), Principal{ID: "alice@example.com", CallerID: "alice@example.com", Kind: CallerUser}))
 			opDir := onlyOperationDir(t, cards)
 			mu.Lock()
 			defer mu.Unlock()
@@ -507,8 +461,6 @@ func TestConfirmRemovedNeedsAListingThatShowsItGone(t *testing.T) {
 		{name: "pending, listed, removed and gone", state: stateCreationPending, exists: true, wantCleared: true, wantRemoves: 1},
 		{name: "pending, listed, removal fails", state: stateCreationPending, exists: true, failRemove: true, wantRemoves: 1, wantErr: "still shows it"},
 		{name: "pending, listing fails", state: stateCreationPending, exists: true, failList: true, wantErr: "list the containers of operation op1"},
-		{name: "unknown, never listed", state: stateUnknown, wantErr: errCreateUnconfirmed.Error()},
-		{name: "unknown, listed, removed and gone", state: stateUnknown, exists: true, wantCleared: true, wantRemoves: 1},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -533,22 +485,6 @@ func TestConfirmRemovedNeedsAListingThatShowsItGone(t *testing.T) {
 	}
 }
 
-// TestVersion2RecordIsRefusedByTheVersion1Decoder decodes a version 2
-// record with the record type and strict decoder of the release before
-// version 2: it is refused, so an older server keeps the directory whole.
-func TestVersion2RecordIsRefusedByTheVersion1Decoder(t *testing.T) {
-	var v1 struct {
-		Docker     string   `json:"docker"`
-		Host       string   `json:"host"`
-		Containers []string `json:"containers"`
-	}
-	raw, err := json.Marshal(checkOwner{Version: ownerVersion, Docker: "/usr/local/bin/docker", Host: "unix:///var/run/docker.sock", Containers: []ownedContainer{}})
-	require.NoError(t, err)
-	err = decodeStrictObject(raw, &v1)
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "unknown field")
-}
-
 // TestCheckHelperSpansJoinTheServerTrace runs a passing check and reads the
 // helper's spans: its operation span is a child of the server's request
 // span, and every container has create, run and remove spans under it.
@@ -565,7 +501,8 @@ func TestCheckHelperSpansJoinTheServerTrace(t *testing.T) {
 		CardsDir: filepath.Join(realTempDir(t), "cards"), WorkspaceDir: newShopModule(t, nil),
 		Checker: candidate.NewContainerRunner(), CheckHelper: testCheckHelper(t), CheckTimeout: time.Minute, TracerProvider: tp,
 	})
-	res, err := cp.CheckProject(WithPrincipal(t.Context(), Principal{ID: "alice@example.com"}))
+	readCheckBuilderFixture(t, cp)
+	res, err := cp.CheckProject(WithPrincipal(t.Context(), Principal{ID: "alice@example.com", CallerID: "alice@example.com", Kind: CallerUser}))
 	require.NoError(t, err)
 	require.True(t, res.Passed)
 
@@ -608,6 +545,9 @@ func runKillCase(t *testing.T, self string, tc killCase) {
 	t.Setenv("DOCKER_HOST", daemon.hostURI)
 	workspace := newShopModule(t, map[string]string{"go.sum": "old-sum\n"})
 	cards := filepath.Join(realTempDir(t), "cards")
+	cp := openCheckCP(t, cards, workspace)
+	working := readCheckBuilderFixture(t, cp)
+	require.NoError(t, cp.Close())
 	wait, cancelWait := context.WithTimeout(t.Context(), lifecycleWaitTimeout)
 	defer cancelWait()
 	blocked, release, senderGone := make(chan struct{}), make(chan struct{}), make(chan struct{})
@@ -622,7 +562,7 @@ func runKillCase(t *testing.T, self string, tc killCase) {
 			// go mod tidy changed go.sum in the copy, so only cancellation
 			// can keep it from being published.
 			created := daemon.createdContainers()
-			src := findMount(t, &created[len(created)-1], workspace).Source
+			src := findMount(t, &created[len(created)-1], working).Source
 			assert.NoError(t, os.WriteFile(filepath.Join(src, "go.sum"), []byte("new-sum\n"), 0o644))
 		}
 		close(blocked)
@@ -669,7 +609,7 @@ func runKillCase(t *testing.T, self string, tc killCase) {
 	// The output reads back by its op_id without any server running: the
 	// reader only opens the operation's files.
 	reader := &ControlPlane{checkWorkDir: filepath.Join(cards, "check-work")}
-	page, err := reader.ReadCheckOutput(WithPrincipal(t.Context(), Principal{ID: "alice@example.com"}), &gensurla.ReadCheckOutputPayload{OpID: filepath.Base(opDir)})
+	page, err := reader.ReadCheckOutput(WithPrincipal(t.Context(), Principal{ID: "alice@example.com", CallerID: "alice@example.com", Kind: CallerUser}), &gensurla.ReadCheckOutputPayload{OpID: filepath.Base(opDir)})
 	require.NoError(t, err, "the helper finished the output")
 	assert.Contains(t, page.Text, "==> modules: .")
 	if raw, err := os.ReadFile(filepath.Join(opDir, ownerFile)); err == nil {
@@ -698,6 +638,7 @@ func runKillCase(t *testing.T, self string, tc killCase) {
 	}
 	assert.NoDirExists(t, filepath.Join(opDir, "src"))
 	assertFileContent(t, filepath.Join(workspace, "go.sum"), "old-sum\n")
+	assertFileContent(t, filepath.Join(working, "go.sum"), "old-sum\n")
 }
 
 // onlyOperationDir returns the single operation directory under cards.
@@ -842,6 +783,7 @@ func checkHost(cardsDir, workspace, tool string) int {
 		return 2
 	}
 	cp, err := New(Options{
+		Team:     testTeamBinding(),
 		CardsDir: cardsDir, WorkspaceDir: workspace, Checker: candidate.NewContainerRunner(),
 		CheckHelper:  func() *exec.Cmd { return exec.Command(self, "check-run") },
 		CheckTimeout: time.Minute,
@@ -850,7 +792,7 @@ func checkHost(cardsDir, workspace, tool string) int {
 		fmt.Println("new:", err)
 		return 2
 	}
-	ctx := WithPrincipal(context.Background(), Principal{ID: "alice@example.com"})
+	ctx := WithPrincipal(context.Background(), Principal{ID: "alice@example.com", CallerID: "alice@example.com", Kind: CallerUser})
 	switch tool {
 	case checkToolProject:
 		_, err = cp.CheckProject(ctx)

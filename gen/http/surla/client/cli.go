@@ -28,7 +28,7 @@ func BuildProposeChangePayload(surlaProposeChangeBody *string) (*surla.ProposeCh
 		}
 		err = json.Unmarshal([]byte(*surlaProposeChangeBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"analysis\": {\n         \"ambiguities\": [\n            {\n               \"options\": [\n                  \"\U000556d5\",\n                  \"\U00103058\",\n                  \"\U0001e633\"\n               ],\n               \"question\": \"\U00064b88\"\n            },\n            {\n               \"options\": [\n                  \"\U000556d5\",\n                  \"\U00103058\",\n                  \"\U0001e633\"\n               ],\n               \"question\": \"\U00064b88\"\n            },\n            {\n               \"options\": [\n                  \"\U000556d5\",\n                  \"\U00103058\",\n                  \"\U0001e633\"\n               ],\n               \"question\": \"\U00064b88\"\n            }\n         ],\n         \"examples\": [\n            {\n               \"expected_outcome\": \"\U0001195a\",\n               \"input_summary\": \"\U00092b7a\",\n               \"scenario\": \"\U0001b54f\",\n               \"verification_kind\": \"deterministic\"\n            },\n            {\n               \"expected_outcome\": \"\U0001195a\",\n               \"input_summary\": \"\U00092b7a\",\n               \"scenario\": \"\U0001b54f\",\n               \"verification_kind\": \"deterministic\"\n            }\n         ],\n         \"preserved_behaviors\": [\n            \"\U0005ce6e\",\n            \"\U000a550e\",\n            \"\U000d207b\",\n            \"𪁯\"\n         ],\n         \"summary\": \"\U000fb38a\",\n         \"ui_composition\": \"In optio et.\"\n      },\n      \"change_id\": \"Ipsum soluta officiis facilis dolorem quae.\",\n      \"design_source\": \"Quia placeat maiores voluptatem voluptatem.\",\n      \"prompt\": \"Enim distinctio et sunt sunt et.\",\n      \"story_refresh_op_id\": \"In eaque eveniet facere.\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"analysis\": {\n         \"ambiguities\": [\n            {\n               \"options\": [\n                  \"\U000556d5\",\n                  \"\U00103058\",\n                  \"\U0001e633\"\n               ],\n               \"question\": \"\U00064b88\"\n            },\n            {\n               \"options\": [\n                  \"\U000556d5\",\n                  \"\U00103058\",\n                  \"\U0001e633\"\n               ],\n               \"question\": \"\U00064b88\"\n            },\n            {\n               \"options\": [\n                  \"\U000556d5\",\n                  \"\U00103058\",\n                  \"\U0001e633\"\n               ],\n               \"question\": \"\U00064b88\"\n            }\n         ],\n         \"examples\": [\n            {\n               \"expected_outcome\": \"\U0001195a\",\n               \"input_summary\": \"\U00092b7a\",\n               \"scenario\": \"\U0001b54f\",\n               \"verification_kind\": \"deterministic\"\n            },\n            {\n               \"expected_outcome\": \"\U0001195a\",\n               \"input_summary\": \"\U00092b7a\",\n               \"scenario\": \"\U0001b54f\",\n               \"verification_kind\": \"deterministic\"\n            }\n         ],\n         \"preserved_behaviors\": [\n            \"\U0005ce6e\",\n            \"\U000a550e\",\n            \"\U000d207b\",\n            \"𪁯\"\n         ],\n         \"summary\": \"\U000fb38a\",\n         \"ui_composition\": \"In optio et.\"\n      },\n      \"change_id\": \"Ipsum soluta officiis facilis dolorem quae.\",\n      \"prompt\": \"Enim distinctio et sunt sunt et.\",\n      \"story_refresh_op_id\": \"In eaque eveniet facere.\"\n   }'")
 		}
 		if body.Analysis == nil {
 			err = goa.MergeErrors(err, goa.MissingFieldError("analysis", "body"))
@@ -45,7 +45,6 @@ func BuildProposeChangePayload(surlaProposeChangeBody *string) (*surla.ProposeCh
 	v := &surla.ProposeChangePayload{
 		ChangeID:         body.ChangeID,
 		Prompt:           body.Prompt,
-		DesignSource:     body.DesignSource,
 		StoryRefreshOpID: body.StoryRefreshOpID,
 	}
 	if body.Analysis != nil {
@@ -66,7 +65,7 @@ func BuildReviseChangePayload(surlaReviseChangeBody *string) (*surla.ReviseChang
 		}
 		err = json.Unmarshal([]byte(*surlaReviseChangeBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"analysis\": {\n         \"ambiguities\": [\n            {\n               \"options\": [\n                  \"\U000556d5\",\n                  \"\U00103058\",\n                  \"\U0001e633\"\n               ],\n               \"question\": \"\U00064b88\"\n            },\n            {\n               \"options\": [\n                  \"\U000556d5\",\n                  \"\U00103058\",\n                  \"\U0001e633\"\n               ],\n               \"question\": \"\U00064b88\"\n            },\n            {\n               \"options\": [\n                  \"\U000556d5\",\n                  \"\U00103058\",\n                  \"\U0001e633\"\n               ],\n               \"question\": \"\U00064b88\"\n            },\n            {\n               \"options\": [\n                  \"\U000556d5\",\n                  \"\U00103058\",\n                  \"\U0001e633\"\n               ],\n               \"question\": \"\U00064b88\"\n            }\n         ],\n         \"examples\": [\n            {\n               \"expected_outcome\": \"\U00092d5e\",\n               \"input_summary\": \"፤\",\n               \"prior_id\": \"te\",\n               \"scenario\": \"\U0008a024\",\n               \"verification_kind\": \"model_judged\"\n            }\n         ],\n         \"preserved_behaviors\": [\n            \"\U000fa9ca\",\n            \"\U000c31d4\",\n            \"𬓺\",\n            \"\U000e9eb6\"\n         ],\n         \"removed_example_ids\": [\n            \"swo\",\n            \"u\"\n         ],\n         \"summary\": \"\U000aa915\",\n         \"ui_composition\": \"Sed tempora quos nobis odio ab.\"\n      },\n      \"change_id\": \"Optio ratione suscipit et neque officia.\",\n      \"design_source\": \"Qui itaque.\",\n      \"prompt\": \"Omnis est.\",\n      \"request_revision\": \"Neque dolore optio.\",\n      \"story_refresh_op_id\": \"Assumenda tenetur minus et magnam consequatur.\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"analysis\": {\n         \"ambiguities\": [\n            {\n               \"options\": [\n                  \"\U000556d5\",\n                  \"\U00103058\",\n                  \"\U0001e633\"\n               ],\n               \"question\": \"\U00064b88\"\n            },\n            {\n               \"options\": [\n                  \"\U000556d5\",\n                  \"\U00103058\",\n                  \"\U0001e633\"\n               ],\n               \"question\": \"\U00064b88\"\n            },\n            {\n               \"options\": [\n                  \"\U000556d5\",\n                  \"\U00103058\",\n                  \"\U0001e633\"\n               ],\n               \"question\": \"\U00064b88\"\n            },\n            {\n               \"options\": [\n                  \"\U000556d5\",\n                  \"\U00103058\",\n                  \"\U0001e633\"\n               ],\n               \"question\": \"\U00064b88\"\n            }\n         ],\n         \"examples\": [\n            {\n               \"expected_outcome\": \"\U00092d5e\",\n               \"input_summary\": \"፤\",\n               \"prior_id\": \"te\",\n               \"scenario\": \"\U0008a024\",\n               \"verification_kind\": \"model_judged\"\n            }\n         ],\n         \"preserved_behaviors\": [\n            \"\U000fa9ca\",\n            \"\U000c31d4\",\n            \"𬓺\",\n            \"\U000e9eb6\"\n         ],\n         \"removed_example_ids\": [\n            \"swo\",\n            \"u\"\n         ],\n         \"summary\": \"\U000aa915\",\n         \"ui_composition\": \"Sed tempora quos nobis odio ab.\"\n      },\n      \"change_id\": \"Optio ratione suscipit et neque officia.\",\n      \"prompt\": \"Omnis est.\",\n      \"request_revision\": \"Neque dolore optio.\",\n      \"story_refresh_op_id\": \"Assumenda tenetur minus et magnam consequatur.\"\n   }'")
 		}
 		if body.Analysis == nil {
 			err = goa.MergeErrors(err, goa.MissingFieldError("analysis", "body"))
@@ -84,7 +83,6 @@ func BuildReviseChangePayload(surlaReviseChangeBody *string) (*surla.ReviseChang
 		ChangeID:         body.ChangeID,
 		RequestRevision:  body.RequestRevision,
 		Prompt:           body.Prompt,
-		DesignSource:     body.DesignSource,
 		StoryRefreshOpID: body.StoryRefreshOpID,
 	}
 	if body.Analysis != nil {
@@ -168,6 +166,35 @@ func BuildGetChangePayload(surlaGetChangeChangeID *string) (*surla.GetChangePayl
 	return v, nil
 }
 
+// BuildDeclineRevisionPayload builds the payload for the surla
+// decline_revision endpoint from CLI flags.
+func BuildDeclineRevisionPayload(surlaDeclineRevisionBody *string) (*surla.DeclineRevisionPayload, error) {
+	var err error
+	var body DeclineRevisionRequestBody
+	{
+		if surlaDeclineRevisionBody == nil {
+			return nil, fmt.Errorf("missing required flag --body")
+		}
+		err = json.Unmarshal([]byte(*surlaDeclineRevisionBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"change_id\": \"sg\",\n      \"request_revision\": \"cf2a81cc33e3bef57abac8bae9e732fbabea86567fde6e5bc232e41f8d5391a7\"\n   }'")
+		}
+		if utf8.RuneCountInString(body.ChangeID) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.change_id", body.ChangeID, utf8.RuneCountInString(body.ChangeID), 1, true))
+		}
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.request_revision", body.RequestRevision, "^[0-9a-f]{64}$"))
+		if err != nil {
+			return nil, err
+		}
+	}
+	v := &surla.DeclineRevisionPayload{
+		ChangeID:        body.ChangeID,
+		RequestRevision: body.RequestRevision,
+	}
+
+	return v, nil
+}
+
 // BuildPreviewArchitecturePayload builds the payload for the surla
 // preview_architecture endpoint from CLI flags.
 func BuildPreviewArchitecturePayload(surlaPreviewArchitectureBody *string) (*surla.PreviewArchitecturePayload, error) {
@@ -179,52 +206,12 @@ func BuildPreviewArchitecturePayload(surlaPreviewArchitectureBody *string) (*sur
 		}
 		err = json.Unmarshal([]byte(*surlaPreviewArchitectureBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"architect_paths\": [\n         \"Voluptas velit quia rerum.\",\n         \"Odit aut perspiciatis aut aut.\",\n         \"Quasi delectus incidunt ipsum.\",\n         \"Non sequi qui nisi pariatur a.\"\n      ],\n      \"builders\": [\n         {\n            \"name\": \"Libero cupiditate occaecati natus sed.\",\n            \"paths\": [\n               \"At recusandae.\",\n               \"Ea ipsa sed ullam et quas.\",\n               \"Quia perferendis rerum.\",\n               \"Praesentium quia beatae dolorem vel.\"\n            ],\n            \"preferred_profile_id\": \"Unde ut in.\"\n         },\n         {\n            \"name\": \"Libero cupiditate occaecati natus sed.\",\n            \"paths\": [\n               \"At recusandae.\",\n               \"Ea ipsa sed ullam et quas.\",\n               \"Quia perferendis rerum.\",\n               \"Praesentium quia beatae dolorem vel.\"\n            ],\n            \"preferred_profile_id\": \"Unde ut in.\"\n         },\n         {\n            \"name\": \"Libero cupiditate occaecati natus sed.\",\n            \"paths\": [\n               \"At recusandae.\",\n               \"Ea ipsa sed ullam et quas.\",\n               \"Quia perferendis rerum.\",\n               \"Praesentium quia beatae dolorem vel.\"\n            ],\n            \"preferred_profile_id\": \"Unde ut in.\"\n         },\n         {\n            \"name\": \"Libero cupiditate occaecati natus sed.\",\n            \"paths\": [\n               \"At recusandae.\",\n               \"Ea ipsa sed ullam et quas.\",\n               \"Quia perferendis rerum.\",\n               \"Praesentium quia beatae dolorem vel.\"\n            ],\n            \"preferred_profile_id\": \"Unde ut in.\"\n         }\n      ],\n      \"change_id\": \"Vel libero.\",\n      \"design\": {\n         \"files\": {\n            \"Doloribus repellat aut eveniet nesciunt natus labore.\": \"Dolores magni.\",\n            \"Quaerat vitae quas rerum.\": \"Vel in molestias et quaerat.\"\n         }\n      },\n      \"eval_paths\": [\n         \"Minima veritatis sint eius qui.\",\n         \"Nemo quas.\",\n         \"Fuga doloribus illum.\"\n      ],\n      \"request_revision\": \"Quisquam mollitia.\"\n   }'")
-		}
-		if body.Design != nil {
-			if err2 := validateDesignSnapshotRequestBody(body.Design, "body.design"); err2 != nil {
-				err = goa.MergeErrors(err, err2)
-			}
-		}
-		for _, e := range body.Builders {
-			if e != nil {
-				if err2 := validateBuilderScopeItemRequestBody(e, "body.builders[*]"); err2 != nil {
-					err = goa.MergeErrors(err, err2)
-				}
-			}
-		}
-		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"change_id\": \"Vel libero.\",\n      \"request_revision\": \"Quisquam mollitia.\"\n   }'")
 		}
 	}
 	v := &surla.PreviewArchitecturePayload{
 		ChangeID:        body.ChangeID,
 		RequestRevision: body.RequestRevision,
-	}
-	if body.Design != nil {
-		v.Design = marshalDesignSnapshotRequestBodyToSurlaDesignSnapshot(body.Design)
-	}
-	if body.Builders != nil {
-		v.Builders = make([]*surla.BuilderScopeItem, len(body.Builders))
-		for i, val := range body.Builders {
-			if val == nil {
-				v.Builders[i] = nil
-				continue
-			}
-			v.Builders[i] = marshalBuilderScopeItemRequestBodyToSurlaBuilderScopeItem(val)
-		}
-	}
-	if body.ArchitectPaths != nil {
-		v.ArchitectPaths = make([]string, len(body.ArchitectPaths))
-		for i, val := range body.ArchitectPaths {
-			v.ArchitectPaths[i] = val
-		}
-	}
-	if body.EvalPaths != nil {
-		v.EvalPaths = make([]string, len(body.EvalPaths))
-		for i, val := range body.EvalPaths {
-			v.EvalPaths[i] = val
-		}
 	}
 
 	return v, nil
@@ -270,7 +257,10 @@ func BuildStartLiveTargetPayload(surlaStartLiveTargetBody *string) (*surla.Start
 		}
 		err = json.Unmarshal([]byte(*surlaStartLiveTargetBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"candidate_commit\": \"4f0b3c1d2e5a6978877665544332211009988776\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"candidate_commit\": \"4f0b3c1d2e5a6978877665544332211009988776\",\n      \"change_id\": \"k1\"\n   }'")
+		}
+		if utf8.RuneCountInString(body.ChangeID) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.change_id", body.ChangeID, utf8.RuneCountInString(body.ChangeID), 1, true))
 		}
 		err = goa.MergeErrors(err, goa.ValidatePattern("body.candidate_commit", body.CandidateCommit, "^([0-9a-f]{40}|[0-9a-f]{64})$"))
 		if err != nil {
@@ -278,6 +268,7 @@ func BuildStartLiveTargetPayload(surlaStartLiveTargetBody *string) (*surla.Start
 		}
 	}
 	v := &surla.StartLiveTargetPayload{
+		ChangeID:        body.ChangeID,
 		CandidateCommit: body.CandidateCommit,
 	}
 
@@ -453,6 +444,41 @@ func BuildConfigureModelPayload(surlaConfigureModelBody *string) (*surla.Configu
 	return v, nil
 }
 
+// BuildHandOverModelSettingsPayload builds the payload for the surla
+// hand_over_model_settings endpoint from CLI flags.
+func BuildHandOverModelSettingsPayload(surlaHandOverModelSettingsBody *string) (*surla.HandOverModelSettingsPayload, error) {
+	var err error
+	var body HandOverModelSettingsRequestBody
+	{
+		if surlaHandOverModelSettingsBody == nil {
+			return nil, fmt.Errorf("missing required flag --body")
+		}
+		err = json.Unmarshal([]byte(*surlaHandOverModelSettingsBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"anthropic\": {\n         \"ANTHROPIC_API_KEY\": \"bb4\",\n         \"ANTHROPIC_AUTH_TOKEN\": \"j\"\n      },\n      \"openai\": {\n         \"OPENAI_BASE_URL\": \"qsj\",\n         \"OPENAI_CUSTOM_HEADERS\": \"p1\",\n         \"OPENAI_ORG_ID\": \"6\"\n      }\n   }'")
+		}
+	}
+	v := &surla.HandOverModelSettingsPayload{}
+	if body.Anthropic != nil {
+		v.Anthropic = make(map[string]string, len(body.Anthropic))
+		for key, val := range body.Anthropic {
+			tk := key
+			tv := val
+			v.Anthropic[tk] = tv
+		}
+	}
+	if body.Openai != nil {
+		v.Openai = make(map[string]string, len(body.Openai))
+		for key, val := range body.Openai {
+			tk := key
+			tv := val
+			v.Openai[tk] = tv
+		}
+	}
+
+	return v, nil
+}
+
 // BuildInitProjectPayload builds the payload for the surla init_project
 // endpoint from CLI flags.
 func BuildInitProjectPayload(surlaInitProjectBody *string) (*surla.InitProjectPayload, error) {
@@ -566,6 +592,321 @@ func BuildListTracesPayload(surlaListTracesStatus string, surlaListTracesLimit s
 	v.Status = status
 	v.Limit = limit
 	v.Cursor = cursor
+
+	return v, nil
+}
+
+// BuildShowTeamPanePayload builds the payload for the surla show_team_pane
+// endpoint from CLI flags.
+func BuildShowTeamPanePayload(surlaShowTeamPaneBody *string) (*surla.ShowTeamPanePayload, error) {
+	var err error
+	var body ShowTeamPaneRequestBody
+	{
+		if surlaShowTeamPaneBody == nil {
+			return nil, fmt.Errorf("missing required flag --body")
+		}
+		err = json.Unmarshal([]byte(*surlaShowTeamPaneBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"role\": \"test_writer\"\n   }'")
+		}
+		if !(body.Role == "guide" || body.Role == "builder" || body.Role == "test_writer") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.role", body.Role, []any{"guide", "builder", "test_writer"}))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	v := &surla.ShowTeamPanePayload{
+		Role: body.Role,
+	}
+
+	return v, nil
+}
+
+// BuildWaitForChangesPayload builds the payload for the surla wait_for_changes
+// endpoint from CLI flags.
+func BuildWaitForChangesPayload(surlaWaitForChangesSince *string) (*surla.WaitForChangesPayload, error) {
+	var err error
+	var since string
+	{
+		if surlaWaitForChangesSince == nil {
+			return nil, fmt.Errorf("missing required flag --since")
+		}
+		since = *surlaWaitForChangesSince
+		if utf8.RuneCountInString(since) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("since", since, utf8.RuneCountInString(since), 1, true))
+		}
+		if utf8.RuneCountInString(since) > 128 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("since", since, utf8.RuneCountInString(since), 128, false))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	v := &surla.WaitForChangesPayload{}
+	v.Since = since
+
+	return v, nil
+}
+
+// BuildStartBuildPayload builds the payload for the surla start_build endpoint
+// from CLI flags.
+func BuildStartBuildPayload(surlaStartBuildBody *string, surlaStartBuildChangeID *string) (*surla.StartBuildPayload, error) {
+	var err error
+	var body StartBuildRequestBody
+	{
+		if surlaStartBuildBody == nil {
+			return nil, fmt.Errorf("missing required flag --body")
+		}
+		err = json.Unmarshal([]byte(*surlaStartBuildBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"replaces\": {\n         \"change_id\": \"61\",\n         \"started_at\": \"2008-09-02T12:30:42Z\"\n      },\n      \"request_revision\": \"q9g\"\n   }'")
+		}
+		if utf8.RuneCountInString(body.RequestRevision) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.request_revision", body.RequestRevision, utf8.RuneCountInString(body.RequestRevision), 1, true))
+		}
+		if body.Replaces != nil {
+			if err2 := validateReplacedBuildRequestBody(body.Replaces, "body.replaces"); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var changeID string
+	{
+		if surlaStartBuildChangeID == nil {
+			return nil, fmt.Errorf("missing required flag --change-id")
+		}
+		changeID = *surlaStartBuildChangeID
+		if utf8.RuneCountInString(changeID) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("change_id", changeID, utf8.RuneCountInString(changeID), 1, true))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	v := &surla.StartBuildPayload{
+		RequestRevision: body.RequestRevision,
+	}
+	if body.Replaces != nil {
+		v.Replaces = marshalReplacedBuildRequestBodyToSurlaReplacedBuild(body.Replaces)
+	}
+	v.ChangeID = changeID
+
+	return v, nil
+}
+
+// BuildDropBuildPayload builds the payload for the surla drop_build endpoint
+// from CLI flags.
+func BuildDropBuildPayload(surlaDropBuildBody *string, surlaDropBuildChangeID *string) (*surla.DropBuildPayload, error) {
+	var err error
+	var body DropBuildRequestBody
+	{
+		if surlaDropBuildBody == nil {
+			return nil, fmt.Errorf("missing required flag --body")
+		}
+		err = json.Unmarshal([]byte(*surlaDropBuildBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"started_at\": \"2003-06-25T17:10:05Z\"\n   }'")
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.started_at", body.StartedAt, goa.FormatDateTime))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var changeID string
+	{
+		if surlaDropBuildChangeID == nil {
+			return nil, fmt.Errorf("missing required flag --change-id")
+		}
+		changeID = *surlaDropBuildChangeID
+		if utf8.RuneCountInString(changeID) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("change_id", changeID, utf8.RuneCountInString(changeID), 1, true))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	v := &surla.DropBuildPayload{
+		StartedAt: body.StartedAt,
+	}
+	v.ChangeID = changeID
+
+	return v, nil
+}
+
+// BuildGetBuildPayload builds the payload for the surla get_build endpoint
+// from CLI flags.
+func BuildGetBuildPayload(surlaGetBuildChangeID *string) (*surla.GetBuildPayload, error) {
+	var err error
+	var changeID string
+	{
+		if surlaGetBuildChangeID == nil {
+			return nil, fmt.Errorf("missing required flag --change-id")
+		}
+		changeID = *surlaGetBuildChangeID
+		if utf8.RuneCountInString(changeID) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("change_id", changeID, utf8.RuneCountInString(changeID), 1, true))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	v := &surla.GetBuildPayload{}
+	v.ChangeID = changeID
+
+	return v, nil
+}
+
+// BuildGetTestFindingsPayload builds the payload for the surla
+// get_test_findings endpoint from CLI flags.
+func BuildGetTestFindingsPayload(surlaGetTestFindingsChangeID *string) (*surla.GetTestFindingsPayload, error) {
+	var err error
+	var changeID string
+	{
+		if surlaGetTestFindingsChangeID == nil {
+			return nil, fmt.Errorf("missing required flag --change-id")
+		}
+		changeID = *surlaGetTestFindingsChangeID
+		if utf8.RuneCountInString(changeID) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("change_id", changeID, utf8.RuneCountInString(changeID), 1, true))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	v := &surla.GetTestFindingsPayload{}
+	v.ChangeID = changeID
+
+	return v, nil
+}
+
+// BuildGetBuilderAssignmentPayload builds the payload for the surla
+// get_builder_assignment endpoint from CLI flags.
+func BuildGetBuilderAssignmentPayload(surlaGetBuilderAssignmentChangeID *string) (*surla.GetBuilderAssignmentPayload, error) {
+	var err error
+	var changeID string
+	{
+		if surlaGetBuilderAssignmentChangeID == nil {
+			return nil, fmt.Errorf("missing required flag --change-id")
+		}
+		changeID = *surlaGetBuilderAssignmentChangeID
+		if utf8.RuneCountInString(changeID) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("change_id", changeID, utf8.RuneCountInString(changeID), 1, true))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	v := &surla.GetBuilderAssignmentPayload{}
+	v.ChangeID = changeID
+
+	return v, nil
+}
+
+// BuildGetTestWriterAssignmentPayload builds the payload for the surla
+// get_test_writer_assignment endpoint from CLI flags.
+func BuildGetTestWriterAssignmentPayload(surlaGetTestWriterAssignmentChangeID *string) (*surla.GetTestWriterAssignmentPayload, error) {
+	var err error
+	var changeID string
+	{
+		if surlaGetTestWriterAssignmentChangeID == nil {
+			return nil, fmt.Errorf("missing required flag --change-id")
+		}
+		changeID = *surlaGetTestWriterAssignmentChangeID
+		if utf8.RuneCountInString(changeID) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("change_id", changeID, utf8.RuneCountInString(changeID), 1, true))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	v := &surla.GetTestWriterAssignmentPayload{}
+	v.ChangeID = changeID
+
+	return v, nil
+}
+
+// BuildReportTestsFinishedPayload builds the payload for the surla
+// report_tests_finished endpoint from CLI flags.
+func BuildReportTestsFinishedPayload(surlaReportTestsFinishedBody *string, surlaReportTestsFinishedChangeID *string) (*surla.ReportTestsFinishedPayload, error) {
+	var err error
+	var body ReportTestsFinishedRequestBody
+	{
+		if surlaReportTestsFinishedBody == nil {
+			return nil, fmt.Errorf("missing required flag --body")
+		}
+		err = json.Unmarshal([]byte(*surlaReportTestsFinishedBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"coverage_statements\": [\n         {\n            \"example_ids\": [\n               \"gy\",\n               \"gy\"\n            ],\n            \"explanation\": \"b\",\n            \"question_ids\": [\n               \"gy\",\n               \"gy\",\n               \"gy\",\n               \"gy\"\n            ],\n            \"scenario\": \"gy\"\n         },\n         {\n            \"example_ids\": [\n               \"gy\",\n               \"gy\"\n            ],\n            \"explanation\": \"b\",\n            \"question_ids\": [\n               \"gy\",\n               \"gy\",\n               \"gy\",\n               \"gy\"\n            ],\n            \"scenario\": \"gy\"\n         },\n         {\n            \"example_ids\": [\n               \"gy\",\n               \"gy\"\n            ],\n            \"explanation\": \"b\",\n            \"question_ids\": [\n               \"gy\",\n               \"gy\",\n               \"gy\",\n               \"gy\"\n            ],\n            \"scenario\": \"gy\"\n         }\n      ],\n      \"request_revision\": \"td\"\n   }'")
+		}
+		if body.CoverageStatements == nil {
+			err = goa.MergeErrors(err, goa.MissingFieldError("coverage_statements", "body"))
+		}
+		if utf8.RuneCountInString(body.RequestRevision) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.request_revision", body.RequestRevision, utf8.RuneCountInString(body.RequestRevision), 1, true))
+		}
+		for _, e := range body.CoverageStatements {
+			if e == nil {
+				err = goa.MergeErrors(err, goa.MissingFieldError("body.coverage_statements", "[*]"))
+			}
+			if e != nil {
+				if err2 := validateTestCoverageStatementRequestBody(e, "body.coverage_statements[*]"); err2 != nil {
+					err = goa.MergeErrors(err, err2)
+				}
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var changeID string
+	{
+		if surlaReportTestsFinishedChangeID == nil {
+			return nil, fmt.Errorf("missing required flag --change-id")
+		}
+		changeID = *surlaReportTestsFinishedChangeID
+		if utf8.RuneCountInString(changeID) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("change_id", changeID, utf8.RuneCountInString(changeID), 1, true))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	v := &surla.ReportTestsFinishedPayload{
+		RequestRevision: body.RequestRevision,
+	}
+	if body.CoverageStatements != nil {
+		v.CoverageStatements = make([]*surla.TestCoverageStatement, len(body.CoverageStatements))
+		for i, val := range body.CoverageStatements {
+			if val == nil {
+				v.CoverageStatements[i] = nil
+				continue
+			}
+			v.CoverageStatements[i] = marshalTestCoverageStatementRequestBodyToSurlaTestCoverageStatement(val)
+		}
+	} else {
+		v.CoverageStatements = []*surla.TestCoverageStatement{}
+	}
+	v.ChangeID = changeID
+
+	return v, nil
+}
+
+// BuildReviewVerificationPayload builds the payload for the surla
+// review_verification endpoint from CLI flags.
+func BuildReviewVerificationPayload(surlaReviewVerificationRunID *string) (*surla.GetVerificationPayload, error) {
+	var runID string
+	{
+		if surlaReviewVerificationRunID == nil {
+			return nil, fmt.Errorf("missing required flag --run-id")
+		}
+		runID = *surlaReviewVerificationRunID
+	}
+	v := &surla.GetVerificationPayload{}
+	v.RunID = runID
 
 	return v, nil
 }

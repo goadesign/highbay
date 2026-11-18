@@ -1,9 +1,8 @@
 package controlplane
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -22,15 +21,16 @@ import (
 func TestCardsSurviveANewControlPlane(t *testing.T) {
 	dir := t.TempDir()
 	cfg := verificationConfig(t)
-	alice := WithPrincipal(context.Background(), Principal{ID: "alice@example.com"})
+	alice := WithPrincipal(context.Background(), Principal{ID: "alice@example.com", CallerID: "alice@example.com", Kind: CallerUser})
 	analysis := refundAnalysis("Refunds up to $50 are instant.", &gensurla.CP1AnalysisAmbiguity{
 		Question: "Does the limit include tax?", Options: []string{"with_tax", "without_tax"},
 	})
 
-	first, err := New(Options{CardsDir: dir, Verification: cfg})
+	opts := buildFixtureOptions(t, Options{BuildCacheDir: t.TempDir(), CardsDir: dir, Verification: cfg})
+	first, err := New(opts)
 	require.NoError(t, err)
-	proposed, err := first.ProposeChange(alice, &gensurla.ProposeChangePayload{ChangeID: "chg", Prompt: "Refunds up to $50 are instant.", Analysis: analysis})
-	require.NoError(t, err)
+	proposed := saveProposedCardFixture(t, first, "alice@example.com", "chg", "Refunds up to $50 are instant.", analysis)
+	proposed = attachBuildSnapshot(t, first, proposed.ChangeID)
 	require.Equal(t, StatusNeedsConfirmation, proposed.Status)
 	confirmed, err := first.ConfirmIntent(alice, &gensurla.ConfirmIntentPayload{
 		ChangeID: "chg", RequestRevision: proposed.RequestRevision,
@@ -39,14 +39,21 @@ func TestCardsSurviveANewControlPlane(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.Equal(t, StatusConfirmed, confirmed.Status)
+	saveStoredBuildFixture(t, first, confirmed)
+	candidate := commitBuilderCandidateFixture(t, first, confirmed)
+	beforeClose, err := first.GetBuild(alice, &gensurla.GetBuildPayload{ChangeID: confirmed.ChangeID})
+	require.NoError(t, err)
 	require.NoError(t, first.Close())
 
-	restarted := newControlPlane(t, Options{CardsDir: dir, Verification: cfg})
+	restarted := newControlPlane(t, opts)
 	got, err := restarted.GetChange(alice, &gensurla.GetChangePayload{ChangeID: "chg"})
 	require.NoError(t, err)
 	assert.Equal(t, confirmed, got, "the saved card comes back unchanged")
+	afterRestart, err := restarted.GetBuild(alice, &gensurla.GetBuildPayload{ChangeID: confirmed.ChangeID})
+	require.NoError(t, err)
+	assert.Equal(t, beforeClose, afterRestart, "the owner recovers the same numbered build and assignment read")
 
-	_, err = restarted.GetChange(WithPrincipal(context.Background(), Principal{ID: "bob@example.com"}), &gensurla.GetChangePayload{ChangeID: "chg"})
+	_, err = restarted.GetChange(WithPrincipal(context.Background(), Principal{ID: "bob@example.com", CallerID: "bob@example.com", Kind: CallerUser}), &gensurla.GetChangePayload{ChangeID: "chg"})
 	assert.ErrorContains(t, err, "is not the owner", "ownership is saved with the card")
 
 	again, err := restarted.ConfirmIntent(alice, &gensurla.ConfirmIntentPayload{
@@ -57,25 +64,37 @@ func TestCardsSurviveANewControlPlane(t *testing.T) {
 	assert.Equal(t, confirmed.RequestRevision, again.RequestRevision, "the design source is saved, so the revision is reproduced")
 
 	run, err := restarted.VerifyChange(alice, &gensurla.VerifyChangePayload{
-		ChangeID: "chg", RequestRevision: confirmed.RequestRevision, CandidateCommit: confirmed.RequestRevision[:40],
+		ChangeID: "chg", RequestRevision: confirmed.RequestRevision, CandidateCommit: candidate,
 	})
 	require.NoError(t, err)
 	_, running := run.State.AsRunning()
 	assert.True(t, running, "a restarted control plane verifies a card confirmed before the restart")
 
-	_, err = restarted.ProposeChange(alice, &gensurla.ProposeChangePayload{ChangeID: "chg", Prompt: "Again.", Analysis: analysis})
+	// The duplicate proposal still uses valid module ingress. This established
+	// consumer fixture retains an actual draft snapshot without running Go.
+	saved := loadMetadataRecord(t, restarted, confirmed.ChangeID)
+	opID := seedStoryRefreshForTest(t, restarted, "alice@example.com", storyRefreshStateSucceeded, saved.stories, "")
+	_, err = restarted.ProposeChange(alice, &gensurla.ProposeChangePayload{
+		ChangeID: "chg", Prompt: "Again.", Analysis: analysis, StoryRefreshOpID: &opID,
+	})
 	assert.ErrorContains(t, err, "already exists")
+	unchanged, err := restarted.GetChange(alice, &gensurla.GetChangePayload{ChangeID: confirmed.ChangeID})
+	require.NoError(t, err)
+	assert.Equal(t, confirmed, unchanged, "the duplicate proposal does not overwrite the recovered card")
 }
 
 // TestCardsDirectoryIsHeldByOneControlPlane checks that a second control
 // plane cannot open a directory that one already holds.
 func TestCardsDirectoryIsHeldByOneControlPlane(t *testing.T) {
 	dir := t.TempDir()
-	newControlPlane(t, Options{CardsDir: dir})
-	_, err := New(Options{CardsDir: dir})
+	opts := Options{CardsDir: dir, WorkspaceDir: realTempDir(t), Team: testTeamBinding()}
+	newControlPlane(t, opts)
+	opts.Team = testTeamBinding()
+	_, err := New(opts)
 	assert.ErrorContains(t, err, "is in use by another process")
 
-	_, err = New(Options{})
+	opts.CardsDir = ""
+	_, err = New(opts)
 	assert.ErrorContains(t, err, "cards directory is required")
 }
 
@@ -108,7 +127,7 @@ func TestCardStoreCloseReleasesDuplicatedLock(t *testing.T) {
 // complete, consistent card fails the call instead of being skipped.
 func TestUnreadableCardsAreErrors(t *testing.T) {
 	saved := confirmedCardFile(t)
-	alice := WithPrincipal(context.Background(), Principal{ID: "alice@example.com"})
+	alice := WithPrincipal(context.Background(), Principal{ID: "alice@example.com", CallerID: "alice@example.com", Kind: CallerUser})
 	cases := []struct {
 		name    string
 		content string
@@ -145,17 +164,17 @@ func TestCardFilesStayInsideTheDirectory(t *testing.T) {
 // writes nothing to the directory a new control plane now holds.
 func TestRequestsFinishingAfterCloseDoNotWrite(t *testing.T) {
 	dir := t.TempDir()
-	inputs := PromotionInputs{
-		SuiteID: "orders_acceptance", SuiteCommit: "suite-1", Environment: "sim",
+	spec := reportSpec{
+		SuiteID: "orders_acceptance", SuiteCommit: strings.Repeat("b", 40), Environment: "sim",
 		Artifacts: map[string]string{"orders": "d1"},
 	}
-	target := &promotionTargetStub{inputs: inputs, loading: make(chan struct{}), release: make(chan struct{})}
-	cp, err := New(Options{CardsDir: dir, PromotionTarget: target})
+	target := &promotionTargetStub{artifacts: spec.Artifacts, loading: make(chan struct{}), release: make(chan struct{})}
+	cp, err := New(buildFixtureOptions(t, Options{BuildCacheDir: t.TempDir(), CardsDir: dir, Verification: verificationConfig(t), PromotionTarget: target}))
 	require.NoError(t, err)
-	card := saveCard(t, cp, nil)
-	const commit = "0123456789abcdef0123456789abcdef01234567"
-	target.report = passingReport(t, card.RequestRevision, commit, inputs)
-	alice := WithPrincipal(context.Background(), Principal{ID: "alice@example.com"})
+	card := saveStoredCardBuildFixture(t, cp, nil)
+	commit := commitBuilderCandidateFixture(t, cp, card)
+	target.report = passingReport(t, card.RequestRevision, commit, spec)
+	alice := WithPrincipal(context.Background(), Principal{ID: "alice@example.com", CallerID: "alice@example.com", Kind: CallerUser})
 	approved := make(chan error, 1)
 	go func() {
 		_, err := cp.ApproveMerge(alice, &gensurla.ApproveMergePayload{
@@ -183,7 +202,7 @@ func TestRequestsFinishingAfterCloseDoNotWrite(t *testing.T) {
 // errCardsClosed and writes nothing to the directory the new control plane
 // holds: no card for a proposal, and the card unchanged for a revision.
 func TestProposalsAndRevisionsFinishingAfterCloseDoNotWrite(t *testing.T) {
-	alice := WithPrincipal(context.Background(), Principal{ID: "alice@example.com"})
+	alice := WithPrincipal(context.Background(), Principal{ID: "alice@example.com", CallerID: "alice@example.com", Kind: CallerUser})
 	// open returns a control plane on a new cards directory whose next span
 	// named held stops at its start until hold is released.
 	open := func(t *testing.T, held string) (*ControlPlane, *spanHold, string) {
@@ -257,7 +276,7 @@ func TestProposalsAndRevisionsFinishingAfterCloseDoNotWrite(t *testing.T) {
 func TestAFailedSaveKeepsThePreviousCard(t *testing.T) {
 	dir := t.TempDir()
 	cp := newControlPlane(t, Options{CardsDir: dir})
-	alice := WithPrincipal(context.Background(), Principal{ID: "alice@example.com"})
+	alice := WithPrincipal(context.Background(), Principal{ID: "alice@example.com", CallerID: "alice@example.com", Kind: CallerUser})
 	card := saveCard(t, cp, nil)
 	require.NoError(t, os.Chmod(dir, 0o500))
 	t.Cleanup(func() { assert.NoError(t, os.Chmod(dir, 0o700)) })
@@ -274,24 +293,42 @@ func TestAFailedSaveKeepsThePreviousCard(t *testing.T) {
 	assert.Equal(t, card, got)
 }
 
-// TestASavedApprovalNeedsAPromotionTarget saves an approved card and reads it
-// from a control plane without a promotion target, which cannot check the
-// approval against current inputs and so reports it in UnverifiedApproval
-// rather than Approval.
+// TestASavedApprovalNeedsAPromotionTarget OnlyWhenConfigured saves an approved
+// card and verifies that without promotion settings it is returned in Approval,
+// while with promotion settings whose release binaries cannot be read it is
+// returned in UnverifiedApproval without mutating the saved card on disk.
 func TestASavedApprovalNeedsAPromotionTarget(t *testing.T) {
-	cp := newControlPlane(t, Options{})
+	alice := WithPrincipal(context.Background(), Principal{ID: "alice@example.com", CallerID: "alice@example.com", Kind: CallerUser})
 	recorded := &gensurla.ApprovalItem{
 		ApprovedBy: "alice@example.com", ReportDigest: strings.Repeat("d", 64), CandidateCommit: strings.Repeat("c", 40),
 		SuiteID: "orders", SuiteCommit: strings.Repeat("b", 40), Environment: "sim",
 		Artifacts: map[string]string{"orders": strings.Repeat("e", 64)}, ScenarioCount: 5,
 	}
-	approved := saveCard(t, cp, recorded)
-	got, err := cp.GetChange(WithPrincipal(context.Background(), Principal{ID: "alice@example.com"}), &gensurla.GetChangePayload{ChangeID: "chg"})
+	expectedApproval := *recorded
+	expectedApproval.TestSource = gensurla.NewApprovalTestSourceEvaluator(&gensurla.OperatorEvaluatorTests{})
+
+	// Without promotion settings, the saved approval is valid as long as the
+	// chosen tests' commit matches.
+	cpNoTarget := newControlPlane(t, buildFixtureOptions(t, Options{BuildCacheDir: t.TempDir(), Verification: verificationConfig(t)}))
+	saveStoredCardBuildFixture(t, cpNoTarget, recorded)
+	gotNoTarget, err := cpNoTarget.GetChange(alice, &gensurla.GetChangePayload{ChangeID: "chg"})
+	require.NoError(t, err)
+	assert.Equal(t, &expectedApproval, gotNoTarget.Approval)
+	assert.Nil(t, gotNoTarget.UnverifiedApproval)
+
+	// With promotion settings whose release binaries cannot be read, the card
+	// is served with unverified_approval while the saved record on disk is
+	// untouched.
+	target := &promotionTargetStub{artifactsErr: errors.New("missing release directory")}
+	cp := newControlPlane(t, buildFixtureOptions(t, Options{BuildCacheDir: t.TempDir(), Verification: verificationConfig(t), PromotionTarget: target}))
+	approved := saveStoredCardBuildFixture(t, cp, recorded)
+	got, err := cp.GetChange(alice, &gensurla.GetChangePayload{ChangeID: "chg"})
 	require.NoError(t, err)
 	assert.Nil(t, got.Approval)
 	require.NotNil(t, got.UnverifiedApproval)
-	assert.Equal(t, recorded, got.UnverifiedApproval.Approval)
-	assert.Contains(t, got.UnverifiedApproval.Reason, "-promotion-config")
+	assert.Equal(t, &expectedApproval, got.UnverifiedApproval.Approval)
+	assert.Contains(t, got.UnverifiedApproval.Reason, "Check current approval")
+	assert.Contains(t, got.UnverifiedApproval.Reason, "surla promotion remove")
 	saved, ok, err := cp.cards.load("chg")
 	require.NoError(t, err)
 	require.True(t, ok)
@@ -302,31 +339,63 @@ func TestASavedApprovalNeedsAPromotionTarget(t *testing.T) {
 	assert.Equal(t, approved, got, "the rest of the card is served with unverified_approval")
 }
 
-// TestSavedCardCompatibilityWithPrior12FieldReader verifies that cardStore.save
-// writes only the 12 persisted Change Card fields (never UnverifiedApproval)
-// and that a strict 12-field reader with DisallowUnknownFields decodes cards
-// across nil/empty collections and optional Approval/UIComposition fields.
-func TestSavedCardCompatibilityWithPrior12FieldReader(t *testing.T) {
-	type prior12FieldCard struct {
-		ChangeID           string
-		Status             string
-		Prompt             string
-		Summary            string
-		Ambiguities        []*gensurla.AmbiguityQuestion
-		Answers            map[string]string
-		Examples           []*gensurla.ExampleItem
-		PreservedBehaviors []string
-		ConfirmedBy        *string
-		RequestRevision    string
-		UIComposition      *gensurla.UICompositionItem
-		Approval           *gensurla.ApprovalItem
+// TestSavedCardInTodaysUntaggedFormWithApprovalDecodes verifies that a card
+// file written in today's untagged form with an Approval record (and no
+// TestSource field) decodes and stays visible while the selected stored
+// evaluator matches its SuiteCommit, independently of build assignments.
+func TestSavedCardInTodaysUntaggedFormWithApprovalDecodes(t *testing.T) {
+	alice := WithPrincipal(context.Background(), Principal{ID: "alice@example.com", CallerID: "alice@example.com", Kind: CallerUser})
+	suiteCommit := strings.Repeat("b", 40)
+	candidateCommit := strings.Repeat("c", 40)
+	reportDigest := strings.Repeat("d", 64)
+	artifactDigest := strings.Repeat("e", 64)
+	confirmedBy := "alice@example.com"
+	base := &gensurla.ChangeCardResult{
+		ChangeID: "chg", Status: StatusConfirmed, Prompt: "Refunds up to $50 are instant.",
+		Summary: "Refunds up to $50 are instant.", Ambiguities: []*gensurla.AmbiguityQuestion{},
+		Answers: map[string]string{}, PreservedBehaviors: []string{}, ConfirmedBy: &confirmedBy,
+		Examples: []*gensurla.ExampleItem{{
+			ID: "chg-check-01", Scenario: "Refund at the limit", InputSummary: "Order total $50.00",
+			ExpectedOutcome: "Instant store credit", VerificationKind: "deterministic",
+		}},
 	}
-	type priorCardFile struct {
-		Card         *prior12FieldCard `json:"card"`
-		Owner        string            `json:"owner"`
-		DesignSource string            `json:"design_source"`
-	}
+	rev, err := computeCanonicalRevision(base, "alice@example.com", "")
+	require.NoError(t, err)
+	rawFile := `{"card":{"ChangeID":"chg","Status":"confirmed","Prompt":"Refunds up to $50 are instant.",` +
+		`"Summary":"Refunds up to $50 are instant.","Ambiguities":[],"Answers":{},` +
+		`"Examples":[{"ID":"chg-check-01","Scenario":"Refund at the limit","InputSummary":"Order total $50.00","ExpectedOutcome":"Instant store credit","VerificationKind":"deterministic"}],` +
+		`"PreservedBehaviors":[],"ConfirmedBy":"alice@example.com","RequestRevision":"` + rev + `",` +
+		`"Approval":{"ApprovedBy":"alice@example.com","ReportDigest":"` + reportDigest + `","CandidateCommit":"` + candidateCommit + `",` +
+		`"SuiteID":"orders","SuiteCommit":"` + suiteCommit + `","Environment":"sim","Artifacts":{"orders":"` + artifactDigest + `"},"ScenarioCount":5}},` +
+		`"owner":"alice@example.com","design_source":"","saved_at":"2026-11-01T10:00:00Z"}`
 
+	cfg := verificationConfig(t)
+	cfg.Plan.SuiteCommit = suiteCommit
+	target := &promotionTargetStub{artifacts: map[string]string{"orders": artifactDigest}}
+	cp := newControlPlane(t, Options{BuildCacheDir: t.TempDir(), Verification: cfg, PromotionTarget: target})
+	require.NoError(t, os.WriteFile(cp.cards.path("chg"), []byte(rawFile), 0o600))
+	got, err := cp.GetChange(alice, &gensurla.GetChangePayload{ChangeID: "chg"})
+	require.NoError(t, err)
+	require.NotNil(t, got.Approval, "returned while the chooser gives its SuiteCommit")
+	assert.Equal(t, &gensurla.ApprovalItem{
+		ApprovedBy: "alice@example.com", ReportDigest: reportDigest, CandidateCommit: candidateCommit,
+		SuiteID: "orders", SuiteCommit: suiteCommit, Environment: "sim",
+		Artifacts: map[string]string{"orders": artifactDigest}, ScenarioCount: 5,
+		TestSource: gensurla.NewApprovalTestSourceEvaluator(&gensurla.OperatorEvaluatorTests{}),
+	}, got.Approval)
+
+	// When the chooser gives another commit, the saved approval is hidden.
+	cp.verifier.(storedVerification).cfg.Plan.SuiteCommit = strings.Repeat("9", 40)
+	hidden, err := cp.GetChange(alice, &gensurla.GetChangePayload{ChangeID: "chg"})
+	require.NoError(t, err)
+	assert.Nil(t, hidden.Approval)
+	assert.Nil(t, hidden.UnverifiedApproval)
+}
+
+// TestCurrentSavedCardRoundTripExcludesResponseOnlyApproval verifies that cardStore.save
+// saves current card data without response-only UnverifiedApproval, across
+// nil/empty collections and optional Approval/UIComposition fields.
+func TestCurrentSavedCardRoundTripExcludesResponseOnlyApproval(t *testing.T) {
 	confirmedBy := "alice@example.com"
 	cases := []struct {
 		name string
@@ -397,16 +466,6 @@ func TestSavedCardCompatibilityWithPrior12FieldReader(t *testing.T) {
 			assert.NotContains(t, string(raw), "UnverifiedApproval")
 			assert.NotContains(t, string(raw), "unverified_approval")
 
-			var oldFormat priorCardFile
-			dec := json.NewDecoder(bytes.NewReader(raw))
-			dec.DisallowUnknownFields()
-			require.NoError(t, dec.Decode(&oldFormat))
-			require.NotNil(t, oldFormat.Card)
-			assert.Equal(t, tc.card.ChangeID, oldFormat.Card.ChangeID)
-			assert.Equal(t, tc.card.RequestRevision, oldFormat.Card.RequestRevision)
-			assert.Equal(t, tc.card.Approval, oldFormat.Card.Approval)
-			assert.Equal(t, tc.card.UIComposition, oldFormat.Card.UIComposition)
-
 			loaded, ok, err := cp.cards.load(tc.card.ChangeID)
 			require.NoError(t, err)
 			require.True(t, ok)
@@ -455,14 +514,14 @@ func confirmedCardFile(t *testing.T) string {
 // plane still serves the saved card and that the next save succeeds.
 func TestAnUnfinishedSaveIsHarmless(t *testing.T) {
 	dir := t.TempDir()
-	first, err := New(Options{CardsDir: dir})
-	require.NoError(t, err)
+	workspace := realTempDir(t)
+	first := newControlPlane(t, Options{CardsDir: dir, WorkspaceDir: workspace})
 	card := saveCard(t, first, nil)
 	require.NoError(t, first.Close())
 	require.NoError(t, os.WriteFile(filepath.Join(dir, stagingFile), []byte(`{"card":`), 0o600))
 
-	next := newControlPlane(t, Options{CardsDir: dir})
-	alice := WithPrincipal(context.Background(), Principal{ID: "alice@example.com"})
+	next := newControlPlane(t, Options{CardsDir: dir, WorkspaceDir: workspace})
+	alice := WithPrincipal(context.Background(), Principal{ID: "alice@example.com", CallerID: "alice@example.com", Kind: CallerUser})
 	got, err := next.GetChange(alice, &gensurla.GetChangePayload{ChangeID: "chg"})
 	require.NoError(t, err)
 	assert.Equal(t, card, got, "the saved card is untouched")
@@ -521,7 +580,7 @@ func TestStagingDoesNotFollowLinks(t *testing.T) {
 // could not be found again once saved.
 func TestChangeIDsMustBeValidUTF8(t *testing.T) {
 	cp := newControlPlane(t, Options{})
-	_, err := cp.ProposeChange(WithPrincipal(context.Background(), Principal{ID: "alice@example.com"}),
+	_, err := cp.ProposeChange(WithPrincipal(context.Background(), Principal{ID: "alice@example.com", CallerID: "alice@example.com", Kind: CallerUser}),
 		&gensurla.ProposeChangePayload{ChangeID: "chg\xff", Prompt: "Refunds up to $50 are instant.", Analysis: refundAnalysis("Refunds up to $50 are instant.")})
 	assertServiceError(t, err, "unprocessable")
 	assert.ErrorContains(t, err, `["change_id"]: invalid UTF-8`)
@@ -532,7 +591,7 @@ func TestChangeIDsMustBeValidUTF8(t *testing.T) {
 // unauthenticated, so no card is saved under an owner it could not match.
 func TestPrincipalIDsMustBeValidUTF8(t *testing.T) {
 	cp := newControlPlane(t, Options{})
-	bad := WithPrincipal(context.Background(), Principal{ID: "alice\xff"})
+	bad := WithPrincipal(context.Background(), Principal{ID: "alice\xff", CallerID: "alice\xff", Kind: CallerUser})
 	_, err := cp.ProposeChange(bad, &gensurla.ProposeChangePayload{ChangeID: "chg", Prompt: "Refunds up to $50 are instant.", Analysis: refundAnalysis("Refunds up to $50 are instant.")})
 	assert.ErrorContains(t, err, "authenticated principal is required")
 	_, err = cp.GetChange(bad, &gensurla.GetChangePayload{ChangeID: "chg"})
@@ -546,23 +605,18 @@ func TestPrincipalIDsMustBeValidUTF8(t *testing.T) {
 // never evaluates creates no design evaluator workspace, that one that did
 // removes it on Close, and that it refuses evaluations afterwards.
 func TestCloseRemovesTheEvaluatorWorkspace(t *testing.T) {
-	tmp := t.TempDir()
-	t.Setenv("TMPDIR", tmp)
-	alice := WithPrincipal(context.Background(), Principal{ID: "alice@example.com"})
+	alice := WithPrincipal(context.Background(), Principal{ID: "alice@example.com", CallerID: "alice@example.com", Kind: CallerUser})
 	incomplete := &gensurla.DesignSnapshot{Files: map[string]string{"design/design.go": "package design\n"}}
 
-	idle, err := New(Options{CardsDir: t.TempDir()})
-	require.NoError(t, err)
-	require.NoError(t, idle.Close())
-	assert.Empty(t, workspaces(t, tmp), "a control plane that never evaluates creates no workspace")
-
-	cp, err := New(Options{CardsDir: t.TempDir()})
-	require.NoError(t, err)
-	_, err = cp.Diff(alice, &gensurla.DiffPayload{Old: incomplete, New: incomplete})
+	cards := t.TempDir()
+	cp := newControlPlane(t, Options{CardsDir: cards})
+	evalParent := filepath.Join(cards, "designeval")
+	assert.Empty(t, workspaces(t, evalParent), "a control plane that never evaluates creates no evaluator workspace")
+	_, err := cp.Diff(alice, &gensurla.DiffPayload{Old: incomplete, New: incomplete})
 	require.Error(t, err)
-	require.Len(t, workspaces(t, tmp), 1)
+	require.Len(t, workspaces(t, evalParent), 1)
 	require.NoError(t, cp.Close())
-	assert.Empty(t, workspaces(t, tmp))
+	assert.Empty(t, workspaces(t, evalParent))
 	_, err = cp.Diff(alice, &gensurla.DiffPayload{Old: incomplete, New: incomplete})
 	require.ErrorContains(t, err, "design evaluator is closed")
 	require.NoError(t, cp.Close(), "closing again repeats the same results")

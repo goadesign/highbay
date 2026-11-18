@@ -1,11 +1,13 @@
-// Package designeval tests sandboxed evaluation of portable Story declarations
+// Package designeval tests the evaluation of portable Story declarations
 // alongside Goa designs and in Story-only modules.
 package designeval
 
 import (
+	"encoding/json"
 	"maps"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -13,10 +15,6 @@ import (
 
 	"github.com/goadesign/surla/internal/testmodule"
 )
-
-// publishedStoryVersion is the module version of github.com/goadesign/surla/story
-// used by target snapshots in Story observation tests.
-const publishedStoryVersion = "v0.0.0-20261111183703-4568fcf5bb85"
 
 func TestEvaluateProgramSpecializesStoryLoading(t *testing.T) {
 	withoutStory := evaluateProgram(map[string]bool{
@@ -26,7 +24,7 @@ func TestEvaluateProgramSpecializesStoryLoading(t *testing.T) {
 	assert.Contains(t, withoutStory, "main.go")
 	assert.NotContains(t, withoutStory, "story.go")
 	assert.NotContains(t, withoutStory["main.go"], harnessStoryModule)
-	assert.NotContains(t, withoutStory["main.go"], "recordStoryRoot")
+	assert.NotContains(t, withoutStory["main.go"], "storySummaries")
 	assert.NotContains(t, withoutStory["main.go"], "storySummary")
 	assert.NotContains(t, withoutStory["main.go"], "hadGoaAPI")
 
@@ -37,19 +35,28 @@ func TestEvaluateProgramSpecializesStoryLoading(t *testing.T) {
 	require.Len(t, withStory, 2)
 	assert.Contains(t, withStory["main.go"], "Stories       []storySummary")
 	assert.Contains(t, withStory["main.go"], "hadGoaAPI := goaexpr.Root.API != nil || len(goaexpr.Root.Services) > 0")
-	assert.Contains(t, withStory["main.go"], "recordStoryRoot(&out)")
+	assert.Contains(t, withStory["main.go"], "out.Stories = storySummaries()")
 	assert.Contains(t, withStory["main.go"], "if (hadGoaAPI || len(out.Stories) == 0) && api != nil")
 	assert.Contains(t, withStory["story.go"], `storyexpr "github.com/goadesign/surla/story/expr"`)
+	assert.True(t, strings.HasPrefix(withStory["story.go"], "package main\n"), "story_reader.go becomes the program's story.go")
+	assert.Contains(t, withStory["story.go"], "func storySummaries() []storySummary {")
 }
 
 func TestEvaluateObservesStoryOnlyAndCombinedDesigns(t *testing.T) {
 	if testing.Short() {
-		t.Skip("runs the sandboxed Go toolchain; the full suite (go test without -short) covers it")
+		t.Skip("runs the Go toolchain; the full suite (go test without -short) covers it")
 	}
 	ctx := t.Context()
+	refundSource, err := os.ReadFile(filepath.Join("testdata", "refund_story.go.txt"))
+	require.NoError(t, err)
+	refundData, err := os.ReadFile(filepath.Join("testdata", "refund_story.json"))
+	require.NoError(t, err)
+	var refunds []StorySummary
+	require.NoError(t, json.Unmarshal(refundData, &refunds))
 
 	t.Run("story_only_with_helper_package_and_unfinished_drafts", func(t *testing.T) {
 		files := storySnapshot(t, preCompleteSourcesGoa, map[string]string{
+			"design/z_refunds.go": string(refundSource),
 			"storyhelpers/actors.go": `package storyhelpers
 
 import . "github.com/goadesign/surla/story/dsl"
@@ -305,12 +312,16 @@ var _ = Story("Carrier Settlements", func() {
 				},
 			},
 		}
+		// The consumer fixture shares its exact source and complete expected
+		// summaries with this existing real evaluation, without another build.
+		want = append(want, refunds...)
 		assert.Equal(t, want, res.Stories)
 	})
 
 	t.Run("combined_story_and_goa_service", func(t *testing.T) {
 		files := storySnapshot(t, completeSourcesGoa, map[string]string{
-			"design/design.go": minimalDesign,
+			"design/design.go":    minimalDesign,
+			"design/z_refunds.go": string(refundSource),
 			"design/story.go": `package design
 
 import . "github.com/goadesign/surla/story/dsl"
@@ -330,10 +341,11 @@ var _ = Story("Order Lookup", func() {
 		assert.Equal(t, "orders", res.SystemName)
 		assert.Contains(t, res.Declarations, "API:orders")
 		assert.Contains(t, res.Declarations, "Service:orders/Method:get_order")
-		require.Len(t, res.Stories, 1)
+		require.Len(t, res.Stories, 1+len(refunds))
 		assert.Equal(t, "Order Lookup", res.Stories[0].Name)
 		require.Len(t, res.Stories[0].Flows, 1)
 		assert.True(t, res.Stories[0].Flows[0].Complete)
+		assert.Equal(t, refunds, res.Stories[1:], "the consumer fixture matches the complete-source Goa profile too")
 
 		generated, err := testEvaluator.Generate(ctx, files)
 		require.NoError(t, err)
@@ -396,7 +408,7 @@ var _ = m.Design("Architecture", "Model-only system", func() {
 
 func TestEvaluateRejectsInvalidStoryDeclarations(t *testing.T) {
 	if testing.Short() {
-		t.Skip("runs the sandboxed Go toolchain; the full suite (go test without -short) covers it")
+		t.Skip("runs the Go toolchain; the full suite (go test without -short) covers it")
 	}
 	ctx := t.Context()
 
@@ -473,7 +485,7 @@ func storySnapshot(t *testing.T, goaVersion string, files map[string]string) map
 	t.Helper()
 	out := maps.Clone(files)
 	out["go.mod"] = "module example.com/story-design\n\ngo 1.27.3\n\nrequire (\n" +
-		"\t" + harnessStoryModule + " " + publishedStoryVersion + "\n" +
+		"\t" + harnessStoryModule + " " + testmodule.SurlaVersion(t, harnessStoryModule) + "\n" +
 		"\t" + harnessGoaModule + " " + goaVersion + "\n)\n"
 	return testmodule.Tidy(t, out)
 }

@@ -9,11 +9,6 @@ package server
 
 import "fmt"
 
-// CheckpointUISurlaPath returns the URL path to the surla service checkpoint_ui HTTP endpoint.
-func CheckpointUISurlaPath() string {
-	return "/ui/checkpoint"
-}
-
 // GoldenPathSurlaPath returns the URL path to the surla service golden_path HTTP endpoint.
 func GoldenPathSurlaPath() string {
 	return "/golden-path"
@@ -39,6 +34,11 @@ func GetChangeSurlaPath(changeID string) string {
 	return fmt.Sprintf("/changes/%v", changeID)
 }
 
+// DeclineRevisionSurlaPath returns the URL path to the surla service decline_revision HTTP endpoint.
+func DeclineRevisionSurlaPath() string {
+	return "/changes/decline"
+}
+
 // PreviewArchitectureSurlaPath returns the URL path to the surla service preview_architecture HTTP endpoint.
 func PreviewArchitectureSurlaPath() string {
 	return "/changes/preview"
@@ -56,6 +56,11 @@ func StartLiveTargetSurlaPath() string {
 
 // StopLiveTargetSurlaPath returns the URL path to the surla service stop_live_target HTTP endpoint.
 func StopLiveTargetSurlaPath() string {
+	return "/live-target"
+}
+
+// GetLiveTargetSurlaPath returns the URL path to the surla service get_live_target HTTP endpoint.
+func GetLiveTargetSurlaPath() string {
 	return "/live-target"
 }
 
@@ -87,6 +92,16 @@ func DiffSurlaPath() string {
 // ConfigureModelSurlaPath returns the URL path to the surla service configure_model HTTP endpoint.
 func ConfigureModelSurlaPath() string {
 	return "/cp1/model"
+}
+
+// GetModelConnectionSurlaPath returns the URL path to the surla service get_model_connection HTTP endpoint.
+func GetModelConnectionSurlaPath() string {
+	return "/cp1/model"
+}
+
+// HandOverModelSettingsSurlaPath returns the URL path to the surla service hand_over_model_settings HTTP endpoint.
+func HandOverModelSettingsSurlaPath() string {
+	return "/cp1/model/settings"
 }
 
 // InitProjectSurlaPath returns the URL path to the surla service init_project HTTP endpoint.
@@ -127,4 +142,84 @@ func RefreshStorySurlaPath() string {
 // GetStoryRefreshSurlaPath returns the URL path to the surla service get_story_refresh HTTP endpoint.
 func GetStoryRefreshSurlaPath() string {
 	return "/workspace/story/refresh"
+}
+
+// UpdateDraftSurlaPath returns the URL path to the surla service update_draft HTTP endpoint.
+func UpdateDraftSurlaPath() string {
+	return "/workspace/draft/update"
+}
+
+// GetTeamSurlaPath returns the URL path to the surla service get_team HTTP endpoint.
+func GetTeamSurlaPath() string {
+	return "/team"
+}
+
+// ShowTeamPaneSurlaPath returns the URL path to the surla service show_team_pane HTTP endpoint.
+func ShowTeamPaneSurlaPath() string {
+	return "/team/pane"
+}
+
+// StartTeamAgentsSurlaPath returns the URL path to the surla service start_team_agents HTTP endpoint.
+func StartTeamAgentsSurlaPath() string {
+	return "/team/agents"
+}
+
+// ListChangesSurlaPath returns the URL path to the surla service list_changes HTTP endpoint.
+func ListChangesSurlaPath() string {
+	return "/changes"
+}
+
+// WaitForChangesSurlaPath returns the URL path to the surla service wait_for_changes HTTP endpoint.
+func WaitForChangesSurlaPath() string {
+	return "/change-updates"
+}
+
+// StartBuildSurlaPath returns the URL path to the surla service start_build HTTP endpoint.
+func StartBuildSurlaPath(changeID string) string {
+	return fmt.Sprintf("/changes/%v/build", changeID)
+}
+
+// DropBuildSurlaPath returns the URL path to the surla service drop_build HTTP endpoint.
+func DropBuildSurlaPath(changeID string) string {
+	return fmt.Sprintf("/changes/%v/build/drop", changeID)
+}
+
+// GetBuildSurlaPath returns the URL path to the surla service get_build HTTP endpoint.
+func GetBuildSurlaPath(changeID string) string {
+	return fmt.Sprintf("/changes/%v/build", changeID)
+}
+
+// GetTestFindingsSurlaPath returns the URL path to the surla service get_test_findings HTTP endpoint.
+func GetTestFindingsSurlaPath(changeID string) string {
+	return fmt.Sprintf("/changes/%v/build/findings", changeID)
+}
+
+// ListBuilderAssignmentsSurlaPath returns the URL path to the surla service list_builder_assignments HTTP endpoint.
+func ListBuilderAssignmentsSurlaPath() string {
+	return "/assignments/builder"
+}
+
+// GetBuilderAssignmentSurlaPath returns the URL path to the surla service get_builder_assignment HTTP endpoint.
+func GetBuilderAssignmentSurlaPath(changeID string) string {
+	return fmt.Sprintf("/assignments/builder/%v", changeID)
+}
+
+// ListTestWriterAssignmentsSurlaPath returns the URL path to the surla service list_test_writer_assignments HTTP endpoint.
+func ListTestWriterAssignmentsSurlaPath() string {
+	return "/assignments/test-writer"
+}
+
+// GetTestWriterAssignmentSurlaPath returns the URL path to the surla service get_test_writer_assignment HTTP endpoint.
+func GetTestWriterAssignmentSurlaPath(changeID string) string {
+	return fmt.Sprintf("/assignments/test-writer/%v", changeID)
+}
+
+// ReportTestsFinishedSurlaPath returns the URL path to the surla service report_tests_finished HTTP endpoint.
+func ReportTestsFinishedSurlaPath(changeID string) string {
+	return fmt.Sprintf("/assignments/test-writer/%v/finished", changeID)
+}
+
+// ReviewVerificationSurlaPath returns the URL path to the surla service review_verification HTTP endpoint.
+func ReviewVerificationSurlaPath(runID string) string {
+	return fmt.Sprintf("/verifications/%v/review", runID)
 }

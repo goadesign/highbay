@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -22,44 +23,33 @@ import (
 
 	genmcpsurla "github.com/goadesign/surla/gen/mcp_surla"
 	gensurla "github.com/goadesign/surla/gen/surla"
-	"github.com/goadesign/surla/internal/abspath"
+	gensurlatools "github.com/goadesign/surla/gen/surla/toolsets/surla"
 	"github.com/goadesign/surla/internal/controlplane"
+	"github.com/goadesign/surla/internal/scaffold"
 	"github.com/goadesign/surla/internal/verifyrun"
 )
 
 // journeyOwnerWait bounds each client wait on a server-owned operation in
 // these journeys: the owner's own limit, defaultProjectVerifyTimeout, which
-// serveOptions gives a live start and the starter resolver saves as a
+// serveOptions gives a live start and writeStarterVerification stores as a
 // verification run's timeout, plus the owner's stop path (stop grace 45s,
 // group stop 30s, executor wait 5s). The owner therefore reports its own
 // timeout or terminal state first when it can; the wait does not guarantee
 // the owner finished if its I/O fails.
 const journeyOwnerWait = defaultProjectVerifyTimeout + 2*time.Minute
 
-// TestMain lets selfCommand launch the test executable's real verify-run
-// and check-run implementations. A detached verification supervisor stops
-// its run at the run's saved timeout, as in production. Other invocations
-// retain the ordinary Go testing entrypoint.
-func TestMain(m *testing.M) {
-	if len(os.Args) > 1 && os.Args[1] == "verify-run" {
-		if err := runVerifyRun(os.Args[2:]); err != nil {
-			fmt.Fprintln(os.Stderr, err)
-			os.Exit(1)
-		}
-		os.Exit(0)
-	}
-	if len(os.Args) > 1 && os.Args[1] == "check-run" {
-		if err := runCheckRun(os.Args[2:]); err != nil {
-			fmt.Fprintln(os.Stderr, err)
-			os.Exit(1)
-		}
-		os.Exit(0)
-	}
-	os.Exit(m.Run())
-}
+// journeyQuickWait is the upper bound on one step that builds, generates,
+// evaluates and starts nothing: a call that reads or writes the server's
+// stored state (a proposal, a confirmation, a refusal), a prompt draft sent
+// to a running live copy, or a git read. It does not measure speed: it is
+// generous enough for a slow machine and exists so that a step that hangs
+// fails under its own name.
+const journeyQuickWait = 3 * time.Minute
 
 // trustedSuiteCommit commits only the harmless evaluator comment and returns
-// the full candidate commit ID; Git identity is local to the parent test.
+// the full candidate commit ID. Its git commands run with testGitEnv: no
+// inherited GIT_* variable, so they act only on the repository at dir, and
+// the fixed test identity.
 func trustedSuiteCommit(t *testing.T, dir string) string {
 	t.Helper()
 	ctx, cancel := context.WithTimeout(t.Context(), 15*time.Second)
@@ -70,11 +60,13 @@ func trustedSuiteCommit(t *testing.T, dir string) string {
 	} {
 		cmd := exec.CommandContext(ctx, "git", args...)
 		cmd.Dir = dir
+		cmd.Env = testGitEnv()
 		out, err := cmd.CombinedOutput()
 		require.NoError(t, err, string(out))
 	}
 	cmd := exec.CommandContext(ctx, "git", "rev-parse", "--verify", "HEAD^{commit}")
 	cmd.Dir = dir
+	cmd.Env = testGitEnv()
 	out, err := cmd.Output()
 	require.NoError(t, err)
 	return strings.TrimSpace(string(out))
@@ -94,6 +86,41 @@ func trustedSuiteCall(t *testing.T, ctx context.Context, client *genmcpsurla.Cli
 	return complete.StructuredContent
 }
 
+// trustedSuiteRefresh selects an actual succeeded draft evaluation through
+// public MCP before a module-backed proposal. The caller owns the wait limit.
+func trustedSuiteRefresh(
+	t *testing.T, ctx context.Context, client *genmcpsurla.Client,
+) *gensurla.StoryRefreshResult {
+	t.Helper()
+	refresh, err := gensurla.DecodeStoryRefreshResult(trustedSuiteCall(t, ctx, client, "refresh_story", []byte(`{}`)))
+	require.NoError(t, err)
+	ticker := time.NewTicker(200 * time.Millisecond)
+	defer ticker.Stop()
+	for refresh.State == "running" {
+		select {
+		case <-ctx.Done():
+			t.Fatalf("Story refresh did not finish: %v", ctx.Err())
+		case <-ticker.C:
+		}
+		refresh, err = gensurla.DecodeStoryRefreshResult(trustedSuiteCall(t, ctx, client, "get_story_refresh", []byte(`{}`)))
+		require.NoError(t, err)
+	}
+	require.Equal(t, "succeeded", refresh.State, "%v", refresh.Diagnostic)
+	require.NotNil(t, refresh.OpID)
+	return refresh
+}
+
+// stepContext returns a context that ends after wait, or with the test, for
+// one step of a journey. Each step gets its own, created immediately before
+// the step, so the time an earlier step took never shortens a later step's
+// wait, and a deadline error names the step that outlasted its own wait.
+func stepContext(t *testing.T, wait time.Duration) context.Context {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(t.Context(), wait)
+	t.Cleanup(cancel)
+	return ctx
+}
+
 // toolErrorText joins the text items of an MCP tool result, the
 // builder-safe message a failing tool returns, so a test failure shows it.
 func toolErrorText(content []*genmcpsurla.ContentItem) string {
@@ -106,85 +133,127 @@ func toolErrorText(content []*genmcpsurla.ContentItem) string {
 	return strings.Join(texts, "\n")
 }
 
-// writeStarterPromotion writes the operator's promotion configuration for the
-// starter project service, whose evaluator suite is pinned at suiteCommit, to
-// <operator-project-dir>/promotion.json, the file surla serve reads on every
-// verification and approval when -promotion-config is not given, so the
-// operator can add it after init_project without restarting. It finds that
-// directory for workspace, the bound workspace, the way surla serve does
-// (abspath.Stored, defaultOperatorRoot and sha256HexString).
-// report_dir is the operator's default reports directory, so verification
-// writes its reports where approval reads them; release_dir is a new empty
-// directory outside the workspace. The suite ID and environment are the ones
-// the starter's evaluator suite declares.
-func writeStarterPromotion(t *testing.T, workspace, service, suiteCommit string) promotionFile {
+// writeStarterVerification stores, through CLI management before the next
+// server start, the operator's verification settings for the starter at dir:
+// its service and test modules, with the tests at suiteCommit run by their
+// generated entry point. With them, the project verifies every
+// change with that evaluator after its builder has read the open build.
+func writeStarterVerification(t *testing.T, workspace, dir, modulePath, suiteCommit string) {
 	t.Helper()
-	root, err := abspath.Stored(workspace)
+	t.Chdir(workspace)
+	layout, err := scaffold.LayoutForModule(modulePath)
 	require.NoError(t, err)
-	opRoot, err := defaultOperatorRoot(root)
+	settings, err := json.Marshal(map[string]any{
+		"candidate_repo":   dir,
+		"candidate_module": ".",
+		"binaries":         map[string]string{layout.Service: layout.CandidatePackage},
+		"suite_repo":       dir,
+		"suite_commit":     suiteCommit,
+		"suite_module":     scaffold.SuiteDir,
+		"suite_command":    layout.GeneratedSuiteCommand(),
+		"timeout":          defaultProjectVerifyTimeout.String(),
+	})
 	require.NoError(t, err)
-	projectDir := filepath.Join(opRoot, "project-"+sha256HexString(root))
+	path := filepath.Join(t.TempDir(), "verification.json")
+	require.NoError(t, os.WriteFile(path, settings, 0o600))
+	require.NoError(t, runProjectSettings("verification", []string{"set", path}, io.Discard))
+}
+
+// assertVerifyRefusedWithoutBuild proposes and confirms changeID through MCP
+// on a server without stored verification settings, and checks that
+// verify_change of candidateCommit is refused, naming the build the user
+// starts, and that runsDir holds no run of changeID for owner. The Story
+// refresh waits within journeyStepWait, which outlasts the server's own limit
+// on a Story evaluation; each later call waits within journeyQuickWait.
+func assertVerifyRefusedWithoutBuild(t *testing.T, client *genmcpsurla.Client, runsDir, owner, changeID, candidateCommit string) {
+	t.Helper()
+	refresh := trustedSuiteRefresh(t, stepContext(t, journeyStepWait), client)
+	args, err := gensurla.EncodeProposeChangePayload(&gensurla.ProposeChangePayload{
+		ChangeID: changeID, Prompt: "Keep answering price questions.", StoryRefreshOpID: refresh.OpID,
+		Analysis: &gensurla.CP1Analysis{
+			Summary:     "The helper keeps answering price questions through the price API.",
+			Ambiguities: []*gensurla.CP1AnalysisAmbiguity{},
+			Examples: []*gensurla.CP1AnalysisExample{{
+				Scenario: "Price question", InputSummary: "Ask for an item's price.",
+				ExpectedOutcome: "Return its price.", VerificationKind: "deterministic",
+			}},
+			PreservedBehaviors: []string{"The price API remains available."},
+		},
+	})
+	require.NoError(t, err)
+	proposed, err := gensurla.DecodeChangeCardResult(trustedSuiteCall(t, stepContext(t, journeyQuickWait), client, "propose_change", args))
+	require.NoError(t, err)
+	args, err = gensurla.EncodeConfirmIntentPayload(&gensurla.ConfirmIntentPayload{
+		ChangeID: changeID, RequestRevision: proposed.RequestRevision, Answers: map[string]string{}, Examples: proposed.Examples,
+	})
+	require.NoError(t, err)
+	card, err := gensurla.DecodeChangeCardResult(trustedSuiteCall(t, stepContext(t, journeyQuickWait), client, "confirm_intent", args))
+	require.NoError(t, err)
+	args, err = gensurla.EncodeVerifyChangePayload(&gensurla.VerifyChangePayload{
+		ChangeID: card.ChangeID, RequestRevision: card.RequestRevision, CandidateCommit: candidateCommit,
+	})
+	require.NoError(t, err)
+	result, err := client.ToolsCall(stepContext(t, journeyQuickWait), &genmcpsurla.ToolsCallPayload{Name: "verify_change", Arguments: args})
+	require.NoError(t, err)
+	complete, ok := result.Outcome.AsComplete()
+	require.True(t, ok)
+	require.True(t, complete.IsError != nil && *complete.IsError, "verify_change without a build is refused")
+	assert.Contains(t, toolErrorText(complete.Content), "change \""+changeID+"\" has no build with a test writer")
+	assert.Contains(t, toolErrorText(complete.Content), "the user starts a build on the views page")
+	runs, err := verifyrun.List(runsDir, owner, changeID)
+	require.NoError(t, err)
+	assert.Empty(t, runs, "no run is accepted")
+}
+
+// writeStarterPromotion stores promotion settings through CLI management before the
+// next server start. Reports use project-owned storage and staged releases remain
+// outside the workspace.
+func writeStarterPromotion(t *testing.T, workspace, service string) promotionFile {
+	t.Helper()
+	t.Chdir(workspace)
+	state, err := fixtureProjectState(workspace)
+	require.NoError(t, err)
 	promotion := promotionFile{
-		ReportDir:   filepath.Join(projectDir, "reports"),
-		ReleaseDir:  filepath.Join(t.TempDir(), "releases"),
-		SuiteID:     service + "_acceptance",
-		SuiteCommit: suiteCommit,
-		Environment: "scripted-model",
-		Binaries:    []string{service},
+		ReportDir:  filepath.Join(state.Dir, "reports"),
+		ReleaseDir: filepath.Join(t.TempDir(), "releases"),
+		Binaries:   []string{service},
 	}
 	require.NoError(t, os.Mkdir(promotion.ReleaseDir, 0o700))
-	raw, err := json.Marshal(promotion)
+	raw, err := json.Marshal(map[string]any{
+		"release_dir": promotion.ReleaseDir,
+		"binaries":    promotion.Binaries,
+	})
 	require.NoError(t, err)
-	require.NoError(t, os.WriteFile(filepath.Join(projectDir, "promotion.json"), raw, 0o600))
+	path := filepath.Join(t.TempDir(), "promotion.json")
+	require.NoError(t, os.WriteFile(path, raw, 0o600))
+	require.NoError(t, runProjectSettings("promotion", []string{"set", path}, io.Discard))
 	return promotion
 }
 
-// assertTrustedSuiteJourney starts and stops a real live candidate, then walks
-// the Change Card journey a coding agent follows through MCP on a server with
-// no model provider key: propose_change with the agent's own analysis (one
-// open question), confirm_intent with the answer, preview_architecture of the
-// workspace design, verify_change of the candidate, and approve_merge of the
+// assertTrustedSuiteJourney walks the Change Card journey a coding agent
+// follows through MCP on a server with no model provider key: propose_change
+// with the agent's own analysis (one open question), confirm_intent with the
+// answer, start and stop a real live candidate for that confirmed change,
+// preview_architecture of the workspace design, verify_change of the
+// candidate, and approve_merge of the
 // passed report against the operator's promotion configuration. It checks the
 // saved plan and full report retain the operator's suite commit and the
 // confirmed revision. The operator stages the binaries that verification
 // built and measured for the candidate commit, copied from the run's retained
 // work directory into a complete <release_dir>/<commit>/ published by one
 // rename; nothing is rebuilt, and no suite payload is replaced or executed
-// outside the existing candidate sandbox.
-func assertTrustedSuiteJourney(t *testing.T, client *genmcpsurla.Client,
-	cardsDir, runsDir, candidateCommit, suiteCommit, changeID string, promotion promotionFile,
+// again.
+func assertTrustedSuiteJourney(t *testing.T, client *genmcpsurla.Client, user *gensurla.Client,
+	projectDir, cardsDir, runsDir, suiteCommit, changeID string, promotion promotionFile,
 ) {
 	t.Helper()
-	liveCtx, cancelLive := context.WithTimeout(t.Context(), journeyOwnerWait)
-	defer cancelLive()
-	args, err := gensurla.EncodeStartLiveTargetPayload(&gensurla.StartLiveTargetPayload{CandidateCommit: candidateCommit})
-	require.NoError(t, err)
-	started, err := gensurla.DecodeLiveTargetResult(trustedSuiteCall(t, liveCtx, client, "start_live_target", args))
-	require.NoError(t, err)
-	assert.Equal(t, candidateCommit, started.CandidateCommit)
-	assert.NotEmpty(t, started.URL)
-	liveDirs, err := verifyrun.LeftoverLiveDirs(filepath.Join(cardsDir, "live"))
-	require.NoError(t, err)
-	require.Len(t, liveDirs, 1)
-	planJSON, err := os.ReadFile(filepath.Join(liveDirs[0], "live.json"))
-	require.NoError(t, err)
-	var live verifyrun.LiveRequest
-	require.NoError(t, json.Unmarshal(planJSON, &live))
-	assert.Equal(t, candidateCommit, live.Plan.CandidateCommit)
-	assert.Equal(t, suiteCommit, live.Plan.SuiteCommit)
-	stopCtx, cancelStop := context.WithTimeout(t.Context(), 45*time.Second)
-	defer cancelStop()
-	stopped, err := gensurla.DecodeStopLiveTargetResult(trustedSuiteCall(t, stopCtx, client, "stop_live_target", []byte(`{}`)))
-	require.NoError(t, err)
-	assert.True(t, stopped.Stopped)
-	liveDirs, err = verifyrun.LeftoverLiveDirs(filepath.Join(cardsDir, "live"))
-	require.NoError(t, err)
-	assert.Empty(t, liveDirs, "stopping the live target removes its processes and directory")
-
-	phase, cancel := context.WithTimeout(t.Context(), journeyOwnerWait)
-	defer cancel()
-	args, err = gensurla.EncodeProposeChangePayload(&gensurla.ProposeChangePayload{
-		ChangeID: changeID, Prompt: "Keep answering price questions.",
+	setupCtx, cancelSetup := context.WithTimeout(t.Context(), journeyOwnerWait)
+	defer cancelSetup()
+	phaseStart := time.Now()
+	refresh := trustedSuiteRefresh(t, setupCtx, client)
+	t.Logf("refresh: %s", time.Since(phaseStart))
+	args, err := gensurla.EncodeProposeChangePayload(&gensurla.ProposeChangePayload{
+		ChangeID: changeID, Prompt: "Keep answering price questions.", StoryRefreshOpID: refresh.OpID,
 		Analysis: &gensurla.CP1Analysis{
 			Summary: "The helper keeps answering price questions through the price API.",
 			Ambiguities: []*gensurla.CP1AnalysisAmbiguity{{
@@ -199,7 +268,7 @@ func assertTrustedSuiteJourney(t *testing.T, client *genmcpsurla.Client,
 		},
 	})
 	require.NoError(t, err)
-	proposed, err := gensurla.DecodeChangeCardResult(trustedSuiteCall(t, phase, client, "propose_change", args))
+	proposed, err := gensurla.DecodeChangeCardResult(trustedSuiteCall(t, setupCtx, client, "propose_change", args))
 	require.NoError(t, err)
 	require.Equal(t, controlplane.StatusNeedsConfirmation, proposed.Status)
 	require.Len(t, proposed.Ambiguities, 1)
@@ -211,14 +280,78 @@ func assertTrustedSuiteJourney(t *testing.T, client *genmcpsurla.Client,
 		Examples: proposed.Examples,
 	})
 	require.NoError(t, err)
-	card, err := gensurla.DecodeChangeCardResult(trustedSuiteCall(t, phase, client, "confirm_intent", args))
+	card, err := gensurla.DecodeChangeCardResult(trustedSuiteCall(t, setupCtx, client, "confirm_intent", args))
 	require.NoError(t, err)
 	require.Equal(t, controlplane.StatusConfirmed, card.Status)
+	phaseStart = time.Now()
+	startedBuild, err := user.StartBuild(setupCtx, &gensurla.StartBuildPayload{
+		ChangeID: changeID, RequestRevision: card.RequestRevision,
+	})
+	t.Logf("start build: %s", time.Since(phaseStart))
+	require.NoError(t, err)
+	assert.Equal(t, card.RequestRevision, startedBuild.Build.RequestRevision)
+	args, err = gensurlatools.MarshalGetBuilderAssignmentPayload(&gensurlatools.GetBuilderAssignmentPayload{ChangeID: changeID})
+	require.NoError(t, err)
+	assignment, err := gensurla.DecodeBuilderAssignment(trustedSuiteCall(t, setupCtx, client, "get_builder_assignment", args))
+	require.NoError(t, err)
+	require.True(t, assignment.Read)
+	require.NotEqual(t, projectDir, assignment.WorkingFolder)
+	// The stored evaluator stays at suiteCommit. The builder authors a distinct
+	// candidate on its numbered branch without changing the user's project.
+	projectDesignPath := filepath.Join(projectDir, "eval", "design", "design.go")
+	projectDesign, err := os.ReadFile(projectDesignPath)
+	require.NoError(t, err)
+	designPath := filepath.Join(assignment.WorkingFolder, "eval", "design", "design.go")
+	design, err := os.ReadFile(designPath)
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(designPath, append(design, []byte("\n// Candidate authored in the builder's working copy.\n")...), 0o644))
+	candidateCommit := trustedSuiteCommit(t, assignment.WorkingFolder)
+	assert.NotEqual(t, suiteCommit, candidateCommit)
+	unchanged, err := os.ReadFile(projectDesignPath)
+	require.NoError(t, err)
+	assert.Equal(t, string(projectDesign), string(unchanged), "the builder leaves the user's evaluator design untouched")
+
+	liveCtx, cancelLive := context.WithTimeout(t.Context(), journeyOwnerWait)
+	defer cancelLive()
+	args, err = gensurla.EncodeStartLiveTargetPayload(&gensurla.StartLiveTargetPayload{
+		ChangeID: card.ChangeID, CandidateCommit: candidateCommit,
+	})
+	require.NoError(t, err)
+	phaseStart = time.Now()
+	started, err := gensurla.DecodeLiveTargetResult(trustedSuiteCall(t, liveCtx, client, "start_live_target", args))
+	t.Logf("start live target: %s", time.Since(phaseStart))
+	require.NoError(t, err)
+	assert.Equal(t, candidateCommit, started.CandidateCommit)
+	assert.NotEmpty(t, started.URL)
+	liveDirs, err := verifyrun.LeftoverLiveDirs(filepath.Join(cardsDir, "live"))
+	require.NoError(t, err)
+	require.Len(t, liveDirs, 1)
+	planJSON, err := os.ReadFile(filepath.Join(liveDirs[0], "live.json"))
+	require.NoError(t, err)
+	var live verifyrun.LiveRequest
+	require.NoError(t, json.Unmarshal(planJSON, &live))
+	assert.Equal(t, candidateCommit, live.Plan.CandidateCommit)
+	assert.Equal(t, suiteCommit, live.Plan.SuiteCommit)
+	stopCtx, cancelStop := context.WithTimeout(t.Context(), 45*time.Second)
+	defer cancelStop()
+	phaseStart = time.Now()
+	stopped, err := gensurla.DecodeStopLiveTargetResult(trustedSuiteCall(t, stopCtx, client, "stop_live_target", []byte(`{}`)))
+	t.Logf("stop live target: %s", time.Since(phaseStart))
+	require.NoError(t, err)
+	assert.True(t, stopped.Stopped)
+	liveDirs, err = verifyrun.LeftoverLiveDirs(filepath.Join(cardsDir, "live"))
+	require.NoError(t, err)
+	assert.Empty(t, liveDirs, "stopping the live target removes its processes and directory")
+
 	args, err = gensurla.EncodePreviewArchitecturePayload(&gensurla.PreviewArchitecturePayload{
 		ChangeID: card.ChangeID, RequestRevision: card.RequestRevision,
 	})
 	require.NoError(t, err)
-	preview, err := gensurla.DecodeArchitecturePreviewResult(trustedSuiteCall(t, phase, client, "preview_architecture", args))
+	previewCtx, cancelPreview := context.WithTimeout(t.Context(), journeyOwnerWait)
+	defer cancelPreview()
+	phaseStart = time.Now()
+	preview, err := gensurla.DecodeArchitecturePreviewResult(trustedSuiteCall(t, previewCtx, client, "preview_architecture", args))
+	t.Logf("preview architecture: %s", time.Since(phaseStart))
 	require.NoError(t, err)
 	assert.Equal(t, card.RequestRevision, preview.RequestRevision)
 	assert.NotEmpty(t, preview.Containers, "the starter's design declares its service")
@@ -226,7 +359,12 @@ func assertTrustedSuiteJourney(t *testing.T, client *genmcpsurla.Client,
 		ChangeID: card.ChangeID, RequestRevision: card.RequestRevision, CandidateCommit: candidateCommit,
 	})
 	require.NoError(t, err)
-	run, err := gensurla.DecodeVerificationStatusResult(trustedSuiteCall(t, phase, client, "verify_change", args))
+	// Verification owns a fresh allowance; live startup and architecture
+	// evaluation above must not consume the run's observation budget.
+	verificationCtx, cancelVerification := context.WithTimeout(t.Context(), journeyOwnerWait)
+	defer cancelVerification()
+	phaseStart = time.Now()
+	run, err := gensurla.DecodeVerificationStatusResult(trustedSuiteCall(t, verificationCtx, client, "verify_change", args))
 	require.NoError(t, err)
 	require.NotEmpty(t, run.RunID)
 	runID := run.RunID
@@ -244,6 +382,7 @@ func assertTrustedSuiteJourney(t *testing.T, client *genmcpsurla.Client,
 		assert.Equal(t, card.RequestRevision, run.RequestRevision)
 		assert.Equal(t, candidateCommit, run.CandidateCommit)
 		assert.Equal(t, suiteCommit, run.SuiteCommit)
+		assert.Equal(t, gensurla.NewTestSourceEvaluator(&gensurla.OperatorEvaluatorTests{}), run.TestSource, "the operator's evaluator runs")
 		if completed, ok := run.State.AsCompleted(); ok {
 			done = completed
 			break
@@ -254,13 +393,14 @@ func assertTrustedSuiteJourney(t *testing.T, client *genmcpsurla.Client,
 		_, running := run.State.AsRunning()
 		require.True(t, running, "unexpected verification state")
 		select {
-		case <-phase.Done():
-			t.Fatalf("verification phase did not finish: %v", phase.Err())
+		case <-verificationCtx.Done():
+			t.Fatalf("verification phase did not finish: %v", verificationCtx.Err())
 		case <-ticker.C:
 		}
-		run, err = gensurla.DecodeVerificationStatusResult(trustedSuiteCall(t, phase, client, "get_verification", args))
+		run, err = gensurla.DecodeVerificationStatusResult(trustedSuiteCall(t, verificationCtx, client, "get_verification", args))
 		require.NoError(t, err)
 	}
+	t.Logf("verify change: %s", time.Since(phaseStart))
 	require.NotNil(t, done.Report)
 	require.True(t, done.Report.Passed, "starter's scripted evaluator must pass")
 	req, saved, err := verifyrun.Read(runsDir, run.RunID)
@@ -295,27 +435,32 @@ func assertTrustedSuiteJourney(t *testing.T, client *genmcpsurla.Client,
 		CandidateCommit: candidateCommit, ReportDigest: done.Report.ReportDigest,
 	})
 	require.NoError(t, err)
-	approved, err := gensurla.DecodeChangeCardResult(trustedSuiteCall(t, phase, client, "approve_merge", args))
+	approvalCtx, cancelApproval := context.WithTimeout(t.Context(), journeyOwnerWait)
+	defer cancelApproval()
+	approved, err := gensurla.DecodeChangeCardResult(trustedSuiteCall(t, approvalCtx, client, "approve_merge", args))
 	require.NoError(t, err)
 	assert.Equal(t, card.RequestRevision, approved.RequestRevision, "approval does not change the card's revision")
+	suiteID := promotion.Binaries[0] + "_acceptance"
+	const environment = "scripted-model"
 	want := &gensurla.ApprovalItem{
 		ApprovedBy:      "operator@example.com",
 		ReportDigest:    done.Report.ReportDigest,
 		CandidateCommit: candidateCommit,
-		SuiteID:         promotion.SuiteID,
+		SuiteID:         suiteID,
 		SuiteCommit:     suiteCommit,
-		Environment:     promotion.Environment,
+		Environment:     environment,
 		Artifacts:       saved.Report.Binding.Artifacts,
 		ScenarioCount:   saved.Report.Counts.Required,
+		TestSource:      gensurla.NewApprovalTestSourceEvaluator(&gensurla.OperatorEvaluatorTests{}),
 	}
 	assert.Equal(t, want, approved.Approval)
 	assert.Nil(t, approved.UnverifiedApproval)
-	assert.Equal(t, promotion.SuiteID, saved.Report.Binding.SuiteID)
-	assert.Equal(t, promotion.Environment, saved.Report.Binding.Environment)
+	assert.Equal(t, suiteID, saved.Report.Binding.SuiteID)
+	assert.Equal(t, environment, saved.Report.Binding.Environment)
 
 	args, err = gensurla.EncodeGetChangePayload(&gensurla.GetChangePayload{ChangeID: card.ChangeID})
 	require.NoError(t, err)
-	read, err := gensurla.DecodeChangeCardResult(trustedSuiteCall(t, phase, client, "get_change", args))
+	read, err := gensurla.DecodeChangeCardResult(trustedSuiteCall(t, approvalCtx, client, "get_change", args))
 	require.NoError(t, err)
 	assert.Equal(t, card.RequestRevision, read.RequestRevision)
 	assert.Equal(t, want, read.Approval, "the saved approval still matches the staged release")

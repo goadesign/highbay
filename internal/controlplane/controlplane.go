@@ -8,13 +8,10 @@ package controlplane
 import (
 	"context"
 	"crypto/sha256"
-	"crypto/subtle"
-	_ "embed"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"maps"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -28,14 +25,16 @@ import (
 	genmcpsurla "github.com/goadesign/surla/gen/jsonrpc/mcp_surla/server"
 	genmcpadapter "github.com/goadesign/surla/gen/mcp_surla"
 	gensurla "github.com/goadesign/surla/gen/surla"
+	"github.com/goadesign/surla/internal/abspath"
 	"github.com/goadesign/surla/internal/designeval"
 	"github.com/goadesign/surla/internal/diff"
 	"github.com/goadesign/surla/internal/goldenpath"
+	"github.com/goadesign/surla/internal/modelsettings"
 	"github.com/goadesign/surla/internal/scaffold"
-	"github.com/goadesign/surla/internal/swarm"
 	"github.com/goadesign/surla/internal/traceview"
 	"github.com/goadesign/surla/internal/verify"
 	"github.com/goadesign/surla/verify/candidate"
+	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
@@ -49,6 +48,10 @@ type (
 	Principal struct {
 		// ID is the stable authenticated operator identifier (for example, "alice@example.com").
 		ID string
+		// CallerID identifies the browser session or agent responsible for an action.
+		CallerID string
+		// Kind is established by the credential owner, never by request payloads.
+		Kind CallerKind
 	}
 
 	// RequestAuthenticator verifies an incoming HTTP request and returns the
@@ -58,49 +61,23 @@ type (
 	// principalContextKey is the context key storing the authenticated Principal.
 	principalContextKey struct{}
 
-	// TargetPromptUpdater applies a Checkpoint 3 Fast Draft Mode prompt template
-	// override to the bound target platform's runtime prompt store.
-	TargetPromptUpdater interface {
-		// ApplyPromptOverride updates promptID with newContent on the bound target
-		// platform and returns the resulting prompt version identifier.
-		ApplyPromptOverride(ctx context.Context, promptID, newContent string) (version string, err error)
-	}
-
 	// PromotionTarget is the promotion owner's view of a candidate being
-	// promoted at Checkpoint 5. The embedding host binds it; approve_merge never
-	// takes these facts from its caller, because a caller-supplied report or
-	// binary digest would let the caller approve its own claims.
+	// promoted at Checkpoint 5. The project server binds it from the stored
+	// promotion settings; approve_merge never takes these facts from its
+	// caller, because a caller-supplied report or binary digest would let the
+	// caller approve its own claims.
 	PromotionTarget interface {
 		// LoadReport returns the verification report that verify.Run wrote
 		// under digest, from storage only the evaluator writes. It fails when
 		// no such report exists.
 		LoadReport(ctx context.Context, digest string) (verify.Report, error)
-		// CurrentInputs returns the evaluator suite and environment the
-		// promotion requires and the digests of the candidate binaries
-		// measured independently for candidateCommit, as one coherent
-		// snapshot the implementation does not change after returning it.
-		// It fails when those facts do not fix the target's behavior, for
-		// example when the host also binds Options.TargetUpdater to the same
-		// running target, whose runtime prompt overrides no verification
-		// report covers (see the verify package). approve_merge checks a
-		// report against it, and get_change and confirm_intent return a
-		// saved approval only while it still matches.
-		CurrentInputs(ctx context.Context, candidateCommit string) (PromotionInputs, error)
-	}
-
-	// PromotionInputs are the facts a verification report must match at
-	// Checkpoint 5, besides the candidate commit and request revision.
-	PromotionInputs struct {
-		// SuiteID names the evaluator suite the promotion requires.
-		SuiteID string
-		// SuiteCommit is the evaluator suite commit the promotion requires.
-		SuiteCommit string
-		// Environment is the dependency profile the promotion requires, such
-		// as "sim".
-		Environment string
-		// Artifacts maps each candidate binary name to its measured SHA-256
-		// digest.
-		Artifacts map[string]string
+		// CurrentArtifacts returns the SHA-256 digests of the candidate
+		// binaries measured independently for candidateCommit, as one coherent
+		// snapshot the implementation does not change after returning it. It
+		// fails when those binaries cannot be measured. approve_merge checks a
+		// report against it, and get_change and confirm_intent return a saved
+		// approval only while its binary digests still match.
+		CurrentArtifacts(ctx context.Context, candidateCommit string) (map[string]string, error)
 	}
 
 	// Options configures a ControlPlane instance.
@@ -115,8 +92,8 @@ type (
 		// not_implemented. The host shuts down this provider after Close, or
 		// if New fails; the control plane never shuts it down.
 		TracerProvider *sdktrace.TracerProvider
-		// WorkspaceDir is the initial filesystem workspace bound to this
-		// control plane. When set, cards, runs, and reports must live outside
+		// WorkspaceDir is the required initial filesystem workspace bound to this
+		// control plane. Cards, runs, and reports must live outside
 		// it, and CP1/CP2/CP3/CP4/CP5 can read or derive project inputs from
 		// the bound workspace.
 		WorkspaceDir string
@@ -139,26 +116,22 @@ type (
 		// is owned by the check helper that holds its lock, and this server's
 		// recovery acts on one only once that lock is free.
 		CheckTimeout time.Duration
-		// ImportedReports are the validated absolute original report paths
-		// recorded by -import-legacy-workspace; check copies never include
-		// the entries the kernel resolves them to.
-		ImportedReports []string
 		// GoProxyEnv holds the operator's GOPROXY, GOSUMDB, GOPRIVATE,
 		// GONOPROXY, GONOSUMDB and GOINSECURE settings as KEY=value, passed
 		// to dependency-download containers and nothing else.
 		GoProxyEnv []string
-		// Evaluator evaluates Goa design snapshots for preview_architecture and
+		// Evaluator evaluates Goa design snapshots for refresh_story and
 		// diff. When nil, New constructs a default designeval.Evaluator (using
-		// <CardsDir>/designeval as its protected temporary parent when
-		// WorkspaceDir is set). When a host supplies Evaluator for a bound
-		// workspace, it must construct it with designeval.NewEvaluatorInDir
-		// using a protected directory outside WorkspaceDir.
+		// <CardsDir>/designeval as its protected temporary parent). A host-supplied
+		// Evaluator must use a protected directory outside WorkspaceDir.
+		// The default uses BuildCacheDir when supplied; embedded hosts can pass
+		// it through designeval.NewEvaluatorWithCache too.
 		Evaluator *designeval.Evaluator
 		// NewGenerator constructs a fresh scaffold.Generator for each
 		// init_project call. When nil, InitProject constructs a fresh
-		// designeval.NewEvaluatorInDir("<CardsDir>/designeval") per call. When
-		// a host supplies NewGenerator, each returned generator must use a
-		// protected directory outside WorkspaceDir.
+		// evaluator under "<CardsDir>/designeval" per call, sharing BuildCacheDir
+		// when supplied. When a host supplies NewGenerator, each generator must
+		// use a protected directory outside WorkspaceDir.
 		NewGenerator func() scaffold.Generator
 		// InitRunner runs external commands (`git`, `go`) during init_project.
 		// When nil, scaffold.RunCommand is used.
@@ -167,62 +140,98 @@ type (
 		// `eval/go.mod` by init_project. When empty, init_project returns
 		// not_implemented.
 		SurlaVersion string
-		// LiveModelEnv returns the CP3 live-target environment for a model
-		// choice made with configure_model. Without it, configure_model returns
-		// not_implemented.
-		LiveModelEnv LiveModelEnv
-		// TargetUpdater applies CP3 Fast Draft Mode prompt overrides to the bound target platform.
-		TargetUpdater TargetPromptUpdater
-		// SwarmProfiles lists server-configured coding-agent provider profiles for
-		// proposing Chorus multi-agent role assignments at CP2.
-		SwarmProfiles []swarm.ProviderProfile
-		// PromotionTarget supplies CP5 verification reports and current
-		// promotion inputs. Without it or ResolvePromotionTarget, approve_merge
-		// fails.
+		// PromotionTarget optionally supplies CP5 verification reports and
+		// measured release binary digests. When nil and ResolvePromotionTarget
+		// resolves nil, approve_merge loads reports from the configured
+		// verifier's ReportDir and records approvals without release-file
+		// digests.
 		PromotionTarget PromotionTarget
-		// ResolvePromotionTarget dynamically resolves a PromotionTarget from
-		// the currently bound workspace directory when PromotionTarget is nil.
+		// ResolvePromotionTarget dynamically resolves an optional
+		// PromotionTarget from the currently bound workspace directory when
+		// PromotionTarget is nil.
 		ResolvePromotionTarget func(ctx context.Context, workspaceDir string) (PromotionTarget, error)
-		// Verification is the operator's static CP4 configuration. When nil,
-		// RunsDir and ResolveVerification supply dynamic workspace-derived CP4
-		// configuration.
+		// Verification is the operator's stored evaluator: the CP4
+		// configuration stored with `surla verification set`. Every change
+		// verifies with it and needs no build; New refuses it together with
+		// WrittenTestRuns, because a project verifies with one source.
 		Verification *VerificationConfig
 		// RunsDir is the protected verification runs directory used by
 		// get_verification, list_verifications, and init_project when
-		// Verification is nil.
+		// Verification is nil. WrittenTestRuns requires it.
 		RunsDir string
-		// ResolveVerification dynamically resolves a VerificationConfig from
-		// the currently bound workspace directory and its trusted starter suite
-		// commit (set by init_project or restored from workspace.json, or empty
-		// when the workspace was not initialized via init_project) for
-		// verify_change and start_live_target.
-		ResolveVerification func(ctx context.Context, workspaceDir, suiteCommit string) (*VerificationConfig, error)
-		// Live lets start_live_target build and run CP3 live targets with
-		// Verification's plan, in <CardsDir>/live. Without it, or without
-		// Verification/ResolveVerification, start_live_target fails.
+		// BuildCacheDir is the retained Go package cache for project design
+		// evaluation, initialization, test-report checking, live targets and
+		// verification. Verification or WrittenTestRuns requires it. It must lie
+		// outside the workspace. Concurrent operations share it on one machine
+		// using a local filesystem; operation cleanup never removes it.
+		BuildCacheDir string
+		// CheckModuleCacheDir is an optional retained Go module cache for Docker
+		// checks and dependency updates. Supply an existing, private 0700 directory
+		// owned by this account, outside source and operation storage. Only trusted
+		// preparation/tidy containers may write it; tests mount it read-only.
+		// Cleanup never removes it. Empty keeps the operation-local cache default;
+		// Checker alone requires neither this directory nor BuildCacheDir.
+		CheckModuleCacheDir string
+		// WrittenTestRuns lets verify_change run, in RunsDir, the tests
+		// accepted for each change's build, in a project without a stored
+		// evaluator. start_live_target uses the same accepted tests, both
+		// read from the repository holding WorkspaceDir,
+		// which it requires. Without it and without Verification, neither
+		// runs.
+		WrittenTestRuns *WrittenTestRuns
+		// Live lets start_live_target build and run CP3 live targets in
+		// <CardsDir>/live. Without it, or without Verification or
+		// WrittenTestRuns, start_live_target fails.
 		Live *LiveConfig
-		// CloseProjectLock releases the operator project directory's shared
-		// import lock when ControlPlane.Close releases CardsDir (or if New
-		// fails).
-		CloseProjectLock func() error
+		// Team is the required project owner and service composed before this
+		// control plane. New validates and copies the binding before serving.
+		Team *TeamBinding
 	}
 
 	// storedChangeCard holds a versioned Change Card alongside its authenticated
-	// owner principal, original design source snapshot, design source origin,
-	// and optional adopted domain Stories.
+	// owner principal, server-observed design source snapshot, optional
+	// adopted domain Stories, and the revision proposed beside it, if any.
 	storedChangeCard struct {
-		// card is the latest versioned ChangeCardResult.
+		// card is the revision in force.
 		card *gensurla.ChangeCardResult
 		// owner is the authenticated Principal.ID that created the card.
 		owner string
 		// designSource is the Goa design source snapshot inspected at CP1.
 		designSource string
-		// sourceOrigin records whether designSource was supplied by the caller
-		// ("supplied") or read from the bound workspace ("workspace").
-		sourceOrigin string
 		// stories holds the evaluated domain Stories adopted for this revision,
 		// or nil when none were adopted.
 		stories []designeval.StorySummary
+		// architecture is the evaluated topology retained outside the revision hash.
+		architecture *savedArchitecture
+		// goMod is the module text evaluated with this revision.
+		goMod string
+		// madeFrom is this revision's immutable design provenance, absent on older cards.
+		madeFrom *madeFromSnapshot
+		// savedAt is when the card store last wrote this card; zero for a
+		// record not yet saved. It is not part of request_revision.
+		savedAt time.Time
+		// proposed is the revision the guide proposed beside a confirmed card,
+		// waiting for the user to adopt or decline it; nil otherwise. card
+		// stays the revision in force until then.
+		proposed *storedRevision
+	}
+
+	// storedRevision is a proposed revision saved beside a confirmed card, with
+	// the design source and Stories it was made from, so its request_revision
+	// is computed and checked on its own.
+	storedRevision struct {
+		// card is the proposed revision, always in needs_confirmation status.
+		card *gensurla.ChangeCardResult
+		// designSource is the Goa design source the proposal was made from.
+		designSource string
+		// stories holds the proposal's evaluated domain Stories, or nil.
+		stories []designeval.StorySummary
+		// architecture is the evaluated topology retained outside the revision hash.
+		architecture *savedArchitecture
+		// goMod is the module text evaluated with this revision.
+		goMod string
+		// madeFrom is this revision's immutable design provenance, absent on older cards.
+		madeFrom *madeFromSnapshot
 	}
 
 	// canonicalAnswerPair is a deterministic key/value entry for JSON hashing.
@@ -242,14 +251,13 @@ type (
 		Owner string `json:"owner"`
 		// Status is the Change Card status.
 		Status string `json:"status"`
-		// Prompt is the original operator feature request.
+		// Prompt is the user's original feature request.
 		Prompt string `json:"prompt"`
 		// DesignSource is the Goa design source inspected at CP1.
 		DesignSource string `json:"design_source"`
 		// Stories is the ordered slice of evaluated domain Stories adopted for
-		// this revision, omitted when empty so cards without Stories keep their
-		// exact revision digest.
-		Stories []designeval.StorySummary `json:"stories,omitempty"`
+		// this revision.
+		Stories []designeval.StorySummary `json:"stories"`
 		// Summary is the plain-English summary.
 		Summary string `json:"summary"`
 		// Ambiguities is the ordered slice of surfaced domain questions.
@@ -276,41 +284,44 @@ type (
 		mu sync.RWMutex
 		// cards saves pending and confirmed CP1 Change Cards by change_id.
 		cards *cardStore
-		// modelMu guards liveModelEnv.
+		// modelMu guards liveModel and heldSettings, which a hand-over can
+		// change together; a launch or an accepted verification snapshots
+		// them under it.
 		modelMu sync.Mutex
-		// liveModelEnv is the environment the next CP3 live target starts
-		// with: Options.Live.Env until configure_model replaces it.
-		liveModelEnv []string
-		// liveModelEnvFor is Options.LiveModelEnv, or nil when runtime model
-		// reconfiguration is not configured.
-		liveModelEnvFor LiveModelEnv
-		// targetUpdater applies CP3 Fast Draft Mode prompt overrides to the target platform.
-		targetUpdater TargetPromptUpdater
-		// swarmProfiles stores server-configured coding-agent provider profiles.
-		swarmProfiles []swarm.ProviderProfile
+		// liveModel is the model choice the next CP3 live target receives:
+		// none until a hand-over brings a provider's default or
+		// configure_model replaces it. get_model_connection reports it.
+		liveModel gensurla.Connection
+		// heldSettings maps each provider whose request settings the surla
+		// command handed over to those settings. It lives in memory only,
+		// never shrinks while the server runs, and is never returned.
+		heldSettings map[string]modelsettings.Settings
 		// promotionTarget supplies CP5 reports and current promotion inputs;
-		// nil when the host bound none.
+		// nil when the project server bound none.
 		promotionTarget PromotionTarget
 		// resolvePromotionTarget dynamically resolves a PromotionTarget from
 		// the currently bound workspace when promotionTarget is nil.
 		resolvePromotionTarget func(ctx context.Context, workspaceDir string) (PromotionTarget, error)
-		// verification is the operator's static CP4 configuration, or nil.
-		verification *VerificationConfig
-		// runsDir is the protected verification runs directory when
-		// verification is nil.
+		// verifier is how this control plane verifies changes, fixed by New:
+		// no verification, the stored evaluator, or each change's accepted
+		// tests. Every reader switches on it.
+		verifier verifier
+		// runsDir is the protected verification runs directory: RunsDir, or
+		// the stored evaluator's when RunsDir is empty.
 		runsDir string
-		// resolveVerification dynamically resolves a VerificationConfig from
-		// the currently bound workspace and its trusted starter suite commit.
-		resolveVerification func(ctx context.Context, workspaceDir, suiteCommit string) (*VerificationConfig, error)
+		// buildCacheDir is the project-owned package cache, independent of run cleanup.
+		buildCacheDir string
+		// checkModuleCacheDir is retained dependency input, never operation scratch.
+		checkModuleCacheDir string
 		// evaluator evaluates designs for preview_architecture and diff. It
 		// creates its build workspace on the first evaluation, and Close
 		// removes it.
 		evaluator *designeval.Evaluator
 		// workspaceMu serializes InitProject and guards activeWorkspaceDir,
-		// boundWorkspaceDev, boundWorkspaceIno, and boundSuiteCommit.
+		// boundWorkspaceDev and boundWorkspaceIno.
 		workspaceMu sync.RWMutex
 		// initialWorkspaceRoot is the cleaned physical path of
-		// Options.WorkspaceDir at startup, or empty when unbound.
+		// Options.WorkspaceDir at startup.
 		initialWorkspaceRoot string
 		// protectedDirs holds the deduplicated physical paths of
 		// initialWorkspaceRoot and its enclosing Git working tree root,
@@ -326,9 +337,6 @@ type (
 		// of activeWorkspaceDir.
 		boundWorkspaceDev uint64
 		boundWorkspaceIno uint64
-		// boundSuiteCommit is the trusted initial starter commit recorded by
-		// init_project or restored from workspace.json.
-		boundSuiteCommit string
 		// initStageDir is Options.InitStageDir.
 		initStageDir string
 		// checker is Options.Checker.
@@ -344,8 +352,6 @@ type (
 		checkWorkDir string
 		// checkTimeout is Options.CheckTimeout.
 		checkTimeout time.Duration
-		// importedReports is Options.ImportedReports.
-		importedReports []string
 		// goProxyEnv is Options.GoProxyEnv.
 		goProxyEnv []string
 		// checkOps counts running check operations so Close can wait for
@@ -359,8 +365,11 @@ type (
 		// storyRefreshOps counts running Story refresh evaluations so Close can
 		// wait for them to finish before closing the evaluator.
 		storyRefreshOps sync.WaitGroup
-		// storyRefreshTimeout overrides defaultStoryRefreshTimeout in tests when positive.
-		storyRefreshTimeout time.Duration
+		// storyRefreshWithTimeout injects the refresh deadline in deterministic tests.
+		storyRefreshWithTimeout func(context.Context, time.Duration) (context.Context, context.CancelFunc)
+		// changesWait and changesPoll override defaultChangesWait and
+		// defaultChangesPoll in tests when positive.
+		changesWait, changesPoll time.Duration
 		// newGenerator constructs a fresh scaffold.Generator for each
 		// InitProject call when non-nil.
 		newGenerator func() scaffold.Generator
@@ -369,15 +378,58 @@ type (
 		// surlaVersion pins the Surla module version in eval/go.mod during
 		// InitProject.
 		surlaVersion string
-		// closeProjectLock releases the operator project directory's shared
-		// import lock when Close releases cards.
-		closeProjectLock func() error
 		// initStepHook is an optional test hook invoked in InitProject at
-		// "after_wal" (after Step 1 writeWorkspaceRecord before RenameatxNp)
-		// and "after_rename" (after RenameatxNp and Fsync before verifyPublishedTarget).
+		// "after_wal" (after Step 1 writeWorkspaceRecord before renameat.NoReplace)
+		// and "after_rename" (after renameat.NoReplace and Fsync before verifyPublishedTarget).
 		initStepHook func(step string)
 		// liveState holds the live CP3 target state.
 		liveState
+		// buildCopyFactory replaces the copy owner only in deterministic start tests.
+		buildCopyFactory func(context.Context, string, scaffold.Layout) (buildCopy, error)
+		// buildIdentityCheck replaces the host identity check in tests.
+		buildIdentityCheck func(context.Context, string) error
+		// builderCopyTurn reserves the builder's copy independently of test checks.
+		// Later copy operations take it without waiting before workingCopyTurn.
+		builderCopyTurn chan struct{}
+		// workingCopyTurn is the one lock on the project's test working copy,
+		// a channel with room for one value: a sender takes the turn, a
+		// receive releases it, and a waiter can give up when its context
+		// ends. Whoever holds the turn is the only one opening the copy,
+		// writing the required tests into it, checking it or recording its
+		// accepted tests, for the whole of that step: a build start takes it
+		// without waiting, and the report checker holds it for each report it
+		// judges. With workspaceMu as the outer lifetime gate, locks are taken in
+		// the order builderCopyTurn, workingCopyTurn, reportMu, draftMu, mu,
+		// never the other way: the turn's steps run for minutes, and mu guards
+		// every card and build read.
+		workingCopyTurn chan struct{}
+		// reportMu serializes report_tests_finished with the report
+		// checker's last step, which confirms that a build is still the one
+		// it checked, records accepted tests and saves the verdict. A report
+		// thus never falls between that confirmation and the commit; it
+		// waits for one Record, which takes milliseconds. Taken after
+		// workingCopyTurn and before mu.
+		reportMu sync.Mutex
+		// draftMu serializes the draft and its made-from list. Git and evaluation
+		// work never run under mu; only draft file copies and merge-file run
+		// under draftMu. The new draft owners activate this lock in later slices.
+		draftMu sync.Mutex
+		// reportWake tells the report checker that a report was recorded.
+		// It has room for one value; report_tests_finished sends without
+		// waiting, and a full channel already says the same.
+		reportWake chan struct{}
+		// reports is the project's report checker;
+		// reportWorker runs it and drains before stores close.
+		reports      *reportChecker
+		reportWorker sync.WaitGroup
+		// buildStartOps counts accepted starts, admitted through workspaceMu's
+		// existing shutdown barrier and drained before stores and evaluators close.
+		buildStartOps sync.WaitGroup
+		// buildStartWithTimeout injects the phase deadline in deterministic tests.
+		buildStartWithTimeout func(context.Context, time.Duration) (context.Context, context.CancelFunc)
+		// team is the single injected owner; teamWorker drains before stores close.
+		team       TeamBinding
+		teamWorker sync.WaitGroup
 	}
 )
 
@@ -390,15 +442,6 @@ const (
 	TargetKindPromptTemplate = "prompt_template"
 	// TargetKindCompiledRule identifies a compiled Go business rule that cannot be overridden via prompt store.
 	TargetKindCompiledRule = "compiled_rule"
-)
-
-var (
-	// checkpointUIHTML is the stateless MCP Apps (`ui://surla/checkpoint`,
-	// `text/html;profile=mcp-app`) HTML document host embedded from
-	// checkpoint.html.
-	//
-	//go:embed checkpoint.html
-	checkpointUIHTML string
 )
 
 // WithPrincipal returns a child context carrying the authenticated Principal.
@@ -418,54 +461,38 @@ func PrincipalFromContext(ctx context.Context) (Principal, bool) {
 	if !ok || strings.TrimSpace(p.ID) == "" || !utf8.ValidString(p.ID) {
 		return Principal{}, false
 	}
-	return Principal{ID: strings.TrimSpace(p.ID)}, true
-}
-
-// NewTokenAuthenticator returns a RequestAuthenticator that validates
-// `Authorization: Bearer <token>` headers in constant time against the
-// configured token-to-principal map.
-func NewTokenAuthenticator(tokens map[string]Principal) RequestAuthenticator {
-	cloned := maps.Clone(tokens)
-	return func(r *http.Request) (Principal, error) {
-		if r == nil {
-			return Principal{}, errors.New("missing http request")
-		}
-		raw := strings.TrimSpace(r.Header.Get("Authorization"))
-		token, ok := strings.CutPrefix(raw, "Bearer ")
-		if !ok || strings.TrimSpace(token) == "" {
-			return Principal{}, errors.New("missing bearer token")
-		}
-		token = strings.TrimSpace(token)
-		for expected, principal := range cloned {
-			if subtle.ConstantTimeCompare([]byte(token), []byte(expected)) == 1 {
-				if strings.TrimSpace(principal.ID) == "" {
-					return Principal{}, errors.New("empty principal configured for token")
-				}
-				return Principal{ID: strings.TrimSpace(principal.ID)}, nil
-			}
-		}
-		return Principal{}, errors.New("invalid bearer token")
-	}
+	p.ID = strings.TrimSpace(p.ID)
+	return p, true
 }
 
 // New constructs a ControlPlane that saves its Change Cards under
-// opts.CardsDir, so cards written by an earlier process are served again. It
+// opts.CardsDir, so cards written by an earlier process are served again. Team
+// and a physical WorkspaceDir are required; invalid bindings fail before the
+// card store is opened or created. New copies the validated Team binding. It
 // creates the directory when missing and holds its lock until Close; it fails
 // when CardsDir is empty or another process holds the lock.
 func New(opts Options) (*ControlPlane, error) {
+	return newWithWorkspaceGitTimeout(opts, context.WithTimeout)
+}
+
+// newWithWorkspaceGitTimeout preserves New's construction and cleanup while
+// allowing deterministic tests to shorten only its workspace Git deadline.
+func newWithWorkspaceGitTimeout(
+	opts Options,
+	withTimeout func(context.Context, time.Duration) (context.Context, context.CancelFunc),
+) (*ControlPlane, error) {
 	cleanupFailedNew := func() error {
-		var evalErr, lockErr error
+		var evalErr error
 		if opts.Evaluator != nil {
 			evalErr = opts.Evaluator.Close()
 		}
-		if opts.CloseProjectLock != nil {
-			lockErr = opts.CloseProjectLock()
-		}
-		return errors.Join(evalErr, lockErr)
+		return evalErr
 	}
-	if opts.TargetUpdater != nil && opts.Live != nil {
-		err := errors.New("set either TargetUpdater or Live, not both: draft_override sends prompt text to exactly one target")
-		return nil, errors.Join(err, cleanupFailedNew())
+	if opts.Team == nil {
+		return nil, errors.Join(errors.New("Team is required"), cleanupFailedNew())
+	}
+	if opts.Team.Owner == "" || opts.Team.Service == nil {
+		return nil, errors.Join(errors.New("Team requires an owner and service"), cleanupFailedNew())
 	}
 	surlaVersion := strings.TrimSpace(opts.SurlaVersion)
 	if surlaVersion != "" && !scaffold.ValidVersion(surlaVersion) {
@@ -476,9 +503,49 @@ func New(opts Options) (*ControlPlane, error) {
 	if err != nil {
 		return nil, errors.Join(err, cleanupFailedNew())
 	}
-	runsDir, initStageDir, verCfg, protectedDirs, err := normalizeAndValidateStartupPaths(opts, wsRoot)
+	if opts.Verification != nil && opts.WrittenTestRuns != nil {
+		err := errors.New("set either Verification or WrittenTestRuns, not both: a project verifies with its stored evaluator or with each change's accepted tests")
+		return nil, errors.Join(err, cleanupFailedNew())
+	}
+	if opts.WrittenTestRuns != nil && opts.RunsDir == "" {
+		err := errors.New("WrittenTestRuns requires RunsDir, where its runs are kept")
+		return nil, errors.Join(err, cleanupFailedNew())
+	}
+	if (opts.Verification != nil || opts.WrittenTestRuns != nil) && opts.BuildCacheDir == "" {
+		return nil, errors.Join(errors.New("Verification and WrittenTestRuns require BuildCacheDir"), cleanupFailedNew())
+	}
+	if opts.BuildCacheDir != "" {
+		var err error
+		opts.BuildCacheDir, err = abspath.EvalMissing(opts.BuildCacheDir)
+		if err != nil {
+			return nil, errors.Join(fmt.Errorf("resolve build cache directory: %w", err), cleanupFailedNew())
+		}
+	}
+	if opts.CheckModuleCacheDir != "" {
+		info, err := os.Lstat(opts.CheckModuleCacheDir)
+		if err != nil {
+			return nil, errors.Join(fmt.Errorf("inspect check module cache directory: %w", err), cleanupFailedNew())
+		}
+		if info.Mode()&os.ModeSymlink != 0 {
+			return nil, errors.Join(errors.New("check module cache directory must not be a symlink"), cleanupFailedNew())
+		}
+		opts.CheckModuleCacheDir, err = abspath.Eval(opts.CheckModuleCacheDir)
+		if err != nil {
+			return nil, errors.Join(fmt.Errorf("resolve check module cache directory: %w", err), cleanupFailedNew())
+		}
+	}
+	runsDir, initStageDir, verif, protectedDirs, err := normalizeAndValidateStartupPaths(opts, wsRoot, withTimeout)
 	if err != nil {
 		return nil, errors.Join(err, cleanupFailedNew())
+	}
+	if opts.CheckModuleCacheDir != "" {
+		excluded := append([]string{opts.CardsDir, runsDir, initStageDir, opts.BuildCacheDir}, protectedDirs...)
+		if cfg := verifierRuns(verif); cfg != nil {
+			excluded = append(excluded, cfg.RunsDir, cfg.Plan.ReportDir)
+		}
+		if err := validateCheckModuleCacheDir(opts.CheckModuleCacheDir, excluded...); err != nil {
+			return nil, errors.Join(err, cleanupFailedNew())
+		}
 	}
 	cards, err := openCardStore(opts.CardsDir)
 	if err != nil {
@@ -490,29 +557,28 @@ func New(opts Options) (*ControlPlane, error) {
 	}
 	eval := opts.Evaluator
 	if eval == nil {
-		if wsRoot != "" {
-			eval = designeval.NewEvaluatorInDir(filepath.Join(cards.dir, "designeval"))
+		parent := filepath.Join(cards.dir, "designeval")
+		if opts.BuildCacheDir != "" {
+			eval, err = designeval.NewEvaluatorWithCache(parent, opts.BuildCacheDir)
+			if err != nil {
+				return nil, errors.Join(err, traces.Close(), cards.close(), cleanupFailedNew())
+			}
 		} else {
-			eval = designeval.NewEvaluator()
+			eval = designeval.NewEvaluatorInDir(parent)
 		}
-	}
-	var initialLiveEnv []string
-	if opts.Live != nil {
-		initialLiveEnv = opts.Live.Env
 	}
 	cp := &ControlPlane{
 		cards:                  cards,
 		traces:                 traces,
 		traceProvider:          opts.TracerProvider,
-		liveModelEnv:           initialLiveEnv,
-		liveModelEnvFor:        opts.LiveModelEnv,
-		targetUpdater:          opts.TargetUpdater,
-		swarmProfiles:          opts.SwarmProfiles,
+		liveModel:              gensurla.NewConnectionNone(&gensurla.ModelNone{}),
+		heldSettings:           map[string]modelsettings.Settings{},
 		promotionTarget:        opts.PromotionTarget,
 		resolvePromotionTarget: opts.ResolvePromotionTarget,
-		verification:           verCfg,
+		verifier:               verif,
 		runsDir:                runsDir,
-		resolveVerification:    opts.ResolveVerification,
+		buildCacheDir:          opts.BuildCacheDir,
+		checkModuleCacheDir:    opts.CheckModuleCacheDir,
 		evaluator:              eval,
 		initialWorkspaceRoot:   wsRoot,
 		protectedDirs:          protectedDirs,
@@ -525,18 +591,20 @@ func New(opts Options) (*ControlPlane, error) {
 		checker:                opts.Checker,
 		checkHelper:            opts.CheckHelper,
 		checkTimeout:           opts.CheckTimeout,
-		importedReports:        opts.ImportedReports,
 		goProxyEnv:             opts.GoProxyEnv,
 		newGenerator:           opts.NewGenerator,
 		initRunner:             opts.InitRunner,
 		surlaVersion:           surlaVersion,
-		closeProjectLock:       opts.CloseProjectLock,
 		liveState:              newLiveState(opts.Live, cards.dir),
+		builderCopyTurn:        make(chan struct{}, 1),
+		workingCopyTurn:        make(chan struct{}, 1),
+		reportWake:             make(chan struct{}, 1),
+		team:                   *opts.Team,
 	}
 	if err := cp.restoreWorkspace(); err != nil {
 		return nil, errors.Join(err, cp.Close())
 	}
-	if err := validateStartupSeparation(cards.dir, runsDir, initStageDir, verCfg, protectedDirs...); err != nil {
+	if err := validateStartupSeparation(cards.dir, runsDir, initStageDir, opts.BuildCacheDir, verifierRuns(verif), protectedDirs...); err != nil {
 		return nil, errors.Join(err, cp.Close())
 	}
 	if opts.Checker != nil {
@@ -556,54 +624,74 @@ func New(opts Options) (*ControlPlane, error) {
 		// does not stop this server from starting.
 		cp.recoverCheckOperations()
 	}
+	cp.startTeamSupervisor()
+	cp.startReportChecker()
 	return cp, nil
 }
 
 // NewHTTPHandler mounts both the Goa HTTP endpoints and the MCP JSON-RPC
 // server (`/mcp`) for svc onto a single HTTP handler protected by auth. The
-// HTTP endpoints decode JSON bodies with strictJSONRequestDecoder; the MCP
+// HTTP endpoints decode JSON bodies with StrictJSONRequestDecoder; the MCP
 // server keeps Goa's decoder for its JSON-RPC envelope, because its generated
 // tool codecs already refuse undeclared argument fields.
+// auth is required and is supplied by the project credential owner. A request
+// sent with GET carries a private mark the diagnostics history uses to leave
+// out the user's reads that succeed or are refused.
 func NewHTTPHandler(svc gensurla.Service, auth RequestAuthenticator) http.Handler {
 	mux := goahttp.NewMuxer()
 	endpoints := gensurla.NewEndpoints(svc)
+	recorder := otel.Tracer("surla/requests")
+	if owner, ok := svc.(*ControlPlane); ok {
+		recorder = owner.tracer("surla/requests")
+	}
+	applyOperationPolicy(endpoints, recorder)
 	httpServer := gensurlahttp.New(
 		endpoints,
 		mux,
-		strictJSONRequestDecoder,
+		StrictJSONRequestDecoder,
 		goahttp.ResponseEncoder,
 		nil,
 		nil,
 	)
 	gensurlahttp.Mount(mux, httpServer)
 
-	mcpAdapter := genmcpadapter.NewMCPAdapter(endpoints, nil)
+	mcpAdapter := genmcpadapter.NewMCPAdapter(endpoints, &genmcpadapter.MCPAdapterOptions{
+		ErrorMapper: mapMCPRefusal,
+	})
 	mcpEndpoints := genmcpadapter.NewEndpoints(mcpAdapter)
+	filterMCPDiscovery(mcpEndpoints)
 	mcpServer := genmcpsurla.New(
 		mcpEndpoints,
 		mux,
 		goahttp.RequestDecoder,
 		goahttp.ResponseEncoder,
-		nil,
+		func(ctx context.Context, _ http.ResponseWriter, err error) {
+			_, span := recorder.Start(ctx, "surla.mcp.transport_error")
+			defer span.End()
+			span.SetAttributes(attribute.String("error.classification", "mcp_transport"))
+			span.RecordError(err)
+			span.SetStatus(codes.Error, "MCP transport failure")
+		},
 	)
 	genmcpsurla.Mount(mux, mcpServer)
 
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if auth != nil {
-			principal, err := auth(r)
-			if err != nil {
-				http.Error(w, "unauthorized", http.StatusUnauthorized)
-				return
+		principal, err := auth(r)
+		if err != nil {
+			w.Header().Set("X-Content-Type-Options", "nosniff")
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusUnauthorized)
+			if encodeErr := goahttp.ResponseEncoder(r.Context(), w).Encode(goahttp.NewErrorResponse(r.Context(), gensurla.MakeForbidden(errors.New("open the project views with surla; session or credential is no longer valid")))); encodeErr != nil {
+				otel.Handle(encodeErr)
 			}
-			r = r.WithContext(WithPrincipal(r.Context(), principal))
+			return
 		}
-		mux.ServeHTTP(w, r)
+		ctx := WithPrincipal(r.Context(), principal)
+		if r.Method == http.MethodGet {
+			ctx = context.WithValue(ctx, httpReadKey{}, true)
+		}
+		mux.ServeHTTP(w, r.WithContext(ctx))
 	})
-}
-
-// CheckpointUI returns the interactive MCP Apps HTML host for `ui://surla/checkpoint`.
-func (c *ControlPlane) CheckpointUI(_ context.Context) (string, error) {
-	return checkpointUIHTML, nil
 }
 
 // GoldenPath returns the Markdown `surla://golden-path` serves: the Golden
@@ -624,10 +712,9 @@ func (c *ControlPlane) GoldenPath(_ context.Context) (string, error) {
 // <change_id>-ambiguity-NN and examples check_NN in list order, records the
 // design source and optional Stories (when story_refresh_op_id is given, the
 // design/*.go snapshot and evaluated Stories from that succeeded
-// refresh_story operation; else design_source when given; else design/*.go
+// refresh_story operation; otherwise design/*.go
 // from the bound workspace; else none), and binds the card to the
-// authenticated principal. A card without ambiguities is saved confirmed by
-// its owner; otherwise it waits in needs_confirmation. A change_id that
+// authenticated principal. Every proposed card waits in needs_confirmation for the user, including a card without ambiguities. A change_id that
 // already has a card is a conflict; a payload that breaks a rule, a blank
 // change_id or prompt, an invalid or stale story_refresh_op_id, or an
 // unreadable workspace design is unprocessable, and none saves anything.
@@ -642,33 +729,15 @@ func (c *ControlPlane) ProposeChange(ctx context.Context, p *gensurla.ProposeCha
 	if strings.TrimSpace(p.ChangeID) == "" || strings.TrimSpace(p.Prompt) == "" {
 		return nil, gensurla.MakeUnprocessable(errors.New("change_id and prompt are required"))
 	}
-	var designSrc string
-	var stories []designeval.StorySummary
-	sourceOrigin := sourceOriginSupplied
-	switch {
-	case p.StoryRefreshOpID != nil:
-		if p.DesignSource != nil {
-			return nil, gensurla.MakeUnprocessable(errors.New(
-				"cannot combine design_source with story_refresh_op_id; omit design_source so Surla reads the workspace snapshot verified by refresh_story",
-			))
-		}
+	var snapshot refreshedSnapshot
+	if p.StoryRefreshOpID != nil {
 		var err error
-		designSrc, stories, err = c.adoptStoryRefresh(principal, *p.StoryRefreshOpID)
+		snapshot, err = c.adoptStoryRefresh(principal, *p.StoryRefreshOpID)
 		if err != nil {
 			return nil, err
 		}
-		sourceOrigin = sourceOriginWorkspace
-	case p.DesignSource != nil:
-		designSrc = *p.DesignSource
-	default:
-		if wsDir, wsDev, wsIno := c.currentWorkspaceTarget(); wsDir != "" {
-			src, err := readWorkspaceDesignSource(wsDir, wsDev, wsIno)
-			if err != nil {
-				return nil, err
-			}
-			designSrc = src
-			sourceOrigin = sourceOriginWorkspace
-		}
+	} else if err := c.requireRefreshForModule(); err != nil {
+		return nil, err
 	}
 
 	_, span := c.tracer("surla/controlplane").Start(
@@ -683,14 +752,7 @@ func (c *ControlPlane) ProposeChange(ctx context.Context, p *gensurla.ProposeCha
 		span.SetAttributes(attribute.String("surla.public_summary", cp1RejectedAnalysisSummary(false)))
 		return nil, gensurla.MakeUnprocessable(fmt.Errorf("invalid analysis: %w", err))
 	}
-	status := StatusConfirmed
-	var confirmedBy *string
-	if len(ambiguities) > 0 {
-		status = StatusNeedsConfirmation
-	} else {
-		ownerCopy := principal.ID
-		confirmedBy = &ownerCopy
-	}
+	status := StatusNeedsConfirmation
 
 	card := &gensurla.ChangeCardResult{
 		ChangeID:           p.ChangeID,
@@ -700,10 +762,9 @@ func (c *ControlPlane) ProposeChange(ctx context.Context, p *gensurla.ProposeCha
 		Ambiguities:        ambiguities,
 		Examples:           examples,
 		PreservedBehaviors: preserved,
-		Stories:            storySummaryItemsOrNil(stories),
-		ConfirmedBy:        confirmedBy,
+		Stories:            storySummaryItemsOrNil(snapshot.stories),
 	}
-	rev, err := computeCanonicalRevision(card, principal.ID, designSrc)
+	rev, err := computeCanonicalRevision(card, principal.ID, snapshot.designSource)
 	if err != nil {
 		span.SetAttributes(attribute.String("surla.public_summary", cp1SafeFaultSummary(false, cp1FaultRevision)))
 		span.RecordError(err)
@@ -717,6 +778,10 @@ func (c *ControlPlane) ProposeChange(ctx context.Context, p *gensurla.ProposeCha
 		card.UIComposition = &gensurla.UICompositionItem{Program: *p.Analysis.UIComposition, ComposedForRevision: rev}
 	}
 
+	if snapshot.madeFrom != nil {
+		c.draftMu.Lock()
+		defer c.draftMu.Unlock()
+	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	_, exists, err := c.cards.load(p.ChangeID)
@@ -730,18 +795,24 @@ func (c *ControlPlane) ProposeChange(ctx context.Context, p *gensurla.ProposeCha
 		span.SetAttributes(attribute.String("surla.public_summary", "Change Card ID already exists (this request did not overwrite the existing Change Card); call get_change or choose a new change_id."))
 		return nil, gensurla.MakeConflict(fmt.Errorf("change_id %q already exists", p.ChangeID))
 	}
+	if snapshot.madeFrom != nil {
+		if err := c.recordRefreshedSnapshot(span, snapshot); err != nil {
+			return nil, err
+		}
+	}
 	if err := c.cards.save(storedChangeCard{
 		card:         card,
 		owner:        principal.ID,
-		designSource: designSrc,
-		sourceOrigin: sourceOrigin,
-		stories:      stories,
+		designSource: snapshot.designSource,
+		stories:      snapshot.stories,
+		architecture: snapshot.architecture, goMod: snapshot.goMod, madeFrom: snapshot.madeFrom,
 	}); err != nil {
 		span.SetAttributes(attribute.String("surla.public_summary", cp1SafeFaultSummary(false, cp1FaultStorageSave)))
 		span.RecordError(err)
 		span.SetStatus(codes.Error, "save cp1 change card")
 		return nil, err
 	}
+	c.suppressDraftDropNote(snapshot.madeFrom)
 	span.SetAttributes(attribute.String("surla.public_summary", fmt.Sprintf("Proposed Change Card (%s).", status)))
 	return card, nil
 }
@@ -749,27 +820,30 @@ func (c *ControlPlane) ProposeChange(ctx context.Context, p *gensurla.ProposeCha
 // Close shuts the control plane down. It first refuses new live targets,
 // then stops the live target, then cancels the design evaluations in
 // progress, waits for them, and removes their build workspace, and finally
-// releases the cards directory and operator project lock so another process can
-// use them. Local tracing stays active through owned work and cleanup; its
+// releases the card store's lock so another process can use the directory.
+// Local tracing stays active through owned work and cleanup; its
 // file then closes, and later spans are discarded. The host flushes its other
 // exporters afterward.
 // It always attempts the evaluator cleanup, and joins its error with
 // any other. If the live target cannot be confirmed stopped, the cards
-// directory and operator project lock stay locked on this and every later call,
-// because the target's processes may still use them. Card cleanup waits for a
+// directory stays locked on this and every later call,
+// because the target's processes may still use its files. Card cleanup waits for a
 // card read or save in progress; requests that reach the cards afterwards,
 // such as one still waiting on a promotion target, fail without
 // writing. A later call returns the same evaluator result and, if the live
-// target could not be stopped, the same failure; the cards directory and
-// project lock are released only once.
+// target could not be stopped, the same failure; the card store's lock
+// is released only once.
 func (c *ControlPlane) Close() error {
 	c.cancelServer()
+	c.teamWorker.Wait()
+	c.reportWorker.Wait()
 	// Wait out any check admission in progress: an operation admitted under
 	// workspaceMu before this point is already registered, and every later
 	// one sees the server context ended and is refused (see
 	// admitCheckOperation).
 	c.workspaceMu.Lock()
 	c.workspaceMu.Unlock()
+	c.buildStartOps.Wait()
 	// Running checks see the server context end, remove their containers
 	// and return; then any container still unconfirmed gets one more try.
 	c.checkOps.Wait()
@@ -784,20 +858,18 @@ func (c *ControlPlane) Close() error {
 	defer c.workspaceMu.Unlock()
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	var lockErr error
-	if c.closeProjectLock != nil {
-		lockErr = c.closeProjectLock()
-		c.closeProjectLock = nil
-	}
-	return errors.Join(evalErr, checkErr, c.traces.Close(), c.cards.close(), lockErr)
+	return errors.Join(evalErr, checkErr, c.traces.Close(), c.cards.close())
 }
 
 // GetChange returns the current Change Card for change_id to its owner. It
 // fails for an unknown change_id or a caller who does not own the card, and
 // never changes the card. A saved approval is returned in Approval only while
-// it still matches the promotion target's current inputs, or in
+// its suite_commit is still the tests' commit chosen for this revision and its
+// binary digests still match the promotion target's current binaries, or in
 // UnverifiedApproval when no promotion target is configured or the target
-// cannot report its current inputs (see currentCard).
+// cannot measure the candidate's binaries (see currentCard). A revision
+// proposed beside a confirmed card is returned in ProposedRevision while it
+// waits.
 func (c *ControlPlane) GetChange(ctx context.Context, p *gensurla.GetChangePayload) (*gensurla.ChangeCardResult, error) {
 	principal, ok := PrincipalFromContext(ctx)
 	if !ok {
@@ -815,13 +887,13 @@ func (c *ControlPlane) GetChange(ctx context.Context, p *gensurla.GetChangePaylo
 	if record.owner != principal.ID {
 		return nil, gensurla.MakeForbidden(fmt.Errorf("principal %q is not the owner of change_id %q", principal.ID, p.ChangeID))
 	}
-	return c.currentCard(ctx, record.card)
+	return c.changeResult(ctx, record)
 }
 
-// PreviewArchitecture evaluates the candidate design module snapshot via the
-// real Goa evaluation engine (the control plane's designeval.Evaluator) bound to a confirmed CP1
-// Change Card and returns the validated C4 topology, directed edges, per-agent
-// runtime policies, and tool contracts.
+// PreviewArchitecture returns the evaluated architecture saved with the user's
+// confirmed revision. It reads no workspace and runs no evaluation, so a later
+// draft, project edit or waiting proposal cannot change that agreed preview.
+// Older cards without architecture must adopt a succeeded refresh first.
 func (c *ControlPlane) PreviewArchitecture(ctx context.Context, p *gensurla.PreviewArchitecturePayload) (*gensurla.ArchitecturePreviewResult, error) {
 	principal, ok := PrincipalFromContext(ctx)
 	if !ok {
@@ -850,32 +922,13 @@ func (c *ControlPlane) PreviewArchitecture(ctx context.Context, p *gensurla.Prev
 		return nil, gensurla.MakeConflict(fmt.Errorf("request_revision mismatch for %q: got %q, want %q", p.ChangeID, p.RequestRevision, record.card.RequestRevision))
 	}
 
-	var designFiles map[string]string
-	switch {
-	case p.Design != nil:
-		designFiles = p.Design.Files
-	default:
-		wsDir, wsDev, wsIno := c.currentWorkspaceTarget()
-		if wsDir == "" {
-			return nil, gensurla.MakeUnprocessable(errors.New(
-				"design is required when no workspace directory is bound to this control plane",
-			))
-		}
-		designFiles, err = readWorkspaceModuleSnapshot(wsDir, wsDev, wsIno)
-		if err != nil {
-			return nil, err
-		}
+	if record.architecture == nil {
+		return nil, gensurla.MakeUnprocessable(errors.New("no architecture to show; call refresh_story, then revise_change with its op_id"))
 	}
-
-	if err := reportProgress(ctx, 0, 2, "Evaluating the candidate design in the sandbox"); err != nil {
-		return nil, err
-	}
-	evaluated, err := c.evaluator.Evaluate(ctx, designFiles)
-	if err != nil {
-		return nil, err
-	}
-	if err := reportProgress(ctx, 1, 2, "Planning the proposed swarm roster"); err != nil {
-		return nil, err
+	evaluated := designeval.Result{
+		SystemName: record.architecture.SystemName, Containers: record.architecture.Containers,
+		Edges: record.architecture.Edges, AgentPolicies: record.architecture.AgentPolicies,
+		Tools: record.architecture.Tools,
 	}
 	if evaluated.SystemName == "" || len(evaluated.Containers) == 0 {
 		return nil, gensurla.MakeUnprocessable(errors.New("design must declare at least one Goa API or Service container"))
@@ -886,21 +939,7 @@ func (c *ControlPlane) PreviewArchitecture(ctx context.Context, p *gensurla.Prev
 		}
 	}
 
-	designDigest := designeval.SnapshotDigest(designFiles)
-	swarmItem, err := planSwarmRoster(
-		p.ChangeID,
-		designDigest,
-		c.swarmProfiles,
-		p.Builders,
-		p.ArchitectPaths,
-		p.EvalPaths,
-	)
-	if err != nil {
-		return nil, err
-	}
-	if err := reportProgress(ctx, 2, 2, "Architecture preview ready"); err != nil {
-		return nil, err
-	}
+	designDigest := record.architecture.DesignDigest
 	banner := evaluated.Summary()
 
 	return &gensurla.ArchitecturePreviewResult{
@@ -912,14 +951,16 @@ func (c *ControlPlane) PreviewArchitecture(ctx context.Context, p *gensurla.Prev
 		Edges:           evaluated.Edges,
 		AgentPolicies:   evaluated.AgentPolicies,
 		Tools:           evaluated.Tools,
-		Swarm:           swarmItem,
 		Banner:          banner,
 	}, nil
 }
 
-// DraftOverride applies a 0-second prompt override on the bound target platform
-// via TargetPromptUpdater when target_kind is "prompt_template", or refuses to
-// mask a compiled Go business rule when target_kind is "compiled_rule".
+// DraftOverride sends a prompt template to the live target start_live_target
+// runs when target_kind is "prompt_template", or refuses to mask a compiled
+// Go business rule when target_kind is "compiled_rule". Surla changes prompts
+// only in a live target it built and started itself, so a prompt template
+// with no live target running is refused with no_live_target, which names
+// start_live_target as the step that enables it.
 func (c *ControlPlane) DraftOverride(ctx context.Context, p *gensurla.DraftOverridePayload) (*gensurla.DraftOverrideResult, error) {
 	if _, ok := PrincipalFromContext(ctx); !ok {
 		return nil, errors.New("authenticated principal is required")
@@ -941,26 +982,11 @@ func (c *ControlPlane) DraftOverride(ctx context.Context, p *gensurla.DraftOverr
 		if strings.TrimSpace(p.NewContent) == "" {
 			return nil, errors.New("new_content is required when target_kind is prompt_template")
 		}
-		id := strings.TrimSpace(*p.PromptID)
-		if c.targetUpdater == nil {
-			if lt := c.boundLive(); lt != nil {
-				return c.draftLive(ctx, lt, id, p.NewContent)
-			}
-			return nil, errors.New("no target prompt updater is bound to this control plane")
-		}
-		version, err := c.targetUpdater.ApplyPromptOverride(ctx, id, p.NewContent)
+		lt, err := c.boundLive()
 		if err != nil {
-			return nil, fmt.Errorf("apply target prompt override: %w", err)
+			return nil, err
 		}
-		if strings.TrimSpace(version) == "" {
-			return nil, errors.New("target prompt updater returned an empty version")
-		}
-		return &gensurla.DraftOverrideResult{
-			AppliedInStore:  true,
-			RequiresRebuild: false,
-			PromptVersion:   &version,
-			Message:         fmt.Sprintf("Updated prompt %q on target platform (version %s) for 0s hot reload.", id, version),
-		}, nil
+		return c.draftLive(ctx, lt, strings.TrimSpace(*p.PromptID), p.NewContent)
 	default:
 		return nil, fmt.Errorf("unsupported target_kind %q", p.TargetKind)
 	}
@@ -986,7 +1012,7 @@ func (c *ControlPlane) Diff(ctx context.Context, p *gensurla.DiffPayload) (*gens
 	}, nil
 }
 
-// strictJSONRequestDecoder is the request body decoder of every HTTP route
+// StrictJSONRequestDecoder is the request body decoder of every HTTP route
 // NewHTTPHandler mounts. It returns goahttp.RequestDecoder's decoder for r's
 // Content-Type and, when that is a JSON decoder (application/json, or no
 // Content-Type), makes it refuse object fields the route's design does not
@@ -994,7 +1020,7 @@ func (c *ControlPlane) Diff(ctx context.Context, p *gensurla.DiffPayload) (*gens
 // decode_payload error, HTTP 400, naming the field; for example a
 // propose_change analysis carrying a caller-chosen ambiguity "id". Bodies in
 // other formats Goa accepts (XML, gob, text) decode exactly as before.
-func strictJSONRequestDecoder(r *http.Request) goahttp.Decoder {
+func StrictJSONRequestDecoder(r *http.Request) goahttp.Decoder {
 	dec := goahttp.RequestDecoder(r)
 	if jsonDec, ok := dec.(*json.Decoder); ok {
 		jsonDec.DisallowUnknownFields()
@@ -1052,84 +1078,4 @@ func reportProgress(ctx context.Context, value, total float64, message string) e
 		return fmt.Errorf("report progress: %w", err)
 	}
 	return nil
-}
-
-// planSwarmRoster invokes swarm.Plan over server-owned provider profiles and
-// explicit workspace path scopes and projects the result into a
-// gensurla.SwarmPlanItem.
-func planSwarmRoster(
-	changeID, designDigest string,
-	profiles []swarm.ProviderProfile,
-	in []*gensurla.BuilderScopeItem,
-	architectPaths, evalPaths []string,
-) (*gensurla.SwarmPlanItem, error) {
-	builders := make([]swarm.BuilderScope, 0, len(in))
-	for i, item := range in {
-		if item == nil {
-			return nil, gensurla.MakeUnprocessable(fmt.Errorf("builders[%d] is nil", i))
-		}
-		var preferred string
-		if item.PreferredProfileID != nil {
-			preferred = *item.PreferredProfileID
-		}
-		builders = append(builders, swarm.BuilderScope{
-			Name:               item.Name,
-			Paths:              item.Paths,
-			PreferredProfileID: preferred,
-		})
-	}
-	plan, err := swarm.Plan(swarm.Request{
-		ChangeID:       changeID,
-		DesignDigest:   designDigest,
-		Profiles:       profiles,
-		ArchitectPaths: architectPaths,
-		Builders:       builders,
-		EvalPaths:      evalPaths,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("plan swarm roster: %w", err)
-	}
-
-	assignments := make([]*gensurla.SwarmRoleItem, 0, len(plan.Assignments))
-	for _, a := range plan.Assignments {
-		assignments = append(assignments, &gensurla.SwarmRoleItem{
-			Handle:     a.Handle,
-			Role:       string(a.Role),
-			ScopeName:  a.ScopeName,
-			ProfileID:  a.ProfileID,
-			Provider:   a.Provider,
-			Model:      a.Model,
-			Family:     a.Family,
-			OwnedPaths: a.OwnedPaths,
-			AccessMode: a.AccessMode,
-		})
-	}
-
-	var missingRoles []string
-	if len(plan.MissingRoles) > 0 {
-		missingRoles = make([]string, 0, len(plan.MissingRoles))
-		for _, r := range plan.MissingRoles {
-			missingRoles = append(missingRoles, string(r))
-		}
-	}
-
-	var manifestPtr *string
-	if plan.Status == swarm.StatusConfigured {
-		manifest, err := swarm.FormatManifest(changeID, designDigest, plan)
-		if err != nil {
-			return nil, fmt.Errorf("format swarm manifest: %w", err)
-		}
-		manifestPtr = &manifest
-	}
-
-	return &gensurla.SwarmPlanItem{
-		Status:            string(plan.Status),
-		Assignments:       assignments,
-		CrossFamilyReview: plan.CrossFamilyReview,
-		CrossFamilyEval:   plan.CrossFamilyEval,
-		SingleFamily:      plan.SingleFamily,
-		MissingRoles:      missingRoles,
-		Summary:           plan.Summary,
-		Manifest:          manifestPtr,
-	}, nil
 }

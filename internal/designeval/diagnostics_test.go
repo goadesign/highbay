@@ -15,8 +15,55 @@ import (
 	"github.com/goadesign/surla/internal/testmodule"
 )
 
+// TestFailedOnModuleNamesTheModulePhases checks every phase runProgram sets
+// and the failures outside it: only checking, resolving, compiling and
+// evaluating the module's own files count, whatever the underlying cause. Of
+// those, only the phase that loads the module's dependencies is one
+// FailedLoadingDependencies reports.
+func TestFailedOnModuleNamesTheModulePhases(t *testing.T) {
+	t.Parallel()
+	cause := errors.New("exit status 1")
+	for _, test := range []struct {
+		name string
+		err  error
+		want bool
+		// wantLoading is what FailedLoadingDependencies reports.
+		wantLoading bool
+	}{
+		{name: "snapshot validation", err: &snapshotValidationError{err: cause}, want: true},
+		{name: "checking the module files", err: &phaseError{phase: phaseCheckFiles, err: cause}, want: true},
+		{name: "loading the module's dependencies", err: &phaseError{phase: phaseLoadModules, err: cause}, want: true, wantLoading: true},
+		{
+			name: "loading the module's dependencies, wrapped by a caller",
+			err:  fmt.Errorf("generate: %w", &phaseError{phase: phaseLoadModules, err: cause}), want: true, wantLoading: true,
+		},
+		{name: "compiling the design", err: &phaseError{phase: phaseCompile, err: &buildError{err: cause}}, want: true},
+		{name: "evaluating the design", err: &phaseError{phase: phaseEvaluateDSL, err: cause}, want: true},
+		{name: "preparing the compiler", err: &phaseError{phase: "preparing the design compiler", err: cause}},
+		{name: "preparing the temporary files", err: &phaseError{phase: "preparing the temporary compiler files", err: cause}},
+		{name: "starting the design generator", err: &phaseError{phase: "starting the design generator", err: cause}},
+		{name: "reading the generated output", err: &phaseError{phase: "reading the generated output", err: cause}},
+		{name: "removing the temporary files", err: &phaseError{phase: "removing the temporary compiler files", err: cause}},
+		{name: "a closed evaluator", err: errEvaluatorClosed},
+		{
+			name: "closed while loading the module's dependencies",
+			err:  fmt.Errorf("%w: %w", errEvaluatorClosed, &phaseError{phase: phaseLoadModules, err: cause}),
+		},
+		{
+			name: "a build that would not stop while compiling the design",
+			err:  errors.Join(&stuckGroupError{err: cause}, &phaseError{phase: phaseCompile, err: cause}),
+		},
+		{name: "wrapped by a caller", err: fmt.Errorf("generate: %w", &phaseError{phase: phaseCompile, err: cause}), want: true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			assert.Equal(t, test.want, FailedOnModule(test.err))
+			assert.Equal(t, test.wantLoading, FailedLoadingDependencies(test.err))
+		})
+	}
+}
+
 // TestGenerationDiagnosticReportsFactsWithoutBlamingSource verifies phase and
-// sandbox-output reporting without inferring a source cause from an exit code.
+// command-output reporting without inferring a source cause from an exit code.
 // Errors from module commands retain raw private output only for CLI/traces.
 func TestGenerationDiagnosticReportsFactsWithoutBlamingSource(t *testing.T) {
 	cause := errors.New("exit status 1")
@@ -26,9 +73,9 @@ func TestGenerationDiagnosticReportsFactsWithoutBlamingSource(t *testing.T) {
 		err  error
 		want string
 	}{
-		{name: "compiler source error", err: &phaseError{phase: "compiling the design", err: &buildError{err: &sandboxOutputError{err: cause, output: "design/design.go:7:9: undefined: Missing", paths: paths}}}, want: "undefined: Missing"},
-		{name: "compiler storage error", err: &phaseError{phase: "compiling the design", err: &buildError{err: &sandboxOutputError{err: cause, output: "failed to initialize build cache at /operator/compiler/gocache: not a directory", paths: paths}}}, want: "failed to initialize build cache at <compiler>/gocache"},
-		{name: "DSL error", err: &phaseError{phase: "evaluating the design and generating files", err: &sandboxOutputError{err: cause, output: "service orders: method get_order: result type is invalid", paths: paths}}, want: "result type is invalid"},
+		{name: "compiler source error", err: &phaseError{phase: "compiling the design", err: &buildError{err: &commandOutputError{err: cause, output: "design/design.go:7:9: undefined: Missing", paths: paths}}}, want: "undefined: Missing"},
+		{name: "compiler storage error", err: &phaseError{phase: "compiling the design", err: &buildError{err: &commandOutputError{err: cause, output: "create build cache directory: mkdir /operator/compiler/gocache: not a directory", paths: paths}}}, want: "create build cache directory: mkdir <compiler>/gocache: not a directory"},
+		{name: "DSL error", err: &phaseError{phase: "evaluating the design and generating files", err: &commandOutputError{err: cause, output: "service orders: method get_order: result type is invalid", paths: paths}}, want: "result type is invalid"},
 		{name: "module command", err: &phaseError{phase: "loading the design module dependencies", err: fmt.Errorf("private proxy https://private:credential@private-proxy.example: %w", cause)}, want: "loading the design module dependencies"},
 		{name: "file setup", err: &phaseError{phase: "preparing the temporary compiler files", err: &os.PathError{Op: "mkdir", Path: "/operator/run", Err: os.ErrPermission}}, want: "preparing the temporary compiler files"},
 		{name: "before admission", err: errors.New("create private /operator/run failed"), want: "starting the design compiler"},
@@ -43,7 +90,7 @@ func TestGenerationDiagnosticReportsFactsWithoutBlamingSource(t *testing.T) {
 			assert.NotContains(t, diagnostic, "Correct the design")
 		})
 	}
-	original := &sandboxOutputError{err: cause, output: "raw /operator/run/output", paths: paths}
+	original := &commandOutputError{err: cause, output: "raw /operator/run/output", paths: paths}
 	wrapped := &phaseError{phase: "compiling the design", err: errors.Join(original, os.ErrPermission)}
 	assert.Equal(t, cause.Error()+" (raw /operator/run/output)", original.Error())
 	assert.Equal(t, errors.Join(original, os.ErrPermission).Error(), wrapped.Error())
@@ -60,18 +107,19 @@ func TestGenerationDiagnosticMapsExactEscapedPaths(t *testing.T) {
 			parent := "/operator/" + special
 			paths := diagnosticPaths{
 				source: parent + "/run/build/target", temporary: parent + "/run",
-				work: parent + "/compiler", goroot: parent + "/toolchain", modCache: parent + "/modules",
+				work: parent + "/compiler", buildCache: parent + "/packages",
+				goroot: parent + "/toolchain", modCache: parent + "/modules",
 			}
 			var output strings.Builder
-			for _, dir := range []string{paths.source, paths.temporary, paths.work, paths.goroot, paths.modCache} {
+			for _, dir := range []string{paths.source, paths.temporary, paths.work, paths.buildCache, paths.goroot, paths.modCache} {
 				fmt.Fprintf(&output, "%s\n%q\n%s/file.go\n%q\n", dir, dir, dir, dir+"/file.go")
 			}
 			raw := output.String()
-			failure := &sandboxOutputError{err: errors.New("exit status 1"), output: raw, paths: paths}
+			failure := &commandOutputError{err: errors.New("exit status 1"), output: raw, paths: paths}
 			diagnostic := GenerationDiagnostic(failure)
 			assert.NotContains(t, diagnostic, "/operator/")
 			assert.NotContains(t, diagnostic, special)
-			for _, label := range []string{"./file.go", "<generation>/file.go", "<compiler>/file.go", "<toolchain>/file.go", "<modules>/file.go"} {
+			for _, label := range []string{"./file.go", "<generation>/file.go", "<compiler>/file.go", "<build-cache>/file.go", "<toolchain>/file.go", "<modules>/file.go"} {
 				assert.Contains(t, diagnostic, label)
 			}
 			assert.Equal(t, "exit status 1 ("+raw+")", failure.Error(), "raw CLI/trace text is unchanged")
@@ -86,7 +134,7 @@ func TestGenerationDiagnosticPreservesSnapshotValidationDetail(t *testing.T) {
 		name, mod, want     string
 		omitSum, omitDesign bool
 	}{
-		{name: "missing checksum file", omitSum: true, want: "run `go mod tidy`"},
+		{name: "missing checksum file", omitSum: true, want: "run `GOWORK=off go mod tidy`"},
 		{name: "malformed module", mod: "module (\n", want: "parse snapshot go.mod"},
 		{name: "missing design", omitDesign: true, want: "design snapshot has no design/*.go file"},
 		{name: "local replacement", mod: "module example.com/design\ngo 1.24\nreplace example.com/local => ./local\n", want: "only versioned replacements are supported"},
@@ -115,10 +163,10 @@ func TestGenerationDiagnosticPreservesSnapshotValidationDetail(t *testing.T) {
 }
 
 // TestGenerationUsesPhysicalOperatorPaths observes the exact facts supplied to
-// a real sandboxed Go build, despite relative and symlinked owner settings.
+// a real Go build, despite relative and symlinked owner settings.
 func TestGenerationUsesPhysicalOperatorPaths(t *testing.T) {
 	if testing.Short() {
-		t.Skip("runs the sandboxed Go toolchain; the full suite (go test without -short) covers it")
+		t.Skip("runs the Go toolchain; the full suite (go test without -short) covers it")
 	}
 	files := testmodule.Snapshot(t, "", minimalDesign)
 	toolchain, err := resolveToolchainEnv(t.Context())
@@ -140,8 +188,8 @@ func TestGenerationUsesPhysicalOperatorPaths(t *testing.T) {
 	ev.finish(nil)
 	require.NoError(t, os.WriteFile(filepath.Join(work, "gocache"), []byte("a file prevents cache setup\n"), 0o600))
 	_, err = ev.Generate(t.Context(), files)
-	require.ErrorContains(t, err, "failed to initialize build cache")
-	var output *sandboxOutputError
+	require.ErrorContains(t, err, "create build cache directory")
+	var output *commandOutputError
 	require.ErrorAs(t, err, &output)
 	assert.Equal(t, toolchain.goroot, output.paths.goroot)
 	assert.Equal(t, modCache, output.paths.modCache)

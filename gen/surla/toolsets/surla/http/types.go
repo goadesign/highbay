@@ -33,7 +33,7 @@ type (
 		ChangeID *string `json:"change_id"`
 		// Checkpoint status (needs_confirmation or confirmed).
 		Status *string `json:"status"`
-		// Operator feature request for this revision.
+		// The user's feature request for this revision.
 		Prompt *string `json:"prompt"`
 		// Plain-English summary of the proposed change from propose_change or
 		// revise_change. confirm_intent does not rewrite this text; when status is
@@ -54,7 +54,7 @@ type (
 		// revision in declaration order; omitted when the card has no Stories.
 		// Included in request_revision.
 		Stories []*StorySummaryItemTransport `json:"stories,omitempty"`
-		// Authenticated principal that confirmed the Change Card.
+		// User who confirmed the Change Card.
 		ConfirmedBy *string `json:"confirmed_by,omitempty"`
 		// SHA-256 digest of the canonical versioned Change Card.
 		RequestRevision *string `json:"request_revision"`
@@ -62,18 +62,24 @@ type (
 		// sent one. A confirm_intent that changes answers or examples returns the new
 		// revision without it.
 		UIComposition *UICompositionItemTransport `json:"ui_composition,omitempty"`
-		// Checkpoint 5 approval of this revision, present only while it is verified
-		// against the promotion target's current inputs on this read. It is absent
-		// before approve_merge succeeds, whenever the target's suite, environment or
-		// binary digests have changed since, and whenever current inputs cannot be
+		// Checkpoint 5 approval of this revision, present while suite_commit is still
+		// the tests' commit chosen for this revision and (when a promotion target is
+		// configured) the promotion target's current binary digests still equal
+		// artifacts on this read. It is absent before approve_merge succeeds, whenever
+		// the chosen tests' commit or the staged binary digests have changed since,
+		// and whenever a configured promotion target's staged binaries cannot be
 		// verified (see unverified_approval). It is never hashed into request_revision.
 		Approval *ApprovalItemTransport `json:"approval,omitempty"`
-		// Saved Checkpoint 5 approval of this revision when current promotion inputs
-		// could not be verified on this read (because no promotion target is
-		// configured or the target could not report its current inputs). At most one
-		// of approval or unverified_approval is set. It is never saved to disk or
-		// hashed into request_revision.
+		// Saved Checkpoint 5 approval of this revision when suite_commit still matches
+		// the chosen tests' commit and promotion settings are configured, but the
+		// staged binaries could not be verified on this read. At most one of approval
+		// or unverified_approval is set. It is never saved to disk or hashed into
+		// request_revision.
 		UnverifiedApproval *UnverifiedApprovalItemTransport `json:"unverified_approval,omitempty"`
+		// The revision the guide proposed beside this confirmed revision, while it
+		// waits for the user to adopt or decline it; absent otherwise. This card's own
+		// fields describe the revision in force.
+		ProposedRevision *ProposedRevisionItemTransport `json:"proposed_revision,omitempty"`
 	}
 	// CheckProjectPayloadTransport is the internal JSON transport type for CheckProjectPayload.
 	// It lives in the toolset-local http package and is used only for JSON
@@ -133,8 +139,9 @@ type (
 		RequestRevision *string `json:"request_revision"`
 		// Selected resolution per ambiguity question ID. Answer every current
 		// question, and give each value exactly as one string from that question's
-		// options, character for character. To record a decision that no option
-		// expresses, call revise_change with that decision in prompt.
+		// options, character for character. A decision that no option expresses goes
+		// to the guide, which records it with revise_change; the user then confirms
+		// the resulting revision.
 		Answers map[string]string `json:"answers"`
 		// The complete confirmed example table, including examples you edited or
 		// added. Keep an existing example's id when you edit it, and give an example
@@ -150,7 +157,7 @@ type (
 		ChangeID *string `json:"change_id"`
 		// Checkpoint status (needs_confirmation or confirmed).
 		Status *string `json:"status"`
-		// Operator feature request for this revision.
+		// The user's feature request for this revision.
 		Prompt *string `json:"prompt"`
 		// Plain-English summary of the proposed change from propose_change or
 		// revise_change. confirm_intent does not rewrite this text; when status is
@@ -171,7 +178,7 @@ type (
 		// revision in declaration order; omitted when the card has no Stories.
 		// Included in request_revision.
 		Stories []*StorySummaryItemTransport `json:"stories,omitempty"`
-		// Authenticated principal that confirmed the Change Card.
+		// User who confirmed the Change Card.
 		ConfirmedBy *string `json:"confirmed_by,omitempty"`
 		// SHA-256 digest of the canonical versioned Change Card.
 		RequestRevision *string `json:"request_revision"`
@@ -179,18 +186,92 @@ type (
 		// sent one. A confirm_intent that changes answers or examples returns the new
 		// revision without it.
 		UIComposition *UICompositionItemTransport `json:"ui_composition,omitempty"`
-		// Checkpoint 5 approval of this revision, present only while it is verified
-		// against the promotion target's current inputs on this read. It is absent
-		// before approve_merge succeeds, whenever the target's suite, environment or
-		// binary digests have changed since, and whenever current inputs cannot be
+		// Checkpoint 5 approval of this revision, present while suite_commit is still
+		// the tests' commit chosen for this revision and (when a promotion target is
+		// configured) the promotion target's current binary digests still equal
+		// artifacts on this read. It is absent before approve_merge succeeds, whenever
+		// the chosen tests' commit or the staged binary digests have changed since,
+		// and whenever a configured promotion target's staged binaries cannot be
 		// verified (see unverified_approval). It is never hashed into request_revision.
 		Approval *ApprovalItemTransport `json:"approval,omitempty"`
-		// Saved Checkpoint 5 approval of this revision when current promotion inputs
-		// could not be verified on this read (because no promotion target is
-		// configured or the target could not report its current inputs). At most one
-		// of approval or unverified_approval is set. It is never saved to disk or
-		// hashed into request_revision.
+		// Saved Checkpoint 5 approval of this revision when suite_commit still matches
+		// the chosen tests' commit and promotion settings are configured, but the
+		// staged binaries could not be verified on this read. At most one of approval
+		// or unverified_approval is set. It is never saved to disk or hashed into
+		// request_revision.
 		UnverifiedApproval *UnverifiedApprovalItemTransport `json:"unverified_approval,omitempty"`
+		// The revision the guide proposed beside this confirmed revision, while it
+		// waits for the user to adopt or decline it; absent otherwise. This card's own
+		// fields describe the revision in force.
+		ProposedRevision *ProposedRevisionItemTransport `json:"proposed_revision,omitempty"`
+	}
+	// DeclineRevisionPayloadTransport is the internal JSON transport type for DeclineRevisionPayload.
+	// It lives in the toolset-local http package and is used only for JSON
+	// decode + validation (missing-field detection) before transforming into
+	// the public tool type.
+	DeclineRevisionPayloadTransport struct {
+		// Change identifier.
+		ChangeID *string `json:"change_id"`
+		// request_revision of the proposed revision being declined
+		// (proposed_revision.request_revision): 64 lowercase hex characters.
+		RequestRevision *string `json:"request_revision"`
+	}
+	// DeclineRevisionResultTransport is the internal JSON transport type for DeclineRevisionResult.
+	// It lives in the toolset-local http package and is used only for JSON
+	// decode + validation (missing-field detection) before transforming into
+	// the public tool type.
+	DeclineRevisionResultTransport struct {
+		// Change identifier.
+		ChangeID *string `json:"change_id"`
+		// Checkpoint status (needs_confirmation or confirmed).
+		Status *string `json:"status"`
+		// The user's feature request for this revision.
+		Prompt *string `json:"prompt"`
+		// Plain-English summary of the proposed change from propose_change or
+		// revise_change. confirm_intent does not rewrite this text; when status is
+		// confirmed, answers records the owner's resolutions for ambiguities.
+		Summary *string `json:"summary"`
+		// Domain questions surfaced at CP1, retained for audit after confirmation.
+		Ambiguities []*AmbiguityQuestionTransport `json:"ambiguities,omitempty"`
+		// Owner-confirmed answers keyed by ambiguity question ID when status is
+		// confirmed and ambiguities is non-empty (empty when a confirmed card has no
+		// ambiguity questions). Each answer equals one of its question's declared
+		// options and takes precedence over open phrasing in summary.
+		Answers map[string]string `json:"answers,omitempty"`
+		// Concrete examples mapped to evaluator checks.
+		Examples []*ExampleItemTransport `json:"examples"`
+		// Existing contract invariants preserved by this change.
+		PreservedBehaviors []string `json:"preserved_behaviors"`
+		// Evaluated domain Stories adopted from refresh_story for this Change Card
+		// revision in declaration order; omitted when the card has no Stories.
+		// Included in request_revision.
+		Stories []*StorySummaryItemTransport `json:"stories,omitempty"`
+		// User who confirmed the Change Card.
+		ConfirmedBy *string `json:"confirmed_by,omitempty"`
+		// SHA-256 digest of the canonical versioned Change Card.
+		RequestRevision *string `json:"request_revision"`
+		// Decision view the caller composed for this revision in its analysis, when it
+		// sent one. A confirm_intent that changes answers or examples returns the new
+		// revision without it.
+		UIComposition *UICompositionItemTransport `json:"ui_composition,omitempty"`
+		// Checkpoint 5 approval of this revision, present while suite_commit is still
+		// the tests' commit chosen for this revision and (when a promotion target is
+		// configured) the promotion target's current binary digests still equal
+		// artifacts on this read. It is absent before approve_merge succeeds, whenever
+		// the chosen tests' commit or the staged binary digests have changed since,
+		// and whenever a configured promotion target's staged binaries cannot be
+		// verified (see unverified_approval). It is never hashed into request_revision.
+		Approval *ApprovalItemTransport `json:"approval,omitempty"`
+		// Saved Checkpoint 5 approval of this revision when suite_commit still matches
+		// the chosen tests' commit and promotion settings are configured, but the
+		// staged binaries could not be verified on this read. At most one of approval
+		// or unverified_approval is set. It is never saved to disk or hashed into
+		// request_revision.
+		UnverifiedApproval *UnverifiedApprovalItemTransport `json:"unverified_approval,omitempty"`
+		// The revision the guide proposed beside this confirmed revision, while it
+		// waits for the user to adopt or decline it; absent otherwise. This card's own
+		// fields describe the revision in force.
+		ProposedRevision *ProposedRevisionItemTransport `json:"proposed_revision,omitempty"`
 	}
 	// DiffPayloadTransport is the internal JSON transport type for DiffPayload.
 	// It lives in the toolset-local http package and is used only for JSON
@@ -238,11 +319,12 @@ type (
 	// decode + validation (missing-field detection) before transforming into
 	// the public tool type.
 	DraftOverrideResultTransport struct {
-		// True when updated in the target platform's prompt.Store for 0s reload.
+		// True when the live target saved the prompt text in its prompt store for 0s
+		// reload.
 		AppliedInStore *bool `json:"applied_in_store"`
 		// True when the change modifies a compiled Go business rule.
 		RequiresRebuild *bool `json:"requires_rebuild"`
-		// New prompt version digest returned by the target platform.
+		// Version of the accepted prompt text, as the live target returned it.
 		PromptVersion *string `json:"prompt_version,omitempty"`
 		// Operator-facing status explanation.
 		Message *string `json:"message"`
@@ -253,7 +335,7 @@ type (
 	// the public tool type.
 	GenerateCodePayloadTransport struct {
 		// Module to regenerate: candidate (the application, the default when omitted)
-		// or eval (the local eval/ module).
+		// or eval (the test module).
 		Target *string `json:"target,omitempty"`
 	}
 	// GenerateCodeResultTransport is the internal JSON transport type for GenerateCodeResult.
@@ -269,6 +351,76 @@ type (
 		// Problems that did not prevent gen/ publication, such as incomplete cleanup
 		// or a guide that could not be written.
 		Warnings []string `json:"warnings"`
+	}
+	// GetBuildPayloadTransport is the internal JSON transport type for GetBuildPayload.
+	// It lives in the toolset-local http package and is used only for JSON
+	// decode + validation (missing-field detection) before transforming into
+	// the public tool type.
+	GetBuildPayloadTransport struct {
+		// Change Card identifier.
+		ChangeID *string `json:"change_id"`
+	}
+	// GetBuildResultTransport is the internal JSON transport type for GetBuildResult.
+	// It lives in the toolset-local http package and is used only for JSON
+	// decode + validation (missing-field detection) before transforming into
+	// the public tool type.
+	GetBuildResultTransport struct {
+		// Change Card identifier.
+		ChangeID *string `json:"change_id"`
+		// True only when the current agreed revision’s saved record of how its design
+		// was drafted predates the current actual drop: start_build would refuse it
+		// with drafted_before_drop. It becomes true after that drop and false once the
+		// user adopts a revision drafted after the drop, even if its request_revision
+		// is unchanged. A waiting proposal does not change this fact; ask the guide to
+		// refresh_story and revise_change from that refresh, then adopt the revision
+		// before building. False says only that this refusal does not apply, not that
+		// every other build check will pass; it is also false without an agreed
+		// revision or saved record of its draft. start_build rechecks concurrent
+		// changes.
+		DraftedBeforeDrop *bool `json:"drafted_before_drop"`
+		// not_started when the change has no usable build for the current test source;
+		// start a new build on the views page. Otherwise started with the usable build.
+		Build *Build `json:"build"`
+	}
+	// GetBuilderAssignmentPayloadTransport is the internal JSON transport type for GetBuilderAssignmentPayload.
+	// It lives in the toolset-local http package and is used only for JSON
+	// decode + validation (missing-field detection) before transforming into
+	// the public tool type.
+	GetBuilderAssignmentPayloadTransport struct {
+		// Change Card identifier from list_builder_assignments.
+		ChangeID *string `json:"change_id"`
+	}
+	// GetBuilderAssignmentResultTransport is the internal JSON transport type for GetBuilderAssignmentResult.
+	// It lives in the toolset-local http package and is used only for JSON
+	// decode + validation (missing-field detection) before transforming into
+	// the public tool type.
+	GetBuilderAssignmentResultTransport struct {
+		// Change Card to build; get_change takes it.
+		ChangeID *string `json:"change_id"`
+		// Change Card revision to build; verify_change takes it.
+		RequestRevision *string `json:"request_revision"`
+		// True when request_revision is the change's agreed revision, the one in
+		// force, as get_build reports it. It stays true while a proposed revision
+		// waits and when a refreshed draft is adopted without changing
+		// request_revision. If adoption or confirmation changes the agreed
+		// request_revision, it becomes false; verify_change refuses this earlier
+		// revision, and the assignment stays as it is until the user builds again.
+		InForce *bool `json:"in_force"`
+		// True once you read this assignment in full with get_builder_assignment.
+		Read *bool `json:"read"`
+		// Where the test writer's tests for this build stand: not_used when no test
+		// writer is used because the project has stored verification settings;
+		// otherwise accepted, with the commit and time, when the build records
+		// accepted tests, and not_yet_accepted when it records none.
+		WrittenTests *WrittenTests `json:"written_tests"`
+		// Absolute path of the folder to build in: the project's folder inside your
+		// working copy .surla-build, on the build's branch surla/build-<n>. Run git
+		// and go there, never in the project folder.
+		WorkingFolder *string `json:"working_folder"`
+		// True when no go.work lies in working_folder or in a folder between it and
+		// the working copy's root: run every go command there as GOWORK=off go …, so a
+		// go.work of the project folder around your copy does not take it over.
+		GoworkOff *bool `json:"gowork_off"`
 	}
 	// GetChangePayloadTransport is the internal JSON transport type for GetChangePayload.
 	// It lives in the toolset-local http package and is used only for JSON
@@ -287,7 +439,7 @@ type (
 		ChangeID *string `json:"change_id"`
 		// Checkpoint status (needs_confirmation or confirmed).
 		Status *string `json:"status"`
-		// Operator feature request for this revision.
+		// The user's feature request for this revision.
 		Prompt *string `json:"prompt"`
 		// Plain-English summary of the proposed change from propose_change or
 		// revise_change. confirm_intent does not rewrite this text; when status is
@@ -308,7 +460,7 @@ type (
 		// revision in declaration order; omitted when the card has no Stories.
 		// Included in request_revision.
 		Stories []*StorySummaryItemTransport `json:"stories,omitempty"`
-		// Authenticated principal that confirmed the Change Card.
+		// User who confirmed the Change Card.
 		ConfirmedBy *string `json:"confirmed_by,omitempty"`
 		// SHA-256 digest of the canonical versioned Change Card.
 		RequestRevision *string `json:"request_revision"`
@@ -316,18 +468,42 @@ type (
 		// sent one. A confirm_intent that changes answers or examples returns the new
 		// revision without it.
 		UIComposition *UICompositionItemTransport `json:"ui_composition,omitempty"`
-		// Checkpoint 5 approval of this revision, present only while it is verified
-		// against the promotion target's current inputs on this read. It is absent
-		// before approve_merge succeeds, whenever the target's suite, environment or
-		// binary digests have changed since, and whenever current inputs cannot be
+		// Checkpoint 5 approval of this revision, present while suite_commit is still
+		// the tests' commit chosen for this revision and (when a promotion target is
+		// configured) the promotion target's current binary digests still equal
+		// artifacts on this read. It is absent before approve_merge succeeds, whenever
+		// the chosen tests' commit or the staged binary digests have changed since,
+		// and whenever a configured promotion target's staged binaries cannot be
 		// verified (see unverified_approval). It is never hashed into request_revision.
 		Approval *ApprovalItemTransport `json:"approval,omitempty"`
-		// Saved Checkpoint 5 approval of this revision when current promotion inputs
-		// could not be verified on this read (because no promotion target is
-		// configured or the target could not report its current inputs). At most one
-		// of approval or unverified_approval is set. It is never saved to disk or
-		// hashed into request_revision.
+		// Saved Checkpoint 5 approval of this revision when suite_commit still matches
+		// the chosen tests' commit and promotion settings are configured, but the
+		// staged binaries could not be verified on this read. At most one of approval
+		// or unverified_approval is set. It is never saved to disk or hashed into
+		// request_revision.
 		UnverifiedApproval *UnverifiedApprovalItemTransport `json:"unverified_approval,omitempty"`
+		// The revision the guide proposed beside this confirmed revision, while it
+		// waits for the user to adopt or decline it; absent otherwise. This card's own
+		// fields describe the revision in force.
+		ProposedRevision *ProposedRevisionItemTransport `json:"proposed_revision,omitempty"`
+	}
+	// GetLiveTargetPayloadTransport is the internal JSON transport type for GetLiveTargetPayload.
+	// It lives in the toolset-local http package and is used only for JSON
+	// decode + validation (missing-field detection) before transforming into
+	// the public tool type.
+	GetLiveTargetPayloadTransport struct {
+	}
+	// GetLiveTargetResultTransport is the internal JSON transport type for GetLiveTargetResult.
+	// It lives in the toolset-local http package and is used only for JSON
+	// decode + validation (missing-field detection) before transforming into
+	// the public tool type.
+	GetLiveTargetResultTransport struct {
+		// none when no live target runs; starting while one is built and started;
+		// running with its commit, address, start time and the prompts whose drafts
+		// are in force; not_confirmed_stopped when its processes could not be
+		// confirmed stopped; ended when a ready target ended unexpectedly and cleanup
+		// is confirmed.
+		LiveTarget *LiveTarget `json:"live_target"`
 	}
 	// GetStoryRefreshPayloadTransport is the internal JSON transport type for GetStoryRefreshPayload.
 	// It lives in the toolset-local http package and is used only for JSON
@@ -340,15 +516,20 @@ type (
 	// decode + validation (missing-field detection) before transforming into
 	// the public tool type.
 	GetStoryRefreshResultTransport struct {
-		// Identifier of the caller's current Story refresh operation for the bound
-		// workspace; present when state is running, succeeded, or failed. Pass it as
+		// Absolute path intended for the guide's draft, .surla-draft in the project
+		// folder, whose go.mod, go.sum and design/ refresh_story reads. When state is
+		// none, this path does not mean the folder exists; refresh_story makes it when
+		// needed.
+		DraftFolder *string `json:"draft_folder"`
+		// Identifier of the owner's current Story refresh operation for the guide's
+		// draft; present when state is running, succeeded, or failed. Pass it as
 		// story_refresh_op_id to propose_change or revise_change once state is
 		// succeeded to adopt the evaluated Story into a Change Card.
 		OpID *string `json:"op_id,omitempty"`
 		// Current operation state: none, running, succeeded, or failed.
 		State *string `json:"state"`
-		// Canonical SHA-256 digest of the workspace module snapshot read when this
-		// refresh started; present when state is running, succeeded, or failed.
+		// Canonical SHA-256 digest of the draft snapshot read when this refresh
+		// started; present when state is running, succeeded, or failed.
 		SnapshotDigest *string `json:"snapshot_digest,omitempty"`
 		// Evaluated domain Stories in declaration order when state is succeeded (empty
 		// when the design declares no Stories or when state is none, running, or
@@ -356,8 +537,71 @@ type (
 		Stories []*StorySummaryItemTransport `json:"stories"`
 		// Safe failure or timeout diagnostic when state is failed; omitted otherwise.
 		Diagnostic *string `json:"diagnostic,omitempty"`
-		// Summary of the current Story refresh state and next action.
+		// Summary of the current Story refresh state and next action. After a dropped
+		// build remakes the draft and until a revision is saved from it, begins by
+		// naming the dropped change and saying that edits made before then are gone.
 		Message *string `json:"message"`
+	}
+	// GetTestWriterAssignmentPayloadTransport is the internal JSON transport type for GetTestWriterAssignmentPayload.
+	// It lives in the toolset-local http package and is used only for JSON
+	// decode + validation (missing-field detection) before transforming into
+	// the public tool type.
+	GetTestWriterAssignmentPayloadTransport struct {
+		// Change Card identifier from list_test_writer_assignments.
+		ChangeID *string `json:"change_id"`
+	}
+	// GetTestWriterAssignmentResultTransport is the internal JSON transport type for GetTestWriterAssignmentResult.
+	// It lives in the toolset-local http package and is used only for JSON
+	// decode + validation (missing-field detection) before transforming into
+	// the public tool type.
+	GetTestWriterAssignmentResultTransport struct {
+		// Change Card the tests are for.
+		ChangeID *string `json:"change_id"`
+		// Change Card revision the tests are for; report_tests_finished takes it.
+		RequestRevision *string `json:"request_revision"`
+		// True when request_revision is the change's agreed revision, the one in
+		// force, as get_build reports it. It stays true while a proposed revision
+		// waits and when a refreshed draft is adopted without changing
+		// request_revision. If adoption or confirmation changes the agreed
+		// request_revision, it becomes false; the assignment stays on the earlier
+		// revision until the user builds again.
+		InForce *bool `json:"in_force"`
+		// Where this assignment stands.
+		Progress *TestWriterProgressTransport `json:"progress"`
+		// Surla's findings, one problem per item, with no absolute path: as many as
+		// progress gives in finding_count when its state is needs_changes, and none in
+		// any other state. Fix them in working_folder, then report again.
+		Findings []string `json:"findings"`
+		// Folder to write the tests in: your own working copy of the project,
+		// .surla-tests, on the build's branch surla/tests-<n>. Do not commit there:
+		// Surla commits what it accepts.
+		WorkingFolder *string `json:"working_folder"`
+		// The canonical design source as agreed at request_revision, copied when this
+		// build started; later revisions do not change it.
+		DesignSource *string `json:"design_source"`
+		// The Story as agreed at request_revision, in declaration order. It does not
+		// change when the change is revised later.
+		Stories []*StorySummaryItemTransport `json:"stories"`
+		// One test per finished flow of stories, in declaration order; unfinished
+		// flows require none.
+		RequiredTests []*RequiredTestTransport `json:"required_tests"`
+		// Each question of the change as agreed at request_revision with the answer
+		// the user confirmed, in question order, copied when this build started; empty
+		// when the agreed revision asked none. The tests must hold the service to
+		// every answer.
+		Answers []*ConfirmedAnswerTransport `json:"answers"`
+		// The confirmation examples as agreed at request_revision, exactly as the user
+		// confirmed them, copied when this build started. The tests must hold the
+		// service to each expected outcome.
+		Examples []*ExampleItemTransport `json:"examples"`
+		// The existing behaviors the change as agreed at request_revision keeps,
+		// copied when this build started; empty when it names none. The tests must
+		// hold the service to each.
+		PreservedBehaviors []string `json:"preserved_behaviors"`
+		// Statements submitted with the latest report, retained for correction after
+		// findings or a check that could not run; empty before any report or when none
+		// were stated.
+		CoverageStatements []*TestCoverageStatementTransport `json:"coverage_statements"`
 	}
 	// GetVerificationPayloadTransport is the internal JSON transport type for GetVerificationPayload.
 	// It lives in the toolset-local http package and is used only for JSON
@@ -380,10 +624,24 @@ type (
 		RequestRevision *string `json:"request_revision"`
 		// Candidate commit the run builds and verifies.
 		CandidateCommit *string `json:"candidate_commit"`
-		// Evaluator suite commit the operator configured for the run.
+		// Commit of the tests the run uses: the operator's evaluator, or the tests
+		// accepted for the change's build.
 		SuiteCommit *string `json:"suite_commit"`
 		// When the run was accepted.
 		AcceptedAt *string `json:"accepted_at"`
+		// Whether this run's agreed revision and selected tests match the current
+		// Change Card and the usable build or the stored verification settings. This
+		// observation does not establish the current candidate working tree,
+		// deployment or approval.
+		InputsCurrent *bool `json:"inputs_current"`
+		// Absolute folder containing the binaries built by this completed run.
+		// Returned only to the user when promotion settings are configured, so the
+		// user can publish these exact binaries before approval. Agents never receive
+		// this private path.
+		CandidateBinariesDir *string `json:"candidate_binaries_dir,omitempty"`
+		// Where the run's tests came from, recorded when the run started: evaluator,
+		// or written_tests with their commit and a notice.
+		TestSource *TestSource `json:"test_source"`
 		// Exactly one of running, completed or not_completed.
 		State *State `json:"state"`
 	}
@@ -414,6 +672,56 @@ type (
 		// repository (40 or 64 lowercase hex characters); start_live_target and
 		// verify_change take this commit ID.
 		Commit *string `json:"commit"`
+	}
+	// ListBuilderAssignmentsPayloadTransport is the internal JSON transport type for ListBuilderAssignmentsPayload.
+	// It lives in the toolset-local http package and is used only for JSON
+	// decode + validation (missing-field detection) before transforming into
+	// the public tool type.
+	ListBuilderAssignmentsPayloadTransport struct {
+	}
+	// ListBuilderAssignmentsResultTransport is the internal JSON transport type for ListBuilderAssignmentsResult.
+	// It lives in the toolset-local http package and is used only for JSON
+	// decode + validation (missing-field detection) before transforming into
+	// the public tool type.
+	ListBuilderAssignmentsResultTransport struct {
+		// The open build's assignment while it needs this role; empty otherwise.
+		Assignments []*BuilderAssignmentTransport `json:"assignments"`
+	}
+	// ListChangesPayloadTransport is the internal JSON transport type for ListChangesPayload.
+	// It lives in the toolset-local http package and is used only for JSON
+	// decode + validation (missing-field detection) before transforming into
+	// the public tool type.
+	ListChangesPayloadTransport struct {
+	}
+	// ListChangesResultTransport is the internal JSON transport type for ListChangesResult.
+	// It lives in the toolset-local http package and is used only for JSON
+	// decode + validation (missing-field detection) before transforming into
+	// the public tool type.
+	ListChangesResultTransport struct {
+		// Saved Change Cards, most recently saved first.
+		Changes []*ChangeListItemTransport `json:"changes"`
+		// Opaque value for change detection. Compare it only for equality; the
+		// returned fields contain the facts this operation makes readable.
+		Version *string `json:"version"`
+		// Whether approve_merge can record approvals on this server: true when the
+		// server runs Checkpoint 4 verification, as every server surla starts does,
+		// and any stored promotion settings could be resolved; false when the server
+		// runs no verification or resolving the promotion target fails.
+		ApprovalAvailable *bool `json:"approval_available"`
+	}
+	// ListTestWriterAssignmentsPayloadTransport is the internal JSON transport type for ListTestWriterAssignmentsPayload.
+	// It lives in the toolset-local http package and is used only for JSON
+	// decode + validation (missing-field detection) before transforming into
+	// the public tool type.
+	ListTestWriterAssignmentsPayloadTransport struct {
+	}
+	// ListTestWriterAssignmentsResultTransport is the internal JSON transport type for ListTestWriterAssignmentsResult.
+	// It lives in the toolset-local http package and is used only for JSON
+	// decode + validation (missing-field detection) before transforming into
+	// the public tool type.
+	ListTestWriterAssignmentsResultTransport struct {
+		// The open build's assignment while it needs this role; empty otherwise.
+		Assignments []*TestWriterAssignmentItemTransport `json:"assignments"`
 	}
 	// ListTracesPayloadTransport is the internal JSON transport type for ListTracesPayload.
 	// It lives in the toolset-local http package and is used only for JSON
@@ -469,20 +777,6 @@ type (
 		ChangeID *string `json:"change_id"`
 		// Expected CP1 request_revision digest.
 		RequestRevision *string `json:"request_revision"`
-		// Candidate module whose Goa and Goa-AI design is evaluated. When omitted on a
-		// server with a bound workspace, Surla reads the candidate module snapshot
-		// from the bound workspace.
-		Design *DesignSnapshotTransport `json:"design,omitempty"`
-		// Optional explicit builder path scopes for proposing a Chorus build roster.
-		// When omitted, preview_architecture returns a solo preview with swarm.status
-		// unconfigured and no missing_roles.
-		Builders []*BuilderScopeItemTransport `json:"builders,omitempty"`
-		// Optional repository-relative path globs for an @architect role in the
-		// proposed Chorus roster (requires builders).
-		ArchitectPaths []string `json:"architect_paths,omitempty"`
-		// Optional repository or evaluator-workspace relative path globs for an
-		// @eval-author role in the proposed Chorus roster (requires builders).
-		EvalPaths []string `json:"eval_paths,omitempty"`
 	}
 	// PreviewArchitectureResultTransport is the internal JSON transport type for PreviewArchitectureResult.
 	// It lives in the toolset-local http package and is used only for JSON
@@ -493,8 +787,8 @@ type (
 		ChangeID *string `json:"change_id"`
 		// Bound CP1 request_revision digest.
 		RequestRevision *string `json:"request_revision"`
-		// SHA-256 digest of the evaluated design snapshot (sorted path and content
-		// pairs).
+		// SHA-256 digest of the design snapshot the revision's refresh evaluated
+		// (sorted path and content pairs).
 		DesignDigest *string `json:"design_digest"`
 		// API or primary service name declared in the design.
 		SystemName *string `json:"system_name"`
@@ -506,8 +800,6 @@ type (
 		AgentPolicies []*AgentPolicyItemTransport `json:"agent_policies"`
 		// Evaluated Goa-AI tool contracts.
 		Tools []*ToolContractItemTransport `json:"tools"`
-		// Proposed Chorus multi-agent role assignments and model-family routing.
-		Swarm *SwarmPlanItemTransport `json:"swarm"`
 		// Plain-English summary of topology and guardrails.
 		Banner *string `json:"banner"`
 	}
@@ -518,21 +810,11 @@ type (
 	ProposeChangePayloadTransport struct {
 		// Unique change identifier.
 		ChangeID *string `json:"change_id"`
-		// Operator feature request.
+		// The user's feature request.
 		Prompt *string `json:"prompt"`
-		// Goa design source the analysis was made against (the target's design/*.go
-		// files). Surla saves it with the card and includes it in request_revision; it
-		// does not interpret it. When omitted on a server with a bound workspace,
-		// Surla records design/*.go from the bound workspace; when omitted without a
-		// bound workspace, the card records no design. Cannot be combined with
-		// story_refresh_op_id.
-		DesignSource *string `json:"design_source,omitempty"`
-		// Optional op_id of a succeeded refresh_story operation for the bound
-		// workspace whose evaluated Stories this card adopts. When set, design_source
-		// must be omitted; Surla reads one workspace snapshot, requires its
-		// snapshot_digest to match the operation's, and records both the evaluated
-		// Stories and that snapshot's design/*.go on the card. Omit when the card has
-		// no Story.
+		// op_id of a succeeded refresh_story operation whose evaluated draft this card
+		// adopts: its design, Stories, architecture, go.mod and made-from list.
+		// Required when the project folder holds a go.mod; Surla reads no file.
 		StoryRefreshOpID *string `json:"story_refresh_op_id,omitempty"`
 		// Your analysis of prompt against the target's current design.
 		Analysis *CP1AnalysisTransport `json:"analysis"`
@@ -546,7 +828,7 @@ type (
 		ChangeID *string `json:"change_id"`
 		// Checkpoint status (needs_confirmation or confirmed).
 		Status *string `json:"status"`
-		// Operator feature request for this revision.
+		// The user's feature request for this revision.
 		Prompt *string `json:"prompt"`
 		// Plain-English summary of the proposed change from propose_change or
 		// revise_change. confirm_intent does not rewrite this text; when status is
@@ -567,7 +849,7 @@ type (
 		// revision in declaration order; omitted when the card has no Stories.
 		// Included in request_revision.
 		Stories []*StorySummaryItemTransport `json:"stories,omitempty"`
-		// Authenticated principal that confirmed the Change Card.
+		// User who confirmed the Change Card.
 		ConfirmedBy *string `json:"confirmed_by,omitempty"`
 		// SHA-256 digest of the canonical versioned Change Card.
 		RequestRevision *string `json:"request_revision"`
@@ -575,18 +857,24 @@ type (
 		// sent one. A confirm_intent that changes answers or examples returns the new
 		// revision without it.
 		UIComposition *UICompositionItemTransport `json:"ui_composition,omitempty"`
-		// Checkpoint 5 approval of this revision, present only while it is verified
-		// against the promotion target's current inputs on this read. It is absent
-		// before approve_merge succeeds, whenever the target's suite, environment or
-		// binary digests have changed since, and whenever current inputs cannot be
+		// Checkpoint 5 approval of this revision, present while suite_commit is still
+		// the tests' commit chosen for this revision and (when a promotion target is
+		// configured) the promotion target's current binary digests still equal
+		// artifacts on this read. It is absent before approve_merge succeeds, whenever
+		// the chosen tests' commit or the staged binary digests have changed since,
+		// and whenever a configured promotion target's staged binaries cannot be
 		// verified (see unverified_approval). It is never hashed into request_revision.
 		Approval *ApprovalItemTransport `json:"approval,omitempty"`
-		// Saved Checkpoint 5 approval of this revision when current promotion inputs
-		// could not be verified on this read (because no promotion target is
-		// configured or the target could not report its current inputs). At most one
-		// of approval or unverified_approval is set. It is never saved to disk or
-		// hashed into request_revision.
+		// Saved Checkpoint 5 approval of this revision when suite_commit still matches
+		// the chosen tests' commit and promotion settings are configured, but the
+		// staged binaries could not be verified on this read. At most one of approval
+		// or unverified_approval is set. It is never saved to disk or hashed into
+		// request_revision.
 		UnverifiedApproval *UnverifiedApprovalItemTransport `json:"unverified_approval,omitempty"`
+		// The revision the guide proposed beside this confirmed revision, while it
+		// waits for the user to adopt or decline it; absent otherwise. This card's own
+		// fields describe the revision in force.
+		ProposedRevision *ProposedRevisionItemTransport `json:"proposed_revision,omitempty"`
 	}
 	// ReadCheckOutputPayloadTransport is the internal JSON transport type for ReadCheckOutputPayload.
 	// It lives in the toolset-local http package and is used only for JSON
@@ -624,15 +912,20 @@ type (
 	// decode + validation (missing-field detection) before transforming into
 	// the public tool type.
 	RefreshStoryResultTransport struct {
-		// Identifier of the caller's current Story refresh operation for the bound
-		// workspace; present when state is running, succeeded, or failed. Pass it as
+		// Absolute path intended for the guide's draft, .surla-draft in the project
+		// folder, whose go.mod, go.sum and design/ refresh_story reads. When state is
+		// none, this path does not mean the folder exists; refresh_story makes it when
+		// needed.
+		DraftFolder *string `json:"draft_folder"`
+		// Identifier of the owner's current Story refresh operation for the guide's
+		// draft; present when state is running, succeeded, or failed. Pass it as
 		// story_refresh_op_id to propose_change or revise_change once state is
 		// succeeded to adopt the evaluated Story into a Change Card.
 		OpID *string `json:"op_id,omitempty"`
 		// Current operation state: none, running, succeeded, or failed.
 		State *string `json:"state"`
-		// Canonical SHA-256 digest of the workspace module snapshot read when this
-		// refresh started; present when state is running, succeeded, or failed.
+		// Canonical SHA-256 digest of the draft snapshot read when this refresh
+		// started; present when state is running, succeeded, or failed.
 		SnapshotDigest *string `json:"snapshot_digest,omitempty"`
 		// Evaluated domain Stories in declaration order when state is succeeded (empty
 		// when the design declares no Stories or when state is none, running, or
@@ -640,8 +933,87 @@ type (
 		Stories []*StorySummaryItemTransport `json:"stories"`
 		// Safe failure or timeout diagnostic when state is failed; omitted otherwise.
 		Diagnostic *string `json:"diagnostic,omitempty"`
-		// Summary of the current Story refresh state and next action.
+		// Summary of the current Story refresh state and next action. After a dropped
+		// build remakes the draft and until a revision is saved from it, begins by
+		// naming the dropped change and saying that edits made before then are gone.
 		Message *string `json:"message"`
+	}
+	// ReportTestsFinishedPayloadTransport is the internal JSON transport type for ReportTestsFinishedPayload.
+	// It lives in the toolset-local http package and is used only for JSON
+	// decode + validation (missing-field detection) before transforming into
+	// the public tool type.
+	ReportTestsFinishedPayloadTransport struct {
+		// Change Card identifier from your test assignment.
+		ChangeID *string `json:"change_id"`
+		// request_revision of your test assignment.
+		RequestRevision *string `json:"request_revision"`
+		// Your stated scenario coverage of this assignment's answers and examples; use
+		// [] when none is stated. Surla validates references but does not judge
+		// assertion meaning.
+		CoverageStatements []*TestCoverageStatementTransport `json:"coverage_statements"`
+	}
+	// ReportTestsFinishedResultTransport is the internal JSON transport type for ReportTestsFinishedResult.
+	// It lives in the toolset-local http package and is used only for JSON
+	// decode + validation (missing-field detection) before transforming into
+	// the public tool type.
+	ReportTestsFinishedResultTransport struct {
+		// Change Card the tests are for; get_test_writer_assignment takes it.
+		ChangeID *string `json:"change_id"`
+		// Change Card revision the tests are for.
+		RequestRevision *string `json:"request_revision"`
+		// True when request_revision is the change's agreed revision, the one in
+		// force, as get_build reports it. It stays true while a proposed revision
+		// waits and when a refreshed draft is adopted without changing
+		// request_revision. If adoption or confirmation changes the agreed
+		// request_revision, it becomes false; the assignment stays on the earlier
+		// revision until the user builds again.
+		InForce *bool `json:"in_force"`
+		// Where this assignment stands.
+		Progress *TestWriterProgressTransport `json:"progress"`
+	}
+	// ReviewVerificationPayloadTransport is the internal JSON transport type for ReviewVerificationPayload.
+	// It lives in the toolset-local http package and is used only for JSON
+	// decode + validation (missing-field detection) before transforming into
+	// the public tool type.
+	ReviewVerificationPayloadTransport struct {
+		// Verification run identifier returned by verify_change.
+		RunID *string `json:"run_id"`
+	}
+	// ReviewVerificationResultTransport is the internal JSON transport type for ReviewVerificationResult.
+	// It lives in the toolset-local http package and is used only for JSON
+	// decode + validation (missing-field detection) before transforming into
+	// the public tool type.
+	ReviewVerificationResultTransport struct {
+		// Immutable Story evidence and the owner's current approval observation.
+		Review *VerificationReviewTransport `json:"review"`
+		// Verification run identifier; get_verification takes it.
+		RunID *string `json:"run_id"`
+		// Change Card the run verifies.
+		ChangeID *string `json:"change_id"`
+		// Change Card revision the run verifies.
+		RequestRevision *string `json:"request_revision"`
+		// Candidate commit the run builds and verifies.
+		CandidateCommit *string `json:"candidate_commit"`
+		// Commit of the tests the run uses: the operator's evaluator, or the tests
+		// accepted for the change's build.
+		SuiteCommit *string `json:"suite_commit"`
+		// When the run was accepted.
+		AcceptedAt *string `json:"accepted_at"`
+		// Whether this run's agreed revision and selected tests match the current
+		// Change Card and the usable build or the stored verification settings. This
+		// observation does not establish the current candidate working tree,
+		// deployment or approval.
+		InputsCurrent *bool `json:"inputs_current"`
+		// Absolute folder containing the binaries built by this completed run.
+		// Returned only to the user when promotion settings are configured, so the
+		// user can publish these exact binaries before approval. Agents never receive
+		// this private path.
+		CandidateBinariesDir *string `json:"candidate_binaries_dir,omitempty"`
+		// Where the run's tests came from, recorded when the run started: evaluator,
+		// or written_tests with their commit and a notice.
+		TestSource *TestSource `json:"test_source"`
+		// Exactly one of running, completed or not_completed.
+		State *State `json:"state"`
 	}
 	// ReviseChangePayloadTransport is the internal JSON transport type for ReviseChangePayload.
 	// It lives in the toolset-local http package and is used only for JSON
@@ -650,26 +1022,17 @@ type (
 	ReviseChangePayloadTransport struct {
 		// Change identifier.
 		ChangeID *string `json:"change_id"`
-		// Current CP1 request_revision digest being revised.
+		// request_revision of the latest revision you read: the proposed revision's
+		// when the change shows one waiting (proposed_revision.request_revision),
+		// otherwise the change's own.
 		RequestRevision *string `json:"request_revision"`
-		// Revised operator feature request.
+		// The user's revised feature request.
 		Prompt *string `json:"prompt"`
-		// Updated Goa design source the analysis was made against (the target's
-		// design/*.go files). Surla saves it with the card and includes it in
-		// request_revision; it does not interpret it. When omitted on a
-		// workspace-backed card without Stories and with a bound workspace, Surla
-		// records design/*.go from the bound workspace again; otherwise the card's
-		// saved design source is kept. Cannot be set when story_refresh_op_id is set
-		// or when the card already has adopted Stories.
-		DesignSource *string `json:"design_source,omitempty"`
-		// Optional op_id of a succeeded refresh_story operation for the bound
-		// workspace whose evaluated Stories this revision adopts. When set,
-		// design_source must be omitted and the card must not use a caller-supplied
-		// design_source; Surla reads one workspace snapshot, requires its
-		// snapshot_digest to match the operation's, and records both the evaluated
-		// Stories and that snapshot's design/*.go on the revised card. When omitted on
-		// a card that already has Stories, the card's saved Stories and saved
-		// design_source are kept together.
+		// op_id of a succeeded refresh_story operation whose evaluated draft this
+		// revision adopts. When omitted, the revision keeps every snapshot field of
+		// the revision it revises: design, Stories, architecture, go.mod and made-from
+		// list, even with zero Stories. A project with a go.mod refuses an omitted
+		// op_id when that revision has no design. Surla reads no file.
 		StoryRefreshOpID *string `json:"story_refresh_op_id,omitempty"`
 		// Your analysis of the revised prompt against the current card and the
 		// target's current design.
@@ -684,7 +1047,7 @@ type (
 		ChangeID *string `json:"change_id"`
 		// Checkpoint status (needs_confirmation or confirmed).
 		Status *string `json:"status"`
-		// Operator feature request for this revision.
+		// The user's feature request for this revision.
 		Prompt *string `json:"prompt"`
 		// Plain-English summary of the proposed change from propose_change or
 		// revise_change. confirm_intent does not rewrite this text; when status is
@@ -705,7 +1068,7 @@ type (
 		// revision in declaration order; omitted when the card has no Stories.
 		// Included in request_revision.
 		Stories []*StorySummaryItemTransport `json:"stories,omitempty"`
-		// Authenticated principal that confirmed the Change Card.
+		// User who confirmed the Change Card.
 		ConfirmedBy *string `json:"confirmed_by,omitempty"`
 		// SHA-256 digest of the canonical versioned Change Card.
 		RequestRevision *string `json:"request_revision"`
@@ -713,24 +1076,32 @@ type (
 		// sent one. A confirm_intent that changes answers or examples returns the new
 		// revision without it.
 		UIComposition *UICompositionItemTransport `json:"ui_composition,omitempty"`
-		// Checkpoint 5 approval of this revision, present only while it is verified
-		// against the promotion target's current inputs on this read. It is absent
-		// before approve_merge succeeds, whenever the target's suite, environment or
-		// binary digests have changed since, and whenever current inputs cannot be
+		// Checkpoint 5 approval of this revision, present while suite_commit is still
+		// the tests' commit chosen for this revision and (when a promotion target is
+		// configured) the promotion target's current binary digests still equal
+		// artifacts on this read. It is absent before approve_merge succeeds, whenever
+		// the chosen tests' commit or the staged binary digests have changed since,
+		// and whenever a configured promotion target's staged binaries cannot be
 		// verified (see unverified_approval). It is never hashed into request_revision.
 		Approval *ApprovalItemTransport `json:"approval,omitempty"`
-		// Saved Checkpoint 5 approval of this revision when current promotion inputs
-		// could not be verified on this read (because no promotion target is
-		// configured or the target could not report its current inputs). At most one
-		// of approval or unverified_approval is set. It is never saved to disk or
-		// hashed into request_revision.
+		// Saved Checkpoint 5 approval of this revision when suite_commit still matches
+		// the chosen tests' commit and promotion settings are configured, but the
+		// staged binaries could not be verified on this read. At most one of approval
+		// or unverified_approval is set. It is never saved to disk or hashed into
+		// request_revision.
 		UnverifiedApproval *UnverifiedApprovalItemTransport `json:"unverified_approval,omitempty"`
+		// The revision the guide proposed beside this confirmed revision, while it
+		// waits for the user to adopt or decline it; absent otherwise. This card's own
+		// fields describe the revision in force.
+		ProposedRevision *ProposedRevisionItemTransport `json:"proposed_revision,omitempty"`
 	}
 	// StartLiveTargetPayloadTransport is the internal JSON transport type for StartLiveTargetPayload.
 	// It lives in the toolset-local http package and is used only for JSON
 	// decode + validation (missing-field detection) before transforming into
 	// the public tool type.
 	StartLiveTargetPayloadTransport struct {
+		// Owned, confirmed change from list_builder_assignments.
+		ChangeID *string `json:"change_id"`
 		// Full commit ID to build, in the candidate repository's object format.
 		CandidateCommit *string `json:"candidate_commit"`
 	}
@@ -777,12 +1148,35 @@ type (
 	UpdateDependenciesResultTransport struct {
 		// Operation identifier; pass it to read_check_output to read the full output.
 		OpID *string `json:"op_id"`
-		// Workspace-relative go.mod, go.sum and go.work.sum files whose bytes changed
-		// and were written.
+		// Working-folder-relative go.mod, go.sum and go.work.sum files whose bytes
+		// changed and were written.
 		FilesWritten []string `json:"files_written"`
 		// At most 16 KiB: what was updated, and Go's message for any module that could
 		// not be.
 		Message *string `json:"message"`
+	}
+	// UpdateDraftPayloadTransport is the internal JSON transport type for UpdateDraftPayload.
+	// It lives in the toolset-local http package and is used only for JSON
+	// decode + validation (missing-field detection) before transforming into
+	// the public tool type.
+	UpdateDraftPayloadTransport struct {
+	}
+	// UpdateDraftResultTransport is the internal JSON transport type for UpdateDraftResult.
+	// It lives in the toolset-local http package and is used only for JSON
+	// decode + validation (missing-field detection) before transforming into
+	// the public tool type.
+	UpdateDraftResultTransport struct {
+		// Absolute path of the guide's draft folder.
+		DraftFolder *string `json:"draft_folder"`
+		// Design files the draft took from the project folder because it had not
+		// changed them, in path order.
+		Taken []string `json:"taken"`
+		// Design files where the project folder's change and the draft's edits merged
+		// without conflict, in path order.
+		Merged []string `json:"merged"`
+		// Files to correct before refreshing, each in the folder it names, in path
+		// order; empty when none.
+		ToCorrect []*DraftCorrectionTransport `json:"to_correct"`
 	}
 	// VerifyChangePayloadTransport is the internal JSON transport type for VerifyChangePayload.
 	// It lives in the toolset-local http package and is used only for JSON
@@ -810,10 +1204,24 @@ type (
 		RequestRevision *string `json:"request_revision"`
 		// Candidate commit the run builds and verifies.
 		CandidateCommit *string `json:"candidate_commit"`
-		// Evaluator suite commit the operator configured for the run.
+		// Commit of the tests the run uses: the operator's evaluator, or the tests
+		// accepted for the change's build.
 		SuiteCommit *string `json:"suite_commit"`
 		// When the run was accepted.
 		AcceptedAt *string `json:"accepted_at"`
+		// Whether this run's agreed revision and selected tests match the current
+		// Change Card and the usable build or the stored verification settings. This
+		// observation does not establish the current candidate working tree,
+		// deployment or approval.
+		InputsCurrent *bool `json:"inputs_current"`
+		// Absolute folder containing the binaries built by this completed run.
+		// Returned only to the user when promotion settings are configured, so the
+		// user can publish these exact binaries before approval. Agents never receive
+		// this private path.
+		CandidateBinariesDir *string `json:"candidate_binaries_dir,omitempty"`
+		// Where the run's tests came from, recorded when the run started: evaluator,
+		// or written_tests with their commit and a notice.
+		TestSource *TestSource `json:"test_source"`
 		// Exactly one of running, completed or not_completed.
 		State *State `json:"state"`
 	}
@@ -839,6 +1247,17 @@ type (
 		// True when prompt caching places a checkpoint after tool definitions.
 		CacheAfterTools *bool `json:"cache_after_tools"`
 	}
+	// AgentWrittenTestsTransport is the internal JSON transport type for AgentWrittenTestsTransport.
+	// It lives in the toolset-local http package and is used only for JSON
+	// decode + validation (missing-field detection) before transforming into
+	// the public tool type.
+	AgentWrittenTestsTransport struct {
+		// Commit Surla recorded the accepted tests at; the same as suite_commit.
+		Commit *string `json:"commit"`
+		// Always: These tests were written by a separate agent on this machine and are
+		// not isolated from the builder.
+		Notice *string `json:"notice"`
+	}
 	// AmbiguityQuestionTransport is the internal JSON transport type for AmbiguityQuestionTransport.
 	// It lives in the toolset-local http package and is used only for JSON
 	// decode + validation (missing-field detection) before transforming into
@@ -846,7 +1265,7 @@ type (
 	AmbiguityQuestionTransport struct {
 		// Stable question identifier.
 		ID *string `json:"id"`
-		// Plain-English question for the operator.
+		// Plain-English question for the user.
 		Question *string `json:"question"`
 		// Concrete resolution choices.
 		Options []string `json:"options"`
@@ -856,37 +1275,130 @@ type (
 	// decode + validation (missing-field detection) before transforming into
 	// the public tool type.
 	ApprovalItemTransport struct {
-		// Authenticated principal that owns the card and called approve_merge.
-		// Authentication does not prove that a human, rather than a coding agent, made
-		// the call.
+		// User who approved the result.
 		ApprovedBy *string `json:"approved_by"`
 		// SHA-256 digest of the approved CP4 verification report.
 		ReportDigest *string `json:"report_digest"`
 		// Candidate commit the report was checked against.
 		CandidateCommit *string `json:"candidate_commit"`
-		// Evaluator suite the promotion target requires.
+		// Suite identifier the tests at suite_commit declared in the report (shown,
+		// not compared).
 		SuiteID *string `json:"suite_id"`
-		// Evaluator suite commit the promotion target requires.
+		// Commit of the tests the report ran: the evaluator suite commit in the stored
+		// verification settings, or the tests Surla accepted for the change's build.
 		SuiteCommit *string `json:"suite_commit"`
-		// Dependency profile the promotion target requires, such as sim.
+		// Dependency profile the tests at suite_commit declared in the report, such as
+		// sim or scripted-model (shown, not compared).
 		Environment *string `json:"environment"`
 		// SHA-256 digest of each candidate binary the promotion target measured, keyed
-		// by binary name.
+		// by binary name; empty when no promotion settings are configured.
 		Artifacts map[string]string `json:"artifacts"`
-		// Number of declared evaluator scenarios, every one of which passed.
+		// Number of declared scenarios in the report, every one of which passed.
 		ScenarioCount *int `json:"scenario_count"`
+		// Where the tests at suite_commit came from, derived on each read: evaluator,
+		// or written_tests with their commit and a notice.
+		TestSource *ApprovalTestSource `json:"test_source"`
 	}
-	// BuilderScopeItemTransport is the internal JSON transport type for BuilderScopeItemTransport.
+	// BuildBuildingTransport is the internal JSON transport type for BuildBuildingTransport.
 	// It lives in the toolset-local http package and is used only for JSON
 	// decode + validation (missing-field detection) before transforming into
 	// the public tool type.
-	BuilderScopeItemTransport struct {
-		// Human-readable builder scope name (for example, orders or api).
-		Name *string `json:"name"`
-		// Repository-relative path globs owned by this builder.
-		Paths []string `json:"paths"`
-		// Optional preference selecting a server-configured authenticated profile ID.
-		PreferredProfileID *string `json:"preferred_profile_id,omitempty"`
+	BuildBuildingTransport struct {
+	}
+	// BuildDroppedTransport is the internal JSON transport type for BuildDroppedTransport.
+	// It lives in the toolset-local http package and is used only for JSON
+	// decode + validation (missing-field detection) before transforming into
+	// the public tool type.
+	BuildDroppedTransport struct {
+		// The build's own branches that exist and hold a commit made after the build's
+		// base, where its work stays (git log <branch> shows it); empty when nothing
+		// was committed for it.
+		KeptBranches []string `json:"kept_branches"`
+	}
+	// BuildMergedTransport is the internal JSON transport type for BuildMergedTransport.
+	// It lives in the toolset-local http package and is used only for JSON
+	// decode + validation (missing-field detection) before transforming into
+	// the public tool type.
+	BuildMergedTransport struct {
+	}
+	// BuildNotStartedTransport is the internal JSON transport type for BuildNotStartedTransport.
+	// It lives in the toolset-local http package and is used only for JSON
+	// decode + validation (missing-field detection) before transforming into
+	// the public tool type.
+	BuildNotStartedTransport struct {
+	}
+	// BuildPassedTestsTransport is the internal JSON transport type for BuildPassedTestsTransport.
+	// It lives in the toolset-local http package and is used only for JSON
+	// decode + validation (missing-field detection) before transforming into
+	// the public tool type.
+	BuildPassedTestsTransport struct {
+		// Commit Surla recorded the accepted tests at.
+		Commit *string `json:"commit"`
+		// The build's test-writer branch, surla/tests-<n>, where this commit was
+		// verified.
+		Branch *string `json:"branch"`
+	}
+	// BuildPassedTransport is the internal JSON transport type for BuildPassedTransport.
+	// It lives in the toolset-local http package and is used only for JSON
+	// decode + validation (missing-field detection) before transforming into
+	// the public tool type.
+	BuildPassedTransport struct {
+		// The newest passed run; get_verification takes it.
+		RunID *string `json:"run_id"`
+		// The builder's commit the run passed.
+		CandidateCommit *string `json:"candidate_commit"`
+		// The build's builder branch, surla/build-<n>, where this commit was verified.
+		CandidateBranch *string `json:"candidate_branch"`
+		// written_tests with the accepted tests' commit to merge after the builder's;
+		// evaluator when the project verifies with its stored evaluator, whose tests
+		// are not merged.
+		Tests *BuildPassedTestSource `json:"tests"`
+		// False when the branch checked out in the project folder no longer holds the
+		// commit this build started from, because its history was rewritten: merging
+		// these commits brings that history back, and dropping the build and building
+		// again starts from the branch as it is.
+		BaseInBranch *bool `json:"base_in_branch"`
+	}
+	// BuilderAssignmentTransport is the internal JSON transport type for BuilderAssignmentTransport.
+	// It lives in the toolset-local http package and is used only for JSON
+	// decode + validation (missing-field detection) before transforming into
+	// the public tool type.
+	BuilderAssignmentTransport struct {
+		// Change Card to build; get_change takes it.
+		ChangeID *string `json:"change_id"`
+		// Change Card revision to build; verify_change takes it.
+		RequestRevision *string `json:"request_revision"`
+		// True when request_revision is the change's agreed revision, the one in
+		// force, as get_build reports it. It stays true while a proposed revision
+		// waits and when a refreshed draft is adopted without changing
+		// request_revision. If adoption or confirmation changes the agreed
+		// request_revision, it becomes false; verify_change refuses this earlier
+		// revision, and the assignment stays as it is until the user builds again.
+		InForce *bool `json:"in_force"`
+		// True once you read this assignment in full with get_builder_assignment.
+		Read *bool `json:"read"`
+		// Where the test writer's tests for this build stand: not_used when no test
+		// writer is used because the project has stored verification settings;
+		// otherwise accepted, with the commit and time, when the build records
+		// accepted tests, and not_yet_accepted when it records none.
+		WrittenTests *WrittenTests `json:"written_tests"`
+		// Absolute path of the folder to build in: the project's folder inside your
+		// working copy .surla-build, on the build's branch surla/build-<n>. Run git
+		// and go there, never in the project folder.
+		WorkingFolder *string `json:"working_folder"`
+		// True when no go.work lies in working_folder or in a folder between it and
+		// the working copy's root: run every go command there as GOWORK=off go …, so a
+		// go.work of the project folder around your copy does not take it over.
+		GoworkOff *bool `json:"gowork_off"`
+	}
+	// BuilderProgressTransport is the internal JSON transport type for BuilderProgressTransport.
+	// It lives in the toolset-local http package and is used only for JSON
+	// decode + validation (missing-field detection) before transforming into
+	// the public tool type.
+	BuilderProgressTransport struct {
+		// True once the builder read this assignment in full with
+		// get_builder_assignment.
+		Read *bool `json:"read"`
 	}
 	// BuilderVerificationReportTransport is the internal JSON transport type for BuilderVerificationReportTransport.
 	// It lives in the toolset-local http package and is used only for JSON
@@ -984,8 +1496,8 @@ type (
 		// questions, built only from the decision components the surla://golden-path
 		// resource lists. Refer to an ambiguity or example only by its 1-based
 		// position in this analysis (1 is the first); never invent identifiers. Surla
-		// saves it unchanged without checking it; the checkpoint viewer validates and
-		// renders it. Omit it when a plain card is clearer.
+		// saves it unchanged without checking it; the views page validates and renders
+		// it. Omit it when a plain card is clearer.
 		UIComposition *string `json:"ui_composition,omitempty"`
 	}
 	// CP1RevisionAnalysisExampleTransport is the internal JSON transport type for CP1RevisionAnalysisExampleTransport.
@@ -1037,9 +1549,44 @@ type (
 		// questions, built only from the decision components the surla://golden-path
 		// resource lists. Refer to an ambiguity or example only by its 1-based
 		// position in this analysis (1 is the first); never invent identifiers. Surla
-		// saves it unchanged without checking it; the checkpoint viewer validates and
-		// renders it. Omit it when a plain card is clearer.
+		// saves it unchanged without checking it; the views page validates and renders
+		// it. Omit it when a plain card is clearer.
 		UIComposition *string `json:"ui_composition,omitempty"`
+	}
+	// ChangeListItemTransport is the internal JSON transport type for ChangeListItemTransport.
+	// It lives in the toolset-local http package and is used only for JSON
+	// decode + validation (missing-field detection) before transforming into
+	// the public tool type.
+	ChangeListItemTransport struct {
+		// Change Card identifier; get_change takes it.
+		ChangeID *string `json:"change_id"`
+		// Plain-English summary of the current revision.
+		Summary *string `json:"summary"`
+		// Checkpoint status of the current revision.
+		Status *string `json:"status"`
+		// Current request_revision of the Change Card.
+		RequestRevision *string `json:"request_revision"`
+		// The Change Card's most recently accepted verification run; absent when none
+		// was started.
+		LatestVerification *LatestVerificationItemTransport `json:"latest_verification,omitempty"`
+		// request_revision of the revision the guide proposed beside this confirmed
+		// change, while it waits for the user to adopt or decline it; absent
+		// otherwise. status and request_revision describe the revision in force.
+		ProposedRevision *string `json:"proposed_revision,omitempty"`
+		// When the Change Card was last saved. It is not part of request_revision.
+		SavedAt *string `json:"saved_at"`
+	}
+	// ConfirmedAnswerTransport is the internal JSON transport type for ConfirmedAnswerTransport.
+	// It lives in the toolset-local http package and is used only for JSON
+	// decode + validation (missing-field detection) before transforming into
+	// the public tool type.
+	ConfirmedAnswerTransport struct {
+		// Question identifier on the Change Card.
+		ID *string `json:"id"`
+		// The question as the user answered it.
+		Question *string `json:"question"`
+		// The option the user confirmed, exactly as confirmed.
+		Answer *string `json:"answer"`
 	}
 	// DesignSnapshotTransport is the internal JSON transport type for DesignSnapshotTransport.
 	// It lives in the toolset-local http package and is used only for JSON
@@ -1049,6 +1596,29 @@ type (
 		// File contents keyed by module-relative path, such as design/design.go or
 		// go.mod.
 		Files map[string]string `json:"files"`
+	}
+	// DraftCorrectionTransport is the internal JSON transport type for DraftCorrectionTransport.
+	// It lives in the toolset-local http package and is used only for JSON
+	// decode + validation (missing-field detection) before transforming into
+	// the public tool type.
+	DraftCorrectionTransport struct {
+		// Path relative to the folder that folder names, such as design/types.go or
+		// go.mod.
+		Path *string `json:"path"`
+		// Which folder holds the file to correct: draft_folder is the guide's draft,
+		// at the result's draft_folder; project_folder is the user's project folder,
+		// which holds the draft.
+		Folder *string `json:"folder"`
+		// What to correct. In the draft: conflict markers where the draft and the
+		// project folder changed the same lines; a file removed on one side and
+		// changed on the other; a draft file Go cannot parse, with its line; a file
+		// whose project change Surla took without merging, or was writing when it
+		// stopped, to check that it holds the intended edits once; or a module the
+		// project's go.mod requires at another version than the draft's, or that the
+		// draft's lacks, including differing replace directives and a differing module
+		// path. In the project folder: a design file or go.mod there that cannot be
+		// parsed, with its line, or a go.mod that declares no module.
+		Problem *string `json:"problem"`
 	}
 	// ExampleItemTransport is the internal JSON transport type for ExampleItemTransport.
 	// It lives in the toolset-local http package and is used only for JSON
@@ -1067,6 +1637,253 @@ type (
 		ExpectedOutcome *string `json:"expected_outcome"`
 		// Evaluator check classification (deterministic or model_judged).
 		VerificationKind *string `json:"verification_kind"`
+	}
+	// LatestVerificationItemTransport is the internal JSON transport type for LatestVerificationItemTransport.
+	// It lives in the toolset-local http package and is used only for JSON
+	// decode + validation (missing-field detection) before transforming into
+	// the public tool type.
+	LatestVerificationItemTransport struct {
+		// Verification run identifier; get_verification takes it.
+		RunID *string `json:"run_id"`
+		// running while the run builds or evaluates the candidate; passed or failed
+		// when its report's verdict is known; not_completed when it stopped without a
+		// report.
+		State *string `json:"state"`
+		// Whether this run names the agreed request_revision and the tests selected
+		// now: the accepted test commit of the usable build in force, or the evaluator
+		// suite in the stored verification settings. It does not say whether the
+		// candidate working tree, deployment or approval is current.
+		InputsCurrent *bool `json:"inputs_current"`
+	}
+	// LivePromptItemTransport is the internal JSON transport type for LivePromptItemTransport.
+	// It lives in the toolset-local http package and is used only for JSON
+	// decode + validation (missing-field detection) before transforming into
+	// the public tool type.
+	LivePromptItemTransport struct {
+		// Registered prompt identifier.
+		PromptID *string `json:"prompt_id"`
+		// Version of the text in force, as the live target returned it.
+		Version *string `json:"version"`
+		// When the live target first accepted the version in force. A later draft that
+		// the target answers with the same version, such as the same text sent again,
+		// keeps this time.
+		AcceptedAt *string `json:"accepted_at"`
+	}
+	// LiveTargetEndedTransport is the internal JSON transport type for LiveTargetEndedTransport.
+	// It lives in the toolset-local http package and is used only for JSON
+	// decode + validation (missing-field detection) before transforming into
+	// the public tool type.
+	LiveTargetEndedTransport struct {
+		// The commit the ended target ran.
+		CandidateCommit *string `json:"candidate_commit"`
+		// When that target became ready.
+		StartedAt *string `json:"started_at"`
+		// When the server observed that target ending.
+		EndedAt *string `json:"ended_at"`
+		// Fixed explanation of what is known and the builder's next step.
+		Message *string `json:"message"`
+	}
+	// LiveTargetNoneTransport is the internal JSON transport type for LiveTargetNoneTransport.
+	// It lives in the toolset-local http package and is used only for JSON
+	// decode + validation (missing-field detection) before transforming into
+	// the public tool type.
+	LiveTargetNoneTransport struct {
+	}
+	// LiveTargetNotConfirmedStoppedTransport is the internal JSON transport type for LiveTargetNotConfirmedStoppedTransport.
+	// It lives in the toolset-local http package and is used only for JSON
+	// decode + validation (missing-field detection) before transforming into
+	// the public tool type.
+	LiveTargetNotConfirmedStoppedTransport struct {
+		// The commit it was built from.
+		CandidateCommit *string `json:"candidate_commit"`
+		// What happened and what to do next.
+		Message *string `json:"message"`
+	}
+	// LiveTargetStartingTransport is the internal JSON transport type for LiveTargetStartingTransport.
+	// It lives in the toolset-local http package and is used only for JSON
+	// decode + validation (missing-field detection) before transforming into
+	// the public tool type.
+	LiveTargetStartingTransport struct {
+		// The commit being built.
+		CandidateCommit *string `json:"candidate_commit"`
+		// When the start began.
+		Since *string `json:"since"`
+	}
+	// OperatorEvaluatorTestsTransport is the internal JSON transport type for OperatorEvaluatorTestsTransport.
+	// It lives in the toolset-local http package and is used only for JSON
+	// decode + validation (missing-field detection) before transforming into
+	// the public tool type.
+	OperatorEvaluatorTestsTransport struct {
+	}
+	// ProposedRevisionItemTransport is the internal JSON transport type for ProposedRevisionItemTransport.
+	// It lives in the toolset-local http package and is used only for JSON
+	// decode + validation (missing-field detection) before transforming into
+	// the public tool type.
+	ProposedRevisionItemTransport struct {
+		// The user's feature request for this revision.
+		Prompt *string `json:"prompt"`
+		// Plain-English summary of the proposed change.
+		Summary *string `json:"summary"`
+		// Domain questions the user answers when adopting this revision.
+		Ambiguities []*AmbiguityQuestionTransport `json:"ambiguities,omitempty"`
+		// Concrete examples mapped to evaluator checks.
+		Examples []*ExampleItemTransport `json:"examples"`
+		// Existing contract invariants preserved by this change.
+		PreservedBehaviors []string `json:"preserved_behaviors"`
+		// Evaluated domain Stories of this revision in declaration order; omitted when
+		// it has none. Included in its request_revision.
+		Stories []*StorySummaryItemTransport `json:"stories,omitempty"`
+		// SHA-256 digest of this proposed revision: confirm_intent adopts it,
+		// decline_revision declines it, and revise_change replaces it when given this
+		// value.
+		RequestRevision *string `json:"request_revision"`
+		// Decision view the guide composed for this revision in its analysis, when it
+		// sent one.
+		UIComposition *UICompositionItemTransport `json:"ui_composition,omitempty"`
+		// Paths of the design/*.go files that differ between the design source the
+		// confirmed revision was made from and the one this revision was made from
+		// (added, removed or changed), in path order; empty when both were made from
+		// the same design files. Adopting the revision binds it to its own design
+		// source.
+		ChangedDesignFiles []string `json:"changed_design_files"`
+	}
+	// RecordedRunStoryTransport is the internal JSON transport type for RecordedRunStoryTransport.
+	// It lives in the toolset-local http package and is used only for JSON
+	// decode + validation (missing-field detection) before transforming into
+	// the public tool type.
+	RecordedRunStoryTransport struct {
+		// Number of the build this run was accepted for.
+		BuildNumber *int `json:"build_number"`
+		// Accepted build's saved start time.
+		BuildStartedAt *string `json:"build_started_at"`
+		// Stories as agreed for this run, in declaration order; empty when the
+		// agreement declares none.
+		Stories []*StorySummaryItemTransport `json:"stories"`
+		// The owner's exact required-test mapping for written tests, or the explicit
+		// absence of such a mapping for an operator evaluator.
+		Mapping *Mapping `json:"mapping"`
+		// The writer's immutable statements for this run, or explicit missing
+		// historical/operator evidence.
+		TestCoverage *TestCoverage `json:"test_coverage"`
+	}
+	// RecordedTestCoverageTransport is the internal JSON transport type for RecordedTestCoverageTransport.
+	// It lives in the toolset-local http package and is used only for JSON
+	// decode + validation (missing-field detection) before transforming into
+	// the public tool type.
+	RecordedTestCoverageTransport struct {
+		// Accepted test-writer report number.
+		Report *int `json:"report"`
+		// Answers saved for the built agreement, in question order.
+		Answers []*ConfirmedAnswerTransport `json:"answers"`
+		// Examples saved for the built agreement, in confirmation order.
+		Examples []*ExampleItemTransport `json:"examples"`
+		// Writer statements for this report; empty means Not stated.
+		CoverageStatements []*TestCoverageStatementTransport `json:"coverage_statements"`
+	}
+	// RequiredTestTransport is the internal JSON transport type for RequiredTestTransport.
+	// It lives in the toolset-local http package and is used only for JSON
+	// decode + validation (missing-field detection) before transforming into
+	// the public tool type.
+	RequiredTestTransport struct {
+		// Name of the Story the flow belongs to.
+		Story *string `json:"story"`
+		// Key of the finished flow.
+		FlowKey *string `json:"flow_key"`
+		// Scenario name the evaluation suite declares for the flow.
+		Scenario *string `json:"scenario"`
+		// Hook method the test writer implements for the scenario.
+		Hook *string `json:"hook"`
+	}
+	// RunApprovalAvailableTransport is the internal JSON transport type for RunApprovalAvailableTransport.
+	// It lives in the toolset-local http package and is used only for JSON
+	// decode + validation (missing-field detection) before transforming into
+	// the public tool type.
+	RunApprovalAvailableTransport struct {
+	}
+	// RunApprovalBlockedTransport is the internal JSON transport type for RunApprovalBlockedTransport.
+	// It lives in the toolset-local http package and is used only for JSON
+	// decode + validation (missing-field detection) before transforming into
+	// the public tool type.
+	RunApprovalBlockedTransport struct {
+		// Owner's safe explanation and enabling step.
+		Reason *string `json:"reason"`
+	}
+	// RunEvaluatorMappingUnknownTransport is the internal JSON transport type for RunEvaluatorMappingUnknownTransport.
+	// It lives in the toolset-local http package and is used only for JSON
+	// decode + validation (missing-field detection) before transforming into
+	// the public tool type.
+	RunEvaluatorMappingUnknownTransport struct {
+	}
+	// RunStoryMappingTransport is the internal JSON transport type for RunStoryMappingTransport.
+	// It lives in the toolset-local http package and is used only for JSON
+	// decode + validation (missing-field detection) before transforming into
+	// the public tool type.
+	RunStoryMappingTransport struct {
+		// One test per finished flow, in declaration order.
+		RequiredTests []*RequiredTestTransport `json:"required_tests"`
+	}
+	// RunStoryNotRecordedTransport is the internal JSON transport type for RunStoryNotRecordedTransport.
+	// It lives in the toolset-local http package and is used only for JSON
+	// decode + validation (missing-field detection) before transforming into
+	// the public tool type.
+	RunStoryNotRecordedTransport struct {
+	}
+	// RunningLiveTargetTransport is the internal JSON transport type for RunningLiveTargetTransport.
+	// It lives in the toolset-local http package and is used only for JSON
+	// decode + validation (missing-field detection) before transforming into
+	// the public tool type.
+	RunningLiveTargetTransport struct {
+		// The commit it was built from.
+		CandidateCommit *string `json:"candidate_commit"`
+		// The origin it listens on, as its evaluator suite reported it.
+		URL *string `json:"url"`
+		// When it became ready.
+		StartedAt *string `json:"started_at"`
+		// One entry per prompt whose draft it accepted, sorted by prompt_id; empty
+		// when none.
+		Prompts []*LivePromptItemTransport `json:"prompts"`
+	}
+	// StartedBuildTransport is the internal JSON transport type for StartedBuildTransport.
+	// It lives in the toolset-local http package and is used only for JSON
+	// decode + validation (missing-field detection) before transforming into
+	// the public tool type.
+	StartedBuildTransport struct {
+		// Change Card revision the user built.
+		RequestRevision *string `json:"request_revision"`
+		// When the user started this build.
+		StartedAt *string `json:"started_at"`
+		// True when request_revision is the change's agreed revision, the one in
+		// force, as get_build reports it. It stays true while a proposed revision
+		// waits and when a refreshed draft is adopted without changing
+		// request_revision. If adoption or confirmation changes the agreed
+		// request_revision, it becomes false; the assignments stay on the earlier
+		// revision until the user builds again.
+		InForce *bool `json:"in_force"`
+		// The builder's assignment.
+		Builder *BuilderProgressTransport `json:"builder"`
+		// The test writer's assignment.
+		TestWriter *TestWriterProgressTransport `json:"test_writer"`
+		// Number of finished flows in the agreed Story. Zero means no test of this
+		// change's Story was required.
+		RequiredTestCount *int `json:"required_test_count"`
+		// Tests required by this build's saved Story, in declaration order; unfinished
+		// flows require none. Empty when no finished flow requires a test.
+		RequiredTests []*RequiredTestTransport `json:"required_tests"`
+		// Confirmed answers saved when this build started; later revisions do not
+		// replace them.
+		Answers []*ConfirmedAnswerTransport `json:"answers"`
+		// Examples saved when this build started; later revisions do not replace them.
+		Examples []*ExampleItemTransport `json:"examples"`
+		// The accepted report's writer statements; empty before acceptance or when
+		// none were stated. Surla did not judge them.
+		CoverageStatements []*TestCoverageStatementTransport `json:"coverage_statements"`
+		// Whether the user has taken this build: building until a verification of it
+		// passes; passed with the commits to merge; merged once the branch checked out
+		// in the project folder holds the commits of one passed run, the builder's
+		// and, for written tests, the tests'; dropped once the user dropped it. A
+		// project has one open build, and another change is built only once it is
+		// merged or dropped.
+		Taking *BuildTaking `json:"taking"`
 	}
 	// StoryActorItemTransport is the internal JSON transport type for StoryActorItemTransport.
 	// It lives in the toolset-local http package and is used only for JSON
@@ -1145,59 +1962,128 @@ type (
 		// Timeline paths declared in the Story in declaration order.
 		Flows []*StoryFlowItemTransport `json:"flows"`
 	}
-	// SwarmPlanItemTransport is the internal JSON transport type for SwarmPlanItemTransport.
+	// TestCoverageNotRecordedTransport is the internal JSON transport type for TestCoverageNotRecordedTransport.
 	// It lives in the toolset-local http package and is used only for JSON
 	// decode + validation (missing-field detection) before transforming into
 	// the public tool type.
-	SwarmPlanItemTransport struct {
-		// Roster configuration status.
-		Status *string `json:"status"`
-		// Deterministic role assignments when status is configured.
-		Assignments []*SwarmRoleItemTransport `json:"assignments"`
-		// True if and only if status is configured and the reviewer model family is
-		// disjoint from every assigned builder model family.
-		CrossFamilyReview *bool `json:"cross_family_review"`
-		// True if and only if status is configured, an eval_author role is assigned,
-		// and the eval_author model family is disjoint from every assigned builder
-		// model family.
-		CrossFamilyEval *bool `json:"cross_family_eval"`
-		// True when status is configured and all assigned roles share one model family.
-		SingleFamily *bool `json:"single_family"`
-		// Requested roles lacking an authenticated capable profile when status is
-		// unconfigured (with builder scopes supplied) or missing_capability; omitted
-		// on solo previews with no builder scopes.
-		MissingRoles []string `json:"missing_roles,omitempty"`
-		// Plain-English summary of the proposed swarm roster and model-family posture.
-		Summary *string `json:"summary"`
-		// Formatted Chorus collaboration manifest text when status is configured; does
-		// not claim publication until sent via Chorus.
-		Manifest *string `json:"manifest,omitempty"`
+	TestCoverageNotRecordedTransport struct {
 	}
-	// SwarmRoleItemTransport is the internal JSON transport type for SwarmRoleItemTransport.
+	// TestCoverageReferenceTransport is the internal JSON transport type for TestCoverageReferenceTransport.
 	// It lives in the toolset-local http package and is used only for JSON
 	// decode + validation (missing-field detection) before transforming into
 	// the public tool type.
-	SwarmRoleItemTransport struct {
-		// Deterministic Chorus agent handle (without leading '@', at most 32
+	TestCoverageReferenceTransport string
+	// TestCoverageStatementTransport is the internal JSON transport type for TestCoverageStatementTransport.
+	// It lives in the toolset-local http package and is used only for JSON
+	// decode + validation (missing-field detection) before transforming into
+	// the public tool type.
+	TestCoverageStatementTransport struct {
+		// Exact declared scenario identifier.
+		Scenario *TestCoverageReferenceTransport `json:"scenario"`
+		// Question IDs from the assignment's answers[].id; empty when this statement
+		// names only examples.
+		QuestionIds []*TestCoverageReferenceTransport `json:"question_ids"`
+		// Example IDs from the assignment's examples[].id; empty when this statement
+		// names only answers.
+		ExampleIds []*TestCoverageReferenceTransport `json:"example_ids"`
+		// Interaction or assertion the writer says exercises these requirements.
+		Explanation *string `json:"explanation"`
+	}
+	// TestWriterAssignmentItemTransport is the internal JSON transport type for TestWriterAssignmentItemTransport.
+	// It lives in the toolset-local http package and is used only for JSON
+	// decode + validation (missing-field detection) before transforming into
+	// the public tool type.
+	TestWriterAssignmentItemTransport struct {
+		// Change Card the tests are for; get_test_writer_assignment takes it.
+		ChangeID *string `json:"change_id"`
+		// Change Card revision the tests are for.
+		RequestRevision *string `json:"request_revision"`
+		// True when request_revision is the change's agreed revision, the one in
+		// force, as get_build reports it. It stays true while a proposed revision
+		// waits and when a refreshed draft is adopted without changing
+		// request_revision. If adoption or confirmation changes the agreed
+		// request_revision, it becomes false; the assignment stays on the earlier
+		// revision until the user builds again.
+		InForce *bool `json:"in_force"`
+		// Where this assignment stands.
+		Progress *TestWriterProgressTransport `json:"progress"`
+	}
+	// TestWriterProgressTransport is the internal JSON transport type for TestWriterProgressTransport.
+	// It lives in the toolset-local http package and is used only for JSON
+	// decode + validation (missing-field detection) before transforming into
+	// the public tool type.
+	TestWriterProgressTransport struct {
+		// The tests' state: not_used when the project has stored verification
+		// settings; otherwise assigned, reported, needs_changes with the number of
+		// Surla's findings, accepted with the commit Surla recorded, or could_not_run
+		// with the reason and the user's step. Each verdict carries the time Surla
+		// reached it.
+		Tests *Tests `json:"tests"`
+		// True once the test writer read this assignment in full with
+		// get_test_writer_assignment.
+		Read *bool `json:"read"`
+		// Number of the test writer's latest report of this build: 0 until its first
+		// report, and one more with each report_tests_finished.
+		Report *int `json:"report"`
+	}
+	// TestsAcceptedTransport is the internal JSON transport type for TestsAcceptedTransport.
+	// It lives in the toolset-local http package and is used only for JSON
+	// decode + validation (missing-field detection) before transforming into
+	// the public tool type.
+	TestsAcceptedTransport struct {
+		// Full commit ID Surla recorded the accepted tests at (40 or 64 lowercase hex
 		// characters).
-		Handle *string `json:"handle"`
-		// Assigned swarm role kind.
-		Role *string `json:"role"`
-		// Human-readable scope label for this assignment.
-		ScopeName *string `json:"scope_name"`
-		// Assigned server-configured provider profile ID.
-		ProfileID *string `json:"profile_id"`
-		// Assigned coding-agent provider name.
-		Provider *string `json:"provider"`
-		// Assigned model identifier.
-		Model *string `json:"model"`
-		// Canonical model family identifier.
-		Family *string `json:"family"`
-		// Repository or workspace path globs owned by this role for Chorus
-		// coordination.
-		OwnedPaths []string `json:"owned_paths"`
-		// Operator-declared workspace coordination boundary for this role.
-		AccessMode *string `json:"access_mode"`
+		Commit *string `json:"commit"`
+		// When Surla's check reached this verdict.
+		CheckedAt *string `json:"checked_at"`
+		// What Surla's check did not judge, always the same sentence.
+		NotJudged *string `json:"not_judged"`
+	}
+	// TestsAssignedTransport is the internal JSON transport type for TestsAssignedTransport.
+	// It lives in the toolset-local http package and is used only for JSON
+	// decode + validation (missing-field detection) before transforming into
+	// the public tool type.
+	TestsAssignedTransport struct {
+	}
+	// TestsCouldNotRunTransport is the internal JSON transport type for TestsCouldNotRunTransport.
+	// It lives in the toolset-local http package and is used only for JSON
+	// decode + validation (missing-field detection) before transforming into
+	// the public tool type.
+	TestsCouldNotRunTransport struct {
+		// Why the check could not run.
+		Reason *string `json:"reason"`
+		// What the user does so the check can run.
+		Step *string `json:"step"`
+		// When Surla's check stopped.
+		CheckedAt *string `json:"checked_at"`
+	}
+	// TestsNeedChangesTransport is the internal JSON transport type for TestsNeedChangesTransport.
+	// It lives in the toolset-local http package and is used only for JSON
+	// decode + validation (missing-field detection) before transforming into
+	// the public tool type.
+	TestsNeedChangesTransport struct {
+		// Number of problems Surla found.
+		FindingCount *int `json:"finding_count"`
+		// When Surla's check reached this verdict.
+		CheckedAt *string `json:"checked_at"`
+	}
+	// TestsNotUsedTransport is the internal JSON transport type for TestsNotUsedTransport.
+	// It lives in the toolset-local http package and is used only for JSON
+	// decode + validation (missing-field detection) before transforming into
+	// the public tool type.
+	TestsNotUsedTransport struct {
+	}
+	// TestsNotYetAcceptedTransport is the internal JSON transport type for TestsNotYetAcceptedTransport.
+	// It lives in the toolset-local http package and is used only for JSON
+	// decode + validation (missing-field detection) before transforming into
+	// the public tool type.
+	TestsNotYetAcceptedTransport struct {
+	}
+	// TestsReportedTransport is the internal JSON transport type for TestsReportedTransport.
+	// It lives in the toolset-local http package and is used only for JSON
+	// decode + validation (missing-field detection) before transforming into
+	// the public tool type.
+	TestsReportedTransport struct {
 	}
 	// ToolContractItemTransport is the internal JSON transport type for ToolContractItemTransport.
 	// It lives in the toolset-local http package and is used only for JSON
@@ -1274,8 +2160,8 @@ type (
 		Status *string `json:"status"`
 		// Safe operation summary, at most 2048 bytes; never a raw error message.
 		Summary *string `json:"summary"`
-		// Selected operation identifiers and results; at most six values of 1024 bytes
-		// each.
+		// Selected operation identifiers, results, and private caller attribution; at
+		// most seven values of 1024 bytes each.
 		Attributes map[string]string `json:"attributes"`
 		// True when text was shortened to fit this diagnostic record; use operator
 		// telemetry for the full values.
@@ -1287,9 +2173,9 @@ type (
 	// the public tool type.
 	UICompositionItemTransport struct {
 		// OpenUI Lang program from the analysis's ui_composition, exactly as the
-		// caller sent it. The server does not check it; the checkpoint viewer
-		// validates it and shows its error state, with the rest of the card still
-		// usable, when the program is not a valid composition.
+		// caller sent it. The server does not check it; the views page validates it
+		// and shows its error state, with the rest of the card still usable, when the
+		// program is not a valid composition.
 		Program *string `json:"program"`
 		// request_revision of the Change Card this program was composed for.
 		ComposedForRevision *string `json:"composed_for_revision"`
@@ -1302,7 +2188,7 @@ type (
 		// Recorded promotion approval from the Change Card.
 		Approval *ApprovalItemTransport `json:"approval"`
 		// Explanation of why the recorded approval could not be verified against
-		// current promotion inputs and how to recover.
+		// current release binaries and how to recover.
 		Reason *string `json:"reason"`
 	}
 	// VerificationCheckTransport is the internal JSON transport type for VerificationCheckTransport.
@@ -1358,6 +2244,17 @@ type (
 		// Builder-safe description of what stopped the run; never command output.
 		Summary *string `json:"summary"`
 	}
+	// VerificationReviewTransport is the internal JSON transport type for VerificationReviewTransport.
+	// It lives in the toolset-local http package and is used only for JSON
+	// decode + validation (missing-field detection) before transforming into
+	// the public tool type.
+	VerificationReviewTransport struct {
+		// The run's immutable Story context, or the explicit fact it was not recorded.
+		StoryContext *StoryContext `json:"story_context"`
+		// The owner's current observation for this exact report, independent of
+		// inputs_current.
+		Approval *Approval `json:"approval"`
+	}
 	// VerificationRunningTransport is the internal JSON transport type for VerificationRunningTransport.
 	// It lives in the toolset-local http package and is used only for JSON
 	// decode + validation (missing-field detection) before transforming into
@@ -1393,10 +2290,24 @@ type (
 		RequestRevision *string `json:"request_revision"`
 		// Candidate commit the run builds and verifies.
 		CandidateCommit *string `json:"candidate_commit"`
-		// Evaluator suite commit the operator configured for the run.
+		// Commit of the tests the run uses: the operator's evaluator, or the tests
+		// accepted for the change's build.
 		SuiteCommit *string `json:"suite_commit"`
 		// When the run was accepted.
 		AcceptedAt *string `json:"accepted_at"`
+		// Whether this run's agreed revision and selected tests match the current
+		// Change Card and the usable build or the stored verification settings. This
+		// observation does not establish the current candidate working tree,
+		// deployment or approval.
+		InputsCurrent *bool `json:"inputs_current"`
+		// Absolute folder containing the binaries built by this completed run.
+		// Returned only to the user when promotion settings are configured, so the
+		// user can publish these exact binaries before approval. Agents never receive
+		// this private path.
+		CandidateBinariesDir *string `json:"candidate_binaries_dir,omitempty"`
+		// Where the run's tests came from, recorded when the run started: evaluator,
+		// or written_tests with their commit and a notice.
+		TestSource *TestSource `json:"test_source"`
 		// Exactly one of running, completed or not_completed.
 		State *State `json:"state"`
 	}

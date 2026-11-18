@@ -1,6 +1,7 @@
 package verify
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -20,6 +21,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/goadesign/surla/internal/gitenv"
 	"github.com/goadesign/surla/verify/candidate"
 	"github.com/goadesign/surla/verify/suite"
 	"goa.design/goa-ai/eval"
@@ -62,15 +64,23 @@ type (
 		SuiteCommand string
 		// RequestRevision identifies the confirmed request being verified.
 		RequestRevision string
-		// WorkDir is a private directory for clones, builds and evidence. It
-		// must not be shared with the candidate's builder. It is required and
-		// must be missing or empty, so everything a build can read under it was
-		// written by this run; a relative path is made absolute against the
-		// current directory.
+		// WorkDir is a private directory for clones, build scratch, outputs and
+		// evidence. It must not be shared with the candidate's builder. It is
+		// required and must be missing or empty. Retained compiled packages are
+		// a separate trusted input supplied to Run or Prepare. A relative path
+		// is made absolute against the current directory.
 		WorkDir string
 		// ReportDir receives the report, named by its digest.
 		ReportDir string
+		// Tests says who wrote the test program, which decides the
+		// environment it starts with (see ProgramEnv): TestsEvaluator for
+		// the operator's evaluator, TestsWritten for a test module agents on
+		// this machine wrote.
+		Tests TestsSource
 	}
+
+	// TestsSource says who wrote a plan's test program.
+	TestsSource string
 
 	// Stage names the step of Run that stopped a verification.
 	Stage string
@@ -102,6 +112,9 @@ type (
 		ArtifactFlags []string
 		// EvidenceDir holds every preparation command's output.
 		EvidenceDir string
+		// TmpDir is the empty folder inside WorkDir that a test program
+		// agents wrote gets as TMPDIR in a verification run.
+		TmpDir string
 		// runner runs Run's later suite commands with the same evidence
 		// directory.
 		runner *runner
@@ -113,13 +126,13 @@ type (
 		evidenceDir string
 	}
 
-	// buildToolchain is what a sandboxed candidate build runs with.
+	// buildToolchain is what a candidate build runs with.
 	buildToolchain struct {
 		// goroot is the resolved toolchain the candidate module selects.
 		goroot string
 		// modCache is the module cache holding the candidate's dependencies.
 		modCache string
-		// workDir is the build's private TMPDIR and GOCACHE.
+		// workDir is the build's operation-owned TMPDIR and staging parent.
 		workDir string
 	}
 )
@@ -154,13 +167,6 @@ const (
 	// summarySuiteBuild is the builder-safe summary of an evaluator suite that
 	// did not build.
 	summarySuiteBuild = "The evaluator suite did not build."
-	// sandboxExit71 is the exit status (EX_OSERR) /usr/bin/sandbox-exec returns
-	// when macOS refuses to apply a sandbox profile (for example inside a nested
-	// restricted coding-agent shell), and also when a sandboxed child exits 71.
-	sandboxExit71 = 71
-	// summarySandboxExit71 is the builder-safe summary returned when a
-	// non-canceled sandboxed build command in Prepare exits with status 71.
-	summarySandboxExit71 = "The sandboxed command exited with status 71. If Surla is running inside a restricted coding-agent shell, its sandbox may have been blocked; run Surla from an unrestricted host shell."
 )
 
 // commitID matches a full commit ID in either Git object format: 40 hex digits
@@ -181,22 +187,29 @@ func IsCommitID(commit string) bool {
 // the CP4 report bound to everything that was tested. The report is also
 // written to ReportDir as <digest>.json.
 //
-// Both builds go through candidate.Build: an OS sandbox in which the build
-// reads nothing but its source tree, the toolchain, the module cache and its
-// own directories under WorkDir, writes nothing but those directories, and has
-// no network. The candidate's source tree is its module; the suite's is its
-// whole checkout, so it may replace sibling modules there. A committed link or
-// replace directive can reach only those trees: the bound commit, the trusted
-// toolchain and checksum-verified modules, and directories this run created
-// empty, because Run refuses a WorkDir that already has contents. The suite is
-// checked out only after the candidate is built. Every command's
-// output goes to files under WorkDir/evidence; errors quote only a bounded
-// excerpt.
+// Both builds compile offline through candidate: they download nothing
+// (GOPROXY=off, -mod=readonly) and use the toolchain and module cache
+// prepareBuild resolved. A build is an ordinary process of the user, so a
+// committed link or replace directive that leaves the checkout reads the
+// user's files; the suite's module may replace sibling modules in its own
+// checkout. Run refuses a WorkDir that already has contents. The suite is
+// checked out only after the candidate is built. Workspace settings and
+// workspace package-loading output are discarded because they may contain
+// operator secrets. Checkout, standalone dependency and toolchain operations,
+// and evaluator protocol diagnostics stay in private evidence files; outward
+// errors name those files without quoting their output.
+// Compiler failures retain bounded build-output excerpts.
 //
 // Run starts its builds, the suite and the candidates the suite runs in the
 // caller's process group and does not stop processes they leave behind: its
 // caller must run it inside an owning group that it stops afterwards, as
 // `surla verify-run execute` does under its supervisor.
+//
+// Preparation runs with the process environment. environ is the
+// environment the test program's own is derived from (ProgramEnv): the
+// process environment plus the provider request settings the run was
+// given, which the caller removed from its own process so preparation
+// never sees them.
 //
 // Every error is a *StageError naming the step that failed and a summary
 // safe to show builders; its Err may quote command output and stays with the
@@ -204,40 +217,36 @@ func IsCommitID(commit string) bool {
 // Otherwise the report keeps the suite's evidence and exit status: a suite
 // that ran and failed, or that exited abnormally after writing partial
 // results, yields a report that does not pass.
-func Run(ctx context.Context, p Plan) (Report, error) {
-	prep, err := Prepare(ctx, p)
+func Run(ctx context.Context, p Plan, environ []string, buildCacheDir string) (Report, error) {
+	prep, err := Prepare(ctx, p, buildCacheDir)
 	if err != nil {
 		return Report{}, err
 	}
-	r, binding, suiteBin, artifactFlags := prep.runner, prep.Binding, prep.SuiteBin, prep.ArtifactFlags
-	declared, err := r.describe(ctx, suiteBin)
-	if err != nil {
-		return Report{}, stageError(StageDescribe, "The evaluator suite did not describe its scenarios.", err)
-	}
-	binding.SuiteID, binding.Environment = declared.ID, declared.Environment
-	evidence, exit, err := r.runSuite(ctx, suiteBin, artifactFlags)
-	if err != nil {
-		return Report{}, stageError(StageSuite, "The evaluator suite ended without a report.", err)
-	}
-	report, err := Assemble(binding, declared, evidence, exit)
-	if err != nil {
-		return Report{}, stageError(StageReport, "The evaluator suite's report does not match its declaration or the binaries it was given.", err)
-	}
-	if err := writeReport(p.ReportDir, report); err != nil {
-		return Report{}, stageError(StageReport, "Saving the verification report failed.", err)
-	}
-	return report, nil
+	return runPrepared(ctx, p, prep, environ)
+}
+
+// CandidateBinariesDir names the output folder Prepare owns inside the run's
+// work directory. Run readers use the same location to identify the binaries
+// retained after verification; callers supply the recorded absolute WorkDir.
+func CandidateBinariesDir(workDir string) string {
+	return filepath.Join(workDir, "candidate-bin")
 }
 
 // Prepare runs the trusted preparation Run starts with: it checks the plan,
 // clones the candidate at its exact commit and builds its binaries into
 // WorkDir/candidate-bin, then clones the suite at its exact commit and builds
-// it into WorkDir/suite-bin, with the same sandbox, containment and evidence
+// it into WorkDir/suite-bin, with the same build and evidence
 // rules Run documents. Run calls it before describing and running the suite;
 // a live CP3 target calls it before starting the suite in --live mode, so
 // both build exactly the same way. The caller owns the process group, as for
-// Run. Every error is a *StageError.
-func Prepare(ctx context.Context, p Plan) (Prepared, error) {
+// Run. buildCacheDir is required and retains compiled packages independently
+// of WorkDir. It is a trusted compiler input: same-user code can change it
+// and affect a later binary or test program without changing the selected source.
+// Every error is a *StageError.
+func Prepare(ctx context.Context, p Plan, buildCacheDir string) (Prepared, error) {
+	if buildCacheDir == "" {
+		return Prepared{}, stageError(StageCheckout, summaryPlan, errors.New("build cache directory is required"))
+	}
 	for name, commit := range map[string]string{"candidate": p.CandidateCommit, "suite": p.SuiteCommit} {
 		if !IsCommitID(commit) {
 			return Prepared{}, stageError(StageCheckout, summaryPlan, fmt.Errorf("%s commit %q is not a full commit ID", name, commit))
@@ -253,6 +262,9 @@ func Prepare(ctx context.Context, p Plan) (Prepared, error) {
 	}
 	if err := validatePackagePath(p.SuiteCommand); err != nil {
 		return Prepared{}, stageError(StageCheckout, summaryPlan, fmt.Errorf("suite command: %w", err))
+	}
+	if err := p.Tests.Check(); err != nil {
+		return Prepared{}, stageError(StageCheckout, summaryPlan, err)
 	}
 	if p.WorkDir == "" {
 		return Prepared{}, stageError(StageCheckout, summaryPlan, errors.New("work directory is required"))
@@ -270,9 +282,10 @@ func Prepare(ctx context.Context, p Plan) (Prepared, error) {
 		return Prepared{}, stageError(StageCheckout, summaryPlan, fmt.Errorf("work directory %s must be missing or empty", p.WorkDir))
 	}
 	evidenceDir := filepath.Join(p.WorkDir, "evidence")
-	candidateBinDir := filepath.Join(p.WorkDir, "candidate-bin")
+	candidateBinDir := CandidateBinariesDir(p.WorkDir)
 	suiteBinDir := filepath.Join(p.WorkDir, "suite-bin")
-	for _, dir := range []string{evidenceDir, candidateBinDir, suiteBinDir} {
+	tmpDir := filepath.Join(p.WorkDir, "tmp")
+	for _, dir := range []string{evidenceDir, candidateBinDir, suiteBinDir, tmpDir} {
 		if err := os.MkdirAll(dir, 0o700); err != nil {
 			return Prepared{}, stageError(StageCheckout, summaryPlan, fmt.Errorf("create %s: %w", dir, err))
 		}
@@ -298,7 +311,8 @@ func Prepare(ctx context.Context, p Plan) (Prepared, error) {
 			return Prepared{}, stageError(StageCheckout, "The candidate commit does not contain a configured binary package.", fmt.Errorf("binary %q package %q: %w", name, pkg, err))
 		}
 	}
-	toolchain, err := r.prepareBuild(ctx, "candidate", moduleDir, p.WorkDir)
+	toolchain, err := r.prepareBuild(ctx, "candidate", candidateDir, moduleDir, p.WorkDir,
+		slices.Sorted(maps.Values(p.Binaries)))
 	if err != nil {
 		return Prepared{}, stageError(StageBuild, summaryCandidateBuild, err)
 	}
@@ -307,13 +321,13 @@ func Prepare(ctx context.Context, p Plan) (Prepared, error) {
 		out := filepath.Join(candidateBinDir, name)
 		logFile := filepath.Join(r.evidenceDir, "build-"+name+".log")
 		if err := candidate.Build(ctx, candidate.BuildSpec{
-			SourceDir: moduleDir, ModuleDir: moduleDir, Package: p.Binaries[name], Out: out,
+			SourceDir: candidateDir, ModuleDir: moduleDir, Package: p.Binaries[name], Out: out,
 			GOROOT: toolchain.goroot, ModCache: toolchain.modCache, WorkDir: toolchain.workDir,
-			LogFile: logFile,
+			BuildCacheDir: buildCacheDir, LogFile: logFile,
 		}, (*exec.Cmd).Run); err != nil {
 			// The private error carries the end of the compiler's output and
 			// the log that holds all of it; the summary builders see does not.
-			return Prepared{}, stageError(StageBuild, buildSummary(ctx, err, summaryCandidateBuild),
+			return Prepared{}, stageError(StageBuild, summaryCandidateBuild,
 				fmt.Errorf("build candidate %s: %w%s", name, err, excerptFile(logFile, "build output")))
 		}
 		digest, err := sha256File(out)
@@ -335,22 +349,30 @@ func Prepare(ctx context.Context, p Plan) (Prepared, error) {
 	if _, err := resolveInside(suiteModuleDir, p.SuiteCommand); err != nil {
 		return Prepared{}, stageError(StageCheckout, summaryPlan, fmt.Errorf("suite command %q: %w", p.SuiteCommand, err))
 	}
-	suiteToolchain, err := r.prepareBuild(ctx, "suite", suiteModuleDir, p.WorkDir)
+	// Written tests are an independent module. Stored evaluators retain the
+	// checkout's workspace for lookup, download and compile alike.
+	buildSuite := candidate.BuildModule
+	var suiteToolchain buildToolchain
+	if p.Tests == TestsWritten {
+		suiteToolchain, err = r.prepareGoBuild(ctx, "suite", suiteModuleDir, p.WorkDir, "off", []string{p.SuiteCommand})
+	} else {
+		suiteToolchain, err = r.prepareBuild(ctx, "suite", suiteDir, suiteModuleDir, p.WorkDir, []string{p.SuiteCommand})
+		buildSuite = candidate.Build
+	}
 	if err != nil {
 		return Prepared{}, stageError(StageBuild, summarySuiteBuild, err)
 	}
-	// The suite builds in the same sandbox as the candidate, readable only
-	// within its own checkout: its module may replace sibling modules there,
-	// but no link or replace can pull in source outside SuiteCommit.
+	// Keep the full checkout for both sources, including local replacements
+	// into sibling modules, even when the written test module ignores go.work.
 	suiteBin := filepath.Join(suiteBinDir, "suite")
 	suiteLog := filepath.Join(r.evidenceDir, "build-suite.log")
-	if err := candidate.Build(ctx, candidate.BuildSpec{
+	if err := buildSuite(ctx, candidate.BuildSpec{
 		SourceDir: suiteDir, ModuleDir: suiteModuleDir, Package: p.SuiteCommand, Out: suiteBin,
 		GOROOT: suiteToolchain.goroot, ModCache: suiteToolchain.modCache, WorkDir: suiteToolchain.workDir,
-		LogFile: suiteLog,
+		BuildCacheDir: buildCacheDir, LogFile: suiteLog,
 	}, (*exec.Cmd).Run); err != nil {
 		// As for the candidate: compiler output goes only into the private error.
-		return Prepared{}, stageError(StageBuild, buildSummary(ctx, err, summarySuiteBuild),
+		return Prepared{}, stageError(StageBuild, summarySuiteBuild,
 			fmt.Errorf("build suite: %w%s", err, excerptFile(suiteLog, "build output")))
 	}
 	return Prepared{
@@ -358,6 +380,7 @@ func Prepare(ctx context.Context, p Plan) (Prepared, error) {
 		SuiteBin:      suiteBin,
 		ArtifactFlags: artifactFlags,
 		EvidenceDir:   evidenceDir,
+		TmpDir:        tmpDir,
 		runner:        r,
 	}, nil
 }
@@ -370,6 +393,31 @@ func (e *StageError) Error() string {
 // Unwrap returns the full error.
 func (e *StageError) Unwrap() error {
 	return e.Err
+}
+
+// runPrepared is Run after Prepare: it describes and runs the suite prep
+// built for p, both with the environment ProgramEnv gives p's test program
+// from environ, then assembles the report and saves it in p.ReportDir.
+func runPrepared(ctx context.Context, p Plan, prep Prepared, environ []string) (Report, error) {
+	r, binding, suiteBin, artifactFlags := prep.runner, prep.Binding, prep.SuiteBin, prep.ArtifactFlags
+	env := ProgramEnv(p, environ, prep.TmpDir)
+	declared, err := r.describe(ctx, env, suiteBin)
+	if err != nil {
+		return Report{}, stageError(StageDescribe, "The evaluator suite did not describe its scenarios.", err)
+	}
+	binding.SuiteID, binding.Environment = declared.ID, declared.Environment
+	evidence, exit, err := r.runSuite(ctx, env, suiteBin, artifactFlags)
+	if err != nil {
+		return Report{}, stageError(StageSuite, "The evaluator suite ended without a report.", err)
+	}
+	report, err := Assemble(binding, declared, evidence, exit)
+	if err != nil {
+		return Report{}, stageError(StageReport, "The evaluator suite's report does not match its declaration or the binaries it was given.", err)
+	}
+	if err := writeReport(p.ReportDir, report); err != nil {
+		return Report{}, stageError(StageReport, "Saving the verification report failed.", err)
+	}
+	return report, nil
 }
 
 // resolveInside resolves rel, a path relative to the directory root, following
@@ -418,17 +466,23 @@ func ValidateArtifactName(name string) error {
 }
 
 // checkout clones repo into dir and checks out commit, detached. The source
-// repository is only read; clone hooks and templates are disabled.
+// repository is only read; clone hooks and templates are disabled. Its git
+// commands run without the variables that point git at another repository
+// (gitenv.WithoutRedirects), so only repo and dir are ever used, whatever
+// repository the process's own environment names. Every other variable
+// stays, protocol, identity and credential settings among them, because a
+// plan's repository may be remote (surla verify -candidate-repo <url>).
 func (r *runner) checkout(ctx context.Context, label, repo, commit, dir string) error {
-	if err := r.run(ctx, "clone-"+label, "", nil, "git", "-c", "core.hooksPath=/dev/null",
+	env := gitenv.WithoutRedirects(os.Environ())
+	if err := r.run(ctx, "clone-"+label, "", env, "git", "-c", "core.hooksPath=/dev/null",
 		"clone", "--quiet", "--no-checkout", "--template=", repo, dir); err != nil {
 		return fmt.Errorf("check out %s: %w", label, err)
 	}
-	if err := r.run(ctx, "checkout-"+label, dir, nil, "git", "-c", "core.hooksPath=/dev/null",
+	if err := r.run(ctx, "checkout-"+label, dir, env, "git", "-c", "core.hooksPath=/dev/null",
 		"-c", "advice.detachedHead=false", "checkout", "--quiet", "--detach", commit+"^{commit}"); err != nil {
 		return fmt.Errorf("check out %s: %w", label, err)
 	}
-	if err := r.run(ctx, "head-"+label, dir, nil, "git", "rev-parse", "HEAD"); err != nil {
+	if err := r.run(ctx, "head-"+label, dir, env, "git", "rev-parse", "HEAD"); err != nil {
 		return fmt.Errorf("check out %s: %w", label, err)
 	}
 	head, err := os.ReadFile(filepath.Join(r.evidenceDir, "head-"+label+".stdout"))
@@ -436,20 +490,22 @@ func (r *runner) checkout(ctx context.Context, label, repo, commit, dir string) 
 		return fmt.Errorf("read %s head: %w", label, err)
 	}
 	if got := strings.TrimSpace(string(head)); got != commit {
-		return fmt.Errorf("check out %s: HEAD is %s, want %s", label, got, commit)
+		return fmt.Errorf("check out %s: HEAD does not match the requested commit; diagnostic output is private in %s",
+			label, filepath.Join(r.evidenceDir, "head-"+label+".stdout"))
 	}
 	return nil
 }
 
-// describe runs the suite's --describe and converts it into the declared
-// scenario list.
-func (r *runner) describe(ctx context.Context, suiteBin string) (Suite, error) {
-	if err := r.run(ctx, "describe", "", nil, suiteBin, "--describe"); err != nil {
+// describe runs the suite's --describe with env and converts it into the
+// declared scenario list.
+func (r *runner) describe(ctx context.Context, env []string, suiteBin string) (Suite, error) {
+	if err := r.run(ctx, "describe", "", env, suiteBin, "--describe"); err != nil {
 		return Suite{}, fmt.Errorf("describe suite: %w", err)
 	}
 	var d suite.Declaration
 	if err := decodeFile(filepath.Join(r.evidenceDir, "describe.stdout"), &d); err != nil {
-		return Suite{}, fmt.Errorf("decode suite declaration: %w", err)
+		return Suite{}, fmt.Errorf("decode suite declaration: malformed output; diagnostic output is private in %s",
+			filepath.Join(r.evidenceDir, "describe.stdout"))
 	}
 	s := Suite{ID: d.ID, Environment: d.Environment}
 	for _, sc := range d.Scenarios {
@@ -458,14 +514,15 @@ func (r *runner) describe(ctx context.Context, suiteBin string) (Suite, error) {
 	return s, nil
 }
 
-// runSuite runs the suite and returns its eval.Report and exit status. The
-// suite and the candidates it starts run in the caller's process group, which
-// stops and reaps them (surla verify-run supervise owns that group).
+// runSuite runs the suite with env and returns its eval.Report and exit
+// status. The suite and the candidates it starts run in the caller's process
+// group, which stops and reaps them (surla verify-run supervise owns that
+// group).
 // Cancellation sends SIGTERM to the suite so it can stop its candidates and
 // report what it has; it is killed after suiteStopGrace. A report is decoded
 // whatever the outcome; a canceled or abnormal end gets exit status -1 and
 // never passes. Only a missing or undecodable report is an error.
-func (r *runner) runSuite(ctx context.Context, suiteBin string, artifactFlags []string) (eval.Report, int, error) {
+func (r *runner) runSuite(ctx context.Context, env []string, suiteBin string, artifactFlags []string) (eval.Report, int, error) {
 	stdout, stderr, err := r.outputs("suite")
 	if err != nil {
 		return eval.Report{}, 0, err
@@ -473,6 +530,7 @@ func (r *runner) runSuite(ctx context.Context, suiteBin string, artifactFlags []
 	defer stdout.Close()
 	defer stderr.Close()
 	cmd := exec.CommandContext(ctx, suiteBin, artifactFlags...)
+	cmd.Env = env
 	cmd.Stdout, cmd.Stderr = stdout, stderr
 	// Cancellation asks the suite to stop its candidates and report; it gets
 	// suiteStopGrace before it is killed. The suite and whatever it starts
@@ -494,13 +552,20 @@ func (r *runner) runSuite(ctx context.Context, suiteBin string, artifactFlags []
 		exit = -1
 	}
 	if decodeErr != nil {
-		return eval.Report{}, 0, fmt.Errorf("suite ended (%v) without a decodable report: %w%s", runErr, decodeErr, r.excerpt("suite"))
+		if runErr != nil {
+			return eval.Report{}, 0, fmt.Errorf("suite ended without a decodable report: %w; diagnostic output is private in %s and %s",
+				runErr, stdout.Name(), stderr.Name())
+		}
+		return eval.Report{}, 0, fmt.Errorf("suite ended without a decodable report: malformed output; diagnostic output is private in %s and %s",
+			stdout.Name(), stderr.Name())
 	}
 	return report, exit, nil
 }
 
 // run runs one command with its stdout and stderr in evidence files named by
-// label. env, when non-nil, replaces the inherited environment.
+// label. Only the fixed operation, wrapped process cause and evidence filename
+// leave this owner: child output may contain operator credentials. env, when
+// non-nil, replaces the inherited environment.
 func (r *runner) run(ctx context.Context, label, dir string, env []string, name string, args ...string) error {
 	stdout, stderr, err := r.outputs(label)
 	if err != nil {
@@ -513,7 +578,7 @@ func (r *runner) run(ctx context.Context, label, dir string, env []string, name 
 	cmd.Env = env
 	cmd.Stdout, cmd.Stderr = stdout, stderr
 	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("%s: %w%s", label, err, r.excerpt(label))
+		return fmt.Errorf("%s: %w; diagnostic output is private in %s", label, err, stderr.Name())
 	}
 	return nil
 }
@@ -532,38 +597,126 @@ func (r *runner) outputs(label string) (*os.File, *os.File, error) {
 	return stdout, stderr, nil
 }
 
-// excerpt returns the end of a command's stderr for an error message, noting
-// truncation and where the full output is.
-func (r *runner) excerpt(label string) string {
-	return excerptFile(filepath.Join(r.evidenceDir, label+".stderr"), "stderr")
+// prepareBuild selects the checkout's workspace and prepares exactly packages,
+// the configured compile targets, with the operator's download settings.
+// A plan with no candidate targets still resolves its toolchain but loads no
+// workspace package. The following offline builds download nothing.
+func (r *runner) prepareBuild(
+	ctx context.Context, label, sourceDir, moduleDir, workDir string, packages []string,
+) (buildToolchain, error) {
+	goWork, err := candidate.GoWork(sourceDir, moduleDir)
+	if err != nil {
+		return buildToolchain{}, fmt.Errorf("find the %s build's workspace: %w", label, err)
+	}
+	return r.prepareGoBuild(ctx, label, moduleDir, workDir, goWork, packages)
 }
 
-// prepareBuild resolves the toolchain the module at moduleDir selects and
-// downloads its module dependencies, outside the sandbox, for the build named
-// label ("candidate" or "suite"). These steps fetch checksum-verified modules
-// and official toolchains and compile or execute no checked-out code; the
-// sandboxed build afterwards runs with no network. Evidence files and the
-// build home are named by label so the two builds never share them.
-func (r *runner) prepareBuild(ctx context.Context, label, moduleDir, workDir string) (buildToolchain, error) {
-	if err := r.run(ctx, "go-mod-download-"+label, moduleDir, nil, "go", "mod", "download"); err != nil {
-		return buildToolchain{}, fmt.Errorf("download %s modules: %w", label, err)
+// prepareGoBuild keeps standalone module downloads unchanged. In a workspace,
+// Go 1.27.3's bare module download expands the module graph, including declared
+// versions that a workspace's local modules override for package builds:
+// https://go.dev/ref/mod#go-mod-download. Loading the configured packages with
+// -deps instead fetches their compile dependencies, without unrelated packages
+// or tests: https://pkg.go.dev/cmd/go@go1.27.3#hdr-List_packages_or_modules.
+// This parses sources reached through local replacements, including outside
+// the checkout, where module download only read go.mod. It compiles or executes
+// no checked-out code.
+func (r *runner) prepareGoBuild(
+	ctx context.Context, label, moduleDir, workDir, goWork string, packages []string,
+) (buildToolchain, error) {
+	var toolchain buildToolchain
+	if goWork == "off" {
+		env := append(gitenv.WithoutRedirects(os.Environ()), "GOWORK=off")
+		if err := r.run(ctx, "go-mod-download-"+label, moduleDir, env, "go", "mod", "download"); err != nil {
+			return buildToolchain{}, fmt.Errorf("download %s modules: %w", label, err)
+		}
+		if err := r.run(ctx, "go-env-"+label, moduleDir, env, "go", "env", "GOROOT", "GOMODCACHE"); err != nil {
+			return buildToolchain{}, fmt.Errorf("resolve %s toolchain: %w", label, err)
+		}
+		out, err := os.ReadFile(filepath.Join(r.evidenceDir, "go-env-"+label+".stdout"))
+		if err != nil {
+			return buildToolchain{}, fmt.Errorf("read toolchain: %w", err)
+		}
+		lines := strings.Fields(string(out))
+		if len(lines) != 2 {
+			return buildToolchain{}, fmt.Errorf("resolve %s toolchain: malformed Go settings output; diagnostic output is private in %s",
+				label, filepath.Join(r.evidenceDir, "go-env-"+label+".stdout"))
+		}
+		toolchain.goroot, toolchain.modCache = lines[0], lines[1]
+	} else {
+		var env []string
+		var err error
+		toolchain, env, err = workspaceBuildEnvironment(ctx, label, moduleDir, goWork)
+		if err != nil {
+			return buildToolchain{}, err
+		}
+		if len(packages) > 0 {
+			args := append([]string{"list", "-deps"}, packages...)
+			cmd := exec.CommandContext(ctx, filepath.Join(toolchain.goroot, "bin", "go"), args...)
+			cmd.Dir, cmd.Env = moduleDir, env
+			// Like the written-test dependency owner, withhold network command
+			// output: proxy and credential helpers may print operator secrets.
+			cmd.Stdout, cmd.Stderr = io.Discard, io.Discard
+			if err := cmd.Run(); err != nil {
+				return buildToolchain{}, fmt.Errorf("download %s modules: %w", label, err)
+			}
+		}
 	}
-	if err := r.run(ctx, "go-env-"+label, moduleDir, nil, "go", "env", "GOROOT", "GOMODCACHE"); err != nil {
-		return buildToolchain{}, fmt.Errorf("resolve %s toolchain: %w", label, err)
-	}
-	out, err := os.ReadFile(filepath.Join(r.evidenceDir, "go-env-"+label+".stdout"))
-	if err != nil {
-		return buildToolchain{}, fmt.Errorf("read toolchain: %w", err)
-	}
-	lines := strings.Fields(string(out))
-	if len(lines) != 2 {
-		return buildToolchain{}, fmt.Errorf("unexpected go env output %q", out)
-	}
-	t := buildToolchain{goroot: lines[0], modCache: lines[1], workDir: filepath.Join(workDir, "build-home-"+label)}
-	if err := os.MkdirAll(t.workDir, 0o700); err != nil {
+	toolchain.workDir = filepath.Join(workDir, "build-home-"+label)
+	if err := os.MkdirAll(toolchain.workDir, 0o700); err != nil {
 		return buildToolchain{}, fmt.Errorf("create build home: %w", err)
 	}
-	return t, nil
+	return toolchain, nil
+}
+
+// workspaceBuildEnvironment resolves the operator's toolchain and effective
+// download policy through Go itself. Credential-bearing JSON stays in memory:
+// it is never runner evidence, a log or an error. The selected binary then uses
+// the same native/default compiler selectors as candidate.Build, with workspaces
+// on, cgo off and read-only manifests. HOME, XDG and credential helpers remain;
+// GOENV is disabled only after its effective download settings are retained.
+func workspaceBuildEnvironment(
+	ctx context.Context, label, moduleDir, goWork string,
+) (buildToolchain, []string, error) {
+	keys := []string{
+		"GOROOT", "GOMODCACHE", "GOPATH", "GOPROXY", "GOSUMDB", "GOPRIVATE",
+		"GONOPROXY", "GONOSUMDB", "GOINSECURE", "GOVCS", "GOAUTH", "GOTOOLCHAIN",
+	}
+	operatorEnv := append(gitenv.WithoutRedirects(os.Environ()), "GOWORK="+goWork)
+	cmd := exec.CommandContext(ctx, "go", append([]string{"env", "-json"}, keys...)...)
+	cmd.Dir, cmd.Env, cmd.Stderr = moduleDir, operatorEnv, io.Discard
+	var output bytes.Buffer
+	defer func() {
+		clear(output.Bytes())
+		output.Reset()
+	}()
+	cmd.Stdout = &output
+	if err := cmd.Run(); err != nil {
+		return buildToolchain{}, nil, fmt.Errorf("resolve %s toolchain: %w", label, err)
+	}
+	var settings map[string]string
+	decodeErr := json.Unmarshal(output.Bytes(), &settings)
+	clear(output.Bytes())
+	output.Reset()
+	if decodeErr != nil || settings["GOROOT"] == "" || settings["GOMODCACHE"] == "" {
+		return buildToolchain{}, nil, fmt.Errorf("resolve %s toolchain: invalid Go settings output", label)
+	}
+	// These selectors are absent from candidate.Build's explicit environment.
+	// Removing them and GOENV lets this selected Go binary own their defaults;
+	// an empty override alone would fall through to the persisted user file.
+	env := gitenv.WithoutRedirects(operatorEnv,
+		"GOENV", "GO111MODULE", "GOOS", "GOARCH", "GOAMD64", "GOARM", "GOARM64",
+		"GO386", "GOMIPS", "GOMIPS64", "GOPPC64", "GORISCV64", "GOWASM",
+		"GOEXPERIMENT", "GOFIPS140", "GODEBUG", "GOFLAGS", "CGO_ENABLED",
+	)
+	for _, key := range keys {
+		if key != "GOTOOLCHAIN" {
+			env = append(env, key+"="+settings[key])
+		}
+	}
+	// The initial lookup honors toolchain policy. Pin its resolved binary now,
+	// as compilation does, so package loading cannot select another toolchain.
+	env = append(env, "GOENV=off", "CGO_ENABLED=0", "GOFLAGS=-mod=readonly", "GOTOOLCHAIN=local")
+	return buildToolchain{goroot: settings["GOROOT"], modCache: settings["GOMODCACHE"]}, env, nil
 }
 
 // excerptFile returns the end of the evidence file at path, described as
@@ -626,18 +779,6 @@ func sha256File(path string) (string, error) {
 		return "", fmt.Errorf("hash %s: %w", path, err)
 	}
 	return hex.EncodeToString(h.Sum(nil)), nil
-}
-
-// buildSummary returns summarySandboxExit71 when a non-canceled sandboxed
-// build command exited with status 71, and defaultSummary otherwise.
-func buildSummary(ctx context.Context, err error, defaultSummary string) string {
-	if ctx.Err() == nil {
-		var exitErr *exec.ExitError
-		if errors.As(err, &exitErr) && exitErr.ExitCode() == sandboxExit71 {
-			return summarySandboxExit71
-		}
-	}
-	return defaultSummary
 }
 
 // stageError wraps err as the *StageError Run returns.

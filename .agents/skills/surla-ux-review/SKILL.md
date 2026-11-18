@@ -50,8 +50,8 @@ participant's folder and, apart from it, the tester's folder:
   surla/       # git clone of github.com/goadesign/surla at the commit under test
   work/        # empty; the participant builds its product here
 ~/surla-ux-reports/<id>/
-  docs/        # README.md, PROPOSAL.md, PRESS_RELEASE.md, docs/ (with img/),
-               # and examples/*/README.md from that commit, copied at their
+  docs/        # README.md, docs/ (with img/), and examples/*/README.md
+               # from that commit, copied at their
                # repository-relative paths so the READMEs do not overwrite
                # each other
   observations.md   # the tester's notes, which it writes
@@ -82,19 +82,20 @@ source out of its view.
   as a global `CLAUDE.md` or `AGENTS.md`. These can tell the participant
   things the README does not, so the report lists them as a limitation;
 - whether commands run inside your coding agent's own sandbox, and whether
-  they have network access. `surla init` downloads modules, and Surla's
-  verification builds and runs the code under test inside its own macOS
-  `sandbox-exec` sandbox (`verify/candidate`), which usually cannot start
-  inside the agent's sandbox. Give the participant the host access you are
+  they have network access. `surla init` downloads modules, and Surla builds
+  and runs the code under test as ordinary processes with the user's file
+  and network access. Working copies and process groups do not confine that
+  code. Keep any coding-agent sandbox restrictions separate from Surla's
+  documented execution policy. Give the participant the host access you are
   authorized to give. Trusted Surla commands run as the docs show, including
   `surla init`, which generates code from Surla's own unmodified starter
   templates. The product's own code is never compiled, generated from, or run
-  outside Surla's sandbox. That includes `goa gen` on its design, which runs
-  that design code. If the documented workflow needs a step Surla cannot run in
-  its sandbox, the study reports it as a missing capability. If the access
-  Surla needs is not available, that is an
-  environment limitation: the tester marks the milestones it blocks as not
-  supported;
+  except through Surla's commands. That
+  includes `goa gen` on its design, which runs that design code. If the
+  documented workflow needs a step Surla offers no command for, the study
+  reports it as a missing capability. If the access Surla needs is not
+  available, that is an environment limitation: the tester marks the
+  milestones it blocks as not supported;
 - **how the participant reaches Surla's MCP server.** The README tells a user
   to point a coding agent at `http://<addr>/mcp`. A subagent cannot add an MCP
   server to its own session. The participant therefore runs its own
@@ -119,7 +120,7 @@ fill in every placeholder:
 | --- | --- |
 | `{{TASK}}` | the task |
 | `{{PARTICIPANT_PROFILE}}` | the participant profile |
-| `{{ENVIRONMENT_FACTS}}` | the recorded facts that matter to a user: installed tools, credentials set, network and sandbox limits |
+| `{{ENVIRONMENT_FACTS}}` | the recorded facts that matter to a user: installed tools, credentials set, network access and coding-agent sandbox restrictions |
 | `{{CODING_AGENTS}}` | the coding-agent CLIs the participant may run, or "none" |
 | `{{PARTICIPANT}}` | the participant's folder |
 | `{{TESTER}}` | the tester's folder |
@@ -188,8 +189,8 @@ are its own account, so compare them with its actual tool calls wherever your
 harness keeps a subagent transcript. Also read the logs its coding agent saved
 in `work/agent-logs/`. A leak is reading anything outside the participant's
 allowed list, loading this skill, building the product without Surla, or
-compiling, generating from, or running the product's code outside Surla's
-sandbox.
+compiling, generating from, or running the product's code except through
+Surla's commands.
 
 A participant cannot unlearn what it read, so a leak ends the attempt. Tell
 the tester what was read and when. The tester records the leak as a finding,
@@ -223,17 +224,17 @@ deleting it is authorized.
 
 When the tester decides `stop_for_bug`, it names the bug and gives the steps
 to reproduce it. A blocking bug is one where Surla crashes, behaves
-differently from its documentation, or offers no sandboxed way to run
+differently from its documentation, or offers no command to run
 something its documented workflow needs, and no documented workaround
 exists. The participant cannot get past it however well it uses Surla.
 
 1. Reproduce the bug yourself with the trusted Surla CLI, using the host and
    network access you are authorized to use, so a restriction in your coding
    agent is not mistaken for a Surla bug. The product's code is still
-   compiled, generated from, and run only inside Surla's sandbox.
+   compiled, generated from, and run only through Surla's commands.
    - If the failure comes from the harness, tell the tester "environment
      limitation, not a Surla bug" and which milestones it affects.
-   - A missing capability, meaning no sandboxed way to run a step the
+   - A missing capability, meaning no Surla command for a step the
      documented workflow needs, counts as a real bug even when Surla lacks
      it by design. Go to step 2.
    - If Surla behaves as designed, tell the tester "reproduced; behavior is as

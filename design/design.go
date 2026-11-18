@@ -9,7 +9,7 @@ import (
 
 var _ = API("surla", func() {
 	Title("Surla MCP Software Factory Control Plane")
-	Description("MCP-native control plane for creating, verifying, and evolving production Goa-AI agentic platforms.")
+	Description("The Surla project server: coding agents propose, build, test and verify changes to a Goa and Goa-AI service through its MCP tools, and the user agrees each change and approves its result on its views page.")
 	Version("1.0.0")
 })
 
@@ -17,7 +17,7 @@ var _ = API("surla", func() {
 var AmbiguityQuestion = Type("AmbiguityQuestion", func() {
 	Description("Domain ambiguity surfaced with concrete examples at Checkpoint 1.")
 	Attribute("id", String, "Stable question identifier.")
-	Attribute("question", String, "Plain-English question for the operator.")
+	Attribute("question", String, "Plain-English question for the user.")
 	Attribute("options", ArrayOf(String), "Concrete resolution choices.")
 	Required("id", "question", "options")
 })
@@ -37,23 +37,21 @@ var ExampleItem = Type("ExampleItem", func() {
 
 // ProposeChangePayload is the input to the CP1 propose_change tool.
 var ProposeChangePayload = Type("ProposeChangePayload", func() {
-	Description("Operator feature request and the caller's analysis of it, saved as a new Checkpoint 1 Change Card.")
+	Description("The user's feature request and the caller's analysis of it, saved as a new Checkpoint 1 Change Card.")
 	Attribute("change_id", String, "Unique change identifier.")
-	Attribute("prompt", String, "Operator feature request.")
-	Attribute("design_source", String, "Goa design source the analysis was made against (the target's design/*.go files). Surla saves it with the card and includes it in request_revision; it does not interpret it. When omitted on a server with a bound workspace, Surla records design/*.go from the bound workspace; when omitted without a bound workspace, the card records no design. Cannot be combined with story_refresh_op_id.")
-	Attribute("story_refresh_op_id", String, "Optional op_id of a succeeded refresh_story operation for the bound workspace whose evaluated Stories this card adopts. When set, design_source must be omitted; Surla reads one workspace snapshot, requires its snapshot_digest to match the operation's, and records both the evaluated Stories and that snapshot's design/*.go on the card. Omit when the card has no Story.")
+	Attribute("prompt", String, "The user's feature request.")
+	Attribute("story_refresh_op_id", String, "op_id of a succeeded refresh_story operation whose evaluated draft this card adopts: its design, Stories, architecture, go.mod and made-from list. Required when the project folder holds a go.mod; Surla reads no file.")
 	Attribute("analysis", CP1Analysis, "Your analysis of prompt against the target's current design.")
 	Required("change_id", "prompt", "analysis")
 })
 
 // ReviseChangePayload is the input to the CP1 revise_change tool.
 var ReviseChangePayload = Type("ReviseChangePayload", func() {
-	Description("Revised operator feature request and the caller's analysis of it, saved as the next revision of an existing Checkpoint 1 Change Card.")
+	Description("The user's revised feature request and the caller's analysis of it, saved as the next revision of an existing Checkpoint 1 Change Card.")
 	Attribute("change_id", String, "Change identifier.")
-	Attribute("request_revision", String, "Current CP1 request_revision digest being revised.")
-	Attribute("prompt", String, "Revised operator feature request.")
-	Attribute("design_source", String, "Updated Goa design source the analysis was made against (the target's design/*.go files). Surla saves it with the card and includes it in request_revision; it does not interpret it. When omitted on a workspace-backed card without Stories and with a bound workspace, Surla records design/*.go from the bound workspace again; otherwise the card's saved design source is kept. Cannot be set when story_refresh_op_id is set or when the card already has adopted Stories.")
-	Attribute("story_refresh_op_id", String, "Optional op_id of a succeeded refresh_story operation for the bound workspace whose evaluated Stories this revision adopts. When set, design_source must be omitted and the card must not use a caller-supplied design_source; Surla reads one workspace snapshot, requires its snapshot_digest to match the operation's, and records both the evaluated Stories and that snapshot's design/*.go on the revised card. When omitted on a card that already has Stories, the card's saved Stories and saved design_source are kept together.")
+	Attribute("request_revision", String, "request_revision of the latest revision you read: the proposed revision's when the change shows one waiting (proposed_revision.request_revision), otherwise the change's own.")
+	Attribute("prompt", String, "The user's revised feature request.")
+	Attribute("story_refresh_op_id", String, "op_id of a succeeded refresh_story operation whose evaluated draft this revision adopts. When omitted, the revision keeps every snapshot field of the revision it revises: design, Stories, architecture, go.mod and made-from list, even with zero Stories. A project with a go.mod refuses an omitted op_id when that revision has no design. Surla reads no file.")
 	Attribute("analysis", CP1RevisionAnalysis, "Your analysis of the revised prompt against the current card and the target's current design.")
 	Required("change_id", "request_revision", "prompt", "analysis")
 })
@@ -63,6 +61,18 @@ var GetChangePayload = Type("GetChangePayload", func() {
 	Description("Identifies the Change Card the authenticated owner wants to read.")
 	Attribute("change_id", String, "Change identifier.")
 	Required("change_id")
+})
+
+// DeclineRevisionPayload names the proposed revision the user declines.
+var DeclineRevisionPayload = Type("DeclineRevisionPayload", func() {
+	Description("Identifies the proposed revision of a confirmed Change Card that the user declines.")
+	Attribute("change_id", String, "Change identifier.", func() {
+		MinLength(1)
+	})
+	Attribute("request_revision", String, "request_revision of the proposed revision being declined (proposed_revision.request_revision): 64 lowercase hex characters.", func() {
+		Pattern("^[0-9a-f]{64}$")
+	})
+	Required("change_id", "request_revision")
 })
 
 // InitProjectPayload is the input to the init_project tool.
@@ -90,12 +100,10 @@ var InitProjectResult = Type("InitProjectResult", func() {
 	Required("dir", "module_path", "service_name", "commit")
 })
 
-// GenerateCodePayload selects the local module whose edited design is compiled.
+// GenerateCodePayload selects the module of the builder's working folder to regenerate.
 var GenerateCodePayload = Type("GenerateCodePayload", func() {
-	Description("Selects the application module or its public local eval/ module for code generation from the active workspace's files.")
-	Attribute("target", String, "Module to regenerate: candidate (the application, the default when omitted) or eval (the local eval/ module).", func() {
-		Enum("candidate", "eval")
-	})
+	Description("Selects the module of the builder's working folder to regenerate: candidate, the application, whose design/ Surla first writes from the open build; or eval, the test module, regenerated from its own design.")
+	Attribute("target", String, "Module to regenerate: candidate (the application, the default when omitted) or eval (the test module).", func() { Enum("candidate", "eval") })
 })
 
 // GenerateCodeResult reports the generated files actually published locally.
@@ -111,7 +119,7 @@ var GenerateCodeResult = Type("GenerateCodeResult", func() {
 
 // CheckProjectResult reports one check_project operation.
 var CheckProjectResult = Type("CheckProjectResult", func() {
-	Description("Outcome of running every Go module's tests in a protected copy of the workspace inside Linux containers.")
+	Description("Outcome of running every Go module's tests in a protected copy of the working folder inside Linux containers.")
 	Attribute("op_id", String, "Operation identifier; pass it to read_check_output to read the full output.")
 	Attribute("passed", Boolean, "True only when go test ./... exited 0 in every module.")
 	Attribute("message", String, "At most 16 KiB: the modules tested, the first failure and the end of its output, and how to read the rest.")
@@ -138,16 +146,16 @@ var CheckOutputPage = Type("CheckOutputPage", func() {
 
 // UpdateDependenciesResult reports the manifests written by update_dependencies.
 var UpdateDependenciesResult = Type("UpdateDependenciesResult", func() {
-	Description("Go module manifests rewritten in the workspace after go mod tidy ran in a protected copy.")
+	Description("Go module manifests rewritten in the working folder after go mod tidy ran in a protected copy.")
 	Attribute("op_id", String, "Operation identifier; pass it to read_check_output to read the full output.")
-	Attribute("files_written", ArrayOf(String), "Workspace-relative go.mod, go.sum and go.work.sum files whose bytes changed and were written.")
+	Attribute("files_written", ArrayOf(String), "Working-folder-relative go.mod, go.sum and go.work.sum files whose bytes changed and were written.")
 	Attribute("message", String, "At most 16 KiB: what was updated, and Go's message for any module that could not be.")
 	Required("op_id", "files_written", "message")
 })
 
 // ConfigureModelPayload is the input to the configure_model tool.
 var ConfigureModelPayload = Type("ConfigureModelPayload", func() {
-	Description("Selects either a direct model provider and model name (using the API key already present in surla serve's process environment) or a running goa-ai model gateway address.")
+	Description("Selects either a direct model provider and model name (whose request settings the surla command handed to the project server) or a running goa-ai model gateway address.")
 	Attribute("provider", String, "Direct model provider name when configuring a direct provider; must be paired with model_name and omitted when gateway_addr is set.", func() {
 		Enum("anthropic", "openai")
 		Example("anthropic")
@@ -180,7 +188,7 @@ var ModelConfigResult = Type("ModelConfigResult", func() {
 // Change Card revision.
 var UICompositionItem = Type("UICompositionItem", func() {
 	Description("Caller-authored OpenUI Lang decision view for exactly one Change Card revision. It is presentation only: it is never hashed into request_revision, confirm_intent never reads it, and it describes the card only while composed_for_revision equals the card's request_revision.")
-	Attribute("program", String, "OpenUI Lang program from the analysis's ui_composition, exactly as the caller sent it. The server does not check it; the checkpoint viewer validates it and shows its error state, with the rest of the card still usable, when the program is not a valid composition.")
+	Attribute("program", String, "OpenUI Lang program from the analysis's ui_composition, exactly as the caller sent it. The server does not check it; the views page validates it and shows its error state, with the rest of the card still usable, when the program is not a valid composition.")
 	Attribute("composed_for_revision", String, "request_revision of the Change Card this program was composed for.")
 	Required("program", "composed_for_revision")
 })
@@ -188,55 +196,80 @@ var UICompositionItem = Type("UICompositionItem", func() {
 // ApprovalItem records a passed CP5 promotion check for one Change Card
 // revision.
 var ApprovalItem = Type("ApprovalItem", func() {
-	Description("Checkpoint 5 approval recorded by approve_merge after the evaluator-written verification report passed and matched the change being promoted: the exact candidate commit, suite, environment and binary digests it checked. It is saved with the card in the control plane's cards directory, merges and deploys nothing, is replaced by the next successful approve_merge for the same revision, and is dropped when confirm_intent or revise_change mints a new request_revision. get_change and confirm_intent return it in approval only while the promotion target's current suite, environment and binary digests still equal the ones it records, or in unverified_approval when current promotion inputs cannot be verified on that read.")
-	Attribute("approved_by", String, "Authenticated principal that owns the card and called approve_merge. Authentication does not prove that a human, rather than a coding agent, made the call.")
+	Description("Checkpoint 5 approval recorded by approve_merge after the verification report passed and matched the change being promoted: the exact candidate commit, the tests' commit chosen for the revision, and (when promotion settings are configured) the binary digests the promotion target measured. suite_id and environment record what the tests at suite_commit declared in the report and are shown, not compared against separate promotion settings. test_source is derived on each read from how the server chooses tests. The approval is saved with the card in the control plane's cards directory, merges and deploys nothing, is replaced by the next successful approve_merge for the same revision, and is dropped when the user refines the confirmed revision or adopts a proposed one with confirm_intent. A revise_change on a confirmed card leaves it on the confirmed revision, which stays in force until the user adopts the proposal. get_change and confirm_intent return it in approval while the tests' commit chosen for the revision still equals suite_commit and (when a promotion target is configured) the promotion target's current binary digests still equal artifacts, or in unverified_approval when the tests' commit still matches but a configured promotion target cannot verify the candidate's binaries on that read.")
+	Attribute("approved_by", String, "User who approved the result.")
 	Attribute("report_digest", String, "SHA-256 digest of the approved CP4 verification report.")
 	Attribute("candidate_commit", String, "Candidate commit the report was checked against.")
-	Attribute("suite_id", String, "Evaluator suite the promotion target requires.")
-	Attribute("suite_commit", String, "Evaluator suite commit the promotion target requires.")
-	Attribute("environment", String, "Dependency profile the promotion target requires, such as sim.")
-	Attribute("artifacts", MapOf(String, String), "SHA-256 digest of each candidate binary the promotion target measured, keyed by binary name.")
-	Attribute("scenario_count", Int, "Number of declared evaluator scenarios, every one of which passed.")
-	Required("approved_by", "report_digest", "candidate_commit", "suite_id", "suite_commit", "environment", "artifacts", "scenario_count")
+	Attribute("suite_id", String, "Suite identifier the tests at suite_commit declared in the report (shown, not compared).")
+	Attribute("suite_commit", String, "Commit of the tests the report ran: the evaluator suite commit in the stored verification settings, or the tests Surla accepted for the change's build.")
+	Attribute("environment", String, "Dependency profile the tests at suite_commit declared in the report, such as sim or scripted-model (shown, not compared).")
+	Attribute("artifacts", MapOf(String, String), "SHA-256 digest of each candidate binary the promotion target measured, keyed by binary name; empty when no promotion settings are configured.")
+	Attribute("scenario_count", Int, "Number of declared scenarios in the report, every one of which passed.")
+	OneOf("test_source", "Where the tests at suite_commit came from, derived on each read: evaluator, or written_tests with their commit and a notice.", func() {
+		TypeName("ApprovalTestSource")
+		Meta("oneof:json:flatten")
+		Meta("oneof:type:field", "source")
+		Attribute("evaluator", OperatorEvaluatorTests)
+		Attribute("written_tests", AgentWrittenTests)
+	})
+	Required("approved_by", "report_digest", "candidate_commit", "suite_id", "suite_commit", "environment", "artifacts", "scenario_count", "test_source")
 })
 
 // UnverifiedApprovalItem wraps a saved CP5 approval whose current promotion
 // inputs could not be verified on this read.
 var UnverifiedApprovalItem = Type("UnverifiedApprovalItem", func() {
-	Description("Saved Checkpoint 5 promotion approval recorded on the Change Card whose current promotion inputs could not be verified on this read.")
+	Description("Saved Checkpoint 5 promotion approval recorded on the Change Card whose current release binaries could not be verified on this read.")
 	Attribute("approval", ApprovalItem, "Recorded promotion approval from the Change Card.")
-	Attribute("reason", String, "Explanation of why the recorded approval could not be verified against current promotion inputs and how to recover.")
+	Attribute("reason", String, "Explanation of why the recorded approval could not be verified against current release binaries and how to recover.")
 	Required("approval", "reason")
 })
 
-// ChangeCardResult is the output of CP1 propose_change, revise_change, confirm_intent and get_change.
+// ProposedRevisionItem is a revision the guide proposed beside a confirmed
+// Change Card, waiting for the user to adopt or decline it.
+var ProposedRevisionItem = Type("ProposedRevisionItem", func() {
+	Description("A revision the guide proposed with revise_change beside the confirmed revision in force. It waits until the user adopts it, by answering its questions and confirming its request_revision with confirm_intent, or declines it with decline_revision. Until then the confirmed revision stays in force with its answers, confirmation, approval, Stories and design source, and architecture preview, verification and approval keep working on it. A later revise_change naming this request_revision replaces it.")
+	Attribute("prompt", String, "The user's feature request for this revision.")
+	Attribute("summary", String, "Plain-English summary of the proposed change.")
+	Attribute("ambiguities", ArrayOf(AmbiguityQuestion), "Domain questions the user answers when adopting this revision.")
+	Attribute("examples", ArrayOf(ExampleItem), "Concrete examples mapped to evaluator checks.")
+	Attribute("preserved_behaviors", ArrayOf(String), "Existing contract invariants preserved by this change.")
+	Attribute("stories", ArrayOf(StorySummaryItem), "Evaluated domain Stories of this revision in declaration order; omitted when it has none. Included in its request_revision.")
+	Attribute("request_revision", String, "SHA-256 digest of this proposed revision: confirm_intent adopts it, decline_revision declines it, and revise_change replaces it when given this value.")
+	Attribute("ui_composition", UICompositionItem, "Decision view the guide composed for this revision in its analysis, when it sent one.")
+	Attribute("changed_design_files", ArrayOf(String), "Paths of the design/*.go files that differ between the design source the confirmed revision was made from and the one this revision was made from (added, removed or changed), in path order; empty when both were made from the same design files. Adopting the revision binds it to its own design source.")
+	Required("prompt", "summary", "examples", "preserved_behaviors", "request_revision", "changed_design_files")
+})
+
+// ChangeCardResult is the output of CP1 propose_change, revise_change,
+// confirm_intent, decline_revision, approve_merge and get_change.
 var ChangeCardResult = Type("ChangeCardResult", func() {
 	Description("Checkpoint 1 Change Card containing examples, preserved behaviors, optional adopted domain Stories, and audit metadata.")
 	Attribute("change_id", String, "Change identifier.")
 	Attribute("status", String, "Checkpoint status (needs_confirmation or confirmed).", func() {
 		Enum("needs_confirmation", "confirmed")
 	})
-	Attribute("prompt", String, "Operator feature request for this revision.")
+	Attribute("prompt", String, "The user's feature request for this revision.")
 	Attribute("summary", String, "Plain-English summary of the proposed change from propose_change or revise_change. confirm_intent does not rewrite this text; when status is confirmed, answers records the owner's resolutions for ambiguities.")
 	Attribute("ambiguities", ArrayOf(AmbiguityQuestion), "Domain questions surfaced at CP1, retained for audit after confirmation.")
 	Attribute("answers", MapOf(String, String), "Owner-confirmed answers keyed by ambiguity question ID when status is confirmed and ambiguities is non-empty (empty when a confirmed card has no ambiguity questions). Each answer equals one of its question's declared options and takes precedence over open phrasing in summary.")
 	Attribute("examples", ArrayOf(ExampleItem), "Concrete examples mapped to evaluator checks.")
 	Attribute("preserved_behaviors", ArrayOf(String), "Existing contract invariants preserved by this change.")
 	Attribute("stories", ArrayOf(StorySummaryItem), "Evaluated domain Stories adopted from refresh_story for this Change Card revision in declaration order; omitted when the card has no Stories. Included in request_revision.")
-	Attribute("confirmed_by", String, "Authenticated principal that confirmed the Change Card.")
+	Attribute("confirmed_by", String, "User who confirmed the Change Card.")
 	Attribute("request_revision", String, "SHA-256 digest of the canonical versioned Change Card.")
 	Attribute("ui_composition", UICompositionItem, "Decision view the caller composed for this revision in its analysis, when it sent one. A confirm_intent that changes answers or examples returns the new revision without it.")
-	Attribute("approval", ApprovalItem, "Checkpoint 5 approval of this revision, present only while it is verified against the promotion target's current inputs on this read. It is absent before approve_merge succeeds, whenever the target's suite, environment or binary digests have changed since, and whenever current inputs cannot be verified (see unverified_approval). It is never hashed into request_revision.")
-	Attribute("unverified_approval", UnverifiedApprovalItem, "Saved Checkpoint 5 approval of this revision when current promotion inputs could not be verified on this read (because no promotion target is configured or the target could not report its current inputs). At most one of approval or unverified_approval is set. It is never saved to disk or hashed into request_revision.")
+	Attribute("approval", ApprovalItem, "Checkpoint 5 approval of this revision, present while suite_commit is still the tests' commit chosen for this revision and (when a promotion target is configured) the promotion target's current binary digests still equal artifacts on this read. It is absent before approve_merge succeeds, whenever the chosen tests' commit or the staged binary digests have changed since, and whenever a configured promotion target's staged binaries cannot be verified (see unverified_approval). It is never hashed into request_revision.")
+	Attribute("unverified_approval", UnverifiedApprovalItem, "Saved Checkpoint 5 approval of this revision when suite_commit still matches the chosen tests' commit and promotion settings are configured, but the staged binaries could not be verified on this read. At most one of approval or unverified_approval is set. It is never saved to disk or hashed into request_revision.")
+	Attribute("proposed_revision", ProposedRevisionItem, "The revision the guide proposed beside this confirmed revision, while it waits for the user to adopt or decline it; absent otherwise. This card's own fields describe the revision in force.")
 	Required("change_id", "status", "prompt", "summary", "examples", "preserved_behaviors", "request_revision")
 })
 
-// ConfirmIntentPayload locks the operator's confirmed ambiguity answers and example table at CP1.
+// ConfirmIntentPayload locks the user's confirmed ambiguity answers and example table at CP1.
 var ConfirmIntentPayload = Type("ConfirmIntentPayload", func() {
-	Description("Operator confirmation of Checkpoint 1 ambiguity answers and concrete examples.")
+	Description("The user's confirmation of Checkpoint 1 ambiguity answers and concrete examples.")
 	Attribute("change_id", String, "Change identifier.")
 	Attribute("request_revision", String, "Reviewed CP1 request_revision digest being confirmed.")
-	Attribute("answers", MapOf(String, String), "Selected resolution per ambiguity question ID. Answer every current question, and give each value exactly as one string from that question's options, character for character. To record a decision that no option expresses, call revise_change with that decision in prompt.")
+	Attribute("answers", MapOf(String, String), "Selected resolution per ambiguity question ID. Answer every current question, and give each value exactly as one string from that question's options, character for character. A decision that no option expresses goes to the guide, which records it with revise_change; the user then confirms the resulting revision.")
 	Attribute("examples", ArrayOf(ExampleItem), "The complete confirmed example table, including examples you edited or added. Keep an existing example's id when you edit it, and give an example you add a new, unique, non-blank id; ids are saved as sent.")
 	Required("change_id", "request_revision", "answers", "examples")
 })
@@ -327,67 +360,6 @@ var ToolContractItem = Type("ToolContractItem", func() {
 	)
 })
 
-// BuilderScopeItem defines an explicit file-ownership slice for one builder agent.
-var BuilderScopeItem = Type("BuilderScopeItem", func() {
-	Description("Explicit repository path ownership slice for a builder agent role.")
-	Attribute("name", String, "Human-readable builder scope name (for example, orders or api).")
-	Attribute("paths", ArrayOf(String), "Repository-relative path globs owned by this builder.")
-	Attribute("preferred_profile_id", String, "Optional preference selecting a server-configured authenticated profile ID.")
-	Required("name", "paths")
-})
-
-// SwarmRoleItem describes one proposed agent role assignment in a Surla build swarm.
-var SwarmRoleItem = Type("SwarmRoleItem", func() {
-	Description("Proposed Chorus agent role assignment derived from server-owned provider profiles and explicit workspace scopes. Owned paths and access modes are operator-declared coordination ownership boundaries for Chorus agents, not Surla-enforced OS isolation.")
-	Attribute("handle", String, "Deterministic Chorus agent handle (without leading '@', at most 32 characters).")
-	Attribute("role", String, "Assigned swarm role kind.", func() {
-		Enum("architect", "builder", "eval_author", "reviewer")
-	})
-	Attribute("scope_name", String, "Human-readable scope label for this assignment.")
-	Attribute("profile_id", String, "Assigned server-configured provider profile ID.")
-	Attribute("provider", String, "Assigned coding-agent provider name.")
-	Attribute("model", String, "Assigned model identifier.")
-	Attribute("family", String, "Canonical model family identifier.")
-	Attribute("owned_paths", ArrayOf(String), "Repository or workspace path globs owned by this role for Chorus coordination.")
-	Attribute("access_mode", String, "Operator-declared workspace coordination boundary for this role.", func() {
-		Enum("read_only_after_cp2", "read_write_worktree", "isolated_eval_workspace", "read_only_review")
-	})
-	Required(
-		"handle",
-		"role",
-		"scope_name",
-		"profile_id",
-		"provider",
-		"model",
-		"family",
-		"owned_paths",
-		"access_mode",
-	)
-})
-
-// SwarmPlanItem reports the proposed Chorus role roster and model-family routing at Checkpoint 2.
-var SwarmPlanItem = Type("SwarmPlanItem", func() {
-	Description("Proposed Chorus role assignments and model-family diversity facts surfaced at Checkpoint 2. Role, model, and workspace scope assignments are Chorus coordination proposals and do not prove agent launch or replace OS process and workspace isolation.")
-	Attribute("status", String, "Roster configuration status.", func() {
-		Enum("configured", "unconfigured", "missing_capability")
-	})
-	Attribute("assignments", ArrayOf(SwarmRoleItem), "Deterministic role assignments when status is configured.")
-	Attribute("cross_family_review", Boolean, "True if and only if status is configured and the reviewer model family is disjoint from every assigned builder model family.")
-	Attribute("cross_family_eval", Boolean, "True if and only if status is configured, an eval_author role is assigned, and the eval_author model family is disjoint from every assigned builder model family.")
-	Attribute("single_family", Boolean, "True when status is configured and all assigned roles share one model family.")
-	Attribute("missing_roles", ArrayOf(String), "Requested roles lacking an authenticated capable profile when status is unconfigured (with builder scopes supplied) or missing_capability; omitted on solo previews with no builder scopes.")
-	Attribute("summary", String, "Plain-English summary of the proposed swarm roster and model-family posture.")
-	Attribute("manifest", String, "Formatted Chorus collaboration manifest text when status is configured; does not claim publication until sent via Chorus.")
-	Required(
-		"status",
-		"assignments",
-		"cross_family_review",
-		"cross_family_eval",
-		"single_family",
-		"summary",
-	)
-})
-
 // DesignSnapshot is an immutable copy of a Go module holding a Goa design.
 var DesignSnapshot = Type("DesignSnapshot", func() {
 	Description("Exact files of one Go module containing a Goa/Goa-AI design package at design/. Paths are clean, relative to the module root, and name only .go, go.mod and go.sum files; go.mod, go.sum and at least one design/*.go file are required. The evaluator stages exactly these bytes, resolves dependencies only from go.mod and go.sum, and never reads host paths.")
@@ -397,28 +369,23 @@ var DesignSnapshot = Type("DesignSnapshot", func() {
 
 // PreviewArchitecturePayload is the input to the CP2 preview_architecture tool.
 var PreviewArchitecturePayload = Type("PreviewArchitecturePayload", func() {
-	Description("Request to derive the Checkpoint 2 C4 topology, guardrails, and proposed swarm roster from a candidate Goa design bound to a confirmed Change Card.")
+	Description("Request for the Checkpoint 2 C4 topology and guardrails of a confirmed Change Card's agreed revision, from the architecture saved with it.")
 	Attribute("change_id", String, "Confirmed Change Card identifier.")
 	Attribute("request_revision", String, "Expected CP1 request_revision digest.")
-	Attribute("design", DesignSnapshot, "Candidate module whose Goa and Goa-AI design is evaluated. When omitted on a server with a bound workspace, Surla reads the candidate module snapshot from the bound workspace.")
-	Attribute("builders", ArrayOf(BuilderScopeItem), "Optional explicit builder path scopes for proposing a Chorus build roster. When omitted, preview_architecture returns a solo preview with swarm.status unconfigured and no missing_roles.")
-	Attribute("architect_paths", ArrayOf(String), "Optional repository-relative path globs for an @architect role in the proposed Chorus roster (requires builders).")
-	Attribute("eval_paths", ArrayOf(String), "Optional repository or evaluator-workspace relative path globs for an @eval-author role in the proposed Chorus roster (requires builders).")
 	Required("change_id", "request_revision")
 })
 
 // ArchitecturePreviewResult is the output of the CP2 preview_architecture tool.
 var ArchitecturePreviewResult = Type("ArchitecturePreviewResult", func() {
-	Description("Checkpoint 2 C4 container topology, tool contracts, per-agent Goa-AI guardrails, and proposed Chorus swarm roster derived from the evaluated candidate design.")
+	Description("Checkpoint 2 C4 container topology, tool contracts, per-agent Goa-AI guardrails, derived from the evaluated candidate design.")
 	Attribute("change_id", String, "Bound Change Card identifier.")
 	Attribute("request_revision", String, "Bound CP1 request_revision digest.")
-	Attribute("design_digest", String, "SHA-256 digest of the evaluated design snapshot (sorted path and content pairs).")
+	Attribute("design_digest", String, "SHA-256 digest of the design snapshot the revision's refresh evaluated (sorted path and content pairs).")
 	Attribute("system_name", String, "API or primary service name declared in the design.")
 	Attribute("containers", ArrayOf(C4ContainerItem), "Derived C4 containers.")
 	Attribute("edges", ArrayOf(C4EdgeItem), "Validated directed edges between declared containers.")
 	Attribute("agent_policies", ArrayOf(AgentPolicyItem), "Evaluated Goa-AI runtime policies per declared agent.")
 	Attribute("tools", ArrayOf(ToolContractItem), "Evaluated Goa-AI tool contracts.")
-	Attribute("swarm", SwarmPlanItem, "Proposed Chorus multi-agent role assignments and model-family routing.")
 	Attribute("banner", String, "Plain-English summary of topology and guardrails.")
 	Required(
 		"change_id",
@@ -429,14 +396,13 @@ var ArchitecturePreviewResult = Type("ArchitecturePreviewResult", func() {
 		"edges",
 		"agent_policies",
 		"tools",
-		"swarm",
 		"banner",
 	)
 })
 
 // DraftOverridePayload is the input to the CP3 Fast Draft Mode tool.
 var DraftOverridePayload = Type("DraftOverridePayload", func() {
-	Description("Fast Draft Mode request to hot-reload a prompt template on the bound target platform or reject a compiled business-rule edit.")
+	Description("Fast Draft Mode request to hot-reload a prompt template on the live target start_live_target runs, or reject a compiled business-rule edit.")
 	Attribute("target_kind", String, "Override target kind (prompt_template or compiled_rule).", func() {
 		Enum("prompt_template", "compiled_rule")
 	})
@@ -448,21 +414,22 @@ var DraftOverridePayload = Type("DraftOverridePayload", func() {
 // DraftOverrideResult reports whether the CP3 edit was hot-reloaded in 0s or requires a full Go rebuild.
 var DraftOverrideResult = Type("DraftOverrideResult", func() {
 	Description("Result of a Checkpoint 3 Fast Draft Mode override request.")
-	Attribute("applied_in_store", Boolean, "True when updated in the target platform's prompt.Store for 0s reload.")
+	Attribute("applied_in_store", Boolean, "True when the live target saved the prompt text in its prompt store for 0s reload.")
 	Attribute("requires_rebuild", Boolean, "True when the change modifies a compiled Go business rule.")
-	Attribute("prompt_version", String, "New prompt version digest returned by the target platform.")
+	Attribute("prompt_version", String, "Version of the accepted prompt text, as the live target returned it.")
 	Attribute("message", String, "Operator-facing status explanation.")
 	Required("applied_in_store", "requires_rebuild", "message")
 })
 
 // StartLiveTargetPayload names the candidate commit a CP3 live target runs.
 var StartLiveTargetPayload = Type("StartLiveTargetPayload", func() {
-	Description("Candidate commit to build and run as this server's live CP3 target.")
+	Description("Owned, confirmed change and candidate commit to build and run as this server's live CP3 target.")
+	Attribute("change_id", String, "Owned, confirmed change from list_builder_assignments.", func() { MinLength(1) })
 	Attribute("candidate_commit", String, "Full commit ID to build, in the candidate repository's object format.", func() {
 		Pattern("^([0-9a-f]{40}|[0-9a-f]{64})$")
 		Example("4f0b3c1d2e5a6978877665544332211009988776")
 	})
-	Required("candidate_commit")
+	Required("change_id", "candidate_commit")
 })
 
 // LiveTargetResult describes the live CP3 target a server now runs.
@@ -482,9 +449,115 @@ var StopLiveTargetResult = Type("StopLiveTargetResult", func() {
 	Required("stopped", "message")
 })
 
+// LiveTargetNone is the live target state when none runs.
+var LiveTargetNone = Type("LiveTargetNone", func() {
+	Description("No live target is running.")
+})
+
+// LiveTargetStarting is a live target that is being built and started.
+var LiveTargetStarting = Type("LiveTargetStarting", func() {
+	Description("A live target is being built from a commit and started. It cannot be stopped until the start finishes.")
+	Attribute("candidate_commit", String, "The commit being built.")
+	Attribute("since", String, "When the start began.", func() { Format(FormatDateTime) })
+	Required("candidate_commit", "since")
+})
+
+// LivePromptItem is one prompt whose draft a running live target accepted.
+var LivePromptItem = Type("LivePromptItem", func() {
+	Description("A prompt whose text the live target replaced with an accepted draft, and the version now in force. There is one entry per prompt: a later draft of the same prompt replaces it. The text itself is never returned.")
+	Attribute("prompt_id", String, "Registered prompt identifier.")
+	Attribute("version", String, "Version of the text in force, as the live target returned it.")
+	Attribute("accepted_at", String, "When the live target first accepted the version in force. A later draft that the target answers with the same version, such as the same text sent again, keeps this time.", func() { Format(FormatDateTime) })
+	Required("prompt_id", "version", "accepted_at")
+})
+
+// RunningLiveTarget is a live target that is running.
+var RunningLiveTarget = Type("RunningLiveTarget", func() {
+	Description("A running live target.")
+	Attribute("candidate_commit", String, "The commit it was built from.")
+	Attribute("url", String, "The origin it listens on, as its evaluator suite reported it.")
+	Attribute("started_at", String, "When it became ready.", func() { Format(FormatDateTime) })
+	Attribute("prompts", ArrayOf(LivePromptItem), "One entry per prompt whose draft it accepted, sorted by prompt_id; empty when none.")
+	Required("candidate_commit", "url", "started_at", "prompts")
+})
+
+// LiveTargetNotConfirmedStopped is a live target whose processes could not
+// be confirmed stopped.
+var LiveTargetNotConfirmedStopped = Type("LiveTargetNotConfirmedStopped", func() {
+	Description("A live target whose processes could not be confirmed stopped. No other live target can start until they are.")
+	Attribute("candidate_commit", String, "The commit it was built from.")
+	Attribute("message", String, "What happened and what to do next.")
+	Required("candidate_commit", "message")
+})
+
+// LiveTargetEnded is the last ready target that ended unexpectedly after
+// the server confirmed that all its processes stopped.
+var LiveTargetEnded = Type("LiveTargetEnded", func() {
+	Description("The last ready target ended unexpectedly and its processes are confirmed stopped. This in-memory observation lasts until an explicit stop, an accepted replacement, or a server restart. It contains no address, prompt, credential or provider detail.")
+	Attribute("candidate_commit", String, "The commit the ended target ran.")
+	Attribute("started_at", String, "When that target became ready.", func() { Format(FormatDateTime) })
+	Attribute("ended_at", String, "When the server observed that target ending.", func() { Format(FormatDateTime) })
+	Attribute("message", String, "Fixed explanation of what is known and the builder's next step.")
+	Required("candidate_commit", "started_at", "ended_at", "message")
+})
+
+// LiveTargetStatus is this server's live target in exactly one state.
+var LiveTargetStatus = Type("LiveTargetStatus", func() {
+	Description("This server's live target, as get_live_target reports it.")
+	OneOf("live_target", "none when no live target runs; starting while one is built and started; running with its commit, address, start time and the prompts whose drafts are in force; not_confirmed_stopped when its processes could not be confirmed stopped; ended when a ready target ended unexpectedly and cleanup is confirmed.", func() {
+		Meta("oneof:json:flatten")
+		Meta("oneof:type:field", "state")
+		Attribute("none", LiveTargetNone)
+		Attribute("starting", LiveTargetStarting)
+		Attribute("running", RunningLiveTarget)
+		Attribute("not_confirmed_stopped", LiveTargetNotConfirmedStopped)
+		Attribute("ended", LiveTargetEnded)
+	})
+	Required("live_target")
+})
+
+// ModelNone is the model connection when no model is chosen.
+var ModelNone = Type("ModelNone", func() {
+	Description("No model is chosen. A written-tests live target requires a model choice; a target using stored verification settings may start without one.")
+})
+
+// ModelDirect is a direct model provider and model name.
+var ModelDirect = Type("ModelDirect", func() {
+	Description("A direct model provider and model name. The provider's request settings stay in the project server's memory and are never returned.")
+	Attribute("provider", String, "Direct model provider.", func() {
+		Enum("anthropic", "openai")
+	})
+	Attribute("model_name", String, "Provider model identifier.", func() {
+		MinLength(1)
+	})
+	Required("provider", "model_name")
+})
+
+// ModelGateway is a running goa-ai model gateway.
+var ModelGateway = Type("ModelGateway", func() {
+	Description("A running goa-ai model gateway, which chooses the model.")
+	Attribute("gateway_addr", String, "Plaintext gRPC host:port of the gateway.", func() {
+		MinLength(1)
+	})
+	Required("gateway_addr")
+})
+
+// ModelConnection is the model choice live targets started afterwards use.
+var ModelConnection = Type("ModelConnection", func() {
+	Description("The model live targets started afterwards use, as get_model_connection reports it.")
+	OneOf("connection", "none when no model is chosen; direct with a provider and model name; gateway with a model gateway address.", func() {
+		Meta("oneof:json:flatten")
+		Meta("oneof:type:field", "kind")
+		Attribute("none", ModelNone)
+		Attribute("direct", ModelDirect)
+		Attribute("gateway", ModelGateway)
+	})
+	Required("connection")
+})
+
 // ApproveMergePayload is the input to the CP5 approve_merge tool.
 var ApproveMergePayload = Type("ApproveMergePayload", func() {
-	Description("Identifies the confirmed Change Card revision, the candidate commit being promoted, and the evaluator-written verification report to check. The report itself and the expected suite, environment and binary digests come from the control plane's promotion target, never from the caller.")
+	Description("Identifies the confirmed Change Card revision, the candidate commit being promoted, and the verification report to check. Which tests' commit the report must have run comes from the project's stored verification settings or the tests Surla accepted for the revision's build, and the report itself and the measured candidate binary digests come from the control plane's promotion target, never from the caller.")
 	Attribute("change_id", String, "Confirmed Change Card identifier.")
 	Attribute("request_revision", String, "Current request_revision of the confirmed Change Card.")
 	Attribute("candidate_commit", String, "Full commit ID of the candidate being promoted (40 or 64 lowercase hex characters).", func() {
@@ -518,7 +591,7 @@ var DiffResult = Type("DiffResult", func() {
 
 // VerifyChangePayload starts Checkpoint 4 verification of one candidate commit.
 var VerifyChangePayload = Type("VerifyChangePayload", func() {
-	Description("Names the confirmed Change Card revision and the candidate commit to verify. What is built and which evaluator suite runs come from the operator's configuration of surla serve, never from the caller.")
+	Description("Names the confirmed Change Card revision and the candidate commit to verify. What is built and which tests run come from the project, never from the caller: the candidate commit's programs and the tests Surla accepted for the user's build of the revision or, with stored verification settings, the programs and evaluator suite those settings name.")
 	Attribute("change_id", String, "Confirmed Change Card identifier.")
 	Attribute("request_revision", String, "Current request_revision of the confirmed Change Card.")
 	Attribute("candidate_commit", String, "Full commit ID of the candidate to build and verify (40 or 64 lowercase hex characters).", func() {
@@ -613,14 +686,35 @@ var VerificationStatusResult = Type("VerificationStatusResult", func() {
 	Attribute("change_id", String, "Change Card the run verifies.")
 	Attribute("request_revision", String, "Change Card revision the run verifies.")
 	Attribute("candidate_commit", String, "Candidate commit the run builds and verifies.")
-	Attribute("suite_commit", String, "Evaluator suite commit the operator configured for the run.")
+	Attribute("suite_commit", String, "Commit of the tests the run uses: the operator's evaluator, or the tests accepted for the change's build.")
 	Attribute("accepted_at", String, "When the run was accepted.", func() { Format(FormatDateTime) })
+	Attribute("inputs_current", Boolean, "Whether this run's agreed revision and selected tests match the current Change Card and the usable build or the stored verification settings. This observation does not establish the current candidate working tree, deployment or approval.")
+	Attribute("candidate_binaries_dir", String, "Absolute folder containing the binaries built by this completed run. Returned only to the user when promotion settings are configured, so the user can publish these exact binaries before approval. Agents never receive this private path.", func() { MinLength(1) })
+	OneOf("test_source", "Where the run's tests came from, recorded when the run started: evaluator, or written_tests with their commit and a notice.", func() {
+		Meta("oneof:json:flatten")
+		Meta("oneof:type:field", "source")
+		Attribute("evaluator", OperatorEvaluatorTests)
+		Attribute("written_tests", AgentWrittenTests)
+	})
 	OneOf("state", "Exactly one of running, completed or not_completed.", func() {
 		Attribute("running", VerificationRunning)
 		Attribute("completed", VerificationCompleted)
 		Attribute("not_completed", VerificationNotCompleted)
 	})
-	Required("run_id", "change_id", "request_revision", "candidate_commit", "suite_commit", "accepted_at", "state")
+	Required("run_id", "change_id", "request_revision", "candidate_commit", "suite_commit", "accepted_at", "inputs_current", "test_source", "state")
+})
+
+// OperatorEvaluatorTests is a run whose tests are the operator's evaluator.
+var OperatorEvaluatorTests = Type("OperatorEvaluatorTests", func() {
+	Description("The run used the operator's evaluator: the one stored with surla verification set, or the one named on surla verify's command line.")
+})
+
+// AgentWrittenTests is a run whose tests a test writer on this machine wrote.
+var AgentWrittenTests = Type("AgentWrittenTests", func() {
+	Description("The run used the tests Surla accepted for the change's build, which a separate agent on this machine wrote.")
+	Attribute("commit", String, "Commit Surla recorded the accepted tests at; the same as suite_commit.")
+	Attribute("notice", String, "Always: These tests were written by a separate agent on this machine and are not isolated from the builder.")
+	Required("commit", "notice")
 })
 
 // ListVerificationsPayload names the Change Card whose verification runs are listed.
@@ -642,20 +736,12 @@ var VerificationListResult = Type("VerificationListResult", func() {
 
 var _ = Service("surla", func() {
 	Description("Surla MCP software factory control plane.")
+	Error("forbidden", ErrorResult, "The authenticated caller may not perform this operation or does not own the resource.")
+	HTTP(func() { Response("forbidden", StatusForbidden) })
 
 	MCP("surla", "1.0.0")
 	JSONRPC(func() {
 		POST("/mcp")
-	})
-
-	Method("checkpoint_ui", func() {
-		Description("Serve the interactive MCP Apps HTML host for Surla checkpoints.")
-		Result(String)
-		Resource("checkpoint_ui", "ui://surla/checkpoint", "text/html;profile=mcp-app")
-		HTTP(func() {
-			GET("/ui/checkpoint")
-			Response(StatusOK)
-		})
 	})
 
 	Method("golden_path", func() {
@@ -669,117 +755,118 @@ var _ = Service("surla", func() {
 	})
 
 	Method("propose_change", func() {
-		Description("Save a new Checkpoint 1 Change Card from a feature request and the caller's analysis of it. Surla checks the analysis's structure and cross-field rules, gives ambiguities the IDs <change_id>-ambiguity-NN and examples the IDs check_01, check_02, ... in list order, binds the card to the authenticated owner, records the design source (or, when story_refresh_op_id is given, reads one workspace snapshot, verifies its digest against the caller's succeeded refresh_story operation, and records both its evaluated Stories and its design/*.go files), and computes request_revision. A card without ambiguities is confirmed at once; otherwise it waits for confirm_intent. Surla runs no model for this step and cannot judge whether the analysis is complete or correct.")
+		Description("Save a new Checkpoint 1 Change Card from a feature request and the caller's analysis of it. Surla checks the analysis's structure and cross-field rules, gives ambiguities the IDs <change_id>-ambiguity-NN and examples the IDs check_01, check_02, ... in list order, binds the card to the authenticated owner, and computes request_revision. With story_refresh_op_id, Surla saves what that succeeded refresh_story operation evaluated: the draft's design, Stories, architecture, go.mod and made-from list; it reads no file. A project with a go.mod requires story_refresh_op_id for a new card; with neither a go.mod nor an op_id, the card records no design. An op_id whose refresh read the draft before the user dropped a build is refused with drafted_before_drop. Every card waits for user confirmation, including a card without ambiguities. Surla runs no model for this step and cannot judge whether the analysis is complete or correct.")
 		Payload(ProposeChangePayload)
 		Result(ChangeCardResult)
 		Error("conflict", ErrorResult, "A Change Card with this change_id already exists; use revise_change or a new change_id.")
-		Error("unprocessable", ErrorResult, "The request could not be accepted: change_id or prompt is blank, an ambiguity repeats an option, story_refresh_op_id does not name a current succeeded refresh_story operation matching the bound workspace snapshot, or the bound workspace's design/*.go could not be read. The message says which; nothing was saved.")
-		Tool("propose_change", "Propose a feature change as a Checkpoint 1 Change Card. Read the target's design/*.go and the surla://golden-path playbook first, then send the request in prompt with your analysis of it: a summary, the open questions only the requester can answer (an empty list when none), concrete examples that become checks, and the existing behaviors the change must keep. When adopting a workspace Story, pass the succeeded refresh_story operation's op_id in story_refresh_op_id and omit design_source. Surla assigns the IDs and request_revision and saves the card; a card without open questions is confirmed at once. When design_source and story_refresh_op_id are omitted and a workspace is bound, Surla records design/*.go from the bound workspace.", func() {
-			ToolUI("ui://surla/checkpoint")
-		})
+		Error("unprocessable", ErrorResult, "The request could not be accepted: change_id or prompt is blank, an ambiguity repeats an option, story_refresh_op_id does not name the owner's current succeeded refresh_story operation, or the project folder holds a go.mod and story_refresh_op_id is missing. The message says which; nothing was saved.")
+		Error("drafted_before_drop", ErrorResult, "A build was dropped after this refresh. Call refresh_story to remake and evaluate the draft.")
+		Tool("propose_change", "Propose a feature change as a Checkpoint 1 Change Card. Read surla://golden-path first. Draft only in the draft folder refresh_story returns, then pass its succeeded op_id as story_refresh_op_id. Send the request in prompt with your analysis: a summary, the open questions only the requester can answer (an empty list when none), concrete examples that become checks, and the existing behaviors the change must keep. Surla assigns the IDs and request_revision and saves the card; every card awaits the user's confirmation, including a card without open questions.")
 		HTTP(func() {
 			POST("/changes/propose")
 			Response(StatusOK)
+			Response("drafted_before_drop", StatusConflict)
 			Response("conflict", StatusConflict)
 			Response("unprocessable", StatusUnprocessableEntity)
 		})
 	})
 
 	Method("revise_change", func() {
-		Description("Save the next revision of an existing Checkpoint 1 Change Card from a revised feature request and the caller's analysis of it, bound to the card's current request_revision. The analysis accounts for every current example exactly once, keeping or editing it through prior_id or dropping it through removed_example_ids. Surla keeps the IDs of kept examples, gives new examples the lowest check_NN ID neither card uses, adopts the evaluated Stories and design/*.go from the single workspace snapshot verified against story_refresh_op_id when story_refresh_op_id is given (or keeps the saved Stories and saved design_source together when story_refresh_op_id is omitted on a card with Stories, or records design/*.go from the bound workspace again when omitted on a workspace-backed card without Stories), and saves the new revision in needs_confirmation status for operator review. The new revision's answers, confirmed_by and any approval are cleared: earlier decisions remain only where the analysis restates them in its summary, examples or preserved behaviors. Surla runs no model for this step and cannot judge whether the analysis is complete or correct.")
+		Description("Save the next revision of an existing Checkpoint 1 Change Card from a revised feature request and the guide's analysis of it. Only the guide revises a change; only the user confirms or adopts a revision, with confirm_intent on the views page. The request is bound to the latest revision: the proposed revision's request_revision when one waits, otherwise the card's. On a card that was never confirmed, the new revision replaces it. On a confirmed card, the new revision is saved as the proposed revision beside the confirmed one, replacing any earlier proposal, and the confirmed revision stays in force with its answers, confirmation, approval, Stories and design source until the user adopts the proposal with confirm_intent or declines it. The analysis accounts for every example of the revision it revises exactly once, keeping or editing it through prior_id or dropping it through removed_example_ids. Surla keeps the IDs of kept examples, gives new examples the lowest check_NN ID neither card uses, adopts the evaluated draft's design, Stories, architecture, go.mod and made-from list when story_refresh_op_id is given, without reading any file, or keeps every snapshot field of the revision it revises when it is omitted, even with zero Stories, and saves the new revision in needs_confirmation status for the user's review. The new revision has no answers, confirmed_by or approval: earlier decisions carry over only where the analysis restates them in its summary, examples or preserved behaviors. The result is the change as get_change returns it. Surla runs no model for this step and cannot judge whether the analysis is complete or correct. A project with a go.mod refuses an omitted op_id when the revision being revised has no design. A refresh from before the user dropped a build is refused with drafted_before_drop.")
 		Payload(ReviseChangePayload)
 		Result(ChangeCardResult)
 		Error("not_found", ErrorResult, "No Change Card exists with this change_id.")
-		Error("forbidden", ErrorResult, "The authenticated principal does not own this Change Card.")
-		Error("conflict", ErrorResult, "The card's request_revision changed; read the current revision with get_change.")
-		Error("unprocessable", ErrorResult, "The request could not be accepted: change_id, request_revision or prompt is blank, an ambiguity repeats an option, the analysis does not account for every current example exactly once, story_refresh_op_id does not name a current succeeded refresh_story operation matching the bound workspace snapshot, or the bound workspace's design/*.go could not be read. The message says which; the card did not change.")
-		Tool("revise_change", "Revise an existing Checkpoint 1 Change Card with updated requirements bound to its current request_revision. Send the revised request in prompt with a new analysis made against the current card (as get_change returns it) and the target's design: keep or edit each current example through prior_id, list the dropped ones in removed_example_ids, and restate the confirmed decisions that still hold in summary, examples or preserved_behaviors. Pass story_refresh_op_id from a succeeded refresh_story operation to adopt an updated workspace Story, or omit story_refresh_op_id on a card with Stories to keep its agreed Story and design_source. The new revision's answers, confirmed_by and any approval are cleared, so it needs confirmation again.", func() {
-			ToolUI("ui://surla/checkpoint")
-		})
+		Error("conflict", ErrorResult, "request_revision does not name the latest revision (the waiting proposal's, when one waits); read the change with get_change.")
+		Error("unprocessable", ErrorResult, "The request could not be accepted: change_id, request_revision or prompt is blank, an ambiguity repeats an option, the analysis does not account for every example of the revision it revises exactly once, story_refresh_op_id does not name the owner's current succeeded refresh_story operation, or the project folder holds a go.mod and story_refresh_op_id is missing when the revision being revised has no design. The message says which; the card did not change.")
+		Error("drafted_before_drop", ErrorResult, "A build was dropped after this refresh. Call refresh_story to remake and evaluate the draft.")
+		Tool("revise_change", "Revise an existing Checkpoint 1 Change Card with updated requirements. Name the latest revision you read in request_revision: proposed_revision.request_revision when get_change shows a proposal waiting, otherwise the card's. Send the revised request in prompt with a new analysis made against that revision and the design in your draft folder: keep or edit each of its examples through prior_id, list the dropped ones in removed_example_ids, and restate the confirmed decisions that still hold in summary, examples or preserved_behaviors. Draft only in the draft folder refresh_story returns, then pass its succeeded op_id as story_refresh_op_id. Omit it only to keep every snapshot field of the revision you revise: design, Stories, architecture, go.mod and made-from list, even with zero Stories. On a confirmed card your revision becomes a proposal beside the confirmed one, which stays in force until the user adopts or declines the proposal on the views page; you cannot withdraw a proposal, only replace it by revising again.")
 		HTTP(func() {
 			POST("/changes/revise")
 			Response(StatusOK)
+			Response("drafted_before_drop", StatusConflict)
 			Response("not_found", StatusNotFound)
-			Response("forbidden", StatusForbidden)
 			Response("conflict", StatusConflict)
 			Response("unprocessable", StatusUnprocessableEntity)
 		})
 	})
 
 	Method("confirm_intent", func() {
-		Description("Confirm or refine a Checkpoint 1 Change Card with the complete ambiguity answers and example table, bound to its current request_revision. Changed answers or examples produce a new request_revision; unchanged ones return the card as it is, with a saved approval returned in approval only while that approval still matches the promotion target's current inputs, or in unverified_approval when no promotion target is configured or the target cannot report its current inputs. To record a decision that no option expresses, call revise_change with that decision in prompt.")
+		Description("Confirm or refine a Checkpoint 1 Change Card with the complete ambiguity answers and example table, or adopt the revision the guide proposed beside a confirmed card. Only the user's browser session calls it, from the views page; the guide revises with revise_change and never confirms. Naming the proposed revision's request_revision adopts it: its questions are answered, it becomes the confirmed revision in force under a new request_revision with no approval, and the proposal is gone. While a proposal waits, refining the confirmed revision is refused: adopt or decline the proposal first. Otherwise the request names the card's request_revision: changed answers or examples produce a new request_revision; unchanged ones return the card as it is, with a saved approval returned in approval only while its suite_commit is still the tests' commit chosen for this revision and either no promotion target is configured or its binary digests still match the promotion target's current binaries, or in unverified_approval when a promotion target is configured and cannot measure the candidate's binaries. A decision that no option expresses goes to the guide, which records it with revise_change; the user then confirms the resulting revision.")
 		Payload(ConfirmIntentPayload)
 		Result(ChangeCardResult)
 		Error("not_found", ErrorResult, "No Change Card exists with this change_id.")
-		Error("forbidden", ErrorResult, "The authenticated principal does not own this Change Card.")
-		Error("conflict", ErrorResult, "The card's request_revision changed; read the current revision with get_change.")
+		Error("conflict", ErrorResult, "request_revision names neither the card's revision nor a waiting proposal's, or it names the confirmed revision while a proposal waits (adopt or decline the proposal first); read the change with get_change.")
 		Error("unprocessable", ErrorResult, "The submitted answers or examples did not satisfy the Change Card's requirements; the message states which check failed.")
-		Tool("confirm_intent", "Confirm or refine Checkpoint 1 ambiguity answers and example checks for the card's current request_revision. To record a decision that no option expresses, call revise_change with that decision in prompt.", func() {
-			ToolUI("ui://surla/checkpoint")
-		})
+		Tool("confirm_intent", "Confirm or refine Checkpoint 1 ambiguity answers and example checks for the card's current request_revision, or adopt a waiting proposed revision by naming its request_revision with answers to its questions. A decision that no option expresses goes to the guide, which records it with revise_change; the user then confirms the resulting revision.")
 		HTTP(func() {
 			POST("/changes/confirm")
 			Response(StatusOK)
 			Response("not_found", StatusNotFound)
-			Response("forbidden", StatusForbidden)
 			Response("conflict", StatusConflict)
 			Response("unprocessable", StatusUnprocessableEntity)
 		})
 	})
 
 	Method("get_change", func() {
-		Description("Return the current Change Card, including its request_revision, to its owner, for example after confirm_intent or revise_change refused an edit made against an older revision. Reading never confirms or changes the card. A recorded approval is returned in approval only while it still matches the promotion target's current suite, environment and binary digests, or in unverified_approval when no promotion target is configured or the target cannot report its current inputs.")
+		Description("Return the current Change Card, including its request_revision, to its owner, for example after confirm_intent or revise_change refused an edit made against an older revision. The card's fields describe the revision in force; a revision the guide proposed beside a confirmed card is returned in proposed_revision while it waits. Reading never confirms or changes the card. A recorded approval is returned in approval only while its suite_commit is still the tests' commit chosen for this revision and either no promotion target is configured or its binary digests still match the promotion target's current binaries, or in unverified_approval when a promotion target is configured and cannot measure the candidate's binaries.")
 		Payload(GetChangePayload)
 		Result(ChangeCardResult)
 		Error("not_found", ErrorResult, "No Change Card exists with this change_id.")
-		Error("forbidden", ErrorResult, "The authenticated principal does not own this Change Card.")
-		Tool("get_change", "Read the current Checkpoint 1 Change Card and its request_revision.", func() {
-			ToolUI("ui://surla/checkpoint")
-		})
+		Tool("get_change", "Read the current Checkpoint 1 Change Card, its request_revision, and any proposed revision waiting beside it.")
 		HTTP(func() {
 			GET("/changes/{change_id}")
 			Response(StatusOK)
 			Response("not_found", StatusNotFound)
-			Response("forbidden", StatusForbidden)
+		})
+	})
+
+	Method("decline_revision", func() {
+		Description("Decline the revision the guide proposed beside a confirmed Checkpoint 1 Change Card. The proposal is removed and the confirmed revision in force stays exactly as it was, with its answers, confirmation, approval, Stories and design source. Only the user may decline; the guide replaces a proposal by revising again. The result is the change as get_change returns it.")
+		Payload(DeclineRevisionPayload)
+		Result(ChangeCardResult)
+		Error("not_found", ErrorResult, "No Change Card exists with this change_id.")
+		Error("conflict", ErrorResult, "No proposed revision waits, or request_revision does not name it; read the change with get_change.")
+		Tool("decline_revision", "Decline the revision the guide proposed beside a confirmed Change Card, naming proposed_revision.request_revision; the confirmed revision stays in force.")
+		HTTP(func() {
+			POST("/changes/decline")
+			Response(StatusOK)
+			Response("not_found", StatusNotFound)
+			Response("conflict", StatusConflict)
 		})
 	})
 
 	Method("preview_architecture", func() {
-		Description("Extract and validate the Checkpoint 2 C4 container topology, tool contracts, Goa-AI guardrails, and proposed Chorus swarm roster from a candidate Goa design bound to a confirmed Change Card. When design is omitted and a workspace is bound, Surla reads the candidate module snapshot from the bound workspace. Apart from the swarm roster, the result reports what the design declares; it does not compare the design with the Change Card's requirements.")
+		Description("Return the Checkpoint 2 C4 container topology, tool contracts, and Goa-AI guardrails of a confirmed Change Card's agreed revision, from the architecture its refresh evaluated and the revision saved; it reads and evaluates no file. It refuses a design with no Goa API or Service container and an agent without positive TimeBudget and DefaultCaps(MaxToolCalls). The result reports what the design declares; it does not compare the design with the Change Card's requirements. The guide sees the architecture of an unsaved draft with surla preview -dir <draft_folder>.")
 		Payload(PreviewArchitecturePayload)
 		Result(ArchitecturePreviewResult)
 		Error("not_found", ErrorResult, "No Change Card exists with this change_id.")
-		Error("forbidden", ErrorResult, "The authenticated principal does not own this Change Card.")
-		Error("conflict", ErrorResult, "The Change Card is not confirmed or its request_revision does not match; confirm the card or read the current revision with get_change.")
+		Error("conflict", ErrorResult, "The Change Card is not confirmed, its request_revision does not match, or the agreed revision records no architecture to show; confirm the card or read the current revision with get_change.")
 		Error("unprocessable", ErrorResult, "The request or evaluated design did not meet Checkpoint 2 requirements; the message states which check failed.")
-		Tool("preview_architecture", "Preview Checkpoint 2 C4 container topology, Goa-AI guardrails, and proposed Chorus swarm roster for a confirmed Change Card. Omit design to read the candidate module from the bound workspace. Apart from the swarm roster, it reports what the design declares; it does not compare the design with the Change Card's requirements.", func() {
-			ToolUI("ui://surla/checkpoint")
-		})
+		Tool("preview_architecture", "Read the saved Checkpoint 2 C4 container topology and Goa-AI guardrails of a confirmed Change Card's agreed revision. Surla reads and evaluates no file. The result reports what the design declares; it does not compare the design with the Change Card's requirements.")
 		HTTP(func() {
 			POST("/changes/preview")
 			Response(StatusOK)
 			Response("not_found", StatusNotFound)
-			Response("forbidden", StatusForbidden)
 			Response("conflict", StatusConflict)
 			Response("unprocessable", StatusUnprocessableEntity)
 		})
 	})
 
 	Method("draft_override", func() {
-		Description("Apply a Fast Draft Mode prompt override on the bound target or reject a compiled-rule prompt hack. A prompt_template override needs a bound target: on surla serve, that is the live target start_live_target runs. On a live target started with start_live_target, a rejected update leaves the target's text unchanged; update_not_confirmed means the target may or may not have applied it.")
+		Description("Apply a Fast Draft Mode prompt override on the live target start_live_target runs, or reject a compiled-rule prompt hack. Surla changes prompts only in a live target it built and started itself, so a prompt_template override with no live target running is refused with no_live_target. A rejected update leaves the target's text unchanged; update_not_confirmed means the target may or may not have applied it.")
 		Payload(DraftOverridePayload)
 		Result(DraftOverrideResult)
+		Error("no_live_target", ErrorResult, "No live target is running, so nothing changed. Call start_live_target with an owned confirmed change_id and a candidate commit first.")
 		Error("prompt_not_found", ErrorResult, "The live target has no prompt with this ID; nothing changed.")
 		Error("invalid_prompt", ErrorResult, "The live target rejected the template because it does not render; nothing changed.")
 		Error("live_target_ended", ErrorResult, "The live target is no longer running; start it again with start_live_target.")
 		Error("target_rejected_credential", ErrorResult, "The live target rejected this server's key; nothing changed. Start the target again with start_live_target.")
 		Error("update_not_confirmed", ErrorResult, "The live target did not confirm the update, so it may or may not have applied it. Keep the draft and send it again.")
-		Tool("draft_override", "Hot-reload a prompt template in 0s or flag a compiled business rule change. A prompt template needs a bound target; on surla serve, call start_live_target with a candidate commit first.", func() {
-			ToolUI("ui://surla/checkpoint")
-		})
+		Tool("draft_override", "Hot-reload a prompt template in 0s or flag a compiled business rule change. A prompt template needs a running live target: call start_live_target with a candidate commit first.")
 		HTTP(func() {
 			POST("/sandbox/draft")
 			Response(StatusOK)
+			Response("no_live_target", StatusConflict)
 			Response("prompt_not_found", StatusNotFound)
 			Response("invalid_prompt", StatusUnprocessableEntity)
 			Response("live_target_ended", StatusConflict)
@@ -789,16 +876,24 @@ var _ = Service("surla", func() {
 	})
 
 	Method("start_live_target", func() {
-		Description("Build a candidate commit exactly as Checkpoint 4 does and run it, with the operator's evaluator suite, as this server's one live CP3 target, then bind draft_override to it. A running target is stopped first, so there is never more than one. The target runs until stop_live_target, a later start_live_target, its own exit, or this server's shutdown; a server restart leaves none running. Requires a committed starter project in the bound workspace or -verification-config.")
+		Description("Build the candidate commit for the owner's confirmed change and bind draft_override to this server's one live target. Stored verification settings use the operator's evaluator and need no build. Otherwise the change's current revision must have a build with accepted tests: the candidate programs come from candidate_commit and the test program from the accepted tests commit. Written tests require a chosen model; with a direct provider the executor serves an executor-owned loopback model gateway and passes no provider setting to the program. That gateway has no authentication: any local process, including another user's, can use it while the target runs without receiving the provider key. Card, tests, model and plan refusals preserve the running target. After those checks a replacement stops the old target and discards its drafts, even if the new startup fails. A target that ends unexpectedly is reported as ended after confirmed cleanup; a server restart leaves none.")
+		Error("not_found", ErrorResult, "No owned Change Card exists with this change_id.")
+		Error("conflict", ErrorResult, "The change is not confirmed, a required commit is unavailable, the project folder was replaced, or the candidate changes hand-written test-module files or shares no history with the accepted tests.")
+		Error("no_build", ErrorResult, "The current change revision has no usable build.")
+		Error("tests_not_accepted", ErrorResult, "The current build has no accepted tests; the message names who acts next.")
+		Error("no_test_layout", ErrorResult, "The candidate or accepted tests lacks the required test layout.")
 		Payload(StartLiveTargetPayload)
 		Result(LiveTargetResult)
 		Error("live_target_unavailable", ErrorResult, "This server has no verification configuration, so it cannot build or run a live target.")
 		Error("live_target_failed", ErrorResult, "The live target could not be built or started; the message says which step failed.")
-		Tool("start_live_target", "Build a candidate commit and run it as this server's live CP3 target so draft_override can try prompt text on it. This first stops the target already running, which discards every prompt draft applied to it, even if the new build then fails. Prompt text survives only when it is committed. Requires a committed starter project in the bound workspace or -verification-config.", func() {
-			ToolUI("ui://surla/checkpoint")
-		})
+		Tool("start_live_target", "Start a live target for change_id from list_builder_assignments and candidate_commit so draft_override can try prompt text. The change must be owned and confirmed. Without stored verification settings its current build must have accepted tests, which start the target, and a model must be chosen. A refusal naming the user's step means tell the user. Refused preflight preserves a running target; an accepted replacement discards its drafts even if startup then fails. Commit prompt text to preserve it.")
 		HTTP(func() {
 			POST("/live-target")
+			Response("not_found", StatusNotFound)
+			Response("conflict", StatusConflict)
+			Response("no_build", StatusConflict)
+			Response("tests_not_accepted", StatusConflict)
+			Response("no_test_layout", StatusConflict)
 			Response(StatusOK)
 			Response("live_target_unavailable", StatusNotImplemented)
 			Response("live_target_failed", StatusUnprocessableEntity)
@@ -808,10 +903,8 @@ var _ = Service("surla", func() {
 	Method("stop_live_target", func() {
 		Description("Stop this server's live CP3 target, if one runs, and unbind draft_override from it. Stopping when none runs is not an error.")
 		Result(StopLiveTargetResult)
-		Error("live_target_stop_failed", ErrorResult, "The live target's processes could not be confirmed stopped; restart surla serve.")
-		Tool("stop_live_target", "Stop this server's live CP3 target, if one runs. This discards every prompt draft applied to it; prompt text survives only when it is committed.", func() {
-			ToolUI("ui://surla/checkpoint")
-		})
+		Error("live_target_stop_failed", ErrorResult, "The live target's processes could not be confirmed stopped; stop and start Surla.")
+		Tool("stop_live_target", "Stop this server's live CP3 target, if one runs. This discards every prompt draft applied to it; prompt text survives only when it is committed.")
 		HTTP(func() {
 			DELETE("/live-target")
 			Response(StatusOK)
@@ -819,83 +912,99 @@ var _ = Service("surla", func() {
 		})
 	})
 
+	Method("get_live_target", func() {
+		Description("Report this server's live target: none; starting, with the commit being built; running, with its commit, its address, when it became ready and, for each prompt whose draft it accepted, the prompt identifier, the version in force and when it was accepted; ended after an unexpected ending with confirmed cleanup, or not confirmed stopped, with what to do next. Prompt text is never returned. It changes nothing and saves nothing: an ended observation lasts until explicit stop, an accepted replacement, or server restart.")
+		Result(LiveTargetStatus)
+		Tool("get_live_target", "Report this server's live target. It changes nothing. It answers none; starting, with the commit being built; running, with its commit, its address, when it became ready and, for each prompt whose draft it accepted, the prompt identifier, the version in force and when it was accepted (never the text); ended with commit, start and observed end times and a safe next step, or not_confirmed_stopped, with what to do next.")
+		HTTP(func() {
+			GET("/live-target")
+			Response(StatusOK)
+		})
+	})
+
 	Method("verify_change", func() {
-		Description("Start Checkpoint 4 verification of a candidate commit for the owner's confirmed Change Card revision and return its run_id at once. The server builds the commit in Surla's sandbox and runs the evaluator suite the operator configured, in a separate process that keeps running when the caller disconnects or the server restarts; get_verification reads its state. Only the builder view of the report is ever returned. Requires a committed starter project in the bound workspace or -verification-config.")
+		Description("Start Checkpoint 4 verification of a candidate commit for the owner's confirmed Change Card revision and return its run_id at once. The change's build must be the project's open build, not dropped, and the builder's working copy must have joined it. Before any run Surla checks, with git in the project's repository: the candidate is on the build's branch surla/build-<n>, descends from the build's base and is not that base, and holds no commit of another build's branch that the base lacks; its design/ files, read by the design walk in gofmt form, are the build's design source version for version; and every design version at its merge base with the project's commit is one the revision was made from. With verification settings stored with surla verification set, the run uses the operator's evaluator. Otherwise Surla must have accepted the build's tests: the run builds the candidate's programs from the candidate commit and runs the generated entry point of the tests at the accepted commit. The server builds the commit and runs the tests in a separate process that keeps running when the caller disconnects or the server restarts; the builds, the tests and the programs they start run as ordinary processes with the user's file and network access. get_verification reads its state. Only the builder view of the report is ever returned, with where its tests came from. A candidate the user already merged still verifies.")
 		Payload(VerifyChangePayload)
 		Result(VerificationStatusResult)
 		Error("not_found", ErrorResult, "No Change Card exists with this change_id.")
-		Error("forbidden", ErrorResult, "The authenticated principal does not own this Change Card.")
-		Error("conflict", ErrorResult, "The Change Card is not confirmed or its request_revision does not match; confirm the card or read the current revision with get_change.")
+		Error("conflict", ErrorResult, "The Change Card is not confirmed or its request_revision does not match, the candidate commit is not in the project's repository, the project folder was replaced after the server started, the candidate's design/ files differ from the build's design source (the message names them; call generate_code, commit and verify again), or (without stored verification settings) the candidate changes hand-written files in the test module.")
+		Error("no_build", ErrorResult, "No build of this change is open (the user built another change or none), the user dropped it, or the open build is for another revision of the change. The message names what Surla found and the user's step.")
+		Error("tests_not_accepted", ErrorResult, "Without stored verification settings: Surla has not accepted the tests of the change's build. The message names the test writer's state and who acts, and ends with the step.")
+		Error("no_test_layout", ErrorResult, "Without stored verification settings: a commit lacks the test layout surla init makes, the accepted tests' commit is no longer in the project's repository, or the project folder is not in a git repository. The message names the commit or folder and what is missing, and ends with the step.")
 		Error("not_implemented", ErrorResult, "This server has no verification configuration, so it cannot run Checkpoint 4 verifications.")
-		Tool("verify_change", "Start CP4 verification of a candidate commit for the confirmed Change Card revision; returns a run_id to read with get_verification. Requires a committed starter project in the bound workspace or -verification-config.", func() {
-			ToolUI("ui://surla/checkpoint")
-		})
+		Error("assignment_unread", ErrorResult, "A build started after your last read of your assignment: stop your current work, then call get_builder_assignment for its change.")
+		Error("copy_off_branch", CopyOffBranch, "Your working copy is not on the build's branch: the message states its branch, the build's branch and what is uncommitted, and the goal. Put your work there with git, commit it, and verify again.")
+		Error("working_folder_missing", ErrorResult, "Your working folder is missing; ask the user to build this change again on the views page.")
+		Error("build_branch_mismatch", ErrorResult, "The candidate is not on your build's branch, does not descend from the build's base, is the base itself, or holds a commit of another build's branch that the base lacks. The message names the commit and, for another build's work, its branch and the files it changed, and states the goal: your branch and working copy hold none of that work.")
+		Error("design_changed_outside", ErrorResult, "A design file at the candidate's merge base with the project's commit is not a version the revision was made from: it was changed outside Surla. The message names the file and the commit. When the change is uncommitted, the user commits the design change in the project folder, then asks the guide to call update_draft, refresh_story and revise_change.")
+		Tool("verify_change", "Start CP4 verification of a candidate commit on your build's branch for the agreed revision; returns a run_id to read with get_verification. The candidate must be on your branch, descend from the build's base, hold no other build's work and carry exactly the agreed design generate_code wrote; without stored verification settings Surla must also have accepted the build's tests (your assignment says when). A refusal states what Surla found and the goal: put your work right with git and verify again.")
 		HTTP(func() {
 			POST("/changes/{change_id}/verifications")
 			Response(StatusOK)
+			Response("assignment_unread", StatusConflict)
+			Response("copy_off_branch", StatusConflict)
+			Response("working_folder_missing", StatusConflict)
+			Response("build_branch_mismatch", StatusConflict)
+			Response("design_changed_outside", StatusConflict)
 			Response("not_found", StatusNotFound)
-			Response("forbidden", StatusForbidden)
 			Response("conflict", StatusConflict)
+			Response("no_build", StatusConflict)
+			Response("tests_not_accepted", StatusConflict)
+			Response("no_test_layout", StatusConflict)
 			Response("not_implemented", StatusNotImplemented)
 		})
 	})
 
 	Method("get_verification", func() {
-		Description("Return the current state of a verification run to the owner who started it: running, completed with the builder view of its report, or not completed with where it stopped. A run keeps the Change Card revision it was started for.")
+		Description("Return the current state of a verification run to the owner who started it: running, completed with the builder view of its report, or not completed with where it stopped, and where its tests came from. A run keeps the Change Card revision it was started for. The test writer reads only the runs of a change it has an assignment for.")
 		Payload(GetVerificationPayload)
 		Result(VerificationStatusResult)
 		Error("not_found", ErrorResult, "No verification run exists with this run_id.")
-		Error("forbidden", ErrorResult, "The authenticated principal does not own this verification run.")
 		Error("not_implemented", ErrorResult, "This server has no verification configuration, so it cannot read verification runs.")
-		Tool("get_verification", "Read the state of a CP4 verification run started by verify_change.", func() {
-			ToolUI("ui://surla/checkpoint")
-		})
+		Tool("get_verification", "Read the state of a CP4 verification run started by verify_change.")
 		HTTP(func() {
 			GET("/verifications/{run_id}")
 			Response(StatusOK)
 			Response("not_found", StatusNotFound)
-			Response("forbidden", StatusForbidden)
 			Response("not_implemented", StatusNotImplemented)
 		})
 	})
 
 	Method("list_verifications", func() {
-		Description("Return all Checkpoint 4 verification runs started by the owner for a Change Card, ordered newest first by accepted_at (tie-broken by run_id), with each run's current state and the Change Card revision it was started for. Works whether the Change Card is currently confirmed or in needs_confirmation after a later revision.")
+		Description("Return all Checkpoint 4 verification runs started by the owner for a Change Card, ordered newest first by accepted_at (tie-broken by run_id), with each run's current state, the Change Card revision it was started for and where its tests came from. Works whether the Change Card is currently confirmed or in needs_confirmation after a later revision. The test writer lists only the runs of a change it has an assignment for.")
 		Payload(ListVerificationsPayload)
 		Result(VerificationListResult)
 		Error("not_found", ErrorResult, "No Change Card exists with this change_id.")
-		Error("forbidden", ErrorResult, "The authenticated principal does not own this Change Card.")
 		Error("not_implemented", ErrorResult, "This server has no verification configuration, so it cannot list verification runs.")
-		Tool("list_verifications", "List all CP4 verification runs started for a Change Card, newest first.", func() {
-			ToolUI("ui://surla/checkpoint")
-		})
+		Tool("list_verifications", "List all CP4 verification runs started for a Change Card, newest first.")
 		HTTP(func() {
 			GET("/changes/{change_id}/verifications")
 			Response(StatusOK)
 			Response("not_found", StatusNotFound)
-			Response("forbidden", StatusForbidden)
 			Response("not_implemented", StatusNotImplemented)
 		})
 	})
 
 	Method("approve_merge", func() {
-		Description("Record Checkpoint 5 approval for the owner's confirmed Change Card revision. The control plane loads the verification report by digest and the expected suite, environment and candidate binary digests from its promotion target, re-derives the report from its evidence with verify.Approve, and records the approval on the card. A report that did not pass or describes different inputs is rejected. Nothing is merged or deployed. The promotion target comes from surla serve -promotion-config or from the program that embeds the control plane; a control plane without one rejects every call.")
+		Description("Record Checkpoint 5 approval for the owner's confirmed Change Card revision. The control plane chooses the tests' commit the same way verify_change does (the suite commit in the project's stored verification settings, or the tests Surla accepted for the change's build at request_revision), loads the verification report by digest, re-derives the report from its evidence with verify.Approve, and records the approval on the card when the report passed for candidate_commit, request_revision, and that tests' commit. When promotion settings are configured with surla promotion set (or a PromotionTarget is bound), approve_merge also checks that the staged binaries in <release_dir>/<candidate_commit>/ match the report's binary digests and records those digests in artifacts; without promotion settings, no release folder or staged binaries are required and artifacts is empty. The report's suite_id and environment are what the tests at suite_commit declared and are recorded on the approval without a separate comparison. Nothing is merged or deployed. It checks again, with git, that the candidate is on the build's branch, descends from its base and holds no other build's work.")
 		Payload(ApproveMergePayload)
 		Result(ChangeCardResult)
 		Error("not_found", ErrorResult, "No Change Card exists with this change_id.")
-		Error("forbidden", ErrorResult, "The authenticated principal does not own this Change Card.")
-		Error("conflict", ErrorResult, "The Change Card is not confirmed or its request_revision does not match; confirm the card or read the current revision with get_change.")
-		Error("unprocessable", ErrorResult, "The verification report did not pass or does not match the Change Card and promotion target inputs.")
-		Error("not_implemented", ErrorResult, "This control plane has no promotion target bound to it.")
-		Tool("approve_merge", "Approve the confirmed Change Card revision after its CP4 verification report passed for the candidate commit. Requires a promotion target, such as surla serve -promotion-config.", func() {
-			ToolUI("ui://surla/checkpoint")
-		})
+		Error("conflict", ErrorResult, "The Change Card is not confirmed, its request_revision does not match, or the accepted tests changed while approving; confirm the card, read the current revision with get_change, or approve again.")
+		Error("no_build", ErrorResult, "Without stored verification settings: the user has not built the change's revision in force with a test writer, so no tests are accepted for it. The message names the revision built, if any, and ends with the user's step.")
+		Error("tests_not_accepted", ErrorResult, "Without stored verification settings: Surla has not accepted the tests of the change's build. The message names the test writer's state and who acts, and ends with the step.")
+		Error("unprocessable", ErrorResult, "The verification report did not pass or does not match the Change Card, the chosen tests' commit, or (when promotion settings are configured) the promotion target's staged binary digests.")
+		Error("not_implemented", ErrorResult, "This control plane has no verification configuration bound to it.")
+		Error("build_branch_mismatch", ErrorResult, "The run's candidate is no longer on the build's branch, or that branch now holds another build's work: the builder verifies again, then the user approves that run.")
+		Tool("approve_merge", "Approve the confirmed Change Card revision after its CP4 verification report passed for the candidate commit and the tests chosen for the revision. When promotion settings are configured with surla promotion set, also checks that the staged release binaries match the report.")
 		HTTP(func() {
 			POST("/changes/approve")
 			Response(StatusOK)
+			Response("build_branch_mismatch", StatusConflict)
 			Response("not_found", StatusNotFound)
-			Response("forbidden", StatusForbidden)
 			Response("conflict", StatusConflict)
+			Response("no_build", StatusConflict)
+			Response("tests_not_accepted", StatusConflict)
 			Response("unprocessable", StatusUnprocessableEntity)
 			Response("not_implemented", StatusNotImplemented)
 		})
@@ -905,9 +1014,7 @@ var _ = Service("surla", func() {
 		Description("Compare evaluated Goa designs and go.mod directives without emitting a blanket compatibility verdict.")
 		Payload(DiffPayload)
 		Result(DiffResult)
-		Tool("diff", "Compute structural Goa design and go.mod dependency diffs.", func() {
-			ToolUI("ui://surla/checkpoint")
-		})
+		Tool("diff", "Compute structural Goa design and go.mod dependency diffs.")
 		HTTP(func() {
 			POST("/diff")
 			Response(StatusOK)
@@ -915,27 +1022,46 @@ var _ = Service("surla", func() {
 	})
 
 	Method("configure_model", func() {
-		Description("Choose, on a running control plane without restarting, the model that CP3 live targets started afterwards receive: a direct provider and model name (using that provider's API key from surla serve's environment) or a running gRPC model gateway. start_live_target passes the choice to the target's evaluator suite as SURLA_LIVE_MODEL_PROVIDER and SURLA_LIVE_MODEL_NAME, or as SURLA_LIVE_MODEL_GATEWAY.")
+		Description("Choose, on a running control plane without restarting, the model that CP3 live targets started afterwards receive: a direct provider and model name, whose request settings the surla command handed to the project server with hand_over_model_settings, or a running gRPC model gateway. With written tests, a direct provider is served by the executor's loopback model gateway and the accepted test program receives only that gateway, never provider settings. The executor-owned gateway has no authentication: any local process, including another user's, can use it while the target runs without receiving the provider key. With stored verification settings, the evaluator receives the choice and its chosen provider's settings. A configured gateway is passed through unchanged.")
 		Payload(ConfigureModelPayload)
 		Result(ModelConfigResult)
-		Error("unprocessable", ErrorResult, "The model provider, model name, gateway address, or required environment credential is invalid.")
-		Error("not_implemented", ErrorResult, "Runtime model reconfiguration is not configured on this control plane.")
-		Tool("configure_model", "Switch the model provider and model name (such as anthropic/claude-sonnet-4-6 or openai/gpt-5.4-mini, using the API key in surla serve's environment) or attach a running model gateway address, without restarting surla serve. Live targets that start_live_target starts afterwards plan with this model.")
+		Error("unprocessable", ErrorResult, "The field combination is invalid, or the project server holds no request settings for the chosen provider; the message names the provider's key variable and how to hand it over.")
+		Tool("configure_model", "Switch the model provider and model name (such as anthropic/claude-sonnet-4-6 or openai/gpt-5.4-mini, whose key the user exported in the shell that ran surla) or attach a running model gateway address, without restarting the project server. Live targets that start_live_target starts afterwards plan with this model.")
 		HTTP(func() {
 			POST("/cp1/model")
 			Response(StatusOK)
 			Response("unprocessable", StatusUnprocessableEntity)
-			Response("not_implemented", StatusNotImplemented)
+		})
+	})
+
+	Method("get_model_connection", func() {
+		Description("Report the model choice live targets started afterwards receive: none, a direct provider and model name, or a model gateway address. It starts as none. While no model is chosen, a hand_over_model_settings call that holds a provider's settings selects that provider's default model; every accepted configure_model call replaces the choice. It never returns an API key or any other setting value, and it changes nothing. Verification runs do not use this choice.")
+		Result(ModelConnection)
+		HTTP(func() {
+			GET("/cp1/model")
+			Response(StatusOK)
+		})
+	})
+
+	Method("hand_over_model_settings", func() {
+		Description("The surla command, after it confirms the project server's identity, hands over the request settings of each model provider whose key is set in the shell it runs in: the key and the listed settings that route and authenticate the provider's requests. The project server holds them in memory only and forgets them when it stops. A live target using stored verification settings receives the chosen provider's held settings; a verification with that evaluator receives every held provider's settings. Accepted written tests receive no provider settings in verification or live targets: for a direct live model the executor serves an executor-owned loopback model gateway. It has no authentication: any local process, including another user's, can use it while the target runs without receiving the provider key. The check helper receives none. An absent provider attribute keeps what is held for that provider. A present one replaces everything held for it and must include the provider's key variable; an empty one is refused, because it is neither a way to keep nor a way to forget. A request with neither attribute changes nothing and reports what is held. When no model is chosen and a provider is now held, live targets use that provider's default model, anthropic before openai; any other choice stays. The result names the held variables and the model choice, never a value. Only the surla command's management credential may call this operation; it is never an MCP tool.")
+		Payload(HandOverModelSettingsPayload)
+		Result(ModelSettingsResult)
+		Error("unprocessable", ErrorResult, "A provider's settings do not include its key variable, or a value contains a NUL character. The message names the provider and the variable, never a value; nothing held changed.")
+		HTTP(func() {
+			POST("/cp1/model/settings")
+			Response(StatusOK)
+			Response("unprocessable", StatusUnprocessableEntity)
 		})
 	})
 
 	Method("init_project", func() {
-		Description("Initialize a new Surla starter project directory inside the server's bound workspace, generating the candidate Go module, Goa and Goa-AI code, and the eval/ verification harness, creating the initial Git commit, and switching the server's active workspace and trusted evaluator suite commit to that project. When the request includes a progressToken, the tool sends MCP progress updates as starter generation/tests, initial commit creation, and publication start.")
+		Description("Initialize a new Surla starter project directory inside the server's bound workspace, generating the candidate Go module, Goa and Goa-AI code, and the eval/ verification harness, creating the initial Git commit, and switching the server's active workspace to that project. When the request includes a progressToken, the tool sends MCP progress updates as starter generation/tests, initial commit creation, and publication start.")
 		Payload(InitProjectPayload)
 		Result(InitProjectResult)
 		Error("conflict", ErrorResult, "The workspace or target directory is already initialized.")
 		Error("unprocessable", ErrorResult, "The module path or child directory name is invalid.")
-		Error("not_implemented", ErrorResult, "This control plane has no bound workspace or starter generator configured.")
+		Error("not_implemented", ErrorResult, "This control plane has no exact Surla module version configured for starter generation.")
 		Tool("init_project", "Initialize a new Surla starter project inside the bound workspace directory, create its initial Git commit, and switch the server's active workspace to that project. Returns the created commit ID in commit for start_live_target and verify_change.")
 		HTTP(func() {
 			POST("/workspace/init")
@@ -947,30 +1073,36 @@ var _ = Service("surla", func() {
 	})
 
 	Method("generate_code", func() {
-		Description("Read the active workspace's application module, or its public local eval/ module when target is eval, compile that module's edited Goa design in Surla's sandbox, and atomically replace its gen/ directory. Preserve top-level user files and their permissions and leave go.mod and go.sum unchanged. Return the written paths and warnings; a warning after gen/ publication still means generation succeeded. The tool compiles the design only; it does not build the application or run tests. Fix a rejected design and call again on the same running server.")
+		Description("Write the open build's agreed design into the builder's working folder and regenerate its code. Surla replaces, creates or removes the Go files under the builder's design/ so that design/ holds exactly the build's design source (never a test file or testdata; a linked design/ is refused), then compares each module the design imports with the go.mod the revision was made from: when the builder's go.mod lacks a module or requires an older version, the call names go get <module>@<version> and go mod tidy, prefixed GOWORK=off when the assignment's gowork_off is true, writes design/ and generates nothing until they are run. A differing replace directive for a module the design imports is also named, including the saved replacement line or the fact that none was saved, so the builder corrects go.mod before calling again. Otherwise it compiles and runs the design as an ordinary process with the user's file and network access and atomically replaces gen/, preserving top-level user files and leaving go.mod and go.sum unchanged. With target eval it regenerates the working folder's eval/ module from its own design. Return the written paths and warnings; a warning after gen/ publication still means generation succeeded. It compiles the design only; it does not build the application or run tests.")
 		Payload(GenerateCodePayload)
 		Result(GenerateCodeResult)
-		Error("unprocessable", ErrorResult, "The selected local module is absent, replaced, or invalid; correct its local files and call again.")
-		Error("not_implemented", ErrorResult, "No workspace directory is bound to this control plane.")
-		Tool("generate_code", "Regenerate code from local edited design files without uploading source. Omit target for the application, or use target eval for the public local eval/ module. Return sorted module-relative files_written and warnings. This compiles the design only; run check_project to build and test the application before verification. Fix a rejected design and call again on the same server.")
+		builderCopyRefusals()
+		Error("conflict", ErrorResult, "The open build is for a revision that is no longer the change's revision in force; the user builds again.")
+		Error("missing_modules", ErrorResult, "The builder's go.mod lacks a module the agreed design imports, requires an older version than the revision was made with, or has a differing replace directive. design/ was written and gen/ was not; the message names each required go get, go mod tidy or replacement correction in the working folder.")
+		Error("unprocessable", ErrorResult, "The selected module of the working folder is absent, replaced, or invalid; correct its files and call again.")
+		Tool("generate_code", "Write the agreed design of your build into design/ of your working folder and regenerate gen/. Your open build names the change. Never edit design/ or gen/ yourself. When it names go get and go mod tidy, run exactly what it names in your working folder, then call generate_code again. Use target eval only to regenerate the eval/ module. This compiles the design only; run check_project before verify_change.")
 		HTTP(func() {
 			POST("/workspace/generate")
 			Response(StatusOK)
+			builderCopyRefusalResponses()
+			Response("conflict", StatusConflict)
+			Response("missing_modules", StatusUnprocessableEntity)
 			Response("unprocessable", StatusUnprocessableEntity)
-			Response("not_implemented", StatusNotImplemented)
 		})
 	})
 
 	Method("check_project", func() {
-		Description("Copy the active workspace's live files (uncommitted edits included) into a protected per-operation copy and run go test ./... for every Go module in it, each in a Linux container with no network. Nothing in the workspace changes. Returns passed and a bounded message; read the full output with read_check_output.")
+		Description("Copy the builder's working folder's live files (uncommitted edits included) into a protected per-operation copy and run go test ./... for every Go module in it (without stored verification settings, leaving out the starter test module whose tests the test writer writes, and saying so), each in a Linux container with no network. Nothing in the working folder changes. Returns passed and a bounded message; read the full output with read_check_output. It reads only the builder's working copy, never the project folder. It refuses as generate_code does when no build is open, the build was dropped, the assignment was not read since the build started, or the copy is off its branch.")
 		Result(CheckProjectResult)
-		Error("unprocessable", ErrorResult, "The workspace contains no Go module.")
-		Error("not_implemented", ErrorResult, "No workspace directory is bound to this control plane.")
+		builderCopyRefusals()
+		Error("unprocessable", ErrorResult, "The working folder contains no Go module.")
+		Error("not_implemented", ErrorResult, "This control plane has no check runner configured.")
 		Error("unavailable", ErrorResult, "No local Docker engine is usable: docker is missing, the engine does not answer or is not local, or the Go image cannot be pulled.")
-		Tool("check_project", "Run the workspace's Go tests on the current uncommitted files in an isolated Linux container. No input. Returns passed and a message with the first failure; when it says the output was cut, read the rest with read_check_output(op_id). If the message says go.sum or go.work.sum needs entries or go.mod needs an update, call update_dependencies and check again.")
+		Tool("check_project", "Run your working folder's Go tests on the current uncommitted files in an isolated Linux container (without stored verification settings, leaving out the starter test module whose tests the test writer writes, and saying so). No input. Returns passed and a message with the first failure; when it says the output was cut, read the rest with read_check_output(op_id). If the message says go.sum or go.work.sum needs entries or go.mod needs an update, call update_dependencies and check again. It reads only the builder's working copy, never the project folder. It refuses as generate_code does when no build is open, the build was dropped, the assignment was not read since the build started, or the copy is off its branch.")
 		HTTP(func() {
 			POST("/workspace/check")
 			Response(StatusOK)
+			builderCopyRefusalResponses()
 			Response("unprocessable", StatusUnprocessableEntity)
 			Response("not_implemented", StatusNotImplemented)
 			Response("unavailable", StatusServiceUnavailable)
@@ -978,15 +1110,17 @@ var _ = Service("surla", func() {
 	})
 
 	Method("update_dependencies", func() {
-		Description("Run go mod tidy for every Go module of the active workspace in a protected copy inside Linux containers, then write only the changed go.mod, go.sum and go.work.sum files back to the workspace through verified handles. A symlinked manifest or one edited during the call is refused for that module.")
+		Description("Run go mod tidy for every Go module of the builder's working folder, its own working copy of the project (without stored verification settings, leaving out the starter test module whose tests the test writer writes, and saying so) in a protected copy inside Linux containers, then write only the changed go.mod, go.sum and go.work.sum files back to the working folder through verified handles. A symlinked manifest or one edited during the call is refused for that module. It reads only the builder's working copy, never the project folder. It refuses as generate_code does when no build is open, the build was dropped, the assignment was not read since the build started, or the copy is off its branch.")
 		Result(UpdateDependenciesResult)
-		Error("unprocessable", ErrorResult, "The workspace contains no Go module.")
-		Error("not_implemented", ErrorResult, "No workspace directory is bound to this control plane.")
+		builderCopyRefusals()
+		Error("unprocessable", ErrorResult, "The working folder contains no Go module.")
+		Error("not_implemented", ErrorResult, "This control plane has no check runner configured.")
 		Error("unavailable", ErrorResult, "No local Docker engine is usable: docker is missing, the engine does not answer or is not local, or the Go image cannot be pulled.")
-		Tool("update_dependencies", "Add missing requirements and checksums for the workspace's Go modules (go mod tidy) and write the changed go.mod, go.sum and go.work.sum. No input. Call it when check_project reports a missing go.sum or go.work.sum entry or a needed go.mod update, then call check_project again.")
+		Tool("update_dependencies", "Add missing requirements and checksums for your working folder's Go modules (go mod tidy; without stored verification settings, leaving out the starter test module whose tests the test writer writes, and saying so) and write the changed go.mod, go.sum and go.work.sum. No input. Call it when check_project reports a missing go.sum or go.work.sum entry or a needed go.mod update, then call check_project again. It reads only the builder's working copy, never the project folder. It refuses as generate_code does when no build is open, the build was dropped, the assignment was not read since the build started, or the copy is off its branch.")
 		HTTP(func() {
 			POST("/workspace/dependencies")
 			Response(StatusOK)
+			builderCopyRefusalResponses()
 			Response("unprocessable", StatusUnprocessableEntity)
 			Response("not_implemented", StatusNotImplemented)
 			Response("unavailable", StatusServiceUnavailable)
@@ -1009,4 +1143,26 @@ var _ = Service("surla", func() {
 	})
 	traceMethods()
 	storyRefreshMethods()
+	teamMethods()
+	changeListMethods()
+	buildMethods()
+	verificationReviewMethod()
 })
+
+// builderCopyRefusals declares a builder tool's open-build and working-copy refusals.
+func builderCopyRefusals() {
+	Error("working_copy_busy", ErrorResult, "The builder's working copy is in use by another operation; call this tool again after that operation finishes. Nothing was changed.")
+	Error("no_build", ErrorResult, "No build is open, or the user dropped it: stop work on it and make no more edits or commits for it. The user starts builds on the views page.")
+	Error("assignment_unread", ErrorResult, "A build started after your last read of your assignment: stop your current work, then call get_builder_assignment for its change.")
+	Error("copy_off_branch", CopyOffBranch, "Your working copy is not on the build's branch: the message states its branch, the build's branch and what is uncommitted, and the goal. Put your work there with git, commit it, and call again.")
+	Error("working_folder_missing", ErrorResult, "Your working folder is missing; ask the user to build this change again on the views page.")
+}
+
+// builderCopyRefusalResponses maps the builder working-copy refusals to HTTP.
+func builderCopyRefusalResponses() {
+	Response("working_copy_busy", StatusConflict)
+	Response("no_build", StatusConflict)
+	Response("assignment_unread", StatusConflict)
+	Response("copy_off_branch", StatusConflict)
+	Response("working_folder_missing", StatusConflict)
+}

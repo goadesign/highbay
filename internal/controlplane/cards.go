@@ -12,11 +12,13 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
+	"maps"
 	"os"
 	"path/filepath"
 	"regexp"
 	"strings"
 	"syscall"
+	"time"
 
 	gensurla "github.com/goadesign/surla/gen/surla"
 	"github.com/goadesign/surla/internal/abspath"
@@ -28,8 +30,9 @@ type (
 	// directory, so cards outlive the process that wrote them. The files are
 	// the only copy: each read decodes the file and each change replaces it.
 	// One process at a time may use a directory; openCardStore holds an
-	// exclusive lock on it until close. Callers hold ControlPlane.mu for
-	// every call: the read lock for loads, the write lock for saves and close.
+	// exclusive lock on it until close. Card and legacy build calls hold
+	// ControlPlane.mu: its read lock for loads and write lock for saves and
+	// close. The open-build and made-from records document their own locks.
 	cardStore struct {
 		// dir holds one <hex sha256(change_id)>.json file per card.
 		dir string
@@ -41,15 +44,13 @@ type (
 	}
 
 	// savedCard is the on-disk JSON representation of one Change Card. It
-	// holds only the 12 persisted card fields (omitting response-only
-	// UnverifiedApproval) without omitempty tags so saved card files remain
-	// byte-for-byte compatible across versions under DisallowUnknownFields.
+	// excludes the response-only UnverifiedApproval field.
 	savedCard struct {
 		// ChangeID is the Change Card identifier.
 		ChangeID string
 		// Status is the checkpoint status ("needs_confirmation" or "confirmed").
 		Status string
-		// Prompt is the operator feature request for this revision.
+		// Prompt is the user's feature request for this revision.
 		Prompt string
 		// Summary is the plain-English summary of requested behavior.
 		Summary string
@@ -61,32 +62,82 @@ type (
 		Examples []*gensurla.ExampleItem
 		// PreservedBehaviors lists contract invariants preserved by this change.
 		PreservedBehaviors []string
-		// ConfirmedBy is the authenticated principal that confirmed the card.
+		// ConfirmedBy is the project owner whose user session confirmed the card.
 		ConfirmedBy *string
 		// RequestRevision is the SHA-256 digest of the canonical versioned card.
 		RequestRevision string
 		// UIComposition is the optional OpenUI Lang decision view for this revision.
 		UIComposition *gensurla.UICompositionItem
 		// Approval is the recorded Checkpoint 5 promotion approval for this revision.
-		Approval *gensurla.ApprovalItem
+		Approval *savedApproval
+	}
+
+	// savedApproval is the on-disk JSON representation of one recorded
+	// Checkpoint 5 approval. It keeps the exact untagged field names saved
+	// cards have always used and excludes the derived TestSource union.
+	savedApproval struct {
+		// ApprovedBy is the user who approved the result.
+		ApprovedBy string
+		// ReportDigest is the SHA-256 digest of the approved verification report.
+		ReportDigest string
+		// CandidateCommit is the candidate commit the report was checked against.
+		CandidateCommit string
+		// SuiteID is the suite identifier the tests at SuiteCommit declared.
+		SuiteID string
+		// SuiteCommit is the commit of the tests the report ran.
+		SuiteCommit string
+		// Environment is the dependency profile the tests at SuiteCommit declared.
+		Environment string
+		// Artifacts maps each candidate binary name to its measured SHA-256 digest.
+		Artifacts map[string]string
+		// ScenarioCount is the number of declared scenarios in the report.
+		ScenarioCount int
 	}
 
 	// cardFile is the saved form of one card. Saved cards that do not match
 	// this schema stop the calls that read them rather than being skipped.
 	cardFile struct {
-		// Card is the latest versioned Change Card.
+		// Card is the revision in force.
 		Card *savedCard `json:"card"`
 		// Owner is the authenticated principal that created the card.
 		Owner string `json:"owner"`
 		// DesignSource is the Goa design source inspected at CP1.
 		DesignSource string `json:"design_source"`
-		// SourceOrigin records whether DesignSource was read from the bound
-		// workspace ("workspace") or supplied by the caller (omitted on disk).
-		SourceOrigin string `json:"source_origin,omitempty"`
 		// Stories holds the evaluated domain Stories adopted for this card
-		// revision in declaration order, omitted on disk when empty so cards
-		// without Stories keep their prior schema and request_revision.
-		Stories []designeval.StorySummary `json:"stories,omitempty"`
+		// revision in declaration order.
+		Stories []designeval.StorySummary `json:"stories"`
+		// Architecture is the evaluated topology, absent together with GoMod
+		// and MadeFrom on cards written before snapshot metadata was recorded.
+		Architecture *savedArchitecture `json:"architecture,omitempty"`
+		// GoMod is the module text evaluated with this revision.
+		GoMod string `json:"go_mod,omitempty"`
+		// MadeFrom keeps the revision's own provenance, independent of later drops.
+		MadeFrom *madeFromSnapshot `json:"made_from,omitempty"`
+		// SavedAt is when save last wrote the file. It sits outside Card so
+		// request_revision never covers it: saving the same content again
+		// keeps the revision and moves only this time.
+		SavedAt time.Time `json:"saved_at"`
+		// Proposed is the revision the guide proposed beside a confirmed Card,
+		// absent otherwise. It is checked against its own request_revision.
+		Proposed *proposedFile `json:"proposed,omitempty"`
+	}
+
+	// proposedFile is the saved form of a proposed revision: the revision with
+	// the design source and Stories it was made from.
+	proposedFile struct {
+		// Card is the proposed revision, in needs_confirmation status.
+		Card *savedCard `json:"card"`
+		// DesignSource is the Goa design source the proposal was made from.
+		DesignSource string `json:"design_source"`
+		// Stories holds the proposal's evaluated domain Stories.
+		Stories []designeval.StorySummary `json:"stories"`
+		// Architecture is the evaluated topology, absent together with GoMod
+		// and MadeFrom on cards written before snapshot metadata was recorded.
+		Architecture *savedArchitecture `json:"architecture,omitempty"`
+		// GoMod is the module text evaluated with this revision.
+		GoMod string `json:"go_mod,omitempty"`
+		// MadeFrom keeps the revision's own provenance, independent of later drops.
+		MadeFrom *madeFromSnapshot `json:"made_from,omitempty"`
 	}
 )
 
@@ -95,12 +146,6 @@ const (
 	// writes before renaming it over the card's file. load opens only the hashed
 	// path of the card it is asked for, so this file is never read.
 	stagingFile = "pending"
-	// sourceOriginSupplied marks a card whose design_source came from the caller
-	// payload (or had no bound workspace at proposal time).
-	sourceOriginSupplied = "supplied"
-	// sourceOriginWorkspace marks a card whose design_source was read from the
-	// control plane's bound workspace directory.
-	sourceOriginWorkspace = "workspace"
 )
 
 var (
@@ -111,107 +156,6 @@ var (
 	// saved Change Card filename.
 	cardFileDigestPattern = regexp.MustCompile(`^[0-9a-f]{64}$`)
 )
-
-// PrepareCardSnapshot copies saved <64-hex>.json Change Card files verbatim from
-// legacyCardsDir into stageCardsDir while holding a non-blocking shared lock on
-// <legacyCardsDir>/lock until releaseLock is called. It never imports
-// workspace.json or modifies legacy originals.
-func PrepareCardSnapshot(legacyCardsDir, stageCardsDir string) (releaseLock func() error, err error) {
-	if err := os.MkdirAll(stageCardsDir, 0o700); err != nil {
-		return nil, fmt.Errorf("create staged cards directory %s: %w", stageCardsDir, err)
-	}
-	if err := writeCardRegularFileNoFollow(filepath.Join(stageCardsDir, "lock"), nil, 0o600); err != nil {
-		return nil, fmt.Errorf("create staged cards lock: %w", err)
-	}
-	if legacyCardsDir == "" {
-		if err := syncDir(stageCardsDir); err != nil {
-			return nil, fmt.Errorf("sync staged cards directory %s: %w", stageCardsDir, err)
-		}
-		return func() error { return nil }, nil
-	}
-	info, err := os.Lstat(legacyCardsDir)
-	if errors.Is(err, fs.ErrNotExist) {
-		if err := syncDir(stageCardsDir); err != nil {
-			return nil, fmt.Errorf("sync staged cards directory %s: %w", stageCardsDir, err)
-		}
-		return func() error { return nil }, nil
-	}
-	if err != nil {
-		return nil, fmt.Errorf("stat legacy cards directory %s: %w", legacyCardsDir, err)
-	}
-	if info.Mode()&os.ModeSymlink != 0 || !info.IsDir() {
-		return nil, fmt.Errorf("legacy cards directory %s is not a regular directory", legacyCardsDir)
-	}
-
-	var heldLock *os.File
-	closeHeld := func() error {
-		if heldLock == nil {
-			return nil
-		}
-		f := heldLock
-		heldLock = nil
-		// A forked child may still hold a copy before exec closes it. Release
-		// this owner's lock now rather than waiting for the last descriptor.
-		return errors.Join(syscall.Flock(int(f.Fd()), syscall.LOCK_UN), f.Close())
-	}
-	defer func() {
-		if err != nil {
-			err = errors.Join(err, closeHeld())
-		}
-	}()
-
-	lockPath := filepath.Join(legacyCardsDir, "lock")
-	if _, statErr := os.Lstat(lockPath); !errors.Is(statErr, fs.ErrNotExist) {
-		f, openErr := os.OpenFile(lockPath, os.O_RDONLY|syscall.O_NOFOLLOW|syscall.O_NONBLOCK, 0)
-		if openErr != nil {
-			return nil, fmt.Errorf("open legacy cards lock %s: %w", lockPath, openErr)
-		}
-		st, statErr := f.Stat()
-		if statErr == nil && !st.Mode().IsRegular() {
-			statErr = fmt.Errorf("legacy cards lock %s is not a regular file", lockPath)
-		}
-		if statErr == nil {
-			statErr = syscall.Flock(int(f.Fd()), syscall.LOCK_SH|syscall.LOCK_NB)
-		}
-		if statErr != nil {
-			if errors.Is(statErr, syscall.EWOULDBLOCK) {
-				return nil, errors.Join(
-					fmt.Errorf(
-						"legacy cards directory %s has an active writer; stop all legacy surla processes before running -import-legacy-workspace",
-						legacyCardsDir,
-					),
-					f.Close(),
-				)
-			}
-			return nil, errors.Join(fmt.Errorf("lock legacy cards directory %s: %w", legacyCardsDir, statErr), f.Close())
-		}
-		heldLock = f
-	}
-
-	entries, err := os.ReadDir(legacyCardsDir)
-	if err != nil {
-		return nil, fmt.Errorf("read legacy cards directory %s: %w", legacyCardsDir, err)
-	}
-	for _, entry := range entries {
-		name := entry.Name()
-		if !isHexCardFilename(name) {
-			continue
-		}
-		srcPath := filepath.Join(legacyCardsDir, name)
-		raw, err := readCardRegularFileNoFollow(srcPath)
-		if err != nil {
-			return nil, fmt.Errorf("read legacy card %s: %w", srcPath, err)
-		}
-		dstPath := filepath.Join(stageCardsDir, name)
-		if err := writeCardRegularFileNoFollow(dstPath, raw, 0o600); err != nil {
-			return nil, fmt.Errorf("write staged card %s: %w", dstPath, err)
-		}
-	}
-	if err := syncDir(stageCardsDir); err != nil {
-		return nil, fmt.Errorf("sync staged cards directory %s: %w", stageCardsDir, err)
-	}
-	return closeHeld, nil
-}
 
 // openCardStore resolves dir to its physical path, creates dir (0700) when
 // missing, and takes its lock. It fails when another process already holds the
@@ -311,59 +255,96 @@ func decodeCardBytes(label, fileName string, requireExactID bool, data []byte) (
 	if hex.EncodeToString(sum[:])+".json" != fileName {
 		return storedChangeCard{}, fmt.Errorf("change card file for %q does not hold that card", label)
 	}
-	sourceOrigin := sourceOriginSupplied
-	switch f.SourceOrigin {
-	case "", sourceOriginSupplied:
-		sourceOrigin = sourceOriginSupplied
-	case sourceOriginWorkspace:
-		sourceOrigin = sourceOriginWorkspace
-	default:
-		return storedChangeCard{}, fmt.Errorf("change card %q has unknown source_origin %q", label, f.SourceOrigin)
-	}
-	if f.Stories != nil && len(f.Stories) == 0 {
-		return storedChangeCard{}, fmt.Errorf("change card %q has empty stories array; omit stories when empty", label)
-	}
-	stories := cloneStorySummaries(f.Stories)
-	if len(stories) > 0 && sourceOrigin != sourceOriginWorkspace {
-		return storedChangeCard{}, fmt.Errorf("change card %q has stories with non-workspace source_origin %q", label, sourceOrigin)
-	}
-	card := &gensurla.ChangeCardResult{
-		ChangeID:           f.Card.ChangeID,
-		Status:             f.Card.Status,
-		Prompt:             f.Card.Prompt,
-		Summary:            f.Card.Summary,
-		Ambiguities:        f.Card.Ambiguities,
-		Answers:            f.Card.Answers,
-		Examples:           f.Card.Examples,
-		PreservedBehaviors: f.Card.PreservedBehaviors,
-		Stories:            storySummaryItemsOrNil(stories),
-		ConfirmedBy:        f.Card.ConfirmedBy,
-		RequestRevision:    f.Card.RequestRevision,
-		UIComposition:      f.Card.UIComposition,
-		Approval:           f.Card.Approval,
-	}
-	if card.Status != StatusNeedsConfirmation && card.Status != StatusConfirmed {
-		return storedChangeCard{}, fmt.Errorf("change card %q has unknown status %q", label, card.Status)
-	}
-	// request_revision is the digest of the card's content, owner and design
-	// source, so recomputing it checks every field it covers.
-	rev, err := computeCanonicalRevision(card, f.Owner, f.DesignSource)
+	card, stories, err := decodeRevision(label, f.Owner, f.Card, f.DesignSource, f.Stories)
 	if err != nil {
 		return storedChangeCard{}, err
 	}
-	if rev != card.RequestRevision {
-		return storedChangeCard{}, fmt.Errorf("change card %q does not match its request_revision", label)
+	if err := validateRevisionMetadata(f.Architecture, f.GoMod, f.MadeFrom); err != nil {
+		return storedChangeCard{}, fmt.Errorf("change card %q metadata: %w", label, err)
 	}
-	return storedChangeCard{
+	if f.SavedAt.IsZero() {
+		return storedChangeCard{}, fmt.Errorf("change card %q has no saved time", label)
+	}
+	record := storedChangeCard{
 		card:         card,
 		owner:        f.Owner,
 		designSource: f.DesignSource,
-		sourceOrigin: sourceOrigin,
 		stories:      stories,
-	}, nil
+		architecture: f.Architecture,
+		goMod:        f.GoMod,
+		madeFrom:     f.MadeFrom,
+		savedAt:      f.SavedAt,
+	}
+	if f.Proposed == nil {
+		return record, nil
+	}
+	// A proposal waits only beside an agreed revision, and is itself an
+	// unconfirmed revision of the same change with nothing recorded on it.
+	if card.Status != StatusConfirmed {
+		return storedChangeCard{}, fmt.Errorf("change card %q has a proposed revision beside an unconfirmed one", label)
+	}
+	if f.Proposed.Card == nil || f.Proposed.Card.ChangeID != card.ChangeID {
+		return storedChangeCard{}, fmt.Errorf("change card %q has a proposed revision of another change", label)
+	}
+	proposal, proposalStories, err := decodeRevision(label, f.Owner, f.Proposed.Card, f.Proposed.DesignSource, f.Proposed.Stories)
+	if err != nil {
+		return storedChangeCard{}, fmt.Errorf("proposed revision: %w", err)
+	}
+	if proposal.Status != StatusNeedsConfirmation || len(proposal.Answers) > 0 ||
+		proposal.ConfirmedBy != nil || proposal.Approval != nil {
+		return storedChangeCard{}, fmt.Errorf("change card %q has a proposed revision that is not awaiting confirmation", label)
+	}
+	if err := validateRevisionMetadata(f.Proposed.Architecture, f.Proposed.GoMod, f.Proposed.MadeFrom); err != nil {
+		return storedChangeCard{}, fmt.Errorf("proposed revision metadata: %w", err)
+	}
+	record.proposed = &storedRevision{
+		card: proposal, designSource: f.Proposed.DesignSource, stories: proposalStories,
+		architecture: f.Proposed.Architecture, goMod: f.Proposed.GoMod, madeFrom: f.Proposed.MadeFrom,
+	}
+	return record, nil
 }
 
-// save replaces the saved card for record.card.ChangeID. It writes and syncs
+// decodeRevision turns one saved revision into its Change Card and Stories,
+// checking its status and that it matches its own request_revision, which is
+// the digest of its content, owner and design source.
+func decodeRevision(
+	label, owner string,
+	saved *savedCard,
+	designSource string,
+	savedStories []designeval.StorySummary,
+) (*gensurla.ChangeCardResult, []designeval.StorySummary, error) {
+	stories := cloneStorySummaries(savedStories)
+	card := &gensurla.ChangeCardResult{
+		ChangeID:           saved.ChangeID,
+		Status:             saved.Status,
+		Prompt:             saved.Prompt,
+		Summary:            saved.Summary,
+		Ambiguities:        saved.Ambiguities,
+		Answers:            saved.Answers,
+		Examples:           saved.Examples,
+		PreservedBehaviors: saved.PreservedBehaviors,
+		Stories:            storySummaryItemsOrNil(stories),
+		ConfirmedBy:        saved.ConfirmedBy,
+		RequestRevision:    saved.RequestRevision,
+		UIComposition:      saved.UIComposition,
+		Approval:           approvalItemOf(saved.Approval),
+	}
+	if card.Status != StatusNeedsConfirmation && card.Status != StatusConfirmed {
+		return nil, nil, fmt.Errorf("change card %q has unknown status %q", label, card.Status)
+	}
+	rev, err := computeCanonicalRevision(card, owner, designSource)
+	if err != nil {
+		return nil, nil, err
+	}
+	if rev != card.RequestRevision {
+		return nil, nil, fmt.Errorf("change card %q does not match its request_revision", label)
+	}
+	return card, stories, nil
+}
+
+// save replaces the saved change for record.card.ChangeID, its revision in
+// force and any proposal beside it, in one file, and records the current time
+// as its saved time, ignoring record.savedAt. It writes and syncs
 // the card to the directory's one staging file, then renames that over the
 // card's file. Only one save runs at a time in a directory (the directory
 // lock and ControlPlane.mu), so one staging file suffices; a save that
@@ -375,35 +356,35 @@ func (s *cardStore) save(record storedChangeCard) error {
 	if s.lock == nil {
 		return errCardsClosed
 	}
-	persisted := &savedCard{
-		ChangeID:           record.card.ChangeID,
-		Status:             record.card.Status,
-		Prompt:             record.card.Prompt,
-		Summary:            record.card.Summary,
-		Ambiguities:        record.card.Ambiguities,
-		Answers:            record.card.Answers,
-		Examples:           record.card.Examples,
-		PreservedBehaviors: record.card.PreservedBehaviors,
-		ConfirmedBy:        record.card.ConfirmedBy,
-		RequestRevision:    record.card.RequestRevision,
-		UIComposition:      record.card.UIComposition,
-		Approval:           record.card.Approval,
+	if err := validateRevisionMetadata(record.architecture, record.goMod, record.madeFrom); err != nil {
+		return fmt.Errorf("change card %q metadata: %w", record.card.ChangeID, err)
 	}
-	persistedOrigin := ""
-	if record.sourceOrigin == sourceOriginWorkspace {
-		persistedOrigin = sourceOriginWorkspace
+	if p := record.proposed; p != nil {
+		if err := validateRevisionMetadata(p.architecture, p.goMod, p.madeFrom); err != nil {
+			return fmt.Errorf("proposed revision metadata: %w", err)
+		}
 	}
-	persistedStories := cloneStorySummaries(record.stories)
-	if len(persistedStories) == 0 && len(record.card.Stories) > 0 {
-		persistedStories = canonicalStorySummariesFromItems(record.card.Stories)
-	}
-	data, err := json.Marshal(cardFile{
-		Card:         persisted,
+	file := cardFile{
+		Card:         savedCardOf(record.card),
 		Owner:        record.owner,
 		DesignSource: record.designSource,
-		SourceOrigin: persistedOrigin,
-		Stories:      persistedStories,
-	})
+		Stories:      persistedStories(record.card, record.stories),
+		Architecture: record.architecture,
+		GoMod:        record.goMod,
+		MadeFrom:     record.madeFrom,
+		SavedAt:      time.Now().UTC(),
+	}
+	if p := record.proposed; p != nil {
+		file.Proposed = &proposedFile{
+			Card:         savedCardOf(p.card),
+			DesignSource: p.designSource,
+			Stories:      persistedStories(p.card, p.stories),
+			Architecture: p.architecture,
+			GoMod:        p.goMod,
+			MadeFrom:     p.madeFrom,
+		}
+	}
+	data, err := json.Marshal(file)
 	if err != nil {
 		return fmt.Errorf("encode change card %q: %w", record.card.ChangeID, err)
 	}
@@ -437,19 +418,87 @@ func (s *cardStore) path(changeID string) string {
 	return filepath.Join(s.dir, hex.EncodeToString(sum[:])+".json")
 }
 
-// hasWorkspaceCardsWithFiles reports whether any saved card in s captured
-// existing workspace design files (source_origin == "workspace" with non-empty
-// design_source). Cards proposed in an empty workspace before init_project have
-// an empty design_source and do not block initialization. Every saved card file
-// is validated with the same strict decoder as load.
-func (s *cardStore) hasWorkspaceCardsWithFiles() (bool, error) {
+// savedCardOf is card's saved form, without the response-only
+// UnverifiedApproval and ProposedRevision fields.
+func savedCardOf(card *gensurla.ChangeCardResult) *savedCard {
+	return &savedCard{
+		ChangeID:           card.ChangeID,
+		Status:             card.Status,
+		Prompt:             card.Prompt,
+		Summary:            card.Summary,
+		Ambiguities:        card.Ambiguities,
+		Answers:            card.Answers,
+		Examples:           card.Examples,
+		PreservedBehaviors: card.PreservedBehaviors,
+		ConfirmedBy:        card.ConfirmedBy,
+		RequestRevision:    card.RequestRevision,
+		UIComposition:      card.UIComposition,
+		Approval:           savedApprovalOf(card.Approval),
+	}
+}
+
+// approvalItemOf converts a stored approval into an ApprovalItem without
+// TestSource, which currentCard derives when the approval is read.
+func approvalItemOf(saved *savedApproval) *gensurla.ApprovalItem {
+	if saved == nil {
+		return nil
+	}
+	artifacts := maps.Clone(saved.Artifacts)
+	if artifacts == nil {
+		artifacts = map[string]string{}
+	}
+	return &gensurla.ApprovalItem{
+		ApprovedBy:      saved.ApprovedBy,
+		ReportDigest:    saved.ReportDigest,
+		CandidateCommit: saved.CandidateCommit,
+		SuiteID:         saved.SuiteID,
+		SuiteCommit:     saved.SuiteCommit,
+		Environment:     saved.Environment,
+		Artifacts:       artifacts,
+		ScenarioCount:   saved.ScenarioCount,
+	}
+}
+
+// savedApprovalOf converts an ApprovalItem into its on-disk form without the
+// derived TestSource union.
+func savedApprovalOf(item *gensurla.ApprovalItem) *savedApproval {
+	if item == nil {
+		return nil
+	}
+	return &savedApproval{
+		ApprovedBy:      item.ApprovedBy,
+		ReportDigest:    item.ReportDigest,
+		CandidateCommit: item.CandidateCommit,
+		SuiteID:         item.SuiteID,
+		SuiteCommit:     item.SuiteCommit,
+		Environment:     item.Environment,
+		Artifacts:       maps.Clone(item.Artifacts),
+		ScenarioCount:   item.ScenarioCount,
+	}
+}
+
+// persistedStories returns the Stories saved with card: stories, or the
+// card's own Stories when stories is empty.
+func persistedStories(card *gensurla.ChangeCardResult, stories []designeval.StorySummary) []designeval.StorySummary {
+	out := cloneStorySummaries(stories)
+	if len(out) == 0 && len(card.Stories) > 0 {
+		out = canonicalStorySummariesFromItems(card.Stories)
+	}
+	return out
+}
+
+// all returns every saved card in s in directory order. Every saved card
+// file is validated with the same strict decoder as load, so one unreadable
+// card fails the call rather than being skipped.
+func (s *cardStore) all() ([]storedChangeCard, error) {
 	if s.lock == nil {
-		return false, errCardsClosed
+		return nil, errCardsClosed
 	}
 	entries, err := os.ReadDir(s.dir)
 	if err != nil {
-		return false, fmt.Errorf("read cards directory: %w", err)
+		return nil, fmt.Errorf("read cards directory: %w", err)
 	}
+	var records []storedChangeCard
 	for _, entry := range entries {
 		name := entry.Name()
 		if !isHexCardFilename(name) {
@@ -457,13 +506,31 @@ func (s *cardStore) hasWorkspaceCardsWithFiles() (bool, error) {
 		}
 		raw, err := readCardRegularFileNoFollow(filepath.Join(s.dir, name))
 		if err != nil {
-			return false, fmt.Errorf("read saved card %s: %w", name, err)
+			return nil, fmt.Errorf("read saved card %s: %w", name, err)
 		}
 		rec, err := decodeCardBytes(name, name, false, raw)
 		if err != nil {
-			return false, err
+			return nil, err
 		}
-		if rec.sourceOrigin == sourceOriginWorkspace && strings.TrimSpace(rec.designSource) != "" {
+		records = append(records, rec)
+	}
+	return records, nil
+}
+
+// hasWorkspaceCardsWithFiles reports whether any saved change in s captured
+// existing workspace design files (a non-empty design_source), which decides
+// whether init_project may still lay down a fresh workspace. A waiting
+// proposal counts like the revision in force: adopting it binds the change to
+// the files it recorded. Changes proposed in an empty workspace before
+// init_project have an empty design_source and do not block initialization.
+func (s *cardStore) hasWorkspaceCardsWithFiles() (bool, error) {
+	records, err := s.all()
+	if err != nil {
+		return false, err
+	}
+	for _, rec := range records {
+		if strings.TrimSpace(rec.designSource) != "" ||
+			(rec.proposed != nil && strings.TrimSpace(rec.proposed.designSource) != "") {
 			return true, nil
 		}
 	}
@@ -493,20 +560,22 @@ func readCardRegularFileNoFollow(path string) ([]byte, error) {
 	return raw, errors.Join(readErr, f.Close())
 }
 
-// writeCardRegularFileNoFollow creates path exclusively without following
-// symlinks, writes raw, syncs the file, sets perm, and closes it.
-func writeCardRegularFileNoFollow(path string, raw []byte, perm os.FileMode) error {
-	f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL|syscall.O_NOFOLLOW, 0o600)
+// CardStoreInUse probes the existing writer lock without reading or changing any cards.
+// The caller must serialize start decisions separately; the lock, not a PID record, proves liveness.
+func CardStoreInUse(dir string) (inUse bool, err error) {
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return false, err
+	}
+	lock, err := os.OpenFile(filepath.Join(dir, "lock"), os.O_RDWR|os.O_CREATE, 0o600)
 	if err != nil {
-		return err
+		return false, err
 	}
-	if _, err := f.Write(raw); err != nil {
-		return errors.Join(err, f.Close())
-	}
-	if perm != 0o600 {
-		if err := f.Chmod(perm); err != nil {
-			return errors.Join(err, f.Close())
+	defer func() { err = errors.Join(err, lock.Close()) }()
+	if err := syscall.Flock(int(lock.Fd()), syscall.LOCK_EX|syscall.LOCK_NB); err != nil {
+		if errors.Is(err, syscall.EWOULDBLOCK) {
+			return true, nil
 		}
+		return false, err
 	}
-	return errors.Join(f.Sync(), f.Close())
+	return false, syscall.Flock(int(lock.Fd()), syscall.LOCK_UN)
 }

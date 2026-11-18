@@ -1,7 +1,8 @@
 // This file implements update_dependencies: run go mod tidy for every
-// workspace module in a protected copy inside Linux containers, then write
-// only the changed go.mod, go.sum and go.work.sum files back to the live
-// workspace through descriptors that never follow a link.
+// builder-owned workspace module in a protected copy inside Linux containers
+// (leaving out the starter test module eval when the project's tests belong to
+// the test writer), then write only the changed go.mod, go.sum and go.work.sum
+// files back to the live workspace through descriptors that never follow a link.
 package controlplane
 
 import (
@@ -21,11 +22,19 @@ import (
 	"golang.org/x/sys/unix"
 
 	gensurla "github.com/goadesign/surla/gen/surla"
+	"github.com/goadesign/surla/internal/renameat"
+	"github.com/goadesign/surla/internal/scaffold"
 )
 
-// maxCleanupWarningBytes bounds the post-write failure text in an
-// update_dependencies message, so it never displaces the written paths.
-const maxCleanupWarningBytes = 2 << 10
+const (
+	// maxCleanupWarningBytes bounds the post-write failure text in an
+	// update_dependencies message, so it never displaces the written paths.
+	maxCleanupWarningBytes = 2 << 10
+	// skippedTestModuleNote explains in check_project's and
+	// update_dependencies' result and output why the starter test module
+	// eval was left untouched.
+	skippedTestModuleNote = "Left test module eval out (tests belong to the test writer)"
+)
 
 var (
 	// errManifestConflict reports that a live manifest cannot be updated
@@ -34,31 +43,33 @@ var (
 	errManifestConflict = errors.New("manifest conflict")
 	// errPublicationCanceled reports a changed manifest that was not written
 	// because the operation was canceled or ran out of time first.
-	errPublicationCanceled = errors.New("the operation was canceled or exceeded -check-timeout before writing it")
+	errPublicationCanceled = errors.New("the operation was canceled or exceeded check timeout before writing it")
 	// fsyncDir makes a rename durable; tests replace it to inject a failure
 	// after the rename succeeded.
 	fsyncDir = unix.Fsync
 )
 
-// UpdateDependencies runs go mod tidy for every Go module of the active
-// workspace in a protected copy, populates go.work.sum when the copy has a
-// go.work, and publishes only the changed manifests. The work runs in a
-// check helper process that finishes and cleans up the operation even if
-// this server dies. Modules are published one at a time with Go's normal
-// partial semantics. Once a manifest is replaced, later failures are
-// reported next to the written paths, never instead of them. It requires an
-// authenticated principal.
+// UpdateDependencies runs go mod tidy for every Go module of the open build's
+// builder folder in a protected copy (except the starter test module eval when the
+// project has no stored verification settings, because those tests belong to
+// the test writer), populates go.work.sum when the copy has a go.work, and
+// publishes only the changed manifests. The work runs in a check helper
+// process that finishes and cleans up the operation even if this server dies.
+// Modules are published one at a time with Go's normal partial semantics. Once
+// a manifest is replaced, later failures are reported next to the written
+// paths, never instead of them. It requires an authenticated principal and a
+// read assignment for the open build, reserved until helper cleanup completes.
 func (c *ControlPlane) UpdateDependencies(ctx context.Context) (res *gensurla.UpdateDependenciesResult, retErr error) {
 	if _, ok := PrincipalFromContext(ctx); !ok {
 		return nil, errors.New("authenticated principal is required")
 	}
 	ctx, span := c.tracer("surla/controlplane").Start(ctx, "surla.controlplane.update_dependencies")
 	if err := c.admitCheckOperation(); err != nil {
-		endCheckSpan(span, err)
+		endCheckRequestSpan(span, err)
 		return nil, err
 	}
 	defer func() {
-		endCheckSpan(span, retErr)
+		endCheckRequestSpan(span, retErr)
 		c.checkOps.Done()
 	}()
 	ctx, cancel := c.checkDeadline(ctx)
@@ -82,6 +93,10 @@ func (op *checkOperation) updateDependencies(ctx context.Context) (*gensurla.Upd
 	if err := op.start(ctx); err != nil {
 		return nil, err
 	}
+	leftOutTestModule := op.leaveOutStarterTestModule()
+	if leftOutTestModule {
+		fmt.Fprintf(op.out, "note: %s\n", skippedTestModuleNote)
+	}
 	var failures []moduleOutcome
 	for _, mod := range op.copy.modules {
 		if f, ok, err := op.runGo(ctx, mod, "tidy", "bridge", false, op.goProxyEnv, "mod", "tidy"); err != nil {
@@ -92,7 +107,9 @@ func (op *checkOperation) updateDependencies(ctx context.Context) (*gensurla.Upd
 	}
 	if op.hasGoWork() {
 		for _, mod := range op.copy.modules {
-			if f, ok, err := op.runGo(ctx, mod, "download", "bridge", false, op.goProxyEnv, "list", "-deps", "-test", "./..."); err != nil {
+			// Resolve workspace sums without a package listing that could
+			// displace Go's diagnostics from the bounded failure message.
+			if f, ok, err := op.runGo(ctx, mod, "download", "bridge", false, op.goProxyEnv, "list", "-deps", "-test", `-f={{""}}`, "./..."); err != nil {
 				return nil, op.finish(err)
 			} else if !ok {
 				failures = append(failures, f)
@@ -101,7 +118,10 @@ func (op *checkOperation) updateDependencies(ctx context.Context) (*gensurla.Upd
 	}
 	written, notes, canceled := op.publishManifests(ctx, failures)
 	if canceled && len(written) == 0 {
-		return nil, op.finish(fmt.Errorf("check exceeded -check-timeout (%s) or was canceled before writing the dependency files; nothing was written: %w", op.checkTimeout, ctx.Err()))
+		return nil, op.finish(fmt.Errorf("check exceeded check timeout (%s) or was canceled before writing the dependency files; nothing was written: %w", op.checkTimeout, ctx.Err()))
+	}
+	if leftOutTestModule {
+		notes = append([]string{skippedTestModuleNote}, notes...)
 	}
 	warning := ""
 	if err := op.finish(nil); err != nil {
@@ -116,6 +136,30 @@ func (op *checkOperation) updateDependencies(ctx context.Context) (*gensurla.Upd
 		FilesWritten: written,
 		Message:      op.updateMessage(written, notes, warning, failures),
 	}, nil
+}
+
+// leaveOutStarterTestModule removes the starter test module (eval) from
+// op.copy.modules when the project has no stored verification settings and
+// the workspace holds a starter test layout (go.mod and eval/go.mod accepted
+// by scaffold.StarterLayout). Tests in eval then belong to the test writer,
+// so check_project does not test eval and update_dependencies neither tidies
+// nor writes eval/go.mod or eval/go.sum.
+func (op *checkOperation) leaveOutStarterTestModule() bool {
+	if op.storedEvaluator || !slices.Contains(op.copy.modules, ".") || !slices.Contains(op.copy.modules, scaffold.SuiteDir) {
+		return false
+	}
+	rootMod, rootOK := op.copy.manifests[path.Join(op.moduleGrantRel("."), "go.mod")]
+	evalMod, evalOK := op.copy.manifests[path.Join(op.moduleGrantRel(scaffold.SuiteDir), "go.mod")]
+	if !rootOK || !evalOK || len(rootMod) > maxLayoutFileBytes || len(evalMod) > maxLayoutFileBytes {
+		return false
+	}
+	if _, err := scaffold.StarterLayout(rootMod, evalMod); err != nil {
+		return false
+	}
+	op.copy.modules = slices.DeleteFunc(op.copy.modules, func(mod string) bool {
+		return mod == scaffold.SuiteDir
+	})
+	return true
 }
 
 // hasGoWork reports whether the copy holds a go.work file.
@@ -384,7 +428,7 @@ func writeAtomic(dirFD int, name string, data []byte, create bool) (bool, error)
 		return false, errors.Join(fmt.Errorf("write %s: %w", name, err), unix.Unlinkat(dirFD, tmp, 0))
 	}
 	if create {
-		err = unix.RenameatxNp(dirFD, tmp, dirFD, name, unix.RENAME_EXCL)
+		err = renameat.NoReplace(dirFD, tmp, dirFD, name)
 		if errors.Is(err, unix.EEXIST) {
 			return false, errors.Join(fmt.Errorf("%w: %s was created concurrently; call again", errManifestConflict, name), unix.Unlinkat(dirFD, tmp, 0))
 		}

@@ -35,7 +35,12 @@ const (
 // TestMain lets the test binary act as `surla verify-run supervise|execute`
 // so the lifecycle runs in real processes.
 func TestMain(m *testing.M) {
-	if len(os.Args) == 4 && os.Args[1] == "verify-run" {
+	if len(os.Args) > 1 && os.Args[1] == "verify-run" {
+		// A malformed child invocation must never start the test suite again.
+		if len(os.Args) != 5 {
+			fmt.Fprintln(os.Stderr, "verify-run needs a role, run directory and build cache directory")
+			os.Exit(1)
+		}
 		os.Exit(helper(os.Args[2], os.Args[3]))
 	}
 	if len(os.Args) >= 2 && os.Args[1] == "--live" {
@@ -52,11 +57,11 @@ func helper(role, dir string) int {
 	var err error
 	switch role {
 	case "supervise":
-		err = Supervise(dir, []string{os.Args[0]})
+		err = Supervise(dir, []string{os.Args[0]}, os.Args[4])
 	case "execute":
 		err = Execute(dir, fakeRun, os.Stdout, os.Stderr)
 	case "live":
-		err = Live(dir, fakePrepare, os.Stdout, os.Stderr)
+		err = Live(dir, fakePrepare, fakeLiveProvider, os.Stdout, os.Stderr)
 	default:
 		err = fmt.Errorf("unknown role %q", role)
 	}
@@ -67,9 +72,27 @@ func helper(role, dir string) int {
 	return 0
 }
 
+// evaluatorPlan is the plan of a run or live target whose fields these tests
+// do not read: the operator's evaluator, the one test source that keeps the
+// caller's environment.
+var evaluatorPlan = verify.Plan{Tests: verify.TestsEvaluator}
+
 // fakeRun stands in for verify.Run according to fakeModeEnv.
-func fakeRun(ctx context.Context, plan verify.Plan) (verify.Report, error) {
+func fakeRun(ctx context.Context, plan verify.Plan, environ []string) (verify.Report, error) {
 	switch os.Getenv(fakeModeEnv) {
+	case "workspace-preparation":
+		return verify.Run(ctx, plan, environ, os.Args[4])
+	case "judge":
+		// An operator's suite whose judge needs its provider key: preparation
+		// runs in this process, the suite from environ.
+		if err := writeSettingsReport(filepath.Join(filepath.Dir(plan.WorkDir), "prepare-report"), os.Environ()); err != nil {
+			return verify.Report{}, err
+		}
+		if err := writeSettingsReport(filepath.Join(filepath.Dir(plan.WorkDir), "suite-report"), verify.ProgramEnv(plan, environ, plan.WorkDir)); err != nil {
+			return verify.Report{}, err
+		}
+		_, judged := lookupEnv(verify.ProgramEnv(plan, environ, plan.WorkDir), "ANTHROPIC_API_KEY")
+		return saveReport(plan, judged)
 	case "pass":
 		if err := os.MkdirAll(filepath.Join(plan.WorkDir, "candidate-bin"), 0o700); err != nil {
 			return verify.Report{}, err
@@ -80,12 +103,6 @@ func fakeRun(ctx context.Context, plan verify.Plan) (verify.Report, error) {
 	case "fail":
 		return verify.Report{}, &verify.StageError{Stage: verify.StageBuild, Summary: "The candidate did not build.",
 			Err: errors.New("compile error in /private/secret/path")}
-	case "fail-exit71":
-		return verify.Report{}, &verify.StageError{
-			Stage:   verify.StageBuild,
-			Summary: "The sandboxed command exited with status 71. If Surla is running inside a restricted coding-agent shell, its sandbox may have been blocked; run Surla from an unrestricted host shell.",
-			Err:     errors.New("build candidate app: exit status 71 in /private/secret/path"),
-		}
 	case "hang":
 		store := filepath.Join(plan.WorkDir, "store")
 		if err := os.MkdirAll(store, 0o700); err != nil {
@@ -163,9 +180,9 @@ func start(t *testing.T, mode string) (string, string, int) {
 		Plan: verify.Plan{
 			CandidateCommit: strings.Repeat("a", 40), RequestRevision: "rev-1",
 			SuiteCommit: strings.Repeat("b", 40), ReportDir: reports,
-			WorkDir: filepath.Join(root, runID, "work"),
+			WorkDir: filepath.Join(root, runID, "work"), Tests: verify.TestsEvaluator,
 		},
-	}, []string{os.Args[0]})
+	}, []string{os.Args[0]}, nil, t.TempDir())
 	require.NoError(t, err)
 	return root, runID, pid
 }
@@ -247,21 +264,6 @@ func TestFailedStepReadsAsExecutionFailedWithoutItsOutput(t *testing.T) {
 	evidence, err := os.ReadFile(filepath.Join(root, runID, "executor.log"))
 	require.NoError(t, err)
 	assert.Contains(t, string(evidence), "/private/secret/path", "the full error stays with the evaluator")
-
-	root71, runID71, _ := start(t, "fail-exit71")
-	require.NoError(t, Wait(root71, runID71))
-	_, state71, err := Read(root71, runID71)
-	require.NoError(t, err)
-	want71Summary := "The sandboxed command exited with status 71. If Surla is running inside a restricted coding-agent shell, its sandbox may have been blocked; run Surla from an unrestricted host shell."
-	assert.Equal(t, State{Kind: StateNotCompleted, Result: Result{
-		Kind: ResultNoReport, Failure: FailureExecution, Stage: "build", Summary: want71Summary,
-	}}, state71)
-	saved71, err := os.ReadFile(filepath.Join(root71, runID71, "result.json"))
-	require.NoError(t, err)
-	assert.NotContains(t, string(saved71), "/private/secret/path")
-	evidence71, err := os.ReadFile(filepath.Join(root71, runID71, "executor.log"))
-	require.NoError(t, err)
-	assert.Contains(t, string(evidence71), "/private/secret/path")
 }
 
 func TestKilledExecutorIsInterruptedAndLeavesNoProcesses(t *testing.T) {
@@ -351,16 +353,16 @@ func TestReadAndStartRejectInvalidRuns(t *testing.T) {
 		Owner:      "alice",
 		AcceptedAt: time.Now().UTC(),
 		Timeout:    time.Minute,
-		Plan:       verify.Plan{WorkDir: "w"},
-	}, []string{os.Args[0]})
+		Plan:       verify.Plan{WorkDir: "w", Tests: verify.TestsEvaluator},
+	}, []string{os.Args[0]}, nil, t.TempDir())
 	assert.ErrorContains(t, err, "create run directory", "a run directory is never reused")
-	_, err = Start(root, Request{RunID: NewRunID(), Timeout: -time.Second}, []string{os.Args[0]})
+	_, err = Start(root, Request{RunID: NewRunID(), Timeout: -time.Second}, []string{os.Args[0]}, nil, t.TempDir())
 	assert.ErrorContains(t, err, "must not be negative")
-	_, err = Start(root, Request{RunID: NewRunID(), Timeout: time.Minute}, []string{os.Args[0]})
+	_, err = Start(root, Request{RunID: NewRunID(), Timeout: time.Minute}, []string{os.Args[0]}, nil, t.TempDir())
 	assert.ErrorContains(t, err, "work directory is required")
-	_, err = Start(root, Request{RunID: NewRunID(), Timeout: time.Minute, Plan: verify.Plan{WorkDir: "w"}}, []string{os.Args[0]})
+	_, err = Start(root, Request{RunID: NewRunID(), Timeout: time.Minute, Plan: verify.Plan{WorkDir: "w"}}, []string{os.Args[0]}, nil, t.TempDir())
 	assert.ErrorContains(t, err, "run owner is required")
-	_, err = Start(root, Request{RunID: NewRunID(), Owner: "alice", Timeout: time.Minute, Plan: verify.Plan{WorkDir: "w"}}, []string{os.Args[0]})
+	_, err = Start(root, Request{RunID: NewRunID(), Owner: "alice", Timeout: time.Minute, Plan: verify.Plan{WorkDir: "w"}}, []string{os.Args[0]}, nil, t.TempDir())
 	assert.ErrorContains(t, err, "run accepted_at time is required")
 }
 
@@ -384,6 +386,7 @@ func TestReadRequestValidationPreservesCLIAndRejectsCorruptRecords(t *testing.T)
 		Owner:      "cli",
 		ChangeID:   "",
 		AcceptedAt: time.Date(2026, 10, 31, 12, 0, 0, 100_000_000, time.UTC),
+		Plan:       evaluatorPlan,
 	})
 	require.NoError(t, err)
 	writeRawRun(t, cliRunID, string(cliReq), `{"kind":"no_report","failure":"execution_failed","stage":"build","summary":"Failed"}`)
@@ -433,6 +436,22 @@ func TestReadRequestValidationPreservesCLIAndRejectsCorruptRecords(t *testing.T)
 			wantOwner: "bob",
 		},
 		{
+			name: "no test source preserves decoded owner",
+			buildBody: func(runID string) string {
+				return `{"run_id":"` + runID + `","owner":"bob","change_id":"chg","accepted_at":"2026-10-31T12:00:00Z"}`
+			},
+			wantErr:   `decode run request: unknown test source ""`,
+			wantOwner: "bob",
+		},
+		{
+			name: "unknown test source preserves decoded owner",
+			buildBody: func(runID string) string {
+				return `{"run_id":"` + runID + `","owner":"bob","change_id":"chg","accepted_at":"2026-10-31T12:00:00Z","plan":{"Tests":"agents"}}`
+			},
+			wantErr:   `decode run request: unknown test source "agents"`,
+			wantOwner: "bob",
+		},
+		{
 			name: "trailing JSON data preserves decoded owner",
 			buildBody: func(runID string) string {
 				return `{"run_id":"` + runID + `","owner":"bob","change_id":"chg","accepted_at":"2026-10-31T12:00:00Z"}{}`
@@ -465,20 +484,7 @@ func TestListFiltersByOwnerAndChangeBeforeReadingStateAndSortsDeterministically(
 	root := t.TempDir()
 	writeRun := func(t *testing.T, runID, owner, changeID string, acceptedAt time.Time, resultBody string) {
 		t.Helper()
-		dir := filepath.Join(root, runID)
-		require.NoError(t, os.MkdirAll(dir, 0o700))
-		rawReq, err := json.Marshal(Request{
-			RunID:      runID,
-			Owner:      owner,
-			ChangeID:   changeID,
-			AcceptedAt: acceptedAt,
-		})
-		require.NoError(t, err)
-		require.NoError(t, os.WriteFile(filepath.Join(dir, requestFile), rawReq, 0o600))
-		require.NoError(t, os.WriteFile(filepath.Join(dir, lockFile), nil, 0o600))
-		if resultBody != "" {
-			require.NoError(t, os.WriteFile(filepath.Join(dir, resultFile), []byte(resultBody), 0o600))
-		}
+		writeListedRun(t, root, runID, owner, changeID, acceptedAt, resultBody)
 	}
 
 	// Unaccepted directory without request.json (e.g. Start publication window) is skipped cleanly.
@@ -525,4 +531,64 @@ func TestListFiltersByOwnerAndChangeBeforeReadingStateAndSortsDeterministically(
 	require.NoError(t, os.WriteFile(filepath.Join(corruptDir, requestFile), []byte(`{}`), 0o600))
 	_, err = List(root, "alice", "chg-1")
 	require.ErrorContains(t, err, "does not match directory")
+}
+
+// TestLatestByChangeReadsEachChangesNewestRunOnly checks that LatestByChange
+// returns each of an owner's changes' newest run, with List's tie-break, reads
+// the state of those runs only, leaves out other owners' runs, and fails on a
+// damaged request rather than leaving it out.
+func TestLatestByChangeReadsEachChangesNewestRunOnly(t *testing.T) {
+	latest, err := LatestByChange(filepath.Join(t.TempDir(), "not-created-yet"), "alice")
+	require.NoError(t, err)
+	assert.Empty(t, latest, "missing root has no runs before any run is started")
+	_, err = LatestByChange(t.TempDir(), "")
+	assert.ErrorContains(t, err, "run owner is required")
+
+	root := t.TempDir()
+	okResult := `{"kind":"no_report","failure":"execution_failed","stage":"build","summary":"Stopped at build."}`
+	sameTime := time.Date(2026, 10, 31, 12, 0, 0, 100_000_000, time.UTC)
+	// chg-1's newest runs tie on time; the lower RunID wins, as in List.
+	writeListedRun(t, root, "22222222222222222222222222222222", "alice", "chg-1", sameTime, okResult)
+	writeListedRun(t, root, "11111111111111111111111111111111", "alice", "chg-1", sameTime, okResult)
+	// An older run's damaged result is never read: only newest runs are.
+	writeListedRun(t, root, "33333333333333333333333333333333", "alice", "chg-1", sameTime.Add(-time.Minute), `{corrupt-older-result`)
+	writeListedRun(t, root, "44444444444444444444444444444444", "alice", "chg-2", sameTime.Add(-time.Hour), "")
+	// Another owner's runs are left out before their state is read.
+	writeListedRun(t, root, "55555555555555555555555555555555", "bob", "chg-1", sameTime.Add(time.Hour), `{corrupt-foreign-result`)
+	require.NoError(t, os.MkdirAll(filepath.Join(root, NewRunID()), 0o700))
+
+	latest, err = LatestByChange(root, "alice")
+	require.NoError(t, err)
+	require.Len(t, latest, 2)
+	assert.Equal(t, "11111111111111111111111111111111", latest["chg-1"].Request.RunID)
+	assert.Equal(t, StateNotCompleted, latest["chg-1"].State.Kind, "the newest run's own result was read")
+	assert.Equal(t, "44444444444444444444444444444444", latest["chg-2"].Request.RunID)
+
+	corruptDir := filepath.Join(root, NewRunID())
+	require.NoError(t, os.MkdirAll(corruptDir, 0o700))
+	require.NoError(t, os.WriteFile(filepath.Join(corruptDir, requestFile), []byte(`{}`), 0o600))
+	_, err = LatestByChange(root, "alice")
+	require.ErrorContains(t, err, "does not match directory", "a damaged request fails the read rather than being left out")
+}
+
+// writeListedRun saves a run under root as Start publishes it: request.json
+// naming owner, changeID, and acceptedAt, the run's lock file, and, when
+// resultBody is not empty, result.json.
+func writeListedRun(t *testing.T, root, runID, owner, changeID string, acceptedAt time.Time, resultBody string) {
+	t.Helper()
+	dir := filepath.Join(root, runID)
+	require.NoError(t, os.MkdirAll(dir, 0o700))
+	rawReq, err := json.Marshal(Request{
+		RunID:      runID,
+		Owner:      owner,
+		ChangeID:   changeID,
+		AcceptedAt: acceptedAt,
+		Plan:       evaluatorPlan,
+	})
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(filepath.Join(dir, requestFile), rawReq, 0o600))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, lockFile), nil, 0o600))
+	if resultBody != "" {
+		require.NoError(t, os.WriteFile(filepath.Join(dir, resultFile), []byte(resultBody), 0o600))
+	}
 }

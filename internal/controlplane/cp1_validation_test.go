@@ -14,8 +14,6 @@ import (
 
 	genmcpadapter "github.com/goadesign/surla/gen/mcp_surla"
 	gensurla "github.com/goadesign/surla/gen/surla"
-	"github.com/goadesign/surla/internal/swarm"
-	"github.com/goadesign/surla/internal/testmodule"
 )
 
 // TestValidateAmbiguityAnswersReportsEveryProblemOnce verifies that
@@ -29,7 +27,7 @@ func TestValidateAmbiguityAnswersReportsEveryProblemOnce(t *testing.T) {
 		{ID: "chg-ambiguity-02", Question: "Who accepts offers?", Options: []string{"Listing seller", "Any seller"}},
 		{ID: "chg-ambiguity-03", Question: "Keep history?", Options: []string{"Yes", "No"}},
 	}
-	const pointer = "; each answer must be exactly one of its question's options, and a decision that no option expresses goes in revise_change's prompt"
+	const pointer = "; each answer must be exactly one of its question's options; for a decision that no option expresses, ask the guide to revise the change"
 	complete := map[string]string{
 		"chg-ambiguity-01": "Demo persona header",
 		"chg-ambiguity-02": "Listing seller",
@@ -94,14 +92,13 @@ func TestValidateAmbiguityAnswersReportsEveryProblemOnce(t *testing.T) {
 // TestChangeCardHTTPErrorsAndMCPToolPreservation verifies that established
 // caller, state, and unconfigured-capability refusals across the Change Card
 // HTTP routes return their declared non-fault HTTP status codes (403, 404, 409,
-// 422, 501), that server-owned SwarmProfiles misconfiguration on an embedded
-// host remains an HTTP 500 fault, and that MCP tools/call continues to return
+// 422, 501), and that MCP tools/call continues to return
 // non-fault tool error results with the same domain error message.
 func TestChangeCardHTTPErrorsAndMCPToolPreservation(t *testing.T) {
 	if testing.Short() {
-		t.Skip("runs the sandboxed Go toolchain; the full suite (go test without -short) covers it")
+		t.Skip("runs the Go toolchain; the full suite (go test without -short) covers it")
 	}
-	aliceCtx := WithPrincipal(context.Background(), Principal{ID: "alice@example.com"})
+	aliceCtx := WithPrincipal(context.Background(), Principal{ID: "alice@example.com", CallerID: "alice@example.com", Kind: CallerUser})
 	ambiguous := &gensurla.CP1Analysis{
 		Summary:     "Refunds up to $50 are instant.",
 		Ambiguities: []*gensurla.CP1AnalysisAmbiguity{{Question: "Who approves?", Options: []string{"instant", "manager"}}},
@@ -110,15 +107,13 @@ func TestChangeCardHTTPErrorsAndMCPToolPreservation(t *testing.T) {
 		}},
 		PreservedBehaviors: []string{},
 	}
-	auth := NewTokenAuthenticator(map[string]Principal{
+	auth := workflowAuthenticator(map[string]Principal{
 		"alice-token": {ID: "alice@example.com"},
 		"bob-token":   {ID: "bob@example.com"},
 	})
 	// Both preview refusals use one server so its evaluator reuses its own
 	// compiler workspace while the handler preserves each distinct error.
-	cp := newControlPlane(t, Options{
-		SwarmProfiles: []swarm.ProviderProfile{{ID: "bad"}},
-	})
+	cp := newControlPlane(t, Options{})
 	pending, err := cp.ProposeChange(aliceCtx, &gensurla.ProposeChangePayload{ChangeID: "chg", Prompt: "Refunds.", Analysis: ambiguous})
 	require.NoError(t, err)
 	confirmed, err := cp.ConfirmIntent(aliceCtx, &gensurla.ConfirmIntentPayload{
@@ -131,11 +126,6 @@ func TestChangeCardHTTPErrorsAndMCPToolPreservation(t *testing.T) {
 		Examples: pending.Examples,
 	})
 	require.NoError(t, err)
-	designFiles := testmodule.Snapshot(t, "", `package design
-import . "goa.design/goa/v3/dsl"
-var _ = API("orders", func() {})
-var _ = Service("orders", func() {})
-`)
 	handler := NewHTTPHandler(cp, auth)
 	fixedHostHandler := NewHTTPHandler(newControlPlane(t, Options{}), auth)
 	// proposalAnalysis and revisionAnalysis are the wire forms of complete
@@ -171,8 +161,8 @@ var _ = Service("orders", func() {})
 		wantFault  bool
 		wantMsg    string
 	}{
-		{"configure_model without LiveModelEnv on fixed host", fixedHostHandler, http.MethodPost, "/cp1/model", "alice-token", map[string]any{"gateway_addr": "127.0.0.1:9090"}, http.StatusNotImplemented, false, msgModelReconfigUnavailable},
-		{"configure_model without LiveModelEnv on configured fixed host", handler, http.MethodPost, "/cp1/model", "alice-token", map[string]any{"gateway_addr": "127.0.0.1:9090"}, http.StatusNotImplemented, false, msgModelReconfigUnavailable},
+		{"configure_model provider without held settings on fixed host", fixedHostHandler, http.MethodPost, "/cp1/model", "alice-token", map[string]any{"provider": "anthropic", "model_name": "claude-sonnet-4-6"}, http.StatusUnprocessableEntity, false, "provider anthropic needs ANTHROPIC_API_KEY: export it"},
+		{"configure_model provider without held settings on configured host", handler, http.MethodPost, "/cp1/model", "alice-token", map[string]any{"provider": "openai", "model_name": "gpt-5.4-mini"}, http.StatusUnprocessableEntity, false, "provider openai needs OPENAI_API_KEY: export it"},
 		{"propose duplicate change_id", handler, http.MethodPost, "/changes/propose", "alice-token", map[string]any{"change_id": "chg", "prompt": "p", "analysis": proposalAnalysis}, http.StatusConflict, false, `change_id "chg" already exists`},
 		{"propose blank prompt", handler, http.MethodPost, "/changes/propose", "alice-token", map[string]any{"change_id": "blank", "prompt": "  ", "analysis": proposalAnalysis}, http.StatusUnprocessableEntity, false, "change_id and prompt are required"},
 		{"revise unknown change_id", handler, http.MethodPost, "/changes/revise", "alice-token", map[string]any{"change_id": "missing", "request_revision": strings.Repeat("0", 64), "prompt": "p", "analysis": revisionAnalysis("check_01")}, http.StatusNotFound, false, `unknown change_id "missing"`},
@@ -193,9 +183,8 @@ var _ = Service("orders", func() {})
 				"verification_kind": pending.Examples[0].VerificationKind,
 			}},
 		}, http.StatusUnprocessableEntity, false, "is not one of its options"},
-		{"preview unconfirmed card", handler, http.MethodPost, "/changes/preview", "alice-token", map[string]any{"change_id": "chg", "request_revision": pending.RequestRevision, "design": map[string]any{"files": designFiles}}, http.StatusConflict, false, `change_id "chg" must be confirmed before architecture preview (status "needs_confirmation")`},
-		{"preview nil builder element", handler, http.MethodPost, "/changes/preview", "alice-token", map[string]any{"change_id": "chg-ok", "request_revision": confirmed.RequestRevision, "design": map[string]any{"files": designFiles}, "builders": []any{nil}}, http.StatusUnprocessableEntity, false, "builders[0] is nil"},
-		{"preview malformed server SwarmProfiles", handler, http.MethodPost, "/changes/preview", "alice-token", map[string]any{"change_id": "chg-ok", "request_revision": confirmed.RequestRevision, "design": map[string]any{"files": designFiles}}, http.StatusInternalServerError, true, "plan swarm roster"},
+		{"preview unconfirmed card", handler, http.MethodPost, "/changes/preview", "alice-token", map[string]any{"change_id": "chg", "request_revision": pending.RequestRevision}, http.StatusConflict, false, `change_id "chg" must be confirmed before architecture preview (status "needs_confirmation")`},
+		{"preview without saved architecture", handler, http.MethodPost, "/changes/preview", "alice-token", map[string]any{"change_id": "chg-ok", "request_revision": confirmed.RequestRevision}, http.StatusUnprocessableEntity, false, "no architecture to show"},
 		{"verify_change without config", handler, http.MethodPost, "/changes/chg-ok/verifications", "alice-token", map[string]any{"request_revision": confirmed.RequestRevision, "candidate_commit": strings.Repeat("a", 40)}, http.StatusNotImplemented, false, "verification is not configured"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -206,7 +195,7 @@ var _ = Service("orders", func() {})
 				require.NoError(t, err)
 			}
 			req := httptest.NewRequest(tc.method, tc.path, strings.NewReader(string(raw)))
-			req.Header.Set("Authorization", "Bearer "+tc.token)
+			workflowAuthorization(req, tc.token)
 			req.Header.Set("Content-Type", "application/json")
 			rec := httptest.NewRecorder()
 			tc.h.ServeHTTP(rec, req)
@@ -223,7 +212,7 @@ var _ = Service("orders", func() {})
 
 	adapter := genmcpadapter.NewMCPAdapter(gensurla.NewEndpoints(cp), nil)
 	argsJSON, err := json.Marshal(map[string]any{
-		"change_id": "chg", "request_revision": pending.RequestRevision, "design": map[string]any{"files": designFiles},
+		"change_id": "chg", "request_revision": pending.RequestRevision,
 	})
 	require.NoError(t, err)
 	mcpRes, err := adapter.ToolsCall(aliceCtx, &genmcpadapter.ToolsCallPayload{Name: "preview_architecture", Arguments: argsJSON})
@@ -247,10 +236,10 @@ var _ = Service("orders", func() {})
 // including one made only of U+200B or U+FEFF, is saved byte for byte as sent,
 // surrounding whitespace included.
 func TestAnalysisTextsMustHoldMoreThanWhitespace(t *testing.T) {
-	alice := WithPrincipal(context.Background(), Principal{ID: "alice@example.com"})
+	alice := WithPrincipal(context.Background(), Principal{ID: "alice@example.com", CallerID: "alice@example.com", Kind: CallerUser})
 	cp := newControlPlane(t, Options{})
 	adapter := genmcpadapter.NewMCPAdapter(gensurla.NewEndpoints(cp), nil)
-	srv := httptest.NewServer(NewHTTPHandler(cp, NewTokenAuthenticator(map[string]Principal{"alice-token": {ID: "alice@example.com"}})))
+	srv := httptest.NewServer(NewHTTPHandler(cp, workflowAuthenticator(map[string]Principal{"alice-token": {ID: "alice@example.com"}})))
 	t.Cleanup(srv.Close)
 
 	// The test source names each character by code point so it stays ASCII.

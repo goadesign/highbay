@@ -3,7 +3,7 @@
   <path d="M 184 104 H 136 A 56 56 0 0 0 80 160 V 352 A 56 56 0 0 0 136 408 H 184"
         stroke="#3B82F6" stroke-width="44" stroke-linecap="round" stroke-linejoin="round" />
 
-  <!-- Right Isolated-Sandbox Gate Pillar (Amber) -->
+  <!-- Right Gate Pillar (Amber) -->
   <path d="M 328 104 H 376 A 56 56 0 0 1 432 160 V 352 A 56 56 0 0 1 376 408 H 328"
         stroke="#F59E0B" stroke-width="44" stroke-linecap="round" stroke-linejoin="round" />
 

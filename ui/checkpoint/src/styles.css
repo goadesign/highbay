@@ -267,30 +267,6 @@ li { margin-bottom: 0.35rem; }
   border: 1px solid var(--border);
   border-radius: var(--radius);
 }
-.surla-nav-row {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.45rem 0.75rem;
-}
-.surla-nav-tabs {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.35rem;
-  max-width: 100%;
-}
-.surla-nav-tabs .surla-pill {
-  flex: none;
-  margin: 0;
-  position: relative;
-}
-.surla-nav-tabs .surla-pill[aria-current="page"]::after {
-  content: "";
-  position: absolute;
-  inset: auto 0.45rem 2px 0.45rem;
-  border-block-end: 2px solid var(--accent);
-}
 .surla-workspace-context {
   display: flex;
   flex-wrap: wrap;
@@ -512,6 +488,8 @@ li { margin-bottom: 0.35rem; }
 }
 
 .surla-field-row { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: flex-start; margin: 0.4rem 0; }
+/* The display rule above would otherwise override the hidden attribute. */
+.surla-field-row[hidden] { display: none; }
 .surla-field-label { display: flex; flex-direction: column; gap: 0.22rem; flex: 1 1 12rem; font-size: 0.82rem; font-weight: 500; }
 .surla-input {
   width: 100%;
@@ -643,6 +621,66 @@ li { margin-bottom: 0.35rem; }
 }
 summary { cursor: pointer; font-weight: 500; user-select: none; }
 
+/* Story stage: flows are rows; a flow's steps are cards in a row that
+   scrolls inside the stage, so long flows never widen the page. */
+.surla-story-stage h5 { font-size: 0.84rem; font-weight: 600; margin: 0; overflow-wrap: anywhere; }
+/* Read by assistive technology, not shown. */
+.surla-visually-hidden {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+.surla-story-stage { min-width: 0; }
+.surla-story-stage section + section { margin-top: 1rem; }
+.surla-story-section { min-width: 0; }
+.surla-story-muted { color: var(--muted-foreground); font-size: 0.82rem; }
+.surla-story-flows { list-style: none; padding-left: 0; margin: 0.4rem 0; display: grid; gap: 0.7rem; }
+.surla-story-flow {
+  min-width: 0;
+  padding: 0.6rem 0.7rem;
+  border: 1px solid var(--border);
+  border-radius: calc(var(--radius) - 3px);
+  background: var(--surface);
+  overflow-wrap: anywhere;
+}
+.surla-story-flow[data-complete="false"] { border-style: dashed; border-color: var(--warning); }
+.surla-story-flow-header { display: flex; flex-wrap: wrap; align-items: center; gap: 0.35rem 0.6rem; }
+.surla-story-reasons { margin: 0.3rem 0; font-size: 0.82rem; }
+.surla-story-steps {
+  display: flex;
+  gap: 0.5rem;
+  list-style: none;
+  padding: 0.2rem 0 0.4rem 0;
+  margin: 0.45rem 0 0.2rem 0;
+  overflow-x: auto;
+  max-inline-size: 100%;
+}
+.surla-story-steps:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.surla-story-step {
+  flex: 0 0 13.5rem;
+  min-width: 0;
+  margin: 0;
+  padding: 0.5rem 0.6rem;
+  border: 1px solid var(--border);
+  border-radius: calc(var(--radius) - 4px);
+  background: var(--card);
+  overflow-wrap: anywhere;
+}
+.surla-story-step[data-kind="start"] { border-top: 3px solid var(--accent); }
+.surla-story-step[data-kind="outcome"] { border-bottom: 3px solid var(--success); }
+.surla-story-actor { display: block; font-size: 0.72rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.03em; color: var(--muted-foreground); }
+.surla-story-summary { margin: 0.2rem 0; }
+.surla-story-kind { display: inline-block; font-size: 0.72rem; color: var(--muted-foreground); }
+.surla-story-questions { margin: 0.35rem 0 0 0; font-size: 0.82rem; }
+.surla-story-options { margin: 0.15rem 0; }
+#surla-story-draft-diagnostic { max-block-size: 18rem; overflow: auto; }
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
     animation-duration: 0.01ms !important;
@@ -650,4 +688,205 @@ summary { cursor: pointer; font-weight: 500; user-select: none; }
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
   }
+}
+
+/* Live target view: prompt identifiers, versions, addresses and server
+   messages can be long, so they wrap inside the card instead of widening
+   the page at phone width. */
+.surla-live-wrap,
+.surla-live-wrap code,
+.surla-live-wrap a {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  min-width: 0;
+}
+.surla-live-prompts { margin: 0.4rem 0; padding-inline-start: 1.2rem; }
+.surla-live-prompts > li { margin-block: 0.25rem; }
+
+/* Build keeps the shared card width; state and actions share its header and
+   wrap in source order at narrow widths. Commands scroll only within pre. */
+.surla-build-header { flex-wrap: wrap; align-items: center; }
+.surla-build-header h3 { margin-inline-end: auto; }
+.surla-build-badges { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+.surla-build-header .surla-build-actions { margin: 0; }
+.surla-build-roles { list-style: none; padding-inline-start: 0; }
+.surla-build-roles li { margin-block: 0.2rem; }
+.surla-build-roles p { margin-block: 0; }
+.surla-build-actions { margin-block: 0.75rem; }
+.surla-build-merge ol { padding-inline-start: 1.25rem; }
+.surla-build-merge li { min-inline-size: 0; margin-block-end: 0.75rem; }
+.surla-build-merge pre { margin-block: 0.4rem 0.25rem; white-space: pre; overflow-wrap: normal; }
+.surla-build-merge pre code { padding: 0; background: transparent; white-space: pre; overflow-wrap: normal; word-break: normal; }
+.surla-build-merge li p { font-size: 0.875rem; color: var(--muted-foreground); }
+
+/* Layout B: the fixed Surla surface owns orientation and the deciding action. */
+:root {
+  --surla-space-1: 4px;
+  --surla-space-2: 8px;
+  --surla-space-3: 12px;
+  --surla-space-4: 16px;
+  --surla-space-5: 24px;
+}
+html { scroll-padding-block-start: calc(var(--surla-frame-height, 120px) + 16px); }
+.surla-skip-link {
+  position: fixed; inset-block-start: 8px; inset-inline-start: 12px;
+  transform: translateY(-180%); z-index: 50; padding: 8px 12px;
+  background: var(--card); color: var(--foreground); border: 1px solid var(--border);
+}
+.surla-skip-link:focus { transform: translateY(0); }
+#surla-checkpoint-nav:not([hidden]) {
+  position: sticky; inset-block-start: 0; z-index: 30;
+  margin: -0.85rem -0.15rem 16px; padding: 0;
+  border: 0; border-block-end: 1px solid var(--border); border-radius: 0;
+  background: var(--card);
+}
+.surla-fixed-frame { font-size: 13px; line-height: 18px; }
+.surla-frame-where {
+  display: grid; grid-template-columns: minmax(110px, 1fr) auto auto;
+  gap: 8px 16px; align-items: center; padding: 8px 12px;
+}
+.surla-frame-project {
+  display: flex; align-items: baseline; flex-wrap: wrap; gap: 8px;
+  min-inline-size: 0; margin: 0; font-size: 13px; line-height: 18px;
+  letter-spacing: normal; overflow-wrap: anywhere;
+}
+.surla-frame-project > span:first-child { font-weight: 700; }
+.surla-frame-project > span:nth-child(2) { color: var(--muted-foreground); }
+.surla-frame-journey, .surla-frame-references { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; }
+.surla-fixed-frame .surla-btn {
+  min-block-size: 30px; padding: 4px 10px; border-radius: 4px;
+  font-size: 13px; line-height: 18px; white-space: normal;
+}
+.surla-frame-journey .surla-btn { border-color: transparent; background: transparent; }
+.surla-frame-journey [aria-current="step"] { color: var(--accent); border-block-end-color: var(--accent); border-radius: 0; }
+.surla-frame-references .surla-btn { background: transparent; }
+.surla-frame-slots {
+  display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr) minmax(170px, auto);
+  margin: 0; padding: 12px; gap: 16px; border-block-start: 1px solid var(--border);
+}
+.surla-frame-slots > div { min-inline-size: 0; }
+.surla-frame-slots dt { font-size: 12px; color: var(--muted-foreground); margin-block-end: 4px; }
+.surla-frame-slots dd { margin: 0; overflow-wrap: anywhere; }
+.surla-frame-summary {
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2;
+  line-clamp: 2; max-block-size: 2lh; overflow: hidden;
+}
+.surla-frame-agreed .surla-btn { margin-block-start: 4px; }
+#surla-agreement-summary:focus { outline: 2px solid var(--accent); outline-offset: 2px; }
+.surla-frame-next dd { display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: center; }
+#surla-frame-next .surla-btn-primary {
+  background-color: var(--primary); color: var(--primary-foreground); border-color: var(--primary);
+}
+.surla-frame-action-binding { font-size: 12px; color: var(--muted-foreground); }
+.surla-frame-context { padding: 0 12px 8px; font-size: 12px; }
+.surla-frame-context summary { color: var(--muted-foreground); cursor: pointer; }
+.surla-frame-context .surla-workspace-context { margin-block-start: 8px; font-size: 12px; }
+.surla-frame-project-menu { position: relative; justify-self: end; }
+.surla-frame-project-menu > summary {
+  padding: 10px 12px; min-block-size: 44px; cursor: pointer;
+  border: 1px solid var(--border); border-radius: 4px;
+}
+.surla-frame-project-menu .surla-frame-references {
+  position: absolute; inset-inline-end: 0; inset-block-start: calc(100% + 4px);
+  z-index: 35; inline-size: min(260px, 85vw); padding: 8px;
+  background: var(--card); border: 1px solid var(--border); border-radius: 6px;
+}
+.surla-approval-stage { min-inline-size: 0; font-size: 14px; line-height: 1.5; padding: 8px 0 24px; }
+.surla-approval-stage h2 { font-size: 18px; line-height: 1.4; margin: 0 0 8px; }
+.surla-approval-stage h3 { font-size: 14px; margin: 24px 0 8px; }
+.surla-approval-stage h4 { font-size: 13px; margin: 16px 0 8px; }
+.surla-approval-heading { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 12px 24px; }
+.surla-approval-heading p { color: var(--muted-foreground); margin: 0; }
+.surla-approval-binding { display: flex; flex-wrap: wrap; gap: 12px 24px; margin: 16px 0; padding-block: 12px; border-block: 1px solid var(--border); }
+.surla-approval-binding dt { color: var(--muted-foreground); font-size: 12px; }
+.surla-approval-binding dd { margin: 4px 0 0; }
+.surla-approval-evidence { display: grid; grid-template-columns: minmax(0, 2fr) minmax(250px, 1fr); gap: 24px; align-items: start; }
+.surla-approval-evidence > * { min-inline-size: 0; }
+.surla-approval-basis { padding-inline-start: 24px; border-inline-start: 1px solid var(--border); }
+.surla-approval-notice { padding: 12px 0; color: var(--muted-foreground); }
+.surla-approval-exclusions { margin-block: 24px; padding-block: 0 16px; border-block-end: 1px solid var(--border); }
+.surla-flow-evidence { inline-size: 100%; border-collapse: collapse; table-layout: fixed; font-size: 13px; }
+.surla-flow-evidence th, .surla-flow-evidence td { text-align: start; vertical-align: top; padding: 12px 8px; border-block-end: 1px solid var(--border); overflow-wrap: anywhere; }
+.surla-flow-evidence thead th { font-size: 12px; color: var(--muted-foreground); font-weight: 500; }
+.surla-flow-evidence th:first-child { inline-size: 49%; padding-inline-start: 0; }
+.surla-flow-evidence th:last-child { inline-size: 21%; }
+.surla-flow-evidence tbody th { font-weight: 400; }
+.surla-flow-evidence tbody th p { font-size: 13px; color: var(--muted-foreground); margin-block-start: 4px; }
+.surla-approval-stage [data-outcome="passed"] { color: var(--success); }
+.surla-approval-stage [data-outcome="failed"] { color: var(--destructive); }
+.surla-approval-stage [data-outcome="not_run"], .surla-approval-stage [data-outcome="harness_error"] { color: var(--warning); }
+.surla-approval-test-list { list-style: none; padding: 0; }
+.surla-approval-test-list li { display: flex; justify-content: space-between; gap: 12px; padding-block: 8px; border-block-end: 1px solid var(--border); }
+.surla-approval-basis dl { margin: 12px 0; }
+.surla-approval-basis dt { margin-block-start: 12px; color: var(--muted-foreground); font-size: 12px; }
+.surla-approval-basis dd { margin: 4px 0 0; }
+.surla-approval-basis pre { white-space: pre; overflow-wrap: normal; max-inline-size: 100%; }
+.surla-approval-stage .surla-details > summary { display: list-item; padding: 4px 0; }
+.surla-approval-stage :focus-visible, .surla-fixed-frame :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.surla-build-test-review { min-inline-size: 0; font-size: 14px; line-height: 1.5; }
+.surla-build-test-review h4 { font-size: 18px; margin: 16px 0 8px; }
+.surla-build-test-review h5 { font-size: 14px; margin: 12px 0 8px; }
+.surla-build-test-binding { font-size: 12px; color: var(--muted-foreground); overflow-wrap: anywhere; }
+.surla-build-test-evidence { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 24px; align-items: start; }
+.surla-build-test-evidence > * { min-inline-size: 0; }
+.surla-build-test-evidence > section:only-child { grid-column: 1 / -1; }
+.surla-build-required-tests { list-style: none; padding: 0; margin: 0; }
+.surla-build-required-tests li { display: grid; gap: 4px; padding-block: 12px; border-block-end: 1px solid var(--border); overflow-wrap: anywhere; }
+.surla-build-finding-text { max-block-size: 20rem; overflow: auto; overflow-wrap: anywhere; }
+.surla-build-test-review .surla-details > summary { display: list-item; padding: 4px 0; }
+#surla-build-details > summary, #surla-agreement-details > summary { display: list-item; padding: 4px 0; }
+.surla-build-test-review :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.surla-test-coverage { margin-block-start: 24px; padding-block-start: 8px; border-block-start: 1px solid var(--border); overflow-wrap: anywhere; }
+.surla-test-coverage dt { margin-block-start: 16px; font-weight: 600; }
+.surla-test-coverage dd { margin: 4px 0 0; }
+.surla-test-coverage p { margin-block: 4px; max-inline-size: 75ch; }
+.surla-test-coverage ul { padding-inline-start: 20px; }
+@media (max-width: 720px) {
+  .surla-build-test-evidence { grid-template-columns: minmax(0, 1fr); gap: 16px; }
+}
+@media (max-width: 1100px) {
+  .surla-frame-where { grid-template-columns: minmax(0, 1fr) auto; }
+  .surla-frame-journey { grid-row: 2; grid-column: 1 / -1; }
+  .surla-approval-evidence { grid-template-columns: minmax(0, 1fr); }
+  .surla-approval-basis { border-inline-start: 0; border-block-start: 1px solid var(--border); padding: 8px 0 0; }
+  .surla-approval-basis > h3 { margin-block-start: 0; }
+  .surla-approval-evidence { gap: 16px; }
+  .surla-approval-test-list { margin-block-end: 0; }
+  .surla-approval-test-list li:last-child { border-block-end: 0; }
+  .surla-approval-evidence > div > section:last-child { margin-block-end: 0; padding-block-end: 0; border-block-end: 0; }
+}
+@media (max-width: 720px) {
+  body { padding-inline: 12px; padding-block-end: calc(var(--surla-next-height, 110px) + 24px); }
+  #surla-checkpoint-nav:not([hidden]) { position: relative; margin-inline: -12px; }
+  html { scroll-padding-block-start: 12px; }
+  .surla-frame-where { gap: 4px 8px; padding: 4px 12px; }
+  .surla-fixed-frame .surla-btn, .surla-approval-stage .surla-btn { min-block-size: 44px; padding: 10px 12px; }
+  .surla-frame-journey { flex-wrap: wrap; gap: 0; }
+  .surla-frame-journey .surla-btn { flex: 1; padding-inline: 6px; }
+  .surla-frame-slots { grid-template-columns: minmax(0, 1fr); gap: 8px; }
+  .surla-frame-next {
+    position: fixed; inset-inline: 0; inset-block-end: 0; z-index: 40;
+    display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 12px;
+    padding: 12px 16px calc(12px + env(safe-area-inset-bottom));
+    background: var(--card); border-block-start: 1px solid var(--border);
+  }
+  .surla-frame-next dt { margin: 0; }
+  .surla-frame-next dd { justify-content: flex-end; }
+  .surla-frame-next:not(:has(button)) {
+    position: static; padding: 0; border: 0; background: transparent;
+    grid-template-columns: minmax(0, 1fr); gap: 4px;
+  }
+  .surla-frame-next:not(:has(button)) dd { justify-content: flex-start; }
+  body:has(.surla-frame-next:not(:has(button))) { padding-block-end: 24px; }
+  .surla-frame-action-binding { white-space: nowrap; }
+  .surla-approval-binding { gap: 12px; }
+  .surla-flow-evidence, .surla-flow-evidence tbody { display: block; }
+  .surla-flow-evidence thead { position: absolute; inline-size: 1px; block-size: 1px; overflow: hidden; clip-path: inset(50%); }
+  .surla-flow-evidence tbody tr { display: block; padding-block: 12px; border-block-end: 1px solid var(--border); }
+  .surla-flow-evidence tbody th, .surla-flow-evidence tbody td { display: block; inline-size: 100%; padding: 4px 0; border: 0; }
+  .surla-flow-evidence tbody th:first-child { inline-size: 100%; }
+  .surla-flow-evidence td::before { content: attr(data-label) ": "; color: var(--muted-foreground); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .surla-fixed-frame *, .surla-approval-stage * { scroll-behavior: auto; transition: none; }
 }

@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -19,12 +20,10 @@ import (
 	"github.com/stretchr/testify/require"
 	"goa.design/goa-ai/features/model/gateway"
 	"goa.design/goa-ai/runtime/agent/model"
-	goa "goa.design/goa/v3/pkg"
 	"google.golang.org/grpc"
 
 	gensurla "github.com/goadesign/surla/gen/surla"
 	"github.com/goadesign/surla/internal/controlplane"
-	"github.com/goadesign/surla/internal/swarm"
 	"github.com/goadesign/surla/internal/verify"
 )
 
@@ -33,203 +32,62 @@ type (
 	// gateway in tests, standing in for the model a live target plans with.
 	// It answers every Complete call with an empty assistant text.
 	scriptedModelProvider struct{}
-
-	// noopTargetUpdater is a TargetPromptUpdater stub used to verify CP3
-	// startup status formatting when a host binds TargetUpdater.
-	noopTargetUpdater struct{}
 )
-
-// TestValidateModelConfigChecksModelFlags verifies the -model-* flag rules
-// serve applies at startup: no flags, a gateway alone, or a provider with a
-// model name and that provider's API key; key values never appear in errors.
-func TestValidateModelConfigChecksModelFlags(t *testing.T) {
-	env := map[string]string{
-		"ANTHROPIC_API_KEY": "test-anthropic-key",
-		"OPENAI_API_KEY":    "test-openai-key",
-	}
-	cases := []struct {
-		name    string
-		cfg     serveConfig
-		env     map[string]string
-		wantErr string
-	}{
-		{name: "no model flags", cfg: serveConfig{checkTimeout: defaultCheckTimeout}, env: env},
-		{name: "gateway", cfg: serveConfig{checkTimeout: defaultCheckTimeout, gatewayAddr: "127.0.0.1:9090"}, env: env},
-		{name: "anthropic", cfg: serveConfig{checkTimeout: defaultCheckTimeout, provider: "anthropic", modelName: "claude-test"}, env: env},
-		{name: "openai", cfg: serveConfig{checkTimeout: defaultCheckTimeout, provider: "openai", modelName: "gpt-test"}, env: env},
-		{
-			name:    "gateway with model name",
-			cfg:     serveConfig{checkTimeout: defaultCheckTimeout, gatewayAddr: "127.0.0.1:9090", modelName: "claude-test"},
-			env:     env,
-			wantErr: "-model-gateway-addr cannot be combined",
-		},
-		{
-			name:    "gateway with provider",
-			cfg:     serveConfig{checkTimeout: defaultCheckTimeout, gatewayAddr: "127.0.0.1:9090", provider: "anthropic"},
-			env:     env,
-			wantErr: "-model-gateway-addr cannot be combined",
-		},
-		{name: "provider without model", cfg: serveConfig{checkTimeout: defaultCheckTimeout, provider: "anthropic"}, env: env, wantErr: "must be set together"},
-		{name: "model without provider", cfg: serveConfig{checkTimeout: defaultCheckTimeout, modelName: "claude-test"}, env: env, wantErr: "must be set together"},
-		{
-			name:    "unknown provider",
-			cfg:     serveConfig{checkTimeout: defaultCheckTimeout, provider: "Anthropic", modelName: "claude-test"},
-			env:     env,
-			wantErr: `unsupported -model-provider "Anthropic"`,
-		},
-		{
-			name:    "missing api key",
-			cfg:     serveConfig{checkTimeout: defaultCheckTimeout, provider: "openai", modelName: "gpt-test"},
-			env:     map[string]string{"ANTHROPIC_API_KEY": "test-anthropic-key"},
-			wantErr: "-model-provider openai requires OPENAI_API_KEY",
-		},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			err := validateModelConfig(tc.cfg, func(k string) string { return tc.env[k] })
-			if tc.wantErr == "" {
-				require.NoError(t, err)
-				return
-			}
-			require.Error(t, err)
-			assert.Contains(t, err.Error(), tc.wantErr)
-			assert.NotContains(t, err.Error(), "test-anthropic-key")
-			assert.NotContains(t, err.Error(), "test-openai-key")
-		})
-	}
-}
-
-// TestNewLiveModelEnvBuildsTheLiveTargetEnvironment verifies the callback
-// configure_model uses on surla serve: a gateway or a provider whose key is
-// in serve's environment yields serve's environment, without its bearer
-// token, plus the SURLA_LIVE_MODEL_* choice; a provider whose key is missing
-// is refused as unprocessable and names the key, never its value.
-func TestNewLiveModelEnvBuildsTheLiveTargetEnvironment(t *testing.T) {
-	environ := []string{"PATH=/bin", "SURLA_AUTH_TOKEN=secret", "ANTHROPIC_API_KEY=ant-k"}
-	env := map[string]string{"ANTHROPIC_API_KEY": "ant-k"}
-	build := newLiveModelEnv(func(k string) string { return env[k] }, environ)
-	gw, provider, model, other := "127.0.0.1:9090", "anthropic", "claude-sonnet-4-6", "openai"
-
-	got, err := build(&gensurla.ConfigureModelPayload{GatewayAddr: &gw})
-	require.NoError(t, err)
-	assert.Equal(t, []string{"PATH=/bin", "ANTHROPIC_API_KEY=ant-k", "SURLA_LIVE_MODEL_GATEWAY=127.0.0.1:9090"}, got)
-
-	got, err = build(&gensurla.ConfigureModelPayload{Provider: &provider, ModelName: &model})
-	require.NoError(t, err)
-	assert.Equal(t, []string{"PATH=/bin", "ANTHROPIC_API_KEY=ant-k", "SURLA_LIVE_MODEL_PROVIDER=anthropic", "SURLA_LIVE_MODEL_NAME=claude-sonnet-4-6"}, got)
-
-	_, err = build(&gensurla.ConfigureModelPayload{Provider: &other, ModelName: &model})
-	var se *goa.ServiceError
-	require.ErrorAs(t, err, &se)
-	assert.Equal(t, "unprocessable", se.GoaErrorName())
-	assert.Contains(t, err.Error(), "provider openai requires OPENAI_API_KEY in surla serve's environment")
-	assert.NotContains(t, err.Error(), "ant-k")
-}
-
-func TestLoadSwarmProfilesDecodesStrictly(t *testing.T) {
-	cases := []struct {
-		name    string
-		content string
-		want    []swarm.ProviderProfile
-		wantErr string
-	}{
-		{
-			name: "valid profiles",
-			content: `[{"id":"claude-a","provider":"anthropic","model":"model-a","family":"claude",` +
-				`"authenticated":true,"capabilities":["architect","builder"]}]`,
-			want: []swarm.ProviderProfile{{
-				ID:            "claude-a",
-				Provider:      "anthropic",
-				Model:         "model-a",
-				Family:        "claude",
-				Authenticated: true,
-				Capabilities:  []swarm.RoleKind{swarm.RoleArchitect, swarm.RoleBuilder},
-			}},
-		},
-		{name: "unknown field", content: `[{"id":"a","api_key":"x"}]`, wantErr: `unknown field "api_key"`},
-		{name: "trailing data", content: `[] []`, wantErr: "trailing data"},
-		{name: "empty array", content: `[]`, want: []swarm.ProviderProfile{}},
-		{name: "not an array", content: `{"id":"a"}`, wantErr: "decode -swarm-profiles"},
-		{name: "null", content: `null`, wantErr: "expected a JSON array, got null"},
-		{
-			name: "duplicate id",
-			content: `[{"id":"a","provider":"openai","model":"m","family":"gpt"},` +
-				`{"id":"a","provider":"anthropic","model":"n","family":"claude"}]`,
-			wantErr: `duplicate provider profile id "a"`,
-		},
-		{name: "empty required field", content: `[{"id":"a","provider":"openai","family":"gpt"}]`, wantErr: "requires non-empty"},
-		{
-			name:    "unknown capability",
-			content: `[{"id":"a","provider":"openai","model":"m","family":"gpt","capabilities":["deployer"]}]`,
-			wantErr: `unsupported capability "deployer"`,
-		},
-		{
-			name:    "valid profiles without builder capability",
-			content: `[{"id":"a","provider":"openai","model":"m","family":"gpt","capabilities":["reviewer"]}]`,
-			want: []swarm.ProviderProfile{{
-				ID: "a", Provider: "openai", Model: "m", Family: "gpt",
-				Capabilities: []swarm.RoleKind{swarm.RoleReviewer},
-			}},
-		},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			path := filepath.Join(t.TempDir(), "profiles.json")
-			require.NoError(t, os.WriteFile(path, []byte(tc.content), 0o600))
-			got, err := loadSwarmProfiles(path)
-			if tc.wantErr != "" {
-				require.Error(t, err)
-				assert.Contains(t, err.Error(), tc.wantErr)
-				return
-			}
-			require.NoError(t, err)
-			assert.Equal(t, tc.want, got)
-		})
-	}
-}
 
 func TestServeOptionsDerivesLiveTargetsFromVerification(t *testing.T) {
 	isolateServeWorkspace(t)
 	path := filepath.Join(t.TempDir(), "verification.json")
-	require.NoError(t, os.WriteFile(path, []byte(`{"runs_dir":"/r","report_dir":"/p","candidate_repo":"/c","candidate_module":".","suite_module":".","binaries":{"app":"./cmd/app"},`+
+	require.NoError(t, os.WriteFile(path, []byte(`{"candidate_repo":"/c","candidate_module":".","suite_module":".","binaries":{"app":"./cmd/app"},`+
 		`"suite_repo":"/s","suite_commit":"`+strings.Repeat("a", 40)+`","suite_command":"./cmd/evals","timeout":"20m"}`), 0o600))
-	opts, err := serveOptions(serveConfig{checkTimeout: defaultCheckTimeout, verificationPath: path}, func(string) string { return "" },
-		[]string{"PATH=/bin", "SURLA_AUTH_TOKEN=secret", "ANTHROPIC_API_KEY=k"})
+	require.NoError(t, runProjectSettings("verification", []string{"set", path}, io.Discard))
+	opts, err := serveOptions([]string{"PATH=/bin"})
 	require.NoError(t, err)
-	defer closeServeOptions(t, opts)
-	assert.Nil(t, opts.ResolveVerification, "explicit -verification-config must not set starter ResolveVerification")
+	assert.Nil(t, opts.WrittenTestRuns, "stored verification settings leave no runs of written tests")
 	require.NotNil(t, opts.Live)
 	assert.Equal(t, opts.Verification.Command, opts.Live.Command)
 	assert.Equal(t, 20*time.Minute, opts.Live.StartTimeout)
-	assert.Equal(t, []string{"PATH=/bin", "ANTHROPIC_API_KEY=k"}, opts.Live.Env, "serve's own bearer token never reaches a live target")
+	assert.Equal(t, []string{"PATH=/bin"}, opts.Live.Env, "project credentials never enter the live-target environment")
 }
 
 // TestServeOptionsBindsTheCheckHelperOnEveryServePath checks that both ways
-// surla serve finds its verification, an explicit -verification-config and
+// the project server finds its verification, stored verification settings and
 // the workspace's starter, bind the check runner together with the launcher
 // of its check helper, `<this executable> check-run`, which each start of
-// surla serve already resolves before this change.
+// the project server already resolves before this change.
 func TestServeOptionsBindsTheCheckHelperOnEveryServePath(t *testing.T) {
 	self, err := selfCommand()
 	require.NoError(t, err)
 	verificationPath := filepath.Join(t.TempDir(), "verification.json")
-	require.NoError(t, os.WriteFile(verificationPath, []byte(`{"runs_dir":"/r","report_dir":"/p","candidate_repo":"/c","candidate_module":".","suite_module":".","binaries":{"app":"./cmd/app"},`+
+	require.NoError(t, os.WriteFile(verificationPath, []byte(`{"candidate_repo":"/c","candidate_module":".","suite_module":".","binaries":{"app":"./cmd/app"},`+
 		`"suite_repo":"/s","suite_commit":"`+strings.Repeat("a", 40)+`","suite_command":"./cmd/evals","timeout":"20m"}`), 0o600))
 	cases := []struct {
 		name string
-		cfg  serveConfig
 	}{
-		{name: "verification config", cfg: serveConfig{checkTimeout: defaultCheckTimeout, verificationPath: verificationPath}},
-		{name: "workspace starter", cfg: serveConfig{checkTimeout: defaultCheckTimeout}},
+		{name: "verification config"},
+		{name: "workspace starter"},
 	}
+	var previousCache string
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			isolateServeWorkspace(t)
-			opts, err := serveOptions(tc.cfg, func(string) string { return "" }, nil)
+			if tc.name == "verification config" {
+				require.NoError(t, runProjectSettings("verification", []string{"set", verificationPath}, io.Discard))
+			}
+			opts, err := serveOptions(nil)
 			require.NoError(t, err)
-			defer closeServeOptions(t, opts)
 			require.NotNil(t, opts.Checker)
 			require.NotNil(t, opts.CheckHelper)
+			cache := opts.CheckModuleCacheDir
+			assert.Equal(t, filepath.Join(filepath.Dir(opts.CardsDir), "check-modcache"), cache)
+			assert.NoError(t, validateOperatorPrivateDir(cache))
+			assert.NotEqual(t, previousCache, cache, "projects keep separate dependency inputs")
+			previousCache = cache
+			marker := filepath.Join(cache, "retained")
+			require.NoError(t, os.WriteFile(marker, []byte("input"), 0o600))
+			again, err := serveOptions(nil)
+			require.NoError(t, err)
+			assert.Equal(t, cache, again.CheckModuleCacheDir)
+			assert.FileExists(t, marker, "recomposing the server preserves dependency inputs")
 			cmd := opts.CheckHelper()
 			assert.Equal(t, self[0], cmd.Path)
 			assert.Equal(t, []string{self[0], "check-run"}, cmd.Args)
@@ -237,221 +95,45 @@ func TestServeOptionsBindsTheCheckHelperOnEveryServePath(t *testing.T) {
 	}
 }
 
-func TestLiveTargetEnvCarriesServesModelChoice(t *testing.T) {
-	environ := []string{"PATH=/bin", "SURLA_AUTH_TOKEN=secret", "ANTHROPIC_API_KEY=k", "SURLA_LIVE_MODEL_GATEWAY=stale:1"}
-	cases := []struct {
-		name string
-		cfg  serveConfig
-		want []string
-	}{
-		{name: "direct provider", cfg: serveConfig{checkTimeout: defaultCheckTimeout, provider: "anthropic", modelName: "claude-x"},
-			want: []string{"PATH=/bin", "ANTHROPIC_API_KEY=k", "SURLA_LIVE_MODEL_PROVIDER=anthropic", "SURLA_LIVE_MODEL_NAME=claude-x"}},
-		{name: "gateway", cfg: serveConfig{checkTimeout: defaultCheckTimeout, gatewayAddr: "127.0.0.1:9090"},
-			want: []string{"PATH=/bin", "ANTHROPIC_API_KEY=k", "SURLA_LIVE_MODEL_GATEWAY=127.0.0.1:9090"}},
-		{name: "no model", cfg: serveConfig{checkTimeout: defaultCheckTimeout},
-			want: []string{"PATH=/bin", "ANTHROPIC_API_KEY=k"}},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			assert.Equal(t, tc.want, liveTargetEnv(environ, tc.cfg))
-		})
-	}
-}
-
-func TestServeOptionsWiresLiveModelEnvAndProfiles(t *testing.T) {
+// TestServeOptionsStartLiveTargetsWithoutAModel composes the server from its
+// environment after serve removed the provider families: live targets start
+// from that environment, and no model is chosen until the surla command
+// hands settings over.
+func TestServeOptionsStartLiveTargetsWithoutAModel(t *testing.T) {
 	isolateServeWorkspace(t)
-	path := filepath.Join(t.TempDir(), "profiles.json")
-	require.NoError(t, os.WriteFile(path, []byte(`[{"id":"a","provider":"openai","model":"m","family":"gpt"}]`), 0o600))
-
-	opts, err := serveOptions(
-		serveConfig{checkTimeout: defaultCheckTimeout, provider: "openai", modelName: "gpt-test", swarmProfilesPath: path},
-		func(string) string { return "test-key" },
-		nil,
-	)
+	opts, err := serveOptions([]string{"PATH=/bin"})
 	require.NoError(t, err)
-	assert.NotNil(t, opts.LiveModelEnv)
-	assert.Equal(t, []swarm.ProviderProfile{{ID: "a", Provider: "openai", Model: "m", Family: "gpt"}}, opts.SwarmProfiles)
-	assert.Nil(t, opts.TargetUpdater)
-	require.NotNil(t, opts.Live)
-	assert.Equal(t, []string{"SURLA_LIVE_MODEL_PROVIDER=openai", "SURLA_LIVE_MODEL_NAME=gpt-test"}, opts.Live.Env)
-	closeServeOptions(t, opts)
-
-	opts, err = serveOptions(serveConfig{checkTimeout: defaultCheckTimeout, gatewayAddr: "127.0.0.1:9090"}, func(string) string { return "" }, nil)
-	require.NoError(t, err)
-	require.NotNil(t, opts.Live)
-	assert.Equal(t, []string{"SURLA_LIVE_MODEL_GATEWAY=127.0.0.1:9090"}, opts.Live.Env)
-	closeServeOptions(t, opts)
-
-	opts, err = serveOptions(serveConfig{checkTimeout: defaultCheckTimeout}, func(string) string { return "" }, nil)
-	require.NoError(t, err)
-	assert.NotNil(t, opts.LiveModelEnv)
-	assert.Nil(t, opts.SwarmProfiles)
 	assert.Nil(t, opts.Verification)
-	assert.NotNil(t, opts.ResolveVerification)
+	assert.NotNil(t, opts.WrittenTestRuns)
 	require.NotNil(t, opts.Live)
 	assert.Len(t, opts.Live.Command, 1)
 	assert.Equal(t, defaultProjectVerifyTimeout, opts.Live.StartTimeout)
-	assert.Empty(t, opts.Live.Env, "no model flags and no keys pass no model choice to live targets")
-	closeServeOptions(t, opts)
-
-	_, err = serveOptions(serveConfig{checkTimeout: defaultCheckTimeout, swarmProfilesPath: filepath.Join(t.TempDir(), "missing.json")}, os.Getenv, nil)
-	require.ErrorContains(t, err, "read -swarm-profiles")
-}
-
-func TestResolveStartupModelConfigAndServeOptionsAutoDetection(t *testing.T) {
-	baseEnviron := []string{"PATH=/bin", "SURLA_AUTH_TOKEN=secret", "ANTHROPIC_API_KEY=ant-k", "OPENAI_API_KEY=oai-k"}
-	cases := []struct {
-		name        string
-		cfg         serveConfig
-		env         map[string]string
-		wantCfg     serveConfig
-		wantLiveEnv []string
-	}{
-		{
-			name: "anthropic key auto-detects claude-sonnet-4-6 without verification config",
-			cfg:  serveConfig{checkTimeout: defaultCheckTimeout},
-			env:  map[string]string{"ANTHROPIC_API_KEY": "ant-k"},
-			wantCfg: serveConfig{
-				checkTimeout: defaultCheckTimeout,
-				provider:     "anthropic",
-				modelName:    defaultAnthropicModel,
-			},
-			wantLiveEnv: []string{
-				"PATH=/bin",
-				"ANTHROPIC_API_KEY=ant-k",
-				"OPENAI_API_KEY=oai-k",
-				"SURLA_LIVE_MODEL_PROVIDER=anthropic",
-				"SURLA_LIVE_MODEL_NAME=claude-sonnet-4-6",
-			},
-		},
-		{
-			name: "openai key auto-detects gpt-5.4-mini when anthropic key is absent",
-			cfg:  serveConfig{checkTimeout: defaultCheckTimeout},
-			env:  map[string]string{"OPENAI_API_KEY": "oai-k"},
-			wantCfg: serveConfig{
-				checkTimeout: defaultCheckTimeout,
-				provider:     "openai",
-				modelName:    defaultOpenAIModel,
-			},
-			wantLiveEnv: []string{
-				"PATH=/bin",
-				"ANTHROPIC_API_KEY=ant-k",
-				"OPENAI_API_KEY=oai-k",
-				"SURLA_LIVE_MODEL_PROVIDER=openai",
-				"SURLA_LIVE_MODEL_NAME=gpt-5.4-mini",
-			},
-		},
-		{
-			name: "both keys prefer anthropic claude-sonnet-4-6 when model flags are omitted",
-			cfg:  serveConfig{checkTimeout: defaultCheckTimeout},
-			env: map[string]string{
-				"ANTHROPIC_API_KEY": "ant-k",
-				"OPENAI_API_KEY":    "oai-k",
-			},
-			wantCfg: serveConfig{
-				checkTimeout: defaultCheckTimeout,
-				provider:     "anthropic",
-				modelName:    defaultAnthropicModel,
-			},
-			wantLiveEnv: []string{
-				"PATH=/bin",
-				"ANTHROPIC_API_KEY=ant-k",
-				"OPENAI_API_KEY=oai-k",
-				"SURLA_LIVE_MODEL_PROVIDER=anthropic",
-				"SURLA_LIVE_MODEL_NAME=claude-sonnet-4-6",
-			},
-		},
-		{
-			name: "explicit model flags override auto-detection when both keys are present",
-			cfg: serveConfig{
-				checkTimeout: defaultCheckTimeout,
-				provider:     "openai",
-				modelName:    "gpt-5.4",
-			},
-			env: map[string]string{
-				"ANTHROPIC_API_KEY": "ant-k",
-				"OPENAI_API_KEY":    "oai-k",
-			},
-			wantCfg: serveConfig{
-				checkTimeout: defaultCheckTimeout,
-				provider:     "openai",
-				modelName:    "gpt-5.4",
-			},
-			wantLiveEnv: []string{
-				"PATH=/bin",
-				"ANTHROPIC_API_KEY=ant-k",
-				"OPENAI_API_KEY=oai-k",
-				"SURLA_LIVE_MODEL_PROVIDER=openai",
-				"SURLA_LIVE_MODEL_NAME=gpt-5.4",
-			},
-		},
-		{
-			name: "whitespace-only keys leave live targets without a model choice",
-			cfg:  serveConfig{checkTimeout: defaultCheckTimeout},
-			env: map[string]string{
-				"ANTHROPIC_API_KEY": "   ",
-				"OPENAI_API_KEY":    "\t\n",
-			},
-			wantCfg: serveConfig{checkTimeout: defaultCheckTimeout},
-			wantLiveEnv: []string{
-				"PATH=/bin",
-				"ANTHROPIC_API_KEY=ant-k",
-				"OPENAI_API_KEY=oai-k",
-			},
-		},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			isolateServeWorkspace(t)
-			getenv := func(k string) string { return tc.env[k] }
-			assert.Equal(t, tc.wantCfg, resolveStartupModelConfig(tc.cfg, getenv))
-			opts, err := serveOptions(tc.cfg, getenv, baseEnviron)
-			require.NoError(t, err)
-			assert.Nil(t, opts.Verification, "no verification config was supplied and empty workspace has no committed starter")
-			assert.NotNil(t, opts.ResolveVerification)
-			require.NotNil(t, opts.Live)
-			assert.Len(t, opts.Live.Command, 1)
-			assert.Equal(t, defaultProjectVerifyTimeout, opts.Live.StartTimeout)
-			assert.Equal(t, tc.wantLiveEnv, opts.Live.Env)
-			var statusBuf bytes.Buffer
-			writeServeStatus(&statusBuf, &net.TCPAddr{IP: net.ParseIP("127.0.0.1"), Port: 8090}, opts, "")
-			assert.Contains(t, statusBuf.String(), "surla: CP3 (draft_override, start_live_target): compiled_rule is on; prompt_template is on once start_live_target runs a candidate commit")
-			assert.Contains(t, statusBuf.String(), "surla: CP4 (verify_change, get_verification, list_verifications): workspace ")
-			cp, err := controlplane.New(opts)
-			require.NoError(t, err)
-			t.Cleanup(func() { require.NoError(t, cp.Close()) })
-			_, err = cp.StartLiveTarget(
-				controlplane.WithPrincipal(context.Background(), controlplane.Principal{ID: "alice@example.com"}),
-				&gensurla.StartLiveTargetPayload{CandidateCommit: strings.Repeat("a", 40)},
-			)
-			require.Error(t, err)
-			var se *goa.ServiceError
-			require.ErrorAs(t, err, &se)
-			assert.Equal(t, "live_target_unavailable", se.GoaErrorName())
-		})
-	}
+	assert.Equal(t, []string{"PATH=/bin"}, opts.Live.Env)
+	opts.Team = fixtureWorkflowTeam("alice@example.com")
+	cp, err := controlplane.New(opts)
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, cp.Close()) })
+	read, err := cp.GetModelConnection(controlplane.WithPrincipal(context.Background(), controlplane.Principal{ID: "alice@example.com", Kind: controlplane.CallerUser}))
+	require.NoError(t, err)
+	assert.Equal(t, noChoice(), read.Connection)
 }
 
 // TestServeProposesWithoutAModelAndConfigureModelSwitchesTheLiveTargetModel
-// starts serve with no model flags and no provider keys, proposes a change
+// starts the server without provider settings, proposes a change
 // over authenticated HTTP with the caller's analysis (no model is needed),
 // then switches the live-target model with POST /cp1/model: a provider whose
-// key is missing is refused with 422, and a gateway or a provider whose key
-// is present is accepted.
+// settings were not handed over is refused with 422, and a gateway or a
+// provider whose settings the surla command handed over is accepted.
 func TestServeProposesWithoutAModelAndConfigureModelSwitchesTheLiveTargetModel(t *testing.T) {
 	isolateServeWorkspace(t)
-	env := map[string]string{}
-	opts, err := serveOptions(
-		serveConfig{checkTimeout: defaultCheckTimeout, cardsDir: t.TempDir(), cardsDirExplicit: true},
-		func(k string) string { return env[k] },
-		[]string{"PATH=/bin", "SURLA_AUTH_TOKEN=secret"},
-	)
+	opts, err := serveOptions([]string{"PATH=/bin"})
 	require.NoError(t, err)
 
+	opts.Team = fixtureWorkflowTeam("operator@example.com")
 	cp, err := controlplane.New(opts)
 	require.NoError(t, err)
 	t.Cleanup(func() { assert.NoError(t, cp.Close()) })
-	auth := controlplane.NewTokenAuthenticator(map[string]controlplane.Principal{
+	auth := workflowAuthenticator(map[string]controlplane.Principal{
 		"test-token": {ID: "operator@example.com"},
 	})
 	srv := httptest.NewServer(controlplane.NewHTTPHandler(cp, auth))
@@ -459,7 +141,7 @@ func TestServeProposesWithoutAModelAndConfigureModelSwitchesTheLiveTargetModel(t
 	post := func(path, body string) (int, []byte) {
 		req, reqErr := http.NewRequest(http.MethodPost, srv.URL+path, strings.NewReader(body))
 		require.NoError(t, reqErr)
-		req.Header.Set("Authorization", "Bearer test-token")
+		workflowAuthorization(req, "test-token")
 		req.Header.Set("Content-Type", "application/json")
 		resp, doErr := http.DefaultClient.Do(req)
 		require.NoError(t, doErr)
@@ -486,14 +168,13 @@ func TestServeProposesWithoutAModelAndConfigureModelSwitchesTheLiveTargetModel(t
 		} `json:"examples"`
 	}
 	require.NoError(t, json.Unmarshal(body, &card))
-	assert.Equal(t, controlplane.StatusConfirmed, card.Status)
-	require.NotNil(t, card.ConfirmedBy)
-	assert.Equal(t, "operator@example.com", *card.ConfirmedBy)
+	assert.Equal(t, controlplane.StatusNeedsConfirmation, card.Status)
+	assert.Nil(t, card.ConfirmedBy)
 	require.Len(t, card.Examples, 1)
 	assert.Equal(t, "check_01", card.Examples[0].ID)
 	assert.Regexp(t, regexp.MustCompile(`^[0-9a-f]{64}$`), card.RequestRevision)
 
-	// 2. A direct provider whose API key is missing is refused with 422.
+	// 2. A direct provider whose settings were not handed over is refused with 422.
 	status, body = post("/cp1/model", `{"provider":"openai","model_name":"gpt-5.4-mini"}`)
 	var missingKeyBody struct {
 		Message string `json:"message"`
@@ -502,7 +183,7 @@ func TestServeProposesWithoutAModelAndConfigureModelSwitchesTheLiveTargetModel(t
 	require.NoError(t, json.Unmarshal(body, &missingKeyBody))
 	assert.Equal(t, http.StatusUnprocessableEntity, status)
 	assert.False(t, missingKeyBody.Fault)
-	assert.Contains(t, missingKeyBody.Message, "provider openai requires OPENAI_API_KEY in surla serve's environment")
+	assert.Equal(t, "provider openai needs OPENAI_API_KEY: export it, with any OPENAI_ request settings it needs, in a shell and run surla there; the project server keeps running. Or choose a model gateway.", missingKeyBody.Message)
 
 	// 3. A gateway address is accepted.
 	status, body = post("/cp1/model", `{"gateway_addr":"127.0.0.1:9090"}`)
@@ -518,8 +199,12 @@ func TestServeProposesWithoutAModelAndConfigureModelSwitchesTheLiveTargetModel(t
 	require.NotNil(t, gwResult.GatewayAddr)
 	assert.Equal(t, "127.0.0.1:9090", *gwResult.GatewayAddr)
 
-	// 4. A provider and model name are accepted once the key is in serve's environment.
-	env["ANTHROPIC_API_KEY"] = "test-anthropic-key"
+	// 4. A provider and model name are accepted once the surla command handed its settings over.
+	_, err = cp.HandOverModelSettings(
+		controlplane.WithPrincipal(context.Background(), controlplane.Principal{ID: "operator@example.com", CallerID: "management", Kind: controlplane.CallerManagement}),
+		&gensurla.HandOverModelSettingsPayload{Anthropic: map[string]string{"ANTHROPIC_API_KEY": "test-anthropic-key"}},
+	)
+	require.NoError(t, err)
 	status, body = post("/cp1/model", `{"provider":"anthropic","model_name":"claude-sonnet-4-6"}`)
 	require.Equal(t, http.StatusOK, status, string(body))
 	var provResult struct {
@@ -536,77 +221,42 @@ func TestServeProposesWithoutAModelAndConfigureModelSwitchesTheLiveTargetModel(t
 }
 
 func TestWriteServeStatusNamesTheBoundAddressAndOffFeatures(t *testing.T) {
+	buildCache := t.TempDir()
 	fixedSuite := verify.Plan{SuiteCommit: strings.Repeat("b", 40), ReportDir: "/var/lib/surla/reports"}
 	cases := []struct {
-		name       string
-		addr       *net.TCPAddr
-		opts       controlplane.Options
-		projectDir string
-		want       string
+		name string
+		addr *net.TCPAddr
+		opts controlplane.Options
+		want string
 	}{
 		{
 			name: "loopback with only CP1 and CP2 preview on",
 			addr: &net.TCPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 51234},
 			opts: controlplane.Options{CardsDir: ".surla/cards"},
 			want: `surla: serving on http://127.0.0.1:51234
-surla: connect MCP clients to http://127.0.0.1:51234/mcp with the bearer token (architecture guide: surla://golden-path or http://127.0.0.1:51234/golden-path)
 surla: saving Change Cards in .surla/cards
-surla: CP1 (propose_change, revise_change, confirm_intent, get_change): on
-surla: CP2 (preview_architecture): design preview is on; swarm roster is off (set -swarm-profiles)
-surla: CP3 (draft_override, start_live_target): compiled_rule is on; prompt_template is off (set -project or -verification-config, then call start_live_target with a commit; or edit the prompt's source text, commit, and verify the commit)
-surla: CP4 (verify_change, get_verification, list_verifications): off (set -project or -verification-config, or run surla verify on the CLI)
-surla: CP5 (approve_merge): off (set -promotion-config, or run surla approve on the CLI)
+surla: CP1 (propose_change, revise_change, confirm_intent, decline_revision, get_change): on
+surla: CP2 (preview_architecture): on
+surla: CP3 (draft_override, start_live_target): compiled_rule is on; prompt_template is off (use surla verification set, then call start_live_target with the confirmed change_id and a commit; or edit the prompt's source text, commit, and verify the commit)
+surla: CP4 (verify_change, get_verification, list_verifications): off (use surla verification set, or run surla verify on the CLI)
+surla: CP5 (approve_merge): off, because CP4 is off (use surla verification set, or run surla approve on the CLI)
 `,
 		},
 		{
-			name: "all IPv4 interfaces",
-			addr: &net.TCPAddr{IP: net.IPv4zero, Port: 8090},
-			opts: controlplane.Options{CardsDir: ".surla/cards"},
-			want: `surla: serving on http://localhost:8090
-surla: connect MCP clients to http://localhost:8090/mcp with the bearer token (architecture guide: surla://golden-path or http://localhost:8090/golden-path)
-surla: saving Change Cards in .surla/cards
-surla: CP1 (propose_change, revise_change, confirm_intent, get_change): on
-surla: CP2 (preview_architecture): design preview is on; swarm roster is off (set -swarm-profiles)
-surla: CP3 (draft_override, start_live_target): compiled_rule is on; prompt_template is off (set -project or -verification-config, then call start_live_target with a commit; or edit the prompt's source text, commit, and verify the commit)
-surla: CP4 (verify_change, get_verification, list_verifications): off (set -project or -verification-config, or run surla verify on the CLI)
-surla: CP5 (approve_merge): off (set -promotion-config, or run surla approve on the CLI)
-`,
-		},
-		{
-			name: "loopback with one swarm profile",
+			name: "loopback with verification and promotion but no live targets",
 			addr: &net.TCPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 8090},
-			opts: controlplane.Options{
-				CardsDir:      ".surla/cards",
-				SwarmProfiles: []swarm.ProviderProfile{{ID: "claude-a"}},
-			},
-			want: `surla: serving on http://127.0.0.1:8090
-surla: connect MCP clients to http://127.0.0.1:8090/mcp with the bearer token (architecture guide: surla://golden-path or http://127.0.0.1:8090/golden-path)
-surla: saving Change Cards in .surla/cards
-surla: CP1 (propose_change, revise_change, confirm_intent, get_change): on
-surla: CP2 (preview_architecture): on (1 swarm profile loaded; pass builders in the request to propose a roster)
-surla: CP3 (draft_override, start_live_target): compiled_rule is on; prompt_template is off (set -project or -verification-config, then call start_live_target with a commit; or edit the prompt's source text, commit, and verify the commit)
-surla: CP4 (verify_change, get_verification, list_verifications): off (set -project or -verification-config, or run surla verify on the CLI)
-surla: CP5 (approve_merge): off (set -promotion-config, or run surla approve on the CLI)
-`,
-		},
-		{
-			name: "all interfaces with all checkpoints configured",
-			addr: &net.TCPAddr{IP: net.IPv6unspecified, Port: 8090},
-			opts: controlplane.Options{
+			opts: controlplane.Options{BuildCacheDir: buildCache,
 				CardsDir:        "/var/lib/surla/cards",
-				SwarmProfiles:   []swarm.ProviderProfile{{ID: "claude-a"}, {ID: "gpt-b"}},
-				TargetUpdater:   noopTargetUpdater{},
 				Verification:    &controlplane.VerificationConfig{RunsDir: "/var/lib/surla/runs", Plan: fixedSuite},
 				PromotionTarget: &releaseTarget{},
 			},
-			want: `surla: serving on http://localhost:8090
-surla: connect MCP clients to http://localhost:8090/mcp with the bearer token (architecture guide: surla://golden-path or http://localhost:8090/golden-path)
+			want: `surla: serving on http://127.0.0.1:8090
 surla: saving Change Cards in /var/lib/surla/cards
-surla: CP1 (propose_change, revise_change, confirm_intent, get_change): on
-surla: CP2 (preview_architecture): on (2 swarm profiles loaded; pass builders in the request to propose a roster)
-surla: CP3 (draft_override): on
-surla: CP4 (verify_change, get_verification, list_verifications): on (runs in /var/lib/surla/runs, reports in /var/lib/surla/reports, evaluator suite commit ` + fixedSuite.SuiteCommit + `)
-surla: CP5 (approve_merge): on
+surla: CP1 (propose_change, revise_change, confirm_intent, decline_revision, get_change): on
+surla: CP2 (preview_architecture): on
+surla: CP3 (draft_override, start_live_target): compiled_rule is on; prompt_template is off (use surla verification set, then call start_live_target with the confirmed change_id and a commit; or edit the prompt's source text, commit, and verify the commit)
+surla: CP4 (verify_change, get_verification, list_verifications): on with stored verification settings (runs in /var/lib/surla/runs, reports in /var/lib/surla/reports, build cache in ` + buildCache + `, evaluator suite commit ` + fixedSuite.SuiteCommit + `)
+surla: CP5 (approve_merge): on; approval also checks the release binaries the promotion settings name
 `,
 		},
 	}
@@ -615,71 +265,62 @@ surla: CP5 (approve_merge): on
 	leftover := filepath.Join(liveRoot, "live-123")
 	require.NoError(t, os.MkdirAll(leftover, 0o700))
 	cases = append(cases, struct {
-		name       string
-		addr       *net.TCPAddr
-		opts       controlplane.Options
-		projectDir string
-		want       string
+		name string
+		addr *net.TCPAddr
+		opts controlplane.Options
+		want string
 	}{
 		name: "live targets with a directory an earlier serve left",
 		addr: &net.TCPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 8090},
-		opts: controlplane.Options{
+		opts: controlplane.Options{BuildCacheDir: buildCache,
 			CardsDir:     cardsDir,
 			Verification: &controlplane.VerificationConfig{RunsDir: "/var/lib/surla/runs", Plan: fixedSuite},
 			Live:         &controlplane.LiveConfig{},
 		},
 		want: `surla: serving on http://127.0.0.1:8090
-surla: connect MCP clients to http://127.0.0.1:8090/mcp with the bearer token (architecture guide: surla://golden-path or http://127.0.0.1:8090/golden-path)
 surla: saving Change Cards in ` + cardsDir + `
-surla: CP1 (propose_change, revise_change, confirm_intent, get_change): on
-surla: CP2 (preview_architecture): design preview is on; swarm roster is off (set -swarm-profiles)
-surla: CP3 (draft_override, start_live_target): compiled_rule is on; prompt_template is on once start_live_target runs a candidate commit (live targets in ` + liveRoot + `)
-surla: CP3: an earlier surla serve using this cards directory left live target directory ` + leftover + `; its files were kept
-surla: CP4 (verify_change, get_verification, list_verifications): on (runs in /var/lib/surla/runs, reports in /var/lib/surla/reports, evaluator suite commit ` + fixedSuite.SuiteCommit + `)
-surla: CP5 (approve_merge): off (set -promotion-config, or run surla approve on the CLI)
+surla: CP1 (propose_change, revise_change, confirm_intent, decline_revision, get_change): on
+surla: CP2 (preview_architecture): on
+surla: CP3 (draft_override, start_live_target): compiled_rule is on; prompt_template is on once start_live_target runs a candidate commit for a confirmed change_id (live targets in ` + liveRoot + `)
+surla: CP3: an earlier project server using this cards directory left live target directory ` + leftover + `; its files were kept and may hold what its test program printed: remove it once its processes have stopped
+surla: CP4 (verify_change, get_verification, list_verifications): on with stored verification settings (runs in /var/lib/surla/runs, reports in /var/lib/surla/reports, build cache in ` + buildCache + `, evaluator suite commit ` + fixedSuite.SuiteCommit + `)
+surla: CP5 (approve_merge): on; no promotion settings are stored, so approval checks no release binaries
 `,
 	})
 	suite := strings.Repeat("c", 40)
 	cases = append(cases, struct {
-		name       string
-		addr       *net.TCPAddr
-		opts       controlplane.Options
-		projectDir string
-		want       string
+		name string
+		addr *net.TCPAddr
+		opts controlplane.Options
+		want string
 	}{
-		name: "starter project pins its HEAD as the evaluator suite",
+		name: "project without stored settings runs each change's accepted tests",
 		addr: &net.TCPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 8090},
-		opts: controlplane.Options{
-			CardsDir: cardsDir,
-			Verification: &controlplane.VerificationConfig{
-				RunsDir: "/work/shop/.surla/runs",
-				Plan:    verify.Plan{SuiteCommit: suite, ReportDir: "/work/shop/reports"},
-			},
-			Live: &controlplane.LiveConfig{},
+		opts: controlplane.Options{BuildCacheDir: buildCache,
+			CardsDir:        cardsDir,
+			RunsDir:         "/work/ops/runs",
+			WrittenTestRuns: &controlplane.WrittenTestRuns{ReportDir: "/work/ops/reports"},
+			Live:            &controlplane.LiveConfig{},
 		},
-		projectDir: ".",
 		want: `surla: serving on http://127.0.0.1:8090
-surla: connect MCP clients to http://127.0.0.1:8090/mcp with the bearer token (architecture guide: surla://golden-path or http://127.0.0.1:8090/golden-path)
 surla: saving Change Cards in ` + cardsDir + `
-surla: CP1 (propose_change, revise_change, confirm_intent, get_change): on
-surla: CP2 (preview_architecture): design preview is on; swarm roster is off (set -swarm-profiles)
-surla: CP3 (draft_override, start_live_target): compiled_rule is on; prompt_template is on once start_live_target runs a candidate commit (live targets in ` + liveRoot + `)
-surla: CP3: an earlier surla serve using this cards directory left live target directory ` + leftover + `; its files were kept
-surla: CP4 (verify_change, get_verification, list_verifications): on (runs in /work/shop/.surla/runs, reports in /work/shop/reports, evaluator suite commit ` + suite + `)
-surla: -project .: the evaluator suite commit is the project's HEAD at startup; commit and restart surla serve to use a later suite
-surla: CP5 (approve_merge): off (set -promotion-config, or run surla approve on the CLI)
+surla: CP1 (propose_change, revise_change, confirm_intent, decline_revision, get_change): on
+surla: CP2 (preview_architecture): on
+surla: CP3 (draft_override, start_live_target): compiled_rule is on; prompt_template is on once start_live_target runs a candidate commit for a confirmed change_id (live targets in ` + liveRoot + `)
+surla: CP3: an earlier project server using this cards directory left live target directory ` + leftover + `; its files were kept and may hold what its test program printed: remove it once its processes have stopped
+surla: CP4 (verify_change, get_verification, list_verifications): on with the tests accepted for each change's build (runs in /work/ops/runs, reports in /work/ops/reports, build cache in ` + buildCache + `)
+surla: CP5 (approve_merge): on; no promotion settings are stored, so approval checks no release binaries
 `,
 	})
 	cases = append(cases, struct {
-		name       string
-		addr       *net.TCPAddr
-		opts       controlplane.Options
-		projectDir string
-		want       string
+		name string
+		addr *net.TCPAddr
+		opts controlplane.Options
+		want string
 	}{
 		name: "explicit configuration keeps its fixed suite commit",
 		addr: &net.TCPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 8090},
-		opts: controlplane.Options{
+		opts: controlplane.Options{BuildCacheDir: buildCache,
 			CardsDir: "/srv/cards",
 			Verification: &controlplane.VerificationConfig{
 				RunsDir: "/srv/runs",
@@ -687,19 +328,18 @@ surla: CP5 (approve_merge): off (set -promotion-config, or run surla approve on 
 			},
 		},
 		want: `surla: serving on http://127.0.0.1:8090
-surla: connect MCP clients to http://127.0.0.1:8090/mcp with the bearer token (architecture guide: surla://golden-path or http://127.0.0.1:8090/golden-path)
 surla: saving Change Cards in /srv/cards
-surla: CP1 (propose_change, revise_change, confirm_intent, get_change): on
-surla: CP2 (preview_architecture): design preview is on; swarm roster is off (set -swarm-profiles)
-surla: CP3 (draft_override, start_live_target): compiled_rule is on; prompt_template is off (set -project or -verification-config, then call start_live_target with a commit; or edit the prompt's source text, commit, and verify the commit)
-surla: CP4 (verify_change, get_verification, list_verifications): on (runs in /srv/runs, reports in /srv/reports, evaluator suite commit ` + suite + `)
-surla: CP5 (approve_merge): off (set -promotion-config, or run surla approve on the CLI)
+surla: CP1 (propose_change, revise_change, confirm_intent, decline_revision, get_change): on
+surla: CP2 (preview_architecture): on
+surla: CP3 (draft_override, start_live_target): compiled_rule is on; prompt_template is off (use surla verification set, then call start_live_target with the confirmed change_id and a commit; or edit the prompt's source text, commit, and verify the commit)
+surla: CP4 (verify_change, get_verification, list_verifications): on with stored verification settings (runs in /srv/runs, reports in /srv/reports, build cache in ` + buildCache + `, evaluator suite commit ` + suite + `)
+surla: CP5 (approve_merge): on; no promotion settings are stored, so approval checks no release binaries
 `,
 	})
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			var out bytes.Buffer
-			writeServeStatus(&out, tc.addr, tc.opts, tc.projectDir)
+			writeServeStatus(&out, tc.addr, tc.opts)
 			assert.Equal(t, tc.want, out.String())
 		})
 	}
@@ -721,11 +361,6 @@ func (*scriptedModelProvider) Stream(context.Context, *model.Request) (model.Str
 	return nil, errors.New("streaming is not scripted")
 }
 
-// ApplyPromptOverride satisfies controlplane.TargetPromptUpdater for status tests.
-func (noopTargetUpdater) ApplyPromptOverride(context.Context, string, string) (string, error) {
-	return "v1", nil
-}
-
 // startModelGateway serves provider through a Goa-AI model gateway on a
 // loopback gRPC listener and returns its address. The server stops when the
 // test ends.
@@ -740,4 +375,19 @@ func startModelGateway(t *testing.T, provider model.Provider) string {
 	go func() { assert.NoError(t, grpcSrv.Serve(lis)) }()
 	t.Cleanup(grpcSrv.Stop)
 	return lis.Addr().String()
+}
+
+// noChoice returns the declared choice of no model.
+func noChoice() gensurla.Connection {
+	return gensurla.NewConnectionNone(&gensurla.ModelNone{})
+}
+
+// directChoice returns the declared choice of a direct provider and model.
+func directChoice(provider, name string) gensurla.Connection {
+	return gensurla.NewConnectionDirect(&gensurla.ModelDirect{Provider: provider, ModelName: name})
+}
+
+// gatewayChoice returns the declared choice of a model gateway.
+func gatewayChoice(addr string) gensurla.Connection {
+	return gensurla.NewConnectionGateway(&gensurla.ModelGateway{GatewayAddr: addr})
 }

@@ -1,0 +1,358 @@
+// This file implements project management, persistent agent authentication, and memory-only browser sessions.
+package project
+
+import (
+	"context"
+	"crypto/sha256"
+	"crypto/subtle"
+	"encoding/hex"
+	"errors"
+	"fmt"
+	"io"
+	"net/http"
+	"os"
+	"path/filepath"
+	"strings"
+	"sync"
+	"time"
+
+	genprojectserver "github.com/goadesign/surla/gen/http/project/server"
+	genproject "github.com/goadesign/surla/gen/project"
+	"github.com/goadesign/surla/internal/controlplane"
+	"go.opentelemetry.io/otel"
+	goahttp "goa.design/goa/v3/http"
+)
+
+type (
+	// Server is the sole owner of credentials for a running project. Browser credentials never leave memory.
+	Server struct {
+		// state holds durable owner identity and agent credential metadata for this server.
+		state *State
+		// stop requests the composition root's ordered shutdown.
+		stop func()
+		// mu serializes management revocation, link consumption, and session issuance.
+		mu sync.Mutex
+		// management is created once and cleared irreversibly before the listener closes.
+		management string
+		// links maps single-use credentials to their expiration, only for this server lifetime.
+		links map[string]time.Time
+		// sessions maps random session credentials to separately generated attribution caller IDs.
+		sessions map[string]string
+		// team owns serialized, bounded team effects.
+		team teamOperation
+		// now supplies the link-expiration clock; tests replace it deterministically.
+		now func() time.Time
+		// build is the BuildIdentity read when the server was created, before any later
+		// replacement of its executable file can change what that path names.
+		build string
+	}
+)
+
+// buildIdentity reads this process's executable once; see BuildIdentity.
+var buildIdentity = sync.OnceValues(readBuildIdentity)
+
+// BuildIdentity is the SHA-256 of this process's executable file, read on first use. The
+// project server reports it from Identity and the CLI compares it with its own, so a CLI
+// never attaches to a server started by another build. A version string cannot serve:
+// two local builds of one commit, or of one dirty working tree, report the same version
+// and the same VCS settings in their build information, while their executables differ.
+// The server reads it when created, because an in-place upgrade later replaces the file
+// its executable path names.
+func BuildIdentity() (string, error) { return buildIdentity() }
+
+// NewServer creates fresh management authority for one server lifetime.
+// The caller publishes it only after binding the listener and revokes it before closing that listener.
+// The team connector is required but is called only when the caller starts the team.
+func NewServer(state *State, stop func(), team TeamDependencies) (*Server, error) {
+	if team.Lifetime == nil || team.Host == nil || team.Connect == nil || !filepath.IsAbs(team.RosterDirectory) {
+		return nil, errors.New("project server requires team lifetime, host, connector and absolute roster directory")
+	}
+	credential, err := randomCredential()
+	if err != nil {
+		return nil, err
+	}
+	build, err := BuildIdentity()
+	if err != nil {
+		return nil, err
+	}
+	return &Server{
+		build:      build,
+		state:      state,
+		team:       teamOperation{dependencies: team},
+		stop:       stop,
+		management: credential,
+		links:      map[string]time.Time{},
+		sessions:   map[string]string{},
+		now:        time.Now,
+	}, nil
+}
+
+// PublishRunning atomically publishes this server's private management credential after Listen.
+// Publication cannot restore authority after RevokeManagement has permanently withdrawn it.
+func (s *Server) PublishRunning(pid int, terminal string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.management == "" {
+		return errors.New("project management access has ended")
+	}
+	return s.state.SaveRunning(Running{PID: pid, Terminal: terminal, ManagementCredential: s.management})
+}
+
+// RevokeManagement permanently ends this server's management authority before listener closure.
+// A failure to withdraw its private record never restores the memory credential.
+func (s *Server) RevokeManagement() error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.management = ""
+	return s.state.RemoveRunning()
+}
+
+// Authenticate derives ownership and caller purpose solely from a trusted credential.
+func (s *Server) Authenticate(r *http.Request) (controlplane.Principal, error) {
+	token, ok := strings.CutPrefix(r.Header.Get("Authorization"), "Bearer ")
+	if !ok || token == "" {
+		return controlplane.Principal{}, errors.New("open the project's views with surla")
+	}
+	owner := s.state.Record.Owner
+	s.mu.Lock()
+	caller := ""
+	for credential, id := range s.sessions {
+		if credentialEqual(token, credential) {
+			caller = id
+		}
+	}
+	management := s.management != "" && credentialEqual(token, s.management)
+	s.mu.Unlock()
+	if caller != "" {
+		if r.Header.Get("Sec-Fetch-Site") != "same-origin" {
+			return controlplane.Principal{}, errors.New("browser session requires a same-origin page request")
+		}
+		return controlplane.Principal{ID: owner, CallerID: caller, Kind: controlplane.CallerUser}, nil
+	}
+	if management {
+		return controlplane.Principal{ID: owner, CallerID: "management", Kind: controlplane.CallerManagement}, nil
+	}
+	s.state.mu.Lock()
+	defer s.state.mu.Unlock()
+	for id, role := range s.state.Record.Agents {
+		credential, err := readCredential(s.state.AgentFile(id))
+		if errors.Is(err, os.ErrNotExist) {
+			continue
+		}
+		if err != nil {
+			return controlplane.Principal{}, err
+		}
+		if credentialEqual(token, credential) {
+			return controlplane.Principal{ID: owner, CallerID: id, Kind: controlplane.CallerKind(role.Role)}, nil
+		}
+	}
+	return controlplane.Principal{}, errors.New("session or credential is no longer valid; open the project's views with surla")
+}
+
+// Handler mounts the generated project contract and guards every page, HTTP, and MCP response.
+// The composition root owns the single public GET /views shell in application.
+func (s *Server) Handler(application http.Handler) http.Handler {
+	mux := goahttp.NewMuxer()
+	endpoints := genproject.NewEndpoints(s)
+	server := genprojectserver.New(endpoints, mux, controlplane.StrictJSONRequestDecoder, goahttp.ResponseEncoder, nil, nil)
+	genprojectserver.Mount(mux, server)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("X-Content-Type-Options", "nosniff")
+		w.Header().Set("Cache-Control", "no-store")
+		if r.Host != s.state.Address() || r.Header.Get("Origin") != "" && r.Header.Get("Origin") != s.state.Origin() {
+			writeAccessError(w, r, http.StatusForbidden, "forbidden", "request must use the project's own address and page")
+			return
+		}
+		site := r.Header.Get("Sec-Fetch-Site")
+		shell := r.Method == http.MethodGet && r.URL.Path == "/views"
+		// Navigation can come from any site, including a browser extension.
+		// Only the fixed shell is public; its fragment exchange remains same-origin.
+		navigation := shell && r.Header.Get("Sec-Fetch-Mode") == "navigate" &&
+			r.Header.Get("Sec-Fetch-Dest") == "document"
+		if site != "" && site != "same-origin" && !navigation && !(shell && (site == "none" || site == "same-site")) {
+			writeAccessError(w, r, http.StatusForbidden, "forbidden", "request must come from the project's own page; run surla in your project folder to open it, or surla --print-link to get a link without opening a browser")
+			return
+		}
+		if strings.HasPrefix(r.URL.Path, "/project/") {
+			if r.URL.Path == "/project/browser-session" && r.Method == http.MethodPost {
+				if site != "same-origin" {
+					writeAccessError(w, r, http.StatusForbidden, "forbidden", "open the project's views with surla")
+					return
+				}
+			} else {
+				principal, err := s.Authenticate(r)
+				if err != nil {
+					writeAccessError(w, r, http.StatusUnauthorized, "unauthorized", "open the project's views with surla")
+					return
+				}
+				r = r.WithContext(controlplane.WithPrincipal(r.Context(), principal))
+			}
+			mux.ServeHTTP(w, r)
+			return
+		}
+		application.ServeHTTP(w, r)
+	})
+}
+
+// Identity proves the answering address belongs to the CLI's project.
+func (s *Server) Identity(ctx context.Context) (*genproject.ProjectIdentity, error) {
+	if err := managementOnly(ctx, "identity"); err != nil {
+		return nil, err
+	}
+	r := s.state.Record
+	return &genproject.ProjectIdentity{ProjectID: r.ID, Directory: r.Directory, Owner: r.Owner, Build: &s.build}, nil
+}
+
+// Stop requests the composition root's ordered shutdown without blocking its own HTTP request.
+func (s *Server) Stop(ctx context.Context) error {
+	if err := managementOnly(ctx, "stop"); err != nil {
+		return err
+	}
+	s.stop()
+	return nil
+}
+
+// BrowserLink creates a short-lived value usable for one browser exchange only.
+func (s *Server) BrowserLink(ctx context.Context) (*genproject.BrowserLinkResult, error) {
+	if err := managementOnly(ctx, "browser_link"); err != nil {
+		return nil, err
+	}
+	token, err := randomCredential()
+	if err != nil {
+		return nil, err
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	now := s.now()
+	for link, expires := range s.links {
+		if !now.Before(expires) {
+			delete(s.links, link)
+		}
+	}
+	expires := now.Add(2 * time.Minute)
+	s.links[token] = expires
+	return &genproject.BrowserLinkResult{URL: s.state.Origin() + "/views#link=" + token, ExpiresAt: expires.Format(time.RFC3339Nano)}, nil
+}
+
+// ExchangeBrowserLink atomically consumes one valid link and creates a random memory-only session.
+func (s *Server) ExchangeBrowserLink(_ context.Context, p *genproject.ExchangeBrowserLinkPayload) (*genproject.ExchangeBrowserLinkResult, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	var expires time.Time
+	link := ""
+	for credential, expiry := range s.links {
+		if credentialEqual(p.Link, credential) {
+			link, expires = credential, expiry
+		}
+	}
+	exists := link != ""
+	if !exists || !s.now().Before(expires) {
+		delete(s.links, link)
+		return nil, genproject.MakeUnprocessable(errors.New("browser link is used or expired; open the project's views with surla"))
+	}
+	token, err := randomCredential()
+	if err != nil {
+		return nil, err
+	}
+	id, err := randomCredential()
+	if err != nil {
+		return nil, err
+	}
+	delete(s.links, link)
+	s.sessions[token] = "user-" + id
+	return &genproject.ExchangeBrowserLinkResult{
+		Session:     token,
+		ProjectName: filepath.Base(s.state.Record.Directory),
+	}, nil
+}
+
+// managementOnly checks trusted caller purpose rather than naming conventions or payload claims.
+func managementOnly(ctx context.Context, operation string) error {
+	p, ok := controlplane.PrincipalFromContext(ctx)
+	if !ok || !controlplane.OperationAllowed(p.Kind, operation) {
+		return genproject.MakeForbidden(errors.New("this operation requires the surla command's management credential"))
+	}
+	return nil
+}
+
+// credentialEqual compares opaque credentials without leaking their common prefix.
+func credentialEqual(a, b string) bool { return subtle.ConstantTimeCompare([]byte(a), []byte(b)) == 1 }
+
+// writeAccessError preserves the generated service error shape even before routing or authentication.
+func writeAccessError(w http.ResponseWriter, r *http.Request, status int, name, message string) {
+	accessErr := genproject.MakeForbidden(errors.New(message))
+	accessErr.Name = name
+	response := goahttp.NewErrorResponse(r.Context(), accessErr)
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	if err := goahttp.ResponseEncoder(r.Context(), w).Encode(response); err != nil {
+		otel.Handle(err)
+	}
+}
+
+// registerAgent saves one role's current folder, preserving its stable handle and credential.
+// The team operation lock serializes admissions; state.mu owns record and credential writes.
+func (s *Server) registerAgent(handle string, agent agentRecord) (string, error) {
+	if err := validateAgent(handle, agent); err != nil {
+		return "", err
+	}
+	s.state.mu.Lock()
+	defer s.state.mu.Unlock()
+	for existing, registered := range s.state.Record.Agents {
+		if registered.Role != agent.Role {
+			continue
+		}
+		if _, err := readCredential(s.state.AgentFile(existing)); err != nil {
+			return "", err
+		}
+		if registered.Folder == agent.Folder {
+			return existing, nil
+		}
+		s.state.Record.Agents[existing] = agent
+		if err := s.state.save(); err != nil {
+			s.state.Record.Agents[existing] = registered
+			return "", err
+		}
+		return existing, nil
+	}
+	if _, exists := s.state.Record.Agents[handle]; exists {
+		return "", errors.New("agent handle already owns another role")
+	}
+	token, err := randomCredential()
+	if err != nil {
+		return "", err
+	}
+	if err := os.MkdirAll(filepath.Join(s.state.Dir, "agents"), 0o700); err != nil {
+		return "", err
+	}
+	if err := privateDirectory(filepath.Join(s.state.Dir, "agents")); err != nil {
+		return "", err
+	}
+	if err := writePrivate(s.state.AgentFile(handle), []byte(token)); err != nil {
+		return "", err
+	}
+	s.state.Record.Agents[handle] = agent
+	if err := s.state.save(); err != nil {
+		delete(s.state.Record.Agents, handle)
+		return "", errors.Join(err, os.Remove(s.state.AgentFile(handle)))
+	}
+	return handle, nil
+}
+
+// readBuildIdentity hashes the file this process's executable path names.
+func readBuildIdentity() (build string, err error) {
+	self, err := os.Executable()
+	if err != nil {
+		return "", fmt.Errorf("find the surla executable: %w", err)
+	}
+	f, err := os.Open(self)
+	if err != nil {
+		return "", fmt.Errorf("read the surla executable: %w", err)
+	}
+	defer func() { err = errors.Join(err, f.Close()) }()
+	sum := sha256.New()
+	if _, err := io.Copy(sum, f); err != nil {
+		return "", fmt.Errorf("read the surla executable %s: %w", self, err)
+	}
+	return hex.EncodeToString(sum.Sum(nil)), nil
+}

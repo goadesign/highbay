@@ -1,9 +1,11 @@
-// This file implements check_project: copy the active workspace's live grant
-// into a per-operation directory and run go test ./... for every workspace
-// module in Linux containers, after downloading dependencies against a
-// read-only copy. surla serve binds the workspace and creates and locks the
-// operation's directory; the check helper process (check_helper.go) then
-// owns that directory, its containers and its output until it exits.
+// This file implements check_project: copy the builder's working-copy grant
+// into a per-operation directory and run go test ./... for every builder-owned
+// workspace module in Linux containers (leaving out the starter test module
+// eval when the project's tests belong to the test writer), after downloading
+// dependencies against a read-only copy. surla serve binds the workspace and
+// creates and locks the operation's directory; the check helper process
+// (check_helper.go) then owns that directory, its containers and its output
+// until it exits.
 package controlplane
 
 import (
@@ -30,6 +32,7 @@ import (
 	"golang.org/x/sys/unix"
 
 	gensurla "github.com/goadesign/surla/gen/surla"
+	"github.com/goadesign/surla/internal/abspath"
 	"github.com/goadesign/surla/verify/candidate"
 )
 
@@ -44,6 +47,9 @@ type (
 		id string
 		// dir is <cards dir>/check-work/<id>.
 		dir string
+		// moduleCacheDir is retained project input when supplied by the server;
+		// otherwise start creates it inside dir for operation-local cleanup.
+		moduleCacheDir string
 		// grantRoot is the live grant's path when the operation started. It
 		// names the source mount point inside containers and nothing else.
 		grantRoot string
@@ -66,14 +72,16 @@ type (
 		copy grantCopy
 		// checker resolves the operation's engine.
 		checker *candidate.ContainerRunner
-		// checkTimeout is the operator's -check-timeout, named in messages
+		// checkTimeout is the configured check timeout, named in messages
 		// about operations that ran out of time.
 		checkTimeout time.Duration
 		// goProxyEnv is the operator's module proxy settings for download
 		// containers.
 		goProxyEnv []string
-		// importedReports are the original report paths the copy leaves out.
-		importedReports []string
+		// storedEvaluator is true when the project verifies with stored
+		// verification settings, so check_project and update_dependencies
+		// include eval/.
+		storedEvaluator bool
 		// engine is the operation's resolved local Docker engine.
 		engine *candidate.Engine
 		// out captures every container's output.
@@ -112,22 +120,25 @@ const (
 	containerWork = "/work"
 )
 
-// CheckProject copies the active workspace's live files into a protected
+// CheckProject copies the open build's builder working files into a protected
 // per-operation copy and runs go test ./... for every Go module in it in
-// Linux containers, never changing the workspace. The work runs in a check
-// helper process that finishes and cleans up the operation even if this
-// server dies. It requires an authenticated principal.
+// Linux containers (except the starter test module eval when the project has no
+// stored verification settings, because those tests belong to the test writer),
+// never changing the workspace. The work runs in a check helper process that
+// finishes and cleans up the operation even if this server dies. It requires an
+// authenticated principal and a read assignment for the open build. The builder
+// turn remains reserved until the helper finishes its operation and cleanup.
 func (c *ControlPlane) CheckProject(ctx context.Context) (res *gensurla.CheckProjectResult, retErr error) {
 	if _, ok := PrincipalFromContext(ctx); !ok {
 		return nil, errors.New("authenticated principal is required")
 	}
 	ctx, span := c.tracer("surla/controlplane").Start(ctx, "surla.controlplane.check_project")
 	if err := c.admitCheckOperation(); err != nil {
-		endCheckSpan(span, err)
+		endCheckRequestSpan(span, err)
 		return nil, err
 	}
 	defer func() {
-		endCheckSpan(span, retErr)
+		endCheckRequestSpan(span, retErr)
 		c.checkOps.Done()
 	}()
 	ctx, cancel := c.checkDeadline(ctx)
@@ -145,7 +156,7 @@ func (c *ControlPlane) CheckProject(ctx context.Context) (res *gensurla.CheckPro
 // read lock of workspaceMu, which Close takes exclusively after canceling
 // serverCtx: an operation admitted before that point is registered before
 // Close waits on checkOps, and every later one sees serverCtx ended. Admitted
-// operations still run concurrently.
+// operations reserve the builder copy separately and refuse a busy copy.
 func (c *ControlPlane) admitCheckOperation() error {
 	if c.checker == nil || c.checkWorkDir == "" {
 		return gensurla.MakeNotImplemented(errors.New("check_project is not configured on this server"))
@@ -160,7 +171,7 @@ func (c *ControlPlane) admitCheckOperation() error {
 }
 
 // checkDeadline bounds a whole check or dependency operation (copy, image
-// pull, every container) by the operator's -check-timeout, and cancels it
+// pull, every container) by the configured check timeout, and cancels it
 // when the server closes. The request context can only shorten it.
 func (c *ControlPlane) checkDeadline(ctx context.Context) (context.Context, context.CancelFunc) {
 	ctx, cancel := context.WithTimeout(ctx, c.checkTimeout)
@@ -271,16 +282,24 @@ func (c *ControlPlane) recoverCheckOperation(span trace.Span, id string) error {
 }
 
 // checkProject runs check_project's operation inside the check helper: it
-// prepares the operation, runs go list -deps -test ./... then go test ./...
-// for every module, and finishes the operation directory. Errors are the
-// caller-facing errors, already joined with the output ID by finish.
+// prepares the operation, leaves out the starter test module eval when the
+// project's tests belong to the test writer, runs go list -deps -test ./...
+// then go test ./... for every remaining module, and finishes the operation
+// directory. Errors are the caller-facing errors, already joined with the
+// output ID by finish.
 func (op *checkOperation) checkProject(ctx context.Context) (*gensurla.CheckProjectResult, error) {
 	if err := op.start(ctx); err != nil {
 		return nil, err
 	}
+	leftOutTestModule := op.leaveOutStarterTestModule()
+	if leftOutTestModule {
+		fmt.Fprintf(op.out, "note: %s\n", skippedTestModuleNote)
+	}
 	var failures []moduleOutcome
 	for _, mod := range op.copy.modules {
-		if f, ok, err := op.runGo(ctx, mod, "download", "bridge", true, op.goProxyEnv, "list", "-deps", "-test", "./..."); err != nil {
+		// Preparation needs no package listing: it can bury Go's earlier
+		// diagnostics outside the bounded failure message.
+		if f, ok, err := op.runGo(ctx, mod, "download", "bridge", true, op.goProxyEnv, "list", "-deps", "-test", `-f={{""}}`, "./..."); err != nil {
 			return nil, op.finish(err)
 		} else if !ok {
 			failures = append(failures, f)
@@ -299,7 +318,7 @@ func (op *checkOperation) checkProject(ctx context.Context) (*gensurla.CheckProj
 	return &gensurla.CheckProjectResult{
 		OpID:    op.id,
 		Passed:  len(failures) == 0,
-		Message: op.message(failures),
+		Message: op.message(failures, leftOutTestModule),
 	}, nil
 }
 
@@ -309,7 +328,12 @@ func (op *checkOperation) checkProject(ctx context.Context) (*gensurla.CheckProj
 // are the caller-facing errors; once the output exists they come from
 // finish.
 func (op *checkOperation) start(ctx context.Context) error {
-	for _, d := range []string{op.path("src"), op.path("modcache"), op.path("docker-config")} {
+	dirs := []string{op.path("src"), op.path("docker-config")}
+	if op.moduleCacheDir == "" {
+		op.moduleCacheDir = op.path("modcache")
+		dirs = append(dirs, op.moduleCacheDir)
+	}
+	for _, d := range dirs {
 		if err := os.Mkdir(d, 0o700); err != nil {
 			return errors.Join(fmt.Errorf("create check directory %s: %w", d, err), op.closeLive())
 		}
@@ -318,12 +342,12 @@ func (op *checkOperation) start(ctx context.Context) error {
 	if op.out, err = newCapWriter(op.path(outputFile)); err != nil {
 		return errors.Join(err, op.closeLive())
 	}
-	op.copy, err = copyGrant(ctx, op.grantFD, op.workspaceRel, op.workspaceID, op.path("src"), op.importedReports)
+	op.copy, err = copyGrant(ctx, op.grantFD, op.workspaceRel, op.workspaceID, op.path("src"))
 	if err != nil {
 		var changed *errSourceChanged
 		switch {
 		case ctx.Err() != nil:
-			return op.finish(fmt.Errorf("check exceeded -check-timeout (%s) or was canceled while copying the workspace: %w", op.checkTimeout, err))
+			return op.finish(fmt.Errorf("check exceeded check timeout (%s) or was canceled while copying the workspace: %w", op.checkTimeout, err))
 		case errors.As(err, &changed):
 			return op.finish(err)
 		}
@@ -360,7 +384,7 @@ func (op *checkOperation) start(ctx context.Context) error {
 // every path afterwards.
 func (op *checkOperation) runGo(ctx context.Context, mod, step, network string, srcReadOnly bool, extraEnv []string, args ...string) (moduleOutcome, bool, error) {
 	if err := ctx.Err(); err != nil {
-		return moduleOutcome{}, false, fmt.Errorf("check exceeded -check-timeout (%s) or was canceled before %s of %s: %w", op.checkTimeout, step, mod, err)
+		return moduleOutcome{}, false, fmt.Errorf("check exceeded check timeout (%s) or was canceled before %s of %s: %w", op.checkTimeout, step, mod, err)
 	}
 	name := fmt.Sprintf("surla-check-%s-%d", op.id, op.containers)
 	work := op.path(fmt.Sprintf("work-%d", op.containers))
@@ -396,7 +420,7 @@ func (op *checkOperation) runGo(ctx context.Context, mod, step, network string, 
 		WorkDir:   filepath.Join(op.grantRoot, filepath.FromSlash(op.moduleGrantRel(mod))),
 		Mounts: []candidate.Mount{
 			{Source: op.path("src"), Target: op.grantRoot, ReadOnly: srcReadOnly},
-			{Source: op.path("modcache"), Target: containerModCache, ReadOnly: step == "test"},
+			{Source: op.moduleCacheDir, Target: containerModCache, ReadOnly: step == "test"},
 			{Source: work, Target: containerWork},
 		},
 		Env:  env,
@@ -407,7 +431,7 @@ func (op *checkOperation) runGo(ctx context.Context, mod, step, network string, 
 	code, err := op.runContainer(ctx, spec)
 	end := op.out.size()
 	if err != nil && ctx.Err() != nil {
-		err = fmt.Errorf("check exceeded -check-timeout (%s) or was canceled during %s of %s: %w", op.checkTimeout, step, mod, err)
+		err = fmt.Errorf("check exceeded check timeout (%s) or was canceled during %s of %s: %w", op.checkTimeout, step, mod, err)
 	}
 	if kept := op.settle(ctx, name); kept != nil {
 		// The container may still exist or still appear; owner.json keeps
@@ -502,7 +526,7 @@ func (op *checkOperation) finish(cause error) error {
 		}
 	}
 	if len(op.owner.Containers) > 0 && op.owner.scratchUnused() {
-		cleanupErr = errors.Join(cleanupErr, fmt.Errorf("kept the record of container %s in %s: its creation was never confirmed, so it may still appear; surla serve looks for it at every start and shutdown", op.owner.Containers[0].Name, op.dir))
+		cleanupErr = errors.Join(cleanupErr, fmt.Errorf("kept the record of container %s in %s: its creation was never confirmed, so it may still appear; the project server looks for it at every start and shutdown", op.owner.Containers[0].Name, op.dir))
 	}
 	err := errors.Join(cause, closeErr, cleanupErr)
 	if err == nil {
@@ -520,16 +544,22 @@ func (op *checkOperation) finish(cause error) error {
 	return withOutput
 }
 
-// message is the result message: the modules tested, then the first
-// failure and the end of its output, bounded as a whole.
-func (op *checkOperation) message(failures []moduleOutcome) string {
+// message is the result message: the modules tested, whether the starter test
+// module was left out, then the first failure and the end of its output,
+// bounded as a whole.
+func (op *checkOperation) message(failures []moduleOutcome, leftOutTestModule bool) string {
 	head := fmt.Sprintf("tested %d module(s): ", len(op.copy.modules))
 	list := strings.Join(op.copy.modules, ", ")
+	note := ""
+	if leftOutTestModule {
+		note = ". " + skippedTestModuleNote
+	}
 	if len(failures) == 0 {
-		return op.boundedMessage(head, list, ". All passed.", nil)
+		return op.boundedMessage(head, list, note+". All passed.", nil)
 	}
 	f := failures[0]
 	var b strings.Builder
+	b.WriteString(note)
 	switch f.step {
 	case "download":
 		fmt.Fprintf(&b, ". Dependencies for %s could not be prepared (go list exited %d). If Go reports a missing go.sum or go.work.sum entry, or a go.mod update, call update_dependencies and check again.", f.dir, f.exitCode)
@@ -644,21 +674,21 @@ func (op *checkOperation) openLive(wsRoot *os.Root, accepted []string) error {
 	if err := unix.Fstat(op.workspaceFD, &st); err != nil {
 		return fmt.Errorf("hold the workspace: %w", err)
 	}
-	op.workspaceID = fileID{dev: st.Dev, ino: st.Ino}
+	op.workspaceID = fileID{dev: uint64(st.Dev), ino: st.Ino}
 	accepted0 := outermost(accepted)
 	if op.grantFD, err = unix.Open(accepted0, openDirFlags, 0); err != nil {
 		return fmt.Errorf("open the source directory %s: %w", accepted0, err)
 	}
-	if op.grantRoot, err = fdPath(op.grantFD); err != nil {
+	if op.grantRoot, err = abspath.FDPath(op.grantFD); err != nil {
 		return fmt.Errorf("resolve the source directory %s: %w", accepted0, err)
 	}
-	wsPath, err := fdPath(op.workspaceFD)
+	wsPath, err := abspath.FDPath(op.workspaceFD)
 	if err != nil {
 		return fmt.Errorf("resolve the workspace: %w", err)
 	}
 	rel, err := filepath.Rel(op.grantRoot, wsPath)
 	if err != nil || !filepath.IsLocal(rel) && rel != "." {
-		return gensurla.MakeUnprocessable(fmt.Errorf("workspace %s is outside %s, the source directory this server accepted at startup; if the workspace moved, move it back or restart surla serve from it", wsPath, op.grantRoot))
+		return gensurla.MakeUnprocessable(fmt.Errorf("workspace %s is outside %s, the source directory this server accepted at startup; if the workspace moved, move it back or stop and start Surla from it", wsPath, op.grantRoot))
 	}
 	op.workspaceRel = filepath.ToSlash(rel)
 	return nil
@@ -711,6 +741,16 @@ func clipText(s string, n int) string {
 		k--
 	}
 	return s[:k] + more
+}
+
+// endCheckRequestSpan keeps expected worker refusals on the request's normal
+// outcome path. Internal helper and cleanup spans still record actual errors.
+func endCheckRequestSpan(span trace.Span, err error) {
+	if expectedRequestRefusal(err) {
+		span.End()
+		return
+	}
+	endCheckSpan(span, err)
 }
 
 // endCheckSpan records a failed operation's error with error status and

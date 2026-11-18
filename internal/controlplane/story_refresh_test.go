@@ -22,11 +22,11 @@ import (
 )
 
 // TestStoryRefreshPreconditionsAndExpectedAbsence verifies authentication,
-// unbound-workspace errors, missing-go.mod errors without "pass design in the
-// request" advice, expected absence ("none") before any refresh and after a
-// server restart, and replaced-workspace rejection.
+// missing-go.mod errors without "pass design in the request" advice, expected
+// absence ("none") before any refresh and after a server restart, and
+// replaced-workspace rejection.
 func TestStoryRefreshPreconditionsAndExpectedAbsence(t *testing.T) {
-	alice := WithPrincipal(context.Background(), Principal{ID: "alice@example.com"})
+	alice := WithPrincipal(context.Background(), Principal{ID: "alice@example.com", CallerID: "alice@example.com", Kind: CallerUser})
 
 	t.Run("unauthenticated callers are rejected", func(t *testing.T) {
 		cp := newControlPlane(t, Options{})
@@ -36,23 +36,10 @@ func TestStoryRefreshPreconditionsAndExpectedAbsence(t *testing.T) {
 		require.ErrorContains(t, err, "authenticated principal is required")
 	})
 
-	t.Run("no bound workspace returns not_implemented naming the enabling step", func(t *testing.T) {
-		cp := newControlPlane(t, Options{})
-		_, err := cp.RefreshStory(alice)
-		assertServiceError(t, err, "not_implemented")
-		assert.ErrorContains(t, err, "start Surla from a project directory or pass -project")
-		assert.NotContains(t, err.Error(), "pass design in the request")
-
-		_, err = cp.GetStoryRefresh(alice)
-		assertServiceError(t, err, "not_implemented")
-		assert.ErrorContains(t, err, "start Surla from a project directory or pass -project")
-		assert.NotContains(t, err.Error(), "pass design in the request")
-	})
-
-	t.Run("bound workspace without go.mod returns none on get and unprocessable on refresh", func(t *testing.T) {
+	t.Run("workspace without go.mod returns none on get and unprocessable on refresh", func(t *testing.T) {
 		wsDir := t.TempDir()
 		cp := newControlPlane(t, Options{WorkspaceDir: wsDir})
-		srv := httptest.NewServer(NewHTTPHandler(cp, NewTokenAuthenticator(map[string]Principal{
+		srv := httptest.NewServer(NewHTTPHandler(cp, workflowAuthenticator(map[string]Principal{
 			"alice-token": {ID: "alice@example.com"},
 		})))
 		t.Cleanup(srv.Close)
@@ -60,6 +47,7 @@ func TestStoryRefreshPreconditionsAndExpectedAbsence(t *testing.T) {
 		noneRes, err := cp.GetStoryRefresh(alice)
 		require.NoError(t, err)
 		assert.Equal(t, storyRefreshStateNone, noneRes.State)
+		assert.Equal(t, filepath.Join(cp.activeWorkspaceDir, draftFolderName), noneRes.DraftFolder, "none names the intended draft without requiring go.mod")
 		assert.Nil(t, noneRes.OpID)
 		assert.Nil(t, noneRes.SnapshotDigest)
 		assert.Empty(t, noneRes.Stories)
@@ -98,10 +86,16 @@ func TestStoryRefreshPreconditionsAndExpectedAbsence(t *testing.T) {
 		assertServiceError(t, err, "unprocessable")
 		assert.ErrorContains(t, err, "not valid UTF-8")
 
-		// Replace the directory at wsDir with a new inode.
-		require.NoError(t, os.RemoveAll(wsDir))
+		// Keep the original directory alive so its inode cannot be reused.
+		_, oldDev, oldIno, err := openWorkspaceRootAndStat(wsDir)
+		require.NoError(t, err)
+		require.NoError(t, os.Rename(wsDir, wsDir+"-original"))
 		require.NoError(t, os.MkdirAll(wsDir, 0o755))
 		require.NoError(t, os.WriteFile(filepath.Join(wsDir, "go.mod"), []byte("module example.com/orders\n\ngo 1.24\n"), 0o600))
+
+		_, newDev, newIno, err := openWorkspaceRootAndStat(wsDir)
+		require.NoError(t, err)
+		require.True(t, oldDev != newDev || oldIno != newIno, "replacement has a distinct device/inode identity")
 
 		_, err = cp.RefreshStory(alice)
 		assertServiceError(t, err, "unprocessable")
@@ -114,7 +108,7 @@ func TestStoryRefreshPreconditionsAndExpectedAbsence(t *testing.T) {
 		writeWorkspaceFiles(t, wsDir, map[string]string{
 			"go.mod": "module example.com/orders\n\ngo 1.24\n",
 		})
-		cp1, err := New(Options{CardsDir: cardsDir, WorkspaceDir: wsDir})
+		cp1, err := New(Options{Team: testTeamBinding(), CardsDir: cardsDir, WorkspaceDir: wsDir})
 		require.NoError(t, err)
 		started, err := cp1.RefreshStory(alice)
 		require.NoError(t, err)
@@ -131,12 +125,12 @@ func TestStoryRefreshPreconditionsAndExpectedAbsence(t *testing.T) {
 		for _, e := range entries {
 			names = append(names, e.Name())
 		}
-		assert.Equal(t, []string{"designeval", "lock"}, names, "Story refresh writes no card or refresh files to cardsDir")
+		assert.Equal(t, []string{"designeval", "lock", madeFromFileName}, names, "Story refresh persists provenance but no operation or card")
 		evalEntries, err := os.ReadDir(filepath.Join(cardsDir, "designeval"))
 		require.NoError(t, err)
 		assert.Empty(t, evalEntries, "Close removes the designeval build workspace")
 
-		cp2, err := New(Options{CardsDir: cardsDir, WorkspaceDir: wsDir})
+		cp2, err := New(Options{Team: testTeamBinding(), CardsDir: cardsDir, WorkspaceDir: wsDir})
 		require.NoError(t, err)
 		t.Cleanup(func() { require.NoError(t, cp2.Close()) })
 		afterRestart, err := cp2.GetStoryRefresh(alice)
@@ -151,7 +145,7 @@ func TestStoryRefreshPreconditionsAndExpectedAbsence(t *testing.T) {
 // propose_change, get_change, nor verify_change, and that refreshing an
 // unchanged snapshot while running reuses the running operation.
 func TestSlowStoryRefreshDoesNotBlockGetChangeVerifyChangeOrProposeChange(t *testing.T) {
-	alice := WithPrincipal(context.Background(), Principal{ID: "alice@example.com"})
+	alice := WithPrincipal(context.Background(), Principal{ID: "alice@example.com", CallerID: "alice@example.com", Kind: CallerUser})
 	wsDir := t.TempDir()
 	files := validWorkspaceStub("package design\n")
 	writeWorkspaceFiles(t, wsDir, files)
@@ -162,6 +156,7 @@ func TestSlowStoryRefreshDoesNotBlockGetChangeVerifyChangeOrProposeChange(t *tes
 	installFakeGo(t, "#!/bin/sh\n: > "+startedFile+"\nexec sleep 600\n")
 
 	cp := newControlPlane(t, Options{WorkspaceDir: wsDir})
+	existing := saveProposedCardFixture(t, cp, "alice@example.com", "existing", "Refunds up to $50 are instant.", refundAnalysis("Refunds up to $50 are instant."))
 
 	first, err := cp.RefreshStory(alice)
 	require.NoError(t, err)
@@ -185,27 +180,23 @@ func TestSlowStoryRefreshDoesNotBlockGetChangeVerifyChangeOrProposeChange(t *tes
 
 	// propose_change, get_change, and verify_change do not block on the running evaluation.
 	var (
-		proposed *gensurla.ChangeCardResult
-		propErr  error
-		gotCard  *gensurla.ChangeCardResult
-		getErr   error
-		verErr   error
+		propErr error
+		gotCard *gensurla.ChangeCardResult
+		getErr  error
+		verErr  error
 	)
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		proposed, propErr = cp.ProposeChange(alice, &gensurla.ProposeChangePayload{
+		_, propErr = cp.ProposeChange(alice, &gensurla.ProposeChangePayload{
 			ChangeID: "chg-unblocked",
 			Prompt:   "Refunds up to $50 are instant.",
 			Analysis: refundAnalysis("Refunds up to $50 are instant."),
 		})
-		if propErr != nil {
-			return
-		}
-		gotCard, getErr = cp.GetChange(alice, &gensurla.GetChangePayload{ChangeID: proposed.ChangeID})
+		gotCard, getErr = cp.GetChange(alice, &gensurla.GetChangePayload{ChangeID: existing.ChangeID})
 		_, verErr = cp.VerifyChange(alice, &gensurla.VerifyChangePayload{
-			ChangeID:        proposed.ChangeID,
-			RequestRevision: proposed.RequestRevision,
+			ChangeID:        existing.ChangeID,
+			RequestRevision: existing.RequestRevision,
 			CandidateCommit: strings.Repeat("a", 40),
 		})
 	}()
@@ -214,9 +205,10 @@ func TestSlowStoryRefreshDoesNotBlockGetChangeVerifyChangeOrProposeChange(t *tes
 	case <-time.After(2 * time.Second):
 		t.Fatal("propose_change, get_change, or verify_change blocked on a slow Story refresh")
 	}
-	require.NoError(t, propErr)
+	assertServiceError(t, propErr, "unprocessable")
+	assert.ErrorContains(t, propErr, "story_refresh_op_id is required")
 	require.NoError(t, getErr)
-	assert.Equal(t, proposed.RequestRevision, gotCard.RequestRevision)
+	assert.Equal(t, existing.RequestRevision, gotCard.RequestRevision)
 	assertServiceError(t, verErr, "not_implemented")
 
 	status, err := cp.GetStoryRefresh(alice)
@@ -239,7 +231,7 @@ func TestStoryRefreshSurvivesClientDisconnect(t *testing.T) {
 	installFakeGo(t, "#!/bin/sh\n: > "+startedFile+"\nwhile [ ! -f "+releaseFile+" ]; do sleep 0.02; done\necho 'reached after client disconnect' >&2\nexit 1\n")
 
 	cp := newControlPlane(t, Options{WorkspaceDir: wsDir})
-	reqCtx, reqCancel := context.WithCancel(WithPrincipal(context.Background(), Principal{ID: "alice@example.com"}))
+	reqCtx, reqCancel := context.WithCancel(WithPrincipal(context.Background(), Principal{ID: "alice@example.com", CallerID: "alice@example.com", Kind: CallerUser}))
 
 	started, err := cp.RefreshStory(reqCtx)
 	require.NoError(t, err)
@@ -254,7 +246,7 @@ func TestStoryRefreshSurvivesClientDisconnect(t *testing.T) {
 	// Simulate client disconnect by canceling the request context.
 	reqCancel()
 
-	readCtx := WithPrincipal(context.Background(), Principal{ID: "alice@example.com"})
+	readCtx := WithPrincipal(context.Background(), Principal{ID: "alice@example.com", CallerID: "alice@example.com", Kind: CallerUser})
 	stillRunning, err := cp.GetStoryRefresh(readCtx)
 	require.NoError(t, err)
 	assert.Equal(t, storyRefreshStateRunning, stillRunning.State)
@@ -272,7 +264,7 @@ func TestStoryRefreshSurvivesClientDisconnect(t *testing.T) {
 // exit before returning, leaves no operation running or published, and writes
 // nothing to disk afterwards.
 func TestStoryRefreshCloseCancelsWaitsAndWritesNothingAfterwards(t *testing.T) {
-	alice := WithPrincipal(context.Background(), Principal{ID: "alice@example.com"})
+	alice := WithPrincipal(context.Background(), Principal{ID: "alice@example.com", CallerID: "alice@example.com", Kind: CallerUser})
 	wsDir := t.TempDir()
 	cardsDir := filepath.Join(t.TempDir(), "cards")
 	writeWorkspaceFiles(t, wsDir, validWorkspaceStub("package design\n"))
@@ -281,7 +273,7 @@ func TestStoryRefreshCloseCancelsWaitsAndWritesNothingAfterwards(t *testing.T) {
 	startedFile := filepath.Join(markerDir, "started")
 	installFakeGo(t, "#!/bin/sh\n: > "+startedFile+"\nexec sleep 600\n")
 
-	cp, err := New(Options{CardsDir: cardsDir, WorkspaceDir: wsDir})
+	cp, err := New(Options{Team: testTeamBinding(), CardsDir: cardsDir, WorkspaceDir: wsDir})
 	require.NoError(t, err)
 
 	res, err := cp.RefreshStory(alice)
@@ -294,6 +286,9 @@ func TestStoryRefreshCloseCancelsWaitsAndWritesNothingAfterwards(t *testing.T) {
 		return statErr == nil
 	}, 5*time.Second, 10*time.Millisecond)
 
+	provenancePath := filepath.Join(cardsDir, madeFromFileName)
+	provenance, err := os.ReadFile(provenancePath)
+	require.NoError(t, err)
 	require.NoError(t, cp.Close())
 
 	// After Close returns, no Story refresh operation remains running or published.
@@ -305,14 +300,18 @@ func TestStoryRefreshCloseCancelsWaitsAndWritesNothingAfterwards(t *testing.T) {
 	_, err = cp.RefreshStory(alice)
 	assertServiceError(t, err, "unavailable")
 
-	// Nothing was written to cardsDir beyond the lock file and empty designeval parent.
+	// Refresh persisted its draft provenance before evaluation started. Close
+	// preserves it, and the canceled evaluator publishes no later card write.
 	entries, err := os.ReadDir(cardsDir)
 	require.NoError(t, err)
 	var names []string
 	for _, e := range entries {
 		names = append(names, e.Name())
 	}
-	assert.Equal(t, []string{"designeval", "lock"}, names)
+	assert.Equal(t, []string{"designeval", "lock", "made-from", "made-from.json"}, names)
+	afterProvenance, err := os.ReadFile(provenancePath)
+	require.NoError(t, err)
+	assert.Equal(t, provenance, afterProvenance)
 	evalEntries, err := os.ReadDir(filepath.Join(cardsDir, "designeval"))
 	require.NoError(t, err)
 	assert.Empty(t, evalEntries)
@@ -326,11 +325,11 @@ func TestStoryRefreshCloseCancelsWaitsAndWritesNothingAfterwards(t *testing.T) {
 //  3. the same snapshot after an expired run reads failed with a diagnostic
 //     naming the deadline and evaluates again on the next refresh.
 func TestStoryRefreshReplacementFailureRetryAndExpiry(t *testing.T) {
-	alice := WithPrincipal(context.Background(), Principal{ID: "alice@example.com"})
+	alice := WithPrincipal(context.Background(), Principal{ID: "alice@example.com", CallerID: "alice@example.com", Kind: CallerUser})
 
 	t.Run("changed snapshot replaces running operation and replaced evaluation publishes nothing", func(t *testing.T) {
 		wsDir := t.TempDir()
-		v1Files := validWorkspaceStub("package design\n// v1\n")
+		v1Files := validWorkspaceStub("package design\n\n// v1\n")
 		writeWorkspaceFiles(t, wsDir, v1Files)
 		v1Digest := designeval.SnapshotDigest(v1Files)
 
@@ -351,9 +350,9 @@ func TestStoryRefreshReplacementFailureRetryAndExpiry(t *testing.T) {
 			return statErr == nil
 		}, 5*time.Second, 10*time.Millisecond)
 
-		// Change the workspace snapshot and refresh again.
-		v2Files := validWorkspaceStub("package design\n// v2\n")
-		writeWorkspaceFiles(t, wsDir, v2Files)
+		// Change the draft snapshot and refresh again.
+		v2Files := validWorkspaceStub("package design\n\n// v2\n")
+		writeWorkspaceFiles(t, filepath.Join(wsDir, draftFolderName), v2Files)
 		v2Digest := designeval.SnapshotDigest(v2Files)
 		require.NotEqual(t, v1Digest, v2Digest)
 
@@ -434,12 +433,32 @@ func TestStoryRefreshReplacementFailureRetryAndExpiry(t *testing.T) {
 		run2 := filepath.Join(countDir, "run2")
 		installFakeGo(t, "#!/bin/sh\nif [ ! -f "+run1+" ]; then\n  : > "+run1+"\n  exec sleep 600\nfi\n: > "+run2+"\nexec sleep 600\n")
 
+		var (
+			deadlineCalls int
+			expireFirst   context.CancelCauseFunc
+		)
 		cp := newControlPlane(t, Options{WorkspaceDir: wsDir})
-		cp.storyRefreshTimeout = 200 * time.Millisecond
+		cp.storyRefreshWithTimeout = func(ctx context.Context, limit time.Duration) (context.Context, context.CancelFunc) {
+			assert.Equal(t, defaultStoryRefreshTimeout, limit)
+			deadlineCalls++
+			if deadlineCalls == 1 {
+				evalCtx, cancelCause := context.WithCancelCause(ctx)
+				expireFirst = cancelCause
+				return evalCtx, func() { cancelCause(nil) }
+			}
+			return context.WithTimeout(ctx, limit)
+		}
 
 		first, err := cp.RefreshStory(alice)
 		require.NoError(t, err)
 		require.NotNil(t, first.OpID)
+
+		require.Eventually(t, func() bool {
+			_, statErr := os.Stat(run1)
+			return statErr == nil
+		}, 5*time.Second, 10*time.Millisecond)
+		require.NotNil(t, expireFirst)
+		expireFirst(context.DeadlineExceeded)
 
 		var expired *gensurla.StoryRefreshResult
 		require.Eventually(t, func() bool {
@@ -451,7 +470,7 @@ func TestStoryRefreshReplacementFailureRetryAndExpiry(t *testing.T) {
 			return cur.State == storyRefreshStateFailed
 		}, 5*time.Second, 10*time.Millisecond)
 		require.NotNil(t, expired.Diagnostic)
-		assert.Contains(t, *expired.Diagnostic, "Story refresh timed out after 200ms")
+		assert.Contains(t, *expired.Diagnostic, "Story refresh timed out after 5m0s")
 
 		// Refreshing the same snapshot after expiry starts a fresh evaluation.
 		second, err := cp.RefreshStory(alice)
@@ -464,13 +483,85 @@ func TestStoryRefreshReplacementFailureRetryAndExpiry(t *testing.T) {
 			return statErr == nil
 		}, 5*time.Second, 10*time.Millisecond)
 	})
+
+	t.Run("real context.WithTimeout expiry reports timed out diagnostic", func(t *testing.T) {
+		wsDir := t.TempDir()
+		writeWorkspaceFiles(t, wsDir, validWorkspaceStub("package design\n"))
+		installFakeGo(t, "#!/bin/sh\nexec sleep 600\n")
+
+		cp := newControlPlane(t, Options{WorkspaceDir: wsDir})
+		cp.storyRefreshWithTimeout = func(ctx context.Context, limit time.Duration) (context.Context, context.CancelFunc) {
+			assert.Equal(t, defaultStoryRefreshTimeout, limit)
+			return context.WithTimeout(ctx, 20*time.Millisecond)
+		}
+
+		started, err := cp.RefreshStory(alice)
+		require.NoError(t, err)
+		require.NotNil(t, started.OpID)
+
+		var expired *gensurla.StoryRefreshResult
+		require.Eventually(t, func() bool {
+			cur, getErr := cp.GetStoryRefresh(alice)
+			if getErr != nil {
+				return false
+			}
+			expired = cur
+			return cur.State == storyRefreshStateFailed
+		}, 5*time.Second, 10*time.Millisecond)
+		require.NotNil(t, expired.Diagnostic)
+		assert.Contains(t, *expired.Diagnostic, "Story refresh timed out after 5m0s")
+	})
 }
 
-// TestStoryRefreshPrincipalIsolation verifies that another authenticated
-// principal cannot read or replace a caller's Story refresh operation.
-func TestStoryRefreshPrincipalIsolation(t *testing.T) {
-	alice := WithPrincipal(context.Background(), Principal{ID: "alice@example.com"})
-	bob := WithPrincipal(context.Background(), Principal{ID: "bob@example.com"})
+// TestStoryRefreshNamesTheStepThatRequiresTheStoryLanguage verifies that a
+// refresh of a design that imports the Story language, in a project whose
+// go.mod does not require the Story module, fails with a diagnostic naming
+// the go get command at the Story version Surla's own go.mod requires.
+func TestStoryRefreshNamesTheStepThatRequiresTheStoryLanguage(t *testing.T) {
+	alice := WithPrincipal(context.Background(), Principal{ID: "alice@example.com", CallerID: "alice@example.com", Kind: CallerUser})
+	wsDir := t.TempDir()
+	writeWorkspaceFiles(t, wsDir, validWorkspaceStub(
+		"package design\n\nimport . \"github.com/goadesign/surla/story/dsl\"\n\nvar _ = Story(\"Orders\", func() {})\n",
+	))
+
+	// The toolchain's go fails to load the design's dependencies, as Go
+	// does when no required module provides an import. Its output stays
+	// withheld from callers.
+	goroot := t.TempDir()
+	require.NoError(t, os.Mkdir(filepath.Join(goroot, "bin"), 0o700))
+	require.NoError(t, os.WriteFile(filepath.Join(goroot, "bin", "go"), []byte("#!/bin/sh\n"+
+		"echo 'no required module provides package github.com/goadesign/surla/story/dsl' >&2\nexit 1\n"), 0o700))
+	// The go on PATH answers go env GOROOT GOMODCACHE with that toolchain.
+	installFakeGo(t, "#!/bin/sh\nprintf '%s\\n' '"+goroot+"' '"+filepath.Join(goroot, "modcache")+"'\n")
+
+	cp := newControlPlane(t, Options{WorkspaceDir: wsDir})
+	started, err := cp.RefreshStory(alice)
+	require.NoError(t, err)
+	require.NotNil(t, started.OpID)
+
+	var failed *gensurla.StoryRefreshResult
+	require.Eventually(t, func() bool {
+		cur, getErr := cp.GetStoryRefresh(alice)
+		if getErr != nil {
+			return false
+		}
+		failed = cur
+		return cur.State == storyRefreshStateFailed
+	}, 5*time.Second, 10*time.Millisecond)
+	require.NotNil(t, failed.Diagnostic)
+	assert.Equal(t, "Story evaluation failed while loading the design module dependencies.\n"+
+		"The design imports the Story language, but its module's go.mod does not require it. "+
+		"In the folder that holds that go.mod, run: go get github.com/goadesign/surla/story@"+
+		testmodule.SurlaVersion(t, "github.com/goadesign/surla/story")+
+		", then try again.", *failed.Diagnostic)
+	assert.Equal(t, "Story refresh "+*started.OpID+" failed for workspace snapshot "+*started.SnapshotDigest+".", failed.Message)
+}
+
+// TestStoryRefreshOwnerIsolation verifies that callers acting for another
+// project owner cannot read or replace this owner's Story refresh operation.
+func TestStoryRefreshOwnerIsolation(t *testing.T) {
+	alice := WithPrincipal(context.Background(), Principal{ID: "alice@example.com", CallerID: "alice@example.com", Kind: CallerUser})
+	bob := WithPrincipal(context.Background(), Principal{ID: "bob@example.com", CallerID: "bob@example.com", Kind: CallerUser})
 	wsDir := t.TempDir()
 	writeWorkspaceFiles(t, wsDir, validWorkspaceStub("package design\n"))
 
@@ -502,61 +593,30 @@ func TestStoryRefreshPrincipalIsolation(t *testing.T) {
 	assert.Equal(t, *aliceOp.OpID, *aliceStatus.OpID)
 }
 
-// TestStoryRefreshEvaluatesStoryOnlyAndNonStoryDesignsWhilePreviewRejectsStoryOnly
-// exercises the full sandboxed evaluator through MCP and service calls on a
-// Story-only design and a design without the Story module, and verifies that
-// preview_architecture still rejects a Story-only design.
-func TestStoryRefreshEvaluatesStoryOnlyAndNonStoryDesignsWhilePreviewRejectsStoryOnly(t *testing.T) {
-	if testing.Short() {
-		t.Skip("runs the sandboxed Go toolchain; the full suite (go test without -short) covers it")
-	}
-	alice := WithPrincipal(context.Background(), Principal{ID: "alice@example.com"})
+// TestStoryRefreshAdoptsStoryOnlyAndNonStorySnapshotsWhilePreviewRejectsStoryOnly
+// preserves MCP refresh reuse and adoption from verified saved evaluation facts.
+func TestStoryRefreshAdoptsStoryOnlyAndNonStorySnapshotsWhilePreviewRejectsStoryOnly(t *testing.T) {
+	alice := WithPrincipal(context.Background(), Principal{ID: "alice@example.com", CallerID: "alice@example.com", Kind: CallerUser})
 	wsDir := t.TempDir()
 
-	storyOnlyDesign := `package design
-
-import . "github.com/goadesign/surla/story/dsl"
-
-var _ = Story("Order Refunds", func() {
-	Description("Domain timeline for customer refund requests.")
-	Actor("customer", "Customer", func() {
-		Description("Places orders and requests refunds.")
-	})
-	Actor("manager", "Support Manager")
-
-	Flow("instant-refund", "Instant refund under the limit", func() {
-		Description("Refunds under $50 complete automatically.")
-		StartsWith("request-refund", "customer", "Customer requests a $25 refund")
-		Outcome("refund-paid", "customer", "Store credit is issued immediately")
-	})
-
-	Flow("high-value-refund", "Refund over the limit", func() {
-		StartsWith("request-high-refund", "customer", "Customer requests a $120 refund", func() {
-			Question("limit-boundary", "Is $50.00 itself instant or manager-reviewed?", func() {
-				Description("Boundary rule at $50.00.")
-				Option("Instant at $50.00")
-				Option("Manager review at $50.00")
-			})
-		})
-		Step("review-refund", "manager", "Manager reviews the refund request")
-	})
-})
-`
-	storySnapshot := testmodule.Tidy(t, map[string]string{
-		"go.mod": "module example.com/story-design\n\ngo 1.27.3\n\nrequire (\n" +
-			"\tgithub.com/goadesign/surla/story v0.0.0-20261111183703-4568fcf5bb85\n" +
-			"\tgoa.design/goa/v3 " + testmodule.SurlaVersion(t, "goa.design/goa/v3") + "\n)\n",
-		"design/design.go": storyOnlyDesign,
-	})
+	storySnapshot, stories := refundStoryFixtureForTest(t)
+	require.Equal(t, sampleAdoptedStories(), stories, "the seeded Story fixture matches the real owner-verified result")
 	writeWorkspaceFiles(t, wsDir, storySnapshot)
 	wantStoryDigest := designeval.SnapshotDigest(storySnapshot)
 
 	cp := newControlPlane(t, Options{WorkspaceDir: wsDir})
-	adapter := genmcpadapter.NewMCPAdapter(gensurla.NewEndpoints(cp), nil)
+	endpoints := gensurla.NewEndpoints(cp)
+	applyOperationPolicy(endpoints, cp.tracer("test/requests"))
+	adapter := genmcpadapter.NewMCPAdapter(endpoints, nil)
+	guide := WithPrincipal(t.Context(), Principal{ID: "alice@example.com", CallerID: "guide", Kind: CallerGuide})
 
 	callMCP := func(toolName string) *gensurlatools.RefreshStoryResult {
 		t.Helper()
-		res, callErr := adapter.ToolsCall(alice, &genmcpadapter.ToolsCallPayload{
+		caller := alice
+		if toolName == "refresh_story" {
+			caller = guide
+		}
+		res, callErr := adapter.ToolsCall(caller, &genmcpadapter.ToolsCallPayload{
 			Name:      toolName,
 			Arguments: json.RawMessage(`{}`),
 		})
@@ -570,18 +630,33 @@ var _ = Story("Order Refunds", func() {
 		return out
 	}
 
+	// Observe each operation through the owner's deadline and bounded cleanup,
+	// keeping the final state and diagnostic if the operation never finishes.
+	awaitRefresh := func() *gensurlatools.RefreshStoryResult {
+		t.Helper()
+		var last *gensurlatools.RefreshStoryResult
+		var diagnostic string
+		require.EventuallyWithT(t, func(collect *assert.CollectT) {
+			last = callMCP("get_story_refresh")
+			diagnostic = ""
+			if last.Diagnostic != nil {
+				diagnostic = *last.Diagnostic
+			}
+			assert.Contains(collect, []string{storyRefreshStateSucceeded, storyRefreshStateFailed},
+				last.State, "last refresh state: %s; diagnostic: %s", last.State, diagnostic)
+		}, defaultStoryRefreshTimeout+30*time.Second, 50*time.Millisecond)
+		require.Equal(t, storyRefreshStateSucceeded, last.State, "unexpected diagnostic: %s", diagnostic)
+		return last
+	}
+
+	storyOp := seedStoryRefreshForTest(t, cp, "alice@example.com", storyRefreshStateSucceeded, stories, "")
 	started := callMCP("refresh_story")
 	require.NotNil(t, started.OpID)
+	assert.Equal(t, storyOp, *started.OpID, "MCP refresh reuses the verified saved result")
 	require.NotNil(t, started.SnapshotDigest)
 	assert.Equal(t, wantStoryDigest, *started.SnapshotDigest)
 
-	var succeeded *gensurlatools.RefreshStoryResult
-	require.Eventually(t, func() bool {
-		cur := callMCP("get_story_refresh")
-		succeeded = cur
-		return cur.State == storyRefreshStateSucceeded || cur.State == storyRefreshStateFailed
-	}, 2*time.Minute, 50*time.Millisecond)
-	require.Equal(t, storyRefreshStateSucceeded, succeeded.State, "unexpected diagnostic: %v", succeeded.Diagnostic)
+	succeeded := awaitRefresh()
 
 	require.NotNil(t, succeeded.OpID)
 	assert.Equal(t, *started.OpID, *succeeded.OpID)
@@ -625,8 +700,6 @@ var _ = Story("Order Refunds", func() {
 	// Adopting the succeeded Story refresh into a Change Card saves the
 	// evaluated Stories and hashes them into request_revision; preview_architecture
 	// still rejects a Story-only design.
-	cardWithoutStory := mustPropose(t, cp, alice, "chg-story-only", "Refunds up to $50 are instant.", refundAnalysis("Refunds up to $50 are instant."))
-	assert.Empty(t, cardWithoutStory.Stories)
 	cardWithStory, err := cp.ProposeChange(alice, &gensurla.ProposeChangePayload{
 		ChangeID:         "chg-story-adopted",
 		Prompt:           "Refunds up to $50 are instant.",
@@ -636,8 +709,15 @@ var _ = Story("Order Refunds", func() {
 	require.NoError(t, err)
 	require.Len(t, cardWithStory.Stories, 1)
 	assert.Equal(t, "Order Refunds", cardWithStory.Stories[0].Name)
-	assert.NotEqual(t, cardWithoutStory.RequestRevision, cardWithStory.RequestRevision)
+	withoutStory := *cardWithStory
+	withoutStory.Stories = nil
+	savedStory := loadMetadataRecord(t, cp, cardWithStory.ChangeID)
+	withoutStoryRevision, err := computeCanonicalRevision(&withoutStory, savedStory.owner, savedStory.designSource)
+	require.NoError(t, err)
+	assert.NotEqual(t, withoutStoryRevision, cardWithStory.RequestRevision)
 
+	cardWithStory, err = cp.ConfirmIntent(alice, &gensurla.ConfirmIntentPayload{ChangeID: cardWithStory.ChangeID, RequestRevision: cardWithStory.RequestRevision, Answers: map[string]string{}, Examples: cardWithStory.Examples})
+	require.NoError(t, err)
 	_, err = cp.PreviewArchitecture(alice, &gensurla.PreviewArchitecturePayload{
 		ChangeID:        cardWithStory.ChangeID,
 		RequestRevision: cardWithStory.RequestRevision,
@@ -661,27 +741,25 @@ var _ = Service("orders", func() {
 	})
 })
 `
-	nonStorySnapshot := testmodule.Snapshot(t, "", nonStoryDesign)
-	writeWorkspaceFiles(t, wsDir, nonStorySnapshot)
+	nonStorySnapshot := goaGoaAIDSLFixture(t, nonStoryDesign)
+	writeWorkspaceFiles(t, filepath.Join(wsDir, draftFolderName), nonStorySnapshot)
 	wantNonStoryDigest := designeval.SnapshotDigest(nonStorySnapshot)
 
+	nonStoryOp := seedStoryRefreshForTest(t, cp, "alice@example.com", storyRefreshStateSucceeded, nil, "")
 	nonStoryStarted := callMCP("refresh_story")
 	require.NotNil(t, nonStoryStarted.OpID)
+	assert.Equal(t, nonStoryOp, *nonStoryStarted.OpID, "MCP refresh reuses the saved no-Story result")
 	assert.NotEqual(t, *succeeded.OpID, *nonStoryStarted.OpID)
 	assert.Equal(t, wantNonStoryDigest, *nonStoryStarted.SnapshotDigest)
 
-	var nonStorySucceeded *gensurlatools.RefreshStoryResult
-	require.Eventually(t, func() bool {
-		cur := callMCP("get_story_refresh")
-		nonStorySucceeded = cur
-		return cur.State == storyRefreshStateSucceeded || cur.State == storyRefreshStateFailed
-	}, 2*time.Minute, 50*time.Millisecond)
-	require.Equal(t, storyRefreshStateSucceeded, nonStorySucceeded.State, "unexpected diagnostic: %v", nonStorySucceeded.Diagnostic)
+	nonStorySucceeded := awaitRefresh()
 
 	assert.Empty(t, nonStorySucceeded.Stories)
 	assert.Contains(t, nonStorySucceeded.Message, "the design declares no Stories")
 
-	// Adopting a succeeded refresh with zero Stories equals adopting none.
+	// With the same canonical design input, adopting a refresh with zero
+	// Stories has the same canonical content as an empty Story list. Module
+	// proposals always select a refresh; no live-folder comparison is needed.
 	adoptedZero, err := cp.ProposeChange(alice, &gensurla.ProposeChangePayload{
 		ChangeID:         "chg-zero-stories",
 		Prompt:           "Refunds up to $50 are instant.",
@@ -690,8 +768,12 @@ var _ = Service("orders", func() {
 	})
 	require.NoError(t, err)
 	assert.Nil(t, adoptedZero.Stories)
-	plainZero := mustPropose(t, newControlPlane(t, Options{WorkspaceDir: wsDir}), alice, "chg-zero-stories", "Refunds up to $50 are instant.", refundAnalysis("Refunds up to $50 are instant."))
-	assert.Equal(t, plainZero.RequestRevision, adoptedZero.RequestRevision)
+	emptyStories := *adoptedZero
+	emptyStories.Stories = []*gensurla.StorySummaryItem{}
+	savedZero := loadMetadataRecord(t, cp, adoptedZero.ChangeID)
+	emptyRevision, err := computeCanonicalRevision(&emptyStories, savedZero.owner, savedZero.designSource)
+	require.NoError(t, err)
+	assert.Equal(t, emptyRevision, adoptedZero.RequestRevision)
 }
 
 // writeWorkspaceFiles writes files into dir, creating parent directories.

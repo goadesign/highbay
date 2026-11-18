@@ -6,7 +6,6 @@
 package controlplane
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"net/http"
@@ -26,75 +25,18 @@ import (
 	"github.com/goadesign/surla/internal/designeval"
 )
 
-// savedCardFromEarlierServer is a card file exactly as an earlier server
-// (commit f1c1214 of this repository, which ran its own model to analyze
-// requests) saved it: a workspace-backed card in needs_confirmation with one
-// open question, one example, a preserved behavior and a decision view. Its
-// request_revision was computed by that server.
-const savedCardFromEarlierServer = `{"card":{"ChangeID":"chg-saved","Status":"needs_confirmation","Prompt":"Refunds up to $50 are instant.","Summary":"Refunds up to $50 are instant; larger refunds wait for a manager.","Ambiguities":[{"ID":"chg-saved-ambiguity-01","Question":"Is the limit the item subtotal or the order total?","Options":["item_subtotal","order_total"]}],"Answers":null,"Examples":[{"ID":"check_01","Scenario":"Refund at the limit","InputSummary":"Order total $50.00","ExpectedOutcome":"Instant store credit","VerificationKind":"deterministic"}],"PreservedBehaviors":["Cross-tenant order lookups return 404 Not Found."],"ConfirmedBy":null,"RequestRevision":"d90c6f9dea412aa2c9fd60c626bef576e6dfc3a023d36a7f03715db366cef4af","UIComposition":{"Program":"root = DecisionWorkspace(\"Refund limit\", [choice])\nchoice = AmbiguityChoiceCard(1)","ComposedForRevision":"d90c6f9dea412aa2c9fd60c626bef576e6dfc3a023d36a7f03715db366cef4af"},"Approval":null},"owner":"alice@example.com","design_source":"{\"design/design.go\":\"package design // refunds\\n\"}","source_origin":"workspace"}`
-
-// TestASavedCardFromAnEarlierServerStillLoadsAndRevises verifies that a card
-// file the earlier server saved loads unchanged under its saved
-// request_revision, can be confirmed, and can be revised with a
-// caller-supplied analysis that keeps its example; with no workspace bound,
-// the workspace-backed card keeps its saved design source.
-func TestASavedCardFromAnEarlierServerStillLoadsAndRevises(t *testing.T) {
-	alice := WithPrincipal(context.Background(), Principal{ID: "alice@example.com"})
-	cp := newControlPlane(t, Options{})
-	require.NoError(t, os.WriteFile(cp.cards.path("chg-saved"), []byte(savedCardFromEarlierServer), 0o600))
-
-	loaded, err := cp.GetChange(alice, &gensurla.GetChangePayload{ChangeID: "chg-saved"})
-	require.NoError(t, err)
-	const savedRevision = "d90c6f9dea412aa2c9fd60c626bef576e6dfc3a023d36a7f03715db366cef4af"
-	assert.Equal(t, savedRevision, loaded.RequestRevision)
-	assert.Equal(t, StatusNeedsConfirmation, loaded.Status)
-	require.NotNil(t, loaded.UIComposition)
-	assert.Equal(t, savedRevision, loaded.UIComposition.ComposedForRevision)
-
-	confirmed, err := cp.ConfirmIntent(alice, &gensurla.ConfirmIntentPayload{
-		ChangeID: "chg-saved", RequestRevision: savedRevision,
-		Answers: map[string]string{"chg-saved-ambiguity-01": "item_subtotal"}, Examples: loaded.Examples,
-	})
-	require.NoError(t, err)
-	assert.Equal(t, StatusConfirmed, confirmed.Status)
-
-	check01 := "check_01"
-	revised, err := cp.ReviseChange(alice, &gensurla.ReviseChangePayload{
-		ChangeID: "chg-saved", RequestRevision: confirmed.RequestRevision, Prompt: "Refunds up to $60 are instant.",
-		Analysis: &gensurla.CP1RevisionAnalysis{
-			Summary:     "Refunds up to $60 of item subtotal are instant; larger refunds wait for a manager.",
-			Ambiguities: []*gensurla.CP1AnalysisAmbiguity{},
-			Examples: []*gensurla.CP1RevisionAnalysisExample{
-				{PriorID: &check01, Scenario: "Refund at the limit", InputSummary: "Item subtotal $60.00", ExpectedOutcome: "Instant store credit", VerificationKind: "deterministic"},
-				{Scenario: "Refund above the limit", InputSummary: "Item subtotal $60.01", ExpectedOutcome: "Waits for a manager", VerificationKind: "deterministic"},
-			},
-			RemovedExampleIds:  []string{},
-			PreservedBehaviors: []string{"Cross-tenant order lookups return 404 Not Found.", "The limit applies to the item subtotal."},
-		},
-	})
-	require.NoError(t, err)
-	assert.Equal(t, StatusNeedsConfirmation, revised.Status)
-	assert.Equal(t, []string{"check_01", "check_02"}, []string{revised.Examples[0].ID, revised.Examples[1].ID})
-	assert.Empty(t, revised.Answers)
-	assert.Nil(t, revised.ConfirmedBy)
-	stored, ok, err := cp.cards.load("chg-saved")
-	require.NoError(t, err)
-	require.True(t, ok)
-	assert.Equal(t, `{"design/design.go":"package design // refunds\n"}`, stored.designSource)
-	assert.Equal(t, sourceOriginWorkspace, stored.sourceOrigin)
-}
-
 // TestReviseChangeOverHTTPAndMCP verifies revise_change over the Go service,
-// HTTP (`POST /changes/revise`) and MCP: the tool links the checkpoint viewer;
+// HTTP (`POST /changes/revise`) and MCP: the tool is listed;
 // unknown, foreign and stale cards are refused; an analysis that repeats an
 // option or does not account for every current example exactly once is
 // unprocessable and leaves the saved card file byte for byte unchanged; and a
-// complete analysis saves a new revision in needs_confirmation.
+// complete analysis of the confirmed card saves a proposed revision in
+// needs_confirmation beside it, which a later revision over MCP replaces.
 func TestReviseChangeOverHTTPAndMCP(t *testing.T) {
-	aliceCtx := WithPrincipal(context.Background(), Principal{ID: "alice@example.com"})
-	bobCtx := WithPrincipal(context.Background(), Principal{ID: "bob@example.com"})
+	aliceCtx := WithPrincipal(context.Background(), Principal{ID: "alice@example.com", CallerID: "alice@example.com", Kind: CallerUser})
+	bobCtx := WithPrincipal(context.Background(), Principal{ID: "bob@example.com", CallerID: "bob@example.com", Kind: CallerUser})
 	cp := newControlPlane(t, Options{})
-	srv := httptest.NewServer(NewHTTPHandler(cp, NewTokenAuthenticator(map[string]Principal{"alice-token": {ID: "alice@example.com"}})))
+	srv := httptest.NewServer(NewHTTPHandler(cp, workflowAuthenticator(map[string]Principal{"alice-token": {ID: "alice@example.com"}})))
 	t.Cleanup(srv.Close)
 	adapter := genmcpadapter.NewMCPAdapter(gensurla.NewEndpoints(cp), nil)
 
@@ -102,15 +44,13 @@ func TestReviseChangeOverHTTPAndMCP(t *testing.T) {
 	require.NoError(t, err)
 	var foundReviseTool bool
 	for _, tool := range toolsList.Tools {
-		if tool.Name == "revise_change" {
-			foundReviseTool = true
-			assert.Contains(t, string(tool.Meta), "ui://surla/checkpoint")
-		}
+		foundReviseTool = foundReviseTool || tool.Name == "revise_change"
 	}
 	require.True(t, foundReviseTool, "MCP ToolsList must include revise_change")
 
 	r1 := mustPropose(t, cp, aliceCtx, "chg-tx", "Refunds up to $50 are instant.", refundAnalysis("Refunds up to $50 are instant."))
-	require.Equal(t, StatusConfirmed, r1.Status, "a proposal without open questions is confirmed")
+	r1 = mustConfirmNoop(t, cp, aliceCtx, r1)
+	require.Equal(t, StatusConfirmed, r1.Status, "the user explicitly confirmed this fixture")
 	cardPath := cp.cards.path("chg-tx")
 	r1DiskBytes, err := os.ReadFile(cardPath)
 	require.NoError(t, err)
@@ -185,45 +125,52 @@ func TestReviseChangeOverHTTPAndMCP(t *testing.T) {
 	})
 	status, body := postJSON(t, srv.URL+"/changes/revise", "alice-token", string(httpBody))
 	require.Equal(t, http.StatusOK, status, body)
-	var httpCard struct {
-		Status          string `json:"status"`
-		Summary         string `json:"summary"`
-		RequestRevision string `json:"request_revision"`
+	type changeBody struct {
+		Status           string `json:"status"`
+		RequestRevision  string `json:"request_revision"`
+		ProposedRevision *struct {
+			Summary         string `json:"summary"`
+			RequestRevision string `json:"request_revision"`
+		} `json:"proposed_revision"`
 	}
+	var httpCard changeBody
 	require.NoError(t, json.Unmarshal([]byte(body), &httpCard))
-	assert.Equal(t, StatusNeedsConfirmation, httpCard.Status)
-	assert.Equal(t, "Refunds up to $100 are instant via HTTP.", httpCard.Summary)
+	assert.Equal(t, StatusConfirmed, httpCard.Status, "the agreed revision stays in force")
+	assert.Equal(t, r1.RequestRevision, httpCard.RequestRevision)
+	require.NotNil(t, httpCard.ProposedRevision)
+	assert.Equal(t, "Refunds up to $100 are instant via HTTP.", httpCard.ProposedRevision.Summary)
 
-	// MCP revise_change succeeds against the HTTP revision.
+	// MCP revise_change succeeds against the HTTP proposal and replaces it.
 	res, err = adapter.ToolsCall(aliceCtx, &genmcpadapter.ToolsCallPayload{Name: "revise_change", Arguments: reviseArgs(t, &gensurla.ReviseChangePayload{
-		ChangeID: "chg-tx", RequestRevision: httpCard.RequestRevision, Prompt: "Refunds up to $150 are instant.",
+		ChangeID: "chg-tx", RequestRevision: httpCard.ProposedRevision.RequestRevision, Prompt: "Refunds up to $150 are instant.",
 		Analysis: revision("Refunds up to $150 are instant via MCP.", "check_01"),
 	})})
 	require.NoError(t, err)
 	complete, ok = res.Outcome.AsComplete()
 	require.True(t, ok)
 	require.False(t, complete.IsError != nil && *complete.IsError)
-	var mcpCard struct {
-		Status  string `json:"status"`
-		Summary string `json:"summary"`
-	}
+	var mcpCard changeBody
 	require.NoError(t, json.Unmarshal(complete.StructuredContent, &mcpCard))
-	assert.Equal(t, StatusNeedsConfirmation, mcpCard.Status)
-	assert.Equal(t, "Refunds up to $150 are instant via MCP.", mcpCard.Summary)
+	assert.Equal(t, StatusConfirmed, mcpCard.Status)
+	require.NotNil(t, mcpCard.ProposedRevision)
+	assert.Equal(t, "Refunds up to $150 are instant via MCP.", mcpCard.ProposedRevision.Summary)
+	assert.NotEqual(t, httpCard.ProposedRevision.RequestRevision, mcpCard.ProposedRevision.RequestRevision, "the second revision replaced the first proposal")
 }
 
 // TestReviseChangeSavesARevisionThatOnlyItsContentDetermines verifies what a
-// revision keeps and drops: it enters needs_confirmation and clears answers,
-// confirmed_by and a recorded approval, numbers its questions afresh from 01,
+// revision keeps and drops: it enters needs_confirmation with no answers,
+// confirmed_by or approval while the confirmed revision beside it keeps its
+// own, numbers its questions afresh from 01,
 // binds its ui_composition to its own request_revision, and gets the same
 // request_revision as an earlier revision whose saved content it repeats
 // exactly, because request_revision is a digest of that content alone.
 func TestReviseChangeSavesARevisionThatOnlyItsContentDetermines(t *testing.T) {
-	alice := WithPrincipal(context.Background(), Principal{ID: "alice@example.com"})
-	cp := newControlPlane(t, Options{})
+	alice := WithPrincipal(context.Background(), Principal{ID: "alice@example.com", CallerID: "alice@example.com", Kind: CallerUser})
+	cp := newControlPlane(t, buildFixtureOptions(t, Options{BuildCacheDir: t.TempDir(), Verification: verificationConfig(t)}))
 
-	// A confirmed card with a recorded approval loses both on revision.
-	approved := saveCard(t, cp, &gensurla.ApprovalItem{
+	// Revising a confirmed card with a recorded approval proposes a revision
+	// without one, and the approval stays on the confirmed revision.
+	approved := saveStoredCardBuildFixture(t, cp, &gensurla.ApprovalItem{
 		ApprovedBy: "alice@example.com", ReportDigest: strings.Repeat("d", 64), CandidateCommit: strings.Repeat("c", 40),
 		SuiteID: "orders", SuiteCommit: strings.Repeat("b", 40), Environment: "sim",
 		Artifacts: map[string]string{"orders": strings.Repeat("e", 64)}, ScenarioCount: 1,
@@ -243,21 +190,25 @@ func TestReviseChangeSavesARevisionThatOnlyItsContentDetermines(t *testing.T) {
 		},
 	})
 	require.NoError(t, err)
-	assert.Equal(t, StatusNeedsConfirmation, revised.Status, "a revision without open questions still needs confirmation")
-	assert.Nil(t, revised.ConfirmedBy)
-	assert.Empty(t, revised.Answers)
-	assert.Nil(t, revised.Approval)
-	assert.Nil(t, revised.UnverifiedApproval)
+	assert.Equal(t, StatusConfirmed, revised.Status, "the confirmed revision stays in force")
+	assert.Equal(t, approved.RequestRevision, revised.RequestRevision)
+	require.NotNil(t, revised.Approval, "the confirmed revision keeps its approval")
 	stored, ok, err := cp.cards.load("chg")
 	require.NoError(t, err)
 	require.True(t, ok)
-	assert.Nil(t, stored.card.Approval, "the saved revision carries no approval")
+	require.NotNil(t, stored.card.Approval, "the saved confirmed revision keeps its approval")
+	require.NotNil(t, stored.proposed)
+	assert.Equal(t, StatusNeedsConfirmation, stored.proposed.card.Status, "a revision without open questions still needs confirmation")
+	assert.Nil(t, stored.proposed.card.ConfirmedBy)
+	assert.Empty(t, stored.proposed.card.Answers)
+	assert.Nil(t, stored.proposed.card.Approval, "the proposed revision carries no approval")
 
 	// R1 -> R2 -> R3, where R3 repeats R1's content exactly.
 	question := func(q string) []*gensurla.CP1AnalysisAmbiguity {
 		return []*gensurla.CP1AnalysisAmbiguity{{Question: q, Options: []string{"item_subtotal", "order_total"}}}
 	}
-	r1 := mustPropose(t, cp, alice, "rev", "Refunds up to $50 are instant.", refundAnalysis("Refunds up to $50 are instant.", question("Is the limit the item subtotal or the order total?")[0]))
+	r1 := saveProposedCardFixture(t, cp, "alice@example.com", "rev", "Refunds up to $50 are instant.", refundAnalysis("Refunds up to $50 are instant.", question("Is the limit the item subtotal or the order total?")[0]))
+	r1 = attachBuildSnapshot(t, cp, "rev")
 	require.Equal(t, StatusNeedsConfirmation, r1.Status)
 	check01 := "check_01"
 	program := `root = DecisionWorkspace("Refund limit", [choice])
@@ -308,7 +259,7 @@ choice = AmbiguityChoiceCard(1, "Shipping changes who waits")`
 // saved and every other one is refused as a conflict, because a revision is
 // saved only while the card still has the caller's request_revision.
 func TestReviseChangeConcurrentRevisionsSaveOnlyOne(t *testing.T) {
-	alice := WithPrincipal(context.Background(), Principal{ID: "alice@example.com"})
+	alice := WithPrincipal(context.Background(), Principal{ID: "alice@example.com", CallerID: "alice@example.com", Kind: CallerUser})
 	cp := newControlPlane(t, Options{})
 	r1 := mustPropose(t, cp, alice, "chg", "Refunds up to $50 are instant.", refundAnalysis("Refunds up to $50 are instant."))
 
@@ -354,16 +305,15 @@ func TestReviseChangeConcurrentRevisionsSaveOnlyOne(t *testing.T) {
 	assert.Equal(t, saved.RequestRevision, current.RequestRevision)
 }
 
-// TestASavedCardWithStoriesLoadsKeepsStoriesOnConfirmAndReviseAndBlocksOlderServer
+// TestSavedStoriesStayPairedWithTheirSourceAcrossConfirmAndRevise
 // verifies that a saved card file containing adopted Stories loads under its
 // pinned request_revision, returns Stories on GetChange, keeps Stories on
 // ConfirmIntent without re-evaluating, keeps Stories and saved design_source
 // together on ReviseChange when story_refresh_op_id is omitted even after
 // workspace design/*.go changes on disk, fails if a saved Story field is
-// modified on disk, and is rejected by a pre-Slice-B strict card reader
-// without the stories field.
-func TestASavedCardWithStoriesLoadsKeepsStoriesOnConfirmAndReviseAndBlocksOlderServer(t *testing.T) {
-	alice := WithPrincipal(context.Background(), Principal{ID: "alice@example.com"})
+// modified on disk.
+func TestSavedStoriesStayPairedWithTheirSourceAcrossConfirmAndRevise(t *testing.T) {
+	alice := WithPrincipal(context.Background(), Principal{ID: "alice@example.com", CallerID: "alice@example.com", Kind: CallerUser})
 	wsDir := t.TempDir()
 	writeWorkspaceFiles(t, wsDir, validWorkspaceStub("package design // refunds\n"))
 
@@ -394,25 +344,17 @@ func TestASavedCardWithStoriesLoadsKeepsStoriesOnConfirmAndReviseAndBlocksOlderS
 	savedBytes, err := os.ReadFile(seedCP.cards.path("chg-story-saved"))
 	require.NoError(t, err)
 
-	// Pin both the exact saved card file and its canonical request_revision.
-	const (
-		pinnedRevision = "9cd74d219f9a25454adf5187314554cd1373b187da52573bed63492184b5ae6c"
-		pinnedCardFile = `{"card":{"ChangeID":"chg-story-saved","Status":"needs_confirmation","Prompt":"Refunds up to $50 are instant.","Summary":"Refunds up to $50 are instant; larger refunds wait for a manager.","Ambiguities":[{"ID":"chg-story-saved-ambiguity-01","Question":"Is the limit the item subtotal or the order total?","Options":["item_subtotal","order_total"]}],"Answers":null,"Examples":[{"ID":"check_01","Scenario":"Refund at the limit","InputSummary":"Order total $50.00","ExpectedOutcome":"Instant store credit","VerificationKind":"deterministic"}],"PreservedBehaviors":["Cross-tenant order lookups return 404 Not Found."],"ConfirmedBy":null,"RequestRevision":"` + pinnedRevision + `","UIComposition":{"Program":"root = DecisionWorkspace(\"Refund limit\", [choice])\nchoice = AmbiguityChoiceCard(1)","ComposedForRevision":"` + pinnedRevision + `"},"Approval":null},"owner":"alice@example.com","design_source":"{\"design/design.go\":\"package design // refunds\\n\"}","source_origin":"workspace","stories":[{"name":"Order Refunds","description":"Domain timeline for customer refund requests.","actors":[{"key":"customer","title":"Customer","description":"Places orders and requests refunds."},{"key":"manager","title":"Support Manager"}],"flows":[{"key":"instant-refund","title":"Instant refund under the limit","description":"Refunds under $50 complete automatically.","complete":true,"steps":[{"key":"request-refund","actor_key":"customer","summary":"Customer requests a $25 refund","kind":"start"},{"key":"refund-paid","actor_key":"customer","summary":"Store credit is issued immediately","kind":"outcome"}]},{"key":"high-value-refund","title":"Refund over the limit","complete":false,"steps":[{"key":"request-high-refund","actor_key":"customer","summary":"Customer requests a $120 refund","kind":"start","questions":[{"key":"limit-boundary","prompt":"Is $50.00 itself instant or manager-reviewed?","description":"Boundary rule at $50.00.","options":["Instant at $50.00","Manager review at $50.00"]}]},{"key":"review-refund","actor_key":"manager","summary":"Manager reviews the refund request","kind":"step"}]}]}]}`
-	)
-	assert.Equal(t, pinnedRevision, proposed.RequestRevision)
-	assert.Equal(t, pinnedCardFile, string(savedBytes))
-
 	// Modify workspace design/design.go on disk after the card was saved so we
 	// prove confirm_intent and revise_change (without story_refresh_op_id)
 	// carry over the saved Stories and saved design_source together without
 	// re-reading or re-evaluating the workspace.
 	writeWorkspaceFiles(t, wsDir, validWorkspaceStub("package design // workspace moved on without refreshing\n"))
 	cp := newControlPlane(t, Options{WorkspaceDir: wsDir})
-	require.NoError(t, os.WriteFile(cp.cards.path("chg-story-saved"), []byte(pinnedCardFile), 0o600))
+	require.NoError(t, os.WriteFile(cp.cards.path("chg-story-saved"), savedBytes, 0o600))
 
 	loaded, err := cp.GetChange(alice, &gensurla.GetChangePayload{ChangeID: "chg-story-saved"})
 	require.NoError(t, err)
-	assert.Equal(t, pinnedRevision, loaded.RequestRevision)
+	assert.Equal(t, proposed.RequestRevision, loaded.RequestRevision)
 	require.Len(t, loaded.Stories, 1)
 	assert.Equal(t, "Order Refunds", loaded.Stories[0].Name)
 	require.Len(t, loaded.Stories[0].Flows, 2)
@@ -421,14 +363,14 @@ func TestASavedCardWithStoriesLoadsKeepsStoriesOnConfirmAndReviseAndBlocksOlderS
 
 	confirmed, err := cp.ConfirmIntent(alice, &gensurla.ConfirmIntentPayload{
 		ChangeID:        "chg-story-saved",
-		RequestRevision: pinnedRevision,
+		RequestRevision: proposed.RequestRevision,
 		Answers:         map[string]string{"chg-story-saved-ambiguity-01": "item_subtotal"},
 		Examples:        loaded.Examples,
 	})
 	require.NoError(t, err)
 	assert.Equal(t, StatusConfirmed, confirmed.Status)
 	assert.Equal(t, loaded.Stories, confirmed.Stories)
-	assert.NotEqual(t, pinnedRevision, confirmed.RequestRevision)
+	assert.NotEqual(t, proposed.RequestRevision, confirmed.RequestRevision)
 
 	check01 := "check_01"
 	revised, err := cp.ReviseChange(alice, &gensurla.ReviseChangePayload{
@@ -450,34 +392,76 @@ func TestASavedCardWithStoriesLoadsKeepsStoriesOnConfirmAndReviseAndBlocksOlderS
 		},
 	})
 	require.NoError(t, err)
-	assert.Equal(t, StatusNeedsConfirmation, revised.Status)
-	assert.Equal(t, loaded.Stories, revised.Stories, "omitting story_refresh_op_id keeps the agreed Story")
+	proposal := proposalCard(t, revised)
+	assert.Equal(t, loaded.Stories, proposal.Stories, "omitting story_refresh_op_id keeps the agreed Story")
 	stored, ok, err := cp.cards.load("chg-story-saved")
 	require.NoError(t, err)
 	require.True(t, ok)
-	assert.Equal(t, `{"design/design.go":"package design // refunds\n"}`, stored.designSource, "saved design_source carries over with the agreed Story")
-	assert.Equal(t, sourceOriginWorkspace, stored.sourceOrigin)
-	assert.Equal(t, sampleAdoptedStories(), stored.stories)
+	require.NotNil(t, stored.proposed)
+	assert.Equal(t, `{"design/design.go":"package design // refunds\n"}`, stored.proposed.designSource, "saved design_source carries over with the agreed Story")
+	assert.Equal(t, sampleAdoptedStories(), stored.proposed.stories)
+	assert.Equal(t, stored.designSource, stored.proposed.designSource, "the confirmed revision keeps its own design source")
 
 	// Modifying any Story field on disk invalidates the saved request_revision.
-	tampered := strings.Replace(pinnedCardFile, "Store credit is issued immediately", "Cash refund is issued immediately", 1)
+	tampered := strings.Replace(string(savedBytes), "Store credit is issued immediately", "Cash refund is issued immediately", 1)
 	require.NoError(t, os.WriteFile(cp.cards.path("chg-story-saved"), []byte(tampered), 0o600))
 	_, err = cp.GetChange(alice, &gensurla.GetChangePayload{ChangeID: "chg-story-saved"})
 	assert.ErrorContains(t, err, "does not match its request_revision")
 
-	// A pre-Slice-B strict card reader (without the stories field) rejects a
-	// card file that has stories, which is the documented rollback constraint.
-	type preStoryCardFile struct {
-		Card         *gensurla.ChangeCardResult `json:"card"`
-		Owner        string                     `json:"owner"`
-		DesignSource string                     `json:"design_source"`
-		SourceOrigin string                     `json:"source_origin,omitempty"`
-	}
-	var oldReader preStoryCardFile
-	dec := json.NewDecoder(bytes.NewReader([]byte(pinnedCardFile)))
-	dec.DisallowUnknownFields()
-	err = dec.Decode(&oldReader)
-	assert.ErrorContains(t, err, `unknown field "stories"`)
+}
+
+// TestStoryWithActorsAndNoFlowsSurvivesReloadAndIdenticalRevision proves that
+// an unfinished Story stays paired with its source and has a stable revision.
+func TestStoryWithActorsAndNoFlowsSurvivesReloadAndIdenticalRevision(t *testing.T) {
+	alice := WithPrincipal(context.Background(), Principal{ID: "alice@example.com", CallerID: "alice@example.com", Kind: CallerUser})
+	workspace := t.TempDir()
+	writeWorkspaceFiles(t, workspace, validWorkspaceStub("package design // actor draft\n"))
+	cardsDir := t.TempDir()
+	stories := sampleAdoptedStories()
+	stories[0].Flows = nil
+	analysis := refundAnalysis("Define the refund participants.", &gensurla.CP1AnalysisAmbiguity{
+		Question: "Who reviews a refund?", Options: []string{"manager", "support"},
+	})
+	first := newControlPlane(t, Options{CardsDir: cardsDir, WorkspaceDir: workspace})
+	opID := seedStoryRefreshForTest(t, first, "alice@example.com", storyRefreshStateSucceeded, stories, "")
+	card, err := first.ProposeChange(alice, &gensurla.ProposeChangePayload{
+		ChangeID: "chg-actor-draft", Prompt: "Define the refund participants.",
+		StoryRefreshOpID: &opID, Analysis: analysis,
+	})
+	require.NoError(t, err)
+	assert.Equal(t, StatusNeedsConfirmation, card.Status)
+	require.Len(t, card.Stories, 1)
+	assert.Len(t, card.Stories[0].Actors, 2)
+	assert.Empty(t, card.Stories[0].Flows)
+	require.NoError(t, first.Close())
+
+	// A later workspace edit cannot change the adopted actor-only Story/source pair.
+	writeWorkspaceFiles(t, workspace, validWorkspaceStub("package design // later edit\n"))
+	reopened := newControlPlane(t, Options{CardsDir: cardsDir, WorkspaceDir: workspace})
+	loaded, err := reopened.GetChange(alice, &gensurla.GetChangePayload{ChangeID: card.ChangeID})
+	require.NoError(t, err)
+	assert.Equal(t, card, loaded)
+	priorID := loaded.Examples[0].ID
+	example := analysis.Examples[0]
+	revised, err := reopened.ReviseChange(alice, &gensurla.ReviseChangePayload{
+		ChangeID: card.ChangeID, RequestRevision: loaded.RequestRevision, Prompt: card.Prompt,
+		Analysis: &gensurla.CP1RevisionAnalysis{
+			Summary: analysis.Summary, Ambiguities: analysis.Ambiguities,
+			Examples: []*gensurla.CP1RevisionAnalysisExample{{
+				PriorID: &priorID, Scenario: example.Scenario, InputSummary: example.InputSummary,
+				ExpectedOutcome: example.ExpectedOutcome, VerificationKind: example.VerificationKind,
+			}},
+			RemovedExampleIds: []string{}, PreservedBehaviors: analysis.PreservedBehaviors,
+		},
+	})
+	require.NoError(t, err)
+	assert.Equal(t, card.RequestRevision, revised.RequestRevision)
+	assert.Equal(t, loaded.Stories, revised.Stories)
+	record, found, err := reopened.cards.load(card.ChangeID)
+	require.NoError(t, err)
+	require.True(t, found)
+	assert.Equal(t, stories, record.stories)
+	assert.Contains(t, record.designSource, "actor draft")
 }
 
 // TestAdoptStoryRefreshOnProposeAndRevise verifies Story adoption across Go
@@ -492,7 +476,7 @@ func TestASavedCardWithStoriesLoadsKeepsStoriesOnConfirmAndReviseAndBlocksOlderS
 //   - adopting a succeeded refresh with zero Stories equals adopting none
 //     (Stories is nil, omitted from the saved card file and revision digest).
 func TestAdoptStoryRefreshOnProposeAndRevise(t *testing.T) {
-	aliceCtx := WithPrincipal(context.Background(), Principal{ID: "alice@example.com"})
+	aliceCtx := WithPrincipal(context.Background(), Principal{ID: "alice@example.com", CallerID: "alice@example.com", Kind: CallerUser})
 	wsDir := t.TempDir()
 	snapshot := map[string]string{
 		"go.mod":                    "module example.com/orders\n\ngo 1.24\n",
@@ -503,7 +487,7 @@ func TestAdoptStoryRefreshOnProposeAndRevise(t *testing.T) {
 	writeWorkspaceFiles(t, wsDir, snapshot)
 
 	cp := newControlPlane(t, Options{WorkspaceDir: wsDir})
-	srv := httptest.NewServer(NewHTTPHandler(cp, NewTokenAuthenticator(map[string]Principal{
+	srv := httptest.NewServer(NewHTTPHandler(cp, workflowAuthenticator(map[string]Principal{
 		"alice-token": {ID: "alice@example.com"},
 	})))
 	t.Cleanup(srv.Close)
@@ -532,11 +516,12 @@ func TestAdoptStoryRefreshOnProposeAndRevise(t *testing.T) {
 	wantDesignSrc, err := encodeDesignSource(map[string]string{"design/design.go": "package design // v1\n"})
 	require.NoError(t, err)
 	assert.Equal(t, wantDesignSrc, storedHTTP.designSource)
-	assert.Equal(t, sourceOriginWorkspace, storedHTTP.sourceOrigin)
 
-	// MCP propose_change adopts the same succeeded opV1 on a second control
-	// plane with the same change_id and produces the exact same request_revision.
-	cpMCP := newControlPlane(t, Options{WorkspaceDir: wsDir})
+	// MCP adopts the same input on an independent project and control plane.
+	// The transport comparison shares neither draft files nor provenance owners.
+	mcpWorkspace := t.TempDir()
+	writeWorkspaceFiles(t, mcpWorkspace, snapshot)
+	cpMCP := newControlPlane(t, Options{WorkspaceDir: mcpWorkspace})
 	opMCPV1 := seedStoryRefreshForTest(t, cpMCP, "alice@example.com", storyRefreshStateSucceeded, storiesV1, "")
 	adapter := genmcpadapter.NewMCPAdapter(gensurla.NewEndpoints(cpMCP), nil)
 	res, err := adapter.ToolsCall(aliceCtx, &genmcpadapter.ToolsCallPayload{
@@ -628,11 +613,16 @@ func TestAdoptStoryRefreshOnProposeAndRevise(t *testing.T) {
 	})
 	require.NoError(t, err)
 	assert.Nil(t, proposedZero.Stories)
-	proposedPlain := mustPropose(t, cpMCP, aliceCtx, "chg-zero", "Refunds up to $50 are instant.", refundAnalysis("Refunds up to $50 are instant."))
+	opPlainZero := seedStoryRefreshForTest(t, cpMCP, "alice@example.com", storyRefreshStateSucceeded, nil, "")
+	proposedPlain, err := cpMCP.ProposeChange(aliceCtx, &gensurla.ProposeChangePayload{
+		ChangeID: "chg-zero", Prompt: "Refunds up to $50 are instant.",
+		StoryRefreshOpID: &opPlainZero, Analysis: refundAnalysis("Refunds up to $50 are instant."),
+	})
+	require.NoError(t, err)
 	assert.Equal(t, proposedPlain.RequestRevision, proposedZero.RequestRevision)
 	rawZeroBytes, err := os.ReadFile(cp.cards.path("chg-zero"))
 	require.NoError(t, err)
-	assert.NotContains(t, string(rawZeroBytes), `"stories"`)
+	assert.Contains(t, string(rawZeroBytes), `"stories":null`)
 
 	revisedToZero, err := cp.ReviseChange(aliceCtx, &gensurla.ReviseChangePayload{
 		ChangeID:         "chg-http",
@@ -643,8 +633,15 @@ func TestAdoptStoryRefreshOnProposeAndRevise(t *testing.T) {
 	})
 	require.NoError(t, err)
 	assert.Nil(t, revisedToZero.Stories)
-	cpPlain := newControlPlane(t, Options{WorkspaceDir: wsDir})
-	plainHTTP := mustPropose(t, cpPlain, aliceCtx, "chg-http", "Refunds up to $50 are instant.", refundAnalysis("Refunds up to $50 are instant."))
+	plainWorkspace := t.TempDir()
+	writeWorkspaceFiles(t, plainWorkspace, snapshot)
+	cpPlain := newControlPlane(t, Options{WorkspaceDir: plainWorkspace})
+	plainOp := seedStoryRefreshForTest(t, cpPlain, "alice@example.com", storyRefreshStateSucceeded, nil, "")
+	plainHTTP, err := cpPlain.ProposeChange(aliceCtx, &gensurla.ProposeChangePayload{
+		ChangeID: "chg-http", Prompt: "Refunds up to $50 are instant.", StoryRefreshOpID: &plainOp,
+		Analysis: refundAnalysis("Refunds up to $50 are instant."),
+	})
+	require.NoError(t, err)
 	revisedPlain, err := cpPlain.ReviseChange(aliceCtx, &gensurla.ReviseChangePayload{
 		ChangeID:        "chg-http",
 		RequestRevision: plainHTTP.RequestRevision,
@@ -656,11 +653,11 @@ func TestAdoptStoryRefreshOnProposeAndRevise(t *testing.T) {
 }
 
 // TestAdoptStoryRefreshRejectionsLeaveCardStorageUnchanged verifies every
-// invalid story_refresh_op_id or design_source combination across
+// invalid story_refresh_op_id across
 // propose_change and revise_change: each returns an actionable unprocessable
 // error naming refresh_story and leaves card storage unchanged.
 func TestAdoptStoryRefreshRejectionsLeaveCardStorageUnchanged(t *testing.T) {
-	aliceCtx := WithPrincipal(context.Background(), Principal{ID: "alice@example.com"})
+	aliceCtx := WithPrincipal(context.Background(), Principal{ID: "alice@example.com", CallerID: "alice@example.com", Kind: CallerUser})
 	check01 := "check_01"
 	revAnalysis := &gensurla.CP1RevisionAnalysis{
 		Summary:     "Refunds up to $60 are instant.",
@@ -680,7 +677,7 @@ func TestAdoptStoryRefreshRejectionsLeaveCardStorageUnchanged(t *testing.T) {
 		wsDir := t.TempDir()
 		writeWorkspaceFiles(t, wsDir, validWorkspaceStub("package design\n"))
 		cp := newControlPlane(t, Options{WorkspaceDir: wsDir})
-		card := mustPropose(t, cp, aliceCtx, "chg-existing", "Refunds up to $50 are instant.", refundAnalysis("Refunds up to $50 are instant."))
+		card := saveProposedCardFixture(t, cp, "alice@example.com", "chg-existing", "Refunds up to $50 are instant.", refundAnalysis("Refunds up to $50 are instant."))
 		return wsDir, cp, card
 	}
 
@@ -695,7 +692,7 @@ func TestAdoptStoryRefreshRejectionsLeaveCardStorageUnchanged(t *testing.T) {
 				_, cp, card := newWS(t)
 				return cp, "story-refresh-1", nil, card
 			},
-			want: "is not the current Story refresh operation for this caller and workspace; call refresh_story",
+			want: "is not the current Story refresh operation for this project and workspace; call refresh_story",
 		},
 		{
 			name: "blank story_refresh_op_id",
@@ -713,7 +710,7 @@ func TestAdoptStoryRefreshRejectionsLeaveCardStorageUnchanged(t *testing.T) {
 				_ = seedStoryRefreshForTest(t, cp, "alice@example.com", storyRefreshStateSucceeded, sampleAdoptedStories(), "")
 				return cp, firstOp, nil, card
 			},
-			want: "is not the current Story refresh operation for this caller and workspace; call refresh_story",
+			want: "is not the current Story refresh operation for this project and workspace; call refresh_story",
 		},
 		{
 			name: "another principal's story_refresh_op_id",
@@ -722,7 +719,7 @@ func TestAdoptStoryRefreshRejectionsLeaveCardStorageUnchanged(t *testing.T) {
 				bobOp := seedStoryRefreshForTest(t, cp, "bob@example.com", storyRefreshStateSucceeded, sampleAdoptedStories(), "")
 				return cp, bobOp, nil, card
 			},
-			want: "is not the current Story refresh operation for this caller and workspace; call refresh_story",
+			want: "is not the current Story refresh operation for this project and workspace; call refresh_story",
 		},
 		{
 			name: "running refresh_story operation",
@@ -743,18 +740,6 @@ func TestAdoptStoryRefreshRejectionsLeaveCardStorageUnchanged(t *testing.T) {
 			want: `has state "failed", not succeeded; wait for get_story_refresh to report succeeded or call refresh_story again`,
 		},
 		{
-			name: "no workspace bound",
-			setup: func(t *testing.T) (*ControlPlane, string, *string, *gensurla.ChangeCardResult) {
-				_, cp, card := newWS(t)
-				opID := seedStoryRefreshForTest(t, cp, "alice@example.com", storyRefreshStateSucceeded, sampleAdoptedStories(), "")
-				cp.workspaceMu.Lock()
-				cp.activeWorkspaceDir, cp.boundWorkspaceDev, cp.boundWorkspaceIno = "", 0, 0
-				cp.workspaceMu.Unlock()
-				return cp, opID, nil, card
-			},
-			want: "no workspace directory is bound to this control plane; start Surla from a project directory or pass -project, then call refresh_story",
-		},
-		{
 			name: "different workspace bound after refresh_story",
 			setup: func(t *testing.T) (*ControlPlane, string, *string, *gensurla.ChangeCardResult) {
 				_, cp, card := newWS(t)
@@ -768,7 +753,7 @@ func TestAdoptStoryRefreshRejectionsLeaveCardStorageUnchanged(t *testing.T) {
 				cp.workspaceMu.Unlock()
 				return cp, opID, nil, card
 			},
-			want: "is not the current Story refresh operation for this caller and workspace; call refresh_story",
+			want: "is not the current Story refresh operation for this project and workspace; call refresh_story",
 		},
 		{
 			name: "rebound workspace inode at the same path",
@@ -776,63 +761,32 @@ func TestAdoptStoryRefreshRejectionsLeaveCardStorageUnchanged(t *testing.T) {
 				wsDir := filepath.Join(t.TempDir(), "ws")
 				writeWorkspaceFiles(t, wsDir, validWorkspaceStub("package design\n"))
 				cp := newControlPlane(t, Options{WorkspaceDir: wsDir})
-				card := mustPropose(t, cp, aliceCtx, "chg-existing", "Refunds up to $50 are instant.", refundAnalysis("Refunds up to $50 are instant."))
+				card := saveProposedCardFixture(t, cp, "alice@example.com", "chg-existing", "Refunds up to $50 are instant.", refundAnalysis("Refunds up to $50 are instant."))
 				opID := seedStoryRefreshForTest(t, cp, "alice@example.com", storyRefreshStateSucceeded, sampleAdoptedStories(), "")
-				require.NoError(t, os.RemoveAll(wsDir))
+				_, oldDev, oldIno, err := openWorkspaceRootAndStat(wsDir)
+				require.NoError(t, err)
+				// Keep the original inode allocated while the replacement exists.
+				require.NoError(t, os.Rename(wsDir, wsDir+"-original"))
 				writeWorkspaceFiles(t, wsDir, validWorkspaceStub("package design\n"))
 				cleanWS, dev, ino, err := openWorkspaceRootAndStat(wsDir)
 				require.NoError(t, err)
+				require.True(t, oldDev != dev || oldIno != ino, "replacement has a distinct device/inode identity")
 				cp.workspaceMu.Lock()
 				cp.activeWorkspaceDir, cp.boundWorkspaceDev, cp.boundWorkspaceIno = cleanWS, dev, ino
 				cp.workspaceMu.Unlock()
 				return cp, opID, nil, card
 			},
-			want: "is not the current Story refresh operation for this caller and workspace; call refresh_story",
-		},
-		{
-			name: "workspace design changed after refresh_story",
-			setup: func(t *testing.T) (*ControlPlane, string, *string, *gensurla.ChangeCardResult) {
-				wsDir, cp, card := newWS(t)
-				opID := seedStoryRefreshForTest(t, cp, "alice@example.com", storyRefreshStateSucceeded, sampleAdoptedStories(), "")
-				writeWorkspaceFiles(t, wsDir, validWorkspaceStub("package design // after\n"))
-				return cp, opID, nil, card
-			},
-			want: "no longer matches story_refresh_op_id",
-		},
-		{
-			name: "workspace non-design Go file changed after refresh_story",
-			setup: func(t *testing.T) (*ControlPlane, string, *string, *gensurla.ChangeCardResult) {
-				wsDir, cp, card := newWS(t)
-				files := validWorkspaceStub("package design\n")
-				files["internal/policy/policy.go"] = "package policy // v1\n"
-				writeWorkspaceFiles(t, wsDir, files)
-				opID := seedStoryRefreshForTest(t, cp, "alice@example.com", storyRefreshStateSucceeded, sampleAdoptedStories(), "")
-				files["internal/policy/policy.go"] = "package policy // v2\n"
-				writeWorkspaceFiles(t, wsDir, files)
-				return cp, opID, nil, card
-			},
-			want: "no longer matches story_refresh_op_id",
-		},
-		{
-			name: "caller-supplied design_source combined with story_refresh_op_id",
-			setup: func(t *testing.T) (*ControlPlane, string, *string, *gensurla.ChangeCardResult) {
-				wsDir, cp, card := newWS(t)
-				opID := seedStoryRefreshForTest(t, cp, "alice@example.com", storyRefreshStateSucceeded, sampleAdoptedStories(), "")
-				require.NoError(t, os.RemoveAll(wsDir))
-				supplied := "package design // supplied\n"
-				return cp, opID, &supplied, card
-			},
-			want: "cannot combine design_source with story_refresh_op_id; omit design_source so Surla reads the workspace snapshot verified by refresh_story",
+			want: "is not the current Story refresh operation for this project and workspace; call refresh_story",
 		},
 	}
 
 	for _, tc := range cases {
 		t.Run("propose_change/"+tc.name, func(t *testing.T) {
-			cp, opID, designSrc, _ := tc.setup(t)
+			cp, opID, _, _ := tc.setup(t)
 			_, err := cp.ProposeChange(aliceCtx, &gensurla.ProposeChangePayload{
 				ChangeID: "chg-new", Prompt: "Refunds up to $50 are instant.",
-				DesignSource: designSrc, StoryRefreshOpID: &opID,
-				Analysis: refundAnalysis("Refunds up to $50 are instant."),
+				StoryRefreshOpID: &opID,
+				Analysis:         refundAnalysis("Refunds up to $50 are instant."),
 			})
 			assertServiceError(t, err, "unprocessable")
 			assert.ErrorContains(t, err, "refresh_story")
@@ -843,12 +797,12 @@ func TestAdoptStoryRefreshRejectionsLeaveCardStorageUnchanged(t *testing.T) {
 		})
 
 		t.Run("revise_change/"+tc.name, func(t *testing.T) {
-			cp, opID, designSrc, existing := tc.setup(t)
+			cp, opID, _, existing := tc.setup(t)
 			beforeBytes, err := os.ReadFile(cp.cards.path(existing.ChangeID))
 			require.NoError(t, err)
 			_, err = cp.ReviseChange(aliceCtx, &gensurla.ReviseChangePayload{
 				ChangeID: existing.ChangeID, RequestRevision: existing.RequestRevision,
-				Prompt: "Refunds up to $60 are instant.", DesignSource: designSrc,
+				Prompt:           "Refunds up to $60 are instant.",
 				StoryRefreshOpID: &opID, Analysis: revAnalysis,
 			})
 			assertServiceError(t, err, "unprocessable")
@@ -860,75 +814,30 @@ func TestAdoptStoryRefreshRejectionsLeaveCardStorageUnchanged(t *testing.T) {
 		})
 	}
 
-	t.Run("revise_change/card with caller-supplied source_origin cannot adopt story_refresh_op_id", func(t *testing.T) {
-		wsDir, cp, _ := newWS(t)
-		supplied := "package design // supplied\n"
-		card, err := cp.ProposeChange(aliceCtx, &gensurla.ProposeChangePayload{
-			ChangeID: "chg-supplied", Prompt: "Refunds up to $50 are instant.",
-			DesignSource: &supplied, Analysis: refundAnalysis("Refunds up to $50 are instant."),
-		})
-		require.NoError(t, err)
-		opID := seedStoryRefreshForTest(t, cp, "alice@example.com", storyRefreshStateSucceeded, sampleAdoptedStories(), "")
-		require.NoError(t, os.RemoveAll(wsDir))
-		beforeBytes, err := os.ReadFile(cp.cards.path("chg-supplied"))
-		require.NoError(t, err)
-
-		_, err = cp.ReviseChange(aliceCtx, &gensurla.ReviseChangePayload{
-			ChangeID: "chg-supplied", RequestRevision: card.RequestRevision,
-			Prompt: "Refunds up to $60 are instant.", StoryRefreshOpID: &opID, Analysis: revAnalysis,
-		})
-		assertServiceError(t, err, "unprocessable")
-		assert.ErrorContains(t, err, "uses a caller-supplied design_source and cannot adopt a workspace Story from refresh_story")
-		afterBytes, err := os.ReadFile(cp.cards.path("chg-supplied"))
-		require.NoError(t, err)
-		assert.Equal(t, string(beforeBytes), string(afterBytes))
-	})
-
-	t.Run("revise_change/card with Stories cannot replace design_source with caller-supplied value", func(t *testing.T) {
-		wsDir, cp, _ := newWS(t)
-		opID := seedStoryRefreshForTest(t, cp, "alice@example.com", storyRefreshStateSucceeded, sampleAdoptedStories(), "")
-		card, err := cp.ProposeChange(aliceCtx, &gensurla.ProposeChangePayload{
-			ChangeID: "chg-has-stories", Prompt: "Refunds up to $50 are instant.",
-			StoryRefreshOpID: &opID, Analysis: refundAnalysis("Refunds up to $50 are instant."),
-		})
-		require.NoError(t, err)
-		require.NoError(t, os.RemoveAll(wsDir))
-		beforeBytes, err := os.ReadFile(cp.cards.path("chg-has-stories"))
-		require.NoError(t, err)
-
-		supplied := "package design // supplied\n"
-		_, err = cp.ReviseChange(aliceCtx, &gensurla.ReviseChangePayload{
-			ChangeID: "chg-has-stories", RequestRevision: card.RequestRevision,
-			Prompt: "Refunds up to $60 are instant.", DesignSource: &supplied, Analysis: revAnalysis,
-		})
-		assertServiceError(t, err, "unprocessable")
-		assert.ErrorContains(t, err, "has adopted Stories from refresh_story and cannot replace design_source with a caller-supplied value")
-		afterBytes, err := os.ReadFile(cp.cards.path("chg-has-stories"))
-		require.NoError(t, err)
-		assert.Equal(t, string(beforeBytes), string(afterBytes))
-	})
 }
 
-// seedStoryRefreshForTest records a Story refresh operation for principalID
-// against cp's currently bound workspace snapshot and returns its op_id.
+// seedStoryRefreshForTest records a Story refresh operation for owner
+// against cp's draft and provenance and returns its op_id.
 func seedStoryRefreshForTest(
 	t *testing.T,
 	cp *ControlPlane,
-	principalID, state string,
+	owner, state string,
 	stories []designeval.StorySummary,
 	diagnostic string,
 ) string {
 	t.Helper()
 	wsDir, wsDev, wsIno := cp.currentWorkspaceTarget()
 	require.NotEmpty(t, wsDir)
-	files, err := readWorkspaceSnapshotForStoryRefresh(wsDir, wsDev, wsIno)
+	files, madeFrom, err := cp.readDraftSnapshot(context.Background(), wsDir, wsDev, wsIno)
 	require.NoError(t, err)
 	digest := designeval.SnapshotDigest(files)
+	designSource, err := designSourceFromModuleSnapshot(files)
+	require.NoError(t, err)
 	opID, err := newStoryRefreshOpID()
 	require.NoError(t, err)
 
 	key := storyRefreshKey{
-		principalID:  principalID,
+		owner:        owner,
 		workspaceDir: wsDir,
 		workspaceDev: wsDev,
 		workspaceIno: wsIno,
@@ -944,6 +853,11 @@ func seedStoryRefreshForTest(
 		snapshotDigest: digest,
 		stories:        cloneStorySummaries(stories),
 		diagnostic:     diagnostic,
+		designSource:   designSource,
+		goMod:          files["go.mod"],
+		architecture:   &savedArchitecture{DesignDigest: digest},
+		madeFrom:       &madeFromSnapshot{Start: madeFrom.Start, Entries: madeFrom.Entries},
+		listWrite:      madeFrom.Write,
 	}
 	return opID
 }
@@ -991,4 +905,26 @@ func sampleAdoptedStories() []designeval.StorySummary {
 			},
 		},
 	}}
+}
+
+// proposalCard returns the revision proposed beside change as a
+// needs_confirmation card, failing the test when none waits. Revising a
+// confirmed card returns the change with the new revision in
+// ProposedRevision.
+func proposalCard(t *testing.T, change *gensurla.ChangeCardResult) *gensurla.ChangeCardResult {
+	t.Helper()
+	require.NotNil(t, change.ProposedRevision, "revising a confirmed change proposes a revision beside it")
+	p := change.ProposedRevision
+	return &gensurla.ChangeCardResult{
+		ChangeID:           change.ChangeID,
+		Status:             StatusNeedsConfirmation,
+		Prompt:             p.Prompt,
+		Summary:            p.Summary,
+		Ambiguities:        p.Ambiguities,
+		Examples:           p.Examples,
+		PreservedBehaviors: p.PreservedBehaviors,
+		Stories:            p.Stories,
+		RequestRevision:    p.RequestRevision,
+		UIComposition:      p.UIComposition,
+	}
 }

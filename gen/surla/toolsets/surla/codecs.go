@@ -86,6 +86,22 @@ func ConfirmIntentResultCodec() tools.JSONCodec[*ConfirmIntentResult] {
 	}
 }
 
+// DeclineRevisionPayloadCodec returns a fresh codec for *DeclineRevisionPayload.
+func DeclineRevisionPayloadCodec() tools.JSONCodec[*DeclineRevisionPayload] {
+	return tools.JSONCodec[*DeclineRevisionPayload]{
+		ToJSON:   MarshalDeclineRevisionPayload,
+		FromJSON: UnmarshalDeclineRevisionPayload,
+	}
+}
+
+// DeclineRevisionResultCodec returns a fresh codec for *DeclineRevisionResult.
+func DeclineRevisionResultCodec() tools.JSONCodec[*DeclineRevisionResult] {
+	return tools.JSONCodec[*DeclineRevisionResult]{
+		ToJSON:   MarshalDeclineRevisionResult,
+		FromJSON: UnmarshalDeclineRevisionResult,
+	}
+}
+
 // DiffPayloadCodec returns a fresh codec for *DiffPayload.
 func DiffPayloadCodec() tools.JSONCodec[*DiffPayload] {
 	return tools.JSONCodec[*DiffPayload]{
@@ -134,6 +150,38 @@ func GenerateCodeResultCodec() tools.JSONCodec[*GenerateCodeResult] {
 	}
 }
 
+// GetBuildPayloadCodec returns a fresh codec for *GetBuildPayload.
+func GetBuildPayloadCodec() tools.JSONCodec[*GetBuildPayload] {
+	return tools.JSONCodec[*GetBuildPayload]{
+		ToJSON:   MarshalGetBuildPayload,
+		FromJSON: UnmarshalGetBuildPayload,
+	}
+}
+
+// GetBuildResultCodec returns a fresh codec for *GetBuildResult.
+func GetBuildResultCodec() tools.JSONCodec[*GetBuildResult] {
+	return tools.JSONCodec[*GetBuildResult]{
+		ToJSON:   MarshalGetBuildResult,
+		FromJSON: UnmarshalGetBuildResult,
+	}
+}
+
+// GetBuilderAssignmentPayloadCodec returns a fresh codec for *GetBuilderAssignmentPayload.
+func GetBuilderAssignmentPayloadCodec() tools.JSONCodec[*GetBuilderAssignmentPayload] {
+	return tools.JSONCodec[*GetBuilderAssignmentPayload]{
+		ToJSON:   MarshalGetBuilderAssignmentPayload,
+		FromJSON: UnmarshalGetBuilderAssignmentPayload,
+	}
+}
+
+// GetBuilderAssignmentResultCodec returns a fresh codec for *GetBuilderAssignmentResult.
+func GetBuilderAssignmentResultCodec() tools.JSONCodec[*GetBuilderAssignmentResult] {
+	return tools.JSONCodec[*GetBuilderAssignmentResult]{
+		ToJSON:   MarshalGetBuilderAssignmentResult,
+		FromJSON: UnmarshalGetBuilderAssignmentResult,
+	}
+}
+
 // GetChangePayloadCodec returns a fresh codec for *GetChangePayload.
 func GetChangePayloadCodec() tools.JSONCodec[*GetChangePayload] {
 	return tools.JSONCodec[*GetChangePayload]{
@@ -150,6 +198,22 @@ func GetChangeResultCodec() tools.JSONCodec[*GetChangeResult] {
 	}
 }
 
+// GetLiveTargetPayloadCodec returns a fresh codec for *GetLiveTargetPayload.
+func GetLiveTargetPayloadCodec() tools.JSONCodec[*GetLiveTargetPayload] {
+	return tools.JSONCodec[*GetLiveTargetPayload]{
+		ToJSON:   MarshalGetLiveTargetPayload,
+		FromJSON: UnmarshalGetLiveTargetPayload,
+	}
+}
+
+// GetLiveTargetResultCodec returns a fresh codec for *GetLiveTargetResult.
+func GetLiveTargetResultCodec() tools.JSONCodec[*GetLiveTargetResult] {
+	return tools.JSONCodec[*GetLiveTargetResult]{
+		ToJSON:   MarshalGetLiveTargetResult,
+		FromJSON: UnmarshalGetLiveTargetResult,
+	}
+}
+
 // GetStoryRefreshPayloadCodec returns a fresh codec for *GetStoryRefreshPayload.
 func GetStoryRefreshPayloadCodec() tools.JSONCodec[*GetStoryRefreshPayload] {
 	return tools.JSONCodec[*GetStoryRefreshPayload]{
@@ -163,6 +227,22 @@ func GetStoryRefreshResultCodec() tools.JSONCodec[*GetStoryRefreshResult] {
 	return tools.JSONCodec[*GetStoryRefreshResult]{
 		ToJSON:   MarshalGetStoryRefreshResult,
 		FromJSON: UnmarshalGetStoryRefreshResult,
+	}
+}
+
+// GetTestWriterAssignmentPayloadCodec returns a fresh codec for *GetTestWriterAssignmentPayload.
+func GetTestWriterAssignmentPayloadCodec() tools.JSONCodec[*GetTestWriterAssignmentPayload] {
+	return tools.JSONCodec[*GetTestWriterAssignmentPayload]{
+		ToJSON:   MarshalGetTestWriterAssignmentPayload,
+		FromJSON: UnmarshalGetTestWriterAssignmentPayload,
+	}
+}
+
+// GetTestWriterAssignmentResultCodec returns a fresh codec for *GetTestWriterAssignmentResult.
+func GetTestWriterAssignmentResultCodec() tools.JSONCodec[*GetTestWriterAssignmentResult] {
+	return tools.JSONCodec[*GetTestWriterAssignmentResult]{
+		ToJSON:   MarshalGetTestWriterAssignmentResult,
+		FromJSON: UnmarshalGetTestWriterAssignmentResult,
 	}
 }
 
@@ -195,6 +275,54 @@ func InitProjectResultCodec() tools.JSONCodec[*InitProjectResult] {
 	return tools.JSONCodec[*InitProjectResult]{
 		ToJSON:   MarshalInitProjectResult,
 		FromJSON: UnmarshalInitProjectResult,
+	}
+}
+
+// ListBuilderAssignmentsPayloadCodec returns a fresh codec for *ListBuilderAssignmentsPayload.
+func ListBuilderAssignmentsPayloadCodec() tools.JSONCodec[*ListBuilderAssignmentsPayload] {
+	return tools.JSONCodec[*ListBuilderAssignmentsPayload]{
+		ToJSON:   MarshalListBuilderAssignmentsPayload,
+		FromJSON: UnmarshalListBuilderAssignmentsPayload,
+	}
+}
+
+// ListBuilderAssignmentsResultCodec returns a fresh codec for *ListBuilderAssignmentsResult.
+func ListBuilderAssignmentsResultCodec() tools.JSONCodec[*ListBuilderAssignmentsResult] {
+	return tools.JSONCodec[*ListBuilderAssignmentsResult]{
+		ToJSON:   MarshalListBuilderAssignmentsResult,
+		FromJSON: UnmarshalListBuilderAssignmentsResult,
+	}
+}
+
+// ListChangesPayloadCodec returns a fresh codec for *ListChangesPayload.
+func ListChangesPayloadCodec() tools.JSONCodec[*ListChangesPayload] {
+	return tools.JSONCodec[*ListChangesPayload]{
+		ToJSON:   MarshalListChangesPayload,
+		FromJSON: UnmarshalListChangesPayload,
+	}
+}
+
+// ListChangesResultCodec returns a fresh codec for *ListChangesResult.
+func ListChangesResultCodec() tools.JSONCodec[*ListChangesResult] {
+	return tools.JSONCodec[*ListChangesResult]{
+		ToJSON:   MarshalListChangesResult,
+		FromJSON: UnmarshalListChangesResult,
+	}
+}
+
+// ListTestWriterAssignmentsPayloadCodec returns a fresh codec for *ListTestWriterAssignmentsPayload.
+func ListTestWriterAssignmentsPayloadCodec() tools.JSONCodec[*ListTestWriterAssignmentsPayload] {
+	return tools.JSONCodec[*ListTestWriterAssignmentsPayload]{
+		ToJSON:   MarshalListTestWriterAssignmentsPayload,
+		FromJSON: UnmarshalListTestWriterAssignmentsPayload,
+	}
+}
+
+// ListTestWriterAssignmentsResultCodec returns a fresh codec for *ListTestWriterAssignmentsResult.
+func ListTestWriterAssignmentsResultCodec() tools.JSONCodec[*ListTestWriterAssignmentsResult] {
+	return tools.JSONCodec[*ListTestWriterAssignmentsResult]{
+		ToJSON:   MarshalListTestWriterAssignmentsResult,
+		FromJSON: UnmarshalListTestWriterAssignmentsResult,
 	}
 }
 
@@ -294,6 +422,38 @@ func RefreshStoryResultCodec() tools.JSONCodec[*RefreshStoryResult] {
 	}
 }
 
+// ReportTestsFinishedPayloadCodec returns a fresh codec for *ReportTestsFinishedPayload.
+func ReportTestsFinishedPayloadCodec() tools.JSONCodec[*ReportTestsFinishedPayload] {
+	return tools.JSONCodec[*ReportTestsFinishedPayload]{
+		ToJSON:   MarshalReportTestsFinishedPayload,
+		FromJSON: UnmarshalReportTestsFinishedPayload,
+	}
+}
+
+// ReportTestsFinishedResultCodec returns a fresh codec for *ReportTestsFinishedResult.
+func ReportTestsFinishedResultCodec() tools.JSONCodec[*ReportTestsFinishedResult] {
+	return tools.JSONCodec[*ReportTestsFinishedResult]{
+		ToJSON:   MarshalReportTestsFinishedResult,
+		FromJSON: UnmarshalReportTestsFinishedResult,
+	}
+}
+
+// ReviewVerificationPayloadCodec returns a fresh codec for *ReviewVerificationPayload.
+func ReviewVerificationPayloadCodec() tools.JSONCodec[*ReviewVerificationPayload] {
+	return tools.JSONCodec[*ReviewVerificationPayload]{
+		ToJSON:   MarshalReviewVerificationPayload,
+		FromJSON: UnmarshalReviewVerificationPayload,
+	}
+}
+
+// ReviewVerificationResultCodec returns a fresh codec for *ReviewVerificationResult.
+func ReviewVerificationResultCodec() tools.JSONCodec[*ReviewVerificationResult] {
+	return tools.JSONCodec[*ReviewVerificationResult]{
+		ToJSON:   MarshalReviewVerificationResult,
+		FromJSON: UnmarshalReviewVerificationResult,
+	}
+}
+
 // ReviseChangePayloadCodec returns a fresh codec for *ReviseChangePayload.
 func ReviseChangePayloadCodec() tools.JSONCodec[*ReviseChangePayload] {
 	return tools.JSONCodec[*ReviseChangePayload]{
@@ -355,6 +515,22 @@ func UpdateDependenciesResultCodec() tools.JSONCodec[*UpdateDependenciesResult] 
 	return tools.JSONCodec[*UpdateDependenciesResult]{
 		ToJSON:   MarshalUpdateDependenciesResult,
 		FromJSON: UnmarshalUpdateDependenciesResult,
+	}
+}
+
+// UpdateDraftPayloadCodec returns a fresh codec for *UpdateDraftPayload.
+func UpdateDraftPayloadCodec() tools.JSONCodec[*UpdateDraftPayload] {
+	return tools.JSONCodec[*UpdateDraftPayload]{
+		ToJSON:   MarshalUpdateDraftPayload,
+		FromJSON: UnmarshalUpdateDraftPayload,
+	}
+}
+
+// UpdateDraftResultCodec returns a fresh codec for *UpdateDraftResult.
+func UpdateDraftResultCodec() tools.JSONCodec[*UpdateDraftResult] {
+	return tools.JSONCodec[*UpdateDraftResult]{
+		ToJSON:   MarshalUpdateDraftResult,
+		FromJSON: UnmarshalUpdateDraftResult,
 	}
 }
 
@@ -479,6 +655,32 @@ var (
 			return UnmarshalConfirmIntentResult(data)
 		},
 	}
+	// declineRevisionPayloadCodec provides an untyped codec for *DeclineRevisionPayload.
+	declineRevisionPayloadCodec = tools.JSONCodec[any]{
+		ToJSON: func(v any) ([]byte, error) {
+			// Prefer typed marshal when the value matches the expected type.
+			if typed, ok := v.(*DeclineRevisionPayload); ok {
+				return MarshalDeclineRevisionPayload(typed)
+			}
+			return nil, fmt.Errorf("invalid value type for *DeclineRevisionPayload: %T", v)
+		},
+		FromJSON: func(data []byte) (any, error) {
+			return UnmarshalDeclineRevisionPayload(data)
+		},
+	}
+	// declineRevisionResultCodec provides an untyped codec for *DeclineRevisionResult.
+	declineRevisionResultCodec = tools.JSONCodec[any]{
+		ToJSON: func(v any) ([]byte, error) {
+			// Prefer typed marshal when the value matches the expected type.
+			if typed, ok := v.(*DeclineRevisionResult); ok {
+				return MarshalDeclineRevisionResult(typed)
+			}
+			return nil, fmt.Errorf("invalid value type for *DeclineRevisionResult: %T", v)
+		},
+		FromJSON: func(data []byte) (any, error) {
+			return UnmarshalDeclineRevisionResult(data)
+		},
+	}
 	// diffPayloadCodec provides an untyped codec for *DiffPayload.
 	diffPayloadCodec = tools.JSONCodec[any]{
 		ToJSON: func(v any) ([]byte, error) {
@@ -557,6 +759,58 @@ var (
 			return UnmarshalGenerateCodeResult(data)
 		},
 	}
+	// getBuildPayloadCodec provides an untyped codec for *GetBuildPayload.
+	getBuildPayloadCodec = tools.JSONCodec[any]{
+		ToJSON: func(v any) ([]byte, error) {
+			// Prefer typed marshal when the value matches the expected type.
+			if typed, ok := v.(*GetBuildPayload); ok {
+				return MarshalGetBuildPayload(typed)
+			}
+			return nil, fmt.Errorf("invalid value type for *GetBuildPayload: %T", v)
+		},
+		FromJSON: func(data []byte) (any, error) {
+			return UnmarshalGetBuildPayload(data)
+		},
+	}
+	// getBuildResultCodec provides an untyped codec for *GetBuildResult.
+	getBuildResultCodec = tools.JSONCodec[any]{
+		ToJSON: func(v any) ([]byte, error) {
+			// Prefer typed marshal when the value matches the expected type.
+			if typed, ok := v.(*GetBuildResult); ok {
+				return MarshalGetBuildResult(typed)
+			}
+			return nil, fmt.Errorf("invalid value type for *GetBuildResult: %T", v)
+		},
+		FromJSON: func(data []byte) (any, error) {
+			return UnmarshalGetBuildResult(data)
+		},
+	}
+	// getBuilderAssignmentPayloadCodec provides an untyped codec for *GetBuilderAssignmentPayload.
+	getBuilderAssignmentPayloadCodec = tools.JSONCodec[any]{
+		ToJSON: func(v any) ([]byte, error) {
+			// Prefer typed marshal when the value matches the expected type.
+			if typed, ok := v.(*GetBuilderAssignmentPayload); ok {
+				return MarshalGetBuilderAssignmentPayload(typed)
+			}
+			return nil, fmt.Errorf("invalid value type for *GetBuilderAssignmentPayload: %T", v)
+		},
+		FromJSON: func(data []byte) (any, error) {
+			return UnmarshalGetBuilderAssignmentPayload(data)
+		},
+	}
+	// getBuilderAssignmentResultCodec provides an untyped codec for *GetBuilderAssignmentResult.
+	getBuilderAssignmentResultCodec = tools.JSONCodec[any]{
+		ToJSON: func(v any) ([]byte, error) {
+			// Prefer typed marshal when the value matches the expected type.
+			if typed, ok := v.(*GetBuilderAssignmentResult); ok {
+				return MarshalGetBuilderAssignmentResult(typed)
+			}
+			return nil, fmt.Errorf("invalid value type for *GetBuilderAssignmentResult: %T", v)
+		},
+		FromJSON: func(data []byte) (any, error) {
+			return UnmarshalGetBuilderAssignmentResult(data)
+		},
+	}
 	// getChangePayloadCodec provides an untyped codec for *GetChangePayload.
 	getChangePayloadCodec = tools.JSONCodec[any]{
 		ToJSON: func(v any) ([]byte, error) {
@@ -583,6 +837,32 @@ var (
 			return UnmarshalGetChangeResult(data)
 		},
 	}
+	// getLiveTargetPayloadCodec provides an untyped codec for *GetLiveTargetPayload.
+	getLiveTargetPayloadCodec = tools.JSONCodec[any]{
+		ToJSON: func(v any) ([]byte, error) {
+			// Prefer typed marshal when the value matches the expected type.
+			if typed, ok := v.(*GetLiveTargetPayload); ok {
+				return MarshalGetLiveTargetPayload(typed)
+			}
+			return nil, fmt.Errorf("invalid value type for *GetLiveTargetPayload: %T", v)
+		},
+		FromJSON: func(data []byte) (any, error) {
+			return UnmarshalGetLiveTargetPayload(data)
+		},
+	}
+	// getLiveTargetResultCodec provides an untyped codec for *GetLiveTargetResult.
+	getLiveTargetResultCodec = tools.JSONCodec[any]{
+		ToJSON: func(v any) ([]byte, error) {
+			// Prefer typed marshal when the value matches the expected type.
+			if typed, ok := v.(*GetLiveTargetResult); ok {
+				return MarshalGetLiveTargetResult(typed)
+			}
+			return nil, fmt.Errorf("invalid value type for *GetLiveTargetResult: %T", v)
+		},
+		FromJSON: func(data []byte) (any, error) {
+			return UnmarshalGetLiveTargetResult(data)
+		},
+	}
 	// getStoryRefreshPayloadCodec provides an untyped codec for *GetStoryRefreshPayload.
 	getStoryRefreshPayloadCodec = tools.JSONCodec[any]{
 		ToJSON: func(v any) ([]byte, error) {
@@ -607,6 +887,32 @@ var (
 		},
 		FromJSON: func(data []byte) (any, error) {
 			return UnmarshalGetStoryRefreshResult(data)
+		},
+	}
+	// getTestWriterAssignmentPayloadCodec provides an untyped codec for *GetTestWriterAssignmentPayload.
+	getTestWriterAssignmentPayloadCodec = tools.JSONCodec[any]{
+		ToJSON: func(v any) ([]byte, error) {
+			// Prefer typed marshal when the value matches the expected type.
+			if typed, ok := v.(*GetTestWriterAssignmentPayload); ok {
+				return MarshalGetTestWriterAssignmentPayload(typed)
+			}
+			return nil, fmt.Errorf("invalid value type for *GetTestWriterAssignmentPayload: %T", v)
+		},
+		FromJSON: func(data []byte) (any, error) {
+			return UnmarshalGetTestWriterAssignmentPayload(data)
+		},
+	}
+	// getTestWriterAssignmentResultCodec provides an untyped codec for *GetTestWriterAssignmentResult.
+	getTestWriterAssignmentResultCodec = tools.JSONCodec[any]{
+		ToJSON: func(v any) ([]byte, error) {
+			// Prefer typed marshal when the value matches the expected type.
+			if typed, ok := v.(*GetTestWriterAssignmentResult); ok {
+				return MarshalGetTestWriterAssignmentResult(typed)
+			}
+			return nil, fmt.Errorf("invalid value type for *GetTestWriterAssignmentResult: %T", v)
+		},
+		FromJSON: func(data []byte) (any, error) {
+			return UnmarshalGetTestWriterAssignmentResult(data)
 		},
 	}
 	// getVerificationPayloadCodec provides an untyped codec for *GetVerificationPayload.
@@ -659,6 +965,84 @@ var (
 		},
 		FromJSON: func(data []byte) (any, error) {
 			return UnmarshalInitProjectResult(data)
+		},
+	}
+	// listBuilderAssignmentsPayloadCodec provides an untyped codec for *ListBuilderAssignmentsPayload.
+	listBuilderAssignmentsPayloadCodec = tools.JSONCodec[any]{
+		ToJSON: func(v any) ([]byte, error) {
+			// Prefer typed marshal when the value matches the expected type.
+			if typed, ok := v.(*ListBuilderAssignmentsPayload); ok {
+				return MarshalListBuilderAssignmentsPayload(typed)
+			}
+			return nil, fmt.Errorf("invalid value type for *ListBuilderAssignmentsPayload: %T", v)
+		},
+		FromJSON: func(data []byte) (any, error) {
+			return UnmarshalListBuilderAssignmentsPayload(data)
+		},
+	}
+	// listBuilderAssignmentsResultCodec provides an untyped codec for *ListBuilderAssignmentsResult.
+	listBuilderAssignmentsResultCodec = tools.JSONCodec[any]{
+		ToJSON: func(v any) ([]byte, error) {
+			// Prefer typed marshal when the value matches the expected type.
+			if typed, ok := v.(*ListBuilderAssignmentsResult); ok {
+				return MarshalListBuilderAssignmentsResult(typed)
+			}
+			return nil, fmt.Errorf("invalid value type for *ListBuilderAssignmentsResult: %T", v)
+		},
+		FromJSON: func(data []byte) (any, error) {
+			return UnmarshalListBuilderAssignmentsResult(data)
+		},
+	}
+	// listChangesPayloadCodec provides an untyped codec for *ListChangesPayload.
+	listChangesPayloadCodec = tools.JSONCodec[any]{
+		ToJSON: func(v any) ([]byte, error) {
+			// Prefer typed marshal when the value matches the expected type.
+			if typed, ok := v.(*ListChangesPayload); ok {
+				return MarshalListChangesPayload(typed)
+			}
+			return nil, fmt.Errorf("invalid value type for *ListChangesPayload: %T", v)
+		},
+		FromJSON: func(data []byte) (any, error) {
+			return UnmarshalListChangesPayload(data)
+		},
+	}
+	// listChangesResultCodec provides an untyped codec for *ListChangesResult.
+	listChangesResultCodec = tools.JSONCodec[any]{
+		ToJSON: func(v any) ([]byte, error) {
+			// Prefer typed marshal when the value matches the expected type.
+			if typed, ok := v.(*ListChangesResult); ok {
+				return MarshalListChangesResult(typed)
+			}
+			return nil, fmt.Errorf("invalid value type for *ListChangesResult: %T", v)
+		},
+		FromJSON: func(data []byte) (any, error) {
+			return UnmarshalListChangesResult(data)
+		},
+	}
+	// listTestWriterAssignmentsPayloadCodec provides an untyped codec for *ListTestWriterAssignmentsPayload.
+	listTestWriterAssignmentsPayloadCodec = tools.JSONCodec[any]{
+		ToJSON: func(v any) ([]byte, error) {
+			// Prefer typed marshal when the value matches the expected type.
+			if typed, ok := v.(*ListTestWriterAssignmentsPayload); ok {
+				return MarshalListTestWriterAssignmentsPayload(typed)
+			}
+			return nil, fmt.Errorf("invalid value type for *ListTestWriterAssignmentsPayload: %T", v)
+		},
+		FromJSON: func(data []byte) (any, error) {
+			return UnmarshalListTestWriterAssignmentsPayload(data)
+		},
+	}
+	// listTestWriterAssignmentsResultCodec provides an untyped codec for *ListTestWriterAssignmentsResult.
+	listTestWriterAssignmentsResultCodec = tools.JSONCodec[any]{
+		ToJSON: func(v any) ([]byte, error) {
+			// Prefer typed marshal when the value matches the expected type.
+			if typed, ok := v.(*ListTestWriterAssignmentsResult); ok {
+				return MarshalListTestWriterAssignmentsResult(typed)
+			}
+			return nil, fmt.Errorf("invalid value type for *ListTestWriterAssignmentsResult: %T", v)
+		},
+		FromJSON: func(data []byte) (any, error) {
+			return UnmarshalListTestWriterAssignmentsResult(data)
 		},
 	}
 	// listTracesPayloadCodec provides an untyped codec for *ListTracesPayload.
@@ -817,6 +1201,58 @@ var (
 			return UnmarshalRefreshStoryResult(data)
 		},
 	}
+	// reportTestsFinishedPayloadCodec provides an untyped codec for *ReportTestsFinishedPayload.
+	reportTestsFinishedPayloadCodec = tools.JSONCodec[any]{
+		ToJSON: func(v any) ([]byte, error) {
+			// Prefer typed marshal when the value matches the expected type.
+			if typed, ok := v.(*ReportTestsFinishedPayload); ok {
+				return MarshalReportTestsFinishedPayload(typed)
+			}
+			return nil, fmt.Errorf("invalid value type for *ReportTestsFinishedPayload: %T", v)
+		},
+		FromJSON: func(data []byte) (any, error) {
+			return UnmarshalReportTestsFinishedPayload(data)
+		},
+	}
+	// reportTestsFinishedResultCodec provides an untyped codec for *ReportTestsFinishedResult.
+	reportTestsFinishedResultCodec = tools.JSONCodec[any]{
+		ToJSON: func(v any) ([]byte, error) {
+			// Prefer typed marshal when the value matches the expected type.
+			if typed, ok := v.(*ReportTestsFinishedResult); ok {
+				return MarshalReportTestsFinishedResult(typed)
+			}
+			return nil, fmt.Errorf("invalid value type for *ReportTestsFinishedResult: %T", v)
+		},
+		FromJSON: func(data []byte) (any, error) {
+			return UnmarshalReportTestsFinishedResult(data)
+		},
+	}
+	// reviewVerificationPayloadCodec provides an untyped codec for *ReviewVerificationPayload.
+	reviewVerificationPayloadCodec = tools.JSONCodec[any]{
+		ToJSON: func(v any) ([]byte, error) {
+			// Prefer typed marshal when the value matches the expected type.
+			if typed, ok := v.(*ReviewVerificationPayload); ok {
+				return MarshalReviewVerificationPayload(typed)
+			}
+			return nil, fmt.Errorf("invalid value type for *ReviewVerificationPayload: %T", v)
+		},
+		FromJSON: func(data []byte) (any, error) {
+			return UnmarshalReviewVerificationPayload(data)
+		},
+	}
+	// reviewVerificationResultCodec provides an untyped codec for *ReviewVerificationResult.
+	reviewVerificationResultCodec = tools.JSONCodec[any]{
+		ToJSON: func(v any) ([]byte, error) {
+			// Prefer typed marshal when the value matches the expected type.
+			if typed, ok := v.(*ReviewVerificationResult); ok {
+				return MarshalReviewVerificationResult(typed)
+			}
+			return nil, fmt.Errorf("invalid value type for *ReviewVerificationResult: %T", v)
+		},
+		FromJSON: func(data []byte) (any, error) {
+			return UnmarshalReviewVerificationResult(data)
+		},
+	}
 	// reviseChangePayloadCodec provides an untyped codec for *ReviseChangePayload.
 	reviseChangePayloadCodec = tools.JSONCodec[any]{
 		ToJSON: func(v any) ([]byte, error) {
@@ -921,6 +1357,32 @@ var (
 			return UnmarshalUpdateDependenciesResult(data)
 		},
 	}
+	// updateDraftPayloadCodec provides an untyped codec for *UpdateDraftPayload.
+	updateDraftPayloadCodec = tools.JSONCodec[any]{
+		ToJSON: func(v any) ([]byte, error) {
+			// Prefer typed marshal when the value matches the expected type.
+			if typed, ok := v.(*UpdateDraftPayload); ok {
+				return MarshalUpdateDraftPayload(typed)
+			}
+			return nil, fmt.Errorf("invalid value type for *UpdateDraftPayload: %T", v)
+		},
+		FromJSON: func(data []byte) (any, error) {
+			return UnmarshalUpdateDraftPayload(data)
+		},
+	}
+	// updateDraftResultCodec provides an untyped codec for *UpdateDraftResult.
+	updateDraftResultCodec = tools.JSONCodec[any]{
+		ToJSON: func(v any) ([]byte, error) {
+			// Prefer typed marshal when the value matches the expected type.
+			if typed, ok := v.(*UpdateDraftResult); ok {
+				return MarshalUpdateDraftResult(typed)
+			}
+			return nil, fmt.Errorf("invalid value type for *UpdateDraftResult: %T", v)
+		},
+		FromJSON: func(data []byte) (any, error) {
+			return UnmarshalUpdateDraftResult(data)
+		},
+	}
 	// verifyChangePayloadCodec provides an untyped codec for *VerifyChangePayload.
 	verifyChangePayloadCodec = tools.JSONCodec[any]{
 		ToJSON: func(v any) ([]byte, error) {
@@ -951,7 +1413,7 @@ var (
 var approveMergePayloadFields = []tools.FieldMetadata{
 	{
 		JSONType:    "object",
-		Description: "Identifies the confirmed Change Card revision, the candidate commit being promoted, and the evaluator-written verification report to check. The report itself and the expected suite, environment and binary digests come from the control plane's promotion target, never from the caller.",
+		Description: "Identifies the confirmed Change Card revision, the candidate commit being promoted, and the verification report to check. Which tests' commit the report must have run comes from the project's stored verification settings or the tests Surla accepted for the revision's build, and the report itself and the measured candidate binary digests come from the control plane's promotion target, never from the caller.",
 	},
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("change_id")},
@@ -992,7 +1454,7 @@ var approveMergeResultFields = []tools.FieldMetadata{
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("prompt")},
 		JSONType:    "string",
-		Description: "Operator feature request for this revision.",
+		Description: "The user's feature request for this revision.",
 	},
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("summary")},
@@ -1017,7 +1479,7 @@ var approveMergeResultFields = []tools.FieldMetadata{
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("ambiguities"), tools.DynamicField{}, tools.FixedField("question")},
 		JSONType:    "string",
-		Description: "Plain-English question for the operator.",
+		Description: "Plain-English question for the user.",
 	},
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("ambiguities"), tools.DynamicField{}, tools.FixedField("options")},
@@ -1267,7 +1729,7 @@ var approveMergeResultFields = []tools.FieldMetadata{
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("confirmed_by")},
 		JSONType:    "string",
-		Description: "Authenticated principal that confirmed the Change Card.",
+		Description: "User who confirmed the Change Card.",
 	},
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("request_revision")},
@@ -1282,7 +1744,7 @@ var approveMergeResultFields = []tools.FieldMetadata{
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("ui_composition"), tools.FixedField("program")},
 		JSONType:    "string",
-		Description: "OpenUI Lang program from the analysis's ui_composition, exactly as the caller sent it. The server does not check it; the checkpoint viewer validates it and shows its error state, with the rest of the card still usable, when the program is not a valid composition.",
+		Description: "OpenUI Lang program from the analysis's ui_composition, exactly as the caller sent it. The server does not check it; the views page validates it and shows its error state, with the rest of the card still usable, when the program is not a valid composition.",
 	},
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("ui_composition"), tools.FixedField("composed_for_revision")},
@@ -1292,12 +1754,12 @@ var approveMergeResultFields = []tools.FieldMetadata{
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("approval")},
 		JSONType:    "object",
-		Description: "Checkpoint 5 approval of this revision, present only while it is verified against the promotion target's current inputs on this read. It is absent before approve_merge succeeds, whenever the target's suite, environment or binary digests have changed since, and whenever current inputs cannot be verified (see unverified_approval). It is never hashed into request_revision.",
+		Description: "Checkpoint 5 approval of this revision, present while suite_commit is still the tests' commit chosen for this revision and (when a promotion target is configured) the promotion target's current binary digests still equal artifacts on this read. It is absent before approve_merge succeeds, whenever the chosen tests' commit or the staged binary digests have changed since, and whenever a configured promotion target's staged binaries cannot be verified (see unverified_approval). It is never hashed into request_revision.",
 	},
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("approval"), tools.FixedField("approved_by")},
 		JSONType:    "string",
-		Description: "Authenticated principal that owns the card and called approve_merge. Authentication does not prove that a human, rather than a coding agent, made the call.",
+		Description: "User who approved the result.",
 	},
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("approval"), tools.FixedField("report_digest")},
@@ -1312,37 +1774,94 @@ var approveMergeResultFields = []tools.FieldMetadata{
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("approval"), tools.FixedField("suite_id")},
 		JSONType:    "string",
-		Description: "Evaluator suite the promotion target requires.",
+		Description: "Suite identifier the tests at suite_commit declared in the report (shown, not compared).",
 	},
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("approval"), tools.FixedField("suite_commit")},
 		JSONType:    "string",
-		Description: "Evaluator suite commit the promotion target requires.",
+		Description: "Commit of the tests the report ran: the evaluator suite commit in the stored verification settings, or the tests Surla accepted for the change's build.",
 	},
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("approval"), tools.FixedField("environment")},
 		JSONType:    "string",
-		Description: "Dependency profile the promotion target requires, such as sim.",
+		Description: "Dependency profile the tests at suite_commit declared in the report, such as sim or scripted-model (shown, not compared).",
 	},
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("approval"), tools.FixedField("artifacts")},
 		JSONType:    "object",
-		Description: "SHA-256 digest of each candidate binary the promotion target measured, keyed by binary name.",
+		Description: "SHA-256 digest of each candidate binary the promotion target measured, keyed by binary name; empty when no promotion settings are configured.",
 	},
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("approval"), tools.FixedField("artifacts"), tools.DynamicField{}},
 		JSONType:    "string",
-		Description: "SHA-256 digest of each candidate binary the promotion target measured, keyed by binary name.",
+		Description: "SHA-256 digest of each candidate binary the promotion target measured, keyed by binary name; empty when no promotion settings are configured.",
 	},
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("approval"), tools.FixedField("scenario_count")},
 		JSONType:    "integer",
-		Description: "Number of declared evaluator scenarios, every one of which passed.",
+		Description: "Number of declared scenarios in the report, every one of which passed.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("approval"), tools.FixedField("test_source")},
+		JSONType:    "object",
+		Description: "Where the tests at suite_commit came from, derived on each read: evaluator, or written_tests with their commit and a notice.",
+	},
+	{
+		Path:     []tools.FieldPathSegment{tools.FixedField("approval"), tools.FixedField("test_source"), tools.FixedField("source")},
+		JSONType: "string",
+		DiscriminatorValues: []string{
+			"evaluator",
+			"written_tests",
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("approval"), tools.FixedField("test_source")},
+		JSONType:    "object",
+		Description: "The run used the operator's evaluator: the one stored with surla verification set, or the one named on surla verify's command line.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("approval"), tools.FixedField("test_source"), tools.FixedField("source")},
+				Value:         "evaluator",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("approval"), tools.FixedField("test_source")},
+		JSONType:    "object",
+		Description: "The run used the tests Surla accepted for the change's build, which a separate agent on this machine wrote.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("approval"), tools.FixedField("test_source"), tools.FixedField("source")},
+				Value:         "written_tests",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("approval"), tools.FixedField("test_source"), tools.FixedField("commit")},
+		JSONType:    "string",
+		Description: "Commit Surla recorded the accepted tests at; the same as suite_commit.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("approval"), tools.FixedField("test_source"), tools.FixedField("source")},
+				Value:         "written_tests",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("approval"), tools.FixedField("test_source"), tools.FixedField("notice")},
+		JSONType:    "string",
+		Description: "Always: These tests were written by a separate agent on this machine and are not isolated from the builder.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("approval"), tools.FixedField("test_source"), tools.FixedField("source")},
+				Value:         "written_tests",
+			},
+		},
 	},
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("unverified_approval")},
 		JSONType:    "object",
-		Description: "Saved Checkpoint 5 approval of this revision when current promotion inputs could not be verified on this read (because no promotion target is configured or the target could not report its current inputs). At most one of approval or unverified_approval is set. It is never saved to disk or hashed into request_revision.",
+		Description: "Saved Checkpoint 5 approval of this revision when suite_commit still matches the chosen tests' commit and promotion settings are configured, but the staged binaries could not be verified on this read. At most one of approval or unverified_approval is set. It is never saved to disk or hashed into request_revision.",
 	},
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("unverified_approval"), tools.FixedField("approval")},
@@ -1352,7 +1871,7 @@ var approveMergeResultFields = []tools.FieldMetadata{
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("unverified_approval"), tools.FixedField("approval"), tools.FixedField("approved_by")},
 		JSONType:    "string",
-		Description: "Authenticated principal that owns the card and called approve_merge. Authentication does not prove that a human, rather than a coding agent, made the call.",
+		Description: "User who approved the result.",
 	},
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("unverified_approval"), tools.FixedField("approval"), tools.FixedField("report_digest")},
@@ -1367,37 +1886,394 @@ var approveMergeResultFields = []tools.FieldMetadata{
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("unverified_approval"), tools.FixedField("approval"), tools.FixedField("suite_id")},
 		JSONType:    "string",
-		Description: "Evaluator suite the promotion target requires.",
+		Description: "Suite identifier the tests at suite_commit declared in the report (shown, not compared).",
 	},
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("unverified_approval"), tools.FixedField("approval"), tools.FixedField("suite_commit")},
 		JSONType:    "string",
-		Description: "Evaluator suite commit the promotion target requires.",
+		Description: "Commit of the tests the report ran: the evaluator suite commit in the stored verification settings, or the tests Surla accepted for the change's build.",
 	},
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("unverified_approval"), tools.FixedField("approval"), tools.FixedField("environment")},
 		JSONType:    "string",
-		Description: "Dependency profile the promotion target requires, such as sim.",
+		Description: "Dependency profile the tests at suite_commit declared in the report, such as sim or scripted-model (shown, not compared).",
 	},
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("unverified_approval"), tools.FixedField("approval"), tools.FixedField("artifacts")},
 		JSONType:    "object",
-		Description: "SHA-256 digest of each candidate binary the promotion target measured, keyed by binary name.",
+		Description: "SHA-256 digest of each candidate binary the promotion target measured, keyed by binary name; empty when no promotion settings are configured.",
 	},
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("unverified_approval"), tools.FixedField("approval"), tools.FixedField("artifacts"), tools.DynamicField{}},
 		JSONType:    "string",
-		Description: "SHA-256 digest of each candidate binary the promotion target measured, keyed by binary name.",
+		Description: "SHA-256 digest of each candidate binary the promotion target measured, keyed by binary name; empty when no promotion settings are configured.",
 	},
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("unverified_approval"), tools.FixedField("approval"), tools.FixedField("scenario_count")},
 		JSONType:    "integer",
-		Description: "Number of declared evaluator scenarios, every one of which passed.",
+		Description: "Number of declared scenarios in the report, every one of which passed.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("unverified_approval"), tools.FixedField("approval"), tools.FixedField("test_source")},
+		JSONType:    "object",
+		Description: "Where the tests at suite_commit came from, derived on each read: evaluator, or written_tests with their commit and a notice.",
+	},
+	{
+		Path:     []tools.FieldPathSegment{tools.FixedField("unverified_approval"), tools.FixedField("approval"), tools.FixedField("test_source"), tools.FixedField("source")},
+		JSONType: "string",
+		DiscriminatorValues: []string{
+			"evaluator",
+			"written_tests",
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("unverified_approval"), tools.FixedField("approval"), tools.FixedField("test_source")},
+		JSONType:    "object",
+		Description: "The run used the operator's evaluator: the one stored with surla verification set, or the one named on surla verify's command line.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("unverified_approval"), tools.FixedField("approval"), tools.FixedField("test_source"), tools.FixedField("source")},
+				Value:         "evaluator",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("unverified_approval"), tools.FixedField("approval"), tools.FixedField("test_source")},
+		JSONType:    "object",
+		Description: "The run used the tests Surla accepted for the change's build, which a separate agent on this machine wrote.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("unverified_approval"), tools.FixedField("approval"), tools.FixedField("test_source"), tools.FixedField("source")},
+				Value:         "written_tests",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("unverified_approval"), tools.FixedField("approval"), tools.FixedField("test_source"), tools.FixedField("commit")},
+		JSONType:    "string",
+		Description: "Commit Surla recorded the accepted tests at; the same as suite_commit.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("unverified_approval"), tools.FixedField("approval"), tools.FixedField("test_source"), tools.FixedField("source")},
+				Value:         "written_tests",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("unverified_approval"), tools.FixedField("approval"), tools.FixedField("test_source"), tools.FixedField("notice")},
+		JSONType:    "string",
+		Description: "Always: These tests were written by a separate agent on this machine and are not isolated from the builder.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("unverified_approval"), tools.FixedField("approval"), tools.FixedField("test_source"), tools.FixedField("source")},
+				Value:         "written_tests",
+			},
+		},
 	},
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("unverified_approval"), tools.FixedField("reason")},
 		JSONType:    "string",
-		Description: "Explanation of why the recorded approval could not be verified against current promotion inputs and how to recover.",
+		Description: "Explanation of why the recorded approval could not be verified against current release binaries and how to recover.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision")},
+		JSONType:    "object",
+		Description: "The revision the guide proposed beside this confirmed revision, while it waits for the user to adopt or decline it; absent otherwise. This card's own fields describe the revision in force.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("prompt")},
+		JSONType:    "string",
+		Description: "The user's feature request for this revision.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("summary")},
+		JSONType:    "string",
+		Description: "Plain-English summary of the proposed change.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("ambiguities")},
+		JSONType:    "array",
+		Description: "Domain questions the user answers when adopting this revision.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("ambiguities"), tools.DynamicField{}},
+		JSONType:    "object",
+		Description: "Domain questions the user answers when adopting this revision.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("ambiguities"), tools.DynamicField{}, tools.FixedField("id")},
+		JSONType:    "string",
+		Description: "Stable question identifier.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("ambiguities"), tools.DynamicField{}, tools.FixedField("question")},
+		JSONType:    "string",
+		Description: "Plain-English question for the user.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("ambiguities"), tools.DynamicField{}, tools.FixedField("options")},
+		JSONType:    "array",
+		Description: "Concrete resolution choices.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("ambiguities"), tools.DynamicField{}, tools.FixedField("options"), tools.DynamicField{}},
+		JSONType:    "string",
+		Description: "Concrete resolution choices.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("examples")},
+		JSONType:    "array",
+		Description: "Concrete examples mapped to evaluator checks.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("examples"), tools.DynamicField{}},
+		JSONType:    "object",
+		Description: "Concrete examples mapped to evaluator checks.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("examples"), tools.DynamicField{}, tools.FixedField("id")},
+		JSONType:    "string",
+		Description: "Stable example identifier. Default code-assigned IDs use check_01, check_02, ... (valid goa-ai/eval Scenario names). confirm_intent preserves caller-chosen IDs.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("examples"), tools.DynamicField{}, tools.FixedField("scenario")},
+		JSONType:    "string",
+		Description: "Plain-English scenario description.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("examples"), tools.DynamicField{}, tools.FixedField("input_summary")},
+		JSONType:    "string",
+		Description: "Representative user request and domain fixture state.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("examples"), tools.DynamicField{}, tools.FixedField("expected_outcome")},
+		JSONType:    "string",
+		Description: "Expected side effect and response behavior.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("examples"), tools.DynamicField{}, tools.FixedField("verification_kind")},
+		JSONType:    "string",
+		Description: "Evaluator check classification (deterministic or model_judged).",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("preserved_behaviors")},
+		JSONType:    "array",
+		Description: "Existing contract invariants preserved by this change.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("preserved_behaviors"), tools.DynamicField{}},
+		JSONType:    "string",
+		Description: "Existing contract invariants preserved by this change.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("stories")},
+		JSONType:    "array",
+		Description: "Evaluated domain Stories of this revision in declaration order; omitted when it has none. Included in its request_revision.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("stories"), tools.DynamicField{}},
+		JSONType:    "object",
+		Description: "Evaluated domain Stories of this revision in declaration order; omitted when it has none. Included in its request_revision.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("name")},
+		JSONType:    "string",
+		Description: "Human-facing Story title.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("description")},
+		JSONType:    "string",
+		Description: "Optional longer explanation of the Story.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("actors")},
+		JSONType:    "array",
+		Description: "Domain roles declared in the Story in declaration order.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("actors"), tools.DynamicField{}},
+		JSONType:    "object",
+		Description: "Domain roles declared in the Story in declaration order.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("actors"), tools.DynamicField{}, tools.FixedField("key")},
+		JSONType:    "string",
+		Description: "Story-scoped actor key.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("actors"), tools.DynamicField{}, tools.FixedField("title")},
+		JSONType:    "string",
+		Description: "Human-facing actor label.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("actors"), tools.DynamicField{}, tools.FixedField("description")},
+		JSONType:    "string",
+		Description: "Optional longer explanation of the actor role.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("flows")},
+		JSONType:    "array",
+		Description: "Timeline paths declared in the Story in declaration order.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("flows"), tools.DynamicField{}},
+		JSONType:    "object",
+		Description: "Timeline paths declared in the Story in declaration order.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("flows"), tools.DynamicField{}, tools.FixedField("key")},
+		JSONType:    "string",
+		Description: "Story-scoped flow key.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("flows"), tools.DynamicField{}, tools.FixedField("title")},
+		JSONType:    "string",
+		Description: "Human-facing flow title.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("flows"), tools.DynamicField{}, tools.FixedField("description")},
+		JSONType:    "string",
+		Description: "Optional longer explanation of the flow.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("flows"), tools.DynamicField{}, tools.FixedField("complete")},
+		JSONType:    "boolean",
+		Description: "True when the flow has a start, at least one outcome, and no open questions on the flow or any of its steps.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("flows"), tools.DynamicField{}, tools.FixedField("steps")},
+		JSONType:    "array",
+		Description: "Starting, intermediate, and outcome steps in declaration order.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("flows"), tools.DynamicField{}, tools.FixedField("steps"), tools.DynamicField{}},
+		JSONType:    "object",
+		Description: "Starting, intermediate, and outcome steps in declaration order.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("flows"), tools.DynamicField{}, tools.FixedField("steps"), tools.DynamicField{}, tools.FixedField("key")},
+		JSONType:    "string",
+		Description: "Flow-scoped step key.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("flows"), tools.DynamicField{}, tools.FixedField("steps"), tools.DynamicField{}, tools.FixedField("actor_key")},
+		JSONType:    "string",
+		Description: "Story-scoped key of the actor performing or observing the step.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("flows"), tools.DynamicField{}, tools.FixedField("steps"), tools.DynamicField{}, tools.FixedField("summary")},
+		JSONType:    "string",
+		Description: "Timeline sticky-note sentence for the step.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("flows"), tools.DynamicField{}, tools.FixedField("steps"), tools.DynamicField{}, tools.FixedField("description")},
+		JSONType:    "string",
+		Description: "Optional longer explanation of the step.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("flows"), tools.DynamicField{}, tools.FixedField("steps"), tools.DynamicField{}, tools.FixedField("kind")},
+		JSONType:    "string",
+		Description: "Step position in the flow: start, step, or outcome.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("flows"), tools.DynamicField{}, tools.FixedField("steps"), tools.DynamicField{}, tools.FixedField("questions")},
+		JSONType:    "array",
+		Description: "Unresolved step-level decisions in declaration order.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("flows"), tools.DynamicField{}, tools.FixedField("steps"), tools.DynamicField{}, tools.FixedField("questions"), tools.DynamicField{}},
+		JSONType:    "object",
+		Description: "Unresolved step-level decisions in declaration order.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("flows"), tools.DynamicField{}, tools.FixedField("steps"), tools.DynamicField{}, tools.FixedField("questions"), tools.DynamicField{}, tools.FixedField("key")},
+		JSONType:    "string",
+		Description: "Flow-scoped question key.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("flows"), tools.DynamicField{}, tools.FixedField("steps"), tools.DynamicField{}, tools.FixedField("questions"), tools.DynamicField{}, tools.FixedField("prompt")},
+		JSONType:    "string",
+		Description: "Human-facing question text.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("flows"), tools.DynamicField{}, tools.FixedField("steps"), tools.DynamicField{}, tools.FixedField("questions"), tools.DynamicField{}, tools.FixedField("description")},
+		JSONType:    "string",
+		Description: "Optional longer context for the question.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("flows"), tools.DynamicField{}, tools.FixedField("steps"), tools.DynamicField{}, tools.FixedField("questions"), tools.DynamicField{}, tools.FixedField("options")},
+		JSONType:    "array",
+		Description: "Suggested choices in declaration order.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("flows"), tools.DynamicField{}, tools.FixedField("steps"), tools.DynamicField{}, tools.FixedField("questions"), tools.DynamicField{}, tools.FixedField("options"), tools.DynamicField{}},
+		JSONType:    "string",
+		Description: "Suggested choices in declaration order.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("flows"), tools.DynamicField{}, tools.FixedField("questions")},
+		JSONType:    "array",
+		Description: "Unresolved flow-level decisions in declaration order.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("flows"), tools.DynamicField{}, tools.FixedField("questions"), tools.DynamicField{}},
+		JSONType:    "object",
+		Description: "Unresolved flow-level decisions in declaration order.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("flows"), tools.DynamicField{}, tools.FixedField("questions"), tools.DynamicField{}, tools.FixedField("key")},
+		JSONType:    "string",
+		Description: "Flow-scoped question key.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("flows"), tools.DynamicField{}, tools.FixedField("questions"), tools.DynamicField{}, tools.FixedField("prompt")},
+		JSONType:    "string",
+		Description: "Human-facing question text.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("flows"), tools.DynamicField{}, tools.FixedField("questions"), tools.DynamicField{}, tools.FixedField("description")},
+		JSONType:    "string",
+		Description: "Optional longer context for the question.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("flows"), tools.DynamicField{}, tools.FixedField("questions"), tools.DynamicField{}, tools.FixedField("options")},
+		JSONType:    "array",
+		Description: "Suggested choices in declaration order.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("flows"), tools.DynamicField{}, tools.FixedField("questions"), tools.DynamicField{}, tools.FixedField("options"), tools.DynamicField{}},
+		JSONType:    "string",
+		Description: "Suggested choices in declaration order.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("request_revision")},
+		JSONType:    "string",
+		Description: "SHA-256 digest of this proposed revision: confirm_intent adopts it, decline_revision declines it, and revise_change replaces it when given this value.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("ui_composition")},
+		JSONType:    "object",
+		Description: "Decision view the guide composed for this revision in its analysis, when it sent one.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("ui_composition"), tools.FixedField("program")},
+		JSONType:    "string",
+		Description: "OpenUI Lang program from the analysis's ui_composition, exactly as the caller sent it. The server does not check it; the views page validates it and shows its error state, with the rest of the card still usable, when the program is not a valid composition.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("ui_composition"), tools.FixedField("composed_for_revision")},
+		JSONType:    "string",
+		Description: "request_revision of the Change Card this program was composed for.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("changed_design_files")},
+		JSONType:    "array",
+		Description: "Paths of the design/*.go files that differ between the design source the confirmed revision was made from and the one this revision was made from (added, removed or changed), in path order; empty when both were made from the same design files. Adopting the revision binds it to its own design source.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("changed_design_files"), tools.DynamicField{}},
+		JSONType:    "string",
+		Description: "Paths of the design/*.go files that differ between the design source the confirmed revision was made from and the one this revision was made from (added, removed or changed), in path order; empty when both were made from the same design files. Adopting the revision binds it to its own design source.",
 	},
 }
 var checkProjectPayloadFields = []tools.FieldMetadata{
@@ -1408,7 +2284,7 @@ var checkProjectPayloadFields = []tools.FieldMetadata{
 var checkProjectResultFields = []tools.FieldMetadata{
 	{
 		JSONType:    "object",
-		Description: "Outcome of running every Go module's tests in a protected copy of the workspace inside Linux containers.",
+		Description: "Outcome of running every Go module's tests in a protected copy of the working folder inside Linux containers.",
 	},
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("op_id")},
@@ -1429,7 +2305,7 @@ var checkProjectResultFields = []tools.FieldMetadata{
 var configureModelPayloadFields = []tools.FieldMetadata{
 	{
 		JSONType:    "object",
-		Description: "Selects either a direct model provider and model name (using the API key already present in surla serve's process environment) or a running goa-ai model gateway address.",
+		Description: "Selects either a direct model provider and model name (whose request settings the surla command handed to the project server) or a running goa-ai model gateway address.",
 	},
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("provider")},
@@ -1471,7 +2347,7 @@ var configureModelResultFields = []tools.FieldMetadata{
 var confirmIntentPayloadFields = []tools.FieldMetadata{
 	{
 		JSONType:    "object",
-		Description: "Operator confirmation of Checkpoint 1 ambiguity answers and concrete examples.",
+		Description: "The user's confirmation of Checkpoint 1 ambiguity answers and concrete examples.",
 	},
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("change_id")},
@@ -1486,12 +2362,12 @@ var confirmIntentPayloadFields = []tools.FieldMetadata{
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("answers")},
 		JSONType:    "object",
-		Description: "Selected resolution per ambiguity question ID. Answer every current question, and give each value exactly as one string from that question's options, character for character. To record a decision that no option expresses, call revise_change with that decision in prompt.",
+		Description: "Selected resolution per ambiguity question ID. Answer every current question, and give each value exactly as one string from that question's options, character for character. A decision that no option expresses goes to the guide, which records it with revise_change; the user then confirms the resulting revision.",
 	},
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("answers"), tools.DynamicField{}},
 		JSONType:    "string",
-		Description: "Selected resolution per ambiguity question ID. Answer every current question, and give each value exactly as one string from that question's options, character for character. To record a decision that no option expresses, call revise_change with that decision in prompt.",
+		Description: "Selected resolution per ambiguity question ID. Answer every current question, and give each value exactly as one string from that question's options, character for character. A decision that no option expresses goes to the guide, which records it with revise_change; the user then confirms the resulting revision.",
 	},
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("examples")},
@@ -1547,7 +2423,7 @@ var confirmIntentResultFields = []tools.FieldMetadata{
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("prompt")},
 		JSONType:    "string",
-		Description: "Operator feature request for this revision.",
+		Description: "The user's feature request for this revision.",
 	},
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("summary")},
@@ -1572,7 +2448,7 @@ var confirmIntentResultFields = []tools.FieldMetadata{
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("ambiguities"), tools.DynamicField{}, tools.FixedField("question")},
 		JSONType:    "string",
-		Description: "Plain-English question for the operator.",
+		Description: "Plain-English question for the user.",
 	},
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("ambiguities"), tools.DynamicField{}, tools.FixedField("options")},
@@ -1822,7 +2698,7 @@ var confirmIntentResultFields = []tools.FieldMetadata{
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("confirmed_by")},
 		JSONType:    "string",
-		Description: "Authenticated principal that confirmed the Change Card.",
+		Description: "User who confirmed the Change Card.",
 	},
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("request_revision")},
@@ -1837,7 +2713,7 @@ var confirmIntentResultFields = []tools.FieldMetadata{
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("ui_composition"), tools.FixedField("program")},
 		JSONType:    "string",
-		Description: "OpenUI Lang program from the analysis's ui_composition, exactly as the caller sent it. The server does not check it; the checkpoint viewer validates it and shows its error state, with the rest of the card still usable, when the program is not a valid composition.",
+		Description: "OpenUI Lang program from the analysis's ui_composition, exactly as the caller sent it. The server does not check it; the views page validates it and shows its error state, with the rest of the card still usable, when the program is not a valid composition.",
 	},
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("ui_composition"), tools.FixedField("composed_for_revision")},
@@ -1847,12 +2723,12 @@ var confirmIntentResultFields = []tools.FieldMetadata{
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("approval")},
 		JSONType:    "object",
-		Description: "Checkpoint 5 approval of this revision, present only while it is verified against the promotion target's current inputs on this read. It is absent before approve_merge succeeds, whenever the target's suite, environment or binary digests have changed since, and whenever current inputs cannot be verified (see unverified_approval). It is never hashed into request_revision.",
+		Description: "Checkpoint 5 approval of this revision, present while suite_commit is still the tests' commit chosen for this revision and (when a promotion target is configured) the promotion target's current binary digests still equal artifacts on this read. It is absent before approve_merge succeeds, whenever the chosen tests' commit or the staged binary digests have changed since, and whenever a configured promotion target's staged binaries cannot be verified (see unverified_approval). It is never hashed into request_revision.",
 	},
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("approval"), tools.FixedField("approved_by")},
 		JSONType:    "string",
-		Description: "Authenticated principal that owns the card and called approve_merge. Authentication does not prove that a human, rather than a coding agent, made the call.",
+		Description: "User who approved the result.",
 	},
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("approval"), tools.FixedField("report_digest")},
@@ -1867,37 +2743,94 @@ var confirmIntentResultFields = []tools.FieldMetadata{
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("approval"), tools.FixedField("suite_id")},
 		JSONType:    "string",
-		Description: "Evaluator suite the promotion target requires.",
+		Description: "Suite identifier the tests at suite_commit declared in the report (shown, not compared).",
 	},
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("approval"), tools.FixedField("suite_commit")},
 		JSONType:    "string",
-		Description: "Evaluator suite commit the promotion target requires.",
+		Description: "Commit of the tests the report ran: the evaluator suite commit in the stored verification settings, or the tests Surla accepted for the change's build.",
 	},
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("approval"), tools.FixedField("environment")},
 		JSONType:    "string",
-		Description: "Dependency profile the promotion target requires, such as sim.",
+		Description: "Dependency profile the tests at suite_commit declared in the report, such as sim or scripted-model (shown, not compared).",
 	},
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("approval"), tools.FixedField("artifacts")},
 		JSONType:    "object",
-		Description: "SHA-256 digest of each candidate binary the promotion target measured, keyed by binary name.",
+		Description: "SHA-256 digest of each candidate binary the promotion target measured, keyed by binary name; empty when no promotion settings are configured.",
 	},
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("approval"), tools.FixedField("artifacts"), tools.DynamicField{}},
 		JSONType:    "string",
-		Description: "SHA-256 digest of each candidate binary the promotion target measured, keyed by binary name.",
+		Description: "SHA-256 digest of each candidate binary the promotion target measured, keyed by binary name; empty when no promotion settings are configured.",
 	},
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("approval"), tools.FixedField("scenario_count")},
 		JSONType:    "integer",
-		Description: "Number of declared evaluator scenarios, every one of which passed.",
+		Description: "Number of declared scenarios in the report, every one of which passed.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("approval"), tools.FixedField("test_source")},
+		JSONType:    "object",
+		Description: "Where the tests at suite_commit came from, derived on each read: evaluator, or written_tests with their commit and a notice.",
+	},
+	{
+		Path:     []tools.FieldPathSegment{tools.FixedField("approval"), tools.FixedField("test_source"), tools.FixedField("source")},
+		JSONType: "string",
+		DiscriminatorValues: []string{
+			"evaluator",
+			"written_tests",
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("approval"), tools.FixedField("test_source")},
+		JSONType:    "object",
+		Description: "The run used the operator's evaluator: the one stored with surla verification set, or the one named on surla verify's command line.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("approval"), tools.FixedField("test_source"), tools.FixedField("source")},
+				Value:         "evaluator",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("approval"), tools.FixedField("test_source")},
+		JSONType:    "object",
+		Description: "The run used the tests Surla accepted for the change's build, which a separate agent on this machine wrote.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("approval"), tools.FixedField("test_source"), tools.FixedField("source")},
+				Value:         "written_tests",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("approval"), tools.FixedField("test_source"), tools.FixedField("commit")},
+		JSONType:    "string",
+		Description: "Commit Surla recorded the accepted tests at; the same as suite_commit.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("approval"), tools.FixedField("test_source"), tools.FixedField("source")},
+				Value:         "written_tests",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("approval"), tools.FixedField("test_source"), tools.FixedField("notice")},
+		JSONType:    "string",
+		Description: "Always: These tests were written by a separate agent on this machine and are not isolated from the builder.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("approval"), tools.FixedField("test_source"), tools.FixedField("source")},
+				Value:         "written_tests",
+			},
+		},
 	},
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("unverified_approval")},
 		JSONType:    "object",
-		Description: "Saved Checkpoint 5 approval of this revision when current promotion inputs could not be verified on this read (because no promotion target is configured or the target could not report its current inputs). At most one of approval or unverified_approval is set. It is never saved to disk or hashed into request_revision.",
+		Description: "Saved Checkpoint 5 approval of this revision when suite_commit still matches the chosen tests' commit and promotion settings are configured, but the staged binaries could not be verified on this read. At most one of approval or unverified_approval is set. It is never saved to disk or hashed into request_revision.",
 	},
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("unverified_approval"), tools.FixedField("approval")},
@@ -1907,7 +2840,7 @@ var confirmIntentResultFields = []tools.FieldMetadata{
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("unverified_approval"), tools.FixedField("approval"), tools.FixedField("approved_by")},
 		JSONType:    "string",
-		Description: "Authenticated principal that owns the card and called approve_merge. Authentication does not prove that a human, rather than a coding agent, made the call.",
+		Description: "User who approved the result.",
 	},
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("unverified_approval"), tools.FixedField("approval"), tools.FixedField("report_digest")},
@@ -1922,37 +2855,1250 @@ var confirmIntentResultFields = []tools.FieldMetadata{
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("unverified_approval"), tools.FixedField("approval"), tools.FixedField("suite_id")},
 		JSONType:    "string",
-		Description: "Evaluator suite the promotion target requires.",
+		Description: "Suite identifier the tests at suite_commit declared in the report (shown, not compared).",
 	},
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("unverified_approval"), tools.FixedField("approval"), tools.FixedField("suite_commit")},
 		JSONType:    "string",
-		Description: "Evaluator suite commit the promotion target requires.",
+		Description: "Commit of the tests the report ran: the evaluator suite commit in the stored verification settings, or the tests Surla accepted for the change's build.",
 	},
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("unverified_approval"), tools.FixedField("approval"), tools.FixedField("environment")},
 		JSONType:    "string",
-		Description: "Dependency profile the promotion target requires, such as sim.",
+		Description: "Dependency profile the tests at suite_commit declared in the report, such as sim or scripted-model (shown, not compared).",
 	},
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("unverified_approval"), tools.FixedField("approval"), tools.FixedField("artifacts")},
 		JSONType:    "object",
-		Description: "SHA-256 digest of each candidate binary the promotion target measured, keyed by binary name.",
+		Description: "SHA-256 digest of each candidate binary the promotion target measured, keyed by binary name; empty when no promotion settings are configured.",
 	},
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("unverified_approval"), tools.FixedField("approval"), tools.FixedField("artifacts"), tools.DynamicField{}},
 		JSONType:    "string",
-		Description: "SHA-256 digest of each candidate binary the promotion target measured, keyed by binary name.",
+		Description: "SHA-256 digest of each candidate binary the promotion target measured, keyed by binary name; empty when no promotion settings are configured.",
 	},
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("unverified_approval"), tools.FixedField("approval"), tools.FixedField("scenario_count")},
 		JSONType:    "integer",
-		Description: "Number of declared evaluator scenarios, every one of which passed.",
+		Description: "Number of declared scenarios in the report, every one of which passed.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("unverified_approval"), tools.FixedField("approval"), tools.FixedField("test_source")},
+		JSONType:    "object",
+		Description: "Where the tests at suite_commit came from, derived on each read: evaluator, or written_tests with their commit and a notice.",
+	},
+	{
+		Path:     []tools.FieldPathSegment{tools.FixedField("unverified_approval"), tools.FixedField("approval"), tools.FixedField("test_source"), tools.FixedField("source")},
+		JSONType: "string",
+		DiscriminatorValues: []string{
+			"evaluator",
+			"written_tests",
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("unverified_approval"), tools.FixedField("approval"), tools.FixedField("test_source")},
+		JSONType:    "object",
+		Description: "The run used the operator's evaluator: the one stored with surla verification set, or the one named on surla verify's command line.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("unverified_approval"), tools.FixedField("approval"), tools.FixedField("test_source"), tools.FixedField("source")},
+				Value:         "evaluator",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("unverified_approval"), tools.FixedField("approval"), tools.FixedField("test_source")},
+		JSONType:    "object",
+		Description: "The run used the tests Surla accepted for the change's build, which a separate agent on this machine wrote.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("unverified_approval"), tools.FixedField("approval"), tools.FixedField("test_source"), tools.FixedField("source")},
+				Value:         "written_tests",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("unverified_approval"), tools.FixedField("approval"), tools.FixedField("test_source"), tools.FixedField("commit")},
+		JSONType:    "string",
+		Description: "Commit Surla recorded the accepted tests at; the same as suite_commit.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("unverified_approval"), tools.FixedField("approval"), tools.FixedField("test_source"), tools.FixedField("source")},
+				Value:         "written_tests",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("unverified_approval"), tools.FixedField("approval"), tools.FixedField("test_source"), tools.FixedField("notice")},
+		JSONType:    "string",
+		Description: "Always: These tests were written by a separate agent on this machine and are not isolated from the builder.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("unverified_approval"), tools.FixedField("approval"), tools.FixedField("test_source"), tools.FixedField("source")},
+				Value:         "written_tests",
+			},
+		},
 	},
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("unverified_approval"), tools.FixedField("reason")},
 		JSONType:    "string",
-		Description: "Explanation of why the recorded approval could not be verified against current promotion inputs and how to recover.",
+		Description: "Explanation of why the recorded approval could not be verified against current release binaries and how to recover.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision")},
+		JSONType:    "object",
+		Description: "The revision the guide proposed beside this confirmed revision, while it waits for the user to adopt or decline it; absent otherwise. This card's own fields describe the revision in force.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("prompt")},
+		JSONType:    "string",
+		Description: "The user's feature request for this revision.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("summary")},
+		JSONType:    "string",
+		Description: "Plain-English summary of the proposed change.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("ambiguities")},
+		JSONType:    "array",
+		Description: "Domain questions the user answers when adopting this revision.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("ambiguities"), tools.DynamicField{}},
+		JSONType:    "object",
+		Description: "Domain questions the user answers when adopting this revision.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("ambiguities"), tools.DynamicField{}, tools.FixedField("id")},
+		JSONType:    "string",
+		Description: "Stable question identifier.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("ambiguities"), tools.DynamicField{}, tools.FixedField("question")},
+		JSONType:    "string",
+		Description: "Plain-English question for the user.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("ambiguities"), tools.DynamicField{}, tools.FixedField("options")},
+		JSONType:    "array",
+		Description: "Concrete resolution choices.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("ambiguities"), tools.DynamicField{}, tools.FixedField("options"), tools.DynamicField{}},
+		JSONType:    "string",
+		Description: "Concrete resolution choices.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("examples")},
+		JSONType:    "array",
+		Description: "Concrete examples mapped to evaluator checks.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("examples"), tools.DynamicField{}},
+		JSONType:    "object",
+		Description: "Concrete examples mapped to evaluator checks.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("examples"), tools.DynamicField{}, tools.FixedField("id")},
+		JSONType:    "string",
+		Description: "Stable example identifier. Default code-assigned IDs use check_01, check_02, ... (valid goa-ai/eval Scenario names). confirm_intent preserves caller-chosen IDs.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("examples"), tools.DynamicField{}, tools.FixedField("scenario")},
+		JSONType:    "string",
+		Description: "Plain-English scenario description.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("examples"), tools.DynamicField{}, tools.FixedField("input_summary")},
+		JSONType:    "string",
+		Description: "Representative user request and domain fixture state.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("examples"), tools.DynamicField{}, tools.FixedField("expected_outcome")},
+		JSONType:    "string",
+		Description: "Expected side effect and response behavior.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("examples"), tools.DynamicField{}, tools.FixedField("verification_kind")},
+		JSONType:    "string",
+		Description: "Evaluator check classification (deterministic or model_judged).",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("preserved_behaviors")},
+		JSONType:    "array",
+		Description: "Existing contract invariants preserved by this change.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("preserved_behaviors"), tools.DynamicField{}},
+		JSONType:    "string",
+		Description: "Existing contract invariants preserved by this change.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("stories")},
+		JSONType:    "array",
+		Description: "Evaluated domain Stories of this revision in declaration order; omitted when it has none. Included in its request_revision.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("stories"), tools.DynamicField{}},
+		JSONType:    "object",
+		Description: "Evaluated domain Stories of this revision in declaration order; omitted when it has none. Included in its request_revision.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("name")},
+		JSONType:    "string",
+		Description: "Human-facing Story title.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("description")},
+		JSONType:    "string",
+		Description: "Optional longer explanation of the Story.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("actors")},
+		JSONType:    "array",
+		Description: "Domain roles declared in the Story in declaration order.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("actors"), tools.DynamicField{}},
+		JSONType:    "object",
+		Description: "Domain roles declared in the Story in declaration order.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("actors"), tools.DynamicField{}, tools.FixedField("key")},
+		JSONType:    "string",
+		Description: "Story-scoped actor key.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("actors"), tools.DynamicField{}, tools.FixedField("title")},
+		JSONType:    "string",
+		Description: "Human-facing actor label.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("actors"), tools.DynamicField{}, tools.FixedField("description")},
+		JSONType:    "string",
+		Description: "Optional longer explanation of the actor role.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("flows")},
+		JSONType:    "array",
+		Description: "Timeline paths declared in the Story in declaration order.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("flows"), tools.DynamicField{}},
+		JSONType:    "object",
+		Description: "Timeline paths declared in the Story in declaration order.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("flows"), tools.DynamicField{}, tools.FixedField("key")},
+		JSONType:    "string",
+		Description: "Story-scoped flow key.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("flows"), tools.DynamicField{}, tools.FixedField("title")},
+		JSONType:    "string",
+		Description: "Human-facing flow title.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("flows"), tools.DynamicField{}, tools.FixedField("description")},
+		JSONType:    "string",
+		Description: "Optional longer explanation of the flow.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("flows"), tools.DynamicField{}, tools.FixedField("complete")},
+		JSONType:    "boolean",
+		Description: "True when the flow has a start, at least one outcome, and no open questions on the flow or any of its steps.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("flows"), tools.DynamicField{}, tools.FixedField("steps")},
+		JSONType:    "array",
+		Description: "Starting, intermediate, and outcome steps in declaration order.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("flows"), tools.DynamicField{}, tools.FixedField("steps"), tools.DynamicField{}},
+		JSONType:    "object",
+		Description: "Starting, intermediate, and outcome steps in declaration order.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("flows"), tools.DynamicField{}, tools.FixedField("steps"), tools.DynamicField{}, tools.FixedField("key")},
+		JSONType:    "string",
+		Description: "Flow-scoped step key.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("flows"), tools.DynamicField{}, tools.FixedField("steps"), tools.DynamicField{}, tools.FixedField("actor_key")},
+		JSONType:    "string",
+		Description: "Story-scoped key of the actor performing or observing the step.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("flows"), tools.DynamicField{}, tools.FixedField("steps"), tools.DynamicField{}, tools.FixedField("summary")},
+		JSONType:    "string",
+		Description: "Timeline sticky-note sentence for the step.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("flows"), tools.DynamicField{}, tools.FixedField("steps"), tools.DynamicField{}, tools.FixedField("description")},
+		JSONType:    "string",
+		Description: "Optional longer explanation of the step.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("flows"), tools.DynamicField{}, tools.FixedField("steps"), tools.DynamicField{}, tools.FixedField("kind")},
+		JSONType:    "string",
+		Description: "Step position in the flow: start, step, or outcome.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("flows"), tools.DynamicField{}, tools.FixedField("steps"), tools.DynamicField{}, tools.FixedField("questions")},
+		JSONType:    "array",
+		Description: "Unresolved step-level decisions in declaration order.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("flows"), tools.DynamicField{}, tools.FixedField("steps"), tools.DynamicField{}, tools.FixedField("questions"), tools.DynamicField{}},
+		JSONType:    "object",
+		Description: "Unresolved step-level decisions in declaration order.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("flows"), tools.DynamicField{}, tools.FixedField("steps"), tools.DynamicField{}, tools.FixedField("questions"), tools.DynamicField{}, tools.FixedField("key")},
+		JSONType:    "string",
+		Description: "Flow-scoped question key.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("flows"), tools.DynamicField{}, tools.FixedField("steps"), tools.DynamicField{}, tools.FixedField("questions"), tools.DynamicField{}, tools.FixedField("prompt")},
+		JSONType:    "string",
+		Description: "Human-facing question text.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("flows"), tools.DynamicField{}, tools.FixedField("steps"), tools.DynamicField{}, tools.FixedField("questions"), tools.DynamicField{}, tools.FixedField("description")},
+		JSONType:    "string",
+		Description: "Optional longer context for the question.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("flows"), tools.DynamicField{}, tools.FixedField("steps"), tools.DynamicField{}, tools.FixedField("questions"), tools.DynamicField{}, tools.FixedField("options")},
+		JSONType:    "array",
+		Description: "Suggested choices in declaration order.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("flows"), tools.DynamicField{}, tools.FixedField("steps"), tools.DynamicField{}, tools.FixedField("questions"), tools.DynamicField{}, tools.FixedField("options"), tools.DynamicField{}},
+		JSONType:    "string",
+		Description: "Suggested choices in declaration order.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("flows"), tools.DynamicField{}, tools.FixedField("questions")},
+		JSONType:    "array",
+		Description: "Unresolved flow-level decisions in declaration order.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("flows"), tools.DynamicField{}, tools.FixedField("questions"), tools.DynamicField{}},
+		JSONType:    "object",
+		Description: "Unresolved flow-level decisions in declaration order.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("flows"), tools.DynamicField{}, tools.FixedField("questions"), tools.DynamicField{}, tools.FixedField("key")},
+		JSONType:    "string",
+		Description: "Flow-scoped question key.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("flows"), tools.DynamicField{}, tools.FixedField("questions"), tools.DynamicField{}, tools.FixedField("prompt")},
+		JSONType:    "string",
+		Description: "Human-facing question text.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("flows"), tools.DynamicField{}, tools.FixedField("questions"), tools.DynamicField{}, tools.FixedField("description")},
+		JSONType:    "string",
+		Description: "Optional longer context for the question.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("flows"), tools.DynamicField{}, tools.FixedField("questions"), tools.DynamicField{}, tools.FixedField("options")},
+		JSONType:    "array",
+		Description: "Suggested choices in declaration order.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("flows"), tools.DynamicField{}, tools.FixedField("questions"), tools.DynamicField{}, tools.FixedField("options"), tools.DynamicField{}},
+		JSONType:    "string",
+		Description: "Suggested choices in declaration order.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("request_revision")},
+		JSONType:    "string",
+		Description: "SHA-256 digest of this proposed revision: confirm_intent adopts it, decline_revision declines it, and revise_change replaces it when given this value.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("ui_composition")},
+		JSONType:    "object",
+		Description: "Decision view the guide composed for this revision in its analysis, when it sent one.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("ui_composition"), tools.FixedField("program")},
+		JSONType:    "string",
+		Description: "OpenUI Lang program from the analysis's ui_composition, exactly as the caller sent it. The server does not check it; the views page validates it and shows its error state, with the rest of the card still usable, when the program is not a valid composition.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("ui_composition"), tools.FixedField("composed_for_revision")},
+		JSONType:    "string",
+		Description: "request_revision of the Change Card this program was composed for.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("changed_design_files")},
+		JSONType:    "array",
+		Description: "Paths of the design/*.go files that differ between the design source the confirmed revision was made from and the one this revision was made from (added, removed or changed), in path order; empty when both were made from the same design files. Adopting the revision binds it to its own design source.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("changed_design_files"), tools.DynamicField{}},
+		JSONType:    "string",
+		Description: "Paths of the design/*.go files that differ between the design source the confirmed revision was made from and the one this revision was made from (added, removed or changed), in path order; empty when both were made from the same design files. Adopting the revision binds it to its own design source.",
+	},
+}
+var declineRevisionPayloadFields = []tools.FieldMetadata{
+	{
+		JSONType:    "object",
+		Description: "Identifies the proposed revision of a confirmed Change Card that the user declines.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("change_id")},
+		JSONType:    "string",
+		Description: "Change identifier.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("request_revision")},
+		JSONType:    "string",
+		Description: "request_revision of the proposed revision being declined (proposed_revision.request_revision): 64 lowercase hex characters.",
+	},
+}
+var declineRevisionResultFields = []tools.FieldMetadata{
+	{
+		JSONType:    "object",
+		Description: "Checkpoint 1 Change Card containing examples, preserved behaviors, optional adopted domain Stories, and audit metadata.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("change_id")},
+		JSONType:    "string",
+		Description: "Change identifier.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("status")},
+		JSONType:    "string",
+		Description: "Checkpoint status (needs_confirmation or confirmed).",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("prompt")},
+		JSONType:    "string",
+		Description: "The user's feature request for this revision.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("summary")},
+		JSONType:    "string",
+		Description: "Plain-English summary of the proposed change from propose_change or revise_change. confirm_intent does not rewrite this text; when status is confirmed, answers records the owner's resolutions for ambiguities.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("ambiguities")},
+		JSONType:    "array",
+		Description: "Domain questions surfaced at CP1, retained for audit after confirmation.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("ambiguities"), tools.DynamicField{}},
+		JSONType:    "object",
+		Description: "Domain questions surfaced at CP1, retained for audit after confirmation.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("ambiguities"), tools.DynamicField{}, tools.FixedField("id")},
+		JSONType:    "string",
+		Description: "Stable question identifier.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("ambiguities"), tools.DynamicField{}, tools.FixedField("question")},
+		JSONType:    "string",
+		Description: "Plain-English question for the user.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("ambiguities"), tools.DynamicField{}, tools.FixedField("options")},
+		JSONType:    "array",
+		Description: "Concrete resolution choices.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("ambiguities"), tools.DynamicField{}, tools.FixedField("options"), tools.DynamicField{}},
+		JSONType:    "string",
+		Description: "Concrete resolution choices.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("answers")},
+		JSONType:    "object",
+		Description: "Owner-confirmed answers keyed by ambiguity question ID when status is confirmed and ambiguities is non-empty (empty when a confirmed card has no ambiguity questions). Each answer equals one of its question's declared options and takes precedence over open phrasing in summary.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("answers"), tools.DynamicField{}},
+		JSONType:    "string",
+		Description: "Owner-confirmed answers keyed by ambiguity question ID when status is confirmed and ambiguities is non-empty (empty when a confirmed card has no ambiguity questions). Each answer equals one of its question's declared options and takes precedence over open phrasing in summary.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("examples")},
+		JSONType:    "array",
+		Description: "Concrete examples mapped to evaluator checks.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("examples"), tools.DynamicField{}},
+		JSONType:    "object",
+		Description: "Concrete examples mapped to evaluator checks.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("examples"), tools.DynamicField{}, tools.FixedField("id")},
+		JSONType:    "string",
+		Description: "Stable example identifier. Default code-assigned IDs use check_01, check_02, ... (valid goa-ai/eval Scenario names). confirm_intent preserves caller-chosen IDs.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("examples"), tools.DynamicField{}, tools.FixedField("scenario")},
+		JSONType:    "string",
+		Description: "Plain-English scenario description.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("examples"), tools.DynamicField{}, tools.FixedField("input_summary")},
+		JSONType:    "string",
+		Description: "Representative user request and domain fixture state.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("examples"), tools.DynamicField{}, tools.FixedField("expected_outcome")},
+		JSONType:    "string",
+		Description: "Expected side effect and response behavior.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("examples"), tools.DynamicField{}, tools.FixedField("verification_kind")},
+		JSONType:    "string",
+		Description: "Evaluator check classification (deterministic or model_judged).",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("preserved_behaviors")},
+		JSONType:    "array",
+		Description: "Existing contract invariants preserved by this change.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("preserved_behaviors"), tools.DynamicField{}},
+		JSONType:    "string",
+		Description: "Existing contract invariants preserved by this change.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("stories")},
+		JSONType:    "array",
+		Description: "Evaluated domain Stories adopted from refresh_story for this Change Card revision in declaration order; omitted when the card has no Stories. Included in request_revision.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("stories"), tools.DynamicField{}},
+		JSONType:    "object",
+		Description: "Evaluated domain Stories adopted from refresh_story for this Change Card revision in declaration order; omitted when the card has no Stories. Included in request_revision.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("name")},
+		JSONType:    "string",
+		Description: "Human-facing Story title.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("description")},
+		JSONType:    "string",
+		Description: "Optional longer explanation of the Story.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("actors")},
+		JSONType:    "array",
+		Description: "Domain roles declared in the Story in declaration order.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("actors"), tools.DynamicField{}},
+		JSONType:    "object",
+		Description: "Domain roles declared in the Story in declaration order.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("actors"), tools.DynamicField{}, tools.FixedField("key")},
+		JSONType:    "string",
+		Description: "Story-scoped actor key.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("actors"), tools.DynamicField{}, tools.FixedField("title")},
+		JSONType:    "string",
+		Description: "Human-facing actor label.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("actors"), tools.DynamicField{}, tools.FixedField("description")},
+		JSONType:    "string",
+		Description: "Optional longer explanation of the actor role.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("flows")},
+		JSONType:    "array",
+		Description: "Timeline paths declared in the Story in declaration order.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("flows"), tools.DynamicField{}},
+		JSONType:    "object",
+		Description: "Timeline paths declared in the Story in declaration order.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("flows"), tools.DynamicField{}, tools.FixedField("key")},
+		JSONType:    "string",
+		Description: "Story-scoped flow key.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("flows"), tools.DynamicField{}, tools.FixedField("title")},
+		JSONType:    "string",
+		Description: "Human-facing flow title.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("flows"), tools.DynamicField{}, tools.FixedField("description")},
+		JSONType:    "string",
+		Description: "Optional longer explanation of the flow.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("flows"), tools.DynamicField{}, tools.FixedField("complete")},
+		JSONType:    "boolean",
+		Description: "True when the flow has a start, at least one outcome, and no open questions on the flow or any of its steps.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("flows"), tools.DynamicField{}, tools.FixedField("steps")},
+		JSONType:    "array",
+		Description: "Starting, intermediate, and outcome steps in declaration order.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("flows"), tools.DynamicField{}, tools.FixedField("steps"), tools.DynamicField{}},
+		JSONType:    "object",
+		Description: "Starting, intermediate, and outcome steps in declaration order.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("flows"), tools.DynamicField{}, tools.FixedField("steps"), tools.DynamicField{}, tools.FixedField("key")},
+		JSONType:    "string",
+		Description: "Flow-scoped step key.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("flows"), tools.DynamicField{}, tools.FixedField("steps"), tools.DynamicField{}, tools.FixedField("actor_key")},
+		JSONType:    "string",
+		Description: "Story-scoped key of the actor performing or observing the step.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("flows"), tools.DynamicField{}, tools.FixedField("steps"), tools.DynamicField{}, tools.FixedField("summary")},
+		JSONType:    "string",
+		Description: "Timeline sticky-note sentence for the step.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("flows"), tools.DynamicField{}, tools.FixedField("steps"), tools.DynamicField{}, tools.FixedField("description")},
+		JSONType:    "string",
+		Description: "Optional longer explanation of the step.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("flows"), tools.DynamicField{}, tools.FixedField("steps"), tools.DynamicField{}, tools.FixedField("kind")},
+		JSONType:    "string",
+		Description: "Step position in the flow: start, step, or outcome.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("flows"), tools.DynamicField{}, tools.FixedField("steps"), tools.DynamicField{}, tools.FixedField("questions")},
+		JSONType:    "array",
+		Description: "Unresolved step-level decisions in declaration order.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("flows"), tools.DynamicField{}, tools.FixedField("steps"), tools.DynamicField{}, tools.FixedField("questions"), tools.DynamicField{}},
+		JSONType:    "object",
+		Description: "Unresolved step-level decisions in declaration order.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("flows"), tools.DynamicField{}, tools.FixedField("steps"), tools.DynamicField{}, tools.FixedField("questions"), tools.DynamicField{}, tools.FixedField("key")},
+		JSONType:    "string",
+		Description: "Flow-scoped question key.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("flows"), tools.DynamicField{}, tools.FixedField("steps"), tools.DynamicField{}, tools.FixedField("questions"), tools.DynamicField{}, tools.FixedField("prompt")},
+		JSONType:    "string",
+		Description: "Human-facing question text.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("flows"), tools.DynamicField{}, tools.FixedField("steps"), tools.DynamicField{}, tools.FixedField("questions"), tools.DynamicField{}, tools.FixedField("description")},
+		JSONType:    "string",
+		Description: "Optional longer context for the question.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("flows"), tools.DynamicField{}, tools.FixedField("steps"), tools.DynamicField{}, tools.FixedField("questions"), tools.DynamicField{}, tools.FixedField("options")},
+		JSONType:    "array",
+		Description: "Suggested choices in declaration order.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("flows"), tools.DynamicField{}, tools.FixedField("steps"), tools.DynamicField{}, tools.FixedField("questions"), tools.DynamicField{}, tools.FixedField("options"), tools.DynamicField{}},
+		JSONType:    "string",
+		Description: "Suggested choices in declaration order.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("flows"), tools.DynamicField{}, tools.FixedField("questions")},
+		JSONType:    "array",
+		Description: "Unresolved flow-level decisions in declaration order.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("flows"), tools.DynamicField{}, tools.FixedField("questions"), tools.DynamicField{}},
+		JSONType:    "object",
+		Description: "Unresolved flow-level decisions in declaration order.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("flows"), tools.DynamicField{}, tools.FixedField("questions"), tools.DynamicField{}, tools.FixedField("key")},
+		JSONType:    "string",
+		Description: "Flow-scoped question key.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("flows"), tools.DynamicField{}, tools.FixedField("questions"), tools.DynamicField{}, tools.FixedField("prompt")},
+		JSONType:    "string",
+		Description: "Human-facing question text.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("flows"), tools.DynamicField{}, tools.FixedField("questions"), tools.DynamicField{}, tools.FixedField("description")},
+		JSONType:    "string",
+		Description: "Optional longer context for the question.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("flows"), tools.DynamicField{}, tools.FixedField("questions"), tools.DynamicField{}, tools.FixedField("options")},
+		JSONType:    "array",
+		Description: "Suggested choices in declaration order.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("flows"), tools.DynamicField{}, tools.FixedField("questions"), tools.DynamicField{}, tools.FixedField("options"), tools.DynamicField{}},
+		JSONType:    "string",
+		Description: "Suggested choices in declaration order.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("confirmed_by")},
+		JSONType:    "string",
+		Description: "User who confirmed the Change Card.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("request_revision")},
+		JSONType:    "string",
+		Description: "SHA-256 digest of the canonical versioned Change Card.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("ui_composition")},
+		JSONType:    "object",
+		Description: "Decision view the caller composed for this revision in its analysis, when it sent one. A confirm_intent that changes answers or examples returns the new revision without it.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("ui_composition"), tools.FixedField("program")},
+		JSONType:    "string",
+		Description: "OpenUI Lang program from the analysis's ui_composition, exactly as the caller sent it. The server does not check it; the views page validates it and shows its error state, with the rest of the card still usable, when the program is not a valid composition.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("ui_composition"), tools.FixedField("composed_for_revision")},
+		JSONType:    "string",
+		Description: "request_revision of the Change Card this program was composed for.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("approval")},
+		JSONType:    "object",
+		Description: "Checkpoint 5 approval of this revision, present while suite_commit is still the tests' commit chosen for this revision and (when a promotion target is configured) the promotion target's current binary digests still equal artifacts on this read. It is absent before approve_merge succeeds, whenever the chosen tests' commit or the staged binary digests have changed since, and whenever a configured promotion target's staged binaries cannot be verified (see unverified_approval). It is never hashed into request_revision.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("approval"), tools.FixedField("approved_by")},
+		JSONType:    "string",
+		Description: "User who approved the result.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("approval"), tools.FixedField("report_digest")},
+		JSONType:    "string",
+		Description: "SHA-256 digest of the approved CP4 verification report.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("approval"), tools.FixedField("candidate_commit")},
+		JSONType:    "string",
+		Description: "Candidate commit the report was checked against.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("approval"), tools.FixedField("suite_id")},
+		JSONType:    "string",
+		Description: "Suite identifier the tests at suite_commit declared in the report (shown, not compared).",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("approval"), tools.FixedField("suite_commit")},
+		JSONType:    "string",
+		Description: "Commit of the tests the report ran: the evaluator suite commit in the stored verification settings, or the tests Surla accepted for the change's build.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("approval"), tools.FixedField("environment")},
+		JSONType:    "string",
+		Description: "Dependency profile the tests at suite_commit declared in the report, such as sim or scripted-model (shown, not compared).",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("approval"), tools.FixedField("artifacts")},
+		JSONType:    "object",
+		Description: "SHA-256 digest of each candidate binary the promotion target measured, keyed by binary name; empty when no promotion settings are configured.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("approval"), tools.FixedField("artifacts"), tools.DynamicField{}},
+		JSONType:    "string",
+		Description: "SHA-256 digest of each candidate binary the promotion target measured, keyed by binary name; empty when no promotion settings are configured.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("approval"), tools.FixedField("scenario_count")},
+		JSONType:    "integer",
+		Description: "Number of declared scenarios in the report, every one of which passed.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("approval"), tools.FixedField("test_source")},
+		JSONType:    "object",
+		Description: "Where the tests at suite_commit came from, derived on each read: evaluator, or written_tests with their commit and a notice.",
+	},
+	{
+		Path:     []tools.FieldPathSegment{tools.FixedField("approval"), tools.FixedField("test_source"), tools.FixedField("source")},
+		JSONType: "string",
+		DiscriminatorValues: []string{
+			"evaluator",
+			"written_tests",
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("approval"), tools.FixedField("test_source")},
+		JSONType:    "object",
+		Description: "The run used the operator's evaluator: the one stored with surla verification set, or the one named on surla verify's command line.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("approval"), tools.FixedField("test_source"), tools.FixedField("source")},
+				Value:         "evaluator",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("approval"), tools.FixedField("test_source")},
+		JSONType:    "object",
+		Description: "The run used the tests Surla accepted for the change's build, which a separate agent on this machine wrote.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("approval"), tools.FixedField("test_source"), tools.FixedField("source")},
+				Value:         "written_tests",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("approval"), tools.FixedField("test_source"), tools.FixedField("commit")},
+		JSONType:    "string",
+		Description: "Commit Surla recorded the accepted tests at; the same as suite_commit.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("approval"), tools.FixedField("test_source"), tools.FixedField("source")},
+				Value:         "written_tests",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("approval"), tools.FixedField("test_source"), tools.FixedField("notice")},
+		JSONType:    "string",
+		Description: "Always: These tests were written by a separate agent on this machine and are not isolated from the builder.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("approval"), tools.FixedField("test_source"), tools.FixedField("source")},
+				Value:         "written_tests",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("unverified_approval")},
+		JSONType:    "object",
+		Description: "Saved Checkpoint 5 approval of this revision when suite_commit still matches the chosen tests' commit and promotion settings are configured, but the staged binaries could not be verified on this read. At most one of approval or unverified_approval is set. It is never saved to disk or hashed into request_revision.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("unverified_approval"), tools.FixedField("approval")},
+		JSONType:    "object",
+		Description: "Recorded promotion approval from the Change Card.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("unverified_approval"), tools.FixedField("approval"), tools.FixedField("approved_by")},
+		JSONType:    "string",
+		Description: "User who approved the result.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("unverified_approval"), tools.FixedField("approval"), tools.FixedField("report_digest")},
+		JSONType:    "string",
+		Description: "SHA-256 digest of the approved CP4 verification report.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("unverified_approval"), tools.FixedField("approval"), tools.FixedField("candidate_commit")},
+		JSONType:    "string",
+		Description: "Candidate commit the report was checked against.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("unverified_approval"), tools.FixedField("approval"), tools.FixedField("suite_id")},
+		JSONType:    "string",
+		Description: "Suite identifier the tests at suite_commit declared in the report (shown, not compared).",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("unverified_approval"), tools.FixedField("approval"), tools.FixedField("suite_commit")},
+		JSONType:    "string",
+		Description: "Commit of the tests the report ran: the evaluator suite commit in the stored verification settings, or the tests Surla accepted for the change's build.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("unverified_approval"), tools.FixedField("approval"), tools.FixedField("environment")},
+		JSONType:    "string",
+		Description: "Dependency profile the tests at suite_commit declared in the report, such as sim or scripted-model (shown, not compared).",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("unverified_approval"), tools.FixedField("approval"), tools.FixedField("artifacts")},
+		JSONType:    "object",
+		Description: "SHA-256 digest of each candidate binary the promotion target measured, keyed by binary name; empty when no promotion settings are configured.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("unverified_approval"), tools.FixedField("approval"), tools.FixedField("artifacts"), tools.DynamicField{}},
+		JSONType:    "string",
+		Description: "SHA-256 digest of each candidate binary the promotion target measured, keyed by binary name; empty when no promotion settings are configured.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("unverified_approval"), tools.FixedField("approval"), tools.FixedField("scenario_count")},
+		JSONType:    "integer",
+		Description: "Number of declared scenarios in the report, every one of which passed.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("unverified_approval"), tools.FixedField("approval"), tools.FixedField("test_source")},
+		JSONType:    "object",
+		Description: "Where the tests at suite_commit came from, derived on each read: evaluator, or written_tests with their commit and a notice.",
+	},
+	{
+		Path:     []tools.FieldPathSegment{tools.FixedField("unverified_approval"), tools.FixedField("approval"), tools.FixedField("test_source"), tools.FixedField("source")},
+		JSONType: "string",
+		DiscriminatorValues: []string{
+			"evaluator",
+			"written_tests",
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("unverified_approval"), tools.FixedField("approval"), tools.FixedField("test_source")},
+		JSONType:    "object",
+		Description: "The run used the operator's evaluator: the one stored with surla verification set, or the one named on surla verify's command line.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("unverified_approval"), tools.FixedField("approval"), tools.FixedField("test_source"), tools.FixedField("source")},
+				Value:         "evaluator",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("unverified_approval"), tools.FixedField("approval"), tools.FixedField("test_source")},
+		JSONType:    "object",
+		Description: "The run used the tests Surla accepted for the change's build, which a separate agent on this machine wrote.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("unverified_approval"), tools.FixedField("approval"), tools.FixedField("test_source"), tools.FixedField("source")},
+				Value:         "written_tests",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("unverified_approval"), tools.FixedField("approval"), tools.FixedField("test_source"), tools.FixedField("commit")},
+		JSONType:    "string",
+		Description: "Commit Surla recorded the accepted tests at; the same as suite_commit.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("unverified_approval"), tools.FixedField("approval"), tools.FixedField("test_source"), tools.FixedField("source")},
+				Value:         "written_tests",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("unverified_approval"), tools.FixedField("approval"), tools.FixedField("test_source"), tools.FixedField("notice")},
+		JSONType:    "string",
+		Description: "Always: These tests were written by a separate agent on this machine and are not isolated from the builder.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("unverified_approval"), tools.FixedField("approval"), tools.FixedField("test_source"), tools.FixedField("source")},
+				Value:         "written_tests",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("unverified_approval"), tools.FixedField("reason")},
+		JSONType:    "string",
+		Description: "Explanation of why the recorded approval could not be verified against current release binaries and how to recover.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision")},
+		JSONType:    "object",
+		Description: "The revision the guide proposed beside this confirmed revision, while it waits for the user to adopt or decline it; absent otherwise. This card's own fields describe the revision in force.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("prompt")},
+		JSONType:    "string",
+		Description: "The user's feature request for this revision.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("summary")},
+		JSONType:    "string",
+		Description: "Plain-English summary of the proposed change.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("ambiguities")},
+		JSONType:    "array",
+		Description: "Domain questions the user answers when adopting this revision.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("ambiguities"), tools.DynamicField{}},
+		JSONType:    "object",
+		Description: "Domain questions the user answers when adopting this revision.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("ambiguities"), tools.DynamicField{}, tools.FixedField("id")},
+		JSONType:    "string",
+		Description: "Stable question identifier.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("ambiguities"), tools.DynamicField{}, tools.FixedField("question")},
+		JSONType:    "string",
+		Description: "Plain-English question for the user.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("ambiguities"), tools.DynamicField{}, tools.FixedField("options")},
+		JSONType:    "array",
+		Description: "Concrete resolution choices.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("ambiguities"), tools.DynamicField{}, tools.FixedField("options"), tools.DynamicField{}},
+		JSONType:    "string",
+		Description: "Concrete resolution choices.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("examples")},
+		JSONType:    "array",
+		Description: "Concrete examples mapped to evaluator checks.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("examples"), tools.DynamicField{}},
+		JSONType:    "object",
+		Description: "Concrete examples mapped to evaluator checks.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("examples"), tools.DynamicField{}, tools.FixedField("id")},
+		JSONType:    "string",
+		Description: "Stable example identifier. Default code-assigned IDs use check_01, check_02, ... (valid goa-ai/eval Scenario names). confirm_intent preserves caller-chosen IDs.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("examples"), tools.DynamicField{}, tools.FixedField("scenario")},
+		JSONType:    "string",
+		Description: "Plain-English scenario description.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("examples"), tools.DynamicField{}, tools.FixedField("input_summary")},
+		JSONType:    "string",
+		Description: "Representative user request and domain fixture state.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("examples"), tools.DynamicField{}, tools.FixedField("expected_outcome")},
+		JSONType:    "string",
+		Description: "Expected side effect and response behavior.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("examples"), tools.DynamicField{}, tools.FixedField("verification_kind")},
+		JSONType:    "string",
+		Description: "Evaluator check classification (deterministic or model_judged).",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("preserved_behaviors")},
+		JSONType:    "array",
+		Description: "Existing contract invariants preserved by this change.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("preserved_behaviors"), tools.DynamicField{}},
+		JSONType:    "string",
+		Description: "Existing contract invariants preserved by this change.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("stories")},
+		JSONType:    "array",
+		Description: "Evaluated domain Stories of this revision in declaration order; omitted when it has none. Included in its request_revision.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("stories"), tools.DynamicField{}},
+		JSONType:    "object",
+		Description: "Evaluated domain Stories of this revision in declaration order; omitted when it has none. Included in its request_revision.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("name")},
+		JSONType:    "string",
+		Description: "Human-facing Story title.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("description")},
+		JSONType:    "string",
+		Description: "Optional longer explanation of the Story.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("actors")},
+		JSONType:    "array",
+		Description: "Domain roles declared in the Story in declaration order.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("actors"), tools.DynamicField{}},
+		JSONType:    "object",
+		Description: "Domain roles declared in the Story in declaration order.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("actors"), tools.DynamicField{}, tools.FixedField("key")},
+		JSONType:    "string",
+		Description: "Story-scoped actor key.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("actors"), tools.DynamicField{}, tools.FixedField("title")},
+		JSONType:    "string",
+		Description: "Human-facing actor label.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("actors"), tools.DynamicField{}, tools.FixedField("description")},
+		JSONType:    "string",
+		Description: "Optional longer explanation of the actor role.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("flows")},
+		JSONType:    "array",
+		Description: "Timeline paths declared in the Story in declaration order.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("flows"), tools.DynamicField{}},
+		JSONType:    "object",
+		Description: "Timeline paths declared in the Story in declaration order.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("flows"), tools.DynamicField{}, tools.FixedField("key")},
+		JSONType:    "string",
+		Description: "Story-scoped flow key.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("flows"), tools.DynamicField{}, tools.FixedField("title")},
+		JSONType:    "string",
+		Description: "Human-facing flow title.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("flows"), tools.DynamicField{}, tools.FixedField("description")},
+		JSONType:    "string",
+		Description: "Optional longer explanation of the flow.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("flows"), tools.DynamicField{}, tools.FixedField("complete")},
+		JSONType:    "boolean",
+		Description: "True when the flow has a start, at least one outcome, and no open questions on the flow or any of its steps.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("flows"), tools.DynamicField{}, tools.FixedField("steps")},
+		JSONType:    "array",
+		Description: "Starting, intermediate, and outcome steps in declaration order.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("flows"), tools.DynamicField{}, tools.FixedField("steps"), tools.DynamicField{}},
+		JSONType:    "object",
+		Description: "Starting, intermediate, and outcome steps in declaration order.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("flows"), tools.DynamicField{}, tools.FixedField("steps"), tools.DynamicField{}, tools.FixedField("key")},
+		JSONType:    "string",
+		Description: "Flow-scoped step key.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("flows"), tools.DynamicField{}, tools.FixedField("steps"), tools.DynamicField{}, tools.FixedField("actor_key")},
+		JSONType:    "string",
+		Description: "Story-scoped key of the actor performing or observing the step.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("flows"), tools.DynamicField{}, tools.FixedField("steps"), tools.DynamicField{}, tools.FixedField("summary")},
+		JSONType:    "string",
+		Description: "Timeline sticky-note sentence for the step.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("flows"), tools.DynamicField{}, tools.FixedField("steps"), tools.DynamicField{}, tools.FixedField("description")},
+		JSONType:    "string",
+		Description: "Optional longer explanation of the step.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("flows"), tools.DynamicField{}, tools.FixedField("steps"), tools.DynamicField{}, tools.FixedField("kind")},
+		JSONType:    "string",
+		Description: "Step position in the flow: start, step, or outcome.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("flows"), tools.DynamicField{}, tools.FixedField("steps"), tools.DynamicField{}, tools.FixedField("questions")},
+		JSONType:    "array",
+		Description: "Unresolved step-level decisions in declaration order.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("flows"), tools.DynamicField{}, tools.FixedField("steps"), tools.DynamicField{}, tools.FixedField("questions"), tools.DynamicField{}},
+		JSONType:    "object",
+		Description: "Unresolved step-level decisions in declaration order.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("flows"), tools.DynamicField{}, tools.FixedField("steps"), tools.DynamicField{}, tools.FixedField("questions"), tools.DynamicField{}, tools.FixedField("key")},
+		JSONType:    "string",
+		Description: "Flow-scoped question key.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("flows"), tools.DynamicField{}, tools.FixedField("steps"), tools.DynamicField{}, tools.FixedField("questions"), tools.DynamicField{}, tools.FixedField("prompt")},
+		JSONType:    "string",
+		Description: "Human-facing question text.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("flows"), tools.DynamicField{}, tools.FixedField("steps"), tools.DynamicField{}, tools.FixedField("questions"), tools.DynamicField{}, tools.FixedField("description")},
+		JSONType:    "string",
+		Description: "Optional longer context for the question.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("flows"), tools.DynamicField{}, tools.FixedField("steps"), tools.DynamicField{}, tools.FixedField("questions"), tools.DynamicField{}, tools.FixedField("options")},
+		JSONType:    "array",
+		Description: "Suggested choices in declaration order.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("flows"), tools.DynamicField{}, tools.FixedField("steps"), tools.DynamicField{}, tools.FixedField("questions"), tools.DynamicField{}, tools.FixedField("options"), tools.DynamicField{}},
+		JSONType:    "string",
+		Description: "Suggested choices in declaration order.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("flows"), tools.DynamicField{}, tools.FixedField("questions")},
+		JSONType:    "array",
+		Description: "Unresolved flow-level decisions in declaration order.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("flows"), tools.DynamicField{}, tools.FixedField("questions"), tools.DynamicField{}},
+		JSONType:    "object",
+		Description: "Unresolved flow-level decisions in declaration order.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("flows"), tools.DynamicField{}, tools.FixedField("questions"), tools.DynamicField{}, tools.FixedField("key")},
+		JSONType:    "string",
+		Description: "Flow-scoped question key.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("flows"), tools.DynamicField{}, tools.FixedField("questions"), tools.DynamicField{}, tools.FixedField("prompt")},
+		JSONType:    "string",
+		Description: "Human-facing question text.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("flows"), tools.DynamicField{}, tools.FixedField("questions"), tools.DynamicField{}, tools.FixedField("description")},
+		JSONType:    "string",
+		Description: "Optional longer context for the question.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("flows"), tools.DynamicField{}, tools.FixedField("questions"), tools.DynamicField{}, tools.FixedField("options")},
+		JSONType:    "array",
+		Description: "Suggested choices in declaration order.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("flows"), tools.DynamicField{}, tools.FixedField("questions"), tools.DynamicField{}, tools.FixedField("options"), tools.DynamicField{}},
+		JSONType:    "string",
+		Description: "Suggested choices in declaration order.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("request_revision")},
+		JSONType:    "string",
+		Description: "SHA-256 digest of this proposed revision: confirm_intent adopts it, decline_revision declines it, and revise_change replaces it when given this value.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("ui_composition")},
+		JSONType:    "object",
+		Description: "Decision view the guide composed for this revision in its analysis, when it sent one.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("ui_composition"), tools.FixedField("program")},
+		JSONType:    "string",
+		Description: "OpenUI Lang program from the analysis's ui_composition, exactly as the caller sent it. The server does not check it; the views page validates it and shows its error state, with the rest of the card still usable, when the program is not a valid composition.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("ui_composition"), tools.FixedField("composed_for_revision")},
+		JSONType:    "string",
+		Description: "request_revision of the Change Card this program was composed for.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("changed_design_files")},
+		JSONType:    "array",
+		Description: "Paths of the design/*.go files that differ between the design source the confirmed revision was made from and the one this revision was made from (added, removed or changed), in path order; empty when both were made from the same design files. Adopting the revision binds it to its own design source.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("changed_design_files"), tools.DynamicField{}},
+		JSONType:    "string",
+		Description: "Paths of the design/*.go files that differ between the design source the confirmed revision was made from and the one this revision was made from (added, removed or changed), in path order; empty when both were made from the same design files. Adopting the revision binds it to its own design source.",
 	},
 }
 var diffPayloadFields = []tools.FieldMetadata{
@@ -2050,7 +4196,7 @@ var diffResultFields = []tools.FieldMetadata{
 var draftOverridePayloadFields = []tools.FieldMetadata{
 	{
 		JSONType:    "object",
-		Description: "Fast Draft Mode request to hot-reload a prompt template on the bound target platform or reject a compiled business-rule edit.",
+		Description: "Fast Draft Mode request to hot-reload a prompt template on the live target start_live_target runs, or reject a compiled business-rule edit.",
 	},
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("target_kind")},
@@ -2076,7 +4222,7 @@ var draftOverrideResultFields = []tools.FieldMetadata{
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("applied_in_store")},
 		JSONType:    "boolean",
-		Description: "True when updated in the target platform's prompt.Store for 0s reload.",
+		Description: "True when the live target saved the prompt text in its prompt store for 0s reload.",
 	},
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("requires_rebuild")},
@@ -2086,7 +4232,7 @@ var draftOverrideResultFields = []tools.FieldMetadata{
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("prompt_version")},
 		JSONType:    "string",
-		Description: "New prompt version digest returned by the target platform.",
+		Description: "Version of the accepted prompt text, as the live target returned it.",
 	},
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("message")},
@@ -2097,12 +4243,12 @@ var draftOverrideResultFields = []tools.FieldMetadata{
 var generateCodePayloadFields = []tools.FieldMetadata{
 	{
 		JSONType:    "object",
-		Description: "Selects the application module or its public local eval/ module for code generation from the active workspace's files.",
+		Description: "Selects the module of the builder's working folder to regenerate: candidate, the application, whose design/ Surla first writes from the open build; or eval, the test module, regenerated from its own design.",
 	},
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("target")},
 		JSONType:    "string",
-		Description: "Module to regenerate: candidate (the application, the default when omitted) or eval (the local eval/ module).",
+		Description: "Module to regenerate: candidate (the application, the default when omitted) or eval (the test module).",
 	},
 }
 var generateCodeResultFields = []tools.FieldMetadata{
@@ -2136,6 +4282,1103 @@ var generateCodeResultFields = []tools.FieldMetadata{
 		Description: "Problems that did not prevent gen/ publication, such as incomplete cleanup or a guide that could not be written.",
 	},
 }
+var getBuildPayloadFields = []tools.FieldMetadata{
+	{
+		JSONType: "object",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("change_id")},
+		JSONType:    "string",
+		Description: "Change Card identifier.",
+	},
+}
+var getBuildResultFields = []tools.FieldMetadata{
+	{
+		JSONType:    "object",
+		Description: "A change's build as get_build reports it.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("change_id")},
+		JSONType:    "string",
+		Description: "Change Card identifier.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("drafted_before_drop")},
+		JSONType:    "boolean",
+		Description: "True only when the current agreed revision’s saved record of how its design was drafted predates the current actual drop: start_build would refuse it with drafted_before_drop. It becomes true after that drop and false once the user adopts a revision drafted after the drop, even if its request_revision is unchanged. A waiting proposal does not change this fact; ask the guide to refresh_story and revise_change from that refresh, then adopt the revision before building. False says only that this refusal does not apply, not that every other build check will pass; it is also false without an agreed revision or saved record of its draft. start_build rechecks concurrent changes.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("build")},
+		JSONType:    "object",
+		Description: "not_started when the change has no usable build for the current test source; start a new build on the views page. Otherwise started with the usable build.",
+	},
+	{
+		Path:     []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("state")},
+		JSONType: "string",
+		DiscriminatorValues: []string{
+			"not_started",
+			"started",
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("build")},
+		JSONType:    "object",
+		Description: "This change has no usable build: the project's open build is another change's or there is none, or its builder-only build lost the stored verification settings that supplied its tests. Start a new build on the views page.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("state")},
+				Value:         "not_started",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("build")},
+		JSONType:    "object",
+		Description: "The usable build the user started for a change, with the builder's assignment and the test writer's progress when one is used. A build started with only the builder remains usable while stored verification settings supply its tests.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("state")},
+				Value:         "started",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("request_revision")},
+		JSONType:    "string",
+		Description: "Change Card revision the user built.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("state")},
+				Value:         "started",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("started_at")},
+		JSONType:    "string",
+		Description: "When the user started this build.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("state")},
+				Value:         "started",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("in_force")},
+		JSONType:    "boolean",
+		Description: "True when request_revision is the change's agreed revision, the one in force, as get_build reports it. It stays true while a proposed revision waits and when a refreshed draft is adopted without changing request_revision. If adoption or confirmation changes the agreed request_revision, it becomes false; the assignments stay on the earlier revision until the user builds again.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("state")},
+				Value:         "started",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("builder")},
+		JSONType:    "object",
+		Description: "The builder's assignment.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("state")},
+				Value:         "started",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("builder"), tools.FixedField("read")},
+		JSONType:    "boolean",
+		Description: "True once the builder read this assignment in full with get_builder_assignment.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("state")},
+				Value:         "started",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("test_writer")},
+		JSONType:    "object",
+		Description: "The test writer's assignment.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("state")},
+				Value:         "started",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("test_writer"), tools.FixedField("tests")},
+		JSONType:    "object",
+		Description: "The tests' state: not_used when the project has stored verification settings; otherwise assigned, reported, needs_changes with the number of Surla's findings, accepted with the commit Surla recorded, or could_not_run with the reason and the user's step. Each verdict carries the time Surla reached it.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("state")},
+				Value:         "started",
+			},
+		},
+	},
+	{
+		Path:     []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("test_writer"), tools.FixedField("tests"), tools.FixedField("state")},
+		JSONType: "string",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("state")},
+				Value:         "started",
+			},
+		},
+		DiscriminatorValues: []string{
+			"not_used",
+			"assigned",
+			"reported",
+			"needs_changes",
+			"accepted",
+			"could_not_run",
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("test_writer"), tools.FixedField("tests")},
+		JSONType:    "object",
+		Description: "No test writer is used: the project verifies with the evaluator stored with surla verification set. Every read of a build in such a project shows this, whatever the build recorded.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("state")},
+				Value:         "started",
+			},
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("test_writer"), tools.FixedField("tests"), tools.FixedField("state")},
+				Value:         "not_used",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("test_writer"), tools.FixedField("tests")},
+		JSONType:    "object",
+		Description: "Surla assigned the tests for this build; the test writer has not reported them finished.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("state")},
+				Value:         "started",
+			},
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("test_writer"), tools.FixedField("tests"), tools.FixedField("state")},
+				Value:         "assigned",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("test_writer"), tools.FixedField("tests")},
+		JSONType:    "object",
+		Description: "The test writer reported its tests finished at this build's revision. Surla checks them right after each report; its verdict replaces this state.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("state")},
+				Value:         "started",
+			},
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("test_writer"), tools.FixedField("tests"), tools.FixedField("state")},
+				Value:         "reported",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("test_writer"), tools.FixedField("tests")},
+		JSONType:    "object",
+		Description: "Surla checked the reported tests and found problems the test writer must fix before reporting again, including a working copy that is off its build's branch or holds another build's work. Their text is in get_test_writer_assignment and, for the user, in get_test_findings.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("state")},
+				Value:         "started",
+			},
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("test_writer"), tools.FixedField("tests"), tools.FixedField("state")},
+				Value:         "needs_changes",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("test_writer"), tools.FixedField("tests"), tools.FixedField("finding_count")},
+		JSONType:    "integer",
+		Description: "Number of problems Surla found.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("state")},
+				Value:         "started",
+			},
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("test_writer"), tools.FixedField("tests"), tools.FixedField("state")},
+				Value:         "needs_changes",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("test_writer"), tools.FixedField("tests"), tools.FixedField("checked_at")},
+		JSONType:    "string",
+		Description: "When Surla's check reached this verdict.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("state")},
+				Value:         "started",
+			},
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("test_writer"), tools.FixedField("tests"), tools.FixedField("state")},
+				Value:         "needs_changes",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("test_writer"), tools.FixedField("tests")},
+		JSONType:    "object",
+		Description: "Surla checked the reported tests and recorded them as a commit.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("state")},
+				Value:         "started",
+			},
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("test_writer"), tools.FixedField("tests"), tools.FixedField("state")},
+				Value:         "accepted",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("test_writer"), tools.FixedField("tests"), tools.FixedField("commit")},
+		JSONType:    "string",
+		Description: "Full commit ID Surla recorded the accepted tests at (40 or 64 lowercase hex characters).",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("state")},
+				Value:         "started",
+			},
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("test_writer"), tools.FixedField("tests"), tools.FixedField("state")},
+				Value:         "accepted",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("test_writer"), tools.FixedField("tests"), tools.FixedField("checked_at")},
+		JSONType:    "string",
+		Description: "When Surla's check reached this verdict.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("state")},
+				Value:         "started",
+			},
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("test_writer"), tools.FixedField("tests"), tools.FixedField("state")},
+				Value:         "accepted",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("test_writer"), tools.FixedField("tests"), tools.FixedField("not_judged")},
+		JSONType:    "string",
+		Description: "What Surla's check did not judge, always the same sentence.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("state")},
+				Value:         "started",
+			},
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("test_writer"), tools.FixedField("tests"), tools.FixedField("state")},
+				Value:         "accepted",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("test_writer"), tools.FixedField("tests")},
+		JSONType:    "object",
+		Description: "Surla's check of the reported tests could not run, for a cause the test writer cannot fix; the user's step makes it possible.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("state")},
+				Value:         "started",
+			},
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("test_writer"), tools.FixedField("tests"), tools.FixedField("state")},
+				Value:         "could_not_run",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("test_writer"), tools.FixedField("tests"), tools.FixedField("reason")},
+		JSONType:    "string",
+		Description: "Why the check could not run.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("state")},
+				Value:         "started",
+			},
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("test_writer"), tools.FixedField("tests"), tools.FixedField("state")},
+				Value:         "could_not_run",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("test_writer"), tools.FixedField("tests"), tools.FixedField("step")},
+		JSONType:    "string",
+		Description: "What the user does so the check can run.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("state")},
+				Value:         "started",
+			},
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("test_writer"), tools.FixedField("tests"), tools.FixedField("state")},
+				Value:         "could_not_run",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("test_writer"), tools.FixedField("tests"), tools.FixedField("checked_at")},
+		JSONType:    "string",
+		Description: "When Surla's check stopped.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("state")},
+				Value:         "started",
+			},
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("test_writer"), tools.FixedField("tests"), tools.FixedField("state")},
+				Value:         "could_not_run",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("test_writer"), tools.FixedField("read")},
+		JSONType:    "boolean",
+		Description: "True once the test writer read this assignment in full with get_test_writer_assignment.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("state")},
+				Value:         "started",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("test_writer"), tools.FixedField("report")},
+		JSONType:    "integer",
+		Description: "Number of the test writer's latest report of this build: 0 until its first report, and one more with each report_tests_finished.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("state")},
+				Value:         "started",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("required_test_count")},
+		JSONType:    "integer",
+		Description: "Number of finished flows in the agreed Story. Zero means no test of this change's Story was required.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("state")},
+				Value:         "started",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("required_tests")},
+		JSONType:    "array",
+		Description: "Tests required by this build's saved Story, in declaration order; unfinished flows require none. Empty when no finished flow requires a test.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("state")},
+				Value:         "started",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("required_tests"), tools.DynamicField{}},
+		JSONType:    "object",
+		Description: "Tests required by this build's saved Story, in declaration order; unfinished flows require none. Empty when no finished flow requires a test.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("state")},
+				Value:         "started",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("required_tests"), tools.DynamicField{}, tools.FixedField("story")},
+		JSONType:    "string",
+		Description: "Name of the Story the flow belongs to.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("state")},
+				Value:         "started",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("required_tests"), tools.DynamicField{}, tools.FixedField("flow_key")},
+		JSONType:    "string",
+		Description: "Key of the finished flow.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("state")},
+				Value:         "started",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("required_tests"), tools.DynamicField{}, tools.FixedField("scenario")},
+		JSONType:    "string",
+		Description: "Scenario name the evaluation suite declares for the flow.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("state")},
+				Value:         "started",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("required_tests"), tools.DynamicField{}, tools.FixedField("hook")},
+		JSONType:    "string",
+		Description: "Hook method the test writer implements for the scenario.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("state")},
+				Value:         "started",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("answers")},
+		JSONType:    "array",
+		Description: "Confirmed answers saved when this build started; later revisions do not replace them.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("state")},
+				Value:         "started",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("answers"), tools.DynamicField{}},
+		JSONType:    "object",
+		Description: "Confirmed answers saved when this build started; later revisions do not replace them.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("state")},
+				Value:         "started",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("answers"), tools.DynamicField{}, tools.FixedField("id")},
+		JSONType:    "string",
+		Description: "Question identifier on the Change Card.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("state")},
+				Value:         "started",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("answers"), tools.DynamicField{}, tools.FixedField("question")},
+		JSONType:    "string",
+		Description: "The question as the user answered it.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("state")},
+				Value:         "started",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("answers"), tools.DynamicField{}, tools.FixedField("answer")},
+		JSONType:    "string",
+		Description: "The option the user confirmed, exactly as confirmed.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("state")},
+				Value:         "started",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("examples")},
+		JSONType:    "array",
+		Description: "Examples saved when this build started; later revisions do not replace them.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("state")},
+				Value:         "started",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("examples"), tools.DynamicField{}},
+		JSONType:    "object",
+		Description: "Examples saved when this build started; later revisions do not replace them.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("state")},
+				Value:         "started",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("examples"), tools.DynamicField{}, tools.FixedField("id")},
+		JSONType:    "string",
+		Description: "Stable example identifier. Default code-assigned IDs use check_01, check_02, ... (valid goa-ai/eval Scenario names). confirm_intent preserves caller-chosen IDs.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("state")},
+				Value:         "started",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("examples"), tools.DynamicField{}, tools.FixedField("scenario")},
+		JSONType:    "string",
+		Description: "Plain-English scenario description.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("state")},
+				Value:         "started",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("examples"), tools.DynamicField{}, tools.FixedField("input_summary")},
+		JSONType:    "string",
+		Description: "Representative user request and domain fixture state.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("state")},
+				Value:         "started",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("examples"), tools.DynamicField{}, tools.FixedField("expected_outcome")},
+		JSONType:    "string",
+		Description: "Expected side effect and response behavior.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("state")},
+				Value:         "started",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("examples"), tools.DynamicField{}, tools.FixedField("verification_kind")},
+		JSONType:    "string",
+		Description: "Evaluator check classification (deterministic or model_judged).",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("state")},
+				Value:         "started",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("coverage_statements")},
+		JSONType:    "array",
+		Description: "The accepted report's writer statements; empty before acceptance or when none were stated. Surla did not judge them.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("state")},
+				Value:         "started",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("coverage_statements"), tools.DynamicField{}},
+		JSONType:    "object",
+		Description: "The accepted report's writer statements; empty before acceptance or when none were stated. Surla did not judge them.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("state")},
+				Value:         "started",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("coverage_statements"), tools.DynamicField{}, tools.FixedField("scenario")},
+		JSONType:    "string",
+		Description: "Exact declared scenario identifier.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("state")},
+				Value:         "started",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("coverage_statements"), tools.DynamicField{}, tools.FixedField("question_ids")},
+		JSONType:    "array",
+		Description: "Question IDs from the assignment's answers[].id; empty when this statement names only examples.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("state")},
+				Value:         "started",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("coverage_statements"), tools.DynamicField{}, tools.FixedField("question_ids"), tools.DynamicField{}},
+		JSONType:    "string",
+		Description: "Question IDs from the assignment's answers[].id; empty when this statement names only examples.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("state")},
+				Value:         "started",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("coverage_statements"), tools.DynamicField{}, tools.FixedField("example_ids")},
+		JSONType:    "array",
+		Description: "Example IDs from the assignment's examples[].id; empty when this statement names only answers.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("state")},
+				Value:         "started",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("coverage_statements"), tools.DynamicField{}, tools.FixedField("example_ids"), tools.DynamicField{}},
+		JSONType:    "string",
+		Description: "Example IDs from the assignment's examples[].id; empty when this statement names only answers.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("state")},
+				Value:         "started",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("coverage_statements"), tools.DynamicField{}, tools.FixedField("explanation")},
+		JSONType:    "string",
+		Description: "Interaction or assertion the writer says exercises these requirements.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("state")},
+				Value:         "started",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("taking")},
+		JSONType:    "object",
+		Description: "Whether the user has taken this build: building until a verification of it passes; passed with the commits to merge; merged once the branch checked out in the project folder holds the commits of one passed run, the builder's and, for written tests, the tests'; dropped once the user dropped it. A project has one open build, and another change is built only once it is merged or dropped.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("state")},
+				Value:         "started",
+			},
+		},
+	},
+	{
+		Path:     []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("taking"), tools.FixedField("state")},
+		JSONType: "string",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("state")},
+				Value:         "started",
+			},
+		},
+		DiscriminatorValues: []string{
+			"building",
+			"passed",
+			"merged",
+			"dropped",
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("taking")},
+		JSONType:    "object",
+		Description: "No verification of this build has passed yet, so there is nothing to merge: the builder finishes it, or the user drops it.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("state")},
+				Value:         "started",
+			},
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("taking"), tools.FixedField("state")},
+				Value:         "building",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("taking")},
+		JSONType:    "object",
+		Description: "A verification of this build passed and the user has not merged it: the commits of its newest passed run, which the user merges into the branch checked out in the project folder, the builder's first, then the tests'.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("state")},
+				Value:         "started",
+			},
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("taking"), tools.FixedField("state")},
+				Value:         "passed",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("taking"), tools.FixedField("run_id")},
+		JSONType:    "string",
+		Description: "The newest passed run; get_verification takes it.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("state")},
+				Value:         "started",
+			},
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("taking"), tools.FixedField("state")},
+				Value:         "passed",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("taking"), tools.FixedField("candidate_commit")},
+		JSONType:    "string",
+		Description: "The builder's commit the run passed.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("state")},
+				Value:         "started",
+			},
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("taking"), tools.FixedField("state")},
+				Value:         "passed",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("taking"), tools.FixedField("candidate_branch")},
+		JSONType:    "string",
+		Description: "The build's builder branch, surla/build-<n>, where this commit was verified.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("state")},
+				Value:         "started",
+			},
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("taking"), tools.FixedField("state")},
+				Value:         "passed",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("taking"), tools.FixedField("tests")},
+		JSONType:    "object",
+		Description: "written_tests with the accepted tests' commit to merge after the builder's; evaluator when the project verifies with its stored evaluator, whose tests are not merged.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("state")},
+				Value:         "started",
+			},
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("taking"), tools.FixedField("state")},
+				Value:         "passed",
+			},
+		},
+	},
+	{
+		Path:     []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("taking"), tools.FixedField("tests"), tools.FixedField("source")},
+		JSONType: "string",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("state")},
+				Value:         "started",
+			},
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("taking"), tools.FixedField("state")},
+				Value:         "passed",
+			},
+		},
+		DiscriminatorValues: []string{
+			"evaluator",
+			"written_tests",
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("taking"), tools.FixedField("tests")},
+		JSONType:    "object",
+		Description: "The run used the operator's evaluator: the one stored with surla verification set, or the one named on surla verify's command line.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("state")},
+				Value:         "started",
+			},
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("taking"), tools.FixedField("state")},
+				Value:         "passed",
+			},
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("taking"), tools.FixedField("tests"), tools.FixedField("source")},
+				Value:         "evaluator",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("taking"), tools.FixedField("tests")},
+		JSONType:    "object",
+		Description: "The accepted tests' commit a passed run used, which the user merges after the builder's commit, and the build's test-writer branch, where this commit was verified.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("state")},
+				Value:         "started",
+			},
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("taking"), tools.FixedField("state")},
+				Value:         "passed",
+			},
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("taking"), tools.FixedField("tests"), tools.FixedField("source")},
+				Value:         "written_tests",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("taking"), tools.FixedField("tests"), tools.FixedField("commit")},
+		JSONType:    "string",
+		Description: "Commit Surla recorded the accepted tests at.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("state")},
+				Value:         "started",
+			},
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("taking"), tools.FixedField("state")},
+				Value:         "passed",
+			},
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("taking"), tools.FixedField("tests"), tools.FixedField("source")},
+				Value:         "written_tests",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("taking"), tools.FixedField("tests"), tools.FixedField("branch")},
+		JSONType:    "string",
+		Description: "The build's test-writer branch, surla/tests-<n>, where this commit was verified.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("state")},
+				Value:         "started",
+			},
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("taking"), tools.FixedField("state")},
+				Value:         "passed",
+			},
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("taking"), tools.FixedField("tests"), tools.FixedField("source")},
+				Value:         "written_tests",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("taking"), tools.FixedField("base_in_branch")},
+		JSONType:    "boolean",
+		Description: "False when the branch checked out in the project folder no longer holds the commit this build started from, because its history was rewritten: merging these commits brings that history back, and dropping the build and building again starts from the branch as it is.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("state")},
+				Value:         "started",
+			},
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("taking"), tools.FixedField("state")},
+				Value:         "passed",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("taking")},
+		JSONType:    "object",
+		Description: "The branch checked out in the project folder holds the commits of one passed run of this build: the builder's and, for written tests, the tests'. Each is held by merge or by a squash commit that holds every file it changed as that commit has it. This build no longer blocks starting another build; start_build's other checks still apply.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("state")},
+				Value:         "started",
+			},
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("taking"), tools.FixedField("state")},
+				Value:         "merged",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("taking")},
+		JSONType:    "object",
+		Description: "The user dropped this build with drop_build: Surla builds nothing on it, no role has work for it, and it no longer blocks starting another build. An agreement drafted before the drop still cannot be built: get_build's drafted_before_drop reports it for each change, and start_build refuses it with drafted_before_drop until the guide refreshes the draft and revises the change and the user adopts the revision.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("state")},
+				Value:         "started",
+			},
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("taking"), tools.FixedField("state")},
+				Value:         "dropped",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("taking"), tools.FixedField("kept_branches")},
+		JSONType:    "array",
+		Description: "The build's own branches that exist and hold a commit made after the build's base, where its work stays (git log <branch> shows it); empty when nothing was committed for it.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("state")},
+				Value:         "started",
+			},
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("taking"), tools.FixedField("state")},
+				Value:         "dropped",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("taking"), tools.FixedField("kept_branches"), tools.DynamicField{}},
+		JSONType:    "string",
+		Description: "The build's own branches that exist and hold a commit made after the build's base, where its work stays (git log <branch> shows it); empty when nothing was committed for it.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("state")},
+				Value:         "started",
+			},
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("taking"), tools.FixedField("state")},
+				Value:         "dropped",
+			},
+		},
+	},
+}
+var getBuilderAssignmentPayloadFields = []tools.FieldMetadata{
+	{
+		JSONType: "object",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("change_id")},
+		JSONType:    "string",
+		Description: "Change Card identifier from list_builder_assignments.",
+	},
+}
+var getBuilderAssignmentResultFields = []tools.FieldMetadata{
+	{
+		JSONType:    "object",
+		Description: "The builder's assignment for the project's open build: build this change at this revision in working_folder, your own working copy of the project on the build's own branch, where generate_code, check_project and update_dependencies act and where verify_change looks for the candidate.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("change_id")},
+		JSONType:    "string",
+		Description: "Change Card to build; get_change takes it.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("request_revision")},
+		JSONType:    "string",
+		Description: "Change Card revision to build; verify_change takes it.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("in_force")},
+		JSONType:    "boolean",
+		Description: "True when request_revision is the change's agreed revision, the one in force, as get_build reports it. It stays true while a proposed revision waits and when a refreshed draft is adopted without changing request_revision. If adoption or confirmation changes the agreed request_revision, it becomes false; verify_change refuses this earlier revision, and the assignment stays as it is until the user builds again.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("read")},
+		JSONType:    "boolean",
+		Description: "True once you read this assignment in full with get_builder_assignment.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("written_tests")},
+		JSONType:    "object",
+		Description: "Where the test writer's tests for this build stand: not_used when no test writer is used because the project has stored verification settings; otherwise accepted, with the commit and time, when the build records accepted tests, and not_yet_accepted when it records none.",
+	},
+	{
+		Path:     []tools.FieldPathSegment{tools.FixedField("written_tests"), tools.FixedField("state")},
+		JSONType: "string",
+		DiscriminatorValues: []string{
+			"not_used",
+			"not_yet_accepted",
+			"accepted",
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("written_tests")},
+		JSONType:    "object",
+		Description: "No test writer is used: the project verifies with the evaluator stored with surla verification set. Every read of a build in such a project shows this, whatever the build recorded.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("written_tests"), tools.FixedField("state")},
+				Value:         "not_used",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("written_tests")},
+		JSONType:    "object",
+		Description: "The build records no accepted tests.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("written_tests"), tools.FixedField("state")},
+				Value:         "not_yet_accepted",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("written_tests")},
+		JSONType:    "object",
+		Description: "Surla checked the reported tests and recorded them as a commit.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("written_tests"), tools.FixedField("state")},
+				Value:         "accepted",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("written_tests"), tools.FixedField("commit")},
+		JSONType:    "string",
+		Description: "Full commit ID Surla recorded the accepted tests at (40 or 64 lowercase hex characters).",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("written_tests"), tools.FixedField("state")},
+				Value:         "accepted",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("written_tests"), tools.FixedField("checked_at")},
+		JSONType:    "string",
+		Description: "When Surla's check reached this verdict.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("written_tests"), tools.FixedField("state")},
+				Value:         "accepted",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("written_tests"), tools.FixedField("not_judged")},
+		JSONType:    "string",
+		Description: "What Surla's check did not judge, always the same sentence.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("written_tests"), tools.FixedField("state")},
+				Value:         "accepted",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("working_folder")},
+		JSONType:    "string",
+		Description: "Absolute path of the folder to build in: the project's folder inside your working copy .surla-build, on the build's branch surla/build-<n>. Run git and go there, never in the project folder.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("gowork_off")},
+		JSONType:    "boolean",
+		Description: "True when no go.work lies in working_folder or in a folder between it and the working copy's root: run every go command there as GOWORK=off go …, so a go.work of the project folder around your copy does not take it over.",
+	},
+}
 var getChangePayloadFields = []tools.FieldMetadata{
 	{
 		JSONType:    "object",
@@ -2165,7 +5408,7 @@ var getChangeResultFields = []tools.FieldMetadata{
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("prompt")},
 		JSONType:    "string",
-		Description: "Operator feature request for this revision.",
+		Description: "The user's feature request for this revision.",
 	},
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("summary")},
@@ -2190,7 +5433,7 @@ var getChangeResultFields = []tools.FieldMetadata{
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("ambiguities"), tools.DynamicField{}, tools.FixedField("question")},
 		JSONType:    "string",
-		Description: "Plain-English question for the operator.",
+		Description: "Plain-English question for the user.",
 	},
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("ambiguities"), tools.DynamicField{}, tools.FixedField("options")},
@@ -2440,7 +5683,7 @@ var getChangeResultFields = []tools.FieldMetadata{
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("confirmed_by")},
 		JSONType:    "string",
-		Description: "Authenticated principal that confirmed the Change Card.",
+		Description: "User who confirmed the Change Card.",
 	},
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("request_revision")},
@@ -2455,7 +5698,7 @@ var getChangeResultFields = []tools.FieldMetadata{
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("ui_composition"), tools.FixedField("program")},
 		JSONType:    "string",
-		Description: "OpenUI Lang program from the analysis's ui_composition, exactly as the caller sent it. The server does not check it; the checkpoint viewer validates it and shows its error state, with the rest of the card still usable, when the program is not a valid composition.",
+		Description: "OpenUI Lang program from the analysis's ui_composition, exactly as the caller sent it. The server does not check it; the views page validates it and shows its error state, with the rest of the card still usable, when the program is not a valid composition.",
 	},
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("ui_composition"), tools.FixedField("composed_for_revision")},
@@ -2465,12 +5708,12 @@ var getChangeResultFields = []tools.FieldMetadata{
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("approval")},
 		JSONType:    "object",
-		Description: "Checkpoint 5 approval of this revision, present only while it is verified against the promotion target's current inputs on this read. It is absent before approve_merge succeeds, whenever the target's suite, environment or binary digests have changed since, and whenever current inputs cannot be verified (see unverified_approval). It is never hashed into request_revision.",
+		Description: "Checkpoint 5 approval of this revision, present while suite_commit is still the tests' commit chosen for this revision and (when a promotion target is configured) the promotion target's current binary digests still equal artifacts on this read. It is absent before approve_merge succeeds, whenever the chosen tests' commit or the staged binary digests have changed since, and whenever a configured promotion target's staged binaries cannot be verified (see unverified_approval). It is never hashed into request_revision.",
 	},
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("approval"), tools.FixedField("approved_by")},
 		JSONType:    "string",
-		Description: "Authenticated principal that owns the card and called approve_merge. Authentication does not prove that a human, rather than a coding agent, made the call.",
+		Description: "User who approved the result.",
 	},
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("approval"), tools.FixedField("report_digest")},
@@ -2485,37 +5728,94 @@ var getChangeResultFields = []tools.FieldMetadata{
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("approval"), tools.FixedField("suite_id")},
 		JSONType:    "string",
-		Description: "Evaluator suite the promotion target requires.",
+		Description: "Suite identifier the tests at suite_commit declared in the report (shown, not compared).",
 	},
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("approval"), tools.FixedField("suite_commit")},
 		JSONType:    "string",
-		Description: "Evaluator suite commit the promotion target requires.",
+		Description: "Commit of the tests the report ran: the evaluator suite commit in the stored verification settings, or the tests Surla accepted for the change's build.",
 	},
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("approval"), tools.FixedField("environment")},
 		JSONType:    "string",
-		Description: "Dependency profile the promotion target requires, such as sim.",
+		Description: "Dependency profile the tests at suite_commit declared in the report, such as sim or scripted-model (shown, not compared).",
 	},
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("approval"), tools.FixedField("artifacts")},
 		JSONType:    "object",
-		Description: "SHA-256 digest of each candidate binary the promotion target measured, keyed by binary name.",
+		Description: "SHA-256 digest of each candidate binary the promotion target measured, keyed by binary name; empty when no promotion settings are configured.",
 	},
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("approval"), tools.FixedField("artifacts"), tools.DynamicField{}},
 		JSONType:    "string",
-		Description: "SHA-256 digest of each candidate binary the promotion target measured, keyed by binary name.",
+		Description: "SHA-256 digest of each candidate binary the promotion target measured, keyed by binary name; empty when no promotion settings are configured.",
 	},
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("approval"), tools.FixedField("scenario_count")},
 		JSONType:    "integer",
-		Description: "Number of declared evaluator scenarios, every one of which passed.",
+		Description: "Number of declared scenarios in the report, every one of which passed.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("approval"), tools.FixedField("test_source")},
+		JSONType:    "object",
+		Description: "Where the tests at suite_commit came from, derived on each read: evaluator, or written_tests with their commit and a notice.",
+	},
+	{
+		Path:     []tools.FieldPathSegment{tools.FixedField("approval"), tools.FixedField("test_source"), tools.FixedField("source")},
+		JSONType: "string",
+		DiscriminatorValues: []string{
+			"evaluator",
+			"written_tests",
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("approval"), tools.FixedField("test_source")},
+		JSONType:    "object",
+		Description: "The run used the operator's evaluator: the one stored with surla verification set, or the one named on surla verify's command line.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("approval"), tools.FixedField("test_source"), tools.FixedField("source")},
+				Value:         "evaluator",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("approval"), tools.FixedField("test_source")},
+		JSONType:    "object",
+		Description: "The run used the tests Surla accepted for the change's build, which a separate agent on this machine wrote.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("approval"), tools.FixedField("test_source"), tools.FixedField("source")},
+				Value:         "written_tests",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("approval"), tools.FixedField("test_source"), tools.FixedField("commit")},
+		JSONType:    "string",
+		Description: "Commit Surla recorded the accepted tests at; the same as suite_commit.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("approval"), tools.FixedField("test_source"), tools.FixedField("source")},
+				Value:         "written_tests",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("approval"), tools.FixedField("test_source"), tools.FixedField("notice")},
+		JSONType:    "string",
+		Description: "Always: These tests were written by a separate agent on this machine and are not isolated from the builder.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("approval"), tools.FixedField("test_source"), tools.FixedField("source")},
+				Value:         "written_tests",
+			},
+		},
 	},
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("unverified_approval")},
 		JSONType:    "object",
-		Description: "Saved Checkpoint 5 approval of this revision when current promotion inputs could not be verified on this read (because no promotion target is configured or the target could not report its current inputs). At most one of approval or unverified_approval is set. It is never saved to disk or hashed into request_revision.",
+		Description: "Saved Checkpoint 5 approval of this revision when suite_commit still matches the chosen tests' commit and promotion settings are configured, but the staged binaries could not be verified on this read. At most one of approval or unverified_approval is set. It is never saved to disk or hashed into request_revision.",
 	},
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("unverified_approval"), tools.FixedField("approval")},
@@ -2525,7 +5825,7 @@ var getChangeResultFields = []tools.FieldMetadata{
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("unverified_approval"), tools.FixedField("approval"), tools.FixedField("approved_by")},
 		JSONType:    "string",
-		Description: "Authenticated principal that owns the card and called approve_merge. Authentication does not prove that a human, rather than a coding agent, made the call.",
+		Description: "User who approved the result.",
 	},
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("unverified_approval"), tools.FixedField("approval"), tools.FixedField("report_digest")},
@@ -2540,37 +5840,652 @@ var getChangeResultFields = []tools.FieldMetadata{
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("unverified_approval"), tools.FixedField("approval"), tools.FixedField("suite_id")},
 		JSONType:    "string",
-		Description: "Evaluator suite the promotion target requires.",
+		Description: "Suite identifier the tests at suite_commit declared in the report (shown, not compared).",
 	},
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("unverified_approval"), tools.FixedField("approval"), tools.FixedField("suite_commit")},
 		JSONType:    "string",
-		Description: "Evaluator suite commit the promotion target requires.",
+		Description: "Commit of the tests the report ran: the evaluator suite commit in the stored verification settings, or the tests Surla accepted for the change's build.",
 	},
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("unverified_approval"), tools.FixedField("approval"), tools.FixedField("environment")},
 		JSONType:    "string",
-		Description: "Dependency profile the promotion target requires, such as sim.",
+		Description: "Dependency profile the tests at suite_commit declared in the report, such as sim or scripted-model (shown, not compared).",
 	},
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("unverified_approval"), tools.FixedField("approval"), tools.FixedField("artifacts")},
 		JSONType:    "object",
-		Description: "SHA-256 digest of each candidate binary the promotion target measured, keyed by binary name.",
+		Description: "SHA-256 digest of each candidate binary the promotion target measured, keyed by binary name; empty when no promotion settings are configured.",
 	},
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("unverified_approval"), tools.FixedField("approval"), tools.FixedField("artifacts"), tools.DynamicField{}},
 		JSONType:    "string",
-		Description: "SHA-256 digest of each candidate binary the promotion target measured, keyed by binary name.",
+		Description: "SHA-256 digest of each candidate binary the promotion target measured, keyed by binary name; empty when no promotion settings are configured.",
 	},
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("unverified_approval"), tools.FixedField("approval"), tools.FixedField("scenario_count")},
 		JSONType:    "integer",
-		Description: "Number of declared evaluator scenarios, every one of which passed.",
+		Description: "Number of declared scenarios in the report, every one of which passed.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("unverified_approval"), tools.FixedField("approval"), tools.FixedField("test_source")},
+		JSONType:    "object",
+		Description: "Where the tests at suite_commit came from, derived on each read: evaluator, or written_tests with their commit and a notice.",
+	},
+	{
+		Path:     []tools.FieldPathSegment{tools.FixedField("unverified_approval"), tools.FixedField("approval"), tools.FixedField("test_source"), tools.FixedField("source")},
+		JSONType: "string",
+		DiscriminatorValues: []string{
+			"evaluator",
+			"written_tests",
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("unverified_approval"), tools.FixedField("approval"), tools.FixedField("test_source")},
+		JSONType:    "object",
+		Description: "The run used the operator's evaluator: the one stored with surla verification set, or the one named on surla verify's command line.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("unverified_approval"), tools.FixedField("approval"), tools.FixedField("test_source"), tools.FixedField("source")},
+				Value:         "evaluator",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("unverified_approval"), tools.FixedField("approval"), tools.FixedField("test_source")},
+		JSONType:    "object",
+		Description: "The run used the tests Surla accepted for the change's build, which a separate agent on this machine wrote.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("unverified_approval"), tools.FixedField("approval"), tools.FixedField("test_source"), tools.FixedField("source")},
+				Value:         "written_tests",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("unverified_approval"), tools.FixedField("approval"), tools.FixedField("test_source"), tools.FixedField("commit")},
+		JSONType:    "string",
+		Description: "Commit Surla recorded the accepted tests at; the same as suite_commit.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("unverified_approval"), tools.FixedField("approval"), tools.FixedField("test_source"), tools.FixedField("source")},
+				Value:         "written_tests",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("unverified_approval"), tools.FixedField("approval"), tools.FixedField("test_source"), tools.FixedField("notice")},
+		JSONType:    "string",
+		Description: "Always: These tests were written by a separate agent on this machine and are not isolated from the builder.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("unverified_approval"), tools.FixedField("approval"), tools.FixedField("test_source"), tools.FixedField("source")},
+				Value:         "written_tests",
+			},
+		},
 	},
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("unverified_approval"), tools.FixedField("reason")},
 		JSONType:    "string",
-		Description: "Explanation of why the recorded approval could not be verified against current promotion inputs and how to recover.",
+		Description: "Explanation of why the recorded approval could not be verified against current release binaries and how to recover.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision")},
+		JSONType:    "object",
+		Description: "The revision the guide proposed beside this confirmed revision, while it waits for the user to adopt or decline it; absent otherwise. This card's own fields describe the revision in force.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("prompt")},
+		JSONType:    "string",
+		Description: "The user's feature request for this revision.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("summary")},
+		JSONType:    "string",
+		Description: "Plain-English summary of the proposed change.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("ambiguities")},
+		JSONType:    "array",
+		Description: "Domain questions the user answers when adopting this revision.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("ambiguities"), tools.DynamicField{}},
+		JSONType:    "object",
+		Description: "Domain questions the user answers when adopting this revision.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("ambiguities"), tools.DynamicField{}, tools.FixedField("id")},
+		JSONType:    "string",
+		Description: "Stable question identifier.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("ambiguities"), tools.DynamicField{}, tools.FixedField("question")},
+		JSONType:    "string",
+		Description: "Plain-English question for the user.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("ambiguities"), tools.DynamicField{}, tools.FixedField("options")},
+		JSONType:    "array",
+		Description: "Concrete resolution choices.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("ambiguities"), tools.DynamicField{}, tools.FixedField("options"), tools.DynamicField{}},
+		JSONType:    "string",
+		Description: "Concrete resolution choices.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("examples")},
+		JSONType:    "array",
+		Description: "Concrete examples mapped to evaluator checks.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("examples"), tools.DynamicField{}},
+		JSONType:    "object",
+		Description: "Concrete examples mapped to evaluator checks.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("examples"), tools.DynamicField{}, tools.FixedField("id")},
+		JSONType:    "string",
+		Description: "Stable example identifier. Default code-assigned IDs use check_01, check_02, ... (valid goa-ai/eval Scenario names). confirm_intent preserves caller-chosen IDs.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("examples"), tools.DynamicField{}, tools.FixedField("scenario")},
+		JSONType:    "string",
+		Description: "Plain-English scenario description.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("examples"), tools.DynamicField{}, tools.FixedField("input_summary")},
+		JSONType:    "string",
+		Description: "Representative user request and domain fixture state.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("examples"), tools.DynamicField{}, tools.FixedField("expected_outcome")},
+		JSONType:    "string",
+		Description: "Expected side effect and response behavior.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("examples"), tools.DynamicField{}, tools.FixedField("verification_kind")},
+		JSONType:    "string",
+		Description: "Evaluator check classification (deterministic or model_judged).",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("preserved_behaviors")},
+		JSONType:    "array",
+		Description: "Existing contract invariants preserved by this change.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("preserved_behaviors"), tools.DynamicField{}},
+		JSONType:    "string",
+		Description: "Existing contract invariants preserved by this change.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("stories")},
+		JSONType:    "array",
+		Description: "Evaluated domain Stories of this revision in declaration order; omitted when it has none. Included in its request_revision.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("stories"), tools.DynamicField{}},
+		JSONType:    "object",
+		Description: "Evaluated domain Stories of this revision in declaration order; omitted when it has none. Included in its request_revision.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("name")},
+		JSONType:    "string",
+		Description: "Human-facing Story title.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("description")},
+		JSONType:    "string",
+		Description: "Optional longer explanation of the Story.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("actors")},
+		JSONType:    "array",
+		Description: "Domain roles declared in the Story in declaration order.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("actors"), tools.DynamicField{}},
+		JSONType:    "object",
+		Description: "Domain roles declared in the Story in declaration order.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("actors"), tools.DynamicField{}, tools.FixedField("key")},
+		JSONType:    "string",
+		Description: "Story-scoped actor key.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("actors"), tools.DynamicField{}, tools.FixedField("title")},
+		JSONType:    "string",
+		Description: "Human-facing actor label.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("actors"), tools.DynamicField{}, tools.FixedField("description")},
+		JSONType:    "string",
+		Description: "Optional longer explanation of the actor role.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("flows")},
+		JSONType:    "array",
+		Description: "Timeline paths declared in the Story in declaration order.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("flows"), tools.DynamicField{}},
+		JSONType:    "object",
+		Description: "Timeline paths declared in the Story in declaration order.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("flows"), tools.DynamicField{}, tools.FixedField("key")},
+		JSONType:    "string",
+		Description: "Story-scoped flow key.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("flows"), tools.DynamicField{}, tools.FixedField("title")},
+		JSONType:    "string",
+		Description: "Human-facing flow title.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("flows"), tools.DynamicField{}, tools.FixedField("description")},
+		JSONType:    "string",
+		Description: "Optional longer explanation of the flow.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("flows"), tools.DynamicField{}, tools.FixedField("complete")},
+		JSONType:    "boolean",
+		Description: "True when the flow has a start, at least one outcome, and no open questions on the flow or any of its steps.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("flows"), tools.DynamicField{}, tools.FixedField("steps")},
+		JSONType:    "array",
+		Description: "Starting, intermediate, and outcome steps in declaration order.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("flows"), tools.DynamicField{}, tools.FixedField("steps"), tools.DynamicField{}},
+		JSONType:    "object",
+		Description: "Starting, intermediate, and outcome steps in declaration order.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("flows"), tools.DynamicField{}, tools.FixedField("steps"), tools.DynamicField{}, tools.FixedField("key")},
+		JSONType:    "string",
+		Description: "Flow-scoped step key.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("flows"), tools.DynamicField{}, tools.FixedField("steps"), tools.DynamicField{}, tools.FixedField("actor_key")},
+		JSONType:    "string",
+		Description: "Story-scoped key of the actor performing or observing the step.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("flows"), tools.DynamicField{}, tools.FixedField("steps"), tools.DynamicField{}, tools.FixedField("summary")},
+		JSONType:    "string",
+		Description: "Timeline sticky-note sentence for the step.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("flows"), tools.DynamicField{}, tools.FixedField("steps"), tools.DynamicField{}, tools.FixedField("description")},
+		JSONType:    "string",
+		Description: "Optional longer explanation of the step.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("flows"), tools.DynamicField{}, tools.FixedField("steps"), tools.DynamicField{}, tools.FixedField("kind")},
+		JSONType:    "string",
+		Description: "Step position in the flow: start, step, or outcome.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("flows"), tools.DynamicField{}, tools.FixedField("steps"), tools.DynamicField{}, tools.FixedField("questions")},
+		JSONType:    "array",
+		Description: "Unresolved step-level decisions in declaration order.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("flows"), tools.DynamicField{}, tools.FixedField("steps"), tools.DynamicField{}, tools.FixedField("questions"), tools.DynamicField{}},
+		JSONType:    "object",
+		Description: "Unresolved step-level decisions in declaration order.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("flows"), tools.DynamicField{}, tools.FixedField("steps"), tools.DynamicField{}, tools.FixedField("questions"), tools.DynamicField{}, tools.FixedField("key")},
+		JSONType:    "string",
+		Description: "Flow-scoped question key.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("flows"), tools.DynamicField{}, tools.FixedField("steps"), tools.DynamicField{}, tools.FixedField("questions"), tools.DynamicField{}, tools.FixedField("prompt")},
+		JSONType:    "string",
+		Description: "Human-facing question text.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("flows"), tools.DynamicField{}, tools.FixedField("steps"), tools.DynamicField{}, tools.FixedField("questions"), tools.DynamicField{}, tools.FixedField("description")},
+		JSONType:    "string",
+		Description: "Optional longer context for the question.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("flows"), tools.DynamicField{}, tools.FixedField("steps"), tools.DynamicField{}, tools.FixedField("questions"), tools.DynamicField{}, tools.FixedField("options")},
+		JSONType:    "array",
+		Description: "Suggested choices in declaration order.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("flows"), tools.DynamicField{}, tools.FixedField("steps"), tools.DynamicField{}, tools.FixedField("questions"), tools.DynamicField{}, tools.FixedField("options"), tools.DynamicField{}},
+		JSONType:    "string",
+		Description: "Suggested choices in declaration order.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("flows"), tools.DynamicField{}, tools.FixedField("questions")},
+		JSONType:    "array",
+		Description: "Unresolved flow-level decisions in declaration order.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("flows"), tools.DynamicField{}, tools.FixedField("questions"), tools.DynamicField{}},
+		JSONType:    "object",
+		Description: "Unresolved flow-level decisions in declaration order.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("flows"), tools.DynamicField{}, tools.FixedField("questions"), tools.DynamicField{}, tools.FixedField("key")},
+		JSONType:    "string",
+		Description: "Flow-scoped question key.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("flows"), tools.DynamicField{}, tools.FixedField("questions"), tools.DynamicField{}, tools.FixedField("prompt")},
+		JSONType:    "string",
+		Description: "Human-facing question text.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("flows"), tools.DynamicField{}, tools.FixedField("questions"), tools.DynamicField{}, tools.FixedField("description")},
+		JSONType:    "string",
+		Description: "Optional longer context for the question.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("flows"), tools.DynamicField{}, tools.FixedField("questions"), tools.DynamicField{}, tools.FixedField("options")},
+		JSONType:    "array",
+		Description: "Suggested choices in declaration order.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("flows"), tools.DynamicField{}, tools.FixedField("questions"), tools.DynamicField{}, tools.FixedField("options"), tools.DynamicField{}},
+		JSONType:    "string",
+		Description: "Suggested choices in declaration order.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("request_revision")},
+		JSONType:    "string",
+		Description: "SHA-256 digest of this proposed revision: confirm_intent adopts it, decline_revision declines it, and revise_change replaces it when given this value.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("ui_composition")},
+		JSONType:    "object",
+		Description: "Decision view the guide composed for this revision in its analysis, when it sent one.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("ui_composition"), tools.FixedField("program")},
+		JSONType:    "string",
+		Description: "OpenUI Lang program from the analysis's ui_composition, exactly as the caller sent it. The server does not check it; the views page validates it and shows its error state, with the rest of the card still usable, when the program is not a valid composition.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("ui_composition"), tools.FixedField("composed_for_revision")},
+		JSONType:    "string",
+		Description: "request_revision of the Change Card this program was composed for.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("changed_design_files")},
+		JSONType:    "array",
+		Description: "Paths of the design/*.go files that differ between the design source the confirmed revision was made from and the one this revision was made from (added, removed or changed), in path order; empty when both were made from the same design files. Adopting the revision binds it to its own design source.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("changed_design_files"), tools.DynamicField{}},
+		JSONType:    "string",
+		Description: "Paths of the design/*.go files that differ between the design source the confirmed revision was made from and the one this revision was made from (added, removed or changed), in path order; empty when both were made from the same design files. Adopting the revision binds it to its own design source.",
+	},
+}
+var getLiveTargetPayloadFields = []tools.FieldMetadata{
+	{
+		JSONType: "object",
+	},
+}
+var getLiveTargetResultFields = []tools.FieldMetadata{
+	{
+		JSONType:    "object",
+		Description: "This server's live target, as get_live_target reports it.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("live_target")},
+		JSONType:    "object",
+		Description: "none when no live target runs; starting while one is built and started; running with its commit, address, start time and the prompts whose drafts are in force; not_confirmed_stopped when its processes could not be confirmed stopped; ended when a ready target ended unexpectedly and cleanup is confirmed.",
+	},
+	{
+		Path:     []tools.FieldPathSegment{tools.FixedField("live_target"), tools.FixedField("state")},
+		JSONType: "string",
+		DiscriminatorValues: []string{
+			"none",
+			"starting",
+			"running",
+			"not_confirmed_stopped",
+			"ended",
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("live_target")},
+		JSONType:    "object",
+		Description: "No live target is running.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("live_target"), tools.FixedField("state")},
+				Value:         "none",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("live_target")},
+		JSONType:    "object",
+		Description: "A live target is being built from a commit and started. It cannot be stopped until the start finishes.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("live_target"), tools.FixedField("state")},
+				Value:         "starting",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("live_target"), tools.FixedField("candidate_commit")},
+		JSONType:    "string",
+		Description: "The commit being built.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("live_target"), tools.FixedField("state")},
+				Value:         "starting",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("live_target"), tools.FixedField("since")},
+		JSONType:    "string",
+		Description: "When the start began.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("live_target"), tools.FixedField("state")},
+				Value:         "starting",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("live_target")},
+		JSONType:    "object",
+		Description: "A running live target.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("live_target"), tools.FixedField("state")},
+				Value:         "running",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("live_target"), tools.FixedField("candidate_commit")},
+		JSONType:    "string",
+		Description: "The commit it was built from.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("live_target"), tools.FixedField("state")},
+				Value:         "running",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("live_target"), tools.FixedField("url")},
+		JSONType:    "string",
+		Description: "The origin it listens on, as its evaluator suite reported it.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("live_target"), tools.FixedField("state")},
+				Value:         "running",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("live_target"), tools.FixedField("started_at")},
+		JSONType:    "string",
+		Description: "When it became ready.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("live_target"), tools.FixedField("state")},
+				Value:         "running",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("live_target"), tools.FixedField("prompts")},
+		JSONType:    "array",
+		Description: "One entry per prompt whose draft it accepted, sorted by prompt_id; empty when none.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("live_target"), tools.FixedField("state")},
+				Value:         "running",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("live_target"), tools.FixedField("prompts"), tools.DynamicField{}},
+		JSONType:    "object",
+		Description: "One entry per prompt whose draft it accepted, sorted by prompt_id; empty when none.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("live_target"), tools.FixedField("state")},
+				Value:         "running",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("live_target"), tools.FixedField("prompts"), tools.DynamicField{}, tools.FixedField("prompt_id")},
+		JSONType:    "string",
+		Description: "Registered prompt identifier.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("live_target"), tools.FixedField("state")},
+				Value:         "running",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("live_target"), tools.FixedField("prompts"), tools.DynamicField{}, tools.FixedField("version")},
+		JSONType:    "string",
+		Description: "Version of the text in force, as the live target returned it.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("live_target"), tools.FixedField("state")},
+				Value:         "running",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("live_target"), tools.FixedField("prompts"), tools.DynamicField{}, tools.FixedField("accepted_at")},
+		JSONType:    "string",
+		Description: "When the live target first accepted the version in force. A later draft that the target answers with the same version, such as the same text sent again, keeps this time.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("live_target"), tools.FixedField("state")},
+				Value:         "running",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("live_target")},
+		JSONType:    "object",
+		Description: "A live target whose processes could not be confirmed stopped. No other live target can start until they are.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("live_target"), tools.FixedField("state")},
+				Value:         "not_confirmed_stopped",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("live_target"), tools.FixedField("candidate_commit")},
+		JSONType:    "string",
+		Description: "The commit it was built from.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("live_target"), tools.FixedField("state")},
+				Value:         "not_confirmed_stopped",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("live_target"), tools.FixedField("message")},
+		JSONType:    "string",
+		Description: "What happened and what to do next.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("live_target"), tools.FixedField("state")},
+				Value:         "not_confirmed_stopped",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("live_target")},
+		JSONType:    "object",
+		Description: "The last ready target ended unexpectedly and its processes are confirmed stopped. This in-memory observation lasts until an explicit stop, an accepted replacement, or a server restart. It contains no address, prompt, credential or provider detail.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("live_target"), tools.FixedField("state")},
+				Value:         "ended",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("live_target"), tools.FixedField("candidate_commit")},
+		JSONType:    "string",
+		Description: "The commit the ended target ran.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("live_target"), tools.FixedField("state")},
+				Value:         "ended",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("live_target"), tools.FixedField("started_at")},
+		JSONType:    "string",
+		Description: "When that target became ready.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("live_target"), tools.FixedField("state")},
+				Value:         "ended",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("live_target"), tools.FixedField("ended_at")},
+		JSONType:    "string",
+		Description: "When the server observed that target ending.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("live_target"), tools.FixedField("state")},
+				Value:         "ended",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("live_target"), tools.FixedField("message")},
+		JSONType:    "string",
+		Description: "Fixed explanation of what is known and the builder's next step.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("live_target"), tools.FixedField("state")},
+				Value:         "ended",
+			},
+		},
 	},
 }
 var getStoryRefreshPayloadFields = []tools.FieldMetadata{
@@ -2581,12 +6496,17 @@ var getStoryRefreshPayloadFields = []tools.FieldMetadata{
 var getStoryRefreshResultFields = []tools.FieldMetadata{
 	{
 		JSONType:    "object",
-		Description: "Current Story refresh operation for the authenticated caller and bound workspace. state is none when no refresh has run yet in this server process for the bound workspace; running while sandboxed evaluation is in progress; succeeded with the evaluated stories (empty when the design does not load the Story module); or failed with a safe diagnostic.",
+		Description: "Current Story refresh operation of the project's owner for the guide's draft: the user, the guide and the builder all act for the owner, so they read the same one. state is none when no refresh has run yet in this server process for the guide's draft; running while evaluation is in progress; succeeded with the evaluated stories (empty when the design does not load the Story module); or failed with a safe diagnostic.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("draft_folder")},
+		JSONType:    "string",
+		Description: "Absolute path intended for the guide's draft, .surla-draft in the project folder, whose go.mod, go.sum and design/ refresh_story reads. When state is none, this path does not mean the folder exists; refresh_story makes it when needed.",
 	},
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("op_id")},
 		JSONType:    "string",
-		Description: "Identifier of the caller's current Story refresh operation for the bound workspace; present when state is running, succeeded, or failed. Pass it as story_refresh_op_id to propose_change or revise_change once state is succeeded to adopt the evaluated Story into a Change Card.",
+		Description: "Identifier of the owner's current Story refresh operation for the guide's draft; present when state is running, succeeded, or failed. Pass it as story_refresh_op_id to propose_change or revise_change once state is succeeded to adopt the evaluated Story into a Change Card.",
 	},
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("state")},
@@ -2596,7 +6516,7 @@ var getStoryRefreshResultFields = []tools.FieldMetadata{
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("snapshot_digest")},
 		JSONType:    "string",
-		Description: "Canonical SHA-256 digest of the workspace module snapshot read when this refresh started; present when state is running, succeeded, or failed.",
+		Description: "Canonical SHA-256 digest of the draft snapshot read when this refresh started; present when state is running, succeeded, or failed.",
 	},
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("stories")},
@@ -2786,7 +6706,564 @@ var getStoryRefreshResultFields = []tools.FieldMetadata{
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("message")},
 		JSONType:    "string",
-		Description: "Summary of the current Story refresh state and next action.",
+		Description: "Summary of the current Story refresh state and next action. After a dropped build remakes the draft and until a revision is saved from it, begins by naming the dropped change and saying that edits made before then are gone.",
+	},
+}
+var getTestWriterAssignmentPayloadFields = []tools.FieldMetadata{
+	{
+		JSONType: "object",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("change_id")},
+		JSONType:    "string",
+		Description: "Change Card identifier from list_test_writer_assignments.",
+	},
+}
+var getTestWriterAssignmentResultFields = []tools.FieldMetadata{
+	{
+		JSONType:    "object",
+		Description: "The test writer's assignment for one build: write the required tests for the Story as agreed at the built revision, in the test module (eval/) of the working folder, and make them hold the service to the user's confirmed answers, confirmation examples and preserved behaviors of that revision, which the assignment carries exactly as confirmed. Surla writes eval/design/story_tests.go, which declares the required tests, from the agreed Story and generates the module at each read that marks the assignment read and again at each report; the test writer leaves that file as it is. After changing the module's design, the test writer reports to have it generated again or runs surla gen -dir eval in the working folder first; regenerating keeps the required tests. go build ./... in eval/ checks the work before a report, and Surla's check of each report is the judge.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("change_id")},
+		JSONType:    "string",
+		Description: "Change Card the tests are for.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("request_revision")},
+		JSONType:    "string",
+		Description: "Change Card revision the tests are for; report_tests_finished takes it.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("in_force")},
+		JSONType:    "boolean",
+		Description: "True when request_revision is the change's agreed revision, the one in force, as get_build reports it. It stays true while a proposed revision waits and when a refreshed draft is adopted without changing request_revision. If adoption or confirmation changes the agreed request_revision, it becomes false; the assignment stays on the earlier revision until the user builds again.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("progress")},
+		JSONType:    "object",
+		Description: "Where this assignment stands.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("progress"), tools.FixedField("tests")},
+		JSONType:    "object",
+		Description: "The tests' state: not_used when the project has stored verification settings; otherwise assigned, reported, needs_changes with the number of Surla's findings, accepted with the commit Surla recorded, or could_not_run with the reason and the user's step. Each verdict carries the time Surla reached it.",
+	},
+	{
+		Path:     []tools.FieldPathSegment{tools.FixedField("progress"), tools.FixedField("tests"), tools.FixedField("state")},
+		JSONType: "string",
+		DiscriminatorValues: []string{
+			"not_used",
+			"assigned",
+			"reported",
+			"needs_changes",
+			"accepted",
+			"could_not_run",
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("progress"), tools.FixedField("tests")},
+		JSONType:    "object",
+		Description: "No test writer is used: the project verifies with the evaluator stored with surla verification set. Every read of a build in such a project shows this, whatever the build recorded.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("progress"), tools.FixedField("tests"), tools.FixedField("state")},
+				Value:         "not_used",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("progress"), tools.FixedField("tests")},
+		JSONType:    "object",
+		Description: "Surla assigned the tests for this build; the test writer has not reported them finished.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("progress"), tools.FixedField("tests"), tools.FixedField("state")},
+				Value:         "assigned",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("progress"), tools.FixedField("tests")},
+		JSONType:    "object",
+		Description: "The test writer reported its tests finished at this build's revision. Surla checks them right after each report; its verdict replaces this state.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("progress"), tools.FixedField("tests"), tools.FixedField("state")},
+				Value:         "reported",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("progress"), tools.FixedField("tests")},
+		JSONType:    "object",
+		Description: "Surla checked the reported tests and found problems the test writer must fix before reporting again, including a working copy that is off its build's branch or holds another build's work. Their text is in get_test_writer_assignment and, for the user, in get_test_findings.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("progress"), tools.FixedField("tests"), tools.FixedField("state")},
+				Value:         "needs_changes",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("progress"), tools.FixedField("tests"), tools.FixedField("finding_count")},
+		JSONType:    "integer",
+		Description: "Number of problems Surla found.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("progress"), tools.FixedField("tests"), tools.FixedField("state")},
+				Value:         "needs_changes",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("progress"), tools.FixedField("tests"), tools.FixedField("checked_at")},
+		JSONType:    "string",
+		Description: "When Surla's check reached this verdict.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("progress"), tools.FixedField("tests"), tools.FixedField("state")},
+				Value:         "needs_changes",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("progress"), tools.FixedField("tests")},
+		JSONType:    "object",
+		Description: "Surla checked the reported tests and recorded them as a commit.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("progress"), tools.FixedField("tests"), tools.FixedField("state")},
+				Value:         "accepted",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("progress"), tools.FixedField("tests"), tools.FixedField("commit")},
+		JSONType:    "string",
+		Description: "Full commit ID Surla recorded the accepted tests at (40 or 64 lowercase hex characters).",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("progress"), tools.FixedField("tests"), tools.FixedField("state")},
+				Value:         "accepted",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("progress"), tools.FixedField("tests"), tools.FixedField("checked_at")},
+		JSONType:    "string",
+		Description: "When Surla's check reached this verdict.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("progress"), tools.FixedField("tests"), tools.FixedField("state")},
+				Value:         "accepted",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("progress"), tools.FixedField("tests"), tools.FixedField("not_judged")},
+		JSONType:    "string",
+		Description: "What Surla's check did not judge, always the same sentence.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("progress"), tools.FixedField("tests"), tools.FixedField("state")},
+				Value:         "accepted",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("progress"), tools.FixedField("tests")},
+		JSONType:    "object",
+		Description: "Surla's check of the reported tests could not run, for a cause the test writer cannot fix; the user's step makes it possible.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("progress"), tools.FixedField("tests"), tools.FixedField("state")},
+				Value:         "could_not_run",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("progress"), tools.FixedField("tests"), tools.FixedField("reason")},
+		JSONType:    "string",
+		Description: "Why the check could not run.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("progress"), tools.FixedField("tests"), tools.FixedField("state")},
+				Value:         "could_not_run",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("progress"), tools.FixedField("tests"), tools.FixedField("step")},
+		JSONType:    "string",
+		Description: "What the user does so the check can run.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("progress"), tools.FixedField("tests"), tools.FixedField("state")},
+				Value:         "could_not_run",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("progress"), tools.FixedField("tests"), tools.FixedField("checked_at")},
+		JSONType:    "string",
+		Description: "When Surla's check stopped.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("progress"), tools.FixedField("tests"), tools.FixedField("state")},
+				Value:         "could_not_run",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("progress"), tools.FixedField("read")},
+		JSONType:    "boolean",
+		Description: "True once the test writer read this assignment in full with get_test_writer_assignment.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("progress"), tools.FixedField("report")},
+		JSONType:    "integer",
+		Description: "Number of the test writer's latest report of this build: 0 until its first report, and one more with each report_tests_finished.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("findings")},
+		JSONType:    "array",
+		Description: "Surla's findings, one problem per item, with no absolute path: as many as progress gives in finding_count when its state is needs_changes, and none in any other state. Fix them in working_folder, then report again.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("findings"), tools.DynamicField{}},
+		JSONType:    "string",
+		Description: "Surla's findings, one problem per item, with no absolute path: as many as progress gives in finding_count when its state is needs_changes, and none in any other state. Fix them in working_folder, then report again.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("working_folder")},
+		JSONType:    "string",
+		Description: "Folder to write the tests in: your own working copy of the project, .surla-tests, on the build's branch surla/tests-<n>. Do not commit there: Surla commits what it accepts.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("design_source")},
+		JSONType:    "string",
+		Description: "The canonical design source as agreed at request_revision, copied when this build started; later revisions do not change it.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("stories")},
+		JSONType:    "array",
+		Description: "The Story as agreed at request_revision, in declaration order. It does not change when the change is revised later.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("stories"), tools.DynamicField{}},
+		JSONType:    "object",
+		Description: "The Story as agreed at request_revision, in declaration order. It does not change when the change is revised later.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("name")},
+		JSONType:    "string",
+		Description: "Human-facing Story title.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("description")},
+		JSONType:    "string",
+		Description: "Optional longer explanation of the Story.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("actors")},
+		JSONType:    "array",
+		Description: "Domain roles declared in the Story in declaration order.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("actors"), tools.DynamicField{}},
+		JSONType:    "object",
+		Description: "Domain roles declared in the Story in declaration order.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("actors"), tools.DynamicField{}, tools.FixedField("key")},
+		JSONType:    "string",
+		Description: "Story-scoped actor key.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("actors"), tools.DynamicField{}, tools.FixedField("title")},
+		JSONType:    "string",
+		Description: "Human-facing actor label.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("actors"), tools.DynamicField{}, tools.FixedField("description")},
+		JSONType:    "string",
+		Description: "Optional longer explanation of the actor role.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("flows")},
+		JSONType:    "array",
+		Description: "Timeline paths declared in the Story in declaration order.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("flows"), tools.DynamicField{}},
+		JSONType:    "object",
+		Description: "Timeline paths declared in the Story in declaration order.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("flows"), tools.DynamicField{}, tools.FixedField("key")},
+		JSONType:    "string",
+		Description: "Story-scoped flow key.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("flows"), tools.DynamicField{}, tools.FixedField("title")},
+		JSONType:    "string",
+		Description: "Human-facing flow title.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("flows"), tools.DynamicField{}, tools.FixedField("description")},
+		JSONType:    "string",
+		Description: "Optional longer explanation of the flow.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("flows"), tools.DynamicField{}, tools.FixedField("complete")},
+		JSONType:    "boolean",
+		Description: "True when the flow has a start, at least one outcome, and no open questions on the flow or any of its steps.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("flows"), tools.DynamicField{}, tools.FixedField("steps")},
+		JSONType:    "array",
+		Description: "Starting, intermediate, and outcome steps in declaration order.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("flows"), tools.DynamicField{}, tools.FixedField("steps"), tools.DynamicField{}},
+		JSONType:    "object",
+		Description: "Starting, intermediate, and outcome steps in declaration order.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("flows"), tools.DynamicField{}, tools.FixedField("steps"), tools.DynamicField{}, tools.FixedField("key")},
+		JSONType:    "string",
+		Description: "Flow-scoped step key.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("flows"), tools.DynamicField{}, tools.FixedField("steps"), tools.DynamicField{}, tools.FixedField("actor_key")},
+		JSONType:    "string",
+		Description: "Story-scoped key of the actor performing or observing the step.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("flows"), tools.DynamicField{}, tools.FixedField("steps"), tools.DynamicField{}, tools.FixedField("summary")},
+		JSONType:    "string",
+		Description: "Timeline sticky-note sentence for the step.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("flows"), tools.DynamicField{}, tools.FixedField("steps"), tools.DynamicField{}, tools.FixedField("description")},
+		JSONType:    "string",
+		Description: "Optional longer explanation of the step.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("flows"), tools.DynamicField{}, tools.FixedField("steps"), tools.DynamicField{}, tools.FixedField("kind")},
+		JSONType:    "string",
+		Description: "Step position in the flow: start, step, or outcome.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("flows"), tools.DynamicField{}, tools.FixedField("steps"), tools.DynamicField{}, tools.FixedField("questions")},
+		JSONType:    "array",
+		Description: "Unresolved step-level decisions in declaration order.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("flows"), tools.DynamicField{}, tools.FixedField("steps"), tools.DynamicField{}, tools.FixedField("questions"), tools.DynamicField{}},
+		JSONType:    "object",
+		Description: "Unresolved step-level decisions in declaration order.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("flows"), tools.DynamicField{}, tools.FixedField("steps"), tools.DynamicField{}, tools.FixedField("questions"), tools.DynamicField{}, tools.FixedField("key")},
+		JSONType:    "string",
+		Description: "Flow-scoped question key.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("flows"), tools.DynamicField{}, tools.FixedField("steps"), tools.DynamicField{}, tools.FixedField("questions"), tools.DynamicField{}, tools.FixedField("prompt")},
+		JSONType:    "string",
+		Description: "Human-facing question text.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("flows"), tools.DynamicField{}, tools.FixedField("steps"), tools.DynamicField{}, tools.FixedField("questions"), tools.DynamicField{}, tools.FixedField("description")},
+		JSONType:    "string",
+		Description: "Optional longer context for the question.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("flows"), tools.DynamicField{}, tools.FixedField("steps"), tools.DynamicField{}, tools.FixedField("questions"), tools.DynamicField{}, tools.FixedField("options")},
+		JSONType:    "array",
+		Description: "Suggested choices in declaration order.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("flows"), tools.DynamicField{}, tools.FixedField("steps"), tools.DynamicField{}, tools.FixedField("questions"), tools.DynamicField{}, tools.FixedField("options"), tools.DynamicField{}},
+		JSONType:    "string",
+		Description: "Suggested choices in declaration order.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("flows"), tools.DynamicField{}, tools.FixedField("questions")},
+		JSONType:    "array",
+		Description: "Unresolved flow-level decisions in declaration order.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("flows"), tools.DynamicField{}, tools.FixedField("questions"), tools.DynamicField{}},
+		JSONType:    "object",
+		Description: "Unresolved flow-level decisions in declaration order.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("flows"), tools.DynamicField{}, tools.FixedField("questions"), tools.DynamicField{}, tools.FixedField("key")},
+		JSONType:    "string",
+		Description: "Flow-scoped question key.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("flows"), tools.DynamicField{}, tools.FixedField("questions"), tools.DynamicField{}, tools.FixedField("prompt")},
+		JSONType:    "string",
+		Description: "Human-facing question text.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("flows"), tools.DynamicField{}, tools.FixedField("questions"), tools.DynamicField{}, tools.FixedField("description")},
+		JSONType:    "string",
+		Description: "Optional longer context for the question.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("flows"), tools.DynamicField{}, tools.FixedField("questions"), tools.DynamicField{}, tools.FixedField("options")},
+		JSONType:    "array",
+		Description: "Suggested choices in declaration order.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("flows"), tools.DynamicField{}, tools.FixedField("questions"), tools.DynamicField{}, tools.FixedField("options"), tools.DynamicField{}},
+		JSONType:    "string",
+		Description: "Suggested choices in declaration order.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("required_tests")},
+		JSONType:    "array",
+		Description: "One test per finished flow of stories, in declaration order; unfinished flows require none.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("required_tests"), tools.DynamicField{}},
+		JSONType:    "object",
+		Description: "One test per finished flow of stories, in declaration order; unfinished flows require none.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("required_tests"), tools.DynamicField{}, tools.FixedField("story")},
+		JSONType:    "string",
+		Description: "Name of the Story the flow belongs to.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("required_tests"), tools.DynamicField{}, tools.FixedField("flow_key")},
+		JSONType:    "string",
+		Description: "Key of the finished flow.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("required_tests"), tools.DynamicField{}, tools.FixedField("scenario")},
+		JSONType:    "string",
+		Description: "Scenario name the evaluation suite declares for the flow.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("required_tests"), tools.DynamicField{}, tools.FixedField("hook")},
+		JSONType:    "string",
+		Description: "Hook method the test writer implements for the scenario.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("answers")},
+		JSONType:    "array",
+		Description: "Each question of the change as agreed at request_revision with the answer the user confirmed, in question order, copied when this build started; empty when the agreed revision asked none. The tests must hold the service to every answer.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("answers"), tools.DynamicField{}},
+		JSONType:    "object",
+		Description: "Each question of the change as agreed at request_revision with the answer the user confirmed, in question order, copied when this build started; empty when the agreed revision asked none. The tests must hold the service to every answer.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("answers"), tools.DynamicField{}, tools.FixedField("id")},
+		JSONType:    "string",
+		Description: "Question identifier on the Change Card.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("answers"), tools.DynamicField{}, tools.FixedField("question")},
+		JSONType:    "string",
+		Description: "The question as the user answered it.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("answers"), tools.DynamicField{}, tools.FixedField("answer")},
+		JSONType:    "string",
+		Description: "The option the user confirmed, exactly as confirmed.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("examples")},
+		JSONType:    "array",
+		Description: "The confirmation examples as agreed at request_revision, exactly as the user confirmed them, copied when this build started. The tests must hold the service to each expected outcome.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("examples"), tools.DynamicField{}},
+		JSONType:    "object",
+		Description: "The confirmation examples as agreed at request_revision, exactly as the user confirmed them, copied when this build started. The tests must hold the service to each expected outcome.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("examples"), tools.DynamicField{}, tools.FixedField("id")},
+		JSONType:    "string",
+		Description: "Stable example identifier. Default code-assigned IDs use check_01, check_02, ... (valid goa-ai/eval Scenario names). confirm_intent preserves caller-chosen IDs.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("examples"), tools.DynamicField{}, tools.FixedField("scenario")},
+		JSONType:    "string",
+		Description: "Plain-English scenario description.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("examples"), tools.DynamicField{}, tools.FixedField("input_summary")},
+		JSONType:    "string",
+		Description: "Representative user request and domain fixture state.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("examples"), tools.DynamicField{}, tools.FixedField("expected_outcome")},
+		JSONType:    "string",
+		Description: "Expected side effect and response behavior.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("examples"), tools.DynamicField{}, tools.FixedField("verification_kind")},
+		JSONType:    "string",
+		Description: "Evaluator check classification (deterministic or model_judged).",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("preserved_behaviors")},
+		JSONType:    "array",
+		Description: "The existing behaviors the change as agreed at request_revision keeps, copied when this build started; empty when it names none. The tests must hold the service to each.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("preserved_behaviors"), tools.DynamicField{}},
+		JSONType:    "string",
+		Description: "The existing behaviors the change as agreed at request_revision keeps, copied when this build started; empty when it names none. The tests must hold the service to each.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("coverage_statements")},
+		JSONType:    "array",
+		Description: "Statements submitted with the latest report, retained for correction after findings or a check that could not run; empty before any report or when none were stated.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("coverage_statements"), tools.DynamicField{}},
+		JSONType:    "object",
+		Description: "Statements submitted with the latest report, retained for correction after findings or a check that could not run; empty before any report or when none were stated.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("coverage_statements"), tools.DynamicField{}, tools.FixedField("scenario")},
+		JSONType:    "string",
+		Description: "Exact declared scenario identifier.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("coverage_statements"), tools.DynamicField{}, tools.FixedField("question_ids")},
+		JSONType:    "array",
+		Description: "Question IDs from the assignment's answers[].id; empty when this statement names only examples.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("coverage_statements"), tools.DynamicField{}, tools.FixedField("question_ids"), tools.DynamicField{}},
+		JSONType:    "string",
+		Description: "Question IDs from the assignment's answers[].id; empty when this statement names only examples.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("coverage_statements"), tools.DynamicField{}, tools.FixedField("example_ids")},
+		JSONType:    "array",
+		Description: "Example IDs from the assignment's examples[].id; empty when this statement names only answers.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("coverage_statements"), tools.DynamicField{}, tools.FixedField("example_ids"), tools.DynamicField{}},
+		JSONType:    "string",
+		Description: "Example IDs from the assignment's examples[].id; empty when this statement names only answers.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("coverage_statements"), tools.DynamicField{}, tools.FixedField("explanation")},
+		JSONType:    "string",
+		Description: "Interaction or assertion the writer says exercises these requirements.",
 	},
 }
 var getVerificationPayloadFields = []tools.FieldMetadata{
@@ -2828,12 +7305,79 @@ var getVerificationResultFields = []tools.FieldMetadata{
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("suite_commit")},
 		JSONType:    "string",
-		Description: "Evaluator suite commit the operator configured for the run.",
+		Description: "Commit of the tests the run uses: the operator's evaluator, or the tests accepted for the change's build.",
 	},
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("accepted_at")},
 		JSONType:    "string",
 		Description: "When the run was accepted.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("inputs_current")},
+		JSONType:    "boolean",
+		Description: "Whether this run's agreed revision and selected tests match the current Change Card and the usable build or the stored verification settings. This observation does not establish the current candidate working tree, deployment or approval.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("candidate_binaries_dir")},
+		JSONType:    "string",
+		Description: "Absolute folder containing the binaries built by this completed run. Returned only to the user when promotion settings are configured, so the user can publish these exact binaries before approval. Agents never receive this private path.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("test_source")},
+		JSONType:    "object",
+		Description: "Where the run's tests came from, recorded when the run started: evaluator, or written_tests with their commit and a notice.",
+	},
+	{
+		Path:     []tools.FieldPathSegment{tools.FixedField("test_source"), tools.FixedField("source")},
+		JSONType: "string",
+		DiscriminatorValues: []string{
+			"evaluator",
+			"written_tests",
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("test_source")},
+		JSONType:    "object",
+		Description: "The run used the operator's evaluator: the one stored with surla verification set, or the one named on surla verify's command line.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("test_source"), tools.FixedField("source")},
+				Value:         "evaluator",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("test_source")},
+		JSONType:    "object",
+		Description: "The run used the tests Surla accepted for the change's build, which a separate agent on this machine wrote.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("test_source"), tools.FixedField("source")},
+				Value:         "written_tests",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("test_source"), tools.FixedField("commit")},
+		JSONType:    "string",
+		Description: "Commit Surla recorded the accepted tests at; the same as suite_commit.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("test_source"), tools.FixedField("source")},
+				Value:         "written_tests",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("test_source"), tools.FixedField("notice")},
+		JSONType:    "string",
+		Description: "Always: These tests were written by a separate agent on this machine and are not isolated from the builder.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("test_source"), tools.FixedField("source")},
+				Value:         "written_tests",
+			},
+		},
 	},
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("state")},
@@ -3211,6 +7755,440 @@ var initProjectResultFields = []tools.FieldMetadata{
 		Description: "Full commit ID of the initial starter commit created in the initialized repository (40 or 64 lowercase hex characters); start_live_target and verify_change take this commit ID.",
 	},
 }
+var listBuilderAssignmentsPayloadFields = []tools.FieldMetadata{
+	{
+		JSONType: "object",
+	},
+}
+var listBuilderAssignmentsResultFields = []tools.FieldMetadata{
+	{
+		JSONType:    "object",
+		Description: "The builder's assignment for the project's open build while that build needs the builder; empty otherwise.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("assignments")},
+		JSONType:    "array",
+		Description: "The open build's assignment while it needs this role; empty otherwise.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("assignments"), tools.DynamicField{}},
+		JSONType:    "object",
+		Description: "The open build's assignment while it needs this role; empty otherwise.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("assignments"), tools.DynamicField{}, tools.FixedField("change_id")},
+		JSONType:    "string",
+		Description: "Change Card to build; get_change takes it.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("assignments"), tools.DynamicField{}, tools.FixedField("request_revision")},
+		JSONType:    "string",
+		Description: "Change Card revision to build; verify_change takes it.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("assignments"), tools.DynamicField{}, tools.FixedField("in_force")},
+		JSONType:    "boolean",
+		Description: "True when request_revision is the change's agreed revision, the one in force, as get_build reports it. It stays true while a proposed revision waits and when a refreshed draft is adopted without changing request_revision. If adoption or confirmation changes the agreed request_revision, it becomes false; verify_change refuses this earlier revision, and the assignment stays as it is until the user builds again.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("assignments"), tools.DynamicField{}, tools.FixedField("read")},
+		JSONType:    "boolean",
+		Description: "True once you read this assignment in full with get_builder_assignment.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("assignments"), tools.DynamicField{}, tools.FixedField("written_tests")},
+		JSONType:    "object",
+		Description: "Where the test writer's tests for this build stand: not_used when no test writer is used because the project has stored verification settings; otherwise accepted, with the commit and time, when the build records accepted tests, and not_yet_accepted when it records none.",
+	},
+	{
+		Path:     []tools.FieldPathSegment{tools.FixedField("assignments"), tools.DynamicField{}, tools.FixedField("written_tests"), tools.FixedField("state")},
+		JSONType: "string",
+		DiscriminatorValues: []string{
+			"not_used",
+			"not_yet_accepted",
+			"accepted",
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("assignments"), tools.DynamicField{}, tools.FixedField("written_tests")},
+		JSONType:    "object",
+		Description: "No test writer is used: the project verifies with the evaluator stored with surla verification set. Every read of a build in such a project shows this, whatever the build recorded.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("assignments"), tools.DynamicField{}, tools.FixedField("written_tests"), tools.FixedField("state")},
+				Value:         "not_used",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("assignments"), tools.DynamicField{}, tools.FixedField("written_tests")},
+		JSONType:    "object",
+		Description: "The build records no accepted tests.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("assignments"), tools.DynamicField{}, tools.FixedField("written_tests"), tools.FixedField("state")},
+				Value:         "not_yet_accepted",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("assignments"), tools.DynamicField{}, tools.FixedField("written_tests")},
+		JSONType:    "object",
+		Description: "Surla checked the reported tests and recorded them as a commit.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("assignments"), tools.DynamicField{}, tools.FixedField("written_tests"), tools.FixedField("state")},
+				Value:         "accepted",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("assignments"), tools.DynamicField{}, tools.FixedField("written_tests"), tools.FixedField("commit")},
+		JSONType:    "string",
+		Description: "Full commit ID Surla recorded the accepted tests at (40 or 64 lowercase hex characters).",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("assignments"), tools.DynamicField{}, tools.FixedField("written_tests"), tools.FixedField("state")},
+				Value:         "accepted",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("assignments"), tools.DynamicField{}, tools.FixedField("written_tests"), tools.FixedField("checked_at")},
+		JSONType:    "string",
+		Description: "When Surla's check reached this verdict.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("assignments"), tools.DynamicField{}, tools.FixedField("written_tests"), tools.FixedField("state")},
+				Value:         "accepted",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("assignments"), tools.DynamicField{}, tools.FixedField("written_tests"), tools.FixedField("not_judged")},
+		JSONType:    "string",
+		Description: "What Surla's check did not judge, always the same sentence.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("assignments"), tools.DynamicField{}, tools.FixedField("written_tests"), tools.FixedField("state")},
+				Value:         "accepted",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("assignments"), tools.DynamicField{}, tools.FixedField("working_folder")},
+		JSONType:    "string",
+		Description: "Absolute path of the folder to build in: the project's folder inside your working copy .surla-build, on the build's branch surla/build-<n>. Run git and go there, never in the project folder.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("assignments"), tools.DynamicField{}, tools.FixedField("gowork_off")},
+		JSONType:    "boolean",
+		Description: "True when no go.work lies in working_folder or in a folder between it and the working copy's root: run every go command there as GOWORK=off go …, so a go.work of the project folder around your copy does not take it over.",
+	},
+}
+var listChangesPayloadFields = []tools.FieldMetadata{
+	{
+		JSONType: "object",
+	},
+}
+var listChangesResultFields = []tools.FieldMetadata{
+	{
+		JSONType:    "object",
+		Description: "The project's saved Change Cards, most recently saved first (tie-broken by change_id).",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("changes")},
+		JSONType:    "array",
+		Description: "Saved Change Cards, most recently saved first.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("changes"), tools.DynamicField{}},
+		JSONType:    "object",
+		Description: "Saved Change Cards, most recently saved first.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("changes"), tools.DynamicField{}, tools.FixedField("change_id")},
+		JSONType:    "string",
+		Description: "Change Card identifier; get_change takes it.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("changes"), tools.DynamicField{}, tools.FixedField("summary")},
+		JSONType:    "string",
+		Description: "Plain-English summary of the current revision.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("changes"), tools.DynamicField{}, tools.FixedField("status")},
+		JSONType:    "string",
+		Description: "Checkpoint status of the current revision.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("changes"), tools.DynamicField{}, tools.FixedField("request_revision")},
+		JSONType:    "string",
+		Description: "Current request_revision of the Change Card.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("changes"), tools.DynamicField{}, tools.FixedField("latest_verification")},
+		JSONType:    "object",
+		Description: "The Change Card's most recently accepted verification run; absent when none was started.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("changes"), tools.DynamicField{}, tools.FixedField("latest_verification"), tools.FixedField("run_id")},
+		JSONType:    "string",
+		Description: "Verification run identifier; get_verification takes it.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("changes"), tools.DynamicField{}, tools.FixedField("latest_verification"), tools.FixedField("state")},
+		JSONType:    "string",
+		Description: "running while the run builds or evaluates the candidate; passed or failed when its report's verdict is known; not_completed when it stopped without a report.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("changes"), tools.DynamicField{}, tools.FixedField("latest_verification"), tools.FixedField("inputs_current")},
+		JSONType:    "boolean",
+		Description: "Whether this run names the agreed request_revision and the tests selected now: the accepted test commit of the usable build in force, or the evaluator suite in the stored verification settings. It does not say whether the candidate working tree, deployment or approval is current.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("changes"), tools.DynamicField{}, tools.FixedField("proposed_revision")},
+		JSONType:    "string",
+		Description: "request_revision of the revision the guide proposed beside this confirmed change, while it waits for the user to adopt or decline it; absent otherwise. status and request_revision describe the revision in force.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("changes"), tools.DynamicField{}, tools.FixedField("saved_at")},
+		JSONType:    "string",
+		Description: "When the Change Card was last saved. It is not part of request_revision.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("version")},
+		JSONType:    "string",
+		Description: "Opaque value for change detection. Compare it only for equality; the returned fields contain the facts this operation makes readable.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("approval_available")},
+		JSONType:    "boolean",
+		Description: "Whether approve_merge can record approvals on this server: true when the server runs Checkpoint 4 verification, as every server surla starts does, and any stored promotion settings could be resolved; false when the server runs no verification or resolving the promotion target fails.",
+	},
+}
+var listTestWriterAssignmentsPayloadFields = []tools.FieldMetadata{
+	{
+		JSONType: "object",
+	},
+}
+var listTestWriterAssignmentsResultFields = []tools.FieldMetadata{
+	{
+		JSONType:    "object",
+		Description: "The test writer's assignment for the project's open build while that build needs the test writer; empty otherwise.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("assignments")},
+		JSONType:    "array",
+		Description: "The open build's assignment while it needs this role; empty otherwise.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("assignments"), tools.DynamicField{}},
+		JSONType:    "object",
+		Description: "The open build's assignment while it needs this role; empty otherwise.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("assignments"), tools.DynamicField{}, tools.FixedField("change_id")},
+		JSONType:    "string",
+		Description: "Change Card the tests are for; get_test_writer_assignment takes it.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("assignments"), tools.DynamicField{}, tools.FixedField("request_revision")},
+		JSONType:    "string",
+		Description: "Change Card revision the tests are for.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("assignments"), tools.DynamicField{}, tools.FixedField("in_force")},
+		JSONType:    "boolean",
+		Description: "True when request_revision is the change's agreed revision, the one in force, as get_build reports it. It stays true while a proposed revision waits and when a refreshed draft is adopted without changing request_revision. If adoption or confirmation changes the agreed request_revision, it becomes false; the assignment stays on the earlier revision until the user builds again.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("assignments"), tools.DynamicField{}, tools.FixedField("progress")},
+		JSONType:    "object",
+		Description: "Where this assignment stands.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("assignments"), tools.DynamicField{}, tools.FixedField("progress"), tools.FixedField("tests")},
+		JSONType:    "object",
+		Description: "The tests' state: not_used when the project has stored verification settings; otherwise assigned, reported, needs_changes with the number of Surla's findings, accepted with the commit Surla recorded, or could_not_run with the reason and the user's step. Each verdict carries the time Surla reached it.",
+	},
+	{
+		Path:     []tools.FieldPathSegment{tools.FixedField("assignments"), tools.DynamicField{}, tools.FixedField("progress"), tools.FixedField("tests"), tools.FixedField("state")},
+		JSONType: "string",
+		DiscriminatorValues: []string{
+			"not_used",
+			"assigned",
+			"reported",
+			"needs_changes",
+			"accepted",
+			"could_not_run",
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("assignments"), tools.DynamicField{}, tools.FixedField("progress"), tools.FixedField("tests")},
+		JSONType:    "object",
+		Description: "No test writer is used: the project verifies with the evaluator stored with surla verification set. Every read of a build in such a project shows this, whatever the build recorded.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("assignments"), tools.DynamicField{}, tools.FixedField("progress"), tools.FixedField("tests"), tools.FixedField("state")},
+				Value:         "not_used",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("assignments"), tools.DynamicField{}, tools.FixedField("progress"), tools.FixedField("tests")},
+		JSONType:    "object",
+		Description: "Surla assigned the tests for this build; the test writer has not reported them finished.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("assignments"), tools.DynamicField{}, tools.FixedField("progress"), tools.FixedField("tests"), tools.FixedField("state")},
+				Value:         "assigned",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("assignments"), tools.DynamicField{}, tools.FixedField("progress"), tools.FixedField("tests")},
+		JSONType:    "object",
+		Description: "The test writer reported its tests finished at this build's revision. Surla checks them right after each report; its verdict replaces this state.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("assignments"), tools.DynamicField{}, tools.FixedField("progress"), tools.FixedField("tests"), tools.FixedField("state")},
+				Value:         "reported",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("assignments"), tools.DynamicField{}, tools.FixedField("progress"), tools.FixedField("tests")},
+		JSONType:    "object",
+		Description: "Surla checked the reported tests and found problems the test writer must fix before reporting again, including a working copy that is off its build's branch or holds another build's work. Their text is in get_test_writer_assignment and, for the user, in get_test_findings.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("assignments"), tools.DynamicField{}, tools.FixedField("progress"), tools.FixedField("tests"), tools.FixedField("state")},
+				Value:         "needs_changes",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("assignments"), tools.DynamicField{}, tools.FixedField("progress"), tools.FixedField("tests"), tools.FixedField("finding_count")},
+		JSONType:    "integer",
+		Description: "Number of problems Surla found.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("assignments"), tools.DynamicField{}, tools.FixedField("progress"), tools.FixedField("tests"), tools.FixedField("state")},
+				Value:         "needs_changes",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("assignments"), tools.DynamicField{}, tools.FixedField("progress"), tools.FixedField("tests"), tools.FixedField("checked_at")},
+		JSONType:    "string",
+		Description: "When Surla's check reached this verdict.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("assignments"), tools.DynamicField{}, tools.FixedField("progress"), tools.FixedField("tests"), tools.FixedField("state")},
+				Value:         "needs_changes",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("assignments"), tools.DynamicField{}, tools.FixedField("progress"), tools.FixedField("tests")},
+		JSONType:    "object",
+		Description: "Surla checked the reported tests and recorded them as a commit.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("assignments"), tools.DynamicField{}, tools.FixedField("progress"), tools.FixedField("tests"), tools.FixedField("state")},
+				Value:         "accepted",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("assignments"), tools.DynamicField{}, tools.FixedField("progress"), tools.FixedField("tests"), tools.FixedField("commit")},
+		JSONType:    "string",
+		Description: "Full commit ID Surla recorded the accepted tests at (40 or 64 lowercase hex characters).",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("assignments"), tools.DynamicField{}, tools.FixedField("progress"), tools.FixedField("tests"), tools.FixedField("state")},
+				Value:         "accepted",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("assignments"), tools.DynamicField{}, tools.FixedField("progress"), tools.FixedField("tests"), tools.FixedField("checked_at")},
+		JSONType:    "string",
+		Description: "When Surla's check reached this verdict.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("assignments"), tools.DynamicField{}, tools.FixedField("progress"), tools.FixedField("tests"), tools.FixedField("state")},
+				Value:         "accepted",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("assignments"), tools.DynamicField{}, tools.FixedField("progress"), tools.FixedField("tests"), tools.FixedField("not_judged")},
+		JSONType:    "string",
+		Description: "What Surla's check did not judge, always the same sentence.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("assignments"), tools.DynamicField{}, tools.FixedField("progress"), tools.FixedField("tests"), tools.FixedField("state")},
+				Value:         "accepted",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("assignments"), tools.DynamicField{}, tools.FixedField("progress"), tools.FixedField("tests")},
+		JSONType:    "object",
+		Description: "Surla's check of the reported tests could not run, for a cause the test writer cannot fix; the user's step makes it possible.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("assignments"), tools.DynamicField{}, tools.FixedField("progress"), tools.FixedField("tests"), tools.FixedField("state")},
+				Value:         "could_not_run",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("assignments"), tools.DynamicField{}, tools.FixedField("progress"), tools.FixedField("tests"), tools.FixedField("reason")},
+		JSONType:    "string",
+		Description: "Why the check could not run.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("assignments"), tools.DynamicField{}, tools.FixedField("progress"), tools.FixedField("tests"), tools.FixedField("state")},
+				Value:         "could_not_run",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("assignments"), tools.DynamicField{}, tools.FixedField("progress"), tools.FixedField("tests"), tools.FixedField("step")},
+		JSONType:    "string",
+		Description: "What the user does so the check can run.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("assignments"), tools.DynamicField{}, tools.FixedField("progress"), tools.FixedField("tests"), tools.FixedField("state")},
+				Value:         "could_not_run",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("assignments"), tools.DynamicField{}, tools.FixedField("progress"), tools.FixedField("tests"), tools.FixedField("checked_at")},
+		JSONType:    "string",
+		Description: "When Surla's check stopped.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("assignments"), tools.DynamicField{}, tools.FixedField("progress"), tools.FixedField("tests"), tools.FixedField("state")},
+				Value:         "could_not_run",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("assignments"), tools.DynamicField{}, tools.FixedField("progress"), tools.FixedField("read")},
+		JSONType:    "boolean",
+		Description: "True once the test writer read this assignment in full with get_test_writer_assignment.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("assignments"), tools.DynamicField{}, tools.FixedField("progress"), tools.FixedField("report")},
+		JSONType:    "integer",
+		Description: "Number of the test writer's latest report of this build: 0 until its first report, and one more with each report_tests_finished.",
+	},
+}
 var listTracesPayloadFields = []tools.FieldMetadata{
 	{
 		JSONType:    "object",
@@ -3295,12 +8273,12 @@ var listTracesResultFields = []tools.FieldMetadata{
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("spans"), tools.DynamicField{}, tools.FixedField("attributes")},
 		JSONType:    "object",
-		Description: "Selected operation identifiers and results; at most six values of 1024 bytes each.",
+		Description: "Selected operation identifiers, results, and private caller attribution; at most seven values of 1024 bytes each.",
 	},
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("spans"), tools.DynamicField{}, tools.FixedField("attributes"), tools.DynamicField{}},
 		JSONType:    "string",
-		Description: "Selected operation identifiers and results; at most six values of 1024 bytes each.",
+		Description: "Selected operation identifiers, results, and private caller attribution; at most seven values of 1024 bytes each.",
 	},
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("spans"), tools.DynamicField{}, tools.FixedField("shortened")},
@@ -3372,12 +8350,79 @@ var listVerificationsResultFields = []tools.FieldMetadata{
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("runs"), tools.DynamicField{}, tools.FixedField("suite_commit")},
 		JSONType:    "string",
-		Description: "Evaluator suite commit the operator configured for the run.",
+		Description: "Commit of the tests the run uses: the operator's evaluator, or the tests accepted for the change's build.",
 	},
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("runs"), tools.DynamicField{}, tools.FixedField("accepted_at")},
 		JSONType:    "string",
 		Description: "When the run was accepted.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("runs"), tools.DynamicField{}, tools.FixedField("inputs_current")},
+		JSONType:    "boolean",
+		Description: "Whether this run's agreed revision and selected tests match the current Change Card and the usable build or the stored verification settings. This observation does not establish the current candidate working tree, deployment or approval.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("runs"), tools.DynamicField{}, tools.FixedField("candidate_binaries_dir")},
+		JSONType:    "string",
+		Description: "Absolute folder containing the binaries built by this completed run. Returned only to the user when promotion settings are configured, so the user can publish these exact binaries before approval. Agents never receive this private path.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("runs"), tools.DynamicField{}, tools.FixedField("test_source")},
+		JSONType:    "object",
+		Description: "Where the run's tests came from, recorded when the run started: evaluator, or written_tests with their commit and a notice.",
+	},
+	{
+		Path:     []tools.FieldPathSegment{tools.FixedField("runs"), tools.DynamicField{}, tools.FixedField("test_source"), tools.FixedField("source")},
+		JSONType: "string",
+		DiscriminatorValues: []string{
+			"evaluator",
+			"written_tests",
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("runs"), tools.DynamicField{}, tools.FixedField("test_source")},
+		JSONType:    "object",
+		Description: "The run used the operator's evaluator: the one stored with surla verification set, or the one named on surla verify's command line.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("runs"), tools.DynamicField{}, tools.FixedField("test_source"), tools.FixedField("source")},
+				Value:         "evaluator",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("runs"), tools.DynamicField{}, tools.FixedField("test_source")},
+		JSONType:    "object",
+		Description: "The run used the tests Surla accepted for the change's build, which a separate agent on this machine wrote.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("runs"), tools.DynamicField{}, tools.FixedField("test_source"), tools.FixedField("source")},
+				Value:         "written_tests",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("runs"), tools.DynamicField{}, tools.FixedField("test_source"), tools.FixedField("commit")},
+		JSONType:    "string",
+		Description: "Commit Surla recorded the accepted tests at; the same as suite_commit.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("runs"), tools.DynamicField{}, tools.FixedField("test_source"), tools.FixedField("source")},
+				Value:         "written_tests",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("runs"), tools.DynamicField{}, tools.FixedField("test_source"), tools.FixedField("notice")},
+		JSONType:    "string",
+		Description: "Always: These tests were written by a separate agent on this machine and are not isolated from the builder.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("runs"), tools.DynamicField{}, tools.FixedField("test_source"), tools.FixedField("source")},
+				Value:         "written_tests",
+			},
+		},
 	},
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("runs"), tools.DynamicField{}, tools.FixedField("state")},
@@ -3716,7 +8761,7 @@ var listVerificationsResultFields = []tools.FieldMetadata{
 var previewArchitecturePayloadFields = []tools.FieldMetadata{
 	{
 		JSONType:    "object",
-		Description: "Request to derive the Checkpoint 2 C4 topology, guardrails, and proposed swarm roster from a candidate Goa design bound to a confirmed Change Card.",
+		Description: "Request for the Checkpoint 2 C4 topology and guardrails of a confirmed Change Card's agreed revision, from the architecture saved with it.",
 	},
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("change_id")},
@@ -3728,76 +8773,11 @@ var previewArchitecturePayloadFields = []tools.FieldMetadata{
 		JSONType:    "string",
 		Description: "Expected CP1 request_revision digest.",
 	},
-	{
-		Path:        []tools.FieldPathSegment{tools.FixedField("design")},
-		JSONType:    "object",
-		Description: "Candidate module whose Goa and Goa-AI design is evaluated. When omitted on a server with a bound workspace, Surla reads the candidate module snapshot from the bound workspace.",
-	},
-	{
-		Path:        []tools.FieldPathSegment{tools.FixedField("design"), tools.FixedField("files")},
-		JSONType:    "object",
-		Description: "File contents keyed by module-relative path, such as design/design.go or go.mod.",
-	},
-	{
-		Path:        []tools.FieldPathSegment{tools.FixedField("design"), tools.FixedField("files"), tools.DynamicField{}},
-		JSONType:    "string",
-		Description: "File contents keyed by module-relative path, such as design/design.go or go.mod.",
-	},
-	{
-		Path:        []tools.FieldPathSegment{tools.FixedField("builders")},
-		JSONType:    "array",
-		Description: "Optional explicit builder path scopes for proposing a Chorus build roster. When omitted, preview_architecture returns a solo preview with swarm.status unconfigured and no missing_roles.",
-	},
-	{
-		Path:        []tools.FieldPathSegment{tools.FixedField("builders"), tools.DynamicField{}},
-		JSONType:    "object",
-		Description: "Optional explicit builder path scopes for proposing a Chorus build roster. When omitted, preview_architecture returns a solo preview with swarm.status unconfigured and no missing_roles.",
-	},
-	{
-		Path:        []tools.FieldPathSegment{tools.FixedField("builders"), tools.DynamicField{}, tools.FixedField("name")},
-		JSONType:    "string",
-		Description: "Human-readable builder scope name (for example, orders or api).",
-	},
-	{
-		Path:        []tools.FieldPathSegment{tools.FixedField("builders"), tools.DynamicField{}, tools.FixedField("paths")},
-		JSONType:    "array",
-		Description: "Repository-relative path globs owned by this builder.",
-	},
-	{
-		Path:        []tools.FieldPathSegment{tools.FixedField("builders"), tools.DynamicField{}, tools.FixedField("paths"), tools.DynamicField{}},
-		JSONType:    "string",
-		Description: "Repository-relative path globs owned by this builder.",
-	},
-	{
-		Path:        []tools.FieldPathSegment{tools.FixedField("builders"), tools.DynamicField{}, tools.FixedField("preferred_profile_id")},
-		JSONType:    "string",
-		Description: "Optional preference selecting a server-configured authenticated profile ID.",
-	},
-	{
-		Path:        []tools.FieldPathSegment{tools.FixedField("architect_paths")},
-		JSONType:    "array",
-		Description: "Optional repository-relative path globs for an @architect role in the proposed Chorus roster (requires builders).",
-	},
-	{
-		Path:        []tools.FieldPathSegment{tools.FixedField("architect_paths"), tools.DynamicField{}},
-		JSONType:    "string",
-		Description: "Optional repository-relative path globs for an @architect role in the proposed Chorus roster (requires builders).",
-	},
-	{
-		Path:        []tools.FieldPathSegment{tools.FixedField("eval_paths")},
-		JSONType:    "array",
-		Description: "Optional repository or evaluator-workspace relative path globs for an @eval-author role in the proposed Chorus roster (requires builders).",
-	},
-	{
-		Path:        []tools.FieldPathSegment{tools.FixedField("eval_paths"), tools.DynamicField{}},
-		JSONType:    "string",
-		Description: "Optional repository or evaluator-workspace relative path globs for an @eval-author role in the proposed Chorus roster (requires builders).",
-	},
 }
 var previewArchitectureResultFields = []tools.FieldMetadata{
 	{
 		JSONType:    "object",
-		Description: "Checkpoint 2 C4 container topology, tool contracts, per-agent Goa-AI guardrails, and proposed Chorus swarm roster derived from the evaluated candidate design.",
+		Description: "Checkpoint 2 C4 container topology, tool contracts, per-agent Goa-AI guardrails, derived from the evaluated candidate design.",
 	},
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("change_id")},
@@ -3812,7 +8792,7 @@ var previewArchitectureResultFields = []tools.FieldMetadata{
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("design_digest")},
 		JSONType:    "string",
-		Description: "SHA-256 digest of the evaluated design snapshot (sorted path and content pairs).",
+		Description: "SHA-256 digest of the design snapshot the revision's refresh evaluated (sorted path and content pairs).",
 	},
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("system_name")},
@@ -4030,111 +9010,6 @@ var previewArchitectureResultFields = []tools.FieldMetadata{
 		Description: "True when the tool declares a BoundedResult cursor/truncation contract.",
 	},
 	{
-		Path:        []tools.FieldPathSegment{tools.FixedField("swarm")},
-		JSONType:    "object",
-		Description: "Proposed Chorus multi-agent role assignments and model-family routing.",
-	},
-	{
-		Path:        []tools.FieldPathSegment{tools.FixedField("swarm"), tools.FixedField("status")},
-		JSONType:    "string",
-		Description: "Roster configuration status.",
-	},
-	{
-		Path:        []tools.FieldPathSegment{tools.FixedField("swarm"), tools.FixedField("assignments")},
-		JSONType:    "array",
-		Description: "Deterministic role assignments when status is configured.",
-	},
-	{
-		Path:        []tools.FieldPathSegment{tools.FixedField("swarm"), tools.FixedField("assignments"), tools.DynamicField{}},
-		JSONType:    "object",
-		Description: "Deterministic role assignments when status is configured.",
-	},
-	{
-		Path:        []tools.FieldPathSegment{tools.FixedField("swarm"), tools.FixedField("assignments"), tools.DynamicField{}, tools.FixedField("handle")},
-		JSONType:    "string",
-		Description: "Deterministic Chorus agent handle (without leading '@', at most 32 characters).",
-	},
-	{
-		Path:        []tools.FieldPathSegment{tools.FixedField("swarm"), tools.FixedField("assignments"), tools.DynamicField{}, tools.FixedField("role")},
-		JSONType:    "string",
-		Description: "Assigned swarm role kind.",
-	},
-	{
-		Path:        []tools.FieldPathSegment{tools.FixedField("swarm"), tools.FixedField("assignments"), tools.DynamicField{}, tools.FixedField("scope_name")},
-		JSONType:    "string",
-		Description: "Human-readable scope label for this assignment.",
-	},
-	{
-		Path:        []tools.FieldPathSegment{tools.FixedField("swarm"), tools.FixedField("assignments"), tools.DynamicField{}, tools.FixedField("profile_id")},
-		JSONType:    "string",
-		Description: "Assigned server-configured provider profile ID.",
-	},
-	{
-		Path:        []tools.FieldPathSegment{tools.FixedField("swarm"), tools.FixedField("assignments"), tools.DynamicField{}, tools.FixedField("provider")},
-		JSONType:    "string",
-		Description: "Assigned coding-agent provider name.",
-	},
-	{
-		Path:        []tools.FieldPathSegment{tools.FixedField("swarm"), tools.FixedField("assignments"), tools.DynamicField{}, tools.FixedField("model")},
-		JSONType:    "string",
-		Description: "Assigned model identifier.",
-	},
-	{
-		Path:        []tools.FieldPathSegment{tools.FixedField("swarm"), tools.FixedField("assignments"), tools.DynamicField{}, tools.FixedField("family")},
-		JSONType:    "string",
-		Description: "Canonical model family identifier.",
-	},
-	{
-		Path:        []tools.FieldPathSegment{tools.FixedField("swarm"), tools.FixedField("assignments"), tools.DynamicField{}, tools.FixedField("owned_paths")},
-		JSONType:    "array",
-		Description: "Repository or workspace path globs owned by this role for Chorus coordination.",
-	},
-	{
-		Path:        []tools.FieldPathSegment{tools.FixedField("swarm"), tools.FixedField("assignments"), tools.DynamicField{}, tools.FixedField("owned_paths"), tools.DynamicField{}},
-		JSONType:    "string",
-		Description: "Repository or workspace path globs owned by this role for Chorus coordination.",
-	},
-	{
-		Path:        []tools.FieldPathSegment{tools.FixedField("swarm"), tools.FixedField("assignments"), tools.DynamicField{}, tools.FixedField("access_mode")},
-		JSONType:    "string",
-		Description: "Operator-declared workspace coordination boundary for this role.",
-	},
-	{
-		Path:        []tools.FieldPathSegment{tools.FixedField("swarm"), tools.FixedField("cross_family_review")},
-		JSONType:    "boolean",
-		Description: "True if and only if status is configured and the reviewer model family is disjoint from every assigned builder model family.",
-	},
-	{
-		Path:        []tools.FieldPathSegment{tools.FixedField("swarm"), tools.FixedField("cross_family_eval")},
-		JSONType:    "boolean",
-		Description: "True if and only if status is configured, an eval_author role is assigned, and the eval_author model family is disjoint from every assigned builder model family.",
-	},
-	{
-		Path:        []tools.FieldPathSegment{tools.FixedField("swarm"), tools.FixedField("single_family")},
-		JSONType:    "boolean",
-		Description: "True when status is configured and all assigned roles share one model family.",
-	},
-	{
-		Path:        []tools.FieldPathSegment{tools.FixedField("swarm"), tools.FixedField("missing_roles")},
-		JSONType:    "array",
-		Description: "Requested roles lacking an authenticated capable profile when status is unconfigured (with builder scopes supplied) or missing_capability; omitted on solo previews with no builder scopes.",
-	},
-	{
-		Path:        []tools.FieldPathSegment{tools.FixedField("swarm"), tools.FixedField("missing_roles"), tools.DynamicField{}},
-		JSONType:    "string",
-		Description: "Requested roles lacking an authenticated capable profile when status is unconfigured (with builder scopes supplied) or missing_capability; omitted on solo previews with no builder scopes.",
-	},
-	{
-		Path:        []tools.FieldPathSegment{tools.FixedField("swarm"), tools.FixedField("summary")},
-		JSONType:    "string",
-		Description: "Plain-English summary of the proposed swarm roster and model-family posture.",
-	},
-	{
-		Path:        []tools.FieldPathSegment{tools.FixedField("swarm"), tools.FixedField("manifest")},
-		JSONType:    "string",
-		Description: "Formatted Chorus collaboration manifest text when status is configured; does not claim publication until sent via Chorus.",
-	},
-	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("banner")},
 		JSONType:    "string",
 		Description: "Plain-English summary of topology and guardrails.",
@@ -4143,7 +9018,7 @@ var previewArchitectureResultFields = []tools.FieldMetadata{
 var proposeChangePayloadFields = []tools.FieldMetadata{
 	{
 		JSONType:    "object",
-		Description: "Operator feature request and the caller's analysis of it, saved as a new Checkpoint 1 Change Card.",
+		Description: "The user's feature request and the caller's analysis of it, saved as a new Checkpoint 1 Change Card.",
 	},
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("change_id")},
@@ -4153,17 +9028,12 @@ var proposeChangePayloadFields = []tools.FieldMetadata{
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("prompt")},
 		JSONType:    "string",
-		Description: "Operator feature request.",
-	},
-	{
-		Path:        []tools.FieldPathSegment{tools.FixedField("design_source")},
-		JSONType:    "string",
-		Description: "Goa design source the analysis was made against (the target's design/*.go files). Surla saves it with the card and includes it in request_revision; it does not interpret it. When omitted on a server with a bound workspace, Surla records design/*.go from the bound workspace; when omitted without a bound workspace, the card records no design. Cannot be combined with story_refresh_op_id.",
+		Description: "The user's feature request.",
 	},
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("story_refresh_op_id")},
 		JSONType:    "string",
-		Description: "Optional op_id of a succeeded refresh_story operation for the bound workspace whose evaluated Stories this card adopts. When set, design_source must be omitted; Surla reads one workspace snapshot, requires its snapshot_digest to match the operation's, and records both the evaluated Stories and that snapshot's design/*.go on the card. Omit when the card has no Story.",
+		Description: "op_id of a succeeded refresh_story operation whose evaluated draft this card adopts: its design, Stories, architecture, go.mod and made-from list. Required when the project folder holds a go.mod; Surla reads no file.",
 	},
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("analysis")},
@@ -4243,7 +9113,7 @@ var proposeChangePayloadFields = []tools.FieldMetadata{
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("analysis"), tools.FixedField("ui_composition")},
 		JSONType:    "string",
-		Description: "Optional OpenUI Lang program that helps the requester decide the open questions, built only from the decision components the surla://golden-path resource lists. Refer to an ambiguity or example only by its 1-based position in this analysis (1 is the first); never invent identifiers. Surla saves it unchanged without checking it; the checkpoint viewer validates and renders it. Omit it when a plain card is clearer.",
+		Description: "Optional OpenUI Lang program that helps the requester decide the open questions, built only from the decision components the surla://golden-path resource lists. Refer to an ambiguity or example only by its 1-based position in this analysis (1 is the first); never invent identifiers. Surla saves it unchanged without checking it; the views page validates and renders it. Omit it when a plain card is clearer.",
 	},
 }
 var proposeChangeResultFields = []tools.FieldMetadata{
@@ -4264,7 +9134,7 @@ var proposeChangeResultFields = []tools.FieldMetadata{
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("prompt")},
 		JSONType:    "string",
-		Description: "Operator feature request for this revision.",
+		Description: "The user's feature request for this revision.",
 	},
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("summary")},
@@ -4289,7 +9159,7 @@ var proposeChangeResultFields = []tools.FieldMetadata{
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("ambiguities"), tools.DynamicField{}, tools.FixedField("question")},
 		JSONType:    "string",
-		Description: "Plain-English question for the operator.",
+		Description: "Plain-English question for the user.",
 	},
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("ambiguities"), tools.DynamicField{}, tools.FixedField("options")},
@@ -4539,7 +9409,7 @@ var proposeChangeResultFields = []tools.FieldMetadata{
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("confirmed_by")},
 		JSONType:    "string",
-		Description: "Authenticated principal that confirmed the Change Card.",
+		Description: "User who confirmed the Change Card.",
 	},
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("request_revision")},
@@ -4554,7 +9424,7 @@ var proposeChangeResultFields = []tools.FieldMetadata{
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("ui_composition"), tools.FixedField("program")},
 		JSONType:    "string",
-		Description: "OpenUI Lang program from the analysis's ui_composition, exactly as the caller sent it. The server does not check it; the checkpoint viewer validates it and shows its error state, with the rest of the card still usable, when the program is not a valid composition.",
+		Description: "OpenUI Lang program from the analysis's ui_composition, exactly as the caller sent it. The server does not check it; the views page validates it and shows its error state, with the rest of the card still usable, when the program is not a valid composition.",
 	},
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("ui_composition"), tools.FixedField("composed_for_revision")},
@@ -4564,12 +9434,12 @@ var proposeChangeResultFields = []tools.FieldMetadata{
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("approval")},
 		JSONType:    "object",
-		Description: "Checkpoint 5 approval of this revision, present only while it is verified against the promotion target's current inputs on this read. It is absent before approve_merge succeeds, whenever the target's suite, environment or binary digests have changed since, and whenever current inputs cannot be verified (see unverified_approval). It is never hashed into request_revision.",
+		Description: "Checkpoint 5 approval of this revision, present while suite_commit is still the tests' commit chosen for this revision and (when a promotion target is configured) the promotion target's current binary digests still equal artifacts on this read. It is absent before approve_merge succeeds, whenever the chosen tests' commit or the staged binary digests have changed since, and whenever a configured promotion target's staged binaries cannot be verified (see unverified_approval). It is never hashed into request_revision.",
 	},
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("approval"), tools.FixedField("approved_by")},
 		JSONType:    "string",
-		Description: "Authenticated principal that owns the card and called approve_merge. Authentication does not prove that a human, rather than a coding agent, made the call.",
+		Description: "User who approved the result.",
 	},
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("approval"), tools.FixedField("report_digest")},
@@ -4584,37 +9454,94 @@ var proposeChangeResultFields = []tools.FieldMetadata{
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("approval"), tools.FixedField("suite_id")},
 		JSONType:    "string",
-		Description: "Evaluator suite the promotion target requires.",
+		Description: "Suite identifier the tests at suite_commit declared in the report (shown, not compared).",
 	},
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("approval"), tools.FixedField("suite_commit")},
 		JSONType:    "string",
-		Description: "Evaluator suite commit the promotion target requires.",
+		Description: "Commit of the tests the report ran: the evaluator suite commit in the stored verification settings, or the tests Surla accepted for the change's build.",
 	},
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("approval"), tools.FixedField("environment")},
 		JSONType:    "string",
-		Description: "Dependency profile the promotion target requires, such as sim.",
+		Description: "Dependency profile the tests at suite_commit declared in the report, such as sim or scripted-model (shown, not compared).",
 	},
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("approval"), tools.FixedField("artifacts")},
 		JSONType:    "object",
-		Description: "SHA-256 digest of each candidate binary the promotion target measured, keyed by binary name.",
+		Description: "SHA-256 digest of each candidate binary the promotion target measured, keyed by binary name; empty when no promotion settings are configured.",
 	},
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("approval"), tools.FixedField("artifacts"), tools.DynamicField{}},
 		JSONType:    "string",
-		Description: "SHA-256 digest of each candidate binary the promotion target measured, keyed by binary name.",
+		Description: "SHA-256 digest of each candidate binary the promotion target measured, keyed by binary name; empty when no promotion settings are configured.",
 	},
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("approval"), tools.FixedField("scenario_count")},
 		JSONType:    "integer",
-		Description: "Number of declared evaluator scenarios, every one of which passed.",
+		Description: "Number of declared scenarios in the report, every one of which passed.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("approval"), tools.FixedField("test_source")},
+		JSONType:    "object",
+		Description: "Where the tests at suite_commit came from, derived on each read: evaluator, or written_tests with their commit and a notice.",
+	},
+	{
+		Path:     []tools.FieldPathSegment{tools.FixedField("approval"), tools.FixedField("test_source"), tools.FixedField("source")},
+		JSONType: "string",
+		DiscriminatorValues: []string{
+			"evaluator",
+			"written_tests",
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("approval"), tools.FixedField("test_source")},
+		JSONType:    "object",
+		Description: "The run used the operator's evaluator: the one stored with surla verification set, or the one named on surla verify's command line.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("approval"), tools.FixedField("test_source"), tools.FixedField("source")},
+				Value:         "evaluator",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("approval"), tools.FixedField("test_source")},
+		JSONType:    "object",
+		Description: "The run used the tests Surla accepted for the change's build, which a separate agent on this machine wrote.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("approval"), tools.FixedField("test_source"), tools.FixedField("source")},
+				Value:         "written_tests",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("approval"), tools.FixedField("test_source"), tools.FixedField("commit")},
+		JSONType:    "string",
+		Description: "Commit Surla recorded the accepted tests at; the same as suite_commit.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("approval"), tools.FixedField("test_source"), tools.FixedField("source")},
+				Value:         "written_tests",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("approval"), tools.FixedField("test_source"), tools.FixedField("notice")},
+		JSONType:    "string",
+		Description: "Always: These tests were written by a separate agent on this machine and are not isolated from the builder.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("approval"), tools.FixedField("test_source"), tools.FixedField("source")},
+				Value:         "written_tests",
+			},
+		},
 	},
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("unverified_approval")},
 		JSONType:    "object",
-		Description: "Saved Checkpoint 5 approval of this revision when current promotion inputs could not be verified on this read (because no promotion target is configured or the target could not report its current inputs). At most one of approval or unverified_approval is set. It is never saved to disk or hashed into request_revision.",
+		Description: "Saved Checkpoint 5 approval of this revision when suite_commit still matches the chosen tests' commit and promotion settings are configured, but the staged binaries could not be verified on this read. At most one of approval or unverified_approval is set. It is never saved to disk or hashed into request_revision.",
 	},
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("unverified_approval"), tools.FixedField("approval")},
@@ -4624,7 +9551,7 @@ var proposeChangeResultFields = []tools.FieldMetadata{
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("unverified_approval"), tools.FixedField("approval"), tools.FixedField("approved_by")},
 		JSONType:    "string",
-		Description: "Authenticated principal that owns the card and called approve_merge. Authentication does not prove that a human, rather than a coding agent, made the call.",
+		Description: "User who approved the result.",
 	},
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("unverified_approval"), tools.FixedField("approval"), tools.FixedField("report_digest")},
@@ -4639,37 +9566,394 @@ var proposeChangeResultFields = []tools.FieldMetadata{
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("unverified_approval"), tools.FixedField("approval"), tools.FixedField("suite_id")},
 		JSONType:    "string",
-		Description: "Evaluator suite the promotion target requires.",
+		Description: "Suite identifier the tests at suite_commit declared in the report (shown, not compared).",
 	},
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("unverified_approval"), tools.FixedField("approval"), tools.FixedField("suite_commit")},
 		JSONType:    "string",
-		Description: "Evaluator suite commit the promotion target requires.",
+		Description: "Commit of the tests the report ran: the evaluator suite commit in the stored verification settings, or the tests Surla accepted for the change's build.",
 	},
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("unverified_approval"), tools.FixedField("approval"), tools.FixedField("environment")},
 		JSONType:    "string",
-		Description: "Dependency profile the promotion target requires, such as sim.",
+		Description: "Dependency profile the tests at suite_commit declared in the report, such as sim or scripted-model (shown, not compared).",
 	},
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("unverified_approval"), tools.FixedField("approval"), tools.FixedField("artifacts")},
 		JSONType:    "object",
-		Description: "SHA-256 digest of each candidate binary the promotion target measured, keyed by binary name.",
+		Description: "SHA-256 digest of each candidate binary the promotion target measured, keyed by binary name; empty when no promotion settings are configured.",
 	},
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("unverified_approval"), tools.FixedField("approval"), tools.FixedField("artifacts"), tools.DynamicField{}},
 		JSONType:    "string",
-		Description: "SHA-256 digest of each candidate binary the promotion target measured, keyed by binary name.",
+		Description: "SHA-256 digest of each candidate binary the promotion target measured, keyed by binary name; empty when no promotion settings are configured.",
 	},
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("unverified_approval"), tools.FixedField("approval"), tools.FixedField("scenario_count")},
 		JSONType:    "integer",
-		Description: "Number of declared evaluator scenarios, every one of which passed.",
+		Description: "Number of declared scenarios in the report, every one of which passed.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("unverified_approval"), tools.FixedField("approval"), tools.FixedField("test_source")},
+		JSONType:    "object",
+		Description: "Where the tests at suite_commit came from, derived on each read: evaluator, or written_tests with their commit and a notice.",
+	},
+	{
+		Path:     []tools.FieldPathSegment{tools.FixedField("unverified_approval"), tools.FixedField("approval"), tools.FixedField("test_source"), tools.FixedField("source")},
+		JSONType: "string",
+		DiscriminatorValues: []string{
+			"evaluator",
+			"written_tests",
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("unverified_approval"), tools.FixedField("approval"), tools.FixedField("test_source")},
+		JSONType:    "object",
+		Description: "The run used the operator's evaluator: the one stored with surla verification set, or the one named on surla verify's command line.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("unverified_approval"), tools.FixedField("approval"), tools.FixedField("test_source"), tools.FixedField("source")},
+				Value:         "evaluator",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("unverified_approval"), tools.FixedField("approval"), tools.FixedField("test_source")},
+		JSONType:    "object",
+		Description: "The run used the tests Surla accepted for the change's build, which a separate agent on this machine wrote.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("unverified_approval"), tools.FixedField("approval"), tools.FixedField("test_source"), tools.FixedField("source")},
+				Value:         "written_tests",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("unverified_approval"), tools.FixedField("approval"), tools.FixedField("test_source"), tools.FixedField("commit")},
+		JSONType:    "string",
+		Description: "Commit Surla recorded the accepted tests at; the same as suite_commit.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("unverified_approval"), tools.FixedField("approval"), tools.FixedField("test_source"), tools.FixedField("source")},
+				Value:         "written_tests",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("unverified_approval"), tools.FixedField("approval"), tools.FixedField("test_source"), tools.FixedField("notice")},
+		JSONType:    "string",
+		Description: "Always: These tests were written by a separate agent on this machine and are not isolated from the builder.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("unverified_approval"), tools.FixedField("approval"), tools.FixedField("test_source"), tools.FixedField("source")},
+				Value:         "written_tests",
+			},
+		},
 	},
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("unverified_approval"), tools.FixedField("reason")},
 		JSONType:    "string",
-		Description: "Explanation of why the recorded approval could not be verified against current promotion inputs and how to recover.",
+		Description: "Explanation of why the recorded approval could not be verified against current release binaries and how to recover.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision")},
+		JSONType:    "object",
+		Description: "The revision the guide proposed beside this confirmed revision, while it waits for the user to adopt or decline it; absent otherwise. This card's own fields describe the revision in force.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("prompt")},
+		JSONType:    "string",
+		Description: "The user's feature request for this revision.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("summary")},
+		JSONType:    "string",
+		Description: "Plain-English summary of the proposed change.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("ambiguities")},
+		JSONType:    "array",
+		Description: "Domain questions the user answers when adopting this revision.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("ambiguities"), tools.DynamicField{}},
+		JSONType:    "object",
+		Description: "Domain questions the user answers when adopting this revision.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("ambiguities"), tools.DynamicField{}, tools.FixedField("id")},
+		JSONType:    "string",
+		Description: "Stable question identifier.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("ambiguities"), tools.DynamicField{}, tools.FixedField("question")},
+		JSONType:    "string",
+		Description: "Plain-English question for the user.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("ambiguities"), tools.DynamicField{}, tools.FixedField("options")},
+		JSONType:    "array",
+		Description: "Concrete resolution choices.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("ambiguities"), tools.DynamicField{}, tools.FixedField("options"), tools.DynamicField{}},
+		JSONType:    "string",
+		Description: "Concrete resolution choices.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("examples")},
+		JSONType:    "array",
+		Description: "Concrete examples mapped to evaluator checks.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("examples"), tools.DynamicField{}},
+		JSONType:    "object",
+		Description: "Concrete examples mapped to evaluator checks.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("examples"), tools.DynamicField{}, tools.FixedField("id")},
+		JSONType:    "string",
+		Description: "Stable example identifier. Default code-assigned IDs use check_01, check_02, ... (valid goa-ai/eval Scenario names). confirm_intent preserves caller-chosen IDs.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("examples"), tools.DynamicField{}, tools.FixedField("scenario")},
+		JSONType:    "string",
+		Description: "Plain-English scenario description.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("examples"), tools.DynamicField{}, tools.FixedField("input_summary")},
+		JSONType:    "string",
+		Description: "Representative user request and domain fixture state.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("examples"), tools.DynamicField{}, tools.FixedField("expected_outcome")},
+		JSONType:    "string",
+		Description: "Expected side effect and response behavior.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("examples"), tools.DynamicField{}, tools.FixedField("verification_kind")},
+		JSONType:    "string",
+		Description: "Evaluator check classification (deterministic or model_judged).",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("preserved_behaviors")},
+		JSONType:    "array",
+		Description: "Existing contract invariants preserved by this change.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("preserved_behaviors"), tools.DynamicField{}},
+		JSONType:    "string",
+		Description: "Existing contract invariants preserved by this change.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("stories")},
+		JSONType:    "array",
+		Description: "Evaluated domain Stories of this revision in declaration order; omitted when it has none. Included in its request_revision.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("stories"), tools.DynamicField{}},
+		JSONType:    "object",
+		Description: "Evaluated domain Stories of this revision in declaration order; omitted when it has none. Included in its request_revision.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("name")},
+		JSONType:    "string",
+		Description: "Human-facing Story title.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("description")},
+		JSONType:    "string",
+		Description: "Optional longer explanation of the Story.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("actors")},
+		JSONType:    "array",
+		Description: "Domain roles declared in the Story in declaration order.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("actors"), tools.DynamicField{}},
+		JSONType:    "object",
+		Description: "Domain roles declared in the Story in declaration order.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("actors"), tools.DynamicField{}, tools.FixedField("key")},
+		JSONType:    "string",
+		Description: "Story-scoped actor key.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("actors"), tools.DynamicField{}, tools.FixedField("title")},
+		JSONType:    "string",
+		Description: "Human-facing actor label.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("actors"), tools.DynamicField{}, tools.FixedField("description")},
+		JSONType:    "string",
+		Description: "Optional longer explanation of the actor role.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("flows")},
+		JSONType:    "array",
+		Description: "Timeline paths declared in the Story in declaration order.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("flows"), tools.DynamicField{}},
+		JSONType:    "object",
+		Description: "Timeline paths declared in the Story in declaration order.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("flows"), tools.DynamicField{}, tools.FixedField("key")},
+		JSONType:    "string",
+		Description: "Story-scoped flow key.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("flows"), tools.DynamicField{}, tools.FixedField("title")},
+		JSONType:    "string",
+		Description: "Human-facing flow title.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("flows"), tools.DynamicField{}, tools.FixedField("description")},
+		JSONType:    "string",
+		Description: "Optional longer explanation of the flow.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("flows"), tools.DynamicField{}, tools.FixedField("complete")},
+		JSONType:    "boolean",
+		Description: "True when the flow has a start, at least one outcome, and no open questions on the flow or any of its steps.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("flows"), tools.DynamicField{}, tools.FixedField("steps")},
+		JSONType:    "array",
+		Description: "Starting, intermediate, and outcome steps in declaration order.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("flows"), tools.DynamicField{}, tools.FixedField("steps"), tools.DynamicField{}},
+		JSONType:    "object",
+		Description: "Starting, intermediate, and outcome steps in declaration order.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("flows"), tools.DynamicField{}, tools.FixedField("steps"), tools.DynamicField{}, tools.FixedField("key")},
+		JSONType:    "string",
+		Description: "Flow-scoped step key.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("flows"), tools.DynamicField{}, tools.FixedField("steps"), tools.DynamicField{}, tools.FixedField("actor_key")},
+		JSONType:    "string",
+		Description: "Story-scoped key of the actor performing or observing the step.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("flows"), tools.DynamicField{}, tools.FixedField("steps"), tools.DynamicField{}, tools.FixedField("summary")},
+		JSONType:    "string",
+		Description: "Timeline sticky-note sentence for the step.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("flows"), tools.DynamicField{}, tools.FixedField("steps"), tools.DynamicField{}, tools.FixedField("description")},
+		JSONType:    "string",
+		Description: "Optional longer explanation of the step.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("flows"), tools.DynamicField{}, tools.FixedField("steps"), tools.DynamicField{}, tools.FixedField("kind")},
+		JSONType:    "string",
+		Description: "Step position in the flow: start, step, or outcome.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("flows"), tools.DynamicField{}, tools.FixedField("steps"), tools.DynamicField{}, tools.FixedField("questions")},
+		JSONType:    "array",
+		Description: "Unresolved step-level decisions in declaration order.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("flows"), tools.DynamicField{}, tools.FixedField("steps"), tools.DynamicField{}, tools.FixedField("questions"), tools.DynamicField{}},
+		JSONType:    "object",
+		Description: "Unresolved step-level decisions in declaration order.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("flows"), tools.DynamicField{}, tools.FixedField("steps"), tools.DynamicField{}, tools.FixedField("questions"), tools.DynamicField{}, tools.FixedField("key")},
+		JSONType:    "string",
+		Description: "Flow-scoped question key.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("flows"), tools.DynamicField{}, tools.FixedField("steps"), tools.DynamicField{}, tools.FixedField("questions"), tools.DynamicField{}, tools.FixedField("prompt")},
+		JSONType:    "string",
+		Description: "Human-facing question text.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("flows"), tools.DynamicField{}, tools.FixedField("steps"), tools.DynamicField{}, tools.FixedField("questions"), tools.DynamicField{}, tools.FixedField("description")},
+		JSONType:    "string",
+		Description: "Optional longer context for the question.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("flows"), tools.DynamicField{}, tools.FixedField("steps"), tools.DynamicField{}, tools.FixedField("questions"), tools.DynamicField{}, tools.FixedField("options")},
+		JSONType:    "array",
+		Description: "Suggested choices in declaration order.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("flows"), tools.DynamicField{}, tools.FixedField("steps"), tools.DynamicField{}, tools.FixedField("questions"), tools.DynamicField{}, tools.FixedField("options"), tools.DynamicField{}},
+		JSONType:    "string",
+		Description: "Suggested choices in declaration order.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("flows"), tools.DynamicField{}, tools.FixedField("questions")},
+		JSONType:    "array",
+		Description: "Unresolved flow-level decisions in declaration order.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("flows"), tools.DynamicField{}, tools.FixedField("questions"), tools.DynamicField{}},
+		JSONType:    "object",
+		Description: "Unresolved flow-level decisions in declaration order.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("flows"), tools.DynamicField{}, tools.FixedField("questions"), tools.DynamicField{}, tools.FixedField("key")},
+		JSONType:    "string",
+		Description: "Flow-scoped question key.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("flows"), tools.DynamicField{}, tools.FixedField("questions"), tools.DynamicField{}, tools.FixedField("prompt")},
+		JSONType:    "string",
+		Description: "Human-facing question text.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("flows"), tools.DynamicField{}, tools.FixedField("questions"), tools.DynamicField{}, tools.FixedField("description")},
+		JSONType:    "string",
+		Description: "Optional longer context for the question.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("flows"), tools.DynamicField{}, tools.FixedField("questions"), tools.DynamicField{}, tools.FixedField("options")},
+		JSONType:    "array",
+		Description: "Suggested choices in declaration order.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("flows"), tools.DynamicField{}, tools.FixedField("questions"), tools.DynamicField{}, tools.FixedField("options"), tools.DynamicField{}},
+		JSONType:    "string",
+		Description: "Suggested choices in declaration order.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("request_revision")},
+		JSONType:    "string",
+		Description: "SHA-256 digest of this proposed revision: confirm_intent adopts it, decline_revision declines it, and revise_change replaces it when given this value.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("ui_composition")},
+		JSONType:    "object",
+		Description: "Decision view the guide composed for this revision in its analysis, when it sent one.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("ui_composition"), tools.FixedField("program")},
+		JSONType:    "string",
+		Description: "OpenUI Lang program from the analysis's ui_composition, exactly as the caller sent it. The server does not check it; the views page validates it and shows its error state, with the rest of the card still usable, when the program is not a valid composition.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("ui_composition"), tools.FixedField("composed_for_revision")},
+		JSONType:    "string",
+		Description: "request_revision of the Change Card this program was composed for.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("changed_design_files")},
+		JSONType:    "array",
+		Description: "Paths of the design/*.go files that differ between the design source the confirmed revision was made from and the one this revision was made from (added, removed or changed), in path order; empty when both were made from the same design files. Adopting the revision binds it to its own design source.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("changed_design_files"), tools.DynamicField{}},
+		JSONType:    "string",
+		Description: "Paths of the design/*.go files that differ between the design source the confirmed revision was made from and the one this revision was made from (added, removed or changed), in path order; empty when both were made from the same design files. Adopting the revision binds it to its own design source.",
 	},
 }
 var readCheckOutputPayloadFields = []tools.FieldMetadata{
@@ -4722,12 +10006,17 @@ var refreshStoryPayloadFields = []tools.FieldMetadata{
 var refreshStoryResultFields = []tools.FieldMetadata{
 	{
 		JSONType:    "object",
-		Description: "Current Story refresh operation for the authenticated caller and bound workspace. state is none when no refresh has run yet in this server process for the bound workspace; running while sandboxed evaluation is in progress; succeeded with the evaluated stories (empty when the design does not load the Story module); or failed with a safe diagnostic.",
+		Description: "Current Story refresh operation of the project's owner for the guide's draft: the user, the guide and the builder all act for the owner, so they read the same one. state is none when no refresh has run yet in this server process for the guide's draft; running while evaluation is in progress; succeeded with the evaluated stories (empty when the design does not load the Story module); or failed with a safe diagnostic.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("draft_folder")},
+		JSONType:    "string",
+		Description: "Absolute path intended for the guide's draft, .surla-draft in the project folder, whose go.mod, go.sum and design/ refresh_story reads. When state is none, this path does not mean the folder exists; refresh_story makes it when needed.",
 	},
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("op_id")},
 		JSONType:    "string",
-		Description: "Identifier of the caller's current Story refresh operation for the bound workspace; present when state is running, succeeded, or failed. Pass it as story_refresh_op_id to propose_change or revise_change once state is succeeded to adopt the evaluated Story into a Change Card.",
+		Description: "Identifier of the owner's current Story refresh operation for the guide's draft; present when state is running, succeeded, or failed. Pass it as story_refresh_op_id to propose_change or revise_change once state is succeeded to adopt the evaluated Story into a Change Card.",
 	},
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("state")},
@@ -4737,7 +10026,7 @@ var refreshStoryResultFields = []tools.FieldMetadata{
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("snapshot_digest")},
 		JSONType:    "string",
-		Description: "Canonical SHA-256 digest of the workspace module snapshot read when this refresh started; present when state is running, succeeded, or failed.",
+		Description: "Canonical SHA-256 digest of the draft snapshot read when this refresh started; present when state is running, succeeded, or failed.",
 	},
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("stories")},
@@ -4927,13 +10216,2155 @@ var refreshStoryResultFields = []tools.FieldMetadata{
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("message")},
 		JSONType:    "string",
-		Description: "Summary of the current Story refresh state and next action.",
+		Description: "Summary of the current Story refresh state and next action. After a dropped build remakes the draft and until a revision is saved from it, begins by naming the dropped change and saying that edits made before then are gone.",
+	},
+}
+var reportTestsFinishedPayloadFields = []tools.FieldMetadata{
+	{
+		JSONType: "object",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("change_id")},
+		JSONType:    "string",
+		Description: "Change Card identifier from your test assignment.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("request_revision")},
+		JSONType:    "string",
+		Description: "request_revision of your test assignment.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("coverage_statements")},
+		JSONType:    "array",
+		Description: "Your stated scenario coverage of this assignment's answers and examples; use [] when none is stated. Surla validates references but does not judge assertion meaning.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("coverage_statements"), tools.DynamicField{}},
+		JSONType:    "object",
+		Description: "Your stated scenario coverage of this assignment's answers and examples; use [] when none is stated. Surla validates references but does not judge assertion meaning.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("coverage_statements"), tools.DynamicField{}, tools.FixedField("scenario")},
+		JSONType:    "string",
+		Description: "Exact declared scenario identifier.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("coverage_statements"), tools.DynamicField{}, tools.FixedField("question_ids")},
+		JSONType:    "array",
+		Description: "Question IDs from the assignment's answers[].id; empty when this statement names only examples.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("coverage_statements"), tools.DynamicField{}, tools.FixedField("question_ids"), tools.DynamicField{}},
+		JSONType:    "string",
+		Description: "Question IDs from the assignment's answers[].id; empty when this statement names only examples.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("coverage_statements"), tools.DynamicField{}, tools.FixedField("example_ids")},
+		JSONType:    "array",
+		Description: "Example IDs from the assignment's examples[].id; empty when this statement names only answers.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("coverage_statements"), tools.DynamicField{}, tools.FixedField("example_ids"), tools.DynamicField{}},
+		JSONType:    "string",
+		Description: "Example IDs from the assignment's examples[].id; empty when this statement names only answers.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("coverage_statements"), tools.DynamicField{}, tools.FixedField("explanation")},
+		JSONType:    "string",
+		Description: "Interaction or assertion the writer says exercises these requirements.",
+	},
+}
+var reportTestsFinishedResultFields = []tools.FieldMetadata{
+	{
+		JSONType:    "object",
+		Description: "One of the test writer's assignments as list_test_writer_assignments reports it.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("change_id")},
+		JSONType:    "string",
+		Description: "Change Card the tests are for; get_test_writer_assignment takes it.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("request_revision")},
+		JSONType:    "string",
+		Description: "Change Card revision the tests are for.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("in_force")},
+		JSONType:    "boolean",
+		Description: "True when request_revision is the change's agreed revision, the one in force, as get_build reports it. It stays true while a proposed revision waits and when a refreshed draft is adopted without changing request_revision. If adoption or confirmation changes the agreed request_revision, it becomes false; the assignment stays on the earlier revision until the user builds again.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("progress")},
+		JSONType:    "object",
+		Description: "Where this assignment stands.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("progress"), tools.FixedField("tests")},
+		JSONType:    "object",
+		Description: "The tests' state: not_used when the project has stored verification settings; otherwise assigned, reported, needs_changes with the number of Surla's findings, accepted with the commit Surla recorded, or could_not_run with the reason and the user's step. Each verdict carries the time Surla reached it.",
+	},
+	{
+		Path:     []tools.FieldPathSegment{tools.FixedField("progress"), tools.FixedField("tests"), tools.FixedField("state")},
+		JSONType: "string",
+		DiscriminatorValues: []string{
+			"not_used",
+			"assigned",
+			"reported",
+			"needs_changes",
+			"accepted",
+			"could_not_run",
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("progress"), tools.FixedField("tests")},
+		JSONType:    "object",
+		Description: "No test writer is used: the project verifies with the evaluator stored with surla verification set. Every read of a build in such a project shows this, whatever the build recorded.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("progress"), tools.FixedField("tests"), tools.FixedField("state")},
+				Value:         "not_used",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("progress"), tools.FixedField("tests")},
+		JSONType:    "object",
+		Description: "Surla assigned the tests for this build; the test writer has not reported them finished.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("progress"), tools.FixedField("tests"), tools.FixedField("state")},
+				Value:         "assigned",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("progress"), tools.FixedField("tests")},
+		JSONType:    "object",
+		Description: "The test writer reported its tests finished at this build's revision. Surla checks them right after each report; its verdict replaces this state.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("progress"), tools.FixedField("tests"), tools.FixedField("state")},
+				Value:         "reported",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("progress"), tools.FixedField("tests")},
+		JSONType:    "object",
+		Description: "Surla checked the reported tests and found problems the test writer must fix before reporting again, including a working copy that is off its build's branch or holds another build's work. Their text is in get_test_writer_assignment and, for the user, in get_test_findings.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("progress"), tools.FixedField("tests"), tools.FixedField("state")},
+				Value:         "needs_changes",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("progress"), tools.FixedField("tests"), tools.FixedField("finding_count")},
+		JSONType:    "integer",
+		Description: "Number of problems Surla found.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("progress"), tools.FixedField("tests"), tools.FixedField("state")},
+				Value:         "needs_changes",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("progress"), tools.FixedField("tests"), tools.FixedField("checked_at")},
+		JSONType:    "string",
+		Description: "When Surla's check reached this verdict.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("progress"), tools.FixedField("tests"), tools.FixedField("state")},
+				Value:         "needs_changes",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("progress"), tools.FixedField("tests")},
+		JSONType:    "object",
+		Description: "Surla checked the reported tests and recorded them as a commit.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("progress"), tools.FixedField("tests"), tools.FixedField("state")},
+				Value:         "accepted",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("progress"), tools.FixedField("tests"), tools.FixedField("commit")},
+		JSONType:    "string",
+		Description: "Full commit ID Surla recorded the accepted tests at (40 or 64 lowercase hex characters).",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("progress"), tools.FixedField("tests"), tools.FixedField("state")},
+				Value:         "accepted",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("progress"), tools.FixedField("tests"), tools.FixedField("checked_at")},
+		JSONType:    "string",
+		Description: "When Surla's check reached this verdict.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("progress"), tools.FixedField("tests"), tools.FixedField("state")},
+				Value:         "accepted",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("progress"), tools.FixedField("tests"), tools.FixedField("not_judged")},
+		JSONType:    "string",
+		Description: "What Surla's check did not judge, always the same sentence.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("progress"), tools.FixedField("tests"), tools.FixedField("state")},
+				Value:         "accepted",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("progress"), tools.FixedField("tests")},
+		JSONType:    "object",
+		Description: "Surla's check of the reported tests could not run, for a cause the test writer cannot fix; the user's step makes it possible.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("progress"), tools.FixedField("tests"), tools.FixedField("state")},
+				Value:         "could_not_run",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("progress"), tools.FixedField("tests"), tools.FixedField("reason")},
+		JSONType:    "string",
+		Description: "Why the check could not run.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("progress"), tools.FixedField("tests"), tools.FixedField("state")},
+				Value:         "could_not_run",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("progress"), tools.FixedField("tests"), tools.FixedField("step")},
+		JSONType:    "string",
+		Description: "What the user does so the check can run.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("progress"), tools.FixedField("tests"), tools.FixedField("state")},
+				Value:         "could_not_run",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("progress"), tools.FixedField("tests"), tools.FixedField("checked_at")},
+		JSONType:    "string",
+		Description: "When Surla's check stopped.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("progress"), tools.FixedField("tests"), tools.FixedField("state")},
+				Value:         "could_not_run",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("progress"), tools.FixedField("read")},
+		JSONType:    "boolean",
+		Description: "True once the test writer read this assignment in full with get_test_writer_assignment.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("progress"), tools.FixedField("report")},
+		JSONType:    "integer",
+		Description: "Number of the test writer's latest report of this build: 0 until its first report, and one more with each report_tests_finished.",
+	},
+}
+var reviewVerificationPayloadFields = []tools.FieldMetadata{
+	{
+		JSONType:    "object",
+		Description: "Identifies a verification run returned by verify_change.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("run_id")},
+		JSONType:    "string",
+		Description: "Verification run identifier returned by verify_change.",
+	},
+}
+var reviewVerificationResultFields = []tools.FieldMetadata{
+	{
+		JSONType:    "object",
+		Description: "A selected verification run and its required user review. get_verification and list_verifications retain their existing report contracts.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("review")},
+		JSONType:    "object",
+		Description: "Immutable Story evidence and the owner's current approval observation.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context")},
+		JSONType:    "object",
+		Description: "The run's immutable Story context, or the explicit fact it was not recorded.",
+	},
+	{
+		Path:     []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("state")},
+		JSONType: "string",
+		DiscriminatorValues: []string{
+			"recorded",
+			"not_recorded",
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context")},
+		JSONType:    "object",
+		Description: "The Story copied from this run's accepted build, independent of later revisions or builds.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("state")},
+				Value:         "recorded",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("build_number")},
+		JSONType:    "integer",
+		Description: "Number of the build this run was accepted for.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("state")},
+				Value:         "recorded",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("build_started_at")},
+		JSONType:    "string",
+		Description: "Accepted build's saved start time.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("state")},
+				Value:         "recorded",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("stories")},
+		JSONType:    "array",
+		Description: "Stories as agreed for this run, in declaration order; empty when the agreement declares none.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("state")},
+				Value:         "recorded",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("stories"), tools.DynamicField{}},
+		JSONType:    "object",
+		Description: "Stories as agreed for this run, in declaration order; empty when the agreement declares none.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("state")},
+				Value:         "recorded",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("name")},
+		JSONType:    "string",
+		Description: "Human-facing Story title.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("state")},
+				Value:         "recorded",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("description")},
+		JSONType:    "string",
+		Description: "Optional longer explanation of the Story.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("state")},
+				Value:         "recorded",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("actors")},
+		JSONType:    "array",
+		Description: "Domain roles declared in the Story in declaration order.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("state")},
+				Value:         "recorded",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("actors"), tools.DynamicField{}},
+		JSONType:    "object",
+		Description: "Domain roles declared in the Story in declaration order.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("state")},
+				Value:         "recorded",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("actors"), tools.DynamicField{}, tools.FixedField("key")},
+		JSONType:    "string",
+		Description: "Story-scoped actor key.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("state")},
+				Value:         "recorded",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("actors"), tools.DynamicField{}, tools.FixedField("title")},
+		JSONType:    "string",
+		Description: "Human-facing actor label.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("state")},
+				Value:         "recorded",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("actors"), tools.DynamicField{}, tools.FixedField("description")},
+		JSONType:    "string",
+		Description: "Optional longer explanation of the actor role.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("state")},
+				Value:         "recorded",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("flows")},
+		JSONType:    "array",
+		Description: "Timeline paths declared in the Story in declaration order.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("state")},
+				Value:         "recorded",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("flows"), tools.DynamicField{}},
+		JSONType:    "object",
+		Description: "Timeline paths declared in the Story in declaration order.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("state")},
+				Value:         "recorded",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("flows"), tools.DynamicField{}, tools.FixedField("key")},
+		JSONType:    "string",
+		Description: "Story-scoped flow key.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("state")},
+				Value:         "recorded",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("flows"), tools.DynamicField{}, tools.FixedField("title")},
+		JSONType:    "string",
+		Description: "Human-facing flow title.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("state")},
+				Value:         "recorded",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("flows"), tools.DynamicField{}, tools.FixedField("description")},
+		JSONType:    "string",
+		Description: "Optional longer explanation of the flow.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("state")},
+				Value:         "recorded",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("flows"), tools.DynamicField{}, tools.FixedField("complete")},
+		JSONType:    "boolean",
+		Description: "True when the flow has a start, at least one outcome, and no open questions on the flow or any of its steps.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("state")},
+				Value:         "recorded",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("flows"), tools.DynamicField{}, tools.FixedField("steps")},
+		JSONType:    "array",
+		Description: "Starting, intermediate, and outcome steps in declaration order.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("state")},
+				Value:         "recorded",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("flows"), tools.DynamicField{}, tools.FixedField("steps"), tools.DynamicField{}},
+		JSONType:    "object",
+		Description: "Starting, intermediate, and outcome steps in declaration order.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("state")},
+				Value:         "recorded",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("flows"), tools.DynamicField{}, tools.FixedField("steps"), tools.DynamicField{}, tools.FixedField("key")},
+		JSONType:    "string",
+		Description: "Flow-scoped step key.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("state")},
+				Value:         "recorded",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("flows"), tools.DynamicField{}, tools.FixedField("steps"), tools.DynamicField{}, tools.FixedField("actor_key")},
+		JSONType:    "string",
+		Description: "Story-scoped key of the actor performing or observing the step.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("state")},
+				Value:         "recorded",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("flows"), tools.DynamicField{}, tools.FixedField("steps"), tools.DynamicField{}, tools.FixedField("summary")},
+		JSONType:    "string",
+		Description: "Timeline sticky-note sentence for the step.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("state")},
+				Value:         "recorded",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("flows"), tools.DynamicField{}, tools.FixedField("steps"), tools.DynamicField{}, tools.FixedField("description")},
+		JSONType:    "string",
+		Description: "Optional longer explanation of the step.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("state")},
+				Value:         "recorded",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("flows"), tools.DynamicField{}, tools.FixedField("steps"), tools.DynamicField{}, tools.FixedField("kind")},
+		JSONType:    "string",
+		Description: "Step position in the flow: start, step, or outcome.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("state")},
+				Value:         "recorded",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("flows"), tools.DynamicField{}, tools.FixedField("steps"), tools.DynamicField{}, tools.FixedField("questions")},
+		JSONType:    "array",
+		Description: "Unresolved step-level decisions in declaration order.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("state")},
+				Value:         "recorded",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("flows"), tools.DynamicField{}, tools.FixedField("steps"), tools.DynamicField{}, tools.FixedField("questions"), tools.DynamicField{}},
+		JSONType:    "object",
+		Description: "Unresolved step-level decisions in declaration order.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("state")},
+				Value:         "recorded",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("flows"), tools.DynamicField{}, tools.FixedField("steps"), tools.DynamicField{}, tools.FixedField("questions"), tools.DynamicField{}, tools.FixedField("key")},
+		JSONType:    "string",
+		Description: "Flow-scoped question key.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("state")},
+				Value:         "recorded",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("flows"), tools.DynamicField{}, tools.FixedField("steps"), tools.DynamicField{}, tools.FixedField("questions"), tools.DynamicField{}, tools.FixedField("prompt")},
+		JSONType:    "string",
+		Description: "Human-facing question text.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("state")},
+				Value:         "recorded",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("flows"), tools.DynamicField{}, tools.FixedField("steps"), tools.DynamicField{}, tools.FixedField("questions"), tools.DynamicField{}, tools.FixedField("description")},
+		JSONType:    "string",
+		Description: "Optional longer context for the question.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("state")},
+				Value:         "recorded",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("flows"), tools.DynamicField{}, tools.FixedField("steps"), tools.DynamicField{}, tools.FixedField("questions"), tools.DynamicField{}, tools.FixedField("options")},
+		JSONType:    "array",
+		Description: "Suggested choices in declaration order.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("state")},
+				Value:         "recorded",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("flows"), tools.DynamicField{}, tools.FixedField("steps"), tools.DynamicField{}, tools.FixedField("questions"), tools.DynamicField{}, tools.FixedField("options"), tools.DynamicField{}},
+		JSONType:    "string",
+		Description: "Suggested choices in declaration order.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("state")},
+				Value:         "recorded",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("flows"), tools.DynamicField{}, tools.FixedField("questions")},
+		JSONType:    "array",
+		Description: "Unresolved flow-level decisions in declaration order.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("state")},
+				Value:         "recorded",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("flows"), tools.DynamicField{}, tools.FixedField("questions"), tools.DynamicField{}},
+		JSONType:    "object",
+		Description: "Unresolved flow-level decisions in declaration order.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("state")},
+				Value:         "recorded",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("flows"), tools.DynamicField{}, tools.FixedField("questions"), tools.DynamicField{}, tools.FixedField("key")},
+		JSONType:    "string",
+		Description: "Flow-scoped question key.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("state")},
+				Value:         "recorded",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("flows"), tools.DynamicField{}, tools.FixedField("questions"), tools.DynamicField{}, tools.FixedField("prompt")},
+		JSONType:    "string",
+		Description: "Human-facing question text.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("state")},
+				Value:         "recorded",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("flows"), tools.DynamicField{}, tools.FixedField("questions"), tools.DynamicField{}, tools.FixedField("description")},
+		JSONType:    "string",
+		Description: "Optional longer context for the question.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("state")},
+				Value:         "recorded",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("flows"), tools.DynamicField{}, tools.FixedField("questions"), tools.DynamicField{}, tools.FixedField("options")},
+		JSONType:    "array",
+		Description: "Suggested choices in declaration order.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("state")},
+				Value:         "recorded",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("flows"), tools.DynamicField{}, tools.FixedField("questions"), tools.DynamicField{}, tools.FixedField("options"), tools.DynamicField{}},
+		JSONType:    "string",
+		Description: "Suggested choices in declaration order.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("state")},
+				Value:         "recorded",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("mapping")},
+		JSONType:    "object",
+		Description: "The owner's exact required-test mapping for written tests, or the explicit absence of such a mapping for an operator evaluator.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("state")},
+				Value:         "recorded",
+			},
+		},
+	},
+	{
+		Path:     []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("mapping"), tools.FixedField("state")},
+		JSONType: "string",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("state")},
+				Value:         "recorded",
+			},
+		},
+		DiscriminatorValues: []string{
+			"mapped",
+			"not_recorded_for_evaluator",
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("mapping")},
+		JSONType:    "object",
+		Description: "Exact mapping produced by the same owner that generates Story tests; unfinished flows require no test.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("state")},
+				Value:         "recorded",
+			},
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("mapping"), tools.FixedField("state")},
+				Value:         "mapped",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("mapping"), tools.FixedField("required_tests")},
+		JSONType:    "array",
+		Description: "One test per finished flow, in declaration order.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("state")},
+				Value:         "recorded",
+			},
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("mapping"), tools.FixedField("state")},
+				Value:         "mapped",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("mapping"), tools.FixedField("required_tests"), tools.DynamicField{}},
+		JSONType:    "object",
+		Description: "One test per finished flow, in declaration order.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("state")},
+				Value:         "recorded",
+			},
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("mapping"), tools.FixedField("state")},
+				Value:         "mapped",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("mapping"), tools.FixedField("required_tests"), tools.DynamicField{}, tools.FixedField("story")},
+		JSONType:    "string",
+		Description: "Name of the Story the flow belongs to.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("state")},
+				Value:         "recorded",
+			},
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("mapping"), tools.FixedField("state")},
+				Value:         "mapped",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("mapping"), tools.FixedField("required_tests"), tools.DynamicField{}, tools.FixedField("flow_key")},
+		JSONType:    "string",
+		Description: "Key of the finished flow.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("state")},
+				Value:         "recorded",
+			},
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("mapping"), tools.FixedField("state")},
+				Value:         "mapped",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("mapping"), tools.FixedField("required_tests"), tools.DynamicField{}, tools.FixedField("scenario")},
+		JSONType:    "string",
+		Description: "Scenario name the evaluation suite declares for the flow.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("state")},
+				Value:         "recorded",
+			},
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("mapping"), tools.FixedField("state")},
+				Value:         "mapped",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("mapping"), tools.FixedField("required_tests"), tools.DynamicField{}, tools.FixedField("hook")},
+		JSONType:    "string",
+		Description: "Hook method the test writer implements for the scenario.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("state")},
+				Value:         "recorded",
+			},
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("mapping"), tools.FixedField("state")},
+				Value:         "mapped",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("mapping")},
+		JSONType:    "object",
+		Description: "The operator evaluator has no recorded relation between its declared tests and the Story flows. This does not prove the flows were untested.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("state")},
+				Value:         "recorded",
+			},
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("mapping"), tools.FixedField("state")},
+				Value:         "not_recorded_for_evaluator",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("test_coverage")},
+		JSONType:    "object",
+		Description: "The writer's immutable statements for this run, or explicit missing historical/operator evidence.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("state")},
+				Value:         "recorded",
+			},
+		},
+	},
+	{
+		Path:     []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("test_coverage"), tools.FixedField("state")},
+		JSONType: "string",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("state")},
+				Value:         "recorded",
+			},
+		},
+		DiscriminatorValues: []string{
+			"recorded",
+			"not_recorded",
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("test_coverage")},
+		JSONType:    "object",
+		Description: "The accepted writer report's statements and built answers/examples, copied with the exact tests selection for this run. Later reports and revisions cannot replace this evidence.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("state")},
+				Value:         "recorded",
+			},
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("test_coverage"), tools.FixedField("state")},
+				Value:         "recorded",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("test_coverage"), tools.FixedField("report")},
+		JSONType:    "integer",
+		Description: "Accepted test-writer report number.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("state")},
+				Value:         "recorded",
+			},
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("test_coverage"), tools.FixedField("state")},
+				Value:         "recorded",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("test_coverage"), tools.FixedField("answers")},
+		JSONType:    "array",
+		Description: "Answers saved for the built agreement, in question order.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("state")},
+				Value:         "recorded",
+			},
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("test_coverage"), tools.FixedField("state")},
+				Value:         "recorded",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("test_coverage"), tools.FixedField("answers"), tools.DynamicField{}},
+		JSONType:    "object",
+		Description: "Answers saved for the built agreement, in question order.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("state")},
+				Value:         "recorded",
+			},
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("test_coverage"), tools.FixedField("state")},
+				Value:         "recorded",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("test_coverage"), tools.FixedField("answers"), tools.DynamicField{}, tools.FixedField("id")},
+		JSONType:    "string",
+		Description: "Question identifier on the Change Card.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("state")},
+				Value:         "recorded",
+			},
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("test_coverage"), tools.FixedField("state")},
+				Value:         "recorded",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("test_coverage"), tools.FixedField("answers"), tools.DynamicField{}, tools.FixedField("question")},
+		JSONType:    "string",
+		Description: "The question as the user answered it.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("state")},
+				Value:         "recorded",
+			},
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("test_coverage"), tools.FixedField("state")},
+				Value:         "recorded",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("test_coverage"), tools.FixedField("answers"), tools.DynamicField{}, tools.FixedField("answer")},
+		JSONType:    "string",
+		Description: "The option the user confirmed, exactly as confirmed.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("state")},
+				Value:         "recorded",
+			},
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("test_coverage"), tools.FixedField("state")},
+				Value:         "recorded",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("test_coverage"), tools.FixedField("examples")},
+		JSONType:    "array",
+		Description: "Examples saved for the built agreement, in confirmation order.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("state")},
+				Value:         "recorded",
+			},
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("test_coverage"), tools.FixedField("state")},
+				Value:         "recorded",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("test_coverage"), tools.FixedField("examples"), tools.DynamicField{}},
+		JSONType:    "object",
+		Description: "Examples saved for the built agreement, in confirmation order.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("state")},
+				Value:         "recorded",
+			},
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("test_coverage"), tools.FixedField("state")},
+				Value:         "recorded",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("test_coverage"), tools.FixedField("examples"), tools.DynamicField{}, tools.FixedField("id")},
+		JSONType:    "string",
+		Description: "Stable example identifier. Default code-assigned IDs use check_01, check_02, ... (valid goa-ai/eval Scenario names). confirm_intent preserves caller-chosen IDs.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("state")},
+				Value:         "recorded",
+			},
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("test_coverage"), tools.FixedField("state")},
+				Value:         "recorded",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("test_coverage"), tools.FixedField("examples"), tools.DynamicField{}, tools.FixedField("scenario")},
+		JSONType:    "string",
+		Description: "Plain-English scenario description.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("state")},
+				Value:         "recorded",
+			},
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("test_coverage"), tools.FixedField("state")},
+				Value:         "recorded",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("test_coverage"), tools.FixedField("examples"), tools.DynamicField{}, tools.FixedField("input_summary")},
+		JSONType:    "string",
+		Description: "Representative user request and domain fixture state.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("state")},
+				Value:         "recorded",
+			},
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("test_coverage"), tools.FixedField("state")},
+				Value:         "recorded",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("test_coverage"), tools.FixedField("examples"), tools.DynamicField{}, tools.FixedField("expected_outcome")},
+		JSONType:    "string",
+		Description: "Expected side effect and response behavior.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("state")},
+				Value:         "recorded",
+			},
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("test_coverage"), tools.FixedField("state")},
+				Value:         "recorded",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("test_coverage"), tools.FixedField("examples"), tools.DynamicField{}, tools.FixedField("verification_kind")},
+		JSONType:    "string",
+		Description: "Evaluator check classification (deterministic or model_judged).",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("state")},
+				Value:         "recorded",
+			},
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("test_coverage"), tools.FixedField("state")},
+				Value:         "recorded",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("test_coverage"), tools.FixedField("coverage_statements")},
+		JSONType:    "array",
+		Description: "Writer statements for this report; empty means Not stated.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("state")},
+				Value:         "recorded",
+			},
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("test_coverage"), tools.FixedField("state")},
+				Value:         "recorded",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("test_coverage"), tools.FixedField("coverage_statements"), tools.DynamicField{}},
+		JSONType:    "object",
+		Description: "Writer statements for this report; empty means Not stated.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("state")},
+				Value:         "recorded",
+			},
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("test_coverage"), tools.FixedField("state")},
+				Value:         "recorded",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("test_coverage"), tools.FixedField("coverage_statements"), tools.DynamicField{}, tools.FixedField("scenario")},
+		JSONType:    "string",
+		Description: "Exact declared scenario identifier.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("state")},
+				Value:         "recorded",
+			},
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("test_coverage"), tools.FixedField("state")},
+				Value:         "recorded",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("test_coverage"), tools.FixedField("coverage_statements"), tools.DynamicField{}, tools.FixedField("question_ids")},
+		JSONType:    "array",
+		Description: "Question IDs from the assignment's answers[].id; empty when this statement names only examples.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("state")},
+				Value:         "recorded",
+			},
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("test_coverage"), tools.FixedField("state")},
+				Value:         "recorded",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("test_coverage"), tools.FixedField("coverage_statements"), tools.DynamicField{}, tools.FixedField("question_ids"), tools.DynamicField{}},
+		JSONType:    "string",
+		Description: "Question IDs from the assignment's answers[].id; empty when this statement names only examples.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("state")},
+				Value:         "recorded",
+			},
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("test_coverage"), tools.FixedField("state")},
+				Value:         "recorded",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("test_coverage"), tools.FixedField("coverage_statements"), tools.DynamicField{}, tools.FixedField("example_ids")},
+		JSONType:    "array",
+		Description: "Example IDs from the assignment's examples[].id; empty when this statement names only answers.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("state")},
+				Value:         "recorded",
+			},
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("test_coverage"), tools.FixedField("state")},
+				Value:         "recorded",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("test_coverage"), tools.FixedField("coverage_statements"), tools.DynamicField{}, tools.FixedField("example_ids"), tools.DynamicField{}},
+		JSONType:    "string",
+		Description: "Example IDs from the assignment's examples[].id; empty when this statement names only answers.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("state")},
+				Value:         "recorded",
+			},
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("test_coverage"), tools.FixedField("state")},
+				Value:         "recorded",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("test_coverage"), tools.FixedField("coverage_statements"), tools.DynamicField{}, tools.FixedField("explanation")},
+		JSONType:    "string",
+		Description: "Interaction or assertion the writer says exercises these requirements.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("state")},
+				Value:         "recorded",
+			},
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("test_coverage"), tools.FixedField("state")},
+				Value:         "recorded",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("test_coverage")},
+		JSONType:    "object",
+		Description: "No test-writer coverage snapshot was recorded. Never infer it from today's agreement or accepted report.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("state")},
+				Value:         "recorded",
+			},
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("test_coverage"), tools.FixedField("state")},
+				Value:         "not_recorded",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context")},
+		JSONType:    "object",
+		Description: "No Story context was recorded for this run. Never substitute the current agreement's Story.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("state")},
+				Value:         "not_recorded",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("approval")},
+		JSONType:    "object",
+		Description: "The owner's current observation for this exact report, independent of inputs_current.",
+	},
+	{
+		Path:     []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("approval"), tools.FixedField("state")},
+		JSONType: "string",
+		DiscriminatorValues: []string{
+			"available",
+			"blocked",
+			"recorded",
+			"unverified",
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("approval")},
+		JSONType:    "object",
+		Description: "The owner checked this run against current approval requirements. approve_merge rechecks them and may refuse a later change; this read saves nothing.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("approval"), tools.FixedField("state")},
+				Value:         "available",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("approval")},
+		JSONType:    "object",
+		Description: "Approval cannot currently be offered for this run.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("approval"), tools.FixedField("state")},
+				Value:         "blocked",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("approval"), tools.FixedField("reason")},
+		JSONType:    "string",
+		Description: "Owner's safe explanation and enabling step.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("approval"), tools.FixedField("state")},
+				Value:         "blocked",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("approval")},
+		JSONType:    "object",
+		Description: "Checkpoint 5 approval recorded by approve_merge after the verification report passed and matched the change being promoted: the exact candidate commit, the tests' commit chosen for the revision, and (when promotion settings are configured) the binary digests the promotion target measured. suite_id and environment record what the tests at suite_commit declared in the report and are shown, not compared against separate promotion settings. test_source is derived on each read from how the server chooses tests. The approval is saved with the card in the control plane's cards directory, merges and deploys nothing, is replaced by the next successful approve_merge for the same revision, and is dropped when the user refines the confirmed revision or adopts a proposed one with confirm_intent. A revise_change on a confirmed card leaves it on the confirmed revision, which stays in force until the user adopts the proposal. get_change and confirm_intent return it in approval while the tests' commit chosen for the revision still equals suite_commit and (when a promotion target is configured) the promotion target's current binary digests still equal artifacts, or in unverified_approval when the tests' commit still matches but a configured promotion target cannot verify the candidate's binaries on that read.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("approval"), tools.FixedField("state")},
+				Value:         "recorded",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("approval"), tools.FixedField("approved_by")},
+		JSONType:    "string",
+		Description: "User who approved the result.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("approval"), tools.FixedField("state")},
+				Value:         "recorded",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("approval"), tools.FixedField("report_digest")},
+		JSONType:    "string",
+		Description: "SHA-256 digest of the approved CP4 verification report.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("approval"), tools.FixedField("state")},
+				Value:         "recorded",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("approval"), tools.FixedField("candidate_commit")},
+		JSONType:    "string",
+		Description: "Candidate commit the report was checked against.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("approval"), tools.FixedField("state")},
+				Value:         "recorded",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("approval"), tools.FixedField("suite_id")},
+		JSONType:    "string",
+		Description: "Suite identifier the tests at suite_commit declared in the report (shown, not compared).",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("approval"), tools.FixedField("state")},
+				Value:         "recorded",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("approval"), tools.FixedField("suite_commit")},
+		JSONType:    "string",
+		Description: "Commit of the tests the report ran: the evaluator suite commit in the stored verification settings, or the tests Surla accepted for the change's build.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("approval"), tools.FixedField("state")},
+				Value:         "recorded",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("approval"), tools.FixedField("environment")},
+		JSONType:    "string",
+		Description: "Dependency profile the tests at suite_commit declared in the report, such as sim or scripted-model (shown, not compared).",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("approval"), tools.FixedField("state")},
+				Value:         "recorded",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("approval"), tools.FixedField("artifacts")},
+		JSONType:    "object",
+		Description: "SHA-256 digest of each candidate binary the promotion target measured, keyed by binary name; empty when no promotion settings are configured.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("approval"), tools.FixedField("state")},
+				Value:         "recorded",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("approval"), tools.FixedField("artifacts"), tools.DynamicField{}},
+		JSONType:    "string",
+		Description: "SHA-256 digest of each candidate binary the promotion target measured, keyed by binary name; empty when no promotion settings are configured.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("approval"), tools.FixedField("state")},
+				Value:         "recorded",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("approval"), tools.FixedField("scenario_count")},
+		JSONType:    "integer",
+		Description: "Number of declared scenarios in the report, every one of which passed.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("approval"), tools.FixedField("state")},
+				Value:         "recorded",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("approval"), tools.FixedField("test_source")},
+		JSONType:    "object",
+		Description: "Where the tests at suite_commit came from, derived on each read: evaluator, or written_tests with their commit and a notice.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("approval"), tools.FixedField("state")},
+				Value:         "recorded",
+			},
+		},
+	},
+	{
+		Path:     []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("approval"), tools.FixedField("test_source"), tools.FixedField("source")},
+		JSONType: "string",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("approval"), tools.FixedField("state")},
+				Value:         "recorded",
+			},
+		},
+		DiscriminatorValues: []string{
+			"evaluator",
+			"written_tests",
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("approval"), tools.FixedField("test_source")},
+		JSONType:    "object",
+		Description: "The run used the operator's evaluator: the one stored with surla verification set, or the one named on surla verify's command line.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("approval"), tools.FixedField("state")},
+				Value:         "recorded",
+			},
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("approval"), tools.FixedField("test_source"), tools.FixedField("source")},
+				Value:         "evaluator",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("approval"), tools.FixedField("test_source")},
+		JSONType:    "object",
+		Description: "The run used the tests Surla accepted for the change's build, which a separate agent on this machine wrote.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("approval"), tools.FixedField("state")},
+				Value:         "recorded",
+			},
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("approval"), tools.FixedField("test_source"), tools.FixedField("source")},
+				Value:         "written_tests",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("approval"), tools.FixedField("test_source"), tools.FixedField("commit")},
+		JSONType:    "string",
+		Description: "Commit Surla recorded the accepted tests at; the same as suite_commit.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("approval"), tools.FixedField("state")},
+				Value:         "recorded",
+			},
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("approval"), tools.FixedField("test_source"), tools.FixedField("source")},
+				Value:         "written_tests",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("approval"), tools.FixedField("test_source"), tools.FixedField("notice")},
+		JSONType:    "string",
+		Description: "Always: These tests were written by a separate agent on this machine and are not isolated from the builder.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("approval"), tools.FixedField("state")},
+				Value:         "recorded",
+			},
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("approval"), tools.FixedField("test_source"), tools.FixedField("source")},
+				Value:         "written_tests",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("approval")},
+		JSONType:    "object",
+		Description: "Saved Checkpoint 5 promotion approval recorded on the Change Card whose current release binaries could not be verified on this read.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("approval"), tools.FixedField("state")},
+				Value:         "unverified",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("approval"), tools.FixedField("approval")},
+		JSONType:    "object",
+		Description: "Recorded promotion approval from the Change Card.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("approval"), tools.FixedField("state")},
+				Value:         "unverified",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("approval"), tools.FixedField("approval"), tools.FixedField("approved_by")},
+		JSONType:    "string",
+		Description: "User who approved the result.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("approval"), tools.FixedField("state")},
+				Value:         "unverified",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("approval"), tools.FixedField("approval"), tools.FixedField("report_digest")},
+		JSONType:    "string",
+		Description: "SHA-256 digest of the approved CP4 verification report.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("approval"), tools.FixedField("state")},
+				Value:         "unverified",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("approval"), tools.FixedField("approval"), tools.FixedField("candidate_commit")},
+		JSONType:    "string",
+		Description: "Candidate commit the report was checked against.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("approval"), tools.FixedField("state")},
+				Value:         "unverified",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("approval"), tools.FixedField("approval"), tools.FixedField("suite_id")},
+		JSONType:    "string",
+		Description: "Suite identifier the tests at suite_commit declared in the report (shown, not compared).",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("approval"), tools.FixedField("state")},
+				Value:         "unverified",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("approval"), tools.FixedField("approval"), tools.FixedField("suite_commit")},
+		JSONType:    "string",
+		Description: "Commit of the tests the report ran: the evaluator suite commit in the stored verification settings, or the tests Surla accepted for the change's build.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("approval"), tools.FixedField("state")},
+				Value:         "unverified",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("approval"), tools.FixedField("approval"), tools.FixedField("environment")},
+		JSONType:    "string",
+		Description: "Dependency profile the tests at suite_commit declared in the report, such as sim or scripted-model (shown, not compared).",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("approval"), tools.FixedField("state")},
+				Value:         "unverified",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("approval"), tools.FixedField("approval"), tools.FixedField("artifacts")},
+		JSONType:    "object",
+		Description: "SHA-256 digest of each candidate binary the promotion target measured, keyed by binary name; empty when no promotion settings are configured.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("approval"), tools.FixedField("state")},
+				Value:         "unverified",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("approval"), tools.FixedField("approval"), tools.FixedField("artifacts"), tools.DynamicField{}},
+		JSONType:    "string",
+		Description: "SHA-256 digest of each candidate binary the promotion target measured, keyed by binary name; empty when no promotion settings are configured.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("approval"), tools.FixedField("state")},
+				Value:         "unverified",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("approval"), tools.FixedField("approval"), tools.FixedField("scenario_count")},
+		JSONType:    "integer",
+		Description: "Number of declared scenarios in the report, every one of which passed.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("approval"), tools.FixedField("state")},
+				Value:         "unverified",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("approval"), tools.FixedField("approval"), tools.FixedField("test_source")},
+		JSONType:    "object",
+		Description: "Where the tests at suite_commit came from, derived on each read: evaluator, or written_tests with their commit and a notice.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("approval"), tools.FixedField("state")},
+				Value:         "unverified",
+			},
+		},
+	},
+	{
+		Path:     []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("approval"), tools.FixedField("approval"), tools.FixedField("test_source"), tools.FixedField("source")},
+		JSONType: "string",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("approval"), tools.FixedField("state")},
+				Value:         "unverified",
+			},
+		},
+		DiscriminatorValues: []string{
+			"evaluator",
+			"written_tests",
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("approval"), tools.FixedField("approval"), tools.FixedField("test_source")},
+		JSONType:    "object",
+		Description: "The run used the operator's evaluator: the one stored with surla verification set, or the one named on surla verify's command line.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("approval"), tools.FixedField("state")},
+				Value:         "unverified",
+			},
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("approval"), tools.FixedField("approval"), tools.FixedField("test_source"), tools.FixedField("source")},
+				Value:         "evaluator",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("approval"), tools.FixedField("approval"), tools.FixedField("test_source")},
+		JSONType:    "object",
+		Description: "The run used the tests Surla accepted for the change's build, which a separate agent on this machine wrote.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("approval"), tools.FixedField("state")},
+				Value:         "unverified",
+			},
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("approval"), tools.FixedField("approval"), tools.FixedField("test_source"), tools.FixedField("source")},
+				Value:         "written_tests",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("approval"), tools.FixedField("approval"), tools.FixedField("test_source"), tools.FixedField("commit")},
+		JSONType:    "string",
+		Description: "Commit Surla recorded the accepted tests at; the same as suite_commit.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("approval"), tools.FixedField("state")},
+				Value:         "unverified",
+			},
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("approval"), tools.FixedField("approval"), tools.FixedField("test_source"), tools.FixedField("source")},
+				Value:         "written_tests",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("approval"), tools.FixedField("approval"), tools.FixedField("test_source"), tools.FixedField("notice")},
+		JSONType:    "string",
+		Description: "Always: These tests were written by a separate agent on this machine and are not isolated from the builder.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("approval"), tools.FixedField("state")},
+				Value:         "unverified",
+			},
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("approval"), tools.FixedField("approval"), tools.FixedField("test_source"), tools.FixedField("source")},
+				Value:         "written_tests",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("approval"), tools.FixedField("reason")},
+		JSONType:    "string",
+		Description: "Explanation of why the recorded approval could not be verified against current release binaries and how to recover.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("approval"), tools.FixedField("state")},
+				Value:         "unverified",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("run_id")},
+		JSONType:    "string",
+		Description: "Verification run identifier; get_verification takes it.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("change_id")},
+		JSONType:    "string",
+		Description: "Change Card the run verifies.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("request_revision")},
+		JSONType:    "string",
+		Description: "Change Card revision the run verifies.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("candidate_commit")},
+		JSONType:    "string",
+		Description: "Candidate commit the run builds and verifies.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("suite_commit")},
+		JSONType:    "string",
+		Description: "Commit of the tests the run uses: the operator's evaluator, or the tests accepted for the change's build.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("accepted_at")},
+		JSONType:    "string",
+		Description: "When the run was accepted.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("inputs_current")},
+		JSONType:    "boolean",
+		Description: "Whether this run's agreed revision and selected tests match the current Change Card and the usable build or the stored verification settings. This observation does not establish the current candidate working tree, deployment or approval.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("candidate_binaries_dir")},
+		JSONType:    "string",
+		Description: "Absolute folder containing the binaries built by this completed run. Returned only to the user when promotion settings are configured, so the user can publish these exact binaries before approval. Agents never receive this private path.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("test_source")},
+		JSONType:    "object",
+		Description: "Where the run's tests came from, recorded when the run started: evaluator, or written_tests with their commit and a notice.",
+	},
+	{
+		Path:     []tools.FieldPathSegment{tools.FixedField("test_source"), tools.FixedField("source")},
+		JSONType: "string",
+		DiscriminatorValues: []string{
+			"evaluator",
+			"written_tests",
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("test_source")},
+		JSONType:    "object",
+		Description: "The run used the operator's evaluator: the one stored with surla verification set, or the one named on surla verify's command line.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("test_source"), tools.FixedField("source")},
+				Value:         "evaluator",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("test_source")},
+		JSONType:    "object",
+		Description: "The run used the tests Surla accepted for the change's build, which a separate agent on this machine wrote.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("test_source"), tools.FixedField("source")},
+				Value:         "written_tests",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("test_source"), tools.FixedField("commit")},
+		JSONType:    "string",
+		Description: "Commit Surla recorded the accepted tests at; the same as suite_commit.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("test_source"), tools.FixedField("source")},
+				Value:         "written_tests",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("test_source"), tools.FixedField("notice")},
+		JSONType:    "string",
+		Description: "Always: These tests were written by a separate agent on this machine and are not isolated from the builder.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("test_source"), tools.FixedField("source")},
+				Value:         "written_tests",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("state")},
+		JSONType:    "object",
+		Description: "Exactly one of running, completed or not_completed.",
+	},
+	{
+		Path:     []tools.FieldPathSegment{tools.FixedField("state"), tools.FixedField("type")},
+		JSONType: "string",
+		DiscriminatorValues: []string{
+			"running",
+			"completed",
+			"not_completed",
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("state"), tools.FixedField("value")},
+		JSONType:    "object",
+		Description: "The run is still building or evaluating the candidate.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("state"), tools.FixedField("type")},
+				Value:         "running",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("state"), tools.FixedField("value"), tools.FixedField("started_at")},
+		JSONType:    "string",
+		Description: "When the run was accepted.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("state"), tools.FixedField("type")},
+				Value:         "running",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("state"), tools.FixedField("value")},
+		JSONType:    "object",
+		Description: "The run produced a verification report. Its verdict is report.passed.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("state"), tools.FixedField("type")},
+				Value:         "completed",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("state"), tools.FixedField("value"), tools.FixedField("suite_id")},
+		JSONType:    "string",
+		Description: "Evaluator suite the report was produced by.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("state"), tools.FixedField("type")},
+				Value:         "completed",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("state"), tools.FixedField("value"), tools.FixedField("environment")},
+		JSONType:    "string",
+		Description: "Dependency profile the suite ran the candidate with, such as sim.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("state"), tools.FixedField("type")},
+				Value:         "completed",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("state"), tools.FixedField("value"), tools.FixedField("report")},
+		JSONType:    "object",
+		Description: "The builder view of the report.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("state"), tools.FixedField("type")},
+				Value:         "completed",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("state"), tools.FixedField("value"), tools.FixedField("report"), tools.FixedField("report_digest")},
+		JSONType:    "string",
+		Description: "SHA-256 digest of the full report the evaluator saved; approve_merge and surla approve take this digest.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("state"), tools.FixedField("type")},
+				Value:         "completed",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("state"), tools.FixedField("value"), tools.FixedField("report"), tools.FixedField("counts")},
+		JSONType:    "object",
+		Description: "Every declared scenario, counted by outcome.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("state"), tools.FixedField("type")},
+				Value:         "completed",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("state"), tools.FixedField("value"), tools.FixedField("report"), tools.FixedField("counts"), tools.FixedField("required")},
+		JSONType:    "integer",
+		Description: "Scenarios the suite declares.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("state"), tools.FixedField("type")},
+				Value:         "completed",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("state"), tools.FixedField("value"), tools.FixedField("report"), tools.FixedField("counts"), tools.FixedField("passed")},
+		JSONType:    "integer",
+		Description: "Scenarios that passed.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("state"), tools.FixedField("type")},
+				Value:         "completed",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("state"), tools.FixedField("value"), tools.FixedField("report"), tools.FixedField("counts"), tools.FixedField("failed")},
+		JSONType:    "integer",
+		Description: "Scenarios whose checks failed.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("state"), tools.FixedField("type")},
+				Value:         "completed",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("state"), tools.FixedField("value"), tools.FixedField("report"), tools.FixedField("counts"), tools.FixedField("not_run")},
+		JSONType:    "integer",
+		Description: "Declared scenarios the suite did not report.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("state"), tools.FixedField("type")},
+				Value:         "completed",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("state"), tools.FixedField("value"), tools.FixedField("report"), tools.FixedField("counts"), tools.FixedField("harness_error")},
+		JSONType:    "integer",
+		Description: "Scenarios that could not be evaluated.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("state"), tools.FixedField("type")},
+				Value:         "completed",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("state"), tools.FixedField("value"), tools.FixedField("report"), tools.FixedField("passed")},
+		JSONType:    "boolean",
+		Description: "The verdict: true only when every declared scenario passed and the suite ran cleanly.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("state"), tools.FixedField("type")},
+				Value:         "completed",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("state"), tools.FixedField("value"), tools.FixedField("report"), tools.FixedField("suite_failed")},
+		JSONType:    "boolean",
+		Description: "Whether the evaluator suite itself failed or ended abnormally.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("state"), tools.FixedField("type")},
+				Value:         "completed",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("state"), tools.FixedField("value"), tools.FixedField("report"), tools.FixedField("scenarios")},
+		JSONType:    "array",
+		Description: "Every declared scenario in declaration order.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("state"), tools.FixedField("type")},
+				Value:         "completed",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("state"), tools.FixedField("value"), tools.FixedField("report"), tools.FixedField("scenarios"), tools.DynamicField{}},
+		JSONType:    "object",
+		Description: "Every declared scenario in declaration order.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("state"), tools.FixedField("type")},
+				Value:         "completed",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("state"), tools.FixedField("value"), tools.FixedField("report"), tools.FixedField("scenarios"), tools.DynamicField{}, tools.FixedField("id")},
+		JSONType:    "string",
+		Description: "Scenario name for a repair scenario, or holdout-<n> for a holdout.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("state"), tools.FixedField("type")},
+				Value:         "completed",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("state"), tools.FixedField("value"), tools.FixedField("report"), tools.FixedField("scenarios"), tools.DynamicField{}, tools.FixedField("outcome")},
+		JSONType:    "string",
+		Description: "How the scenario ended.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("state"), tools.FixedField("type")},
+				Value:         "completed",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("state"), tools.FixedField("value"), tools.FixedField("report"), tools.FixedField("scenarios"), tools.DynamicField{}, tools.FixedField("checks")},
+		JSONType:    "array",
+		Description: "The repair scenario's checks; empty for holdouts.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("state"), tools.FixedField("type")},
+				Value:         "completed",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("state"), tools.FixedField("value"), tools.FixedField("report"), tools.FixedField("scenarios"), tools.DynamicField{}, tools.FixedField("checks"), tools.DynamicField{}},
+		JSONType:    "object",
+		Description: "The repair scenario's checks; empty for holdouts.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("state"), tools.FixedField("type")},
+				Value:         "completed",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("state"), tools.FixedField("value"), tools.FixedField("report"), tools.FixedField("scenarios"), tools.DynamicField{}, tools.FixedField("checks"), tools.DynamicField{}, tools.FixedField("name")},
+		JSONType:    "string",
+		Description: "Check name.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("state"), tools.FixedField("type")},
+				Value:         "completed",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("state"), tools.FixedField("value"), tools.FixedField("report"), tools.FixedField("scenarios"), tools.DynamicField{}, tools.FixedField("checks"), tools.DynamicField{}, tools.FixedField("passed")},
+		JSONType:    "boolean",
+		Description: "Whether the check passed.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("state"), tools.FixedField("type")},
+				Value:         "completed",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("state"), tools.FixedField("value"), tools.FixedField("report"), tools.FixedField("scenarios"), tools.DynamicField{}, tools.FixedField("checks"), tools.DynamicField{}, tools.FixedField("diagnostic")},
+		JSONType:    "string",
+		Description: "Why the check failed; empty when it passed.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("state"), tools.FixedField("type")},
+				Value:         "completed",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("state"), tools.FixedField("value"), tools.FixedField("report"), tools.FixedField("scenarios"), tools.DynamicField{}, tools.FixedField("error")},
+		JSONType:    "string",
+		Description: "The repair scenario's environment error; empty for holdouts.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("state"), tools.FixedField("type")},
+				Value:         "completed",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("state"), tools.FixedField("value")},
+		JSONType:    "object",
+		Description: "The run was accepted but did not complete: a step failed, or its processes ended or were canceled or timed out before it finished. The summary states where it stopped, without command output; full evidence, including any partial report saved while it was being stopped, stays with the evaluator.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("state"), tools.FixedField("type")},
+				Value:         "not_completed",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("state"), tools.FixedField("value"), tools.FixedField("kind")},
+		JSONType:    "string",
+		Description: "execution_failed when a step failed; interrupted when the run's process ended before it finished.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("state"), tools.FixedField("type")},
+				Value:         "not_completed",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("state"), tools.FixedField("value"), tools.FixedField("stage")},
+		JSONType:    "string",
+		Description: "Where the run stopped.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("state"), tools.FixedField("type")},
+				Value:         "not_completed",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("state"), tools.FixedField("value"), tools.FixedField("summary")},
+		JSONType:    "string",
+		Description: "Builder-safe description of what stopped the run; never command output.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("state"), tools.FixedField("type")},
+				Value:         "not_completed",
+			},
+		},
 	},
 }
 var reviseChangePayloadFields = []tools.FieldMetadata{
 	{
 		JSONType:    "object",
-		Description: "Revised operator feature request and the caller's analysis of it, saved as the next revision of an existing Checkpoint 1 Change Card.",
+		Description: "The user's revised feature request and the caller's analysis of it, saved as the next revision of an existing Checkpoint 1 Change Card.",
 	},
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("change_id")},
@@ -4943,22 +12374,17 @@ var reviseChangePayloadFields = []tools.FieldMetadata{
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("request_revision")},
 		JSONType:    "string",
-		Description: "Current CP1 request_revision digest being revised.",
+		Description: "request_revision of the latest revision you read: the proposed revision's when the change shows one waiting (proposed_revision.request_revision), otherwise the change's own.",
 	},
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("prompt")},
 		JSONType:    "string",
-		Description: "Revised operator feature request.",
-	},
-	{
-		Path:        []tools.FieldPathSegment{tools.FixedField("design_source")},
-		JSONType:    "string",
-		Description: "Updated Goa design source the analysis was made against (the target's design/*.go files). Surla saves it with the card and includes it in request_revision; it does not interpret it. When omitted on a workspace-backed card without Stories and with a bound workspace, Surla records design/*.go from the bound workspace again; otherwise the card's saved design source is kept. Cannot be set when story_refresh_op_id is set or when the card already has adopted Stories.",
+		Description: "The user's revised feature request.",
 	},
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("story_refresh_op_id")},
 		JSONType:    "string",
-		Description: "Optional op_id of a succeeded refresh_story operation for the bound workspace whose evaluated Stories this revision adopts. When set, design_source must be omitted and the card must not use a caller-supplied design_source; Surla reads one workspace snapshot, requires its snapshot_digest to match the operation's, and records both the evaluated Stories and that snapshot's design/*.go on the revised card. When omitted on a card that already has Stories, the card's saved Stories and saved design_source are kept together.",
+		Description: "op_id of a succeeded refresh_story operation whose evaluated draft this revision adopts. When omitted, the revision keeps every snapshot field of the revision it revises: design, Stories, architecture, go.mod and made-from list, even with zero Stories. A project with a go.mod refuses an omitted op_id when that revision has no design. Surla reads no file.",
 	},
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("analysis")},
@@ -5053,7 +12479,7 @@ var reviseChangePayloadFields = []tools.FieldMetadata{
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("analysis"), tools.FixedField("ui_composition")},
 		JSONType:    "string",
-		Description: "Optional OpenUI Lang program that helps the requester decide the open questions, built only from the decision components the surla://golden-path resource lists. Refer to an ambiguity or example only by its 1-based position in this analysis (1 is the first); never invent identifiers. Surla saves it unchanged without checking it; the checkpoint viewer validates and renders it. Omit it when a plain card is clearer.",
+		Description: "Optional OpenUI Lang program that helps the requester decide the open questions, built only from the decision components the surla://golden-path resource lists. Refer to an ambiguity or example only by its 1-based position in this analysis (1 is the first); never invent identifiers. Surla saves it unchanged without checking it; the views page validates and renders it. Omit it when a plain card is clearer.",
 	},
 }
 var reviseChangeResultFields = []tools.FieldMetadata{
@@ -5074,7 +12500,7 @@ var reviseChangeResultFields = []tools.FieldMetadata{
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("prompt")},
 		JSONType:    "string",
-		Description: "Operator feature request for this revision.",
+		Description: "The user's feature request for this revision.",
 	},
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("summary")},
@@ -5099,7 +12525,7 @@ var reviseChangeResultFields = []tools.FieldMetadata{
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("ambiguities"), tools.DynamicField{}, tools.FixedField("question")},
 		JSONType:    "string",
-		Description: "Plain-English question for the operator.",
+		Description: "Plain-English question for the user.",
 	},
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("ambiguities"), tools.DynamicField{}, tools.FixedField("options")},
@@ -5349,7 +12775,7 @@ var reviseChangeResultFields = []tools.FieldMetadata{
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("confirmed_by")},
 		JSONType:    "string",
-		Description: "Authenticated principal that confirmed the Change Card.",
+		Description: "User who confirmed the Change Card.",
 	},
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("request_revision")},
@@ -5364,7 +12790,7 @@ var reviseChangeResultFields = []tools.FieldMetadata{
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("ui_composition"), tools.FixedField("program")},
 		JSONType:    "string",
-		Description: "OpenUI Lang program from the analysis's ui_composition, exactly as the caller sent it. The server does not check it; the checkpoint viewer validates it and shows its error state, with the rest of the card still usable, when the program is not a valid composition.",
+		Description: "OpenUI Lang program from the analysis's ui_composition, exactly as the caller sent it. The server does not check it; the views page validates it and shows its error state, with the rest of the card still usable, when the program is not a valid composition.",
 	},
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("ui_composition"), tools.FixedField("composed_for_revision")},
@@ -5374,12 +12800,12 @@ var reviseChangeResultFields = []tools.FieldMetadata{
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("approval")},
 		JSONType:    "object",
-		Description: "Checkpoint 5 approval of this revision, present only while it is verified against the promotion target's current inputs on this read. It is absent before approve_merge succeeds, whenever the target's suite, environment or binary digests have changed since, and whenever current inputs cannot be verified (see unverified_approval). It is never hashed into request_revision.",
+		Description: "Checkpoint 5 approval of this revision, present while suite_commit is still the tests' commit chosen for this revision and (when a promotion target is configured) the promotion target's current binary digests still equal artifacts on this read. It is absent before approve_merge succeeds, whenever the chosen tests' commit or the staged binary digests have changed since, and whenever a configured promotion target's staged binaries cannot be verified (see unverified_approval). It is never hashed into request_revision.",
 	},
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("approval"), tools.FixedField("approved_by")},
 		JSONType:    "string",
-		Description: "Authenticated principal that owns the card and called approve_merge. Authentication does not prove that a human, rather than a coding agent, made the call.",
+		Description: "User who approved the result.",
 	},
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("approval"), tools.FixedField("report_digest")},
@@ -5394,37 +12820,94 @@ var reviseChangeResultFields = []tools.FieldMetadata{
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("approval"), tools.FixedField("suite_id")},
 		JSONType:    "string",
-		Description: "Evaluator suite the promotion target requires.",
+		Description: "Suite identifier the tests at suite_commit declared in the report (shown, not compared).",
 	},
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("approval"), tools.FixedField("suite_commit")},
 		JSONType:    "string",
-		Description: "Evaluator suite commit the promotion target requires.",
+		Description: "Commit of the tests the report ran: the evaluator suite commit in the stored verification settings, or the tests Surla accepted for the change's build.",
 	},
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("approval"), tools.FixedField("environment")},
 		JSONType:    "string",
-		Description: "Dependency profile the promotion target requires, such as sim.",
+		Description: "Dependency profile the tests at suite_commit declared in the report, such as sim or scripted-model (shown, not compared).",
 	},
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("approval"), tools.FixedField("artifacts")},
 		JSONType:    "object",
-		Description: "SHA-256 digest of each candidate binary the promotion target measured, keyed by binary name.",
+		Description: "SHA-256 digest of each candidate binary the promotion target measured, keyed by binary name; empty when no promotion settings are configured.",
 	},
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("approval"), tools.FixedField("artifacts"), tools.DynamicField{}},
 		JSONType:    "string",
-		Description: "SHA-256 digest of each candidate binary the promotion target measured, keyed by binary name.",
+		Description: "SHA-256 digest of each candidate binary the promotion target measured, keyed by binary name; empty when no promotion settings are configured.",
 	},
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("approval"), tools.FixedField("scenario_count")},
 		JSONType:    "integer",
-		Description: "Number of declared evaluator scenarios, every one of which passed.",
+		Description: "Number of declared scenarios in the report, every one of which passed.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("approval"), tools.FixedField("test_source")},
+		JSONType:    "object",
+		Description: "Where the tests at suite_commit came from, derived on each read: evaluator, or written_tests with their commit and a notice.",
+	},
+	{
+		Path:     []tools.FieldPathSegment{tools.FixedField("approval"), tools.FixedField("test_source"), tools.FixedField("source")},
+		JSONType: "string",
+		DiscriminatorValues: []string{
+			"evaluator",
+			"written_tests",
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("approval"), tools.FixedField("test_source")},
+		JSONType:    "object",
+		Description: "The run used the operator's evaluator: the one stored with surla verification set, or the one named on surla verify's command line.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("approval"), tools.FixedField("test_source"), tools.FixedField("source")},
+				Value:         "evaluator",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("approval"), tools.FixedField("test_source")},
+		JSONType:    "object",
+		Description: "The run used the tests Surla accepted for the change's build, which a separate agent on this machine wrote.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("approval"), tools.FixedField("test_source"), tools.FixedField("source")},
+				Value:         "written_tests",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("approval"), tools.FixedField("test_source"), tools.FixedField("commit")},
+		JSONType:    "string",
+		Description: "Commit Surla recorded the accepted tests at; the same as suite_commit.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("approval"), tools.FixedField("test_source"), tools.FixedField("source")},
+				Value:         "written_tests",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("approval"), tools.FixedField("test_source"), tools.FixedField("notice")},
+		JSONType:    "string",
+		Description: "Always: These tests were written by a separate agent on this machine and are not isolated from the builder.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("approval"), tools.FixedField("test_source"), tools.FixedField("source")},
+				Value:         "written_tests",
+			},
+		},
 	},
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("unverified_approval")},
 		JSONType:    "object",
-		Description: "Saved Checkpoint 5 approval of this revision when current promotion inputs could not be verified on this read (because no promotion target is configured or the target could not report its current inputs). At most one of approval or unverified_approval is set. It is never saved to disk or hashed into request_revision.",
+		Description: "Saved Checkpoint 5 approval of this revision when suite_commit still matches the chosen tests' commit and promotion settings are configured, but the staged binaries could not be verified on this read. At most one of approval or unverified_approval is set. It is never saved to disk or hashed into request_revision.",
 	},
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("unverified_approval"), tools.FixedField("approval")},
@@ -5434,7 +12917,7 @@ var reviseChangeResultFields = []tools.FieldMetadata{
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("unverified_approval"), tools.FixedField("approval"), tools.FixedField("approved_by")},
 		JSONType:    "string",
-		Description: "Authenticated principal that owns the card and called approve_merge. Authentication does not prove that a human, rather than a coding agent, made the call.",
+		Description: "User who approved the result.",
 	},
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("unverified_approval"), tools.FixedField("approval"), tools.FixedField("report_digest")},
@@ -5449,43 +12932,405 @@ var reviseChangeResultFields = []tools.FieldMetadata{
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("unverified_approval"), tools.FixedField("approval"), tools.FixedField("suite_id")},
 		JSONType:    "string",
-		Description: "Evaluator suite the promotion target requires.",
+		Description: "Suite identifier the tests at suite_commit declared in the report (shown, not compared).",
 	},
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("unverified_approval"), tools.FixedField("approval"), tools.FixedField("suite_commit")},
 		JSONType:    "string",
-		Description: "Evaluator suite commit the promotion target requires.",
+		Description: "Commit of the tests the report ran: the evaluator suite commit in the stored verification settings, or the tests Surla accepted for the change's build.",
 	},
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("unverified_approval"), tools.FixedField("approval"), tools.FixedField("environment")},
 		JSONType:    "string",
-		Description: "Dependency profile the promotion target requires, such as sim.",
+		Description: "Dependency profile the tests at suite_commit declared in the report, such as sim or scripted-model (shown, not compared).",
 	},
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("unverified_approval"), tools.FixedField("approval"), tools.FixedField("artifacts")},
 		JSONType:    "object",
-		Description: "SHA-256 digest of each candidate binary the promotion target measured, keyed by binary name.",
+		Description: "SHA-256 digest of each candidate binary the promotion target measured, keyed by binary name; empty when no promotion settings are configured.",
 	},
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("unverified_approval"), tools.FixedField("approval"), tools.FixedField("artifacts"), tools.DynamicField{}},
 		JSONType:    "string",
-		Description: "SHA-256 digest of each candidate binary the promotion target measured, keyed by binary name.",
+		Description: "SHA-256 digest of each candidate binary the promotion target measured, keyed by binary name; empty when no promotion settings are configured.",
 	},
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("unverified_approval"), tools.FixedField("approval"), tools.FixedField("scenario_count")},
 		JSONType:    "integer",
-		Description: "Number of declared evaluator scenarios, every one of which passed.",
+		Description: "Number of declared scenarios in the report, every one of which passed.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("unverified_approval"), tools.FixedField("approval"), tools.FixedField("test_source")},
+		JSONType:    "object",
+		Description: "Where the tests at suite_commit came from, derived on each read: evaluator, or written_tests with their commit and a notice.",
+	},
+	{
+		Path:     []tools.FieldPathSegment{tools.FixedField("unverified_approval"), tools.FixedField("approval"), tools.FixedField("test_source"), tools.FixedField("source")},
+		JSONType: "string",
+		DiscriminatorValues: []string{
+			"evaluator",
+			"written_tests",
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("unverified_approval"), tools.FixedField("approval"), tools.FixedField("test_source")},
+		JSONType:    "object",
+		Description: "The run used the operator's evaluator: the one stored with surla verification set, or the one named on surla verify's command line.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("unverified_approval"), tools.FixedField("approval"), tools.FixedField("test_source"), tools.FixedField("source")},
+				Value:         "evaluator",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("unverified_approval"), tools.FixedField("approval"), tools.FixedField("test_source")},
+		JSONType:    "object",
+		Description: "The run used the tests Surla accepted for the change's build, which a separate agent on this machine wrote.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("unverified_approval"), tools.FixedField("approval"), tools.FixedField("test_source"), tools.FixedField("source")},
+				Value:         "written_tests",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("unverified_approval"), tools.FixedField("approval"), tools.FixedField("test_source"), tools.FixedField("commit")},
+		JSONType:    "string",
+		Description: "Commit Surla recorded the accepted tests at; the same as suite_commit.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("unverified_approval"), tools.FixedField("approval"), tools.FixedField("test_source"), tools.FixedField("source")},
+				Value:         "written_tests",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("unverified_approval"), tools.FixedField("approval"), tools.FixedField("test_source"), tools.FixedField("notice")},
+		JSONType:    "string",
+		Description: "Always: These tests were written by a separate agent on this machine and are not isolated from the builder.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("unverified_approval"), tools.FixedField("approval"), tools.FixedField("test_source"), tools.FixedField("source")},
+				Value:         "written_tests",
+			},
+		},
 	},
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("unverified_approval"), tools.FixedField("reason")},
 		JSONType:    "string",
-		Description: "Explanation of why the recorded approval could not be verified against current promotion inputs and how to recover.",
+		Description: "Explanation of why the recorded approval could not be verified against current release binaries and how to recover.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision")},
+		JSONType:    "object",
+		Description: "The revision the guide proposed beside this confirmed revision, while it waits for the user to adopt or decline it; absent otherwise. This card's own fields describe the revision in force.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("prompt")},
+		JSONType:    "string",
+		Description: "The user's feature request for this revision.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("summary")},
+		JSONType:    "string",
+		Description: "Plain-English summary of the proposed change.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("ambiguities")},
+		JSONType:    "array",
+		Description: "Domain questions the user answers when adopting this revision.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("ambiguities"), tools.DynamicField{}},
+		JSONType:    "object",
+		Description: "Domain questions the user answers when adopting this revision.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("ambiguities"), tools.DynamicField{}, tools.FixedField("id")},
+		JSONType:    "string",
+		Description: "Stable question identifier.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("ambiguities"), tools.DynamicField{}, tools.FixedField("question")},
+		JSONType:    "string",
+		Description: "Plain-English question for the user.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("ambiguities"), tools.DynamicField{}, tools.FixedField("options")},
+		JSONType:    "array",
+		Description: "Concrete resolution choices.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("ambiguities"), tools.DynamicField{}, tools.FixedField("options"), tools.DynamicField{}},
+		JSONType:    "string",
+		Description: "Concrete resolution choices.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("examples")},
+		JSONType:    "array",
+		Description: "Concrete examples mapped to evaluator checks.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("examples"), tools.DynamicField{}},
+		JSONType:    "object",
+		Description: "Concrete examples mapped to evaluator checks.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("examples"), tools.DynamicField{}, tools.FixedField("id")},
+		JSONType:    "string",
+		Description: "Stable example identifier. Default code-assigned IDs use check_01, check_02, ... (valid goa-ai/eval Scenario names). confirm_intent preserves caller-chosen IDs.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("examples"), tools.DynamicField{}, tools.FixedField("scenario")},
+		JSONType:    "string",
+		Description: "Plain-English scenario description.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("examples"), tools.DynamicField{}, tools.FixedField("input_summary")},
+		JSONType:    "string",
+		Description: "Representative user request and domain fixture state.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("examples"), tools.DynamicField{}, tools.FixedField("expected_outcome")},
+		JSONType:    "string",
+		Description: "Expected side effect and response behavior.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("examples"), tools.DynamicField{}, tools.FixedField("verification_kind")},
+		JSONType:    "string",
+		Description: "Evaluator check classification (deterministic or model_judged).",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("preserved_behaviors")},
+		JSONType:    "array",
+		Description: "Existing contract invariants preserved by this change.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("preserved_behaviors"), tools.DynamicField{}},
+		JSONType:    "string",
+		Description: "Existing contract invariants preserved by this change.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("stories")},
+		JSONType:    "array",
+		Description: "Evaluated domain Stories of this revision in declaration order; omitted when it has none. Included in its request_revision.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("stories"), tools.DynamicField{}},
+		JSONType:    "object",
+		Description: "Evaluated domain Stories of this revision in declaration order; omitted when it has none. Included in its request_revision.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("name")},
+		JSONType:    "string",
+		Description: "Human-facing Story title.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("description")},
+		JSONType:    "string",
+		Description: "Optional longer explanation of the Story.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("actors")},
+		JSONType:    "array",
+		Description: "Domain roles declared in the Story in declaration order.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("actors"), tools.DynamicField{}},
+		JSONType:    "object",
+		Description: "Domain roles declared in the Story in declaration order.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("actors"), tools.DynamicField{}, tools.FixedField("key")},
+		JSONType:    "string",
+		Description: "Story-scoped actor key.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("actors"), tools.DynamicField{}, tools.FixedField("title")},
+		JSONType:    "string",
+		Description: "Human-facing actor label.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("actors"), tools.DynamicField{}, tools.FixedField("description")},
+		JSONType:    "string",
+		Description: "Optional longer explanation of the actor role.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("flows")},
+		JSONType:    "array",
+		Description: "Timeline paths declared in the Story in declaration order.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("flows"), tools.DynamicField{}},
+		JSONType:    "object",
+		Description: "Timeline paths declared in the Story in declaration order.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("flows"), tools.DynamicField{}, tools.FixedField("key")},
+		JSONType:    "string",
+		Description: "Story-scoped flow key.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("flows"), tools.DynamicField{}, tools.FixedField("title")},
+		JSONType:    "string",
+		Description: "Human-facing flow title.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("flows"), tools.DynamicField{}, tools.FixedField("description")},
+		JSONType:    "string",
+		Description: "Optional longer explanation of the flow.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("flows"), tools.DynamicField{}, tools.FixedField("complete")},
+		JSONType:    "boolean",
+		Description: "True when the flow has a start, at least one outcome, and no open questions on the flow or any of its steps.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("flows"), tools.DynamicField{}, tools.FixedField("steps")},
+		JSONType:    "array",
+		Description: "Starting, intermediate, and outcome steps in declaration order.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("flows"), tools.DynamicField{}, tools.FixedField("steps"), tools.DynamicField{}},
+		JSONType:    "object",
+		Description: "Starting, intermediate, and outcome steps in declaration order.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("flows"), tools.DynamicField{}, tools.FixedField("steps"), tools.DynamicField{}, tools.FixedField("key")},
+		JSONType:    "string",
+		Description: "Flow-scoped step key.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("flows"), tools.DynamicField{}, tools.FixedField("steps"), tools.DynamicField{}, tools.FixedField("actor_key")},
+		JSONType:    "string",
+		Description: "Story-scoped key of the actor performing or observing the step.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("flows"), tools.DynamicField{}, tools.FixedField("steps"), tools.DynamicField{}, tools.FixedField("summary")},
+		JSONType:    "string",
+		Description: "Timeline sticky-note sentence for the step.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("flows"), tools.DynamicField{}, tools.FixedField("steps"), tools.DynamicField{}, tools.FixedField("description")},
+		JSONType:    "string",
+		Description: "Optional longer explanation of the step.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("flows"), tools.DynamicField{}, tools.FixedField("steps"), tools.DynamicField{}, tools.FixedField("kind")},
+		JSONType:    "string",
+		Description: "Step position in the flow: start, step, or outcome.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("flows"), tools.DynamicField{}, tools.FixedField("steps"), tools.DynamicField{}, tools.FixedField("questions")},
+		JSONType:    "array",
+		Description: "Unresolved step-level decisions in declaration order.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("flows"), tools.DynamicField{}, tools.FixedField("steps"), tools.DynamicField{}, tools.FixedField("questions"), tools.DynamicField{}},
+		JSONType:    "object",
+		Description: "Unresolved step-level decisions in declaration order.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("flows"), tools.DynamicField{}, tools.FixedField("steps"), tools.DynamicField{}, tools.FixedField("questions"), tools.DynamicField{}, tools.FixedField("key")},
+		JSONType:    "string",
+		Description: "Flow-scoped question key.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("flows"), tools.DynamicField{}, tools.FixedField("steps"), tools.DynamicField{}, tools.FixedField("questions"), tools.DynamicField{}, tools.FixedField("prompt")},
+		JSONType:    "string",
+		Description: "Human-facing question text.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("flows"), tools.DynamicField{}, tools.FixedField("steps"), tools.DynamicField{}, tools.FixedField("questions"), tools.DynamicField{}, tools.FixedField("description")},
+		JSONType:    "string",
+		Description: "Optional longer context for the question.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("flows"), tools.DynamicField{}, tools.FixedField("steps"), tools.DynamicField{}, tools.FixedField("questions"), tools.DynamicField{}, tools.FixedField("options")},
+		JSONType:    "array",
+		Description: "Suggested choices in declaration order.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("flows"), tools.DynamicField{}, tools.FixedField("steps"), tools.DynamicField{}, tools.FixedField("questions"), tools.DynamicField{}, tools.FixedField("options"), tools.DynamicField{}},
+		JSONType:    "string",
+		Description: "Suggested choices in declaration order.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("flows"), tools.DynamicField{}, tools.FixedField("questions")},
+		JSONType:    "array",
+		Description: "Unresolved flow-level decisions in declaration order.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("flows"), tools.DynamicField{}, tools.FixedField("questions"), tools.DynamicField{}},
+		JSONType:    "object",
+		Description: "Unresolved flow-level decisions in declaration order.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("flows"), tools.DynamicField{}, tools.FixedField("questions"), tools.DynamicField{}, tools.FixedField("key")},
+		JSONType:    "string",
+		Description: "Flow-scoped question key.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("flows"), tools.DynamicField{}, tools.FixedField("questions"), tools.DynamicField{}, tools.FixedField("prompt")},
+		JSONType:    "string",
+		Description: "Human-facing question text.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("flows"), tools.DynamicField{}, tools.FixedField("questions"), tools.DynamicField{}, tools.FixedField("description")},
+		JSONType:    "string",
+		Description: "Optional longer context for the question.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("flows"), tools.DynamicField{}, tools.FixedField("questions"), tools.DynamicField{}, tools.FixedField("options")},
+		JSONType:    "array",
+		Description: "Suggested choices in declaration order.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("stories"), tools.DynamicField{}, tools.FixedField("flows"), tools.DynamicField{}, tools.FixedField("questions"), tools.DynamicField{}, tools.FixedField("options"), tools.DynamicField{}},
+		JSONType:    "string",
+		Description: "Suggested choices in declaration order.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("request_revision")},
+		JSONType:    "string",
+		Description: "SHA-256 digest of this proposed revision: confirm_intent adopts it, decline_revision declines it, and revise_change replaces it when given this value.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("ui_composition")},
+		JSONType:    "object",
+		Description: "Decision view the guide composed for this revision in its analysis, when it sent one.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("ui_composition"), tools.FixedField("program")},
+		JSONType:    "string",
+		Description: "OpenUI Lang program from the analysis's ui_composition, exactly as the caller sent it. The server does not check it; the views page validates it and shows its error state, with the rest of the card still usable, when the program is not a valid composition.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("ui_composition"), tools.FixedField("composed_for_revision")},
+		JSONType:    "string",
+		Description: "request_revision of the Change Card this program was composed for.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("changed_design_files")},
+		JSONType:    "array",
+		Description: "Paths of the design/*.go files that differ between the design source the confirmed revision was made from and the one this revision was made from (added, removed or changed), in path order; empty when both were made from the same design files. Adopting the revision binds it to its own design source.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("changed_design_files"), tools.DynamicField{}},
+		JSONType:    "string",
+		Description: "Paths of the design/*.go files that differ between the design source the confirmed revision was made from and the one this revision was made from (added, removed or changed), in path order; empty when both were made from the same design files. Adopting the revision binds it to its own design source.",
 	},
 }
 var startLiveTargetPayloadFields = []tools.FieldMetadata{
 	{
 		JSONType:    "object",
-		Description: "Candidate commit to build and run as this server's live CP3 target.",
+		Description: "Owned, confirmed change and candidate commit to build and run as this server's live CP3 target.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("change_id")},
+		JSONType:    "string",
+		Description: "Owned, confirmed change from list_builder_assignments.",
 	},
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("candidate_commit")},
@@ -5543,7 +13388,7 @@ var updateDependenciesPayloadFields = []tools.FieldMetadata{
 var updateDependenciesResultFields = []tools.FieldMetadata{
 	{
 		JSONType:    "object",
-		Description: "Go module manifests rewritten in the workspace after go mod tidy ran in a protected copy.",
+		Description: "Go module manifests rewritten in the working folder after go mod tidy ran in a protected copy.",
 	},
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("op_id")},
@@ -5553,12 +13398,12 @@ var updateDependenciesResultFields = []tools.FieldMetadata{
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("files_written")},
 		JSONType:    "array",
-		Description: "Workspace-relative go.mod, go.sum and go.work.sum files whose bytes changed and were written.",
+		Description: "Working-folder-relative go.mod, go.sum and go.work.sum files whose bytes changed and were written.",
 	},
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("files_written"), tools.DynamicField{}},
 		JSONType:    "string",
-		Description: "Workspace-relative go.mod, go.sum and go.work.sum files whose bytes changed and were written.",
+		Description: "Working-folder-relative go.mod, go.sum and go.work.sum files whose bytes changed and were written.",
 	},
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("message")},
@@ -5566,10 +13411,71 @@ var updateDependenciesResultFields = []tools.FieldMetadata{
 		Description: "At most 16 KiB: what was updated, and Go's message for any module that could not be.",
 	},
 }
+var updateDraftPayloadFields = []tools.FieldMetadata{
+	{
+		JSONType: "object",
+	},
+}
+var updateDraftResultFields = []tools.FieldMetadata{
+	{
+		JSONType:    "object",
+		Description: "What update_draft brought from the project folder into the guide's draft: design files the draft took as they are there, design files merged with the draft's own edits, and files to correct, each with the folder that holds it. The lists describe what this call applied and what remains to correct; empty lists do not prove that every outside design change is present.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("draft_folder")},
+		JSONType:    "string",
+		Description: "Absolute path of the guide's draft folder.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("taken")},
+		JSONType:    "array",
+		Description: "Design files the draft took from the project folder because it had not changed them, in path order.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("taken"), tools.DynamicField{}},
+		JSONType:    "string",
+		Description: "Design files the draft took from the project folder because it had not changed them, in path order.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("merged")},
+		JSONType:    "array",
+		Description: "Design files where the project folder's change and the draft's edits merged without conflict, in path order.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("merged"), tools.DynamicField{}},
+		JSONType:    "string",
+		Description: "Design files where the project folder's change and the draft's edits merged without conflict, in path order.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("to_correct")},
+		JSONType:    "array",
+		Description: "Files to correct before refreshing, each in the folder it names, in path order; empty when none.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("to_correct"), tools.DynamicField{}},
+		JSONType:    "object",
+		Description: "Files to correct before refreshing, each in the folder it names, in path order; empty when none.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("to_correct"), tools.DynamicField{}, tools.FixedField("path")},
+		JSONType:    "string",
+		Description: "Path relative to the folder that folder names, such as design/types.go or go.mod.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("to_correct"), tools.DynamicField{}, tools.FixedField("folder")},
+		JSONType:    "string",
+		Description: "Which folder holds the file to correct: draft_folder is the guide's draft, at the result's draft_folder; project_folder is the user's project folder, which holds the draft.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("to_correct"), tools.DynamicField{}, tools.FixedField("problem")},
+		JSONType:    "string",
+		Description: "What to correct. In the draft: conflict markers where the draft and the project folder changed the same lines; a file removed on one side and changed on the other; a draft file Go cannot parse, with its line; a file whose project change Surla took without merging, or was writing when it stopped, to check that it holds the intended edits once; or a module the project's go.mod requires at another version than the draft's, or that the draft's lacks, including differing replace directives and a differing module path. In the project folder: a design file or go.mod there that cannot be parsed, with its line, or a go.mod that declares no module.",
+	},
+}
 var verifyChangePayloadFields = []tools.FieldMetadata{
 	{
 		JSONType:    "object",
-		Description: "Names the confirmed Change Card revision and the candidate commit to verify. What is built and which evaluator suite runs come from the operator's configuration of surla serve, never from the caller.",
+		Description: "Names the confirmed Change Card revision and the candidate commit to verify. What is built and which tests run come from the project, never from the caller: the candidate commit's programs and the tests Surla accepted for the user's build of the revision or, with stored verification settings, the programs and evaluator suite those settings name.",
 	},
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("change_id")},
@@ -5615,12 +13521,79 @@ var verifyChangeResultFields = []tools.FieldMetadata{
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("suite_commit")},
 		JSONType:    "string",
-		Description: "Evaluator suite commit the operator configured for the run.",
+		Description: "Commit of the tests the run uses: the operator's evaluator, or the tests accepted for the change's build.",
 	},
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("accepted_at")},
 		JSONType:    "string",
 		Description: "When the run was accepted.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("inputs_current")},
+		JSONType:    "boolean",
+		Description: "Whether this run's agreed revision and selected tests match the current Change Card and the usable build or the stored verification settings. This observation does not establish the current candidate working tree, deployment or approval.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("candidate_binaries_dir")},
+		JSONType:    "string",
+		Description: "Absolute folder containing the binaries built by this completed run. Returned only to the user when promotion settings are configured, so the user can publish these exact binaries before approval. Agents never receive this private path.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("test_source")},
+		JSONType:    "object",
+		Description: "Where the run's tests came from, recorded when the run started: evaluator, or written_tests with their commit and a notice.",
+	},
+	{
+		Path:     []tools.FieldPathSegment{tools.FixedField("test_source"), tools.FixedField("source")},
+		JSONType: "string",
+		DiscriminatorValues: []string{
+			"evaluator",
+			"written_tests",
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("test_source")},
+		JSONType:    "object",
+		Description: "The run used the operator's evaluator: the one stored with surla verification set, or the one named on surla verify's command line.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("test_source"), tools.FixedField("source")},
+				Value:         "evaluator",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("test_source")},
+		JSONType:    "object",
+		Description: "The run used the tests Surla accepted for the change's build, which a separate agent on this machine wrote.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("test_source"), tools.FixedField("source")},
+				Value:         "written_tests",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("test_source"), tools.FixedField("commit")},
+		JSONType:    "string",
+		Description: "Commit Surla recorded the accepted tests at; the same as suite_commit.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("test_source"), tools.FixedField("source")},
+				Value:         "written_tests",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("test_source"), tools.FixedField("notice")},
+		JSONType:    "string",
+		Description: "Always: These tests were written by a separate agent on this machine and are not isolated from the builder.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("test_source"), tools.FixedField("source")},
+				Value:         "written_tests",
+			},
+		},
 	},
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("state")},
@@ -6107,6 +14080,40 @@ func enrichConfirmIntentResultValidationError(err error) error {
 	}
 	return tools.NewValidationError(ve.Error(), issues, m)
 }
+func enrichDeclineRevisionPayloadValidationError(err error) error {
+	var ve *tools.ValidationError
+	if !errors.As(err, &ve) {
+		return err
+	}
+	issues := ve.Issues()
+	if len(issues) == 0 {
+		return err
+	}
+	m := make(map[string]string)
+	for _, is := range issues {
+		if field, ok := tools.LookupFieldMetadata(declineRevisionPayloadFields, is.Field); ok && field.Description != "" {
+			m[is.Field] = field.Description
+		}
+	}
+	return tools.NewValidationError(ve.Error(), issues, m)
+}
+func enrichDeclineRevisionResultValidationError(err error) error {
+	var ve *tools.ValidationError
+	if !errors.As(err, &ve) {
+		return err
+	}
+	issues := ve.Issues()
+	if len(issues) == 0 {
+		return err
+	}
+	m := make(map[string]string)
+	for _, is := range issues {
+		if field, ok := tools.LookupFieldMetadata(declineRevisionResultFields, is.Field); ok && field.Description != "" {
+			m[is.Field] = field.Description
+		}
+	}
+	return tools.NewValidationError(ve.Error(), issues, m)
+}
 func enrichDiffPayloadValidationError(err error) error {
 	var ve *tools.ValidationError
 	if !errors.As(err, &ve) {
@@ -6209,6 +14216,74 @@ func enrichGenerateCodeResultValidationError(err error) error {
 	}
 	return tools.NewValidationError(ve.Error(), issues, m)
 }
+func enrichGetBuildPayloadValidationError(err error) error {
+	var ve *tools.ValidationError
+	if !errors.As(err, &ve) {
+		return err
+	}
+	issues := ve.Issues()
+	if len(issues) == 0 {
+		return err
+	}
+	m := make(map[string]string)
+	for _, is := range issues {
+		if field, ok := tools.LookupFieldMetadata(getBuildPayloadFields, is.Field); ok && field.Description != "" {
+			m[is.Field] = field.Description
+		}
+	}
+	return tools.NewValidationError(ve.Error(), issues, m)
+}
+func enrichGetBuildResultValidationError(err error) error {
+	var ve *tools.ValidationError
+	if !errors.As(err, &ve) {
+		return err
+	}
+	issues := ve.Issues()
+	if len(issues) == 0 {
+		return err
+	}
+	m := make(map[string]string)
+	for _, is := range issues {
+		if field, ok := tools.LookupFieldMetadata(getBuildResultFields, is.Field); ok && field.Description != "" {
+			m[is.Field] = field.Description
+		}
+	}
+	return tools.NewValidationError(ve.Error(), issues, m)
+}
+func enrichGetBuilderAssignmentPayloadValidationError(err error) error {
+	var ve *tools.ValidationError
+	if !errors.As(err, &ve) {
+		return err
+	}
+	issues := ve.Issues()
+	if len(issues) == 0 {
+		return err
+	}
+	m := make(map[string]string)
+	for _, is := range issues {
+		if field, ok := tools.LookupFieldMetadata(getBuilderAssignmentPayloadFields, is.Field); ok && field.Description != "" {
+			m[is.Field] = field.Description
+		}
+	}
+	return tools.NewValidationError(ve.Error(), issues, m)
+}
+func enrichGetBuilderAssignmentResultValidationError(err error) error {
+	var ve *tools.ValidationError
+	if !errors.As(err, &ve) {
+		return err
+	}
+	issues := ve.Issues()
+	if len(issues) == 0 {
+		return err
+	}
+	m := make(map[string]string)
+	for _, is := range issues {
+		if field, ok := tools.LookupFieldMetadata(getBuilderAssignmentResultFields, is.Field); ok && field.Description != "" {
+			m[is.Field] = field.Description
+		}
+	}
+	return tools.NewValidationError(ve.Error(), issues, m)
+}
 func enrichGetChangePayloadValidationError(err error) error {
 	var ve *tools.ValidationError
 	if !errors.As(err, &ve) {
@@ -6243,6 +14318,23 @@ func enrichGetChangeResultValidationError(err error) error {
 	}
 	return tools.NewValidationError(ve.Error(), issues, m)
 }
+func enrichGetLiveTargetResultValidationError(err error) error {
+	var ve *tools.ValidationError
+	if !errors.As(err, &ve) {
+		return err
+	}
+	issues := ve.Issues()
+	if len(issues) == 0 {
+		return err
+	}
+	m := make(map[string]string)
+	for _, is := range issues {
+		if field, ok := tools.LookupFieldMetadata(getLiveTargetResultFields, is.Field); ok && field.Description != "" {
+			m[is.Field] = field.Description
+		}
+	}
+	return tools.NewValidationError(ve.Error(), issues, m)
+}
 func enrichGetStoryRefreshResultValidationError(err error) error {
 	var ve *tools.ValidationError
 	if !errors.As(err, &ve) {
@@ -6255,6 +14347,40 @@ func enrichGetStoryRefreshResultValidationError(err error) error {
 	m := make(map[string]string)
 	for _, is := range issues {
 		if field, ok := tools.LookupFieldMetadata(getStoryRefreshResultFields, is.Field); ok && field.Description != "" {
+			m[is.Field] = field.Description
+		}
+	}
+	return tools.NewValidationError(ve.Error(), issues, m)
+}
+func enrichGetTestWriterAssignmentPayloadValidationError(err error) error {
+	var ve *tools.ValidationError
+	if !errors.As(err, &ve) {
+		return err
+	}
+	issues := ve.Issues()
+	if len(issues) == 0 {
+		return err
+	}
+	m := make(map[string]string)
+	for _, is := range issues {
+		if field, ok := tools.LookupFieldMetadata(getTestWriterAssignmentPayloadFields, is.Field); ok && field.Description != "" {
+			m[is.Field] = field.Description
+		}
+	}
+	return tools.NewValidationError(ve.Error(), issues, m)
+}
+func enrichGetTestWriterAssignmentResultValidationError(err error) error {
+	var ve *tools.ValidationError
+	if !errors.As(err, &ve) {
+		return err
+	}
+	issues := ve.Issues()
+	if len(issues) == 0 {
+		return err
+	}
+	m := make(map[string]string)
+	for _, is := range issues {
+		if field, ok := tools.LookupFieldMetadata(getTestWriterAssignmentResultFields, is.Field); ok && field.Description != "" {
 			m[is.Field] = field.Description
 		}
 	}
@@ -6323,6 +14449,57 @@ func enrichInitProjectResultValidationError(err error) error {
 	m := make(map[string]string)
 	for _, is := range issues {
 		if field, ok := tools.LookupFieldMetadata(initProjectResultFields, is.Field); ok && field.Description != "" {
+			m[is.Field] = field.Description
+		}
+	}
+	return tools.NewValidationError(ve.Error(), issues, m)
+}
+func enrichListBuilderAssignmentsResultValidationError(err error) error {
+	var ve *tools.ValidationError
+	if !errors.As(err, &ve) {
+		return err
+	}
+	issues := ve.Issues()
+	if len(issues) == 0 {
+		return err
+	}
+	m := make(map[string]string)
+	for _, is := range issues {
+		if field, ok := tools.LookupFieldMetadata(listBuilderAssignmentsResultFields, is.Field); ok && field.Description != "" {
+			m[is.Field] = field.Description
+		}
+	}
+	return tools.NewValidationError(ve.Error(), issues, m)
+}
+func enrichListChangesResultValidationError(err error) error {
+	var ve *tools.ValidationError
+	if !errors.As(err, &ve) {
+		return err
+	}
+	issues := ve.Issues()
+	if len(issues) == 0 {
+		return err
+	}
+	m := make(map[string]string)
+	for _, is := range issues {
+		if field, ok := tools.LookupFieldMetadata(listChangesResultFields, is.Field); ok && field.Description != "" {
+			m[is.Field] = field.Description
+		}
+	}
+	return tools.NewValidationError(ve.Error(), issues, m)
+}
+func enrichListTestWriterAssignmentsResultValidationError(err error) error {
+	var ve *tools.ValidationError
+	if !errors.As(err, &ve) {
+		return err
+	}
+	issues := ve.Issues()
+	if len(issues) == 0 {
+		return err
+	}
+	m := make(map[string]string)
+	for _, is := range issues {
+		if field, ok := tools.LookupFieldMetadata(listTestWriterAssignmentsResultFields, is.Field); ok && field.Description != "" {
 			m[is.Field] = field.Description
 		}
 	}
@@ -6515,6 +14692,74 @@ func enrichRefreshStoryResultValidationError(err error) error {
 	}
 	return tools.NewValidationError(ve.Error(), issues, m)
 }
+func enrichReportTestsFinishedPayloadValidationError(err error) error {
+	var ve *tools.ValidationError
+	if !errors.As(err, &ve) {
+		return err
+	}
+	issues := ve.Issues()
+	if len(issues) == 0 {
+		return err
+	}
+	m := make(map[string]string)
+	for _, is := range issues {
+		if field, ok := tools.LookupFieldMetadata(reportTestsFinishedPayloadFields, is.Field); ok && field.Description != "" {
+			m[is.Field] = field.Description
+		}
+	}
+	return tools.NewValidationError(ve.Error(), issues, m)
+}
+func enrichReportTestsFinishedResultValidationError(err error) error {
+	var ve *tools.ValidationError
+	if !errors.As(err, &ve) {
+		return err
+	}
+	issues := ve.Issues()
+	if len(issues) == 0 {
+		return err
+	}
+	m := make(map[string]string)
+	for _, is := range issues {
+		if field, ok := tools.LookupFieldMetadata(reportTestsFinishedResultFields, is.Field); ok && field.Description != "" {
+			m[is.Field] = field.Description
+		}
+	}
+	return tools.NewValidationError(ve.Error(), issues, m)
+}
+func enrichReviewVerificationPayloadValidationError(err error) error {
+	var ve *tools.ValidationError
+	if !errors.As(err, &ve) {
+		return err
+	}
+	issues := ve.Issues()
+	if len(issues) == 0 {
+		return err
+	}
+	m := make(map[string]string)
+	for _, is := range issues {
+		if field, ok := tools.LookupFieldMetadata(reviewVerificationPayloadFields, is.Field); ok && field.Description != "" {
+			m[is.Field] = field.Description
+		}
+	}
+	return tools.NewValidationError(ve.Error(), issues, m)
+}
+func enrichReviewVerificationResultValidationError(err error) error {
+	var ve *tools.ValidationError
+	if !errors.As(err, &ve) {
+		return err
+	}
+	issues := ve.Issues()
+	if len(issues) == 0 {
+		return err
+	}
+	m := make(map[string]string)
+	for _, is := range issues {
+		if field, ok := tools.LookupFieldMetadata(reviewVerificationResultFields, is.Field); ok && field.Description != "" {
+			m[is.Field] = field.Description
+		}
+	}
+	return tools.NewValidationError(ve.Error(), issues, m)
+}
 func enrichReviseChangePayloadValidationError(err error) error {
 	var ve *tools.ValidationError
 	if !errors.As(err, &ve) {
@@ -6612,6 +14857,23 @@ func enrichUpdateDependenciesResultValidationError(err error) error {
 	m := make(map[string]string)
 	for _, is := range issues {
 		if field, ok := tools.LookupFieldMetadata(updateDependenciesResultFields, is.Field); ok && field.Description != "" {
+			m[is.Field] = field.Description
+		}
+	}
+	return tools.NewValidationError(ve.Error(), issues, m)
+}
+func enrichUpdateDraftResultValidationError(err error) error {
+	var ve *tools.ValidationError
+	if !errors.As(err, &ve) {
+		return err
+	}
+	issues := ve.Issues()
+	if len(issues) == 0 {
+		return err
+	}
+	m := make(map[string]string)
+	for _, is := range issues {
+		if field, ok := tools.LookupFieldMetadata(updateDraftResultFields, is.Field); ok && field.Description != "" {
 			m[is.Field] = field.Description
 		}
 	}
@@ -6899,6 +15161,68 @@ func invalidConfirmIntentResultFieldTypeError(err error) error {
 		nil,
 	)
 }
+func invalidDeclineRevisionPayloadFieldTypeError(err error) error {
+	var typeErr *json.UnmarshalTypeError
+	if !errors.As(err, &typeErr) {
+		return err
+	}
+	field := typeErr.Field
+	field = strings.TrimPrefix(field, "DeclineRevisionPayloadTransport.")
+	if field == "" {
+		field = "$payload"
+	}
+	metadata, ok := tools.LookupFieldMetadata(declineRevisionPayloadFields, field)
+	if !ok || metadata.JSONType == "" {
+		return err
+	}
+	actual := generatedUnmarshalJSONType(typeErr.Value)
+	if actual == "" {
+		return err
+	}
+	return tools.NewValidationError(
+		err.Error(),
+		[]*tools.FieldIssue{
+			{
+				Field:            field,
+				Constraint:       "invalid_field_type",
+				ExpectedJSONType: metadata.JSONType,
+				ActualJSONType:   actual,
+			},
+		},
+		nil,
+	)
+}
+func invalidDeclineRevisionResultFieldTypeError(err error) error {
+	var typeErr *json.UnmarshalTypeError
+	if !errors.As(err, &typeErr) {
+		return err
+	}
+	field := typeErr.Field
+	field = strings.TrimPrefix(field, "DeclineRevisionResultTransport.")
+	if field == "" {
+		field = "$payload"
+	}
+	metadata, ok := tools.LookupFieldMetadata(declineRevisionResultFields, field)
+	if !ok || metadata.JSONType == "" {
+		return err
+	}
+	actual := generatedUnmarshalJSONType(typeErr.Value)
+	if actual == "" {
+		return err
+	}
+	return tools.NewValidationError(
+		err.Error(),
+		[]*tools.FieldIssue{
+			{
+				Field:            field,
+				Constraint:       "invalid_field_type",
+				ExpectedJSONType: metadata.JSONType,
+				ActualJSONType:   actual,
+			},
+		},
+		nil,
+	)
+}
 func invalidDiffPayloadFieldTypeError(err error) error {
 	var typeErr *json.UnmarshalTypeError
 	if !errors.As(err, &typeErr) {
@@ -7085,6 +15409,130 @@ func invalidGenerateCodeResultFieldTypeError(err error) error {
 		nil,
 	)
 }
+func invalidGetBuildPayloadFieldTypeError(err error) error {
+	var typeErr *json.UnmarshalTypeError
+	if !errors.As(err, &typeErr) {
+		return err
+	}
+	field := typeErr.Field
+	field = strings.TrimPrefix(field, "GetBuildPayloadTransport.")
+	if field == "" {
+		field = "$payload"
+	}
+	metadata, ok := tools.LookupFieldMetadata(getBuildPayloadFields, field)
+	if !ok || metadata.JSONType == "" {
+		return err
+	}
+	actual := generatedUnmarshalJSONType(typeErr.Value)
+	if actual == "" {
+		return err
+	}
+	return tools.NewValidationError(
+		err.Error(),
+		[]*tools.FieldIssue{
+			{
+				Field:            field,
+				Constraint:       "invalid_field_type",
+				ExpectedJSONType: metadata.JSONType,
+				ActualJSONType:   actual,
+			},
+		},
+		nil,
+	)
+}
+func invalidGetBuildResultFieldTypeError(err error) error {
+	var typeErr *json.UnmarshalTypeError
+	if !errors.As(err, &typeErr) {
+		return err
+	}
+	field := typeErr.Field
+	field = strings.TrimPrefix(field, "GetBuildResultTransport.")
+	if field == "" {
+		field = "$payload"
+	}
+	metadata, ok := tools.LookupFieldMetadata(getBuildResultFields, field)
+	if !ok || metadata.JSONType == "" {
+		return err
+	}
+	actual := generatedUnmarshalJSONType(typeErr.Value)
+	if actual == "" {
+		return err
+	}
+	return tools.NewValidationError(
+		err.Error(),
+		[]*tools.FieldIssue{
+			{
+				Field:            field,
+				Constraint:       "invalid_field_type",
+				ExpectedJSONType: metadata.JSONType,
+				ActualJSONType:   actual,
+			},
+		},
+		nil,
+	)
+}
+func invalidGetBuilderAssignmentPayloadFieldTypeError(err error) error {
+	var typeErr *json.UnmarshalTypeError
+	if !errors.As(err, &typeErr) {
+		return err
+	}
+	field := typeErr.Field
+	field = strings.TrimPrefix(field, "GetBuilderAssignmentPayloadTransport.")
+	if field == "" {
+		field = "$payload"
+	}
+	metadata, ok := tools.LookupFieldMetadata(getBuilderAssignmentPayloadFields, field)
+	if !ok || metadata.JSONType == "" {
+		return err
+	}
+	actual := generatedUnmarshalJSONType(typeErr.Value)
+	if actual == "" {
+		return err
+	}
+	return tools.NewValidationError(
+		err.Error(),
+		[]*tools.FieldIssue{
+			{
+				Field:            field,
+				Constraint:       "invalid_field_type",
+				ExpectedJSONType: metadata.JSONType,
+				ActualJSONType:   actual,
+			},
+		},
+		nil,
+	)
+}
+func invalidGetBuilderAssignmentResultFieldTypeError(err error) error {
+	var typeErr *json.UnmarshalTypeError
+	if !errors.As(err, &typeErr) {
+		return err
+	}
+	field := typeErr.Field
+	field = strings.TrimPrefix(field, "GetBuilderAssignmentResultTransport.")
+	if field == "" {
+		field = "$payload"
+	}
+	metadata, ok := tools.LookupFieldMetadata(getBuilderAssignmentResultFields, field)
+	if !ok || metadata.JSONType == "" {
+		return err
+	}
+	actual := generatedUnmarshalJSONType(typeErr.Value)
+	if actual == "" {
+		return err
+	}
+	return tools.NewValidationError(
+		err.Error(),
+		[]*tools.FieldIssue{
+			{
+				Field:            field,
+				Constraint:       "invalid_field_type",
+				ExpectedJSONType: metadata.JSONType,
+				ActualJSONType:   actual,
+			},
+		},
+		nil,
+	)
+}
 func invalidGetChangePayloadFieldTypeError(err error) error {
 	var typeErr *json.UnmarshalTypeError
 	if !errors.As(err, &typeErr) {
@@ -7147,6 +15595,68 @@ func invalidGetChangeResultFieldTypeError(err error) error {
 		nil,
 	)
 }
+func invalidGetLiveTargetPayloadFieldTypeError(err error) error {
+	var typeErr *json.UnmarshalTypeError
+	if !errors.As(err, &typeErr) {
+		return err
+	}
+	field := typeErr.Field
+	field = strings.TrimPrefix(field, "GetLiveTargetPayloadTransport.")
+	if field == "" {
+		field = "$payload"
+	}
+	metadata, ok := tools.LookupFieldMetadata(getLiveTargetPayloadFields, field)
+	if !ok || metadata.JSONType == "" {
+		return err
+	}
+	actual := generatedUnmarshalJSONType(typeErr.Value)
+	if actual == "" {
+		return err
+	}
+	return tools.NewValidationError(
+		err.Error(),
+		[]*tools.FieldIssue{
+			{
+				Field:            field,
+				Constraint:       "invalid_field_type",
+				ExpectedJSONType: metadata.JSONType,
+				ActualJSONType:   actual,
+			},
+		},
+		nil,
+	)
+}
+func invalidGetLiveTargetResultFieldTypeError(err error) error {
+	var typeErr *json.UnmarshalTypeError
+	if !errors.As(err, &typeErr) {
+		return err
+	}
+	field := typeErr.Field
+	field = strings.TrimPrefix(field, "GetLiveTargetResultTransport.")
+	if field == "" {
+		field = "$payload"
+	}
+	metadata, ok := tools.LookupFieldMetadata(getLiveTargetResultFields, field)
+	if !ok || metadata.JSONType == "" {
+		return err
+	}
+	actual := generatedUnmarshalJSONType(typeErr.Value)
+	if actual == "" {
+		return err
+	}
+	return tools.NewValidationError(
+		err.Error(),
+		[]*tools.FieldIssue{
+			{
+				Field:            field,
+				Constraint:       "invalid_field_type",
+				ExpectedJSONType: metadata.JSONType,
+				ActualJSONType:   actual,
+			},
+		},
+		nil,
+	)
+}
 func invalidGetStoryRefreshPayloadFieldTypeError(err error) error {
 	var typeErr *json.UnmarshalTypeError
 	if !errors.As(err, &typeErr) {
@@ -7189,6 +15699,68 @@ func invalidGetStoryRefreshResultFieldTypeError(err error) error {
 		field = "$payload"
 	}
 	metadata, ok := tools.LookupFieldMetadata(getStoryRefreshResultFields, field)
+	if !ok || metadata.JSONType == "" {
+		return err
+	}
+	actual := generatedUnmarshalJSONType(typeErr.Value)
+	if actual == "" {
+		return err
+	}
+	return tools.NewValidationError(
+		err.Error(),
+		[]*tools.FieldIssue{
+			{
+				Field:            field,
+				Constraint:       "invalid_field_type",
+				ExpectedJSONType: metadata.JSONType,
+				ActualJSONType:   actual,
+			},
+		},
+		nil,
+	)
+}
+func invalidGetTestWriterAssignmentPayloadFieldTypeError(err error) error {
+	var typeErr *json.UnmarshalTypeError
+	if !errors.As(err, &typeErr) {
+		return err
+	}
+	field := typeErr.Field
+	field = strings.TrimPrefix(field, "GetTestWriterAssignmentPayloadTransport.")
+	if field == "" {
+		field = "$payload"
+	}
+	metadata, ok := tools.LookupFieldMetadata(getTestWriterAssignmentPayloadFields, field)
+	if !ok || metadata.JSONType == "" {
+		return err
+	}
+	actual := generatedUnmarshalJSONType(typeErr.Value)
+	if actual == "" {
+		return err
+	}
+	return tools.NewValidationError(
+		err.Error(),
+		[]*tools.FieldIssue{
+			{
+				Field:            field,
+				Constraint:       "invalid_field_type",
+				ExpectedJSONType: metadata.JSONType,
+				ActualJSONType:   actual,
+			},
+		},
+		nil,
+	)
+}
+func invalidGetTestWriterAssignmentResultFieldTypeError(err error) error {
+	var typeErr *json.UnmarshalTypeError
+	if !errors.As(err, &typeErr) {
+		return err
+	}
+	field := typeErr.Field
+	field = strings.TrimPrefix(field, "GetTestWriterAssignmentResultTransport.")
+	if field == "" {
+		field = "$payload"
+	}
+	metadata, ok := tools.LookupFieldMetadata(getTestWriterAssignmentResultFields, field)
 	if !ok || metadata.JSONType == "" {
 		return err
 	}
@@ -7313,6 +15885,192 @@ func invalidInitProjectResultFieldTypeError(err error) error {
 		field = "$payload"
 	}
 	metadata, ok := tools.LookupFieldMetadata(initProjectResultFields, field)
+	if !ok || metadata.JSONType == "" {
+		return err
+	}
+	actual := generatedUnmarshalJSONType(typeErr.Value)
+	if actual == "" {
+		return err
+	}
+	return tools.NewValidationError(
+		err.Error(),
+		[]*tools.FieldIssue{
+			{
+				Field:            field,
+				Constraint:       "invalid_field_type",
+				ExpectedJSONType: metadata.JSONType,
+				ActualJSONType:   actual,
+			},
+		},
+		nil,
+	)
+}
+func invalidListBuilderAssignmentsPayloadFieldTypeError(err error) error {
+	var typeErr *json.UnmarshalTypeError
+	if !errors.As(err, &typeErr) {
+		return err
+	}
+	field := typeErr.Field
+	field = strings.TrimPrefix(field, "ListBuilderAssignmentsPayloadTransport.")
+	if field == "" {
+		field = "$payload"
+	}
+	metadata, ok := tools.LookupFieldMetadata(listBuilderAssignmentsPayloadFields, field)
+	if !ok || metadata.JSONType == "" {
+		return err
+	}
+	actual := generatedUnmarshalJSONType(typeErr.Value)
+	if actual == "" {
+		return err
+	}
+	return tools.NewValidationError(
+		err.Error(),
+		[]*tools.FieldIssue{
+			{
+				Field:            field,
+				Constraint:       "invalid_field_type",
+				ExpectedJSONType: metadata.JSONType,
+				ActualJSONType:   actual,
+			},
+		},
+		nil,
+	)
+}
+func invalidListBuilderAssignmentsResultFieldTypeError(err error) error {
+	var typeErr *json.UnmarshalTypeError
+	if !errors.As(err, &typeErr) {
+		return err
+	}
+	field := typeErr.Field
+	field = strings.TrimPrefix(field, "ListBuilderAssignmentsResultTransport.")
+	if field == "" {
+		field = "$payload"
+	}
+	metadata, ok := tools.LookupFieldMetadata(listBuilderAssignmentsResultFields, field)
+	if !ok || metadata.JSONType == "" {
+		return err
+	}
+	actual := generatedUnmarshalJSONType(typeErr.Value)
+	if actual == "" {
+		return err
+	}
+	return tools.NewValidationError(
+		err.Error(),
+		[]*tools.FieldIssue{
+			{
+				Field:            field,
+				Constraint:       "invalid_field_type",
+				ExpectedJSONType: metadata.JSONType,
+				ActualJSONType:   actual,
+			},
+		},
+		nil,
+	)
+}
+func invalidListChangesPayloadFieldTypeError(err error) error {
+	var typeErr *json.UnmarshalTypeError
+	if !errors.As(err, &typeErr) {
+		return err
+	}
+	field := typeErr.Field
+	field = strings.TrimPrefix(field, "ListChangesPayloadTransport.")
+	if field == "" {
+		field = "$payload"
+	}
+	metadata, ok := tools.LookupFieldMetadata(listChangesPayloadFields, field)
+	if !ok || metadata.JSONType == "" {
+		return err
+	}
+	actual := generatedUnmarshalJSONType(typeErr.Value)
+	if actual == "" {
+		return err
+	}
+	return tools.NewValidationError(
+		err.Error(),
+		[]*tools.FieldIssue{
+			{
+				Field:            field,
+				Constraint:       "invalid_field_type",
+				ExpectedJSONType: metadata.JSONType,
+				ActualJSONType:   actual,
+			},
+		},
+		nil,
+	)
+}
+func invalidListChangesResultFieldTypeError(err error) error {
+	var typeErr *json.UnmarshalTypeError
+	if !errors.As(err, &typeErr) {
+		return err
+	}
+	field := typeErr.Field
+	field = strings.TrimPrefix(field, "ListChangesResultTransport.")
+	if field == "" {
+		field = "$payload"
+	}
+	metadata, ok := tools.LookupFieldMetadata(listChangesResultFields, field)
+	if !ok || metadata.JSONType == "" {
+		return err
+	}
+	actual := generatedUnmarshalJSONType(typeErr.Value)
+	if actual == "" {
+		return err
+	}
+	return tools.NewValidationError(
+		err.Error(),
+		[]*tools.FieldIssue{
+			{
+				Field:            field,
+				Constraint:       "invalid_field_type",
+				ExpectedJSONType: metadata.JSONType,
+				ActualJSONType:   actual,
+			},
+		},
+		nil,
+	)
+}
+func invalidListTestWriterAssignmentsPayloadFieldTypeError(err error) error {
+	var typeErr *json.UnmarshalTypeError
+	if !errors.As(err, &typeErr) {
+		return err
+	}
+	field := typeErr.Field
+	field = strings.TrimPrefix(field, "ListTestWriterAssignmentsPayloadTransport.")
+	if field == "" {
+		field = "$payload"
+	}
+	metadata, ok := tools.LookupFieldMetadata(listTestWriterAssignmentsPayloadFields, field)
+	if !ok || metadata.JSONType == "" {
+		return err
+	}
+	actual := generatedUnmarshalJSONType(typeErr.Value)
+	if actual == "" {
+		return err
+	}
+	return tools.NewValidationError(
+		err.Error(),
+		[]*tools.FieldIssue{
+			{
+				Field:            field,
+				Constraint:       "invalid_field_type",
+				ExpectedJSONType: metadata.JSONType,
+				ActualJSONType:   actual,
+			},
+		},
+		nil,
+	)
+}
+func invalidListTestWriterAssignmentsResultFieldTypeError(err error) error {
+	var typeErr *json.UnmarshalTypeError
+	if !errors.As(err, &typeErr) {
+		return err
+	}
+	field := typeErr.Field
+	field = strings.TrimPrefix(field, "ListTestWriterAssignmentsResultTransport.")
+	if field == "" {
+		field = "$payload"
+	}
+	metadata, ok := tools.LookupFieldMetadata(listTestWriterAssignmentsResultFields, field)
 	if !ok || metadata.JSONType == "" {
 		return err
 	}
@@ -7705,6 +16463,130 @@ func invalidRefreshStoryResultFieldTypeError(err error) error {
 		nil,
 	)
 }
+func invalidReportTestsFinishedPayloadFieldTypeError(err error) error {
+	var typeErr *json.UnmarshalTypeError
+	if !errors.As(err, &typeErr) {
+		return err
+	}
+	field := typeErr.Field
+	field = strings.TrimPrefix(field, "ReportTestsFinishedPayloadTransport.")
+	if field == "" {
+		field = "$payload"
+	}
+	metadata, ok := tools.LookupFieldMetadata(reportTestsFinishedPayloadFields, field)
+	if !ok || metadata.JSONType == "" {
+		return err
+	}
+	actual := generatedUnmarshalJSONType(typeErr.Value)
+	if actual == "" {
+		return err
+	}
+	return tools.NewValidationError(
+		err.Error(),
+		[]*tools.FieldIssue{
+			{
+				Field:            field,
+				Constraint:       "invalid_field_type",
+				ExpectedJSONType: metadata.JSONType,
+				ActualJSONType:   actual,
+			},
+		},
+		nil,
+	)
+}
+func invalidReportTestsFinishedResultFieldTypeError(err error) error {
+	var typeErr *json.UnmarshalTypeError
+	if !errors.As(err, &typeErr) {
+		return err
+	}
+	field := typeErr.Field
+	field = strings.TrimPrefix(field, "ReportTestsFinishedResultTransport.")
+	if field == "" {
+		field = "$payload"
+	}
+	metadata, ok := tools.LookupFieldMetadata(reportTestsFinishedResultFields, field)
+	if !ok || metadata.JSONType == "" {
+		return err
+	}
+	actual := generatedUnmarshalJSONType(typeErr.Value)
+	if actual == "" {
+		return err
+	}
+	return tools.NewValidationError(
+		err.Error(),
+		[]*tools.FieldIssue{
+			{
+				Field:            field,
+				Constraint:       "invalid_field_type",
+				ExpectedJSONType: metadata.JSONType,
+				ActualJSONType:   actual,
+			},
+		},
+		nil,
+	)
+}
+func invalidReviewVerificationPayloadFieldTypeError(err error) error {
+	var typeErr *json.UnmarshalTypeError
+	if !errors.As(err, &typeErr) {
+		return err
+	}
+	field := typeErr.Field
+	field = strings.TrimPrefix(field, "ReviewVerificationPayloadTransport.")
+	if field == "" {
+		field = "$payload"
+	}
+	metadata, ok := tools.LookupFieldMetadata(reviewVerificationPayloadFields, field)
+	if !ok || metadata.JSONType == "" {
+		return err
+	}
+	actual := generatedUnmarshalJSONType(typeErr.Value)
+	if actual == "" {
+		return err
+	}
+	return tools.NewValidationError(
+		err.Error(),
+		[]*tools.FieldIssue{
+			{
+				Field:            field,
+				Constraint:       "invalid_field_type",
+				ExpectedJSONType: metadata.JSONType,
+				ActualJSONType:   actual,
+			},
+		},
+		nil,
+	)
+}
+func invalidReviewVerificationResultFieldTypeError(err error) error {
+	var typeErr *json.UnmarshalTypeError
+	if !errors.As(err, &typeErr) {
+		return err
+	}
+	field := typeErr.Field
+	field = strings.TrimPrefix(field, "ReviewVerificationResultTransport.")
+	if field == "" {
+		field = "$payload"
+	}
+	metadata, ok := tools.LookupFieldMetadata(reviewVerificationResultFields, field)
+	if !ok || metadata.JSONType == "" {
+		return err
+	}
+	actual := generatedUnmarshalJSONType(typeErr.Value)
+	if actual == "" {
+		return err
+	}
+	return tools.NewValidationError(
+		err.Error(),
+		[]*tools.FieldIssue{
+			{
+				Field:            field,
+				Constraint:       "invalid_field_type",
+				ExpectedJSONType: metadata.JSONType,
+				ActualJSONType:   actual,
+			},
+		},
+		nil,
+	)
+}
 func invalidReviseChangePayloadFieldTypeError(err error) error {
 	var typeErr *json.UnmarshalTypeError
 	if !errors.As(err, &typeErr) {
@@ -7953,6 +16835,68 @@ func invalidUpdateDependenciesResultFieldTypeError(err error) error {
 		nil,
 	)
 }
+func invalidUpdateDraftPayloadFieldTypeError(err error) error {
+	var typeErr *json.UnmarshalTypeError
+	if !errors.As(err, &typeErr) {
+		return err
+	}
+	field := typeErr.Field
+	field = strings.TrimPrefix(field, "UpdateDraftPayloadTransport.")
+	if field == "" {
+		field = "$payload"
+	}
+	metadata, ok := tools.LookupFieldMetadata(updateDraftPayloadFields, field)
+	if !ok || metadata.JSONType == "" {
+		return err
+	}
+	actual := generatedUnmarshalJSONType(typeErr.Value)
+	if actual == "" {
+		return err
+	}
+	return tools.NewValidationError(
+		err.Error(),
+		[]*tools.FieldIssue{
+			{
+				Field:            field,
+				Constraint:       "invalid_field_type",
+				ExpectedJSONType: metadata.JSONType,
+				ActualJSONType:   actual,
+			},
+		},
+		nil,
+	)
+}
+func invalidUpdateDraftResultFieldTypeError(err error) error {
+	var typeErr *json.UnmarshalTypeError
+	if !errors.As(err, &typeErr) {
+		return err
+	}
+	field := typeErr.Field
+	field = strings.TrimPrefix(field, "UpdateDraftResultTransport.")
+	if field == "" {
+		field = "$payload"
+	}
+	metadata, ok := tools.LookupFieldMetadata(updateDraftResultFields, field)
+	if !ok || metadata.JSONType == "" {
+		return err
+	}
+	actual := generatedUnmarshalJSONType(typeErr.Value)
+	if actual == "" {
+		return err
+	}
+	return tools.NewValidationError(
+		err.Error(),
+		[]*tools.FieldIssue{
+			{
+				Field:            field,
+				Constraint:       "invalid_field_type",
+				ExpectedJSONType: metadata.JSONType,
+				ActualJSONType:   actual,
+			},
+		},
+		nil,
+	)
+}
 func invalidVerifyChangePayloadFieldTypeError(err error) error {
 	var typeErr *json.UnmarshalTypeError
 	if !errors.As(err, &typeErr) {
@@ -8127,6 +17071,9 @@ func MarshalApproveMergeResult(v *ApproveMergeResult) ([]byte, error) {
 	if in.UnverifiedApproval != nil {
 		out.UnverifiedApproval = encodeUnverifiedApprovalItemToUnverifiedApprovalItemTransport(in.UnverifiedApproval)
 	}
+	if in.ProposedRevision != nil {
+		out.ProposedRevision = encodeProposedRevisionItemToProposedRevisionItemTransport(in.ProposedRevision)
+	}
 	return json.Marshal(out)
 }
 
@@ -8206,6 +17153,9 @@ func UnmarshalApproveMergeResult(data []byte) (*ApproveMergeResult, error) {
 	}
 	if in.UnverifiedApproval != nil {
 		out.UnverifiedApproval = decodeUnverifiedApprovalItemTransportToUnverifiedApprovalItem(in.UnverifiedApproval)
+	}
+	if in.ProposedRevision != nil {
+		out.ProposedRevision = decodeProposedRevisionItemTransportToProposedRevisionItem(in.ProposedRevision)
 	}
 	return out, nil
 }
@@ -8509,6 +17459,9 @@ func MarshalConfirmIntentResult(v *ConfirmIntentResult) ([]byte, error) {
 	if in.UnverifiedApproval != nil {
 		out.UnverifiedApproval = encodeUnverifiedApprovalItemToUnverifiedApprovalItemTransport(in.UnverifiedApproval)
 	}
+	if in.ProposedRevision != nil {
+		out.ProposedRevision = encodeProposedRevisionItemToProposedRevisionItemTransport(in.ProposedRevision)
+	}
 	return json.Marshal(out)
 }
 
@@ -8588,6 +17541,205 @@ func UnmarshalConfirmIntentResult(data []byte) (*ConfirmIntentResult, error) {
 	}
 	if in.UnverifiedApproval != nil {
 		out.UnverifiedApproval = decodeUnverifiedApprovalItemTransportToUnverifiedApprovalItem(in.UnverifiedApproval)
+	}
+	if in.ProposedRevision != nil {
+		out.ProposedRevision = decodeProposedRevisionItemTransportToProposedRevisionItem(in.ProposedRevision)
+	}
+	return out, nil
+}
+
+// MarshalDeclineRevisionPayload serializes *DeclineRevisionPayload into JSON.
+func MarshalDeclineRevisionPayload(v *DeclineRevisionPayload) ([]byte, error) {
+	if v == nil {
+		return nil, fmt.Errorf("declineRevisionPayload is nil")
+	}
+	in := v
+	_ = in
+	var out *toolhttp.DeclineRevisionPayloadTransport
+	out = &toolhttp.DeclineRevisionPayloadTransport{
+		ChangeID:        &in.ChangeID,
+		RequestRevision: &in.RequestRevision,
+	}
+	return json.Marshal(out)
+}
+
+// UnmarshalDeclineRevisionPayload deserializes JSON into *DeclineRevisionPayload.
+func UnmarshalDeclineRevisionPayload(data []byte) (*DeclineRevisionPayload, error) {
+	if len(data) == 0 {
+		return nil, fmt.Errorf("declineRevisionPayload JSON is empty")
+	}
+	var tv toolhttp.DeclineRevisionPayloadTransport
+	if err := validateDeclineRevisionPayloadJSON(data); err != nil {
+		return nil, invalidDeclineRevisionPayloadFieldTypeError(err)
+	}
+	if err := json.Unmarshal(data, &tv); err != nil {
+		return nil, invalidDeclineRevisionPayloadFieldTypeError(err)
+	}
+	if err := toolhttp.ValidateDeclineRevisionPayloadTransport(&tv); err != nil {
+		err = newValidationError(err)
+		err = enrichDeclineRevisionPayloadValidationError(err)
+		return nil, err
+	}
+	in := &tv
+	_ = in
+	var out *DeclineRevisionPayload
+	out = &DeclineRevisionPayload{
+		ChangeID:        *in.ChangeID,
+		RequestRevision: *in.RequestRevision,
+	}
+	return out, nil
+}
+
+// MarshalDeclineRevisionResult serializes *DeclineRevisionResult into JSON.
+func MarshalDeclineRevisionResult(v *DeclineRevisionResult) ([]byte, error) {
+	if v == nil {
+		return nil, fmt.Errorf("declineRevisionResult is nil")
+	}
+	in := v
+	_ = in
+	var out *toolhttp.DeclineRevisionResultTransport
+	out = &toolhttp.DeclineRevisionResultTransport{
+		ChangeID:        &in.ChangeID,
+		Status:          &in.Status,
+		Prompt:          &in.Prompt,
+		Summary:         &in.Summary,
+		ConfirmedBy:     in.ConfirmedBy,
+		RequestRevision: &in.RequestRevision,
+	}
+	if in.Ambiguities != nil {
+		out.Ambiguities = make([]*toolhttp.AmbiguityQuestionTransport, len(in.Ambiguities))
+		for i, val := range in.Ambiguities {
+			if val == nil {
+				out.Ambiguities[i] = nil
+				continue
+			}
+			out.Ambiguities[i] = encodeAmbiguityQuestionToAmbiguityQuestionTransport(val)
+		}
+	}
+	if in.Answers != nil {
+		out.Answers = make(map[string]string, len(in.Answers))
+		for key, val := range in.Answers {
+			tk := key
+			tv := val
+			out.Answers[tk] = tv
+		}
+	}
+	out.Examples = make([]*toolhttp.ExampleItemTransport, len(in.Examples))
+	for i, val := range in.Examples {
+		if val == nil {
+			out.Examples[i] = nil
+			continue
+		}
+		out.Examples[i] = encodeExampleItemToExampleItemTransport(val)
+	}
+	out.PreservedBehaviors = make([]string, len(in.PreservedBehaviors))
+	for i, val := range in.PreservedBehaviors {
+		out.PreservedBehaviors[i] = val
+	}
+	if in.Stories != nil {
+		out.Stories = make([]*toolhttp.StorySummaryItemTransport, len(in.Stories))
+		for i, val := range in.Stories {
+			if val == nil {
+				out.Stories[i] = nil
+				continue
+			}
+			out.Stories[i] = encodeStorySummaryItemToStorySummaryItemTransport(val)
+		}
+	}
+	if in.UIComposition != nil {
+		out.UIComposition = encodeUICompositionItemToUICompositionItemTransport(in.UIComposition)
+	}
+	if in.Approval != nil {
+		out.Approval = encodeApprovalItemToApprovalItemTransport(in.Approval)
+	}
+	if in.UnverifiedApproval != nil {
+		out.UnverifiedApproval = encodeUnverifiedApprovalItemToUnverifiedApprovalItemTransport(in.UnverifiedApproval)
+	}
+	if in.ProposedRevision != nil {
+		out.ProposedRevision = encodeProposedRevisionItemToProposedRevisionItemTransport(in.ProposedRevision)
+	}
+	return json.Marshal(out)
+}
+
+// UnmarshalDeclineRevisionResult deserializes JSON into *DeclineRevisionResult.
+func UnmarshalDeclineRevisionResult(data []byte) (*DeclineRevisionResult, error) {
+	if len(data) == 0 {
+		return nil, fmt.Errorf("declineRevisionResult JSON is empty")
+	}
+	var tv toolhttp.DeclineRevisionResultTransport
+	if err := validateProposeChangeResultJSON(data); err != nil {
+		return nil, invalidDeclineRevisionResultFieldTypeError(err)
+	}
+	if err := json.Unmarshal(data, &tv); err != nil {
+		return nil, invalidDeclineRevisionResultFieldTypeError(err)
+	}
+	if err := toolhttp.ValidateDeclineRevisionResultTransport(&tv); err != nil {
+		err = newValidationError(err)
+		err = enrichDeclineRevisionResultValidationError(err)
+		return nil, err
+	}
+	in := &tv
+	_ = in
+	var out *DeclineRevisionResult
+	out = &DeclineRevisionResult{
+		ChangeID:        *in.ChangeID,
+		Status:          *in.Status,
+		Prompt:          *in.Prompt,
+		Summary:         *in.Summary,
+		ConfirmedBy:     in.ConfirmedBy,
+		RequestRevision: *in.RequestRevision,
+	}
+	if in.Ambiguities != nil {
+		out.Ambiguities = make([]*AmbiguityQuestion, len(in.Ambiguities))
+		for i, val := range in.Ambiguities {
+			if val == nil {
+				out.Ambiguities[i] = nil
+				continue
+			}
+			out.Ambiguities[i] = decodeAmbiguityQuestionTransportToAmbiguityQuestion(val)
+		}
+	}
+	if in.Answers != nil {
+		out.Answers = make(map[string]string, len(in.Answers))
+		for key, val := range in.Answers {
+			tk := key
+			tv := val
+			out.Answers[tk] = tv
+		}
+	}
+	out.Examples = make([]*ExampleItem, len(in.Examples))
+	for i, val := range in.Examples {
+		if val == nil {
+			out.Examples[i] = nil
+			continue
+		}
+		out.Examples[i] = decodeExampleItemTransportToExampleItem(val)
+	}
+	out.PreservedBehaviors = make([]string, len(in.PreservedBehaviors))
+	for i, val := range in.PreservedBehaviors {
+		out.PreservedBehaviors[i] = val
+	}
+	if in.Stories != nil {
+		out.Stories = make([]*StorySummaryItem, len(in.Stories))
+		for i, val := range in.Stories {
+			if val == nil {
+				out.Stories[i] = nil
+				continue
+			}
+			out.Stories[i] = decodeStorySummaryItemTransportToStorySummaryItem(val)
+		}
+	}
+	if in.UIComposition != nil {
+		out.UIComposition = decodeUICompositionItemTransportToUICompositionItem(in.UIComposition)
+	}
+	if in.Approval != nil {
+		out.Approval = decodeApprovalItemTransportToApprovalItem(in.Approval)
+	}
+	if in.UnverifiedApproval != nil {
+		out.UnverifiedApproval = decodeUnverifiedApprovalItemTransportToUnverifiedApprovalItem(in.UnverifiedApproval)
+	}
+	if in.ProposedRevision != nil {
+		out.ProposedRevision = decodeProposedRevisionItemTransportToProposedRevisionItem(in.ProposedRevision)
 	}
 	return out, nil
 }
@@ -8892,6 +18044,280 @@ func UnmarshalGenerateCodeResult(data []byte) (*GenerateCodeResult, error) {
 	return out, nil
 }
 
+// MarshalGetBuildPayload serializes *GetBuildPayload into JSON.
+func MarshalGetBuildPayload(v *GetBuildPayload) ([]byte, error) {
+	if v == nil {
+		return nil, fmt.Errorf("getBuildPayload is nil")
+	}
+	in := v
+	_ = in
+	var out *toolhttp.GetBuildPayloadTransport
+	out = &toolhttp.GetBuildPayloadTransport{
+		ChangeID: &in.ChangeID,
+	}
+	return json.Marshal(out)
+}
+
+// UnmarshalGetBuildPayload deserializes JSON into *GetBuildPayload.
+func UnmarshalGetBuildPayload(data []byte) (*GetBuildPayload, error) {
+	if len(data) == 0 {
+		return nil, fmt.Errorf("getBuildPayload JSON is empty")
+	}
+	var tv toolhttp.GetBuildPayloadTransport
+	if err := validateListVerificationsPayloadJSON(data); err != nil {
+		return nil, invalidGetBuildPayloadFieldTypeError(err)
+	}
+	if err := json.Unmarshal(data, &tv); err != nil {
+		return nil, invalidGetBuildPayloadFieldTypeError(err)
+	}
+	if err := toolhttp.ValidateGetBuildPayloadTransport(&tv); err != nil {
+		err = newValidationError(err)
+		err = enrichGetBuildPayloadValidationError(err)
+		return nil, err
+	}
+	in := &tv
+	_ = in
+	var out *GetBuildPayload
+	out = &GetBuildPayload{
+		ChangeID: *in.ChangeID,
+	}
+	return out, nil
+}
+
+// MarshalGetBuildResult serializes *GetBuildResult into JSON.
+func MarshalGetBuildResult(v *GetBuildResult) ([]byte, error) {
+	if v == nil {
+		return nil, fmt.Errorf("getBuildResult is nil")
+	}
+	in := v
+	_ = in
+	var out *toolhttp.GetBuildResultTransport
+	out = &toolhttp.GetBuildResultTransport{
+		ChangeID:          &in.ChangeID,
+		DraftedBeforeDrop: &in.DraftedBeforeDrop,
+	}
+	var buildValue toolhttp.Build
+	switch string(in.Build.Kind()) {
+	case "not_started":
+		actual, _ := in.Build.AsNotStarted()
+		var obj *toolhttp.BuildNotStartedTransport
+		if actual != nil {
+			obj = encodeBuildNotStartedToBuildNotStartedTransport(actual)
+		}
+		u := buildValue
+		u.SetNotStarted((*toolhttp.BuildNotStartedTransport)(obj))
+		buildValue = u
+	case "started":
+		actual, _ := in.Build.AsStarted()
+		var obj *toolhttp.StartedBuildTransport
+		if actual != nil {
+			obj = encodeStartedBuildToStartedBuildTransport(actual)
+		}
+		u := buildValue
+		u.SetStarted((*toolhttp.StartedBuildTransport)(obj))
+		buildValue = u
+	}
+	out.Build = &buildValue
+	return json.Marshal(out)
+}
+
+// UnmarshalGetBuildResult deserializes JSON into *GetBuildResult.
+func UnmarshalGetBuildResult(data []byte) (*GetBuildResult, error) {
+	if len(data) == 0 {
+		return nil, fmt.Errorf("getBuildResult JSON is empty")
+	}
+	var tv toolhttp.GetBuildResultTransport
+	if err := validateGetBuildResultJSON(data); err != nil {
+		return nil, invalidGetBuildResultFieldTypeError(err)
+	}
+	if err := json.Unmarshal(data, &tv); err != nil {
+		return nil, invalidGetBuildResultFieldTypeError(err)
+	}
+	if err := toolhttp.ValidateGetBuildResultTransport(&tv); err != nil {
+		err = newValidationError(err)
+		err = enrichGetBuildResultValidationError(err)
+		return nil, err
+	}
+	in := &tv
+	_ = in
+	var out *GetBuildResult
+	out = &GetBuildResult{
+		ChangeID:          *in.ChangeID,
+		DraftedBeforeDrop: *in.DraftedBeforeDrop,
+	}
+	switch string(in.Build.Kind()) {
+	case "not_started":
+		actual, _ := in.Build.AsNotStarted()
+		var obj *BuildNotStarted
+		if actual != nil {
+			obj = decodeBuildNotStartedTransportToBuildNotStarted(actual)
+		}
+		u := out.Build
+		u.SetNotStarted((*BuildNotStarted)(obj))
+		out.Build = u
+	case "started":
+		actual, _ := in.Build.AsStarted()
+		var obj *StartedBuild
+		if actual != nil {
+			obj = decodeStartedBuildTransportToStartedBuild(actual)
+		}
+		u := out.Build
+		u.SetStarted((*StartedBuild)(obj))
+		out.Build = u
+	}
+	return out, nil
+}
+
+// MarshalGetBuilderAssignmentPayload serializes *GetBuilderAssignmentPayload into JSON.
+func MarshalGetBuilderAssignmentPayload(v *GetBuilderAssignmentPayload) ([]byte, error) {
+	if v == nil {
+		return nil, fmt.Errorf("getBuilderAssignmentPayload is nil")
+	}
+	in := v
+	_ = in
+	var out *toolhttp.GetBuilderAssignmentPayloadTransport
+	out = &toolhttp.GetBuilderAssignmentPayloadTransport{
+		ChangeID: &in.ChangeID,
+	}
+	return json.Marshal(out)
+}
+
+// UnmarshalGetBuilderAssignmentPayload deserializes JSON into *GetBuilderAssignmentPayload.
+func UnmarshalGetBuilderAssignmentPayload(data []byte) (*GetBuilderAssignmentPayload, error) {
+	if len(data) == 0 {
+		return nil, fmt.Errorf("getBuilderAssignmentPayload JSON is empty")
+	}
+	var tv toolhttp.GetBuilderAssignmentPayloadTransport
+	if err := validateGetBuilderAssignmentPayloadJSON(data); err != nil {
+		return nil, invalidGetBuilderAssignmentPayloadFieldTypeError(err)
+	}
+	if err := json.Unmarshal(data, &tv); err != nil {
+		return nil, invalidGetBuilderAssignmentPayloadFieldTypeError(err)
+	}
+	if err := toolhttp.ValidateGetBuilderAssignmentPayloadTransport(&tv); err != nil {
+		err = newValidationError(err)
+		err = enrichGetBuilderAssignmentPayloadValidationError(err)
+		return nil, err
+	}
+	in := &tv
+	_ = in
+	var out *GetBuilderAssignmentPayload
+	out = &GetBuilderAssignmentPayload{
+		ChangeID: *in.ChangeID,
+	}
+	return out, nil
+}
+
+// MarshalGetBuilderAssignmentResult serializes *GetBuilderAssignmentResult into JSON.
+func MarshalGetBuilderAssignmentResult(v *GetBuilderAssignmentResult) ([]byte, error) {
+	if v == nil {
+		return nil, fmt.Errorf("getBuilderAssignmentResult is nil")
+	}
+	in := v
+	_ = in
+	var out *toolhttp.GetBuilderAssignmentResultTransport
+	out = &toolhttp.GetBuilderAssignmentResultTransport{
+		ChangeID:        &in.ChangeID,
+		RequestRevision: &in.RequestRevision,
+		InForce:         &in.InForce,
+		Read:            &in.Read,
+		WorkingFolder:   &in.WorkingFolder,
+		GoworkOff:       &in.GoworkOff,
+	}
+	var writtenTestsValue toolhttp.WrittenTests
+	switch string(in.WrittenTests.Kind()) {
+	case "not_used":
+		actual, _ := in.WrittenTests.AsNotUsed()
+		var obj *toolhttp.TestsNotUsedTransport
+		if actual != nil {
+			obj = encodeTestsNotUsedToTestsNotUsedTransport(actual)
+		}
+		u := writtenTestsValue
+		u.SetNotUsed((*toolhttp.TestsNotUsedTransport)(obj))
+		writtenTestsValue = u
+	case "not_yet_accepted":
+		actual, _ := in.WrittenTests.AsNotYetAccepted()
+		var obj *toolhttp.TestsNotYetAcceptedTransport
+		if actual != nil {
+			obj = encodeTestsNotYetAcceptedToTestsNotYetAcceptedTransport(actual)
+		}
+		u := writtenTestsValue
+		u.SetNotYetAccepted((*toolhttp.TestsNotYetAcceptedTransport)(obj))
+		writtenTestsValue = u
+	case "accepted":
+		actual, _ := in.WrittenTests.AsAccepted()
+		var obj *toolhttp.TestsAcceptedTransport
+		if actual != nil {
+			obj = encodeTestsAcceptedToTestsAcceptedTransport(actual)
+		}
+		u := writtenTestsValue
+		u.SetAccepted((*toolhttp.TestsAcceptedTransport)(obj))
+		writtenTestsValue = u
+	}
+	out.WrittenTests = &writtenTestsValue
+	return json.Marshal(out)
+}
+
+// UnmarshalGetBuilderAssignmentResult deserializes JSON into *GetBuilderAssignmentResult.
+func UnmarshalGetBuilderAssignmentResult(data []byte) (*GetBuilderAssignmentResult, error) {
+	if len(data) == 0 {
+		return nil, fmt.Errorf("getBuilderAssignmentResult JSON is empty")
+	}
+	var tv toolhttp.GetBuilderAssignmentResultTransport
+	if err := validateGetBuilderAssignmentResultJSON(data); err != nil {
+		return nil, invalidGetBuilderAssignmentResultFieldTypeError(err)
+	}
+	if err := json.Unmarshal(data, &tv); err != nil {
+		return nil, invalidGetBuilderAssignmentResultFieldTypeError(err)
+	}
+	if err := toolhttp.ValidateGetBuilderAssignmentResultTransport(&tv); err != nil {
+		err = newValidationError(err)
+		err = enrichGetBuilderAssignmentResultValidationError(err)
+		return nil, err
+	}
+	in := &tv
+	_ = in
+	var out *GetBuilderAssignmentResult
+	out = &GetBuilderAssignmentResult{
+		ChangeID:        *in.ChangeID,
+		RequestRevision: *in.RequestRevision,
+		InForce:         *in.InForce,
+		Read:            *in.Read,
+		WorkingFolder:   *in.WorkingFolder,
+		GoworkOff:       *in.GoworkOff,
+	}
+	switch string(in.WrittenTests.Kind()) {
+	case "not_used":
+		actual, _ := in.WrittenTests.AsNotUsed()
+		var obj *TestsNotUsed
+		if actual != nil {
+			obj = decodeTestsNotUsedTransportToTestsNotUsed(actual)
+		}
+		u := out.WrittenTests
+		u.SetNotUsed((*TestsNotUsed)(obj))
+		out.WrittenTests = u
+	case "not_yet_accepted":
+		actual, _ := in.WrittenTests.AsNotYetAccepted()
+		var obj *TestsNotYetAccepted
+		if actual != nil {
+			obj = decodeTestsNotYetAcceptedTransportToTestsNotYetAccepted(actual)
+		}
+		u := out.WrittenTests
+		u.SetNotYetAccepted((*TestsNotYetAccepted)(obj))
+		out.WrittenTests = u
+	case "accepted":
+		actual, _ := in.WrittenTests.AsAccepted()
+		var obj *TestsAccepted
+		if actual != nil {
+			obj = decodeTestsAcceptedTransportToTestsAccepted(actual)
+		}
+		u := out.WrittenTests
+		u.SetAccepted((*TestsAccepted)(obj))
+		out.WrittenTests = u
+	}
+	return out, nil
+}
+
 // MarshalGetChangePayload serializes *GetChangePayload into JSON.
 func MarshalGetChangePayload(v *GetChangePayload) ([]byte, error) {
 	if v == nil {
@@ -8997,6 +18423,9 @@ func MarshalGetChangeResult(v *GetChangeResult) ([]byte, error) {
 	if in.UnverifiedApproval != nil {
 		out.UnverifiedApproval = encodeUnverifiedApprovalItemToUnverifiedApprovalItemTransport(in.UnverifiedApproval)
 	}
+	if in.ProposedRevision != nil {
+		out.ProposedRevision = encodeProposedRevisionItemToProposedRevisionItemTransport(in.ProposedRevision)
+	}
 	return json.Marshal(out)
 }
 
@@ -9077,6 +18506,173 @@ func UnmarshalGetChangeResult(data []byte) (*GetChangeResult, error) {
 	if in.UnverifiedApproval != nil {
 		out.UnverifiedApproval = decodeUnverifiedApprovalItemTransportToUnverifiedApprovalItem(in.UnverifiedApproval)
 	}
+	if in.ProposedRevision != nil {
+		out.ProposedRevision = decodeProposedRevisionItemTransportToProposedRevisionItem(in.ProposedRevision)
+	}
+	return out, nil
+}
+
+// MarshalGetLiveTargetPayload serializes *GetLiveTargetPayload into JSON.
+func MarshalGetLiveTargetPayload(v *GetLiveTargetPayload) ([]byte, error) {
+	if v == nil {
+		return nil, fmt.Errorf("getLiveTargetPayload is nil")
+	}
+	in := v
+	_ = in
+	var out *toolhttp.GetLiveTargetPayloadTransport
+	out = &toolhttp.GetLiveTargetPayloadTransport{}
+	return json.Marshal(out)
+}
+
+// UnmarshalGetLiveTargetPayload deserializes JSON into *GetLiveTargetPayload.
+func UnmarshalGetLiveTargetPayload(data []byte) (*GetLiveTargetPayload, error) {
+	if len(data) == 0 {
+		var v *GetLiveTargetPayload
+		return v, nil
+	}
+	var tv toolhttp.GetLiveTargetPayloadTransport
+	if err := validateStopLiveTargetPayloadJSON(data); err != nil {
+		return nil, invalidGetLiveTargetPayloadFieldTypeError(err)
+	}
+	if err := json.Unmarshal(data, &tv); err != nil {
+		return nil, invalidGetLiveTargetPayloadFieldTypeError(err)
+	}
+	in := &tv
+	_ = in
+	var out *GetLiveTargetPayload
+	out = &GetLiveTargetPayload{}
+	return out, nil
+}
+
+// MarshalGetLiveTargetResult serializes *GetLiveTargetResult into JSON.
+func MarshalGetLiveTargetResult(v *GetLiveTargetResult) ([]byte, error) {
+	if v == nil {
+		return nil, fmt.Errorf("getLiveTargetResult is nil")
+	}
+	in := v
+	_ = in
+	var out *toolhttp.GetLiveTargetResultTransport
+	out = &toolhttp.GetLiveTargetResultTransport{}
+	var liveTargetValue toolhttp.LiveTarget
+	switch string(in.LiveTarget.Kind()) {
+	case "none":
+		actual, _ := in.LiveTarget.AsNone()
+		var obj *toolhttp.LiveTargetNoneTransport
+		if actual != nil {
+			obj = encodeLiveTargetNoneToLiveTargetNoneTransport(actual)
+		}
+		u := liveTargetValue
+		u.SetNone((*toolhttp.LiveTargetNoneTransport)(obj))
+		liveTargetValue = u
+	case "starting":
+		actual, _ := in.LiveTarget.AsStarting()
+		var obj *toolhttp.LiveTargetStartingTransport
+		if actual != nil {
+			obj = encodeLiveTargetStartingToLiveTargetStartingTransport(actual)
+		}
+		u := liveTargetValue
+		u.SetStarting((*toolhttp.LiveTargetStartingTransport)(obj))
+		liveTargetValue = u
+	case "running":
+		actual, _ := in.LiveTarget.AsRunning()
+		var obj *toolhttp.RunningLiveTargetTransport
+		if actual != nil {
+			obj = encodeRunningLiveTargetToRunningLiveTargetTransport(actual)
+		}
+		u := liveTargetValue
+		u.SetRunning((*toolhttp.RunningLiveTargetTransport)(obj))
+		liveTargetValue = u
+	case "not_confirmed_stopped":
+		actual, _ := in.LiveTarget.AsNotConfirmedStopped()
+		var obj *toolhttp.LiveTargetNotConfirmedStoppedTransport
+		if actual != nil {
+			obj = encodeLiveTargetNotConfirmedStoppedToLiveTargetNotConfirmedStoppedTransport(actual)
+		}
+		u := liveTargetValue
+		u.SetNotConfirmedStopped((*toolhttp.LiveTargetNotConfirmedStoppedTransport)(obj))
+		liveTargetValue = u
+	case "ended":
+		actual, _ := in.LiveTarget.AsEnded()
+		var obj *toolhttp.LiveTargetEndedTransport
+		if actual != nil {
+			obj = encodeLiveTargetEndedToLiveTargetEndedTransport(actual)
+		}
+		u := liveTargetValue
+		u.SetEnded((*toolhttp.LiveTargetEndedTransport)(obj))
+		liveTargetValue = u
+	}
+	out.LiveTarget = &liveTargetValue
+	return json.Marshal(out)
+}
+
+// UnmarshalGetLiveTargetResult deserializes JSON into *GetLiveTargetResult.
+func UnmarshalGetLiveTargetResult(data []byte) (*GetLiveTargetResult, error) {
+	if len(data) == 0 {
+		return nil, fmt.Errorf("getLiveTargetResult JSON is empty")
+	}
+	var tv toolhttp.GetLiveTargetResultTransport
+	if err := validateGetLiveTargetResultJSON(data); err != nil {
+		return nil, invalidGetLiveTargetResultFieldTypeError(err)
+	}
+	if err := json.Unmarshal(data, &tv); err != nil {
+		return nil, invalidGetLiveTargetResultFieldTypeError(err)
+	}
+	if err := toolhttp.ValidateGetLiveTargetResultTransport(&tv); err != nil {
+		err = newValidationError(err)
+		err = enrichGetLiveTargetResultValidationError(err)
+		return nil, err
+	}
+	in := &tv
+	_ = in
+	var out *GetLiveTargetResult
+	out = &GetLiveTargetResult{}
+	switch string(in.LiveTarget.Kind()) {
+	case "none":
+		actual, _ := in.LiveTarget.AsNone()
+		var obj *LiveTargetNone
+		if actual != nil {
+			obj = decodeLiveTargetNoneTransportToLiveTargetNone(actual)
+		}
+		u := out.LiveTarget
+		u.SetNone((*LiveTargetNone)(obj))
+		out.LiveTarget = u
+	case "starting":
+		actual, _ := in.LiveTarget.AsStarting()
+		var obj *LiveTargetStarting
+		if actual != nil {
+			obj = decodeLiveTargetStartingTransportToLiveTargetStarting(actual)
+		}
+		u := out.LiveTarget
+		u.SetStarting((*LiveTargetStarting)(obj))
+		out.LiveTarget = u
+	case "running":
+		actual, _ := in.LiveTarget.AsRunning()
+		var obj *RunningLiveTarget
+		if actual != nil {
+			obj = decodeRunningLiveTargetTransportToRunningLiveTarget(actual)
+		}
+		u := out.LiveTarget
+		u.SetRunning((*RunningLiveTarget)(obj))
+		out.LiveTarget = u
+	case "not_confirmed_stopped":
+		actual, _ := in.LiveTarget.AsNotConfirmedStopped()
+		var obj *LiveTargetNotConfirmedStopped
+		if actual != nil {
+			obj = decodeLiveTargetNotConfirmedStoppedTransportToLiveTargetNotConfirmedStopped(actual)
+		}
+		u := out.LiveTarget
+		u.SetNotConfirmedStopped((*LiveTargetNotConfirmedStopped)(obj))
+		out.LiveTarget = u
+	case "ended":
+		actual, _ := in.LiveTarget.AsEnded()
+		var obj *LiveTargetEnded
+		if actual != nil {
+			obj = decodeLiveTargetEndedTransportToLiveTargetEnded(actual)
+		}
+		u := out.LiveTarget
+		u.SetEnded((*LiveTargetEnded)(obj))
+		out.LiveTarget = u
+	}
 	return out, nil
 }
 
@@ -9121,6 +18717,7 @@ func MarshalGetStoryRefreshResult(v *GetStoryRefreshResult) ([]byte, error) {
 	_ = in
 	var out *toolhttp.GetStoryRefreshResultTransport
 	out = &toolhttp.GetStoryRefreshResultTransport{
+		DraftFolder:    &in.DraftFolder,
 		OpID:           in.OpID,
 		State:          &in.State,
 		SnapshotDigest: in.SnapshotDigest,
@@ -9159,6 +18756,7 @@ func UnmarshalGetStoryRefreshResult(data []byte) (*GetStoryRefreshResult, error)
 	_ = in
 	var out *GetStoryRefreshResult
 	out = &GetStoryRefreshResult{
+		DraftFolder:    *in.DraftFolder,
 		OpID:           in.OpID,
 		State:          *in.State,
 		SnapshotDigest: in.SnapshotDigest,
@@ -9172,6 +18770,192 @@ func UnmarshalGetStoryRefreshResult(data []byte) (*GetStoryRefreshResult, error)
 			continue
 		}
 		out.Stories[i] = decodeStorySummaryItemTransportToStorySummaryItem(val)
+	}
+	return out, nil
+}
+
+// MarshalGetTestWriterAssignmentPayload serializes *GetTestWriterAssignmentPayload into JSON.
+func MarshalGetTestWriterAssignmentPayload(v *GetTestWriterAssignmentPayload) ([]byte, error) {
+	if v == nil {
+		return nil, fmt.Errorf("getTestWriterAssignmentPayload is nil")
+	}
+	in := v
+	_ = in
+	var out *toolhttp.GetTestWriterAssignmentPayloadTransport
+	out = &toolhttp.GetTestWriterAssignmentPayloadTransport{
+		ChangeID: &in.ChangeID,
+	}
+	return json.Marshal(out)
+}
+
+// UnmarshalGetTestWriterAssignmentPayload deserializes JSON into *GetTestWriterAssignmentPayload.
+func UnmarshalGetTestWriterAssignmentPayload(data []byte) (*GetTestWriterAssignmentPayload, error) {
+	if len(data) == 0 {
+		return nil, fmt.Errorf("getTestWriterAssignmentPayload JSON is empty")
+	}
+	var tv toolhttp.GetTestWriterAssignmentPayloadTransport
+	if err := validateGetTestWriterAssignmentPayloadJSON(data); err != nil {
+		return nil, invalidGetTestWriterAssignmentPayloadFieldTypeError(err)
+	}
+	if err := json.Unmarshal(data, &tv); err != nil {
+		return nil, invalidGetTestWriterAssignmentPayloadFieldTypeError(err)
+	}
+	if err := toolhttp.ValidateGetTestWriterAssignmentPayloadTransport(&tv); err != nil {
+		err = newValidationError(err)
+		err = enrichGetTestWriterAssignmentPayloadValidationError(err)
+		return nil, err
+	}
+	in := &tv
+	_ = in
+	var out *GetTestWriterAssignmentPayload
+	out = &GetTestWriterAssignmentPayload{
+		ChangeID: *in.ChangeID,
+	}
+	return out, nil
+}
+
+// MarshalGetTestWriterAssignmentResult serializes *GetTestWriterAssignmentResult into JSON.
+func MarshalGetTestWriterAssignmentResult(v *GetTestWriterAssignmentResult) ([]byte, error) {
+	if v == nil {
+		return nil, fmt.Errorf("getTestWriterAssignmentResult is nil")
+	}
+	in := v
+	_ = in
+	var out *toolhttp.GetTestWriterAssignmentResultTransport
+	out = &toolhttp.GetTestWriterAssignmentResultTransport{
+		ChangeID:        &in.ChangeID,
+		RequestRevision: &in.RequestRevision,
+		InForce:         &in.InForce,
+		WorkingFolder:   &in.WorkingFolder,
+		DesignSource:    &in.DesignSource,
+	}
+	out.Progress = encodeTestWriterProgressToTestWriterProgressTransport(in.Progress)
+	out.Findings = make([]string, len(in.Findings))
+	for i, val := range in.Findings {
+		out.Findings[i] = val
+	}
+	out.Stories = make([]*toolhttp.StorySummaryItemTransport, len(in.Stories))
+	for i, val := range in.Stories {
+		if val == nil {
+			out.Stories[i] = nil
+			continue
+		}
+		out.Stories[i] = encodeStorySummaryItemToStorySummaryItemTransport(val)
+	}
+	out.RequiredTests = make([]*toolhttp.RequiredTestTransport, len(in.RequiredTests))
+	for i, val := range in.RequiredTests {
+		if val == nil {
+			out.RequiredTests[i] = nil
+			continue
+		}
+		out.RequiredTests[i] = encodeRequiredTestToRequiredTestTransport(val)
+	}
+	out.Answers = make([]*toolhttp.ConfirmedAnswerTransport, len(in.Answers))
+	for i, val := range in.Answers {
+		if val == nil {
+			out.Answers[i] = nil
+			continue
+		}
+		out.Answers[i] = encodeConfirmedAnswerToConfirmedAnswerTransport(val)
+	}
+	out.Examples = make([]*toolhttp.ExampleItemTransport, len(in.Examples))
+	for i, val := range in.Examples {
+		if val == nil {
+			out.Examples[i] = nil
+			continue
+		}
+		out.Examples[i] = encodeExampleItemToExampleItemTransport(val)
+	}
+	out.PreservedBehaviors = make([]string, len(in.PreservedBehaviors))
+	for i, val := range in.PreservedBehaviors {
+		out.PreservedBehaviors[i] = val
+	}
+	out.CoverageStatements = make([]*toolhttp.TestCoverageStatementTransport, len(in.CoverageStatements))
+	for i, val := range in.CoverageStatements {
+		if val == nil {
+			out.CoverageStatements[i] = nil
+			continue
+		}
+		out.CoverageStatements[i] = encodeTestCoverageStatementToTestCoverageStatementTransport(val)
+	}
+	return json.Marshal(out)
+}
+
+// UnmarshalGetTestWriterAssignmentResult deserializes JSON into *GetTestWriterAssignmentResult.
+func UnmarshalGetTestWriterAssignmentResult(data []byte) (*GetTestWriterAssignmentResult, error) {
+	if len(data) == 0 {
+		return nil, fmt.Errorf("getTestWriterAssignmentResult JSON is empty")
+	}
+	var tv toolhttp.GetTestWriterAssignmentResultTransport
+	if err := validateGetTestWriterAssignmentResultJSON(data); err != nil {
+		return nil, invalidGetTestWriterAssignmentResultFieldTypeError(err)
+	}
+	if err := json.Unmarshal(data, &tv); err != nil {
+		return nil, invalidGetTestWriterAssignmentResultFieldTypeError(err)
+	}
+	if err := toolhttp.ValidateGetTestWriterAssignmentResultTransport(&tv); err != nil {
+		err = newValidationError(err)
+		err = enrichGetTestWriterAssignmentResultValidationError(err)
+		return nil, err
+	}
+	in := &tv
+	_ = in
+	var out *GetTestWriterAssignmentResult
+	out = &GetTestWriterAssignmentResult{
+		ChangeID:        *in.ChangeID,
+		RequestRevision: *in.RequestRevision,
+		InForce:         *in.InForce,
+		WorkingFolder:   *in.WorkingFolder,
+		DesignSource:    *in.DesignSource,
+	}
+	out.Progress = decodeTestWriterProgressTransportToTestWriterProgress(in.Progress)
+	out.Findings = make([]string, len(in.Findings))
+	for i, val := range in.Findings {
+		out.Findings[i] = val
+	}
+	out.Stories = make([]*StorySummaryItem, len(in.Stories))
+	for i, val := range in.Stories {
+		if val == nil {
+			out.Stories[i] = nil
+			continue
+		}
+		out.Stories[i] = decodeStorySummaryItemTransportToStorySummaryItem(val)
+	}
+	out.RequiredTests = make([]*RequiredTest, len(in.RequiredTests))
+	for i, val := range in.RequiredTests {
+		if val == nil {
+			out.RequiredTests[i] = nil
+			continue
+		}
+		out.RequiredTests[i] = decodeRequiredTestTransportToRequiredTest(val)
+	}
+	out.Answers = make([]*ConfirmedAnswer, len(in.Answers))
+	for i, val := range in.Answers {
+		if val == nil {
+			out.Answers[i] = nil
+			continue
+		}
+		out.Answers[i] = decodeConfirmedAnswerTransportToConfirmedAnswer(val)
+	}
+	out.Examples = make([]*ExampleItem, len(in.Examples))
+	for i, val := range in.Examples {
+		if val == nil {
+			out.Examples[i] = nil
+			continue
+		}
+		out.Examples[i] = decodeExampleItemTransportToExampleItem(val)
+	}
+	out.PreservedBehaviors = make([]string, len(in.PreservedBehaviors))
+	for i, val := range in.PreservedBehaviors {
+		out.PreservedBehaviors[i] = val
+	}
+	out.CoverageStatements = make([]*TestCoverageStatement, len(in.CoverageStatements))
+	for i, val := range in.CoverageStatements {
+		if val == nil {
+			out.CoverageStatements[i] = nil
+			continue
+		}
+		out.CoverageStatements[i] = decodeTestCoverageStatementTransportToTestCoverageStatement(val)
 	}
 	return out, nil
 }
@@ -9225,13 +19009,37 @@ func MarshalGetVerificationResult(v *GetVerificationResult) ([]byte, error) {
 	_ = in
 	var out *toolhttp.GetVerificationResultTransport
 	out = &toolhttp.GetVerificationResultTransport{
-		RunID:           &in.RunID,
-		ChangeID:        &in.ChangeID,
-		RequestRevision: &in.RequestRevision,
-		CandidateCommit: &in.CandidateCommit,
-		SuiteCommit:     &in.SuiteCommit,
-		AcceptedAt:      &in.AcceptedAt,
+		RunID:                &in.RunID,
+		ChangeID:             &in.ChangeID,
+		RequestRevision:      &in.RequestRevision,
+		CandidateCommit:      &in.CandidateCommit,
+		SuiteCommit:          &in.SuiteCommit,
+		AcceptedAt:           &in.AcceptedAt,
+		InputsCurrent:        &in.InputsCurrent,
+		CandidateBinariesDir: in.CandidateBinariesDir,
 	}
+	var testSourceValue toolhttp.TestSource
+	switch string(in.TestSource.Kind()) {
+	case "evaluator":
+		actual, _ := in.TestSource.AsEvaluator()
+		var obj *toolhttp.OperatorEvaluatorTestsTransport
+		if actual != nil {
+			obj = encodeOperatorEvaluatorTestsToOperatorEvaluatorTestsTransport(actual)
+		}
+		u := testSourceValue
+		u.SetEvaluator((*toolhttp.OperatorEvaluatorTestsTransport)(obj))
+		testSourceValue = u
+	case "written_tests":
+		actual, _ := in.TestSource.AsWrittenTests()
+		var obj *toolhttp.AgentWrittenTestsTransport
+		if actual != nil {
+			obj = encodeAgentWrittenTestsToAgentWrittenTestsTransport(actual)
+		}
+		u := testSourceValue
+		u.SetWrittenTests((*toolhttp.AgentWrittenTestsTransport)(obj))
+		testSourceValue = u
+	}
+	out.TestSource = &testSourceValue
 	var stateValue toolhttp.State
 	switch string(in.State.Kind()) {
 	case "running":
@@ -9287,12 +19095,34 @@ func UnmarshalGetVerificationResult(data []byte) (*GetVerificationResult, error)
 	_ = in
 	var out *GetVerificationResult
 	out = &GetVerificationResult{
-		RunID:           *in.RunID,
-		ChangeID:        *in.ChangeID,
-		RequestRevision: *in.RequestRevision,
-		CandidateCommit: *in.CandidateCommit,
-		SuiteCommit:     *in.SuiteCommit,
-		AcceptedAt:      *in.AcceptedAt,
+		RunID:                *in.RunID,
+		ChangeID:             *in.ChangeID,
+		RequestRevision:      *in.RequestRevision,
+		CandidateCommit:      *in.CandidateCommit,
+		SuiteCommit:          *in.SuiteCommit,
+		AcceptedAt:           *in.AcceptedAt,
+		InputsCurrent:        *in.InputsCurrent,
+		CandidateBinariesDir: in.CandidateBinariesDir,
+	}
+	switch string(in.TestSource.Kind()) {
+	case "evaluator":
+		actual, _ := in.TestSource.AsEvaluator()
+		var obj *OperatorEvaluatorTests
+		if actual != nil {
+			obj = decodeOperatorEvaluatorTestsTransportToOperatorEvaluatorTests(actual)
+		}
+		u := out.TestSource
+		u.SetEvaluator((*OperatorEvaluatorTests)(obj))
+		out.TestSource = u
+	case "written_tests":
+		actual, _ := in.TestSource.AsWrittenTests()
+		var obj *AgentWrittenTests
+		if actual != nil {
+			obj = decodeAgentWrittenTestsTransportToAgentWrittenTests(actual)
+		}
+		u := out.TestSource
+		u.SetWrittenTests((*AgentWrittenTests)(obj))
+		out.TestSource = u
 	}
 	switch string(in.State.Kind()) {
 	case "running":
@@ -9410,6 +19240,264 @@ func UnmarshalInitProjectResult(data []byte) (*InitProjectResult, error) {
 		ModulePath:  *in.ModulePath,
 		ServiceName: *in.ServiceName,
 		Commit:      *in.Commit,
+	}
+	return out, nil
+}
+
+// MarshalListBuilderAssignmentsPayload serializes *ListBuilderAssignmentsPayload into JSON.
+func MarshalListBuilderAssignmentsPayload(v *ListBuilderAssignmentsPayload) ([]byte, error) {
+	if v == nil {
+		return nil, fmt.Errorf("listBuilderAssignmentsPayload is nil")
+	}
+	in := v
+	_ = in
+	var out *toolhttp.ListBuilderAssignmentsPayloadTransport
+	out = &toolhttp.ListBuilderAssignmentsPayloadTransport{}
+	return json.Marshal(out)
+}
+
+// UnmarshalListBuilderAssignmentsPayload deserializes JSON into *ListBuilderAssignmentsPayload.
+func UnmarshalListBuilderAssignmentsPayload(data []byte) (*ListBuilderAssignmentsPayload, error) {
+	if len(data) == 0 {
+		var v *ListBuilderAssignmentsPayload
+		return v, nil
+	}
+	var tv toolhttp.ListBuilderAssignmentsPayloadTransport
+	if err := validateStopLiveTargetPayloadJSON(data); err != nil {
+		return nil, invalidListBuilderAssignmentsPayloadFieldTypeError(err)
+	}
+	if err := json.Unmarshal(data, &tv); err != nil {
+		return nil, invalidListBuilderAssignmentsPayloadFieldTypeError(err)
+	}
+	in := &tv
+	_ = in
+	var out *ListBuilderAssignmentsPayload
+	out = &ListBuilderAssignmentsPayload{}
+	return out, nil
+}
+
+// MarshalListBuilderAssignmentsResult serializes *ListBuilderAssignmentsResult into JSON.
+func MarshalListBuilderAssignmentsResult(v *ListBuilderAssignmentsResult) ([]byte, error) {
+	if v == nil {
+		return nil, fmt.Errorf("listBuilderAssignmentsResult is nil")
+	}
+	in := v
+	_ = in
+	var out *toolhttp.ListBuilderAssignmentsResultTransport
+	out = &toolhttp.ListBuilderAssignmentsResultTransport{}
+	out.Assignments = make([]*toolhttp.BuilderAssignmentTransport, len(in.Assignments))
+	for i, val := range in.Assignments {
+		if val == nil {
+			out.Assignments[i] = nil
+			continue
+		}
+		out.Assignments[i] = encodeBuilderAssignmentToBuilderAssignmentTransport(val)
+	}
+	return json.Marshal(out)
+}
+
+// UnmarshalListBuilderAssignmentsResult deserializes JSON into *ListBuilderAssignmentsResult.
+func UnmarshalListBuilderAssignmentsResult(data []byte) (*ListBuilderAssignmentsResult, error) {
+	if len(data) == 0 {
+		return nil, fmt.Errorf("listBuilderAssignmentsResult JSON is empty")
+	}
+	var tv toolhttp.ListBuilderAssignmentsResultTransport
+	if err := validateListBuilderAssignmentsResultJSON(data); err != nil {
+		return nil, invalidListBuilderAssignmentsResultFieldTypeError(err)
+	}
+	if err := json.Unmarshal(data, &tv); err != nil {
+		return nil, invalidListBuilderAssignmentsResultFieldTypeError(err)
+	}
+	if err := toolhttp.ValidateListBuilderAssignmentsResultTransport(&tv); err != nil {
+		err = newValidationError(err)
+		err = enrichListBuilderAssignmentsResultValidationError(err)
+		return nil, err
+	}
+	in := &tv
+	_ = in
+	var out *ListBuilderAssignmentsResult
+	out = &ListBuilderAssignmentsResult{}
+	out.Assignments = make([]*BuilderAssignment, len(in.Assignments))
+	for i, val := range in.Assignments {
+		if val == nil {
+			out.Assignments[i] = nil
+			continue
+		}
+		out.Assignments[i] = decodeBuilderAssignmentTransportToBuilderAssignment(val)
+	}
+	return out, nil
+}
+
+// MarshalListChangesPayload serializes *ListChangesPayload into JSON.
+func MarshalListChangesPayload(v *ListChangesPayload) ([]byte, error) {
+	if v == nil {
+		return nil, fmt.Errorf("listChangesPayload is nil")
+	}
+	in := v
+	_ = in
+	var out *toolhttp.ListChangesPayloadTransport
+	out = &toolhttp.ListChangesPayloadTransport{}
+	return json.Marshal(out)
+}
+
+// UnmarshalListChangesPayload deserializes JSON into *ListChangesPayload.
+func UnmarshalListChangesPayload(data []byte) (*ListChangesPayload, error) {
+	if len(data) == 0 {
+		var v *ListChangesPayload
+		return v, nil
+	}
+	var tv toolhttp.ListChangesPayloadTransport
+	if err := validateStopLiveTargetPayloadJSON(data); err != nil {
+		return nil, invalidListChangesPayloadFieldTypeError(err)
+	}
+	if err := json.Unmarshal(data, &tv); err != nil {
+		return nil, invalidListChangesPayloadFieldTypeError(err)
+	}
+	in := &tv
+	_ = in
+	var out *ListChangesPayload
+	out = &ListChangesPayload{}
+	return out, nil
+}
+
+// MarshalListChangesResult serializes *ListChangesResult into JSON.
+func MarshalListChangesResult(v *ListChangesResult) ([]byte, error) {
+	if v == nil {
+		return nil, fmt.Errorf("listChangesResult is nil")
+	}
+	in := v
+	_ = in
+	var out *toolhttp.ListChangesResultTransport
+	out = &toolhttp.ListChangesResultTransport{
+		Version:           &in.Version,
+		ApprovalAvailable: &in.ApprovalAvailable,
+	}
+	out.Changes = make([]*toolhttp.ChangeListItemTransport, len(in.Changes))
+	for i, val := range in.Changes {
+		if val == nil {
+			out.Changes[i] = nil
+			continue
+		}
+		out.Changes[i] = encodeChangeListItemToChangeListItemTransport(val)
+	}
+	return json.Marshal(out)
+}
+
+// UnmarshalListChangesResult deserializes JSON into *ListChangesResult.
+func UnmarshalListChangesResult(data []byte) (*ListChangesResult, error) {
+	if len(data) == 0 {
+		return nil, fmt.Errorf("listChangesResult JSON is empty")
+	}
+	var tv toolhttp.ListChangesResultTransport
+	if err := validateListChangesResultJSON(data); err != nil {
+		return nil, invalidListChangesResultFieldTypeError(err)
+	}
+	if err := json.Unmarshal(data, &tv); err != nil {
+		return nil, invalidListChangesResultFieldTypeError(err)
+	}
+	if err := toolhttp.ValidateListChangesResultTransport(&tv); err != nil {
+		err = newValidationError(err)
+		err = enrichListChangesResultValidationError(err)
+		return nil, err
+	}
+	in := &tv
+	_ = in
+	var out *ListChangesResult
+	out = &ListChangesResult{
+		Version:           *in.Version,
+		ApprovalAvailable: *in.ApprovalAvailable,
+	}
+	out.Changes = make([]*ChangeListItem, len(in.Changes))
+	for i, val := range in.Changes {
+		if val == nil {
+			out.Changes[i] = nil
+			continue
+		}
+		out.Changes[i] = decodeChangeListItemTransportToChangeListItem(val)
+	}
+	return out, nil
+}
+
+// MarshalListTestWriterAssignmentsPayload serializes *ListTestWriterAssignmentsPayload into JSON.
+func MarshalListTestWriterAssignmentsPayload(v *ListTestWriterAssignmentsPayload) ([]byte, error) {
+	if v == nil {
+		return nil, fmt.Errorf("listTestWriterAssignmentsPayload is nil")
+	}
+	in := v
+	_ = in
+	var out *toolhttp.ListTestWriterAssignmentsPayloadTransport
+	out = &toolhttp.ListTestWriterAssignmentsPayloadTransport{}
+	return json.Marshal(out)
+}
+
+// UnmarshalListTestWriterAssignmentsPayload deserializes JSON into *ListTestWriterAssignmentsPayload.
+func UnmarshalListTestWriterAssignmentsPayload(data []byte) (*ListTestWriterAssignmentsPayload, error) {
+	if len(data) == 0 {
+		var v *ListTestWriterAssignmentsPayload
+		return v, nil
+	}
+	var tv toolhttp.ListTestWriterAssignmentsPayloadTransport
+	if err := validateStopLiveTargetPayloadJSON(data); err != nil {
+		return nil, invalidListTestWriterAssignmentsPayloadFieldTypeError(err)
+	}
+	if err := json.Unmarshal(data, &tv); err != nil {
+		return nil, invalidListTestWriterAssignmentsPayloadFieldTypeError(err)
+	}
+	in := &tv
+	_ = in
+	var out *ListTestWriterAssignmentsPayload
+	out = &ListTestWriterAssignmentsPayload{}
+	return out, nil
+}
+
+// MarshalListTestWriterAssignmentsResult serializes *ListTestWriterAssignmentsResult into JSON.
+func MarshalListTestWriterAssignmentsResult(v *ListTestWriterAssignmentsResult) ([]byte, error) {
+	if v == nil {
+		return nil, fmt.Errorf("listTestWriterAssignmentsResult is nil")
+	}
+	in := v
+	_ = in
+	var out *toolhttp.ListTestWriterAssignmentsResultTransport
+	out = &toolhttp.ListTestWriterAssignmentsResultTransport{}
+	out.Assignments = make([]*toolhttp.TestWriterAssignmentItemTransport, len(in.Assignments))
+	for i, val := range in.Assignments {
+		if val == nil {
+			out.Assignments[i] = nil
+			continue
+		}
+		out.Assignments[i] = encodeTestWriterAssignmentItemToTestWriterAssignmentItemTransport(val)
+	}
+	return json.Marshal(out)
+}
+
+// UnmarshalListTestWriterAssignmentsResult deserializes JSON into *ListTestWriterAssignmentsResult.
+func UnmarshalListTestWriterAssignmentsResult(data []byte) (*ListTestWriterAssignmentsResult, error) {
+	if len(data) == 0 {
+		return nil, fmt.Errorf("listTestWriterAssignmentsResult JSON is empty")
+	}
+	var tv toolhttp.ListTestWriterAssignmentsResultTransport
+	if err := validateListTestWriterAssignmentsResultJSON(data); err != nil {
+		return nil, invalidListTestWriterAssignmentsResultFieldTypeError(err)
+	}
+	if err := json.Unmarshal(data, &tv); err != nil {
+		return nil, invalidListTestWriterAssignmentsResultFieldTypeError(err)
+	}
+	if err := toolhttp.ValidateListTestWriterAssignmentsResultTransport(&tv); err != nil {
+		err = newValidationError(err)
+		err = enrichListTestWriterAssignmentsResultValidationError(err)
+		return nil, err
+	}
+	in := &tv
+	_ = in
+	var out *ListTestWriterAssignmentsResult
+	out = &ListTestWriterAssignmentsResult{}
+	out.Assignments = make([]*TestWriterAssignmentItem, len(in.Assignments))
+	for i, val := range in.Assignments {
+		if val == nil {
+			out.Assignments[i] = nil
+			continue
+		}
+		out.Assignments[i] = decodeTestWriterAssignmentItemTransportToTestWriterAssignmentItem(val)
 	}
 	return out, nil
 }
@@ -9634,31 +19722,6 @@ func MarshalPreviewArchitecturePayload(v *PreviewArchitecturePayload) ([]byte, e
 		ChangeID:        &in.ChangeID,
 		RequestRevision: &in.RequestRevision,
 	}
-	if in.Design != nil {
-		out.Design = encodeDesignSnapshotToDesignSnapshotTransport(in.Design)
-	}
-	if in.Builders != nil {
-		out.Builders = make([]*toolhttp.BuilderScopeItemTransport, len(in.Builders))
-		for i, val := range in.Builders {
-			if val == nil {
-				out.Builders[i] = nil
-				continue
-			}
-			out.Builders[i] = encodeBuilderScopeItemToBuilderScopeItemTransport(val)
-		}
-	}
-	if in.ArchitectPaths != nil {
-		out.ArchitectPaths = make([]string, len(in.ArchitectPaths))
-		for i, val := range in.ArchitectPaths {
-			out.ArchitectPaths[i] = val
-		}
-	}
-	if in.EvalPaths != nil {
-		out.EvalPaths = make([]string, len(in.EvalPaths))
-		for i, val := range in.EvalPaths {
-			out.EvalPaths[i] = val
-		}
-	}
 	return json.Marshal(out)
 }
 
@@ -9685,31 +19748,6 @@ func UnmarshalPreviewArchitecturePayload(data []byte) (*PreviewArchitecturePaylo
 	out = &PreviewArchitecturePayload{
 		ChangeID:        *in.ChangeID,
 		RequestRevision: *in.RequestRevision,
-	}
-	if in.Design != nil {
-		out.Design = decodeDesignSnapshotTransportToDesignSnapshot(in.Design)
-	}
-	if in.Builders != nil {
-		out.Builders = make([]*BuilderScopeItem, len(in.Builders))
-		for i, val := range in.Builders {
-			if val == nil {
-				out.Builders[i] = nil
-				continue
-			}
-			out.Builders[i] = decodeBuilderScopeItemTransportToBuilderScopeItem(val)
-		}
-	}
-	if in.ArchitectPaths != nil {
-		out.ArchitectPaths = make([]string, len(in.ArchitectPaths))
-		for i, val := range in.ArchitectPaths {
-			out.ArchitectPaths[i] = val
-		}
-	}
-	if in.EvalPaths != nil {
-		out.EvalPaths = make([]string, len(in.EvalPaths))
-		for i, val := range in.EvalPaths {
-			out.EvalPaths[i] = val
-		}
 	}
 	return out, nil
 }
@@ -9761,7 +19799,6 @@ func MarshalPreviewArchitectureResult(v *PreviewArchitectureResult) ([]byte, err
 		}
 		out.Tools[i] = encodeToolContractItemToToolContractItemTransport(val)
 	}
-	out.Swarm = encodeSwarmPlanItemToSwarmPlanItemTransport(in.Swarm)
 	return json.Marshal(out)
 }
 
@@ -9824,7 +19861,6 @@ func UnmarshalPreviewArchitectureResult(data []byte) (*PreviewArchitectureResult
 		}
 		out.Tools[i] = decodeToolContractItemTransportToToolContractItem(val)
 	}
-	out.Swarm = decodeSwarmPlanItemTransportToSwarmPlanItem(in.Swarm)
 	return out, nil
 }
 
@@ -9839,7 +19875,6 @@ func MarshalProposeChangePayload(v *ProposeChangePayload) ([]byte, error) {
 	out = &toolhttp.ProposeChangePayloadTransport{
 		ChangeID:         &in.ChangeID,
 		Prompt:           &in.Prompt,
-		DesignSource:     in.DesignSource,
 		StoryRefreshOpID: in.StoryRefreshOpID,
 	}
 	out.Analysis = encodeCP1AnalysisToCP1AnalysisTransport(in.Analysis)
@@ -9869,7 +19904,6 @@ func UnmarshalProposeChangePayload(data []byte) (*ProposeChangePayload, error) {
 	out = &ProposeChangePayload{
 		ChangeID:         *in.ChangeID,
 		Prompt:           *in.Prompt,
-		DesignSource:     in.DesignSource,
 		StoryRefreshOpID: in.StoryRefreshOpID,
 	}
 	out.Analysis = decodeCP1AnalysisTransportToCP1Analysis(in.Analysis)
@@ -9940,6 +19974,9 @@ func MarshalProposeChangeResult(v *ProposeChangeResult) ([]byte, error) {
 	}
 	if in.UnverifiedApproval != nil {
 		out.UnverifiedApproval = encodeUnverifiedApprovalItemToUnverifiedApprovalItemTransport(in.UnverifiedApproval)
+	}
+	if in.ProposedRevision != nil {
+		out.ProposedRevision = encodeProposedRevisionItemToProposedRevisionItemTransport(in.ProposedRevision)
 	}
 	return json.Marshal(out)
 }
@@ -10020,6 +20057,9 @@ func UnmarshalProposeChangeResult(data []byte) (*ProposeChangeResult, error) {
 	}
 	if in.UnverifiedApproval != nil {
 		out.UnverifiedApproval = decodeUnverifiedApprovalItemTransportToUnverifiedApprovalItem(in.UnverifiedApproval)
+	}
+	if in.ProposedRevision != nil {
+		out.ProposedRevision = decodeProposedRevisionItemTransportToProposedRevisionItem(in.ProposedRevision)
 	}
 	return out, nil
 }
@@ -10153,6 +20193,7 @@ func MarshalRefreshStoryResult(v *RefreshStoryResult) ([]byte, error) {
 	_ = in
 	var out *toolhttp.RefreshStoryResultTransport
 	out = &toolhttp.RefreshStoryResultTransport{
+		DraftFolder:    &in.DraftFolder,
 		OpID:           in.OpID,
 		State:          &in.State,
 		SnapshotDigest: in.SnapshotDigest,
@@ -10191,6 +20232,7 @@ func UnmarshalRefreshStoryResult(data []byte) (*RefreshStoryResult, error) {
 	_ = in
 	var out *RefreshStoryResult
 	out = &RefreshStoryResult{
+		DraftFolder:    *in.DraftFolder,
 		OpID:           in.OpID,
 		State:          *in.State,
 		SnapshotDigest: in.SnapshotDigest,
@@ -10208,6 +20250,308 @@ func UnmarshalRefreshStoryResult(data []byte) (*RefreshStoryResult, error) {
 	return out, nil
 }
 
+// MarshalReportTestsFinishedPayload serializes *ReportTestsFinishedPayload into JSON.
+func MarshalReportTestsFinishedPayload(v *ReportTestsFinishedPayload) ([]byte, error) {
+	if v == nil {
+		return nil, fmt.Errorf("reportTestsFinishedPayload is nil")
+	}
+	in := v
+	_ = in
+	var out *toolhttp.ReportTestsFinishedPayloadTransport
+	out = &toolhttp.ReportTestsFinishedPayloadTransport{
+		ChangeID:        &in.ChangeID,
+		RequestRevision: &in.RequestRevision,
+	}
+	out.CoverageStatements = make([]*toolhttp.TestCoverageStatementTransport, len(in.CoverageStatements))
+	for i, val := range in.CoverageStatements {
+		if val == nil {
+			out.CoverageStatements[i] = nil
+			continue
+		}
+		out.CoverageStatements[i] = encodeTestCoverageStatementToTestCoverageStatementTransport(val)
+	}
+	return json.Marshal(out)
+}
+
+// UnmarshalReportTestsFinishedPayload deserializes JSON into *ReportTestsFinishedPayload.
+func UnmarshalReportTestsFinishedPayload(data []byte) (*ReportTestsFinishedPayload, error) {
+	if len(data) == 0 {
+		return nil, fmt.Errorf("reportTestsFinishedPayload JSON is empty")
+	}
+	var tv toolhttp.ReportTestsFinishedPayloadTransport
+	if err := validateReportTestsFinishedPayloadJSON(data); err != nil {
+		return nil, invalidReportTestsFinishedPayloadFieldTypeError(err)
+	}
+	if err := json.Unmarshal(data, &tv); err != nil {
+		return nil, invalidReportTestsFinishedPayloadFieldTypeError(err)
+	}
+	if err := toolhttp.ValidateReportTestsFinishedPayloadTransport(&tv); err != nil {
+		err = newValidationError(err)
+		err = enrichReportTestsFinishedPayloadValidationError(err)
+		return nil, err
+	}
+	in := &tv
+	_ = in
+	var out *ReportTestsFinishedPayload
+	out = &ReportTestsFinishedPayload{
+		ChangeID:        *in.ChangeID,
+		RequestRevision: *in.RequestRevision,
+	}
+	out.CoverageStatements = make([]*TestCoverageStatement, len(in.CoverageStatements))
+	for i, val := range in.CoverageStatements {
+		if val == nil {
+			out.CoverageStatements[i] = nil
+			continue
+		}
+		out.CoverageStatements[i] = decodeTestCoverageStatementTransportToTestCoverageStatement(val)
+	}
+	return out, nil
+}
+
+// MarshalReportTestsFinishedResult serializes *ReportTestsFinishedResult into JSON.
+func MarshalReportTestsFinishedResult(v *ReportTestsFinishedResult) ([]byte, error) {
+	if v == nil {
+		return nil, fmt.Errorf("reportTestsFinishedResult is nil")
+	}
+	in := v
+	_ = in
+	var out *toolhttp.ReportTestsFinishedResultTransport
+	out = &toolhttp.ReportTestsFinishedResultTransport{
+		ChangeID:        &in.ChangeID,
+		RequestRevision: &in.RequestRevision,
+		InForce:         &in.InForce,
+	}
+	out.Progress = encodeTestWriterProgressToTestWriterProgressTransport(in.Progress)
+	return json.Marshal(out)
+}
+
+// UnmarshalReportTestsFinishedResult deserializes JSON into *ReportTestsFinishedResult.
+func UnmarshalReportTestsFinishedResult(data []byte) (*ReportTestsFinishedResult, error) {
+	if len(data) == 0 {
+		return nil, fmt.Errorf("reportTestsFinishedResult JSON is empty")
+	}
+	var tv toolhttp.ReportTestsFinishedResultTransport
+	if err := validateReportTestsFinishedResultJSON(data); err != nil {
+		return nil, invalidReportTestsFinishedResultFieldTypeError(err)
+	}
+	if err := json.Unmarshal(data, &tv); err != nil {
+		return nil, invalidReportTestsFinishedResultFieldTypeError(err)
+	}
+	if err := toolhttp.ValidateReportTestsFinishedResultTransport(&tv); err != nil {
+		err = newValidationError(err)
+		err = enrichReportTestsFinishedResultValidationError(err)
+		return nil, err
+	}
+	in := &tv
+	_ = in
+	var out *ReportTestsFinishedResult
+	out = &ReportTestsFinishedResult{
+		ChangeID:        *in.ChangeID,
+		RequestRevision: *in.RequestRevision,
+		InForce:         *in.InForce,
+	}
+	out.Progress = decodeTestWriterProgressTransportToTestWriterProgress(in.Progress)
+	return out, nil
+}
+
+// MarshalReviewVerificationPayload serializes *ReviewVerificationPayload into JSON.
+func MarshalReviewVerificationPayload(v *ReviewVerificationPayload) ([]byte, error) {
+	if v == nil {
+		return nil, fmt.Errorf("reviewVerificationPayload is nil")
+	}
+	in := v
+	_ = in
+	var out *toolhttp.ReviewVerificationPayloadTransport
+	out = &toolhttp.ReviewVerificationPayloadTransport{
+		RunID: &in.RunID,
+	}
+	return json.Marshal(out)
+}
+
+// UnmarshalReviewVerificationPayload deserializes JSON into *ReviewVerificationPayload.
+func UnmarshalReviewVerificationPayload(data []byte) (*ReviewVerificationPayload, error) {
+	if len(data) == 0 {
+		return nil, fmt.Errorf("reviewVerificationPayload JSON is empty")
+	}
+	var tv toolhttp.ReviewVerificationPayloadTransport
+	if err := validateGetVerificationPayloadJSON(data); err != nil {
+		return nil, invalidReviewVerificationPayloadFieldTypeError(err)
+	}
+	if err := json.Unmarshal(data, &tv); err != nil {
+		return nil, invalidReviewVerificationPayloadFieldTypeError(err)
+	}
+	if err := toolhttp.ValidateReviewVerificationPayloadTransport(&tv); err != nil {
+		err = newValidationError(err)
+		err = enrichReviewVerificationPayloadValidationError(err)
+		return nil, err
+	}
+	in := &tv
+	_ = in
+	var out *ReviewVerificationPayload
+	out = &ReviewVerificationPayload{
+		RunID: *in.RunID,
+	}
+	return out, nil
+}
+
+// MarshalReviewVerificationResult serializes *ReviewVerificationResult into JSON.
+func MarshalReviewVerificationResult(v *ReviewVerificationResult) ([]byte, error) {
+	if v == nil {
+		return nil, fmt.Errorf("reviewVerificationResult is nil")
+	}
+	in := v
+	_ = in
+	var out *toolhttp.ReviewVerificationResultTransport
+	out = &toolhttp.ReviewVerificationResultTransport{
+		RunID:                &in.RunID,
+		ChangeID:             &in.ChangeID,
+		RequestRevision:      &in.RequestRevision,
+		CandidateCommit:      &in.CandidateCommit,
+		SuiteCommit:          &in.SuiteCommit,
+		AcceptedAt:           &in.AcceptedAt,
+		InputsCurrent:        &in.InputsCurrent,
+		CandidateBinariesDir: in.CandidateBinariesDir,
+	}
+	out.Review = encodeVerificationReviewToVerificationReviewTransport(in.Review)
+	var testSourceValue toolhttp.TestSource
+	switch string(in.TestSource.Kind()) {
+	case "evaluator":
+		actual, _ := in.TestSource.AsEvaluator()
+		var obj *toolhttp.OperatorEvaluatorTestsTransport
+		if actual != nil {
+			obj = encodeOperatorEvaluatorTestsToOperatorEvaluatorTestsTransport(actual)
+		}
+		u := testSourceValue
+		u.SetEvaluator((*toolhttp.OperatorEvaluatorTestsTransport)(obj))
+		testSourceValue = u
+	case "written_tests":
+		actual, _ := in.TestSource.AsWrittenTests()
+		var obj *toolhttp.AgentWrittenTestsTransport
+		if actual != nil {
+			obj = encodeAgentWrittenTestsToAgentWrittenTestsTransport(actual)
+		}
+		u := testSourceValue
+		u.SetWrittenTests((*toolhttp.AgentWrittenTestsTransport)(obj))
+		testSourceValue = u
+	}
+	out.TestSource = &testSourceValue
+	var stateValue toolhttp.State
+	switch string(in.State.Kind()) {
+	case "running":
+		actual, _ := in.State.AsRunning()
+		var obj *toolhttp.VerificationRunningTransport
+		if actual != nil {
+			obj = encodeVerificationRunningToVerificationRunningTransport(actual)
+		}
+		u := stateValue
+		u.SetRunning((*toolhttp.VerificationRunningTransport)(obj))
+		stateValue = u
+	case "completed":
+		actual, _ := in.State.AsCompleted()
+		var obj *toolhttp.VerificationCompletedTransport
+		if actual != nil {
+			obj = encodeVerificationCompletedToVerificationCompletedTransport(actual)
+		}
+		u := stateValue
+		u.SetCompleted((*toolhttp.VerificationCompletedTransport)(obj))
+		stateValue = u
+	case "not_completed":
+		actual, _ := in.State.AsNotCompleted()
+		var obj *toolhttp.VerificationNotCompletedTransport
+		if actual != nil {
+			obj = encodeVerificationNotCompletedToVerificationNotCompletedTransport(actual)
+		}
+		u := stateValue
+		u.SetNotCompleted((*toolhttp.VerificationNotCompletedTransport)(obj))
+		stateValue = u
+	}
+	out.State = &stateValue
+	return json.Marshal(out)
+}
+
+// UnmarshalReviewVerificationResult deserializes JSON into *ReviewVerificationResult.
+func UnmarshalReviewVerificationResult(data []byte) (*ReviewVerificationResult, error) {
+	if len(data) == 0 {
+		return nil, fmt.Errorf("reviewVerificationResult JSON is empty")
+	}
+	var tv toolhttp.ReviewVerificationResultTransport
+	if err := validateReviewVerificationResultJSON(data); err != nil {
+		return nil, invalidReviewVerificationResultFieldTypeError(err)
+	}
+	if err := json.Unmarshal(data, &tv); err != nil {
+		return nil, invalidReviewVerificationResultFieldTypeError(err)
+	}
+	if err := toolhttp.ValidateReviewVerificationResultTransport(&tv); err != nil {
+		err = newValidationError(err)
+		err = enrichReviewVerificationResultValidationError(err)
+		return nil, err
+	}
+	in := &tv
+	_ = in
+	var out *ReviewVerificationResult
+	out = &ReviewVerificationResult{
+		RunID:                *in.RunID,
+		ChangeID:             *in.ChangeID,
+		RequestRevision:      *in.RequestRevision,
+		CandidateCommit:      *in.CandidateCommit,
+		SuiteCommit:          *in.SuiteCommit,
+		AcceptedAt:           *in.AcceptedAt,
+		InputsCurrent:        *in.InputsCurrent,
+		CandidateBinariesDir: in.CandidateBinariesDir,
+	}
+	out.Review = decodeVerificationReviewTransportToVerificationReview(in.Review)
+	switch string(in.TestSource.Kind()) {
+	case "evaluator":
+		actual, _ := in.TestSource.AsEvaluator()
+		var obj *OperatorEvaluatorTests
+		if actual != nil {
+			obj = decodeOperatorEvaluatorTestsTransportToOperatorEvaluatorTests(actual)
+		}
+		u := out.TestSource
+		u.SetEvaluator((*OperatorEvaluatorTests)(obj))
+		out.TestSource = u
+	case "written_tests":
+		actual, _ := in.TestSource.AsWrittenTests()
+		var obj *AgentWrittenTests
+		if actual != nil {
+			obj = decodeAgentWrittenTestsTransportToAgentWrittenTests(actual)
+		}
+		u := out.TestSource
+		u.SetWrittenTests((*AgentWrittenTests)(obj))
+		out.TestSource = u
+	}
+	switch string(in.State.Kind()) {
+	case "running":
+		actual, _ := in.State.AsRunning()
+		var obj *VerificationRunning
+		if actual != nil {
+			obj = decodeVerificationRunningTransportToVerificationRunning(actual)
+		}
+		u := out.State
+		u.SetRunning((*VerificationRunning)(obj))
+		out.State = u
+	case "completed":
+		actual, _ := in.State.AsCompleted()
+		var obj *VerificationCompleted
+		if actual != nil {
+			obj = decodeVerificationCompletedTransportToVerificationCompleted(actual)
+		}
+		u := out.State
+		u.SetCompleted((*VerificationCompleted)(obj))
+		out.State = u
+	case "not_completed":
+		actual, _ := in.State.AsNotCompleted()
+		var obj *VerificationNotCompleted
+		if actual != nil {
+			obj = decodeVerificationNotCompletedTransportToVerificationNotCompleted(actual)
+		}
+		u := out.State
+		u.SetNotCompleted((*VerificationNotCompleted)(obj))
+		out.State = u
+	}
+	return out, nil
+}
+
 // MarshalReviseChangePayload serializes *ReviseChangePayload into JSON.
 func MarshalReviseChangePayload(v *ReviseChangePayload) ([]byte, error) {
 	if v == nil {
@@ -10220,7 +20564,6 @@ func MarshalReviseChangePayload(v *ReviseChangePayload) ([]byte, error) {
 		ChangeID:         &in.ChangeID,
 		RequestRevision:  &in.RequestRevision,
 		Prompt:           &in.Prompt,
-		DesignSource:     in.DesignSource,
 		StoryRefreshOpID: in.StoryRefreshOpID,
 	}
 	out.Analysis = encodeCP1RevisionAnalysisToCP1RevisionAnalysisTransport(in.Analysis)
@@ -10251,7 +20594,6 @@ func UnmarshalReviseChangePayload(data []byte) (*ReviseChangePayload, error) {
 		ChangeID:         *in.ChangeID,
 		RequestRevision:  *in.RequestRevision,
 		Prompt:           *in.Prompt,
-		DesignSource:     in.DesignSource,
 		StoryRefreshOpID: in.StoryRefreshOpID,
 	}
 	out.Analysis = decodeCP1RevisionAnalysisTransportToCP1RevisionAnalysis(in.Analysis)
@@ -10322,6 +20664,9 @@ func MarshalReviseChangeResult(v *ReviseChangeResult) ([]byte, error) {
 	}
 	if in.UnverifiedApproval != nil {
 		out.UnverifiedApproval = encodeUnverifiedApprovalItemToUnverifiedApprovalItemTransport(in.UnverifiedApproval)
+	}
+	if in.ProposedRevision != nil {
+		out.ProposedRevision = encodeProposedRevisionItemToProposedRevisionItemTransport(in.ProposedRevision)
 	}
 	return json.Marshal(out)
 }
@@ -10403,6 +20748,9 @@ func UnmarshalReviseChangeResult(data []byte) (*ReviseChangeResult, error) {
 	if in.UnverifiedApproval != nil {
 		out.UnverifiedApproval = decodeUnverifiedApprovalItemTransportToUnverifiedApprovalItem(in.UnverifiedApproval)
 	}
+	if in.ProposedRevision != nil {
+		out.ProposedRevision = decodeProposedRevisionItemTransportToProposedRevisionItem(in.ProposedRevision)
+	}
 	return out, nil
 }
 
@@ -10415,6 +20763,7 @@ func MarshalStartLiveTargetPayload(v *StartLiveTargetPayload) ([]byte, error) {
 	_ = in
 	var out *toolhttp.StartLiveTargetPayloadTransport
 	out = &toolhttp.StartLiveTargetPayloadTransport{
+		ChangeID:        &in.ChangeID,
 		CandidateCommit: &in.CandidateCommit,
 	}
 	return json.Marshal(out)
@@ -10441,6 +20790,7 @@ func UnmarshalStartLiveTargetPayload(data []byte) (*StartLiveTargetPayload, erro
 	_ = in
 	var out *StartLiveTargetPayload
 	out = &StartLiveTargetPayload{
+		ChangeID:        *in.ChangeID,
 		CandidateCommit: *in.CandidateCommit,
 	}
 	return out, nil
@@ -10646,6 +20996,110 @@ func UnmarshalUpdateDependenciesResult(data []byte) (*UpdateDependenciesResult, 
 	return out, nil
 }
 
+// MarshalUpdateDraftPayload serializes *UpdateDraftPayload into JSON.
+func MarshalUpdateDraftPayload(v *UpdateDraftPayload) ([]byte, error) {
+	if v == nil {
+		return nil, fmt.Errorf("updateDraftPayload is nil")
+	}
+	in := v
+	_ = in
+	var out *toolhttp.UpdateDraftPayloadTransport
+	out = &toolhttp.UpdateDraftPayloadTransport{}
+	return json.Marshal(out)
+}
+
+// UnmarshalUpdateDraftPayload deserializes JSON into *UpdateDraftPayload.
+func UnmarshalUpdateDraftPayload(data []byte) (*UpdateDraftPayload, error) {
+	if len(data) == 0 {
+		var v *UpdateDraftPayload
+		return v, nil
+	}
+	var tv toolhttp.UpdateDraftPayloadTransport
+	if err := validateStopLiveTargetPayloadJSON(data); err != nil {
+		return nil, invalidUpdateDraftPayloadFieldTypeError(err)
+	}
+	if err := json.Unmarshal(data, &tv); err != nil {
+		return nil, invalidUpdateDraftPayloadFieldTypeError(err)
+	}
+	in := &tv
+	_ = in
+	var out *UpdateDraftPayload
+	out = &UpdateDraftPayload{}
+	return out, nil
+}
+
+// MarshalUpdateDraftResult serializes *UpdateDraftResult into JSON.
+func MarshalUpdateDraftResult(v *UpdateDraftResult) ([]byte, error) {
+	if v == nil {
+		return nil, fmt.Errorf("updateDraftResult is nil")
+	}
+	in := v
+	_ = in
+	var out *toolhttp.UpdateDraftResultTransport
+	out = &toolhttp.UpdateDraftResultTransport{
+		DraftFolder: &in.DraftFolder,
+	}
+	out.Taken = make([]string, len(in.Taken))
+	for i, val := range in.Taken {
+		out.Taken[i] = val
+	}
+	out.Merged = make([]string, len(in.Merged))
+	for i, val := range in.Merged {
+		out.Merged[i] = val
+	}
+	out.ToCorrect = make([]*toolhttp.DraftCorrectionTransport, len(in.ToCorrect))
+	for i, val := range in.ToCorrect {
+		if val == nil {
+			out.ToCorrect[i] = nil
+			continue
+		}
+		out.ToCorrect[i] = encodeDraftCorrectionToDraftCorrectionTransport(val)
+	}
+	return json.Marshal(out)
+}
+
+// UnmarshalUpdateDraftResult deserializes JSON into *UpdateDraftResult.
+func UnmarshalUpdateDraftResult(data []byte) (*UpdateDraftResult, error) {
+	if len(data) == 0 {
+		return nil, fmt.Errorf("updateDraftResult JSON is empty")
+	}
+	var tv toolhttp.UpdateDraftResultTransport
+	if err := validateUpdateDraftResultJSON(data); err != nil {
+		return nil, invalidUpdateDraftResultFieldTypeError(err)
+	}
+	if err := json.Unmarshal(data, &tv); err != nil {
+		return nil, invalidUpdateDraftResultFieldTypeError(err)
+	}
+	if err := toolhttp.ValidateUpdateDraftResultTransport(&tv); err != nil {
+		err = newValidationError(err)
+		err = enrichUpdateDraftResultValidationError(err)
+		return nil, err
+	}
+	in := &tv
+	_ = in
+	var out *UpdateDraftResult
+	out = &UpdateDraftResult{
+		DraftFolder: *in.DraftFolder,
+	}
+	out.Taken = make([]string, len(in.Taken))
+	for i, val := range in.Taken {
+		out.Taken[i] = val
+	}
+	out.Merged = make([]string, len(in.Merged))
+	for i, val := range in.Merged {
+		out.Merged[i] = val
+	}
+	out.ToCorrect = make([]*DraftCorrection, len(in.ToCorrect))
+	for i, val := range in.ToCorrect {
+		if val == nil {
+			out.ToCorrect[i] = nil
+			continue
+		}
+		out.ToCorrect[i] = decodeDraftCorrectionTransportToDraftCorrection(val)
+	}
+	return out, nil
+}
+
 // MarshalVerifyChangePayload serializes *VerifyChangePayload into JSON.
 func MarshalVerifyChangePayload(v *VerifyChangePayload) ([]byte, error) {
 	if v == nil {
@@ -10699,13 +21153,37 @@ func MarshalVerifyChangeResult(v *VerifyChangeResult) ([]byte, error) {
 	_ = in
 	var out *toolhttp.VerifyChangeResultTransport
 	out = &toolhttp.VerifyChangeResultTransport{
-		RunID:           &in.RunID,
-		ChangeID:        &in.ChangeID,
-		RequestRevision: &in.RequestRevision,
-		CandidateCommit: &in.CandidateCommit,
-		SuiteCommit:     &in.SuiteCommit,
-		AcceptedAt:      &in.AcceptedAt,
+		RunID:                &in.RunID,
+		ChangeID:             &in.ChangeID,
+		RequestRevision:      &in.RequestRevision,
+		CandidateCommit:      &in.CandidateCommit,
+		SuiteCommit:          &in.SuiteCommit,
+		AcceptedAt:           &in.AcceptedAt,
+		InputsCurrent:        &in.InputsCurrent,
+		CandidateBinariesDir: in.CandidateBinariesDir,
 	}
+	var testSourceValue toolhttp.TestSource
+	switch string(in.TestSource.Kind()) {
+	case "evaluator":
+		actual, _ := in.TestSource.AsEvaluator()
+		var obj *toolhttp.OperatorEvaluatorTestsTransport
+		if actual != nil {
+			obj = encodeOperatorEvaluatorTestsToOperatorEvaluatorTestsTransport(actual)
+		}
+		u := testSourceValue
+		u.SetEvaluator((*toolhttp.OperatorEvaluatorTestsTransport)(obj))
+		testSourceValue = u
+	case "written_tests":
+		actual, _ := in.TestSource.AsWrittenTests()
+		var obj *toolhttp.AgentWrittenTestsTransport
+		if actual != nil {
+			obj = encodeAgentWrittenTestsToAgentWrittenTestsTransport(actual)
+		}
+		u := testSourceValue
+		u.SetWrittenTests((*toolhttp.AgentWrittenTestsTransport)(obj))
+		testSourceValue = u
+	}
+	out.TestSource = &testSourceValue
 	var stateValue toolhttp.State
 	switch string(in.State.Kind()) {
 	case "running":
@@ -10761,12 +21239,34 @@ func UnmarshalVerifyChangeResult(data []byte) (*VerifyChangeResult, error) {
 	_ = in
 	var out *VerifyChangeResult
 	out = &VerifyChangeResult{
-		RunID:           *in.RunID,
-		ChangeID:        *in.ChangeID,
-		RequestRevision: *in.RequestRevision,
-		CandidateCommit: *in.CandidateCommit,
-		SuiteCommit:     *in.SuiteCommit,
-		AcceptedAt:      *in.AcceptedAt,
+		RunID:                *in.RunID,
+		ChangeID:             *in.ChangeID,
+		RequestRevision:      *in.RequestRevision,
+		CandidateCommit:      *in.CandidateCommit,
+		SuiteCommit:          *in.SuiteCommit,
+		AcceptedAt:           *in.AcceptedAt,
+		InputsCurrent:        *in.InputsCurrent,
+		CandidateBinariesDir: in.CandidateBinariesDir,
+	}
+	switch string(in.TestSource.Kind()) {
+	case "evaluator":
+		actual, _ := in.TestSource.AsEvaluator()
+		var obj *OperatorEvaluatorTests
+		if actual != nil {
+			obj = decodeOperatorEvaluatorTestsTransportToOperatorEvaluatorTests(actual)
+		}
+		u := out.TestSource
+		u.SetEvaluator((*OperatorEvaluatorTests)(obj))
+		out.TestSource = u
+	case "written_tests":
+		actual, _ := in.TestSource.AsWrittenTests()
+		var obj *AgentWrittenTests
+		if actual != nil {
+			obj = decodeAgentWrittenTestsTransportToAgentWrittenTests(actual)
+		}
+		u := out.TestSource
+		u.SetWrittenTests((*AgentWrittenTests)(obj))
+		out.TestSource = u
 	}
 	switch string(in.State.Kind()) {
 	case "running":
@@ -10850,6 +21350,16 @@ func validateGetChangePayloadJSON(data []byte) error {
 	return validateGetChangePayloadJSONValue("", root, "")
 }
 
+// validateDeclineRevisionPayloadJSON parses one JSON document and checks the exact value
+// shapes known from this generated Goa type.
+func validateDeclineRevisionPayloadJSON(data []byte) error {
+	root, err := readStrictToolJSON(data)
+	if err != nil {
+		return err
+	}
+	return validateDeclineRevisionPayloadJSONValue("", root, "")
+}
+
 // validatePreviewArchitecturePayloadJSON parses one JSON document and checks the exact value
 // shapes known from this generated Goa type.
 func validatePreviewArchitecturePayloadJSON(data []byte) error {
@@ -10917,7 +21427,7 @@ func validateStopLiveTargetPayloadJSON(data []byte) error {
 	if err != nil {
 		return err
 	}
-	return validateStopLiveTargetPayloadJSONValue("", root, "")
+	return validateProposeChangeResultOperatorEvaluatorTestsTransportJSONValue("", root, "")
 }
 
 // validateStopLiveTargetResultJSON parses one JSON document and checks the exact value
@@ -10928,6 +21438,16 @@ func validateStopLiveTargetResultJSON(data []byte) error {
 		return err
 	}
 	return validateStopLiveTargetResultJSONValue("", root, "")
+}
+
+// validateGetLiveTargetResultJSON parses one JSON document and checks the exact value
+// shapes known from this generated Goa type.
+func validateGetLiveTargetResultJSON(data []byte) error {
+	root, err := readStrictToolJSON(data)
+	if err != nil {
+		return err
+	}
+	return validateGetLiveTargetResultJSONValue("", root, "")
 }
 
 // validateVerifyChangePayloadJSON parses one JSON document and checks the exact value
@@ -11140,6 +21660,126 @@ func validateRefreshStoryResultJSON(data []byte) error {
 	return validateRefreshStoryResultJSONValue("", root, "")
 }
 
+// validateUpdateDraftResultJSON parses one JSON document and checks the exact value
+// shapes known from this generated Goa type.
+func validateUpdateDraftResultJSON(data []byte) error {
+	root, err := readStrictToolJSON(data)
+	if err != nil {
+		return err
+	}
+	return validateUpdateDraftResultJSONValue("", root, "")
+}
+
+// validateListChangesResultJSON parses one JSON document and checks the exact value
+// shapes known from this generated Goa type.
+func validateListChangesResultJSON(data []byte) error {
+	root, err := readStrictToolJSON(data)
+	if err != nil {
+		return err
+	}
+	return validateListChangesResultJSONValue("", root, "")
+}
+
+// validateGetBuildResultJSON parses one JSON document and checks the exact value
+// shapes known from this generated Goa type.
+func validateGetBuildResultJSON(data []byte) error {
+	root, err := readStrictToolJSON(data)
+	if err != nil {
+		return err
+	}
+	return validateGetBuildResultJSONValue("", root, "")
+}
+
+// validateListBuilderAssignmentsResultJSON parses one JSON document and checks the exact value
+// shapes known from this generated Goa type.
+func validateListBuilderAssignmentsResultJSON(data []byte) error {
+	root, err := readStrictToolJSON(data)
+	if err != nil {
+		return err
+	}
+	return validateListBuilderAssignmentsResultJSONValue("", root, "")
+}
+
+// validateGetBuilderAssignmentPayloadJSON parses one JSON document and checks the exact value
+// shapes known from this generated Goa type.
+func validateGetBuilderAssignmentPayloadJSON(data []byte) error {
+	root, err := readStrictToolJSON(data)
+	if err != nil {
+		return err
+	}
+	return validateGetBuilderAssignmentPayloadJSONValue("", root, "")
+}
+
+// validateGetBuilderAssignmentResultJSON parses one JSON document and checks the exact value
+// shapes known from this generated Goa type.
+func validateGetBuilderAssignmentResultJSON(data []byte) error {
+	root, err := readStrictToolJSON(data)
+	if err != nil {
+		return err
+	}
+	return validateListBuilderAssignmentsResultBuilderAssignmentTransportJSONValue("", root, "")
+}
+
+// validateListTestWriterAssignmentsResultJSON parses one JSON document and checks the exact value
+// shapes known from this generated Goa type.
+func validateListTestWriterAssignmentsResultJSON(data []byte) error {
+	root, err := readStrictToolJSON(data)
+	if err != nil {
+		return err
+	}
+	return validateListTestWriterAssignmentsResultJSONValue("", root, "")
+}
+
+// validateGetTestWriterAssignmentPayloadJSON parses one JSON document and checks the exact value
+// shapes known from this generated Goa type.
+func validateGetTestWriterAssignmentPayloadJSON(data []byte) error {
+	root, err := readStrictToolJSON(data)
+	if err != nil {
+		return err
+	}
+	return validateGetTestWriterAssignmentPayloadJSONValue("", root, "")
+}
+
+// validateGetTestWriterAssignmentResultJSON parses one JSON document and checks the exact value
+// shapes known from this generated Goa type.
+func validateGetTestWriterAssignmentResultJSON(data []byte) error {
+	root, err := readStrictToolJSON(data)
+	if err != nil {
+		return err
+	}
+	return validateGetTestWriterAssignmentResultJSONValue("", root, "")
+}
+
+// validateReportTestsFinishedPayloadJSON parses one JSON document and checks the exact value
+// shapes known from this generated Goa type.
+func validateReportTestsFinishedPayloadJSON(data []byte) error {
+	root, err := readStrictToolJSON(data)
+	if err != nil {
+		return err
+	}
+	return validateReportTestsFinishedPayloadJSONValue("", root, "")
+}
+
+// validateReportTestsFinishedResultJSON parses one JSON document and checks the exact value
+// shapes known from this generated Goa type.
+func validateReportTestsFinishedResultJSON(data []byte) error {
+	root, err := readStrictToolJSON(data)
+	if err != nil {
+		return err
+	}
+	return validateListTestWriterAssignmentsResultTestWriterAssignmentItemTransportJSONValue("", root, "")
+}
+
+// validateReviewVerificationResultJSON parses one JSON document and checks the exact value
+// shapes known from this generated Goa type.
+func validateReviewVerificationResultJSON(data []byte) error {
+	root, err := readStrictToolJSON(data)
+	if err != nil {
+		return err
+	}
+	return validateReviewVerificationResultJSONValue("", root, "")
+}
+
 // readStrictToolJSON checks the complete JSON document for malformed text and
 // duplicate members, then returns values with their original number text.
 func readStrictToolJSON(data []byte) (any, error) {
@@ -11296,24 +21936,17 @@ func validateProposeChangePayloadJSONValue(path string, value any, description s
 			); err != nil {
 				return err
 			}
-		case "design_source":
-			if err := validateStringJSONValue(
-				generatedJSONChildPath(path, key, false),
-				typed[key], "Goa design source the analysis was made against (the target's design/*.go files). Surla saves it with the card and includes it in request_revision; it does not interpret it. When omitted on a server with a bound workspace, Surla records design/*.go from the bound workspace; when omitted without a bound workspace, the card records no design. Cannot be combined with story_refresh_op_id.",
-			); err != nil {
-				return err
-			}
 		case "prompt":
 			if err := validateStringJSONValue(
 				generatedJSONChildPath(path, key, false),
-				typed[key], "Operator feature request.",
+				typed[key], "The user's feature request.",
 			); err != nil {
 				return err
 			}
 		case "story_refresh_op_id":
 			if err := validateStringJSONValue(
 				generatedJSONChildPath(path, key, false),
-				typed[key], "Optional op_id of a succeeded refresh_story operation for the bound workspace whose evaluated Stories this card adopts. When set, design_source must be omitted; Surla reads one workspace snapshot, requires its snapshot_digest to match the operation's, and records both the evaluated Stories and that snapshot's design/*.go on the card. Omit when the card has no Story.",
+				typed[key], "op_id of a succeeded refresh_story operation whose evaluated draft this card adopts: its design, Stories, architecture, go.mod and made-from list. Required when the project folder holds a go.mod; Surla reads no file.",
 			); err != nil {
 				return err
 			}
@@ -11321,7 +21954,6 @@ func validateProposeChangePayloadJSONValue(path string, value any, description s
 			return unknownJSONFieldError(path, key, []string{
 				"analysis",
 				"change_id",
-				"design_source",
 				"prompt",
 				"story_refresh_op_id",
 			})
@@ -11381,7 +22013,7 @@ func validateProposeChangePayloadCP1AnalysisTransportJSONValue(path string, valu
 		case "ui_composition":
 			if err := validateStringJSONValue(
 				generatedJSONChildPath(path, key, false),
-				typed[key], "Optional OpenUI Lang program that helps the requester decide the open questions, built only from the decision components the surla://golden-path resource lists. Refer to an ambiguity or example only by its 1-based position in this analysis (1 is the first); never invent identifiers. Surla saves it unchanged without checking it; the checkpoint viewer validates and renders it. Omit it when a plain card is clearer.",
+				typed[key], "Optional OpenUI Lang program that helps the requester decide the open questions, built only from the decision components the surla://golden-path resource lists. Refer to an ambiguity or example only by its 1-based position in this analysis (1 is the first); never invent identifiers. Surla saves it unchanged without checking it; the views page validates and renders it. Omit it when a plain card is clearer.",
 			); err != nil {
 				return err
 			}
@@ -11627,7 +22259,7 @@ func validateProposeChangeResultJSONValue(path string, value any, description st
 		case "approval":
 			if err := validateProposeChangeResultApprovalItemTransportJSONValue(
 				generatedJSONChildPath(path, key, false),
-				typed[key], "Checkpoint 5 approval of this revision, present only while it is verified against the promotion target's current inputs on this read. It is absent before approve_merge succeeds, whenever the target's suite, environment or binary digests have changed since, and whenever current inputs cannot be verified (see unverified_approval). It is never hashed into request_revision.",
+				typed[key], "Checkpoint 5 approval of this revision, present while suite_commit is still the tests' commit chosen for this revision and (when a promotion target is configured) the promotion target's current binary digests still equal artifacts on this read. It is absent before approve_merge succeeds, whenever the chosen tests' commit or the staged binary digests have changed since, and whenever a configured promotion target's staged binaries cannot be verified (see unverified_approval). It is never hashed into request_revision.",
 			); err != nil {
 				return err
 			}
@@ -11641,7 +22273,7 @@ func validateProposeChangeResultJSONValue(path string, value any, description st
 		case "confirmed_by":
 			if err := validateStringJSONValue(
 				generatedJSONChildPath(path, key, false),
-				typed[key], "Authenticated principal that confirmed the Change Card.",
+				typed[key], "User who confirmed the Change Card.",
 			); err != nil {
 				return err
 			}
@@ -11662,7 +22294,14 @@ func validateProposeChangeResultJSONValue(path string, value any, description st
 		case "prompt":
 			if err := validateStringJSONValue(
 				generatedJSONChildPath(path, key, false),
-				typed[key], "Operator feature request for this revision.",
+				typed[key], "The user's feature request for this revision.",
+			); err != nil {
+				return err
+			}
+		case "proposed_revision":
+			if err := validateProposeChangeResultProposedRevisionItemTransportJSONValue(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "The revision the guide proposed beside this confirmed revision, while it waits for the user to adopt or decline it; absent otherwise. This card's own fields describe the revision in force.",
 			); err != nil {
 				return err
 			}
@@ -11681,7 +22320,7 @@ func validateProposeChangeResultJSONValue(path string, value any, description st
 				return err
 			}
 		case "stories":
-			if err := validateProposeChangeResultRootStoriesJSONValue(
+			if err := validateProposeChangeResultProposedRevisionItemTransportStoriesJSONValue(
 				generatedJSONChildPath(path, key, false),
 				typed[key], "Evaluated domain Stories adopted from refresh_story for this Change Card revision in declaration order; omitted when the card has no Stories. Included in request_revision.",
 			); err != nil {
@@ -11704,7 +22343,7 @@ func validateProposeChangeResultJSONValue(path string, value any, description st
 		case "unverified_approval":
 			if err := validateProposeChangeResultUnverifiedApprovalItemTransportJSONValue(
 				generatedJSONChildPath(path, key, false),
-				typed[key], "Saved Checkpoint 5 approval of this revision when current promotion inputs could not be verified on this read (because no promotion target is configured or the target could not report its current inputs). At most one of approval or unverified_approval is set. It is never saved to disk or hashed into request_revision.",
+				typed[key], "Saved Checkpoint 5 approval of this revision when suite_commit still matches the chosen tests' commit and promotion settings are configured, but the staged binaries could not be verified on this read. At most one of approval or unverified_approval is set. It is never saved to disk or hashed into request_revision.",
 			); err != nil {
 				return err
 			}
@@ -11718,6 +22357,7 @@ func validateProposeChangeResultJSONValue(path string, value any, description st
 				"examples",
 				"preserved_behaviors",
 				"prompt",
+				"proposed_revision",
 				"request_revision",
 				"status",
 				"stories",
@@ -11791,7 +22431,7 @@ func validateProposeChangeResultAmbiguityQuestionTransportJSONValue(path string,
 		case "question":
 			if err := validateStringJSONValue(
 				generatedJSONChildPath(path, key, false),
-				typed[key], "Plain-English question for the operator.",
+				typed[key], "Plain-English question for the user.",
 			); err != nil {
 				return err
 			}
@@ -11858,14 +22498,14 @@ func validateProposeChangeResultApprovalItemTransportJSONValue(path string, valu
 		case "approved_by":
 			if err := validateStringJSONValue(
 				generatedJSONChildPath(path, key, false),
-				typed[key], "Authenticated principal that owns the card and called approve_merge. Authentication does not prove that a human, rather than a coding agent, made the call.",
+				typed[key], "User who approved the result.",
 			); err != nil {
 				return err
 			}
 		case "artifacts":
 			if err := validateProposeChangeResultRootAnswersJSONValue(
 				generatedJSONChildPath(path, key, false),
-				typed[key], "SHA-256 digest of each candidate binary the promotion target measured, keyed by binary name.",
+				typed[key], "SHA-256 digest of each candidate binary the promotion target measured, keyed by binary name; empty when no promotion settings are configured.",
 			); err != nil {
 				return err
 			}
@@ -11879,7 +22519,7 @@ func validateProposeChangeResultApprovalItemTransportJSONValue(path string, valu
 		case "environment":
 			if err := validateStringJSONValue(
 				generatedJSONChildPath(path, key, false),
-				typed[key], "Dependency profile the promotion target requires, such as sim.",
+				typed[key], "Dependency profile the tests at suite_commit declared in the report, such as sim or scripted-model (shown, not compared).",
 			); err != nil {
 				return err
 			}
@@ -11893,21 +22533,28 @@ func validateProposeChangeResultApprovalItemTransportJSONValue(path string, valu
 		case "scenario_count":
 			if err := validateIntJSONValue(
 				generatedJSONChildPath(path, key, false),
-				typed[key], "Number of declared evaluator scenarios, every one of which passed.",
+				typed[key], "Number of declared scenarios in the report, every one of which passed.",
 			); err != nil {
 				return err
 			}
 		case "suite_commit":
 			if err := validateStringJSONValue(
 				generatedJSONChildPath(path, key, false),
-				typed[key], "Evaluator suite commit the promotion target requires.",
+				typed[key], "Commit of the tests the report ran: the evaluator suite commit in the stored verification settings, or the tests Surla accepted for the change's build.",
 			); err != nil {
 				return err
 			}
 		case "suite_id":
 			if err := validateStringJSONValue(
 				generatedJSONChildPath(path, key, false),
-				typed[key], "Evaluator suite the promotion target requires.",
+				typed[key], "Suite identifier the tests at suite_commit declared in the report (shown, not compared).",
+			); err != nil {
+				return err
+			}
+		case "test_source":
+			if err := validateProposeChangeResultApprovalItemTransportTestSourceJSONValue(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Where the tests at suite_commit came from, derived on each read: evaluator, or written_tests with their commit and a notice.",
 			); err != nil {
 				return err
 			}
@@ -11921,6 +22568,7 @@ func validateProposeChangeResultApprovalItemTransportJSONValue(path string, valu
 				"scenario_count",
 				"suite_commit",
 				"suite_id",
+				"test_source",
 			})
 		}
 	}
@@ -11942,6 +22590,111 @@ func validateIntJSONValue(path string, value any, description string) error {
 	}
 	if _, err := strconv.ParseInt(typed.String(), 10, strconv.IntSize); err != nil {
 		return invalidGeneratedFieldTypeError(field, "integer", "number", description)
+	}
+	return nil
+}
+
+// validateProposeChangeResultApprovalItemTransportTestSourceJSONValue checks one value whose JSON shape is fixed by the generated Goa type.
+func validateProposeChangeResultApprovalItemTransportTestSourceJSONValue(path string, value any, description string) error {
+	field := path
+	if field == "" {
+		field = "$payload"
+	}
+	if value == nil {
+		return invalidGeneratedFieldTypeError(field, "object", "null", description)
+	}
+	typed, ok := value.(map[string]any)
+	if !ok {
+		return invalidGeneratedFieldTypeError(field, "object", decodedJSONType(value), description)
+	}
+	rawDiscriminator, discriminatorPresent := typed["source"]
+	discriminator, ok := rawDiscriminator.(string)
+	if !ok {
+		return invalidJSONUnionDiscriminator(generatedJSONChildPath(path, "source", false), rawDiscriminator, discriminatorPresent, []string{"evaluator", "written_tests"})
+	}
+	branch := make(map[string]any, len(typed)-1)
+	for key, item := range typed {
+		if key != "source" {
+			branch[key] = item
+		}
+	}
+	switch discriminator {
+	case "evaluator":
+		return validateProposeChangeResultOperatorEvaluatorTestsTransportJSONValue(path, branch, "")
+	case "written_tests":
+		return validateProposeChangeResultAgentWrittenTestsTransportJSONValue(path, branch, "")
+	default:
+		return invalidJSONUnionDiscriminator(generatedJSONChildPath(path, "source", false), discriminator, true, []string{"evaluator", "written_tests"})
+	}
+}
+
+// validateProposeChangeResultOperatorEvaluatorTestsTransportJSONValue checks one value whose JSON shape is fixed by the generated Goa type.
+func validateProposeChangeResultOperatorEvaluatorTestsTransportJSONValue(path string, value any, description string) error {
+	field := path
+	if field == "" {
+		field = "$payload"
+	}
+	if value == nil {
+		return invalidGeneratedFieldTypeError(field, "object", "null", description)
+	}
+	typed, ok := value.(map[string]any)
+	if !ok {
+		return invalidGeneratedFieldTypeError(field, "object", decodedJSONType(value), description)
+	}
+	keys := make([]string, 0, len(typed))
+	for key := range typed {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		switch key {
+		default:
+			return unknownJSONFieldError(path, key, []string{})
+		}
+	}
+	return nil
+}
+
+// validateProposeChangeResultAgentWrittenTestsTransportJSONValue checks one value whose JSON shape is fixed by the generated Goa type.
+func validateProposeChangeResultAgentWrittenTestsTransportJSONValue(path string, value any, description string) error {
+	field := path
+	if field == "" {
+		field = "$payload"
+	}
+	if value == nil {
+		return invalidGeneratedFieldTypeError(field, "object", "null", description)
+	}
+	typed, ok := value.(map[string]any)
+	if !ok {
+		return invalidGeneratedFieldTypeError(field, "object", decodedJSONType(value), description)
+	}
+	keys := make([]string, 0, len(typed))
+	for key := range typed {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		switch key {
+		case "commit":
+			if err := validateStringJSONValue(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Commit Surla recorded the accepted tests at; the same as suite_commit.",
+			); err != nil {
+				return err
+			}
+		case "notice":
+			if err := validateStringJSONValue(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Always: These tests were written by a separate agent on this machine and are not isolated from the builder.",
+			); err != nil {
+				return err
+			}
+		default:
+			return unknownJSONFieldError(path, key, []string{
+				"commit",
+				"notice",
+			})
+		}
 	}
 	return nil
 }
@@ -12038,8 +22791,108 @@ func validateProposeChangeResultExampleItemTransportJSONValue(path string, value
 	return nil
 }
 
-// validateProposeChangeResultRootStoriesJSONValue checks one value whose JSON shape is fixed by the generated Goa type.
-func validateProposeChangeResultRootStoriesJSONValue(path string, value any, description string) error {
+// validateProposeChangeResultProposedRevisionItemTransportJSONValue checks one value whose JSON shape is fixed by the generated Goa type.
+func validateProposeChangeResultProposedRevisionItemTransportJSONValue(path string, value any, description string) error {
+	field := path
+	if field == "" {
+		field = "$payload"
+	}
+	if value == nil {
+		return invalidGeneratedFieldTypeError(field, "object", "null", description)
+	}
+	typed, ok := value.(map[string]any)
+	if !ok {
+		return invalidGeneratedFieldTypeError(field, "object", decodedJSONType(value), description)
+	}
+	keys := make([]string, 0, len(typed))
+	for key := range typed {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		switch key {
+		case "ambiguities":
+			if err := validateProposeChangeResultRootAmbiguitiesJSONValue(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Domain questions the user answers when adopting this revision.",
+			); err != nil {
+				return err
+			}
+		case "changed_design_files":
+			if err := validateProposeChangePayloadCP1AnalysisAmbiguityTransportOptionsJSONValue(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Paths of the design/*.go files that differ between the design source the confirmed revision was made from and the one this revision was made from (added, removed or changed), in path order; empty when both were made from the same design files. Adopting the revision binds it to its own design source.",
+			); err != nil {
+				return err
+			}
+		case "examples":
+			if err := validateProposeChangeResultRootExamplesJSONValue(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Concrete examples mapped to evaluator checks.",
+			); err != nil {
+				return err
+			}
+		case "preserved_behaviors":
+			if err := validateProposeChangePayloadCP1AnalysisAmbiguityTransportOptionsJSONValue(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Existing contract invariants preserved by this change.",
+			); err != nil {
+				return err
+			}
+		case "prompt":
+			if err := validateStringJSONValue(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "The user's feature request for this revision.",
+			); err != nil {
+				return err
+			}
+		case "request_revision":
+			if err := validateStringJSONValue(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "SHA-256 digest of this proposed revision: confirm_intent adopts it, decline_revision declines it, and revise_change replaces it when given this value.",
+			); err != nil {
+				return err
+			}
+		case "stories":
+			if err := validateProposeChangeResultProposedRevisionItemTransportStoriesJSONValue(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Evaluated domain Stories of this revision in declaration order; omitted when it has none. Included in its request_revision.",
+			); err != nil {
+				return err
+			}
+		case "summary":
+			if err := validateStringJSONValue(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Plain-English summary of the proposed change.",
+			); err != nil {
+				return err
+			}
+		case "ui_composition":
+			if err := validateProposeChangeResultUICompositionItemTransportJSONValue(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Decision view the guide composed for this revision in its analysis, when it sent one.",
+			); err != nil {
+				return err
+			}
+		default:
+			return unknownJSONFieldError(path, key, []string{
+				"ambiguities",
+				"changed_design_files",
+				"examples",
+				"preserved_behaviors",
+				"prompt",
+				"request_revision",
+				"stories",
+				"summary",
+				"ui_composition",
+			})
+		}
+	}
+	return nil
+}
+
+// validateProposeChangeResultProposedRevisionItemTransportStoriesJSONValue checks one value whose JSON shape is fixed by the generated Goa type.
+func validateProposeChangeResultProposedRevisionItemTransportStoriesJSONValue(path string, value any, description string) error {
 	field := path
 	if field == "" {
 		field = "$payload"
@@ -12528,7 +23381,7 @@ func validateProposeChangeResultUICompositionItemTransportJSONValue(path string,
 		case "program":
 			if err := validateStringJSONValue(
 				generatedJSONChildPath(path, key, false),
-				typed[key], "OpenUI Lang program from the analysis's ui_composition, exactly as the caller sent it. The server does not check it; the checkpoint viewer validates it and shows its error state, with the rest of the card still usable, when the program is not a valid composition.",
+				typed[key], "OpenUI Lang program from the analysis's ui_composition, exactly as the caller sent it. The server does not check it; the views page validates it and shows its error state, with the rest of the card still usable, when the program is not a valid composition.",
 			); err != nil {
 				return err
 			}
@@ -12572,7 +23425,7 @@ func validateProposeChangeResultUnverifiedApprovalItemTransportJSONValue(path st
 		case "reason":
 			if err := validateStringJSONValue(
 				generatedJSONChildPath(path, key, false),
-				typed[key], "Explanation of why the recorded approval could not be verified against current promotion inputs and how to recover.",
+				typed[key], "Explanation of why the recorded approval could not be verified against current release binaries and how to recover.",
 			); err != nil {
 				return err
 			}
@@ -12620,31 +23473,24 @@ func validateReviseChangePayloadJSONValue(path string, value any, description st
 			); err != nil {
 				return err
 			}
-		case "design_source":
-			if err := validateStringJSONValue(
-				generatedJSONChildPath(path, key, false),
-				typed[key], "Updated Goa design source the analysis was made against (the target's design/*.go files). Surla saves it with the card and includes it in request_revision; it does not interpret it. When omitted on a workspace-backed card without Stories and with a bound workspace, Surla records design/*.go from the bound workspace again; otherwise the card's saved design source is kept. Cannot be set when story_refresh_op_id is set or when the card already has adopted Stories.",
-			); err != nil {
-				return err
-			}
 		case "prompt":
 			if err := validateStringJSONValue(
 				generatedJSONChildPath(path, key, false),
-				typed[key], "Revised operator feature request.",
+				typed[key], "The user's revised feature request.",
 			); err != nil {
 				return err
 			}
 		case "request_revision":
 			if err := validateStringJSONValue(
 				generatedJSONChildPath(path, key, false),
-				typed[key], "Current CP1 request_revision digest being revised.",
+				typed[key], "request_revision of the latest revision you read: the proposed revision's when the change shows one waiting (proposed_revision.request_revision), otherwise the change's own.",
 			); err != nil {
 				return err
 			}
 		case "story_refresh_op_id":
 			if err := validateStringJSONValue(
 				generatedJSONChildPath(path, key, false),
-				typed[key], "Optional op_id of a succeeded refresh_story operation for the bound workspace whose evaluated Stories this revision adopts. When set, design_source must be omitted and the card must not use a caller-supplied design_source; Surla reads one workspace snapshot, requires its snapshot_digest to match the operation's, and records both the evaluated Stories and that snapshot's design/*.go on the revised card. When omitted on a card that already has Stories, the card's saved Stories and saved design_source are kept together.",
+				typed[key], "op_id of a succeeded refresh_story operation whose evaluated draft this revision adopts. When omitted, the revision keeps every snapshot field of the revision it revises: design, Stories, architecture, go.mod and made-from list, even with zero Stories. A project with a go.mod refuses an omitted op_id when that revision has no design. Surla reads no file.",
 			); err != nil {
 				return err
 			}
@@ -12652,7 +23498,6 @@ func validateReviseChangePayloadJSONValue(path string, value any, description st
 			return unknownJSONFieldError(path, key, []string{
 				"analysis",
 				"change_id",
-				"design_source",
 				"prompt",
 				"request_revision",
 				"story_refresh_op_id",
@@ -12720,7 +23565,7 @@ func validateReviseChangePayloadCP1RevisionAnalysisTransportJSONValue(path strin
 		case "ui_composition":
 			if err := validateStringJSONValue(
 				generatedJSONChildPath(path, key, false),
-				typed[key], "Optional OpenUI Lang program that helps the requester decide the open questions, built only from the decision components the surla://golden-path resource lists. Refer to an ambiguity or example only by its 1-based position in this analysis (1 is the first); never invent identifiers. Surla saves it unchanged without checking it; the checkpoint viewer validates and renders it. Omit it when a plain card is clearer.",
+				typed[key], "Optional OpenUI Lang program that helps the requester decide the open questions, built only from the decision components the surla://golden-path resource lists. Refer to an ambiguity or example only by its 1-based position in this analysis (1 is the first); never invent identifiers. Surla saves it unchanged without checking it; the views page validates and renders it. Omit it when a plain card is clearer.",
 			); err != nil {
 				return err
 			}
@@ -12853,7 +23698,7 @@ func validateConfirmIntentPayloadJSONValue(path string, value any, description s
 		case "answers":
 			if err := validateProposeChangeResultRootAnswersJSONValue(
 				generatedJSONChildPath(path, key, false),
-				typed[key], "Selected resolution per ambiguity question ID. Answer every current question, and give each value exactly as one string from that question's options, character for character. To record a decision that no option expresses, call revise_change with that decision in prompt.",
+				typed[key], "Selected resolution per ambiguity question ID. Answer every current question, and give each value exactly as one string from that question's options, character for character. A decision that no option expresses goes to the guide, which records it with revise_change; the user then confirms the resulting revision.",
 			); err != nil {
 				return err
 			}
@@ -12926,6 +23771,50 @@ func validateGetChangePayloadJSONValue(path string, value any, description strin
 	return nil
 }
 
+// validateDeclineRevisionPayloadJSONValue checks one value whose JSON shape is fixed by the generated Goa type.
+func validateDeclineRevisionPayloadJSONValue(path string, value any, description string) error {
+	field := path
+	if field == "" {
+		field = "$payload"
+	}
+	if value == nil {
+		return invalidGeneratedFieldTypeError(field, "object", "null", description)
+	}
+	typed, ok := value.(map[string]any)
+	if !ok {
+		return invalidGeneratedFieldTypeError(field, "object", decodedJSONType(value), description)
+	}
+	keys := make([]string, 0, len(typed))
+	for key := range typed {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		switch key {
+		case "change_id":
+			if err := validateStringJSONValue(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Change identifier.",
+			); err != nil {
+				return err
+			}
+		case "request_revision":
+			if err := validateStringJSONValue(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "request_revision of the proposed revision being declined (proposed_revision.request_revision): 64 lowercase hex characters.",
+			); err != nil {
+				return err
+			}
+		default:
+			return unknownJSONFieldError(path, key, []string{
+				"change_id",
+				"request_revision",
+			})
+		}
+	}
+	return nil
+}
+
 // validatePreviewArchitecturePayloadJSONValue checks one value whose JSON shape is fixed by the generated Goa type.
 func validatePreviewArchitecturePayloadJSONValue(path string, value any, description string) error {
 	field := path
@@ -12946,38 +23835,10 @@ func validatePreviewArchitecturePayloadJSONValue(path string, value any, descrip
 	sort.Strings(keys)
 	for _, key := range keys {
 		switch key {
-		case "architect_paths":
-			if err := validateProposeChangePayloadCP1AnalysisAmbiguityTransportOptionsJSONValue(
-				generatedJSONChildPath(path, key, false),
-				typed[key], "Optional repository-relative path globs for an @architect role in the proposed Chorus roster (requires builders).",
-			); err != nil {
-				return err
-			}
-		case "builders":
-			if err := validatePreviewArchitecturePayloadRootBuildersJSONValue(
-				generatedJSONChildPath(path, key, false),
-				typed[key], "Optional explicit builder path scopes for proposing a Chorus build roster. When omitted, preview_architecture returns a solo preview with swarm.status unconfigured and no missing_roles.",
-			); err != nil {
-				return err
-			}
 		case "change_id":
 			if err := validateStringJSONValue(
 				generatedJSONChildPath(path, key, false),
 				typed[key], "Confirmed Change Card identifier.",
-			); err != nil {
-				return err
-			}
-		case "design":
-			if err := validatePreviewArchitecturePayloadDesignSnapshotTransportJSONValue(
-				generatedJSONChildPath(path, key, false),
-				typed[key], "Candidate module whose Goa and Goa-AI design is evaluated. When omitted on a server with a bound workspace, Surla reads the candidate module snapshot from the bound workspace.",
-			); err != nil {
-				return err
-			}
-		case "eval_paths":
-			if err := validateProposeChangePayloadCP1AnalysisAmbiguityTransportOptionsJSONValue(
-				generatedJSONChildPath(path, key, false),
-				typed[key], "Optional repository or evaluator-workspace relative path globs for an @eval-author role in the proposed Chorus roster (requires builders).",
 			); err != nil {
 				return err
 			}
@@ -12990,124 +23851,8 @@ func validatePreviewArchitecturePayloadJSONValue(path string, value any, descrip
 			}
 		default:
 			return unknownJSONFieldError(path, key, []string{
-				"architect_paths",
-				"builders",
 				"change_id",
-				"design",
-				"eval_paths",
 				"request_revision",
-			})
-		}
-	}
-	return nil
-}
-
-// validatePreviewArchitecturePayloadRootBuildersJSONValue checks one value whose JSON shape is fixed by the generated Goa type.
-func validatePreviewArchitecturePayloadRootBuildersJSONValue(path string, value any, description string) error {
-	field := path
-	if field == "" {
-		field = "$payload"
-	}
-	if value == nil {
-		return invalidGeneratedFieldTypeError(field, "array", "null", description)
-	}
-	typed, ok := value.([]any)
-	if !ok {
-		return invalidGeneratedFieldTypeError(field, "array", decodedJSONType(value), description)
-	}
-	for index, item := range typed {
-		if err := validatePreviewArchitecturePayloadBuilderScopeItemTransportJSONValue(
-			generatedJSONChildPath(path, strconv.Itoa(index), true),
-			item, description,
-		); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-// validatePreviewArchitecturePayloadBuilderScopeItemTransportJSONValue checks one value whose JSON shape is fixed by the generated Goa type.
-func validatePreviewArchitecturePayloadBuilderScopeItemTransportJSONValue(path string, value any, description string) error {
-	field := path
-	if field == "" {
-		field = "$payload"
-	}
-	if value == nil {
-		return invalidGeneratedFieldTypeError(field, "object", "null", description)
-	}
-	typed, ok := value.(map[string]any)
-	if !ok {
-		return invalidGeneratedFieldTypeError(field, "object", decodedJSONType(value), description)
-	}
-	keys := make([]string, 0, len(typed))
-	for key := range typed {
-		keys = append(keys, key)
-	}
-	sort.Strings(keys)
-	for _, key := range keys {
-		switch key {
-		case "name":
-			if err := validateStringJSONValue(
-				generatedJSONChildPath(path, key, false),
-				typed[key], "Human-readable builder scope name (for example, orders or api).",
-			); err != nil {
-				return err
-			}
-		case "paths":
-			if err := validateProposeChangePayloadCP1AnalysisAmbiguityTransportOptionsJSONValue(
-				generatedJSONChildPath(path, key, false),
-				typed[key], "Repository-relative path globs owned by this builder.",
-			); err != nil {
-				return err
-			}
-		case "preferred_profile_id":
-			if err := validateStringJSONValue(
-				generatedJSONChildPath(path, key, false),
-				typed[key], "Optional preference selecting a server-configured authenticated profile ID.",
-			); err != nil {
-				return err
-			}
-		default:
-			return unknownJSONFieldError(path, key, []string{
-				"name",
-				"paths",
-				"preferred_profile_id",
-			})
-		}
-	}
-	return nil
-}
-
-// validatePreviewArchitecturePayloadDesignSnapshotTransportJSONValue checks one value whose JSON shape is fixed by the generated Goa type.
-func validatePreviewArchitecturePayloadDesignSnapshotTransportJSONValue(path string, value any, description string) error {
-	field := path
-	if field == "" {
-		field = "$payload"
-	}
-	if value == nil {
-		return invalidGeneratedFieldTypeError(field, "object", "null", description)
-	}
-	typed, ok := value.(map[string]any)
-	if !ok {
-		return invalidGeneratedFieldTypeError(field, "object", decodedJSONType(value), description)
-	}
-	keys := make([]string, 0, len(typed))
-	for key := range typed {
-		keys = append(keys, key)
-	}
-	sort.Strings(keys)
-	for _, key := range keys {
-		switch key {
-		case "files":
-			if err := validateProposeChangeResultRootAnswersJSONValue(
-				generatedJSONChildPath(path, key, false),
-				typed[key], "File contents keyed by module-relative path, such as design/design.go or go.mod.",
-			); err != nil {
-				return err
-			}
-		default:
-			return unknownJSONFieldError(path, key, []string{
-				"files",
 			})
 		}
 	}
@@ -13165,7 +23910,7 @@ func validatePreviewArchitectureResultJSONValue(path string, value any, descript
 		case "design_digest":
 			if err := validateStringJSONValue(
 				generatedJSONChildPath(path, key, false),
-				typed[key], "SHA-256 digest of the evaluated design snapshot (sorted path and content pairs).",
+				typed[key], "SHA-256 digest of the design snapshot the revision's refresh evaluated (sorted path and content pairs).",
 			); err != nil {
 				return err
 			}
@@ -13180,13 +23925,6 @@ func validatePreviewArchitectureResultJSONValue(path string, value any, descript
 			if err := validateStringJSONValue(
 				generatedJSONChildPath(path, key, false),
 				typed[key], "Bound CP1 request_revision digest.",
-			); err != nil {
-				return err
-			}
-		case "swarm":
-			if err := validatePreviewArchitectureResultSwarmPlanItemTransportJSONValue(
-				generatedJSONChildPath(path, key, false),
-				typed[key], "Proposed Chorus multi-agent role assignments and model-family routing.",
 			); err != nil {
 				return err
 			}
@@ -13213,7 +23951,6 @@ func validatePreviewArchitectureResultJSONValue(path string, value any, descript
 				"design_digest",
 				"edges",
 				"request_revision",
-				"swarm",
 				"system_name",
 				"tools",
 			})
@@ -13492,222 +24229,6 @@ func validatePreviewArchitectureResultC4EdgeItemTransportJSONValue(path string, 
 				"from_id",
 				"protocol",
 				"to_id",
-			})
-		}
-	}
-	return nil
-}
-
-// validatePreviewArchitectureResultSwarmPlanItemTransportJSONValue checks one value whose JSON shape is fixed by the generated Goa type.
-func validatePreviewArchitectureResultSwarmPlanItemTransportJSONValue(path string, value any, description string) error {
-	field := path
-	if field == "" {
-		field = "$payload"
-	}
-	if value == nil {
-		return invalidGeneratedFieldTypeError(field, "object", "null", description)
-	}
-	typed, ok := value.(map[string]any)
-	if !ok {
-		return invalidGeneratedFieldTypeError(field, "object", decodedJSONType(value), description)
-	}
-	keys := make([]string, 0, len(typed))
-	for key := range typed {
-		keys = append(keys, key)
-	}
-	sort.Strings(keys)
-	for _, key := range keys {
-		switch key {
-		case "assignments":
-			if err := validatePreviewArchitectureResultSwarmPlanItemTransportAssignmentsJSONValue(
-				generatedJSONChildPath(path, key, false),
-				typed[key], "Deterministic role assignments when status is configured.",
-			); err != nil {
-				return err
-			}
-		case "cross_family_eval":
-			if err := validateBooleanJSONValue(
-				generatedJSONChildPath(path, key, false),
-				typed[key], "True if and only if status is configured, an eval_author role is assigned, and the eval_author model family is disjoint from every assigned builder model family.",
-			); err != nil {
-				return err
-			}
-		case "cross_family_review":
-			if err := validateBooleanJSONValue(
-				generatedJSONChildPath(path, key, false),
-				typed[key], "True if and only if status is configured and the reviewer model family is disjoint from every assigned builder model family.",
-			); err != nil {
-				return err
-			}
-		case "manifest":
-			if err := validateStringJSONValue(
-				generatedJSONChildPath(path, key, false),
-				typed[key], "Formatted Chorus collaboration manifest text when status is configured; does not claim publication until sent via Chorus.",
-			); err != nil {
-				return err
-			}
-		case "missing_roles":
-			if err := validateProposeChangePayloadCP1AnalysisAmbiguityTransportOptionsJSONValue(
-				generatedJSONChildPath(path, key, false),
-				typed[key], "Requested roles lacking an authenticated capable profile when status is unconfigured (with builder scopes supplied) or missing_capability; omitted on solo previews with no builder scopes.",
-			); err != nil {
-				return err
-			}
-		case "single_family":
-			if err := validateBooleanJSONValue(
-				generatedJSONChildPath(path, key, false),
-				typed[key], "True when status is configured and all assigned roles share one model family.",
-			); err != nil {
-				return err
-			}
-		case "status":
-			if err := validateStringJSONValue(
-				generatedJSONChildPath(path, key, false),
-				typed[key], "Roster configuration status.",
-			); err != nil {
-				return err
-			}
-		case "summary":
-			if err := validateStringJSONValue(
-				generatedJSONChildPath(path, key, false),
-				typed[key], "Plain-English summary of the proposed swarm roster and model-family posture.",
-			); err != nil {
-				return err
-			}
-		default:
-			return unknownJSONFieldError(path, key, []string{
-				"assignments",
-				"cross_family_eval",
-				"cross_family_review",
-				"manifest",
-				"missing_roles",
-				"single_family",
-				"status",
-				"summary",
-			})
-		}
-	}
-	return nil
-}
-
-// validatePreviewArchitectureResultSwarmPlanItemTransportAssignmentsJSONValue checks one value whose JSON shape is fixed by the generated Goa type.
-func validatePreviewArchitectureResultSwarmPlanItemTransportAssignmentsJSONValue(path string, value any, description string) error {
-	field := path
-	if field == "" {
-		field = "$payload"
-	}
-	if value == nil {
-		return invalidGeneratedFieldTypeError(field, "array", "null", description)
-	}
-	typed, ok := value.([]any)
-	if !ok {
-		return invalidGeneratedFieldTypeError(field, "array", decodedJSONType(value), description)
-	}
-	for index, item := range typed {
-		if err := validatePreviewArchitectureResultSwarmRoleItemTransportJSONValue(
-			generatedJSONChildPath(path, strconv.Itoa(index), true),
-			item, description,
-		); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-// validatePreviewArchitectureResultSwarmRoleItemTransportJSONValue checks one value whose JSON shape is fixed by the generated Goa type.
-func validatePreviewArchitectureResultSwarmRoleItemTransportJSONValue(path string, value any, description string) error {
-	field := path
-	if field == "" {
-		field = "$payload"
-	}
-	if value == nil {
-		return invalidGeneratedFieldTypeError(field, "object", "null", description)
-	}
-	typed, ok := value.(map[string]any)
-	if !ok {
-		return invalidGeneratedFieldTypeError(field, "object", decodedJSONType(value), description)
-	}
-	keys := make([]string, 0, len(typed))
-	for key := range typed {
-		keys = append(keys, key)
-	}
-	sort.Strings(keys)
-	for _, key := range keys {
-		switch key {
-		case "access_mode":
-			if err := validateStringJSONValue(
-				generatedJSONChildPath(path, key, false),
-				typed[key], "Operator-declared workspace coordination boundary for this role.",
-			); err != nil {
-				return err
-			}
-		case "family":
-			if err := validateStringJSONValue(
-				generatedJSONChildPath(path, key, false),
-				typed[key], "Canonical model family identifier.",
-			); err != nil {
-				return err
-			}
-		case "handle":
-			if err := validateStringJSONValue(
-				generatedJSONChildPath(path, key, false),
-				typed[key], "Deterministic Chorus agent handle (without leading '@', at most 32 characters).",
-			); err != nil {
-				return err
-			}
-		case "model":
-			if err := validateStringJSONValue(
-				generatedJSONChildPath(path, key, false),
-				typed[key], "Assigned model identifier.",
-			); err != nil {
-				return err
-			}
-		case "owned_paths":
-			if err := validateProposeChangePayloadCP1AnalysisAmbiguityTransportOptionsJSONValue(
-				generatedJSONChildPath(path, key, false),
-				typed[key], "Repository or workspace path globs owned by this role for Chorus coordination.",
-			); err != nil {
-				return err
-			}
-		case "profile_id":
-			if err := validateStringJSONValue(
-				generatedJSONChildPath(path, key, false),
-				typed[key], "Assigned server-configured provider profile ID.",
-			); err != nil {
-				return err
-			}
-		case "provider":
-			if err := validateStringJSONValue(
-				generatedJSONChildPath(path, key, false),
-				typed[key], "Assigned coding-agent provider name.",
-			); err != nil {
-				return err
-			}
-		case "role":
-			if err := validateStringJSONValue(
-				generatedJSONChildPath(path, key, false),
-				typed[key], "Assigned swarm role kind.",
-			); err != nil {
-				return err
-			}
-		case "scope_name":
-			if err := validateStringJSONValue(
-				generatedJSONChildPath(path, key, false),
-				typed[key], "Human-readable scope label for this assignment.",
-			); err != nil {
-				return err
-			}
-		default:
-			return unknownJSONFieldError(path, key, []string{
-				"access_mode",
-				"family",
-				"handle",
-				"model",
-				"owned_paths",
-				"profile_id",
-				"provider",
-				"role",
-				"scope_name",
 			})
 		}
 	}
@@ -14005,7 +24526,7 @@ func validateDraftOverrideResultJSONValue(path string, value any, description st
 		case "applied_in_store":
 			if err := validateBooleanJSONValue(
 				generatedJSONChildPath(path, key, false),
-				typed[key], "True when updated in the target platform's prompt.Store for 0s reload.",
+				typed[key], "True when the live target saved the prompt text in its prompt store for 0s reload.",
 			); err != nil {
 				return err
 			}
@@ -14019,7 +24540,7 @@ func validateDraftOverrideResultJSONValue(path string, value any, description st
 		case "prompt_version":
 			if err := validateStringJSONValue(
 				generatedJSONChildPath(path, key, false),
-				typed[key], "New prompt version digest returned by the target platform.",
+				typed[key], "Version of the accepted prompt text, as the live target returned it.",
 			); err != nil {
 				return err
 			}
@@ -14069,9 +24590,17 @@ func validateStartLiveTargetPayloadJSONValue(path string, value any, description
 			); err != nil {
 				return err
 			}
+		case "change_id":
+			if err := validateStringJSONValue(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Owned, confirmed change from list_builder_assignments.",
+			); err != nil {
+				return err
+			}
 		default:
 			return unknownJSONFieldError(path, key, []string{
 				"candidate_commit",
+				"change_id",
 			})
 		}
 	}
@@ -14130,33 +24659,6 @@ func validateStartLiveTargetResultJSONValue(path string, value any, description 
 	return nil
 }
 
-// validateStopLiveTargetPayloadJSONValue checks one value whose JSON shape is fixed by the generated Goa type.
-func validateStopLiveTargetPayloadJSONValue(path string, value any, description string) error {
-	field := path
-	if field == "" {
-		field = "$payload"
-	}
-	if value == nil {
-		return invalidGeneratedFieldTypeError(field, "object", "null", description)
-	}
-	typed, ok := value.(map[string]any)
-	if !ok {
-		return invalidGeneratedFieldTypeError(field, "object", decodedJSONType(value), description)
-	}
-	keys := make([]string, 0, len(typed))
-	for key := range typed {
-		keys = append(keys, key)
-	}
-	sort.Strings(keys)
-	for _, key := range keys {
-		switch key {
-		default:
-			return unknownJSONFieldError(path, key, []string{})
-		}
-	}
-	return nil
-}
-
 // validateStopLiveTargetResultJSONValue checks one value whose JSON shape is fixed by the generated Goa type.
 func validateStopLiveTargetResultJSONValue(path string, value any, description string) error {
 	field := path
@@ -14195,6 +24697,366 @@ func validateStopLiveTargetResultJSONValue(path string, value any, description s
 			return unknownJSONFieldError(path, key, []string{
 				"message",
 				"stopped",
+			})
+		}
+	}
+	return nil
+}
+
+// validateGetLiveTargetResultJSONValue checks one value whose JSON shape is fixed by the generated Goa type.
+func validateGetLiveTargetResultJSONValue(path string, value any, description string) error {
+	field := path
+	if field == "" {
+		field = "$payload"
+	}
+	if value == nil {
+		return invalidGeneratedFieldTypeError(field, "object", "null", description)
+	}
+	typed, ok := value.(map[string]any)
+	if !ok {
+		return invalidGeneratedFieldTypeError(field, "object", decodedJSONType(value), description)
+	}
+	keys := make([]string, 0, len(typed))
+	for key := range typed {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		switch key {
+		case "live_target":
+			if err := validateGetLiveTargetResultRootLiveTargetJSONValue(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "none when no live target runs; starting while one is built and started; running with its commit, address, start time and the prompts whose drafts are in force; not_confirmed_stopped when its processes could not be confirmed stopped; ended when a ready target ended unexpectedly and cleanup is confirmed.",
+			); err != nil {
+				return err
+			}
+		default:
+			return unknownJSONFieldError(path, key, []string{
+				"live_target",
+			})
+		}
+	}
+	return nil
+}
+
+// validateGetLiveTargetResultRootLiveTargetJSONValue checks one value whose JSON shape is fixed by the generated Goa type.
+func validateGetLiveTargetResultRootLiveTargetJSONValue(path string, value any, description string) error {
+	field := path
+	if field == "" {
+		field = "$payload"
+	}
+	if value == nil {
+		return invalidGeneratedFieldTypeError(field, "object", "null", description)
+	}
+	typed, ok := value.(map[string]any)
+	if !ok {
+		return invalidGeneratedFieldTypeError(field, "object", decodedJSONType(value), description)
+	}
+	rawDiscriminator, discriminatorPresent := typed["state"]
+	discriminator, ok := rawDiscriminator.(string)
+	if !ok {
+		return invalidJSONUnionDiscriminator(generatedJSONChildPath(path, "state", false), rawDiscriminator, discriminatorPresent, []string{"none", "starting", "running", "not_confirmed_stopped", "ended"})
+	}
+	branch := make(map[string]any, len(typed)-1)
+	for key, item := range typed {
+		if key != "state" {
+			branch[key] = item
+		}
+	}
+	switch discriminator {
+	case "none":
+		return validateProposeChangeResultOperatorEvaluatorTestsTransportJSONValue(path, branch, "")
+	case "starting":
+		return validateGetLiveTargetResultLiveTargetStartingTransportJSONValue(path, branch, "")
+	case "running":
+		return validateGetLiveTargetResultRunningLiveTargetTransportJSONValue(path, branch, "")
+	case "not_confirmed_stopped":
+		return validateGetLiveTargetResultLiveTargetNotConfirmedStoppedTransportJSONValue(path, branch, "")
+	case "ended":
+		return validateGetLiveTargetResultLiveTargetEndedTransportJSONValue(path, branch, "")
+	default:
+		return invalidJSONUnionDiscriminator(generatedJSONChildPath(path, "state", false), discriminator, true, []string{"none", "starting", "running", "not_confirmed_stopped", "ended"})
+	}
+}
+
+// validateGetLiveTargetResultLiveTargetStartingTransportJSONValue checks one value whose JSON shape is fixed by the generated Goa type.
+func validateGetLiveTargetResultLiveTargetStartingTransportJSONValue(path string, value any, description string) error {
+	field := path
+	if field == "" {
+		field = "$payload"
+	}
+	if value == nil {
+		return invalidGeneratedFieldTypeError(field, "object", "null", description)
+	}
+	typed, ok := value.(map[string]any)
+	if !ok {
+		return invalidGeneratedFieldTypeError(field, "object", decodedJSONType(value), description)
+	}
+	keys := make([]string, 0, len(typed))
+	for key := range typed {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		switch key {
+		case "candidate_commit":
+			if err := validateStringJSONValue(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "The commit being built.",
+			); err != nil {
+				return err
+			}
+		case "since":
+			if err := validateStringJSONValue(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "When the start began.",
+			); err != nil {
+				return err
+			}
+		default:
+			return unknownJSONFieldError(path, key, []string{
+				"candidate_commit",
+				"since",
+			})
+		}
+	}
+	return nil
+}
+
+// validateGetLiveTargetResultRunningLiveTargetTransportJSONValue checks one value whose JSON shape is fixed by the generated Goa type.
+func validateGetLiveTargetResultRunningLiveTargetTransportJSONValue(path string, value any, description string) error {
+	field := path
+	if field == "" {
+		field = "$payload"
+	}
+	if value == nil {
+		return invalidGeneratedFieldTypeError(field, "object", "null", description)
+	}
+	typed, ok := value.(map[string]any)
+	if !ok {
+		return invalidGeneratedFieldTypeError(field, "object", decodedJSONType(value), description)
+	}
+	keys := make([]string, 0, len(typed))
+	for key := range typed {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		switch key {
+		case "candidate_commit":
+			if err := validateStringJSONValue(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "The commit it was built from.",
+			); err != nil {
+				return err
+			}
+		case "prompts":
+			if err := validateGetLiveTargetResultRunningLiveTargetTransportPromptsJSONValue(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "One entry per prompt whose draft it accepted, sorted by prompt_id; empty when none.",
+			); err != nil {
+				return err
+			}
+		case "started_at":
+			if err := validateStringJSONValue(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "When it became ready.",
+			); err != nil {
+				return err
+			}
+		case "url":
+			if err := validateStringJSONValue(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "The origin it listens on, as its evaluator suite reported it.",
+			); err != nil {
+				return err
+			}
+		default:
+			return unknownJSONFieldError(path, key, []string{
+				"candidate_commit",
+				"prompts",
+				"started_at",
+				"url",
+			})
+		}
+	}
+	return nil
+}
+
+// validateGetLiveTargetResultRunningLiveTargetTransportPromptsJSONValue checks one value whose JSON shape is fixed by the generated Goa type.
+func validateGetLiveTargetResultRunningLiveTargetTransportPromptsJSONValue(path string, value any, description string) error {
+	field := path
+	if field == "" {
+		field = "$payload"
+	}
+	if value == nil {
+		return invalidGeneratedFieldTypeError(field, "array", "null", description)
+	}
+	typed, ok := value.([]any)
+	if !ok {
+		return invalidGeneratedFieldTypeError(field, "array", decodedJSONType(value), description)
+	}
+	for index, item := range typed {
+		if err := validateGetLiveTargetResultLivePromptItemTransportJSONValue(
+			generatedJSONChildPath(path, strconv.Itoa(index), true),
+			item, description,
+		); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// validateGetLiveTargetResultLivePromptItemTransportJSONValue checks one value whose JSON shape is fixed by the generated Goa type.
+func validateGetLiveTargetResultLivePromptItemTransportJSONValue(path string, value any, description string) error {
+	field := path
+	if field == "" {
+		field = "$payload"
+	}
+	if value == nil {
+		return invalidGeneratedFieldTypeError(field, "object", "null", description)
+	}
+	typed, ok := value.(map[string]any)
+	if !ok {
+		return invalidGeneratedFieldTypeError(field, "object", decodedJSONType(value), description)
+	}
+	keys := make([]string, 0, len(typed))
+	for key := range typed {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		switch key {
+		case "accepted_at":
+			if err := validateStringJSONValue(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "When the live target first accepted the version in force. A later draft that the target answers with the same version, such as the same text sent again, keeps this time.",
+			); err != nil {
+				return err
+			}
+		case "prompt_id":
+			if err := validateStringJSONValue(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Registered prompt identifier.",
+			); err != nil {
+				return err
+			}
+		case "version":
+			if err := validateStringJSONValue(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Version of the text in force, as the live target returned it.",
+			); err != nil {
+				return err
+			}
+		default:
+			return unknownJSONFieldError(path, key, []string{
+				"accepted_at",
+				"prompt_id",
+				"version",
+			})
+		}
+	}
+	return nil
+}
+
+// validateGetLiveTargetResultLiveTargetNotConfirmedStoppedTransportJSONValue checks one value whose JSON shape is fixed by the generated Goa type.
+func validateGetLiveTargetResultLiveTargetNotConfirmedStoppedTransportJSONValue(path string, value any, description string) error {
+	field := path
+	if field == "" {
+		field = "$payload"
+	}
+	if value == nil {
+		return invalidGeneratedFieldTypeError(field, "object", "null", description)
+	}
+	typed, ok := value.(map[string]any)
+	if !ok {
+		return invalidGeneratedFieldTypeError(field, "object", decodedJSONType(value), description)
+	}
+	keys := make([]string, 0, len(typed))
+	for key := range typed {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		switch key {
+		case "candidate_commit":
+			if err := validateStringJSONValue(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "The commit it was built from.",
+			); err != nil {
+				return err
+			}
+		case "message":
+			if err := validateStringJSONValue(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "What happened and what to do next.",
+			); err != nil {
+				return err
+			}
+		default:
+			return unknownJSONFieldError(path, key, []string{
+				"candidate_commit",
+				"message",
+			})
+		}
+	}
+	return nil
+}
+
+// validateGetLiveTargetResultLiveTargetEndedTransportJSONValue checks one value whose JSON shape is fixed by the generated Goa type.
+func validateGetLiveTargetResultLiveTargetEndedTransportJSONValue(path string, value any, description string) error {
+	field := path
+	if field == "" {
+		field = "$payload"
+	}
+	if value == nil {
+		return invalidGeneratedFieldTypeError(field, "object", "null", description)
+	}
+	typed, ok := value.(map[string]any)
+	if !ok {
+		return invalidGeneratedFieldTypeError(field, "object", decodedJSONType(value), description)
+	}
+	keys := make([]string, 0, len(typed))
+	for key := range typed {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		switch key {
+		case "candidate_commit":
+			if err := validateStringJSONValue(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "The commit the ended target ran.",
+			); err != nil {
+				return err
+			}
+		case "ended_at":
+			if err := validateStringJSONValue(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "When the server observed that target ending.",
+			); err != nil {
+				return err
+			}
+		case "message":
+			if err := validateStringJSONValue(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Fixed explanation of what is known and the builder's next step.",
+			); err != nil {
+				return err
+			}
+		case "started_at":
+			if err := validateStringJSONValue(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "When that target became ready.",
+			); err != nil {
+				return err
+			}
+		default:
+			return unknownJSONFieldError(path, key, []string{
+				"candidate_commit",
+				"ended_at",
+				"message",
+				"started_at",
 			})
 		}
 	}
@@ -14280,6 +25142,13 @@ func validateVerifyChangeResultJSONValue(path string, value any, description str
 			); err != nil {
 				return err
 			}
+		case "candidate_binaries_dir":
+			if err := validateStringJSONValue(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Absolute folder containing the binaries built by this completed run. Returned only to the user when promotion settings are configured, so the user can publish these exact binaries before approval. Agents never receive this private path.",
+			); err != nil {
+				return err
+			}
 		case "candidate_commit":
 			if err := validateStringJSONValue(
 				generatedJSONChildPath(path, key, false),
@@ -14291,6 +25160,13 @@ func validateVerifyChangeResultJSONValue(path string, value any, description str
 			if err := validateStringJSONValue(
 				generatedJSONChildPath(path, key, false),
 				typed[key], "Change Card the run verifies.",
+			); err != nil {
+				return err
+			}
+		case "inputs_current":
+			if err := validateBooleanJSONValue(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Whether this run's agreed revision and selected tests match the current Change Card and the usable build or the stored verification settings. This observation does not establish the current candidate working tree, deployment or approval.",
 			); err != nil {
 				return err
 			}
@@ -14318,19 +25194,29 @@ func validateVerifyChangeResultJSONValue(path string, value any, description str
 		case "suite_commit":
 			if err := validateStringJSONValue(
 				generatedJSONChildPath(path, key, false),
-				typed[key], "Evaluator suite commit the operator configured for the run.",
+				typed[key], "Commit of the tests the run uses: the operator's evaluator, or the tests accepted for the change's build.",
+			); err != nil {
+				return err
+			}
+		case "test_source":
+			if err := validateProposeChangeResultApprovalItemTransportTestSourceJSONValue(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Where the run's tests came from, recorded when the run started: evaluator, or written_tests with their commit and a notice.",
 			); err != nil {
 				return err
 			}
 		default:
 			return unknownJSONFieldError(path, key, []string{
 				"accepted_at",
+				"candidate_binaries_dir",
 				"candidate_commit",
 				"change_id",
+				"inputs_current",
 				"request_revision",
 				"run_id",
 				"state",
 				"suite_commit",
+				"test_source",
 			})
 		}
 	}
@@ -15033,14 +25919,14 @@ func validateDiffPayloadJSONValue(path string, value any, description string) er
 	for _, key := range keys {
 		switch key {
 		case "new":
-			if err := validatePreviewArchitecturePayloadDesignSnapshotTransportJSONValue(
+			if err := validateDiffPayloadDesignSnapshotTransportJSONValue(
 				generatedJSONChildPath(path, key, false),
 				typed[key], "Candidate design module.",
 			); err != nil {
 				return err
 			}
 		case "old":
-			if err := validatePreviewArchitecturePayloadDesignSnapshotTransportJSONValue(
+			if err := validateDiffPayloadDesignSnapshotTransportJSONValue(
 				generatedJSONChildPath(path, key, false),
 				typed[key], "Previous design module.",
 			); err != nil {
@@ -15050,6 +25936,42 @@ func validateDiffPayloadJSONValue(path string, value any, description string) er
 			return unknownJSONFieldError(path, key, []string{
 				"new",
 				"old",
+			})
+		}
+	}
+	return nil
+}
+
+// validateDiffPayloadDesignSnapshotTransportJSONValue checks one value whose JSON shape is fixed by the generated Goa type.
+func validateDiffPayloadDesignSnapshotTransportJSONValue(path string, value any, description string) error {
+	field := path
+	if field == "" {
+		field = "$payload"
+	}
+	if value == nil {
+		return invalidGeneratedFieldTypeError(field, "object", "null", description)
+	}
+	typed, ok := value.(map[string]any)
+	if !ok {
+		return invalidGeneratedFieldTypeError(field, "object", decodedJSONType(value), description)
+	}
+	keys := make([]string, 0, len(typed))
+	for key := range typed {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		switch key {
+		case "files":
+			if err := validateProposeChangeResultRootAnswersJSONValue(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "File contents keyed by module-relative path, such as design/design.go or go.mod.",
+			); err != nil {
+				return err
+			}
+		default:
+			return unknownJSONFieldError(path, key, []string{
+				"files",
 			})
 		}
 	}
@@ -15363,7 +26285,7 @@ func validateGenerateCodePayloadJSONValue(path string, value any, description st
 		case "target":
 			if err := validateStringJSONValue(
 				generatedJSONChildPath(path, key, false),
-				typed[key], "Module to regenerate: candidate (the application, the default when omitted) or eval (the local eval/ module).",
+				typed[key], "Module to regenerate: candidate (the application, the default when omitted) or eval (the test module).",
 			); err != nil {
 				return err
 			}
@@ -15503,7 +26425,7 @@ func validateUpdateDependenciesResultJSONValue(path string, value any, descripti
 		case "files_written":
 			if err := validateProposeChangePayloadCP1AnalysisAmbiguityTransportOptionsJSONValue(
 				generatedJSONChildPath(path, key, false),
-				typed[key], "Workspace-relative go.mod, go.sum and go.work.sum files whose bytes changed and were written.",
+				typed[key], "Working-folder-relative go.mod, go.sum and go.work.sum files whose bytes changed and were written.",
 			); err != nil {
 				return err
 			}
@@ -15806,7 +26728,7 @@ func validateListTracesResultTraceSpanTransportJSONValue(path string, value any,
 		case "attributes":
 			if err := validateProposeChangeResultRootAnswersJSONValue(
 				generatedJSONChildPath(path, key, false),
-				typed[key], "Selected operation identifiers and results; at most six values of 1024 bytes each.",
+				typed[key], "Selected operation identifiers, results, and private caller attribution; at most seven values of 1024 bytes each.",
 			); err != nil {
 				return err
 			}
@@ -15926,24 +26848,31 @@ func validateRefreshStoryResultJSONValue(path string, value any, description str
 			); err != nil {
 				return err
 			}
+		case "draft_folder":
+			if err := validateStringJSONValue(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Absolute path intended for the guide's draft, .surla-draft in the project folder, whose go.mod, go.sum and design/ refresh_story reads. When state is none, this path does not mean the folder exists; refresh_story makes it when needed.",
+			); err != nil {
+				return err
+			}
 		case "message":
 			if err := validateStringJSONValue(
 				generatedJSONChildPath(path, key, false),
-				typed[key], "Summary of the current Story refresh state and next action.",
+				typed[key], "Summary of the current Story refresh state and next action. After a dropped build remakes the draft and until a revision is saved from it, begins by naming the dropped change and saying that edits made before then are gone.",
 			); err != nil {
 				return err
 			}
 		case "op_id":
 			if err := validateStringJSONValue(
 				generatedJSONChildPath(path, key, false),
-				typed[key], "Identifier of the caller's current Story refresh operation for the bound workspace; present when state is running, succeeded, or failed. Pass it as story_refresh_op_id to propose_change or revise_change once state is succeeded to adopt the evaluated Story into a Change Card.",
+				typed[key], "Identifier of the owner's current Story refresh operation for the guide's draft; present when state is running, succeeded, or failed. Pass it as story_refresh_op_id to propose_change or revise_change once state is succeeded to adopt the evaluated Story into a Change Card.",
 			); err != nil {
 				return err
 			}
 		case "snapshot_digest":
 			if err := validateStringJSONValue(
 				generatedJSONChildPath(path, key, false),
-				typed[key], "Canonical SHA-256 digest of the workspace module snapshot read when this refresh started; present when state is running, succeeded, or failed.",
+				typed[key], "Canonical SHA-256 digest of the draft snapshot read when this refresh started; present when state is running, succeeded, or failed.",
 			); err != nil {
 				return err
 			}
@@ -15955,7 +26884,7 @@ func validateRefreshStoryResultJSONValue(path string, value any, description str
 				return err
 			}
 		case "stories":
-			if err := validateProposeChangeResultRootStoriesJSONValue(
+			if err := validateProposeChangeResultProposedRevisionItemTransportStoriesJSONValue(
 				generatedJSONChildPath(path, key, false),
 				typed[key], "Evaluated domain Stories in declaration order when state is succeeded (empty when the design declares no Stories or when state is none, running, or failed).",
 			); err != nil {
@@ -15964,11 +26893,2360 @@ func validateRefreshStoryResultJSONValue(path string, value any, description str
 		default:
 			return unknownJSONFieldError(path, key, []string{
 				"diagnostic",
+				"draft_folder",
 				"message",
 				"op_id",
 				"snapshot_digest",
 				"state",
 				"stories",
+			})
+		}
+	}
+	return nil
+}
+
+// validateUpdateDraftResultJSONValue checks one value whose JSON shape is fixed by the generated Goa type.
+func validateUpdateDraftResultJSONValue(path string, value any, description string) error {
+	field := path
+	if field == "" {
+		field = "$payload"
+	}
+	if value == nil {
+		return invalidGeneratedFieldTypeError(field, "object", "null", description)
+	}
+	typed, ok := value.(map[string]any)
+	if !ok {
+		return invalidGeneratedFieldTypeError(field, "object", decodedJSONType(value), description)
+	}
+	keys := make([]string, 0, len(typed))
+	for key := range typed {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		switch key {
+		case "draft_folder":
+			if err := validateStringJSONValue(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Absolute path of the guide's draft folder.",
+			); err != nil {
+				return err
+			}
+		case "merged":
+			if err := validateProposeChangePayloadCP1AnalysisAmbiguityTransportOptionsJSONValue(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Design files where the project folder's change and the draft's edits merged without conflict, in path order.",
+			); err != nil {
+				return err
+			}
+		case "taken":
+			if err := validateProposeChangePayloadCP1AnalysisAmbiguityTransportOptionsJSONValue(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Design files the draft took from the project folder because it had not changed them, in path order.",
+			); err != nil {
+				return err
+			}
+		case "to_correct":
+			if err := validateUpdateDraftResultRootToCorrectJSONValue(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Files to correct before refreshing, each in the folder it names, in path order; empty when none.",
+			); err != nil {
+				return err
+			}
+		default:
+			return unknownJSONFieldError(path, key, []string{
+				"draft_folder",
+				"merged",
+				"taken",
+				"to_correct",
+			})
+		}
+	}
+	return nil
+}
+
+// validateUpdateDraftResultRootToCorrectJSONValue checks one value whose JSON shape is fixed by the generated Goa type.
+func validateUpdateDraftResultRootToCorrectJSONValue(path string, value any, description string) error {
+	field := path
+	if field == "" {
+		field = "$payload"
+	}
+	if value == nil {
+		return invalidGeneratedFieldTypeError(field, "array", "null", description)
+	}
+	typed, ok := value.([]any)
+	if !ok {
+		return invalidGeneratedFieldTypeError(field, "array", decodedJSONType(value), description)
+	}
+	for index, item := range typed {
+		if err := validateUpdateDraftResultDraftCorrectionTransportJSONValue(
+			generatedJSONChildPath(path, strconv.Itoa(index), true),
+			item, description,
+		); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// validateUpdateDraftResultDraftCorrectionTransportJSONValue checks one value whose JSON shape is fixed by the generated Goa type.
+func validateUpdateDraftResultDraftCorrectionTransportJSONValue(path string, value any, description string) error {
+	field := path
+	if field == "" {
+		field = "$payload"
+	}
+	if value == nil {
+		return invalidGeneratedFieldTypeError(field, "object", "null", description)
+	}
+	typed, ok := value.(map[string]any)
+	if !ok {
+		return invalidGeneratedFieldTypeError(field, "object", decodedJSONType(value), description)
+	}
+	keys := make([]string, 0, len(typed))
+	for key := range typed {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		switch key {
+		case "folder":
+			if err := validateStringJSONValue(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Which folder holds the file to correct: draft_folder is the guide's draft, at the result's draft_folder; project_folder is the user's project folder, which holds the draft.",
+			); err != nil {
+				return err
+			}
+		case "path":
+			if err := validateStringJSONValue(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Path relative to the folder that folder names, such as design/types.go or go.mod.",
+			); err != nil {
+				return err
+			}
+		case "problem":
+			if err := validateStringJSONValue(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "What to correct. In the draft: conflict markers where the draft and the project folder changed the same lines; a file removed on one side and changed on the other; a draft file Go cannot parse, with its line; a file whose project change Surla took without merging, or was writing when it stopped, to check that it holds the intended edits once; or a module the project's go.mod requires at another version than the draft's, or that the draft's lacks, including differing replace directives and a differing module path. In the project folder: a design file or go.mod there that cannot be parsed, with its line, or a go.mod that declares no module.",
+			); err != nil {
+				return err
+			}
+		default:
+			return unknownJSONFieldError(path, key, []string{
+				"folder",
+				"path",
+				"problem",
+			})
+		}
+	}
+	return nil
+}
+
+// validateListChangesResultJSONValue checks one value whose JSON shape is fixed by the generated Goa type.
+func validateListChangesResultJSONValue(path string, value any, description string) error {
+	field := path
+	if field == "" {
+		field = "$payload"
+	}
+	if value == nil {
+		return invalidGeneratedFieldTypeError(field, "object", "null", description)
+	}
+	typed, ok := value.(map[string]any)
+	if !ok {
+		return invalidGeneratedFieldTypeError(field, "object", decodedJSONType(value), description)
+	}
+	keys := make([]string, 0, len(typed))
+	for key := range typed {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		switch key {
+		case "approval_available":
+			if err := validateBooleanJSONValue(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Whether approve_merge can record approvals on this server: true when the server runs Checkpoint 4 verification, as every server surla starts does, and any stored promotion settings could be resolved; false when the server runs no verification or resolving the promotion target fails.",
+			); err != nil {
+				return err
+			}
+		case "changes":
+			if err := validateListChangesResultRootChangesJSONValue(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Saved Change Cards, most recently saved first.",
+			); err != nil {
+				return err
+			}
+		case "version":
+			if err := validateStringJSONValue(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Opaque value for change detection. Compare it only for equality; the returned fields contain the facts this operation makes readable.",
+			); err != nil {
+				return err
+			}
+		default:
+			return unknownJSONFieldError(path, key, []string{
+				"approval_available",
+				"changes",
+				"version",
+			})
+		}
+	}
+	return nil
+}
+
+// validateListChangesResultRootChangesJSONValue checks one value whose JSON shape is fixed by the generated Goa type.
+func validateListChangesResultRootChangesJSONValue(path string, value any, description string) error {
+	field := path
+	if field == "" {
+		field = "$payload"
+	}
+	if value == nil {
+		return invalidGeneratedFieldTypeError(field, "array", "null", description)
+	}
+	typed, ok := value.([]any)
+	if !ok {
+		return invalidGeneratedFieldTypeError(field, "array", decodedJSONType(value), description)
+	}
+	for index, item := range typed {
+		if err := validateListChangesResultChangeListItemTransportJSONValue(
+			generatedJSONChildPath(path, strconv.Itoa(index), true),
+			item, description,
+		); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// validateListChangesResultChangeListItemTransportJSONValue checks one value whose JSON shape is fixed by the generated Goa type.
+func validateListChangesResultChangeListItemTransportJSONValue(path string, value any, description string) error {
+	field := path
+	if field == "" {
+		field = "$payload"
+	}
+	if value == nil {
+		return invalidGeneratedFieldTypeError(field, "object", "null", description)
+	}
+	typed, ok := value.(map[string]any)
+	if !ok {
+		return invalidGeneratedFieldTypeError(field, "object", decodedJSONType(value), description)
+	}
+	keys := make([]string, 0, len(typed))
+	for key := range typed {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		switch key {
+		case "change_id":
+			if err := validateStringJSONValue(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Change Card identifier; get_change takes it.",
+			); err != nil {
+				return err
+			}
+		case "latest_verification":
+			if err := validateListChangesResultLatestVerificationItemTransportJSONValue(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "The Change Card's most recently accepted verification run; absent when none was started.",
+			); err != nil {
+				return err
+			}
+		case "proposed_revision":
+			if err := validateStringJSONValue(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "request_revision of the revision the guide proposed beside this confirmed change, while it waits for the user to adopt or decline it; absent otherwise. status and request_revision describe the revision in force.",
+			); err != nil {
+				return err
+			}
+		case "request_revision":
+			if err := validateStringJSONValue(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Current request_revision of the Change Card.",
+			); err != nil {
+				return err
+			}
+		case "saved_at":
+			if err := validateStringJSONValue(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "When the Change Card was last saved. It is not part of request_revision.",
+			); err != nil {
+				return err
+			}
+		case "status":
+			if err := validateStringJSONValue(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Checkpoint status of the current revision.",
+			); err != nil {
+				return err
+			}
+		case "summary":
+			if err := validateStringJSONValue(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Plain-English summary of the current revision.",
+			); err != nil {
+				return err
+			}
+		default:
+			return unknownJSONFieldError(path, key, []string{
+				"change_id",
+				"latest_verification",
+				"proposed_revision",
+				"request_revision",
+				"saved_at",
+				"status",
+				"summary",
+			})
+		}
+	}
+	return nil
+}
+
+// validateListChangesResultLatestVerificationItemTransportJSONValue checks one value whose JSON shape is fixed by the generated Goa type.
+func validateListChangesResultLatestVerificationItemTransportJSONValue(path string, value any, description string) error {
+	field := path
+	if field == "" {
+		field = "$payload"
+	}
+	if value == nil {
+		return invalidGeneratedFieldTypeError(field, "object", "null", description)
+	}
+	typed, ok := value.(map[string]any)
+	if !ok {
+		return invalidGeneratedFieldTypeError(field, "object", decodedJSONType(value), description)
+	}
+	keys := make([]string, 0, len(typed))
+	for key := range typed {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		switch key {
+		case "inputs_current":
+			if err := validateBooleanJSONValue(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Whether this run names the agreed request_revision and the tests selected now: the accepted test commit of the usable build in force, or the evaluator suite in the stored verification settings. It does not say whether the candidate working tree, deployment or approval is current.",
+			); err != nil {
+				return err
+			}
+		case "run_id":
+			if err := validateStringJSONValue(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Verification run identifier; get_verification takes it.",
+			); err != nil {
+				return err
+			}
+		case "state":
+			if err := validateStringJSONValue(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "running while the run builds or evaluates the candidate; passed or failed when its report's verdict is known; not_completed when it stopped without a report.",
+			); err != nil {
+				return err
+			}
+		default:
+			return unknownJSONFieldError(path, key, []string{
+				"inputs_current",
+				"run_id",
+				"state",
+			})
+		}
+	}
+	return nil
+}
+
+// validateGetBuildResultJSONValue checks one value whose JSON shape is fixed by the generated Goa type.
+func validateGetBuildResultJSONValue(path string, value any, description string) error {
+	field := path
+	if field == "" {
+		field = "$payload"
+	}
+	if value == nil {
+		return invalidGeneratedFieldTypeError(field, "object", "null", description)
+	}
+	typed, ok := value.(map[string]any)
+	if !ok {
+		return invalidGeneratedFieldTypeError(field, "object", decodedJSONType(value), description)
+	}
+	keys := make([]string, 0, len(typed))
+	for key := range typed {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		switch key {
+		case "build":
+			if err := validateGetBuildResultRootBuildJSONValue(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "not_started when the change has no usable build for the current test source; start a new build on the views page. Otherwise started with the usable build.",
+			); err != nil {
+				return err
+			}
+		case "change_id":
+			if err := validateStringJSONValue(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Change Card identifier.",
+			); err != nil {
+				return err
+			}
+		case "drafted_before_drop":
+			if err := validateBooleanJSONValue(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "True only when the current agreed revision’s saved record of how its design was drafted predates the current actual drop: start_build would refuse it with drafted_before_drop. It becomes true after that drop and false once the user adopts a revision drafted after the drop, even if its request_revision is unchanged. A waiting proposal does not change this fact; ask the guide to refresh_story and revise_change from that refresh, then adopt the revision before building. False says only that this refusal does not apply, not that every other build check will pass; it is also false without an agreed revision or saved record of its draft. start_build rechecks concurrent changes.",
+			); err != nil {
+				return err
+			}
+		default:
+			return unknownJSONFieldError(path, key, []string{
+				"build",
+				"change_id",
+				"drafted_before_drop",
+			})
+		}
+	}
+	return nil
+}
+
+// validateGetBuildResultRootBuildJSONValue checks one value whose JSON shape is fixed by the generated Goa type.
+func validateGetBuildResultRootBuildJSONValue(path string, value any, description string) error {
+	field := path
+	if field == "" {
+		field = "$payload"
+	}
+	if value == nil {
+		return invalidGeneratedFieldTypeError(field, "object", "null", description)
+	}
+	typed, ok := value.(map[string]any)
+	if !ok {
+		return invalidGeneratedFieldTypeError(field, "object", decodedJSONType(value), description)
+	}
+	rawDiscriminator, discriminatorPresent := typed["state"]
+	discriminator, ok := rawDiscriminator.(string)
+	if !ok {
+		return invalidJSONUnionDiscriminator(generatedJSONChildPath(path, "state", false), rawDiscriminator, discriminatorPresent, []string{"not_started", "started"})
+	}
+	branch := make(map[string]any, len(typed)-1)
+	for key, item := range typed {
+		if key != "state" {
+			branch[key] = item
+		}
+	}
+	switch discriminator {
+	case "not_started":
+		return validateProposeChangeResultOperatorEvaluatorTestsTransportJSONValue(path, branch, "")
+	case "started":
+		return validateGetBuildResultStartedBuildTransportJSONValue(path, branch, "")
+	default:
+		return invalidJSONUnionDiscriminator(generatedJSONChildPath(path, "state", false), discriminator, true, []string{"not_started", "started"})
+	}
+}
+
+// validateGetBuildResultStartedBuildTransportJSONValue checks one value whose JSON shape is fixed by the generated Goa type.
+func validateGetBuildResultStartedBuildTransportJSONValue(path string, value any, description string) error {
+	field := path
+	if field == "" {
+		field = "$payload"
+	}
+	if value == nil {
+		return invalidGeneratedFieldTypeError(field, "object", "null", description)
+	}
+	typed, ok := value.(map[string]any)
+	if !ok {
+		return invalidGeneratedFieldTypeError(field, "object", decodedJSONType(value), description)
+	}
+	keys := make([]string, 0, len(typed))
+	for key := range typed {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		switch key {
+		case "answers":
+			if err := validateGetBuildResultStartedBuildTransportAnswersJSONValue(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Confirmed answers saved when this build started; later revisions do not replace them.",
+			); err != nil {
+				return err
+			}
+		case "builder":
+			if err := validateGetBuildResultBuilderProgressTransportJSONValue(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "The builder's assignment.",
+			); err != nil {
+				return err
+			}
+		case "coverage_statements":
+			if err := validateGetBuildResultStartedBuildTransportCoverageStatementsJSONValue(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "The accepted report's writer statements; empty before acceptance or when none were stated. Surla did not judge them.",
+			); err != nil {
+				return err
+			}
+		case "examples":
+			if err := validateProposeChangeResultRootExamplesJSONValue(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Examples saved when this build started; later revisions do not replace them.",
+			); err != nil {
+				return err
+			}
+		case "in_force":
+			if err := validateBooleanJSONValue(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "True when request_revision is the change's agreed revision, the one in force, as get_build reports it. It stays true while a proposed revision waits and when a refreshed draft is adopted without changing request_revision. If adoption or confirmation changes the agreed request_revision, it becomes false; the assignments stay on the earlier revision until the user builds again.",
+			); err != nil {
+				return err
+			}
+		case "request_revision":
+			if err := validateStringJSONValue(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Change Card revision the user built.",
+			); err != nil {
+				return err
+			}
+		case "required_test_count":
+			if err := validateIntJSONValue(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Number of finished flows in the agreed Story. Zero means no test of this change's Story was required.",
+			); err != nil {
+				return err
+			}
+		case "required_tests":
+			if err := validateGetBuildResultStartedBuildTransportRequiredTestsJSONValue(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Tests required by this build's saved Story, in declaration order; unfinished flows require none. Empty when no finished flow requires a test.",
+			); err != nil {
+				return err
+			}
+		case "started_at":
+			if err := validateStringJSONValue(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "When the user started this build.",
+			); err != nil {
+				return err
+			}
+		case "taking":
+			if err := validateGetBuildResultStartedBuildTransportTakingJSONValue(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Whether the user has taken this build: building until a verification of it passes; passed with the commits to merge; merged once the branch checked out in the project folder holds the commits of one passed run, the builder's and, for written tests, the tests'; dropped once the user dropped it. A project has one open build, and another change is built only once it is merged or dropped.",
+			); err != nil {
+				return err
+			}
+		case "test_writer":
+			if err := validateGetBuildResultTestWriterProgressTransportJSONValue(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "The test writer's assignment.",
+			); err != nil {
+				return err
+			}
+		default:
+			return unknownJSONFieldError(path, key, []string{
+				"answers",
+				"builder",
+				"coverage_statements",
+				"examples",
+				"in_force",
+				"request_revision",
+				"required_test_count",
+				"required_tests",
+				"started_at",
+				"taking",
+				"test_writer",
+			})
+		}
+	}
+	return nil
+}
+
+// validateGetBuildResultStartedBuildTransportAnswersJSONValue checks one value whose JSON shape is fixed by the generated Goa type.
+func validateGetBuildResultStartedBuildTransportAnswersJSONValue(path string, value any, description string) error {
+	field := path
+	if field == "" {
+		field = "$payload"
+	}
+	if value == nil {
+		return invalidGeneratedFieldTypeError(field, "array", "null", description)
+	}
+	typed, ok := value.([]any)
+	if !ok {
+		return invalidGeneratedFieldTypeError(field, "array", decodedJSONType(value), description)
+	}
+	for index, item := range typed {
+		if err := validateGetBuildResultConfirmedAnswerTransportJSONValue(
+			generatedJSONChildPath(path, strconv.Itoa(index), true),
+			item, description,
+		); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// validateGetBuildResultConfirmedAnswerTransportJSONValue checks one value whose JSON shape is fixed by the generated Goa type.
+func validateGetBuildResultConfirmedAnswerTransportJSONValue(path string, value any, description string) error {
+	field := path
+	if field == "" {
+		field = "$payload"
+	}
+	if value == nil {
+		return invalidGeneratedFieldTypeError(field, "object", "null", description)
+	}
+	typed, ok := value.(map[string]any)
+	if !ok {
+		return invalidGeneratedFieldTypeError(field, "object", decodedJSONType(value), description)
+	}
+	keys := make([]string, 0, len(typed))
+	for key := range typed {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		switch key {
+		case "answer":
+			if err := validateStringJSONValue(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "The option the user confirmed, exactly as confirmed.",
+			); err != nil {
+				return err
+			}
+		case "id":
+			if err := validateStringJSONValue(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Question identifier on the Change Card.",
+			); err != nil {
+				return err
+			}
+		case "question":
+			if err := validateStringJSONValue(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "The question as the user answered it.",
+			); err != nil {
+				return err
+			}
+		default:
+			return unknownJSONFieldError(path, key, []string{
+				"answer",
+				"id",
+				"question",
+			})
+		}
+	}
+	return nil
+}
+
+// validateGetBuildResultBuilderProgressTransportJSONValue checks one value whose JSON shape is fixed by the generated Goa type.
+func validateGetBuildResultBuilderProgressTransportJSONValue(path string, value any, description string) error {
+	field := path
+	if field == "" {
+		field = "$payload"
+	}
+	if value == nil {
+		return invalidGeneratedFieldTypeError(field, "object", "null", description)
+	}
+	typed, ok := value.(map[string]any)
+	if !ok {
+		return invalidGeneratedFieldTypeError(field, "object", decodedJSONType(value), description)
+	}
+	keys := make([]string, 0, len(typed))
+	for key := range typed {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		switch key {
+		case "read":
+			if err := validateBooleanJSONValue(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "True once the builder read this assignment in full with get_builder_assignment.",
+			); err != nil {
+				return err
+			}
+		default:
+			return unknownJSONFieldError(path, key, []string{
+				"read",
+			})
+		}
+	}
+	return nil
+}
+
+// validateGetBuildResultStartedBuildTransportCoverageStatementsJSONValue checks one value whose JSON shape is fixed by the generated Goa type.
+func validateGetBuildResultStartedBuildTransportCoverageStatementsJSONValue(path string, value any, description string) error {
+	field := path
+	if field == "" {
+		field = "$payload"
+	}
+	if value == nil {
+		return invalidGeneratedFieldTypeError(field, "array", "null", description)
+	}
+	typed, ok := value.([]any)
+	if !ok {
+		return invalidGeneratedFieldTypeError(field, "array", decodedJSONType(value), description)
+	}
+	for index, item := range typed {
+		if err := validateGetBuildResultTestCoverageStatementTransportJSONValue(
+			generatedJSONChildPath(path, strconv.Itoa(index), true),
+			item, description,
+		); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// validateGetBuildResultTestCoverageStatementTransportJSONValue checks one value whose JSON shape is fixed by the generated Goa type.
+func validateGetBuildResultTestCoverageStatementTransportJSONValue(path string, value any, description string) error {
+	field := path
+	if field == "" {
+		field = "$payload"
+	}
+	if value == nil {
+		return invalidGeneratedFieldTypeError(field, "object", "null", description)
+	}
+	typed, ok := value.(map[string]any)
+	if !ok {
+		return invalidGeneratedFieldTypeError(field, "object", decodedJSONType(value), description)
+	}
+	keys := make([]string, 0, len(typed))
+	for key := range typed {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		switch key {
+		case "example_ids":
+			if err := validateProposeChangePayloadCP1AnalysisAmbiguityTransportOptionsJSONValue(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Example IDs from the assignment's examples[].id; empty when this statement names only answers.",
+			); err != nil {
+				return err
+			}
+		case "explanation":
+			if err := validateStringJSONValue(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Interaction or assertion the writer says exercises these requirements.",
+			); err != nil {
+				return err
+			}
+		case "question_ids":
+			if err := validateProposeChangePayloadCP1AnalysisAmbiguityTransportOptionsJSONValue(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Question IDs from the assignment's answers[].id; empty when this statement names only examples.",
+			); err != nil {
+				return err
+			}
+		case "scenario":
+			if err := validateStringJSONValue(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Exact declared scenario identifier.",
+			); err != nil {
+				return err
+			}
+		default:
+			return unknownJSONFieldError(path, key, []string{
+				"example_ids",
+				"explanation",
+				"question_ids",
+				"scenario",
+			})
+		}
+	}
+	return nil
+}
+
+// validateGetBuildResultStartedBuildTransportRequiredTestsJSONValue checks one value whose JSON shape is fixed by the generated Goa type.
+func validateGetBuildResultStartedBuildTransportRequiredTestsJSONValue(path string, value any, description string) error {
+	field := path
+	if field == "" {
+		field = "$payload"
+	}
+	if value == nil {
+		return invalidGeneratedFieldTypeError(field, "array", "null", description)
+	}
+	typed, ok := value.([]any)
+	if !ok {
+		return invalidGeneratedFieldTypeError(field, "array", decodedJSONType(value), description)
+	}
+	for index, item := range typed {
+		if err := validateGetBuildResultRequiredTestTransportJSONValue(
+			generatedJSONChildPath(path, strconv.Itoa(index), true),
+			item, description,
+		); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// validateGetBuildResultRequiredTestTransportJSONValue checks one value whose JSON shape is fixed by the generated Goa type.
+func validateGetBuildResultRequiredTestTransportJSONValue(path string, value any, description string) error {
+	field := path
+	if field == "" {
+		field = "$payload"
+	}
+	if value == nil {
+		return invalidGeneratedFieldTypeError(field, "object", "null", description)
+	}
+	typed, ok := value.(map[string]any)
+	if !ok {
+		return invalidGeneratedFieldTypeError(field, "object", decodedJSONType(value), description)
+	}
+	keys := make([]string, 0, len(typed))
+	for key := range typed {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		switch key {
+		case "flow_key":
+			if err := validateStringJSONValue(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Key of the finished flow.",
+			); err != nil {
+				return err
+			}
+		case "hook":
+			if err := validateStringJSONValue(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Hook method the test writer implements for the scenario.",
+			); err != nil {
+				return err
+			}
+		case "scenario":
+			if err := validateStringJSONValue(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Scenario name the evaluation suite declares for the flow.",
+			); err != nil {
+				return err
+			}
+		case "story":
+			if err := validateStringJSONValue(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Name of the Story the flow belongs to.",
+			); err != nil {
+				return err
+			}
+		default:
+			return unknownJSONFieldError(path, key, []string{
+				"flow_key",
+				"hook",
+				"scenario",
+				"story",
+			})
+		}
+	}
+	return nil
+}
+
+// validateGetBuildResultStartedBuildTransportTakingJSONValue checks one value whose JSON shape is fixed by the generated Goa type.
+func validateGetBuildResultStartedBuildTransportTakingJSONValue(path string, value any, description string) error {
+	field := path
+	if field == "" {
+		field = "$payload"
+	}
+	if value == nil {
+		return invalidGeneratedFieldTypeError(field, "object", "null", description)
+	}
+	typed, ok := value.(map[string]any)
+	if !ok {
+		return invalidGeneratedFieldTypeError(field, "object", decodedJSONType(value), description)
+	}
+	rawDiscriminator, discriminatorPresent := typed["state"]
+	discriminator, ok := rawDiscriminator.(string)
+	if !ok {
+		return invalidJSONUnionDiscriminator(generatedJSONChildPath(path, "state", false), rawDiscriminator, discriminatorPresent, []string{"building", "passed", "merged", "dropped"})
+	}
+	branch := make(map[string]any, len(typed)-1)
+	for key, item := range typed {
+		if key != "state" {
+			branch[key] = item
+		}
+	}
+	switch discriminator {
+	case "building":
+		return validateProposeChangeResultOperatorEvaluatorTestsTransportJSONValue(path, branch, "")
+	case "passed":
+		return validateGetBuildResultBuildPassedTransportJSONValue(path, branch, "")
+	case "merged":
+		return validateProposeChangeResultOperatorEvaluatorTestsTransportJSONValue(path, branch, "")
+	case "dropped":
+		return validateGetBuildResultBuildDroppedTransportJSONValue(path, branch, "")
+	default:
+		return invalidJSONUnionDiscriminator(generatedJSONChildPath(path, "state", false), discriminator, true, []string{"building", "passed", "merged", "dropped"})
+	}
+}
+
+// validateGetBuildResultBuildPassedTransportJSONValue checks one value whose JSON shape is fixed by the generated Goa type.
+func validateGetBuildResultBuildPassedTransportJSONValue(path string, value any, description string) error {
+	field := path
+	if field == "" {
+		field = "$payload"
+	}
+	if value == nil {
+		return invalidGeneratedFieldTypeError(field, "object", "null", description)
+	}
+	typed, ok := value.(map[string]any)
+	if !ok {
+		return invalidGeneratedFieldTypeError(field, "object", decodedJSONType(value), description)
+	}
+	keys := make([]string, 0, len(typed))
+	for key := range typed {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		switch key {
+		case "base_in_branch":
+			if err := validateBooleanJSONValue(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "False when the branch checked out in the project folder no longer holds the commit this build started from, because its history was rewritten: merging these commits brings that history back, and dropping the build and building again starts from the branch as it is.",
+			); err != nil {
+				return err
+			}
+		case "candidate_branch":
+			if err := validateStringJSONValue(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "The build's builder branch, surla/build-<n>, where this commit was verified.",
+			); err != nil {
+				return err
+			}
+		case "candidate_commit":
+			if err := validateStringJSONValue(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "The builder's commit the run passed.",
+			); err != nil {
+				return err
+			}
+		case "run_id":
+			if err := validateStringJSONValue(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "The newest passed run; get_verification takes it.",
+			); err != nil {
+				return err
+			}
+		case "tests":
+			if err := validateGetBuildResultBuildPassedTransportTestsJSONValue(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "written_tests with the accepted tests' commit to merge after the builder's; evaluator when the project verifies with its stored evaluator, whose tests are not merged.",
+			); err != nil {
+				return err
+			}
+		default:
+			return unknownJSONFieldError(path, key, []string{
+				"base_in_branch",
+				"candidate_branch",
+				"candidate_commit",
+				"run_id",
+				"tests",
+			})
+		}
+	}
+	return nil
+}
+
+// validateGetBuildResultBuildPassedTransportTestsJSONValue checks one value whose JSON shape is fixed by the generated Goa type.
+func validateGetBuildResultBuildPassedTransportTestsJSONValue(path string, value any, description string) error {
+	field := path
+	if field == "" {
+		field = "$payload"
+	}
+	if value == nil {
+		return invalidGeneratedFieldTypeError(field, "object", "null", description)
+	}
+	typed, ok := value.(map[string]any)
+	if !ok {
+		return invalidGeneratedFieldTypeError(field, "object", decodedJSONType(value), description)
+	}
+	rawDiscriminator, discriminatorPresent := typed["source"]
+	discriminator, ok := rawDiscriminator.(string)
+	if !ok {
+		return invalidJSONUnionDiscriminator(generatedJSONChildPath(path, "source", false), rawDiscriminator, discriminatorPresent, []string{"evaluator", "written_tests"})
+	}
+	branch := make(map[string]any, len(typed)-1)
+	for key, item := range typed {
+		if key != "source" {
+			branch[key] = item
+		}
+	}
+	switch discriminator {
+	case "evaluator":
+		return validateProposeChangeResultOperatorEvaluatorTestsTransportJSONValue(path, branch, "")
+	case "written_tests":
+		return validateGetBuildResultBuildPassedTestsTransportJSONValue(path, branch, "")
+	default:
+		return invalidJSONUnionDiscriminator(generatedJSONChildPath(path, "source", false), discriminator, true, []string{"evaluator", "written_tests"})
+	}
+}
+
+// validateGetBuildResultBuildPassedTestsTransportJSONValue checks one value whose JSON shape is fixed by the generated Goa type.
+func validateGetBuildResultBuildPassedTestsTransportJSONValue(path string, value any, description string) error {
+	field := path
+	if field == "" {
+		field = "$payload"
+	}
+	if value == nil {
+		return invalidGeneratedFieldTypeError(field, "object", "null", description)
+	}
+	typed, ok := value.(map[string]any)
+	if !ok {
+		return invalidGeneratedFieldTypeError(field, "object", decodedJSONType(value), description)
+	}
+	keys := make([]string, 0, len(typed))
+	for key := range typed {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		switch key {
+		case "branch":
+			if err := validateStringJSONValue(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "The build's test-writer branch, surla/tests-<n>, where this commit was verified.",
+			); err != nil {
+				return err
+			}
+		case "commit":
+			if err := validateStringJSONValue(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Commit Surla recorded the accepted tests at.",
+			); err != nil {
+				return err
+			}
+		default:
+			return unknownJSONFieldError(path, key, []string{
+				"branch",
+				"commit",
+			})
+		}
+	}
+	return nil
+}
+
+// validateGetBuildResultBuildDroppedTransportJSONValue checks one value whose JSON shape is fixed by the generated Goa type.
+func validateGetBuildResultBuildDroppedTransportJSONValue(path string, value any, description string) error {
+	field := path
+	if field == "" {
+		field = "$payload"
+	}
+	if value == nil {
+		return invalidGeneratedFieldTypeError(field, "object", "null", description)
+	}
+	typed, ok := value.(map[string]any)
+	if !ok {
+		return invalidGeneratedFieldTypeError(field, "object", decodedJSONType(value), description)
+	}
+	keys := make([]string, 0, len(typed))
+	for key := range typed {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		switch key {
+		case "kept_branches":
+			if err := validateProposeChangePayloadCP1AnalysisAmbiguityTransportOptionsJSONValue(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "The build's own branches that exist and hold a commit made after the build's base, where its work stays (git log <branch> shows it); empty when nothing was committed for it.",
+			); err != nil {
+				return err
+			}
+		default:
+			return unknownJSONFieldError(path, key, []string{
+				"kept_branches",
+			})
+		}
+	}
+	return nil
+}
+
+// validateGetBuildResultTestWriterProgressTransportJSONValue checks one value whose JSON shape is fixed by the generated Goa type.
+func validateGetBuildResultTestWriterProgressTransportJSONValue(path string, value any, description string) error {
+	field := path
+	if field == "" {
+		field = "$payload"
+	}
+	if value == nil {
+		return invalidGeneratedFieldTypeError(field, "object", "null", description)
+	}
+	typed, ok := value.(map[string]any)
+	if !ok {
+		return invalidGeneratedFieldTypeError(field, "object", decodedJSONType(value), description)
+	}
+	keys := make([]string, 0, len(typed))
+	for key := range typed {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		switch key {
+		case "read":
+			if err := validateBooleanJSONValue(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "True once the test writer read this assignment in full with get_test_writer_assignment.",
+			); err != nil {
+				return err
+			}
+		case "report":
+			if err := validateIntJSONValue(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Number of the test writer's latest report of this build: 0 until its first report, and one more with each report_tests_finished.",
+			); err != nil {
+				return err
+			}
+		case "tests":
+			if err := validateGetBuildResultTestWriterProgressTransportTestsJSONValue(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "The tests' state: not_used when the project has stored verification settings; otherwise assigned, reported, needs_changes with the number of Surla's findings, accepted with the commit Surla recorded, or could_not_run with the reason and the user's step. Each verdict carries the time Surla reached it.",
+			); err != nil {
+				return err
+			}
+		default:
+			return unknownJSONFieldError(path, key, []string{
+				"read",
+				"report",
+				"tests",
+			})
+		}
+	}
+	return nil
+}
+
+// validateGetBuildResultTestWriterProgressTransportTestsJSONValue checks one value whose JSON shape is fixed by the generated Goa type.
+func validateGetBuildResultTestWriterProgressTransportTestsJSONValue(path string, value any, description string) error {
+	field := path
+	if field == "" {
+		field = "$payload"
+	}
+	if value == nil {
+		return invalidGeneratedFieldTypeError(field, "object", "null", description)
+	}
+	typed, ok := value.(map[string]any)
+	if !ok {
+		return invalidGeneratedFieldTypeError(field, "object", decodedJSONType(value), description)
+	}
+	rawDiscriminator, discriminatorPresent := typed["state"]
+	discriminator, ok := rawDiscriminator.(string)
+	if !ok {
+		return invalidJSONUnionDiscriminator(generatedJSONChildPath(path, "state", false), rawDiscriminator, discriminatorPresent, []string{"not_used", "assigned", "reported", "needs_changes", "accepted", "could_not_run"})
+	}
+	branch := make(map[string]any, len(typed)-1)
+	for key, item := range typed {
+		if key != "state" {
+			branch[key] = item
+		}
+	}
+	switch discriminator {
+	case "not_used":
+		return validateProposeChangeResultOperatorEvaluatorTestsTransportJSONValue(path, branch, "")
+	case "assigned":
+		return validateProposeChangeResultOperatorEvaluatorTestsTransportJSONValue(path, branch, "")
+	case "reported":
+		return validateProposeChangeResultOperatorEvaluatorTestsTransportJSONValue(path, branch, "")
+	case "needs_changes":
+		return validateGetBuildResultTestsNeedChangesTransportJSONValue(path, branch, "")
+	case "accepted":
+		return validateGetBuildResultTestsAcceptedTransportJSONValue(path, branch, "")
+	case "could_not_run":
+		return validateGetBuildResultTestsCouldNotRunTransportJSONValue(path, branch, "")
+	default:
+		return invalidJSONUnionDiscriminator(generatedJSONChildPath(path, "state", false), discriminator, true, []string{"not_used", "assigned", "reported", "needs_changes", "accepted", "could_not_run"})
+	}
+}
+
+// validateGetBuildResultTestsNeedChangesTransportJSONValue checks one value whose JSON shape is fixed by the generated Goa type.
+func validateGetBuildResultTestsNeedChangesTransportJSONValue(path string, value any, description string) error {
+	field := path
+	if field == "" {
+		field = "$payload"
+	}
+	if value == nil {
+		return invalidGeneratedFieldTypeError(field, "object", "null", description)
+	}
+	typed, ok := value.(map[string]any)
+	if !ok {
+		return invalidGeneratedFieldTypeError(field, "object", decodedJSONType(value), description)
+	}
+	keys := make([]string, 0, len(typed))
+	for key := range typed {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		switch key {
+		case "checked_at":
+			if err := validateStringJSONValue(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "When Surla's check reached this verdict.",
+			); err != nil {
+				return err
+			}
+		case "finding_count":
+			if err := validateIntJSONValue(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Number of problems Surla found.",
+			); err != nil {
+				return err
+			}
+		default:
+			return unknownJSONFieldError(path, key, []string{
+				"checked_at",
+				"finding_count",
+			})
+		}
+	}
+	return nil
+}
+
+// validateGetBuildResultTestsAcceptedTransportJSONValue checks one value whose JSON shape is fixed by the generated Goa type.
+func validateGetBuildResultTestsAcceptedTransportJSONValue(path string, value any, description string) error {
+	field := path
+	if field == "" {
+		field = "$payload"
+	}
+	if value == nil {
+		return invalidGeneratedFieldTypeError(field, "object", "null", description)
+	}
+	typed, ok := value.(map[string]any)
+	if !ok {
+		return invalidGeneratedFieldTypeError(field, "object", decodedJSONType(value), description)
+	}
+	keys := make([]string, 0, len(typed))
+	for key := range typed {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		switch key {
+		case "checked_at":
+			if err := validateStringJSONValue(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "When Surla's check reached this verdict.",
+			); err != nil {
+				return err
+			}
+		case "commit":
+			if err := validateStringJSONValue(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Full commit ID Surla recorded the accepted tests at (40 or 64 lowercase hex characters).",
+			); err != nil {
+				return err
+			}
+		case "not_judged":
+			if err := validateStringJSONValue(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "What Surla's check did not judge, always the same sentence.",
+			); err != nil {
+				return err
+			}
+		default:
+			return unknownJSONFieldError(path, key, []string{
+				"checked_at",
+				"commit",
+				"not_judged",
+			})
+		}
+	}
+	return nil
+}
+
+// validateGetBuildResultTestsCouldNotRunTransportJSONValue checks one value whose JSON shape is fixed by the generated Goa type.
+func validateGetBuildResultTestsCouldNotRunTransportJSONValue(path string, value any, description string) error {
+	field := path
+	if field == "" {
+		field = "$payload"
+	}
+	if value == nil {
+		return invalidGeneratedFieldTypeError(field, "object", "null", description)
+	}
+	typed, ok := value.(map[string]any)
+	if !ok {
+		return invalidGeneratedFieldTypeError(field, "object", decodedJSONType(value), description)
+	}
+	keys := make([]string, 0, len(typed))
+	for key := range typed {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		switch key {
+		case "checked_at":
+			if err := validateStringJSONValue(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "When Surla's check stopped.",
+			); err != nil {
+				return err
+			}
+		case "reason":
+			if err := validateStringJSONValue(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Why the check could not run.",
+			); err != nil {
+				return err
+			}
+		case "step":
+			if err := validateStringJSONValue(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "What the user does so the check can run.",
+			); err != nil {
+				return err
+			}
+		default:
+			return unknownJSONFieldError(path, key, []string{
+				"checked_at",
+				"reason",
+				"step",
+			})
+		}
+	}
+	return nil
+}
+
+// validateListBuilderAssignmentsResultJSONValue checks one value whose JSON shape is fixed by the generated Goa type.
+func validateListBuilderAssignmentsResultJSONValue(path string, value any, description string) error {
+	field := path
+	if field == "" {
+		field = "$payload"
+	}
+	if value == nil {
+		return invalidGeneratedFieldTypeError(field, "object", "null", description)
+	}
+	typed, ok := value.(map[string]any)
+	if !ok {
+		return invalidGeneratedFieldTypeError(field, "object", decodedJSONType(value), description)
+	}
+	keys := make([]string, 0, len(typed))
+	for key := range typed {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		switch key {
+		case "assignments":
+			if err := validateListBuilderAssignmentsResultRootAssignmentsJSONValue(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "The open build's assignment while it needs this role; empty otherwise.",
+			); err != nil {
+				return err
+			}
+		default:
+			return unknownJSONFieldError(path, key, []string{
+				"assignments",
+			})
+		}
+	}
+	return nil
+}
+
+// validateListBuilderAssignmentsResultRootAssignmentsJSONValue checks one value whose JSON shape is fixed by the generated Goa type.
+func validateListBuilderAssignmentsResultRootAssignmentsJSONValue(path string, value any, description string) error {
+	field := path
+	if field == "" {
+		field = "$payload"
+	}
+	if value == nil {
+		return invalidGeneratedFieldTypeError(field, "array", "null", description)
+	}
+	typed, ok := value.([]any)
+	if !ok {
+		return invalidGeneratedFieldTypeError(field, "array", decodedJSONType(value), description)
+	}
+	for index, item := range typed {
+		if err := validateListBuilderAssignmentsResultBuilderAssignmentTransportJSONValue(
+			generatedJSONChildPath(path, strconv.Itoa(index), true),
+			item, description,
+		); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// validateListBuilderAssignmentsResultBuilderAssignmentTransportJSONValue checks one value whose JSON shape is fixed by the generated Goa type.
+func validateListBuilderAssignmentsResultBuilderAssignmentTransportJSONValue(path string, value any, description string) error {
+	field := path
+	if field == "" {
+		field = "$payload"
+	}
+	if value == nil {
+		return invalidGeneratedFieldTypeError(field, "object", "null", description)
+	}
+	typed, ok := value.(map[string]any)
+	if !ok {
+		return invalidGeneratedFieldTypeError(field, "object", decodedJSONType(value), description)
+	}
+	keys := make([]string, 0, len(typed))
+	for key := range typed {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		switch key {
+		case "change_id":
+			if err := validateStringJSONValue(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Change Card to build; get_change takes it.",
+			); err != nil {
+				return err
+			}
+		case "gowork_off":
+			if err := validateBooleanJSONValue(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "True when no go.work lies in working_folder or in a folder between it and the working copy's root: run every go command there as GOWORK=off go …, so a go.work of the project folder around your copy does not take it over.",
+			); err != nil {
+				return err
+			}
+		case "in_force":
+			if err := validateBooleanJSONValue(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "True when request_revision is the change's agreed revision, the one in force, as get_build reports it. It stays true while a proposed revision waits and when a refreshed draft is adopted without changing request_revision. If adoption or confirmation changes the agreed request_revision, it becomes false; verify_change refuses this earlier revision, and the assignment stays as it is until the user builds again.",
+			); err != nil {
+				return err
+			}
+		case "read":
+			if err := validateBooleanJSONValue(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "True once you read this assignment in full with get_builder_assignment.",
+			); err != nil {
+				return err
+			}
+		case "request_revision":
+			if err := validateStringJSONValue(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Change Card revision to build; verify_change takes it.",
+			); err != nil {
+				return err
+			}
+		case "working_folder":
+			if err := validateStringJSONValue(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Absolute path of the folder to build in: the project's folder inside your working copy .surla-build, on the build's branch surla/build-<n>. Run git and go there, never in the project folder.",
+			); err != nil {
+				return err
+			}
+		case "written_tests":
+			if err := validateListBuilderAssignmentsResultBuilderAssignmentTransportWrittenTestsJSONValue(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Where the test writer's tests for this build stand: not_used when no test writer is used because the project has stored verification settings; otherwise accepted, with the commit and time, when the build records accepted tests, and not_yet_accepted when it records none.",
+			); err != nil {
+				return err
+			}
+		default:
+			return unknownJSONFieldError(path, key, []string{
+				"change_id",
+				"gowork_off",
+				"in_force",
+				"read",
+				"request_revision",
+				"working_folder",
+				"written_tests",
+			})
+		}
+	}
+	return nil
+}
+
+// validateListBuilderAssignmentsResultBuilderAssignmentTransportWrittenTestsJSONValue checks one value whose JSON shape is fixed by the generated Goa type.
+func validateListBuilderAssignmentsResultBuilderAssignmentTransportWrittenTestsJSONValue(path string, value any, description string) error {
+	field := path
+	if field == "" {
+		field = "$payload"
+	}
+	if value == nil {
+		return invalidGeneratedFieldTypeError(field, "object", "null", description)
+	}
+	typed, ok := value.(map[string]any)
+	if !ok {
+		return invalidGeneratedFieldTypeError(field, "object", decodedJSONType(value), description)
+	}
+	rawDiscriminator, discriminatorPresent := typed["state"]
+	discriminator, ok := rawDiscriminator.(string)
+	if !ok {
+		return invalidJSONUnionDiscriminator(generatedJSONChildPath(path, "state", false), rawDiscriminator, discriminatorPresent, []string{"not_used", "not_yet_accepted", "accepted"})
+	}
+	branch := make(map[string]any, len(typed)-1)
+	for key, item := range typed {
+		if key != "state" {
+			branch[key] = item
+		}
+	}
+	switch discriminator {
+	case "not_used":
+		return validateProposeChangeResultOperatorEvaluatorTestsTransportJSONValue(path, branch, "")
+	case "not_yet_accepted":
+		return validateProposeChangeResultOperatorEvaluatorTestsTransportJSONValue(path, branch, "")
+	case "accepted":
+		return validateGetBuildResultTestsAcceptedTransportJSONValue(path, branch, "")
+	default:
+		return invalidJSONUnionDiscriminator(generatedJSONChildPath(path, "state", false), discriminator, true, []string{"not_used", "not_yet_accepted", "accepted"})
+	}
+}
+
+// validateGetBuilderAssignmentPayloadJSONValue checks one value whose JSON shape is fixed by the generated Goa type.
+func validateGetBuilderAssignmentPayloadJSONValue(path string, value any, description string) error {
+	field := path
+	if field == "" {
+		field = "$payload"
+	}
+	if value == nil {
+		return invalidGeneratedFieldTypeError(field, "object", "null", description)
+	}
+	typed, ok := value.(map[string]any)
+	if !ok {
+		return invalidGeneratedFieldTypeError(field, "object", decodedJSONType(value), description)
+	}
+	keys := make([]string, 0, len(typed))
+	for key := range typed {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		switch key {
+		case "change_id":
+			if err := validateStringJSONValue(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Change Card identifier from list_builder_assignments.",
+			); err != nil {
+				return err
+			}
+		default:
+			return unknownJSONFieldError(path, key, []string{
+				"change_id",
+			})
+		}
+	}
+	return nil
+}
+
+// validateListTestWriterAssignmentsResultJSONValue checks one value whose JSON shape is fixed by the generated Goa type.
+func validateListTestWriterAssignmentsResultJSONValue(path string, value any, description string) error {
+	field := path
+	if field == "" {
+		field = "$payload"
+	}
+	if value == nil {
+		return invalidGeneratedFieldTypeError(field, "object", "null", description)
+	}
+	typed, ok := value.(map[string]any)
+	if !ok {
+		return invalidGeneratedFieldTypeError(field, "object", decodedJSONType(value), description)
+	}
+	keys := make([]string, 0, len(typed))
+	for key := range typed {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		switch key {
+		case "assignments":
+			if err := validateListTestWriterAssignmentsResultRootAssignmentsJSONValue(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "The open build's assignment while it needs this role; empty otherwise.",
+			); err != nil {
+				return err
+			}
+		default:
+			return unknownJSONFieldError(path, key, []string{
+				"assignments",
+			})
+		}
+	}
+	return nil
+}
+
+// validateListTestWriterAssignmentsResultRootAssignmentsJSONValue checks one value whose JSON shape is fixed by the generated Goa type.
+func validateListTestWriterAssignmentsResultRootAssignmentsJSONValue(path string, value any, description string) error {
+	field := path
+	if field == "" {
+		field = "$payload"
+	}
+	if value == nil {
+		return invalidGeneratedFieldTypeError(field, "array", "null", description)
+	}
+	typed, ok := value.([]any)
+	if !ok {
+		return invalidGeneratedFieldTypeError(field, "array", decodedJSONType(value), description)
+	}
+	for index, item := range typed {
+		if err := validateListTestWriterAssignmentsResultTestWriterAssignmentItemTransportJSONValue(
+			generatedJSONChildPath(path, strconv.Itoa(index), true),
+			item, description,
+		); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// validateListTestWriterAssignmentsResultTestWriterAssignmentItemTransportJSONValue checks one value whose JSON shape is fixed by the generated Goa type.
+func validateListTestWriterAssignmentsResultTestWriterAssignmentItemTransportJSONValue(path string, value any, description string) error {
+	field := path
+	if field == "" {
+		field = "$payload"
+	}
+	if value == nil {
+		return invalidGeneratedFieldTypeError(field, "object", "null", description)
+	}
+	typed, ok := value.(map[string]any)
+	if !ok {
+		return invalidGeneratedFieldTypeError(field, "object", decodedJSONType(value), description)
+	}
+	keys := make([]string, 0, len(typed))
+	for key := range typed {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		switch key {
+		case "change_id":
+			if err := validateStringJSONValue(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Change Card the tests are for; get_test_writer_assignment takes it.",
+			); err != nil {
+				return err
+			}
+		case "in_force":
+			if err := validateBooleanJSONValue(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "True when request_revision is the change's agreed revision, the one in force, as get_build reports it. It stays true while a proposed revision waits and when a refreshed draft is adopted without changing request_revision. If adoption or confirmation changes the agreed request_revision, it becomes false; the assignment stays on the earlier revision until the user builds again.",
+			); err != nil {
+				return err
+			}
+		case "progress":
+			if err := validateGetBuildResultTestWriterProgressTransportJSONValue(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Where this assignment stands.",
+			); err != nil {
+				return err
+			}
+		case "request_revision":
+			if err := validateStringJSONValue(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Change Card revision the tests are for.",
+			); err != nil {
+				return err
+			}
+		default:
+			return unknownJSONFieldError(path, key, []string{
+				"change_id",
+				"in_force",
+				"progress",
+				"request_revision",
+			})
+		}
+	}
+	return nil
+}
+
+// validateGetTestWriterAssignmentPayloadJSONValue checks one value whose JSON shape is fixed by the generated Goa type.
+func validateGetTestWriterAssignmentPayloadJSONValue(path string, value any, description string) error {
+	field := path
+	if field == "" {
+		field = "$payload"
+	}
+	if value == nil {
+		return invalidGeneratedFieldTypeError(field, "object", "null", description)
+	}
+	typed, ok := value.(map[string]any)
+	if !ok {
+		return invalidGeneratedFieldTypeError(field, "object", decodedJSONType(value), description)
+	}
+	keys := make([]string, 0, len(typed))
+	for key := range typed {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		switch key {
+		case "change_id":
+			if err := validateStringJSONValue(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Change Card identifier from list_test_writer_assignments.",
+			); err != nil {
+				return err
+			}
+		default:
+			return unknownJSONFieldError(path, key, []string{
+				"change_id",
+			})
+		}
+	}
+	return nil
+}
+
+// validateGetTestWriterAssignmentResultJSONValue checks one value whose JSON shape is fixed by the generated Goa type.
+func validateGetTestWriterAssignmentResultJSONValue(path string, value any, description string) error {
+	field := path
+	if field == "" {
+		field = "$payload"
+	}
+	if value == nil {
+		return invalidGeneratedFieldTypeError(field, "object", "null", description)
+	}
+	typed, ok := value.(map[string]any)
+	if !ok {
+		return invalidGeneratedFieldTypeError(field, "object", decodedJSONType(value), description)
+	}
+	keys := make([]string, 0, len(typed))
+	for key := range typed {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		switch key {
+		case "answers":
+			if err := validateGetBuildResultStartedBuildTransportAnswersJSONValue(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Each question of the change as agreed at request_revision with the answer the user confirmed, in question order, copied when this build started; empty when the agreed revision asked none. The tests must hold the service to every answer.",
+			); err != nil {
+				return err
+			}
+		case "change_id":
+			if err := validateStringJSONValue(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Change Card the tests are for.",
+			); err != nil {
+				return err
+			}
+		case "coverage_statements":
+			if err := validateGetBuildResultStartedBuildTransportCoverageStatementsJSONValue(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Statements submitted with the latest report, retained for correction after findings or a check that could not run; empty before any report or when none were stated.",
+			); err != nil {
+				return err
+			}
+		case "design_source":
+			if err := validateStringJSONValue(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "The canonical design source as agreed at request_revision, copied when this build started; later revisions do not change it.",
+			); err != nil {
+				return err
+			}
+		case "examples":
+			if err := validateProposeChangeResultRootExamplesJSONValue(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "The confirmation examples as agreed at request_revision, exactly as the user confirmed them, copied when this build started. The tests must hold the service to each expected outcome.",
+			); err != nil {
+				return err
+			}
+		case "findings":
+			if err := validateProposeChangePayloadCP1AnalysisAmbiguityTransportOptionsJSONValue(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Surla's findings, one problem per item, with no absolute path: as many as progress gives in finding_count when its state is needs_changes, and none in any other state. Fix them in working_folder, then report again.",
+			); err != nil {
+				return err
+			}
+		case "in_force":
+			if err := validateBooleanJSONValue(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "True when request_revision is the change's agreed revision, the one in force, as get_build reports it. It stays true while a proposed revision waits and when a refreshed draft is adopted without changing request_revision. If adoption or confirmation changes the agreed request_revision, it becomes false; the assignment stays on the earlier revision until the user builds again.",
+			); err != nil {
+				return err
+			}
+		case "preserved_behaviors":
+			if err := validateProposeChangePayloadCP1AnalysisAmbiguityTransportOptionsJSONValue(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "The existing behaviors the change as agreed at request_revision keeps, copied when this build started; empty when it names none. The tests must hold the service to each.",
+			); err != nil {
+				return err
+			}
+		case "progress":
+			if err := validateGetBuildResultTestWriterProgressTransportJSONValue(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Where this assignment stands.",
+			); err != nil {
+				return err
+			}
+		case "request_revision":
+			if err := validateStringJSONValue(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Change Card revision the tests are for; report_tests_finished takes it.",
+			); err != nil {
+				return err
+			}
+		case "required_tests":
+			if err := validateGetBuildResultStartedBuildTransportRequiredTestsJSONValue(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "One test per finished flow of stories, in declaration order; unfinished flows require none.",
+			); err != nil {
+				return err
+			}
+		case "stories":
+			if err := validateProposeChangeResultProposedRevisionItemTransportStoriesJSONValue(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "The Story as agreed at request_revision, in declaration order. It does not change when the change is revised later.",
+			); err != nil {
+				return err
+			}
+		case "working_folder":
+			if err := validateStringJSONValue(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Folder to write the tests in: your own working copy of the project, .surla-tests, on the build's branch surla/tests-<n>. Do not commit there: Surla commits what it accepts.",
+			); err != nil {
+				return err
+			}
+		default:
+			return unknownJSONFieldError(path, key, []string{
+				"answers",
+				"change_id",
+				"coverage_statements",
+				"design_source",
+				"examples",
+				"findings",
+				"in_force",
+				"preserved_behaviors",
+				"progress",
+				"request_revision",
+				"required_tests",
+				"stories",
+				"working_folder",
+			})
+		}
+	}
+	return nil
+}
+
+// validateReportTestsFinishedPayloadJSONValue checks one value whose JSON shape is fixed by the generated Goa type.
+func validateReportTestsFinishedPayloadJSONValue(path string, value any, description string) error {
+	field := path
+	if field == "" {
+		field = "$payload"
+	}
+	if value == nil {
+		return invalidGeneratedFieldTypeError(field, "object", "null", description)
+	}
+	typed, ok := value.(map[string]any)
+	if !ok {
+		return invalidGeneratedFieldTypeError(field, "object", decodedJSONType(value), description)
+	}
+	keys := make([]string, 0, len(typed))
+	for key := range typed {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		switch key {
+		case "change_id":
+			if err := validateStringJSONValue(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Change Card identifier from your test assignment.",
+			); err != nil {
+				return err
+			}
+		case "coverage_statements":
+			if err := validateGetBuildResultStartedBuildTransportCoverageStatementsJSONValue(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Your stated scenario coverage of this assignment's answers and examples; use [] when none is stated. Surla validates references but does not judge assertion meaning.",
+			); err != nil {
+				return err
+			}
+		case "request_revision":
+			if err := validateStringJSONValue(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "request_revision of your test assignment.",
+			); err != nil {
+				return err
+			}
+		default:
+			return unknownJSONFieldError(path, key, []string{
+				"change_id",
+				"coverage_statements",
+				"request_revision",
+			})
+		}
+	}
+	return nil
+}
+
+// validateReviewVerificationResultJSONValue checks one value whose JSON shape is fixed by the generated Goa type.
+func validateReviewVerificationResultJSONValue(path string, value any, description string) error {
+	field := path
+	if field == "" {
+		field = "$payload"
+	}
+	if value == nil {
+		return invalidGeneratedFieldTypeError(field, "object", "null", description)
+	}
+	typed, ok := value.(map[string]any)
+	if !ok {
+		return invalidGeneratedFieldTypeError(field, "object", decodedJSONType(value), description)
+	}
+	keys := make([]string, 0, len(typed))
+	for key := range typed {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		switch key {
+		case "accepted_at":
+			if err := validateStringJSONValue(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "When the run was accepted.",
+			); err != nil {
+				return err
+			}
+		case "candidate_binaries_dir":
+			if err := validateStringJSONValue(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Absolute folder containing the binaries built by this completed run. Returned only to the user when promotion settings are configured, so the user can publish these exact binaries before approval. Agents never receive this private path.",
+			); err != nil {
+				return err
+			}
+		case "candidate_commit":
+			if err := validateStringJSONValue(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Candidate commit the run builds and verifies.",
+			); err != nil {
+				return err
+			}
+		case "change_id":
+			if err := validateStringJSONValue(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Change Card the run verifies.",
+			); err != nil {
+				return err
+			}
+		case "inputs_current":
+			if err := validateBooleanJSONValue(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Whether this run's agreed revision and selected tests match the current Change Card and the usable build or the stored verification settings. This observation does not establish the current candidate working tree, deployment or approval.",
+			); err != nil {
+				return err
+			}
+		case "request_revision":
+			if err := validateStringJSONValue(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Change Card revision the run verifies.",
+			); err != nil {
+				return err
+			}
+		case "review":
+			if err := validateReviewVerificationResultVerificationReviewTransportJSONValue(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Immutable Story evidence and the owner's current approval observation.",
+			); err != nil {
+				return err
+			}
+		case "run_id":
+			if err := validateStringJSONValue(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Verification run identifier; get_verification takes it.",
+			); err != nil {
+				return err
+			}
+		case "state":
+			if err := validateVerifyChangeResultRootStateJSONValue(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Exactly one of running, completed or not_completed.",
+			); err != nil {
+				return err
+			}
+		case "suite_commit":
+			if err := validateStringJSONValue(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Commit of the tests the run uses: the operator's evaluator, or the tests accepted for the change's build.",
+			); err != nil {
+				return err
+			}
+		case "test_source":
+			if err := validateProposeChangeResultApprovalItemTransportTestSourceJSONValue(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Where the run's tests came from, recorded when the run started: evaluator, or written_tests with their commit and a notice.",
+			); err != nil {
+				return err
+			}
+		default:
+			return unknownJSONFieldError(path, key, []string{
+				"accepted_at",
+				"candidate_binaries_dir",
+				"candidate_commit",
+				"change_id",
+				"inputs_current",
+				"request_revision",
+				"review",
+				"run_id",
+				"state",
+				"suite_commit",
+				"test_source",
+			})
+		}
+	}
+	return nil
+}
+
+// validateReviewVerificationResultVerificationReviewTransportJSONValue checks one value whose JSON shape is fixed by the generated Goa type.
+func validateReviewVerificationResultVerificationReviewTransportJSONValue(path string, value any, description string) error {
+	field := path
+	if field == "" {
+		field = "$payload"
+	}
+	if value == nil {
+		return invalidGeneratedFieldTypeError(field, "object", "null", description)
+	}
+	typed, ok := value.(map[string]any)
+	if !ok {
+		return invalidGeneratedFieldTypeError(field, "object", decodedJSONType(value), description)
+	}
+	keys := make([]string, 0, len(typed))
+	for key := range typed {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		switch key {
+		case "approval":
+			if err := validateReviewVerificationResultVerificationReviewTransportApprovalJSONValue(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "The owner's current observation for this exact report, independent of inputs_current.",
+			); err != nil {
+				return err
+			}
+		case "story_context":
+			if err := validateReviewVerificationResultVerificationReviewTransportStoryContextJSONValue(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "The run's immutable Story context, or the explicit fact it was not recorded.",
+			); err != nil {
+				return err
+			}
+		default:
+			return unknownJSONFieldError(path, key, []string{
+				"approval",
+				"story_context",
+			})
+		}
+	}
+	return nil
+}
+
+// validateReviewVerificationResultVerificationReviewTransportApprovalJSONValue checks one value whose JSON shape is fixed by the generated Goa type.
+func validateReviewVerificationResultVerificationReviewTransportApprovalJSONValue(path string, value any, description string) error {
+	field := path
+	if field == "" {
+		field = "$payload"
+	}
+	if value == nil {
+		return invalidGeneratedFieldTypeError(field, "object", "null", description)
+	}
+	typed, ok := value.(map[string]any)
+	if !ok {
+		return invalidGeneratedFieldTypeError(field, "object", decodedJSONType(value), description)
+	}
+	rawDiscriminator, discriminatorPresent := typed["state"]
+	discriminator, ok := rawDiscriminator.(string)
+	if !ok {
+		return invalidJSONUnionDiscriminator(generatedJSONChildPath(path, "state", false), rawDiscriminator, discriminatorPresent, []string{"available", "blocked", "recorded", "unverified"})
+	}
+	branch := make(map[string]any, len(typed)-1)
+	for key, item := range typed {
+		if key != "state" {
+			branch[key] = item
+		}
+	}
+	switch discriminator {
+	case "available":
+		return validateProposeChangeResultOperatorEvaluatorTestsTransportJSONValue(path, branch, "")
+	case "blocked":
+		return validateReviewVerificationResultRunApprovalBlockedTransportJSONValue(path, branch, "")
+	case "recorded":
+		return validateProposeChangeResultApprovalItemTransportJSONValue(path, branch, "")
+	case "unverified":
+		return validateProposeChangeResultUnverifiedApprovalItemTransportJSONValue(path, branch, "")
+	default:
+		return invalidJSONUnionDiscriminator(generatedJSONChildPath(path, "state", false), discriminator, true, []string{"available", "blocked", "recorded", "unverified"})
+	}
+}
+
+// validateReviewVerificationResultRunApprovalBlockedTransportJSONValue checks one value whose JSON shape is fixed by the generated Goa type.
+func validateReviewVerificationResultRunApprovalBlockedTransportJSONValue(path string, value any, description string) error {
+	field := path
+	if field == "" {
+		field = "$payload"
+	}
+	if value == nil {
+		return invalidGeneratedFieldTypeError(field, "object", "null", description)
+	}
+	typed, ok := value.(map[string]any)
+	if !ok {
+		return invalidGeneratedFieldTypeError(field, "object", decodedJSONType(value), description)
+	}
+	keys := make([]string, 0, len(typed))
+	for key := range typed {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		switch key {
+		case "reason":
+			if err := validateStringJSONValue(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Owner's safe explanation and enabling step.",
+			); err != nil {
+				return err
+			}
+		default:
+			return unknownJSONFieldError(path, key, []string{
+				"reason",
+			})
+		}
+	}
+	return nil
+}
+
+// validateReviewVerificationResultVerificationReviewTransportStoryContextJSONValue checks one value whose JSON shape is fixed by the generated Goa type.
+func validateReviewVerificationResultVerificationReviewTransportStoryContextJSONValue(path string, value any, description string) error {
+	field := path
+	if field == "" {
+		field = "$payload"
+	}
+	if value == nil {
+		return invalidGeneratedFieldTypeError(field, "object", "null", description)
+	}
+	typed, ok := value.(map[string]any)
+	if !ok {
+		return invalidGeneratedFieldTypeError(field, "object", decodedJSONType(value), description)
+	}
+	rawDiscriminator, discriminatorPresent := typed["state"]
+	discriminator, ok := rawDiscriminator.(string)
+	if !ok {
+		return invalidJSONUnionDiscriminator(generatedJSONChildPath(path, "state", false), rawDiscriminator, discriminatorPresent, []string{"recorded", "not_recorded"})
+	}
+	branch := make(map[string]any, len(typed)-1)
+	for key, item := range typed {
+		if key != "state" {
+			branch[key] = item
+		}
+	}
+	switch discriminator {
+	case "recorded":
+		return validateReviewVerificationResultRecordedRunStoryTransportJSONValue(path, branch, "")
+	case "not_recorded":
+		return validateProposeChangeResultOperatorEvaluatorTestsTransportJSONValue(path, branch, "")
+	default:
+		return invalidJSONUnionDiscriminator(generatedJSONChildPath(path, "state", false), discriminator, true, []string{"recorded", "not_recorded"})
+	}
+}
+
+// validateReviewVerificationResultRecordedRunStoryTransportJSONValue checks one value whose JSON shape is fixed by the generated Goa type.
+func validateReviewVerificationResultRecordedRunStoryTransportJSONValue(path string, value any, description string) error {
+	field := path
+	if field == "" {
+		field = "$payload"
+	}
+	if value == nil {
+		return invalidGeneratedFieldTypeError(field, "object", "null", description)
+	}
+	typed, ok := value.(map[string]any)
+	if !ok {
+		return invalidGeneratedFieldTypeError(field, "object", decodedJSONType(value), description)
+	}
+	keys := make([]string, 0, len(typed))
+	for key := range typed {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		switch key {
+		case "build_number":
+			if err := validateIntJSONValue(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Number of the build this run was accepted for.",
+			); err != nil {
+				return err
+			}
+		case "build_started_at":
+			if err := validateStringJSONValue(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Accepted build's saved start time.",
+			); err != nil {
+				return err
+			}
+		case "mapping":
+			if err := validateReviewVerificationResultRecordedRunStoryTransportMappingJSONValue(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "The owner's exact required-test mapping for written tests, or the explicit absence of such a mapping for an operator evaluator.",
+			); err != nil {
+				return err
+			}
+		case "stories":
+			if err := validateProposeChangeResultProposedRevisionItemTransportStoriesJSONValue(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Stories as agreed for this run, in declaration order; empty when the agreement declares none.",
+			); err != nil {
+				return err
+			}
+		case "test_coverage":
+			if err := validateReviewVerificationResultRecordedRunStoryTransportTestCoverageJSONValue(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "The writer's immutable statements for this run, or explicit missing historical/operator evidence.",
+			); err != nil {
+				return err
+			}
+		default:
+			return unknownJSONFieldError(path, key, []string{
+				"build_number",
+				"build_started_at",
+				"mapping",
+				"stories",
+				"test_coverage",
+			})
+		}
+	}
+	return nil
+}
+
+// validateReviewVerificationResultRecordedRunStoryTransportMappingJSONValue checks one value whose JSON shape is fixed by the generated Goa type.
+func validateReviewVerificationResultRecordedRunStoryTransportMappingJSONValue(path string, value any, description string) error {
+	field := path
+	if field == "" {
+		field = "$payload"
+	}
+	if value == nil {
+		return invalidGeneratedFieldTypeError(field, "object", "null", description)
+	}
+	typed, ok := value.(map[string]any)
+	if !ok {
+		return invalidGeneratedFieldTypeError(field, "object", decodedJSONType(value), description)
+	}
+	rawDiscriminator, discriminatorPresent := typed["state"]
+	discriminator, ok := rawDiscriminator.(string)
+	if !ok {
+		return invalidJSONUnionDiscriminator(generatedJSONChildPath(path, "state", false), rawDiscriminator, discriminatorPresent, []string{"mapped", "not_recorded_for_evaluator"})
+	}
+	branch := make(map[string]any, len(typed)-1)
+	for key, item := range typed {
+		if key != "state" {
+			branch[key] = item
+		}
+	}
+	switch discriminator {
+	case "mapped":
+		return validateReviewVerificationResultRunStoryMappingTransportJSONValue(path, branch, "")
+	case "not_recorded_for_evaluator":
+		return validateProposeChangeResultOperatorEvaluatorTestsTransportJSONValue(path, branch, "")
+	default:
+		return invalidJSONUnionDiscriminator(generatedJSONChildPath(path, "state", false), discriminator, true, []string{"mapped", "not_recorded_for_evaluator"})
+	}
+}
+
+// validateReviewVerificationResultRunStoryMappingTransportJSONValue checks one value whose JSON shape is fixed by the generated Goa type.
+func validateReviewVerificationResultRunStoryMappingTransportJSONValue(path string, value any, description string) error {
+	field := path
+	if field == "" {
+		field = "$payload"
+	}
+	if value == nil {
+		return invalidGeneratedFieldTypeError(field, "object", "null", description)
+	}
+	typed, ok := value.(map[string]any)
+	if !ok {
+		return invalidGeneratedFieldTypeError(field, "object", decodedJSONType(value), description)
+	}
+	keys := make([]string, 0, len(typed))
+	for key := range typed {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		switch key {
+		case "required_tests":
+			if err := validateGetBuildResultStartedBuildTransportRequiredTestsJSONValue(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "One test per finished flow, in declaration order.",
+			); err != nil {
+				return err
+			}
+		default:
+			return unknownJSONFieldError(path, key, []string{
+				"required_tests",
+			})
+		}
+	}
+	return nil
+}
+
+// validateReviewVerificationResultRecordedRunStoryTransportTestCoverageJSONValue checks one value whose JSON shape is fixed by the generated Goa type.
+func validateReviewVerificationResultRecordedRunStoryTransportTestCoverageJSONValue(path string, value any, description string) error {
+	field := path
+	if field == "" {
+		field = "$payload"
+	}
+	if value == nil {
+		return invalidGeneratedFieldTypeError(field, "object", "null", description)
+	}
+	typed, ok := value.(map[string]any)
+	if !ok {
+		return invalidGeneratedFieldTypeError(field, "object", decodedJSONType(value), description)
+	}
+	rawDiscriminator, discriminatorPresent := typed["state"]
+	discriminator, ok := rawDiscriminator.(string)
+	if !ok {
+		return invalidJSONUnionDiscriminator(generatedJSONChildPath(path, "state", false), rawDiscriminator, discriminatorPresent, []string{"recorded", "not_recorded"})
+	}
+	branch := make(map[string]any, len(typed)-1)
+	for key, item := range typed {
+		if key != "state" {
+			branch[key] = item
+		}
+	}
+	switch discriminator {
+	case "recorded":
+		return validateReviewVerificationResultRecordedTestCoverageTransportJSONValue(path, branch, "")
+	case "not_recorded":
+		return validateProposeChangeResultOperatorEvaluatorTestsTransportJSONValue(path, branch, "")
+	default:
+		return invalidJSONUnionDiscriminator(generatedJSONChildPath(path, "state", false), discriminator, true, []string{"recorded", "not_recorded"})
+	}
+}
+
+// validateReviewVerificationResultRecordedTestCoverageTransportJSONValue checks one value whose JSON shape is fixed by the generated Goa type.
+func validateReviewVerificationResultRecordedTestCoverageTransportJSONValue(path string, value any, description string) error {
+	field := path
+	if field == "" {
+		field = "$payload"
+	}
+	if value == nil {
+		return invalidGeneratedFieldTypeError(field, "object", "null", description)
+	}
+	typed, ok := value.(map[string]any)
+	if !ok {
+		return invalidGeneratedFieldTypeError(field, "object", decodedJSONType(value), description)
+	}
+	keys := make([]string, 0, len(typed))
+	for key := range typed {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		switch key {
+		case "answers":
+			if err := validateGetBuildResultStartedBuildTransportAnswersJSONValue(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Answers saved for the built agreement, in question order.",
+			); err != nil {
+				return err
+			}
+		case "coverage_statements":
+			if err := validateGetBuildResultStartedBuildTransportCoverageStatementsJSONValue(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Writer statements for this report; empty means Not stated.",
+			); err != nil {
+				return err
+			}
+		case "examples":
+			if err := validateProposeChangeResultRootExamplesJSONValue(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Examples saved for the built agreement, in confirmation order.",
+			); err != nil {
+				return err
+			}
+		case "report":
+			if err := validateIntJSONValue(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Accepted test-writer report number.",
+			); err != nil {
+				return err
+			}
+		default:
+			return unknownJSONFieldError(path, key, []string{
+				"answers",
+				"coverage_statements",
+				"examples",
+				"report",
 			})
 		}
 	}
@@ -16246,6 +29524,39 @@ func decodeApprovalItemTransportToApprovalItem(v *toolhttp.ApprovalItemTransport
 		tv := val
 		res.Artifacts[tk] = tv
 	}
+	switch string(v.TestSource.Kind()) {
+	case "evaluator":
+		actual, _ := v.TestSource.AsEvaluator()
+		var obj *OperatorEvaluatorTests
+		if actual != nil {
+			obj = decodeOperatorEvaluatorTestsTransportToOperatorEvaluatorTests(actual)
+		}
+		u := res.TestSource
+		u.SetEvaluator((*OperatorEvaluatorTests)(obj))
+		res.TestSource = u
+	case "written_tests":
+		actual, _ := v.TestSource.AsWrittenTests()
+		var obj *AgentWrittenTests
+		if actual != nil {
+			obj = decodeAgentWrittenTestsTransportToAgentWrittenTests(actual)
+		}
+		u := res.TestSource
+		u.SetWrittenTests((*AgentWrittenTests)(obj))
+		res.TestSource = u
+	}
+
+	return res
+}
+func decodeOperatorEvaluatorTestsTransportToOperatorEvaluatorTests(v *toolhttp.OperatorEvaluatorTestsTransport) *OperatorEvaluatorTests {
+	res := &OperatorEvaluatorTests{}
+
+	return res
+}
+func decodeAgentWrittenTestsTransportToAgentWrittenTests(v *toolhttp.AgentWrittenTestsTransport) *AgentWrittenTests {
+	res := &AgentWrittenTests{
+		Commit: *v.Commit,
+		Notice: *v.Notice,
+	}
 
 	return res
 }
@@ -16254,6 +29565,54 @@ func decodeUnverifiedApprovalItemTransportToUnverifiedApprovalItem(v *toolhttp.U
 		Reason: *v.Reason,
 	}
 	res.Approval = decodeApprovalItemTransportToApprovalItem(v.Approval)
+
+	return res
+}
+func decodeProposedRevisionItemTransportToProposedRevisionItem(v *toolhttp.ProposedRevisionItemTransport) *ProposedRevisionItem {
+	res := &ProposedRevisionItem{
+		Prompt:          *v.Prompt,
+		Summary:         *v.Summary,
+		RequestRevision: *v.RequestRevision,
+	}
+	if v.Ambiguities != nil {
+		res.Ambiguities = make([]*AmbiguityQuestion, len(v.Ambiguities))
+		for i, val := range v.Ambiguities {
+			if val == nil {
+				res.Ambiguities[i] = nil
+				continue
+			}
+			res.Ambiguities[i] = decodeAmbiguityQuestionTransportToAmbiguityQuestion(val)
+		}
+	}
+	res.Examples = make([]*ExampleItem, len(v.Examples))
+	for i, val := range v.Examples {
+		if val == nil {
+			res.Examples[i] = nil
+			continue
+		}
+		res.Examples[i] = decodeExampleItemTransportToExampleItem(val)
+	}
+	res.PreservedBehaviors = make([]string, len(v.PreservedBehaviors))
+	for i, val := range v.PreservedBehaviors {
+		res.PreservedBehaviors[i] = val
+	}
+	if v.Stories != nil {
+		res.Stories = make([]*StorySummaryItem, len(v.Stories))
+		for i, val := range v.Stories {
+			if val == nil {
+				res.Stories[i] = nil
+				continue
+			}
+			res.Stories[i] = decodeStorySummaryItemTransportToStorySummaryItem(val)
+		}
+	}
+	if v.UIComposition != nil {
+		res.UIComposition = decodeUICompositionItemTransportToUICompositionItem(v.UIComposition)
+	}
+	res.ChangedDesignFiles = make([]string, len(v.ChangedDesignFiles))
+	for i, val := range v.ChangedDesignFiles {
+		res.ChangedDesignFiles[i] = val
+	}
 
 	return res
 }
@@ -16395,6 +29754,41 @@ func encodeApprovalItemToApprovalItemTransport(v *ApprovalItem) *toolhttp.Approv
 		tv := val
 		res.Artifacts[tk] = tv
 	}
+	var testSourceValue toolhttp.ApprovalTestSource
+	switch string(v.TestSource.Kind()) {
+	case "evaluator":
+		actual, _ := v.TestSource.AsEvaluator()
+		var obj *toolhttp.OperatorEvaluatorTestsTransport
+		if actual != nil {
+			obj = encodeOperatorEvaluatorTestsToOperatorEvaluatorTestsTransport(actual)
+		}
+		u := testSourceValue
+		u.SetEvaluator((*toolhttp.OperatorEvaluatorTestsTransport)(obj))
+		testSourceValue = u
+	case "written_tests":
+		actual, _ := v.TestSource.AsWrittenTests()
+		var obj *toolhttp.AgentWrittenTestsTransport
+		if actual != nil {
+			obj = encodeAgentWrittenTestsToAgentWrittenTestsTransport(actual)
+		}
+		u := testSourceValue
+		u.SetWrittenTests((*toolhttp.AgentWrittenTestsTransport)(obj))
+		testSourceValue = u
+	}
+	res.TestSource = &testSourceValue
+
+	return res
+}
+func encodeOperatorEvaluatorTestsToOperatorEvaluatorTestsTransport(v *OperatorEvaluatorTests) *toolhttp.OperatorEvaluatorTestsTransport {
+	res := &toolhttp.OperatorEvaluatorTestsTransport{}
+
+	return res
+}
+func encodeAgentWrittenTestsToAgentWrittenTestsTransport(v *AgentWrittenTests) *toolhttp.AgentWrittenTestsTransport {
+	res := &toolhttp.AgentWrittenTestsTransport{
+		Commit: &v.Commit,
+		Notice: &v.Notice,
+	}
 
 	return res
 }
@@ -16403,6 +29797,54 @@ func encodeUnverifiedApprovalItemToUnverifiedApprovalItemTransport(v *Unverified
 		Reason: &v.Reason,
 	}
 	res.Approval = encodeApprovalItemToApprovalItemTransport(v.Approval)
+
+	return res
+}
+func encodeProposedRevisionItemToProposedRevisionItemTransport(v *ProposedRevisionItem) *toolhttp.ProposedRevisionItemTransport {
+	res := &toolhttp.ProposedRevisionItemTransport{
+		Prompt:          &v.Prompt,
+		Summary:         &v.Summary,
+		RequestRevision: &v.RequestRevision,
+	}
+	if v.Ambiguities != nil {
+		res.Ambiguities = make([]*toolhttp.AmbiguityQuestionTransport, len(v.Ambiguities))
+		for i, val := range v.Ambiguities {
+			if val == nil {
+				res.Ambiguities[i] = nil
+				continue
+			}
+			res.Ambiguities[i] = encodeAmbiguityQuestionToAmbiguityQuestionTransport(val)
+		}
+	}
+	res.Examples = make([]*toolhttp.ExampleItemTransport, len(v.Examples))
+	for i, val := range v.Examples {
+		if val == nil {
+			res.Examples[i] = nil
+			continue
+		}
+		res.Examples[i] = encodeExampleItemToExampleItemTransport(val)
+	}
+	res.PreservedBehaviors = make([]string, len(v.PreservedBehaviors))
+	for i, val := range v.PreservedBehaviors {
+		res.PreservedBehaviors[i] = val
+	}
+	if v.Stories != nil {
+		res.Stories = make([]*toolhttp.StorySummaryItemTransport, len(v.Stories))
+		for i, val := range v.Stories {
+			if val == nil {
+				res.Stories[i] = nil
+				continue
+			}
+			res.Stories[i] = encodeStorySummaryItemToStorySummaryItemTransport(val)
+		}
+	}
+	if v.UIComposition != nil {
+		res.UIComposition = encodeUICompositionItemToUICompositionItemTransport(v.UIComposition)
+	}
+	res.ChangedDesignFiles = make([]string, len(v.ChangedDesignFiles))
+	for i, val := range v.ChangedDesignFiles {
+		res.ChangedDesignFiles[i] = val
+	}
 
 	return res
 }
@@ -16424,6 +29866,723 @@ func encodeDesignSnapshotToDesignSnapshotTransport(v *DesignSnapshot) *toolhttp.
 		tk := key
 		tv := val
 		res.Files[tk] = tv
+	}
+
+	return res
+}
+func decodeBuildNotStartedTransportToBuildNotStarted(v *toolhttp.BuildNotStartedTransport) *BuildNotStarted {
+	res := &BuildNotStarted{}
+
+	return res
+}
+func decodeStartedBuildTransportToStartedBuild(v *toolhttp.StartedBuildTransport) *StartedBuild {
+	res := &StartedBuild{
+		RequestRevision:   *v.RequestRevision,
+		StartedAt:         *v.StartedAt,
+		InForce:           *v.InForce,
+		RequiredTestCount: *v.RequiredTestCount,
+	}
+	res.Builder = decodeBuilderProgressTransportToBuilderProgress(v.Builder)
+	res.TestWriter = decodeTestWriterProgressTransportToTestWriterProgress(v.TestWriter)
+	res.RequiredTests = make([]*RequiredTest, len(v.RequiredTests))
+	for i, val := range v.RequiredTests {
+		if val == nil {
+			res.RequiredTests[i] = nil
+			continue
+		}
+		res.RequiredTests[i] = decodeRequiredTestTransportToRequiredTest(val)
+	}
+	res.Answers = make([]*ConfirmedAnswer, len(v.Answers))
+	for i, val := range v.Answers {
+		if val == nil {
+			res.Answers[i] = nil
+			continue
+		}
+		res.Answers[i] = decodeConfirmedAnswerTransportToConfirmedAnswer(val)
+	}
+	res.Examples = make([]*ExampleItem, len(v.Examples))
+	for i, val := range v.Examples {
+		if val == nil {
+			res.Examples[i] = nil
+			continue
+		}
+		res.Examples[i] = decodeExampleItemTransportToExampleItem(val)
+	}
+	res.CoverageStatements = make([]*TestCoverageStatement, len(v.CoverageStatements))
+	for i, val := range v.CoverageStatements {
+		if val == nil {
+			res.CoverageStatements[i] = nil
+			continue
+		}
+		res.CoverageStatements[i] = decodeTestCoverageStatementTransportToTestCoverageStatement(val)
+	}
+	switch string(v.Taking.Kind()) {
+	case "building":
+		actual, _ := v.Taking.AsBuilding()
+		var obj *BuildBuilding
+		if actual != nil {
+			obj = decodeBuildBuildingTransportToBuildBuilding(actual)
+		}
+		u := res.Taking
+		u.SetBuilding((*BuildBuilding)(obj))
+		res.Taking = u
+	case "passed":
+		actual, _ := v.Taking.AsPassed()
+		var obj *BuildPassed
+		if actual != nil {
+			obj = decodeBuildPassedTransportToBuildPassed(actual)
+		}
+		u := res.Taking
+		u.SetPassed((*BuildPassed)(obj))
+		res.Taking = u
+	case "merged":
+		actual, _ := v.Taking.AsMerged()
+		var obj *BuildMerged
+		if actual != nil {
+			obj = decodeBuildMergedTransportToBuildMerged(actual)
+		}
+		u := res.Taking
+		u.SetMerged((*BuildMerged)(obj))
+		res.Taking = u
+	case "dropped":
+		actual, _ := v.Taking.AsDropped()
+		var obj *BuildDropped
+		if actual != nil {
+			obj = decodeBuildDroppedTransportToBuildDropped(actual)
+		}
+		u := res.Taking
+		u.SetDropped((*BuildDropped)(obj))
+		res.Taking = u
+	}
+
+	return res
+}
+func decodeBuilderProgressTransportToBuilderProgress(v *toolhttp.BuilderProgressTransport) *BuilderProgress {
+	res := &BuilderProgress{
+		Read: *v.Read,
+	}
+
+	return res
+}
+func decodeTestWriterProgressTransportToTestWriterProgress(v *toolhttp.TestWriterProgressTransport) *TestWriterProgress {
+	res := &TestWriterProgress{
+		Read:   *v.Read,
+		Report: *v.Report,
+	}
+	switch string(v.Tests.Kind()) {
+	case "not_used":
+		actual, _ := v.Tests.AsNotUsed()
+		var obj *TestsNotUsed
+		if actual != nil {
+			obj = decodeTestsNotUsedTransportToTestsNotUsed(actual)
+		}
+		u := res.Tests
+		u.SetNotUsed((*TestsNotUsed)(obj))
+		res.Tests = u
+	case "assigned":
+		actual, _ := v.Tests.AsAssigned()
+		var obj *TestsAssigned
+		if actual != nil {
+			obj = decodeTestsAssignedTransportToTestsAssigned(actual)
+		}
+		u := res.Tests
+		u.SetAssigned((*TestsAssigned)(obj))
+		res.Tests = u
+	case "reported":
+		actual, _ := v.Tests.AsReported()
+		var obj *TestsReported
+		if actual != nil {
+			obj = decodeTestsReportedTransportToTestsReported(actual)
+		}
+		u := res.Tests
+		u.SetReported((*TestsReported)(obj))
+		res.Tests = u
+	case "needs_changes":
+		actual, _ := v.Tests.AsNeedsChanges()
+		var obj *TestsNeedChanges
+		if actual != nil {
+			obj = decodeTestsNeedChangesTransportToTestsNeedChanges(actual)
+		}
+		u := res.Tests
+		u.SetNeedsChanges((*TestsNeedChanges)(obj))
+		res.Tests = u
+	case "accepted":
+		actual, _ := v.Tests.AsAccepted()
+		var obj *TestsAccepted
+		if actual != nil {
+			obj = decodeTestsAcceptedTransportToTestsAccepted(actual)
+		}
+		u := res.Tests
+		u.SetAccepted((*TestsAccepted)(obj))
+		res.Tests = u
+	case "could_not_run":
+		actual, _ := v.Tests.AsCouldNotRun()
+		var obj *TestsCouldNotRun
+		if actual != nil {
+			obj = decodeTestsCouldNotRunTransportToTestsCouldNotRun(actual)
+		}
+		u := res.Tests
+		u.SetCouldNotRun((*TestsCouldNotRun)(obj))
+		res.Tests = u
+	}
+
+	return res
+}
+func decodeTestsNotUsedTransportToTestsNotUsed(v *toolhttp.TestsNotUsedTransport) *TestsNotUsed {
+	res := &TestsNotUsed{}
+
+	return res
+}
+func decodeTestsAssignedTransportToTestsAssigned(v *toolhttp.TestsAssignedTransport) *TestsAssigned {
+	res := &TestsAssigned{}
+
+	return res
+}
+func decodeTestsReportedTransportToTestsReported(v *toolhttp.TestsReportedTransport) *TestsReported {
+	res := &TestsReported{}
+
+	return res
+}
+func decodeTestsNeedChangesTransportToTestsNeedChanges(v *toolhttp.TestsNeedChangesTransport) *TestsNeedChanges {
+	res := &TestsNeedChanges{
+		FindingCount: *v.FindingCount,
+		CheckedAt:    *v.CheckedAt,
+	}
+
+	return res
+}
+func decodeTestsAcceptedTransportToTestsAccepted(v *toolhttp.TestsAcceptedTransport) *TestsAccepted {
+	res := &TestsAccepted{
+		Commit:    *v.Commit,
+		CheckedAt: *v.CheckedAt,
+		NotJudged: *v.NotJudged,
+	}
+
+	return res
+}
+func decodeTestsCouldNotRunTransportToTestsCouldNotRun(v *toolhttp.TestsCouldNotRunTransport) *TestsCouldNotRun {
+	res := &TestsCouldNotRun{
+		Reason:    *v.Reason,
+		Step:      *v.Step,
+		CheckedAt: *v.CheckedAt,
+	}
+
+	return res
+}
+func decodeRequiredTestTransportToRequiredTest(v *toolhttp.RequiredTestTransport) *RequiredTest {
+	res := &RequiredTest{
+		Story:    *v.Story,
+		FlowKey:  *v.FlowKey,
+		Scenario: *v.Scenario,
+		Hook:     *v.Hook,
+	}
+
+	return res
+}
+func decodeConfirmedAnswerTransportToConfirmedAnswer(v *toolhttp.ConfirmedAnswerTransport) *ConfirmedAnswer {
+	res := &ConfirmedAnswer{
+		ID:       *v.ID,
+		Question: *v.Question,
+		Answer:   *v.Answer,
+	}
+
+	return res
+}
+func decodeTestCoverageStatementTransportToTestCoverageStatement(v *toolhttp.TestCoverageStatementTransport) *TestCoverageStatement {
+	res := &TestCoverageStatement{
+		Scenario:    TestCoverageReference(*v.Scenario),
+		Explanation: *v.Explanation,
+	}
+	res.QuestionIds = make([]TestCoverageReference, len(v.QuestionIds))
+	for i, val := range v.QuestionIds {
+		res.QuestionIds[i] = TestCoverageReference(*val)
+	}
+	res.ExampleIds = make([]TestCoverageReference, len(v.ExampleIds))
+	for i, val := range v.ExampleIds {
+		res.ExampleIds[i] = TestCoverageReference(*val)
+	}
+
+	return res
+}
+func decodeBuildBuildingTransportToBuildBuilding(v *toolhttp.BuildBuildingTransport) *BuildBuilding {
+	res := &BuildBuilding{}
+
+	return res
+}
+func decodeBuildPassedTransportToBuildPassed(v *toolhttp.BuildPassedTransport) *BuildPassed {
+	res := &BuildPassed{
+		RunID:           *v.RunID,
+		CandidateCommit: *v.CandidateCommit,
+		CandidateBranch: *v.CandidateBranch,
+		BaseInBranch:    *v.BaseInBranch,
+	}
+	switch string(v.Tests.Kind()) {
+	case "evaluator":
+		actual, _ := v.Tests.AsEvaluator()
+		var obj *OperatorEvaluatorTests
+		if actual != nil {
+			obj = decodeOperatorEvaluatorTestsTransportToOperatorEvaluatorTests(actual)
+		}
+		u := res.Tests
+		u.SetEvaluator((*OperatorEvaluatorTests)(obj))
+		res.Tests = u
+	case "written_tests":
+		actual, _ := v.Tests.AsWrittenTests()
+		var obj *BuildPassedTests
+		if actual != nil {
+			obj = decodeBuildPassedTestsTransportToBuildPassedTests(actual)
+		}
+		u := res.Tests
+		u.SetWrittenTests((*BuildPassedTests)(obj))
+		res.Tests = u
+	}
+
+	return res
+}
+func decodeBuildPassedTestsTransportToBuildPassedTests(v *toolhttp.BuildPassedTestsTransport) *BuildPassedTests {
+	res := &BuildPassedTests{
+		Commit: *v.Commit,
+		Branch: *v.Branch,
+	}
+
+	return res
+}
+func decodeBuildMergedTransportToBuildMerged(v *toolhttp.BuildMergedTransport) *BuildMerged {
+	res := &BuildMerged{}
+
+	return res
+}
+func decodeBuildDroppedTransportToBuildDropped(v *toolhttp.BuildDroppedTransport) *BuildDropped {
+	res := &BuildDropped{}
+	res.KeptBranches = make([]string, len(v.KeptBranches))
+	for i, val := range v.KeptBranches {
+		res.KeptBranches[i] = val
+	}
+
+	return res
+}
+func encodeBuildNotStartedToBuildNotStartedTransport(v *BuildNotStarted) *toolhttp.BuildNotStartedTransport {
+	res := &toolhttp.BuildNotStartedTransport{}
+
+	return res
+}
+func encodeStartedBuildToStartedBuildTransport(v *StartedBuild) *toolhttp.StartedBuildTransport {
+	res := &toolhttp.StartedBuildTransport{
+		RequestRevision:   &v.RequestRevision,
+		StartedAt:         &v.StartedAt,
+		InForce:           &v.InForce,
+		RequiredTestCount: &v.RequiredTestCount,
+	}
+	res.Builder = encodeBuilderProgressToBuilderProgressTransport(v.Builder)
+	res.TestWriter = encodeTestWriterProgressToTestWriterProgressTransport(v.TestWriter)
+	res.RequiredTests = make([]*toolhttp.RequiredTestTransport, len(v.RequiredTests))
+	for i, val := range v.RequiredTests {
+		if val == nil {
+			res.RequiredTests[i] = nil
+			continue
+		}
+		res.RequiredTests[i] = encodeRequiredTestToRequiredTestTransport(val)
+	}
+	res.Answers = make([]*toolhttp.ConfirmedAnswerTransport, len(v.Answers))
+	for i, val := range v.Answers {
+		if val == nil {
+			res.Answers[i] = nil
+			continue
+		}
+		res.Answers[i] = encodeConfirmedAnswerToConfirmedAnswerTransport(val)
+	}
+	res.Examples = make([]*toolhttp.ExampleItemTransport, len(v.Examples))
+	for i, val := range v.Examples {
+		if val == nil {
+			res.Examples[i] = nil
+			continue
+		}
+		res.Examples[i] = encodeExampleItemToExampleItemTransport(val)
+	}
+	res.CoverageStatements = make([]*toolhttp.TestCoverageStatementTransport, len(v.CoverageStatements))
+	for i, val := range v.CoverageStatements {
+		if val == nil {
+			res.CoverageStatements[i] = nil
+			continue
+		}
+		res.CoverageStatements[i] = encodeTestCoverageStatementToTestCoverageStatementTransport(val)
+	}
+	var takingValue toolhttp.BuildTaking
+	switch string(v.Taking.Kind()) {
+	case "building":
+		actual, _ := v.Taking.AsBuilding()
+		var obj *toolhttp.BuildBuildingTransport
+		if actual != nil {
+			obj = encodeBuildBuildingToBuildBuildingTransport(actual)
+		}
+		u := takingValue
+		u.SetBuilding((*toolhttp.BuildBuildingTransport)(obj))
+		takingValue = u
+	case "passed":
+		actual, _ := v.Taking.AsPassed()
+		var obj *toolhttp.BuildPassedTransport
+		if actual != nil {
+			obj = encodeBuildPassedToBuildPassedTransport(actual)
+		}
+		u := takingValue
+		u.SetPassed((*toolhttp.BuildPassedTransport)(obj))
+		takingValue = u
+	case "merged":
+		actual, _ := v.Taking.AsMerged()
+		var obj *toolhttp.BuildMergedTransport
+		if actual != nil {
+			obj = encodeBuildMergedToBuildMergedTransport(actual)
+		}
+		u := takingValue
+		u.SetMerged((*toolhttp.BuildMergedTransport)(obj))
+		takingValue = u
+	case "dropped":
+		actual, _ := v.Taking.AsDropped()
+		var obj *toolhttp.BuildDroppedTransport
+		if actual != nil {
+			obj = encodeBuildDroppedToBuildDroppedTransport(actual)
+		}
+		u := takingValue
+		u.SetDropped((*toolhttp.BuildDroppedTransport)(obj))
+		takingValue = u
+	}
+	res.Taking = &takingValue
+
+	return res
+}
+func encodeBuilderProgressToBuilderProgressTransport(v *BuilderProgress) *toolhttp.BuilderProgressTransport {
+	res := &toolhttp.BuilderProgressTransport{
+		Read: &v.Read,
+	}
+
+	return res
+}
+func encodeTestWriterProgressToTestWriterProgressTransport(v *TestWriterProgress) *toolhttp.TestWriterProgressTransport {
+	res := &toolhttp.TestWriterProgressTransport{
+		Read:   &v.Read,
+		Report: &v.Report,
+	}
+	var testsValue toolhttp.Tests
+	switch string(v.Tests.Kind()) {
+	case "not_used":
+		actual, _ := v.Tests.AsNotUsed()
+		var obj *toolhttp.TestsNotUsedTransport
+		if actual != nil {
+			obj = encodeTestsNotUsedToTestsNotUsedTransport(actual)
+		}
+		u := testsValue
+		u.SetNotUsed((*toolhttp.TestsNotUsedTransport)(obj))
+		testsValue = u
+	case "assigned":
+		actual, _ := v.Tests.AsAssigned()
+		var obj *toolhttp.TestsAssignedTransport
+		if actual != nil {
+			obj = encodeTestsAssignedToTestsAssignedTransport(actual)
+		}
+		u := testsValue
+		u.SetAssigned((*toolhttp.TestsAssignedTransport)(obj))
+		testsValue = u
+	case "reported":
+		actual, _ := v.Tests.AsReported()
+		var obj *toolhttp.TestsReportedTransport
+		if actual != nil {
+			obj = encodeTestsReportedToTestsReportedTransport(actual)
+		}
+		u := testsValue
+		u.SetReported((*toolhttp.TestsReportedTransport)(obj))
+		testsValue = u
+	case "needs_changes":
+		actual, _ := v.Tests.AsNeedsChanges()
+		var obj *toolhttp.TestsNeedChangesTransport
+		if actual != nil {
+			obj = encodeTestsNeedChangesToTestsNeedChangesTransport(actual)
+		}
+		u := testsValue
+		u.SetNeedsChanges((*toolhttp.TestsNeedChangesTransport)(obj))
+		testsValue = u
+	case "accepted":
+		actual, _ := v.Tests.AsAccepted()
+		var obj *toolhttp.TestsAcceptedTransport
+		if actual != nil {
+			obj = encodeTestsAcceptedToTestsAcceptedTransport(actual)
+		}
+		u := testsValue
+		u.SetAccepted((*toolhttp.TestsAcceptedTransport)(obj))
+		testsValue = u
+	case "could_not_run":
+		actual, _ := v.Tests.AsCouldNotRun()
+		var obj *toolhttp.TestsCouldNotRunTransport
+		if actual != nil {
+			obj = encodeTestsCouldNotRunToTestsCouldNotRunTransport(actual)
+		}
+		u := testsValue
+		u.SetCouldNotRun((*toolhttp.TestsCouldNotRunTransport)(obj))
+		testsValue = u
+	}
+	res.Tests = &testsValue
+
+	return res
+}
+func encodeTestsNotUsedToTestsNotUsedTransport(v *TestsNotUsed) *toolhttp.TestsNotUsedTransport {
+	res := &toolhttp.TestsNotUsedTransport{}
+
+	return res
+}
+func encodeTestsAssignedToTestsAssignedTransport(v *TestsAssigned) *toolhttp.TestsAssignedTransport {
+	res := &toolhttp.TestsAssignedTransport{}
+
+	return res
+}
+func encodeTestsReportedToTestsReportedTransport(v *TestsReported) *toolhttp.TestsReportedTransport {
+	res := &toolhttp.TestsReportedTransport{}
+
+	return res
+}
+func encodeTestsNeedChangesToTestsNeedChangesTransport(v *TestsNeedChanges) *toolhttp.TestsNeedChangesTransport {
+	res := &toolhttp.TestsNeedChangesTransport{
+		FindingCount: &v.FindingCount,
+		CheckedAt:    &v.CheckedAt,
+	}
+
+	return res
+}
+func encodeTestsAcceptedToTestsAcceptedTransport(v *TestsAccepted) *toolhttp.TestsAcceptedTransport {
+	res := &toolhttp.TestsAcceptedTransport{
+		Commit:    &v.Commit,
+		CheckedAt: &v.CheckedAt,
+		NotJudged: &v.NotJudged,
+	}
+
+	return res
+}
+func encodeTestsCouldNotRunToTestsCouldNotRunTransport(v *TestsCouldNotRun) *toolhttp.TestsCouldNotRunTransport {
+	res := &toolhttp.TestsCouldNotRunTransport{
+		Reason:    &v.Reason,
+		Step:      &v.Step,
+		CheckedAt: &v.CheckedAt,
+	}
+
+	return res
+}
+func encodeRequiredTestToRequiredTestTransport(v *RequiredTest) *toolhttp.RequiredTestTransport {
+	res := &toolhttp.RequiredTestTransport{
+		Story:    &v.Story,
+		FlowKey:  &v.FlowKey,
+		Scenario: &v.Scenario,
+		Hook:     &v.Hook,
+	}
+
+	return res
+}
+func encodeConfirmedAnswerToConfirmedAnswerTransport(v *ConfirmedAnswer) *toolhttp.ConfirmedAnswerTransport {
+	res := &toolhttp.ConfirmedAnswerTransport{
+		ID:       &v.ID,
+		Question: &v.Question,
+		Answer:   &v.Answer,
+	}
+
+	return res
+}
+func encodeTestCoverageStatementToTestCoverageStatementTransport(v *TestCoverageStatement) *toolhttp.TestCoverageStatementTransport {
+	res := &toolhttp.TestCoverageStatementTransport{
+		Explanation: &v.Explanation,
+	}
+	scenario := toolhttp.TestCoverageReferenceTransport(v.Scenario)
+	res.Scenario = &scenario
+	res.QuestionIds = make([]*toolhttp.TestCoverageReferenceTransport, len(v.QuestionIds))
+	for i, val := range v.QuestionIds {
+		var transformed toolhttp.TestCoverageReferenceTransport
+		transformed = toolhttp.TestCoverageReferenceTransport(val)
+		res.QuestionIds[i] = &transformed
+	}
+	res.ExampleIds = make([]*toolhttp.TestCoverageReferenceTransport, len(v.ExampleIds))
+	for i, val := range v.ExampleIds {
+		var transformed toolhttp.TestCoverageReferenceTransport
+		transformed = toolhttp.TestCoverageReferenceTransport(val)
+		res.ExampleIds[i] = &transformed
+	}
+
+	return res
+}
+func encodeBuildBuildingToBuildBuildingTransport(v *BuildBuilding) *toolhttp.BuildBuildingTransport {
+	res := &toolhttp.BuildBuildingTransport{}
+
+	return res
+}
+func encodeBuildPassedToBuildPassedTransport(v *BuildPassed) *toolhttp.BuildPassedTransport {
+	res := &toolhttp.BuildPassedTransport{
+		RunID:           &v.RunID,
+		CandidateCommit: &v.CandidateCommit,
+		CandidateBranch: &v.CandidateBranch,
+		BaseInBranch:    &v.BaseInBranch,
+	}
+	var testsValue toolhttp.BuildPassedTestSource
+	switch string(v.Tests.Kind()) {
+	case "evaluator":
+		actual, _ := v.Tests.AsEvaluator()
+		var obj *toolhttp.OperatorEvaluatorTestsTransport
+		if actual != nil {
+			obj = encodeOperatorEvaluatorTestsToOperatorEvaluatorTestsTransport(actual)
+		}
+		u := testsValue
+		u.SetEvaluator((*toolhttp.OperatorEvaluatorTestsTransport)(obj))
+		testsValue = u
+	case "written_tests":
+		actual, _ := v.Tests.AsWrittenTests()
+		var obj *toolhttp.BuildPassedTestsTransport
+		if actual != nil {
+			obj = encodeBuildPassedTestsToBuildPassedTestsTransport(actual)
+		}
+		u := testsValue
+		u.SetWrittenTests((*toolhttp.BuildPassedTestsTransport)(obj))
+		testsValue = u
+	}
+	res.Tests = &testsValue
+
+	return res
+}
+func encodeBuildPassedTestsToBuildPassedTestsTransport(v *BuildPassedTests) *toolhttp.BuildPassedTestsTransport {
+	res := &toolhttp.BuildPassedTestsTransport{
+		Commit: &v.Commit,
+		Branch: &v.Branch,
+	}
+
+	return res
+}
+func encodeBuildMergedToBuildMergedTransport(v *BuildMerged) *toolhttp.BuildMergedTransport {
+	res := &toolhttp.BuildMergedTransport{}
+
+	return res
+}
+func encodeBuildDroppedToBuildDroppedTransport(v *BuildDropped) *toolhttp.BuildDroppedTransport {
+	res := &toolhttp.BuildDroppedTransport{}
+	res.KeptBranches = make([]string, len(v.KeptBranches))
+	for i, val := range v.KeptBranches {
+		res.KeptBranches[i] = val
+	}
+
+	return res
+}
+func decodeTestsNotYetAcceptedTransportToTestsNotYetAccepted(v *toolhttp.TestsNotYetAcceptedTransport) *TestsNotYetAccepted {
+	res := &TestsNotYetAccepted{}
+
+	return res
+}
+func encodeTestsNotYetAcceptedToTestsNotYetAcceptedTransport(v *TestsNotYetAccepted) *toolhttp.TestsNotYetAcceptedTransport {
+	res := &toolhttp.TestsNotYetAcceptedTransport{}
+
+	return res
+}
+func decodeLiveTargetNoneTransportToLiveTargetNone(v *toolhttp.LiveTargetNoneTransport) *LiveTargetNone {
+	res := &LiveTargetNone{}
+
+	return res
+}
+func decodeLiveTargetStartingTransportToLiveTargetStarting(v *toolhttp.LiveTargetStartingTransport) *LiveTargetStarting {
+	res := &LiveTargetStarting{
+		CandidateCommit: *v.CandidateCommit,
+		Since:           *v.Since,
+	}
+
+	return res
+}
+func decodeRunningLiveTargetTransportToRunningLiveTarget(v *toolhttp.RunningLiveTargetTransport) *RunningLiveTarget {
+	res := &RunningLiveTarget{
+		CandidateCommit: *v.CandidateCommit,
+		URL:             *v.URL,
+		StartedAt:       *v.StartedAt,
+	}
+	res.Prompts = make([]*LivePromptItem, len(v.Prompts))
+	for i, val := range v.Prompts {
+		if val == nil {
+			res.Prompts[i] = nil
+			continue
+		}
+		res.Prompts[i] = decodeLivePromptItemTransportToLivePromptItem(val)
+	}
+
+	return res
+}
+func decodeLivePromptItemTransportToLivePromptItem(v *toolhttp.LivePromptItemTransport) *LivePromptItem {
+	res := &LivePromptItem{
+		PromptID:   *v.PromptID,
+		Version:    *v.Version,
+		AcceptedAt: *v.AcceptedAt,
+	}
+
+	return res
+}
+func decodeLiveTargetNotConfirmedStoppedTransportToLiveTargetNotConfirmedStopped(v *toolhttp.LiveTargetNotConfirmedStoppedTransport) *LiveTargetNotConfirmedStopped {
+	res := &LiveTargetNotConfirmedStopped{
+		CandidateCommit: *v.CandidateCommit,
+		Message:         *v.Message,
+	}
+
+	return res
+}
+func decodeLiveTargetEndedTransportToLiveTargetEnded(v *toolhttp.LiveTargetEndedTransport) *LiveTargetEnded {
+	res := &LiveTargetEnded{
+		CandidateCommit: *v.CandidateCommit,
+		StartedAt:       *v.StartedAt,
+		EndedAt:         *v.EndedAt,
+		Message:         *v.Message,
+	}
+
+	return res
+}
+func encodeLiveTargetNoneToLiveTargetNoneTransport(v *LiveTargetNone) *toolhttp.LiveTargetNoneTransport {
+	res := &toolhttp.LiveTargetNoneTransport{}
+
+	return res
+}
+func encodeLiveTargetStartingToLiveTargetStartingTransport(v *LiveTargetStarting) *toolhttp.LiveTargetStartingTransport {
+	res := &toolhttp.LiveTargetStartingTransport{
+		CandidateCommit: &v.CandidateCommit,
+		Since:           &v.Since,
+	}
+
+	return res
+}
+func encodeRunningLiveTargetToRunningLiveTargetTransport(v *RunningLiveTarget) *toolhttp.RunningLiveTargetTransport {
+	res := &toolhttp.RunningLiveTargetTransport{
+		CandidateCommit: &v.CandidateCommit,
+		URL:             &v.URL,
+		StartedAt:       &v.StartedAt,
+	}
+	res.Prompts = make([]*toolhttp.LivePromptItemTransport, len(v.Prompts))
+	for i, val := range v.Prompts {
+		if val == nil {
+			res.Prompts[i] = nil
+			continue
+		}
+		res.Prompts[i] = encodeLivePromptItemToLivePromptItemTransport(val)
+	}
+
+	return res
+}
+func encodeLivePromptItemToLivePromptItemTransport(v *LivePromptItem) *toolhttp.LivePromptItemTransport {
+	res := &toolhttp.LivePromptItemTransport{
+		PromptID:   &v.PromptID,
+		Version:    &v.Version,
+		AcceptedAt: &v.AcceptedAt,
+	}
+
+	return res
+}
+func encodeLiveTargetNotConfirmedStoppedToLiveTargetNotConfirmedStoppedTransport(v *LiveTargetNotConfirmedStopped) *toolhttp.LiveTargetNotConfirmedStoppedTransport {
+	res := &toolhttp.LiveTargetNotConfirmedStoppedTransport{
+		CandidateCommit: &v.CandidateCommit,
+		Message:         &v.Message,
+	}
+
+	return res
+}
+func encodeLiveTargetEndedToLiveTargetEndedTransport(v *LiveTargetEnded) *toolhttp.LiveTargetEndedTransport {
+	res := &toolhttp.LiveTargetEndedTransport{
+		CandidateCommit: &v.CandidateCommit,
+		StartedAt:       &v.StartedAt,
+		EndedAt:         &v.EndedAt,
+		Message:         &v.Message,
 	}
 
 	return res
@@ -16592,6 +30751,158 @@ func encodeVerificationNotCompletedToVerificationNotCompletedTransport(v *Verifi
 
 	return res
 }
+func decodeBuilderAssignmentTransportToBuilderAssignment(v *toolhttp.BuilderAssignmentTransport) *BuilderAssignment {
+	res := &BuilderAssignment{
+		ChangeID:        *v.ChangeID,
+		RequestRevision: *v.RequestRevision,
+		InForce:         *v.InForce,
+		Read:            *v.Read,
+		WorkingFolder:   *v.WorkingFolder,
+		GoworkOff:       *v.GoworkOff,
+	}
+	switch string(v.WrittenTests.Kind()) {
+	case "not_used":
+		actual, _ := v.WrittenTests.AsNotUsed()
+		var obj *TestsNotUsed
+		if actual != nil {
+			obj = decodeTestsNotUsedTransportToTestsNotUsed(actual)
+		}
+		u := res.WrittenTests
+		u.SetNotUsed((*TestsNotUsed)(obj))
+		res.WrittenTests = u
+	case "not_yet_accepted":
+		actual, _ := v.WrittenTests.AsNotYetAccepted()
+		var obj *TestsNotYetAccepted
+		if actual != nil {
+			obj = decodeTestsNotYetAcceptedTransportToTestsNotYetAccepted(actual)
+		}
+		u := res.WrittenTests
+		u.SetNotYetAccepted((*TestsNotYetAccepted)(obj))
+		res.WrittenTests = u
+	case "accepted":
+		actual, _ := v.WrittenTests.AsAccepted()
+		var obj *TestsAccepted
+		if actual != nil {
+			obj = decodeTestsAcceptedTransportToTestsAccepted(actual)
+		}
+		u := res.WrittenTests
+		u.SetAccepted((*TestsAccepted)(obj))
+		res.WrittenTests = u
+	}
+
+	return res
+}
+func encodeBuilderAssignmentToBuilderAssignmentTransport(v *BuilderAssignment) *toolhttp.BuilderAssignmentTransport {
+	res := &toolhttp.BuilderAssignmentTransport{
+		ChangeID:        &v.ChangeID,
+		RequestRevision: &v.RequestRevision,
+		InForce:         &v.InForce,
+		Read:            &v.Read,
+		WorkingFolder:   &v.WorkingFolder,
+		GoworkOff:       &v.GoworkOff,
+	}
+	var writtenTestsValue toolhttp.WrittenTests
+	switch string(v.WrittenTests.Kind()) {
+	case "not_used":
+		actual, _ := v.WrittenTests.AsNotUsed()
+		var obj *toolhttp.TestsNotUsedTransport
+		if actual != nil {
+			obj = encodeTestsNotUsedToTestsNotUsedTransport(actual)
+		}
+		u := writtenTestsValue
+		u.SetNotUsed((*toolhttp.TestsNotUsedTransport)(obj))
+		writtenTestsValue = u
+	case "not_yet_accepted":
+		actual, _ := v.WrittenTests.AsNotYetAccepted()
+		var obj *toolhttp.TestsNotYetAcceptedTransport
+		if actual != nil {
+			obj = encodeTestsNotYetAcceptedToTestsNotYetAcceptedTransport(actual)
+		}
+		u := writtenTestsValue
+		u.SetNotYetAccepted((*toolhttp.TestsNotYetAcceptedTransport)(obj))
+		writtenTestsValue = u
+	case "accepted":
+		actual, _ := v.WrittenTests.AsAccepted()
+		var obj *toolhttp.TestsAcceptedTransport
+		if actual != nil {
+			obj = encodeTestsAcceptedToTestsAcceptedTransport(actual)
+		}
+		u := writtenTestsValue
+		u.SetAccepted((*toolhttp.TestsAcceptedTransport)(obj))
+		writtenTestsValue = u
+	}
+	res.WrittenTests = &writtenTestsValue
+
+	return res
+}
+func decodeChangeListItemTransportToChangeListItem(v *toolhttp.ChangeListItemTransport) *ChangeListItem {
+	res := &ChangeListItem{
+		ChangeID:         *v.ChangeID,
+		Summary:          *v.Summary,
+		Status:           *v.Status,
+		RequestRevision:  *v.RequestRevision,
+		ProposedRevision: v.ProposedRevision,
+		SavedAt:          *v.SavedAt,
+	}
+	if v.LatestVerification != nil {
+		res.LatestVerification = decodeLatestVerificationItemTransportToLatestVerificationItem(v.LatestVerification)
+	}
+
+	return res
+}
+func decodeLatestVerificationItemTransportToLatestVerificationItem(v *toolhttp.LatestVerificationItemTransport) *LatestVerificationItem {
+	res := &LatestVerificationItem{
+		RunID:         *v.RunID,
+		State:         *v.State,
+		InputsCurrent: *v.InputsCurrent,
+	}
+
+	return res
+}
+func encodeChangeListItemToChangeListItemTransport(v *ChangeListItem) *toolhttp.ChangeListItemTransport {
+	res := &toolhttp.ChangeListItemTransport{
+		ChangeID:         &v.ChangeID,
+		Summary:          &v.Summary,
+		Status:           &v.Status,
+		RequestRevision:  &v.RequestRevision,
+		ProposedRevision: v.ProposedRevision,
+		SavedAt:          &v.SavedAt,
+	}
+	if v.LatestVerification != nil {
+		res.LatestVerification = encodeLatestVerificationItemToLatestVerificationItemTransport(v.LatestVerification)
+	}
+
+	return res
+}
+func encodeLatestVerificationItemToLatestVerificationItemTransport(v *LatestVerificationItem) *toolhttp.LatestVerificationItemTransport {
+	res := &toolhttp.LatestVerificationItemTransport{
+		RunID:         &v.RunID,
+		State:         &v.State,
+		InputsCurrent: &v.InputsCurrent,
+	}
+
+	return res
+}
+func decodeTestWriterAssignmentItemTransportToTestWriterAssignmentItem(v *toolhttp.TestWriterAssignmentItemTransport) *TestWriterAssignmentItem {
+	res := &TestWriterAssignmentItem{
+		ChangeID:        *v.ChangeID,
+		RequestRevision: *v.RequestRevision,
+		InForce:         *v.InForce,
+	}
+	res.Progress = decodeTestWriterProgressTransportToTestWriterProgress(v.Progress)
+
+	return res
+}
+func encodeTestWriterAssignmentItemToTestWriterAssignmentItemTransport(v *TestWriterAssignmentItem) *toolhttp.TestWriterAssignmentItemTransport {
+	res := &toolhttp.TestWriterAssignmentItemTransport{
+		ChangeID:        &v.ChangeID,
+		RequestRevision: &v.RequestRevision,
+		InForce:         &v.InForce,
+	}
+	res.Progress = encodeTestWriterProgressToTestWriterProgressTransport(v.Progress)
+
+	return res
+}
 func decodeTraceSpanTransportToTraceSpan(v *toolhttp.TraceSpanTransport) *TraceSpan {
 	res := &TraceSpan{
 		TraceID:      *v.TraceID,
@@ -16638,12 +30949,34 @@ func encodeTraceSpanToTraceSpanTransport(v *TraceSpan) *toolhttp.TraceSpanTransp
 }
 func decodeVerificationStatusResultTransportToVerificationStatusResult(v *toolhttp.VerificationStatusResultTransport) *VerificationStatusResult {
 	res := &VerificationStatusResult{
-		RunID:           *v.RunID,
-		ChangeID:        *v.ChangeID,
-		RequestRevision: *v.RequestRevision,
-		CandidateCommit: *v.CandidateCommit,
-		SuiteCommit:     *v.SuiteCommit,
-		AcceptedAt:      *v.AcceptedAt,
+		RunID:                *v.RunID,
+		ChangeID:             *v.ChangeID,
+		RequestRevision:      *v.RequestRevision,
+		CandidateCommit:      *v.CandidateCommit,
+		SuiteCommit:          *v.SuiteCommit,
+		AcceptedAt:           *v.AcceptedAt,
+		InputsCurrent:        *v.InputsCurrent,
+		CandidateBinariesDir: v.CandidateBinariesDir,
+	}
+	switch string(v.TestSource.Kind()) {
+	case "evaluator":
+		actual, _ := v.TestSource.AsEvaluator()
+		var obj *OperatorEvaluatorTests
+		if actual != nil {
+			obj = decodeOperatorEvaluatorTestsTransportToOperatorEvaluatorTests(actual)
+		}
+		u := res.TestSource
+		u.SetEvaluator((*OperatorEvaluatorTests)(obj))
+		res.TestSource = u
+	case "written_tests":
+		actual, _ := v.TestSource.AsWrittenTests()
+		var obj *AgentWrittenTests
+		if actual != nil {
+			obj = decodeAgentWrittenTestsTransportToAgentWrittenTests(actual)
+		}
+		u := res.TestSource
+		u.SetWrittenTests((*AgentWrittenTests)(obj))
+		res.TestSource = u
 	}
 	switch string(v.State.Kind()) {
 	case "running":
@@ -16679,13 +31012,37 @@ func decodeVerificationStatusResultTransportToVerificationStatusResult(v *toolht
 }
 func encodeVerificationStatusResultToVerificationStatusResultTransport(v *VerificationStatusResult) *toolhttp.VerificationStatusResultTransport {
 	res := &toolhttp.VerificationStatusResultTransport{
-		RunID:           &v.RunID,
-		ChangeID:        &v.ChangeID,
-		RequestRevision: &v.RequestRevision,
-		CandidateCommit: &v.CandidateCommit,
-		SuiteCommit:     &v.SuiteCommit,
-		AcceptedAt:      &v.AcceptedAt,
+		RunID:                &v.RunID,
+		ChangeID:             &v.ChangeID,
+		RequestRevision:      &v.RequestRevision,
+		CandidateCommit:      &v.CandidateCommit,
+		SuiteCommit:          &v.SuiteCommit,
+		AcceptedAt:           &v.AcceptedAt,
+		InputsCurrent:        &v.InputsCurrent,
+		CandidateBinariesDir: v.CandidateBinariesDir,
 	}
+	var testSourceValue toolhttp.TestSource
+	switch string(v.TestSource.Kind()) {
+	case "evaluator":
+		actual, _ := v.TestSource.AsEvaluator()
+		var obj *toolhttp.OperatorEvaluatorTestsTransport
+		if actual != nil {
+			obj = encodeOperatorEvaluatorTestsToOperatorEvaluatorTestsTransport(actual)
+		}
+		u := testSourceValue
+		u.SetEvaluator((*toolhttp.OperatorEvaluatorTestsTransport)(obj))
+		testSourceValue = u
+	case "written_tests":
+		actual, _ := v.TestSource.AsWrittenTests()
+		var obj *toolhttp.AgentWrittenTestsTransport
+		if actual != nil {
+			obj = encodeAgentWrittenTestsToAgentWrittenTestsTransport(actual)
+		}
+		u := testSourceValue
+		u.SetWrittenTests((*toolhttp.AgentWrittenTestsTransport)(obj))
+		testSourceValue = u
+	}
+	res.TestSource = &testSourceValue
 	var stateValue toolhttp.State
 	switch string(v.State.Kind()) {
 	case "running":
@@ -16717,30 +31074,6 @@ func encodeVerificationStatusResultToVerificationStatusResultTransport(v *Verifi
 		stateValue = u
 	}
 	res.State = &stateValue
-
-	return res
-}
-func decodeBuilderScopeItemTransportToBuilderScopeItem(v *toolhttp.BuilderScopeItemTransport) *BuilderScopeItem {
-	res := &BuilderScopeItem{
-		Name:               *v.Name,
-		PreferredProfileID: v.PreferredProfileID,
-	}
-	res.Paths = make([]string, len(v.Paths))
-	for i, val := range v.Paths {
-		res.Paths[i] = val
-	}
-
-	return res
-}
-func encodeBuilderScopeItemToBuilderScopeItemTransport(v *BuilderScopeItem) *toolhttp.BuilderScopeItemTransport {
-	res := &toolhttp.BuilderScopeItemTransport{
-		Name:               &v.Name,
-		PreferredProfileID: v.PreferredProfileID,
-	}
-	res.Paths = make([]string, len(v.Paths))
-	for i, val := range v.Paths {
-		res.Paths[i] = val
-	}
 
 	return res
 }
@@ -16814,50 +31147,6 @@ func decodeToolInputBindingItemTransportToToolInputBindingItem(v *toolhttp.ToolI
 
 	return res
 }
-func decodeSwarmPlanItemTransportToSwarmPlanItem(v *toolhttp.SwarmPlanItemTransport) *SwarmPlanItem {
-	res := &SwarmPlanItem{
-		Status:            *v.Status,
-		CrossFamilyReview: *v.CrossFamilyReview,
-		CrossFamilyEval:   *v.CrossFamilyEval,
-		SingleFamily:      *v.SingleFamily,
-		Summary:           *v.Summary,
-		Manifest:          v.Manifest,
-	}
-	res.Assignments = make([]*SwarmRoleItem, len(v.Assignments))
-	for i, val := range v.Assignments {
-		if val == nil {
-			res.Assignments[i] = nil
-			continue
-		}
-		res.Assignments[i] = decodeSwarmRoleItemTransportToSwarmRoleItem(val)
-	}
-	if v.MissingRoles != nil {
-		res.MissingRoles = make([]string, len(v.MissingRoles))
-		for i, val := range v.MissingRoles {
-			res.MissingRoles[i] = val
-		}
-	}
-
-	return res
-}
-func decodeSwarmRoleItemTransportToSwarmRoleItem(v *toolhttp.SwarmRoleItemTransport) *SwarmRoleItem {
-	res := &SwarmRoleItem{
-		Handle:     *v.Handle,
-		Role:       *v.Role,
-		ScopeName:  *v.ScopeName,
-		ProfileID:  *v.ProfileID,
-		Provider:   *v.Provider,
-		Model:      *v.Model,
-		Family:     *v.Family,
-		AccessMode: *v.AccessMode,
-	}
-	res.OwnedPaths = make([]string, len(v.OwnedPaths))
-	for i, val := range v.OwnedPaths {
-		res.OwnedPaths[i] = val
-	}
-
-	return res
-}
 func encodeC4ContainerItemToC4ContainerItemTransport(v *C4ContainerItem) *toolhttp.C4ContainerItemTransport {
 	res := &toolhttp.C4ContainerItemTransport{
 		ID:          &v.ID,
@@ -16924,50 +31213,6 @@ func encodeToolInputBindingItemToToolInputBindingItemTransport(v *ToolInputBindi
 	res.InjectedFields = make([]string, len(v.InjectedFields))
 	for i, val := range v.InjectedFields {
 		res.InjectedFields[i] = val
-	}
-
-	return res
-}
-func encodeSwarmPlanItemToSwarmPlanItemTransport(v *SwarmPlanItem) *toolhttp.SwarmPlanItemTransport {
-	res := &toolhttp.SwarmPlanItemTransport{
-		Status:            &v.Status,
-		CrossFamilyReview: &v.CrossFamilyReview,
-		CrossFamilyEval:   &v.CrossFamilyEval,
-		SingleFamily:      &v.SingleFamily,
-		Summary:           &v.Summary,
-		Manifest:          v.Manifest,
-	}
-	res.Assignments = make([]*toolhttp.SwarmRoleItemTransport, len(v.Assignments))
-	for i, val := range v.Assignments {
-		if val == nil {
-			res.Assignments[i] = nil
-			continue
-		}
-		res.Assignments[i] = encodeSwarmRoleItemToSwarmRoleItemTransport(val)
-	}
-	if v.MissingRoles != nil {
-		res.MissingRoles = make([]string, len(v.MissingRoles))
-		for i, val := range v.MissingRoles {
-			res.MissingRoles[i] = val
-		}
-	}
-
-	return res
-}
-func encodeSwarmRoleItemToSwarmRoleItemTransport(v *SwarmRoleItem) *toolhttp.SwarmRoleItemTransport {
-	res := &toolhttp.SwarmRoleItemTransport{
-		Handle:     &v.Handle,
-		Role:       &v.Role,
-		ScopeName:  &v.ScopeName,
-		ProfileID:  &v.ProfileID,
-		Provider:   &v.Provider,
-		Model:      &v.Model,
-		Family:     &v.Family,
-		AccessMode: &v.AccessMode,
-	}
-	res.OwnedPaths = make([]string, len(v.OwnedPaths))
-	for i, val := range v.OwnedPaths {
-		res.OwnedPaths[i] = val
 	}
 
 	return res
@@ -17074,6 +31319,394 @@ func encodeCP1AnalysisExampleToCP1AnalysisExampleTransport(v *CP1AnalysisExample
 
 	return res
 }
+func decodeVerificationReviewTransportToVerificationReview(v *toolhttp.VerificationReviewTransport) *VerificationReview {
+	res := &VerificationReview{}
+	switch string(v.StoryContext.Kind()) {
+	case "recorded":
+		actual, _ := v.StoryContext.AsRecorded()
+		var obj *RecordedRunStory
+		if actual != nil {
+			obj = decodeRecordedRunStoryTransportToRecordedRunStory(actual)
+		}
+		u := res.StoryContext
+		u.SetRecorded((*RecordedRunStory)(obj))
+		res.StoryContext = u
+	case "not_recorded":
+		actual, _ := v.StoryContext.AsNotRecorded()
+		var obj *RunStoryNotRecorded
+		if actual != nil {
+			obj = decodeRunStoryNotRecordedTransportToRunStoryNotRecorded(actual)
+		}
+		u := res.StoryContext
+		u.SetNotRecorded((*RunStoryNotRecorded)(obj))
+		res.StoryContext = u
+	}
+	switch string(v.Approval.Kind()) {
+	case "available":
+		actual, _ := v.Approval.AsAvailable()
+		var obj *RunApprovalAvailable
+		if actual != nil {
+			obj = decodeRunApprovalAvailableTransportToRunApprovalAvailable(actual)
+		}
+		u := res.Approval
+		u.SetAvailable((*RunApprovalAvailable)(obj))
+		res.Approval = u
+	case "blocked":
+		actual, _ := v.Approval.AsBlocked()
+		var obj *RunApprovalBlocked
+		if actual != nil {
+			obj = decodeRunApprovalBlockedTransportToRunApprovalBlocked(actual)
+		}
+		u := res.Approval
+		u.SetBlocked((*RunApprovalBlocked)(obj))
+		res.Approval = u
+	case "recorded":
+		actual, _ := v.Approval.AsRecorded()
+		var obj *ApprovalItem
+		if actual != nil {
+			obj = decodeApprovalItemTransportToApprovalItem(actual)
+		}
+		u := res.Approval
+		u.SetRecorded((*ApprovalItem)(obj))
+		res.Approval = u
+	case "unverified":
+		actual, _ := v.Approval.AsUnverified()
+		var obj *UnverifiedApprovalItem
+		if actual != nil {
+			obj = decodeUnverifiedApprovalItemTransportToUnverifiedApprovalItem(actual)
+		}
+		u := res.Approval
+		u.SetUnverified((*UnverifiedApprovalItem)(obj))
+		res.Approval = u
+	}
+
+	return res
+}
+func decodeRecordedRunStoryTransportToRecordedRunStory(v *toolhttp.RecordedRunStoryTransport) *RecordedRunStory {
+	res := &RecordedRunStory{
+		BuildNumber:    *v.BuildNumber,
+		BuildStartedAt: *v.BuildStartedAt,
+	}
+	res.Stories = make([]*StorySummaryItem, len(v.Stories))
+	for i, val := range v.Stories {
+		if val == nil {
+			res.Stories[i] = nil
+			continue
+		}
+		res.Stories[i] = decodeStorySummaryItemTransportToStorySummaryItem(val)
+	}
+	switch string(v.Mapping.Kind()) {
+	case "mapped":
+		actual, _ := v.Mapping.AsMapped()
+		var obj *RunStoryMapping
+		if actual != nil {
+			obj = decodeRunStoryMappingTransportToRunStoryMapping(actual)
+		}
+		u := res.Mapping
+		u.SetMapped((*RunStoryMapping)(obj))
+		res.Mapping = u
+	case "not_recorded_for_evaluator":
+		actual, _ := v.Mapping.AsNotRecordedForEvaluator()
+		var obj *RunEvaluatorMappingUnknown
+		if actual != nil {
+			obj = decodeRunEvaluatorMappingUnknownTransportToRunEvaluatorMappingUnknown(actual)
+		}
+		u := res.Mapping
+		u.SetNotRecordedForEvaluator((*RunEvaluatorMappingUnknown)(obj))
+		res.Mapping = u
+	}
+	switch string(v.TestCoverage.Kind()) {
+	case "recorded":
+		actual, _ := v.TestCoverage.AsRecorded()
+		var obj *RecordedTestCoverage
+		if actual != nil {
+			obj = decodeRecordedTestCoverageTransportToRecordedTestCoverage(actual)
+		}
+		u := res.TestCoverage
+		u.SetRecorded((*RecordedTestCoverage)(obj))
+		res.TestCoverage = u
+	case "not_recorded":
+		actual, _ := v.TestCoverage.AsNotRecorded()
+		var obj *TestCoverageNotRecorded
+		if actual != nil {
+			obj = decodeTestCoverageNotRecordedTransportToTestCoverageNotRecorded(actual)
+		}
+		u := res.TestCoverage
+		u.SetNotRecorded((*TestCoverageNotRecorded)(obj))
+		res.TestCoverage = u
+	}
+
+	return res
+}
+func decodeRunStoryMappingTransportToRunStoryMapping(v *toolhttp.RunStoryMappingTransport) *RunStoryMapping {
+	res := &RunStoryMapping{}
+	res.RequiredTests = make([]*RequiredTest, len(v.RequiredTests))
+	for i, val := range v.RequiredTests {
+		if val == nil {
+			res.RequiredTests[i] = nil
+			continue
+		}
+		res.RequiredTests[i] = decodeRequiredTestTransportToRequiredTest(val)
+	}
+
+	return res
+}
+func decodeRunEvaluatorMappingUnknownTransportToRunEvaluatorMappingUnknown(v *toolhttp.RunEvaluatorMappingUnknownTransport) *RunEvaluatorMappingUnknown {
+	res := &RunEvaluatorMappingUnknown{}
+
+	return res
+}
+func decodeRecordedTestCoverageTransportToRecordedTestCoverage(v *toolhttp.RecordedTestCoverageTransport) *RecordedTestCoverage {
+	res := &RecordedTestCoverage{
+		Report: *v.Report,
+	}
+	res.Answers = make([]*ConfirmedAnswer, len(v.Answers))
+	for i, val := range v.Answers {
+		if val == nil {
+			res.Answers[i] = nil
+			continue
+		}
+		res.Answers[i] = decodeConfirmedAnswerTransportToConfirmedAnswer(val)
+	}
+	res.Examples = make([]*ExampleItem, len(v.Examples))
+	for i, val := range v.Examples {
+		if val == nil {
+			res.Examples[i] = nil
+			continue
+		}
+		res.Examples[i] = decodeExampleItemTransportToExampleItem(val)
+	}
+	res.CoverageStatements = make([]*TestCoverageStatement, len(v.CoverageStatements))
+	for i, val := range v.CoverageStatements {
+		if val == nil {
+			res.CoverageStatements[i] = nil
+			continue
+		}
+		res.CoverageStatements[i] = decodeTestCoverageStatementTransportToTestCoverageStatement(val)
+	}
+
+	return res
+}
+func decodeTestCoverageNotRecordedTransportToTestCoverageNotRecorded(v *toolhttp.TestCoverageNotRecordedTransport) *TestCoverageNotRecorded {
+	res := &TestCoverageNotRecorded{}
+
+	return res
+}
+func decodeRunStoryNotRecordedTransportToRunStoryNotRecorded(v *toolhttp.RunStoryNotRecordedTransport) *RunStoryNotRecorded {
+	res := &RunStoryNotRecorded{}
+
+	return res
+}
+func decodeRunApprovalAvailableTransportToRunApprovalAvailable(v *toolhttp.RunApprovalAvailableTransport) *RunApprovalAvailable {
+	res := &RunApprovalAvailable{}
+
+	return res
+}
+func decodeRunApprovalBlockedTransportToRunApprovalBlocked(v *toolhttp.RunApprovalBlockedTransport) *RunApprovalBlocked {
+	res := &RunApprovalBlocked{
+		Reason: *v.Reason,
+	}
+
+	return res
+}
+func encodeVerificationReviewToVerificationReviewTransport(v *VerificationReview) *toolhttp.VerificationReviewTransport {
+	res := &toolhttp.VerificationReviewTransport{}
+	var storyContextValue toolhttp.StoryContext
+	switch string(v.StoryContext.Kind()) {
+	case "recorded":
+		actual, _ := v.StoryContext.AsRecorded()
+		var obj *toolhttp.RecordedRunStoryTransport
+		if actual != nil {
+			obj = encodeRecordedRunStoryToRecordedRunStoryTransport(actual)
+		}
+		u := storyContextValue
+		u.SetRecorded((*toolhttp.RecordedRunStoryTransport)(obj))
+		storyContextValue = u
+	case "not_recorded":
+		actual, _ := v.StoryContext.AsNotRecorded()
+		var obj *toolhttp.RunStoryNotRecordedTransport
+		if actual != nil {
+			obj = encodeRunStoryNotRecordedToRunStoryNotRecordedTransport(actual)
+		}
+		u := storyContextValue
+		u.SetNotRecorded((*toolhttp.RunStoryNotRecordedTransport)(obj))
+		storyContextValue = u
+	}
+	res.StoryContext = &storyContextValue
+	var approvalValue toolhttp.Approval
+	switch string(v.Approval.Kind()) {
+	case "available":
+		actual, _ := v.Approval.AsAvailable()
+		var obj *toolhttp.RunApprovalAvailableTransport
+		if actual != nil {
+			obj = encodeRunApprovalAvailableToRunApprovalAvailableTransport(actual)
+		}
+		u := approvalValue
+		u.SetAvailable((*toolhttp.RunApprovalAvailableTransport)(obj))
+		approvalValue = u
+	case "blocked":
+		actual, _ := v.Approval.AsBlocked()
+		var obj *toolhttp.RunApprovalBlockedTransport
+		if actual != nil {
+			obj = encodeRunApprovalBlockedToRunApprovalBlockedTransport(actual)
+		}
+		u := approvalValue
+		u.SetBlocked((*toolhttp.RunApprovalBlockedTransport)(obj))
+		approvalValue = u
+	case "recorded":
+		actual, _ := v.Approval.AsRecorded()
+		var obj *toolhttp.ApprovalItemTransport
+		if actual != nil {
+			obj = encodeApprovalItemToApprovalItemTransport(actual)
+		}
+		u := approvalValue
+		u.SetRecorded((*toolhttp.ApprovalItemTransport)(obj))
+		approvalValue = u
+	case "unverified":
+		actual, _ := v.Approval.AsUnverified()
+		var obj *toolhttp.UnverifiedApprovalItemTransport
+		if actual != nil {
+			obj = encodeUnverifiedApprovalItemToUnverifiedApprovalItemTransport(actual)
+		}
+		u := approvalValue
+		u.SetUnverified((*toolhttp.UnverifiedApprovalItemTransport)(obj))
+		approvalValue = u
+	}
+	res.Approval = &approvalValue
+
+	return res
+}
+func encodeRecordedRunStoryToRecordedRunStoryTransport(v *RecordedRunStory) *toolhttp.RecordedRunStoryTransport {
+	res := &toolhttp.RecordedRunStoryTransport{
+		BuildNumber:    &v.BuildNumber,
+		BuildStartedAt: &v.BuildStartedAt,
+	}
+	res.Stories = make([]*toolhttp.StorySummaryItemTransport, len(v.Stories))
+	for i, val := range v.Stories {
+		if val == nil {
+			res.Stories[i] = nil
+			continue
+		}
+		res.Stories[i] = encodeStorySummaryItemToStorySummaryItemTransport(val)
+	}
+	var mappingValue toolhttp.Mapping
+	switch string(v.Mapping.Kind()) {
+	case "mapped":
+		actual, _ := v.Mapping.AsMapped()
+		var obj *toolhttp.RunStoryMappingTransport
+		if actual != nil {
+			obj = encodeRunStoryMappingToRunStoryMappingTransport(actual)
+		}
+		u := mappingValue
+		u.SetMapped((*toolhttp.RunStoryMappingTransport)(obj))
+		mappingValue = u
+	case "not_recorded_for_evaluator":
+		actual, _ := v.Mapping.AsNotRecordedForEvaluator()
+		var obj *toolhttp.RunEvaluatorMappingUnknownTransport
+		if actual != nil {
+			obj = encodeRunEvaluatorMappingUnknownToRunEvaluatorMappingUnknownTransport(actual)
+		}
+		u := mappingValue
+		u.SetNotRecordedForEvaluator((*toolhttp.RunEvaluatorMappingUnknownTransport)(obj))
+		mappingValue = u
+	}
+	res.Mapping = &mappingValue
+	var testCoverageValue toolhttp.TestCoverage
+	switch string(v.TestCoverage.Kind()) {
+	case "recorded":
+		actual, _ := v.TestCoverage.AsRecorded()
+		var obj *toolhttp.RecordedTestCoverageTransport
+		if actual != nil {
+			obj = encodeRecordedTestCoverageToRecordedTestCoverageTransport(actual)
+		}
+		u := testCoverageValue
+		u.SetRecorded((*toolhttp.RecordedTestCoverageTransport)(obj))
+		testCoverageValue = u
+	case "not_recorded":
+		actual, _ := v.TestCoverage.AsNotRecorded()
+		var obj *toolhttp.TestCoverageNotRecordedTransport
+		if actual != nil {
+			obj = encodeTestCoverageNotRecordedToTestCoverageNotRecordedTransport(actual)
+		}
+		u := testCoverageValue
+		u.SetNotRecorded((*toolhttp.TestCoverageNotRecordedTransport)(obj))
+		testCoverageValue = u
+	}
+	res.TestCoverage = &testCoverageValue
+
+	return res
+}
+func encodeRunStoryMappingToRunStoryMappingTransport(v *RunStoryMapping) *toolhttp.RunStoryMappingTransport {
+	res := &toolhttp.RunStoryMappingTransport{}
+	res.RequiredTests = make([]*toolhttp.RequiredTestTransport, len(v.RequiredTests))
+	for i, val := range v.RequiredTests {
+		if val == nil {
+			res.RequiredTests[i] = nil
+			continue
+		}
+		res.RequiredTests[i] = encodeRequiredTestToRequiredTestTransport(val)
+	}
+
+	return res
+}
+func encodeRunEvaluatorMappingUnknownToRunEvaluatorMappingUnknownTransport(v *RunEvaluatorMappingUnknown) *toolhttp.RunEvaluatorMappingUnknownTransport {
+	res := &toolhttp.RunEvaluatorMappingUnknownTransport{}
+
+	return res
+}
+func encodeRecordedTestCoverageToRecordedTestCoverageTransport(v *RecordedTestCoverage) *toolhttp.RecordedTestCoverageTransport {
+	res := &toolhttp.RecordedTestCoverageTransport{
+		Report: &v.Report,
+	}
+	res.Answers = make([]*toolhttp.ConfirmedAnswerTransport, len(v.Answers))
+	for i, val := range v.Answers {
+		if val == nil {
+			res.Answers[i] = nil
+			continue
+		}
+		res.Answers[i] = encodeConfirmedAnswerToConfirmedAnswerTransport(val)
+	}
+	res.Examples = make([]*toolhttp.ExampleItemTransport, len(v.Examples))
+	for i, val := range v.Examples {
+		if val == nil {
+			res.Examples[i] = nil
+			continue
+		}
+		res.Examples[i] = encodeExampleItemToExampleItemTransport(val)
+	}
+	res.CoverageStatements = make([]*toolhttp.TestCoverageStatementTransport, len(v.CoverageStatements))
+	for i, val := range v.CoverageStatements {
+		if val == nil {
+			res.CoverageStatements[i] = nil
+			continue
+		}
+		res.CoverageStatements[i] = encodeTestCoverageStatementToTestCoverageStatementTransport(val)
+	}
+
+	return res
+}
+func encodeTestCoverageNotRecordedToTestCoverageNotRecordedTransport(v *TestCoverageNotRecorded) *toolhttp.TestCoverageNotRecordedTransport {
+	res := &toolhttp.TestCoverageNotRecordedTransport{}
+
+	return res
+}
+func encodeRunStoryNotRecordedToRunStoryNotRecordedTransport(v *RunStoryNotRecorded) *toolhttp.RunStoryNotRecordedTransport {
+	res := &toolhttp.RunStoryNotRecordedTransport{}
+
+	return res
+}
+func encodeRunApprovalAvailableToRunApprovalAvailableTransport(v *RunApprovalAvailable) *toolhttp.RunApprovalAvailableTransport {
+	res := &toolhttp.RunApprovalAvailableTransport{}
+
+	return res
+}
+func encodeRunApprovalBlockedToRunApprovalBlockedTransport(v *RunApprovalBlocked) *toolhttp.RunApprovalBlockedTransport {
+	res := &toolhttp.RunApprovalBlockedTransport{
+		Reason: &v.Reason,
+	}
+
+	return res
+}
 func decodeCP1RevisionAnalysisTransportToCP1RevisionAnalysis(v *toolhttp.CP1RevisionAnalysisTransport) *CP1RevisionAnalysis {
 	res := &CP1RevisionAnalysis{
 		Summary:       *v.Summary,
@@ -17160,6 +31793,24 @@ func encodeCP1RevisionAnalysisExampleToCP1RevisionAnalysisExampleTransport(v *CP
 		InputSummary:     &v.InputSummary,
 		ExpectedOutcome:  &v.ExpectedOutcome,
 		VerificationKind: &v.VerificationKind,
+	}
+
+	return res
+}
+func decodeDraftCorrectionTransportToDraftCorrection(v *toolhttp.DraftCorrectionTransport) *DraftCorrection {
+	res := &DraftCorrection{
+		Path:    *v.Path,
+		Folder:  *v.Folder,
+		Problem: *v.Problem,
+	}
+
+	return res
+}
+func encodeDraftCorrectionToDraftCorrectionTransport(v *DraftCorrection) *toolhttp.DraftCorrectionTransport {
+	res := &toolhttp.DraftCorrectionTransport{
+		Path:    &v.Path,
+		Folder:  &v.Folder,
+		Problem: &v.Problem,
 	}
 
 	return res

@@ -30,7 +30,10 @@ import (
 	gensurla "github.com/goadesign/surla/gen/surla"
 	"github.com/goadesign/surla/internal/controlplane"
 	"github.com/goadesign/surla/internal/designeval"
+	"github.com/goadesign/surla/internal/project"
 	"github.com/goadesign/surla/internal/scaffold"
+	"github.com/goadesign/surla/internal/testmodule"
+	"github.com/goadesign/surla/internal/testwriter"
 	"github.com/goadesign/surla/internal/verify"
 )
 
@@ -45,28 +48,33 @@ type echoStream struct {
 	response *model.Response
 }
 
+// starterWindowHost refuses the first external window operation. Other host
+// methods are unreachable because the team owner stops on that refusal.
+type starterWindowHost struct{ project.TeamHost }
+
 // published is the Surla version the starter's go.mod pins; it exists on the
 // module proxy. It matches the internal tests' fixture of the same name.
-const published = "v0.0.0-20261110163737-d9beac313142"
+const published = testmodule.PublishedSurlaVersion
 
-// TestStarterLiveTargetAppliesADraftToTheNextModelRequest creates a real
-// starter project, commits it as C1, and runs the full CP3 journey through the
-// control plane for one confirmed Change Card, with real sandboxed builds and
-// processes and a fake model that echoes the system prompt:
-// start_live_target builds C1 and starts it with the generated suite's --live
-// mode through a loopback model gateway, draft_override replaces the helper's
-// system prompt on it, the next question's model request carries the drafted
-// text, and the card keeps its revision. The builder then writes that text
-// into source and commits C2: a live target for C2 sends it with no draft,
-// and verify_change of C2 for the same card passes. A second card skips CP3
-// and verifies C1 directly. Each card is proposed with a fixed analysis, as a
-// coding agent would send it. It needs the network and, for the sandbox,
-// macOS.
+// TestStarterLiveTargetAppliesADraftToTheNextModelRequest creates and commits
+// one real starter, then clones that immutable seed for two independent
+// journeys. The first starts C1 with the stored evaluator before any build,
+// applies a runtime prompt draft, then starts a real build and reads its
+// builder assignment. The builder commits that prompt as C2 in its returned
+// working copy: replacing the live target sends C2's text without a draft,
+// and verification of the same card and revision passes. The second journey
+// skips live drafting and verifies its own committed prompt change. All
+// design evaluations, working copies, builds and suite processes are real;
+// only the model and external window host are deterministic test adapters.
+// It needs the network and macOS or Linux.
 func TestStarterLiveTargetAppliesADraftToTheNextModelRequest(t *testing.T) {
-	dir := filepath.Join(t.TempDir(), "shop")
-	name, err := scaffold.Init(t.Context(), scaffold.Options{Dir: dir, WorkDir: t.TempDir(), Module: "example.com/shop", SurlaVersion: published}, scaffold.RunCommand, designeval.NewEvaluator())
+	seed := filepath.Join(t.TempDir(), "shop")
+	buildCache := testmodule.CompilerCache(t)
+	generator, err := designeval.NewEvaluatorWithCache(t.TempDir(), buildCache)
 	require.NoError(t, err)
-	commit := commitAll(t, dir)
+	name, err := scaffold.Init(t.Context(), scaffold.Options{Dir: seed, WorkDir: t.TempDir(), Module: "example.com/shop", SurlaVersion: published}, scaffold.RunCommand, generator)
+	require.NoError(t, err)
+	commit := commitAll(t, seed)
 
 	surlaBin := filepath.Join(t.TempDir(), "surla")
 	build := exec.CommandContext(t.Context(), "go", "build", "-o", surlaBin, "./cmd/surla")
@@ -75,72 +83,104 @@ func TestStarterLiveTargetAppliesADraftToTheNextModelRequest(t *testing.T) {
 	require.NoError(t, err, string(out))
 
 	gatewayAddr := serveEchoGateway(t)
-	cardsDir, runsDir := t.TempDir(), t.TempDir()
-	cp, err := controlplane.New(controlplane.Options{
-		CardsDir: cardsDir,
-		Verification: &controlplane.VerificationConfig{
-			RunsDir: runsDir,
-			Plan: verify.Plan{
-				CandidateRepo: dir, CandidateModule: ".", Binaries: map[string]string{name: "./cmd/" + name},
-				SuiteRepo: dir, SuiteCommit: commit, SuiteModule: "eval", SuiteCommand: "./cmd/" + name + "-evals",
-				ReportDir: t.TempDir(),
-			},
-			Command: []string{surlaBin},
-			Timeout: 15 * time.Minute,
-		},
-		Live: &controlplane.LiveConfig{
-			Command:      []string{surlaBin},
-			Env:          append(os.Environ(), "SURLA_LIVE_MODEL_GATEWAY="+gatewayAddr),
-			StartTimeout: 10 * time.Minute,
-		},
-	})
-	require.NoError(t, err)
-	t.Cleanup(func() { assert.NoError(t, cp.Close()) })
-	alice := controlplane.WithPrincipal(context.Background(), controlplane.Principal{ID: "alice@example.com"})
-	card := confirmCard(t, cp, alice, "starter-live-prompt")
+	for _, tc := range []struct {
+		name, changeID string
+		live           bool
+	}{
+		{name: "draft_commit_and_verify", changeID: "starter-live-prompt", live: true},
+		{name: "verify_without_live", changeID: "starter-skip-cp3"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := filepath.Join(t.TempDir(), "shop")
+			starterGit(t, seed, "clone", "--no-hardlinks", "--", seed, dir)
+			require.Equal(t, commit, starterGit(t, dir, "rev-parse", "HEAD"))
+			starterGit(t, dir, "config", "user.name", "Starter Tester")
+			starterGit(t, dir, "config", "user.email", "starter@example.com")
+			starterGit(t, dir, "config", "commit.gpgsign", "false")
+			starterGit(t, dir, "config", "core.hooksPath", "/dev/null")
+			cardsDir, runsDir := t.TempDir(), t.TempDir()
+			team := starterTeam(t, dir)
+			cp, err := controlplane.New(controlplane.Options{BuildCacheDir: buildCache,
+				CardsDir: cardsDir, WorkspaceDir: dir,
+				Team: &controlplane.TeamBinding{Owner: "alice@example.com", Service: team},
+				Verification: &controlplane.VerificationConfig{
+					RunsDir: runsDir,
+					Plan: verify.Plan{
+						CandidateRepo: dir, CandidateModule: ".", Binaries: map[string]string{name: "./cmd/" + name},
+						SuiteRepo: dir, SuiteCommit: commit, SuiteModule: "eval", SuiteCommand: "./gen/cmd/" + name + "-evals",
+						ReportDir: t.TempDir(),
+					},
+					Command: []string{surlaBin},
+					Timeout: 15 * time.Minute,
+				},
+				Live: &controlplane.LiveConfig{
+					Command:      []string{surlaBin},
+					Env:          os.Environ(),
+					StartTimeout: 10 * time.Minute,
+				},
+			})
+			require.NoError(t, err)
+			t.Cleanup(func() { assert.NoError(t, cp.Close()) })
+			user := starterCaller(t, controlplane.CallerUser)
+			builder := starterCaller(t, controlplane.CallerBuilder)
+			guide := starterCaller(t, controlplane.CallerGuide)
+			// Live targets plan through the scripted gateway the user chose.
+			_, err = cp.ConfigureModel(user, &gensurla.ConfigureModelPayload{GatewayAddr: &gatewayAddr})
+			require.NoError(t, err)
+			card := confirmCard(t, cp, guide, user, tc.changeID)
+			const text = "You answer questions about item prices. [drafted]"
+			if tc.live {
+				// Stored-evaluator live targets need neither a build nor
+				// accepted test-writer tests. Keep this start before Build.
+				started, err := cp.StartLiveTarget(builder, &gensurla.StartLiveTargetPayload{ChangeID: card.ChangeID, CandidateCommit: commit})
+				require.NoError(t, err)
+				before := askLive(t, started.URL)
+				assert.True(t, strings.HasPrefix(before, "SYSTEM="), before)
+				promptID := name + ".helper.system"
+				drafted, err := cp.DraftOverride(builder, &gensurla.DraftOverridePayload{
+					TargetKind: controlplane.TargetKindPromptTemplate, PromptID: &promptID, NewContent: text,
+				})
+				require.NoError(t, err)
+				assert.True(t, drafted.AppliedInStore)
+				assert.Equal(t, "SYSTEM="+text, askLive(t, started.URL), "the next model request carries the drafted text")
+				afterDraft, err := cp.GetChange(builder, &gensurla.GetChangePayload{ChangeID: card.ChangeID})
+				require.NoError(t, err)
+				assert.Equal(t, card.RequestRevision, afterDraft.RequestRevision, "a runtime draft never changes the card")
+				assert.Equal(t, controlplane.StatusConfirmed, afterDraft.Status)
+			}
 
-	started, err := cp.StartLiveTarget(alice, &gensurla.StartLiveTargetPayload{CandidateCommit: commit})
-	require.NoError(t, err)
-	before := askLive(t, started.URL)
-	assert.True(t, strings.HasPrefix(before, "SYSTEM="), before)
-
-	promptID := name + ".helper.system"
-	const text = "You answer questions about item prices. [drafted]"
-	drafted, err := cp.DraftOverride(alice, &gensurla.DraftOverridePayload{
-		TargetKind: controlplane.TargetKindPromptTemplate, PromptID: &promptID, NewContent: text,
-	})
-	require.NoError(t, err)
-	assert.True(t, drafted.AppliedInStore)
-	assert.Equal(t, "SYSTEM="+text, askLive(t, started.URL), "the next model request carries the drafted text")
-	afterDraft, err := cp.GetChange(alice, &gensurla.GetChangePayload{ChangeID: card.ChangeID})
-	require.NoError(t, err)
-	assert.Equal(t, card.RequestRevision, afterDraft.RequestRevision, "a runtime draft never changes the card")
-	assert.Equal(t, controlplane.StatusConfirmed, afterDraft.Status)
-
-	// The builder keeps the accepted text by writing it into source and
-	// committing C2; the draft itself is never what CP4 verifies.
-	planner := filepath.Join(dir, "internal", "helper", "planner.go")
-	src, err := os.ReadFile(planner)
-	require.NoError(t, err)
-	start := strings.Index(string(src), "systemPrompt = `")
-	end := strings.Index(string(src)[start+len("systemPrompt = `"):], "`")
-	require.True(t, start >= 0 && end >= 0, "the starter declares its system prompt as a raw string")
-	end += start + len("systemPrompt = `")
-	edited := string(src[:start]) + "systemPrompt = `" + text + "`" + string(src[end+1:])
-	require.NoError(t, os.WriteFile(planner, []byte(edited), 0o600))
-	c2 := commitAll(t, dir)
-
-	restarted, err := cp.StartLiveTarget(alice, &gensurla.StartLiveTargetPayload{CandidateCommit: c2})
-	require.NoError(t, err, "starting C2 replaces the C1 target")
-	assert.Equal(t, "SYSTEM="+text, askLive(t, restarted.URL), "C2 carries the committed text without any draft")
-	stopped, err := cp.StopLiveTarget(alice)
-	require.NoError(t, err)
-	assert.True(t, stopped.Stopped)
-
-	assertVerified(t, cp, alice, runsDir, card, c2, "the committed text verifies for the same card")
-
-	skipped := confirmCard(t, cp, alice, "starter-skip-cp3")
-	assertVerified(t, cp, alice, runsDir, skipped, commit, "a card that skips CP3 verifies C1 directly")
+			// CP4 requires an open build and an assignment read even when
+			// the operator supplies the evaluator. The builder authors its
+			// candidate only in the working copy returned by that read.
+			started, err := cp.StartBuild(user, &gensurla.StartBuildPayload{
+				ChangeID: card.ChangeID, RequestRevision: card.RequestRevision,
+			})
+			require.NoError(t, err)
+			assert.Equal(t, card.RequestRevision, started.Build.RequestRevision)
+			assert.Equal(t, gensurla.TeamKindUnavailable, started.Team.Kind(), "this host launches no agents")
+			assert.Equal(t, gensurla.TestsKindNotUsed, started.Build.TestWriter.Tests.Kind())
+			assignment, err := cp.GetBuilderAssignment(builder, &gensurla.GetBuilderAssignmentPayload{ChangeID: card.ChangeID})
+			require.NoError(t, err)
+			require.True(t, assignment.Read)
+			require.True(t, assignment.InForce)
+			require.Equal(t, card.RequestRevision, assignment.RequestRevision)
+			require.NotEqual(t, dir, assignment.WorkingFolder)
+			require.Equal(t, testwriter.BuilderRole.Branch(1), starterGit(t, assignment.WorkingFolder, "symbolic-ref", "--short", "HEAD"))
+			require.Equal(t, commit, starterGit(t, assignment.WorkingFolder, "rev-parse", "HEAD"))
+			c2 := commitStarterPrompt(t, assignment.WorkingFolder, text)
+			require.NotEqual(t, commit, c2, "the candidate contains this build's own work")
+			assert.Equal(t, commit, starterGit(t, dir, "rev-parse", "HEAD"), "the builder never commits in the project folder")
+			if tc.live {
+				restarted, err := cp.StartLiveTarget(builder, &gensurla.StartLiveTargetPayload{ChangeID: card.ChangeID, CandidateCommit: c2})
+				require.NoError(t, err, "starting C2 replaces the C1 target")
+				assert.Equal(t, "SYSTEM="+text, askLive(t, restarted.URL), "C2 carries the committed text without any draft")
+				stopped, err := cp.StopLiveTarget(builder)
+				require.NoError(t, err)
+				assert.True(t, stopped.Stopped)
+			}
+			assertVerified(t, cp, builder, runsDir, card, c2, "the committed text verifies for the same card, including when CP3 is skipped")
+		})
+	}
 }
 
 // keepRun copies a failed run's directory to $SURLA_TEST_KEEP_RUNS, when it
@@ -185,13 +225,31 @@ func buildLogs(t *testing.T, runsDir, runID string) string {
 	return b.String()
 }
 
-// confirmCard proposes changeID with a fixed analysis that has no open
-// questions and confirms it, returning the confirmed card.
-func confirmCard(t *testing.T, cp *controlplane.ControlPlane, ctx context.Context, changeID string) *gensurla.ChangeCardResult {
+// confirmCard evaluates the guide's real draft, proposes that exact snapshot
+// with a fixed analysis, and has the user confirm its current revision.
+func confirmCard(
+	t *testing.T, cp *controlplane.ControlPlane, guide, user context.Context, changeID string,
+) *gensurla.ChangeCardResult {
 	t.Helper()
-	card, err := cp.ProposeChange(ctx, &gensurla.ProposeChangePayload{
-		ChangeID: changeID,
-		Prompt:   "Answer price questions in a friendlier tone.",
+	draft, err := cp.UpdateDraft(guide)
+	require.NoError(t, err)
+	require.Empty(t, draft.ToCorrect)
+	refresh, err := cp.RefreshStory(guide)
+	require.NoError(t, err)
+	require.NotNil(t, refresh.OpID)
+	opID := *refresh.OpID
+	var readErr error
+	require.Eventually(t, func() bool {
+		refresh, readErr = cp.GetStoryRefresh(guide)
+		return readErr != nil || refresh.State == "succeeded" || refresh.State == "failed"
+	}, 5*time.Minute+30*time.Second, 100*time.Millisecond, "refresh %s did not finish", opID)
+	require.NoError(t, readErr)
+	require.Equal(t, "succeeded", refresh.State, "Story evaluation failed: %v", refresh.Diagnostic)
+	require.NotNil(t, refresh.OpID)
+	require.Equal(t, opID, *refresh.OpID)
+	card, err := cp.ProposeChange(guide, &gensurla.ProposeChangePayload{
+		ChangeID: changeID, StoryRefreshOpID: &opID,
+		Prompt: "Answer price questions in a friendlier tone.",
 		Analysis: &gensurla.CP1Analysis{
 			Summary:     "Answer price questions in a friendlier tone.",
 			Ambiguities: []*gensurla.CP1AnalysisAmbiguity{},
@@ -203,14 +261,69 @@ func confirmCard(t *testing.T, cp *controlplane.ControlPlane, ctx context.Contex
 		},
 	})
 	require.NoError(t, err)
-	if card.Status != controlplane.StatusConfirmed {
-		card, err = cp.ConfirmIntent(ctx, &gensurla.ConfirmIntentPayload{
-			ChangeID: changeID, RequestRevision: card.RequestRevision, Answers: map[string]string{}, Examples: card.Examples,
-		})
-		require.NoError(t, err)
-	}
+	card, err = cp.ConfirmIntent(user, &gensurla.ConfirmIntentPayload{
+		ChangeID: changeID, RequestRevision: card.RequestRevision, Answers: map[string]string{}, Examples: card.Examples,
+	})
+	require.NoError(t, err)
 	require.Equal(t, controlplane.StatusConfirmed, card.Status)
 	return card
+}
+
+// starterCaller supplies explicit user, guide and builder attribution for one owner.
+func starterCaller(t *testing.T, kind controlplane.CallerKind) context.Context {
+	t.Helper()
+	return controlplane.WithPrincipal(t.Context(), controlplane.Principal{
+		ID: "alice@example.com", CallerID: string(kind), Kind: kind,
+	})
+}
+
+// starterTeam binds the actual project-owned team and durable role registry.
+// Its unavailable window host prevents this test from launching agents.
+func starterTeam(t *testing.T, dir string) *project.Server {
+	t.Helper()
+	state, err := project.Discover(t.TempDir(), dir)
+	require.NoError(t, err)
+	lock, err := state.StartLock(t.Context())
+	require.NoError(t, err)
+	_, err = state.Initialize("alice@example.com")
+	require.NoError(t, errors.Join(err, lock.Close()))
+	server, err := project.NewServer(state, func() {}, project.TeamDependencies{
+		Lifetime: t.Context(), Host: starterWindowHost{}, RosterDirectory: t.TempDir(),
+	})
+	require.NoError(t, err)
+	return server
+}
+
+// commitStarterPrompt keeps prompt wording in the actual builder's source and
+// commits only that file, leaving the agreed design and operator suite intact.
+func commitStarterPrompt(t *testing.T, dir, text string) string {
+	t.Helper()
+	planner := filepath.Join(dir, "internal", "helper", "planner.go")
+	src, err := os.ReadFile(planner)
+	require.NoError(t, err)
+	const prefix = "systemPrompt = `"
+	start := strings.Index(string(src), prefix)
+	require.GreaterOrEqual(t, start, 0, "the starter declares its system prompt as a raw string")
+	end := strings.Index(string(src)[start+len(prefix):], "`")
+	require.GreaterOrEqual(t, end, 0, "the starter's system prompt has a closing delimiter")
+	end += start + len(prefix)
+	edited := string(src[:start]) + prefix + text + "`" + string(src[end+1:])
+	require.NoError(t, os.WriteFile(planner, []byte(edited), 0o600))
+	starterGit(t, dir, "add", "--", "internal/helper/planner.go")
+	starterGit(t, dir, "commit", "--quiet", "-m", "Keep the agreed prompt wording")
+	return starterGit(t, dir, "rev-parse", "HEAD")
+}
+
+// starterGit runs one bounded Git operation in this test's explicit repository.
+func starterGit(t *testing.T, dir string, args ...string) string {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, "git", args...)
+	cmd.Dir = dir
+	out, err := cmd.CombinedOutput()
+	require.NoError(t, err, "git %v: %s", args, out)
+	return strings.TrimSpace(string(out))
 }
 
 // assertVerified runs verify_change for commit on card and waits, within a
@@ -244,6 +357,11 @@ func assertVerified(t *testing.T, cp *controlplane.ControlPlane, ctx context.Con
 		case <-time.After(2 * time.Second):
 		}
 	}
+}
+
+// Overlays reports the test host's absent window service before any launcher work.
+func (starterWindowHost) Overlays(context.Context) ([]string, error) {
+	return nil, errors.New("the starter integration host has no agent windows")
 }
 
 // Complete is not used; the starter's planner streams.

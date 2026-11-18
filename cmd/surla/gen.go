@@ -17,12 +17,12 @@ import (
 	"github.com/goadesign/surla/internal/genpublish"
 )
 
-// quickstartGuide is the one generated file outside gen/: goa-ai's guide for
-// coding agents, written at the module root.
+// quickstartGuide is the one file generation writes outside gen/: goa-ai's
+// guide for coding agents, written at the module root.
 const quickstartGuide = "AGENTS_QUICKSTART.md"
 
-// runGen regenerates the gen/ directory of the design module in -dir from its
-// design, inside Surla's sandbox, and replaces gen/ in one atomic exchange.
+// gen regenerates the gen/ directory of the design module in -dir from its
+// design and replaces gen/ in one atomic exchange.
 //
 // It reads the module through one os.Root handle that it keeps until
 // publication ends, generates with a design evaluator it owns
@@ -32,12 +32,13 @@ const quickstartGuide = "AGENTS_QUICKSTART.md"
 // gen/ other than the root agent guide, writes and syncs every file, and
 // checks for cancellation. Any failure until then leaves gen/ untouched and
 // returns an error. The exchange
-// swaps the staged gen/ with the current one (or moves it in when there is
-// none) with renameatx_np on the two held directory handles. That is the
+// swaps the staged gen/ with the current one (or moves it in without
+// overwriting when there is none) with renameat.Exchange or renameat.NoReplace
+// on the two held directory handles. That is the
 // success point: afterwards the command returns nil, and writing the agent
 // guide, removing the old tree and reporting the changes only print
 // warnings. go.mod and go.sum are never written.
-func runGen(args []string, stdout, stderr io.Writer) (err error) {
+func (runtime projectRuntime) gen(args []string, stdout, stderr io.Writer) (err error) {
 	fs := flag.NewFlagSet("gen", flag.ContinueOnError)
 	dir := fs.String("dir", ".", "root directory of the design module (holding go.mod, go.sum and design/)")
 	if err := fs.Parse(args); err != nil {
@@ -70,7 +71,7 @@ func runGen(args []string, stdout, stderr io.Writer) (err error) {
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
-	evalWorkDir, err := localEvalWorkDir(cleanDir)
+	evalWorkDir, err := runtime.localEvalWorkDir(cleanDir)
 	if err != nil {
 		return err
 	}

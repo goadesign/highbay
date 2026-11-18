@@ -4,12 +4,13 @@ package controlplane
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 
 	gensurla "github.com/goadesign/surla/gen/surla"
-	"github.com/goadesign/surla/internal/designeval"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
@@ -17,25 +18,34 @@ import (
 
 // ReviseChange saves the next revision of an existing Checkpoint 1 Change
 // Card from the caller's revised feature request and analysis, bound to the
-// card's current request_revision. Only the card's owner may revise it. It
+// latest revision: the proposed revision when one waits beside a confirmed
+// card, otherwise the card itself. Only the card's owner may revise it. It
 // first checks p against the design's rules with the generated
 // gensurla.ValidateReviseChangePayloadValue, so a Go caller gets the same
 // structural checks the HTTP and MCP decoders apply. It then checks the rules
-// that span fields: every current example is kept (examples[].prior_id) or
-// dropped (removed_example_ids) exactly once, and each ambiguity's options
-// are distinct. Kept examples keep their IDs, new examples get the lowest
-// unused check_NN ID, and the revision is saved in needs_confirmation status
-// with no answers, confirmed_by or approval. When story_refresh_op_id is
-// given on a workspace-backed card, the revision adopts the evaluated Stories
-// and design/*.go snapshot from that succeeded refresh_story operation; when
-// story_refresh_op_id is omitted on a card that already has Stories, the
-// saved Stories and saved design source carry over together; otherwise the
-// design source is design_source when given, design/*.go from the bound
-// workspace for a workspace-backed card, or the card's saved design source.
-// The card is saved only if it still has the caller's request_revision; a
-// payload that breaks a rule, a blank change_id, request_revision or prompt,
-// an invalid or stale story_refresh_op_id, or an unreadable workspace design
-// is unprocessable and leaves the card unchanged.
+// that span fields: every example of the revised revision is kept
+// (examples[].prior_id) or dropped (removed_example_ids) exactly once, and
+// each ambiguity's options are distinct. Kept examples keep their IDs, new
+// examples get the lowest unused check_NN ID, and the revision is built in
+// needs_confirmation status with no answers, confirmed_by or approval. When
+// story_refresh_op_id is given, the revision adopts the evaluated Stories and
+// design/*.go snapshot from that succeeded refresh_story operation; when it
+// is omitted on a revision with saved snapshot metadata, the whole snapshot
+// carries over, including when it declares no Stories. Older revisions with
+// Stories keep their Stories and design source together. Without a saved
+// design source, an initialized Go module requires a succeeded refresh_story
+// before revision; a folder without go.mod can still hold intent alone.
+//
+// A card that was never confirmed is replaced by the new revision. Beside a
+// confirmed card the new revision is saved as the proposal, replacing any
+// earlier one, and the confirmed revision stays in force with its answers,
+// confirmation, approval, Stories and design source, until the user adopts
+// the proposal (ConfirmIntent) or declines it (DeclineRevision). The change
+// is saved only if its latest revision is still the caller's
+// request_revision; a payload that breaks a rule, a blank change_id,
+// request_revision or prompt, an invalid or stale story_refresh_op_id, or an
+// unknown or unsuccessful refresh is unprocessable and leaves the change as it
+// was. The result is the change as GetChange returns it.
 func (c *ControlPlane) ReviseChange(
 	ctx context.Context,
 	p *gensurla.ReviseChangePayload,
@@ -53,9 +63,8 @@ func (c *ControlPlane) ReviseChange(
 		return nil, gensurla.MakeUnprocessable(errors.New("change_id, request_revision, and prompt are required"))
 	}
 
-	// Phase 1: read the current card without holding the write lock, because
-	// recording a workspace design reads the bound workspace, which must not
-	// happen under c.mu.
+	// Phase 1: read the latest saved revision. A supplied operation replaces
+	// its entire snapshot; omission preserves it without reading any design.
 	c.mu.RLock()
 	record, exists, err := c.cards.load(p.ChangeID)
 	c.mu.RUnlock()
@@ -68,53 +77,23 @@ func (c *ControlPlane) ReviseChange(
 	if record.owner != principal.ID {
 		return nil, gensurla.MakeForbidden(fmt.Errorf("principal %q is not the owner of change_id %q", principal.ID, p.ChangeID))
 	}
-	if record.card.RequestRevision != p.RequestRevision {
-		return nil, gensurla.MakeConflict(fmt.Errorf(
-			"request_revision mismatch for %q: got %q, want %q",
-			p.ChangeID,
-			p.RequestRevision,
-			record.card.RequestRevision,
-		))
+	latest := record.latest()
+	if err := checkLatestRevision(record, p.RequestRevision); err != nil {
+		return nil, err
 	}
 
-	designSrc := record.designSource
-	nextOrigin := record.sourceOrigin
-	var nextStories []designeval.StorySummary
-	switch {
-	case p.StoryRefreshOpID != nil:
-		if p.DesignSource != nil {
-			return nil, gensurla.MakeUnprocessable(errors.New(
-				"cannot combine design_source with story_refresh_op_id; omit design_source so Surla reads the workspace snapshot verified by refresh_story",
-			))
-		}
-		if record.sourceOrigin != sourceOriginWorkspace {
-			return nil, gensurla.MakeUnprocessable(fmt.Errorf(
-				"change card %q uses a caller-supplied design_source and cannot adopt a workspace Story from refresh_story",
-				p.ChangeID,
-			))
-		}
-		designSrc, nextStories, err = c.adoptStoryRefresh(principal, *p.StoryRefreshOpID)
+	snapshot := refreshedSnapshot{
+		designSource: latest.designSource, stories: cloneStorySummaries(latest.stories),
+		architecture: latest.architecture, goMod: latest.goMod, madeFrom: latest.madeFrom,
+	}
+	if p.StoryRefreshOpID != nil {
+		snapshot, err = c.adoptStoryRefresh(principal, *p.StoryRefreshOpID)
 		if err != nil {
 			return nil, err
 		}
-		nextOrigin = sourceOriginWorkspace
-	case len(record.stories) > 0:
-		if p.DesignSource != nil {
-			return nil, gensurla.MakeUnprocessable(fmt.Errorf(
-				"change card %q has adopted Stories from refresh_story and cannot replace design_source with a caller-supplied value; omit design_source to keep the agreed Story or pass story_refresh_op_id from refresh_story",
-				p.ChangeID,
-			))
-		}
-		nextStories = cloneStorySummaries(record.stories)
-	case p.DesignSource != nil:
-		designSrc = *p.DesignSource
-		nextOrigin = sourceOriginSupplied
-	case nextOrigin == sourceOriginWorkspace:
-		if wsDir, wsDev, wsIno := c.currentWorkspaceTarget(); wsDir != "" {
-			designSrc, err = readWorkspaceDesignSource(wsDir, wsDev, wsIno)
-			if err != nil {
-				return nil, err
-			}
+	} else if snapshot.designSource == "" {
+		if err := c.requireRefreshForModule(); err != nil {
+			return nil, err
 		}
 	}
 
@@ -126,16 +105,16 @@ func (c *ControlPlane) ReviseChange(
 	defer span.End()
 
 	// Phase 2: build the revision. The examples checked here are the ones the
-	// caller's request_revision names; Phase 3 saves only while the card still
-	// has that revision, so they are still the card's examples then.
-	ambiguities, examples, preserved, err := revisedCardContent(p.ChangeID, record.card.Examples, p.Analysis)
+	// caller's request_revision names; Phase 3 saves only while that is still
+	// the latest revision, so they are still its examples then.
+	ambiguities, examples, preserved, err := revisedCardContent(p.ChangeID, latest.card.Examples, p.Analysis)
 	if err != nil {
 		span.SetAttributes(attribute.String("surla.public_summary", cp1RejectedAnalysisSummary(true)))
 		return nil, gensurla.MakeUnprocessable(fmt.Errorf("invalid analysis: %w", err))
 	}
-	// Every revised card enters needs_confirmation so the operator explicitly
-	// reviews and confirms the revised summary, decisions, and examples before
-	// advancing to downstream checkpoints.
+	// Every revision enters needs_confirmation so the user explicitly reviews
+	// and confirms the revised summary, decisions, and examples before it
+	// reaches downstream checkpoints.
 	revised := &gensurla.ChangeCardResult{
 		ChangeID:           p.ChangeID,
 		Status:             StatusNeedsConfirmation,
@@ -144,9 +123,9 @@ func (c *ControlPlane) ReviseChange(
 		Ambiguities:        ambiguities,
 		Examples:           examples,
 		PreservedBehaviors: preserved,
-		Stories:            storySummaryItemsOrNil(nextStories),
+		Stories:            storySummaryItemsOrNil(snapshot.stories),
 	}
-	rev, err := computeCanonicalRevision(revised, principal.ID, designSrc)
+	rev, err := computeCanonicalRevision(revised, principal.ID, snapshot.designSource)
 	if err != nil {
 		span.SetAttributes(attribute.String("surla.public_summary", cp1SafeFaultSummary(true, cp1FaultRevision)))
 		span.RecordError(err)
@@ -162,7 +141,107 @@ func (c *ControlPlane) ReviseChange(
 	}
 
 	// Phase 3: save under the write lock only if no other request changed the
-	// card since Phase 1.
+	// change since Phase 1.
+	next := storedRevision{
+		card: revised, designSource: snapshot.designSource, stories: snapshot.stories,
+		architecture: snapshot.architecture, goMod: snapshot.goMod, madeFrom: snapshot.madeFrom,
+	}
+	saved, err := c.saveRevision(span, principal, p, next)
+	if err != nil {
+		return nil, err
+	}
+	return c.changeResult(ctx, saved)
+}
+
+// DeclineRevision removes the revision the guide proposed beside a confirmed
+// card, which p.RequestRevision must name. It first checks p against the
+// design's rules with the generated gensurla.ValidateDeclineRevisionPayloadValue,
+// so a Go caller gets the checks the HTTP and MCP decoders apply. The
+// confirmed revision in force stays exactly as it was. Only the card's owner reaches this; the operation
+// table lets only the user's session call it. The result is the change as
+// GetChange returns it.
+func (c *ControlPlane) DeclineRevision(
+	ctx context.Context,
+	p *gensurla.DeclineRevisionPayload,
+) (*gensurla.ChangeCardResult, error) {
+	principal, ok := PrincipalFromContext(ctx)
+	if !ok {
+		return nil, errors.New("authenticated principal is required")
+	}
+	if err := gensurla.ValidateDeclineRevisionPayloadValue(p); err != nil {
+		return nil, gensurla.MakeUnprocessable(err)
+	}
+	record, err := c.declineRevision(principal, p)
+	if err != nil {
+		return nil, err
+	}
+	return c.changeResult(ctx, record)
+}
+
+// latest returns the revision a new revision is made from: the proposal
+// when one waits, otherwise the revision in force.
+func (r storedChangeCard) latest() storedRevision {
+	if r.proposed != nil {
+		return *r.proposed
+	}
+	return storedRevision{
+		card: r.card, designSource: r.designSource, stories: r.stories,
+		architecture: r.architecture, goMod: r.goMod, madeFrom: r.madeFrom,
+	}
+}
+
+// agreedRevision returns the revision the user agreed, which is the revision
+// in force: the card's revision once the user confirmed it, and still that
+// revision while a proposal waits beside it; "" while the change awaits its
+// first confirmation. A proposal never becomes in force until the user adopts
+// it. start_build accepts only this revision, get_build and every assignment
+// read report in_force against it, and confirm_intent and revise_change use
+// it to recognize the agreed revision while a proposal waits.
+func (r storedChangeCard) agreedRevision() string {
+	if r.card.Status != StatusConfirmed {
+		return ""
+	}
+	return r.card.RequestRevision
+}
+
+// checkLatestRevision refuses a revision request that does not name record's
+// latest revision. Naming the revision in force while a proposal waits gets a
+// message saying the proposal must be revised instead.
+func checkLatestRevision(record storedChangeCard, requestRevision string) error {
+	latest := record.latest().card.RequestRevision
+	switch {
+	case requestRevision == latest:
+		return nil
+	case record.proposed != nil && requestRevision == record.agreedRevision():
+		return gensurla.MakeConflict(fmt.Errorf(
+			"change_id %q has a proposed revision %q waiting beside the confirmed revision; read it with get_change and revise it by naming its request_revision",
+			record.card.ChangeID,
+			latest,
+		))
+	default:
+		return gensurla.MakeConflict(fmt.Errorf(
+			"request_revision mismatch for %q: got %q, want %q",
+			record.card.ChangeID,
+			requestRevision,
+			latest,
+		))
+	}
+}
+
+// saveRevision saves next under c.mu as the latest revision of p.ChangeID,
+// provided that is still the revision p names: it replaces a card that was
+// never confirmed, or becomes the proposal beside a confirmed card. It
+// returns the saved change.
+func (c *ControlPlane) saveRevision(
+	span trace.Span,
+	principal Principal,
+	p *gensurla.ReviseChangePayload,
+	next storedRevision,
+) (storedChangeCard, error) {
+	if p.StoryRefreshOpID != nil {
+		c.draftMu.Lock()
+		defer c.draftMu.Unlock()
+	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	current, exists, err := c.cards.load(p.ChangeID)
@@ -170,37 +249,172 @@ func (c *ControlPlane) ReviseChange(
 		span.SetAttributes(attribute.String("surla.public_summary", cp1SafeFaultSummary(true, cp1FaultStorageRead)))
 		span.RecordError(err)
 		span.SetStatus(codes.Error, "load cp1 change card")
-		return nil, err
+		return storedChangeCard{}, err
 	}
 	if !exists {
 		span.SetAttributes(attribute.String("surla.public_summary", "Change Card was not found; check change_id or call propose_change."))
-		return nil, gensurla.MakeNotFound(fmt.Errorf("unknown change_id %q", p.ChangeID))
+		return storedChangeCard{}, gensurla.MakeNotFound(fmt.Errorf("unknown change_id %q", p.ChangeID))
 	}
 	if current.owner != principal.ID {
 		span.SetAttributes(attribute.String("surla.public_summary", "Caller does not own this Change Card (this request did not modify the Change Card)."))
-		return nil, gensurla.MakeForbidden(fmt.Errorf("principal %q is not the owner of change_id %q", principal.ID, p.ChangeID))
+		return storedChangeCard{}, gensurla.MakeForbidden(fmt.Errorf("principal %q is not the owner of change_id %q", principal.ID, p.ChangeID))
 	}
-	if current.card.RequestRevision != p.RequestRevision {
+	if err := checkLatestRevision(current, p.RequestRevision); err != nil {
 		span.SetAttributes(attribute.String("surla.public_summary", "Change Card request_revision changed concurrently (this request did not modify the Change Card); call get_change and retry revise_change."))
-		return nil, gensurla.MakeConflict(fmt.Errorf(
-			"request_revision mismatch for %q: got %q, want %q",
-			p.ChangeID,
-			p.RequestRevision,
-			current.card.RequestRevision,
-		))
+		return storedChangeCard{}, err
 	}
-	if err := c.cards.save(storedChangeCard{
-		card:         revised,
-		owner:        principal.ID,
-		designSource: designSrc,
-		sourceOrigin: nextOrigin,
-		stories:      nextStories,
-	}); err != nil {
+	if p.StoryRefreshOpID == nil {
+		// Metadata stays outside request_revision. Another refresh may have
+		// saved a newer module/history with the same hash after Phase 1, so
+		// omission preserves the complete latest group read under this lock.
+		latest := current.latest()
+		next.designSource, next.stories = latest.designSource, latest.stories
+		next.architecture, next.goMod, next.madeFrom = latest.architecture, latest.goMod, latest.madeFrom
+		next.card.Stories = storySummaryItemsOrNil(next.stories)
+	}
+	if p.StoryRefreshOpID != nil {
+		if err := c.recordRefreshedSnapshot(span, refreshedSnapshot{
+			designSource: next.designSource, stories: next.stories, architecture: next.architecture,
+			goMod: next.goMod, madeFrom: next.madeFrom,
+		}); err != nil {
+			return storedChangeCard{}, err
+		}
+	}
+	saved := storedChangeCard{
+		card: next.card, owner: principal.ID, designSource: next.designSource, stories: next.stories,
+		architecture: next.architecture, goMod: next.goMod, madeFrom: next.madeFrom,
+	}
+	summary := "Revised Change Card (needs_confirmation)."
+	if current.card.Status == StatusConfirmed {
+		saved = current
+		saved.proposed = &next
+		summary = "Proposed a revision beside the confirmed Change Card (needs the user's adoption)."
+	}
+	if err := c.cards.save(saved); err != nil {
 		span.SetAttributes(attribute.String("surla.public_summary", cp1SafeFaultSummary(true, cp1FaultStorageSave)))
 		span.RecordError(err)
 		span.SetStatus(codes.Error, "save revised cp1 change card")
+		return storedChangeCard{}, err
+	}
+	c.suppressDraftDropNote(next.madeFrom)
+	span.SetAttributes(attribute.String("surla.public_summary", summary))
+	return saved, nil
+}
+
+// declineRevision removes the proposal p names from its change under c.mu
+// and returns the saved change.
+func (c *ControlPlane) declineRevision(principal Principal, p *gensurla.DeclineRevisionPayload) (storedChangeCard, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	record, exists, err := c.cards.load(p.ChangeID)
+	if err != nil {
+		return storedChangeCard{}, err
+	}
+	if !exists {
+		return storedChangeCard{}, gensurla.MakeNotFound(fmt.Errorf("unknown change_id %q", p.ChangeID))
+	}
+	if record.owner != principal.ID {
+		return storedChangeCard{}, gensurla.MakeForbidden(fmt.Errorf("principal %q is not the owner of change_id %q", principal.ID, p.ChangeID))
+	}
+	if record.proposed == nil {
+		return storedChangeCard{}, gensurla.MakeConflict(fmt.Errorf("change_id %q has no proposed revision to decline", p.ChangeID))
+	}
+	if record.proposed.card.RequestRevision != p.RequestRevision {
+		return storedChangeCard{}, gensurla.MakeConflict(fmt.Errorf(
+			"request_revision %q is not the proposed revision of %q; its proposed revision is %q",
+			p.RequestRevision,
+			p.ChangeID,
+			record.proposed.card.RequestRevision,
+		))
+	}
+	record.proposed = nil
+	if err := c.cards.save(record); err != nil {
+		return storedChangeCard{}, err
+	}
+	return record, nil
+}
+
+// changeResult returns record as GetChange reports it: the revision in force
+// as currentCard reports it, with the proposed revision beside it when one
+// waits. Callers must not hold c.mu, because currentCard may ask a slow
+// promotion target.
+func (c *ControlPlane) changeResult(ctx context.Context, record storedChangeCard) (*gensurla.ChangeCardResult, error) {
+	card, err := c.currentCard(ctx, record)
+	if err != nil {
 		return nil, err
 	}
-	span.SetAttributes(attribute.String("surla.public_summary", "Revised Change Card (needs_confirmation)."))
-	return revised, nil
+	if record.proposed == nil {
+		return card, nil
+	}
+	out := *card
+	out.ProposedRevision, err = proposedRevisionItem(record)
+	if err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// proposedRevisionItem is record's waiting proposal as a change result
+// reports it, naming the design files it was made from that differ from the
+// agreed revision's, or nil when no proposal waits. A saved design source
+// that does not decode is an error.
+func proposedRevisionItem(record storedChangeCard) (*gensurla.ProposedRevisionItem, error) {
+	if record.proposed == nil {
+		return nil, nil
+	}
+	changed, err := changedDesignFiles(record.designSource, record.proposed.designSource)
+	if err != nil {
+		return nil, fmt.Errorf("change card %q: %w", record.card.ChangeID, err)
+	}
+	card := record.proposed.card
+	return &gensurla.ProposedRevisionItem{
+		Prompt:             card.Prompt,
+		Summary:            card.Summary,
+		Ambiguities:        card.Ambiguities,
+		Examples:           card.Examples,
+		PreservedBehaviors: card.PreservedBehaviors,
+		Stories:            card.Stories,
+		RequestRevision:    card.RequestRevision,
+		UIComposition:      card.UIComposition,
+		ChangedDesignFiles: changed,
+	}, nil
+}
+
+// changedDesignFiles returns, in path order, the design files that were
+// added, removed or changed between two saved design sources, each the JSON
+// object of design/*.go files encodeDesignSource writes ("" for none).
+func changedDesignFiles(agreed, proposed string) ([]string, error) {
+	before, err := decodeDesignSource(agreed)
+	if err != nil {
+		return nil, err
+	}
+	after, err := decodeDesignSource(proposed)
+	if err != nil {
+		return nil, err
+	}
+	changed := []string{}
+	for path, content := range after {
+		if prior, ok := before[path]; !ok || prior != content {
+			changed = append(changed, path)
+		}
+	}
+	for path := range before {
+		if _, ok := after[path]; !ok {
+			changed = append(changed, path)
+		}
+	}
+	slices.Sort(changed)
+	return changed, nil
+}
+
+// decodeDesignSource decodes a saved design source into its files.
+func decodeDesignSource(source string) (map[string]string, error) {
+	files := map[string]string{}
+	if source == "" {
+		return files, nil
+	}
+	if err := json.Unmarshal([]byte(source), &files); err != nil {
+		return nil, fmt.Errorf("decode saved design source: %w", err)
+	}
+	return files, nil
 }

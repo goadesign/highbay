@@ -15,184 +15,425 @@
 
 **An agentic software factory that builds, verifies, and evolves production services at a fraction of the token cost.**
 
-Solo coding agents—and most multi-agent "team" wrappers—still ask LLMs to hand-write every line of HTTP routing, auth middleware, workflow plumbing, and tests from scratch. That works on day one and collapses by feature three: the codebase drifts into an inconsistent maze that burns more tokens on every edit, and the agent writing the code writes tests that rubber-stamp its own bugs.
+A coding agent left alone writes the code and also the tests that judge it, so
+its mistakes pass. Hand-written routing, auth middleware and workflow plumbing
+drift with every feature, and each later edit costs more tokens.
 
-**Surla** pairs mixed-model agent teams (combining frontier reasoners and fast coding models across **Claude, Codex, and Gemini**) with a deterministic compiler stack. Because [Goa](https://github.com/goadesign/goa) generates transports, schemas, and validation at **0 LLM tokens**, and [Goa-AI](https://github.com/goadesign/goa-ai) provides built-in durable workflows, tool guardrails, and isolated evaluation, your agents only write compact contracts and pure domain logic, and a separate `surla verify` step checks the candidate build in an OS sandbox before you merge.
+Surla organizes the coding agents you already use into a team with separate
+jobs, and pairs them with a deterministic compiler. Agents write a compact
+service design and the business logic. [Goa](https://github.com/goadesign/goa)
+and [Goa-AI](https://github.com/goadesign/goa-ai) generate the transports,
+schemas, validation, durable workflows and tool guardrails from that design at
+**0 LLM tokens**. One agent writes the code; a different agent writes the
+tests; Surla itself judges those tests and runs them against the code, which
+it builds and runs as ordinary processes on your machine, with your file and
+network access. You agree what is built
+and approve the result in your browser. Surla deploys nothing and merges
+nothing. The project server reuses compiled Go packages for Story refreshes,
+starter initialization, test-report checks, live starts and verification runs.
+Each operation still builds its outputs and runs its checks; a cache hit is never a
+passed check. The cache is a trusted compiler input that programs running as
+you can change; see
+[project storage and cache trust](docs/REFERENCE.md#project-state-folder).
 
-```text
-You: "Add a refund assistant to our orders service. Refunds up to $50 get
-      instant store credit; anything larger waits for a manager."
+## One change from start to finish
 
-Surla: Before I propose a build plan, two quick edge cases:
-  1. Does "$50" mean item subtotal, or total including tax and shipping?
-  2. What happens at exactly $50.00 — instant credit or manager approval?
+These words appear throughout:
 
-You: "Total including tax and shipping, and $50.00 is instant."
+| Term | Meaning |
+| --- | --- |
+| **The server** | The project's Surla server. `surla` starts one per project folder. It keeps what you agreed, who was asked to do what, and what was accepted, and it runs the checks. |
+| **The page** | The server's page in your browser, which the reference calls the views page. Every decision that is yours happens there. |
+| **Herdr** | The terminal program the agents run in, one pane per agent. |
+| **Chorus** | The messaging service the agents use. Its dialog in Herdr is where you choose which coding agent plays each role. |
+| **The guide** | The agent you talk to. It writes the Story and proposes changes. |
+| **The builder** | The agent that writes the application code. |
+| **The test writer** | The agent that writes the change's tests, in its own working copy of the project. |
+| **Story** | A plain description of what the system does, written as Go in the project's design, one flow at a time. |
+| **Flow** | One path through a Story: who starts it, the steps by role, and the outcome. For example, "a customer asks the price of tea and gets it". A flow with a start, an outcome and no open question is *finished*; any other flow is a draft. |
+| **Change Card** | One change the guide proposes: the request, the Story, open questions, concrete examples and the behavior to preserve. |
+| **`request_revision`** | The digest of one saved revision of a Change Card. Previews, verification runs and approvals name the revision they belong to. |
 
-Surla: Locked 5 acceptance checks, compiled design/orders.go (0 tokens),
-       and proposed a team across model families & classes:
-  • Architect (Claude Opus)     → API, auth & workflow contract
-  • Builder (Claude Sonnet)     → Refund workflow & state store
-  • Test Author (Gemini Pro)    → Isolated acceptance & crash suite
-  • Reviewer (Codex)            → Adversarial security & code review
-```
+To work through a terminal and browser automation, run `surla --print-link`. It
+starts or attaches to the same project and prints `{ "url": "...", "expires_at":
+"..." }` JSON instead of opening a browser. Open that one-use URL in your
+controlled browser. The team instructions give commands with the actual Herdr
+space ID: `chorus team inspect` shows the roles, and `chorus team launch` accepts
+your explicit program/model choices. Add `--choices choices.json` to the printed
+inspection command to see your chosen programs' model options and permission
+effects before launching. See [terminal operation](docs/REFERENCE.md#terminal-and-browser-automation)
+for input, recovery and link handling. The dialog remains available.
 
----
+Here is one change, for example a refund assistant whose rule is "refunds up
+to $50 get instant store credit; larger ones wait for a manager":
 
-## Why Engineers Use Surla
+1. **Start.** In your project folder, run `surla`. It starts the server in its
+   own Herdr terminal, starts Chorus and the Herdr app if they are not
+   running, prepares the team, and opens the page.
+2. **Choose agents.** The Chorus dialog opens in Herdr with one row per role.
+   At first the only role is the guide. Pick an agent and a model for it. Its
+   pane opens on the left.
+3. **Describe.** Tell the guide what you want in its pane. It writes the Story
+   and proposes a Change Card, which appears on the page by itself. For the
+   refund rule, the card might ask: "Does $50 mean the item subtotal, or the
+   total with tax and shipping?" and "Does exactly $50.00 get instant credit?"
+4. **Agree.** On the page, answer the questions, check the examples and
+   confirm. No agent can confirm for you. If the guide later revises the
+   change, its proposed revision waits beside the agreed revision until you
+   adopt or decline it; the agreed revision stays in force until then.
+5. **Review the architecture.** Open **Architecture** on the page to inspect
+   the agreed revision's saved design. If it needs a change, ask the guide to
+   revise the change, then review and adopt its proposal before building.
+6. **Build.** Press **Build this change** on the page. Surla saves the agreed
+   revision, and the Chorus dialog asks you for agents for two more roles: the
+   builder and the test writer (or inspect and launch them with `chorus team
+   inspect` and `chorus team launch`; see
+   [terminal operation](docs/REFERENCE.md#terminal-and-browser-automation)).
+   The builder gets its own working copy of the
+   project in `.surla-build` on the branch `surla/build-<n>`, and the test
+   writer gets its own working copy of the project in `.surla-tests` on the
+   branch `surla/tests-<n>`, one required test per finished flow of the Story,
+   and your answers, examples and preserved behaviors, which its tests must
+   also hold the service to. Draft flows require no test.
+7. **Tests.** The test writer writes those tests and reports. Surla does not
+   take its word for it: it writes the required tests into the copy again,
+   checks that nothing changed outside the test module (the project's `eval/`
+   folder), and builds and lists the test program. Problems go
+   back to the test writer as findings. Build shows them beside the saved
+   required tests; Next names the test writer’s next step.
+   When the tests pass the check, Surla accepts them at one commit on
+   `surla/tests-<n>`. Build shows which agreed answers and examples the test
+   writer says each scenario covers. Surla validates those references but does
+   not judge the statements; anything without one says **Not stated**.
+8. **Code and verify.** Meanwhile the builder writes the code, builds and
+   tests it, and commits. If the application calls a model, the builder can
+   try prompt wording after Surla accepts the tests, using a *live target*:
+   a running copy of the application
+   that the server starts from a commit. The builder then asks Surla to
+   verify its commit. Surla builds that commit and runs the
+   tests accepted for that exact revision against it. It refuses to verify
+   until those tests are accepted. The result appears in the page's **Check**
+   view.
+9. **Approve and merge.** Open the run in **Approve** to review its recorded
+   Story flows, test outcomes, excluded drafts and unknown coverage. When the
+   server says approval is available, Next offers **Approve this result**.
+   Surla checks that the run passed and ran the tests accepted
+   for the agreed revision, then records the approval with the builder's
+   commit, the tests commit and the report. While the build shows **Passed**,
+   the recorded approval and the Build section on the page show both commits
+   and give you the `git merge <commit>` commands to run in the project folder:
+   first `git merge <candidate_commit>` (verified on `surla/build-<n>`), and
+   then, for written tests, `git merge <tests_commit>` (verified on
+   `surla/tests-<n>`). The builder commits in `.surla-build` rather than in
+   the project folder, so you merge the builder's commit first and then the
+   tests' commit into the branch checked out in the project folder yourself.
+   Once your branch holds both commits' changes, the build shows **Merged**.
+   Detecting the merge runs no tests: the verification covered the passed
+   run's commits, not your branch after the merge, which may also hold other
+   changes merged after the build started. To run the accepted test suite
+   against the merged commit on your branch yourself, pass the full commit ID
+   of your branch's `HEAD` (`"$(git rev-parse HEAD)"`) as `-candidate-commit`
+   and the accepted `<tests_commit>` shown in **Approve** as `-suite-commit` to
+   [`surla verify`](docs/REFERENCE.md#surla-verify). Surla
+   merges and deploys nothing. Approval needs no
+   settings. A project that stores
+   [promotion settings](docs/REFERENCE.md#surla-verification-and-surla-promotion)
+   (a release folder and the names of its binaries) gets one more check at
+   approval: the files in the release folder must be the binaries the run
+   built.
 
-### 1. 0-token code generation—agents write the contract, the compiler writes the plumbing
-Why pay an LLM to hallucinate 3,000 lines of HTTP handlers, gRPC stubs, OpenAPI specs, MCP schemas, and JSON validators? In Surla, the Architect agent expresses your API, agent tools, and security rules in a compact, strongly typed design (`design/*.go`). Goa deterministically generates the transports, OpenAPI specs, MCP schemas, and validators from that design with no model inference (**0 LLM tokens**)—eliminating entire classes of glue-code bugs and the token spend of writing them by hand.
+Only you confirm a change, start a build and approve a result, and you do it on
+the page. Each agent has its own connection to the server with only its own
+role's permissions. While the team works, the page's **Team** view shows each
+agent's state; an agent that is waiting for you is named above every view,
+with an action such as **Show guide pane** that brings its pane forward. While
+the builder or the test writer has work on the open build and has an assignment
+it has not read, for example the builder after Surla accepts the tests, the
+server sends it one fixed Chorus direct message asking it to read its
+assignments. One that stays idle with that unread assignment for 90 seconds is
+named as waiting for you, and the page says what to tell it.
 
-### 2. A built-in Golden Path that stays cheap and effortless to evolve
-Most AI-built codebases rot after a few weeks because every prompt invents a new folder structure, a new way to call LLMs, or a new auth pattern—forcing future agents to burn tens of thousands of tokens just reverse-engineering the repo. Surla enforces an embedded **Golden Path architecture**:
-- **Predictable layout & generated agent maps:** Every service follows the same clean structure and ships an auto-generated `AGENTS_QUICKSTART.md` map, so any coding agent can jump in months later and extend the platform with minimal context tokens.
-- **Production patterns by default:** One HTTP/MCP edge gateway, internal gRPC services, a central LLM gateway with rate limiting and cost tracking, durable Temporal workflows, and server-injected `tenant_id`/`user_id` fields that the LLM can never spoof.
+You can go back at any point: adopt a revised change, build again, or the test
+writer reports again after findings. Adopting changed content gives it a new
+`request_revision`, which starts without an approval, and verification then
+needs a build of that revision: before you adopt, the page says that the
+existing build stays on the earlier revision. Building again replaces the
+build and requires the tests to be reported, judged and accepted again before
+verification or a new live target. After merging the current agreement, build
+another change or refine this one when there is more to do. **Build again…**
+remains available as a secondary action: it asks before starting a new build
+number from your branch as it is now, for the same agreement, with fresh
+assignments. Earlier reports do not establish that the new build passed.
 
-### 3. Mixed-model teams where the builder never grades its own homework
-When configured with provider profiles (`-swarm-profiles`) and explicit builder path scopes, Surla proposes a team that routes each role to the right model family and class—frontier reasoning models for architecture and security review, fast coding models for scoped implementation, and a **disjoint model family** for test authoring. Final verification (`surla verify` on the CLI, or `verify_change`, `get_verification`, and `list_verifications` over MCP when `-project` or `-verification-config` is configured; see [`docs/REFERENCE.md`](docs/REFERENCE.md#mcp-tools)) is independent of the builder: it builds the candidate from its exact commit inside an **OS sandbox** (`verify/candidate`) and runs an evaluator suite the builder does not control, and the reference suite starts each candidate process in its own sandbox:
-- **Unseen holdout tests:** Hidden scenarios verify security and edge cases while [`Report.ForBuilders()`](internal/verify/report.go) strips holdout names, inputs, and logs from the builder's view. For those scenarios to stay unseen, builders must not be able to read the evaluator suite or its report and work directories; share only the redacted builder report with them.
-- **Real `kill -9` crash & budget proof:** The included [`examples/orders-eval`](examples/orders-eval/) reference suite (`surla verify` or `go test -race -tags e2e`) kills the Temporal worker mid-transaction (`kill -9`), restarts the API during paused approvals, and fails any scenario whose runtime LLM token use exceeds its budget (`TestSeededPayloadBloatFailsTheBudget` proves it with a seeded payload bloat).
+Two limits hold. All agents run as you on one machine, so they are separated
+by job, not walled off from each other. Surla runs the code the agents write
+(the design at each refresh, the builder's programs and the test writer's
+test program) as ordinary processes with your file and network access. The
+page states the second limit next to **Build this change**. Each verification
+run records where its tests came from. For the test writer's tests, the
+**Check** view shows with the run, and the agents read in its result, the
+server's notice that the tests were written by a separate agent on this
+machine and are not isolated from the builder.
 
-### 4. Fast draft overrides and live role-switched testing
-Instead of reading a 2,000-line diff blindly, Surla separates fast prompt tuning from compiled business rules and ships stateful dependency simulators in [`examples/orders-eval`](examples/orders-eval/):
-- **Test across real auth boundaries:** In the reference platform, trigger a `\$54.00` refund as a **Customer**, verify that customer credentials cannot approve it (`403 Forbidden`), and switch to **Approving Manager** to approve or decline the paused workflow through the real HTTP API.
-- **Iterate on prompts without rebuilding:** Start `surla serve` from your project directory (or pass `-project <dir>` or `-verification-config`), then call `start_live_target` with a `candidate_commit`: `surla serve` builds that commit the way verification does and runs it as a live target through the evaluator suite's `--live` mode. `draft_override` (`POST /sandbox/draft`) then sends new prompt wording to that running target, without rebuilding Go code (see the [`draft_override` and `start_live_target` reference](docs/REFERENCE.md#mcp-tools)). A project created with `init_project` over MCP or `surla init` on the CLI has an evaluator suite that supports `--live`; when `surla serve` runs from an empty directory and your agent calls `init_project`, `surla serve` scaffolds and commits the starter project in `<workspace>/<dir>`, transitions the active workspace in place without restarting, and pins `start_live_target` and `verify_change` to that initial starter commit. The live target plans with the model `surla serve` passes it: `ANTHROPIC_API_KEY` with `claude-sonnet-4-6` or `OPENAI_API_KEY` with `gpt-5.4-mini` when model flags are omitted, `-model-provider` and `-model-name` or `-model-gateway-addr`, or the model `configure_model` selects at runtime. When `surla serve` starts in an already-committed starter repository, `start_live_target` and `verify_change` pin the evaluator suite to the repository's `HEAD` commit at server startup. Surla refuses any attempt to override compiled Go business rules (`target_kind: "compiled_rule"`, `requires_rebuild: true`). A draft lasts only as long as the live target: to keep it, edit the text into source, build and test it with `check_project`, commit, and run `verify_change` (or `surla verify`) on that commit for the same `request_revision`. The in-repository [`examples/orders/cmd/orders-surla`](examples/orders/cmd/orders-surla/main.go) host instead binds `Options.TargetUpdater` to edit prompts on an already-running orders deployment.
-- **Interactive MCP Apps checkpoint viewer (`ui://surla/checkpoint`):** An MCP Apps host loads the viewer through MCP `resources/read` (`text/html;profile=mcp-app`) and shows each tool result in it. For a Change Card, the viewer shows a form with every open question, example, and preserved behavior, saves through `confirm_intent` (recovering a newer saved card with `get_change`, preserving only changed draft answers and examples in `#surla-preserved-draft` alongside the `#surla-prior-revision` comparison when a card is revised via `revise_change` or `confirm_intent`), and—when `approve_merge` has recorded promotion approval via `Options.PromotionTarget`—renders the Checkpoint 5 current approval summary (`approval`) or recorded-unverified approval notice (`unverified_approval`, when promotion inputs cannot currently be checked) and warns if local draft edits would supersede the approved revision. When the coding agent also composed a decision view in its analysis (`ui_composition`), the viewer renders it with OpenUI components such as a policy simulator table, ambiguity choice cards, a workflow timeline, and impact callouts. Choices made there change the same draft the form submits, and the view is labeled as a model-proposed illustration. An invalid or stale composition leaves the full form usable. Across checkpoints, the viewer retains received session state and renders a session navigation bar plus in-view actions (`View Saved Verifications`, `Load Change Card`, and `Return to Change Card`) so you can move back and forth between the Change Card (`CP1`/`CP5`), session-only architecture previews (`CP2`), structural diffs, live-target and fast-draft results (`CP3`), and Checkpoint 4 verification runs (`verify_change`, `get_verification`, and `list_verifications`; see [`docs/REFERENCE.md`](docs/REFERENCE.md#mcp-tools)) without losing unsaved CP1 edits. In `CP4`, the viewer loads saved runs for the active `change_id`, warns when a displayed run is not included in the last loaded list or when a `CP2` preview or `CP4` run applies to a different `request_revision` or `change_id` than the loaded card, and keeps raw IDs and digests in expandable Details. The planned role-switcher and replay controls are described in [`docs/HOW_IT_WORKS.md`](docs/HOW_IT_WORKS.md#checkpoint-3-cp3-fast-draft-overrides--live-sandbox-walkthrough).
+## Install
 
-The checkpoint viewer's **Traces** control shows your saved operation diagnostics.
-Read safe summaries, filter recorded errors, and load older pages without losing
-unsaved Change Card edits. See [Operation diagnostics](docs/REFERENCE.md#operation-diagnostics)
-for recording coverage and full operator telemetry.
+Surla needs:
 
-> **Why the name "Surla"?** Named after **Tambdi Surla** in Goa—home to the carved basalt Mahadeva temple beside the Surla River. In Surla (*SOOR-lah*), `design/*.go` is that enduring stone contract: one compiled specification every coding agent builds to, and an independent verifier checks against.
+- **macOS or Linux.** Surla runs the code the agents write (the design at
+  each refresh, candidate builds, the candidate service, test listing, and the
+  test program) as ordinary processes with your file and network access.
+- **Go 1.27.3** or newer.
+- **Git 2.45 or newer**, with your name and address configured (`git config --global
+  user.name` and `user.email`). Surla records accepted tests as commits under
+  your identity, and a build is refused until Git has one.
+- **Docker Desktop**, or another local Docker engine. The builder builds and
+  tests its work in Linux containers. Each project retains downloaded
+  dependencies across checks; tests mount them read-only and run offline with
+  fresh compiler scratch. See [`check_project`](docs/REFERENCE.md#check_project).
+- **Herdr core** (the `herdr-core` and `hc` commands) and the **Herdr app**
+  (`herdr-app`).
+- **Chorus v0.14.0** or newer.
+- A coding agent that the Chorus dialog or terminal command can start for each role.
 
----
-
-## Try It in 60 Seconds
-
-### 1. Inspect, Diff, or Scaffold a Goa-AI Project Locally (`0` API Keys Needed)
-
-Surla requires **macOS** (`sandbox-exec` isolates candidate builds and processes; run `surla` commands and `surla serve` from an unrestricted host shell rather than inside a sandboxed coding-agent CLI, because macOS does not nest `sandbox-exec` profiles—see [`docs/REFERENCE.md`](docs/REFERENCE.md#terminology-at-a-glance)) and **Go 1.27.3+**. Before configuring an LLM key or starting a server, install the `surla` CLI to scaffold and preview a new starter service from anywhere (`surla init` and `surla gen` generate code, and `surla preview` evaluates designs, in Surla's sandbox, so no separate global `goa` install is needed):
+To install the Surla described by this README, clone this repository and check
+out the version you are reading. From the repository root, run:
 
 ```bash
-# Install the Surla CLI (embeds the published module version for surla init):
-go install github.com/goadesign/surla/cmd/surla@latest
+go install ./cmd/surla
+```
 
-# Scaffold a new Goa + Goa-AI + Model starter service and visible eval/ suite:
-surla init -dir /tmp/shop -module example.com/shop
+`go install github.com/goadesign/surla/cmd/surla@latest` installs the latest
+module version available to Go, which may be older than this README and lack
+commands described here. When installing that version, follow its README.
 
-# Compile /tmp/shop/design/*.go in an OS sandbox at 0 LLM tokens and print
-# its C4 containers, boundary edges, agent policies, and tool guardrails:
-surla preview -dir /tmp/shop
+Install Herdr and Chorus:
 
-# List all commands and flags:
+```bash
+curl -fsSL https://releases.herdr.dev/core/install.sh | sh
+curl -fsSL https://releases.herdr.dev/app/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/goadesign/chorus/main/scripts/install.sh | sh
+```
+
+Before it creates anything, `surla` checks for Herdr, Chorus and its version,
+the browser opener, and Git's `--no-lazy-fetch` capability, introduced in
+Git 2.45. An unsupported Git is named by its version with the step to install
+a newer one. A missing Herdr or Chorus program is named with its
+install command, or with the folder to add to your `PATH` when it is
+installed in `~/.local/bin`; an older Chorus is named with
+`chorus update -yes`. The reference says what each prerequisite is for under
+[Prerequisites](docs/REFERENCE.md#prerequisites).
+
+Surla's design and generation steps need no model key; each coding agent
+uses its own sign-in. An application that calls a model needs a key when
+the builder tries prompts on a live target. Export the provider's key, such as
+`ANTHROPIC_API_KEY` or `OPENAI_API_KEY`, with any request settings it needs,
+in the shell where you run `surla`: `surla` hands them to the server, which
+holds them in memory until `surla stop`, and while no model is chosen, live
+targets then use `claude-sonnet-4-6` or `gpt-5.4-mini`. The page's
+**Live target** view changes that model to another provider whose settings
+were handed over, or to a model gateway; see
+[`surla` and `surla stop`](docs/REFERENCE.md#surla-serve).
+
+## Start a project
+
+Start from a starter service, or from an empty folder.
+
+**From a starter.** `surla init` creates a service designed with Goa, Goa-AI
+and [Model](https://github.com/goadesign/model) (architecture diagrams as Go
+code). The service has a first Story, in `design/story.go`, with one finished
+flow, and a test module in `eval/` that already holds the test that flow
+requires. `surla init` then prints the commands that make the first commit
+and start Surla:
+
+```bash
+surla init -dir shop -module example.com/shop
+cd shop
+git init
+git add .gitignore README.md AGENTS_QUICKSTART.md go.mod go.sum design gen internal cmd eval
+git commit -m "Start shop from surla init"
+surla
+```
+
+**From an empty folder.** Run `surla` in an empty folder and ask the guide for
+a new service. The guide has the server create the starter project in a
+folder inside it and make its first commit, without a restart.
+
+`surla` prints what it did and your next step, for example:
+
+```text
+Started a Surla project for this folder. Moving or renaming this folder starts a new project.
+Team <name>.
+Choose an agent for each role in the open Chorus dialog in Herdr.
+Surla is running for <project folder> at <address>
+```
+
+The page opens through a single-use link and keeps its session only while it
+is open: reloading it, closing it or opening it in another tab needs a new
+link, which `surla` gives when you run it again (or `surla --print-link` to
+print the link as JSON without opening a browser; see
+[terminal operation](docs/REFERENCE.md#terminal-and-browser-automation)).
+You can open a fresh link in the same tab. If there are unsaved edits, the page
+keeps them and offers **Open link** after you save or discard them; the link's
+two-minute expiry still starts when it was printed.
+Running `surla` from a
+subfolder finds the same project. `surla stop` shuts the project's server
+down. After you install another build of `surla`, run `surla stop`, then
+`surla`: `surla` does not use a server that another build started. If the
+server stops while starting, `surla` shows its last lines, including its
+error. If the team cannot be prepared, `surla` still opens the page, then
+names what failed and the step that repairs it. When Chorus or the Herdr app could not be started, that step is to start it and run `surla` again; otherwise **Start agents** on the page
+tries again. See [`surla` and `surla stop`](docs/REFERENCE.md#surla-serve)
+for the project's state, settings and recovery.
+
+If Chorus uses another address, start it with `chorus up -addr :9550`.
+Surla uses that managed address when you start the team. After changing it,
+choose **Start agents** or run `surla` again. A foreground `chorus serve -addr`
+alone does not set the managed address. See the [team reference](docs/REFERENCE.md#team-supervision).
+
+## Use the tools without a team
+
+These commands need no server, no team and no model key. `surla init`,
+`surla preview` and `surla gen` run Goa with the module's own versions, so no
+separately installed `goa` is needed. They compile and run the design as an
+ordinary process with your file and network access.
+
+```bash
+# Scaffold a starter service and its test module:
+surla init -dir shop -module example.com/shop
+
+# Compile shop/design at 0 LLM tokens and print its
+# containers, boundary edges, agent policies and tool contracts:
+surla preview -dir shop
+
+# List all commands; "surla help <command>" prints a command's flags:
 surla help
 ```
 
-Or clone this repository to inspect and diff the included [`examples/orders`](examples/orders/README.md) reference platform (from a checkout, you can run either the installed `surla` binary or `go run ./cmd/surla`; when running `go run ./cmd/surla init` from a checkout, pass `-surla-version v0.0.0-20261110163737-d9beac313142`):
+Or clone this repository and look at the [`examples/orders`](examples/orders/README.md)
+reference platform:
 
 ```bash
 git clone https://github.com/goadesign/surla.git
 cd surla
 
-# Preview the Orders reference platform's C4 architecture and tool guardrails at 0 LLM tokens:
+# Preview the Orders platform's architecture and tool guardrails:
 surla preview -dir examples/orders
 
-# Compare two Goa design modules structurally at 0 LLM tokens:
+# Compare two Goa design modules structurally:
 surla diff --old-dir examples/orders --new-dir examples/orders
 ```
 
-After you edit a module's `design/`, `surla gen -dir <module>` regenerates its `gen/` inside the same sandbox and swaps it in atomically. From a connected coding agent, call [`generate_code`](docs/REFERENCE.md#mcp-tools) to regenerate the active application module, or pass `target: "eval"` for its public local `eval/` module, without uploading source or restarting the server. Generation compiles the design only; then call [`check_project`](docs/REFERENCE.md#mcp-tools) to build and test the uncommitted application and `eval/` modules in a Linux container (Docker Desktop required), and [`update_dependencies`](docs/REFERENCE.md#mcp-tools) when Go's output shows a missing `go.sum` or `go.work.sum` entry or a `go.mod` update. It needs the module to use `goa.design/goa/v3` `v3.35.1-0.20261103205041-35e789e8f9b1` or later, and doesn't yet support gRPC designs; see [`surla gen`](docs/REFERENCE.md#surla-gen).
+From a checkout you can also run `go run ./cmd/surla`; `go run ./cmd/surla init`
+then needs `-surla-version` with a published version, such as
+`-surla-version v0.0.0-20261115014514-02c792da3ded`.
 
-### 2. Connect Your Coding Agent to the Surla Control Plane (`surla mcp` or `surla serve`)
+After you edit a module's `design/`, `surla gen -dir <module>` regenerates its
+`gen/` and replaces it in one step. It needs `goa.design/goa/v3`
+`v3.35.1-0.20261103205041-35e789e8f9b1` or later and refuses a design with gRPC
+transports; see [`surla gen`](docs/REFERENCE.md#surla-gen). The operator tools
+`surla verify` and `surla approve` build a commit, run a test suite from a
+Git repository you name against it and check a saved report, outside any
+server; see
+[`surla verify`](docs/REFERENCE.md#surla-verify).
 
-Surla organizes development around five checkpoints (**CP1** Confirm Intent → **CP2** Preview Architecture → **CP3** Fast Draft & Sandbox → **CP4** Isolated Verification → **CP5** Promotion Check; see [`docs/HOW_IT_WORKS.md`](docs/HOW_IT_WORKS.md)). Connect your coding assistant directly over local `stdio` with `surla mcp` (no bearer token, port, or separate server terminal needed), or run the standalone HTTP + MCP server with `surla serve`. When `-project` and `-cards-dir` are omitted, both `surla mcp` and `surla serve` bind to their working directory as the active workspace and store Change Cards, verification runs, reports, and live-target directories in operator-private storage outside the workspace (`<UserConfigDir>/surla/operator/project-<sha256>/`). Starting `surla mcp` or `surla serve` in an empty directory lets your agent call `init_project` over MCP to scaffold and commit a starter project in `<workspace>/<dir>`, transition the active workspace in place without restarting, and pin `verify_change` and `start_live_target` to that initial starter commit; when started in an already-committed starter repository, `verify_change` and `start_live_target` pin the evaluator suite to its `HEAD` commit at server startup (pass `-project <dir>` to bind an explicit workspace directory, `-verification-config <path.json>` to use an explicit verification plan, `-cards-dir <dir>` to override the cards directory, `-import-legacy-workspace` to migrate an existing in-workspace `.surla/` and `reports/` tree once, and `-promotion-config` to bind the **CP5** staged-release `PromotionTarget` for `approve_merge`; the [CLI verification walkthrough](examples/orders/README.md#3-run-os-sandboxed-end-to-end-verification-surla-verify) covers standalone `surla verify` and `surla approve`).
+## Why engineers use Surla
 
-For local `stdio` in Claude Code or Cursor, install the **[Claude Code plugin (`docs/CLAUDE_PLUGIN.md`)](docs/CLAUDE_PLUGIN.md)** or save `.mcp.json` (or `.cursor/mcp.json`) so the client launches `surla mcp` in your workspace (defaulting the session principal to `uid:<euid>`, or pass `"-principal", "<id>"` in `args` to select a specific principal ID):
+### 1. Agents write the contract; the compiler writes the plumbing
 
-```json
-{
-  "mcpServers": {
-    "surla": {
-      "command": "surla",
-      "args": ["mcp"]
-    }
-  }
-}
-```
+Why pay a model to write thousands of lines of HTTP handlers, gRPC stubs,
+OpenAPI specs, MCP schemas and JSON validators? In Surla, agents express your
+API, agent tools and security rules in a compact, strongly typed design
+(`design/*.go`). Goa generates the transports, OpenAPI specs, MCP schemas and
+validators from it with no model inference (**0 LLM tokens**), which removes
+whole classes of glue-code bugs and the tokens spent writing them.
 
-Or run `surla serve` when you want an authenticated HTTP + MCP listener (for example, to share one running server across HTTP CLI tools like `surla preview-change` and MCP clients):
+### 2. A built-in Golden Path that stays cheap to evolve
 
-```bash
-# Start the Surla MCP & HTTP control plane with multi-family swarm profiles. Proposing and
-# revising Change Cards needs no model key: your coding agent writes the analysis.
-export SURLA_AUTH_TOKEN="dev-secret-token"
-surla serve \
-  -addr 127.0.0.1:8090 \
-  -principal operator@example.com \
-  -swarm-profiles ./examples/orders/swarm-profiles.example.json
+AI-built codebases decay when every prompt invents a new folder layout, a new
+way to call models or a new auth pattern, and later agents spend tokens
+reverse-engineering the repository. Surla serves every agent the same
+**Golden Path** rules:
 
-# Live targets (start_live_target) plan with a model. When model flags are omitted, surla mcp
-# and surla serve pass them ANTHROPIC_API_KEY's claude-sonnet-4-6 or OPENAI_API_KEY's gpt-5.4-mini
-# from their environment; select one explicitly with -model-provider and -model-name, or switch it
-# at runtime with configure_model:
-export OPENAI_API_KEY="sk-..."
-MODEL_NAME="gpt-5.4-mini"
-surla serve \
-  -addr 127.0.0.1:8090 \
-  -principal operator@example.com \
-  -model-provider openai \
-  -model-name "$MODEL_NAME" \
-  -swarm-profiles ./examples/orders/swarm-profiles.example.json
-```
+- **Predictable layout and generated agent maps.** Every service follows the
+  same structure and ships a generated `AGENTS_QUICKSTART.md`, so an agent can
+  extend the platform months later with little context.
+- **Production patterns by default.** One HTTP/MCP edge service, internal gRPC
+  services, a central model gateway with rate limiting and usage accounting,
+  durable Temporal workflows, and tool fields such as `tenant_id` and
+  `user_id` that the server injects and the model can never set.
 
-When using `surla serve`, register `http://127.0.0.1:8090/mcp` in your coding agent (connected agents can also read the embedded Surla Golden Path architecture and evaluator guide at the MCP resource `surla://golden-path` or `GET http://127.0.0.1:8090/golden-path`). For Claude Code over HTTP, save this as `.mcp.json`; Claude Code fills in `${SURLA_AUTH_TOKEN}` from the environment it starts in:
+### 3. Independent verification of each commit
 
-```json
-{
-  "mcpServers": {
-    "surla": {
-      "type": "http",
-      "url": "http://127.0.0.1:8090/mcp",
-      "headers": {"Authorization": "Bearer ${SURLA_AUTH_TOKEN}"}
-    }
-  }
-}
-```
+The agent that writes the code never decides whether it works. Tests come
+from the test writer and count only after Surla's own check accepts them.
+Verification builds the builder's exact commit (`verify/candidate`) and runs
+the accepted tests against it; the code under test and the tests run as
+ordinary processes with your file and network access.
 
-Other clients use the client-specific configuration in **[Register Surla in Your MCP Client (`docs/REFERENCE.md`)](docs/REFERENCE.md#register-surla-in-your-mcp-client)** (covering **Cursor** `.cursor/mcp.json`, **Gemini CLI** `.gemini/settings.json` with `httpUrl`, and **Codex** `.codex/config.toml`; see also [Terminology at a Glance](docs/REFERENCE.md#terminology-at-a-glance) and [`-swarm-profiles` configuration](docs/REFERENCE.md#configure-the-proposed-swarm-roster)—[`examples/orders/swarm-profiles.example.json`](examples/orders/swarm-profiles.example.json) is an illustrative operator-edited profile file where `"authenticated": true` is an operator assertion rather than a live credential check, and setting `ANTHROPIC_API_KEY` for live targets does not authenticate the OpenAI or Google coding-agent CLIs).
+- **Hidden scenarios.** A project can instead store verification settings
+  (`surla verification set <file>`, applied when Surla starts again) that
+  name a test suite of your own at one commit of a Git repository you choose;
+  its builds then add only the builder. The suite's scenarios tagged
+  `holdout` are hidden: [`Report.ForBuilders()`](internal/verify/report.go)
+  removes their names, inputs and logs from the report the builder sees. The
+  builder's programs run with your file access, so while a run executes they
+  could read the suite's files on this machine.
+- **Real crash and budget proof.** The [`examples/orders-eval`](examples/orders-eval/)
+  reference suite kills the Temporal worker in the middle of a refund
+  (`kill -9`), restarts the API while an approval is paused, and fails any
+  scenario whose model token use exceeds its budget
+  (`TestSeededPayloadBloatFailsTheBudget` proves it with a seeded payload
+  bloat).
 
-Your coding agent analyzes each feature request itself: it reads the target's `design/*.go` and the `surla://golden-path` playbook, then sends `propose_change` (or `revise_change`) the request with its analysis—a summary, the open questions only the requester can answer, concrete examples that become checks, and the existing behaviors the change must keep. Surla checks the analysis's structure and cross-field rules, assigns the question and example IDs and the `request_revision`, and saves the card; it cannot judge whether the analysis is complete or correct, which is what confirming the card is for. When `surla serve` is bound to a workspace that holds `design/*.go`, `propose_change` and `revise_change` record `design/*.go` from the workspace as the card's design source when `design_source` is omitted (for cards whose `design_source` was read from the workspace), and `preview_architecture` reads the workspace's `DesignSnapshot` when `design` is omitted (pass `design_source` or `design` explicitly when targeting a different directory, such as `examples/orders` from the repository root).
+### 4. Prompt changes without rebuilding
 
-Then prompt your agent:
+Prompt wording and compiled business rules are kept apart. The builder names
+the confirmed change and a commit to start a live target. Without stored
+verification settings, the current build's accepted tests start that copy
+using the chosen model; they receive no provider settings. The builder sends
+new prompt wording to it with
+`draft_override`, without rebuilding Go code. A draft aimed at a compiled
+business rule changes nothing and says that the rule needs a rebuild and
+verification. A draft lasts as long as the live target: to
+keep it, the builder commits the text and verifies that commit. The page's
+**Live target** view shows which prompts changed and the model live targets
+use. An unexpected ending leaves the commit, launch and observed-end times,
+and the builder's recovery step after cleanup, including after a page reload.
+See [`start_live_target`](docs/REFERENCE.md#start_live_target),
+[`draft_override`](docs/REFERENCE.md#draft_override) and the
+[live target prompt contract](docs/REFERENCE.md#live-target-prompt-contract).
 
-> *"Using Surla, propose a change to `examples/orders` so VIP customers get instant store-credit refunds up to \$150, then preview the compiled C4 architecture and Chorus swarm plan for builder scope `orders` (`internal/**`)."*
+### 5. Your decisions on one page
 
-Your agent will create the **Change Card** (`propose_change`, using `revise_change` when requirements evolve on the same `change_id` and calling `confirm_intent` to answer open ambiguity questions or refine confirmed answers and examples, which returns the card's `change_id` and locks a SHA-256 `request_revision` fingerprint), compile the candidate Goa contract at **0 LLM tokens** (`preview_architecture` over MCP—omitting `design` when `surla serve` is bound to that module's workspace—or `surla preview-change` from a local module directory), and return the updated C4 topology, tool guardrails, and—when explicit builder scopes are supplied—a proposed cross-family Chorus roster (`@builder-orders` and `@reviewer` when `builders` are supplied, plus `@architect` when `architect_paths` / `-architect-path` are supplied and `@eval-author` when `eval_paths` / `-eval-path` are supplied). The preview proposes the Chorus coordination roster; it does not launch agents. From a shell, pass the confirmed card's `change_id` and `request_revision` to `surla preview-change` (without `-builders`, the command returns a solo preview of the evaluated C4 architecture, agent policies, and tool contracts with `swarm.status: "unconfigured"` and no `missing_roles`; pass `-builders <file.json>` and optional repeatable `-architect-path` / `-eval-path` flags as shown in [Configure the Proposed Swarm Roster (`docs/REFERENCE.md`)](docs/REFERENCE.md#configure-the-proposed-swarm-roster) to include the proposed team assignments):
+The page lists the project's changes and shows each one's Story, questions,
+build, team, verification runs and approval, and updates itself without
+losing what you typed. The frame names Describe, Agree, Build, Check and
+Approve. The approval decision appears in Next. The **Diagnostics** drawer
+shows safe summaries of what the agents and the server did. See the
+[views page](docs/REFERENCE.md#views-page) and [operation diagnostics](docs/REFERENCE.md#operation-diagnostics).
 
-```bash
-# Send the local module snapshot to CP2 for the confirmed Change Card's change_id and request_revision
-# (returns the evaluated C4 architecture, agent policies, and tool contracts; add -builders to plan the team roster):
-surla preview-change \
-  -server http://127.0.0.1:8090 \
-  -change-id vip-refunds \
-  -request-revision "$REQUEST_REVISION" \
-  -dir examples/orders
-```
+> **Why the name "Surla"?** Named after **Tambdi Surla** in Goa, home to the
+> carved basalt Mahadeva temple beside the Surla River. In Surla
+> (*SOOR-lah*), `design/*.go` is that enduring stone contract: one compiled
+> specification every coding agent builds to, and an independent verifier
+> checks against.
 
-To run the full independent verification suite (`surla verify` and `surla approve`) and compare the default builder-redacted report (where unseen `"holdout"` acceptance tests are redacted to `"id": "holdout-1"`) with the full operator report (`-builder-view=false`), see the **[Orders Reference Platform Walkthrough (`examples/orders/README.md`)](examples/orders/README.md)**.
+## Dive deeper
 
----
-
-## Dive Deeper
-
-- **[Orders Reference Platform (`examples/orders/README.md`)](examples/orders/README.md)** — Walk through the Golden Path `orders` platform, run `surla verify` (default builder view vs. full report with `-builder-view=false`), and watch `TestSeededPayloadBloatFailsTheBudget` catch a token regression.
-- **[How Surla Works (`docs/HOW_IT_WORKS.md`)](docs/HOW_IT_WORKS.md)** — Walk through the 5 checkpoints (`CP1`–`CP5`), the proposed cross-model team, fast draft overrides, and OS-isolated verification.
-- **[Golden Path Architecture (`docs/ARCHITECTURE_PLAYBOOK.md`)](docs/ARCHITECTURE_PLAYBOOK.md)** — Explore the 7 Golden Path rules that keep Surla platforms maintainable and see how the Goa Design suite powers them.
-- **[CLI, MCP & Repo Reference (`docs/REFERENCE.md`)](docs/REFERENCE.md)** & **[Claude Code Plugin (`docs/CLAUDE_PLUGIN.md`)](docs/CLAUDE_PLUGIN.md)** — Configure MCP clients (Claude Code, Cursor, Gemini CLI, and Codex), browse the MCP tools and CLI flags, and run the [`examples/orders`](examples/orders/) reference suite.
-- **[Product Direction (`docs/PRODUCT_DIRECTION.md`)](docs/PRODUCT_DIRECTION.md)** — What Surla is meant to be, who it is for, and the product decisions that follow.
-- **[Architecture Proposal (`PROPOSAL.md`)](PROPOSAL.md)** & **[Product Vision (`PRESS_RELEASE.md`)](PRESS_RELEASE.md)** — Read the full system design, threat model, and Working Backwards press release.
+- **[How Surla works](docs/HOW_IT_WORKS.md)**: the journey step by step, by
+  who acts.
+- **[Reference](docs/REFERENCE.md)**: commands, MCP tools, builds, the page and
+  the server's contracts.
+- **[Story language](story/README.md)**: the declarations a Story is written
+  with.
+- **[Golden Path architecture](docs/ARCHITECTURE_PLAYBOOK.md)**: the rules that
+  keep Surla platforms maintainable, and who owns what in Surla.
+- **[Story flows and the tests a build requires](docs/STORY_TEST_DESIGN.md)**:
+  for contributors, how a Story becomes tests and how Surla judges them.
+- **[Orders reference platform](examples/orders/README.md)**: a complete Golden
+  Path platform with its test suite.
+- **[Product direction](docs/PRODUCT_DIRECTION.md)**: what Surla is meant to be
+  and for whom.
 
 ## License
 

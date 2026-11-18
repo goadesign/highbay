@@ -16,6 +16,7 @@ import (
 	"regexp"
 	"strings"
 	"syscall"
+	"time"
 
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/codes"
@@ -24,20 +25,19 @@ import (
 	gensurla "github.com/goadesign/surla/gen/surla"
 	"github.com/goadesign/surla/internal/abspath"
 	"github.com/goadesign/surla/internal/designeval"
+	"github.com/goadesign/surla/internal/renameat"
 	"github.com/goadesign/surla/internal/verify"
 )
 
 type (
 	// workspaceFile is the persisted JSON schema of `<cards_dir>/workspace.json`.
 	// During `init_project`, the uncommitted write-ahead record sets `StageDir`,
-	// `Staging`, `Dev`, `Ino`, and `SuiteCommit` before `RenameatxNp`; the
+	// `Staging`, `Dev` and `Ino` before `renameat.NoReplace`; the
 	// finalized record clears `StageDir` and `Staging` once the renamed target
 	// directory's `(Dev, Ino)` is verified and synced.
 	workspaceFile struct {
 		// Dir is the direct child directory name inside initialWorkspaceRoot.
 		Dir string `json:"dir"`
-		// SuiteCommit is the trusted initial starter commit recorded for Dir.
-		SuiteCommit string `json:"suite_commit"`
 		// StageDir is the protected operator staging parent directory holding
 		// Staging while initialization is in flight.
 		StageDir string `json:"stage_dir,omitempty"`
@@ -68,7 +68,7 @@ var commitIDPattern = regexp.MustCompile(`^([0-9a-f]{40}|[0-9a-f]{64})$`)
 // its cleaned physical path, device ID, and inode number.
 func openWorkspaceRootAndStat(dir string) (string, uint64, uint64, error) {
 	if dir == "" {
-		return "", 0, 0, nil
+		return "", 0, 0, errors.New("WorkspaceDir is required")
 	}
 	lstatInfo, err := os.Lstat(dir)
 	if err != nil {
@@ -120,15 +120,6 @@ func (c *ControlPlane) currentWorkspaceTarget() (string, uint64, uint64) {
 	return c.activeWorkspaceDir, c.boundWorkspaceDev, c.boundWorkspaceIno
 }
 
-// currentWorkspaceVerificationTarget returns the currently bound workspace
-// directory path, its expected `(dev, ino)` identity, and the trusted starter
-// suite commit recorded by init_project or restored from workspace.json.
-func (c *ControlPlane) currentWorkspaceVerificationTarget() (string, uint64, uint64, string) {
-	c.workspaceMu.RLock()
-	defer c.workspaceMu.RUnlock()
-	return c.activeWorkspaceDir, c.boundWorkspaceDev, c.boundWorkspaceIno, c.boundSuiteCommit
-}
-
 // restoreWorkspace recovers or binds `<cards_dir>/workspace.json` at control
 // plane startup using inode-verified target and staging directory checks.
 func (c *ControlPlane) restoreWorkspace() (err error) {
@@ -136,14 +127,8 @@ func (c *ControlPlane) restoreWorkspace() (err error) {
 	if err != nil || !ok {
 		return err
 	}
-	if c.initialWorkspaceRoot == "" {
-		return errors.New("cards directory contains workspace.json, but no workspace directory is configured")
-	}
 	if err := validateInitDirName(wf.Dir); err != nil {
 		return fmt.Errorf("invalid dir %q in workspace.json: %w", wf.Dir, err)
-	}
-	if !commitIDPattern.MatchString(wf.SuiteCommit) {
-		return fmt.Errorf("invalid suite_commit %q in workspace.json", wf.SuiteCommit)
 	}
 	if wf.Dev == 0 || wf.Ino == 0 {
 		return errors.New("workspace.json is missing non-zero dev/ino identity")
@@ -219,7 +204,6 @@ func (c *ControlPlane) restoreWorkspace() (err error) {
 			c.activeWorkspaceDir = targetPath
 			c.boundWorkspaceDev = wf.Dev
 			c.boundWorkspaceIno = wf.Ino
-			c.boundSuiteCommit = wf.SuiteCommit
 			if wf.Staging != "" {
 				var cleanErr error
 				if stageParentFD >= 0 {
@@ -233,10 +217,9 @@ func (c *ControlPlane) restoreWorkspace() (err error) {
 				cleanErr = errors.Join(
 					cleanErr,
 					c.writeWorkspaceRecord(workspaceFile{
-						Dir:         wf.Dir,
-						SuiteCommit: wf.SuiteCommit,
-						Dev:         wf.Dev,
-						Ino:         wf.Ino,
+						Dir: wf.Dir,
+						Dev: wf.Dev,
+						Ino: wf.Ino,
 					}),
 				)
 				if cleanErr != nil {
@@ -289,7 +272,7 @@ func (c *ControlPlane) restoreWorkspace() (err error) {
 		}
 		var openStat unix.Stat_t
 		statErr := unix.Fstat(stageFD, &openStat)
-		gotStagePath, pathErr := fdPath(stageFD)
+		gotStagePath, pathErr := abspath.FDPath(stageFD)
 		closeStageErr := unix.Close(stageFD)
 		if err := errors.Join(statErr, closeStageErr); err != nil {
 			return err
@@ -298,7 +281,7 @@ func (c *ControlPlane) restoreWorkspace() (err error) {
 			uint64(openStat.Dev) != wf.Dev || openStat.Ino != wf.Ino {
 			return c.removeWorkspaceRecord()
 		}
-		if err := unix.RenameatxNp(stageParentFD, wf.Staging, workspaceFD, wf.Dir, unix.RENAME_EXCL); err != nil {
+		if err := renameat.NoReplace(stageParentFD, wf.Staging, workspaceFD, wf.Dir); err != nil {
 			return fmt.Errorf("recover staged workspace into %s: %w", targetPath, err)
 		}
 		syncErr := errors.Join(unix.Fsync(workspaceFD), unix.Fsync(stageParentFD))
@@ -308,15 +291,13 @@ func (c *ControlPlane) restoreWorkspace() (err error) {
 		c.activeWorkspaceDir = targetPath
 		c.boundWorkspaceDev = wf.Dev
 		c.boundWorkspaceIno = wf.Ino
-		c.boundSuiteCommit = wf.SuiteCommit
 		if syncErr != nil {
 			return syncErr
 		}
 		if err := c.writeWorkspaceRecord(workspaceFile{
-			Dir:         wf.Dir,
-			SuiteCommit: wf.SuiteCommit,
-			Dev:         wf.Dev,
-			Ino:         wf.Ino,
+			Dir: wf.Dir,
+			Dev: wf.Dev,
+			Ino: wf.Ino,
 		}); err != nil {
 			recordWorkspaceCleanupFailure("surla.controlplane.finalize_restored_workspace", err)
 		}
@@ -406,9 +387,6 @@ func (c *ControlPlane) removeWorkspaceRecord() error {
 // `designeval.OpenModuleRoot` and verifies on the opened handle itself
 // (`root.Stat(".")`) that its `(dev, ino)` matches `(expectedDev, expectedIno)`.
 func openModuleRootWithIdentity(dir string, expectedDev, expectedIno uint64) (string, *os.Root, error) {
-	if dir == "" {
-		return "", nil, gensurla.MakeUnprocessable(errors.New("no workspace directory is bound to this control plane"))
-	}
 	if expectedDev == 0 || expectedIno == 0 {
 		return "", nil, gensurla.MakeUnprocessable(fmt.Errorf("bound workspace directory %s has no recorded device/inode identity", dir))
 	}
@@ -433,61 +411,8 @@ func openModuleRootWithIdentity(dir string, expectedDev, expectedIno uint64) (st
 	return cleanDir, root, nil
 }
 
-// readWorkspaceModuleSnapshot reads the bound workspace's Go module and design
-// snapshot (`go.mod`, `go.sum`, and non-test `.go` files) through an
-// identity-verified `*os.Root` handle for `PreviewArchitecture`.
-func readWorkspaceModuleSnapshot(wsDir string, expectedDev, expectedIno uint64) (map[string]string, error) {
-	cleanDir, root, err := openModuleRootWithIdentity(wsDir, expectedDev, expectedIno)
-	if err != nil {
-		return nil, err
-	}
-	files, readErr := designeval.ReadModuleSnapshotFromRoot(cleanDir, root)
-	if err := errors.Join(readErr, root.Close()); err != nil {
-		return nil, gensurla.MakeUnprocessable(err)
-	}
-	if err := designeval.ValidateUTF8Snapshot(files); err != nil {
-		return nil, gensurla.MakeUnprocessable(err)
-	}
-	if _, hasGoMod := files["go.mod"]; !hasGoMod {
-		return nil, gensurla.MakeUnprocessable(fmt.Errorf(
-			"workspace %s does not contain a go.mod file; run init_project first or pass design in the request",
-			cleanDir,
-		))
-	}
-	return files, nil
-}
-
-// readWorkspaceDesignSource reads `design/*.go` files from the bound workspace
-// through an identity-verified `*os.Root` handle, closes the handle before
-// returning, validates that every file path and body is valid UTF-8, and
-// returns the design source a Change Card records for them: the files as a
-// JSON object keyed by module-relative path, with HTML characters unescaped
-// and no trailing newline. That exact text is saved as the card's
-// design_source and hashed into its request_revision, so it must not change
-// for the same files. When `design/` does not exist or contains no non-test
-// `.go` files, it returns "" so a card proposed before `init_project` has an
-// empty design source and does not block initialization. A workspace that was
-// replaced or cannot be read is unprocessable.
-func readWorkspaceDesignSource(wsDir string, expectedDev, expectedIno uint64) (string, error) {
-	cleanDir, root, err := openModuleRootWithIdentity(wsDir, expectedDev, expectedIno)
-	if err != nil {
-		return "", err
-	}
-	files, readErr := designeval.ReadDesignFilesFromRoot(cleanDir, root)
-	if err := errors.Join(readErr, root.Close()); err != nil {
-		return "", gensurla.MakeUnprocessable(err)
-	}
-	if len(files) == 0 {
-		return "", nil
-	}
-	if err := designeval.ValidateUTF8Snapshot(files); err != nil {
-		return "", gensurla.MakeUnprocessable(err)
-	}
-	return encodeDesignSource(files)
-}
-
 // designSourceFromModuleSnapshot extracts the non-test design/*.go entries from
-// a validated workspace module snapshot and encodes them with encodeDesignSource.
+// a canonical draft snapshot and encodes them with encodeDesignSource.
 func designSourceFromModuleSnapshot(files map[string]string) (string, error) {
 	var designFiles map[string]string
 	for rel, content := range files {
@@ -512,15 +437,21 @@ func encodeDesignSource(designFiles map[string]string) (string, error) {
 	enc := json.NewEncoder(&buf)
 	enc.SetEscapeHTML(false)
 	if err := enc.Encode(designFiles); err != nil {
-		return "", fmt.Errorf("encode workspace design source: %w", err)
+		return "", fmt.Errorf("encode design source: %w", err)
 	}
 	return strings.TrimSuffix(buf.String(), "\n"), nil
 }
 
 // normalizeAndValidateStartupPaths resolves configured operator storage paths
-// to physical paths via abspath.EvalMissing and validates separation from
-// wsRoot and its enclosing Git working tree before any directory is created.
-func normalizeAndValidateStartupPaths(opts Options, wsRoot string) (string, string, *VerificationConfig, []string, error) {
+// to physical paths via abspath.EvalMissing, builds the control plane's
+// verifier, and validates separation from wsRoot and its enclosing Git
+// working tree before any directory is created. The runs directory it returns
+// is opts.RunsDir, or the stored evaluator's when opts.RunsDir is empty.
+func normalizeAndValidateStartupPaths(
+	opts Options,
+	wsRoot string,
+	withTimeout func(context.Context, time.Duration) (context.Context, context.CancelFunc),
+) (string, string, verifier, []string, error) {
 	var runsDir string
 	if opts.RunsDir != "" {
 		physRuns, err := abspath.EvalMissing(opts.RunsDir)
@@ -537,20 +468,23 @@ func normalizeAndValidateStartupPaths(opts Options, wsRoot string) (string, stri
 		}
 		initStageDir = physStage
 	}
-	verCfg, err := normalizeVerificationConfig(opts.Verification)
+	verif, err := newVerifier(opts, runsDir)
 	if err != nil {
 		return "", "", nil, nil, err
 	}
-	gitCtx, cancel := context.WithTimeout(contextBackgroundForCleanup(), workspaceGitTimeout)
+	if stored, ok := verif.(storedVerification); ok && runsDir == "" {
+		runsDir = stored.cfg.RunsDir
+	}
+	gitCtx, cancel := withTimeout(contextBackgroundForCleanup(), verify.WorkspaceGitTimeout)
 	protectedDirs, err := verify.WorkspaceBoundaryRoots(gitCtx, wsRoot)
 	cancel()
 	if err != nil {
+		return "", "", nil, nil, fmt.Errorf("%w; check that Git can read the workspace, then start Surla again", err)
+	}
+	if err := validateStartupSeparation(opts.CardsDir, runsDir, initStageDir, opts.BuildCacheDir, verifierRuns(verif), protectedDirs...); err != nil {
 		return "", "", nil, nil, err
 	}
-	if err := validateStartupSeparation(opts.CardsDir, runsDir, initStageDir, verCfg, protectedDirs...); err != nil {
-		return "", "", nil, nil, err
-	}
-	return runsDir, initStageDir, verCfg, protectedDirs, nil
+	return runsDir, initStageDir, verif, protectedDirs, nil
 }
 
 // normalizeVerificationConfig returns a shallow copy of cfg with RunsDir and
@@ -577,11 +511,11 @@ func normalizeVerificationConfig(cfg *VerificationConfig) (*VerificationConfig, 
 	return &out, nil
 }
 
-// validateStartupSeparation verifies that cardsDir, runsDir, initStageDir, and
-// verCfg lie strictly outside protectedDirs (the bound workspace and its
+// validateStartupSeparation verifies that cardsDir, runsDir, initStageDir,
+// buildCacheDir and verCfg lie strictly outside protectedDirs (the bound workspace and its
 // enclosing Git working tree root).
 func validateStartupSeparation(
-	cardsDir, runsDir, initStageDir string,
+	cardsDir, runsDir, initStageDir, buildCacheDir string,
 	verCfg *VerificationConfig,
 	protectedDirs ...string,
 ) error {
@@ -594,41 +528,18 @@ func validateStartupSeparation(
 	if err := validateInitStageWorkspaceSeparation(initStageDir, protectedDirs...); err != nil {
 		return err
 	}
-	return validateVerificationWorkspaceSeparation(verCfg, protectedDirs...)
-}
-
-// resolveActiveVerification resolves the active VerificationConfig for
-// VerifyChange and StartLiveTarget, verifying the bound workspace's (dev, ino)
-// identity and physical path separation.
-func (c *ControlPlane) resolveActiveVerification(ctx context.Context) (*VerificationConfig, error) {
-	if c.resolveVerification != nil {
-		wsDir, wsDev, wsIno, suiteCommit := c.currentWorkspaceVerificationTarget()
-		if wsDir != "" {
-			_, root, err := openModuleRootWithIdentity(wsDir, wsDev, wsIno)
+	if buildCacheDir != "" {
+		for _, ws := range protectedDirs {
+			inside, err := abspath.Within(ws, buildCacheDir)
 			if err != nil {
-				return nil, err
+				return err
 			}
-			if err := root.Close(); err != nil {
-				return nil, err
+			if inside {
+				return fmt.Errorf("build cache directory %s must be outside workspace %s", buildCacheDir, ws)
 			}
 		}
-		cfg, err := c.resolveVerification(ctx, wsDir, suiteCommit)
-		if err != nil {
-			return nil, err
-		}
-		if cfg == nil {
-			return nil, nil
-		}
-		normCfg, err := normalizeVerificationConfig(cfg)
-		if err != nil {
-			return nil, err
-		}
-		if err := validateVerificationWorkspaceSeparation(normCfg, c.protectedDirs...); err != nil {
-			return nil, err
-		}
-		return normCfg, nil
 	}
-	return c.verification, nil
+	return validateVerificationWorkspaceSeparation(verCfg, protectedDirs...)
 }
 
 // validateCardsWorkspaceSeparation verifies that cardsDir does not lie inside

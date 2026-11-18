@@ -60,6 +60,15 @@ func (h *Hooks) PricesTea(ctx context.Context) (eval.Result, error) {
 	return h.ask(ctx, "How much is tea?", "[scripted] Tea costs $3.50.", true)
 }
 
+// PricesCookie is the test the Story's finished flow prices-cookie requires
+// (design/story.go in the project): "How much is cookie?" is answered from the
+// lookup_price result for cookie, 125 cents, shown as $1.25. A build of a
+// change requires one such method per finished flow of its Story; this one
+// ships with the starter as the example to follow.
+func (h *Hooks) PricesCookie(ctx context.Context) (eval.Result, error) {
+	return h.ask(ctx, "How much is cookie?", "[scripted] Cookie costs $1.25.", true)
+}
+
 // UnknownItem checks that a question about coffee, which the catalog does not
 // price, is answered from lookup_price's known=false result.
 func (h *Hooks) UnknownItem(ctx context.Context) (eval.Result, error) {
@@ -115,48 +124,26 @@ func Live(ctx context.Context, binary candidate.Artifact, key string, provider m
 	if err != nil {
 		return suite.LiveTarget{}, err
 	}
-	return liveTarget(ctx, addr, exited, nil, stop), nil
+	return liveTarget(ctx, addr, exited, stop), nil
 }
 
 // LiveThroughGateway starts the pinned [[.Name]] for Surla's live CP3 target
-// planning through the model gateway at gatewayAddr, the address surla serve's
-// -model-gateway-addr names. The candidate sandbox lets the [[.Name]] connect
-// only to loopback ports and resolves no names: a literal loopback address,
-// such as 127.0.0.1 or [::1], is used directly, and any other address,
-// including a hostname such as localhost, is reached through a forwarder this
-// process owns on a loopback port, which dials it with ordinary name
-// resolution. Either way the [[.Name]] may connect to exactly one port.
+// planning through the model gateway at gatewayAddr, the gateway selected for
+// the live target, and passes that address to the [[.Name]] unchanged.
 func LiveThroughGateway(ctx context.Context, binary candidate.Artifact, key, gatewayAddr string) (suite.LiveTarget, error) {
-	port, loopback, err := gatewayPort(gatewayAddr)
+	addr, exited, stop, err := (&Hooks{binary: binary}).startCandidate(ctx, gatewayAddr, key)
 	if err != nil {
 		return suite.LiveTarget{}, err
 	}
-	h := &Hooks{binary: binary}
-	if loopback {
-		addr, exited, stop, err := h.startCandidate(ctx, gatewayAddr, port, key)
-		if err != nil {
-			return suite.LiveTarget{}, err
-		}
-		return liveTarget(ctx, addr, exited, nil, stop), nil
-	}
-	fwd, err := startForwarder(gatewayAddr)
-	if err != nil {
-		return suite.LiveTarget{}, err
-	}
-	addr, exited, stopCandidate, err := h.startCandidate(ctx, fwd.addr(), fwd.port(), key)
-	if err != nil {
-		return suite.LiveTarget{}, errors.Join(err, fwd.close())
-	}
-	return liveTarget(ctx, addr, exited, fwd.failed, func() error { return errors.Join(stopCandidate(), fwd.close()) }), nil
+	return liveTarget(ctx, addr, exited, stop), nil
 }
 
 // liveTarget returns the target for a started [[.Name]]: it stops when ctx
-// ends, when the [[.Name]] exits, or when failed reports an error (nil
-// disables that case), and Done delivers only after stop has cleaned up.
-// Canceling ctx also ends the [[.Name]], so when ctx is canceled the ending
-// is a requested stop whichever case was ready first: Done then carries only
-// stop's own result.
-func liveTarget(ctx context.Context, addr string, exited <-chan struct{}, failed <-chan error, stop func() error) suite.LiveTarget {
+// ends or when the [[.Name]] exits, and Done delivers only after stop has
+// cleaned up. Canceling ctx also ends the [[.Name]], so when ctx is canceled
+// the ending is a requested stop whichever case was ready first: Done then
+// carries only stop's own result.
+func liveTarget(ctx context.Context, addr string, exited <-chan struct{}, stop func() error) suite.LiveTarget {
 	done := make(chan error, 1)
 	go func() {
 		var cause error
@@ -164,8 +151,6 @@ func liveTarget(ctx context.Context, addr string, exited <-chan struct{}, failed
 		case <-ctx.Done():
 		case <-exited:
 			cause = errors.New("[[.Name]] exited")
-		case err := <-failed:
-			cause = err
 		}
 		if ctx.Err() != nil {
 			cause = nil
@@ -173,22 +158,6 @@ func liveTarget(ctx context.Context, addr string, exited <-chan struct{}, failed
 		done <- errors.Join(cause, stop())
 	}()
 	return suite.LiveTarget{URL: "http://" + addr, Done: done}
-}
-
-// gatewayPort returns gatewayAddr's port and whether its host is a literal
-// loopback IP address, which the [[.Name]] can dial directly. A hostname is
-// never resolved here: the forwarder dials it.
-func gatewayPort(gatewayAddr string) (port int, loopback bool, err error) {
-	host, portText, err := net.SplitHostPort(gatewayAddr)
-	if err != nil {
-		return 0, false, fmt.Errorf("model gateway address %q: %w", gatewayAddr, err)
-	}
-	port, err = strconv.Atoi(portText)
-	if err != nil || port <= 0 || port > 65535 {
-		return 0, false, fmt.Errorf("model gateway address %q has no valid port", gatewayAddr)
-	}
-	ip := net.ParseIP(host)
-	return port, ip != nil && ip.IsLoopback(), nil
 }
 
 // firstSystem returns the first exchange's system text, or "".
@@ -232,11 +201,11 @@ func (h *Hooks) ask(ctx context.Context, question, want string, wantKnown bool) 
 // the [[.Name]] pointed at it (see startCandidate). stop also stops the gateway
 // within gatewayStopTimeout.
 func (h *Hooks) start(ctx context.Context, provider model.Provider, liveKey string) (addr string, exited <-chan struct{}, stop func() error, err error) {
-	gwAddr, gwPort, stopGateway, err := serveGateway(provider)
+	gwAddr, stopGateway, err := serveGateway(provider)
 	if err != nil {
 		return "", nil, nil, err
 	}
-	addr, exited, stopCandidate, err := h.startCandidate(ctx, gwAddr, gwPort, liveKey)
+	addr, exited, stopCandidate, err := h.startCandidate(ctx, gwAddr, liveKey)
 	if err != nil {
 		return "", nil, nil, errors.Join(err, stopGateway())
 	}
@@ -244,15 +213,15 @@ func (h *Hooks) start(ctx context.Context, provider model.Provider, liveKey stri
 }
 
 // serveGateway serves provider through a goa-ai gateway on a loopback port and
-// returns its address and port. stop stops it within gatewayStopTimeout.
-func serveGateway(provider model.Provider) (addr string, port int, stop func() error, err error) {
+// returns its address. stop stops it within gatewayStopTimeout.
+func serveGateway(provider model.Provider) (addr string, stop func() error, err error) {
 	gw, err := gateway.NewServer(gateway.WithProvider(provider))
 	if err != nil {
-		return "", 0, nil, fmt.Errorf("create model gateway: %w", err)
+		return "", nil, fmt.Errorf("create model gateway: %w", err)
 	}
 	gwLn, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
-		return "", 0, nil, fmt.Errorf("listen for model gateway: %w", err)
+		return "", nil, fmt.Errorf("listen for model gateway: %w", err)
 	}
 	server := grpc.NewServer()
 	gateway.RegisterGRPCServer(server, gw)
@@ -274,17 +243,16 @@ func serveGateway(provider model.Provider) (addr string, port int, stop func() e
 		}
 		return nil
 	}
-	return gwLn.Addr().String(), gwLn.Addr().(*net.TCPAddr).Port, stop, nil
+	return gwLn.Addr().String(), stop, nil
 }
 
-// startCandidate starts the [[.Name]] in the candidate sandbox, planning
-// through the model gateway at gatewayAddr, which must be a loopback address
-// on gatewayPort, the only port it may connect to. It waits until the
-// [[.Name]] listens or exits. liveKey, when set, is the [[.Name]]'s live key and
-// the only variable added to its environment. exited is closed when the
-// [[.Name]] exits. stop kills the [[.Name]] and removes its state and log,
-// unless the [[.Name]] could not be killed and may still be using them.
-func (h *Hooks) startCandidate(ctx context.Context, gatewayAddr string, gatewayPort int, liveKey string) (addr string, exited <-chan struct{}, stop func() error, err error) {
+// startCandidate starts the [[.Name]], planning through the model gateway at
+// gatewayAddr. It waits until the [[.Name]] listens or exits. liveKey, when
+// set, is the [[.Name]]'s live key and the only variable added to its
+// environment. exited is closed when the [[.Name]] exits. stop kills the
+// [[.Name]] and removes its state and log, unless the [[.Name]] could not be
+// killed and may still be using them.
+func (h *Hooks) startCandidate(ctx context.Context, gatewayAddr, liveKey string) (addr string, exited <-chan struct{}, stop func() error, err error) {
 	// work holds the [[.Name]]'s state directory and, outside it, its log file.
 	work, err := os.MkdirTemp("", "[[.Name]]-eval-*")
 	if err != nil {
@@ -300,12 +268,10 @@ func (h *Hooks) startCandidate(ctx context.Context, gatewayAddr string, gatewayP
 	}
 	addr = "127.0.0.1:" + strconv.Itoa(port)
 	proc, err := candidate.Exec(ctx, h.binary, candidate.Spec{
-		Args:         []string{"-listen", addr, "-model-gateway", gatewayAddr},
-		Env:          liveEnv(liveKey),
-		StateDir:     state,
-		ConnectPorts: []int{gatewayPort},
-		ListenPort:   port,
-		LogFile:      filepath.Join(work, "[[.Name]].log"),
+		Args:     []string{"-listen", addr, "-model-gateway", gatewayAddr},
+		Env:      liveEnv(liveKey),
+		StateDir: state,
+		LogFile:  filepath.Join(work, "[[.Name]].log"),
 	})
 	if err != nil {
 		return "", nil, nil, errors.Join(fmt.Errorf("start [[.Name]]: %w", err), os.RemoveAll(work))

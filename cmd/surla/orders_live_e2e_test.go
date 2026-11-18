@@ -1,0 +1,220 @@
+//go:build e2e
+
+package main
+
+import (
+	"context"
+	"encoding/json"
+	"io"
+	"net/http"
+	"net/http/httptest"
+	"net/url"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"goa.design/goa-ai/runtime/agent/prompt"
+	goahttp "goa.design/goa/v3/http"
+
+	genmcpclient "github.com/goadesign/surla/gen/jsonrpc/mcp_surla/client"
+	genmcpsurla "github.com/goadesign/surla/gen/mcp_surla"
+	gensurla "github.com/goadesign/surla/gen/surla"
+	"github.com/goadesign/surla/internal/controlplane"
+	"github.com/goadesign/surla/internal/testmodule"
+	"github.com/goadesign/surla/internal/verify"
+	"github.com/goadesign/surla/internal/verifyrun"
+)
+
+// ordersSystemPrompt is the refund agent's system prompt in examples/orders.
+const ordersSystemPrompt = "orders.refund.system"
+
+// TestOrdersLiveCopyAppliesADraftThroughTheProjectServer runs the Orders
+// example's prompt-draft journey through the project server's composition
+// root and authenticated MCP endpoint, against this repository's committed
+// HEAD, the way examples/orders/README.md describes it. The operator stores
+// verification settings for examples/orders with surla verification set. A
+// draft with no live copy is refused with no_live_target. The guide proposes
+// a change and the user confirms it; start_live_target names that agreed
+// change, builds HEAD's orders binaries as verification does and starts
+// them through the Orders evaluator suite's --live mode: simulated commerce and payments,
+// a Temporal dev server and the evaluator's scripted model. draft_override
+// then replaces the refund agent's system prompt through Surla's generated
+// prompt client with the key Surla minted, which the copy requires; text that
+// does not render and unknown prompts are refused. Stopping the copy removes
+// it, and drafts are refused again. It needs git, the temporal CLI and macOS,
+// and it tests only what HEAD commits.
+func TestOrdersLiveCopyAppliesADraftThroughTheProjectServer(t *testing.T) {
+	isolateLocalWork(t)
+	for _, name := range []string{"ANTHROPIC_API_KEY", "OPENAI_API_KEY", verify.LiveModelGatewayEnv, verify.LiveModelProviderEnv, verify.LiveModelNameEnv} {
+		t.Setenv(name, "")
+	}
+	repo, err := filepath.Abs(filepath.Join("..", ".."))
+	require.NoError(t, err)
+	headOut, err := exec.CommandContext(t.Context(), "git", "-C", repo, "rev-parse", "--verify", "HEAD^{commit}").Output()
+	require.NoError(t, err)
+	head := strings.TrimSpace(string(headOut))
+	// Refresh owns a draft beside the project. Keep that write and every
+	// candidate/suite read in a test-owned clone of the same committed HEAD.
+	cloned := filepath.Join(t.TempDir(), "candidate")
+	clone := exec.CommandContext(t.Context(), "git", "clone", "--no-hardlinks", "--no-checkout", repo, cloned)
+	clone.Env = testGitEnv()
+	clonedOutput, err := clone.CombinedOutput()
+	require.NoError(t, err, string(clonedOutput))
+	runTestGit(t, cloned, "checkout", "--detach", head)
+	repo = cloned
+	workspace := filepath.Join(repo, "examples", "orders")
+	settings, err := json.Marshal(map[string]any{
+		"candidate_repo":   repo,
+		"candidate_module": "examples/orders",
+		"binaries":         map[string]string{"orders": "./cmd/orders", "orders-worker": "./cmd/orders-worker"},
+		"suite_repo":       repo,
+		"suite_commit":     head,
+		"suite_module":     "examples/orders-eval",
+		"suite_command":    "./cmd/orders_acceptance-evals",
+		"timeout":          "30m",
+	})
+	require.NoError(t, err)
+	settingsFile := filepath.Join(t.TempDir(), "verification.json")
+	require.NoError(t, os.WriteFile(settingsFile, settings, 0o600))
+	t.Chdir(workspace)
+	require.NoError(t, runProjectSettings("verification", []string{"set", settingsFile}, io.Discard))
+
+	opts, err := serveOptions(os.Environ(), workspace)
+	require.NoError(t, err)
+	opts.BuildCacheDir = testmodule.CompilerCache(t)
+	opts.Team = fixtureWorkflowTeam("operator@example.com")
+	cp, err := controlplane.New(opts)
+	require.NoError(t, err)
+	// Registered after the temporary directories, so it runs before they
+	// are removed.
+	t.Cleanup(func() { closeRetaining(cp, opts.CardsDir, opts.RunsDir) })
+	auth := workflowAuthenticator(map[string]controlplane.Principal{"test-token": {ID: "operator@example.com"}})
+	srv := httptest.NewServer(controlplane.NewHTTPHandler(cp, auth))
+	t.Cleanup(srv.Close)
+	serverURL, err := url.Parse(srv.URL)
+	require.NoError(t, err)
+	transport := genmcpclient.NewClient(serverURL.Scheme, serverURL.Host,
+		&bearerDoer{client: srv.Client(), token: "test-token"},
+		goahttp.RequestEncoder, goahttp.ResponseDecoder, false)
+	client := &genmcpsurla.Client{ToolsCallEndpoint: transport.ToolsCall()}
+
+	// Each step below waits within its own allowance. The Story refresh and
+	// the live start outlast the server's own limits on them (journeyStepWait
+	// and journeyOwnerWait); every other step builds nothing and waits three
+	// minutes or less, enough on a slow machine, so that one that hangs fails
+	// under its own name.
+	refused := ordersDraftRefusal(t, stepContext(t, journeyQuickWait), client, ordersSystemPrompt, "Answer in one sentence.")
+	assert.Contains(t, refused, "start_live_target", "with no live copy, the refusal names the step that enables drafts")
+
+	phaseStart := time.Now()
+	refresh := trustedSuiteRefresh(t, stepContext(t, journeyStepWait), client)
+	t.Logf("refresh: %s", time.Since(phaseStart))
+	args, err := gensurla.EncodeProposeChangePayload(&gensurla.ProposeChangePayload{
+		ChangeID: "orders-refund-wording", Prompt: "Answer refund questions in one sentence.", StoryRefreshOpID: refresh.OpID,
+		Analysis: &gensurla.CP1Analysis{
+			Summary:     "Keep the existing refund decisions and answer customers in one sentence.",
+			Ambiguities: []*gensurla.CP1AnalysisAmbiguity{},
+			Examples: []*gensurla.CP1AnalysisExample{{
+				Scenario: "Refund question", InputSummary: "Ask for a refund on an eligible order.",
+				ExpectedOutcome: "Preserve the refund decision and answer in one sentence.", VerificationKind: "deterministic",
+			}},
+			PreservedBehaviors: []string{"Existing refund eligibility decisions remain unchanged."},
+		},
+	})
+	require.NoError(t, err)
+	proposed, err := gensurla.DecodeChangeCardResult(trustedSuiteCall(t, stepContext(t, journeyQuickWait), client, "propose_change", args))
+	require.NoError(t, err)
+	args, err = gensurla.EncodeConfirmIntentPayload(&gensurla.ConfirmIntentPayload{
+		ChangeID: proposed.ChangeID, RequestRevision: proposed.RequestRevision,
+		Answers: map[string]string{}, Examples: proposed.Examples,
+	})
+	require.NoError(t, err)
+	card, err := gensurla.DecodeChangeCardResult(trustedSuiteCall(t, stepContext(t, journeyQuickWait), client, "confirm_intent", args))
+	require.NoError(t, err)
+	require.Equal(t, controlplane.StatusConfirmed, card.Status)
+	args, err = gensurla.EncodeStartLiveTargetPayload(&gensurla.StartLiveTargetPayload{
+		ChangeID: card.ChangeID, CandidateCommit: head,
+	})
+	require.NoError(t, err)
+	phaseStart = time.Now()
+	started, err := gensurla.DecodeLiveTargetResult(trustedSuiteCall(t, stepContext(t, journeyOwnerWait), client, "start_live_target", args))
+	t.Logf("start live target: %s", time.Since(phaseStart))
+	require.NoError(t, err)
+	assert.Equal(t, head, started.CandidateCommit)
+	require.NotEmpty(t, started.URL)
+
+	const text = "You help a customer get refunds for their own orders. Answer in one sentence."
+	args, err = gensurla.EncodeDraftOverridePayload(&gensurla.DraftOverridePayload{
+		TargetKind: controlplane.TargetKindPromptTemplate, PromptID: new(ordersSystemPrompt), NewContent: text,
+	})
+	require.NoError(t, err)
+	phaseStart = time.Now()
+	drafted, err := gensurla.DecodeDraftOverrideResult(trustedSuiteCall(t, stepContext(t, journeyQuickWait), client, "draft_override", args))
+	t.Logf("draft override: %s", time.Since(phaseStart))
+	require.NoError(t, err)
+	assert.True(t, drafted.AppliedInStore)
+	assert.False(t, drafted.RequiresRebuild)
+	require.NotNil(t, drafted.PromptVersion)
+	assert.Equal(t, prompt.VersionFromTemplate(text), *drafted.PromptVersion,
+		"the Orders copy accepted exactly the drafted text")
+	assert.Contains(t, drafted.Message, head)
+
+	assert.Contains(t, ordersDraftRefusal(t, stepContext(t, journeyQuickWait), client, ordersSystemPrompt, "Hello {{ .Name"), "does not render",
+		"text that does not render is refused")
+	assert.Contains(t, ordersDraftRefusal(t, stepContext(t, journeyQuickWait), client, "orders.refund.other", "Hello."), "no prompt with this ID",
+		"an unregistered prompt is refused")
+	assert.Equal(t, http.StatusUnauthorized, ordersPromptStatus(t, started.URL, "not-the-minted-key"),
+		"the copy changes prompts only for the key Surla minted")
+
+	// The server waits up to 30 seconds for the copy's processes to end, then
+	// removes its directory, which has no limit of its own.
+	stopCtx := stepContext(t, 3*time.Minute)
+	phaseStart = time.Now()
+	stopped, err := gensurla.DecodeStopLiveTargetResult(trustedSuiteCall(t, stopCtx, client, "stop_live_target", []byte(`{}`)))
+	t.Logf("stop live target: %s", time.Since(phaseStart))
+	require.NoError(t, err)
+	assert.True(t, stopped.Stopped)
+	liveDirs, err := verifyrun.LeftoverLiveDirs(controlplane.LiveRoot(opts.CardsDir))
+	require.NoError(t, err)
+	assert.Empty(t, liveDirs, "stopping the live copy removes its processes and directory")
+	refused = ordersDraftRefusal(t, stepContext(t, journeyQuickWait), client, ordersSystemPrompt, text)
+	assert.Contains(t, refused, "start_live_target", "after the stop, drafts are refused again")
+}
+
+// ordersDraftRefusal calls draft_override for a prompt template, requires the
+// tool to refuse it, and returns the builder-safe refusal text.
+func ordersDraftRefusal(t *testing.T, ctx context.Context, client *genmcpsurla.Client, promptID, text string) string {
+	t.Helper()
+	args, err := gensurla.EncodeDraftOverridePayload(&gensurla.DraftOverridePayload{
+		TargetKind: controlplane.TargetKindPromptTemplate, PromptID: &promptID, NewContent: text,
+	})
+	require.NoError(t, err)
+	result, err := client.ToolsCall(ctx, &genmcpsurla.ToolsCallPayload{Name: "draft_override", Arguments: args})
+	require.NoError(t, err)
+	complete, ok := result.Outcome.AsComplete()
+	require.True(t, ok, "draft_override completes in the same call")
+	require.True(t, complete.IsError != nil && *complete.IsError, "draft_override must refuse %q", text)
+	return toolErrorText(complete.Content)
+}
+
+// ordersPromptStatus sends a prompt change straight to the live copy at
+// origin with key, as only Surla should, and returns the HTTP status. The
+// request waits at most 30 seconds.
+func ordersPromptStatus(t *testing.T, origin, key string) int {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodPut, origin+"/prompts/"+ordersSystemPrompt,
+		strings.NewReader(`{"template":"Hijacked."}`))
+	require.NoError(t, err)
+	req.Header.Set("X-Live-Target-Key", key)
+	resp, err := http.DefaultClient.Do(req)
+	require.NoError(t, err)
+	require.NoError(t, resp.Body.Close())
+	return resp.StatusCode
+}

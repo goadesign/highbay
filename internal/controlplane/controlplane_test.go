@@ -6,31 +6,25 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
+	"go.opentelemetry.io/otel/sdk/trace/tracetest"
+	"golang.org/x/mod/modfile"
 
 	genmcpadapter "github.com/goadesign/surla/gen/mcp_surla"
 	gensurla "github.com/goadesign/surla/gen/surla"
 	"github.com/goadesign/surla/internal/goldenpath"
-	"github.com/goadesign/surla/internal/swarm"
 	"github.com/goadesign/surla/internal/testmodule"
-	"goa.design/goa-ai/runtime/agent/prompt"
-)
-
-type (
-	// boundTargetPromptUpdater binds a target platform's prompt.Store to the
-	// TargetPromptUpdater contract for testing CP3 Fast Draft Mode.
-	boundTargetPromptUpdater struct {
-		// store is the target platform's prompt.Store.
-		store prompt.Store
-	}
 )
 
 // TestCP1AmbiguityResolutionStrictValidationOwnershipAndRevisionLock verifies
@@ -39,8 +33,8 @@ type (
 // text verbatim, binds the card to the authenticated owner, and locks
 // confirmation to the current request_revision.
 func TestCP1AmbiguityResolutionStrictValidationOwnershipAndRevisionLock(t *testing.T) {
-	aliceCtx := WithPrincipal(context.Background(), Principal{ID: "alice@example.com"})
-	bobCtx := WithPrincipal(context.Background(), Principal{ID: "bob@example.com"})
+	aliceCtx := WithPrincipal(context.Background(), Principal{ID: "alice@example.com", CallerID: "alice@example.com", Kind: CallerUser})
+	bobCtx := WithPrincipal(context.Background(), Principal{ID: "bob@example.com", CallerID: "bob@example.com", Kind: CallerUser})
 
 	ambiguousAnalysis := &gensurla.CP1Analysis{
 		Summary: "  Auto-approve refunds under $50 and route larger refunds to manager approval.\n",
@@ -80,24 +74,26 @@ func TestCP1AmbiguityResolutionStrictValidationOwnershipAndRevisionLock(t *testi
 		},
 	}
 
-	// No Live, LiveModelEnv or model configuration: proposing needs none.
-	cp := newControlPlane(t, Options{})
-
-	designSrc := `package design // orders service`
+	// No Live or model configuration: proposing needs none.
+	workspace := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(workspace, "design"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(workspace, "design", "design.go"), []byte("package design // orders service"), 0o644))
+	cp := newControlPlane(t, Options{WorkspaceDir: workspace})
+	designSrc := "" // Intent before initialization does not inspect project design files.
 	if _, err := cp.ProposeChange(context.Background(), &gensurla.ProposeChangePayload{
-		ChangeID:     "chg-refund-50",
-		Prompt:       "Refunds under $50 should be automatic, otherwise ask a manager.",
-		DesignSource: &designSrc,
-		Analysis:     ambiguousAnalysis,
+		ChangeID: "chg-refund-50",
+		Prompt:   "Refunds under $50 should be automatic, otherwise ask a manager.",
+
+		Analysis: ambiguousAnalysis,
 	}); err == nil {
 		t.Fatal("expected unauthenticated ProposeChange to fail")
 	}
 
 	proposed, err := cp.ProposeChange(aliceCtx, &gensurla.ProposeChangePayload{
-		ChangeID:     "chg-refund-50",
-		Prompt:       "Refunds under $50 should be automatic, otherwise ask a manager.",
-		DesignSource: &designSrc,
-		Analysis:     ambiguousAnalysis,
+		ChangeID: "chg-refund-50",
+		Prompt:   "Refunds under $50 should be automatic, otherwise ask a manager.",
+
+		Analysis: ambiguousAnalysis,
 	})
 	require.NoError(t, err)
 	assert.Equal(t, StatusNeedsConfirmation, proposed.Status)
@@ -118,7 +114,6 @@ func TestCP1AmbiguityResolutionStrictValidationOwnershipAndRevisionLock(t *testi
 	require.NoError(t, err)
 	require.True(t, ok)
 	assert.Equal(t, designSrc, stored.designSource)
-	assert.Equal(t, sourceOriginSupplied, stored.sourceOrigin)
 
 	// Attempting to overwrite an existing change_id must be rejected.
 	_, err = cp.ProposeChange(bobCtx, &gensurla.ProposeChangePayload{
@@ -156,12 +151,11 @@ func TestCP1AmbiguityResolutionStrictValidationOwnershipAndRevisionLock(t *testi
 	assert.NotEqual(t, proposed.RequestRevision, confirmed.RequestRevision)
 }
 
-// TestProposeChangeAutoConfirmsACardWithoutQuestions verifies that an
-// analysis with no open questions is saved confirmed by its owner, and that a
-// proposal on a server bound to a workspace records that workspace's
-// design/*.go as the card's design source.
-func TestProposeChangeAutoConfirmsACardWithoutQuestions(t *testing.T) {
-	alice := WithPrincipal(context.Background(), Principal{ID: "alice@example.com"})
+// TestProposeChangeWaitsForUserWithoutQuestions verifies that an
+// analysis with no open questions still waits for confirmation. Before a
+// module is initialized, a proposal keeps intent without reading design files.
+func TestProposeChangeWaitsForUserWithoutQuestions(t *testing.T) {
+	alice := WithPrincipal(context.Background(), Principal{ID: "alice@example.com", CallerID: "alice@example.com", Kind: CallerUser})
 	ws := t.TempDir()
 	require.NoError(t, os.MkdirAll(filepath.Join(ws, "design"), 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(ws, "design", "design.go"), []byte("package design // refunds\n"), 0o644))
@@ -173,28 +167,22 @@ func TestProposeChangeAutoConfirmsACardWithoutQuestions(t *testing.T) {
 		Analysis: refundAnalysis("Refunds up to $50 are instant."),
 	})
 	require.NoError(t, err)
-	assert.Equal(t, StatusConfirmed, card.Status)
-	require.NotNil(t, card.ConfirmedBy)
-	assert.Equal(t, "alice@example.com", *card.ConfirmedBy)
+	assert.Equal(t, StatusNeedsConfirmation, card.Status)
+	assert.Nil(t, card.ConfirmedBy)
 	assert.Empty(t, card.Ambiguities)
 	assert.Empty(t, card.Answers)
 	assert.Nil(t, card.UIComposition)
 	stored, ok, err := cp.cards.load("chg-instant")
 	require.NoError(t, err)
 	require.True(t, ok)
-	assert.Equal(t, sourceOriginWorkspace, stored.sourceOrigin)
-	assert.Equal(t, `{"design/design.go":"package design // refunds\n"}`, stored.designSource)
+	assert.Empty(t, stored.designSource)
 }
 
 // TestProposeChangeRecordsTheDesignSourceItWasMadeAgainst verifies the design
-// source a card records and hashes into request_revision: none when the
-// caller sends none and no workspace is bound, design_source byte for byte
-// when sent (whitespace included), none for a bound workspace without
-// design/*.go (so the card does not block init_project), and the bound
-// workspace's design/*.go as a JSON object with HTML characters unescaped.
+// source is absent before initialization, including when uninitialized
+// design files exist. Only an explicit refresh can supply evaluated source.
 func TestProposeChangeRecordsTheDesignSourceItWasMadeAgainst(t *testing.T) {
-	alice := WithPrincipal(context.Background(), Principal{ID: "alice@example.com"})
-	whitespace := "  \n\t"
+	alice := WithPrincipal(context.Background(), Principal{ID: "alice@example.com", CallerID: "alice@example.com", Kind: CallerUser})
 	emptyWorkspace := t.TempDir()
 	designWorkspace := t.TempDir()
 	require.NoError(t, os.MkdirAll(filepath.Join(designWorkspace, "design"), 0o755))
@@ -202,19 +190,15 @@ func TestProposeChangeRecordsTheDesignSourceItWasMadeAgainst(t *testing.T) {
 	for _, tc := range []struct {
 		name       string
 		workspace  string
-		design     *string
 		wantSource string
-		wantOrigin string
 	}{
-		{"no design and no workspace", "", nil, "", sourceOriginSupplied},
-		{"whitespace design_source kept as sent", "", &whitespace, whitespace, sourceOriginSupplied},
-		{"workspace without design files", emptyWorkspace, nil, "", sourceOriginWorkspace},
-		{"workspace design files", designWorkspace, nil, `{"design/design.go":"package design // a < b && c > d\n"}`, sourceOriginWorkspace},
+		{"workspace without design files", emptyWorkspace, ""},
+		{"workspace design before a module exists is not read", designWorkspace, ""},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			cp := newControlPlane(t, Options{CardsDir: t.TempDir(), WorkspaceDir: tc.workspace})
 			card, err := cp.ProposeChange(alice, &gensurla.ProposeChangePayload{
-				ChangeID: "chg", Prompt: "Refunds up to $50 are instant.", DesignSource: tc.design,
+				ChangeID: "chg", Prompt: "Refunds up to $50 are instant.",
 				Analysis: refundAnalysis("Refunds up to $50 are instant."),
 			})
 			require.NoError(t, err)
@@ -222,13 +206,13 @@ func TestProposeChangeRecordsTheDesignSourceItWasMadeAgainst(t *testing.T) {
 			require.NoError(t, err)
 			require.True(t, ok)
 			assert.Equal(t, tc.wantSource, stored.designSource)
-			assert.Equal(t, tc.wantOrigin, stored.sourceOrigin)
 			rev, err := computeCanonicalRevision(stored.card, "alice@example.com", tc.wantSource)
 			require.NoError(t, err)
 			assert.Equal(t, rev, card.RequestRevision, "request_revision covers the recorded design source")
 			blocked, err := cp.cards.hasWorkspaceCardsWithFiles()
 			require.NoError(t, err)
-			assert.Equal(t, tc.workspace == designWorkspace, blocked, "only a card that recorded workspace design files blocks init_project")
+			assert.False(t, blocked, "intent before initialization has no saved evaluated design")
+
 		})
 	}
 }
@@ -241,10 +225,10 @@ func TestProposeChangeRecordsTheDesignSourceItWasMadeAgainst(t *testing.T) {
 // before the service runs, and that the service rejects the rules that span
 // fields (repeated options) as unprocessable. No rejected case saves a card.
 func TestChangeAnalysisIsRejectedAtTheBoundary(t *testing.T) {
-	alice := WithPrincipal(context.Background(), Principal{ID: "alice@example.com"})
+	alice := WithPrincipal(context.Background(), Principal{ID: "alice@example.com", CallerID: "alice@example.com", Kind: CallerUser})
 	cp := newControlPlane(t, Options{})
 	adapter := genmcpadapter.NewMCPAdapter(gensurla.NewEndpoints(cp), nil)
-	srv := httptest.NewServer(NewHTTPHandler(cp, NewTokenAuthenticator(map[string]Principal{"alice-token": {ID: "alice@example.com"}})))
+	srv := httptest.NewServer(NewHTTPHandler(cp, workflowAuthenticator(map[string]Principal{"alice-token": {ID: "alice@example.com"}})))
 	t.Cleanup(srv.Close)
 
 	const example = `{"scenario":"Refund at the limit","input_summary":"Order total $50.00","expected_outcome":"Instant store credit","verification_kind":"deterministic"}`
@@ -344,10 +328,10 @@ func TestChangeAnalysisIsRejectedAtTheBoundary(t *testing.T) {
 // covers every HTTP route that reads a JSON body, not only the analysis
 // routes: a configure_model body with a field the design does not declare is
 // refused with 400 decode_payload before the service runs, while the same
-// body without it reaches the service, which on this host answers 501.
+// body without it reaches the service, which accepts it.
 func TestHTTPRoutesRefuseUndeclaredJSONFields(t *testing.T) {
 	cp := newControlPlane(t, Options{})
-	srv := httptest.NewServer(NewHTTPHandler(cp, NewTokenAuthenticator(map[string]Principal{"alice-token": {ID: "alice@example.com"}})))
+	srv := httptest.NewServer(NewHTTPHandler(cp, workflowAuthenticator(map[string]Principal{"alice-token": {ID: "alice@example.com"}})))
 	t.Cleanup(srv.Close)
 
 	status, body := postJSON(t, srv.URL+"/cp1/model", "alice-token", `{"gateway_addr":"127.0.0.1:9090","timeout":"5s"}`)
@@ -361,7 +345,7 @@ func TestHTTPRoutesRefuseUndeclaredJSONFields(t *testing.T) {
 	assert.Equal(t, `json: unknown field "timeout"`, refusal.Message)
 
 	status, body = postJSON(t, srv.URL+"/cp1/model", "alice-token", `{"gateway_addr":"127.0.0.1:9090"}`)
-	assert.Equal(t, http.StatusNotImplemented, status, body)
+	assert.Equal(t, http.StatusOK, status, body)
 }
 
 // TestGoCallersGetTheDesignRules verifies that a Go caller of ProposeChange
@@ -370,7 +354,7 @@ func TestHTTPRoutesRefuseUndeclaredJSONFields(t *testing.T) {
 // unknown verification_kind, a missing analysis or a change_id that is not
 // valid UTF-8 is refused as unprocessable and saves nothing.
 func TestGoCallersGetTheDesignRules(t *testing.T) {
-	alice := WithPrincipal(context.Background(), Principal{ID: "alice@example.com"})
+	alice := WithPrincipal(context.Background(), Principal{ID: "alice@example.com", CallerID: "alice@example.com", Kind: CallerUser})
 	cp := newControlPlane(t, Options{})
 	saved := mustPropose(t, cp, alice, "chg", "Refunds up to $50 are instant.", refundAnalysis("Refunds up to $50 are instant."))
 
@@ -424,14 +408,21 @@ func TestGoCallersGetTheDesignRules(t *testing.T) {
 	assert.Equal(t, saved.RequestRevision, current.RequestRevision, "a refused revision leaves the card unchanged")
 }
 
-// TestCP2EvaluatedArchitecturePreviewCP3FastDraftAndTokenAuthenticator verifies
-// CP2 design evaluation, Golden Path MCP resource serving, proposed swarm
-// planning, CP3 Fast Draft Mode prompt overrides, and bearer-token authentication.
-func TestCP2EvaluatedArchitecturePreviewCP3FastDraftAndTokenAuthenticator(t *testing.T) {
+// TestEvaluatedArchitecturePreviewFastDraftAndAuthenticatedHTTP verifies
+// CP2 design evaluation, Golden Path MCP resource serving, the CP3 refusal of
+// a prompt draft with no live target running, and bearer-token
+// authentication.
+func TestEvaluatedArchitecturePreviewFastDraftAndAuthenticatedHTTP(t *testing.T) {
 	if testing.Short() {
-		t.Skip("runs the sandboxed Go toolchain; the full suite (go test without -short) covers it")
+		t.Skip("runs the Go toolchain; the full suite (go test without -short) covers it")
 	}
-	ctx := WithPrincipal(context.Background(), Principal{ID: "alice@example.com"})
+	for name, value := range map[string]string{
+		"GOPROXY": "off", "GOSUMDB": "off", "GONOPROXY": "none",
+		"GOENV": "off", "GOTOOLCHAIN": "local",
+	} {
+		t.Setenv(name, value)
+	}
+	ctx := WithPrincipal(context.Background(), Principal{ID: "alice@example.com", CallerID: "alice@example.com", Kind: CallerUser})
 	clearAnalysis := &gensurla.CP1Analysis{
 		Summary:     "Refunds with item_subtotal_cents < 5000 auto-approve; >= 5000 require manager approval.",
 		Ambiguities: []*gensurla.CP1AnalysisAmbiguity{},
@@ -446,10 +437,8 @@ func TestCP2EvaluatedArchitecturePreviewCP3FastDraftAndTokenAuthenticator(t *tes
 		PreservedBehaviors: []string{"Idempotency key refund/<tenant>/<order>"},
 	}
 
-	targetStore := prompt.NewInMemoryStore()
-	cp := newControlPlane(t, Options{
-		TargetUpdater: &boundTargetPromptUpdater{store: targetStore},
-	})
+	workspace := t.TempDir()
+	cp := newControlPlane(t, Options{WorkspaceDir: workspace})
 
 	candidateDesign := `package design
 
@@ -500,23 +489,30 @@ var _ = Service("orders", func() {
 	})
 })
 `
-	card, err := cp.ProposeChange(ctx, &gensurla.ProposeChangePayload{
-		ChangeID:     "chg-clear",
-		Prompt:       "Auto-approve when item_subtotal_cents < 5000; require manager when item_subtotal_cents >= 5000.",
-		DesignSource: &candidateDesign,
-		Analysis:     clearAnalysis,
-	})
-	if err != nil {
-		t.Fatalf("ProposeChange failed: %v", err)
+	files := goaGoaAIDSLFixture(t, candidateDesign)
+	writeWorkspaceFiles(t, workspace, files)
+	for _, args := range [][]string{
+		{"list", "-mod=readonly", "-deps", "./design/..."},
+		{"list", "-mod=readonly", "-m", "all"},
+	} {
+		cmd := exec.CommandContext(t.Context(), "go", args...)
+		cmd.Dir = workspace
+		cmd.Env = append(os.Environ(), "GOWORK=off", "GOFLAGS=")
+		output, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatalf("fixture input incomplete: prepare the Goa and Goa-AI DSL profile with GOPROXY=off: %v\n%s", err, output)
+		}
 	}
-	if card.Status != StatusConfirmed {
-		t.Fatalf("expected clear request to be immediately %q, got %q", StatusConfirmed, card.Status)
-	}
+	card := mustProposeFromRefresh(t, cp, ctx, "chg-clear",
+		"Auto-approve when item_subtotal_cents < 5000; require manager when item_subtotal_cents >= 5000.", clearAnalysis)
+	require.Equal(t, StatusNeedsConfirmation, card.Status)
+	card, err := cp.ConfirmIntent(ctx, &gensurla.ConfirmIntentPayload{ChangeID: card.ChangeID, RequestRevision: card.RequestRevision, Answers: map[string]string{}, Examples: card.Examples})
+	require.NoError(t, err)
+	require.Equal(t, StatusConfirmed, card.Status)
 
 	preview, err := cp.PreviewArchitecture(ctx, &gensurla.PreviewArchitecturePayload{
 		ChangeID:        card.ChangeID,
 		RequestRevision: card.RequestRevision,
-		Design:          &gensurla.DesignSnapshot{Files: testmodule.Snapshot(t, "", candidateDesign)},
 	})
 	if err != nil {
 		t.Fatalf("PreviewArchitecture failed: %v", err)
@@ -534,34 +530,28 @@ var _ = Service("orders", func() {
 	if len(preview.Tools) != 1 || !preview.Tools[0].RequiresConfirmation || len(preview.Tools[0].InjectedFields) != 1 || preview.Tools[0].InjectedFields[0] != "tenant_id" {
 		t.Fatalf("unexpected evaluated ToolContractItem: %+v", preview.Tools)
 	}
-	if preview.Swarm == nil || preview.Swarm.Status != string(swarm.StatusUnconfigured) || len(preview.Swarm.MissingRoles) != 0 || preview.Swarm.Manifest != nil {
-		t.Fatalf("expected solo unconfigured swarm plan with empty MissingRoles when no builders are supplied, got %+v", preview.Swarm)
-	}
 
-	// CP3: Fast Draft Mode updates the bound TargetPromptUpdater and rejects compiled_rule hacks.
+	// CP3: Surla changes prompts only in a live target it runs; with none
+	// running, a prompt draft is refused with the declared no_live_target
+	// error. live_test.go covers drafts on a running live target.
 	promptID := "orders.refund.system"
-	draftPrompt, err := cp.DraftOverride(ctx, &gensurla.DraftOverridePayload{
+	_, err = cp.DraftOverride(ctx, &gensurla.DraftOverridePayload{
 		TargetKind: TargetKindPromptTemplate,
 		PromptID:   &promptID,
 		NewContent: "You are a concise, empathetic refund specialist.",
 	})
-	if err != nil {
-		t.Fatalf("DraftOverride(prompt_template) failed: %v", err)
-	}
-	if !draftPrompt.AppliedInStore || draftPrompt.RequiresRebuild || draftPrompt.PromptVersion == nil || *draftPrompt.PromptVersion == "" {
-		t.Fatalf("unexpected prompt_template DraftOverrideResult: %+v", draftPrompt)
-	}
+	assert.Equal(t, "no_live_target", goaErrorName(err))
 
 	// Verified bearer-token authenticator rejects unauthenticated HTTP requests and accepts valid bearer token.
-	auth := NewTokenAuthenticator(map[string]Principal{
+	auth := workflowAuthenticator(map[string]Principal{
 		"secret-token-alice": {ID: "alice@example.com"},
 	})
 	srv := httptest.NewServer(NewHTTPHandler(cp, auth))
 	defer srv.Close()
 
-	unauthResp, err := http.Get(srv.URL + "/ui/checkpoint")
+	unauthResp, err := http.Get(srv.URL + "/golden-path")
 	if err != nil {
-		t.Fatalf("GET /ui/checkpoint failed: %v", err)
+		t.Fatalf("GET /golden-path failed: %v", err)
 	}
 	if closeErr := unauthResp.Body.Close(); closeErr != nil {
 		t.Fatalf("close unauthResp: %v", closeErr)
@@ -570,14 +560,14 @@ var _ = Service("orders", func() {
 		t.Fatalf("expected 401 Unauthorized without bearer token, got %d", unauthResp.StatusCode)
 	}
 
-	authReq, err := http.NewRequestWithContext(ctx, http.MethodGet, srv.URL+"/ui/checkpoint", nil)
+	authReq, err := http.NewRequestWithContext(ctx, http.MethodGet, srv.URL+"/golden-path", nil)
 	if err != nil {
 		t.Fatalf("NewRequest: %v", err)
 	}
 	authReq.Header.Set("Authorization", "Bearer secret-token-alice")
 	authResp, err := http.DefaultClient.Do(authReq)
 	if err != nil {
-		t.Fatalf("authenticated GET /ui/checkpoint failed: %v", err)
+		t.Fatalf("authenticated GET /golden-path failed: %v", err)
 	}
 	if closeErr := authResp.Body.Close(); closeErr != nil {
 		t.Fatalf("close authResp: %v", closeErr)
@@ -598,41 +588,29 @@ var _ = Service("orders", func() {
 	}
 	assert.ElementsMatch(t, []string{
 		"propose_change", "revise_change", "confirm_intent", "get_change", "configure_model", "init_project", "generate_code", "preview_architecture", "draft_override", "approve_merge", "diff",
-		"start_live_target", "stop_live_target",
-		"verify_change", "get_verification", "list_verifications",
+		"start_live_target", "stop_live_target", "get_live_target",
+		"verify_change", "get_verification", "review_verification", "list_verifications",
 		"check_project", "update_dependencies", "read_check_output",
-		"list_traces", "refresh_story", "get_story_refresh",
+		"list_traces", "refresh_story", "get_story_refresh", "update_draft", "list_changes", "decline_revision",
+		"get_build", "list_builder_assignments", "get_builder_assignment",
+		"list_test_writer_assignments", "get_test_writer_assignment", "report_tests_finished",
 	}, toolNames)
-	// Every checkpoint tool, diff included, links the checkpoint viewer so an
-	// MCP Apps host can render its result; configure_model, init_project,
-	// generate_code, check_project, update_dependencies, read_check_output,
-	// refresh_story and get_story_refresh are server/workspace tools without a
-	// checkpoint UI view. list_traces is also a data tool; the viewer reads it
-	// through its separate Traces control.
-	workspaceTools := map[string]bool{
-		"configure_model": true, "init_project": true, "generate_code": true,
-		"check_project": true, "update_dependencies": true, "read_check_output": true,
-		"list_traces": true, "refresh_story": true, "get_story_refresh": true,
-	}
+	// The views page reads the server directly; no tool asks a client to
+	// embed a page for its result.
 	for _, tool := range toolsRes.Tools {
-		if workspaceTools[tool.Name] {
-			if strings.Contains(string(tool.Meta), "resourceUri") {
-				t.Fatalf("tool %q unexpectedly links a UI resource: _meta=%s", tool.Name, tool.Meta)
-			}
-			continue
-		}
-		if !strings.Contains(string(tool.Meta), `"resourceUri":"ui://surla/checkpoint"`) {
-			t.Fatalf("tool %q does not link ui://surla/checkpoint: _meta=%s", tool.Name, tool.Meta)
+		if strings.Contains(string(tool.Meta), "resourceUri") {
+			t.Fatalf("tool %q links a UI resource: _meta=%s", tool.Name, tool.Meta)
 		}
 	}
-	resRead, err := adapter.ResourcesRead(ctx, &genmcpadapter.ResourcesReadPayload{URI: "ui://surla/checkpoint"})
+	resources, err := adapter.ResourcesList(ctx, &genmcpadapter.ResourcesListPayload{})
 	if err != nil {
-		t.Fatalf("ResourcesRead(ui://surla/checkpoint) failed: %v", err)
+		t.Fatalf("ResourcesList: %v", err)
 	}
-	completeRes, ok := resRead.Outcome.AsComplete()
-	if !ok || len(completeRes.Contents) != 1 || completeRes.Contents[0].Text == nil || !strings.Contains(*completeRes.Contents[0].Text, "surla-checkpoint-root") {
-		t.Fatalf("unexpected ResourcesRead content: %+v", resRead)
+	resourceURIs := make([]string, 0, len(resources.Resources))
+	for _, resource := range resources.Resources {
+		resourceURIs = append(resourceURIs, resource.URI)
 	}
+	assert.Equal(t, []string{goldenpath.ResourceURI}, resourceURIs, "the Golden Path is the only MCP resource")
 
 	goldenRes, err := adapter.ResourcesRead(ctx, &genmcpadapter.ResourcesReadPayload{URI: goldenpath.ResourceURI})
 	if err != nil {
@@ -643,119 +621,49 @@ var _ = Service("orders", func() {
 		t.Fatalf("unexpected surla://golden-path content: %+v", goldenRes)
 	}
 
-	// CP2 with server-configured multi-family provider profiles proposes cross-family swarm roster.
-	cpWithSwarm := newControlPlane(t, Options{
-		SwarmProfiles: []swarm.ProviderProfile{
-			{
-				ID:            "claude-opus",
-				Provider:      "claude",
-				Model:         "claude-opus-4-6",
-				Family:        "anthropic",
-				Authenticated: true,
-				Capabilities: []swarm.RoleKind{
-					swarm.RoleArchitect,
-					swarm.RoleBuilder,
-					swarm.RoleEvalAuthor,
-					swarm.RoleReviewer,
-				},
-			},
-			{
-				ID:            "codex-gpt5",
-				Provider:      "codex",
-				Model:         "gpt-5.4",
-				Family:        "openai",
-				Authenticated: true,
-				Capabilities: []swarm.RoleKind{
-					swarm.RoleBuilder,
-					swarm.RoleEvalAuthor,
-					swarm.RoleReviewer,
-				},
-			},
-			{
-				ID:            "gemini-pro",
-				Provider:      "gemini",
-				Model:         "gemini-3.1-pro",
-				Family:        "google",
-				Authenticated: true,
-				Capabilities: []swarm.RoleKind{
-					swarm.RoleArchitect,
-					swarm.RoleEvalAuthor,
-					swarm.RoleReviewer,
-				},
-			},
-		},
-	})
-	cardSwarm, err := cpWithSwarm.ProposeChange(ctx, &gensurla.ProposeChangePayload{
-		ChangeID:     "chg-swarm",
-		Prompt:       "Auto-approve when item_subtotal_cents < 5000; require manager when item_subtotal_cents >= 5000.",
-		DesignSource: &candidateDesign,
-		Analysis:     clearAnalysis,
-	})
-	if err != nil {
-		t.Fatalf("ProposeChange(chg-swarm) failed: %v", err)
-	}
-	// 1. Builders only on full-capability profiles -> 2-role roster (@builder-* + @reviewer).
-	previewSwarm2Role, err := cpWithSwarm.PreviewArchitecture(ctx, &gensurla.PreviewArchitecturePayload{
-		ChangeID:        cardSwarm.ChangeID,
-		RequestRevision: cardSwarm.RequestRevision,
-		Design:          &gensurla.DesignSnapshot{Files: testmodule.Snapshot(t, "", candidateDesign)},
-		Builders: []*gensurla.BuilderScopeItem{
-			{Name: "orders", Paths: []string{"internal/orders/**"}},
-			{Name: "api", Paths: []string{"cmd/orders-api/**"}},
-		},
-	})
-	if err != nil {
-		t.Fatalf("PreviewArchitecture(chg-swarm 2-role) failed: %v", err)
-	}
-	if previewSwarm2Role.Swarm == nil ||
-		previewSwarm2Role.Swarm.Status != string(swarm.StatusConfigured) ||
-		!previewSwarm2Role.Swarm.CrossFamilyReview ||
-		previewSwarm2Role.Swarm.CrossFamilyEval ||
-		previewSwarm2Role.Swarm.SingleFamily ||
-		len(previewSwarm2Role.Swarm.Assignments) != 3 ||
-		previewSwarm2Role.Swarm.Manifest == nil ||
-		!strings.Contains(*previewSwarm2Role.Swarm.Manifest, "eval-author not assigned") {
-		t.Fatalf("unexpected 2-role previewSwarm2Role.Swarm: %+v", previewSwarm2Role.Swarm)
+	for name, want := range files {
+		got, err := os.ReadFile(filepath.Join(workspace, filepath.FromSlash(name)))
+		require.NoError(t, err)
+		assert.Equal(t, want, string(got), "evaluation preserves the fixture input")
 	}
 
-	// 2. Builders + ArchitectPaths + EvalPaths on the same server -> full 4-role roster.
-	previewSwarm, err := cpWithSwarm.PreviewArchitecture(ctx, &gensurla.PreviewArchitecturePayload{
-		ChangeID:        cardSwarm.ChangeID,
-		RequestRevision: cardSwarm.RequestRevision,
-		Design:          &gensurla.DesignSnapshot{Files: testmodule.Snapshot(t, "", candidateDesign)},
-		Builders: []*gensurla.BuilderScopeItem{
-			{Name: "orders", Paths: []string{"internal/orders/**"}},
-			{Name: "api", Paths: []string{"cmd/orders-api/**"}},
-		},
-		ArchitectPaths: []string{"design/**"},
-		EvalPaths:      []string{"*-eval/**"},
-	})
-	if err != nil {
-		t.Fatalf("PreviewArchitecture(chg-swarm 4-role) failed: %v", err)
-	}
-	if previewSwarm.Swarm == nil ||
-		previewSwarm.Swarm.Status != string(swarm.StatusConfigured) ||
-		!previewSwarm.Swarm.CrossFamilyReview ||
-		!previewSwarm.Swarm.CrossFamilyEval ||
-		previewSwarm.Swarm.SingleFamily ||
-		len(previewSwarm.Swarm.Assignments) != 5 ||
-		previewSwarm.Swarm.Manifest == nil ||
-		!strings.Contains(*previewSwarm.Swarm.Manifest, previewSwarm.DesignDigest) {
-		t.Fatalf("unexpected configured previewSwarm.Swarm: %+v", previewSwarm.Swarm)
-	}
+	// Pin the cheap consumer fixture to the real evaluator's complete output
+	// for its exact design, which omits this journey's extra history/cache policy.
+	writeWorkspaceFiles(t, filepath.Join(workspace, draftFolderName),
+		goaGoaAIDSLFixture(t, architectureTestDesign))
+	fixtureCard := mustProposeFromRefresh(t, cp, ctx, "chg-architecture-fixture",
+		"Preserve the architecture fixture.", clearAnalysis)
+	actual := loadMetadataRecord(t, cp, fixtureCard.ChangeID).latest().architecture
+	require.NotNil(t, actual)
+	assert.Equal(t, architectureSnapshotForTest(actual.DesignDigest, "orders"), actual,
+		"the saved consumer fixture must match its real evaluated design")
 }
 
-// ApplyPromptOverride writes newContent into the target prompt.Store and returns the resolved version.
-func (u *boundTargetPromptUpdater) ApplyPromptOverride(ctx context.Context, promptID, newContent string) (string, error) {
-	id := prompt.Ident(promptID)
-	if err := u.store.Set(ctx, id, prompt.Scope{}, newContent, map[string]string{"source": "cp3_fast_draft"}); err != nil {
-		return "", err
+// goaGoaAIDSLFixture returns private workspace values for the committed
+// target graph. Root versions must match before the evaluator runs.
+func goaGoaAIDSLFixture(t *testing.T, design string) map[string]string {
+	t.Helper()
+	profileDir := filepath.Join("..", "testmodule", "testdata", "goa-goaai-dsl")
+	files := map[string]string{"design/design.go": design}
+	for _, name := range []string{"go.mod", "go.sum"} {
+		data, err := os.ReadFile(filepath.Join(profileDir, name))
+		require.NoError(t, err, "fixture input incomplete: read committed Goa and Goa-AI DSL profile")
+		files[name] = string(data)
 	}
-	override, err := u.store.Resolve(ctx, id, prompt.Scope{})
-	if err != nil || override == nil {
-		return "", err
+	mod, err := modfile.Parse("go.mod", []byte(files["go.mod"]), nil)
+	require.NoError(t, err)
+	for _, path := range []string{"goa.design/goa/v3", "goa.design/goa-ai"} {
+		found := false
+		for _, dependency := range mod.Require {
+			if dependency.Mod.Path == path {
+				found = true
+				require.Equal(t, testmodule.SurlaVersion(t, path), dependency.Mod.Version,
+					"fixture input incomplete: update the profile after changing root requirements")
+			}
+		}
+		require.True(t, found, "fixture input incomplete: profile must require %s", path)
 	}
-	return override.Version, nil
+	return files
 }
 
 // TestConfirmIntentRefinesNeedsConfirmationAndConfirmedCards verifies that the
@@ -764,8 +672,8 @@ func (u *boundTargetPromptUpdater) ApplyPromptOverride(ctx context.Context, prom
 // it is, and that stale revisions, other principals and previews bound to an
 // earlier revision are refused.
 func TestConfirmIntentRefinesNeedsConfirmationAndConfirmedCards(t *testing.T) {
-	aliceCtx := WithPrincipal(context.Background(), Principal{ID: "alice@example.com"})
-	bobCtx := WithPrincipal(context.Background(), Principal{ID: "bob@example.com"})
+	aliceCtx := WithPrincipal(context.Background(), Principal{ID: "alice@example.com", CallerID: "alice@example.com", Kind: CallerUser})
+	bobCtx := WithPrincipal(context.Background(), Principal{ID: "bob@example.com", CallerID: "bob@example.com", Kind: CallerUser})
 	ambiguous := refundAnalysis("Refunds up to $50 are instant.", &gensurla.CP1AnalysisAmbiguity{
 		Question: "Is $50.00 itself instant?", Options: []string{"instant", "manager"},
 	})
@@ -828,15 +736,16 @@ func TestConfirmIntentRefinesNeedsConfirmationAndConfirmedCards(t *testing.T) {
 		}
 
 		_, err = cp.PreviewArchitecture(aliceCtx, &gensurla.PreviewArchitecturePayload{
-			ChangeID: "chg", RequestRevision: first.RequestRevision, Design: &gensurla.DesignSnapshot{},
+			ChangeID: "chg", RequestRevision: first.RequestRevision,
 		})
 		if err == nil || !strings.Contains(err.Error(), "request_revision mismatch") {
 			t.Fatalf("preview bound to the earlier revision err = %v, want request_revision mismatch", err)
 		}
 	})
 
-	t.Run("auto-confirmed card is refined later", func(t *testing.T) {
+	t.Run("a user-confirmed card is refined later", func(t *testing.T) {
 		cp, proposed := propose(t, unambiguous)
+		proposed = mustConfirmNoop(t, cp, aliceCtx, proposed)
 		if proposed.Status != StatusConfirmed {
 			t.Fatalf("status = %q, want %q", proposed.Status, StatusConfirmed)
 		}
@@ -868,8 +777,8 @@ func TestConfirmIntentRefinesNeedsConfirmationAndConfirmedCards(t *testing.T) {
 // that get_change is owner-only, fails for an unknown change_id, never changes
 // the card, and is served at GET /changes/{change_id}.
 func TestGetChangeLetsAStaleEditorRecover(t *testing.T) {
-	aliceCtx := WithPrincipal(context.Background(), Principal{ID: "alice@example.com"})
-	bobCtx := WithPrincipal(context.Background(), Principal{ID: "bob@example.com"})
+	aliceCtx := WithPrincipal(context.Background(), Principal{ID: "alice@example.com", CallerID: "alice@example.com", Kind: CallerUser})
+	bobCtx := WithPrincipal(context.Background(), Principal{ID: "bob@example.com", CallerID: "bob@example.com", Kind: CallerUser})
 	cp := newControlPlane(t, Options{})
 	start := mustPropose(t, cp, aliceCtx, "chg", "Refunds up to $50 are instant.", refundAnalysis("Refunds up to $50 are instant."))
 	withOutcome := func(card *gensurla.ChangeCardResult, outcome string) []*gensurla.ExampleItem {
@@ -915,7 +824,7 @@ func TestGetChangeLetsAStaleEditorRecover(t *testing.T) {
 		t.Fatalf("unknown GetChange err = %v, want unknown change_id", err)
 	}
 
-	srv := httptest.NewServer(NewHTTPHandler(cp, NewTokenAuthenticator(map[string]Principal{"alice-token": {ID: "alice@example.com"}})))
+	srv := httptest.NewServer(NewHTTPHandler(cp, workflowAuthenticator(map[string]Principal{"alice-token": {ID: "alice@example.com"}})))
 	defer srv.Close()
 	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, srv.URL+"/changes/chg", nil)
 	if err != nil {
@@ -938,13 +847,22 @@ func TestGetChangeLetsAStaleEditorRecover(t *testing.T) {
 	}
 }
 
-// newControlPlane returns a control plane that saves its cards in a fresh
-// temporary directory, or in opts.CardsDir when set, and closes it when the
-// test ends.
+// newControlPlane supplies an idle team and separate temporary directories
+// for the workspace and cards unless the test specifies them. It closes the
+// control plane when the test ends.
 func newControlPlane(t *testing.T, opts Options) *ControlPlane {
 	t.Helper()
 	if opts.CardsDir == "" {
 		opts.CardsDir = t.TempDir()
+	}
+	if opts.WorkspaceDir == "" {
+		opts.WorkspaceDir = realTempDir(t)
+	}
+	if opts.Team == nil {
+		opts.Team = testTeamBinding()
+	}
+	if opts.BuildCacheDir == "" {
+		opts.BuildCacheDir = testmodule.CompilerCache(t)
 	}
 	cp, err := New(opts)
 	require.NoError(t, err)
@@ -991,7 +909,7 @@ func postJSON(t *testing.T, url, token, body string) (int, string) {
 	t.Helper()
 	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, url, bytes.NewReader([]byte(body)))
 	require.NoError(t, err)
-	req.Header.Set("Authorization", "Bearer "+token)
+	workflowAuthorization(req, token)
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := http.DefaultClient.Do(req)
 	require.NoError(t, err)
@@ -1016,4 +934,74 @@ func reviseArgs(t *testing.T, p *gensurla.ReviseChangePayload) json.RawMessage {
 	raw, err := gensurla.EncodeReviseChangePayload(p)
 	require.NoError(t, err)
 	return raw
+}
+
+// TestUnchangedConfirmationFromAnotherSessionKeepsRevision preserves approval bindings across memory-only browser sessions.
+func TestUnchangedConfirmationFromAnotherSessionKeepsRevision(t *testing.T) {
+	exporter := tracetest.NewInMemoryExporter()
+	provider := sdktrace.NewTracerProvider(sdktrace.WithSyncer(exporter))
+	t.Cleanup(func() { assert.NoError(t, provider.Shutdown(context.Background())) })
+	spec := reportSpec{SuiteID: "suite", SuiteCommit: strings.Repeat("b", 40), Environment: "sim", Artifacts: map[string]string{"app": "artifact"}}
+	target := &promotionTargetStub{artifacts: spec.Artifacts}
+	cp := newControlPlane(t, buildFixtureOptions(t, Options{BuildCacheDir: t.TempDir(), Verification: verificationConfig(t), PromotionTarget: target, TracerProvider: provider}))
+	auth := fixtureCredentials(map[string]Principal{
+		"guide":  {ID: "owner", CallerID: "guide", Kind: CallerGuide},
+		"first":  {ID: "owner", CallerID: "session-one", Kind: CallerUser},
+		"second": {ID: "owner", CallerID: "session-two", Kind: CallerUser},
+	})
+	srv := httptest.NewServer(NewHTTPHandler(cp, auth))
+	defer srv.Close()
+	card := saveProposedCardFixture(t, cp, "owner", "session-change", "Keep the same rules", refundAnalysis("Keep the same rules"))
+	card = attachBuildSnapshot(t, cp, card.ChangeID)
+	payload := &gensurla.ConfirmIntentPayload{ChangeID: card.ChangeID, RequestRevision: card.RequestRevision, Answers: map[string]string{}, Examples: card.Examples}
+	raw, err := gensurla.EncodeConfirmIntentPayload(payload)
+	require.NoError(t, err)
+	send := func(token string, raw []byte) *gensurla.ChangeCardResult {
+		request, err := http.NewRequest(http.MethodPost, srv.URL+"/changes/confirm", bytes.NewReader(raw))
+		require.NoError(t, err)
+		request.Header.Set("Authorization", "Bearer "+token)
+		request.Header.Set("Content-Type", "application/json")
+		response, err := srv.Client().Do(request)
+		require.NoError(t, err)
+		defer response.Body.Close()
+		require.Equal(t, http.StatusOK, response.StatusCode)
+		body, err := io.ReadAll(response.Body)
+		require.NoError(t, err)
+		result, err := gensurla.DecodeChangeCardResult(body)
+		require.NoError(t, err)
+		return result
+	}
+	confirmed := send("first", raw)
+	saveStoredBuildFixture(t, cp, confirmed)
+	candidate := commitBuilderCandidateFixture(t, cp, confirmed)
+	first := WithPrincipal(t.Context(), Principal{ID: "owner", CallerID: "session-one", Kind: CallerUser})
+	target.report = passingReport(t, confirmed.RequestRevision, candidate, spec)
+	approved, err := cp.ApproveMerge(first, &gensurla.ApproveMergePayload{ChangeID: confirmed.ChangeID, RequestRevision: confirmed.RequestRevision, CandidateCommit: candidate, ReportDigest: target.report.Digest})
+	require.NoError(t, err)
+	require.NotNil(t, approved.Approval)
+	payload.RequestRevision = approved.RequestRevision
+	raw, err = gensurla.EncodeConfirmIntentPayload(payload)
+	require.NoError(t, err)
+	unchanged := send("second", raw)
+	assert.Equal(t, approved.RequestRevision, unchanged.RequestRevision)
+	assert.Equal(t, approved.Approval, unchanged.Approval)
+	require.NotNil(t, unchanged.ConfirmedBy)
+	assert.Equal(t, "owner", *unchanged.ConfirmedBy)
+	second := WithPrincipal(t.Context(), Principal{ID: "owner", CallerID: "session-two", Kind: CallerUser})
+	history, err := cp.ListTraces(second, &gensurla.ListTracesPayload{Status: "all", Limit: 100})
+	require.NoError(t, err)
+	callers := map[string]bool{}
+	for _, span := range history.Spans {
+		if span.Name == "surla.request.confirm_intent" {
+			callers[span.Attributes["surla.caller_id"]] = true
+		}
+	}
+	assert.True(t, callers["session-one"])
+	assert.True(t, callers["session-two"])
+	for _, span := range exporter.GetSpans() {
+		for _, attr := range span.Attributes {
+			assert.NotEqual(t, "surla.caller_id", string(attr.Key))
+			assert.NotEqual(t, "surla.caller_kind", string(attr.Key))
+		}
+	}
 }

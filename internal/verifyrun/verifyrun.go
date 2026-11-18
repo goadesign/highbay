@@ -15,9 +15,9 @@
 // the run.
 //
 // Start, called by the API, takes the lock before it writes request.json and
-// hands the locked file to `surla verify-run supervise <dir>`, a new session
+// hands the locked file to `surla verify-run supervise <dir> <build-cache-dir>`, a new session
 // that keeps the lock for its whole life. The supervisor starts
-// `surla verify-run execute <dir>` as the leader of a new process group, so
+// `surla verify-run execute <dir> <build-cache-dir>` as the leader of a new process group, so
 // the builds, the evaluator suite and the candidates it runs all stay in that
 // one group. When the executor ends, for any reason, the supervisor kills the
 // group, waits until it is empty, and only then writes result.json. If the
@@ -50,6 +50,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/goadesign/surla/internal/modelsettings"
 	"github.com/goadesign/surla/internal/procgroup"
 	"github.com/goadesign/surla/internal/verify"
 )
@@ -75,6 +76,8 @@ type (
 		// and suite configuration, the caller's candidate commit, the Change
 		// Card revision, and the run's own work directory.
 		Plan verify.Plan `json:"plan"`
+		// StoryContext is immutable agreement evidence, separate from the run plan.
+		StoryContext StoryContext `json:"story_context"`
 	}
 
 	// Result is the terminal outcome of a run, written once by its
@@ -212,9 +215,38 @@ func NewRunID() string {
 // Start accepts req under root and starts its supervisor, then returns the
 // supervisor's PID without waiting for the run. command is the argument list
 // that runs this program, such as the path of the surla executable; Start
-// appends "verify-run supervise <dir>". The run directory must not exist, and
-// req.Plan.WorkDir must name the run's work directory.
-func Start(root string, req Request, command []string) (int, error) {
+// appends "verify-run supervise <dir> <build-cache-dir>". The supervisor gets this process's
+// environment plus settings, the provider request settings the run's test
+// program may use; they pass to the executor only through the environment,
+// never an argument or request.json, so the run keeps this snapshot whatever
+// its caller holds later. The supervisor, which starts nothing but the
+// executor, thus holds the snapshot in its environment for the run's life.
+// So does the executor: it removes the families from its own process at
+// entry, so only the test program receives them, but its initial
+// environment block, which same-user processes can read, keeps them. The run directory must not exist,
+// req.Plan.WorkDir must name the run's work directory, and req.Plan.Tests
+// must name one of the declared test sources. buildCacheDir is required, absolute and
+// is relayed to the executor as an argument; it never enters saved requests
+// or the test program's arguments or environment.
+func Start(
+	root string,
+	req Request,
+	command []string,
+	settings []modelsettings.Settings,
+	buildCacheDir string,
+) (int, error) {
+	if buildCacheDir == "" {
+		return 0, errors.New("build cache directory is required")
+	}
+	if !filepath.IsAbs(buildCacheDir) {
+		return 0, errors.New("build cache directory must be absolute")
+	}
+	if err := req.StoryContext.check(); err != nil {
+		return 0, err
+	}
+	if req.StoryContext.TestCoverage != nil && req.Plan.Tests != verify.TestsWritten {
+		return 0, errors.New("only written-test runs may carry test-writer coverage evidence")
+	}
 	if !runIDPattern.MatchString(req.RunID) {
 		return 0, fmt.Errorf("run ID %q is not 32 lowercase hex characters", req.RunID)
 	}
@@ -229,6 +261,9 @@ func Start(root string, req Request, command []string) (int, error) {
 	}
 	if req.AcceptedAt.IsZero() {
 		return 0, errors.New("run accepted_at time is required")
+	}
+	if err := req.Plan.Tests.Check(); err != nil {
+		return 0, err
 	}
 	if err := os.MkdirAll(root, 0o700); err != nil {
 		return 0, fmt.Errorf("create runs directory: %w", err)
@@ -256,7 +291,11 @@ func Start(root string, req Request, command []string) (int, error) {
 		return 0, fmt.Errorf("create supervisor log: %w", err)
 	}
 	defer logFile.Close()
-	cmd := exec.Command(command[0], append(command[1:], "verify-run", "supervise", dir)...)
+	cmd := exec.Command(command[0], append(command[1:], "verify-run", "supervise", dir, buildCacheDir)...)
+	cmd.Env = os.Environ()
+	for _, s := range settings {
+		cmd.Env = append(cmd.Env, s.Environ()...)
+	}
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
 	cmd.ExtraFiles = []*os.File{lock}
 	cmd.Stdout, cmd.Stderr = logFile, logFile
@@ -267,7 +306,7 @@ func Start(root string, req Request, command []string) (int, error) {
 	return cmd.Process.Pid, nil
 }
 
-// Supervise runs as `surla verify-run supervise <dir>`. It holds the run lock
+// Supervise runs as `surla verify-run supervise <dir> <build-cache-dir>`. It holds the run lock
 // it inherited on descriptor 3, starts the executor as the leader of a new
 // process group with the read end of a control pipe on its descriptor 3, and
 // waits for it. SIGTERM, SIGINT or SIGHUP cancels the run, and the request's
@@ -280,7 +319,10 @@ func Start(root string, req Request, command []string) (int, error) {
 // read as failed scenarios, so it is kept only as the outcome's
 // PartialReportDigest.
 // command is the argument list that runs this program.
-func Supervise(dir string, command []string) error {
+func Supervise(dir string, command []string, buildCacheDir string) error {
+	if buildCacheDir == "" {
+		return errors.New("build cache directory is required")
+	}
 	syscall.CloseOnExec(passedFD)
 	lock := os.NewFile(passedFD, lockFile)
 	defer lock.Close()
@@ -303,7 +345,7 @@ func Supervise(dir string, command []string) error {
 		return fmt.Errorf("create executor log: %w", err)
 	}
 	defer logFile.Close()
-	cmd := exec.Command(command[0], append(command[1:], "verify-run", "execute", dir)...)
+	cmd := exec.Command(command[0], append(command[1:], "verify-run", "execute", dir, buildCacheDir)...)
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	cmd.ExtraFiles = []*os.File{control}
 	cmd.Stdout = &limitedWriter{w: &out, n: maxExecutorOutput}
@@ -346,17 +388,28 @@ func Supervise(dir string, command []string) error {
 	return writeJSON(dir, resultFile, result)
 }
 
-// Execute runs as `surla verify-run execute <dir>`, the leader of the run's
+// Execute runs as `surla verify-run execute <dir> <build-cache-dir>`, the leader of the run's
 // process group. It watches the control pipe on descriptor 3 and kills its
-// whole group when the supervisor dies; otherwise it runs the plan saved in
-// request.json with run, canceling it on SIGTERM, and writes the run's
-// Result as JSON to out. The full
-// error of a failed step goes to errLog, which stays with the evaluator.
-func Execute(dir string, run func(context.Context, verify.Plan) (verify.Report, error), out, errLog io.Writer) error {
+// whole group when the supervisor dies. It then takes every provider family
+// out of its own process (takeProviderFamilies), so the run's preparation
+// never sees one, and runs the plan saved in request.json with run, passing
+// the process environment plus what it took, from which only the test
+// program's environment is derived. It cancels the run on SIGTERM and
+// writes the run's Result as JSON to out. The full error of a failed step
+// goes to errLog, which stays with the evaluator.
+func Execute(
+	dir string,
+	run func(context.Context, verify.Plan, []string) (verify.Report, error),
+	out, errLog io.Writer,
+) error {
 	syscall.CloseOnExec(passedFD)
 	control := os.NewFile(passedFD, "control")
 	go watchSupervisor(control)
 
+	providers, err := takeProviderFamilies()
+	if err != nil {
+		return err
+	}
 	req, err := readRequest(dir)
 	if err != nil {
 		return err
@@ -365,7 +418,7 @@ func Execute(dir string, run func(context.Context, verify.Plan) (verify.Report, 
 	// can stop its candidates and remove its pinned binaries.
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGTERM)
 	defer stop()
-	report, err := run(ctx, req.Plan)
+	report, err := run(ctx, req.Plan, append(os.Environ(), providers...))
 	result := Result{Kind: ResultReport, ReportDigest: report.Digest}
 	if err != nil {
 		var stage *verify.StageError
@@ -414,45 +467,53 @@ func List(root, owner, changeID string) ([]Run, error) {
 	if strings.TrimSpace(changeID) == "" {
 		return nil, errors.New("change_id is required")
 	}
-	entries, err := os.ReadDir(root)
-	if errors.Is(err, fs.ErrNotExist) {
-		return nil, nil
-	}
+	reqs, err := publishedRequests(root, func(req Request) bool {
+		return req.Owner == owner && req.ChangeID == changeID
+	})
 	if err != nil {
-		return nil, fmt.Errorf("read runs directory: %w", err)
+		return nil, err
 	}
-	var runs []Run
-	for _, entry := range entries {
-		if !entry.IsDir() || !runIDPattern.MatchString(entry.Name()) {
-			continue
-		}
-		dir := filepath.Join(root, entry.Name())
-		req, err := readRequest(dir)
-		if errors.Is(err, fs.ErrNotExist) {
-			continue
-		}
-		if err != nil {
-			return nil, err
-		}
-		if req.Owner != owner || req.ChangeID != changeID {
-			continue
-		}
-		state, err := readState(dir, req)
+	slices.SortFunc(reqs, newestFirst)
+	runs := make([]Run, 0, len(reqs))
+	for _, req := range reqs {
+		state, err := readState(filepath.Join(root, req.RunID), req)
 		if err != nil {
 			return nil, err
 		}
 		runs = append(runs, Run{Request: req, State: state})
 	}
-	slices.SortFunc(runs, func(a, b Run) int {
-		if !a.Request.AcceptedAt.Equal(b.Request.AcceptedAt) {
-			if a.Request.AcceptedAt.After(b.Request.AcceptedAt) {
-				return -1
-			}
-			return 1
-		}
-		return strings.Compare(a.Request.RunID, b.Request.RunID)
-	})
 	return runs, nil
+}
+
+// LatestByChange returns, keyed by change ID, the newest saved run of each of
+// owner's changes under root: the run List would return first for that
+// change. It reads root once, however many changes owner has, so a caller
+// listing every change does not scan root per change. Missing root, runs
+// without request.json, and damaged requests behave as in List. Only the
+// returned runs have their lock, result.json, or report inspected.
+func LatestByChange(root, owner string) (map[string]Run, error) {
+	if strings.TrimSpace(owner) == "" {
+		return nil, errors.New("run owner is required")
+	}
+	reqs, err := publishedRequests(root, func(req Request) bool { return req.Owner == owner })
+	if err != nil {
+		return nil, err
+	}
+	newest := make(map[string]Request)
+	for _, req := range reqs {
+		if current, ok := newest[req.ChangeID]; !ok || newestFirst(req, current) < 0 {
+			newest[req.ChangeID] = req
+		}
+	}
+	latest := make(map[string]Run, len(newest))
+	for changeID, req := range newest {
+		state, err := readState(filepath.Join(root, req.RunID), req)
+		if err != nil {
+			return nil, err
+		}
+		latest[changeID] = Run{Request: req, State: state}
+	}
+	return latest, nil
 }
 
 // LoadReport reads the report saved under reportDir with digest, such as a
@@ -580,9 +641,9 @@ func readRequest(dir string) (Request, error) {
 }
 
 // decodeRequest strictly decodes raw request.json bytes for wantRunID and
-// validates its directory identity, owner, and acceptance time. Once Decode
-// succeeds, req is returned alongside any validation error so callers can still
-// check req.Owner before reporting read failures.
+// validates its directory identity, owner, acceptance time and test source.
+// Once Decode succeeds, req is returned alongside any validation error so
+// callers can still check req.Owner before reporting read failures.
 func decodeRequest(wantRunID string, raw []byte) (Request, error) {
 	dec := json.NewDecoder(bytes.NewReader(raw))
 	dec.DisallowUnknownFields()
@@ -602,6 +663,12 @@ func decodeRequest(wantRunID string, raw []byte) (Request, error) {
 	}
 	if req.AcceptedAt.IsZero() {
 		return req, errors.New("decode run request: accepted_at is required")
+	}
+	if err := req.Plan.Tests.Check(); err != nil {
+		return req, fmt.Errorf("decode run request: %w", err)
+	}
+	if req.StoryContext.TestCoverage != nil && req.Plan.Tests != verify.TestsWritten {
+		return req, errors.New("decode run request: only written-test runs may carry test-writer coverage evidence")
 	}
 	return req, nil
 }
@@ -639,6 +706,21 @@ func stopGroup(pgid int) {
 	if err := syscall.Kill(-pgid, syscall.SIGKILL); err != nil && !errors.Is(err, syscall.ESRCH) {
 		fmt.Fprintf(os.Stderr, "cancel verification: kill process group %d: %v\n", pgid, err)
 	}
+}
+
+// takeProviderFamilies removes every provider family variable from this
+// process's environment and returns them as NAME=value entries. An executor
+// calls it at entry: what it received are the provider request settings its
+// caller handed it, which only its test program may get back.
+func takeProviderFamilies() ([]string, error) {
+	family, _ := modelsettings.Split(os.Environ())
+	for _, kv := range family {
+		name, _, _ := strings.Cut(kv, "=")
+		if err := os.Unsetenv(name); err != nil {
+			return nil, fmt.Errorf("remove provider settings from the executor's environment: %w", err)
+		}
+	}
+	return family, nil
 }
 
 // watchSupervisor reads the control pipe until the supervisor's end closes,
@@ -699,4 +781,44 @@ func stopOnRequest(pgid int, timeout time.Duration, signals <-chan os.Signal, ex
 	case <-grace.C:
 		stopGroup(pgid)
 	}
+}
+
+// publishedRequests reads every published request.json under root, in one
+// pass, and returns those keep accepts. A missing root returns nil, nil; a
+// run directory without request.json is skipped as not yet published; any
+// other unreadable or invalid request.json fails the read.
+func publishedRequests(root string, keep func(Request) bool) ([]Request, error) {
+	entries, err := os.ReadDir(root)
+	if errors.Is(err, fs.ErrNotExist) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("read runs directory: %w", err)
+	}
+	var reqs []Request
+	for _, entry := range entries {
+		if !entry.IsDir() || !runIDPattern.MatchString(entry.Name()) {
+			continue
+		}
+		req, err := readRequest(filepath.Join(root, entry.Name()))
+		if errors.Is(err, fs.ErrNotExist) {
+			continue
+		}
+		if err != nil {
+			return nil, err
+		}
+		if keep(req) {
+			reqs = append(reqs, req)
+		}
+	}
+	return reqs, nil
+}
+
+// newestFirst orders requests by AcceptedAt descending, tie-broken by RunID
+// ascending.
+func newestFirst(a, b Request) int {
+	if byTime := b.AcceptedAt.Compare(a.AcceptedAt); byTime != 0 {
+		return byTime
+	}
+	return strings.Compare(a.RunID, b.RunID)
 }

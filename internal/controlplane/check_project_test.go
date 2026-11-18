@@ -253,7 +253,7 @@ func TestOpenLiveUsesTheSourceRootsAcceptedAtStartup(t *testing.T) {
 			assert.Equal(t, repo, op.grantRoot)
 			assert.Equal(t, tc.wantRel, op.workspaceRel)
 			dst := realTempDir(t)
-			_, err = copyGrant(context.Background(), op.grantFD, op.workspaceRel, op.workspaceID, dst, nil)
+			_, err = copyGrant(context.Background(), op.grantFD, op.workspaceRel, op.workspaceID, dst)
 			require.NoError(t, err)
 			assert.NotContains(t, copiedFiles(t, dst), "operator-private/key.txt")
 			assert.Contains(t, copiedFiles(t, dst), "app/go.mod")
@@ -304,7 +304,11 @@ func TestCheckBindingAcceptsOtherSpellingsThroughTheStartupPipeline(t *testing.T
 			}
 			writeTree(t, parent, map[string]string{tc.stored + "/app/go.mod": "module example.com/app\n"})
 			runGitForTest(t, filepath.Join(parent, tc.stored), "init", "-q")
-			cp, err := New(Options{CardsDir: filepath.Join(realTempDir(t), "cards"), WorkspaceDir: filepath.Join(parent, tc.started)})
+			cp, err := New(Options{
+				CardsDir:     filepath.Join(realTempDir(t), "cards"),
+				WorkspaceDir: filepath.Join(parent, tc.started),
+				Team:         testTeamBinding(),
+			})
 			require.NoError(t, err)
 			defer func() { require.NoError(t, cp.Close()) }()
 
@@ -316,7 +320,7 @@ func TestCheckBindingAcceptsOtherSpellingsThroughTheStartupPipeline(t *testing.T
 			defer func() { require.NoError(t, op.closeLive()) }()
 			assert.Equal(t, "app", op.workspaceRel)
 			dst := realTempDir(t)
-			got, err := copyGrant(context.Background(), op.grantFD, op.workspaceRel, op.workspaceID, dst, nil)
+			got, err := copyGrant(context.Background(), op.grantFD, op.workspaceRel, op.workspaceID, dst)
 			require.NoError(t, err)
 			assert.Equal(t, []string{"."}, got.modules)
 			assert.Contains(t, copiedFiles(t, dst), "app/go.mod")
@@ -367,7 +371,7 @@ func TestOutputKeepsMultiByteCharactersWhole(t *testing.T) {
 		outputMetaFile: fmt.Sprintf(`{"captured":%d,"dropped":0}`, len(text)),
 	})
 	c := &ControlPlane{checkWorkDir: workDir}
-	ctx := WithPrincipal(context.Background(), Principal{ID: "alice@example.com"})
+	ctx := WithPrincipal(context.Background(), Principal{ID: "alice@example.com", CallerID: "alice@example.com", Kind: CallerUser})
 	var pages []string
 	p := &gensurla.ReadCheckOutputPayload{OpID: id}
 	for {
@@ -397,7 +401,14 @@ func TestOutputKeepsMultiByteCharactersWhole(t *testing.T) {
 
 func TestCheckAdmissionIsOrderedWithClose(t *testing.T) {
 	cardsDir := filepath.Join(realTempDir(t), "cards")
-	cp, err := New(Options{CardsDir: cardsDir, Checker: candidate.NewContainerRunner(), CheckHelper: testCheckHelper(t), CheckTimeout: time.Minute})
+	cp, err := New(Options{
+		CardsDir:     cardsDir,
+		WorkspaceDir: realTempDir(t),
+		Team:         testTeamBinding(),
+		Checker:      candidate.NewContainerRunner(),
+		CheckHelper:  testCheckHelper(t),
+		CheckTimeout: time.Minute,
+	})
 	require.NoError(t, err)
 
 	// An admission is in progress (it holds the read lock between its
@@ -422,7 +433,7 @@ func TestCheckAdmissionIsOrderedWithClose(t *testing.T) {
 	assert.NoDirExists(t, filepath.Join(cp.checkWorkDir, id, "src"), "recovery ran after the operation ended")
 
 	// Calls after Close are refused before any work.
-	ctx := WithPrincipal(context.Background(), Principal{ID: "alice@example.com"})
+	ctx := WithPrincipal(context.Background(), Principal{ID: "alice@example.com", CallerID: "alice@example.com", Kind: CallerUser})
 	_, err = cp.CheckProject(ctx)
 	assertServiceError(t, err, "unavailable")
 	_, err = cp.UpdateDependencies(ctx)
@@ -506,7 +517,7 @@ func TestReadCheckOutputBudgetsTheTextTheCallerReceives(t *testing.T) {
 		outputFile:     string(raw),
 		outputMetaFile: fmt.Sprintf(`{"captured":%d,"dropped":0}`, len(raw)),
 	})
-	srv := httptest.NewServer(NewHTTPHandler(cp, NewTokenAuthenticator(map[string]Principal{
+	srv := httptest.NewServer(NewHTTPHandler(cp, workflowAuthenticator(map[string]Principal{
 		"generation-token": {ID: "developer@example.com"},
 	})))
 	t.Cleanup(srv.Close)
@@ -542,7 +553,7 @@ func TestReadCheckOutputBudgetsTheTextTheCallerReceives(t *testing.T) {
 }
 
 func TestReadCheckOutputRefusesDamagedOutput(t *testing.T) {
-	ctx := WithPrincipal(context.Background(), Principal{ID: "alice@example.com"})
+	ctx := WithPrincipal(context.Background(), Principal{ID: "alice@example.com", CallerID: "alice@example.com", Kind: CallerUser})
 	cases := []struct {
 		name    string
 		output  string
@@ -579,22 +590,18 @@ func TestRecoverCheckOperationsKeepsScratchItCannotAttribute(t *testing.T) {
 		wantError string
 	}{
 		{name: "null", owner: `null`, wantKept: true, wantError: "not a JSON object"},
-		{name: "unknown field", owner: `{"docker":"/usr/local/bin/docker","host":"unix:///var/run/docker.sock","containers":[],"extra":1}`, wantKept: true, wantError: "unknown field"},
-		{name: "trailing data", owner: `{"docker":"/usr/local/bin/docker","host":"unix:///var/run/docker.sock","containers":[]} {}`, wantKept: true, wantError: "trailing data"},
-		{name: "missing containers", owner: `{"docker":"/usr/local/bin/docker","host":"unix:///var/run/docker.sock"}`, wantKept: true, wantError: "containers is required"},
-		{name: "relative docker", owner: `{"docker":"docker","host":"unix:///var/run/docker.sock","containers":[]}`, wantKept: true, wantError: "not an absolute path"},
-		{name: "remote engine", owner: `{"docker":"/usr/local/bin/docker","host":"tcp://build.example:2376","containers":[]}`, wantKept: true, wantError: "not a local engine endpoint"},
-		{name: "foreign container", owner: `{"docker":"/usr/local/bin/docker","host":"unix:///var/run/docker.sock","containers":["production-db"]}`, wantKept: true, wantError: "does not belong to operation"},
-		{name: "completed operation with no containers left", owner: `{"docker":"/usr/local/bin/docker","host":"unix:///var/run/docker.sock","containers":[]}`},
-		{name: "completed version 2 operation", owner: `{"version":2,"docker":"/usr/local/bin/docker","host":"unix:///var/run/docker.sock","containers":[]}`},
-		{name: "version 2 without containers", owner: `{"version":2,"docker":"/usr/local/bin/docker","host":"unix:///var/run/docker.sock"}`, wantKept: true, wantError: "containers is required"},
-		{name: "version 2 with names only", owner: `{"version":2,"docker":"/usr/local/bin/docker","host":"unix:///var/run/docker.sock","containers":["surla-check-efefefefefefefefefefefefefefefef-0"]}`, wantKept: true, wantError: "cannot unmarshal"},
-		{name: "version 2 with an unknown state", owner: `{"version":2,"docker":"/usr/local/bin/docker","host":"unix:///var/run/docker.sock","containers":[{"name":"surla-check-efefefefefefefefefefefefefefefef-0","state":"running"}]}`, wantKept: true, wantError: `state "running"`},
-		{name: "version 2 with an unknown entry field", owner: `{"version":2,"docker":"/usr/local/bin/docker","host":"unix:///var/run/docker.sock","containers":[{"name":"surla-check-efefefefefefefefefefefefefefefef-0","state":"unknown","pid":7}]}`, wantKept: true, wantError: "unknown field"},
-		{name: "version 2 with a name listed twice", owner: `{"version":2,"docker":"/usr/local/bin/docker","host":"unix:///var/run/docker.sock","containers":[{"name":"surla-check-efefefefefefefefefefefefefefefef-0","state":"unknown"},{"name":"surla-check-efefefefefefefefefefefefefefefef-0","state":"creation_answered"}]}`, wantKept: true, wantError: "listed twice"},
-		{name: "version 1 with entries", owner: `{"docker":"/usr/local/bin/docker","host":"unix:///var/run/docker.sock","containers":[{"name":"surla-check-efefefefefefefefefefefefefefefef-0","state":"unknown"}]}`, wantKept: true, wantError: "cannot unmarshal"},
+		{name: "unknown field", owner: `{"version":2,"docker":"/usr/local/bin/docker","host":"unix:///var/run/docker.sock","containers":[],"extra":1}`, wantKept: true, wantError: "unknown field"},
+		{name: "trailing data", owner: `{"version":2,"docker":"/usr/local/bin/docker","host":"unix:///var/run/docker.sock","containers":[]} {}`, wantKept: true, wantError: "trailing data"},
+		{name: "missing containers", owner: `{"version":2,"docker":"/usr/local/bin/docker","host":"unix:///var/run/docker.sock"}`, wantKept: true, wantError: "containers is required"},
+		{name: "relative docker", owner: `{"version":2,"docker":"docker","host":"unix:///var/run/docker.sock","containers":[]}`, wantKept: true, wantError: "not an absolute path"},
+		{name: "remote engine", owner: `{"version":2,"docker":"/usr/local/bin/docker","host":"tcp://build.example:2376","containers":[]}`, wantKept: true, wantError: "not a local engine endpoint"},
+		{name: "foreign container", owner: `{"version":2,"docker":"/usr/local/bin/docker","host":"unix:///var/run/docker.sock","containers":[{"name":"production-db","state":"creation_answered"}]}`, wantKept: true, wantError: "does not belong to operation"},
+		{name: "completed operation", owner: `{"version":2,"docker":"/usr/local/bin/docker","host":"unix:///var/run/docker.sock","containers":[]}`},
+		{name: "names only", owner: `{"version":2,"docker":"/usr/local/bin/docker","host":"unix:///var/run/docker.sock","containers":["surla-check-efefefefefefefefefefefefefefefef-0"]}`, wantKept: true, wantError: "cannot unmarshal"},
+		{name: "an unknown state", owner: `{"version":2,"docker":"/usr/local/bin/docker","host":"unix:///var/run/docker.sock","containers":[{"name":"surla-check-efefefefefefefefefefefefefefefef-0","state":"running"}]}`, wantKept: true, wantError: `state "running"`},
+		{name: "an unknown entry field", owner: `{"version":2,"docker":"/usr/local/bin/docker","host":"unix:///var/run/docker.sock","containers":[{"name":"surla-check-efefefefefefefefefefefefefefefef-0","state":"creation_answered","pid":7}]}`, wantKept: true, wantError: "unknown field"},
+		{name: "a name listed twice", owner: `{"version":2,"docker":"/usr/local/bin/docker","host":"unix:///var/run/docker.sock","containers":[{"name":"surla-check-efefefefefefefefefefefefefefefef-0","state":"creation_answered"},{"name":"surla-check-efefefefefefefefefefefefefefefef-0","state":"creation_answered"}]}`, wantKept: true, wantError: "listed twice"},
 		{name: "unknown version", owner: `{"version":3,"docker":"/usr/local/bin/docker","host":"unix:///var/run/docker.sock","containers":[]}`, wantKept: true, wantError: "version 3 is not supported"},
-		{name: "foreign version 2 container", owner: `{"version":2,"docker":"/usr/local/bin/docker","host":"unix:///var/run/docker.sock","containers":[{"name":"production-db","state":"unknown"}]}`, wantKept: true, wantError: "does not belong to operation"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -679,7 +686,13 @@ func TestRecoverCheckOperationsRemovesScratchOfOperationsWithoutContainers(t *te
 
 func TestNewRejectsANonPositiveCheckTimeout(t *testing.T) {
 	for _, timeout := range []time.Duration{0, -time.Second} {
-		_, err := New(Options{CardsDir: filepath.Join(realTempDir(t), "cards"), Checker: candidate.NewContainerRunner(), CheckTimeout: timeout})
+		_, err := New(Options{
+			CardsDir:     filepath.Join(realTempDir(t), "cards"),
+			WorkspaceDir: realTempDir(t),
+			Team:         testTeamBinding(),
+			Checker:      candidate.NewContainerRunner(),
+			CheckTimeout: timeout,
+		})
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "check timeout must be positive")
 	}
@@ -744,7 +757,7 @@ func TestPublishManifestsStopsBeforeEachFileOnceCanceled(t *testing.T) {
 			assert.True(t, canceled)
 			assert.Equal(t, tc.wantWritten, written)
 			require.NotEmpty(t, notes)
-			assert.Contains(t, notes[len(notes)-1], "go.sum was not written: the operation was canceled or exceeded -check-timeout before writing it")
+			assert.Contains(t, notes[len(notes)-1], "go.sum was not written: the operation was canceled or exceeded check timeout before writing it")
 			for name, want := range tc.wantLive {
 				assertFileContent(t, filepath.Join(grant, name), want)
 			}
@@ -761,7 +774,13 @@ func TestPublishManifestsStopsBeforeEachFileOnceCanceled(t *testing.T) {
 // TestNewRequiresACheckHelperWithAChecker checks that a control plane that
 // runs checks cannot be built without the launcher of its check helper.
 func TestNewRequiresACheckHelperWithAChecker(t *testing.T) {
-	_, err := New(Options{CardsDir: filepath.Join(realTempDir(t), "cards"), Checker: candidate.NewContainerRunner(), CheckTimeout: time.Minute})
+	_, err := New(Options{
+		CardsDir:     filepath.Join(realTempDir(t), "cards"),
+		WorkspaceDir: realTempDir(t),
+		Team:         testTeamBinding(),
+		Checker:      candidate.NewContainerRunner(),
+		CheckTimeout: time.Minute,
+	})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "check operations need Options.CheckHelper")
 }
@@ -771,7 +790,7 @@ func TestNewRequiresACheckHelperWithAChecker(t *testing.T) {
 // tools then report not_implemented.
 func TestNewNeedsNoCheckHelperWithoutAChecker(t *testing.T) {
 	cp := newControlPlane(t, Options{CardsDir: filepath.Join(realTempDir(t), "cards")})
-	ctx := WithPrincipal(t.Context(), Principal{ID: "alice@example.com"})
+	ctx := WithPrincipal(t.Context(), Principal{ID: "alice@example.com", CallerID: "alice@example.com", Kind: CallerUser})
 	_, err := cp.CheckProject(ctx)
 	assertServiceError(t, err, "not_implemented")
 	_, err = cp.UpdateDependencies(ctx)
@@ -824,17 +843,18 @@ func TestResultMessagesAreBoundedAsAWhole(t *testing.T) {
 	t.Run("check passes with many modules", func(t *testing.T) {
 		op := newOp(t, "", 0)
 		op.copy.modules = manyModules
-		msg := op.message(nil)
+		msg := op.message(nil, true)
 		assert.LessOrEqual(t, len(msg), maxCheckMessageBytes)
 		assert.True(t, strings.HasPrefix(msg, "tested 3000 module(s): services/module-0000"))
 		assert.Contains(t, msg, "read_check_output(op_id) has the full list")
+		assert.Contains(t, msg, skippedTestModuleNote)
 		assert.True(t, strings.HasSuffix(msg, ". All passed."))
 	})
 	t.Run("check fails with many modules and long output", func(t *testing.T) {
 		op := newOp(t, output, 7)
 		op.copy.modules = manyModules
 		f := moduleOutcome{dir: "services/module-2999", step: "test", exitCode: 1, start: 0, end: int64(len(output))}
-		msg := op.message([]moduleOutcome{f, f})
+		msg := op.message([]moduleOutcome{f, f}, false)
 		assert.LessOrEqual(t, len(msg), maxCheckMessageBytes)
 		assert.Contains(t, msg, "services/module-2999 failed: go test exited 1. 1 other module step(s) also failed.")
 		assert.Contains(t, msg, "--- FAIL: TestLast")
@@ -845,7 +865,7 @@ func TestResultMessagesAreBoundedAsAWhole(t *testing.T) {
 		op := newOp(t, raw, 0)
 		op.copy.modules = []string{"."}
 		f := moduleOutcome{dir: ".", step: "test", exitCode: 2, start: 0, end: int64(len(raw))}
-		msg := op.message([]moduleOutcome{f})
+		msg := op.message([]moduleOutcome{f}, false)
 		assert.True(t, utf8.ValidString(msg))
 		assert.LessOrEqual(t, len(msg), maxCheckMessageBytes, "the replacement characters fit the budget")
 		assert.Contains(t, msg, "\ufffd")
@@ -911,7 +931,7 @@ func TestReadCheckOutputPages(t *testing.T) {
 	raw, _ := json.Marshal(outputMeta{Captured: int64(len(text)), Dropped: 3})
 	require.NoError(t, os.WriteFile(filepath.Join(opDir, outputMetaFile), raw, 0o600))
 	c := &ControlPlane{checkWorkDir: workDir}
-	ctx := WithPrincipal(context.Background(), Principal{ID: "alice@example.com"})
+	ctx := WithPrincipal(context.Background(), Principal{ID: "alice@example.com", CallerID: "alice@example.com", Kind: CallerUser})
 
 	first, err := c.ReadCheckOutput(ctx, &gensurla.ReadCheckOutputPayload{OpID: id})
 	require.NoError(t, err)
