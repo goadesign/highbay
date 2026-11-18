@@ -512,9 +512,9 @@ export function bootstrapViewsPage() {
   let tracePage: TraceList | null = null;
   let traceError: string | null = null;
 
-  // editorBusy is true while a Change Card request (confirm, approve or an
-  // explicit card read) owns the editor; edits and other card requests wait.
-  let editorBusy = false;
+  // editorRequest owns the editor until the card request finishes. Reads
+  // lock editing too, but only writes can leave a save pending on unload.
+  let editorRequest: OperationName | null = null;
   let activeEditor: ActiveEditorState | null = null;
   // editorOpen tracks whether #surla-cp1-editor is mounted. Another stage
   // keeps activeEditor in memory while the editor is not shown.
@@ -753,7 +753,7 @@ export function bootstrapViewsPage() {
     onSuccess: (result: Operations[K]["result"]) => void,
     onError: (message: string, failure: Failure) => void
   ) {
-    editorBusy = true;
+    editorRequest = op;
     // readDeferredCard runs the background read the request held back.
     const readDeferredCard = () => {
       const deferred = cardRefreshAfterEditor;
@@ -767,12 +767,12 @@ export function bootstrapViewsPage() {
       request,
       subject,
       (result) => {
-        editorBusy = false;
+        editorRequest = null;
         onSuccess(result);
         readDeferredCard();
       },
       (message, failure) => {
-        editorBusy = false;
+        editorRequest = null;
         onError(message, failure);
         readDeferredCard();
       }
@@ -1024,7 +1024,7 @@ export function bootstrapViewsPage() {
   // changed, without taking the editor's request slot. While the page's own
   // Change Card request is in flight, the read waits for it to finish.
   function refreshOpenCard(changeId: string) {
-    if (editorBusy) {
+    if (editorRequest !== null) {
       cardRefreshAfterEditor = changeId;
       return;
     }
@@ -1101,7 +1101,7 @@ export function bootstrapViewsPage() {
       syncAllRegions();
       return;
     }
-    if (editorBusy || hasUnsavedEditorState()) {
+    if (editorRequest !== null || hasUnsavedEditorState()) {
       activeEditor = { ...ed, incomingCard: latest };
       if (editorOpen && (!activeResult || activeResult.kind === "cp1-incoming-card")) {
         activeResult = { kind: "cp1-incoming-card" };
@@ -1179,7 +1179,7 @@ export function bootstrapViewsPage() {
   // visible while any of these facts are unknown.
   function runInputsKnown(run: VerificationStatusResult): boolean {
     return sessionState === "active" && !document.hidden && changeList !== null && listError === null &&
-      !waitTroubleShown && !editorBusy && cardRefresh === null &&
+      !waitTroubleShown && editorRequest === null && cardRefresh === null &&
       runObservationGeneration.get(run.run_id) === verificationGeneration &&
       !hasPending("get_verification", run.run_id) &&
       !hasPending("list_verifications", run.change_id) &&
@@ -1349,10 +1349,16 @@ export function bootstrapViewsPage() {
     );
   }
 
+  // hasPendingEditorSave excludes card reads, which lock the editor but have
+  // no unsaved request to lose. The generated route owns the read/write fact.
+  function hasPendingEditorSave(): boolean {
+    return editorRequest !== null && ROUTES[editorRequest].method !== "GET";
+  }
+
   // hasUnsavedPageInput protects all input that reloading this document loses.
   // Agreement warnings continue to use the narrower CP1 draft predicate.
   function hasUnsavedPageInput(): boolean {
-    return hasUnsavedEdits() || editorBusy || modelDraftDirty ||
+    return hasUnsavedEdits() || hasPendingEditorSave() || modelDraftDirty ||
       (activeEditor !== null && Object.keys(activeEditor.proposalAnswers).length > 0);
   }
 
@@ -1373,7 +1379,7 @@ export function bootstrapViewsPage() {
   // shouldRetainEditor keeps drafts and the destination of a pending editor
   // response visible when another stage is shown.
   function shouldRetainEditor(): boolean {
-    return activeEditor !== null && ((editorOpen && editorBusy) || hasUnsavedEditorState());
+    return activeEditor !== null && ((editorOpen && editorRequest !== null) || hasUnsavedEditorState());
   }
 
   // clearEditorDataset removes DOM metadata when no card is displayed.
@@ -1771,7 +1777,7 @@ export function bootstrapViewsPage() {
   // Build control has obtained any required replacement confirmation.
   function startBuild(replaces?: ReplacedBuild) {
     const ed = activeEditor;
-    if (ed === null || sessionState !== "active" || editorBusy ||
+    if (ed === null || sessionState !== "active" || editorRequest !== null ||
         ed.card.status !== "confirmed" || ed.incomingCard !== null ||
         buildChangeId !== ed.card.change_id || buildSnapshot === null ||
         buildReadError !== null || buildDraftedBeforeDrop !== false || hasPending("start_build", ed.card.change_id) ||
@@ -1845,7 +1851,7 @@ export function bootstrapViewsPage() {
   // dropBuild submits only the start shown by the separate Drop question.
   // The owner refuses stale consent and returns the current build's facts.
   function dropBuild(target: ReplacedBuild) {
-    if (sessionState !== "active" || editorBusy || activeEditor === null ||
+    if (sessionState !== "active" || editorRequest !== null || activeEditor === null ||
         hasPending("drop_build", target.change_id)) return;
     const shown = target.change_id === buildChangeId && buildSnapshot?.state === "started"
       ? buildSnapshot : openBuildRefusal?.change_id === target.change_id ? openBuildRefusal.build : null;
@@ -2279,9 +2285,9 @@ export function bootstrapViewsPage() {
         ? "Your approval is recorded."
         : fresh ? "Decide whether this verified result may be promoted." : "Check the owner’s current approval requirements.";
       next = review?.approval.state === "available" && run !== null
-        ? <><Button id="surla-cp5-approve" variant="primary" disabled={!fresh || editorBusy}
+        ? <><Button id="surla-cp5-approve" variant="primary" disabled={!fresh || editorRequest !== null}
           aria-describedby={!fresh ? "surla-cp5-observation-status" : undefined}
-          onClick={() => handleApprove(run)}>{editorBusy ? "Approving…" : "Approve this result"}</Button>
+          onClick={() => handleApprove(run)}>{editorRequest !== null ? "Approving…" : "Approve this result"}</Button>
           <span className="surla-frame-action-binding">Run {run.run_id.slice(0, 12)}</span></>
         : review?.approval.state === "recorded" ? <span>Review the current build before merging.</span>
         : review?.approval.state === "blocked"
@@ -2290,7 +2296,7 @@ export function bootstrapViewsPage() {
       if (review?.approval.state === "recorded" && run !== null) {
         const build = knownTakingBuild(run.change_id);
         if (build === null) {
-          next = <Button disabled={editorBusy || hasPending("get_build", run.change_id)}
+          next = <Button disabled={editorRequest !== null || hasPending("get_build", run.change_id)}
             onClick={() => readBuild(run.change_id)}>Read current build</Button>;
         } else if (build.in_force && runBelongsToBuild(run.change_id, build, run)) {
           switch (build.taking.state) {
@@ -2313,7 +2319,7 @@ export function bootstrapViewsPage() {
         if (review?.approval.state === "blocked") attention = "A newer check is available.";
         next = <><Button id="surla-cp5-review-latest"
           variant={review?.approval.state === "available" ? "default" : "primary"}
-          disabled={editorBusy} onClick={() => reviewSavedCheck(newer)}>Review latest check</Button>{next}</>;
+          disabled={editorRequest !== null} onClick={() => reviewSavedCheck(newer)}>Review latest check</Button>{next}</>;
       }
     } else if (cp1Active && editorStage === "build" && activeEditor !== null) {
       const build = buildChangeId === activeEditor.card.change_id && buildSnapshot?.state === "started"
@@ -2472,7 +2478,7 @@ export function bootstrapViewsPage() {
         {pendingLinkFragment !== null ? (
           <Alert id="surla-pending-link" role="status">
             <p>You opened a new Surla link in this tab. Save or discard your edits, then choose Open link.</p>
-            {editorBusy ? <p>Wait for the current save to finish.</p> : null}
+            {hasPendingEditorSave() ? <p>Wait for the current save to finish.</p> : null}
             {activeEditor !== null && Object.keys(activeEditor.proposalAnswers).length > 0 ? (
               <p>For proposal answers, choose Adopt or Discard Unsaved Edits. Discard clears your answers without declining the proposal.</p>
             ) : null}
@@ -2553,11 +2559,11 @@ export function bootstrapViewsPage() {
             card={ed.card}
             proposal={proposal}
             answers={ed.proposalAnswers}
-            busy={editorBusy}
+            busy={editorRequest !== null}
             error={ed.proposalError}
             buildRevisionNotice={buildRevisionNotice}
             onAnswer={(questionId, option) => {
-              if (!activeEditor || editorBusy) {
+              if (!activeEditor || editorRequest !== null) {
                 return;
               }
               activeEditor = {
@@ -2587,7 +2593,7 @@ export function bootstrapViewsPage() {
               starting={hasPending("start_build", ed.card.change_id)}
               dropping={Array.from(pendingCalls).some((call) => call.op === "drop_build")}
               openBuildRefusal={openBuildRefusal}
-              disabled={sessionState !== "active" || editorBusy}
+              disabled={sessionState !== "active" || editorRequest !== null}
               dirty={isDraftDirty(ed.card, ed.draftAnswers, ed.draftExamples)}
               startReceipt={buildStartReceipt}
               findingTexts={buildFindings?.findings ?? null}
@@ -2612,13 +2618,13 @@ export function bootstrapViewsPage() {
           priorCard={ed.priorCard}
           draftAnswers={ed.draftAnswers}
           draftExamples={ed.draftExamples}
-          rpcInFlight={editorBusy}
+          rpcInFlight={editorRequest !== null}
           loadingVerifications={hasPending("list_verifications", ed.card.change_id)}
           cp4Open={activeResult?.kind === "cp4-verification"}
           preservedDraft={ed.preservedDraft}
           formError={ed.formError}
           onSetAnswer={(ambId, opt) => {
-            if (!activeEditor || editorBusy) {
+            if (!activeEditor || editorRequest !== null) {
               return;
             }
             activeEditor = {
@@ -2628,7 +2634,7 @@ export function bootstrapViewsPage() {
             syncAllRegions();
           }}
           onSetExampleField={(exId, field, value) => {
-            if (!activeEditor || editorBusy) {
+            if (!activeEditor || editorRequest !== null) {
               return;
             }
             activeEditor = {
@@ -2671,7 +2677,7 @@ export function bootstrapViewsPage() {
         loadedCard={loadedCard}
         checking={displayedRun ? hasPending("get_verification", displayedRun.run_id) || hasPending("review_verification", displayedRun.run_id) : false}
         loadingList={hasPending("list_verifications", effectiveChangeId)}
-        loadingCard={editorBusy || cardRefresh !== null}
+        loadingCard={editorRequest !== null || cardRefresh !== null}
         requestError={displayedRun ? runRequestErrors.get(displayedRun.run_id) ?? null : null}
         listError={listRequestErrors.get(effectiveChangeId) ?? null}
         cardLoadError={effectiveChangeId ? cardLoadErrors.get(effectiveChangeId) ?? null : null}
@@ -2715,7 +2721,7 @@ export function bootstrapViewsPage() {
             error={listError}
             openError={lastOpenAttempt !== null ? cardLoadErrors.get(lastOpenAttempt) ?? null : null}
             openChangeId={activeEditor ? activeEditor.card.change_id : null}
-            busy={editorBusy}
+            busy={editorRequest !== null}
             onOpen={openChange}
             onRetry={() => void loadChanges()}
           />
@@ -2809,7 +2815,7 @@ export function bootstrapViewsPage() {
               <ArchitecturePreviewView
                 preview={preview}
                 loadedCard={card}
-                loadingCard={editorBusy}
+                loadingCard={editorRequest !== null}
                 cardLoadError={cardLoadErrors.get(preview.change_id) ?? null}
                 onOpenChangeCard={() => openChange(preview.change_id)}
               />
@@ -2854,7 +2860,7 @@ export function bootstrapViewsPage() {
         rawDetails={verificationDetailsView(run, selectedVerificationChangeId ?? "")}
         run={run} newerCheck={run !== null && newerCheckFor(run) !== null}
         review={displayedApprovalReview()} fresh={run !== null && approvalReviewFresh(run)}
-        loading={run !== null && hasPending("review_verification", run.run_id)} busy={editorBusy}
+        loading={run !== null && hasPending("review_verification", run.run_id)} busy={editorRequest !== null}
         error={run !== null ? runRequestErrors.get(run.run_id) ?? null : cardLoadErrors.get(selectedVerificationChangeId ?? "") ?? null}
         historyLoading={hasPending("list_verifications", selectedVerificationChangeId ?? "")}
         historyError={listRequestErrors.get(selectedVerificationChangeId ?? "") ?? null}
@@ -2897,7 +2903,7 @@ export function bootstrapViewsPage() {
         <IncomingChangeCardView
           incomingCard={incoming}
           onSwitch={() => {
-            if (editorBusy) {
+            if (editorRequest !== null) {
               statusEl.textContent =
                 "Wait for the pending CP1 Change Card request to finish before switching cards.";
               return;
@@ -2937,7 +2943,7 @@ export function bootstrapViewsPage() {
   function syncOpenedCheckStatus() {
     const ed = activeEditor;
     if (sessionState !== "active" || activeResult !== null || ed?.card.status !== "confirmed" ||
-        editorBusy || buildStartError !== null || buildReadError !== null ||
+        editorRequest !== null || buildStartError !== null || buildReadError !== null ||
         listError !== null || waitTroubleShown || cardLoadErrors.has(ed.card.change_id) ||
         (teamSnapshot?.roles.some((role) => role.state === "needs_you") ?? false) ||
         isDraftDirty(ed.card, ed.draftAnswers, ed.draftExamples)) return;
@@ -3303,7 +3309,7 @@ export function bootstrapViewsPage() {
   // not the card already open. A reply that arrives after the user moved to
   // another view, or that names another card, never replaces what is shown.
   function openChange(requestedChangeId: string) {
-    if (!requestedChangeId || editorBusy) {
+    if (!requestedChangeId || editorRequest !== null) {
       return;
     }
     if (activeEditor && activeEditor.card.change_id === requestedChangeId) {
@@ -3401,7 +3407,7 @@ export function bootstrapViewsPage() {
   // handleConfirmSubmit sends complete answers and examples for the displayed
   // saved revision after checking that the user filled every required value.
   function handleConfirmSubmit() {
-    if (!activeEditor || editorBusy) {
+    if (!activeEditor || editorRequest !== null) {
       return;
     }
     const ambiguities = Array.isArray(activeEditor.card.ambiguities)
@@ -3468,7 +3474,7 @@ export function bootstrapViewsPage() {
   // revision keeps them. A refused adoption, such as one the guide's newer
   // proposal overtook, reads the change again.
   function handleAdopt() {
-    if (!activeEditor || editorBusy) {
+    if (!activeEditor || editorRequest !== null) {
       return;
     }
     const card = activeEditor.card;
@@ -3505,7 +3511,7 @@ export function bootstrapViewsPage() {
   // handleDecline removes the waiting proposal; the agreed revision and the
   // user's drafts on it stay as they are.
   function handleDecline() {
-    if (!activeEditor || editorBusy) {
+    if (!activeEditor || editorRequest !== null) {
       return;
     }
     const card = activeEditor.card;
@@ -3553,7 +3559,7 @@ export function bootstrapViewsPage() {
   function handleApprove(run: VerificationStatusResult) {
     const current = runsById.get(run.run_id);
     const review = displayedApprovalReview();
-    if (current === undefined || current.run_id !== selectedRunId || editorBusy ||
+    if (current === undefined || current.run_id !== selectedRunId || editorRequest !== null ||
         !approvalReviewFresh(current) || review?.approval.state !== "available" ||
         current.state.type !== "completed") return;
     const report = current.state.value.report;
@@ -3598,7 +3604,7 @@ export function bootstrapViewsPage() {
   // handleDiscardDraft restores saved values on the retained card and closes
   // the split-screen editor when another stage is displayed beside it.
   function handleDiscardDraft() {
-    if (!activeEditor || editorBusy) {
+    if (!activeEditor || editorRequest !== null) {
       return;
     }
     const savedCard = activeEditor.card;
@@ -3623,7 +3629,7 @@ export function bootstrapViewsPage() {
   // The same revision keeps editable drafts; a different revision preserves
   // their text for reconciliation instead of applying it to changed examples.
   function handleLoadLatestCard() {
-    if (!activeEditor || editorBusy) {
+    if (!activeEditor || editorRequest !== null) {
       return;
     }
     const changeId = activeEditor.card.change_id;

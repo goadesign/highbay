@@ -398,9 +398,13 @@ func TestViewsPageModelConnectionForm(t *testing.T) {
 	handOverSettings(t, cp, &gensurla.HandOverModelSettingsPayload{Anthropic: map[string]string{"ANTHROPIC_API_KEY": secret}})
 	ps := startPageServer(t, cp)
 	runPageScript(t, ps, map[string]any{"secret": secret}, liveScriptHelpers+`
+// Keep the automatic card read pending while the independently loaded model
+// form becomes usable. A read has no unsaved input to lose on leaving.
+await control(origin, "hold", { key: "GET /changes/chg-live" });
 const page = await openPage(origin, { link: input.link });
 await openLive(page);
 await until(() => page.text("#surla-model-current").includes("anthropic / claude-sonnet-4-6"), "the start-up choice is not shown: " + page.text("#surla-model-current"));
+await until(() => page.sent("GET", "/changes/chg-live").some((r) => r.status === undefined), "the initial card read was not held pending");
 expect(page.text("#surla-model-current").startsWith("Live targets started from now on use"), "the choice does not say what it applies to");
 expect(page.text("#surla-model-note").includes("live targets started afterwards") && page.text("#surla-model-note").includes("verification is not affected"), "the note does not say what the choice changes: " + page.text("#surla-model-note"));
 expect(page.text("#surla-model-note").includes("run on this computer as ordinary processes") && page.text("#surla-model-note").includes("test writer’s tests Surla accepted") && page.text("#surla-model-note").includes("Surla gives it no provider setting") && page.text("#surla-model-note").includes("can still read keys your other programs hold"), "the model note must explain the live program's actual access and accepted-test boundary");
@@ -412,6 +416,8 @@ for (const id of ["#surla-model-provider", "#surla-model-name", "#surla-model-ga
 }
 const apply = page.$("#surla-model-apply");
 expect(!page.beforeUnload(), "a loaded model form without edits blocked leaving");
+await control(origin, "release", { key: "GET /changes/chg-live" });
+await until(() => page.sent("GET", "/changes/chg-live").some((r) => r.status === 200), "the initial card read did not settle");
 expect(apply.tagName === "BUTTON" && apply.type === "submit" && apply.classList.contains("shadcn-btn-primary"), "Apply is not the view's primary submit button");
 const select = page.$("#surla-model-provider");
 select.value = "openai";
