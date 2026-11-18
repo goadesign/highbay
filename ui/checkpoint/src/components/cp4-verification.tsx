@@ -9,9 +9,12 @@ import {
   VerificationNotCompleted,
   VerificationScenario,
   VerificationStatusResult,
+  VerificationReview,
   StartedBuild,
 } from "../types";
 import { SavedResultCommits } from "./build";
+import { RunEvidenceLimits, RunTestBinding } from "./run-evidence";
+import { TestCoverage } from "./test-coverage";
 import { Alert, Badge, Button, Card } from "./shadcn";
 
 // VerificationViewProps supplies the active verification state, last loaded
@@ -26,6 +29,10 @@ export interface VerificationViewProps {
   // inputsKnown says the selected run's current-input observation is fresh.
   // Saved report facts remain readable while that observation is unknown.
   inputsKnown: boolean;
+  // review is frozen evidence for this exact run, never today's agreement.
+  review: VerificationReview | null;
+  // currentAgreementRevision is the owner's confirmed revision of this change.
+  currentAgreementRevision: string | null;
   // listedRuns is the exact server-ordered array of runs from the last loaded
   // VerificationListResult for changeId, or null if no list has been loaded yet.
   listedRuns: VerificationStatusResult[] | null;
@@ -110,6 +117,8 @@ export function VerificationView({
   build,
   run,
   inputsKnown,
+  review,
+  currentAgreementRevision,
   listedRuns,
   loadedCard,
   checking,
@@ -285,6 +294,7 @@ export function VerificationView({
       <p id="surla-cp4-started">
         Check started <time dateTime={run.accepted_at}>{localStartTime(run.accepted_at)}</time>.
       </p>
+      <p id="surla-cp4-test-binding"><RunTestBinding run={run} review={review} /></p>
       {run.candidate_binaries_dir !== undefined ? (
         <p id="surla-cp4-binaries-dir">
           <strong>Binaries built by this run: </strong>
@@ -298,6 +308,8 @@ export function VerificationView({
           ? "This result matches the agreed revision and selected tests."
           : "This saved result does not match the current agreement and selected tests. The builder checks again before you can approve."}
       </p>
+      {inputsKnown && !run.inputs_current ? <InputDifference run={run} review={review}
+        currentAgreementRevision={currentAgreementRevision} build={build} /> : null}
       {displayedCardRevision !== null && displayedCardRevision !== run.request_revision ? (
         <Alert variant="warning" role="status" id="surla-cp4-different-revision">
           This result applies to a different saved Change Card revision
@@ -339,6 +351,7 @@ export function VerificationView({
                   localStartTime(r.accepted_at) +
                   " · " +
                   revLabel}
+                {" · "}<RunTestBinding run={r} review={r.run_id === run.run_id ? review : null} />
               </Button>
             );
           })}
@@ -416,6 +429,13 @@ export function VerificationView({
         ) : null}
       </div>
 
+      <RunEvidenceLimits id="surla-cp4-evidence-limits" run={run} review={review} />
+      {review?.story_context.state === "recorded" && review.story_context.test_coverage.state === "recorded" ? (
+        <TestCoverage id="surla-cp4-coverage" heading="h3"
+          answers={review.story_context.test_coverage.answers} examples={review.story_context.test_coverage.examples}
+          statements={review.story_context.test_coverage.coverage_statements}
+          report={state.type === "completed" ? state.value.report : null} />
+      ) : null}
       <details className="surla-details" id="surla-cp4-details">
         <summary>Candidate and run details</summary>
         {state.type === "completed" && state.value.report.passed ? <SavedResultCommits
@@ -452,6 +472,27 @@ export function VerificationView({
       </details>
     </Card>
   );
+}
+
+// InputDifference explains only visible facts behind an authoritative mismatch.
+// Equal visible inputs never replace the owner's negative verdict.
+function InputDifference({ run, review, currentAgreementRevision, build }: {
+  run: VerificationStatusResult;
+  review: VerificationReview | null;
+  currentAgreementRevision: string | null;
+  build: StartedBuild | null;
+}) {
+  if (currentAgreementRevision !== null && currentAgreementRevision !== run.request_revision) {
+    return <p id="surla-cp4-input-difference">This run used agreement <code>{run.request_revision.slice(0, 12)}</code>;
+      {" "}the current confirmed agreement is <code>{currentAgreementRevision.slice(0, 12)}</code>.</p>;
+  }
+  const tests = build?.test_writer.tests;
+  if (currentAgreementRevision !== run.request_revision || run.test_source.source !== "written_tests" ||
+      build === null || !build.in_force || build.taking.state === "dropped" ||
+      build.request_revision !== currentAgreementRevision || tests?.state !== "accepted" ||
+      tests.commit === run.suite_commit) return null;
+  return <p id="surla-cp4-input-difference">This run used <RunTestBinding run={run} review={review} />;
+    {" "}the current accepted tests are report {build.test_writer.report}, commit <code>{tests.commit.slice(0, 12)}</code>.</p>;
 }
 
 // CompletedReport preserves every builder-safe outcome and shows detailed

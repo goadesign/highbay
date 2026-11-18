@@ -1158,7 +1158,7 @@ export function bootstrapViewsPage() {
           selectedRunId = activeResult?.kind === "cp5-approval" && card?.change_id === changeId && approval !== undefined
             ? savedApprovalEvidenceRun(card, approval)?.run_id ?? null : loadedIds[0];
         }
-        if (activeResult?.kind === "cp5-approval" && selectedVerificationChangeId === changeId && selectedRunId !== null) {
+        if (selectedVerificationChangeId === changeId && selectedRunId !== null && isViewingSelectedRun(selectedRunId)) {
           readApprovalReview(selectedRunId, changeId);
         }
       },
@@ -1182,6 +1182,7 @@ export function bootstrapViewsPage() {
       !waitTroubleShown && editorRequest === null && cardRefresh === null &&
       runObservationGeneration.get(run.run_id) === verificationGeneration &&
       !hasPending("get_verification", run.run_id) &&
+      !hasPending("review_verification", run.run_id) &&
       !hasPending("list_verifications", run.change_id) &&
       !hasPending("get_build", run.change_id) &&
       !hasPending("start_build", run.change_id) &&
@@ -1311,6 +1312,12 @@ export function bootstrapViewsPage() {
   // displayedApprovalReview never borrows another selected run's observation.
   function displayedApprovalReview(): VerificationReview | null {
     return selectedReview !== null && selectedReview.runId === selectedRunId ? selectedReview.review : null;
+  }
+
+  // isViewingSelectedRun binds evidence reads to the explicit Check/Approve selection.
+  function isViewingSelectedRun(runId: string): boolean {
+    return selectedRunId === runId &&
+      (activeResult?.kind === "cp4-verification" || activeResult?.kind === "cp5-approval");
   }
 
   // approvalReviewFresh validates the observation's identity and transport
@@ -2130,6 +2137,7 @@ export function bootstrapViewsPage() {
         selectedRunId !== null
           ? "Showing the saved verification result."
           : "Showing saved verification runs for Change Card " + changeId + ".";
+      if (selectedRunId !== null) readVerification(selectedRunId, changeId);
       syncAllRegions();
       return;
     }
@@ -2665,12 +2673,15 @@ export function bootstrapViewsPage() {
       ? listedIds.map((id) => runsById.get(id)).filter((r): r is VerificationStatusResult => Boolean(r))
       : null;
     const loadedCard = activeEditor ? activeEditor.card : null;
+    const current = changeList?.changes.find((item) => item.change_id === effectiveChangeId);
     return (
       <VerificationView
         changeId={effectiveChangeId}
         build={activeResult?.kind === "cp5-approval" && build?.in_force === false ? null : build}
         run={displayedRun}
         inputsKnown={displayedRun !== null && runInputsKnown(displayedRun)}
+        review={displayedRun !== null && displayedRun.run_id === selectedRunId ? displayedApprovalReview() : null}
+        currentAgreementRevision={current?.status === "confirmed" ? current.request_revision : null}
         listedRuns={listedRuns}
         loadedCard={loadedCard}
         checking={displayedRun ? hasPending("get_verification", displayedRun.run_id) || hasPending("review_verification", displayedRun.run_id) : false}
@@ -3060,7 +3071,9 @@ export function bootstrapViewsPage() {
     activeResult = { kind: stage };
     rootEl.dataset.state = stage;
     statusEl.textContent = "Showing the saved verification result.";
-    if (reviewing || !runInputsKnown(target)) readVerification(target.run_id, target.change_id);
+    if (reviewing || !runInputsKnown(target) || displayedApprovalReview() === null) {
+      readVerification(target.run_id, target.change_id);
+    }
     syncAllRegions();
   }
 
@@ -3077,7 +3090,7 @@ export function bootstrapViewsPage() {
   // readVerification coalesces a read invalidated while pending into one
   // replacement. A same-generation failure waits for an explicit retry.
   function readVerification(runID: string, changeId: string) {
-    if (activeResult?.kind === "cp5-approval" && selectedRunId === runID) {
+    if (isViewingSelectedRun(runID)) {
       readApprovalReview(runID, changeId);
       return;
     }
@@ -3143,7 +3156,7 @@ export function bootstrapViewsPage() {
     runRequestErrors.delete(runId);
     const finish = () => {
       const again = runReadAgain.delete(runId) || generation !== verificationGeneration;
-      if (again && sessionState === "active" && activeResult?.kind === "cp5-approval" && selectedRunId === runId) {
+      if (again && sessionState === "active" && isViewingSelectedRun(runId)) {
         readApprovalReview(runId, changeId);
       }
     };
@@ -3248,7 +3261,7 @@ export function bootstrapViewsPage() {
               ? "Showing saved verification runs for Change Card " + requestedChangeId + "."
               : "No saved verification runs found for Change Card " + requestedChangeId + ".";
         }
-        if (selectedRunId !== null && (generation !== verificationGeneration || activeResult?.kind === "cp5-approval")) {
+        if (selectedRunId !== null && (generation !== verificationGeneration || isViewingSelectedRun(selectedRunId))) {
           readVerification(selectedRunId, requestedChangeId);
         }
       },
