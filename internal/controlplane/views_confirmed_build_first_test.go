@@ -88,9 +88,18 @@ const warning = page.$("#surla-confirm-build-consequence");
 expect(warning && warning.textContent.includes("earlier revision") && submit.getAttribute("aria-describedby") === warning.id, "refinement lost its build consequence warning");
 expect(!submit.disabled && submit.textContent.includes("Refine Confirmed Answers & Examples"), "the explicit refinement action is missing");
 expect(page.sent("POST", "/changes/confirm").length === 0, "editing or refreshing submitted the draft");
+page.$("#surla-nav-changes").click();
+const summary = page.$("#surla-agreement-summary");
+// jsdom has no layout or scrolling; native browser coverage owns that proof.
+summary.scrollIntoView = () => {};
+page.$("#surla-read-full-summary").click();
+expect(agreement.open && page.doc.activeElement === summary && summary.textContent.includes(input.card.summary), "Read full summary did not reveal and focus the complete saved text");
+expect(page.$('textarea[data-field="expected_outcome"]') === field && field.value === "A manager reviews this refund" && page.beforeUnload(), "reading the saved summary lost the dirty refinement");
+expect(page.sent("POST", "/changes/confirm").length === 0, "reading the saved summary submitted the draft");
 submit.click();
 await until(() => editor.dataset.requestRevision !== input.card.request_revision, "the explicit refinement did not save");
 expect(page.sent("POST", "/changes/confirm").length === 1 && page.sent("POST", "/changes/chg-fold/build").length === 0, "refinement submitted twice or automatically rebuilt");
+expect(page.text("#surla-prior-revision").includes("Confirmed answer: Subtotal only") && !page.text("#surla-prior-revision").includes("This is the proposal before confirmation."), "refining the agreement changed its earlier confirmed answer into an unanswered proposal");
 page.close();
 `)
 }
@@ -123,6 +132,7 @@ const page = await openPage(origin, { link: input.link });
 await until(() => page.$("#surla-cp1-form-card"), "the proposed card did not open");
 expect(!page.$("#surla-refine-agreement") && !page.$("#surla-agreement-details") && !page.$("#surla-cp1-form-card").closest("details"), "the first confirmation form was folded");
 expect(page.text("#surla-cp1-form-card").includes("Open Questions (1)"), "the unconfirmed questions changed meaning");
+expect(!page.$("#surla-read-full-summary"), "an unconfirmed proposal offers an agreed summary");
 page.$('[data-ambiguity-id="chg-unconfirmed-fold-ambiguity-01"][data-option="subtotal_only"]').click();
 const field = page.$('textarea[data-field="expected_outcome"]');
 page.type(field, "Manager approval");
@@ -132,6 +142,9 @@ page.$("#surla-confirm-submit").click();
 await until(() => page.$("#surla-agreement-details"), "confirmation did not show the agreed card");
 const sent = page.sent("POST", "/changes/confirm");
 expect(sent.length === 1 && sent[0].body.answers[card.ambiguities[0].id] === "subtotal_only" && sent[0].body.examples[0].expected_outcome === "Manager approval", "confirmation lost the chosen answer or edited example");
+const prior = page.text("#surla-prior-revision");
+expect(prior.includes(card.request_revision) && prior.includes("This is the proposal before confirmation. Your confirmed answers are saved in the current agreement.") && prior.includes("Not yet answered in that proposal (options: subtotal_only, total_with_tax)") && !prior.includes("Confirmed answer:"), "confirmation history misrepresents the earlier unanswered proposal");
+expect(page.text("#surla-confirmed-decisions").includes("subtotal_only"), "the current agreement lost its confirmed answer");
 page.close();
 `)
 }

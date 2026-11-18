@@ -17,6 +17,7 @@ export interface WorkspaceFrameProps {
   journey: FrameDestination[];
   references: FrameDestination[];
   agreed: string;
+  onReadFullSummary: (() => void) | null;
   attention: string;
   next: React.ReactNode;
   details: React.ReactNode;
@@ -68,7 +69,11 @@ export function WorkspaceFrame(props: WorkspaceFrameProps) {
       {phone ? <details className="surla-frame-project-menu"><summary>Project</summary>{references}</details> : references}
     </div>
     <dl className="surla-frame-slots">
-      <div className="surla-frame-agreed"><dt>Agreed</dt><dd>{props.agreed}</dd></div>
+      <div className="surla-frame-agreed"><dt>Agreed</dt><dd>
+        <span className="surla-frame-summary">{props.agreed}</span>
+        {props.onReadFullSummary !== null ? <Button id="surla-read-full-summary"
+          onClick={props.onReadFullSummary}>Read full summary</Button> : null}
+      </dd></div>
       <div className="surla-frame-attention"><dt>Needs you</dt><dd>{props.attention}</dd></div>
       <div className="surla-frame-next" id="surla-frame-next" ref={next}><dt>Next</dt><dd>{props.next}</dd></div>
     </dl>

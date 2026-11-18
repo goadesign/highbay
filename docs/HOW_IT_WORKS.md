@@ -162,6 +162,8 @@ The frame names the journey Describe → Agree → Build → Check → Approve.
 Team, Story, Live target, Architecture and Diagnostics remain available as
 project references. Agreed, Needs you and Next keep the current context and
 decision visible; on a phone, Next moves to the bottom of the viewport.
+The frame previews at most two lines of the agreed summary. **Read full
+summary** opens Agree at the complete saved summary, keeping unsaved edits.
 
 | View | What it is for |
 | --- | --- |

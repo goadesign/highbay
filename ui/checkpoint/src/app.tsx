@@ -2328,7 +2328,8 @@ export function bootstrapViewsPage() {
         <WorkspaceFrame project={projectName ?? "Project"}
           journey={tabs.filter((tab) => journeyIds.has(tab.id))}
           references={tabs.filter((tab) => !journeyIds.has(tab.id))}
-          agreed={agreed} attention={attention} next={next}
+          agreed={agreed} onReadFullSummary={activeEditor?.card.status === "confirmed" ? handleReadFullSummary : null}
+          attention={attention} next={next}
           diagnosticsOpen={traceOpen} onToggleDiagnostics={() => {
             traceOpen = !traceOpen;
             if (traceOpen && tracePage === null) loadTracePage();
@@ -3211,6 +3212,16 @@ export function bootstrapViewsPage() {
   // and restores any pending incoming Change Card banner.
   function handleReturnToChangeCard() {
     showChangeEditor("agree");
+  }
+
+  // handleReadFullSummary reveals the saved text in its existing owner without
+  // replacing the retained editor or submitting its unsaved refinement.
+  function handleReadFullSummary() {
+    showChangeEditor("agree");
+    const details = document.getElementById("surla-agreement-details");
+    if (details instanceof HTMLDetailsElement) details.open = true;
+    focusResult("#surla-agreement-summary");
+    document.getElementById("surla-agreement-summary")?.scrollIntoView({ block: "start" });
   }
 
   // showChangeEditor restores retained form state and names the chosen stage.

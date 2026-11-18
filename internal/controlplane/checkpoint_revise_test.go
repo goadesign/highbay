@@ -85,6 +85,7 @@ const r3 = await revise(await read(), "Refunds up to $50 (subtotal only) are ins
 await until(() => editor().dataset.requestRevision === r3.request_revision, "R3 did not replace the clean R2");
 const onR3 = prior();
 expect(onR3 && onR3.textContent.includes(r2.request_revision) && onR3.textContent.includes(r2.summary) && onR3.textContent.includes("check_01") && onR3.textContent.includes("Edited") && onR3.textContent.includes("check_02") && onR3.textContent.includes("Removed") && !preserved(), "expected R3 to show R2 with check_01 Edited and check_02 Removed");
+expect(onR3.textContent.includes("Not yet answered in that proposal (options: subtotal_only, total_with_tax)") && !onR3.textContent.includes("Your confirmed answers are saved"), "unconfirmed history claims a confirmed agreement or loses its original options");
 
 // 3. An unsaved answer waits beside an incoming revision and is preserved with its question.
 editor().querySelector('[data-ambiguity-id="chg-rev-ui-ambiguity-01"][data-option="fixed_delay"]').click();
