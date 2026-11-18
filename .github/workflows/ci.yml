@@ -164,6 +164,7 @@ jobs:
           go run ./.github/scripts/racecheck </dev/null
           go test -count=1 ./.github/scripts/racecheck </dev/null
           go test -count=1 -timeout 1m ./.github/scripts/testcheck </dev/null
+          go test -count=1 -timeout 1m ./.github/scripts/modprime </dev/null
       - name: Check formatting
         run: |
           unformatted=$(gofmt -l $(git ls-files '*.go'))

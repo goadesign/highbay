@@ -16,11 +16,11 @@ import (
 
 // completeSourcesGoa is the first goa.design/goa/v3 with
 // generator.CompleteSources.
-const completeSourcesGoa = "v3.35.1-0.20261103205041-35e789e8f9b1"
+const completeSourcesGoa = testmodule.CompleteSourcesGoaVersion
 
 // preCompleteSourcesGoa is the goa.design/goa/v3 version starters created
 // before generator.CompleteSources require.
-const preCompleteSourcesGoa = "v3.35.1-0.20261030163856-3e08a6128171"
+const preCompleteSourcesGoa = testmodule.StarterPreCompleteSourcesGoaVersion
 
 // genDesign is a small design surla gen regenerates.
 const genDesign = `package design

@@ -525,7 +525,7 @@ func skipInShortMode(t *testing.T) {
 // has everything the generated program calls; the starter's tests use the
 // same one. The fixture requires it as a starter does, because generation
 // refuses a replacement by a local folder.
-const publishedSurla = "v0.0.0-20261115014514-02c792da3ded"
+const publishedSurla = testmodule.PublishedSurlaVersion
 
 // fixtureProject returns a project's files holding the fixture's test module
 // under eval/, as a test writer would start from: generated without a Story,

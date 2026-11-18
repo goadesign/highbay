@@ -34,9 +34,10 @@ func TestEvaluateRejectsAnIncompleteModule(t *testing.T) {
 }
 
 func TestEvaluateRefusesToUpgradeTheTargetsGenerator(t *testing.T) {
+	assert.Equal(t, testmodule.CompleteSourcesGoaVersion, completeSourcesGoa)
 	// The target requires only goa, at a version older than the evaluator's
 	// goa-ai needs; building the evaluator against it would upgrade goa.
-	old := "v3.21.0"
+	old := testmodule.OlderThanGoaAIGoaVersion
 	files := testmodule.Tidy(t, map[string]string{
 		"go.mod":           "module example.com/design\n\ngo 1.24\n\nrequire goa.design/goa/v3 " + old + "\n",
 		"design/design.go": minimalDesign,

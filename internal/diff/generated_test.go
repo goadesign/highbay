@@ -89,7 +89,7 @@ func TestCompareKeepsAnOlderTargetsGoa(t *testing.T) {
 	}
 	// Starters created before Surla required goa 35e789e8 pin goa 3e08; their
 	// previews and diffs keep evaluating with that version.
-	old := testmodule.Snapshot(t, "v3.35.1-0.20261030163856-3e08a6128171", grpcResultDesign)
+	old := testmodule.Snapshot(t, testmodule.StarterPreCompleteSourcesGoaVersion, grpcResultDesign)
 	updated := testmodule.Replace(t, old, "design/design.go", `Field(1, "value", String)`, `Field(1, "amount", String)`)
 	report, err := Compare(t.Context(), testEvaluator, old, updated)
 	require.NoError(t, err)

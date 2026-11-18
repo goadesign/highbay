@@ -34,7 +34,7 @@ import (
 
 // starterSurlaVersion is a published Surla version the starter's evaluator
 // module requires, as the scaffold tests use.
-const starterSurlaVersion = "v0.0.0-20261115014514-02c792da3ded"
+const starterSurlaVersion = testmodule.PublishedSurlaVersion
 
 // starterInitWait bounds the init_project call that creates the starter. The
 // server sets no limit of its own on that call: it generates, builds, tests
