@@ -104,14 +104,12 @@ func storyRefreshMethods() {
 		Description("Read the guide's draft, .surla-draft in the project folder: its go.mod, go.sum and the Go files under design/ in gofmt form, never the rest of the project. When the draft is missing, Surla makes it first, from the newest design a Change Card holds whose versions are all on the draft's made-from list, with the project's go.mod and go.sum, or else from the project folder; after the user dropped a build, it makes the draft again from the project folder and says so in message until a revision is saved. Compute the canonical snapshot_digest and start or reuse the project owner's in-memory Story refresh operation, which every caller acting for the owner reads; it is reused only while the draft and its made-from list are unchanged. Return promptly with op_id, state, snapshot_digest and draft_folder while evaluation continues on a server-owned context that survives client disconnects. A succeeded operation keeps the design, Stories, architecture, the draft's go.mod and the made-from list it read; propose_change and revise_change save them with the revision. A design file Go cannot parse, or one that imports a package of the project outside design/, is refused with its file and line.")
 		Result(StoryRefreshResult)
 		Error("unprocessable", ErrorResult, "The project folder holds no go.mod (run init_project or create go.mod), a draft file Go cannot parse or that imports the project outside design/ (the message names the file and line), or the draft is a link or a file rather than a folder.")
-		Error("not_implemented", ErrorResult, "No workspace directory is bound to this control plane; start Surla from a project directory.")
 		Error("unavailable", ErrorResult, "The control plane is shutting down and is no longer starting Story refresh operations.")
 		Tool("refresh_story", "Start or reuse a Story evaluation of your draft and return op_id, state, snapshot_digest and draft_folder promptly. The design runs as an ordinary process with the user's file and network access. Takes no input. Write the next revision's design only in draft_folder, never in the project folder, and run go there as GOWORK=off go …. Poll get_story_refresh until state is succeeded or failed.")
 		HTTP(func() {
 			POST("/workspace/story/refresh")
 			Response(StatusOK)
 			Response("unprocessable", StatusUnprocessableEntity)
-			Response("not_implemented", StatusNotImplemented)
 			Response("unavailable", StatusServiceUnavailable)
 		})
 	})
@@ -119,12 +117,10 @@ func storyRefreshMethods() {
 	Method("get_story_refresh", func() {
 		Description("Return the project owner's current in-memory Story refresh operation for the guide's draft, the same one for every caller acting for the owner: op_id, state (none, running, succeeded, or failed), snapshot_digest, draft_folder, and the evaluated stories (empty when the design does not load the Story module) or a failure diagnostic. When no refresh has been run yet in this server process for the guide's draft, state is none with the intended draft_folder and a message instructing the caller to run refresh_story; this read succeeds before a go.mod or draft folder exists.")
 		Result(StoryRefreshResult)
-		Error("not_implemented", ErrorResult, "No workspace directory is bound to this control plane; start Surla from a project directory.")
 		Tool("get_story_refresh", "Read the current Story refresh operation for the guide's draft: op_id, state (none, running, succeeded, or failed), snapshot_digest, draft_folder, stories, or diagnostic. Takes no input. When state is none, call refresh_story first.")
 		HTTP(func() {
 			GET("/workspace/story/refresh")
 			Response(StatusOK)
-			Response("not_implemented", StatusNotImplemented)
 		})
 	})
 
@@ -133,7 +129,6 @@ func storyRefreshMethods() {
 		Result(DraftUpdateResult)
 		Error("unprocessable", ErrorResult, "Surla could not read what the update needs; the message names the file or folder. The project folder holds no go.mod, so there is no draft (run init_project or create go.mod), or was replaced after startup; the draft is a link or a file rather than a folder, its .gitignore lacks Surla's draft marker, or its made-from list is missing; the draft or its made-from list changed while Surla was first making the draft; the go.mod of the draft or of the project folder is missing, or a go.mod, go.sum or design file there is not a regular file, cannot be read or is not valid UTF-8; or a design file in the project's current commit cannot be parsed as Go or is a link. The guide corrects a file of its draft and asks the user to correct one of the project folder or of its commit, then calls update_draft again.")
 		Error("conflict", ErrorResult, "The project's commit, the draft, the project's go.mod, go.sum or design files, or the draft's made-from list changed while Surla prepared the update. Surla brought no change into the draft; call update_draft again.")
-		Error("not_implemented", ErrorResult, "No workspace directory is bound to this control plane; start Surla from a project directory.")
 		Error("unavailable", ErrorResult, "The control plane is shutting down.")
 		Tool("update_draft", "Bring design changes made outside Surla, in the project folder, into your draft. Call it before drafting each new change and whenever you are told a design file changed. Takes no input. It returns the files it took, the files it merged with your edits, and files to correct, each with the folder that holds it. Correct a file whose folder is draft_folder yourself, in your draft. For a file whose folder is project_folder, tell the user what to correct in the project folder and wait: never edit it. Call update_draft again until no file is listed, then call refresh_story. When it answers that the project or the draft changed while it prepared the update, it brought nothing: call update_draft again. When it answers that it could not read a file, the message names the file and says who corrects it.")
 		HTTP(func() {
@@ -141,7 +136,6 @@ func storyRefreshMethods() {
 			Response(StatusOK)
 			Response("unprocessable", StatusUnprocessableEntity)
 			Response("conflict", StatusConflict)
-			Response("not_implemented", StatusNotImplemented)
 			Response("unavailable", StatusServiceUnavailable)
 		})
 	})

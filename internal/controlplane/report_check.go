@@ -161,7 +161,7 @@ func (e *openCopyError) Unwrap() error {
 }
 
 // startReportChecker starts the report checker on the server's context for a
-// project with a bound team; Close ends it before the stores close.
+// project; Close ends it before the stores close.
 func (c *ControlPlane) startReportChecker() {
 	c.reports = newReportChecker(c)
 	c.reportWorker.Go(func() { c.reports.run(c.serverCtx) })

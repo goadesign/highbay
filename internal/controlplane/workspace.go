@@ -387,9 +387,6 @@ func (c *ControlPlane) removeWorkspaceRecord() error {
 // `designeval.OpenModuleRoot` and verifies on the opened handle itself
 // (`root.Stat(".")`) that its `(dev, ino)` matches `(expectedDev, expectedIno)`.
 func openModuleRootWithIdentity(dir string, expectedDev, expectedIno uint64) (string, *os.Root, error) {
-	if dir == "" {
-		return "", nil, gensurla.MakeUnprocessable(errors.New("no workspace directory is bound to this control plane"))
-	}
 	if expectedDev == 0 || expectedIno == 0 {
 		return "", nil, gensurla.MakeUnprocessable(fmt.Errorf("bound workspace directory %s has no recorded device/inode identity", dir))
 	}

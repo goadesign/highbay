@@ -122,9 +122,8 @@ type (
 		GoProxyEnv []string
 		// Evaluator evaluates Goa design snapshots for refresh_story and
 		// diff. When nil, New constructs a default designeval.Evaluator (using
-		// <CardsDir>/designeval as its protected temporary parent when
-		// WorkspaceDir is set). When a host supplies Evaluator for a bound
-		// workspace, it must use a protected directory outside WorkspaceDir.
+		// <CardsDir>/designeval as its protected temporary parent). A host-supplied
+		// Evaluator must use a protected directory outside WorkspaceDir.
 		// The default uses BuildCacheDir when supplied; embedded hosts can pass
 		// it through designeval.NewEvaluatorWithCache too.
 		Evaluator *designeval.Evaluator
@@ -419,7 +418,7 @@ type (
 		// It has room for one value; report_tests_finished sends without
 		// waiting, and a full channel already says the same.
 		reportWake chan struct{}
-		// reports is the project's report checker, nil without a bound team;
+		// reports is the project's report checker;
 		// reportWorker runs it and drains before stores close.
 		reports      *reportChecker
 		reportWorker sync.WaitGroup
@@ -467,7 +466,9 @@ func PrincipalFromContext(ctx context.Context) (Principal, bool) {
 }
 
 // New constructs a ControlPlane that saves its Change Cards under
-// opts.CardsDir, so cards written by an earlier process are served again. It
+// opts.CardsDir, so cards written by an earlier process are served again. Team
+// and a physical WorkspaceDir are required; invalid bindings fail before the
+// card store is opened or created. New copies the validated Team binding. It
 // creates the directory when missing and holds its lock until Close; it fails
 // when CardsDir is empty or another process holds the lock.
 func New(opts Options) (*ControlPlane, error) {
@@ -556,10 +557,7 @@ func newWithWorkspaceGitTimeout(
 	}
 	eval := opts.Evaluator
 	if eval == nil {
-		parent := ""
-		if wsRoot != "" {
-			parent = filepath.Join(cards.dir, "designeval")
-		}
+		parent := filepath.Join(cards.dir, "designeval")
 		if opts.BuildCacheDir != "" {
 			eval, err = designeval.NewEvaluatorWithCache(parent, opts.BuildCacheDir)
 			if err != nil {

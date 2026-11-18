@@ -1145,7 +1145,6 @@ calls `update_draft` again until `to_correct` is empty, then calls
 | Refusal | When |
 | --- | --- |
 | `unprocessable` (`422`) | The project folder was replaced; `.surla-draft` is a link or a file rather than a folder, its `.gitignore` has no Surla draft marker, or its provenance is missing; the draft or provenance changed while Surla first made the draft; the draft's or project folder's `go.mod` is missing, or a `go.mod`, `go.sum` or design file there is not regular, cannot be read or is not valid UTF-8; or a design file in the project's current commit cannot be parsed as Go or is a link or submodule. The message names the file or folder and who corrects it. The guide corrects its draft, or asks the user to correct the project file (and commit a correction to committed design), then calls again. |
-| `not_implemented` (`501`) | No project folder is bound: `no workspace directory is bound to this control plane; start Surla from a project directory`. |
 | `conflict` (`409`) | The project's commit, the draft, the project files or the design provenance changed while preparing the update (`The project's commit changed while preparing the draft update; call update_draft again.` or `The draft, project files or design provenance changed while preparing the update; call update_draft again.`). |
 | `unavailable` (`503`) | The server is stopping. |
 
@@ -1796,7 +1795,6 @@ Every refusal below saves no build and registers no role.
 | `copy_folder_in_use` | 409 | Move the project's `.surla-build` or `.surla-tests` entry, which is not Surla's working copy, out of the project. |
 | `tests_branch_in_use` | 409 | Another working copy holds `surla/build-<n>` or `surla/tests-<n>`; the message names it and the step. |
 | `working_copy_busy` | 409 | Build again when the current build start, assignment read or report check has ended. |
-| `not_implemented` | 501 | The server has no team; start the project with `surla`. |
 | `unavailable` | 503 | The server is stopping or the start ran out of time; build again. |
 
 ### `drop_build`
@@ -1823,7 +1821,6 @@ start checks still apply.
 | `not_found` | 404 | No card has this `change_id`, or the project has no open build. |
 | `build_changed` | 409 | The open build (`OpenBuildRefusal`) belongs to another change or has a different `started_at` than named. |
 | `conflict` | 409 | The build was already dropped. |
-| `not_implemented` | 501 | The server has no team; start the project with `surla`. |
 
 ### Judging reports
 
@@ -2079,10 +2076,6 @@ it has facts from that server. A failed address check changes no team state
 or window and leaves the views page available. It reports:
 `Chorus is not running or its settings are invalid. Run chorus up (or chorus status to see the error), then start the agents again (Start agents on the page, or run surla).`
 
-If no team is bound to the server, all three user operations return
-`not_implemented` (`501`) with the enabling step:
-`Start this project with surla to use its team.`
-
 ### `get_team`
 
 `GET /team`. **Output:** `TeamSnapshot` (`team`, `roles`). Registered roles
@@ -2099,7 +2092,6 @@ creates nothing and marks nothing read. Each role has:
 When Herdr sends no heartbeat or event for 45 seconds, every role reads
 `unknown` until fresh facts arrive. A failed assignment read never reads as
 `nothing_owed` or `no_work`. `wait_for_changes` also covers these facts.
-For an unbound team, see [the shared refusal](#team-supervision).
 
 ### `show_team_pane`
 
@@ -2108,7 +2100,6 @@ that role's pane, only when the user asks.
 
 | Refusal | When |
 | --- | --- |
-| `not_implemented` (`501`) | No team is bound; see [the shared refusal](#team-supervision). |
 | `window_busy` (`409`) | A Herdr dialog is open; close it first. Nothing in the window changed. |
 | `pane_unavailable` (`409`) | The role has no pane Surla can identify. |
 | `team_unavailable` (`503`) | Herdr could not establish the pane: `Herdr did not complete a team command; open the Herdr app, then try again`. |
@@ -2120,8 +2111,7 @@ that role's pane, only when the user asks.
 `surla` runs, opening the Chorus dialog when the guide, or a worker role that
 has work on the open build (or any listed role when the assignment read fails),
 is not running.
-Refusals: `not_implemented` (`501`, no team is bound; see
-[the shared refusal](#team-supervision)), `ambiguous_space` (`409`, close the
+Refusals: `ambiguous_space` (`409`, close the
 duplicate Herdr spaces, then start the agents), `window_busy` (`409`) and
 `team_unavailable` (`503`), whose message is the views page's step for its cause (see
 [`ensure_team`](#ensure_team-management)). `team_unavailable` can come after

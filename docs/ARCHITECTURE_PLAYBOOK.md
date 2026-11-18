@@ -85,6 +85,14 @@ Each change is saved as a Change Card: the record of the request, its open quest
 
 ### The server and its state
 
+The executable binds the project's owner and team service and its physical
+workspace directory before constructing the control plane or opening the
+listener. Construction rejects either missing binding before opening the card
+store. Team operations and build operations therefore always have their
+project owner; unavailable Herdr or Chorus services remain ordinary team
+refusals. An empty project folder and a team with no registered or running
+agents are valid states.
+
 A project is one physical folder. `surla` looks for the nearest folder that has a project record and otherwise creates a new, empty project, so moving or renaming the folder starts a new project. Each project has one private state folder under the user's configuration folder, outside the project. It holds the project record (its ID, folder, owning operating-system account, port, team name and Herdr space, and each registered agent's role and working folder), one credential file per agent, the Change Card folder, verification runs and reports, one retained Go build cache, and the stored verification and promotion settings. A new project saves a free loopback port that no other project of the account saved, and keeps it, because its agents' connections and the Chorus roster name that address. When `surla` cannot use a project's record, it names the project folder, the record's path and the repair; when it cannot use a state folder, it names that folder and the repair.
 
 When the user runs `surla`:
