@@ -75,10 +75,10 @@ if (input.state.startsWith("earlier_")) {
   if (input.state === "earlier_merged") {
     expect(action.textContent === "Build current agreed revision" && action.classList.contains("surla-btn-primary"), "earlier merged build lost the primary current-agreement action");
     expect(!page.$("#surla-build-again"), "earlier merged build offers replay instead of the new agreement");
-    expect(taking.includes("It is in your branch. The passed run checked the builder's commit with the accepted tests; Surla did not run the tests on the merged result, which also includes anything else merged into your branch since this build started. Build the current agreed revision to implement the new agreement. No role has work on this build."), "earlier merged completion lost its new-agreement guidance");
+    expect(taking.includes("It is in your branch. Surla verified a passed run's commits before you merged them; it has not run the tests on your branch since, and your branch may also hold other changes merged after this build started. Build the current agreed revision to implement the new agreement. No role has work on this build."), "earlier merged completion lost its new-agreement guidance");
   }
   if (input.state === "earlier_configured") {
-    expect(taking.includes("It is in your branch. The passed run checked the builder's commit; Surla did not check the merged result, which also includes anything else merged into your branch since this build started. Build the current agreed revision to implement the new agreement. No role has work on this build."), "earlier configured merged completion lost its no-tests guidance");
+    expect(taking.includes("It is in your branch. Surla verified a passed run's commit before you merged it; it has not checked your branch since, and your branch may also hold other changes merged after this build started. Build the current agreed revision to implement the new agreement. No role has work on this build."), "earlier configured merged completion lost its no-tests guidance");
     expect(page.text("#surla-build-start-explanation").includes("From Build on, those tests and the builder’s code run on this machine as ordinary programs, with your access to files and the network; nothing confines them. Approval decides only what merges."), "configured tests lost their execution wording");
   }
   expect(page.sent("POST", path).length === 0, "reading an earlier build started work");
@@ -124,8 +124,8 @@ if (state === "dropped") {
 if (state === "merged") {
   expect(!page.$("#surla-build-start"), "current merged agreement still has a primary Build action");
   const expectedMerged = input.state === "merged_configured"
-    ? "It is in your branch. The passed run checked the builder's commit; Surla did not check the merged result, which also includes anything else merged into your branch since this build started. Build another change or refine this one when there is more to do. No role has work on this build."
-    : "It is in your branch. The passed run checked the builder's commit with the accepted tests; Surla did not run the tests on the merged result, which also includes anything else merged into your branch since this build started. Build another change or refine this one when there is more to do. No role has work on this build.";
+    ? "It is in your branch. Surla verified a passed run's commit before you merged it; it has not checked your branch since, and your branch may also hold other changes merged after this build started. Build another change or refine this one when there is more to do. No role has work on this build."
+    : "It is in your branch. Surla verified a passed run's commits before you merged them; it has not run the tests on your branch since, and your branch may also hold other changes merged after this build started. Build another change or refine this one when there is more to do. No role has work on this build.";
   expect(page.text("#surla-build-taking").includes(expectedMerged), "merged taking lost its verification scope or next work guidance");
   async function askReplay() {
     await control(origin, "reply", { key: "GET " + path, status: 200,
