@@ -177,10 +177,20 @@ Surla needs:
 - **Chorus v0.12.0** or newer.
 - A coding agent that the Chorus dialog or terminal command can start for each role.
 
-Install Surla, Herdr and Chorus:
+To install the Surla described by this README, clone this repository and check
+out the version you are reading. From the repository root, run:
 
 ```bash
-go install github.com/goadesign/surla/cmd/surla@latest
+go install ./cmd/surla
+```
+
+`go install github.com/goadesign/surla/cmd/surla@latest` installs the latest
+module version available to Go, which may be older than this README and lack
+commands described here. When installing that version, follow its README.
+
+Install Herdr and Chorus:
+
+```bash
 curl -fsSL https://releases.herdr.dev/core/install.sh | sh
 curl -fsSL https://releases.herdr.dev/app/install.sh | sh
 curl -fsSL https://raw.githubusercontent.com/goadesign/chorus/main/scripts/install.sh | sh
