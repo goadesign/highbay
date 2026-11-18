@@ -152,10 +152,13 @@ You can make the same choices through a terminal and browser automation. Run
 `surla --print-link` to receive a one-use page URL and expiry as JSON, with
 startup notices on stderr, then open it in your controlled browser. The team
 next step gives `chorus team inspect` and `chorus team launch` commands with
-your actual space ID. Name each missing role's program/model explicitly in the
-choices JSON; the command shares the dialog's launch backend but shows no Herdr
-catalog or saved preferences. On a later build, inspect again and choose the
-new worker roles. See [terminal operation](REFERENCE.md#terminal-and-browser-automation)
+your actual space ID. Name each missing role's program in the choices JSON;
+null model/thinking use its defaults. Before launching, add
+`--choices choices.json` to the printed inspect command to see those programs' model
+options and permission effects. The command shares the dialog's discovery and
+launch backend, without Herdr's program catalog or saved preferences. On a later
+build, inspect again and choose the new worker roles. See
+[terminal operation](REFERENCE.md#terminal-and-browser-automation)
 for the exact input and recovery.
 
 The frame names the journey Describe → Agree → Build → Check → Approve.

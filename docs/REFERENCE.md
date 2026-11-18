@@ -49,7 +49,7 @@ an operation, who may call it, what it returns and how it refuses.
 | **Surla** | The command itself. | From the root of the checkout whose README you are reading, run `go install ./cmd/surla`; see [Install](../README.md#install). `go install github.com/goadesign/surla/cmd/surla@latest` installs the latest module version available to Go, which may be older than this README and lack commands described here. When installing that version, follow its README. |
 | **Herdr core** (`herdr-core` and `hc`) | The server and every agent run in Herdr terminals. | `curl -fsSL https://releases.herdr.dev/core/install.sh \| sh` ([herdr.dev/core](https://herdr.dev/core/)) |
 | **Herdr app** (`herdr-app`) | The window that shows the team's panes. | `curl -fsSL https://releases.herdr.dev/app/install.sh \| sh` ([herdr.dev](https://herdr.dev/)) |
-| **Chorus v0.12.0 or later** | Agent messaging and the Chorus dialog. | `curl -fsSL https://raw.githubusercontent.com/goadesign/chorus/main/scripts/install.sh \| sh`; update with `chorus update -yes` |
+| **Chorus v0.13.0 or later** | Agent messaging, the Chorus dialog and terminal client-option inspection. | `curl -fsSL https://raw.githubusercontent.com/goadesign/chorus/main/scripts/install.sh \| sh`; update with `chorus update -yes` |
 | **A coding agent** that the Chorus dialog or terminal command can start | An agent app plays each role: the user picks one per role in the dialog or supplies terminal choices. | — |
 | **Git 2.45 or newer**, with a name and address | Startup requires support for `--no-lazy-fetch`, so Surla's Git reads do not download missing objects. Every build needs the project in a Git repository with a first commit and a Git name and address, with or without stored verification settings, and so does verification, which needs the build. Without stored verification settings, live targets need the repository too. Surla records accepted tests, and any uncommitted files a working copy holds when it joins a new build, as commits under your Git identity. | Install Git 2.45 or newer on `PATH`; `git config --global user.name …` and `user.email …` configure its identity. |
 | **Docker** (Docker Desktop, or another local engine on a `unix://` socket) | `check_project` and `update_dependencies` run Go in Linux containers. The first check pulls `golang:1.27.3`. | [docker.com](https://www.docker.com/) |
@@ -60,7 +60,7 @@ Before it creates any state, `surla` checks for `herdr-core`, `herdr-app` and
 missing. When that program is in `~/.local/bin`, where the installers put it,
 it says instead `<program> is installed in <folder>, which is not on PATH;
 add <folder> to PATH, then run surla again`. It then checks that Chorus is
-v0.12.0 or later (`chorus update -yes` updates it), that `hc` is on the path
+v0.13.0 or later (`chorus update -yes` updates it), that `hc` is on the path
 or in `~/.local/bin`, and, for ordinary startup, that the browser opener (`open` on macOS or
 `xdg-open` on Linux) is on the path. `--print-link` skips that opener check. A
 missing opener is named without an install command. Surla then probes the Git
@@ -92,19 +92,28 @@ roles, then `chorus team launch --space ... --choices choices.json`, or
 `--choices -` to read the same JSON from stdin. Choices are keyed by role:
 
 ```json
-{"guide":{"client":"codex","program":"codex","model":"gpt-6.1-sol","thinking":null,"yolo":false}}
+{"guide":{"client":"codex","program":"codex","model":null,"thinking":null,"yolo":false}}
 ```
 
 All fields are required; null model/thinking use client defaults. Name the
-program and model explicitly: the command has no Herdr agent catalog or saved
-preferences. The dialog retains those features. The client family identifies
+program explicitly: the command has no Herdr program catalog or saved
+preferences. The dialog retains those features. Before launching, run the
+printed `chorus team inspect --space ... --choices choices.json` command to see
+the chosen programs' model options, thinking levels and permission effects.
+It uses the dialog's discovery and keeps its notes or errors visible. A model
+outside the suggestions says
+`not listed by <program>; the client checks it at startup`;
+it is information, not a refusal of a custom model ID.
+`yolo:false` uses client permission settings; `yolo:true` bypasses the client's
+tool confirmations (Codex also disables command sandboxing). Inspection shows
+the exact supported flag and effect. The client family identifies
 its existing flags and connection support; program can name a wrapper. Every
 missing role needs a choice; running roles may be omitted or repeated with
 matching settings. Success prints `{ "tab": "...", "created": 1, "reused": 0 }`.
 A refusal prints a reason and exits nonzero; inspect and retry after partial
 failure to reuse completed panes. See `chorus team launch --help` and the
 [Chorus launcher reference](https://github.com/goadesign/chorus/blob/main/skills/herdr/chorus-launcher/README.md#choose-roles-from-a-terminal)
-for the owning contract. Surla requires Chorus v0.12.0 or newer.
+for the owning contract. Surla requires Chorus v0.13.0 or newer.
 
 ## Commands
 
@@ -139,7 +148,7 @@ identifier. The third is the user's next step, chosen by the server:
 | Chorus dialog | Step printed |
 | --- | --- |
 | Opened for this project | `Choose an agent for each role in the open Chorus dialog in Herdr.` |
-| Already open | `If the open Chorus dialog is for this project, click "Reload team", then choose the agents. If it is for another project, close it, then start the agents again (Start agents on the views page, or run surla).` |
+| Already open | `If this is your project's dialog, click Reload team and choose agents. Otherwise close it; use Start agents on the page or run surla.` |
 | Not needed | `Every listed role is running.` |
 
 Then the browser opens the views page, and the last line prints. When the
