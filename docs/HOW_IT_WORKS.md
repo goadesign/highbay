@@ -148,6 +148,16 @@ check works in an empty folder, before you make a Git repository.
    space with Surla's first message, which points it to the Golden Path and
    to the project's changes.
 
+You can make the same choices through a terminal and browser automation. Run
+`surla --print-link` to receive a one-use page URL and expiry as JSON, with
+startup notices on stderr, then open it in your controlled browser. The team
+next step gives `chorus team inspect` and `chorus team launch` commands with
+your actual space ID. Name each missing role's program/model explicitly in the
+choices JSON; the command shares the dialog's launch backend but shows no Herdr
+catalog or saved preferences. On a later build, inspect again and choose the
+new worker roles. See [terminal operation](REFERENCE.md#terminal-and-browser-automation)
+for the exact input and recovery.
+
 The frame names the journey Describe → Agree → Build → Check → Approve.
 Team, Story, Live target, Architecture and Diagnostics remain available as
 project references. Agreed, Needs you and Next keep the current context and

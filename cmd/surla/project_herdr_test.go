@@ -31,7 +31,7 @@ func init() {
 	herdrTestRuntime = func() projectRuntime {
 		runtime := productionProjectRuntime()
 		runtime.configRoot = testProjectRuntime().configRoot
-		runtime.preflight = func() error { return preflightProjectStart(projectHerdrProgram) }
+		runtime.preflight = func(openBrowser bool) error { return preflightProjectStart(projectHerdrProgram, openBrowser) }
 		bindFixtureTeamEffects(&runtime)
 		return runtime
 	}

@@ -37,8 +37,8 @@ type (
 	}
 )
 
-// minimumTeamChorus is the first release containing the roster and idle-shell launcher contracts.
-const minimumTeamChorus = "v0.11.0"
+// minimumTeamChorus includes the terminal roster commands named in team next steps.
+const minimumTeamChorus = "v0.12.0"
 
 // runTeamCommand bounds one external command run with env; stderr is never echoed to the caller.
 func runTeamCommand(ctx context.Context, env []string, program string, args ...string) ([]byte, error) {

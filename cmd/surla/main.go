@@ -65,6 +65,7 @@ the result.
 Usage:
 
   surla
+  surla --print-link
   surla <command> [flags]
 
 Commands:
@@ -78,6 +79,13 @@ Running surla starts or attaches to this folder's project server, starts Chorus
 and the Herdr app when they are not running, prepares the project's team of
 agents in Herdr and opens the views page. The server runs in its own
 parentless Herdr terminal.
+
+Use --print-link to start or attach and print only {"url","expires_at"} JSON on
+stdout instead of opening a browser. Notices and team instructions go to stderr;
+no browser opener is required. The link grants user-page access to its first
+consumer for two minutes: keep it out of shared logs. Run the command again for
+a fresh link after use, expiry or page reload. A team-only failure may still
+print a usable link while returning a nonzero exit and explaining it on stderr.
 
 Other commands:
   preview         print the architecture, agent policies and tool contracts a design
@@ -111,6 +119,16 @@ func main() {
 func runWithRuntime(args []string, stdout io.Writer, runtime projectRuntime) error {
 	if len(args) == 0 {
 		return runtime.start(stdout)
+	}
+	if args[0] == "--print-link" {
+		if len(args) == 2 && slices.Contains(helpWords, args[1]) {
+			_, err := fmt.Fprint(stdout, usage)
+			return err
+		}
+		if len(args) != 1 {
+			return errors.New("--print-link accepts no additional arguments; use surla --help")
+		}
+		return runtime.printLink(stdout, os.Stderr)
 	}
 	sub, rest := args[0], args[1:]
 	if slices.Contains(helpWords, sub) {

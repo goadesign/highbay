@@ -49,8 +49,8 @@ an operation, who may call it, what it returns and how it refuses.
 | **Surla** | The command itself. | `go install github.com/goadesign/surla/cmd/surla@latest` |
 | **Herdr core** (`herdr-core` and `hc`) | The server and every agent run in Herdr terminals. | `curl -fsSL https://releases.herdr.dev/core/install.sh \| sh` ([herdr.dev/core](https://herdr.dev/core/)) |
 | **Herdr app** (`herdr-app`) | The window that shows the team's panes. | `curl -fsSL https://releases.herdr.dev/app/install.sh \| sh` ([herdr.dev](https://herdr.dev/)) |
-| **Chorus v0.11.0 or later** | Agent messaging and the Chorus dialog. | `curl -fsSL https://raw.githubusercontent.com/goadesign/chorus/main/scripts/install.sh \| sh`; update with `chorus update -yes` |
-| **A coding agent** that the Chorus dialog can start | An agent app plays each role: the user picks one per role in the Chorus dialog. | — |
+| **Chorus v0.12.0 or later** | Agent messaging and the Chorus dialog. | `curl -fsSL https://raw.githubusercontent.com/goadesign/chorus/main/scripts/install.sh \| sh`; update with `chorus update -yes` |
+| **A coding agent** that the Chorus dialog or terminal command can start | An agent app plays each role: the user picks one per role in the dialog or supplies terminal choices. | — |
 | **Git 2.45 or newer**, with a name and address | Startup requires support for `--no-lazy-fetch`, so Surla's Git reads do not download missing objects. Every build needs the project in a Git repository with a first commit and a Git name and address, with or without stored verification settings, and so does verification, which needs the build. Without stored verification settings, live targets need the repository too. Surla records accepted tests, and any uncommitted files a working copy holds when it joins a new build, as commits under your Git identity. | Install Git 2.45 or newer on `PATH`; `git config --global user.name …` and `user.email …` configure its identity. |
 | **Docker** (Docker Desktop, or another local engine on a `unix://` socket) | `check_project` and `update_dependencies` run Go in Linux containers. The first check pulls `golang:1.27.3`. | [docker.com](https://www.docker.com/) |
 | **Temporal CLI** | Only to run the Orders evaluator, which starts a local Temporal server for its scenarios: when Surla verifies the Orders project or starts a live target of it, when `surla verify` runs that evaluator, and in the full-suite tests that run it (the `examples/orders` acceptance suite and the `e2e` tests of `./internal/verify` and `./cmd/surla`). | `brew install temporal` |
@@ -60,8 +60,9 @@ Before it creates any state, `surla` checks for `herdr-core`, `herdr-app` and
 missing. When that program is in `~/.local/bin`, where the installers put it,
 it says instead `<program> is installed in <folder>, which is not on PATH;
 add <folder> to PATH, then run surla again`. It then checks that Chorus is
-v0.11.0 or later (`chorus update -yes` updates it), that `hc` is on the path
-or in `~/.local/bin`, and that the browser opener (`open`) is on the path. A
+v0.12.0 or later (`chorus update -yes` updates it), that `hc` is on the path
+or in `~/.local/bin`, and, for ordinary startup, that the browser opener (`open` on macOS or
+`xdg-open` on Linux) is on the path. `--print-link` skips that opener check. A
 missing opener is named without an install command. Surla then probes the Git
 on `PATH` with `git --no-lazy-fetch version`, without reading a repository.
 If that option is unknown, startup names the installed `git --version` line
@@ -71,6 +72,39 @@ refusals. Git builds with the capability backported are accepted regardless
 of their version label.
 
 ---
+
+## Terminal and browser automation
+
+Run `surla --print-link` in the project folder to start or attach and receive one
+JSON object on stdout: `{ "url": "...", "expires_at": "..." }`. Startup notices,
+team instructions and the nonsecret origin go to stderr. This route does not
+require or call `open`/`xdg-open`; ordinary `surla` keeps opening the browser.
+The URL grants user-page access to whoever exchanges it first within two
+minutes. Avoid shared terminal/log captures and open it in the browser you
+control. After use, expiry or page reload, repeat the command for a fresh link.
+Server/auth/link-validation failure prints no link and exits nonzero. A team-only
+failure can still print a usable link while exiting nonzero with its reason on
+stderr: user decisions on the page do not require an agent.
+
+The shared team next step names the dialog and copyable Chorus commands with
+the actual space ID. Run the printed `chorus team inspect --space ...` to see
+roles, then `chorus team launch --space ... --choices choices.json`, or
+`--choices -` to read the same JSON from stdin. Choices are keyed by role:
+
+```json
+{"guide":{"client":"codex","program":"codex","model":"gpt-6.1-sol","thinking":null,"yolo":false}}
+```
+
+All fields are required; null model/thinking use client defaults. Name the
+program and model explicitly: the command has no Herdr agent catalog or saved
+preferences. The dialog retains those features. The client family identifies
+its existing flags and connection support; program can name a wrapper. Every
+missing role needs a choice; running roles may be omitted or repeated with
+matching settings. Success prints `{ "tab": "...", "created": 1, "reused": 0 }`.
+A refusal prints a reason and exits nonzero; inspect and retry after partial
+failure to reuse completed panes. See `chorus team launch --help` and the
+[Chorus launcher reference](https://github.com/goadesign/chorus/blob/main/skills/herdr/chorus-launcher/README.md#choose-roles-from-a-terminal)
+for the owning contract. Surla requires Chorus v0.12.0 or newer.
 
 ## Commands
 

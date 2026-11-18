@@ -106,6 +106,8 @@ run_selected ./cmd/surla \
   TestLocalWorkStaysOutsideStartupAndTargets \
   TestManagementConnectionIsLocalAndProxyFree \
   TestMissingBrowserOpenerFailsBeforeProjectCreation \
+  TestPrintedLinkNeedsNoOpener \
+  TestPrintedProjectLinksStartsAndReattaches \
   TestPreviewAndDiffRemoveTheirWorkspaceWhenEvaluationFails \
   TestProjectListenerRevokesBeforeClose \
   TestProjectSettingsRejectsWorkspaceAndRepositoryPaths \
