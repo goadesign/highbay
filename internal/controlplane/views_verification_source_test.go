@@ -18,24 +18,25 @@ import (
 func TestViewsPageVerificationTestSource(t *testing.T) {
 	const suiteCommit = "2222222222222222222222222222222222222222"
 	sources := []struct {
-		name        string
-		source      gensurla.TestSource
-		commitLabel string
-		suiteLabel  string
-		notice      string
+		name         string
+		source       gensurla.TestSource
+		commitLabel  string
+		bindingLabel string
+		suiteLabel   string
+		notice       string
 	}{
 		{
 			name: "written_tests",
 			source: gensurla.NewTestSourceWrittenTests(&gensurla.AgentWrittenTests{
 				Commit: suiteCommit, Notice: writtenTestsNotice,
 			}),
-			commitLabel: "Accepted tests commit", suiteLabel: "Written tests suite",
+			commitLabel: "Accepted tests commit", bindingLabel: "Tests' commit", suiteLabel: "Written tests suite",
 			notice: writtenTestsNotice,
 		},
 		{
 			name:        "evaluator",
 			source:      gensurla.NewTestSourceEvaluator(&gensurla.OperatorEvaluatorTests{}),
-			commitLabel: "Evaluator commit", suiteLabel: "Evaluator suite",
+			commitLabel: "Evaluator commit", bindingLabel: "Evaluator commit", suiteLabel: "Evaluator suite",
 		},
 	}
 	states := []struct {
@@ -99,7 +100,7 @@ func TestViewsPageVerificationTestSource(t *testing.T) {
 				runPageScript(t, ps, map[string]any{
 					"change": card.ChangeID, "run": run.RunID, "state": state.name,
 					"heading": state.heading, "notice": source.notice,
-					"commitLabel": source.commitLabel, "suiteLabel": source.suiteLabel,
+					"commitLabel": source.commitLabel, "bindingLabel": source.bindingLabel, "suiteLabel": source.suiteLabel,
 					"suiteCommit": suiteCommit,
 				}, `
 const page = await openPage(origin, { link: input.link });
@@ -108,6 +109,10 @@ page.$("#surla-nav-cp4").click();
 await until(() => page.$("#surla-result-view").dataset.runId === input.run, "the saved run did not open");
 expect(page.text("#surla-cp4-title") === input.heading, "the run's status changed");
 expect(page.text("#surla-cp4-started").startsWith("Check started ") && !page.text("#surla-cp4-started").includes("finished"), "request acceptance was mislabeled as completion");
+const binding = page.text("#surla-cp4-test-binding").replaceAll("’", "'");
+const shortCommit = binding.match(/\b[a-f0-9]{7,40}\b/i)?.[0];
+expect(binding.includes(input.bindingLabel) && shortCommit && shortCommit.length < input.suiteCommit.length && input.suiteCommit.startsWith(shortCommit), "the selected run lacks a source-qualified short suite commit");
+expect(!/\breport \d+\b/i.test(binding), "a run without frozen coverage acquired a test report number");
 const notice = page.$("#surla-cp4-test-source");
 if (input.notice) {
   expect(notice && notice.tagName === "P" && !notice.getAttribute("role") && notice.textContent === input.notice, "the server's written-test notice is missing or changed");
