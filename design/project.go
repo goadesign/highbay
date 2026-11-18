@@ -25,7 +25,11 @@ var ProjectTeamRole = Type("ProjectTeamRole", func() {
 // ProjectTeam describes the server-owned team and the launcher's visible state.
 var ProjectTeam = Type("ProjectTeam", func() {
 	Attribute("team", String, "Stable Chorus team name.", func() { Pattern("^[A-Za-z0-9][A-Za-z0-9_-]{0,31}$") })
-	Attribute("space", String, "Local Herdr space identifier.")
+	Attribute("space", String, "Local Herdr space identifier.", func() {
+		Pattern(`^(?:[A-Za-z0-9_-][A-Za-z0-9_.-]{0,63}|\.[A-Za-z0-9_-][A-Za-z0-9_.-]{0,62}|\.\.[A-Za-z0-9_.-]{1,62})$`)
+		MinLength(1)
+		MaxLength(64)
+	})
 	Attribute("roles", ArrayOf(ProjectTeamRole))
 	Attribute("dialog", String, "Launcher state after ensuring the team.", func() { Enum("opened", "already_open", "not_needed") })
 	Attribute("step", String, "What the user does next for the prepared team.", func() { MinLength(1); MaxLength(512) })
@@ -43,8 +47,8 @@ var TeamSpaceConflict = Type("TeamSpaceConflict", func() {
 // that part's own recovery step without printing peer-authored error text.
 var TeamUnavailable = Type("TeamUnavailable", func() {
 	Attribute("name", String, "Error name.", func() { Meta("struct:error:name") })
-	Attribute("cause", String, "What could not be used: stopping (the server is shutting down), chorus (the managed Chorus server or its settings are unavailable), herdr (a Herdr command failed), roster_folder (Herdr's launcher roster folder could not be written), project_state (the project's private record or an agent credential could not be read or written), or role_folder (a role's working folder could not be read).", func() {
-		Enum("stopping", "chorus", "herdr", "roster_folder", "project_state", "role_folder")
+	Attribute("cause", String, "What could not be used: stopping (the server is shutting down), chorus (the managed Chorus server or its settings are unavailable), herdr (a Herdr command failed), saved_space (the project's saved Herdr space has an ID this version of Surla no longer accepts and is still open), roster_folder (Herdr's launcher roster folder could not be written), project_state (the project's private record or an agent credential could not be read or written), or role_folder (a role's working folder could not be read).", func() {
+		Enum("stopping", "chorus", "herdr", "saved_space", "roster_folder", "project_state", "role_folder")
 	})
 	Required("name", "cause")
 })

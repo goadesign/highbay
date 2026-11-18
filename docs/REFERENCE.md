@@ -110,9 +110,9 @@ program explicitly: the command has no Herdr program catalog or saved
 preferences. The dialog retains those features. Roles with Surla MCP connections
 support `"client": "claude"` or `"client": "codex"`; `"program"` is a single
 executable name, path or shell function name, not shell code or arguments.
-Before launching, run the
-printed `chorus team inspect --space ... --choices choices.json` command to see
-the chosen programs' model options, thinking levels and permission effects.
+Before launching, add `--choices choices.json` to the printed
+`chorus team inspect --space ...` command to see the chosen programs' model
+options, thinking levels and permission effects.
 It validates the choices without opening panes or changing saved preferences and
 adds `client_options`, one entry per distinct chosen `client` and `program`
 (`models`, `efforts`, `model_supported`, `thinking_supported`, `note`, `error`,
@@ -176,15 +176,15 @@ team and opens the views page. **What the user sees**, in order:
 ```text
 Started a Surla project for this folder. Moving or renaming this folder starts a new project.
 Team shop-3f9c1a2b4d5e.
-Choose an agent for each role in the open Chorus dialog in Herdr. Run chorus team inspect --space '<space>'; chorus team launch --help; models and permission effects: chorus team inspect --space '<space>' --choices choices.json; chorus team launch --space '<space>' --choices choices.json. Stdin: --choices -.
+Choose an agent for each role in the open Chorus dialog in Herdr. From a terminal, run chorus team inspect --space '<space>' to see the roles (add --choices choices.json for models and permission effects), then chorus team launch with the same --space and --choices choices.json (--choices - reads stdin; see chorus team launch --help).
 Surla is running for /path/to/shop at http://127.0.0.1:52011
 ```
 
 The first line appears only when the folder had no project. The second names
 the team, after the folder and the first 12 characters of the project's
 identifier. The third is the user's next step, chosen by the server (the first
-two states also append the `chorus team inspect` and `chorus team launch`
-commands above with the space's quoted ID):
+two states also append the `chorus team inspect` command with the space's
+quoted ID and the `chorus team launch` step above):
 
 | Chorus dialog | Step printed |
 | --- | --- |
@@ -243,9 +243,12 @@ an agent app and a model for each role. A worker role without work stays in the
 roster, and when every role that has work is running, no dialog opens. The
 guide's pane is on the left of the team's tab; the builder's pane
 is to its right, and the test writer's below the builder's. Starting again
-reuses the guide and the saved space. If the space was closed, the server
-adopts the one local space that matches its team name and folder, or creates
-one; when several match, it refuses with their count, and the user closes the
+reuses the guide and the saved space. Surla manages spaces whose ID is 1–64
+characters of `[A-Za-z0-9_.-]` (not `.` or `..`). If a saved space has an ID
+outside that rule and is still open in Herdr, Surla refuses until you close
+that space; once the saved space is closed, the server adopts the one
+conforming local space that matches its team name and folder, or creates one;
+when several match, it refuses with their count, and the user closes the
 duplicates. Team preparation needs no Git repository; startup still requires
 the Git executable and capability listed under [Prerequisites](#prerequisites).
 
@@ -2149,6 +2152,7 @@ which opens anyway:
 | `stopping` | The server is shutting down. | `the project server is stopping; run surla again` | `the project server is stopping; run surla in the project folder to start it again` |
 | `chorus` | The managed Chorus server or its settings are unavailable. | `Chorus is not running or its settings are invalid. Run chorus up (or chorus status to see the error), then start the agents again (Start agents on the page, or run surla).` | The same step. |
 | `herdr` | A Herdr command did not complete. | `Herdr did not complete a team command; open the Herdr app, then click Start agents on the views page` | `Herdr did not complete a team command; open the Herdr app, then try again` |
+| `saved_space` | The project's saved Herdr space has an ID this version of Surla no longer accepts and is still open. | `This project's saved Herdr space has an ID this version of Surla no longer accepts. Close that space in Herdr (its agents stop with it), then start the agents again; Surla will prepare a replacement space.` | The same step. |
 | `roster_folder` | Herdr's launcher roster folder could not be written. | `Herdr's launcher roster folder could not be written; make data/chorus-launcher/rosters in Herdr's app folder (~/.config/herdr-app unless HERDR_APP_HOME is set) writable by this account, then click Start agents on the views page` | The same, ending `then start the agents again` |
 | `project_state` | The project's record or an agent credential could not be read or written. | `this project's private state in <state folder> could not be read or written; make that folder and the folders in it private to this account (chmod 700) and its files too (chmod 600), then click Start agents on the views page` | `this project's private state could not be read or written; run surla in the project folder to see which folder to repair` |
 | `role_folder` | A role's working folder could not be read. | `a team role's working folder could not be read; make sure this account can open the project folder <project folder> and its build working folders, then click Start agents on the views page` | `a team role's working folder could not be read; make sure this account can open the project folder and its build working folders, then start the agents again` |

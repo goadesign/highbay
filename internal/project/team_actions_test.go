@@ -295,6 +295,16 @@ func TestTeamFailureNamesItsCause(t *testing.T) {
 			},
 		},
 		{
+			name: "saved space", cause: "saved_space",
+			page: "This project's saved Herdr space has an ID this version of Surla no longer accepts. Close that space in Herdr (its agents stop with it), then start the agents again; Surla will prepare a replacement space.",
+			damage: func(state *State, deps *TeamDependencies) {
+				state.Record.Space = "sp'quoted"
+				require.NoError(t, state.save())
+				host := deps.Host.(*teamFixture)
+				host.spaces = append(host.spaces, TeamSpace{ID: "sp'quoted", Name: state.Record.Team, Folder: state.Record.Directory})
+			},
+		},
+		{
 			name: "roster folder", cause: "roster_folder", page: "data/chorus-launcher/rosters",
 			damage: func(state *State, deps *TeamDependencies) {
 				file := filepath.Join(state.Dir, "not-a-folder")
