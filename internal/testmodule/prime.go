@@ -1,5 +1,15 @@
-// This file primes the Go module and checksum-database cache for synthetic
-// modules constructed by tests at runtime.
+// This file primes the Go module and checksum-database cache for the committed
+// testdata modules and synthetic modules constructed by ordinary-partition
+// tests at runtime.
+//
+// Real starter-template initialization (scaffold.Init and scaffold.Prepare with
+// scaffold.RunCommand on internal/scaffold/templates/{candidate,eval}) is
+// intentionally out of scope: those paths exercise a user's real networked
+// first run and belong to the non-PR Full / starter (-tags=scaffold
+// ./internal/scaffold) and Full / generation (-tags=e2e ./cmd/surla) jobs in
+// .github/workflows/integration.yml, while ordinary-partition tests in
+// internal/scaffold and internal/controlplane substitute fake runners and
+// generators.
 package testmodule
 
 import (

@@ -1,6 +1,9 @@
 // Command modprime populates GOMODCACHE with the committed test module profiles
 // and the synthetic test module closures and sum.golang.org verification tiles
-// before CI saves the module archive.
+// for the ordinary CI partitions before compiler-inputs saves the module
+// archive. Real starter-template initialization (surla init / scaffold.Init
+// with scaffold.RunCommand) exercises networked first-run resolution and stays
+// owned by the non-PR Full / starter and Full / generation jobs.
 package main
 
 import (

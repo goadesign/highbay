@@ -2622,7 +2622,11 @@ module and compiler archives without running tests. Outside pull requests,
 full-root groups wait for these producers, then restore their inputs; PR checks
 remain independent read-only consumers. A missing module or compiler archive
 triggers preparation of the committed and synthetic test-module closures (including
-`sum.golang.org` verification tiles via `go mod tidy` without an initial `go.sum`),
+`sum.golang.org` verification tiles via `go mod tidy` without an initial `go.sum`)
+for the ordinary partitions (`internal/testmodule` callers in `internal/testwriter`,
+`cmd/surla`, `internal/designeval`, `internal/diff`, and `internal/controlplane`;
+real networked starter-template initialization in `surla init` stays owned by
+**Full / starter** and **Full / generation**),
 the declared race/plain compilation,
 CGO-free product dependencies and pinned Goa generator, then compiles Story,
 Orders and Orders Eval with their own dependency versions and plain/race
