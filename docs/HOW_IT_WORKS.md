@@ -626,7 +626,9 @@ and then, for the test writer's tests, `git merge <tests_commit>` (verified on
 `surla/tests-<n>`); with stored verification settings, the tests commit is the
 evaluator's and only `git merge <candidate_commit>` is shown. Once the branch
 checked out in the project folder holds those commits, the build shows
-**Merged**. Before drafting the next change, the guide calls `update_draft` (and
+**Merged**. On Approve, Next then points to describing the next change while
+your selected approval and its evidence stay readable.
+Before drafting the next change, the guide calls `update_draft` (and
 then `refresh_story`) so `.surla-draft` brings in the design changes merged into
 the project folder. Approval is refused when the run used other tests than the ones
 accepted for the revision; the builder then verifies again and you approve that
