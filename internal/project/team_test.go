@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	genproject "github.com/goadesign/surla/gen/project"
@@ -173,6 +174,21 @@ func TestEnsureTeamAdoptionConflictAndAccess(t *testing.T) {
 			assert.Zero(t, host.creates)
 		})
 	}
+	t.Run("skip_non_conforming", func(t *testing.T) {
+		state := testState(t)
+		deps := fixtureTeamDependencies(state)
+		host := deps.Host.(*teamFixture)
+		name := teamName(filepath.Base(state.Record.Directory), state.Record.ID)
+		for _, id := range []string{"sp'quoted", ".", "..", strings.Repeat("a", 65), "remote/sp"} {
+			host.spaces = append(host.spaces, TeamSpace{ID: id, Name: name, Folder: state.Record.Directory, Tabs: []TeamTab{{ID: "tab", Terminals: []TeamPane{{Terminal: "terminal"}}}}})
+		}
+		s, err := NewServer(state, func() {}, deps)
+		require.NoError(t, err)
+		result, err := s.EnsureTeam(teamContext(state))
+		require.NoError(t, err)
+		assert.Equal(t, "space-1", result.Space)
+		assert.Equal(t, 1, host.creates)
+	})
 }
 
 // TestEnsureTeamOtherDialog verifies the server or command contract using only temporary state and stand-ins.
@@ -437,21 +453,28 @@ func TestTeamResultNextStep(t *testing.T) {
 			assert.Contains(t, team.Step, tc.step)
 			if tc.dialog != "not_needed" {
 				assert.Contains(t, team.Step, "From a terminal, run chorus team inspect --space '"+first.Space+"' to see the roles")
-				assert.Contains(t, team.Step, "add --choices choices.json to check models and permission effects")
-				assert.Contains(t, team.Step, "then run chorus team launch --space '"+first.Space+"' --choices choices.json")
-				assert.Contains(t, team.Step, "or --choices - for stdin; see chorus team launch --help")
+				assert.Contains(t, team.Step, "add --choices choices.json for models and permission effects")
+				assert.Contains(t, team.Step, "then chorus team launch with the same --space and --choices choices.json")
+				assert.Contains(t, team.Step, "--choices - reads stdin; see chorus team launch --help")
 				assert.NotContains(t, team.Step, "<id>")
 			} else {
 				assert.Equal(t, tc.step, team.Step)
 			}
-			// The generated response bound must hold for quoted IDs and wider
-			// identifiers, not just the short stand-in returned by this host.
-			for _, id := range []string{"sp'quoted", "12345678-1234-1234-1234-123456789012",
-				"123456781234567812345678123456781234567812345678"} {
+			// The generated response bound must hold up to the 64-character space ID
+			// limit and reject non-conforming space IDs.
+			for _, id := range []string{"12345678-1234-1234-1234-123456789012",
+				"123456781234567812345678123456781234567812345678",
+				strings.Repeat("a", 64), ".a", "..a"} {
 				response := *team
 				response.Space, response.Step = id, teamNextStep(tc.dialog, id)
 				_, err := genproject.EncodeProjectTeam(&response)
 				assert.NoError(t, err, "dialog %s with space %q must encode", tc.dialog, id)
+			}
+			for _, invalid := range []string{"sp'quoted", ".", "..", strings.Repeat("a", 65), "remote/sp"} {
+				response := *team
+				response.Space, response.Step = invalid, teamNextStep(tc.dialog, invalid)
+				_, err := genproject.EncodeProjectTeam(&response)
+				assert.Error(t, err, "dialog %s with invalid space %q must be refused", tc.dialog, invalid)
 			}
 			userTeam, err := server.StartAgents(t.Context())
 			require.NoError(t, err)

@@ -25,7 +25,11 @@ var ProjectTeamRole = Type("ProjectTeamRole", func() {
 // ProjectTeam describes the server-owned team and the launcher's visible state.
 var ProjectTeam = Type("ProjectTeam", func() {
 	Attribute("team", String, "Stable Chorus team name.", func() { Pattern("^[A-Za-z0-9][A-Za-z0-9_-]{0,31}$") })
-	Attribute("space", String, "Local Herdr space identifier.")
+	Attribute("space", String, "Local Herdr space identifier.", func() {
+		Pattern(`^(?:[A-Za-z0-9_-][A-Za-z0-9_.-]{0,63}|\.[A-Za-z0-9_-][A-Za-z0-9_.-]{0,62}|\.\.[A-Za-z0-9_.-]{1,62})$`)
+		MinLength(1)
+		MaxLength(64)
+	})
 	Attribute("roles", ArrayOf(ProjectTeamRole))
 	Attribute("dialog", String, "Launcher state after ensuring the team.", func() { Enum("opened", "already_open", "not_needed") })
 	Attribute("step", String, "What the user does next for the prepared team.", func() { MinLength(1); MaxLength(512) })

@@ -8738,7 +8738,10 @@ definitions:
             space:
                 type: string
                 description: Local Herdr space identifier.
-                example: Ut et aut a tempora possimus.
+                example: j8
+                pattern: ^(?:[A-Za-z0-9_-][A-Za-z0-9_.-]{0,63}|\.[A-Za-z0-9_-][A-Za-z0-9_.-]{0,62}|\.\.[A-Za-z0-9_.-]{1,62})$
+                minLength: 1
+                maxLength: 64
             step:
                 type: string
                 description: What the user does next for the prepared team.
@@ -8762,7 +8765,7 @@ definitions:
                 - handle: Quo a est cumque quae quod velit.
                   role: builder
                   running: true
-            space: Ut et aut a tempora possimus.
+            space: j8
             step: uk
             team: P
         required:
@@ -10811,7 +10814,10 @@ definitions:
                         space:
                             type: string
                             description: Local Herdr space identifier.
-                            example: A modi cumque omnis commodi ea a.
+                            example: z
+                            pattern: ^(?:[A-Za-z0-9_-][A-Za-z0-9_.-]{0,63}|\.[A-Za-z0-9_-][A-Za-z0-9_.-]{0,62}|\.\.[A-Za-z0-9_.-]{1,62})$
+                            minLength: 1
+                            maxLength: 64
                         state:
                             type: string
                             enum:

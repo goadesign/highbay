@@ -176,7 +176,7 @@ team and opens the views page. **What the user sees**, in order:
 ```text
 Started a Surla project for this folder. Moving or renaming this folder starts a new project.
 Team shop-3f9c1a2b4d5e.
-Choose an agent for each role in the open Chorus dialog in Herdr. From a terminal, run chorus team inspect --space '<space>' to see the roles (add --choices choices.json to check models and permission effects), then run chorus team launch --space '<space>' --choices choices.json (or --choices - for stdin; see chorus team launch --help).
+Choose an agent for each role in the open Chorus dialog in Herdr. From a terminal, run chorus team inspect --space '<space>' to see the roles (add --choices choices.json for models and permission effects), then chorus team launch with the same --space and --choices choices.json (--choices - reads stdin; see chorus team launch --help).
 Surla is running for /path/to/shop at http://127.0.0.1:52011
 ```
 

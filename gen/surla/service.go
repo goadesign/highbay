@@ -5638,6 +5638,15 @@ func validatejsonProjectTeamTransport(value *jsonProjectTeamTransport) (err erro
 	if value.Team != nil {
 		err = goa.MergeErrors(err, goa.ValidatePattern("body.team", *value.Team, "^[A-Za-z0-9][A-Za-z0-9_-]{0,31}$"))
 	}
+	if value.Space != nil {
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.space", *value.Space, "^(?:[A-Za-z0-9_-][A-Za-z0-9_.-]{0,63}|\\.[A-Za-z0-9_-][A-Za-z0-9_.-]{0,62}|\\.\\.[A-Za-z0-9_.-]{1,62})$"))
+		if utf8.RuneCountInString(*value.Space) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.space", *value.Space, utf8.RuneCountInString(*value.Space), 1, true))
+		}
+		if utf8.RuneCountInString(*value.Space) > 64 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.space", *value.Space, utf8.RuneCountInString(*value.Space), 64, false))
+		}
+	}
 	for _, e := range value.Roles {
 		if e != nil {
 			if err2 := validatejsonProjectTeamRoleTransport(e); err2 != nil {
@@ -9604,6 +9613,13 @@ func validateProjectTeamOriginal(value *ProjectTeam) (err error) {
 		err = goa.MergeErrors(err, goa.MissingFieldError("roles", "value"))
 	}
 	err = goa.MergeErrors(err, goa.ValidatePattern("value.team", value.Team, "^[A-Za-z0-9][A-Za-z0-9_-]{0,31}$"))
+	err = goa.MergeErrors(err, goa.ValidatePattern("value.space", value.Space, "^(?:[A-Za-z0-9_-][A-Za-z0-9_.-]{0,63}|\\.[A-Za-z0-9_-][A-Za-z0-9_.-]{0,62}|\\.\\.[A-Za-z0-9_.-]{1,62})$"))
+	if utf8.RuneCountInString(value.Space) < 1 {
+		err = goa.MergeErrors(err, goa.InvalidLengthError("value.space", value.Space, utf8.RuneCountInString(value.Space), 1, true))
+	}
+	if utf8.RuneCountInString(value.Space) > 64 {
+		err = goa.MergeErrors(err, goa.InvalidLengthError("value.space", value.Space, utf8.RuneCountInString(value.Space), 64, false))
+	}
 	for _, e := range value.Roles {
 		if e != nil {
 			if err2 := validateProjectTeamRoleOriginal(e); err2 != nil {
