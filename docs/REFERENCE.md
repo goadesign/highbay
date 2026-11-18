@@ -2200,8 +2200,10 @@ copyable and says to run `surla` again. Leaving with unsaved edits asks the
 browser to confirm.
 
 **Every view.** One line per role that needs the user (for example
-`Builder needs you: permission`), with a **Show builder pane** action. The
-page keeps one `wait_for_changes` read open and reads again only what
+`Builder needs you: permission`), with a **Show builder pane** action. This
+polite live region follows the current role facts; a recovered role's line
+disappears without leaving a copied attention message in operation status.
+The page keeps one `wait_for_changes` read open and reads again only what
 changed. When the server does not answer, the status line says so, every
 edit is kept, and the page retries after 5 seconds, doubling up to 30.
 Hiding the tab pauses this. A failed read keeps the last facts with a
