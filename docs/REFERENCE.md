@@ -94,10 +94,11 @@ the actual space ID. Run the printed `chorus team inspect --space ...` to see
 roles: bare inspection prints `{ "root": "...", "swarm": "...", "roles": [...] }`
 with each role's `role`, `title`, `handle`, `running` (`true` or `false`),
 `client`, `model`, `thinking` and `yolo` (`null` when not recorded), never
-credentials, without running client discovery. Before a build, `roles` lists
-only `guide`; pressing **Build this change** on the views page adds `builder`
-and, unless verification settings are stored, `test_writer` to the same space's
-roster. Run `chorus team launch --space ... --choices choices.json`, or
+credentials, without running client discovery. Before the project's first
+build, `roles` lists only `guide`; pressing **Build this change** on the views
+page adds `builder` and, unless verification settings are stored, `test_writer`
+to the same space's roster (registered worker roles stay in the roster across
+later builds). Run `chorus team launch --space ... --choices choices.json`, or
 `--choices -` to read the same JSON from stdin. Choices are keyed by role:
 
 ```json
@@ -126,9 +127,11 @@ the exact supported flag and effect. The client family identifies
 its existing flags and connection support; program can name a wrapper. Every
 missing role needs a choice; running roles may be omitted or repeated with
 matching settings. After starting a build on the page, run `chorus team inspect
---space ...` again and launch `builder` and `test_writer` with `chorus team
-launch --space ... --choices ...`. Success prints `{ "tab": "...", "created": 1,
-"reused": 0 }`.
+--space ...` again to see the current roster and pass choices for the listed
+roles that are not running to `chorus team launch --space ... --choices ...` (a
+choice for a role outside the space's current roster, such as `test_writer`
+when verification settings are stored, is refused). Success prints
+`{ "tab": "...", "created": 1, "reused": 0 }`.
 A refusal prints a reason and exits nonzero; inspect and retry after partial
 failure to reuse completed panes. If Herdr's installed Chorus launcher files are
 missing or older than the `chorus` binary, `chorus team` refuses with
@@ -152,9 +155,11 @@ list the commands`.
 <a id="surla-serve"></a>
 ### `surla` and `surla stop`
 
-**Input:** `surla` (or `surla --print-link`; see
-[Terminal and browser automation](#terminal-and-browser-automation)), run in a
-project folder. **Who acts:** the command starts
+**Input:** `surla`, run in a project folder (`surla --print-link` runs the same
+server and team steps without opening a browser, writing the link JSON to
+stdout and the lines below to stderr; see
+[Terminal and browser automation](#terminal-and-browser-automation)). **Who
+acts:** the command starts
 the folder's server, or attaches to the one already running, then prepares the
 team and opens the views page. **What the user sees**, in order:
 
@@ -578,6 +583,12 @@ surla verify \
   -request-revision starter -work-dir "$WORK_DIR" -report-dir "$REPORT_DIR" -builder-view
 ```
 
+To verify your merged branch against the exact tests Surla accepted for a build
+(even if your branch also holds other changes to `eval/`), keep
+`-candidate-commit "$(git rev-parse HEAD)"` for the merged branch and pass the
+accepted `<tests_commit>` and `<request_revision>` shown in **Approve** (or
+**Build**) as `-suite-commit <tests_commit> -request-revision <request_revision>`.
+
 | Flag | Meaning |
 | --- | --- |
 | `-candidate-repo <path\|url>` *(required)* | Repository holding the application. |
@@ -597,7 +608,8 @@ surla verify \
 When a run ends without completing (`checkout`, `build`, `describe`, `suite`,
 `report` or `supervise`), `surla verify` writes
 `surla: verification <failure> at stage <stage>: <summary>` followed by the
-run's `executor.log` to standard error and exits 1 (when a canceled or
+run's `executor.log` to standard error (or `surla: read executor log: …` if the
+run stopped before creating `executor.log`) and exits 1 (when a canceled or
 timed-out run saved a partial report, it writes that report JSON to standard
 output and the summary line to standard error first, then exits 1).
 Failures during checkout, standalone dependency downloads and toolchain

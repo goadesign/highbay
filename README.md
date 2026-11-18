@@ -131,7 +131,9 @@ to $50 get instant store credit; larger ones wait for a manager":
    Detecting the merge runs no tests: the verification covered the passed
    run's commits, not your branch after the merge, which may also hold other
    changes merged after the build started. To run the accepted test suite
-   against the merged commit on your branch yourself, use
+   against the merged commit on your branch yourself, pass your branch's
+   `HEAD` as `-candidate-commit` and the accepted `<tests_commit>` shown in
+   **Approve** as `-suite-commit` to
    [`surla verify`](docs/REFERENCE.md#surla-verify). Surla
    merges and deploys nothing. Approval needs no
    settings. A project that stores
