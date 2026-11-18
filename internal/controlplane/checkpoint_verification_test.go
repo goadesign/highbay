@@ -1,6 +1,6 @@
 // This file tests the views page's verification stage through its real
-// list_verifications and get_verification requests: every run state and its
-// anonymized holdouts, status reads that never restart work, answers that
+// list_verifications and review_verification requests: every run state and
+// its anonymized holdouts, status reads that never restart work, answers that
 // belong to the run they were asked about, and the editor staying
 // independent while runs are read.
 package controlplane
@@ -159,19 +159,27 @@ const openChange = async (page, changeId) => {
   await until(() => page.sent("GET", buildPath).slice(buildReads).some((r) => r.status === 200) && !page.$("#surla-build-loading") && !page.$("#surla-build-error"), changeId + " did not settle its initial build read");
 };
 const proof = async (page, changeId) => {
-  const lists = page.sent("GET", "/changes/" + changeId + "/verifications").length;
+  const listPath = "/changes/" + changeId + "/verifications";
+  const lists = page.sent("GET", listPath).length;
+  const before = page.requests.length;
   page.$("#surla-nav-cp4").click();
-  await until(() => page.sent("GET", "/changes/" + changeId + "/verifications").length > lists && !page.$("#surla-cp4-verification").getAttribute("aria-busy"), "the runs of " + changeId + " were not read");
+  await until(() => {
+    const selected = page.$("#surla-result-view").dataset.runId;
+    return page.sent("GET", listPath).slice(lists).some((r) => r.status === 200) &&
+      selected && page.requests.slice(before).some((r) =>
+        r.method === "GET" && r.path === reviewPath(selected) && r.status === 200) &&
+      !page.$("#surla-cp4-verification").hasAttribute("aria-busy");
+  }, "the runs of " + changeId + " and the selected review did not settle");
 };
 const text = (page) => page.text("#surla-result-view");
 const field = (page) => page.$('textarea[data-field="expected_outcome"]');
 const button = (page) => page.$("#surla-cp4-check-status");
-const statusReads = (page, runId) => page.sent("GET", "/verifications/" + runId);
+const reviewPath = (runId) => "/verifications/" + runId + "/review";
+const reviewReads = (page, runId) => page.sent("GET", reviewPath(runId));
 const selectRun = async (page, runId) => {
   page.$("#surla-cp4-run-" + runId).click();
   await until(() => page.$("#surla-result-view").dataset.runId === runId, "run " + runId + " was not selected");
 };
-const runJSON = async (runId) => (await api(origin, "GET", "/verifications/" + runId, undefined, input.guide)).body;
 
 // Refreshing a run preserves the exact editable draft and starts no poller.
 {
@@ -181,23 +189,31 @@ const runJSON = async (runId) => (await api(origin, "GET", "/verifications/" + r
   await proof(page, "chg-verify");
   expect(page.text("#surla-cp4-title") === "The check is running", "running state is missing");
   expect(page.$("#surla-cp4-verification").getAttribute("aria-busy") === null, "idle run card marked aria-busy");
+  const reads = reviewReads(page, input.runA).length;
+  const statusReads = () => page.sent("GET", "/verifications/" + input.runA).length;
+  const statusBefore = statusReads();
+  expect(reads === 1 && JSON.parse(reviewReads(page, input.runA)[0].answer).run_id === input.runA, "opening Check did not read its selected review once");
   await sleep(300);
-  expect(statusReads(page, input.runA).length === 0, "showing a run started an automatic status read");
+  expect(reviewReads(page, input.runA).length === reads && statusReads() === statusBefore, "showing a run started polling");
   await fixture("run passed");
-  await control(origin, "hold", { key: "GET /verifications/" + input.runA });
+  const key = "GET " + reviewPath(input.runA);
+  await control(origin, "hold", { key });
   button(page).click();
-  expect(statusReads(page, input.runA).length === 1, "status action did not read this exact run");
+  expect(reviewReads(page, input.runA).length === reads + 1 && statusReads() === statusBefore, "status action did not review this exact run");
+  const refresh = reviewReads(page, input.runA)[reads];
   expect(button(page).disabled && page.$("#surla-cp4-verification").getAttribute("aria-busy") === "true", "status request was not disabled or marked aria-busy");
   expect(!field(page).disabled, "status read disabled independent CP1 editing");
   page.type(field(page), "Edited while checking status");
-  await control(origin, "release", { key: "GET /verifications/" + input.runA });
+  await control(origin, "release", { key });
   await until(() => text(page).includes("The check passed: 2 of 2 scenarios."), "completed report is not shown");
+  expect(refresh.status === 200 && JSON.parse(refresh.answer).run_id === input.runA, "status action did not receive its selected run");
   expect(!button(page) && page.$("#surla-cp4-verification").getAttribute("aria-busy") === null, "completed report is not final or remained aria-busy");
   expect(text(page).includes("The check passed: 2 of 2 scenarios.") && text(page).includes("holdout-1"), "report denominator or anonymous outcome is missing");
-  expect(text(page).includes("Not tested") && text(page).includes(input.commit), "coverage or verified inputs are missing");
+  expect(page.text("#surla-cp4-evidence-limits").includes("What this run does not establish") && text(page).includes(input.commit), "coverage limits or verified inputs are missing");
   expect(field(page).value === "Edited while checking status", "status reply erased a draft");
   await sleep(200);
-  expect(statusReads(page, input.runA).length === 1, "completed report started another request");
+  expect(reviewReads(page, input.runA).length === reads + 1 && statusReads() === statusBefore, "completed report started another request");
+  expect(page.sent("POST", "/changes/chg-verify/verifications").length === 0, "reviewing a run restarted verification");
   page.close();
 }
 
@@ -215,6 +231,7 @@ const runJSON = async (runId) => (await api(origin, "GET", "/verifications/" + r
   expect(text(page).includes("The check did not pass:") && text(page).includes("evaluation failed or ended unexpectedly"), "suite failure was converted to a passing count verdict");
   for (const [runId, title] of [["66666666-6666-4666-8666-666666666666", "The check could not finish"], ["77777777-7777-4777-8777-777777777777", "The check was interrupted"]]) {
     await selectRun(page, runId);
+    await until(() => !page.$("#surla-cp4-verification").hasAttribute("aria-busy"), "the incomplete run's review did not settle");
     expect(text(page).includes(title) && text(page).includes("Stopped during:"), "incomplete outcome is inaccurate");
     expect(!text(page).includes("Declared scenarios") && !button(page), "no-report outcome offered a completed report or restarted work");
   }
@@ -227,13 +244,16 @@ const runJSON = async (runId) => (await api(origin, "GET", "/verifications/" + r
   const page = await open("chg-verify");
   page.type(field(page), "Draft after read error");
   await proof(page, "chg-verify");
-  await control(origin, "reply", { key: "GET /verifications/" + input.runA, status: 503, body: { name: "fault", id: "x", message: "Verification service unavailable", temporary: true, timeout: false, fault: true } });
+  const reads = reviewReads(page, input.runA).length;
+  await control(origin, "reply", { key: "GET " + reviewPath(input.runA), status: 503, body: { name: "fault", id: "x", message: "Verification service unavailable", temporary: true, timeout: false, fault: true } });
   button(page).click();
   await until(() => text(page).includes("Verification service unavailable"), "the read failure is not shown");
   expect(text(page).includes("The check is running") && field(page).value === "Draft after read error" && !button(page).disabled, "read failure lost the run, the draft or the retry");
   await fixture("run passed");
   button(page).click();
   await until(() => text(page).includes("The check passed: 2 of 2 scenarios."), "the retry did not read the run");
+  const [failure, retry] = reviewReads(page, input.runA).slice(reads);
+  expect(failure?.status === 503 && retry?.status === 200 && JSON.parse(retry.answer).run_id === input.runA, "recovery did not retry the same run's review");
   expect(!text(page).includes("Verification service unavailable"), "successful retry retained old feedback");
   page.close();
 }
@@ -244,19 +264,25 @@ const runJSON = async (runId) => (await api(origin, "GET", "/verifications/" + r
   await fixture("run running");
   const page = await open("chg-verify");
   await proof(page, "chg-verify");
-  await selectRun(page, input.runA);
-  await control(origin, "hold", { key: "GET /verifications/" + input.runA });
-  await control(origin, "hold", { key: "GET /verifications/" + input.runB });
+  const keyA = "GET " + reviewPath(input.runA);
+  const keyB = "GET " + reviewPath(input.runB);
+  const readsA = reviewReads(page, input.runA).length;
+  await control(origin, "hold", { key: keyA });
+  await control(origin, "hold", { key: keyB });
   button(page).click();
+  const refreshA = reviewReads(page, input.runA)[readsA];
+  expect(refreshA && !refreshA.status, "run A's refresh was not held");
   await selectRun(page, input.runB);
-  button(page).click();
-  expect(statusReads(page, input.runB).length === 1, "run B's status was not read");
+  const [reviewB] = reviewReads(page, input.runB);
+  expect(reviewReads(page, input.runB).length === 1 && !reviewB.status && button(page).disabled, "selecting run B did not request its own review");
   await fixture("run passed");
-  await control(origin, "release", { key: "GET /verifications/" + input.runA });
-  await sleep(200);
-  expect(page.$("#surla-result-view").dataset.runId === input.runB && button(page).disabled, "late run A answer overwrote run B or cleared B's request");
-  await control(origin, "release", { key: "GET /verifications/" + input.runB });
-  await until(() => !button(page).disabled, "run B remained disabled after its own answer");
+  await control(origin, "release", { key: keyA });
+  await until(() => refreshA.status === 200, "the held run A review did not arrive");
+  expect(JSON.parse(refreshA.answer).state.type === "completed", "run A's late review did not carry the saved completion");
+  expect(page.$("#surla-result-view").dataset.runId === input.runB && button(page).disabled && !reviewB.status, "late run A answer overwrote run B or cleared B's request");
+  await control(origin, "release", { key: keyB });
+  await until(() => !button(page).disabled && reviewB.status === 200, "run B remained disabled after its own answer");
+  expect(JSON.parse(reviewB.answer).run_id === input.runB, "run B's review returned a different run");
   page.close();
 }
 
@@ -268,11 +294,12 @@ const runJSON = async (runId) => (await api(origin, "GET", "/verifications/" + r
   page.type(field(page), "Saved edited outcome");
   await proof(page, "chg-verify");
   expect(field(page), "the editor with unsaved edits did not stay beside the runs");
+  const reads = reviewReads(page, input.runA).length;
   await control(origin, "hold", { key: "POST /changes/confirm" });
   page.$("#surla-confirm-submit").click();
   await fixture("run passed");
   button(page).click();
-  expect(page.sent("POST", "/changes/confirm").length === 1 && statusReads(page, input.runA).length === 1, "independent status read was blocked behind the save");
+  expect(page.sent("POST", "/changes/confirm").length === 1 && reviewReads(page, input.runA).length === reads + 1, "independent review was blocked behind the save");
   await until(() => text(page).includes("The check passed: 2 of 2 scenarios."), "the status read did not finish during the save");
   expect(field(page).disabled, "status reply unlocked an unfinished card save");
   await control(origin, "release", { key: "POST /changes/confirm" });
@@ -430,14 +457,18 @@ for (const order of ["A_THEN_B", "B_THEN_A"]) {
   await fixture("run running");
   const page = await open("chg-verify");
   await proof(page, "chg-verify");
-  await control(origin, "answer-later", { key: "GET /verifications/" + input.runA });
+  const key = "GET " + reviewPath(input.runA);
+  const reads = reviewReads(page, input.runA).length;
+  await control(origin, "answer-later", { key });
   button(page).click();
+  const stale = reviewReads(page, input.runA)[reads];
   await sleep(100);
   await fixture("runs chg-verify passed");
   page.$("#surla-load-verifications").click();
   await until(() => text(page).includes("The check passed: 2 of 2 scenarios."), "the reloaded list did not show the finished run");
-  await control(origin, "release", { key: "GET /verifications/" + input.runA });
-  await until(() => statusReads(page, input.runA).length === 1 && !page.$("#surla-cp4-verification").getAttribute("aria-busy"), "the stale answer did not arrive");
+  await control(origin, "release", { key });
+  await until(() => stale?.status === 200 && !page.$("#surla-cp4-verification").hasAttribute("aria-busy"), "the stale answer did not arrive");
+  expect(JSON.parse(stale.answer).state.type === "running", "the held review did not capture a running snapshot");
   expect(text(page).includes("The check passed: 2 of 2 scenarios.") && !button(page), "an older answer reverted a completed run to running");
   page.close();
 }
@@ -446,13 +477,17 @@ for (const order of ["A_THEN_B", "B_THEN_A"]) {
   await fixture("run running");
   const page = await open("chg-verify");
   await proof(page, "chg-verify");
-  await control(origin, "hold", { key: "GET /verifications/" + input.runA });
+  const key = "GET " + reviewPath(input.runA);
+  const reads = reviewReads(page, input.runA).length;
+  await control(origin, "hold", { key });
   button(page).click();
+  const refresh = reviewReads(page, input.runA)[reads];
   page.$("#surla-load-verifications").click();
   await until(() => !page.$("#surla-load-verifications").disabled, "the running list did not load");
   await fixture("run passed");
-  await control(origin, "release", { key: "GET /verifications/" + input.runA });
+  await control(origin, "release", { key });
   await until(() => text(page).includes("The check passed: 2 of 2 scenarios.") && !button(page), "another running snapshot caused a valid completion to be discarded");
+  expect(refresh?.status === 200 && JSON.parse(refresh.answer).state.type === "completed", "the held review did not deliver the completion");
   page.close();
 }
 
@@ -462,31 +497,35 @@ for (const order of ["A_THEN_B", "B_THEN_A"]) {
   await fixture("run running");
   const page = await open("chg-verify");
   await proof(page, "chg-verify");
-  await control(origin, "hold", { key: "GET /verifications/" + input.runA });
+  const key = "GET " + reviewPath(input.runA);
+  const reads = reviewReads(page, input.runA).length;
+  await control(origin, "hold", { key });
   button(page).click();
+  const refresh = reviewReads(page, input.runA)[reads];
   page.$("#surla-nav-cp1").click();
   await fixture("run passed");
-  await control(origin, "release", { key: "GET /verifications/" + input.runA });
-  await until(() => statusReads(page, input.runA).length === 1, "the late status answer was not requested");
-  await sleep(200);
+  await control(origin, "release", { key });
+  await until(() => refresh?.status === 200, "the late review did not arrive");
   expect(page.state() === "cp1-change-card" && page.$("#surla-result-view").dataset.state === undefined, "a late status answer replaced a different stage");
   page.close();
 }
 
 // Valid offsets are accepted; malformed unions, timestamps and the wrong run fail at the response boundary.
 {
-  await fixture("runs chg-verify running");
-  await fixture("run running");
-  const base = await runJSON(input.runA);
-  const otherRun = await (async () => { await fixture("runs chg-verify running,otherRun"); return runJSON(input.runB); })();
-  await fixture("runs chg-verify running");
+  await fixture("runs chg-verify running,otherRun");
   const page = await open("chg-verify");
   await proof(page, "chg-verify");
+  const base = JSON.parse(reviewReads(page, input.runA)[0].answer);
+  await selectRun(page, input.runB);
+  await until(() => reviewReads(page, input.runB)[0]?.status === 200 && !button(page).disabled, "run B's review did not settle");
+  const otherRun = JSON.parse(reviewReads(page, input.runB)[0].answer);
+  await selectRun(page, input.runA);
+  await until(() => !button(page).disabled, "run A did not settle after selection");
   const answer = async (body) => {
-    await control(origin, "reply", { key: "GET /verifications/" + input.runA, status: 200, body });
-    const reads = statusReads(page, input.runA).length;
+    await control(origin, "reply", { key: "GET " + reviewPath(input.runA), status: 200, body });
+    const reads = reviewReads(page, input.runA).length;
     button(page).click();
-    await until(() => statusReads(page, input.runA).length > reads && !button(page).disabled, "the status read did not finish");
+    await until(() => reviewReads(page, input.runA)[reads]?.status === 200 && !button(page).disabled, "the review did not finish");
   };
   for (const started_at of ["2028-02-29T23:59:59+05:30", "2026-10-31T12:34:56.123456789-07:00"]) {
     await answer({ ...base, state: { type: "running", value: { started_at } } });
@@ -494,6 +533,7 @@ for (const order of ["A_THEN_B", "B_THEN_A"]) {
   }
   const passedValue = { suite_id: "suite", environment: "sim", report: { report_digest: "3".repeat(64), counts: { required: 1, passed: 1, failed: 0, not_run: 0, harness_error: 0 }, passed: true, suite_failed: false, scenarios: [] } };
   const invalid = [
+    { ...base, review: undefined },
     { ...base, inputs_current: undefined },
     { ...base, inputs_current: "true" },
     { ...base, state: undefined },
