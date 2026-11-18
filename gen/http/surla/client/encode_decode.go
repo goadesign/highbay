@@ -6032,6 +6032,7 @@ func EncodeReportTestsFinishedRequest(encoder func(*http.Request) goahttp.Encode
 // by the surla report_tests_finished endpoint. restoreBody controls whether
 // the response body should be restored after having been read.
 // DecodeReportTestsFinishedResponse may return the following errors:
+//   - "invalid_coverage" (type *goa.ServiceError): http.StatusBadRequest
 //   - "no_build" (type *goa.ServiceError): http.StatusConflict
 //   - "working_folder_missing" (type *goa.ServiceError): http.StatusConflict
 //   - "assignment_unread" (type *goa.ServiceError): http.StatusConflict
@@ -6076,6 +6077,20 @@ func DecodeReportTestsFinishedResponse(decoder func(*http.Response) goahttp.Deco
 			}
 			res := NewReportTestsFinishedTestWriterAssignmentItemOK(&body)
 			return res, nil
+		case http.StatusBadRequest:
+			var (
+				body ReportTestsFinishedInvalidCoverageResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("surla", "report_tests_finished", err)
+			}
+			err = ValidateReportTestsFinishedInvalidCoverageResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("surla", "report_tests_finished", err)
+			}
+			return nil, NewReportTestsFinishedInvalidCoverage(&body)
 		case http.StatusConflict:
 			en := resp.Header.Get("goa-error")
 			switch en {
@@ -7453,6 +7468,30 @@ func unmarshalStartedBuildResponseBodyToSurlaStartedBuild(v *StartedBuildRespons
 		}
 		res.RequiredTests[i] = unmarshalRequiredTestResponseBodyToSurlaRequiredTest(val)
 	}
+	res.Answers = make([]*surla.ConfirmedAnswer, len(v.Answers))
+	for i, val := range v.Answers {
+		if val == nil {
+			res.Answers[i] = nil
+			continue
+		}
+		res.Answers[i] = unmarshalConfirmedAnswerResponseBodyToSurlaConfirmedAnswer(val)
+	}
+	res.Examples = make([]*surla.ExampleItem, len(v.Examples))
+	for i, val := range v.Examples {
+		if val == nil {
+			res.Examples[i] = nil
+			continue
+		}
+		res.Examples[i] = unmarshalExampleItemResponseBodyToSurlaExampleItem(val)
+	}
+	res.CoverageStatements = make([]*surla.TestCoverageStatement, len(v.CoverageStatements))
+	for i, val := range v.CoverageStatements {
+		if val == nil {
+			res.CoverageStatements[i] = nil
+			continue
+		}
+		res.CoverageStatements[i] = unmarshalTestCoverageStatementResponseBodyToSurlaTestCoverageStatement(val)
+	}
 	switch string(v.Taking.Kind()) {
 	case "building":
 		actual, _ := v.Taking.AsBuilding()
@@ -7643,6 +7682,39 @@ func unmarshalRequiredTestResponseBodyToSurlaRequiredTest(v *RequiredTestRespons
 		FlowKey:  *v.FlowKey,
 		Scenario: *v.Scenario,
 		Hook:     *v.Hook,
+	}
+
+	return res
+}
+
+// unmarshalConfirmedAnswerResponseBodyToSurlaConfirmedAnswer builds a value of
+// type *surla.ConfirmedAnswer from a value of type
+// *ConfirmedAnswerResponseBody.
+func unmarshalConfirmedAnswerResponseBodyToSurlaConfirmedAnswer(v *ConfirmedAnswerResponseBody) *surla.ConfirmedAnswer {
+	res := &surla.ConfirmedAnswer{
+		ID:       *v.ID,
+		Question: *v.Question,
+		Answer:   *v.Answer,
+	}
+
+	return res
+}
+
+// unmarshalTestCoverageStatementResponseBodyToSurlaTestCoverageStatement
+// builds a value of type *surla.TestCoverageStatement from a value of type
+// *TestCoverageStatementResponseBody.
+func unmarshalTestCoverageStatementResponseBodyToSurlaTestCoverageStatement(v *TestCoverageStatementResponseBody) *surla.TestCoverageStatement {
+	res := &surla.TestCoverageStatement{
+		Scenario:    surla.TestCoverageReference(*v.Scenario),
+		Explanation: *v.Explanation,
+	}
+	res.QuestionIds = make([]surla.TestCoverageReference, len(v.QuestionIds))
+	for i, val := range v.QuestionIds {
+		res.QuestionIds[i] = surla.TestCoverageReference(*val)
+	}
+	res.ExampleIds = make([]surla.TestCoverageReference, len(v.ExampleIds))
+	for i, val := range v.ExampleIds {
+		res.ExampleIds[i] = surla.TestCoverageReference(*val)
 	}
 
 	return res
@@ -7853,14 +7925,57 @@ func unmarshalTestWriterAssignmentItemResponseBodyToSurlaTestWriterAssignmentIte
 	return res
 }
 
-// unmarshalConfirmedAnswerResponseBodyToSurlaConfirmedAnswer builds a value of
-// type *surla.ConfirmedAnswer from a value of type
-// *ConfirmedAnswerResponseBody.
-func unmarshalConfirmedAnswerResponseBodyToSurlaConfirmedAnswer(v *ConfirmedAnswerResponseBody) *surla.ConfirmedAnswer {
-	res := &surla.ConfirmedAnswer{
-		ID:       *v.ID,
-		Question: *v.Question,
-		Answer:   *v.Answer,
+// marshalSurlaTestCoverageStatementToTestCoverageStatementRequestBody builds a
+// value of type *TestCoverageStatementRequestBody from a value of type
+// *surla.TestCoverageStatement.
+func marshalSurlaTestCoverageStatementToTestCoverageStatementRequestBody(v *surla.TestCoverageStatement) *TestCoverageStatementRequestBody {
+	res := &TestCoverageStatementRequestBody{
+		Scenario:    string(v.Scenario),
+		Explanation: v.Explanation,
+	}
+	if v.QuestionIds != nil {
+		res.QuestionIds = make([]string, len(v.QuestionIds))
+		for i, val := range v.QuestionIds {
+			res.QuestionIds[i] = string(val)
+		}
+	} else {
+		res.QuestionIds = []string{}
+	}
+	if v.ExampleIds != nil {
+		res.ExampleIds = make([]string, len(v.ExampleIds))
+		for i, val := range v.ExampleIds {
+			res.ExampleIds[i] = string(val)
+		}
+	} else {
+		res.ExampleIds = []string{}
+	}
+
+	return res
+}
+
+// marshalTestCoverageStatementRequestBodyToSurlaTestCoverageStatement builds a
+// value of type *surla.TestCoverageStatement from a value of type
+// *TestCoverageStatementRequestBody.
+func marshalTestCoverageStatementRequestBodyToSurlaTestCoverageStatement(v *TestCoverageStatementRequestBody) *surla.TestCoverageStatement {
+	res := &surla.TestCoverageStatement{
+		Scenario:    surla.TestCoverageReference(v.Scenario),
+		Explanation: v.Explanation,
+	}
+	if v.QuestionIds != nil {
+		res.QuestionIds = make([]surla.TestCoverageReference, len(v.QuestionIds))
+		for i, val := range v.QuestionIds {
+			res.QuestionIds[i] = surla.TestCoverageReference(val)
+		}
+	} else {
+		res.QuestionIds = []surla.TestCoverageReference{}
+	}
+	if v.ExampleIds != nil {
+		res.ExampleIds = make([]surla.TestCoverageReference, len(v.ExampleIds))
+		for i, val := range v.ExampleIds {
+			res.ExampleIds[i] = surla.TestCoverageReference(val)
+		}
+	} else {
+		res.ExampleIds = []surla.TestCoverageReference{}
 	}
 
 	return res
@@ -7969,6 +8084,26 @@ func unmarshalRecordedRunStoryResponseBodyToSurlaRecordedRunStory(v *RecordedRun
 		u.SetNotRecordedForEvaluator((*surla.RunEvaluatorMappingUnknown)(obj))
 		res.Mapping = u
 	}
+	switch string(v.TestCoverage.Kind()) {
+	case "recorded":
+		actual, _ := v.TestCoverage.AsRecorded()
+		var obj *surla.RecordedTestCoverage
+		if actual != nil {
+			obj = unmarshalRecordedTestCoverageResponseBodyToSurlaRecordedTestCoverage(actual)
+		}
+		u := res.TestCoverage
+		u.SetRecorded((*surla.RecordedTestCoverage)(obj))
+		res.TestCoverage = u
+	case "not_recorded":
+		actual, _ := v.TestCoverage.AsNotRecorded()
+		var obj *surla.TestCoverageNotRecorded
+		if actual != nil {
+			obj = unmarshalTestCoverageNotRecordedResponseBodyToSurlaTestCoverageNotRecorded(actual)
+		}
+		u := res.TestCoverage
+		u.SetNotRecorded((*surla.TestCoverageNotRecorded)(obj))
+		res.TestCoverage = u
+	}
 
 	return res
 }
@@ -7995,6 +8130,50 @@ func unmarshalRunStoryMappingResponseBodyToSurlaRunStoryMapping(v *RunStoryMappi
 // type *RunEvaluatorMappingUnknownResponseBody.
 func unmarshalRunEvaluatorMappingUnknownResponseBodyToSurlaRunEvaluatorMappingUnknown(v *RunEvaluatorMappingUnknownResponseBody) *surla.RunEvaluatorMappingUnknown {
 	res := &surla.RunEvaluatorMappingUnknown{}
+
+	return res
+}
+
+// unmarshalRecordedTestCoverageResponseBodyToSurlaRecordedTestCoverage builds
+// a value of type *surla.RecordedTestCoverage from a value of type
+// *RecordedTestCoverageResponseBody.
+func unmarshalRecordedTestCoverageResponseBodyToSurlaRecordedTestCoverage(v *RecordedTestCoverageResponseBody) *surla.RecordedTestCoverage {
+	res := &surla.RecordedTestCoverage{
+		Report: *v.Report,
+	}
+	res.Answers = make([]*surla.ConfirmedAnswer, len(v.Answers))
+	for i, val := range v.Answers {
+		if val == nil {
+			res.Answers[i] = nil
+			continue
+		}
+		res.Answers[i] = unmarshalConfirmedAnswerResponseBodyToSurlaConfirmedAnswer(val)
+	}
+	res.Examples = make([]*surla.ExampleItem, len(v.Examples))
+	for i, val := range v.Examples {
+		if val == nil {
+			res.Examples[i] = nil
+			continue
+		}
+		res.Examples[i] = unmarshalExampleItemResponseBodyToSurlaExampleItem(val)
+	}
+	res.CoverageStatements = make([]*surla.TestCoverageStatement, len(v.CoverageStatements))
+	for i, val := range v.CoverageStatements {
+		if val == nil {
+			res.CoverageStatements[i] = nil
+			continue
+		}
+		res.CoverageStatements[i] = unmarshalTestCoverageStatementResponseBodyToSurlaTestCoverageStatement(val)
+	}
+
+	return res
+}
+
+// unmarshalTestCoverageNotRecordedResponseBodyToSurlaTestCoverageNotRecorded
+// builds a value of type *surla.TestCoverageNotRecorded from a value of type
+// *TestCoverageNotRecordedResponseBody.
+func unmarshalTestCoverageNotRecordedResponseBodyToSurlaTestCoverageNotRecorded(v *TestCoverageNotRecordedResponseBody) *surla.TestCoverageNotRecorded {
+	res := &surla.TestCoverageNotRecorded{}
 
 	return res
 }

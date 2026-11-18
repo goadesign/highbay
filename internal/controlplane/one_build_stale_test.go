@@ -62,7 +62,7 @@ func TestOneBuildLateConsumersPreserveTheNewOpenRecord(t *testing.T) {
 			assertRefused(t, err, "not_found")
 		}},
 		{name: "test report", run: func(t *testing.T) {
-			_, err := cp.ReportTestsFinished(asCaller("alice@example.com", CallerTestWriter), &gensurla.ReportTestsFinishedPayload{ChangeID: "x", RequestRevision: x.RequestRevision})
+			_, err := cp.ReportTestsFinished(asCaller("alice@example.com", CallerTestWriter), &gensurla.ReportTestsFinishedPayload{ChangeID: "x", RequestRevision: x.RequestRevision, CoverageStatements: []*gensurla.TestCoverageStatement{}})
 			assertRefused(t, err, "not_found")
 		}},
 		{name: "report still belongs", run: func(t *testing.T) {

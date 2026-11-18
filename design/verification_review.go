@@ -18,7 +18,13 @@ var RecordedRunStory = Type("RecordedRunStory", func() {
 		Attribute("mapped", RunStoryMapping)
 		Attribute("not_recorded_for_evaluator", RunEvaluatorMappingUnknown)
 	})
-	Required("build_number", "build_started_at", "stories", "mapping")
+	OneOf("test_coverage", "The writer's immutable statements for this run, or explicit missing historical/operator evidence.", func() {
+		Meta("oneof:json:flatten")
+		Meta("oneof:type:field", "state")
+		Attribute("recorded", RecordedTestCoverage)
+		Attribute("not_recorded", TestCoverageNotRecorded)
+	})
+	Required("build_number", "build_started_at", "stories", "mapping", "test_coverage")
 })
 
 // RunStoryMapping names the tests generation requires for the recorded flows.

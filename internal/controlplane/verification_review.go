@@ -84,6 +84,10 @@ func runStoryContext(req verifyrun.Request) (gensurla.StoryContext, error) {
 		BuildNumber:    context.BuildNumber,
 		BuildStartedAt: context.BuildStartedAt.UTC().Format(time.RFC3339Nano),
 		Stories:        storySummaryItems(context.Stories),
+		TestCoverage:   gensurla.NewTestCoverageNotRecorded(&gensurla.TestCoverageNotRecorded{}),
+	}
+	if context.TestCoverage != nil {
+		recorded.TestCoverage = gensurla.NewTestCoverageRecorded((*gensurla.RecordedTestCoverage)(context.TestCoverage))
 	}
 	if req.Plan.Tests == verify.TestsEvaluator {
 		recorded.Mapping = gensurla.NewMappingNotRecordedForEvaluator(&gensurla.RunEvaluatorMappingUnknown{})
@@ -133,7 +137,9 @@ func (c *ControlPlane) reviewRunApproval(
 			now, readErr := c.ownedCard(principal, req.ChangeID)
 			var tests string
 			if readErr == nil {
-				tests, _, readErr = c.testsChoice(principal, req.ChangeID, req.Plan.RequestRevision)
+				var selection testSelection
+				selection, readErr = c.testsChoice(principal, req.ChangeID, req.Plan.RequestRevision)
+				tests = selection.commit
 			}
 			unchanged := readErr == nil && now.card.RequestRevision == req.Plan.RequestRevision &&
 				now.card.Approval != nil && now.card.Approval.ReportDigest == saved.ReportDigest &&

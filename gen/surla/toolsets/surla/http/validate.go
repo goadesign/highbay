@@ -758,6 +758,9 @@ func ValidateGetTestWriterAssignmentResultTransport(body *GetTestWriterAssignmen
 	if body.PreservedBehaviors == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("preserved_behaviors", "body"))
 	}
+	if body.CoverageStatements == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("coverage_statements", "body"))
+	}
 	if body.Progress != nil {
 		if err2 := ValidateTestWriterProgressTransport(body.Progress); err2 != nil {
 			err = goa.MergeErrors(err, err2)
@@ -787,6 +790,16 @@ func ValidateGetTestWriterAssignmentResultTransport(body *GetTestWriterAssignmen
 	for _, e := range body.Examples {
 		if e != nil {
 			if err2 := ValidateExampleItemTransport(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	for _, e := range body.CoverageStatements {
+		if e == nil {
+			err = goa.MergeErrors(err, goa.MissingFieldError("body.coverage_statements", "[*]"))
+		}
+		if e != nil {
+			if err2 := ValidateTestCoverageStatementTransport(e); err2 != nil {
 				err = goa.MergeErrors(err, err2)
 			}
 		}
@@ -1262,6 +1275,9 @@ func ValidateReportTestsFinishedPayloadTransport(body *ReportTestsFinishedPayloa
 	if body.RequestRevision == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("request_revision", "body"))
 	}
+	if body.CoverageStatements == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("coverage_statements", "body"))
+	}
 	if body.ChangeID != nil {
 		if utf8.RuneCountInString(*body.ChangeID) < 1 {
 			err = goa.MergeErrors(err, goa.InvalidLengthError("body.change_id", *body.ChangeID, utf8.RuneCountInString(*body.ChangeID), 1, true))
@@ -1270,6 +1286,16 @@ func ValidateReportTestsFinishedPayloadTransport(body *ReportTestsFinishedPayloa
 	if body.RequestRevision != nil {
 		if utf8.RuneCountInString(*body.RequestRevision) < 1 {
 			err = goa.MergeErrors(err, goa.InvalidLengthError("body.request_revision", *body.RequestRevision, utf8.RuneCountInString(*body.RequestRevision), 1, true))
+		}
+	}
+	for _, e := range body.CoverageStatements {
+		if e == nil {
+			err = goa.MergeErrors(err, goa.MissingFieldError("body.coverage_statements", "[*]"))
+		}
+		if e != nil {
+			if err2 := ValidateTestCoverageStatementTransport(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
 		}
 	}
 	return
@@ -2419,6 +2445,9 @@ func ValidateRecordedRunStoryTransport(body *RecordedRunStoryTransport) (err err
 	if body.Mapping == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("mapping", "body"))
 	}
+	if body.TestCoverage == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("test_coverage", "body"))
+	}
 	if body.BuildNumber != nil {
 		if *body.BuildNumber < 1 {
 			err = goa.MergeErrors(err, goa.InvalidRangeError("body.build_number", *body.BuildNumber, 1, true))
@@ -2450,6 +2479,75 @@ func ValidateRecordedRunStoryTransport(body *RecordedRunStoryTransport) (err err
 			}
 		}
 
+	}
+	if body.TestCoverage != nil {
+
+		if err2 := body.TestCoverage.Validate(); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		} else {
+			switch string(body.TestCoverage.Kind()) {
+			case "recorded":
+				actual, _ := body.TestCoverage.AsRecorded()
+				if actual != nil {
+					if err2 := ValidateRecordedTestCoverageTransport(actual); err2 != nil {
+						err = goa.MergeErrors(err, err2)
+					}
+				}
+			}
+		}
+
+	}
+	return
+}
+
+// ValidateRecordedTestCoverageTransport runs the validations defined on RecordedTestCoverageTransport.
+func ValidateRecordedTestCoverageTransport(body *RecordedTestCoverageTransport) (err error) {
+	if body.Report == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("report", "body"))
+	}
+	if body.Answers == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("answers", "body"))
+	}
+	if body.Examples == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("examples", "body"))
+	}
+	if body.CoverageStatements == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("coverage_statements", "body"))
+	}
+	if body.Report != nil {
+		if *body.Report < 1 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.report", *body.Report, 1, true))
+		}
+	}
+	for _, e := range body.Answers {
+		if e == nil {
+			err = goa.MergeErrors(err, goa.MissingFieldError("body.answers", "[*]"))
+		}
+		if e != nil {
+			if err2 := ValidateConfirmedAnswerTransport(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	for _, e := range body.Examples {
+		if e == nil {
+			err = goa.MergeErrors(err, goa.MissingFieldError("body.examples", "[*]"))
+		}
+		if e != nil {
+			if err2 := ValidateExampleItemTransport(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	for _, e := range body.CoverageStatements {
+		if e == nil {
+			err = goa.MergeErrors(err, goa.MissingFieldError("body.coverage_statements", "[*]"))
+		}
+		if e != nil {
+			if err2 := ValidateTestCoverageStatementTransport(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
 	}
 	return
 }
@@ -2549,6 +2647,15 @@ func ValidateStartedBuildTransport(body *StartedBuildTransport) (err error) {
 	if body.RequiredTests == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("required_tests", "body"))
 	}
+	if body.Answers == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("answers", "body"))
+	}
+	if body.Examples == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("examples", "body"))
+	}
+	if body.CoverageStatements == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("coverage_statements", "body"))
+	}
 	if body.Taking == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("taking", "body"))
 	}
@@ -2573,6 +2680,36 @@ func ValidateStartedBuildTransport(body *StartedBuildTransport) (err error) {
 	for _, e := range body.RequiredTests {
 		if e != nil {
 			if err2 := ValidateRequiredTestTransport(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	for _, e := range body.Answers {
+		if e == nil {
+			err = goa.MergeErrors(err, goa.MissingFieldError("body.answers", "[*]"))
+		}
+		if e != nil {
+			if err2 := ValidateConfirmedAnswerTransport(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	for _, e := range body.Examples {
+		if e == nil {
+			err = goa.MergeErrors(err, goa.MissingFieldError("body.examples", "[*]"))
+		}
+		if e != nil {
+			if err2 := ValidateExampleItemTransport(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	for _, e := range body.CoverageStatements {
+		if e == nil {
+			err = goa.MergeErrors(err, goa.MissingFieldError("body.coverage_statements", "[*]"))
+		}
+		if e != nil {
+			if err2 := ValidateTestCoverageStatementTransport(e); err2 != nil {
 				err = goa.MergeErrors(err, err2)
 			}
 		}
@@ -2718,6 +2855,61 @@ func ValidateStorySummaryItemTransport(body *StorySummaryItemTransport) (err err
 			if err2 := ValidateStoryFlowItemTransport(e); err2 != nil {
 				err = goa.MergeErrors(err, err2)
 			}
+		}
+	}
+	return
+}
+
+// ValidateTestCoverageReferenceTransport runs the validations defined on TestCoverageReferenceTransport.
+func ValidateTestCoverageReferenceTransport(body TestCoverageReferenceTransport) (err error) {
+	if utf8.RuneCountInString(string(body)) < 1 {
+		err = goa.MergeErrors(err, goa.InvalidLengthError("body", string(body), utf8.RuneCountInString(string(body)), 1, true))
+	}
+	return
+}
+
+// ValidateTestCoverageStatementTransport runs the validations defined on TestCoverageStatementTransport.
+func ValidateTestCoverageStatementTransport(body *TestCoverageStatementTransport) (err error) {
+	if body.Scenario == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("scenario", "body"))
+	}
+	if body.QuestionIds == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("question_ids", "body"))
+	}
+	if body.ExampleIds == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("example_ids", "body"))
+	}
+	if body.Explanation == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("explanation", "body"))
+	}
+	if body.Scenario != nil {
+		if utf8.RuneCountInString(string(*body.Scenario)) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.scenario", string(*body.Scenario), utf8.RuneCountInString(string(*body.Scenario)), 1, true))
+		}
+	}
+	for _, e := range body.QuestionIds {
+		if e == nil {
+			err = goa.MergeErrors(err, goa.MissingFieldError("body.question_ids", "[*]"))
+		}
+		if e != nil {
+			if utf8.RuneCountInString(string(*e)) < 1 {
+				err = goa.MergeErrors(err, goa.InvalidLengthError("body.question_ids[*]", string(*e), utf8.RuneCountInString(string(*e)), 1, true))
+			}
+		}
+	}
+	for _, e := range body.ExampleIds {
+		if e == nil {
+			err = goa.MergeErrors(err, goa.MissingFieldError("body.example_ids", "[*]"))
+		}
+		if e != nil {
+			if utf8.RuneCountInString(string(*e)) < 1 {
+				err = goa.MergeErrors(err, goa.InvalidLengthError("body.example_ids[*]", string(*e), utf8.RuneCountInString(string(*e)), 1, true))
+			}
+		}
+	}
+	if body.Explanation != nil {
+		if utf8.RuneCountInString(*body.Explanation) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.explanation", *body.Explanation, utf8.RuneCountInString(*body.Explanation), 1, true))
 		}
 	}
 	return

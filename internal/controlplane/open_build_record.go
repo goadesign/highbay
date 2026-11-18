@@ -63,6 +63,9 @@ type (
 		Findings []string `json:"findings"`
 		// Commit identifies accepted tests exactly when State is accepted.
 		Commit string `json:"commit"`
+		// CoverageStatements belong to this report, retained for correction
+		// and exposed to the user as accepted only in the accepted state.
+		CoverageStatements []*gensurla.TestCoverageStatement `json:"coverage_statements,omitempty"`
 		// Reason and Step are populated exactly when State is could_not_run.
 		Reason string `json:"reason,omitzero"`
 		Step   string `json:"step,omitzero"`
@@ -93,6 +96,9 @@ func decodeOpenBuild(data []byte) (buildFile, error) {
 	if err := validateOpenBuild(saved); err != nil {
 		return buildFile{}, err
 	}
+	if err := validateStoredCoverage(saved); err != nil {
+		return buildFile{}, err
+	}
 	return saved, nil
 }
 
@@ -118,6 +124,9 @@ func validateOpenBuild(saved buildFile) error {
 		return errors.New("open build has unknown roles")
 	}
 	tw := saved.TestWriter
+	if (tw.State == testsAssigned || saved.Roles == buildRolesBuilderOnly) && len(tw.CoverageStatements) > 0 {
+		return errors.New("unreported or builder-only build must not carry writer coverage statements")
+	}
 	noVerdictFields := tw.Reason == "" && tw.Step == ""
 	var valid, verdict bool
 	switch tw.State {

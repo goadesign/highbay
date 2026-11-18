@@ -95,7 +95,7 @@ func TestReportV1TipGateChecksTheRealCopy(t *testing.T) {
 			folder := filepath.Join(workspace, testwriter.TestsRole.Folder)
 			writeWorkspaceFiles(t, folder, map[string]string{"eval/own_test.txt": "Own test work, not committed.\n"})
 			server := roleServer(t, cp)
-			status, body := httpCall(t, server.URL, "tests", http.MethodPost, "/assignments/test-writer/chg/finished", fmt.Sprintf(`{"request_revision":%q}`, revision))
+			status, body := httpCall(t, server.URL, "tests", http.MethodPost, "/assignments/test-writer/chg/finished", fmt.Sprintf(`{"request_revision":%q,"coverage_statements":[]}`, revision))
 			require.Equal(t, http.StatusOK, status, body)
 			require.Equal(t, 1, receive(t, checking))
 			want := ""
@@ -225,8 +225,7 @@ func TestReportV1RetainsADeletedDroppedBranch(t *testing.T) {
 	productionBuildGit(t, folder, "merge", "--no-edit", foreign)
 	before := productionBuildGit(t, workspace, "rev-parse", "surla/tests-2")
 	_, err = cp.ReportTestsFinished(asCaller("alice@example.com", CallerTestWriter), &gensurla.ReportTestsFinishedPayload{
-		ChangeID: card.ChangeID, RequestRevision: card.RequestRevision,
-	})
+		ChangeID: card.ChangeID, RequestRevision: card.RequestRevision, CoverageStatements: []*gensurla.TestCoverageStatement{}})
 	require.NoError(t, err)
 	waitForNamedTests(t, cp, card.ChangeID, gensurla.TestsKindNeedsChanges)
 	findings, err := cp.GetTestFindings(user, &gensurla.GetTestFindingsPayload{ChangeID: card.ChangeID})

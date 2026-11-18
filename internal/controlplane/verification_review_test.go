@@ -198,22 +198,56 @@ func TestReviewVerificationHTTPPolicy(t *testing.T) {
 }
 
 // TestReviewVerificationKeepsHistoricalStory reads accepted evidence after a
-// real agreement revision and distinguishes a run written without Story context.
+// real agreement revision and restart, and distinguishes old missing context.
 func TestReviewVerificationKeepsHistoricalStory(t *testing.T) {
 	f := newReviewFixture(t)
 	f.req.StoryContext.Stories = sampleAdoptedStories()
+	// This historical written-test record remains readable when the server
+	// now uses a configured evaluator; current settings cannot supply its basis.
+	f.req.Plan.Tests = verify.TestsWritten
+	f.req.StoryContext.TestCoverage = &verifyrun.TestCoverageSnapshot{
+		Report: 1, Answers: []*gensurla.ConfirmedAnswer{}, Examples: f.card.Examples,
+		CoverageStatements: []*gensurla.TestCoverageStatement{{
+			Scenario:    gensurla.TestCoverageReference(f.report.Scenarios[0].ID),
+			QuestionIds: []gensurla.TestCoverageReference{},
+			ExampleIds:  []gensurla.TestCoverageReference{gensurla.TestCoverageReference(f.card.Examples[0].ID)},
+			Explanation: "Checks the original refund outcome.",
+		}},
+	}
 	raw, err := json.Marshal(f.req)
 	require.NoError(t, err)
 	requestFile := filepath.Join(f.cfg.RunsDir, f.req.RunID, "request.json")
 	require.NoError(t, os.WriteFile(requestFile, raw, 0o600))
 	changeReviewAgreement(t, f)
+	require.NoError(t, f.cp.Close())
+	f.cp = newControlPlane(t, Options{
+		CardsDir: f.cp.cards.dir, WorkspaceDir: f.cp.currentWorkspaceDir(),
+		BuildCacheDir: f.cp.buildCacheDir, Verification: f.cfg,
+	})
 	got, err := f.cp.ReviewVerification(asCaller("alice@example.com", CallerUser), &gensurla.GetVerificationPayload{RunID: f.req.RunID})
 	require.NoError(t, err)
 	recorded, ok := got.Review.StoryContext.AsRecorded()
 	require.True(t, ok)
 	assert.Equal(t, storySummaryItems(f.req.StoryContext.Stories), recorded.Stories)
+	coverage, ok := recorded.TestCoverage.AsRecorded()
+	require.True(t, ok)
+	assert.Equal(t, f.req.StoryContext.TestCoverage.Examples, coverage.Examples)
+	assert.Equal(t, f.req.StoryContext.TestCoverage.CoverageStatements, coverage.CoverageStatements)
+	assert.Equal(t, 1, coverage.Report)
 	assert.Equal(t, f.req.Plan.RequestRevision, got.RequestRevision)
 	assert.Equal(t, gensurla.ApprovalKindBlocked, got.Review.Approval.Kind())
+
+	// Older Story snapshots without this new field remain explicitly unknown.
+	f.req.StoryContext.TestCoverage = nil
+	oldCoverage, err := json.Marshal(f.req)
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(requestFile, oldCoverage, 0o600))
+	got, err = f.cp.ReviewVerification(asCaller("alice@example.com", CallerUser), &gensurla.GetVerificationPayload{RunID: f.req.RunID})
+	require.NoError(t, err)
+	recorded, ok = got.Review.StoryContext.AsRecorded()
+	require.True(t, ok)
+	_, missingCoverage := recorded.TestCoverage.AsNotRecorded()
+	assert.True(t, missingCoverage)
 
 	// Remove the whole field as in an older on-disk request, not an explicit
 	// recorded empty list; only verifyrun interprets that absence.

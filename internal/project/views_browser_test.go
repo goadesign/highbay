@@ -155,6 +155,7 @@ type (
 		FooterReserved        bool     `json:"footer_reserved"`
 		FlowLinesReadable     bool     `json:"flow_lines_readable"`
 		PrimaryAtRest         bool     `json:"primary_at_rest"`
+		CoverageLinked        bool     `json:"coverage_linked"`
 		Overflowing           []string `json:"overflowing"`
 		Screenshot            string   `json:"screenshot"`
 	}
