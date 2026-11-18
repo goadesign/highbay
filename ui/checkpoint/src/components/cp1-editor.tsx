@@ -220,7 +220,7 @@ export function CP1EditorView({
           </ul>
         </div>
       ) : null}
-      <p>
+      <p id="surla-agreement-summary" tabIndex={-1}>
         <strong>
           {card.status === "confirmed" && ambiguities.length > 0
             ? "Initial Proposal Summary: "
@@ -315,6 +315,9 @@ export function CP1EditorView({
             <Badge>{priorCard.status === "confirmed" ? "Confirmed" : "Needs confirmation"}</Badge>
             <code>{priorCard.request_revision}</code>
           </div>
+          {priorCard.status === "needs_confirmation" && card.status === "confirmed" ? (
+            <p>This is the proposal before confirmation. Your confirmed answers are saved in the current agreement.</p>
+          ) : null}
           <p>
             <strong>Previous request: </strong>
             {priorCard.prompt}
@@ -341,7 +344,7 @@ export function CP1EditorView({
                     <strong>{amb.question}</strong>
                     {ans
                       ? " — Confirmed answer: " + ans
-                      : " — Unanswered (options: " + amb.options.join(", ") + ")"}
+                      : " — Not yet answered in that proposal (options: " + amb.options.join(", ") + ")"}
                   </li>
                 );
               })}
