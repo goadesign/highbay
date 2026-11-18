@@ -60,6 +60,7 @@ for (const [field, cases] of Object.entries({
 }
 
 const saved = { request_revision: "revision", started_at: "2026-11-13T00:00:00Z", in_force: true, taking: { state: "building" },
+  answers: [], examples: [], coverage_statements: [],
   required_test_count: 0, required_tests: [], builder: { read: false }, test_writer: { read: false, report: 0, tests: { state: "assigned" } } };
 for (const op of ["get_build", "start_build"]) {
   const answer = (build) => op === "get_build"
