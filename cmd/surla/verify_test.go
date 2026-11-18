@@ -396,7 +396,7 @@ func projectDispatchRuntime(t *testing.T) projectRuntime {
 	root := t.TempDir()
 	runtime := testProjectRuntimeAt(root)
 	bindFixtureTeamEffects(&runtime)
-	runtime.preflight = func() error { return nil }
+	runtime.preflight = func(bool) error { return nil }
 	runtime.waitTerminal = func(ctx context.Context, id string) (bool, error) { <-ctx.Done(); return false, nil }
 	starts, opens := 0, 0
 	runtime.startTerminal = func(ctx context.Context, state *project.State) (string, error) {
@@ -451,7 +451,9 @@ func TestDefaultProjectEffectsAreBlocked(t *testing.T) {
 	state, err := fixtureProjectState(t.TempDir())
 	require.NoError(t, err)
 	dependencies := fixtureTeamDependencies(state)
-	assert.Nil(t, dependencies.Observer)
-	assert.Nil(t, dependencies.Sender)
+	connection, err := dependencies.Connect(t.Context())
+	require.NoError(t, err)
+	assert.Nil(t, connection.Observer)
+	assert.Nil(t, connection.Sender)
 	require.ErrorContains(t, run(nil, io.Discard), "cannot start real")
 }

@@ -190,7 +190,7 @@ func TestTeamReminderStopRecordsNoAttempt(t *testing.T) {
 			if tc.stopping {
 				act = func(context.Context) { cancel() }
 			}
-			o.server.team.dependencies.Sender = actingSender{supervisionFixture: f, act: act}
+			o.selection.connection.Sender = actingSender{supervisionFixture: f, act: act}
 			exporter.Reset()
 			o.remind(ctx, now)
 			assert.Len(t, f.sends, 1)
@@ -225,7 +225,7 @@ func TestTeamReminderChildContextEndingIsAChorusFailure(t *testing.T) {
 			o, f, now := newSupervisionFixture(t)
 			listed(o, now.Add(-teamJoinSettle), true, "builder-example")
 			f.sendErr = TeamSendFailure{Post: "who", Kind: tc.kind}
-			o.server.team.dependencies.Sender = actingSender{supervisionFixture: f, act: tc.act}
+			o.selection.connection.Sender = actingSender{supervisionFixture: f, act: tc.act}
 			exporter.Reset()
 			ctx, cancel := context.WithCancel(t.Context())
 			defer cancel()
@@ -255,7 +255,7 @@ func TestTeamReminderStopLeavesRemainingRolesUntried(t *testing.T) {
 	f.sendErr = TeamSendFailure{Post: "who", Kind: "connection"}
 	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
-	o.server.team.dependencies.Sender = actingSender{supervisionFixture: f, act: func(context.Context) { cancel() }}
+	o.selection.connection.Sender = actingSender{supervisionFixture: f, act: func(context.Context) { cancel() }}
 	exporter.Reset()
 	o.remind(ctx, now)
 	require.Len(t, f.sends, 1, "no role after the stopped post is tried")

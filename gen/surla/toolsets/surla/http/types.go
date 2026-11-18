@@ -598,6 +598,10 @@ type (
 		// copied when this build started; empty when it names none. The tests must
 		// hold the service to each.
 		PreservedBehaviors []string `json:"preserved_behaviors"`
+		// Statements submitted with the latest report, retained for correction after
+		// findings or a check that could not run; empty before any report or when none
+		// were stated.
+		CoverageStatements []*TestCoverageStatementTransport `json:"coverage_statements"`
 	}
 	// GetVerificationPayloadTransport is the internal JSON transport type for GetVerificationPayload.
 	// It lives in the toolset-local http package and is used only for JSON
@@ -943,6 +947,10 @@ type (
 		ChangeID *string `json:"change_id"`
 		// request_revision of your test assignment.
 		RequestRevision *string `json:"request_revision"`
+		// Your stated scenario coverage of this assignment's answers and examples; use
+		// [] when none is stated. Surla validates references but does not judge
+		// assertion meaning.
+		CoverageStatements []*TestCoverageStatementTransport `json:"coverage_statements"`
 	}
 	// ReportTestsFinishedResultTransport is the internal JSON transport type for ReportTestsFinishedResult.
 	// It lives in the toolset-local http package and is used only for JSON
@@ -1754,6 +1762,23 @@ type (
 		// The owner's exact required-test mapping for written tests, or the explicit
 		// absence of such a mapping for an operator evaluator.
 		Mapping *Mapping `json:"mapping"`
+		// The writer's immutable statements for this run, or explicit missing
+		// historical/operator evidence.
+		TestCoverage *TestCoverage `json:"test_coverage"`
+	}
+	// RecordedTestCoverageTransport is the internal JSON transport type for RecordedTestCoverageTransport.
+	// It lives in the toolset-local http package and is used only for JSON
+	// decode + validation (missing-field detection) before transforming into
+	// the public tool type.
+	RecordedTestCoverageTransport struct {
+		// Accepted test-writer report number.
+		Report *int `json:"report"`
+		// Answers saved for the built agreement, in question order.
+		Answers []*ConfirmedAnswerTransport `json:"answers"`
+		// Examples saved for the built agreement, in confirmation order.
+		Examples []*ExampleItemTransport `json:"examples"`
+		// Writer statements for this report; empty means Not stated.
+		CoverageStatements []*TestCoverageStatementTransport `json:"coverage_statements"`
 	}
 	// RequiredTestTransport is the internal JSON transport type for RequiredTestTransport.
 	// It lives in the toolset-local http package and is used only for JSON
@@ -1844,6 +1869,14 @@ type (
 		// Tests required by this build's saved Story, in declaration order; unfinished
 		// flows require none. Empty when no finished flow requires a test.
 		RequiredTests []*RequiredTestTransport `json:"required_tests"`
+		// Confirmed answers saved when this build started; later revisions do not
+		// replace them.
+		Answers []*ConfirmedAnswerTransport `json:"answers"`
+		// Examples saved when this build started; later revisions do not replace them.
+		Examples []*ExampleItemTransport `json:"examples"`
+		// The accepted report's writer statements; empty before acceptance or when
+		// none were stated. Surla did not judge them.
+		CoverageStatements []*TestCoverageStatementTransport `json:"coverage_statements"`
 		// Whether the user has taken this build: building until a verification of it
 		// passes; passed with the commits to merge; merged once the branch checked out
 		// in the project folder holds the commits of one passed run, the builder's
@@ -1928,6 +1961,33 @@ type (
 		Actors []*StoryActorItemTransport `json:"actors"`
 		// Timeline paths declared in the Story in declaration order.
 		Flows []*StoryFlowItemTransport `json:"flows"`
+	}
+	// TestCoverageNotRecordedTransport is the internal JSON transport type for TestCoverageNotRecordedTransport.
+	// It lives in the toolset-local http package and is used only for JSON
+	// decode + validation (missing-field detection) before transforming into
+	// the public tool type.
+	TestCoverageNotRecordedTransport struct {
+	}
+	// TestCoverageReferenceTransport is the internal JSON transport type for TestCoverageReferenceTransport.
+	// It lives in the toolset-local http package and is used only for JSON
+	// decode + validation (missing-field detection) before transforming into
+	// the public tool type.
+	TestCoverageReferenceTransport string
+	// TestCoverageStatementTransport is the internal JSON transport type for TestCoverageStatementTransport.
+	// It lives in the toolset-local http package and is used only for JSON
+	// decode + validation (missing-field detection) before transforming into
+	// the public tool type.
+	TestCoverageStatementTransport struct {
+		// Exact declared scenario identifier.
+		Scenario *TestCoverageReferenceTransport `json:"scenario"`
+		// Question IDs from the assignment's answers[].id; empty when this statement
+		// names only examples.
+		QuestionIds []*TestCoverageReferenceTransport `json:"question_ids"`
+		// Example IDs from the assignment's examples[].id; empty when this statement
+		// names only answers.
+		ExampleIds []*TestCoverageReferenceTransport `json:"example_ids"`
+		// Interaction or assertion the writer says exercises these requirements.
+		Explanation *string `json:"explanation"`
 	}
 	// TestWriterAssignmentItemTransport is the internal JSON transport type for TestWriterAssignmentItemTransport.
 	// It lives in the toolset-local http package and is used only for JSON

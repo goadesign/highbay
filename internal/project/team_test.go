@@ -72,7 +72,9 @@ func (f *teamFixture) OpenLauncher(context.Context) error {
 
 // fixtureTeamDependencies prevents all external effects in server authentication/lifecycle tests.
 func fixtureTeamDependencies(state *State) TeamDependencies {
-	return TeamDependencies{Lifetime: context.Background(), Host: &teamFixture{}, RosterDirectory: filepath.Join(state.Dir, "test-rosters"), Shell: "/bin/zsh"}
+	return TeamDependencies{Lifetime: context.Background(), Host: &teamFixture{}, RosterDirectory: filepath.Join(state.Dir, "test-rosters"), Shell: "/bin/zsh", Connect: func(context.Context) (TeamConnection, error) {
+		return TeamConnection{Endpoint: "http://chorus.test"}, nil
+	}}
 }
 
 // teamContext grants management through the same trusted principal boundary used by HTTP.
@@ -407,7 +409,7 @@ func registerTestAgent(server *Server, handle, role, folder string) (*testAgent,
 func TestTeamResultNextStep(t *testing.T) {
 	for _, tc := range []struct{ dialog, step string }{
 		{"opened", "Choose an agent for each role in the open Chorus dialog in Herdr."},
-		{"already_open", `If the open Chorus dialog is for this project, click "Reload team", then choose the agents. If it is for another project, close it, then start the agents again (Start agents on the views page, or run surla).`},
+		{"already_open", "If this is your project's dialog, click Reload team and choose agents. Otherwise close it; use Start agents on the page or run surla."},
 		{"not_needed", "Every listed role is running."},
 	} {
 		t.Run(tc.dialog, func(t *testing.T) {
@@ -432,12 +434,32 @@ func TestTeamResultNextStep(t *testing.T) {
 			team, err := server.EnsureTeam(teamContext(state))
 			require.NoError(t, err)
 			assert.Equal(t, tc.dialog, team.Dialog)
-			assert.Equal(t, tc.step, team.Step)
+			assert.Contains(t, team.Step, tc.step)
+			if tc.dialog != "not_needed" {
+				assert.Contains(t, team.Step, "chorus team inspect --space '"+first.Space+"'")
+				assert.Contains(t, team.Step, "chorus team inspect --space '"+first.Space+"' --choices choices.json")
+				assert.Contains(t, team.Step, "models and permission effects")
+				assert.Contains(t, team.Step, "chorus team launch --space '"+first.Space+"' --choices choices.json")
+				assert.Contains(t, team.Step, "--choices -")
+				assert.NotContains(t, team.Step, "<id>")
+			} else {
+				assert.Equal(t, tc.step, team.Step)
+			}
+			// The generated response bound must hold for quoted IDs and wider
+			// identifiers, not just the short stand-in returned by this host.
+			for _, id := range []string{"sp'quoted", "12345678-1234-1234-1234-123456789012",
+				"123456781234567812345678123456781234567812345678"} {
+				response := *team
+				response.Space, response.Step = id, teamNextStep(tc.dialog, id)
+				_, err := genproject.EncodeProjectTeam(&response)
+				assert.NoError(t, err, "dialog %s with space %q must encode", tc.dialog, id)
+			}
 			userTeam, err := server.StartAgents(t.Context())
 			require.NoError(t, err)
 			assert.Equal(t, team.Step, userTeam.Step, "the user operation must carry the owner's step unchanged")
 		})
 	}
+	assert.Contains(t, teamNextStep("opened", "sp'quoted"), "--space 'sp'\\''quoted'")
 }
 
 // TestEnsureTeamCountsOnlyGuideAndRolesWithWork checks that EnsureTeam counts

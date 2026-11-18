@@ -51,6 +51,8 @@ type (
 	browserInput struct {
 		// DevTools is the browser-wide DevTools WebSocket address.
 		DevTools string `json:"devtools"`
+		// Agreement selects the summary layout and keyboard-reading journey.
+		Agreement bool `json:"agreement,omitempty"`
 		// Phone selects the focused Team and Build layout scenario.
 		Phone bool `json:"phone,omitempty"`
 		// Taking selects the focused passed-build layout and consent scenario.
@@ -110,6 +112,8 @@ type (
 		Phone phoneFacts `json:"phone"`
 		// Taking records one batched desktop and phone inspection.
 		Taking []takingViewFacts `json:"taking"`
+		// Agreement records summary geometry, reachability and retained edits.
+		Agreement []agreementViewFacts `json:"agreement"`
 		// Approval records viewport, evidence and keyboard facts for one owner state.
 		Approval []approvalViewFacts `json:"approval"`
 		// TestReview records required tests, findings and orientation at each width.
@@ -151,6 +155,7 @@ type (
 		FooterReserved        bool     `json:"footer_reserved"`
 		FlowLinesReadable     bool     `json:"flow_lines_readable"`
 		PrimaryAtRest         bool     `json:"primary_at_rest"`
+		CoverageLinked        bool     `json:"coverage_linked"`
 		Overflowing           []string `json:"overflowing"`
 		Screenshot            string   `json:"screenshot"`
 	}

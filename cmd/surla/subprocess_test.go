@@ -39,7 +39,7 @@ func testProjectRuntimeAt(directory string) projectRuntime {
 			}
 			return directory, nil
 		},
-		preflight: func() error { return errors.New("default tests cannot start real project terminals") },
+		preflight: func(bool) error { return errors.New("default tests cannot start real project terminals") },
 		startTerminal: func(context.Context, *project.State) (string, error) {
 			return "", errors.New("default tests cannot start real project terminals")
 		},

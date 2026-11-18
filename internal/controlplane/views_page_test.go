@@ -389,7 +389,7 @@ await control(origin, "release", { key: "POST /changes/approve" });
 await until(() => page.$("#surla-cp5-approval"), "the recorded approval is not shown");
 expect(page.doc.activeElement === page.$("#surla-cp5-approval"), "approving did not move focus to the result");
 const approval = page.text("#surla-approval-stage");
-expect(approval.includes("Approval recorded") && approval.includes("Approval records permission to promote these verified inputs") && approval.includes(input.owner) && approval.includes(input.digest) && approval.includes("orders_acceptance") && approval.includes("Builder’s commit") && approval.includes("Tests’ commit") && approval.includes(input.candidate) && approval.includes("2222222222222222222222222222222222222222"), "the approval panel lacks its record: " + approval);
+expect(approval.includes("Approval recorded") && approval.includes("Approval records permission to promote these verified inputs") && !approval.includes("Approved by") && !approval.includes(input.owner) && approval.includes(input.digest) && approval.includes("orders_acceptance") && approval.includes("Builder’s commit") && approval.includes("Tests’ commit") && approval.includes(input.candidate) && approval.includes("2222222222222222222222222222222222222222"), "the approval panel lacks its record or exposes an opaque identity: " + approval);
 expect(!page.$("#surla-cp5-approval-dirty-warning"), "a clean approved card warned about unsaved edits");
 page.$("#surla-nav-cp1").click();
 const outcome = page.$('textarea[data-field="expected_outcome"]');

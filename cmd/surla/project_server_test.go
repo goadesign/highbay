@@ -352,7 +352,7 @@ func TestProjectSettingsRejectsWorkspaceAndRepositoryPaths(t *testing.T) {
 // TestProjectStartPreflightPrecedesState proves unavailable platform effects do not create a project.
 func TestProjectStartPreflightPrecedesState(t *testing.T) {
 	runtime := testProjectRuntime()
-	runtime.preflight = func() error { return errors.New("install required platform program") }
+	runtime.preflight = func(bool) error { return errors.New("install required platform program") }
 	runtime.configRoot = func() (string, error) { t.Fatal("state reached before preflight"); return "", nil }
 	assert.ErrorContains(t, runWithRuntime(nil, io.Discard, runtime), "install required platform program")
 }
@@ -366,7 +366,7 @@ func TestProjectStartPortTakeoverRemovesOnlyFailedTerminal(t *testing.T) {
 	port := state.Record.Port
 	identity := state.Record.ID
 	runtime := testProjectRuntime()
-	runtime.preflight = func() error { return nil }
+	runtime.preflight = func(bool) error { return nil }
 	runtime.startTerminal = func(ctx context.Context, state *project.State) (string, error) {
 		// attachOrStartProject's precheck already closed its socket. Another owner now takes it.
 		listener, err := net.Listen("tcp", state.Address())
@@ -453,7 +453,7 @@ func TestProjectStartShowsEndedServerOutput(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			isolateServeWorkspace(t)
 			runtime := testProjectRuntime()
-			runtime.preflight = func() error { return nil }
+			runtime.preflight = func(bool) error { return nil }
 			runtime.startTerminal = func(context.Context, *project.State) (string, error) { return "t7", nil }
 			runtime.waitTerminal = func(context.Context, string) (bool, error) { return true, nil }
 			var effects []string
@@ -492,7 +492,7 @@ func TestProjectStartShowsEndedServerOutput(t *testing.T) {
 func TestProjectStartLeavesLiveTerminalUnread(t *testing.T) {
 	isolateServeWorkspace(t)
 	runtime := testProjectRuntime()
-	runtime.preflight = func() error { return nil }
+	runtime.preflight = func(bool) error { return nil }
 	runtime.startTerminal = func(_ context.Context, state *project.State) (string, error) {
 		// Published access with no listener makes the readiness probe fail at once.
 		return "t7", state.SaveRunning(project.Running{ManagementCredential: strings.Repeat("a", 64)})
@@ -595,7 +595,7 @@ func TestServeReadsOnlyItsStateFolder(t *testing.T) {
 	// test binds its own rosters folder and leaves the configuration folder unreachable.
 	rosters := t.TempDir()
 	runtime.teamDependencies = func(ctx context.Context, _ []string) (project.TeamDependencies, error) {
-		return project.TeamDependencies{Lifetime: ctx, Host: &fixtureTeamHost{}, RosterDirectory: rosters, Shell: "/bin/zsh"}, nil
+		return project.TeamDependencies{Lifetime: ctx, Host: &fixtureTeamHost{}, RosterDirectory: rosters, Shell: "/bin/zsh", Connect: fixtureTeamConnection}, nil
 	}
 	runtime.configRoot = func() (string, error) {
 		t.Error("serve must not resolve a configuration folder")
@@ -622,7 +622,9 @@ func TestServeReadsOnlyItsStateFolder(t *testing.T) {
 func TestMissingBrowserOpenerFailsBeforeProjectCreation(t *testing.T) {
 	t.Setenv("PATH", t.TempDir())
 	runtime := productionProjectRuntime()
-	runtime.preflight = func() error { return preflightProjectStart(func() (string, error) { return "owned-hc-stand-in", nil }) }
+	runtime.preflight = func(openBrowser bool) error {
+		return preflightProjectStart(func() (string, error) { return "owned-hc-stand-in", nil }, openBrowser)
+	}
 	runtime.configRoot = func() (string, error) { t.Fatal("state must remain untouched"); return "", nil }
 	var output bytes.Buffer
 	err := runWithRuntime(nil, &output, runtime)

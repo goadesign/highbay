@@ -54,6 +54,16 @@ These words appear throughout:
 | **Change Card** | One change the guide proposes: the request, the Story, open questions, concrete examples and the behavior to preserve. |
 | **`request_revision`** | The digest of one saved revision of a Change Card. Previews, verification runs and approvals name the revision they belong to. |
 
+To work through a terminal and browser automation, run `surla --print-link`. It
+starts or attaches to the same project and prints `{ "url": "...", "expires_at":
+"..." }` JSON instead of opening a browser. Open that one-use URL in your
+controlled browser. The team instructions give commands with the actual Herdr
+space ID: `chorus team inspect` shows the roles, and `chorus team launch` accepts
+your explicit program/model choices. Add `--choices choices.json` to the printed
+inspection command to see your chosen programs' model options and permission
+effects before launching. See [terminal operation](docs/REFERENCE.md#terminal-and-browser-automation)
+for input, recovery and link handling. The dialog remains available.
+
 Here is one change, for example a refund assistant whose rule is "refunds up
 to $50 get instant store credit; larger ones wait for a manager":
 
@@ -71,23 +81,31 @@ to $50 get instant store credit; larger ones wait for a manager":
    confirm. No agent can confirm for you. If the guide later revises the
    change, its proposed revision waits beside the agreed revision until you
    adopt or decline it; the agreed revision stays in force until then.
-5. **Build.** Press **Build this change** on the page. Surla saves the agreed
+5. **Review the architecture.** Open **Architecture** on the page to inspect
+   the agreed revision's saved design. If it needs a change, ask the guide to
+   revise the change, then review and adopt its proposal before building.
+6. **Build.** Press **Build this change** on the page. Surla saves the agreed
    revision, and the Chorus dialog asks you for agents for two more roles: the
-   builder and the test writer. The builder gets its own working copy of the
+   builder and the test writer (or inspect and launch them with `chorus team
+   inspect` and `chorus team launch`; see
+   [terminal operation](docs/REFERENCE.md#terminal-and-browser-automation)).
+   The builder gets its own working copy of the
    project in `.surla-build` on the branch `surla/build-<n>`, and the test
    writer gets its own working copy of the project in `.surla-tests` on the
    branch `surla/tests-<n>`, one required test per finished flow of the Story,
    and your answers, examples and preserved behaviors, which its tests must
    also hold the service to. Draft flows require no test.
-6. **Tests.** The test writer writes those tests and reports. Surla does not
+7. **Tests.** The test writer writes those tests and reports. Surla does not
    take its word for it: it writes the required tests into the copy again,
    checks that nothing changed outside the test module (the project's `eval/`
    folder), and builds and lists the test program. Problems go
    back to the test writer as findings. Build shows them beside the saved
    required tests; Next names the test writer’s next step.
    When the tests pass the check, Surla accepts them at one commit on
-   `surla/tests-<n>`.
-7. **Code and verify.** Meanwhile the builder writes the code, builds and
+   `surla/tests-<n>`. Build shows which agreed answers and examples the test
+   writer says each scenario covers. Surla validates those references but does
+   not judge the statements; anything without one says **Not stated**.
+8. **Code and verify.** Meanwhile the builder writes the code, builds and
    tests it, and commits. If the application calls a model, the builder can
    try prompt wording after Surla accepts the tests, using a *live target*:
    a running copy of the application
@@ -96,7 +114,7 @@ to $50 get instant store credit; larger ones wait for a manager":
    tests accepted for that exact revision against it. It refuses to verify
    until those tests are accepted. The result appears in the page's **Check**
    view.
-8. **Approve and merge.** Open the run in **Approve** to review its recorded
+9. **Approve and merge.** Open the run in **Approve** to review its recorded
    Story flows, test outcomes, excluded drafts and unknown coverage. When the
    server says approval is available, Next offers **Approve this result**.
    Surla checks that the run passed and ran the tests accepted
@@ -109,7 +127,15 @@ to $50 get instant store credit; larger ones wait for a manager":
    `surla/tests-<n>`). The builder commits in `.surla-build` rather than in
    the project folder, so you merge the builder's commit first and then the
    tests' commit into the branch checked out in the project folder yourself.
-   Surla merges and deploys nothing. Approval needs no
+   Once your branch holds both commits' changes, the build shows **Merged**.
+   Detecting the merge runs no tests: the verification covered the passed
+   run's commits, not your branch after the merge, which may also hold other
+   changes merged after the build started. To run the accepted test suite
+   against the merged commit on your branch yourself, pass the full commit ID
+   of your branch's `HEAD` (`"$(git rev-parse HEAD)"`) as `-candidate-commit`
+   and the accepted `<tests_commit>` shown in **Approve** as `-suite-commit` to
+   [`surla verify`](docs/REFERENCE.md#surla-verify). Surla
+   merges and deploys nothing. Approval needs no
    settings. A project that stores
    [promotion settings](docs/REFERENCE.md#surla-verification-and-surla-promotion)
    (a release folder and the names of its binaries) gets one more check at
@@ -166,13 +192,23 @@ Surla needs:
   fresh compiler scratch. See [`check_project`](docs/REFERENCE.md#check_project).
 - **Herdr core** (the `herdr-core` and `hc` commands) and the **Herdr app**
   (`herdr-app`).
-- **Chorus v0.11.0** or newer.
-- A coding agent that the Chorus dialog can start for each role.
+- **Chorus v0.14.0** or newer.
+- A coding agent that the Chorus dialog or terminal command can start for each role.
 
-Install Surla, Herdr and Chorus:
+To install the Surla described by this README, clone this repository and check
+out the version you are reading. From the repository root, run:
 
 ```bash
-go install github.com/goadesign/surla/cmd/surla@latest
+go install ./cmd/surla
+```
+
+`go install github.com/goadesign/surla/cmd/surla@latest` installs the latest
+module version available to Go, which may be older than this README and lack
+commands described here. When installing that version, follow its README.
+
+Install Herdr and Chorus:
+
+```bash
 curl -fsSL https://releases.herdr.dev/core/install.sh | sh
 curl -fsSL https://releases.herdr.dev/app/install.sh | sh
 curl -fsSL https://raw.githubusercontent.com/goadesign/chorus/main/scripts/install.sh | sh
@@ -225,7 +261,7 @@ folder inside it and make its first commit, without a restart.
 `surla` prints what it did and your next step, for example:
 
 ```text
-Created a new, empty Surla project. Moving or renaming this folder starts a new project.
+Started a Surla project for this folder. Moving or renaming this folder starts a new project.
 Team <name>.
 Choose an agent for each role in the open Chorus dialog in Herdr.
 Surla is running for <project folder> at <address>
@@ -233,7 +269,10 @@ Surla is running for <project folder> at <address>
 
 The page opens through a single-use link and keeps its session only while it
 is open: reloading it, closing it or opening it in another tab needs a new
-link, which `surla` gives when you run it again. Running `surla` from a
+link, which `surla` gives when you run it again (or `surla --print-link` to
+print the link as JSON without opening a browser; see
+[terminal operation](docs/REFERENCE.md#terminal-and-browser-automation)).
+Running `surla` from a
 subfolder finds the same project. `surla stop` shuts the project's server
 down. After you install another build of `surla`, run `surla stop`, then
 `surla`: `surla` does not use a server that another build started. If the
@@ -242,6 +281,11 @@ error. If the team cannot be prepared, `surla` still opens the page, then
 names what failed and the step that repairs it. When Chorus or the Herdr app could not be started, that step is to start it and run `surla` again; otherwise **Start agents** on the page
 tries again. See [`surla` and `surla stop`](docs/REFERENCE.md#surla-serve)
 for the project's state, settings and recovery.
+
+If Chorus uses another address, start it with `chorus up -addr :9550`.
+Surla uses that managed address when you start the team. After changing it,
+choose **Start agents** or run `surla` again. A foreground `chorus serve -addr`
+alone does not set the managed address. See the [team reference](docs/REFERENCE.md#team-supervision).
 
 ## Use the tools without a team
 

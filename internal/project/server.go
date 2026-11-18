@@ -62,9 +62,10 @@ func BuildIdentity() (string, error) { return buildIdentity() }
 
 // NewServer creates fresh management authority for one server lifetime.
 // The caller publishes it only after binding the listener and revokes it before closing that listener.
+// The team connector is required but is called only when the caller starts the team.
 func NewServer(state *State, stop func(), team TeamDependencies) (*Server, error) {
-	if team.Lifetime == nil || team.Host == nil || !filepath.IsAbs(team.RosterDirectory) {
-		return nil, errors.New("project server requires team lifetime, host and absolute roster directory")
+	if team.Lifetime == nil || team.Host == nil || team.Connect == nil || !filepath.IsAbs(team.RosterDirectory) {
+		return nil, errors.New("project server requires team lifetime, host, connector and absolute roster directory")
 	}
 	credential, err := randomCredential()
 	if err != nil {
@@ -164,8 +165,12 @@ func (s *Server) Handler(application http.Handler) http.Handler {
 		}
 		site := r.Header.Get("Sec-Fetch-Site")
 		shell := r.Method == http.MethodGet && r.URL.Path == "/views"
-		if site != "" && site != "same-origin" && !(shell && (site == "none" || site == "same-site")) {
-			writeAccessError(w, r, http.StatusForbidden, "forbidden", "request must come from the project's own page")
+		// Navigation can come from any site, including a browser extension.
+		// Only the fixed shell is public; its fragment exchange remains same-origin.
+		navigation := shell && r.Header.Get("Sec-Fetch-Mode") == "navigate" &&
+			r.Header.Get("Sec-Fetch-Dest") == "document"
+		if site != "" && site != "same-origin" && !navigation && !(shell && (site == "none" || site == "same-site")) {
+			writeAccessError(w, r, http.StatusForbidden, "forbidden", "request must come from the project's own page; run surla in your project folder to open it, or surla --print-link to get a link without opening a browser")
 			return
 		}
 		if strings.HasPrefix(r.URL.Path, "/project/") {

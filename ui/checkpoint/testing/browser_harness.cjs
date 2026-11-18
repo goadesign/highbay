@@ -650,6 +650,44 @@ async function approvalScenario(input, facts, views) {
   for (const [name, width, height, scale] of sizes) {
     await views.dt.send("Emulation.setDeviceMetricsOverride", { width, height, deviceScaleFactor: scale, mobile: width < 600 }, views.sessionId);
     await views.dt.send("Emulation.setEmulatedMedia", { features: [{ name: "prefers-color-scheme", value: name === "dark" ? "dark" : "light" }] }, views.sessionId);
+    let coverageLinked = false;
+    if (input.approval_state === "current") {
+      await evaluate(views, "document.getElementById('surla-nav-build').click(), true");
+      const buildReady = await until(views, "document.getElementById('surla-build-coverage') !== null");
+      if (buildReady.timed_out) throw new Error("accepted Build coverage did not appear");
+      await evaluate(views, "(" + function revealBuildCoverage() {
+        for (let parent = document.getElementById("surla-build-coverage").parentElement; parent; parent = parent.parentElement) {
+          if (parent.tagName === "DETAILS") parent.open = true;
+        }
+      }.toString() + ")()");
+      const buildVisible = await until(views, "document.getElementById('surla-build-coverage').getBoundingClientRect().height > 0");
+      if (buildVisible.timed_out) throw new Error("accepted Build coverage stayed hidden");
+      const coverageFacts = function coverageFacts(id) {
+        const section = document.getElementById(id);
+        return {
+          requirements: Array.from(section.querySelectorAll('dt'), (node) => node.textContent),
+          scenarios: Array.from(section.querySelectorAll('li code'), (node) => node.textContent),
+          explanations: Array.from(section.querySelectorAll('li > p:last-child'), (node) => node.textContent),
+        };
+      };
+      const builtCoverage = await evaluate(views, "(" + coverageFacts.toString() + ")('surla-build-coverage')");
+      if (name === "desktop" || name === "phone") {
+        await evaluate(views, "document.getElementById('surla-build-coverage').scrollIntoView({block: 'start'}), new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))");
+        const shown = await views.dt.send("Page.captureScreenshot", { format: "png", captureBeyondViewport: false }, views.sessionId);
+        fs.writeFileSync(require("node:path").join(input.capture_directory, "current-" + name + "-build-coverage.png"), Buffer.from(shown.data, "base64"));
+      }
+      await evaluate(views, "document.getElementById('surla-nav-cp5').click(), true");
+      const reviewed = await until(views, "document.getElementById('surla-approval-coverage') !== null && !document.getElementById('surla-cp5-observation-status')");
+      if (reviewed.timed_out) throw new Error("recorded approval coverage did not appear");
+      const recordedCoverage = await evaluate(views, "(" + coverageFacts.toString() + ")('surla-approval-coverage')");
+      coverageLinked = builtCoverage.requirements.length > 0 && builtCoverage.scenarios.length > 0 &&
+        JSON.stringify(builtCoverage) === JSON.stringify(recordedCoverage);
+      if (name === "desktop" || name === "phone") {
+        await evaluate(views, "document.getElementById('surla-approval-coverage').scrollIntoView({block: 'start'}), new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))");
+        const shown = await views.dt.send("Page.captureScreenshot", { format: "png", captureBeyondViewport: false }, views.sessionId);
+        fs.writeFileSync(require("node:path").join(input.capture_directory, "current-" + name + "-approval-coverage.png"), Buffer.from(shown.data, "base64"));
+      }
+    }
     await evaluate(views, "window.scrollTo(0, 0), new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))");
     // Two paint frames can still fall inside the incumbent 150ms color
     // transition. Measure rest only after finite animations settle, bounded
@@ -712,6 +750,7 @@ async function approvalScenario(input, facts, views) {
     }.toString() + ")()");
     measured.name = name;
     measured.primary_at_rest = primaryAtRest;
+    measured.coverage_linked = coverageLinked;
     measured.keyboard_reached_action = reached;
     measured.flow_lines_readable = true;
     const capture = await views.dt.send("Page.captureScreenshot", { format: "png", captureBeyondViewport: true }, views.sessionId);
@@ -789,6 +828,87 @@ async function testReviewScenario(input, facts, views) {
   }
 }
 
+// agreementScenario measures one long saved summary and its existing reading
+// destination, using native Tab/Enter defaults and one browser for both widths.
+async function agreementScenario(input, facts, views) {
+  const ready = await until(views, "document.getElementById('surla-confirm-submit') !== null");
+  if (ready.timed_out) throw new Error("agreement form did not load");
+  if (await evaluate(views, "document.getElementById('surla-read-full-summary') !== null")) {
+    throw new Error("unconfirmed proposal offers an agreed summary");
+  }
+  await evaluate(views, "document.getElementById('surla-confirm-submit').click(), true");
+  const confirmed = await until(views, "document.getElementById('surla-read-full-summary') !== null");
+  if (confirmed.timed_out) throw new Error("confirmation did not expose summary reading");
+  facts.agreement = [];
+  for (const [name, width, height] of [["desktop", 1280, 900], ["phone", 390, 844]]) {
+    await views.dt.send("Emulation.setDeviceMetricsOverride", { width, height, deviceScaleFactor: 1, mobile: width < 600 }, views.sessionId);
+    await evaluate(views, "document.getElementById('surla-nav-cp1').click(), document.getElementById('surla-refine-agreement').open = true, true");
+    await evaluate(views, "(" + function focusDraft() {
+      const field = document.querySelector('textarea[data-field="expected_outcome"]');
+      field.focus();
+      field.setSelectionRange(0, field.value.length);
+      return true;
+    }.toString() + ")()");
+    await views.dt.send("Input.insertText", { text: "Unsaved example for " + name }, views.sessionId);
+    await evaluate(views, "document.getElementById('surla-agreement-details').open = false, document.getElementById('surla-nav-changes').click(), window.scrollTo(0, 0), new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))");
+    const measured = await evaluate(views, "(" + function measurePreview() {
+      const preview = document.querySelector('.surla-frame-summary');
+      return {
+        width: document.documentElement.clientWidth,
+        document_width: document.documentElement.scrollWidth,
+        preview_height: preview.getBoundingClientRect().height,
+        line_height: parseFloat(getComputedStyle(preview).lineHeight),
+        preview_clipped: preview.scrollHeight > preview.clientHeight,
+      };
+    }.toString() + ")()");
+    measured.name = name;
+    measured.preview_screenshot = require("node:path").join(input.capture_directory, name + "-summary-preview.png");
+    const preview = await views.dt.send("Page.captureScreenshot", { format: "png", captureBeyondViewport: false }, views.sessionId);
+    fs.writeFileSync(measured.preview_screenshot, Buffer.from(preview.data, "base64"));
+    await evaluate(views, "document.querySelector('.surla-skip-link').focus(), true");
+    measured.keyboard_reachable = false;
+    for (let step = 0; step < 32; step++) {
+      await views.dt.send("Input.dispatchKeyEvent", { type: "keyDown", key: "Tab", code: "Tab", windowsVirtualKeyCode: 9 }, views.sessionId);
+      await views.dt.send("Input.dispatchKeyEvent", { type: "keyUp", key: "Tab", code: "Tab", windowsVirtualKeyCode: 9 }, views.sessionId);
+      measured.keyboard_reachable = await evaluate(views, "document.activeElement?.id === 'surla-read-full-summary'");
+      if (measured.keyboard_reachable) break;
+    }
+    measured.focus_visible = await evaluate(views, "(" + function focusVisible() {
+      const style = getComputedStyle(document.getElementById('surla-read-full-summary'));
+      return style.outlineStyle !== 'none' && parseFloat(style.outlineWidth) >= 2;
+    }.toString() + ")()");
+    if (!measured.keyboard_reachable) throw new Error("Read full summary is unreachable by keyboard at " + name);
+    await views.dt.send("Input.dispatchKeyEvent", { type: "keyDown", key: "Enter", code: "Enter", windowsVirtualKeyCode: 13, text: "\r" }, views.sessionId);
+    await views.dt.send("Input.dispatchKeyEvent", { type: "keyUp", key: "Enter", code: "Enter", windowsVirtualKeyCode: 13 }, views.sessionId);
+    await evaluate(views, "new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))");
+    Object.assign(measured, await evaluate(views, "(" + function measureSummary(draft) {
+      const summary = document.getElementById('surla-agreement-summary');
+      const box = summary.getBoundingClientRect();
+      const frame = document.getElementById('surla-checkpoint-nav');
+      return {
+        full_text: summary.textContent,
+        details_open: document.getElementById('surla-agreement-details').open,
+        summary_focused: document.activeElement === summary,
+        summary_visible: box.top >= (getComputedStyle(frame).position === 'sticky' ? frame.getBoundingClientRect().bottom : 0) && box.top < innerHeight,
+        draft_preserved: document.querySelector('textarea[data-field="expected_outcome"]').value === draft,
+      };
+    }.toString() + ")(" + JSON.stringify("Unsaved example for " + name) + ")"));
+    measured.summary_screenshot = require("node:path").join(input.capture_directory, name + "-summary-reading.png");
+    const reading = await views.dt.send("Page.captureScreenshot", { format: "png", captureBeyondViewport: false }, views.sessionId);
+    fs.writeFileSync(measured.summary_screenshot, Buffer.from(reading.data, "base64"));
+    measured.end_reachable = await evaluate(views, "(" + async function reachSummaryEnd() {
+      const summary = document.getElementById('surla-agreement-summary');
+      summary.scrollIntoView({ block: 'end' });
+      await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+      const box = summary.getBoundingClientRect();
+      const footer = document.getElementById('surla-frame-next');
+      const bottom = getComputedStyle(footer).position === 'fixed' ? footer.getBoundingClientRect().top : innerHeight;
+      return box.bottom > 0 && box.bottom <= bottom && getComputedStyle(summary).overflowY === 'visible';
+    }.toString() + ")()");
+    facts.agreement.push(measured);
+  }
+}
+
 // main runs the scenario. Each section names the Go subtest that judges it.
 async function main(input, facts) {
   const dt = await DevTools.connect(input.devtools);
@@ -818,6 +938,11 @@ async function main(input, facts) {
       target_url: targetInfo.url,
     };
 
+    if (input.agreement) {
+      await agreementScenario(input, facts, views);
+      await dt.send("Target.closeTarget", { targetId: views.targetId });
+      return;
+    }
     if (input.test_review) {
       await testReviewScenario(input, facts, views);
       await dt.send("Target.closeTarget", { targetId: views.targetId });

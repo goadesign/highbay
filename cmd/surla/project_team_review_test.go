@@ -50,7 +50,7 @@ func TestProductionTeamPreflightRejectsOldChorus(t *testing.T) {
 	runtime.openViews = func(context.Context, string) error { t.Fatal("old Chorus must not open a browser"); return nil }
 	var output bytes.Buffer
 	err := runtime.start(&output)
-	require.ErrorContains(t, err, "Chorus v0.11.0 or newer is required; update with: chorus update -yes")
+	require.ErrorContains(t, err, "Chorus v0.14.0 or newer is required; update with: chorus update -yes")
 	assert.Empty(t, output.String())
 	_, err = os.Stat(effects)
 	assert.ErrorIs(t, err, os.ErrNotExist)
@@ -430,7 +430,7 @@ func TestCLIAlreadyOpenAndCredentialNonleak(t *testing.T) {
 	calls = nil
 	runtime := testProjectRuntime()
 	bindFixtureTeamEffects(&runtime)
-	runtime.preflight = func() error { return nil }
+	runtime.preflight = func(bool) error { return nil }
 	runtime.startTeamPrograms = func(ctx context.Context) error {
 		_, hasDeadline := ctx.Deadline()
 		assert.False(t, hasDeadline, "machine phases own separate deadlines")
@@ -439,7 +439,7 @@ func TestCLIAlreadyOpenAndCredentialNonleak(t *testing.T) {
 	runtime.openViews = func(context.Context, string) error { return nil }
 	var output bytes.Buffer
 	require.NoError(t, runtime.start(&output))
-	assert.Contains(t, output.String(), `If the open Chorus dialog is for this project, click "Reload team", then choose the agents. If it is for another project, close it, then start the agents again (Start agents on the views page, or run surla).`)
+	assert.Contains(t, output.String(), "If this is your project's dialog, click Reload team and choose agents. Otherwise close it; use Start agents on the page or run surla.")
 	for actor := range state.Record.Agents {
 		secret, err := os.ReadFile(state.AgentFile(actor))
 		require.NoError(t, err)

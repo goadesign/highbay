@@ -80,7 +80,7 @@ export interface C4EdgeItem {
 }
 
 export interface ChangeBuild {
-  build: ({ "state": "not_started" } | { "builder": BuilderProgress; "in_force": boolean; "request_revision": string; "required_test_count": number; "required_tests": RequiredTest[]; "started_at": string; "state": "started"; "taking": ({ "state": "building" } | { "base_in_branch": boolean; "candidate_branch": string; "candidate_commit": string; "run_id": string; "state": "passed"; "tests": ({ "source": "evaluator" } | { "branch": string; "commit": string; "source": "written_tests" }) } | { "state": "merged" } | { "kept_branches": string[]; "state": "dropped" }); "test_writer": TestWriterProgress });
+  build: ({ "state": "not_started" } | { "answers": ConfirmedAnswer[]; "builder": BuilderProgress; "coverage_statements": TestCoverageStatement[]; "examples": ExampleItem[]; "in_force": boolean; "request_revision": string; "required_test_count": number; "required_tests": RequiredTest[]; "started_at": string; "state": "started"; "taking": ({ "state": "building" } | { "base_in_branch": boolean; "candidate_branch": string; "candidate_commit": string; "run_id": string; "state": "passed"; "tests": ({ "source": "evaluator" } | { "branch": string; "commit": string; "source": "written_tests" }) } | { "state": "merged" } | { "kept_branches": string[]; "state": "dropped" }); "test_writer": TestWriterProgress });
   change_id: string;
   drafted_before_drop: boolean;
 }
@@ -134,6 +134,12 @@ export interface ConfirmIntentPayload {
   change_id: string;
   examples: ExampleItem[];
   request_revision: string;
+}
+
+export interface ConfirmedAnswer {
+  answer: string;
+  id: string;
+  question: string;
 }
 
 export interface DeclineRevisionPayload {
@@ -258,7 +264,10 @@ export interface StartBuildResult {
 }
 
 export interface StartedBuild {
+  answers: ConfirmedAnswer[];
   builder: BuilderProgress;
+  coverage_statements: TestCoverageStatement[];
+  examples: ExampleItem[];
   in_force: boolean;
   request_revision: string;
   required_test_count: number;
@@ -333,6 +342,13 @@ export interface TeamRoleState {
 export interface TeamSnapshot {
   roles: TeamRoleState[];
   team: string;
+}
+
+export interface TestCoverageStatement {
+  example_ids: string[];
+  explanation: string;
+  question_ids: string[];
+  scenario: string;
 }
 
 export interface TestFindings {
@@ -436,7 +452,7 @@ export interface VerificationNotCompleted {
 
 export interface VerificationReview {
   approval: ({ "state": "available" } | { "reason": string; "state": "blocked" } | { "approved_by": string; "artifacts": Record<string, string>; "candidate_commit": string; "environment": string; "report_digest": string; "scenario_count": number; "state": "recorded"; "suite_commit": string; "suite_id": string; "test_source": ({ "source": "evaluator" } | { "commit": string; "notice": string; "source": "written_tests" }) } | { "approval": ApprovalItem; "reason": string; "state": "unverified" });
-  story_context: ({ "build_number": number; "build_started_at": string; "mapping": ({ "required_tests": RequiredTest[]; "state": "mapped" } | { "state": "not_recorded_for_evaluator" }); "state": "recorded"; "stories": StorySummaryItem[] } | { "state": "not_recorded" });
+  story_context: ({ "build_number": number; "build_started_at": string; "mapping": ({ "required_tests": RequiredTest[]; "state": "mapped" } | { "state": "not_recorded_for_evaluator" }); "state": "recorded"; "stories": StorySummaryItem[]; "test_coverage": ({ "answers": ConfirmedAnswer[]; "coverage_statements": TestCoverageStatement[]; "examples": ExampleItem[]; "report": number; "state": "recorded" } | { "state": "not_recorded" }) } | { "state": "not_recorded" });
 }
 
 export interface VerificationReviewResult {
@@ -1215,12 +1231,33 @@ const SCHEMA_DEFS: Record<string, JSONSchemaNode> = {
               "test_writer",
               "required_test_count",
               "required_tests",
+              "answers",
+              "examples",
+              "coverage_statements",
               "taking",
               "state"
             ],
             "properties": {
+              "answers": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/$defs/ConfirmedAnswer"
+                }
+              },
               "builder": {
                 "$ref": "#/$defs/BuilderProgress"
+              },
+              "coverage_statements": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/$defs/TestCoverageStatement"
+                }
+              },
+              "examples": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/$defs/ExampleItem"
+                }
               },
               "in_force": {
                 "type": "boolean"
@@ -1594,6 +1631,26 @@ const SCHEMA_DEFS: Record<string, JSONSchemaNode> = {
         }
       },
       "request_revision": {
+        "type": "string"
+      }
+    },
+    "additionalProperties": false
+  },
+  "ConfirmedAnswer": {
+    "type": "object",
+    "required": [
+      "id",
+      "question",
+      "answer"
+    ],
+    "properties": {
+      "answer": {
+        "type": "string"
+      },
+      "id": {
+        "type": "string"
+      },
+      "question": {
         "type": "string"
       }
     },
@@ -2355,11 +2412,32 @@ const SCHEMA_DEFS: Record<string, JSONSchemaNode> = {
       "test_writer",
       "required_test_count",
       "required_tests",
+      "answers",
+      "examples",
+      "coverage_statements",
       "taking"
     ],
     "properties": {
+      "answers": {
+        "type": "array",
+        "items": {
+          "$ref": "#/$defs/ConfirmedAnswer"
+        }
+      },
       "builder": {
         "$ref": "#/$defs/BuilderProgress"
+      },
+      "coverage_statements": {
+        "type": "array",
+        "items": {
+          "$ref": "#/$defs/TestCoverageStatement"
+        }
+      },
+      "examples": {
+        "type": "array",
+        "items": {
+          "$ref": "#/$defs/ExampleItem"
+        }
       },
       "in_force": {
         "type": "boolean"
@@ -2808,6 +2886,36 @@ const SCHEMA_DEFS: Record<string, JSONSchemaNode> = {
         }
       },
       "team": {
+        "type": "string"
+      }
+    },
+    "additionalProperties": false
+  },
+  "TestCoverageStatement": {
+    "type": "object",
+    "required": [
+      "scenario",
+      "question_ids",
+      "example_ids",
+      "explanation"
+    ],
+    "properties": {
+      "example_ids": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      },
+      "explanation": {
+        "type": "string"
+      },
+      "question_ids": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      },
+      "scenario": {
         "type": "string"
       }
     },
@@ -3495,6 +3603,7 @@ const SCHEMA_DEFS: Record<string, JSONSchemaNode> = {
               "build_started_at",
               "stories",
               "mapping",
+              "test_coverage",
               "state"
             ],
             "properties": {
@@ -3559,6 +3668,67 @@ const SCHEMA_DEFS: Record<string, JSONSchemaNode> = {
                 "items": {
                   "$ref": "#/$defs/StorySummaryItem"
                 }
+              },
+              "test_coverage": {
+                "type": "object",
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "required": [
+                      "report",
+                      "answers",
+                      "examples",
+                      "coverage_statements",
+                      "state"
+                    ],
+                    "properties": {
+                      "answers": {
+                        "type": "array",
+                        "items": {
+                          "$ref": "#/$defs/ConfirmedAnswer"
+                        }
+                      },
+                      "coverage_statements": {
+                        "type": "array",
+                        "items": {
+                          "$ref": "#/$defs/TestCoverageStatement"
+                        }
+                      },
+                      "examples": {
+                        "type": "array",
+                        "items": {
+                          "$ref": "#/$defs/ExampleItem"
+                        }
+                      },
+                      "report": {
+                        "type": "integer",
+                        "minimum": 1
+                      },
+                      "state": {
+                        "type": "string",
+                        "enum": [
+                          "recorded"
+                        ]
+                      }
+                    },
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "required": [
+                      "state"
+                    ],
+                    "properties": {
+                      "state": {
+                        "type": "string",
+                        "enum": [
+                          "not_recorded"
+                        ]
+                      }
+                    },
+                    "additionalProperties": false
+                  }
+                ]
               }
             },
             "additionalProperties": false

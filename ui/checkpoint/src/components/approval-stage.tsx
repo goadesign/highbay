@@ -6,11 +6,13 @@ import {
   VerificationReview, VerificationScenario, VerificationStatusResult,
 } from "../types";
 import { SavedResultCommits } from "./build";
+import { TestCoverage } from "./test-coverage";
 import { Alert, Button } from "./shadcn";
 
 // ApprovalStageProps binds evidence and currentness to one selected run.
 export interface ApprovalStageProps {
   run: VerificationStatusResult | null;
+  newerCheck: boolean;
   review: VerificationReview | null;
   fresh: boolean;
   loading: boolean;
@@ -65,6 +67,7 @@ export function ApprovalStage(props: ApprovalStageProps) {
   const context = review?.story_context;
   const stories = context?.state === "recorded" ? context.stories : null;
   const mapping = context?.state === "recorded" ? context.mapping : null;
+  const coverage = context?.state === "recorded" ? context.test_coverage : null;
   const names = new Set(mapping?.state === "mapped" ? mapping.required_tests.map((test) => test.scenario) : []);
   const other = report?.scenarios.filter((test) => !names.has(test.id)) ?? [];
   const drafts = stories?.flatMap((story) => story.flows.filter((flow) => !flow.complete)
@@ -84,6 +87,8 @@ export function ApprovalStage(props: ApprovalStageProps) {
           onClick={props.onRefresh}>Refresh result</Button>
       </div>
     </div>
+    {props.newerCheck ? <p role="status">A newer check is available. Review the latest check to see its result;
+      this saved result remains selected until you do.</p> : null}
     <dl className="surla-approval-binding">
       <div><dt>Agreement</dt><dd><code>{run.request_revision.slice(0, 12)}</code></dd></div>
       <div><dt>Builder’s commit</dt><dd><code>{run.candidate_commit.slice(0, 12)}</code></dd></div>
@@ -130,6 +135,14 @@ export function ApprovalStage(props: ApprovalStageProps) {
             <p>This agreement recorded no Story flows. The declared tests below do not establish Story coverage.</p> :
             stories.map((story) => <StoryEvidence key={story.name} story={story} report={report} mapping={mapping} />)}
         </section>
+        {review !== null ? coverage?.state === "recorded" ? <TestCoverage id="surla-approval-coverage" heading="h3"
+          answers={coverage.answers} examples={coverage.examples} statements={coverage.coverage_statements} report={report} /> :
+          <section id="surla-approval-coverage" className="surla-test-coverage" aria-labelledby="surla-approval-coverage-title">
+            <h3 id="surla-approval-coverage-title">Test writer's stated coverage</h3>
+            <p>{run.test_source.source === "written_tests"
+              ? "Agreed answers and examples were not recorded for this run. Coverage: Not stated."
+              : "This run uses the configured evaluator. Test-writer coverage: Not stated."}</p>
+          </section> : null}
         <section className="surla-approval-exclusions" aria-labelledby="surla-approval-exclusions-title">
           <h3 id="surla-approval-exclusions-title">What this run does not establish</h3>
           {drafts.length > 0 ? <><p>These draft flows were excluded from the required tests:</p>
@@ -157,7 +170,6 @@ export function ApprovalStage(props: ApprovalStageProps) {
         <p>The run’s evidence and commit bindings stay fixed when you change the agreement or choose new tests.</p>
         {saved !== null ? <section id="surla-cp5-approval" data-approval-state={approval?.state} tabIndex={-1} aria-label="Recorded promotion approval">
           <h4>{approval?.state === "unverified" ? "Saved approval, unverified" : "Approval recorded"}</h4>
-          <p>Approved by <code>{saved.approved_by}</code>.</p>
           <p>Approval records permission to promote these verified inputs.</p>
           <details><summary>Approval record and artifacts</summary>
             <dl><dt>Environment</dt><dd><code>{saved.environment}</code></dd>
@@ -204,7 +216,6 @@ function SavedApprovalRecord({ record }: { record: NonNullable<ApprovalStageProp
     {record.reason !== null ? <Alert id="surla-cp5-unverified-approval-reason" variant="warning" role="status">{record.reason}</Alert> : null}
     <p>Approval records permission to promote the inputs below. Surla did not merge or deploy anything.</p>
     <dl>
-      <dt>Approved by</dt><dd><code>{approval.approved_by}</code></dd>
       <dt>Agreement</dt><dd><code>{record.requestRevision}</code></dd>
       <dt>Builder’s commit</dt><dd><code>{approval.candidate_commit}</code></dd>
       <dt>Tests’ commit</dt><dd><code>{approval.suite_commit}</code></dd>

@@ -39,10 +39,18 @@ type (
 		RosterDirectory string
 		// Shell is the server login shell used by the shared running predicate.
 		Shell string
-		// Observer follows only the registered selection. Nil refuses all observations.
+		// Connect resolves the running Chorus owner at each accepted team start.
+		// Failure happens before any team state or window changes.
+		Connect func(context.Context) (TeamConnection, error)
+	}
+	// TeamConnection binds an immutable observer/sender pair to one Chorus endpoint.
+	// The executable constructs it from Chorus status; it is never persisted.
+	TeamConnection struct {
+		// Endpoint identifies the server whose watcher facts permit reminders.
+		Endpoint string
+		// Observer follows only the registered selection; nil leaves facts unknown.
 		Observer TeamObserver
-		// Sender posts reminders to Chorus as direct messages; nil sends nothing.
-		// Nothing is ever typed into a terminal.
+		// Sender posts fixed direct reminders; nil sends nothing. It never types into a terminal.
 		Sender TeamSender
 	}
 	// TeamSpace is a local space and its tab-to-terminal mapping reported by Herdr.
@@ -84,9 +92,10 @@ type (
 		assignments controlplane.AssignmentReader
 		// withTimeout privately injects the accepted-operation deadline; nil uses context.WithTimeout.
 		withTimeout func(context.Context, time.Duration) (context.Context, context.CancelFunc)
-		// observationMu protects only the small public snapshot, never external replies.
+		// observationMu protects the immutable connection and small public snapshot.
 		observationMu sync.RWMutex
 		observed      map[string]roleObservation
+		connection    TeamConnection
 	}
 	// launcherRoster mirrors Chorus load_roster's exact closed schema.
 	launcherRoster struct {
@@ -174,12 +183,19 @@ func (s *Server) ensureTeam(ctx context.Context) (result *genproject.ProjectTeam
 	defer s.team.Unlock()
 	defer func() {
 		if result != nil {
-			result.Step = teamNextStep(result.Dialog)
+			result.Step = teamNextStep(result.Dialog, result.Space)
 		}
 	}()
 	if err := ctx.Err(); err != nil {
 		return nil, teamUnavailable(ctx, "lifetime", "stopping")
 	}
+	connection, err := s.team.dependencies.Connect(ctx)
+	if err != nil {
+		return nil, teamUnavailable(ctx, "chorus_status", "chorus")
+	}
+	s.team.observationMu.Lock()
+	s.team.connection = connection
+	s.team.observationMu.Unlock()
 	host := s.team.dependencies.Host
 	// Observe dialogs before any space creation or focus change: opening the launcher is a toggle.
 	overlays, err := host.Overlays(ctx)
@@ -377,7 +393,7 @@ func roleFirstMessage(role string) (string, string) {
 	case "builder":
 		return "Builder", "Use your surla connection, starting with the surla://golden-path guidance resource. Use list_builder_assignments to find the build. An empty list means no build needs you: say so and stop. Work only in this working folder, your copy of the project (working_folder in your assignment), on the branch checked out there. Read each new assignment with get_builder_assignment before any other work: it puts your folder on the build's own branch. Then run git status: implementation files you authored or generated for this build are expected current work. If you find unexpected files or work from an earlier build, stop and tell the user before carrying it forward. When a Surla call says a build was dropped or a new one started, stop: make no more edits or commits for the old work. Call generate_code: it writes the agreed design into design/ and regenerates gen/; never edit either. If the design needs a change, ask the guide to propose a revision for the user to adopt. When generation names go get, run what it names here, then call it again. Commit on your branch. Never name, move or delete a surla/ branch. Never merge, cherry-pick or copy files from another surla/ branch: they hold work the user has not taken. When a Surla call says your copy is on another branch, put your work where it says with git and call again; when it names another build's work, remove its commits and its changes to the files named, by any git you choose. When your assignment's gowork_off is true, run every go command as GOWORK=off go .... Use check_project before verify_change. Read the assignment before verification: when a test writer is used, verify_change is refused until its tests are accepted. Keep your Chorus watcher running. Surla messages you there when you have an unread assignment. Such a message only asks you to read your assignments: it never changes what is owed. Only the user confirms intent and approves results on the views page."
 	case "test_writer":
-		return "Test writer", "Use your surla connection, starting with the surla://golden-path guidance resource. Use list_test_writer_assignments to find the build. An empty list means no build needs you: say so and stop. Read each new assignment with get_test_writer_assignment before any other work: it puts your folder on the build's own branch. Then run git status: the Story table and generated test-module files Surla just prepared, and tests you already authored for this build, are expected current work. Leave Surla's prepared files unchanged. If you find unexpected files or work from an earlier build, stop and tell the user before carrying it forward. When a Surla call says a build was dropped or a new one started, stop: make no more edits or commits for the old work. Stay on the branch checked out in your working copy and do not commit: Surla commits what it accepts. Never name, move or delete a surla/ branch. Never bring files or commits from another surla/ branch. Run every go command as GOWORK=off go ..., as Surla's tests check does. Implement one test per required entry in the test module, eval/ in the working folder the assignment names, and change nothing outside that module. Your tests must also hold the service to every answer the user confirmed, every confirmation example and every preserved behavior the assignment lists. Surla writes eval/design/story_tests.go, which declares the required tests, from the agreed Story and generates the test module at each assignment read that marks it read and again at each report; leave that file as it is. After changing the module's design, report to have it generated again or run surla gen -dir eval in the working folder first; regenerating keeps the required tests. To check your work, run GOWORK=off go build ./... in eval/: it fails naming any required method you have not written. Then call report_tests_finished. Surla's check of your report is the judge: Surla messages you on Chorus when its verdict is in; then read get_test_writer_assignment again, with any findings to fix. Keep your Chorus watcher running. Surla messages you there when you have an unread assignment. Such a message only asks you to read your assignments: it never changes what is owed. Only the user confirms intent and approves results on the views page."
+		return "Test writer", "Use your surla connection, starting with the surla://golden-path guidance resource. Use list_test_writer_assignments to find the build. An empty list means no build needs you: say so and stop. Read each new assignment with get_test_writer_assignment before any other work: it puts your folder on the build's own branch. Then run git status: the Story table and generated test-module files Surla just prepared, and tests you already authored for this build, are expected current work. Leave Surla's prepared files unchanged. If you find unexpected files or work from an earlier build, stop and tell the user before carrying it forward. When a Surla call says a build was dropped or a new one started, stop: make no more edits or commits for the old work. Stay on the branch checked out in your working copy and do not commit: Surla commits what it accepts. Never name, move or delete a surla/ branch. Never bring files or commits from another surla/ branch. Run every go command as GOWORK=off go ..., as Surla's tests check does. Implement one test per required entry in the test module, eval/ in the working folder the assignment names, and change nothing outside that module. Your tests must also hold the service to every answer the user confirmed, every confirmation example and every preserved behavior the assignment lists. Surla writes eval/design/story_tests.go, which declares the required tests, from the agreed Story and generates the test module at each assignment read that marks it read and again at each report; leave that file as it is. After changing the module's design, report to have it generated again or run surla gen -dir eval in the working folder first; regenerating keeps the required tests. To check your work, run GOWORK=off go build ./... in eval/: it fails naming any required method you have not written. Then call report_tests_finished. When you call report_tests_finished, include coverage_statements. For each scenario whose coverage you state, give its exact scenario ID, question_ids from this assignment's answers[].id, example_ids from examples[].id, and an explanation of the interaction or assertion that exercises them. Use an empty array when you state none; Surla will show Not stated. These are your statements, not Surla's judgment of what your tests assert. The tests must still hold the service to every confirmed answer, example and preserved behavior. Surla validates supplied references while checking your report. Read get_test_writer_assignment for the verdict and the statements you submitted; correct any stated-reference findings and report again. Do not commit: Surla records the tests it accepts. Surla's check of your report is the judge: Surla messages you on Chorus when its verdict is in; then read get_test_writer_assignment again, with any findings to fix. Keep your Chorus watcher running. Surla messages you there when you have an unread assignment. Such a message only asks you to read your assignments: it never changes what is owed. Only the user confirms intent and approves results on the views page."
 	}
 	panic("unregistered team role")
 }
@@ -509,12 +525,19 @@ func teamUnavailable(ctx context.Context, step, cause string) error {
 // teamNextStep owns the user's next action after preparing a team. The launcher
 // reads its rows when it opens; an already open dialog rereads a rewritten roster
 // only when the user clicks its existing Reload team action.
-func teamNextStep(dialog string) string {
+func teamNextStep(dialog, space string) string {
+	// Quote the actual owner-returned ID as shell data so both user surfaces
+	// supply copyable commands, including when an external ID contains punctuation.
+	quotedSpace := "'" + strings.ReplaceAll(space, "'", "'\\''") + "'"
+	terminal := "Run chorus team inspect --space " + quotedSpace +
+		"; chorus team launch --help; models and permission effects: chorus team inspect --space " + quotedSpace +
+		" --choices choices.json; chorus team launch --space " + quotedSpace +
+		" --choices choices.json. Stdin: --choices -."
 	switch dialog {
 	case "opened":
-		return "Choose an agent for each role in the open Chorus dialog in Herdr."
+		return "Choose an agent for each role in the open Chorus dialog in Herdr. " + terminal
 	case "already_open":
-		return "If the open Chorus dialog is for this project, click \"Reload team\", then choose the agents. If it is for another project, close it, then start the agents again (Start agents on the views page, or run surla)."
+		return "If this is your project's dialog, click Reload team and choose agents. Otherwise close it; use Start agents on the page or run surla. " + terminal
 	case "not_needed":
 		return "Every listed role is running."
 	}

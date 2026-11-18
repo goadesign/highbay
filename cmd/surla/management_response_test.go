@@ -90,7 +90,7 @@ func TestStartOpensOnlyProjectViewsLinks(t *testing.T) {
 			require.NoError(t, state.SaveRunning(project.Running{ManagementCredential: strings.Repeat("b", 64)}))
 			runtime := testProjectRuntime()
 			bindFixtureTeamEffects(&runtime)
-			runtime.preflight = func() error { return nil }
+			runtime.preflight = func(bool) error { return nil }
 			opened := false
 			runtime.openViews = func(_ context.Context, address string) error {
 				opened = true
@@ -133,7 +133,7 @@ func TestUnexpectedManagementResponseDoesNotEchoCredential(t *testing.T) {
 	require.NoError(t, state.SaveRunning(project.Running{Terminal: "owned-terminal", ManagementCredential: key}))
 	runtime := testProjectRuntime()
 	bindFixtureTeamEffects(&runtime)
-	runtime.preflight = func() error { return nil }
+	runtime.preflight = func(bool) error { return nil }
 	err = runWithRuntime(nil, io.Discard, runtime)
 	require.Error(t, err)
 	var failure *goahttp.ClientError
@@ -387,7 +387,7 @@ func TestStartPrintsProjectTeamStep(t *testing.T) {
 			require.NoError(t, state.SaveRunning(project.Running{ManagementCredential: strings.Repeat("b", 64)}))
 			runtime := testProjectRuntime()
 			bindFixtureTeamEffects(&runtime)
-			runtime.preflight = func() error { return nil }
+			runtime.preflight = func(bool) error { return nil }
 			runtime.openViews = func(context.Context, string) error { return nil }
 			var output bytes.Buffer
 			require.NoError(t, runtime.start(&output))

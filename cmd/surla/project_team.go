@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -37,8 +36,8 @@ type (
 	}
 )
 
-// minimumTeamChorus is the first release containing the roster and idle-shell launcher contracts.
-const minimumTeamChorus = "v0.11.0"
+// minimumTeamChorus includes managed-address discovery through status -json.
+const minimumTeamChorus = "v0.14.0"
 
 // runTeamCommand bounds one external command run with env; stderr is never echoed to the caller.
 func runTeamCommand(ctx context.Context, env []string, program string, args ...string) ([]byte, error) {
@@ -201,9 +200,9 @@ func reapTeamProgram(command *exec.Cmd, exited chan<- error) { exited <- command
 // herdrEnv is the server's original environment, which serve kept before removing every model
 // provider family from its own process; only Herdr's own programs run with it, unchanged.
 func projectTeamDependencies(ctx context.Context, herdrEnv []string) (project.TeamDependencies, error) {
-	// Resolve only Herdr, when a team operation actually makes a command. Server startup
+	// Resolve programs only when a team operation actually makes a command. Server startup
 	// and unrelated management operations remain available without these programs on login PATH.
-	commands := teamCommands{core: "herdr-core", app: "herdr-app", run: runServerTeamCommand, herdrEnv: herdrEnv}
+	commands := teamCommands{core: "herdr-core", app: "herdr-app", chorus: "chorus", run: runServerTeamCommand, herdrEnv: herdrEnv, chorusEnv: withoutProviderFamilies(herdrEnv)}
 	home := os.Getenv("HERDR_APP_HOME")
 	if home == "" {
 		userHome, err := os.UserHomeDir()
@@ -212,7 +211,7 @@ func projectTeamDependencies(ctx context.Context, herdrEnv []string) (project.Te
 		}
 		home = filepath.Join(userHome, ".config", "herdr-app")
 	}
-	return project.TeamDependencies{Lifetime: ctx, Host: commands, RosterDirectory: filepath.Join(home, "data", "chorus-launcher", "rosters"), Shell: os.Getenv("SHELL"), Observer: teamObservations{commands: commands, stream: runTeamStream, client: &http.Client{Timeout: 65 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}, chorusURL: teamChorusURL}, Sender: newTeamChorusSender()}, nil
+	return project.TeamDependencies{Lifetime: ctx, Host: commands, RosterDirectory: filepath.Join(home, "data", "chorus-launcher", "rosters"), Shell: os.Getenv("SHELL"), Connect: commands.connectChorus}, nil
 }
 
 // json decodes command replies and checks JSON-level errors as well as process status.
@@ -359,12 +358,12 @@ func (c teamCommands) OpenLauncher(ctx context.Context) error {
 	}{"chorus-launcher"}, &result)
 }
 
-// runServerTeamCommand resolves a required Herdr program at the external operation boundary
+// runServerTeamCommand resolves a required team program at the external operation boundary
 // and runs it with env.
 func runServerTeamCommand(ctx context.Context, env []string, program string, args ...string) ([]byte, error) {
 	resolved, err := exec.LookPath(program)
 	if err != nil {
-		return nil, errors.New("required Herdr program is unavailable on the server login PATH")
+		return nil, errors.New("required team program is unavailable on the server login PATH")
 	}
 	return runTeamCommand(ctx, env, resolved, args...)
 }

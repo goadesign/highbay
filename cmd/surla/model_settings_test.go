@@ -129,7 +129,7 @@ func TestHandOverSendsTheShellsRequestSettings(t *testing.T) {
 	errStop := errors.New("stopped after the hand-over")
 	runtime := testProjectRuntime()
 	bindFixtureTeamEffects(&runtime)
-	runtime.preflight = func() error { return nil }
+	runtime.preflight = func(bool) error { return nil }
 	runtime.startTeamPrograms = func(context.Context) error { return errStop }
 
 	var first bytes.Buffer
@@ -308,7 +308,7 @@ func TestRefusedHandOverStopsStartBeforeTheTeam(t *testing.T) {
 			require.NoError(t, state.SaveRunning(project.Running{ManagementCredential: strings.Repeat("b", 64)}))
 			runtime := testProjectRuntime()
 			bindFixtureTeamEffects(&runtime)
-			runtime.preflight = func() error { return nil }
+			runtime.preflight = func(bool) error { return nil }
 			teamStarted, opened := false, false
 			runtime.startTeamPrograms = func(context.Context) error { teamStarted = true; return nil }
 			runtime.openViews = func(context.Context, string) error { opened = true; return nil }
@@ -348,7 +348,7 @@ func TestCLIChildrenReceiveTheShellsProviderVariablesOnlyWhereAllowed(t *testing
 	// Each stand-in reports under its name and first argument; the opener's
 	// argument is a link, so it reports as "opener".
 	standIns := map[string]string{
-		"chorus":     `case "$1" in version) echo "chorus v0.11.0";; status) [ -f "$SURLA_TEST_STAND_IN_DIR/chorus-up" ] && echo "Chorus v0.11.0 is running" || exit 1;; up) : > "$SURLA_TEST_STAND_IN_DIR/chorus-up";; esac`,
+		"chorus":     `case "$1" in version) echo "chorus v0.14.0";; status) [ -f "$SURLA_TEST_STAND_IN_DIR/chorus-up" ] && echo "Chorus v0.14.0 is running" || exit 1;; up) : > "$SURLA_TEST_STAND_IN_DIR/chorus-up";; esac`,
 		"herdr-app":  `case "$1" in status) [ -f "$SURLA_TEST_STAND_IN_DIR/app-up" ] && printf '{"overlays":[]}' || exit 1;; "") : > "$SURLA_TEST_STAND_IN_DIR/app-up";; esac`,
 		"herdr-core": `exit 0`,
 		"hc":         `case "$1" in run) printf '{"address":"stand-in"}';; wait) printf '{"ended":false}';; rm) :;; esac`,

@@ -840,10 +840,23 @@ func BuildReportTestsFinishedPayload(surlaReportTestsFinishedBody *string, surla
 		}
 		err = json.Unmarshal([]byte(*surlaReportTestsFinishedBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"request_revision\": \"td\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"coverage_statements\": [\n         {\n            \"example_ids\": [\n               \"gy\",\n               \"gy\"\n            ],\n            \"explanation\": \"b\",\n            \"question_ids\": [\n               \"gy\",\n               \"gy\",\n               \"gy\",\n               \"gy\"\n            ],\n            \"scenario\": \"gy\"\n         },\n         {\n            \"example_ids\": [\n               \"gy\",\n               \"gy\"\n            ],\n            \"explanation\": \"b\",\n            \"question_ids\": [\n               \"gy\",\n               \"gy\",\n               \"gy\",\n               \"gy\"\n            ],\n            \"scenario\": \"gy\"\n         },\n         {\n            \"example_ids\": [\n               \"gy\",\n               \"gy\"\n            ],\n            \"explanation\": \"b\",\n            \"question_ids\": [\n               \"gy\",\n               \"gy\",\n               \"gy\",\n               \"gy\"\n            ],\n            \"scenario\": \"gy\"\n         }\n      ],\n      \"request_revision\": \"td\"\n   }'")
+		}
+		if body.CoverageStatements == nil {
+			err = goa.MergeErrors(err, goa.MissingFieldError("coverage_statements", "body"))
 		}
 		if utf8.RuneCountInString(body.RequestRevision) < 1 {
 			err = goa.MergeErrors(err, goa.InvalidLengthError("body.request_revision", body.RequestRevision, utf8.RuneCountInString(body.RequestRevision), 1, true))
+		}
+		for _, e := range body.CoverageStatements {
+			if e == nil {
+				err = goa.MergeErrors(err, goa.MissingFieldError("body.coverage_statements", "[*]"))
+			}
+			if e != nil {
+				if err2 := validateTestCoverageStatementRequestBody(e, "body.coverage_statements[*]"); err2 != nil {
+					err = goa.MergeErrors(err, err2)
+				}
+			}
 		}
 		if err != nil {
 			return nil, err
@@ -864,6 +877,18 @@ func BuildReportTestsFinishedPayload(surlaReportTestsFinishedBody *string, surla
 	}
 	v := &surla.ReportTestsFinishedPayload{
 		RequestRevision: body.RequestRevision,
+	}
+	if body.CoverageStatements != nil {
+		v.CoverageStatements = make([]*surla.TestCoverageStatement, len(body.CoverageStatements))
+		for i, val := range body.CoverageStatements {
+			if val == nil {
+				v.CoverageStatements[i] = nil
+				continue
+			}
+			v.CoverageStatements[i] = marshalTestCoverageStatementRequestBodyToSurlaTestCoverageStatement(val)
+		}
+	} else {
+		v.CoverageStatements = []*surla.TestCoverageStatement{}
 	}
 	v.ChangeID = changeID
 

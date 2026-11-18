@@ -55,7 +55,12 @@ func (f *fixtureTeamHost) OpenLauncher(context.Context) error { return nil }
 
 // fixtureTeamDependencies binds only the caller's temporary state directory and recorded effects.
 func fixtureTeamDependencies(state *project.State) project.TeamDependencies {
-	return project.TeamDependencies{Lifetime: context.Background(), Host: &fixtureTeamHost{}, RosterDirectory: filepath.Join(state.Dir, "fixture-rosters"), Shell: "/bin/zsh"}
+	return project.TeamDependencies{Lifetime: context.Background(), Host: &fixtureTeamHost{}, RosterDirectory: filepath.Join(state.Dir, "fixture-rosters"), Shell: "/bin/zsh", Connect: fixtureTeamConnection}
+}
+
+// fixtureTeamConnection leaves observations unknown without starting Chorus.
+func fixtureTeamConnection(context.Context) (project.TeamConnection, error) {
+	return project.TeamConnection{Endpoint: "http://chorus.test"}, nil
 }
 
 // bindFixtureTeamEffects explicitly opts a journey into test-owned team effects.
@@ -77,7 +82,7 @@ func bindFixtureTeamEffects(runtime *projectRuntime) {
 		if err != nil {
 			return project.TeamDependencies{}, err
 		}
-		return project.TeamDependencies{Lifetime: ctx, Host: &fixtureTeamHost{}, RosterDirectory: filepath.Join(root, "fixture-rosters"), Shell: "/bin/zsh"}, nil
+		return project.TeamDependencies{Lifetime: ctx, Host: &fixtureTeamHost{}, RosterDirectory: filepath.Join(root, "fixture-rosters"), Shell: "/bin/zsh", Connect: fixtureTeamConnection}, nil
 	}
 }
 
@@ -97,15 +102,24 @@ func TestTeamPreflightVersionAndPrograms(t *testing.T) {
 			assert.Zero(t, calls)
 		})
 	}
-	for _, version := range []string{"v0.10.1", "v0.11.0", "v0.12.0", "invalid", "v0.11.0-rc.1"} {
-		t.Run(version, func(t *testing.T) {
+	for _, tc := range []struct {
+		version string
+		valid   bool
+	}{
+		{version: "v0.10.1"}, {version: "v0.11.0"}, {version: "v0.12.0"},
+		{version: "v0.11.0-rc.1"},
+		{version: "v0.13.0-rc.1"}, {version: "invalid"},
+		{version: "v0.13.0"}, {version: "v0.13.1"}, {version: "v0.14.0-rc.1"},
+		{version: "v0.14.0", valid: true}, {version: "v0.14.1", valid: true},
+	} {
+		t.Run(tc.version, func(t *testing.T) {
 			commands := teamCommands{chorus: "chorus", run: func(_ context.Context, _ []string, name string, args ...string) ([]byte, error) {
 				assert.Equal(t, "chorus", name)
 				assert.Equal(t, []string{"version"}, args)
-				return []byte("chorus " + version + "\n"), nil
+				return []byte("chorus " + tc.version + "\n"), nil
 			}}
 			err := preflightTeam(commands)
-			if version == "v0.11.0" || version == "v0.12.0" {
+			if tc.valid {
 				assert.NoError(t, err)
 			} else {
 				assert.ErrorContains(t, err, "chorus update -yes")
@@ -309,6 +323,12 @@ func TestStartOpensViewsWhenTeamFails(t *testing.T) {
 			want:     "run chorus up, then run surla again",
 		},
 		{
+			name:   "chorus address",
+			status: http.StatusServiceUnavailable,
+			body:   `{"name":"team_unavailable","cause":"chorus"}`,
+			want:   "Run chorus up (or chorus status to see the error)",
+		},
+		{
 			name:   "herdr command",
 			status: http.StatusServiceUnavailable,
 			body:   `{"name":"team_unavailable","cause":"herdr"}`,
@@ -376,7 +396,7 @@ func TestStartOpensViewsWhenTeamFails(t *testing.T) {
 			require.NoError(t, state.SaveRunning(project.Running{ManagementCredential: strings.Repeat("b", 64)}))
 			runtime := testProjectRuntime()
 			bindFixtureTeamEffects(&runtime)
-			runtime.preflight = func() error { return nil }
+			runtime.preflight = func(bool) error { return nil }
 			runtime.startTeamPrograms = func(context.Context) error { return tc.programs }
 			opened := ""
 			runtime.openViews = func(_ context.Context, address string) error { opened = address; return nil }
@@ -403,7 +423,7 @@ func TestTeamPreflightHasNoStateEffects(t *testing.T) {
 				return "", nil
 			}
 			runtime.startTeamPrograms = func(context.Context) error { t.Fatal("preflight failure must not start services/windows"); return nil }
-			runtime.preflight = func() error {
+			runtime.preflight = func(bool) error {
 				commands, err := resolveTeamCommands(func(name string) (string, error) {
 					if name == scenario {
 						return "", assert.AnError

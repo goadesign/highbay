@@ -10,7 +10,6 @@ import (
 	"maps"
 	"net/http"
 	"net/http/httptest"
-	"os"
 	"reflect"
 	"slices"
 	"strings"
@@ -111,8 +110,7 @@ func startRecordedChorus(t *testing.T, answer map[string]http.HandlerFunc) (*rec
 	chorus := &recordedChorus{answer: answer}
 	server := httptest.NewServer(chorus)
 	t.Cleanup(server.Close)
-	sender := newTeamChorusSender()
-	sender.chorusURL = server.URL
+	sender := newTeamChorusSender(server.URL)
 	return chorus, sender
 }
 
@@ -305,18 +303,50 @@ func TestTeamReminderPostFailures(t *testing.T) {
 // own bounded at 5 seconds per post that follows no redirect, to the same local
 // Chorus server the view reader uses.
 func TestTeamReminderProductionBinding(t *testing.T) {
-	deps, err := projectTeamDependencies(t.Context(), os.Environ())
+	chorus := &recordedChorus{}
+	watchReads := make(chan struct{}, 1)
+	mux := http.NewServeMux()
+	mux.Handle("/mcp", chorus)
+	mux.HandleFunc("/swarms/team/view", func(w http.ResponseWriter, r *http.Request) {
+		watchReads <- struct{}{}
+		w.Header().Set("ETag", "managed-version")
+		_, err := io.WriteString(w, `{"swarm":"team","agents":[{"handle":"builder","watching_on_this_server":true}]}`)
+		assert.NoError(t, err)
+	})
+	server := httptest.NewServer(mux)
+	t.Cleanup(server.Close)
+	deps, err := projectTeamDependencies(t.Context(), []string{"PATH=/bin", "ANTHROPIC_API_KEY=fixture", "KEEP=value"})
 	require.NoError(t, err)
-	sender, ok := deps.Sender.(teamChorusSender)
-	require.True(t, ok, "production binds %T", deps.Sender)
-	assert.Equal(t, "http://127.0.0.1:9440", sender.chorusURL)
+	require.NotNil(t, deps.Connect)
+	commands := deps.Host.(teamCommands)
+	commands.run = func(_ context.Context, env []string, program string, args ...string) ([]byte, error) {
+		assert.Equal(t, []string{"PATH=/bin", "KEEP=value"}, env)
+		assert.Equal(t, "chorus", program)
+		assert.Equal(t, []string{"status", "-json"}, args)
+		return json.Marshal(map[string]string{"base_url": server.URL})
+	}
+	connection, err := commands.connectChorus(t.Context())
+	require.NoError(t, err)
+	sender, ok := connection.Sender.(teamChorusSender)
+	require.True(t, ok, "production binds %T", connection.Sender)
+	assert.Equal(t, server.URL, sender.chorusURL)
 	assert.Equal(t, 5*time.Second, sender.client.Timeout)
 	require.NotNil(t, sender.client.CheckRedirect)
 	assert.ErrorIs(t, sender.client.CheckRedirect(nil, nil), http.ErrUseLastResponse)
-	observer, ok := deps.Observer.(teamObservations)
+	observer, ok := connection.Observer.(teamObservations)
 	require.True(t, ok)
 	assert.Equal(t, sender.chorusURL, observer.chorusURL)
 	assert.NotSame(t, observer.client, sender.client, "the sender's bound is its own")
+	view, err := observer.ReadWatchers(t.Context(), "team", "", []project.TeamRole{{Role: "builder", Handle: "builder"}})
+	require.NoError(t, err)
+	assert.True(t, view.Held["builder"])
+	assert.Len(t, watchReads, 1, "watcher reads reached the owner-reported endpoint")
+	reminder := testReminder
+	reminder.Team = "team"
+	require.NoError(t, sender.Send(t.Context(), reminder))
+	chorus.mu.Lock()
+	defer chorus.mu.Unlock()
+	assert.Len(t, chorus.posts, 2, "who and send reached the same owner-reported endpoint")
 }
 
 // TestTeamCommandsNeverType drives every Herdr adapter operation through a

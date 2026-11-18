@@ -4,6 +4,7 @@
 package project
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -23,6 +24,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	genprojectserver "github.com/goadesign/surla/gen/http/project/server"
 	genproject "github.com/goadesign/surla/gen/project"
 	"github.com/goadesign/surla/internal/controlplane"
 )
@@ -139,6 +141,74 @@ func TestViewsPageSessionLifecycle(t *testing.T) {
   expect(afterRestart.status === 401, "a session from before the restart answered " + afterRestart.status);
   page.close();
 `)
+}
+
+// TestViewsPageShellNavigation allows top-level navigation to the data-free
+// shell while refusing cross-site frames, fetches and session exchanges.
+func TestViewsPageShellNavigation(t *testing.T) {
+	vp := startViewsProject(t, controlplane.Options{})
+	for _, tc := range []struct {
+		name, method, path, site, mode, destination string
+		want                                        int
+	}{
+		{"bare address", "GET", "/", "none", "navigate", "document", http.StatusForbidden},
+		{"extension navigation", "GET", "/views", "cross-site", "navigate", "document", http.StatusOK},
+		{"address bar", "GET", "/views", "none", "navigate", "document", http.StatusOK},
+		{"same-site navigation", "GET", "/views", "same-site", "navigate", "document", http.StatusOK},
+		{"same-origin shell", "GET", "/views", "same-origin", "", "", http.StatusOK},
+		{"cross-site frame", "GET", "/views", "cross-site", "navigate", "iframe", http.StatusForbidden},
+		{"cross-site fetch", "GET", "/views", "cross-site", "cors", "empty", http.StatusForbidden},
+		{"wrong mode", "GET", "/views", "cross-site", "no-cors", "document", http.StatusForbidden},
+		{"missing destination", "GET", "/views", "cross-site", "navigate", "", http.StatusForbidden},
+		{"other method", "POST", "/views", "cross-site", "navigate", "document", http.StatusForbidden},
+		{"other route", "GET", "/project/identity", "cross-site", "navigate", "document", http.StatusForbidden},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			request, err := http.NewRequestWithContext(t.Context(), tc.method, vp.state.Origin()+tc.path, nil)
+			require.NoError(t, err)
+			request.Header.Set("Sec-Fetch-Site", tc.site)
+			request.Header.Set("Sec-Fetch-Mode", tc.mode)
+			request.Header.Set("Sec-Fetch-Dest", tc.destination)
+			response, err := http.DefaultClient.Do(request)
+			require.NoError(t, err)
+			assert.Equal(t, tc.want, response.StatusCode)
+			assert.Equal(t, "no-store", response.Header.Get("Cache-Control"))
+			if tc.want == http.StatusOK {
+				assert.Contains(t, response.Header.Get("Content-Security-Policy"), "frame-ancestors 'none'")
+				assert.Equal(t, "nosniff", response.Header.Get("X-Content-Type-Options"))
+			}
+			body, err := io.ReadAll(response.Body)
+			require.NoError(t, err)
+			require.NoError(t, response.Body.Close())
+			if tc.name == "bare address" {
+				assert.Contains(t, string(body), "request must come from the project's own page")
+				assert.Contains(t, string(body), "run surla in your project folder to open it")
+				assert.Contains(t, string(body), "surla --print-link to get a link without opening a browser")
+			}
+		})
+	}
+	link, err := vp.link()
+	require.NoError(t, err)
+	body, err := json.Marshal(&genprojectserver.ExchangeBrowserLinkRequestBody{Link: &link})
+	require.NoError(t, err)
+	for _, site := range []string{"cross-site", "same-site", "none", "same-origin"} {
+		request, err := http.NewRequestWithContext(t.Context(), http.MethodPost, vp.state.Origin()+"/project/browser-session", bytes.NewReader(body))
+		require.NoError(t, err)
+		request.Header.Set("Content-Type", "application/json")
+		request.Header.Set("Sec-Fetch-Site", site)
+		request.Header.Set("Sec-Fetch-Mode", "navigate")
+		request.Header.Set("Sec-Fetch-Dest", "document")
+		response, err := http.DefaultClient.Do(request)
+		require.NoError(t, err)
+		want := http.StatusForbidden
+		if site == "same-origin" {
+			want = http.StatusCreated // Refused requests never consumed the link.
+		}
+		assert.Equal(t, want, response.StatusCode, "exchange from %s", site)
+		_, err = io.Copy(io.Discard, response.Body)
+		require.NoError(t, err)
+		require.NoError(t, response.Body.Close())
+	}
 }
 
 // TestViewsPageReadsNeedTheSameOriginMark sends the page's two reads with a

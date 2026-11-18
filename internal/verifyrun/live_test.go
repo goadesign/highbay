@@ -127,7 +127,7 @@ func fakeSuiteLive() int {
 		}
 	}
 	if mode == "gateway-before-panic" {
-		return callFakeLiveModel(mode)
+		return callFakeLiveModel(mode, os.Getenv(verify.LiveModelGatewayEnv))
 	}
 	switch mode {
 	case "leak":
@@ -168,8 +168,8 @@ func fakeSuiteLive() int {
 	if err := json.NewEncoder(os.Stdout).Encode(map[string]string{"url": "http://127.0.0.1:4100"}); err != nil {
 		return 2
 	}
-	if strings.HasPrefix(mode, "gateway-") && mode != "gateway-ready" && mode != "gateway-ends" {
-		if result := callFakeLiveModel(mode); result != 0 {
+	if mode == "gateway-hold" {
+		if result := callFakeLiveModel(mode, os.Getenv(verify.LiveModelGatewayEnv)); result != 0 {
 			return result
 		}
 	}

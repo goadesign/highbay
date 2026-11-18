@@ -344,8 +344,14 @@ test writer's turn.
 
 ## How Surla judges a report
 
-The test writer calls `report_tests_finished` with the change and the
-build's revision. A report is refused when the user dropped the build
+The test writer calls `report_tests_finished` with the change, the
+build's revision and `coverage_statements`: its stated links from declared
+scenarios to agreed question and example IDs, with an explanation per scenario.
+An empty list is valid and displays **Not stated**. The owner validates supplied
+requirement references before changing the report; the checker validates
+scenario references against the listing it already produced. These statements
+do not prove what the tests assert or add a semantic acceptance requirement.
+A report is refused when the user dropped the build
 (`no_build`), when the test writer has not read the build's assignment
 (`assignment_unread`), when its copy is missing, is not on `surla/tests-<n>`
 or has a Git operation in progress (`working_folder_missing`,
@@ -383,6 +389,23 @@ project then judges it, without trusting the copy's author:
 
 The whole judgment has a 15-minute limit. Within it, building the test
 program has 10 minutes and listing its scenarios 60 seconds.
+
+The listing also supplies the exact scenario IDs used to validate the report's
+coverage statements, including additional declared tests. The report owner
+retains the current report's statements through findings or a check that could
+not run, so the writer can correct them. A replaced report's checker cannot
+publish its statements. Only accepted statements appear as coverage in Build.
+Verification copies that accepted report's statements and built requirements
+with its selected tests commit, and Approve reads the immutable run evidence.
+None of these checks judges whether assertions actually exercise the stated
+behavior, and an empty statement list remains valid.
+
+Older saved reports without statements read as **Not stated**; older run
+requests without the new snapshot are not backfilled from current state.
+Once new coverage fields are written, an older binary's strict storage decoder
+cannot read those records. Use the new server/page/tool contracts together;
+in-place downgrade after those writes is unsupported. Preserve the evidence
+and roll forward to a correction rather than removing fields or resetting state.
 
 The download in step 5 runs with the user's proxy
 settings, so its output is withheld, and Surla decides whose failure it is

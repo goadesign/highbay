@@ -1522,7 +1522,7 @@ func surlaReportTestsFinishedUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "surla report-tests-finished --body '{\n      \"request_revision\": \"td\"\n   }' --change-id \"7\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "surla report-tests-finished --body '{\n      \"coverage_statements\": [\n         {\n            \"example_ids\": [\n               \"gy\",\n               \"gy\"\n            ],\n            \"explanation\": \"b\",\n            \"question_ids\": [\n               \"gy\",\n               \"gy\",\n               \"gy\",\n               \"gy\"\n            ],\n            \"scenario\": \"gy\"\n         },\n         {\n            \"example_ids\": [\n               \"gy\",\n               \"gy\"\n            ],\n            \"explanation\": \"b\",\n            \"question_ids\": [\n               \"gy\",\n               \"gy\",\n               \"gy\",\n               \"gy\"\n            ],\n            \"scenario\": \"gy\"\n         },\n         {\n            \"example_ids\": [\n               \"gy\",\n               \"gy\"\n            ],\n            \"explanation\": \"b\",\n            \"question_ids\": [\n               \"gy\",\n               \"gy\",\n               \"gy\",\n               \"gy\"\n            ],\n            \"scenario\": \"gy\"\n         }\n      ],\n      \"request_revision\": \"td\"\n   }' --change-id \"7\"")
 }
 
 func surlaReviewVerificationUsage() {

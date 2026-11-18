@@ -241,14 +241,17 @@ func startedBuild(held heldBuild, taking gensurla.BuildTaking) (*gensurla.Starte
 		return nil, fmt.Errorf("name the required tests of change %q: %w", held.file.ChangeID, err)
 	}
 	return &gensurla.StartedBuild{
-		RequestRevision:   held.file.RequestRevision,
-		StartedAt:         held.file.StartedAt.UTC().Format(time.RFC3339Nano),
-		InForce:           held.inForce,
-		Builder:           builderProgress(held.file.Builder),
-		TestWriter:        testWriterProgress(held),
-		RequiredTestCount: len(required),
-		RequiredTests:     required,
-		Taking:            taking,
+		RequestRevision:    held.file.RequestRevision,
+		StartedAt:          held.file.StartedAt.UTC().Format(time.RFC3339Nano),
+		InForce:            held.inForce,
+		Builder:            builderProgress(held.file.Builder),
+		TestWriter:         testWriterProgress(held),
+		RequiredTestCount:  len(required),
+		RequiredTests:      required,
+		Answers:            held.file.Answers,
+		Examples:           held.file.Examples,
+		CoverageStatements: acceptedCoverageStatements(held),
+		Taking:             taking,
 	}, nil
 }
 

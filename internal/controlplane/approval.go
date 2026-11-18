@@ -135,7 +135,9 @@ func (c *ControlPlane) readApprovalInputs(
 		record.card.Status == StatusConfirmed && record.card.RequestRevision == p.RequestRevision {
 		build, choiceErr = c.verificationBuild(principal, p.ChangeID, p.RequestRevision)
 		if choiceErr == nil {
-			testsCommit, source, choiceErr = c.testsChoice(principal, p.ChangeID, p.RequestRevision)
+			var selection testSelection
+			selection, choiceErr = c.testsChoice(principal, p.ChangeID, p.RequestRevision)
+			testsCommit, source = selection.commit, selection.source
 		}
 	}
 	c.mu.RUnlock()
@@ -310,11 +312,11 @@ func (c *ControlPlane) recheckApproval(
 	if candidateErr != nil {
 		return storedChangeCard{}, "", candidateErr
 	}
-	nowCommit, nowSource, err := c.testsChoice(principal, p.ChangeID, p.RequestRevision)
-	if err != nil || nowCommit != testsCommit {
+	selection, err := c.testsChoice(principal, p.ChangeID, p.RequestRevision)
+	if err != nil || selection.commit != testsCommit {
 		return storedChangeCard{}, "", gensurla.MakeConflict(errors.New("the accepted tests changed while approving: approve again"))
 	}
-	return record, nowSource, nil
+	return record, selection.source, nil
 }
 
 // currentCard returns record.card as get_change, an unchanged confirm_intent,
@@ -368,7 +370,8 @@ func (c *ControlPlane) currentCard(
 
 	owner := Principal{ID: record.owner, CallerID: record.owner, Kind: CallerUser}
 	c.mu.RLock()
-	testsCommit, source, choiceErr := c.testsChoice(owner, card.ChangeID, card.RequestRevision)
+	selection, choiceErr := c.testsChoice(owner, card.ChangeID, card.RequestRevision)
+	testsCommit, source := selection.commit, selection.source
 	c.mu.RUnlock()
 	if choiceErr != nil || testsCommit != saved.SuiteCommit {
 		span.AddEvent(

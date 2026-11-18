@@ -4747,6 +4747,226 @@ var getBuildResultFields = []tools.FieldMetadata{
 		},
 	},
 	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("answers")},
+		JSONType:    "array",
+		Description: "Confirmed answers saved when this build started; later revisions do not replace them.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("state")},
+				Value:         "started",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("answers"), tools.DynamicField{}},
+		JSONType:    "object",
+		Description: "Confirmed answers saved when this build started; later revisions do not replace them.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("state")},
+				Value:         "started",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("answers"), tools.DynamicField{}, tools.FixedField("id")},
+		JSONType:    "string",
+		Description: "Question identifier on the Change Card.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("state")},
+				Value:         "started",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("answers"), tools.DynamicField{}, tools.FixedField("question")},
+		JSONType:    "string",
+		Description: "The question as the user answered it.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("state")},
+				Value:         "started",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("answers"), tools.DynamicField{}, tools.FixedField("answer")},
+		JSONType:    "string",
+		Description: "The option the user confirmed, exactly as confirmed.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("state")},
+				Value:         "started",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("examples")},
+		JSONType:    "array",
+		Description: "Examples saved when this build started; later revisions do not replace them.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("state")},
+				Value:         "started",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("examples"), tools.DynamicField{}},
+		JSONType:    "object",
+		Description: "Examples saved when this build started; later revisions do not replace them.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("state")},
+				Value:         "started",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("examples"), tools.DynamicField{}, tools.FixedField("id")},
+		JSONType:    "string",
+		Description: "Stable example identifier. Default code-assigned IDs use check_01, check_02, ... (valid goa-ai/eval Scenario names). confirm_intent preserves caller-chosen IDs.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("state")},
+				Value:         "started",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("examples"), tools.DynamicField{}, tools.FixedField("scenario")},
+		JSONType:    "string",
+		Description: "Plain-English scenario description.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("state")},
+				Value:         "started",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("examples"), tools.DynamicField{}, tools.FixedField("input_summary")},
+		JSONType:    "string",
+		Description: "Representative user request and domain fixture state.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("state")},
+				Value:         "started",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("examples"), tools.DynamicField{}, tools.FixedField("expected_outcome")},
+		JSONType:    "string",
+		Description: "Expected side effect and response behavior.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("state")},
+				Value:         "started",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("examples"), tools.DynamicField{}, tools.FixedField("verification_kind")},
+		JSONType:    "string",
+		Description: "Evaluator check classification (deterministic or model_judged).",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("state")},
+				Value:         "started",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("coverage_statements")},
+		JSONType:    "array",
+		Description: "The accepted report's writer statements; empty before acceptance or when none were stated. Surla did not judge them.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("state")},
+				Value:         "started",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("coverage_statements"), tools.DynamicField{}},
+		JSONType:    "object",
+		Description: "The accepted report's writer statements; empty before acceptance or when none were stated. Surla did not judge them.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("state")},
+				Value:         "started",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("coverage_statements"), tools.DynamicField{}, tools.FixedField("scenario")},
+		JSONType:    "string",
+		Description: "Exact declared scenario identifier.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("state")},
+				Value:         "started",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("coverage_statements"), tools.DynamicField{}, tools.FixedField("question_ids")},
+		JSONType:    "array",
+		Description: "Question IDs from the assignment's answers[].id; empty when this statement names only examples.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("state")},
+				Value:         "started",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("coverage_statements"), tools.DynamicField{}, tools.FixedField("question_ids"), tools.DynamicField{}},
+		JSONType:    "string",
+		Description: "Question IDs from the assignment's answers[].id; empty when this statement names only examples.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("state")},
+				Value:         "started",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("coverage_statements"), tools.DynamicField{}, tools.FixedField("example_ids")},
+		JSONType:    "array",
+		Description: "Example IDs from the assignment's examples[].id; empty when this statement names only answers.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("state")},
+				Value:         "started",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("coverage_statements"), tools.DynamicField{}, tools.FixedField("example_ids"), tools.DynamicField{}},
+		JSONType:    "string",
+		Description: "Example IDs from the assignment's examples[].id; empty when this statement names only answers.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("state")},
+				Value:         "started",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("coverage_statements"), tools.DynamicField{}, tools.FixedField("explanation")},
+		JSONType:    "string",
+		Description: "Interaction or assertion the writer says exercises these requirements.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("state")},
+				Value:         "started",
+			},
+		},
+	},
+	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("taking")},
 		JSONType:    "object",
 		Description: "Whether the user has taken this build: building until a verification of it passes; passed with the commits to merge; merged once the branch checked out in the project folder holds the commits of one passed run, the builder's and, for written tests, the tests'; dropped once the user dropped it. A project has one open build, and another change is built only once it is merged or dropped.",
@@ -7004,6 +7224,46 @@ var getTestWriterAssignmentResultFields = []tools.FieldMetadata{
 		Path:        []tools.FieldPathSegment{tools.FixedField("preserved_behaviors"), tools.DynamicField{}},
 		JSONType:    "string",
 		Description: "The existing behaviors the change as agreed at request_revision keeps, copied when this build started; empty when it names none. The tests must hold the service to each.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("coverage_statements")},
+		JSONType:    "array",
+		Description: "Statements submitted with the latest report, retained for correction after findings or a check that could not run; empty before any report or when none were stated.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("coverage_statements"), tools.DynamicField{}},
+		JSONType:    "object",
+		Description: "Statements submitted with the latest report, retained for correction after findings or a check that could not run; empty before any report or when none were stated.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("coverage_statements"), tools.DynamicField{}, tools.FixedField("scenario")},
+		JSONType:    "string",
+		Description: "Exact declared scenario identifier.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("coverage_statements"), tools.DynamicField{}, tools.FixedField("question_ids")},
+		JSONType:    "array",
+		Description: "Question IDs from the assignment's answers[].id; empty when this statement names only examples.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("coverage_statements"), tools.DynamicField{}, tools.FixedField("question_ids"), tools.DynamicField{}},
+		JSONType:    "string",
+		Description: "Question IDs from the assignment's answers[].id; empty when this statement names only examples.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("coverage_statements"), tools.DynamicField{}, tools.FixedField("example_ids")},
+		JSONType:    "array",
+		Description: "Example IDs from the assignment's examples[].id; empty when this statement names only answers.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("coverage_statements"), tools.DynamicField{}, tools.FixedField("example_ids"), tools.DynamicField{}},
+		JSONType:    "string",
+		Description: "Example IDs from the assignment's examples[].id; empty when this statement names only answers.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("coverage_statements"), tools.DynamicField{}, tools.FixedField("explanation")},
+		JSONType:    "string",
+		Description: "Interaction or assertion the writer says exercises these requirements.",
 	},
 }
 var getVerificationPayloadFields = []tools.FieldMetadata{
@@ -9973,6 +10233,46 @@ var reportTestsFinishedPayloadFields = []tools.FieldMetadata{
 		JSONType:    "string",
 		Description: "request_revision of your test assignment.",
 	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("coverage_statements")},
+		JSONType:    "array",
+		Description: "Your stated scenario coverage of this assignment's answers and examples; use [] when none is stated. Surla validates references but does not judge assertion meaning.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("coverage_statements"), tools.DynamicField{}},
+		JSONType:    "object",
+		Description: "Your stated scenario coverage of this assignment's answers and examples; use [] when none is stated. Surla validates references but does not judge assertion meaning.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("coverage_statements"), tools.DynamicField{}, tools.FixedField("scenario")},
+		JSONType:    "string",
+		Description: "Exact declared scenario identifier.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("coverage_statements"), tools.DynamicField{}, tools.FixedField("question_ids")},
+		JSONType:    "array",
+		Description: "Question IDs from the assignment's answers[].id; empty when this statement names only examples.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("coverage_statements"), tools.DynamicField{}, tools.FixedField("question_ids"), tools.DynamicField{}},
+		JSONType:    "string",
+		Description: "Question IDs from the assignment's answers[].id; empty when this statement names only examples.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("coverage_statements"), tools.DynamicField{}, tools.FixedField("example_ids")},
+		JSONType:    "array",
+		Description: "Example IDs from the assignment's examples[].id; empty when this statement names only answers.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("coverage_statements"), tools.DynamicField{}, tools.FixedField("example_ids"), tools.DynamicField{}},
+		JSONType:    "string",
+		Description: "Example IDs from the assignment's examples[].id; empty when this statement names only answers.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("coverage_statements"), tools.DynamicField{}, tools.FixedField("explanation")},
+		JSONType:    "string",
+		Description: "Interaction or assertion the writer says exercises these requirements.",
+	},
 }
 var reportTestsFinishedResultFields = []tools.FieldMetadata{
 	{
@@ -10786,6 +11086,376 @@ var reviewVerificationResultFields = []tools.FieldMetadata{
 			tools.TaggedUnionBranch{
 				Discriminator: []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("mapping"), tools.FixedField("state")},
 				Value:         "not_recorded_for_evaluator",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("test_coverage")},
+		JSONType:    "object",
+		Description: "The writer's immutable statements for this run, or explicit missing historical/operator evidence.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("state")},
+				Value:         "recorded",
+			},
+		},
+	},
+	{
+		Path:     []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("test_coverage"), tools.FixedField("state")},
+		JSONType: "string",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("state")},
+				Value:         "recorded",
+			},
+		},
+		DiscriminatorValues: []string{
+			"recorded",
+			"not_recorded",
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("test_coverage")},
+		JSONType:    "object",
+		Description: "The accepted writer report's statements and built answers/examples, copied with the exact tests selection for this run. Later reports and revisions cannot replace this evidence.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("state")},
+				Value:         "recorded",
+			},
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("test_coverage"), tools.FixedField("state")},
+				Value:         "recorded",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("test_coverage"), tools.FixedField("report")},
+		JSONType:    "integer",
+		Description: "Accepted test-writer report number.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("state")},
+				Value:         "recorded",
+			},
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("test_coverage"), tools.FixedField("state")},
+				Value:         "recorded",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("test_coverage"), tools.FixedField("answers")},
+		JSONType:    "array",
+		Description: "Answers saved for the built agreement, in question order.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("state")},
+				Value:         "recorded",
+			},
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("test_coverage"), tools.FixedField("state")},
+				Value:         "recorded",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("test_coverage"), tools.FixedField("answers"), tools.DynamicField{}},
+		JSONType:    "object",
+		Description: "Answers saved for the built agreement, in question order.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("state")},
+				Value:         "recorded",
+			},
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("test_coverage"), tools.FixedField("state")},
+				Value:         "recorded",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("test_coverage"), tools.FixedField("answers"), tools.DynamicField{}, tools.FixedField("id")},
+		JSONType:    "string",
+		Description: "Question identifier on the Change Card.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("state")},
+				Value:         "recorded",
+			},
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("test_coverage"), tools.FixedField("state")},
+				Value:         "recorded",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("test_coverage"), tools.FixedField("answers"), tools.DynamicField{}, tools.FixedField("question")},
+		JSONType:    "string",
+		Description: "The question as the user answered it.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("state")},
+				Value:         "recorded",
+			},
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("test_coverage"), tools.FixedField("state")},
+				Value:         "recorded",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("test_coverage"), tools.FixedField("answers"), tools.DynamicField{}, tools.FixedField("answer")},
+		JSONType:    "string",
+		Description: "The option the user confirmed, exactly as confirmed.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("state")},
+				Value:         "recorded",
+			},
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("test_coverage"), tools.FixedField("state")},
+				Value:         "recorded",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("test_coverage"), tools.FixedField("examples")},
+		JSONType:    "array",
+		Description: "Examples saved for the built agreement, in confirmation order.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("state")},
+				Value:         "recorded",
+			},
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("test_coverage"), tools.FixedField("state")},
+				Value:         "recorded",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("test_coverage"), tools.FixedField("examples"), tools.DynamicField{}},
+		JSONType:    "object",
+		Description: "Examples saved for the built agreement, in confirmation order.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("state")},
+				Value:         "recorded",
+			},
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("test_coverage"), tools.FixedField("state")},
+				Value:         "recorded",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("test_coverage"), tools.FixedField("examples"), tools.DynamicField{}, tools.FixedField("id")},
+		JSONType:    "string",
+		Description: "Stable example identifier. Default code-assigned IDs use check_01, check_02, ... (valid goa-ai/eval Scenario names). confirm_intent preserves caller-chosen IDs.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("state")},
+				Value:         "recorded",
+			},
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("test_coverage"), tools.FixedField("state")},
+				Value:         "recorded",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("test_coverage"), tools.FixedField("examples"), tools.DynamicField{}, tools.FixedField("scenario")},
+		JSONType:    "string",
+		Description: "Plain-English scenario description.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("state")},
+				Value:         "recorded",
+			},
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("test_coverage"), tools.FixedField("state")},
+				Value:         "recorded",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("test_coverage"), tools.FixedField("examples"), tools.DynamicField{}, tools.FixedField("input_summary")},
+		JSONType:    "string",
+		Description: "Representative user request and domain fixture state.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("state")},
+				Value:         "recorded",
+			},
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("test_coverage"), tools.FixedField("state")},
+				Value:         "recorded",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("test_coverage"), tools.FixedField("examples"), tools.DynamicField{}, tools.FixedField("expected_outcome")},
+		JSONType:    "string",
+		Description: "Expected side effect and response behavior.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("state")},
+				Value:         "recorded",
+			},
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("test_coverage"), tools.FixedField("state")},
+				Value:         "recorded",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("test_coverage"), tools.FixedField("examples"), tools.DynamicField{}, tools.FixedField("verification_kind")},
+		JSONType:    "string",
+		Description: "Evaluator check classification (deterministic or model_judged).",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("state")},
+				Value:         "recorded",
+			},
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("test_coverage"), tools.FixedField("state")},
+				Value:         "recorded",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("test_coverage"), tools.FixedField("coverage_statements")},
+		JSONType:    "array",
+		Description: "Writer statements for this report; empty means Not stated.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("state")},
+				Value:         "recorded",
+			},
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("test_coverage"), tools.FixedField("state")},
+				Value:         "recorded",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("test_coverage"), tools.FixedField("coverage_statements"), tools.DynamicField{}},
+		JSONType:    "object",
+		Description: "Writer statements for this report; empty means Not stated.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("state")},
+				Value:         "recorded",
+			},
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("test_coverage"), tools.FixedField("state")},
+				Value:         "recorded",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("test_coverage"), tools.FixedField("coverage_statements"), tools.DynamicField{}, tools.FixedField("scenario")},
+		JSONType:    "string",
+		Description: "Exact declared scenario identifier.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("state")},
+				Value:         "recorded",
+			},
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("test_coverage"), tools.FixedField("state")},
+				Value:         "recorded",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("test_coverage"), tools.FixedField("coverage_statements"), tools.DynamicField{}, tools.FixedField("question_ids")},
+		JSONType:    "array",
+		Description: "Question IDs from the assignment's answers[].id; empty when this statement names only examples.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("state")},
+				Value:         "recorded",
+			},
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("test_coverage"), tools.FixedField("state")},
+				Value:         "recorded",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("test_coverage"), tools.FixedField("coverage_statements"), tools.DynamicField{}, tools.FixedField("question_ids"), tools.DynamicField{}},
+		JSONType:    "string",
+		Description: "Question IDs from the assignment's answers[].id; empty when this statement names only examples.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("state")},
+				Value:         "recorded",
+			},
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("test_coverage"), tools.FixedField("state")},
+				Value:         "recorded",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("test_coverage"), tools.FixedField("coverage_statements"), tools.DynamicField{}, tools.FixedField("example_ids")},
+		JSONType:    "array",
+		Description: "Example IDs from the assignment's examples[].id; empty when this statement names only answers.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("state")},
+				Value:         "recorded",
+			},
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("test_coverage"), tools.FixedField("state")},
+				Value:         "recorded",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("test_coverage"), tools.FixedField("coverage_statements"), tools.DynamicField{}, tools.FixedField("example_ids"), tools.DynamicField{}},
+		JSONType:    "string",
+		Description: "Example IDs from the assignment's examples[].id; empty when this statement names only answers.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("state")},
+				Value:         "recorded",
+			},
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("test_coverage"), tools.FixedField("state")},
+				Value:         "recorded",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("test_coverage"), tools.FixedField("coverage_statements"), tools.DynamicField{}, tools.FixedField("explanation")},
+		JSONType:    "string",
+		Description: "Interaction or assertion the writer says exercises these requirements.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("state")},
+				Value:         "recorded",
+			},
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("test_coverage"), tools.FixedField("state")},
+				Value:         "recorded",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("test_coverage")},
+		JSONType:    "object",
+		Description: "No test-writer coverage snapshot was recorded. Never infer it from today's agreement or accepted report.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("state")},
+				Value:         "recorded",
+			},
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("story_context"), tools.FixedField("test_coverage"), tools.FixedField("state")},
+				Value:         "not_recorded",
 			},
 		},
 	},
@@ -18200,6 +18870,14 @@ func MarshalGetTestWriterAssignmentResult(v *GetTestWriterAssignmentResult) ([]b
 	for i, val := range in.PreservedBehaviors {
 		out.PreservedBehaviors[i] = val
 	}
+	out.CoverageStatements = make([]*toolhttp.TestCoverageStatementTransport, len(in.CoverageStatements))
+	for i, val := range in.CoverageStatements {
+		if val == nil {
+			out.CoverageStatements[i] = nil
+			continue
+		}
+		out.CoverageStatements[i] = encodeTestCoverageStatementToTestCoverageStatementTransport(val)
+	}
 	return json.Marshal(out)
 }
 
@@ -18270,6 +18948,14 @@ func UnmarshalGetTestWriterAssignmentResult(data []byte) (*GetTestWriterAssignme
 	out.PreservedBehaviors = make([]string, len(in.PreservedBehaviors))
 	for i, val := range in.PreservedBehaviors {
 		out.PreservedBehaviors[i] = val
+	}
+	out.CoverageStatements = make([]*TestCoverageStatement, len(in.CoverageStatements))
+	for i, val := range in.CoverageStatements {
+		if val == nil {
+			out.CoverageStatements[i] = nil
+			continue
+		}
+		out.CoverageStatements[i] = decodeTestCoverageStatementTransportToTestCoverageStatement(val)
 	}
 	return out, nil
 }
@@ -19576,6 +20262,14 @@ func MarshalReportTestsFinishedPayload(v *ReportTestsFinishedPayload) ([]byte, e
 		ChangeID:        &in.ChangeID,
 		RequestRevision: &in.RequestRevision,
 	}
+	out.CoverageStatements = make([]*toolhttp.TestCoverageStatementTransport, len(in.CoverageStatements))
+	for i, val := range in.CoverageStatements {
+		if val == nil {
+			out.CoverageStatements[i] = nil
+			continue
+		}
+		out.CoverageStatements[i] = encodeTestCoverageStatementToTestCoverageStatementTransport(val)
+	}
 	return json.Marshal(out)
 }
 
@@ -19602,6 +20296,14 @@ func UnmarshalReportTestsFinishedPayload(data []byte) (*ReportTestsFinishedPaylo
 	out = &ReportTestsFinishedPayload{
 		ChangeID:        *in.ChangeID,
 		RequestRevision: *in.RequestRevision,
+	}
+	out.CoverageStatements = make([]*TestCoverageStatement, len(in.CoverageStatements))
+	for i, val := range in.CoverageStatements {
+		if val == nil {
+			out.CoverageStatements[i] = nil
+			continue
+		}
+		out.CoverageStatements[i] = decodeTestCoverageStatementTransportToTestCoverageStatement(val)
 	}
 	return out, nil
 }
@@ -26657,10 +27359,31 @@ func validateGetBuildResultStartedBuildTransportJSONValue(path string, value any
 	sort.Strings(keys)
 	for _, key := range keys {
 		switch key {
+		case "answers":
+			if err := validateGetBuildResultStartedBuildTransportAnswersJSONValue(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Confirmed answers saved when this build started; later revisions do not replace them.",
+			); err != nil {
+				return err
+			}
 		case "builder":
 			if err := validateGetBuildResultBuilderProgressTransportJSONValue(
 				generatedJSONChildPath(path, key, false),
 				typed[key], "The builder's assignment.",
+			); err != nil {
+				return err
+			}
+		case "coverage_statements":
+			if err := validateGetBuildResultStartedBuildTransportCoverageStatementsJSONValue(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "The accepted report's writer statements; empty before acceptance or when none were stated. Surla did not judge them.",
+			); err != nil {
+				return err
+			}
+		case "examples":
+			if err := validateProposeChangeResultRootExamplesJSONValue(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Examples saved when this build started; later revisions do not replace them.",
 			); err != nil {
 				return err
 			}
@@ -26715,7 +27438,10 @@ func validateGetBuildResultStartedBuildTransportJSONValue(path string, value any
 			}
 		default:
 			return unknownJSONFieldError(path, key, []string{
+				"answers",
 				"builder",
+				"coverage_statements",
+				"examples",
 				"in_force",
 				"request_revision",
 				"required_test_count",
@@ -26723,6 +27449,82 @@ func validateGetBuildResultStartedBuildTransportJSONValue(path string, value any
 				"started_at",
 				"taking",
 				"test_writer",
+			})
+		}
+	}
+	return nil
+}
+
+// validateGetBuildResultStartedBuildTransportAnswersJSONValue checks one value whose JSON shape is fixed by the generated Goa type.
+func validateGetBuildResultStartedBuildTransportAnswersJSONValue(path string, value any, description string) error {
+	field := path
+	if field == "" {
+		field = "$payload"
+	}
+	if value == nil {
+		return invalidGeneratedFieldTypeError(field, "array", "null", description)
+	}
+	typed, ok := value.([]any)
+	if !ok {
+		return invalidGeneratedFieldTypeError(field, "array", decodedJSONType(value), description)
+	}
+	for index, item := range typed {
+		if err := validateGetBuildResultConfirmedAnswerTransportJSONValue(
+			generatedJSONChildPath(path, strconv.Itoa(index), true),
+			item, description,
+		); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// validateGetBuildResultConfirmedAnswerTransportJSONValue checks one value whose JSON shape is fixed by the generated Goa type.
+func validateGetBuildResultConfirmedAnswerTransportJSONValue(path string, value any, description string) error {
+	field := path
+	if field == "" {
+		field = "$payload"
+	}
+	if value == nil {
+		return invalidGeneratedFieldTypeError(field, "object", "null", description)
+	}
+	typed, ok := value.(map[string]any)
+	if !ok {
+		return invalidGeneratedFieldTypeError(field, "object", decodedJSONType(value), description)
+	}
+	keys := make([]string, 0, len(typed))
+	for key := range typed {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		switch key {
+		case "answer":
+			if err := validateStringJSONValue(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "The option the user confirmed, exactly as confirmed.",
+			); err != nil {
+				return err
+			}
+		case "id":
+			if err := validateStringJSONValue(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Question identifier on the Change Card.",
+			); err != nil {
+				return err
+			}
+		case "question":
+			if err := validateStringJSONValue(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "The question as the user answered it.",
+			); err != nil {
+				return err
+			}
+		default:
+			return unknownJSONFieldError(path, key, []string{
+				"answer",
+				"id",
+				"question",
 			})
 		}
 	}
@@ -26759,6 +27561,90 @@ func validateGetBuildResultBuilderProgressTransportJSONValue(path string, value 
 		default:
 			return unknownJSONFieldError(path, key, []string{
 				"read",
+			})
+		}
+	}
+	return nil
+}
+
+// validateGetBuildResultStartedBuildTransportCoverageStatementsJSONValue checks one value whose JSON shape is fixed by the generated Goa type.
+func validateGetBuildResultStartedBuildTransportCoverageStatementsJSONValue(path string, value any, description string) error {
+	field := path
+	if field == "" {
+		field = "$payload"
+	}
+	if value == nil {
+		return invalidGeneratedFieldTypeError(field, "array", "null", description)
+	}
+	typed, ok := value.([]any)
+	if !ok {
+		return invalidGeneratedFieldTypeError(field, "array", decodedJSONType(value), description)
+	}
+	for index, item := range typed {
+		if err := validateGetBuildResultTestCoverageStatementTransportJSONValue(
+			generatedJSONChildPath(path, strconv.Itoa(index), true),
+			item, description,
+		); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// validateGetBuildResultTestCoverageStatementTransportJSONValue checks one value whose JSON shape is fixed by the generated Goa type.
+func validateGetBuildResultTestCoverageStatementTransportJSONValue(path string, value any, description string) error {
+	field := path
+	if field == "" {
+		field = "$payload"
+	}
+	if value == nil {
+		return invalidGeneratedFieldTypeError(field, "object", "null", description)
+	}
+	typed, ok := value.(map[string]any)
+	if !ok {
+		return invalidGeneratedFieldTypeError(field, "object", decodedJSONType(value), description)
+	}
+	keys := make([]string, 0, len(typed))
+	for key := range typed {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		switch key {
+		case "example_ids":
+			if err := validateProposeChangePayloadCP1AnalysisAmbiguityTransportOptionsJSONValue(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Example IDs from the assignment's examples[].id; empty when this statement names only answers.",
+			); err != nil {
+				return err
+			}
+		case "explanation":
+			if err := validateStringJSONValue(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Interaction or assertion the writer says exercises these requirements.",
+			); err != nil {
+				return err
+			}
+		case "question_ids":
+			if err := validateProposeChangePayloadCP1AnalysisAmbiguityTransportOptionsJSONValue(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Question IDs from the assignment's answers[].id; empty when this statement names only examples.",
+			); err != nil {
+				return err
+			}
+		case "scenario":
+			if err := validateStringJSONValue(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Exact declared scenario identifier.",
+			); err != nil {
+				return err
+			}
+		default:
+			return unknownJSONFieldError(path, key, []string{
+				"example_ids",
+				"explanation",
+				"question_ids",
+				"scenario",
 			})
 		}
 	}
@@ -27704,7 +28590,7 @@ func validateGetTestWriterAssignmentResultJSONValue(path string, value any, desc
 	for _, key := range keys {
 		switch key {
 		case "answers":
-			if err := validateGetTestWriterAssignmentResultRootAnswersJSONValue(
+			if err := validateGetBuildResultStartedBuildTransportAnswersJSONValue(
 				generatedJSONChildPath(path, key, false),
 				typed[key], "Each question of the change as agreed at request_revision with the answer the user confirmed, in question order, copied when this build started; empty when the agreed revision asked none. The tests must hold the service to every answer.",
 			); err != nil {
@@ -27714,6 +28600,13 @@ func validateGetTestWriterAssignmentResultJSONValue(path string, value any, desc
 			if err := validateStringJSONValue(
 				generatedJSONChildPath(path, key, false),
 				typed[key], "Change Card the tests are for.",
+			); err != nil {
+				return err
+			}
+		case "coverage_statements":
+			if err := validateGetBuildResultStartedBuildTransportCoverageStatementsJSONValue(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Statements submitted with the latest report, retained for correction after findings or a check that could not run; empty before any report or when none were stated.",
 			); err != nil {
 				return err
 			}
@@ -27791,6 +28684,7 @@ func validateGetTestWriterAssignmentResultJSONValue(path string, value any, desc
 			return unknownJSONFieldError(path, key, []string{
 				"answers",
 				"change_id",
+				"coverage_statements",
 				"design_source",
 				"examples",
 				"findings",
@@ -27801,82 +28695,6 @@ func validateGetTestWriterAssignmentResultJSONValue(path string, value any, desc
 				"required_tests",
 				"stories",
 				"working_folder",
-			})
-		}
-	}
-	return nil
-}
-
-// validateGetTestWriterAssignmentResultRootAnswersJSONValue checks one value whose JSON shape is fixed by the generated Goa type.
-func validateGetTestWriterAssignmentResultRootAnswersJSONValue(path string, value any, description string) error {
-	field := path
-	if field == "" {
-		field = "$payload"
-	}
-	if value == nil {
-		return invalidGeneratedFieldTypeError(field, "array", "null", description)
-	}
-	typed, ok := value.([]any)
-	if !ok {
-		return invalidGeneratedFieldTypeError(field, "array", decodedJSONType(value), description)
-	}
-	for index, item := range typed {
-		if err := validateGetTestWriterAssignmentResultConfirmedAnswerTransportJSONValue(
-			generatedJSONChildPath(path, strconv.Itoa(index), true),
-			item, description,
-		); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-// validateGetTestWriterAssignmentResultConfirmedAnswerTransportJSONValue checks one value whose JSON shape is fixed by the generated Goa type.
-func validateGetTestWriterAssignmentResultConfirmedAnswerTransportJSONValue(path string, value any, description string) error {
-	field := path
-	if field == "" {
-		field = "$payload"
-	}
-	if value == nil {
-		return invalidGeneratedFieldTypeError(field, "object", "null", description)
-	}
-	typed, ok := value.(map[string]any)
-	if !ok {
-		return invalidGeneratedFieldTypeError(field, "object", decodedJSONType(value), description)
-	}
-	keys := make([]string, 0, len(typed))
-	for key := range typed {
-		keys = append(keys, key)
-	}
-	sort.Strings(keys)
-	for _, key := range keys {
-		switch key {
-		case "answer":
-			if err := validateStringJSONValue(
-				generatedJSONChildPath(path, key, false),
-				typed[key], "The option the user confirmed, exactly as confirmed.",
-			); err != nil {
-				return err
-			}
-		case "id":
-			if err := validateStringJSONValue(
-				generatedJSONChildPath(path, key, false),
-				typed[key], "Question identifier on the Change Card.",
-			); err != nil {
-				return err
-			}
-		case "question":
-			if err := validateStringJSONValue(
-				generatedJSONChildPath(path, key, false),
-				typed[key], "The question as the user answered it.",
-			); err != nil {
-				return err
-			}
-		default:
-			return unknownJSONFieldError(path, key, []string{
-				"answer",
-				"id",
-				"question",
 			})
 		}
 	}
@@ -27910,6 +28728,13 @@ func validateReportTestsFinishedPayloadJSONValue(path string, value any, descrip
 			); err != nil {
 				return err
 			}
+		case "coverage_statements":
+			if err := validateGetBuildResultStartedBuildTransportCoverageStatementsJSONValue(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Your stated scenario coverage of this assignment's answers and examples; use [] when none is stated. Surla validates references but does not judge assertion meaning.",
+			); err != nil {
+				return err
+			}
 		case "request_revision":
 			if err := validateStringJSONValue(
 				generatedJSONChildPath(path, key, false),
@@ -27920,6 +28745,7 @@ func validateReportTestsFinishedPayloadJSONValue(path string, value any, descrip
 		default:
 			return unknownJSONFieldError(path, key, []string{
 				"change_id",
+				"coverage_statements",
 				"request_revision",
 			})
 		}
@@ -28243,12 +29069,20 @@ func validateReviewVerificationResultRecordedRunStoryTransportJSONValue(path str
 			); err != nil {
 				return err
 			}
+		case "test_coverage":
+			if err := validateReviewVerificationResultRecordedRunStoryTransportTestCoverageJSONValue(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "The writer's immutable statements for this run, or explicit missing historical/operator evidence.",
+			); err != nil {
+				return err
+			}
 		default:
 			return unknownJSONFieldError(path, key, []string{
 				"build_number",
 				"build_started_at",
 				"mapping",
 				"stories",
+				"test_coverage",
 			})
 		}
 	}
@@ -28319,6 +29153,100 @@ func validateReviewVerificationResultRunStoryMappingTransportJSONValue(path stri
 		default:
 			return unknownJSONFieldError(path, key, []string{
 				"required_tests",
+			})
+		}
+	}
+	return nil
+}
+
+// validateReviewVerificationResultRecordedRunStoryTransportTestCoverageJSONValue checks one value whose JSON shape is fixed by the generated Goa type.
+func validateReviewVerificationResultRecordedRunStoryTransportTestCoverageJSONValue(path string, value any, description string) error {
+	field := path
+	if field == "" {
+		field = "$payload"
+	}
+	if value == nil {
+		return invalidGeneratedFieldTypeError(field, "object", "null", description)
+	}
+	typed, ok := value.(map[string]any)
+	if !ok {
+		return invalidGeneratedFieldTypeError(field, "object", decodedJSONType(value), description)
+	}
+	rawDiscriminator, discriminatorPresent := typed["state"]
+	discriminator, ok := rawDiscriminator.(string)
+	if !ok {
+		return invalidJSONUnionDiscriminator(generatedJSONChildPath(path, "state", false), rawDiscriminator, discriminatorPresent, []string{"recorded", "not_recorded"})
+	}
+	branch := make(map[string]any, len(typed)-1)
+	for key, item := range typed {
+		if key != "state" {
+			branch[key] = item
+		}
+	}
+	switch discriminator {
+	case "recorded":
+		return validateReviewVerificationResultRecordedTestCoverageTransportJSONValue(path, branch, "")
+	case "not_recorded":
+		return validateProposeChangeResultOperatorEvaluatorTestsTransportJSONValue(path, branch, "")
+	default:
+		return invalidJSONUnionDiscriminator(generatedJSONChildPath(path, "state", false), discriminator, true, []string{"recorded", "not_recorded"})
+	}
+}
+
+// validateReviewVerificationResultRecordedTestCoverageTransportJSONValue checks one value whose JSON shape is fixed by the generated Goa type.
+func validateReviewVerificationResultRecordedTestCoverageTransportJSONValue(path string, value any, description string) error {
+	field := path
+	if field == "" {
+		field = "$payload"
+	}
+	if value == nil {
+		return invalidGeneratedFieldTypeError(field, "object", "null", description)
+	}
+	typed, ok := value.(map[string]any)
+	if !ok {
+		return invalidGeneratedFieldTypeError(field, "object", decodedJSONType(value), description)
+	}
+	keys := make([]string, 0, len(typed))
+	for key := range typed {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		switch key {
+		case "answers":
+			if err := validateGetBuildResultStartedBuildTransportAnswersJSONValue(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Answers saved for the built agreement, in question order.",
+			); err != nil {
+				return err
+			}
+		case "coverage_statements":
+			if err := validateGetBuildResultStartedBuildTransportCoverageStatementsJSONValue(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Writer statements for this report; empty means Not stated.",
+			); err != nil {
+				return err
+			}
+		case "examples":
+			if err := validateProposeChangeResultRootExamplesJSONValue(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Examples saved for the built agreement, in confirmation order.",
+			); err != nil {
+				return err
+			}
+		case "report":
+			if err := validateIntJSONValue(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Accepted test-writer report number.",
+			); err != nil {
+				return err
+			}
+		default:
+			return unknownJSONFieldError(path, key, []string{
+				"answers",
+				"coverage_statements",
+				"examples",
+				"report",
 			})
 		}
 	}
@@ -28964,6 +29892,30 @@ func decodeStartedBuildTransportToStartedBuild(v *toolhttp.StartedBuildTransport
 		}
 		res.RequiredTests[i] = decodeRequiredTestTransportToRequiredTest(val)
 	}
+	res.Answers = make([]*ConfirmedAnswer, len(v.Answers))
+	for i, val := range v.Answers {
+		if val == nil {
+			res.Answers[i] = nil
+			continue
+		}
+		res.Answers[i] = decodeConfirmedAnswerTransportToConfirmedAnswer(val)
+	}
+	res.Examples = make([]*ExampleItem, len(v.Examples))
+	for i, val := range v.Examples {
+		if val == nil {
+			res.Examples[i] = nil
+			continue
+		}
+		res.Examples[i] = decodeExampleItemTransportToExampleItem(val)
+	}
+	res.CoverageStatements = make([]*TestCoverageStatement, len(v.CoverageStatements))
+	for i, val := range v.CoverageStatements {
+		if val == nil {
+			res.CoverageStatements[i] = nil
+			continue
+		}
+		res.CoverageStatements[i] = decodeTestCoverageStatementTransportToTestCoverageStatement(val)
+	}
 	switch string(v.Taking.Kind()) {
 	case "building":
 		actual, _ := v.Taking.AsBuilding()
@@ -29127,6 +30079,31 @@ func decodeRequiredTestTransportToRequiredTest(v *toolhttp.RequiredTestTransport
 
 	return res
 }
+func decodeConfirmedAnswerTransportToConfirmedAnswer(v *toolhttp.ConfirmedAnswerTransport) *ConfirmedAnswer {
+	res := &ConfirmedAnswer{
+		ID:       *v.ID,
+		Question: *v.Question,
+		Answer:   *v.Answer,
+	}
+
+	return res
+}
+func decodeTestCoverageStatementTransportToTestCoverageStatement(v *toolhttp.TestCoverageStatementTransport) *TestCoverageStatement {
+	res := &TestCoverageStatement{
+		Scenario:    TestCoverageReference(*v.Scenario),
+		Explanation: *v.Explanation,
+	}
+	res.QuestionIds = make([]TestCoverageReference, len(v.QuestionIds))
+	for i, val := range v.QuestionIds {
+		res.QuestionIds[i] = TestCoverageReference(*val)
+	}
+	res.ExampleIds = make([]TestCoverageReference, len(v.ExampleIds))
+	for i, val := range v.ExampleIds {
+		res.ExampleIds[i] = TestCoverageReference(*val)
+	}
+
+	return res
+}
 func decodeBuildBuildingTransportToBuildBuilding(v *toolhttp.BuildBuildingTransport) *BuildBuilding {
 	res := &BuildBuilding{}
 
@@ -29205,6 +30182,30 @@ func encodeStartedBuildToStartedBuildTransport(v *StartedBuild) *toolhttp.Starte
 			continue
 		}
 		res.RequiredTests[i] = encodeRequiredTestToRequiredTestTransport(val)
+	}
+	res.Answers = make([]*toolhttp.ConfirmedAnswerTransport, len(v.Answers))
+	for i, val := range v.Answers {
+		if val == nil {
+			res.Answers[i] = nil
+			continue
+		}
+		res.Answers[i] = encodeConfirmedAnswerToConfirmedAnswerTransport(val)
+	}
+	res.Examples = make([]*toolhttp.ExampleItemTransport, len(v.Examples))
+	for i, val := range v.Examples {
+		if val == nil {
+			res.Examples[i] = nil
+			continue
+		}
+		res.Examples[i] = encodeExampleItemToExampleItemTransport(val)
+	}
+	res.CoverageStatements = make([]*toolhttp.TestCoverageStatementTransport, len(v.CoverageStatements))
+	for i, val := range v.CoverageStatements {
+		if val == nil {
+			res.CoverageStatements[i] = nil
+			continue
+		}
+		res.CoverageStatements[i] = encodeTestCoverageStatementToTestCoverageStatementTransport(val)
 	}
 	var takingValue toolhttp.BuildTaking
 	switch string(v.Taking.Kind()) {
@@ -29369,6 +30370,36 @@ func encodeRequiredTestToRequiredTestTransport(v *RequiredTest) *toolhttp.Requir
 		FlowKey:  &v.FlowKey,
 		Scenario: &v.Scenario,
 		Hook:     &v.Hook,
+	}
+
+	return res
+}
+func encodeConfirmedAnswerToConfirmedAnswerTransport(v *ConfirmedAnswer) *toolhttp.ConfirmedAnswerTransport {
+	res := &toolhttp.ConfirmedAnswerTransport{
+		ID:       &v.ID,
+		Question: &v.Question,
+		Answer:   &v.Answer,
+	}
+
+	return res
+}
+func encodeTestCoverageStatementToTestCoverageStatementTransport(v *TestCoverageStatement) *toolhttp.TestCoverageStatementTransport {
+	res := &toolhttp.TestCoverageStatementTransport{
+		Explanation: &v.Explanation,
+	}
+	scenario := toolhttp.TestCoverageReferenceTransport(v.Scenario)
+	res.Scenario = &scenario
+	res.QuestionIds = make([]*toolhttp.TestCoverageReferenceTransport, len(v.QuestionIds))
+	for i, val := range v.QuestionIds {
+		var transformed toolhttp.TestCoverageReferenceTransport
+		transformed = toolhttp.TestCoverageReferenceTransport(val)
+		res.QuestionIds[i] = &transformed
+	}
+	res.ExampleIds = make([]*toolhttp.TestCoverageReferenceTransport, len(v.ExampleIds))
+	for i, val := range v.ExampleIds {
+		var transformed toolhttp.TestCoverageReferenceTransport
+		transformed = toolhttp.TestCoverageReferenceTransport(val)
+		res.ExampleIds[i] = &transformed
 	}
 
 	return res
@@ -29552,24 +30583,6 @@ func encodeLiveTargetEndedToLiveTargetEndedTransport(v *LiveTargetEnded) *toolht
 		StartedAt:       &v.StartedAt,
 		EndedAt:         &v.EndedAt,
 		Message:         &v.Message,
-	}
-
-	return res
-}
-func decodeConfirmedAnswerTransportToConfirmedAnswer(v *toolhttp.ConfirmedAnswerTransport) *ConfirmedAnswer {
-	res := &ConfirmedAnswer{
-		ID:       *v.ID,
-		Question: *v.Question,
-		Answer:   *v.Answer,
-	}
-
-	return res
-}
-func encodeConfirmedAnswerToConfirmedAnswerTransport(v *ConfirmedAnswer) *toolhttp.ConfirmedAnswerTransport {
-	res := &toolhttp.ConfirmedAnswerTransport{
-		ID:       &v.ID,
-		Question: &v.Question,
-		Answer:   &v.Answer,
 	}
 
 	return res
@@ -30402,6 +31415,26 @@ func decodeRecordedRunStoryTransportToRecordedRunStory(v *toolhttp.RecordedRunSt
 		u.SetNotRecordedForEvaluator((*RunEvaluatorMappingUnknown)(obj))
 		res.Mapping = u
 	}
+	switch string(v.TestCoverage.Kind()) {
+	case "recorded":
+		actual, _ := v.TestCoverage.AsRecorded()
+		var obj *RecordedTestCoverage
+		if actual != nil {
+			obj = decodeRecordedTestCoverageTransportToRecordedTestCoverage(actual)
+		}
+		u := res.TestCoverage
+		u.SetRecorded((*RecordedTestCoverage)(obj))
+		res.TestCoverage = u
+	case "not_recorded":
+		actual, _ := v.TestCoverage.AsNotRecorded()
+		var obj *TestCoverageNotRecorded
+		if actual != nil {
+			obj = decodeTestCoverageNotRecordedTransportToTestCoverageNotRecorded(actual)
+		}
+		u := res.TestCoverage
+		u.SetNotRecorded((*TestCoverageNotRecorded)(obj))
+		res.TestCoverage = u
+	}
 
 	return res
 }
@@ -30420,6 +31453,42 @@ func decodeRunStoryMappingTransportToRunStoryMapping(v *toolhttp.RunStoryMapping
 }
 func decodeRunEvaluatorMappingUnknownTransportToRunEvaluatorMappingUnknown(v *toolhttp.RunEvaluatorMappingUnknownTransport) *RunEvaluatorMappingUnknown {
 	res := &RunEvaluatorMappingUnknown{}
+
+	return res
+}
+func decodeRecordedTestCoverageTransportToRecordedTestCoverage(v *toolhttp.RecordedTestCoverageTransport) *RecordedTestCoverage {
+	res := &RecordedTestCoverage{
+		Report: *v.Report,
+	}
+	res.Answers = make([]*ConfirmedAnswer, len(v.Answers))
+	for i, val := range v.Answers {
+		if val == nil {
+			res.Answers[i] = nil
+			continue
+		}
+		res.Answers[i] = decodeConfirmedAnswerTransportToConfirmedAnswer(val)
+	}
+	res.Examples = make([]*ExampleItem, len(v.Examples))
+	for i, val := range v.Examples {
+		if val == nil {
+			res.Examples[i] = nil
+			continue
+		}
+		res.Examples[i] = decodeExampleItemTransportToExampleItem(val)
+	}
+	res.CoverageStatements = make([]*TestCoverageStatement, len(v.CoverageStatements))
+	for i, val := range v.CoverageStatements {
+		if val == nil {
+			res.CoverageStatements[i] = nil
+			continue
+		}
+		res.CoverageStatements[i] = decodeTestCoverageStatementTransportToTestCoverageStatement(val)
+	}
+
+	return res
+}
+func decodeTestCoverageNotRecordedTransportToTestCoverageNotRecorded(v *toolhttp.TestCoverageNotRecordedTransport) *TestCoverageNotRecorded {
+	res := &TestCoverageNotRecorded{}
 
 	return res
 }
@@ -30542,6 +31611,28 @@ func encodeRecordedRunStoryToRecordedRunStoryTransport(v *RecordedRunStory) *too
 		mappingValue = u
 	}
 	res.Mapping = &mappingValue
+	var testCoverageValue toolhttp.TestCoverage
+	switch string(v.TestCoverage.Kind()) {
+	case "recorded":
+		actual, _ := v.TestCoverage.AsRecorded()
+		var obj *toolhttp.RecordedTestCoverageTransport
+		if actual != nil {
+			obj = encodeRecordedTestCoverageToRecordedTestCoverageTransport(actual)
+		}
+		u := testCoverageValue
+		u.SetRecorded((*toolhttp.RecordedTestCoverageTransport)(obj))
+		testCoverageValue = u
+	case "not_recorded":
+		actual, _ := v.TestCoverage.AsNotRecorded()
+		var obj *toolhttp.TestCoverageNotRecordedTransport
+		if actual != nil {
+			obj = encodeTestCoverageNotRecordedToTestCoverageNotRecordedTransport(actual)
+		}
+		u := testCoverageValue
+		u.SetNotRecorded((*toolhttp.TestCoverageNotRecordedTransport)(obj))
+		testCoverageValue = u
+	}
+	res.TestCoverage = &testCoverageValue
 
 	return res
 }
@@ -30560,6 +31651,42 @@ func encodeRunStoryMappingToRunStoryMappingTransport(v *RunStoryMapping) *toolht
 }
 func encodeRunEvaluatorMappingUnknownToRunEvaluatorMappingUnknownTransport(v *RunEvaluatorMappingUnknown) *toolhttp.RunEvaluatorMappingUnknownTransport {
 	res := &toolhttp.RunEvaluatorMappingUnknownTransport{}
+
+	return res
+}
+func encodeRecordedTestCoverageToRecordedTestCoverageTransport(v *RecordedTestCoverage) *toolhttp.RecordedTestCoverageTransport {
+	res := &toolhttp.RecordedTestCoverageTransport{
+		Report: &v.Report,
+	}
+	res.Answers = make([]*toolhttp.ConfirmedAnswerTransport, len(v.Answers))
+	for i, val := range v.Answers {
+		if val == nil {
+			res.Answers[i] = nil
+			continue
+		}
+		res.Answers[i] = encodeConfirmedAnswerToConfirmedAnswerTransport(val)
+	}
+	res.Examples = make([]*toolhttp.ExampleItemTransport, len(v.Examples))
+	for i, val := range v.Examples {
+		if val == nil {
+			res.Examples[i] = nil
+			continue
+		}
+		res.Examples[i] = encodeExampleItemToExampleItemTransport(val)
+	}
+	res.CoverageStatements = make([]*toolhttp.TestCoverageStatementTransport, len(v.CoverageStatements))
+	for i, val := range v.CoverageStatements {
+		if val == nil {
+			res.CoverageStatements[i] = nil
+			continue
+		}
+		res.CoverageStatements[i] = encodeTestCoverageStatementToTestCoverageStatementTransport(val)
+	}
+
+	return res
+}
+func encodeTestCoverageNotRecordedToTestCoverageNotRecordedTransport(v *TestCoverageNotRecorded) *toolhttp.TestCoverageNotRecordedTransport {
+	res := &toolhttp.TestCoverageNotRecordedTransport{}
 
 	return res
 }

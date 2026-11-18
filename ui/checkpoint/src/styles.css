@@ -767,6 +767,12 @@ html { scroll-padding-block-start: calc(var(--surla-frame-height, 120px) + 16px)
 .surla-frame-slots > div { min-inline-size: 0; }
 .surla-frame-slots dt { font-size: 12px; color: var(--muted-foreground); margin-block-end: 4px; }
 .surla-frame-slots dd { margin: 0; overflow-wrap: anywhere; }
+.surla-frame-summary {
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2;
+  line-clamp: 2; max-block-size: 2lh; overflow: hidden;
+}
+.surla-frame-agreed .surla-btn { margin-block-start: 4px; }
+#surla-agreement-summary:focus { outline: 2px solid var(--accent); outline-offset: 2px; }
 .surla-frame-next dd { display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: center; }
 #surla-frame-next .surla-btn-primary {
   background-color: var(--primary); color: var(--primary-foreground); border-color: var(--primary);
@@ -830,6 +836,11 @@ html { scroll-padding-block-start: calc(var(--surla-frame-height, 120px) + 16px)
 .surla-build-test-review .surla-details > summary { display: list-item; padding: 4px 0; }
 #surla-build-details > summary, #surla-agreement-details > summary { display: list-item; padding: 4px 0; }
 .surla-build-test-review :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.surla-test-coverage { margin-block-start: 24px; padding-block-start: 8px; border-block-start: 1px solid var(--border); overflow-wrap: anywhere; }
+.surla-test-coverage dt { margin-block-start: 16px; font-weight: 600; }
+.surla-test-coverage dd { margin: 4px 0 0; }
+.surla-test-coverage p { margin-block: 4px; max-inline-size: 75ch; }
+.surla-test-coverage ul { padding-inline-start: 20px; }
 @media (max-width: 720px) {
   .surla-build-test-evidence { grid-template-columns: minmax(0, 1fr); gap: 16px; }
 }

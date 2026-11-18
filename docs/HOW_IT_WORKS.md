@@ -118,8 +118,8 @@ Git on `PATH` supports `--no-lazy-fetch` (Git 2.45 or newer). An unsupported
 Git is named by its version; install a newer Git and run `surla` again. This
 check works in an empty folder, before you make a Git repository.
 
-1. **The server starts.** The first time, `surla` prints `Created a new,
-   empty Surla project. Moving or renaming this folder starts a new project.`
+1. **The server starts.** The first time, `surla` prints `Started a Surla project
+   for this folder. Moving or renaming this folder starts a new project.`
    It starts the server in its own Herdr terminal, labelled
    `surla_project=<id>`, and tells it the private state folder it found for
    this project. That folder belongs to your account and lies outside the
@@ -142,16 +142,35 @@ check works in an empty folder, before you make a Git repository.
 3. **The page opens.** `surla` opens the page in your browser through a
    single-use link and prints `Surla is running for <folder> at <address>`.
    To open the page again later, run `surla` again in the same folder.
+
+   Chorus's address comes from its managed settings. Use `chorus up -addr :9550`
+   for another address, then **Start agents** or run `surla` again. A failed
+   Chorus check leaves the page available and names the recovery step.
 4. **You choose the agents.** The Chorus dialog lists one row per role Surla
    registered. On the first start that is the guide alone. You pick which
    installed agent plays it. The guide's pane opens in the project's Herdr
    space with Surla's first message, which points it to the Golden Path and
    to the project's changes.
 
+You can make the same choices through a terminal and browser automation. Run
+`surla --print-link` to receive a one-use page URL and expiry as JSON, with
+startup notices on stderr, then open it in your controlled browser. The team
+next step gives `chorus team inspect` and `chorus team launch` commands with
+your actual space ID. Name each missing role's program in the choices JSON;
+null model/thinking use its defaults. Before launching, add
+`--choices choices.json` to the printed inspect command to see those programs' model
+options and permission effects. The command shares the dialog's discovery and
+launch backend, without Herdr's program catalog or saved preferences. On a later
+build, inspect again and choose the new worker roles. See
+[terminal operation](REFERENCE.md#terminal-and-browser-automation)
+for the exact input and recovery.
+
 The frame names the journey Describe → Agree → Build → Check → Approve.
 Team, Story, Live target, Architecture and Diagnostics remain available as
 project references. Agreed, Needs you and Next keep the current context and
 decision visible; on a phone, Next moves to the bottom of the viewport.
+The frame previews at most two lines of the agreed summary. **Read full
+summary** opens Agree at the complete saved summary, keeping unsaved edits.
 
 | View | What it is for |
 | --- | --- |
@@ -370,10 +389,20 @@ test writer reports to have it generated again or runs
 `surla gen -dir eval` in its working copy first. It checks
 its work with `go build ./...` in `eval/`, which fails naming any required
 method not yet written.
-Then it calls `report_tests_finished`. The report returns at once with the
+Then it calls `report_tests_finished`, including which agreed answers and
+examples each scenario is stated to cover and an explanation; an empty
+statement list means **Not stated**. The report returns at once with the
 report's number; the build shows the test writer as **Reported**. In a
 starter project the test of the starter's own flow, the method `PricesCookie`
 in `eval/acceptance`, is already written and shows the form to follow.
+
+After acceptance, Build shows **Test writer's stated coverage** against your
+agreed answers and examples. Surla validates the references and checks that the
+tests build and declare their required scenarios; it does not judge the
+writer's coverage statements. Approve shows the same recorded statements
+beside the selected run's results, even after later changes. An answer or
+example without a statement says **Not stated**, which does not establish
+whether it was tested.
 
 ### Surla checks the tests
 
@@ -594,6 +623,9 @@ Only you can approve. Next offers **Approve this result** when the owner’s
 current review says it is available. A blocked result keeps its evidence and
 explains the enabling step. A read failure retains evidence and withholds
 approval until recovery. Approval stays on this stage after it is recorded.
+If another check arrives while you review an earlier result, **Review latest
+check** opens it. **Refresh result** keeps reviewing the selected run; saved
+results and approvals retain their own evidence.
 The server reloads the run's report and derives it again from its evidence,
 checks that it passed and that it verified the agreed revision with the tests
 accepted for that revision, and records the approval on the Change Card:
@@ -613,7 +645,9 @@ and then, for the test writer's tests, `git merge <tests_commit>` (verified on
 `surla/tests-<n>`); with stored verification settings, the tests commit is the
 evaluator's and only `git merge <candidate_commit>` is shown. Once the branch
 checked out in the project folder holds those commits, the build shows
-**Merged**. Before drafting the next change, the guide calls `update_draft` (and
+**Merged**. On Approve, Next then points to describing the next change while
+your selected approval and its evidence stay readable.
+Before drafting the next change, the guide calls `update_draft` (and
 then `refresh_story`) so `.surla-draft` brings in the design changes merged into
 the project folder. Approval is refused when the run used other tests than the ones
 accepted for the revision; the builder then verifies again and you approve that

@@ -46,11 +46,11 @@ an operation, who may call it, what it returns and how it refuses.
 | **macOS or Linux** | Surla runs the code the agents write (the design at each refresh, candidate builds, the candidate service, test listing, and the test program) as ordinary processes with your file and network access. Verification gives the test writer's accepted test program only `PATH` and `TMPDIR`; a live target also gives it a target key and a model gateway, without provider settings (see [`verify_change`](#verify_change) and [`start_live_target`](#start_live_target)). With stored verification settings, the operator's evaluator receives provider settings. Running as you, these programs can still read keys your other programs hold. `check_project` runs the project's tests in Linux containers (see **Docker** below). | — |
 
 | **Go 1.27.3 or later** | `surla` is a Go program, and the project's checks use Go. Surla runs Goa with each module's own versions, so no `goa` binary is needed. | [go.dev/dl](https://go.dev/dl/) |
-| **Surla** | The command itself. | `go install github.com/goadesign/surla/cmd/surla@latest` |
+| **Surla** | The command itself. | From the root of the checkout whose README you are reading, run `go install ./cmd/surla`; see [Install](../README.md#install). `go install github.com/goadesign/surla/cmd/surla@latest` installs the latest module version available to Go, which may be older than this README and lack commands described here. When installing that version, follow its README. |
 | **Herdr core** (`herdr-core` and `hc`) | The server and every agent run in Herdr terminals. | `curl -fsSL https://releases.herdr.dev/core/install.sh \| sh` ([herdr.dev/core](https://herdr.dev/core/)) |
 | **Herdr app** (`herdr-app`) | The window that shows the team's panes. | `curl -fsSL https://releases.herdr.dev/app/install.sh \| sh` ([herdr.dev](https://herdr.dev/)) |
-| **Chorus v0.11.0 or later** | Agent messaging and the Chorus dialog. | `curl -fsSL https://raw.githubusercontent.com/goadesign/chorus/main/scripts/install.sh \| sh`; update with `chorus update -yes` |
-| **A coding agent** that the Chorus dialog can start | An agent app plays each role: the user picks one per role in the Chorus dialog. | — |
+| **Chorus v0.14.0 or later** | Agent messaging, the Chorus dialog and terminal client-option inspection. | `curl -fsSL https://raw.githubusercontent.com/goadesign/chorus/main/scripts/install.sh \| sh`; update with `chorus update -yes` |
+| **A coding agent** that the Chorus dialog or terminal command can start | An agent app plays each role: the user picks one per role in the dialog or supplies terminal choices. | — |
 | **Git 2.45 or newer**, with a name and address | Startup requires support for `--no-lazy-fetch`, so Surla's Git reads do not download missing objects. Every build needs the project in a Git repository with a first commit and a Git name and address, with or without stored verification settings, and so does verification, which needs the build. Without stored verification settings, live targets need the repository too. Surla records accepted tests, and any uncommitted files a working copy holds when it joins a new build, as commits under your Git identity. | Install Git 2.45 or newer on `PATH`; `git config --global user.name …` and `user.email …` configure its identity. |
 | **Docker** (Docker Desktop, or another local engine on a `unix://` socket) | `check_project` and `update_dependencies` run Go in Linux containers. The first check pulls `golang:1.27.3`. | [docker.com](https://www.docker.com/) |
 | **Temporal CLI** | Only to run the Orders evaluator, which starts a local Temporal server for its scenarios: when Surla verifies the Orders project or starts a live target of it, when `surla verify` runs that evaluator, and in the full-suite tests that run it (the `examples/orders` acceptance suite and the `e2e` tests of `./internal/verify` and `./cmd/surla`). | `brew install temporal` |
@@ -60,8 +60,9 @@ Before it creates any state, `surla` checks for `herdr-core`, `herdr-app` and
 missing. When that program is in `~/.local/bin`, where the installers put it,
 it says instead `<program> is installed in <folder>, which is not on PATH;
 add <folder> to PATH, then run surla again`. It then checks that Chorus is
-v0.11.0 or later (`chorus update -yes` updates it), that `hc` is on the path
-or in `~/.local/bin`, and that the browser opener (`open`) is on the path. A
+v0.14.0 or later (`chorus update -yes` updates it), that `hc` is on the path
+or in `~/.local/bin`, and, for ordinary startup, that the browser opener (`open` on macOS or
+`xdg-open` on Linux) is on the path. `--print-link` skips that opener check. A
 missing opener is named without an install command. Surla then probes the Git
 on `PATH` with `git --no-lazy-fetch version`, without reading a repository.
 If that option is unknown, startup names the installed `git --version` line
@@ -71,6 +72,83 @@ refusals. Git builds with the capability backported are accepted regardless
 of their version label.
 
 ---
+
+## Terminal and browser automation
+
+Run `surla --print-link` in the project folder to start or attach and receive one
+JSON object on stdout: `{ "url": "...", "expires_at": "..." }`. Startup notices,
+team instructions and the nonsecret origin go to stderr. `--print-link` takes no
+other arguments (apart from `help`, `-h`, `-help` or `--help`); extra arguments
+are refused with `surla: --print-link accepts no additional arguments; use surla
+--help`. This route does not
+require or call `open`/`xdg-open`; ordinary `surla` keeps opening the browser.
+The URL grants user-page access to whoever exchanges it first within two
+minutes. Avoid shared terminal/log captures and open it in the browser you
+control. After use, expiry or page reload, repeat the command for a fresh link.
+Server/auth/link-validation failure prints no link and exits nonzero. A team-only
+failure can still print a usable link while exiting nonzero with its reason on
+stderr: user decisions on the page do not require an agent.
+
+The shared team next step names the dialog and copyable Chorus commands with
+the actual space ID. Run the printed `chorus team inspect --space ...` to see
+roles: bare inspection prints `{ "root": "...", "swarm": "...", "roles": [...] }`
+with each role's `role`, `title`, `handle`, `running` (`true` or `false`),
+`client`, `model`, `thinking` and `yolo` (`null` when not recorded), never
+credentials, without running client discovery. Before the project's first
+build, `roles` lists only `guide`; pressing **Build this change** on the views
+page adds `builder` and, unless verification settings are stored, `test_writer`
+to the same space's roster (registered worker roles stay in the roster across
+later builds). Run `chorus team launch --space ... --choices choices.json`, or
+`--choices -` to read the same JSON from stdin. Choices are keyed by role:
+
+```json
+{"guide":{"client":"codex","program":"codex","model":null,"thinking":null,"yolo":false}}
+```
+
+All fields are required; null model/thinking use client defaults. Name the
+program explicitly: the command has no Herdr program catalog or saved
+preferences. The dialog retains those features. Roles with Surla MCP connections
+support `"client": "claude"` or `"client": "codex"`; `"program"` is a single
+executable name, path or shell function name, not shell code or arguments.
+Before launching, run the
+printed `chorus team inspect --space ... --choices choices.json` command to see
+the chosen programs' model options, thinking levels and permission effects.
+It validates the choices without opening panes or changing saved preferences and
+adds `client_options`, one entry per distinct chosen `client` and `program`
+(`models`, `efforts`, `model_supported`, `thinking_supported`, `note`, `error`,
+`yolo_flag`, `yolo_effect` and per-role `choices`), using the dialog's discovery
+and keeping its notes or errors visible. A model
+outside the suggestions says
+`not listed by <program>; the client checks it at startup`;
+it is information, not a refusal of a custom model ID.
+`yolo:false` uses client permission settings; `yolo:true` bypasses the client's
+tool confirmations (Codex also disables command sandboxing). Inspection shows
+the exact supported flag and effect. The client family identifies
+its existing flags and connection support; program can name a wrapper. Every
+missing role needs a choice; running roles may be omitted or repeated with
+matching settings. After starting a build on the page, run `chorus team inspect
+--space ...` again to see the current roster and pass choices for the listed
+roles that are not running to `chorus team launch --space ... --choices ...` (a
+choice for a role outside the space's current roster, such as `test_writer`
+when verification settings are stored, is refused). Success prints
+`{ "tab": "...", "created": 1, "reused": 0 }`.
+
+Chorus v0.15.0 or later also returns each inspected role's `terminal` ID
+(null when no pane is running) and reported `status`: Herdr's `state` and
+`kind`, or null when the pane has not reported status. A missing kind is null.
+After a successful launch, those versions print a next step to stderr while
+keeping stdout as the success JSON: inspect the same space, run
+`hc read <terminal>` for each new pane, and answer what it displays before
+sending other text or keys. `running: true` does not mean a pane is ready for
+input, and unreported status does not prove that a question is open.
+
+A refusal prints a reason and exits nonzero; inspect and retry after partial
+failure to reuse completed panes. If Herdr's installed Chorus launcher files are
+missing or older than the `chorus` binary, `chorus team` refuses with
+`Herdr's Chorus launcher needs this release's files; run chorus setup -global,
+then retry`. See `chorus team launch --help` and the
+[Chorus launcher reference](https://github.com/goadesign/chorus/blob/main/skills/herdr/chorus-launcher/README.md#choose-roles-from-a-terminal)
+for the owning contract. Surla requires Chorus v0.14.0 or newer.
 
 ## Commands
 
@@ -87,25 +165,31 @@ list the commands`.
 <a id="surla-serve"></a>
 ### `surla` and `surla stop`
 
-**Input:** `surla`, run in a project folder. **Who acts:** the command starts
+**Input:** `surla`, run in a project folder (`surla --print-link` runs the same
+server and team steps without opening a browser, writing the link JSON to
+stdout and the lines below to stderr; see
+[Terminal and browser automation](#terminal-and-browser-automation)). **Who
+acts:** the command starts
 the folder's server, or attaches to the one already running, then prepares the
 team and opens the views page. **What the user sees**, in order:
 
 ```text
-Created a new, empty Surla project. Moving or renaming this folder starts a new project.
+Started a Surla project for this folder. Moving or renaming this folder starts a new project.
 Team shop-3f9c1a2b4d5e.
-Choose an agent for each role in the open Chorus dialog in Herdr.
+Choose an agent for each role in the open Chorus dialog in Herdr. Run chorus team inspect --space '<space>'; chorus team launch --help; models and permission effects: chorus team inspect --space '<space>' --choices choices.json; chorus team launch --space '<space>' --choices choices.json. Stdin: --choices -.
 Surla is running for /path/to/shop at http://127.0.0.1:52011
 ```
 
 The first line appears only when the folder had no project. The second names
 the team, after the folder and the first 12 characters of the project's
-identifier. The third is the user's next step, chosen by the server:
+identifier. The third is the user's next step, chosen by the server (the first
+two states also append the `chorus team inspect` and `chorus team launch`
+commands above with the space's quoted ID):
 
 | Chorus dialog | Step printed |
 | --- | --- |
 | Opened for this project | `Choose an agent for each role in the open Chorus dialog in Herdr.` |
-| Already open | `If the open Chorus dialog is for this project, click "Reload team", then choose the agents. If it is for another project, close it, then start the agents again (Start agents on the views page, or run surla).` |
+| Already open | `If this is your project's dialog, click Reload team and choose agents. Otherwise close it; use Start agents on the page or run surla.` |
 | Not needed | `Every listed role is running.` |
 
 Then the browser opens the views page, and the last line prints. When the
@@ -484,35 +568,66 @@ module keeps the tests the table requires (see
 An operator tool that checks a commit without a server. It clones the
 committed application and evaluator into a private work folder, builds the
 application's binaries and the evaluator's program, runs
-the evaluator, writes the full report to `<report-dir>/<digest>.json`, and
+the evaluator with the caller's shell environment unchanged (unlike
+[`verify_change`](#verify_change) on written tests, which gives only `PATH` and
+`TMPDIR`), writes the full report to `<report-dir>/<digest>.json`, and
 prints the builder view of the report (hidden scenarios shown only as
 `holdout-N`) to standard output. Then it writes one summary line to standard
 error, such as
 `surla: verification report did not pass: 1/3 scenarios passed; failed: 1, not run: 1, harness errors: 0; not passing: "refund_over_limit", "slow_refund" (report 4f2c…)`.
+It exits 0 when the report completed and passed, and 1 otherwise.
 A report that did not pass is written and printed before the command exits
-non-zero; a setup or build failure prints no report.
+non-zero; a setup or build failure prints no report. Omitting a required flag
+fails with `surla: verify requires <flags>`.
+
+To verify the current commit of a Surla project (`shop`, with the test module in
+`eval/` and generated evaluator `./gen/cmd/shop-evals`) from its repository root:
+
+```sh
+VERIFY_DIR="$(mktemp -d)"
+WORK_DIR="$VERIFY_DIR/work"
+REPORT_DIR="$VERIFY_DIR/reports"
+surla verify \
+  -candidate-repo . -candidate-commit "$(git rev-parse HEAD)" -binary shop=./cmd/shop \
+  -suite-repo . -suite-commit "$(git rev-parse HEAD)" -suite-module eval -suite-command ./gen/cmd/shop-evals \
+  -request-revision starter -work-dir "$WORK_DIR" -report-dir "$REPORT_DIR" -builder-view
+```
+
+To verify your merged branch against the exact tests Surla accepted for a build
+(even if your branch also holds other changes to `eval/`), keep
+`-candidate-commit "$(git rev-parse HEAD)"` for the merged branch and pass the
+accepted `<tests_commit>` and `<request_revision>` shown in **Approve** (or
+**Build**) as `-suite-commit <tests_commit> -request-revision <request_revision>`.
 
 | Flag | Meaning |
 | --- | --- |
 | `-candidate-repo <path\|url>` *(required)* | Repository holding the application. |
 | `-candidate-commit <sha>` *(required)* | Full commit ID to build. |
 | `-candidate-module <dir>` | Module folder inside the repository (default `.`). |
-| `-binary <name=package>` *(repeatable, at least one)* | Binary name and package path, `.` or `./…`, such as `orders=./cmd/orders`. |
+| `-binary <name=package>` *(repeatable, at least one)* | Binary name and package path, `.` or `./…`, such as `shop=./cmd/shop` or `orders=./cmd/orders`. |
 | `-suite-repo <path\|url>` *(required)* | Repository holding the evaluator. |
 | `-suite-commit <sha>` *(required)* | Full commit ID of the evaluator. |
-| `-suite-module <dir>` | Evaluator module folder (default `.`). |
-| `-suite-command <package>` *(required)* | The evaluator program's package, such as `./cmd/orders_acceptance-evals`. |
+| `-suite-module <dir>` | Evaluator module folder (default `.`; `eval` for a Surla test module). |
+| `-suite-command <package>` *(required)* | The evaluator program's package, such as `./gen/cmd/shop-evals` for a Surla test module or `./cmd/orders_acceptance-evals`. |
 | `-request-revision <digest>` *(required)* | The `request_revision` recorded in the report. Without a Change Card, any label works if `surla approve` gets the same one. |
-| `-work-dir <path>` *(required)* | A missing or empty operator-owned folder for this operation's checkouts, scratch, outputs, evidence and Go build cache. Suite evidence can name hidden scenarios: keep this folder separate from builders' working copies and do not show it to builders. Programs running as you retain your file access. Relative paths resolve from the caller's directory. |
+| `-work-dir <path>` *(required)* | A missing or empty operator-owned folder for this operation's checkouts, scratch, outputs, evidence and Go build cache. It is kept after the run, so retrying or running again requires a new or emptied `-work-dir`. Suite evidence can name hidden scenarios: keep this folder separate from builders' working copies and do not show it to builders. Programs running as you retain your file access. Relative paths resolve from the caller's directory. |
 | `-report-dir <path>` *(required)* | Where the full report is written; keep it from the builder when scenarios are hidden. |
 | `-timeout <duration>` | Limit for the run (default `0`, no limit). A stopped run prints any partial report the evaluator saved and exits non-zero; a partial report can pass. |
 | `-builder-view` | Default `true`. `-builder-view=false` prints the full report and names hidden scenarios in the summary. Failures go to standard error in either view; do not show them to the builder. |
 
+When a run ends without completing (`checkout`, `build`, `describe`, `suite`,
+`report` or `supervise`), `surla verify` writes
+`surla: verification <failure> at stage <stage>: <summary>` followed by the
+run's `executor.log` to standard error (or `surla: read executor log: …` if the
+run stopped before creating `executor.log`) and exits 1 (when a canceled or
+timed-out run saved a partial report, it writes that report JSON to standard
+output and the summary line to standard error first, then exits 1).
 Failures during checkout, standalone dependency downloads and toolchain
 lookups, and the evaluator protocol name the failed operation, its process
 status when present, and the private evidence file. Their raw standard output
 and standard error remain under `<work-dir>/evidence/`, including after the
-command ends, so the operator can inspect the named file and retry. Workspace
+command ends, so the operator can inspect the named file, pass a new or emptied
+`-work-dir`, and retry. Workspace
 preparation diagnostics are discarded. Compiler failures still include bounded
 build-output excerpts.
 
@@ -1910,13 +2025,34 @@ when the open build was dropped), `copy_off_branch` (`409`),
 ### `report_tests_finished`
 
 `POST /assignments/test-writer/{change_id}/finished`. **Input:** `change_id`,
-`request_revision`. **Output:** `TestWriterAssignmentItem`.
+`request_revision`, `coverage_statements` (required array; `[]` means **Not
+stated**). **Output:** `TestWriterAssignmentItem`.
+
+Each statement has `scenario` (the exact declared test name), `question_ids`
+(from the assignment's `answers[].id`), `example_ids` (from `examples[].id`),
+and `explanation` (what the writer says its interaction or assertion exercises).
+Both ID arrays are required, and at least one must name a requirement. One
+scenario has one statement; a requirement may be named by several scenarios.
+The server rejects duplicate or foreign requirement references before saving
+a report. It checks scenario names against the test program it already lists,
+including extra declared tests, without a second compilation or listing.
+An unknown scenario produces a finding to correct the report statement.
+
+Statements are the test writer's account; Surla does not judge them. Missing
+statements on older saved reports read as **Not stated**. The assignment keeps
+the latest submitted statements for correction after findings or a check that
+could not run. Build shows the accepted report's statements with the built
+answers and examples. Approve keeps that same evidence for its selected run,
+independent of later revisions, builds or reports; old runs and configured
+evaluators without this evidence say **Not stated**. Existing test acceptance
+and approval requirements remain in force.
 
 Records `reported` from any state, raises `report` by one, clears an earlier
 verdict, returns at once and wakes the report checker.
 
 | Refusal | When |
 | --- | --- |
+| `invalid_coverage` (`400`) | A statement repeats a scenario or reference, names no requirement, or refers to a question/example outside the built agreement. Nothing is saved. |
 | `no_build` (`409`) | The open build was dropped. |
 | `assignment_unread` (`409`) | The test writer has not read the open build's assignment; call `get_test_writer_assignment` first. |
 | `copy_off_branch` (`409`) | `.surla-tests` is not on `surla/tests-<n>` or has a Git operation in progress. |
@@ -1933,6 +2069,15 @@ saves none of it. The user's views page reads it and acts on it with
 `get_team`, `show_team_pane` and `start_team_agents`; agents and management
 cannot call these three, and none is an MCP tool. The `surla` command
 prepares the same team with the management operation `ensure_team`.
+
+Each team start asks Chorus for its healthy managed address through
+`chorus status -json`. Use `chorus up -addr :9550` to select another address;
+a foreground `chorus serve -addr` alone does not set Surla's managed endpoint.
+After changing the managed address, choose **Start agents** or run `surla`
+again. Surla replaces the old connection and shows unknown watcher state until
+it has facts from that server. A failed address check changes no team state
+or window and leaves the views page available. It reports:
+`Chorus is not running or its settings are invalid. Run chorus up (or chorus status to see the error), then start the agents again (Start agents on the page, or run surla).`
 
 If no team is bound to the server, all three user operations return
 `not_implemented` (`501`) with the enabling step:
@@ -2002,6 +2147,7 @@ which opens anyway:
 | `cause` | What could not be used | `surla` prints | The views page shows |
 | --- | --- | --- | --- |
 | `stopping` | The server is shutting down. | `the project server is stopping; run surla again` | `the project server is stopping; run surla in the project folder to start it again` |
+| `chorus` | The managed Chorus server or its settings are unavailable. | `Chorus is not running or its settings are invalid. Run chorus up (or chorus status to see the error), then start the agents again (Start agents on the page, or run surla).` | The same step. |
 | `herdr` | A Herdr command did not complete. | `Herdr did not complete a team command; open the Herdr app, then click Start agents on the views page` | `Herdr did not complete a team command; open the Herdr app, then try again` |
 | `roster_folder` | Herdr's launcher roster folder could not be written. | `Herdr's launcher roster folder could not be written; make data/chorus-launcher/rosters in Herdr's app folder (~/.config/herdr-app unless HERDR_APP_HOME is set) writable by this account, then click Start agents on the views page` | The same, ending `then start the agents again` |
 | `project_state` | The project's record or an agent credential could not be read or written. | `this project's private state in <state folder> could not be read or written; make that folder and the folders in it private to this account (chmod 700) and its files too (chmod 600), then click Start agents on the views page` | `this project's private state could not be read or written; run surla in the project folder to see which folder to repair` |
@@ -2165,9 +2311,16 @@ it does after a restart, the page keeps everything typed visible and
 copyable and says to run `surla` again. Leaving with unsaved edits asks the
 browser to confirm.
 
-**Every view.** One line per role that needs the user (for example
-`Builder needs you: permission`), with a **Show builder pane** action. The
-page keeps one `wait_for_changes` read open and reads again only what
+**Every view.** The frame previews at most two lines of the confirmed
+agreement's summary. **Read full summary** opens Agree, expands **Agreement
+details**, and focuses the complete saved summary without submitting or
+discarding unsaved edits. The action is absent before confirmation.
+
+One line per role that needs the user (for example
+`Builder needs you: permission`), with a **Show builder pane** action. This
+polite live region follows the current role facts; a recovered role's line
+disappears without leaving a copied attention message in operation status.
+The page keeps one `wait_for_changes` read open and reads again only what
 changed. When the server does not answer, the status line says so, every
 edit is kept, and the page retries after 5 seconds, doubling up to 30.
 Hiding the tab pauses this. A failed read keeps the last facts with a
@@ -2180,7 +2333,7 @@ holds it beside them (**Switch to Incoming Card**).
 | **Team** | Each registered role's state, its Chorus watcher, and its assignment status (**No assignments** for the guide, and **Assignment unread**, **No unread assignment**, **No work now** or **Assignment status unknown** for a worker role), with a **Show … pane** action per role, such as **Show guide pane**, and **Start agents**, which says what it returned and when. With no role: `No agents are registered. Start agents prepares the guide; building adds the required roles.` Nothing runs on a refresh. |
 | **Story** | The Story saved with the shown revision, one row of step cards per flow: a finished flow is marked **will be tested end to end**, others **draft: not tested** with the reasons. Below it, the current Story evaluation ([`get_story_refresh`](#get_story_refresh)): none, running, failed, or succeeded, and how it differs from the change's Story; a draft is not part of the change until the guide revises the change with it and the user confirms. |
 | **Live target** | Whether a live target is starting, running, ended unexpectedly or not confirmed stopped. A running target shows its commit, address, accepted prompt versions (never the text), and **Stop live target**, which asks first. An ended target shows its commit, launch and observed-end times, and the builder's recovery step. Below it, the model live targets started afterwards use and a form whose **Apply** sends [`configure_model`](#configure_model); a refusal names a missing key's variable. |
-| **Agree** | The Change Card: questions to answer, examples, preserved behaviors, and **Confirm Intent & Lock Examples** (on an agreed card, **Refine Confirmed Answers & Examples**). A proposed revision appears above the agreed one with everything adopting it would confirm (changed request and summary, questions and examples marked **New**, **Edited**, **Kept** or **Removed**, Story and design changes), **Adopt this revision** and **Decline**. A stale submission offers **Load Latest Card**. On a confirmed card the **Build** section comes first, with the saved agreement below it under **Agreed:** and the request. **Agreement details** and **Refine agreed answers and examples** remain available for review and refinement; an active edit stays open. **Review saved approval** opens the record in Approve. **Build** opens the same saved build section directly. |
+| **Agree** | The Change Card: questions to answer, examples, preserved behaviors, and **Confirm Intent & Lock Examples** (on an agreed card, **Refine Confirmed Answers & Examples**). A proposed revision appears above the agreed one with everything adopting it would confirm (changed request and summary, questions and examples marked **New**, **Edited**, **Kept** or **Removed**, Story and design changes), **Adopt this revision** and **Decline**. A stale submission offers **Load Latest Card**. On a confirmed card the **Build** section comes first, with the saved agreement below it under **Agreed:** and the request. **Agreement details** and **Refine agreed answers and examples** remain available for review and refinement; an active edit stays open. **Previous Saved Revision** keeps the earlier snapshot: questions not yet answered in that proposal are labeled as historical, and a note distinguishes an unconfirmed proposal from the current confirmed agreement. **Review saved approval** opens the record in Approve. **Build** opens the same saved build section directly. |
 | **Architecture** | [`preview_architecture`](#preview_architecture) for the revision shown. |
 | **Check** | The change's verification runs and each report's scenario outcomes, hidden scenarios anonymous. **Check started** shows the request's start time in local time, not a completion time; the exact recorded timestamp stays in details. A single saved run needs no selector. With promotion settings, a completed run shows its actual binary folder under **Binaries built by this run**, as selectable code; the approval error panel repeats the selected run's folder. A run of written tests shows the `notice` of its `test_source`. **Candidate and run details** shows the run's candidate commit and its tests commit, labeled **Accepted tests commit** for written tests and **Evaluator commit** for an evaluator named in stored verification settings. |
 | **Approve** | The exact selected run’s recorded Story flows, required tests and outcomes; excluded drafts and unknown mapping; test source, human judgment limits and verified commits. **Test details and saved runs** discloses the safe report and history. **Verified inputs and digests** discloses full bindings. Next owns the single approval action, based on [`review_verification`](#review_verification); blocked or unverified records retain the owner’s reason. Unsaved Agree edits remain available on return. |
@@ -2265,12 +2418,22 @@ changes nothing keeps the revision and its build.
 **Approval on the page.** The frame shows the project, journey, agreed change,
 what needs you and one Next action. On a phone, Next moves to a bottom surface
 with reserved document space. Approve presents the run’s recorded evidence;
-**Refresh result** reads the owner’s current requirements. Only an `available`
+**Refresh result** reads the owner’s current requirements for that same run.
+When a newer check is available, **Review latest check** opens it for review;
+the shown result stays selected until you choose it. Earlier results remain
+selectable in **Test details and saved runs**, and a saved approval stays bound
+to its own verified inputs. Only an `available`
 observation enables **Approve this result**. Pending or failed reads keep the
 evidence and disable submission. A refusal stays on the same stage with its
 reason; success shows the recorded approval and moves focus to it. A saved
 approval without a readable run remains available through **Review saved
 approval**, with **Check current approval** to read the card again.
+
+After the approved result's current build is merged, Next points to describing
+the next change. The selected approval keeps its own evidence. An unrelated
+historical result does not borrow the current build's completion; a pending or
+failed build read withholds merge/completion guidance, and **Read current
+build** retries that owner read.
 
 The recorded approval shows **Builder's commit** and **Tests' commit**. While
 the current agreement’s open build has `taking.state: passed` and the run is
@@ -2291,8 +2454,14 @@ illustration, not the Story.
 from [`ui/checkpoint/`](../ui/checkpoint/). It sends only the operations
 listed in `PAGE_OPERATIONS` in [`ui/checkpoint/build.mjs`](../ui/checkpoint/build.mjs),
 whose request types and result validators are generated from the OpenAPI
-description, and refuses an answer that does not match. Every page request
-must be same-origin. The server sends this `Content-Security-Policy`:
+description, and refuses an answer that does not match. A top-level browser
+navigation to `GET /views` may come from any site when marked
+`Sec-Fetch-Mode: navigate` and `Sec-Fetch-Dest: document`, including a browser
+extension opening the link. This serves only the fixed shell, with `no-store`;
+the one-use credential stays in the fragment. Cross-site iframe and fetch
+requests to the shell are refused. The address/Origin checks remain in force,
+and exchanging the link or using a browser session still requires
+`Sec-Fetch-Site: same-origin`. The server sends this `Content-Security-Policy`:
 
 | Directive | What the browser allows |
 | --- | --- |

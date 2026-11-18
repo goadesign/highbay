@@ -1238,6 +1238,16 @@ export function bootstrapViewsPage() {
     return id === undefined ? null : runsById.get(id) ?? null;
   }
 
+  // newerCheckFor offers only the latest identity agreed by both owner reads.
+  // Their ordered history must place the displayed run after it; a delayed
+  // list cannot describe a more recently selected run as older.
+  function newerCheckFor(run: VerificationStatusResult): VerificationStatusResult | null {
+    const latest = latestVerificationFor(run.change_id);
+    const history = lastLoadedListByChangeId.get(run.change_id);
+    return latest !== null && history?.[0] === latest.run_id && history.indexOf(run.run_id) > 0
+      ? latest : null;
+  }
+
   // reviewSavedCheck opens the exact result whose action the user selected.
   function reviewSavedCheck(run: VerificationStatusResult) {
     selectedVerificationChangeId = run.change_id;
@@ -1457,19 +1467,8 @@ export function bootstrapViewsPage() {
       "get_team", {}, "",
       (snapshot) => {
         if (sessionState !== "active") return;
-        const before = teamSnapshot;
-        const wasFailed = teamReadError !== null;
         teamSnapshot = snapshot;
         teamReadError = null;
-        const newlyNeedingUser = snapshot.roles.filter((role) => {
-          if (role.state !== "needs_you") return false;
-          const previous = before?.roles.find((item) => item.role === role.role && item.handle === role.handle);
-          return wasFailed || previous?.state !== "needs_you" || previous.attention !== role.attention;
-        });
-        if (newlyNeedingUser.length > 0) {
-          statusEl.textContent = (waitTroubleShown ? "Last read: " : "") +
-            newlyNeedingUser.map(teamAttentionText).join(". ");
-        }
         done();
       },
       (message, failure) => {
@@ -2241,17 +2240,45 @@ export function bootstrapViewsPage() {
     if (onApproval) {
       attention = review?.approval.state === "blocked" ? "Approval unavailable."
         : review?.approval.state === "unverified" ? "Saved approval needs checking." : review?.approval.state === "recorded"
-        ? "Your approval is recorded. Take the verified commits when you are ready."
+        ? "Your approval is recorded."
         : fresh ? "Decide whether this verified result may be promoted." : "Check the owner’s current approval requirements.";
       next = review?.approval.state === "available" && run !== null
         ? <><Button id="surla-cp5-approve" variant="primary" disabled={!fresh || editorBusy}
           aria-describedby={!fresh ? "surla-cp5-observation-status" : undefined}
           onClick={() => handleApprove(run)}>{editorBusy ? "Approving…" : "Approve this result"}</Button>
           <span className="surla-frame-action-binding">Run {run.run_id.slice(0, 12)}</span></>
-        : review?.approval.state === "recorded" ? <span>Merge the verified commits shown below.</span>
+        : review?.approval.state === "recorded" ? <span>Review the current build before merging.</span>
         : review?.approval.state === "blocked"
         ? <Button onClick={() => focusResult("#surla-cp5-approve-blocked")}>Review requirements</Button>
         : review?.approval.state === "unverified" ? <span>Check current approval.</span> : <span>Read current requirements.</span>;
+      if (review?.approval.state === "recorded" && run !== null) {
+        const build = knownTakingBuild(run.change_id);
+        if (build === null) {
+          next = <Button disabled={editorBusy || hasPending("get_build", run.change_id)}
+            onClick={() => readBuild(run.change_id)}>Read current build</Button>;
+        } else if (build.in_force && runBelongsToBuild(run.change_id, build, run)) {
+          switch (build.taking.state) {
+            case "merged":
+              attention = "The approved build is merged.";
+              next = <span>Describe the next change when you are ready.</span>;
+              break;
+            case "passed":
+              next = <span>Merge the verified commits shown below.</span>;
+              break;
+            case "dropped":
+              attention = "This build was dropped. Your saved approval remains readable.";
+              next = <span>Review the current agreement before building again.</span>;
+              break;
+          }
+        }
+      }
+      const newer = run !== null ? newerCheckFor(run) : null;
+      if (newer !== null) {
+        if (review?.approval.state === "blocked") attention = "A newer check is available.";
+        next = <><Button id="surla-cp5-review-latest"
+          variant={review?.approval.state === "available" ? "default" : "primary"}
+          disabled={editorBusy} onClick={() => reviewSavedCheck(newer)}>Review latest check</Button>{next}</>;
+      }
     } else if (cp1Active && editorStage === "build" && activeEditor !== null) {
       const build = buildChangeId === activeEditor.card.change_id && buildSnapshot?.state === "started"
         ? buildSnapshot : null;
@@ -2301,7 +2328,8 @@ export function bootstrapViewsPage() {
         <WorkspaceFrame project={projectName ?? "Project"}
           journey={tabs.filter((tab) => journeyIds.has(tab.id))}
           references={tabs.filter((tab) => !journeyIds.has(tab.id))}
-          agreed={agreed} attention={attention} next={next}
+          agreed={agreed} onReadFullSummary={activeEditor?.card.status === "confirmed" ? handleReadFullSummary : null}
+          attention={attention} next={next}
           diagnosticsOpen={traceOpen} onToggleDiagnostics={() => {
             traceOpen = !traceOpen;
             if (traceOpen && tracePage === null) loadTracePage();
@@ -2398,8 +2426,8 @@ export function bootstrapViewsPage() {
     return step + ": " + projectName;
   }
 
-  // syncNoticeRegion keeps the tab title, session notice and role attention visible on
-  // every view. Announcements are emitted only by the event/read handlers.
+  // syncNoticeRegion keeps the tab title, session notice and live role attention
+  // visible on every view.
   function syncNoticeRegion() {
     document.title = projectTitle();
     flushSync(() => {
@@ -2771,7 +2799,8 @@ export function bootstrapViewsPage() {
       }
       flushSync(() => resultRoot.render(<ApprovalStage
         rawDetails={verificationDetailsView(run, selectedVerificationChangeId ?? "")}
-        run={run} review={displayedApprovalReview()} fresh={run !== null && approvalReviewFresh(run)}
+        run={run} newerCheck={run !== null && newerCheckFor(run) !== null}
+        review={displayedApprovalReview()} fresh={run !== null && approvalReviewFresh(run)}
         loading={run !== null && hasPending("review_verification", run.run_id)} busy={editorBusy}
         error={run !== null ? runRequestErrors.get(run.run_id) ?? null : cardLoadErrors.get(selectedVerificationChangeId ?? "") ?? null}
         historyLoading={hasPending("list_verifications", selectedVerificationChangeId ?? "")}
@@ -3183,6 +3212,16 @@ export function bootstrapViewsPage() {
   // and restores any pending incoming Change Card banner.
   function handleReturnToChangeCard() {
     showChangeEditor("agree");
+  }
+
+  // handleReadFullSummary reveals the saved text in its existing owner without
+  // replacing the retained editor or submitting its unsaved refinement.
+  function handleReadFullSummary() {
+    showChangeEditor("agree");
+    const details = document.getElementById("surla-agreement-details");
+    if (details instanceof HTMLDetailsElement) details.open = true;
+    focusResult("#surla-agreement-summary");
+    document.getElementById("surla-agreement-summary")?.scrollIntoView({ block: "start" });
   }
 
   // showChangeEditor restores retained form state and names the chosen stage.

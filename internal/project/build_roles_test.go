@@ -281,9 +281,12 @@ func TestFirstMessagesNameOnlyAllowedOperations(t *testing.T) {
 		_, message := roleFirstMessage(role)
 		assert.True(t, controlplane.OperationAllowed(controlplane.CallerKind(role), "golden_path"))
 		for _, operation := range names.FindAllString(files.ReplaceAllString(message, ""), -1) {
-			// These two words name fields of the builder assignment, not calls.
-			// Every other snake-case word must remain a permitted operation.
+			// Assignment/report fields name data, not calls. All remaining
+			// snake-case words must remain permitted operations for this role.
 			if role == "builder" && (operation == "working_folder" || operation == "gowork_off") {
+				continue
+			}
+			if role == "test_writer" && (operation == "coverage_statements" || operation == "question_ids" || operation == "example_ids") {
 				continue
 			}
 			assert.Contains(t, gensurla.MethodNames, operation)

@@ -243,8 +243,7 @@ func TestReportAfterAVerdictClearsIt(t *testing.T) {
 			require.NoError(t, err)
 			editBuildFile(t, cp, "chg", savedTestWriter(fields))
 			reported, err := cp.ReportTestsFinished(asCaller("alice@example.com", CallerTestWriter), &gensurla.ReportTestsFinishedPayload{
-				ChangeID: "chg", RequestRevision: card.RequestRevision,
-			})
+				ChangeID: "chg", RequestRevision: card.RequestRevision, CoverageStatements: []*gensurla.TestCoverageStatement{}})
 			require.NoError(t, err)
 			assert.Equal(t, gensurla.TestsKindReported, reported.Progress.Tests.Kind())
 			assert.Equal(t, 2, reported.Progress.Report, "the report after the verdict's is counted")

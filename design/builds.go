@@ -147,6 +147,9 @@ var StartedBuild = Type("StartedBuild", func() {
 	Attribute("test_writer", TestWriterProgress, "The test writer's assignment.")
 	Attribute("required_test_count", Int, "Number of finished flows in the agreed Story. Zero means no test of this change's Story was required.", func() { Minimum(0) })
 	Attribute("required_tests", ArrayOf(RequiredTest), "Tests required by this build's saved Story, in declaration order; unfinished flows require none. Empty when no finished flow requires a test.")
+	Attribute("answers", ArrayOfRequired(ConfirmedAnswer), "Confirmed answers saved when this build started; later revisions do not replace them.")
+	Attribute("examples", ArrayOfRequired(ExampleItem), "Examples saved when this build started; later revisions do not replace them.")
+	Attribute("coverage_statements", ArrayOfRequired(TestCoverageStatement), "The accepted report's writer statements; empty before acceptance or when none were stated. Surla did not judge them.")
 	OneOf("taking", "Whether the user has taken this build: building until a verification of it passes; passed with the commits to merge; merged once the branch checked out in the project folder holds the commits of one passed run, the builder's and, for written tests, the tests'; dropped once the user dropped it. A project has one open build, and another change is built only once it is merged or dropped.", func() {
 		Meta("oneof:json:flatten")
 		Meta("oneof:type:field", "state")
@@ -156,7 +159,7 @@ var StartedBuild = Type("StartedBuild", func() {
 		Attribute("merged", BuildMerged)
 		Attribute("dropped", BuildDropped)
 	})
-	Required("request_revision", "started_at", "in_force", "builder", "test_writer", "required_test_count", "required_tests", "taking")
+	Required("request_revision", "started_at", "in_force", "builder", "test_writer", "required_test_count", "required_tests", "answers", "examples", "coverage_statements", "taking")
 })
 
 // BuildNotStarted says the change has no usable build for its current test source.
@@ -271,7 +274,8 @@ var TestWriterAssignment = Type("TestWriterAssignment", func() {
 	Attribute("answers", ArrayOf(ConfirmedAnswer), "Each question of the change as agreed at request_revision with the answer the user confirmed, in question order, copied when this build started; empty when the agreed revision asked none. The tests must hold the service to every answer.")
 	Attribute("examples", ArrayOf(ExampleItem), "The confirmation examples as agreed at request_revision, exactly as the user confirmed them, copied when this build started. The tests must hold the service to each expected outcome.")
 	Attribute("preserved_behaviors", ArrayOf(String), "The existing behaviors the change as agreed at request_revision keeps, copied when this build started; empty when it names none. The tests must hold the service to each.")
-	Required("change_id", "request_revision", "in_force", "progress", "findings", "working_folder", "design_source", "stories", "required_tests", "answers", "examples", "preserved_behaviors")
+	Attribute("coverage_statements", ArrayOfRequired(TestCoverageStatement), "Statements submitted with the latest report, retained for correction after findings or a check that could not run; empty before any report or when none were stated.")
+	Required("change_id", "request_revision", "in_force", "progress", "findings", "working_folder", "design_source", "stories", "required_tests", "answers", "examples", "preserved_behaviors", "coverage_statements")
 })
 
 // TestFindings is the text of Surla's findings on one build's tests.
@@ -427,7 +431,7 @@ func buildMethods() {
 		Error("copy_off_branch", CopyOffBranch, "Your working copy cannot join or serve this build: the message states its branch, the build's branch, any Git operation and what is uncommitted, and the goal. Put your test files on the build's branch, uncommitted, because Surla commits what it accepts; then call again.")
 		Error("working_folder_missing", ErrorResult, "Your working folder is missing; ask the user to build this change again on the views page.")
 		Error("working_copy_busy", ErrorResult, "Surla is checking the tests in your working folder; call get_test_writer_assignment again when the check has ended.")
-		Tool("get_test_writer_assignment", "Read your test assignment for a change: the working folder, the design and Story as agreed, the user's confirmed answers, examples and preserved behaviors, one required test per finished flow, and your state with any findings to fix. Your tests must hold the service to every answer, example and preserved behavior, not only to the Story's flows. Align the service interface in your copy with the agreed design and write tests inside its test module, eval/ in the working folder. Surla writes eval/design/story_tests.go, which declares the required tests, from the agreed Story and generates the module at each read that marks the assignment read and again at each report; leave that file as it is. After changing the module's design, report to have it generated again or run surla gen -dir eval in the working folder first; regenerating keeps the required tests. Check your work with GOWORK=off go build ./... in eval/, then call report_tests_finished with change_id and request_revision; Surla's check is the judge, and its verdict appears here. Stay on the branch checked out in your working copy and do not commit: Surla commits what it accepts. Run every go command as GOWORK=off go …, as Surla's tests check does.")
+		Tool("get_test_writer_assignment", "Read your test assignment for a change: the working folder, the design and Story as agreed, the user's confirmed answers, examples and preserved behaviors, one required test per finished flow, and your state with any findings to fix. Your tests must hold the service to every answer, example and preserved behavior, not only to the Story's flows. Align the service interface in your copy with the agreed design and write tests inside its test module, eval/ in the working folder. Surla writes eval/design/story_tests.go, which declares the required tests, from the agreed Story and generates the module at each read that marks the assignment read and again at each report; leave that file as it is. After changing the module's design, report to have it generated again or run surla gen -dir eval in the working folder first; regenerating keeps the required tests. Check your work with GOWORK=off go build ./... in eval/, then call report_tests_finished with change_id, request_revision and coverage_statements; Surla's check is the judge, and its verdict appears here. Stay on the branch checked out in your working copy and do not commit: Surla commits what it accepts. Run every go command as GOWORK=off go …, as Surla's tests check does. When you call report_tests_finished, include coverage_statements. For each scenario whose coverage you state, give its exact scenario ID, question_ids from this assignment's answers[].id, example_ids from examples[].id, and an explanation of the interaction or assertion that exercises them. Use an empty array when you state none; Surla will show Not stated. These are your statements, not Surla's judgment of what your tests assert. The tests must still hold the service to every confirmed answer, example and preserved behavior. Surla validates supplied references while checking your report. Read get_test_writer_assignment for the verdict and the statements you submitted; correct any stated-reference findings and report again. Do not commit: Surla records the tests it accepts.")
 		HTTP(func() {
 			GET("/assignments/test-writer/{change_id}")
 			Response(StatusOK)
@@ -444,7 +448,8 @@ func buildMethods() {
 		Payload(func() {
 			Attribute("change_id", String, "Change Card identifier from your test assignment.", func() { MinLength(1) })
 			Attribute("request_revision", String, "request_revision of your test assignment.", func() { MinLength(1) })
-			Required("change_id", "request_revision")
+			Attribute("coverage_statements", ArrayOfRequired(TestCoverageStatement), "Your stated scenario coverage of this assignment's answers and examples; use [] when none is stated. Surla validates references but does not judge assertion meaning.")
+			Required("change_id", "request_revision", "coverage_statements")
 		})
 		Result(TestWriterAssignmentItem)
 		Error("not_found", ErrorResult, "You have no test assignment for this change_id.")
@@ -453,10 +458,12 @@ func buildMethods() {
 		Error("copy_off_branch", CopyOffBranch, "Your working copy cannot join or serve this build: the message states its branch, the build's branch, any Git operation and what is uncommitted, and the goal. Put your test files on the build's branch, uncommitted, because Surla commits what it accepts; then call again.")
 		Error("working_folder_missing", ErrorResult, "Your working folder is missing; ask the user to build this change again on the views page.")
 		Error("assignment_unread", ErrorResult, "A build started after your last read of your assignment: stop your current work, then call get_test_writer_assignment for its change.")
-		Tool("report_tests_finished", "Report that your tests for the assignment's change_id and request_revision are finished. It returns at once with state reported and the new report number. Surla then checks your tests; read its verdict, with any findings to fix, in get_test_writer_assignment.")
+		Error("invalid_coverage", ErrorResult, "A supplied coverage statement repeats a scenario or reference, names no requirement, or names a question/example outside the built agreement. Nothing changed.")
+		Tool("report_tests_finished", "Report that your tests for the assignment's change_id and request_revision are finished. It returns at once with state reported and the new report number. Surla then checks your tests; read its verdict, with any findings to fix, in get_test_writer_assignment. When you call report_tests_finished, include coverage_statements. For each scenario whose coverage you state, give its exact scenario ID, question_ids from this assignment's answers[].id, example_ids from examples[].id, and an explanation of the interaction or assertion that exercises them. Use an empty array when you state none; Surla will show Not stated. These are your statements, not Surla's judgment of what your tests assert. The tests must still hold the service to every confirmed answer, example and preserved behavior. Surla validates supplied references while checking your report. Read get_test_writer_assignment for the verdict and the statements you submitted; correct any stated-reference findings and report again. Do not commit: Surla records the tests it accepts.")
 		HTTP(func() {
 			POST("/assignments/test-writer/{change_id}/finished")
 			Response(StatusOK)
+			Response("invalid_coverage", StatusBadRequest)
 			Response("no_build", StatusConflict)
 			Response("copy_off_branch", StatusConflict)
 			Response("working_folder_missing", StatusConflict)

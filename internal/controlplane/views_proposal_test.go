@@ -94,6 +94,7 @@ expect(adoption.request_revision === proposal.request_revision && adoption.answe
 const adopted = await readCard("chg-proposal");
 expect(adopted.status === "confirmed" && adopted.confirmed_by === input.owner && !adopted.proposed_revision && adopted.summary.includes("exchanges"), "the adopted revision is not in force: " + JSON.stringify(adopted));
 expect(editor().dataset.requestRevision === adopted.request_revision && page.$("#surla-prior-revision") && page.text("#surla-prior-revision").includes(input.agreed), "the earlier agreed revision is not shown as prior");
+expect(!page.text("#surla-prior-revision").includes("This is the proposal before confirmation.") && !page.text("#surla-prior-revision").includes("Not yet answered in that proposal"), "confirmed history is described as an unanswered proposal");
 expect(page.$("#surla-preserved-draft") && page.text("#surla-preserved-draft").includes("Typed on the agreed revision"), "adopting lost the edit typed on the earlier revision");
 page.close();
 `)

@@ -96,13 +96,33 @@ When the user runs `surla`:
 
 The management credential lets `surla` prepare the team, stop the server and ask for a browser link; it cannot confirm or approve anything. The browser gets a single-use link that expires after two minutes. The page exchanges it for a session that lives only in the server's memory and the open page, and the server answers that session only for requests from its own page. Each agent authenticates with its own credential file. The caller's role comes from the credential, never from a name.
 
+`surla --print-link` uses the same startup and management browser-link operation,
+but prints the generated URL and expiry as JSON instead of invoking the opener.
+Notices go to stderr. It adds no credential store or user-decision operation.
+The team owner derives the same next-step text for the CLI and page, including
+commands with the actual Herdr space ID. Chorus v0.14.0 or newer owns terminal
+role choices and inspection of each explicitly named program's models and
+permission effects. It uses the dialog's discovery and backend for MCP
+configuration, pane placement, labels and replay; Surla does not copy Herdr's
+program catalog or saved preferences.
+
 `surla verification set` and `surla promotion set` validate a settings file and copy it into the state folder. The server reads both at start, so a change applies when Surla is started again.
 
 ### The team: Herdr and Chorus
 
-Herdr is the terminal program the agents run in, one pane per agent. Chorus is the messaging service the agents use, and its dialog in Herdr is where the user picks which installed agent app plays each role.
+The executable constructs team dependencies offline. At each accepted team start,
+ensureTeam resolves the healthy managed endpoint with `chorus status -json` before
+any space, roster or window changes. One immutable observer/sender pair owns that
+endpoint for the binding. The endpoint is part of the supervisor's reader identity:
+a change cancels and joins old readers, drains queued observations, and clears
+watcher knowledge and listing age before a reminder can use the new server.
+Existing assignment-attempt latches remain owned by the supervisor. No endpoint
+is persisted or resolved during each poll. A failed resolution preserves the
+previous binding and the available views page.
 
-Before creating any state, `surla` checks that Herdr core (`herdr-core` and `hc`), the Herdr app (`herdr-app`), Chorus v0.11.0 or newer (`chorus`) and the browser opener are installed. For a missing Herdr or Chorus program it names the install command, or the folder to add to the path when the program is in `~/.local/bin`; for a missing browser opener it names the program. Once the server answers, `surla` starts Chorus and the Herdr app when they are not running, then asks the server to prepare the team. When either step fails, `surla` still opens the views page, where confirming and approving need no agent, and then reports the failure. A failure of the server's team preparation names only its cause (`stopping`, `herdr`, `roster_folder`, `project_state` or `role_folder`), never its own text, and `surla` and the views page each turn that cause into a fixed step. The server:
+Herdr is the terminal program the agents run in, one pane per agent. Chorus is the messaging service the agents use, and its dialog in Herdr lets the user pick which installed agent app plays each role. Its terminal commands also accept explicit program/model choices for roster roles.
+
+Before creating any state, `surla` checks that Herdr core (`herdr-core` and `hc`), the Herdr app (`herdr-app`), Chorus v0.14.0 or newer (`chorus`) and the browser opener are installed. For a missing Herdr or Chorus program it names the install command, or the folder to add to the path when the program is in `~/.local/bin`; for a missing browser opener it names the program. Once the server answers, `surla` starts Chorus and the Herdr app when they are not running, then asks the server to prepare the team. When either step fails, `surla` still opens the views page, where confirming and approving need no agent, and then reports the failure. A failure of the server's team preparation names only its cause (`stopping`, `chorus`, `herdr`, `roster_folder`, `project_state` or `role_folder`), never its own text, and `surla` and the views page each turn that cause into a fixed step. The server:
 
 1. adopts the project's saved Herdr space, or the single space with the team's name and the project's folder, or creates one; several matching spaces are refused, and the user closes the duplicates;
 2. registers the guide, working in the project folder;
@@ -161,6 +181,18 @@ The views page keeps one waiting read (`wait_for_changes`) open. Its answer is a
 `internal/testwriter` owns the builder's and the test writer's working copies—linked Git working copies of the project at `.surla-build` on `surla/build-<n>` and `.surla-tests` on `surla/tests-<n>`—joining each to its build branch on the first assignment read, checking build-branch lineage, and preparing, checking and recording accepted tests as a commit on `surla/tests-<n>`. The control plane runs one report checker per project: it starts when the server binds the team and drains before the stores close. Two working-copy turns—the builder's copy turn (`ControlPlane.builderCopyTurn`) and the test writer's working-copy turn (`ControlPlane.workingCopyTurn`)—guard the working copies, and in-process locks are always taken in this order: the builder's copy turn, the working-copy turn, the report lock, the draft lock (`ControlPlane.draftMu`, which serializes the guide's draft and its made-from list), the card lock. A build start takes the builder's copy turn and then the working-copy turn and releases both after registering the roles, without writing tests; the test writer's marking assignment read and each report check hold the working-copy turn and write the required tests, and either can take minutes. The report lock (`ControlPlane.reportMu`) makes a newly arriving report wait while the checker confirms the build is the one it checked, records the accepted tests and saves the verdict. Git and the commands that build and run the test writer's code never run under the card lock. [Story flows and the tests a build requires](STORY_TEST_DESIGN.md) describes [the copy](STORY_TEST_DESIGN.md#the-test-writers-working-copy) and [the check and its findings](STORY_TEST_DESIGN.md#how-surla-judges-a-report).
 
 ### Verification runs and the live target
+
+The test writer submits stated scenario coverage of the built answers and
+examples with its report. The control plane validates those requirement IDs
+before report mutation, checks scenario IDs using the program's existing
+listing, and saves statements with the matching report and accepted commit.
+Build exposes accepted statements only. Verification selects the report and
+its tests commit in the same locked read and copies the agreed basis and
+statements into its immutable request. Approve reads that snapshot; it never
+substitutes today's card or newer report. Old-run absence and configured
+evaluators remain explicitly not recorded. These are writer statements, not
+Surla's judgment of assertion meaning; see
+[the report contract](REFERENCE.md#report_tests_finished).
 
 One function, `testsChoice` in [`verification_plan.go`](../internal/controlplane/verification_plan.go), chooses which tests judge a change: the suite named in the stored verification settings, or the tests accepted for the change's build at its revision. Verification runs those tests, `approve_merge` requires the approved report to have run them, and a saved approval is shown only while they stay the same; `verificationPlan` builds a run's configuration from that choice. The builder names only the change, the revision and its commit.
 
