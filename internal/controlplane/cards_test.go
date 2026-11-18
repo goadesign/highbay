@@ -243,6 +243,7 @@ func TestProposalsAndRevisionsFinishingAfterCloseDoNotWrite(t *testing.T) {
 		done := hold.run(t, func() error {
 			_, err := cp.ReviseChange(alice, &gensurla.ReviseChangePayload{
 				ChangeID: "chg", RequestRevision: card.RequestRevision, Prompt: "Refunds up to $60 are instant.",
+				RevisionNote: "Revise the change.",
 				Analysis: &gensurla.CP1RevisionAnalysis{
 					Summary:     "Refunds up to $60 are instant.",
 					Ambiguities: []*gensurla.CP1AnalysisAmbiguity{},

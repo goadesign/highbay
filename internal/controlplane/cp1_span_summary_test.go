@@ -97,7 +97,7 @@ func TestCP1SpanSummariesAreCodeAuthoredAndExcludeRequestContent(t *testing.T) {
 		return cp.ProposeChange(alice, &gensurla.ProposeChangePayload{ChangeID: changeID, Prompt: "private-prompt-secret", Analysis: analysis})
 	}
 	revise := func(changeID, rev string, analysis *gensurla.CP1RevisionAnalysis) (*gensurla.ChangeCardResult, error) {
-		return cp.ReviseChange(alice, &gensurla.ReviseChangePayload{ChangeID: changeID, RequestRevision: rev, Prompt: "private-prompt-secret", Analysis: analysis})
+		return cp.ReviseChange(alice, &gensurla.ReviseChangePayload{ChangeID: changeID, RequestRevision: rev, Prompt: "private-prompt-secret", RevisionNote: "Revise the change.", Analysis: analysis})
 	}
 
 	// Success over HTTP, so the bearer token reaches the server.
@@ -251,7 +251,7 @@ func TestCP1ConcurrentChangesKeepTheWinningCard(t *testing.T) {
 		t.Helper()
 		done := s.hold.run(t, func() error {
 			_, err := s.cp.ReviseChange(alice, &gensurla.ReviseChangePayload{
-				ChangeID: "chg", RequestRevision: s.card.RequestRevision, Prompt: "Refunds up to $80 are instant.", Analysis: analysis,
+				ChangeID: "chg", RequestRevision: s.card.RequestRevision, Prompt: "Refunds up to $80 are instant.", RevisionNote: "Revise the change.", Analysis: analysis,
 			})
 			return err
 		})
@@ -279,7 +279,7 @@ func TestCP1ConcurrentChangesKeepTheWinningCard(t *testing.T) {
 		unknown := "check_09"
 		done := heldRevise(t, s, revision("Request A", &unknown))
 		winner, err := s.cp.ReviseChange(alice, &gensurla.ReviseChangePayload{
-			ChangeID: "chg", RequestRevision: s.card.RequestRevision, Prompt: "Request B", Analysis: revision("Request B", &check01),
+			ChangeID: "chg", RequestRevision: s.card.RequestRevision, Prompt: "Request B", RevisionNote: "Revise the change.", Analysis: revision("Request B", &check01),
 		})
 		require.NoError(t, err)
 		s.hold.releaseOnce()
@@ -306,7 +306,7 @@ func TestCP1ConcurrentChangesKeepTheWinningCard(t *testing.T) {
 			name: "concurrent revision",
 			change: func(t *testing.T, s setup) {
 				_, err := s.cp.ReviseChange(alice, &gensurla.ReviseChangePayload{
-					ChangeID: "chg", RequestRevision: s.card.RequestRevision, Prompt: "Request B", Analysis: revision("Request B", &check01),
+					ChangeID: "chg", RequestRevision: s.card.RequestRevision, Prompt: "Request B", RevisionNote: "Revise the change.", Analysis: revision("Request B", &check01),
 				})
 				require.NoError(t, err)
 			},

@@ -390,6 +390,7 @@ func TestGoCallersGetTheDesignRules(t *testing.T) {
 	check01 := "check_01"
 	_, err := cp.ReviseChange(alice, &gensurla.ReviseChangePayload{
 		ChangeID: "chg", RequestRevision: saved.RequestRevision, Prompt: "Refunds up to $60 are instant.",
+		RevisionNote: "Revise the change.",
 		Analysis: &gensurla.CP1RevisionAnalysis{
 			Summary:     "",
 			Ambiguities: []*gensurla.CP1AnalysisAmbiguity{},

@@ -50,7 +50,8 @@ func TestViewsPageWarnsBeforeChangingABuiltRevision(t *testing.T) {
 				example := card.Examples[0]
 				_, err := cp.ReviseChange(asCaller(pageOwner, CallerGuide), &gensurla.ReviseChangePayload{
 					ChangeID: card.ChangeID, RequestRevision: card.RequestRevision,
-					Prompt: "Review the revised refund decision.",
+					Prompt:       "Review the revised refund decision.",
+					RevisionNote: "Revise the change.",
 					Analysis: &gensurla.CP1RevisionAnalysis{
 						Summary:     "The revised refund decision.",
 						Ambiguities: []*gensurla.CP1AnalysisAmbiguity{}, RemovedExampleIds: []string{},

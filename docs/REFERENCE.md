@@ -464,7 +464,8 @@ Git working tree, refuses unknown fields and trailing data, resolves relative
 paths against the file's folder, and stores a private copy; a refused file
 leaves the earlier settings in place. `show` prints the stored settings;
 `remove` deletes them. The server reads them when it starts, so a change takes
-effect after `surla stop` and `surla`.
+effect after `surla stop` and `surla`. `surla help verification` and
+`surla help promotion` print each format's fields and a minimal valid file.
 
 **Verification settings** name an evaluator Surla runs instead of tests
 written by the test writer:
@@ -934,7 +935,7 @@ sends `analysis`:
 | --- | --- |
 | `summary` | The change in plain words. |
 | `ambiguities` | The questions only the user can answer, each a `question` with at least two distinct `options`; empty when nothing is open. |
-| `examples` | At least one concrete example: `scenario`, `input_summary`, `expected_outcome`, and `verification_kind` (`deterministic` or `model_judged`). |
+| `examples` | At least one concrete example: `scenario`, `input_summary`, `expected_outcome`, and `verification_kind` (`deterministic` or `model_judged`). `verification_kind` is a saved label for people and the test writer; verification runs the scenarios the accepted tests declare, and the label does not select how or whether one runs. |
 | `preserved_behaviors` | The behaviors the change must keep, possibly none. |
 | `ui_composition` *(optional)* | An illustration of the decision for the views page (see [MCP resources](#mcp-resources)). It is never checked, never part of `request_revision`, and is dropped when the user changes the answers or examples. |
 
@@ -960,9 +961,21 @@ that when confirming.
 #### `revise_change`
 
 `POST /changes/revise`. **Input:** `change_id`, `request_revision`, `prompt`,
-`story_refresh_op_id?`, `analysis` (as for `propose_change`, with
+`revision_note`, `story_refresh_op_id?`, `analysis` (as for `propose_change`, with
 `examples[].prior_id` and `removed_example_ids`). **Output:**
 `ChangeCardResult`.
+
+`prompt` is the change's complete feature request as it now stands: the
+original intent with every requirement added since, restated in full, never
+only the difference. `revision_note` says what this revision changes and why,
+for example "Legal requires pre-approval before a listing goes live". The card
+and a proposed revision return the note as `revision_note`, and the views page
+shows it as **Revision note**; confirming or adopting the revision keeps it. A
+card made by `propose_change`, and a revision saved before notes were recorded,
+has none. The note is saved with the revision but is not part of its
+`request_revision`, which covers `prompt` and the rest of the card's content:
+a revision that repeats an earlier one's content keeps that `request_revision`
+and records the newer note.
 
 Saves the next revision of a change. `request_revision` names the latest
 revision the guide read: the waiting proposed revision's, when one waits,
@@ -991,7 +1004,7 @@ an omitted `story_refresh_op_id` when the revision being revised has no design.
 | `not_found` (`404`) | No card has this `change_id`. |
 | `conflict` (`409`) | `request_revision` is not the latest revision, including the agreed revision while a proposed revision waits. |
 | `drafted_before_drop` (`409`) | The user dropped a build after `story_refresh_op_id` was evaluated; call `refresh_story` to remake and evaluate the draft from the project folder, then revise again. |
-| `unprocessable` (`422`) | Blank text, an example not accounted for exactly once, `story_refresh_op_id` does not name the owner's current succeeded `refresh_story` operation, or the project folder holds a `go.mod` and `story_refresh_op_id` is omitted when the revision being revised has no design. |
+| `unprocessable` (`422`) | Blank text, including a blank `prompt` or `revision_note`, an example not accounted for exactly once, `story_refresh_op_id` does not name the owner's current succeeded `refresh_story` operation, or the project folder holds a `go.mod` and `story_refresh_op_id` is omitted when the revision being revised has no design. |
 
 #### `confirm_intent`
 
@@ -2319,7 +2332,10 @@ browser to confirm, including for unadopted proposal answers and Model-form edit
 **Every view.** The frame previews at most two lines of the confirmed
 agreement's summary. **Read full summary** opens Agree, expands **Agreement
 details**, and focuses the complete saved summary without submitting or
-discarding unsaved edits. The action is absent before confirmation.
+discarding unsaved edits. The action is absent before confirmation. On
+Describe with no change open for editing, the frame says **No confirmed
+agreement opened** and offers no **Read full summary**; a change kept open
+there because its edits are unsaved, failed or still saving keeps both.
 
 One line per role that needs the user (for example
 `Builder needs you: permission`), with a **Show builder pane** action. This

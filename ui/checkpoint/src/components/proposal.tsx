@@ -74,6 +74,13 @@ export function ProposedRevisionView({
         approval of the agreed revision does not carry over.
       </p>
 
+      {proposal.revision_note ? (
+        <p id="surla-proposal-revision-note">
+          <strong>Revision note: </strong>
+          {proposal.revision_note}
+        </p>
+      ) : null}
+
       <h3>Request</h3>
       {proposal.prompt === card.prompt ? (
         <p id="surla-proposal-prompt" data-changed="false">

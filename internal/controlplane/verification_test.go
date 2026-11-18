@@ -356,6 +356,7 @@ func TestListVerifications(t *testing.T) {
 			ChangeID:        "chg",
 			RequestRevision: card.RequestRevision,
 			Prompt:          "Require a refund reason.",
+			RevisionNote:    "Revise the change.",
 			Analysis: &gensurla.CP1RevisionAnalysis{
 				Summary: "Refunds up to $50 require a reason.",
 				Ambiguities: []*gensurla.CP1AnalysisAmbiguity{{

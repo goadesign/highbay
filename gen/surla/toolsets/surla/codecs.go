@@ -1454,7 +1454,12 @@ var approveMergeResultFields = []tools.FieldMetadata{
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("prompt")},
 		JSONType:    "string",
-		Description: "The user's feature request for this revision.",
+		Description: "The change's complete feature request as this revision states it.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("revision_note")},
+		JSONType:    "string",
+		Description: "What this revision changes and why, as revise_change recorded it. Absent on a card propose_change made and on revisions saved before notes were recorded. Confirming or adopting keeps it. It is saved with the revision but is not part of request_revision, which covers prompt and the rest of the card's content.",
 	},
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("summary")},
@@ -1983,7 +1988,12 @@ var approveMergeResultFields = []tools.FieldMetadata{
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("prompt")},
 		JSONType:    "string",
-		Description: "The user's feature request for this revision.",
+		Description: "The change's complete feature request as this revision states it.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("revision_note")},
+		JSONType:    "string",
+		Description: "What this revision changes and why, as revise_change recorded it; absent on a revision saved before notes were recorded. It is not part of request_revision.",
 	},
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("summary")},
@@ -2423,7 +2433,12 @@ var confirmIntentResultFields = []tools.FieldMetadata{
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("prompt")},
 		JSONType:    "string",
-		Description: "The user's feature request for this revision.",
+		Description: "The change's complete feature request as this revision states it.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("revision_note")},
+		JSONType:    "string",
+		Description: "What this revision changes and why, as revise_change recorded it. Absent on a card propose_change made and on revisions saved before notes were recorded. Confirming or adopting keeps it. It is saved with the revision but is not part of request_revision, which covers prompt and the rest of the card's content.",
 	},
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("summary")},
@@ -2952,7 +2967,12 @@ var confirmIntentResultFields = []tools.FieldMetadata{
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("prompt")},
 		JSONType:    "string",
-		Description: "The user's feature request for this revision.",
+		Description: "The change's complete feature request as this revision states it.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("revision_note")},
+		JSONType:    "string",
+		Description: "What this revision changes and why, as revise_change recorded it; absent on a revision saved before notes were recorded. It is not part of request_revision.",
 	},
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("summary")},
@@ -3279,7 +3299,12 @@ var declineRevisionResultFields = []tools.FieldMetadata{
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("prompt")},
 		JSONType:    "string",
-		Description: "The user's feature request for this revision.",
+		Description: "The change's complete feature request as this revision states it.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("revision_note")},
+		JSONType:    "string",
+		Description: "What this revision changes and why, as revise_change recorded it. Absent on a card propose_change made and on revisions saved before notes were recorded. Confirming or adopting keeps it. It is saved with the revision but is not part of request_revision, which covers prompt and the rest of the card's content.",
 	},
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("summary")},
@@ -3808,7 +3833,12 @@ var declineRevisionResultFields = []tools.FieldMetadata{
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("prompt")},
 		JSONType:    "string",
-		Description: "The user's feature request for this revision.",
+		Description: "The change's complete feature request as this revision states it.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("revision_note")},
+		JSONType:    "string",
+		Description: "What this revision changes and why, as revise_change recorded it; absent on a revision saved before notes were recorded. It is not part of request_revision.",
 	},
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("summary")},
@@ -5408,7 +5438,12 @@ var getChangeResultFields = []tools.FieldMetadata{
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("prompt")},
 		JSONType:    "string",
-		Description: "The user's feature request for this revision.",
+		Description: "The change's complete feature request as this revision states it.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("revision_note")},
+		JSONType:    "string",
+		Description: "What this revision changes and why, as revise_change recorded it. Absent on a card propose_change made and on revisions saved before notes were recorded. Confirming or adopting keeps it. It is saved with the revision but is not part of request_revision, which covers prompt and the rest of the card's content.",
 	},
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("summary")},
@@ -5937,7 +5972,12 @@ var getChangeResultFields = []tools.FieldMetadata{
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("prompt")},
 		JSONType:    "string",
-		Description: "The user's feature request for this revision.",
+		Description: "The change's complete feature request as this revision states it.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("revision_note")},
+		JSONType:    "string",
+		Description: "What this revision changes and why, as revise_change recorded it; absent on a revision saved before notes were recorded. It is not part of request_revision.",
 	},
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("summary")},
@@ -9134,7 +9174,12 @@ var proposeChangeResultFields = []tools.FieldMetadata{
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("prompt")},
 		JSONType:    "string",
-		Description: "The user's feature request for this revision.",
+		Description: "The change's complete feature request as this revision states it.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("revision_note")},
+		JSONType:    "string",
+		Description: "What this revision changes and why, as revise_change recorded it. Absent on a card propose_change made and on revisions saved before notes were recorded. Confirming or adopting keeps it. It is saved with the revision but is not part of request_revision, which covers prompt and the rest of the card's content.",
 	},
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("summary")},
@@ -9663,7 +9708,12 @@ var proposeChangeResultFields = []tools.FieldMetadata{
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("prompt")},
 		JSONType:    "string",
-		Description: "The user's feature request for this revision.",
+		Description: "The change's complete feature request as this revision states it.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("revision_note")},
+		JSONType:    "string",
+		Description: "What this revision changes and why, as revise_change recorded it; absent on a revision saved before notes were recorded. It is not part of request_revision.",
 	},
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("summary")},
@@ -12364,7 +12414,7 @@ var reviewVerificationResultFields = []tools.FieldMetadata{
 var reviseChangePayloadFields = []tools.FieldMetadata{
 	{
 		JSONType:    "object",
-		Description: "The user's revised feature request and the caller's analysis of it, saved as the next revision of an existing Checkpoint 1 Change Card.",
+		Description: "The change's complete feature request as it now stands, a note saying what this revision changes and why, and the caller's analysis, saved as the next revision of an existing Checkpoint 1 Change Card.",
 	},
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("change_id")},
@@ -12379,7 +12429,12 @@ var reviseChangePayloadFields = []tools.FieldMetadata{
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("prompt")},
 		JSONType:    "string",
-		Description: "The user's revised feature request.",
+		Description: "The change's complete feature request as it now stands: the original intent with every requirement added since, restated in full. Never only the difference; that goes in revision_note.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("revision_note")},
+		JSONType:    "string",
+		Description: "What this revision changes and why, in the user's terms, for example \"Legal requires pre-approval before a listing goes live\".",
 	},
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("story_refresh_op_id")},
@@ -12500,7 +12555,12 @@ var reviseChangeResultFields = []tools.FieldMetadata{
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("prompt")},
 		JSONType:    "string",
-		Description: "The user's feature request for this revision.",
+		Description: "The change's complete feature request as this revision states it.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("revision_note")},
+		JSONType:    "string",
+		Description: "What this revision changes and why, as revise_change recorded it. Absent on a card propose_change made and on revisions saved before notes were recorded. Confirming or adopting keeps it. It is saved with the revision but is not part of request_revision, which covers prompt and the rest of the card's content.",
 	},
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("summary")},
@@ -13029,7 +13089,12 @@ var reviseChangeResultFields = []tools.FieldMetadata{
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("prompt")},
 		JSONType:    "string",
-		Description: "The user's feature request for this revision.",
+		Description: "The change's complete feature request as this revision states it.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("revision_note")},
+		JSONType:    "string",
+		Description: "What this revision changes and why, as revise_change recorded it; absent on a revision saved before notes were recorded. It is not part of request_revision.",
 	},
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("summary")},
@@ -17018,6 +17083,7 @@ func MarshalApproveMergeResult(v *ApproveMergeResult) ([]byte, error) {
 		ChangeID:        &in.ChangeID,
 		Status:          &in.Status,
 		Prompt:          &in.Prompt,
+		RevisionNote:    in.RevisionNote,
 		Summary:         &in.Summary,
 		ConfirmedBy:     in.ConfirmedBy,
 		RequestRevision: &in.RequestRevision,
@@ -17101,6 +17167,7 @@ func UnmarshalApproveMergeResult(data []byte) (*ApproveMergeResult, error) {
 		ChangeID:        *in.ChangeID,
 		Status:          *in.Status,
 		Prompt:          *in.Prompt,
+		RevisionNote:    in.RevisionNote,
 		Summary:         *in.Summary,
 		ConfirmedBy:     in.ConfirmedBy,
 		RequestRevision: *in.RequestRevision,
@@ -17406,6 +17473,7 @@ func MarshalConfirmIntentResult(v *ConfirmIntentResult) ([]byte, error) {
 		ChangeID:        &in.ChangeID,
 		Status:          &in.Status,
 		Prompt:          &in.Prompt,
+		RevisionNote:    in.RevisionNote,
 		Summary:         &in.Summary,
 		ConfirmedBy:     in.ConfirmedBy,
 		RequestRevision: &in.RequestRevision,
@@ -17489,6 +17557,7 @@ func UnmarshalConfirmIntentResult(data []byte) (*ConfirmIntentResult, error) {
 		ChangeID:        *in.ChangeID,
 		Status:          *in.Status,
 		Prompt:          *in.Prompt,
+		RevisionNote:    in.RevisionNote,
 		Summary:         *in.Summary,
 		ConfirmedBy:     in.ConfirmedBy,
 		RequestRevision: *in.RequestRevision,
@@ -17602,6 +17671,7 @@ func MarshalDeclineRevisionResult(v *DeclineRevisionResult) ([]byte, error) {
 		ChangeID:        &in.ChangeID,
 		Status:          &in.Status,
 		Prompt:          &in.Prompt,
+		RevisionNote:    in.RevisionNote,
 		Summary:         &in.Summary,
 		ConfirmedBy:     in.ConfirmedBy,
 		RequestRevision: &in.RequestRevision,
@@ -17685,6 +17755,7 @@ func UnmarshalDeclineRevisionResult(data []byte) (*DeclineRevisionResult, error)
 		ChangeID:        *in.ChangeID,
 		Status:          *in.Status,
 		Prompt:          *in.Prompt,
+		RevisionNote:    in.RevisionNote,
 		Summary:         *in.Summary,
 		ConfirmedBy:     in.ConfirmedBy,
 		RequestRevision: *in.RequestRevision,
@@ -18370,6 +18441,7 @@ func MarshalGetChangeResult(v *GetChangeResult) ([]byte, error) {
 		ChangeID:        &in.ChangeID,
 		Status:          &in.Status,
 		Prompt:          &in.Prompt,
+		RevisionNote:    in.RevisionNote,
 		Summary:         &in.Summary,
 		ConfirmedBy:     in.ConfirmedBy,
 		RequestRevision: &in.RequestRevision,
@@ -18453,6 +18525,7 @@ func UnmarshalGetChangeResult(data []byte) (*GetChangeResult, error) {
 		ChangeID:        *in.ChangeID,
 		Status:          *in.Status,
 		Prompt:          *in.Prompt,
+		RevisionNote:    in.RevisionNote,
 		Summary:         *in.Summary,
 		ConfirmedBy:     in.ConfirmedBy,
 		RequestRevision: *in.RequestRevision,
@@ -19922,6 +19995,7 @@ func MarshalProposeChangeResult(v *ProposeChangeResult) ([]byte, error) {
 		ChangeID:        &in.ChangeID,
 		Status:          &in.Status,
 		Prompt:          &in.Prompt,
+		RevisionNote:    in.RevisionNote,
 		Summary:         &in.Summary,
 		ConfirmedBy:     in.ConfirmedBy,
 		RequestRevision: &in.RequestRevision,
@@ -20005,6 +20079,7 @@ func UnmarshalProposeChangeResult(data []byte) (*ProposeChangeResult, error) {
 		ChangeID:        *in.ChangeID,
 		Status:          *in.Status,
 		Prompt:          *in.Prompt,
+		RevisionNote:    in.RevisionNote,
 		Summary:         *in.Summary,
 		ConfirmedBy:     in.ConfirmedBy,
 		RequestRevision: *in.RequestRevision,
@@ -20564,6 +20639,7 @@ func MarshalReviseChangePayload(v *ReviseChangePayload) ([]byte, error) {
 		ChangeID:         &in.ChangeID,
 		RequestRevision:  &in.RequestRevision,
 		Prompt:           &in.Prompt,
+		RevisionNote:     &in.RevisionNote,
 		StoryRefreshOpID: in.StoryRefreshOpID,
 	}
 	out.Analysis = encodeCP1RevisionAnalysisToCP1RevisionAnalysisTransport(in.Analysis)
@@ -20594,6 +20670,7 @@ func UnmarshalReviseChangePayload(data []byte) (*ReviseChangePayload, error) {
 		ChangeID:         *in.ChangeID,
 		RequestRevision:  *in.RequestRevision,
 		Prompt:           *in.Prompt,
+		RevisionNote:     *in.RevisionNote,
 		StoryRefreshOpID: in.StoryRefreshOpID,
 	}
 	out.Analysis = decodeCP1RevisionAnalysisTransportToCP1RevisionAnalysis(in.Analysis)
@@ -20612,6 +20689,7 @@ func MarshalReviseChangeResult(v *ReviseChangeResult) ([]byte, error) {
 		ChangeID:        &in.ChangeID,
 		Status:          &in.Status,
 		Prompt:          &in.Prompt,
+		RevisionNote:    in.RevisionNote,
 		Summary:         &in.Summary,
 		ConfirmedBy:     in.ConfirmedBy,
 		RequestRevision: &in.RequestRevision,
@@ -20695,6 +20773,7 @@ func UnmarshalReviseChangeResult(data []byte) (*ReviseChangeResult, error) {
 		ChangeID:        *in.ChangeID,
 		Status:          *in.Status,
 		Prompt:          *in.Prompt,
+		RevisionNote:    in.RevisionNote,
 		Summary:         *in.Summary,
 		ConfirmedBy:     in.ConfirmedBy,
 		RequestRevision: *in.RequestRevision,
@@ -22294,7 +22373,7 @@ func validateProposeChangeResultJSONValue(path string, value any, description st
 		case "prompt":
 			if err := validateStringJSONValue(
 				generatedJSONChildPath(path, key, false),
-				typed[key], "The user's feature request for this revision.",
+				typed[key], "The change's complete feature request as this revision states it.",
 			); err != nil {
 				return err
 			}
@@ -22309,6 +22388,13 @@ func validateProposeChangeResultJSONValue(path string, value any, description st
 			if err := validateStringJSONValue(
 				generatedJSONChildPath(path, key, false),
 				typed[key], "SHA-256 digest of the canonical versioned Change Card.",
+			); err != nil {
+				return err
+			}
+		case "revision_note":
+			if err := validateStringJSONValue(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "What this revision changes and why, as revise_change recorded it. Absent on a card propose_change made and on revisions saved before notes were recorded. Confirming or adopting keeps it. It is saved with the revision but is not part of request_revision, which covers prompt and the rest of the card's content.",
 			); err != nil {
 				return err
 			}
@@ -22359,6 +22445,7 @@ func validateProposeChangeResultJSONValue(path string, value any, description st
 				"prompt",
 				"proposed_revision",
 				"request_revision",
+				"revision_note",
 				"status",
 				"stories",
 				"summary",
@@ -22842,7 +22929,7 @@ func validateProposeChangeResultProposedRevisionItemTransportJSONValue(path stri
 		case "prompt":
 			if err := validateStringJSONValue(
 				generatedJSONChildPath(path, key, false),
-				typed[key], "The user's feature request for this revision.",
+				typed[key], "The change's complete feature request as this revision states it.",
 			); err != nil {
 				return err
 			}
@@ -22850,6 +22937,13 @@ func validateProposeChangeResultProposedRevisionItemTransportJSONValue(path stri
 			if err := validateStringJSONValue(
 				generatedJSONChildPath(path, key, false),
 				typed[key], "SHA-256 digest of this proposed revision: confirm_intent adopts it, decline_revision declines it, and revise_change replaces it when given this value.",
+			); err != nil {
+				return err
+			}
+		case "revision_note":
+			if err := validateStringJSONValue(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "What this revision changes and why, as revise_change recorded it; absent on a revision saved before notes were recorded. It is not part of request_revision.",
 			); err != nil {
 				return err
 			}
@@ -22882,6 +22976,7 @@ func validateProposeChangeResultProposedRevisionItemTransportJSONValue(path stri
 				"preserved_behaviors",
 				"prompt",
 				"request_revision",
+				"revision_note",
 				"stories",
 				"summary",
 				"ui_composition",
@@ -23476,7 +23571,7 @@ func validateReviseChangePayloadJSONValue(path string, value any, description st
 		case "prompt":
 			if err := validateStringJSONValue(
 				generatedJSONChildPath(path, key, false),
-				typed[key], "The user's revised feature request.",
+				typed[key], "The change's complete feature request as it now stands: the original intent with every requirement added since, restated in full. Never only the difference; that goes in revision_note.",
 			); err != nil {
 				return err
 			}
@@ -23484,6 +23579,13 @@ func validateReviseChangePayloadJSONValue(path string, value any, description st
 			if err := validateStringJSONValue(
 				generatedJSONChildPath(path, key, false),
 				typed[key], "request_revision of the latest revision you read: the proposed revision's when the change shows one waiting (proposed_revision.request_revision), otherwise the change's own.",
+			); err != nil {
+				return err
+			}
+		case "revision_note":
+			if err := validateStringJSONValue(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "What this revision changes and why, in the user's terms, for example \"Legal requires pre-approval before a listing goes live\".",
 			); err != nil {
 				return err
 			}
@@ -23500,6 +23602,7 @@ func validateReviseChangePayloadJSONValue(path string, value any, description st
 				"change_id",
 				"prompt",
 				"request_revision",
+				"revision_note",
 				"story_refresh_op_id",
 			})
 		}
@@ -29571,6 +29674,7 @@ func decodeUnverifiedApprovalItemTransportToUnverifiedApprovalItem(v *toolhttp.U
 func decodeProposedRevisionItemTransportToProposedRevisionItem(v *toolhttp.ProposedRevisionItemTransport) *ProposedRevisionItem {
 	res := &ProposedRevisionItem{
 		Prompt:          *v.Prompt,
+		RevisionNote:    v.RevisionNote,
 		Summary:         *v.Summary,
 		RequestRevision: *v.RequestRevision,
 	}
@@ -29803,6 +29907,7 @@ func encodeUnverifiedApprovalItemToUnverifiedApprovalItemTransport(v *Unverified
 func encodeProposedRevisionItemToProposedRevisionItemTransport(v *ProposedRevisionItem) *toolhttp.ProposedRevisionItemTransport {
 	res := &toolhttp.ProposedRevisionItemTransport{
 		Prompt:          &v.Prompt,
+		RevisionNote:    v.RevisionNote,
 		Summary:         &v.Summary,
 		RequestRevision: &v.RequestRevision,
 	}

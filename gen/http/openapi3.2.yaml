@@ -1919,6 +1919,7 @@ paths:
                                         - Dolore impedit et praesentium illo.
                                     prompt: Et placeat architecto sint quia.
                                     request_revision: Ab expedita.
+                                    revision_note: Provident et illum.
                                     stories:
                                         - actors:
                                             - description: Odio nulla itaque earum aperiam rerum.
@@ -2741,6 +2742,7 @@ paths:
                                         composed_for_revision: Est et sit voluptatibus quibusdam quisquam.
                                         program: Numquam provident excepturi et deleniti vel sed.
                                 request_revision: Eum minus sequi repudiandae velit enim.
+                                revision_note: Et dolorem ullam non.
                                 status: needs_confirmation
                                 stories:
                                     - actors:
@@ -4834,6 +4836,7 @@ paths:
                                         - Dolore impedit et praesentium illo.
                                     prompt: Et placeat architecto sint quia.
                                     request_revision: Ab expedita.
+                                    revision_note: Provident et illum.
                                     stories:
                                         - actors:
                                             - description: Odio nulla itaque earum aperiam rerum.
@@ -5656,6 +5659,7 @@ paths:
                                         composed_for_revision: Est et sit voluptatibus quibusdam quisquam.
                                         program: Numquam provident excepturi et deleniti vel sed.
                                 request_revision: Similique facilis sequi maiores placeat autem.
+                                revision_note: Dolor ut officiis debitis nemo.
                                 status: needs_confirmation
                                 stories:
                                     - actors:
@@ -6730,6 +6734,7 @@ paths:
                                         - Dolore impedit et praesentium illo.
                                     prompt: Et placeat architecto sint quia.
                                     request_revision: Ab expedita.
+                                    revision_note: Provident et illum.
                                     stories:
                                         - actors:
                                             - description: Odio nulla itaque earum aperiam rerum.
@@ -7552,6 +7557,7 @@ paths:
                                         composed_for_revision: Est et sit voluptatibus quibusdam quisquam.
                                         program: Numquam provident excepturi et deleniti vel sed.
                                 request_revision: Amet voluptatem quibusdam.
+                                revision_note: Esse ipsum a qui nostrum ducimus facilis.
                                 status: needs_confirmation
                                 stories:
                                     - actors:
@@ -8585,6 +8591,7 @@ paths:
                                         - Dolore impedit et praesentium illo.
                                     prompt: Et placeat architecto sint quia.
                                     request_revision: Ab expedita.
+                                    revision_note: Provident et illum.
                                     stories:
                                         - actors:
                                             - description: Odio nulla itaque earum aperiam rerum.
@@ -9407,6 +9414,7 @@ paths:
                                         composed_for_revision: Est et sit voluptatibus quibusdam quisquam.
                                         program: Numquam provident excepturi et deleniti vel sed.
                                 request_revision: Ex facilis repellat mollitia.
+                                revision_note: Ut veniam sequi labore.
                                 status: confirmed
                                 stories:
                                     - actors:
@@ -10901,6 +10909,7 @@ paths:
                                         - Dolore impedit et praesentium illo.
                                     prompt: Et placeat architecto sint quia.
                                     request_revision: Ab expedita.
+                                    revision_note: Provident et illum.
                                     stories:
                                         - actors:
                                             - description: Odio nulla itaque earum aperiam rerum.
@@ -11723,6 +11732,7 @@ paths:
                                         composed_for_revision: Est et sit voluptatibus quibusdam quisquam.
                                         program: Numquam provident excepturi et deleniti vel sed.
                                 request_revision: Et maxime fugiat.
+                                revision_note: Tempore rerum blanditiis nulla ut praesentium fugiat.
                                 status: confirmed
                                 stories:
                                     - actors:
@@ -12346,7 +12356,7 @@ paths:
             tags:
                 - surla
             summary: revise_change surla
-            description: 'Save the next revision of an existing Checkpoint 1 Change Card from a revised feature request and the guide''s analysis of it. Only the guide revises a change; only the user confirms or adopts a revision, with confirm_intent on the views page. The request is bound to the latest revision: the proposed revision''s request_revision when one waits, otherwise the card''s. On a card that was never confirmed, the new revision replaces it. On a confirmed card, the new revision is saved as the proposed revision beside the confirmed one, replacing any earlier proposal, and the confirmed revision stays in force with its answers, confirmation, approval, Stories and design source until the user adopts the proposal with confirm_intent or declines it. The analysis accounts for every example of the revision it revises exactly once, keeping or editing it through prior_id or dropping it through removed_example_ids. Surla keeps the IDs of kept examples, gives new examples the lowest check_NN ID neither card uses, adopts the evaluated draft''s design, Stories, architecture, go.mod and made-from list when story_refresh_op_id is given, without reading any file, or keeps every snapshot field of the revision it revises when it is omitted, even with zero Stories, and saves the new revision in needs_confirmation status for the user''s review. The new revision has no answers, confirmed_by or approval: earlier decisions carry over only where the analysis restates them in its summary, examples or preserved behaviors. The result is the change as get_change returns it. Surla runs no model for this step and cannot judge whether the analysis is complete or correct. A project with a go.mod refuses an omitted op_id when the revision being revised has no design. A refresh from before the user dropped a build is refused with drafted_before_drop.'
+            description: 'Save the next revision of an existing Checkpoint 1 Change Card from the change''s complete feature request as it now stands, a note saying what this revision changes and why, and the guide''s analysis. Only the guide revises a change; only the user confirms or adopts a revision, with confirm_intent on the views page. The request is bound to the latest revision: the proposed revision''s request_revision when one waits, otherwise the card''s. On a card that was never confirmed, the new revision replaces it. On a confirmed card, the new revision is saved as the proposed revision beside the confirmed one, replacing any earlier proposal, and the confirmed revision stays in force with its answers, confirmation, approval, Stories and design source until the user adopts the proposal with confirm_intent or declines it. The analysis accounts for every example of the revision it revises exactly once, keeping or editing it through prior_id or dropping it through removed_example_ids. Surla keeps the IDs of kept examples, gives new examples the lowest check_NN ID neither card uses, adopts the evaluated draft''s design, Stories, architecture, go.mod and made-from list when story_refresh_op_id is given, without reading any file, or keeps every snapshot field of the revision it revises when it is omitted, even with zero Stories, and saves the new revision in needs_confirmation status for the user''s review. The new revision has no answers, confirmed_by or approval: earlier decisions carry over only where the analysis restates them in its summary, examples or preserved behaviors. The result is the change as get_change returns it. Surla runs no model for this step and cannot judge whether the analysis is complete or correct. A project with a go.mod refuses an omitted op_id when the revision being revised has no design. A refresh from before the user dropped a build is refused with drafted_before_drop.'
             operationId: surla#revise_change
             requestBody:
                 description: Request body for revise_change.
@@ -12397,6 +12407,7 @@ paths:
                             change_id: Optio ratione suscipit et neque officia.
                             prompt: Omnis est.
                             request_revision: Neque dolore optio.
+                            revision_note: Fugit est libero distinctio omnis sint praesentium.
                             story_refresh_op_id: Assumenda tenetur minus et magnam consequatur.
             responses:
                 "200":
@@ -12518,6 +12529,7 @@ paths:
                                         - Dolore impedit et praesentium illo.
                                     prompt: Et placeat architecto sint quia.
                                     request_revision: Ab expedita.
+                                    revision_note: Provident et illum.
                                     stories:
                                         - actors:
                                             - description: Odio nulla itaque earum aperiam rerum.
@@ -13340,6 +13352,7 @@ paths:
                                         composed_for_revision: Est et sit voluptatibus quibusdam quisquam.
                                         program: Numquam provident excepturi et deleniti vel sed.
                                 request_revision: Provident voluptatum.
+                                revision_note: Quasi iste culpa.
                                 status: confirmed
                                 stories:
                                     - actors:
@@ -13959,7 +13972,7 @@ paths:
                                         temporary: false
                                         timeout: false
                 "422":
-                    description: 'unprocessable: The request could not be accepted: change_id, request_revision or prompt is blank, an ambiguity repeats an option, the analysis does not account for every example of the revision it revises exactly once, story_refresh_op_id does not name the owner''s current succeeded refresh_story operation, or the project folder holds a go.mod and story_refresh_op_id is missing when the revision being revised has no design. The message says which; the card did not change.'
+                    description: 'unprocessable: The request could not be accepted: change_id, request_revision, prompt or revision_note is blank, an ambiguity repeats an option, the analysis does not account for every example of the revision it revises exactly once, story_refresh_op_id does not name the owner''s current succeeded refresh_story operation, or the project folder holds a go.mod and story_refresh_op_id is missing when the revision being revised has no design. The message says which; the card did not change.'
                     content:
                         application/vnd.goa.error:
                             schema:
@@ -19546,7 +19559,7 @@ components:
                         - Animi unde.
                 prompt:
                     type: string
-                    description: The user's feature request for this revision.
+                    description: The change's complete feature request as this revision states it.
                     example: Ea perferendis neque.
                 proposed_revision:
                     $ref: '#/components/schemas/ProposedRevisionItem'
@@ -19554,6 +19567,10 @@ components:
                     type: string
                     description: SHA-256 digest of the canonical versioned Change Card.
                     example: Et maxime fugiat.
+                revision_note:
+                    type: string
+                    description: What this revision changes and why, as revise_change recorded it. Absent on a card propose_change made and on revisions saved before notes were recorded. Confirming or adopting keeps it. It is saved with the revision but is not part of request_revision, which covers prompt and the rest of the card's content.
+                    example: Tempore rerum blanditiis nulla ut praesentium fugiat.
                 status:
                     type: string
                     description: Checkpoint status (needs_confirmation or confirmed).
@@ -20222,6 +20239,7 @@ components:
                         - Dolore impedit et praesentium illo.
                     prompt: Et placeat architecto sint quia.
                     request_revision: Ab expedita.
+                    revision_note: Provident et illum.
                     stories:
                         - actors:
                             - description: Odio nulla itaque earum aperiam rerum.
@@ -21044,6 +21062,7 @@ components:
                         composed_for_revision: Est et sit voluptatibus quibusdam quisquam.
                         program: Numquam provident excepturi et deleniti vel sed.
                 request_revision: Et maxime fugiat.
+                revision_note: Tempore rerum blanditiis nulla ut praesentium fugiat.
                 status: confirmed
                 stories:
                     - actors:
@@ -23314,12 +23333,16 @@ components:
                         - Dolore impedit et praesentium illo.
                 prompt:
                     type: string
-                    description: The user's feature request for this revision.
+                    description: The change's complete feature request as this revision states it.
                     example: Et placeat architecto sint quia.
                 request_revision:
                     type: string
                     description: 'SHA-256 digest of this proposed revision: confirm_intent adopts it, decline_revision declines it, and revise_change replaces it when given this value.'
                     example: Ab expedita.
+                revision_note:
+                    type: string
+                    description: What this revision changes and why, as revise_change recorded it; absent on a revision saved before notes were recorded. It is not part of request_revision.
+                    example: Provident et illum.
                 stories:
                     type: array
                     items:
@@ -24193,6 +24216,7 @@ components:
                     - Dolore impedit et praesentium illo.
                 prompt: Et placeat architecto sint quia.
                 request_revision: Ab expedita.
+                revision_note: Provident et illum.
                 stories:
                     - actors:
                         - description: Odio nulla itaque earum aperiam rerum.
@@ -25180,12 +25204,16 @@ components:
                     example: Optio ratione suscipit et neque officia.
                 prompt:
                     type: string
-                    description: The user's revised feature request.
+                    description: 'The change''s complete feature request as it now stands: the original intent with every requirement added since, restated in full. Never only the difference; that goes in revision_note.'
                     example: Omnis est.
                 request_revision:
                     type: string
                     description: 'request_revision of the latest revision you read: the proposed revision''s when the change shows one waiting (proposed_revision.request_revision), otherwise the change''s own.'
                     example: Neque dolore optio.
+                revision_note:
+                    type: string
+                    description: What this revision changes and why, in the user's terms, for example "Legal requires pre-approval before a listing goes live".
+                    example: Fugit est libero distinctio omnis sint praesentium.
                 story_refresh_op_id:
                     type: string
                     description: 'op_id of a succeeded refresh_story operation whose evaluated draft this revision adopts. When omitted, the revision keeps every snapshot field of the revision it revises: design, Stories, architecture, go.mod and made-from list, even with zero Stories. A project with a go.mod refuses an omitted op_id when that revision has no design. Surla reads no file.'
@@ -25233,11 +25261,13 @@ components:
                 change_id: Optio ratione suscipit et neque officia.
                 prompt: Omnis est.
                 request_revision: Neque dolore optio.
+                revision_note: Fugit est libero distinctio omnis sint praesentium.
                 story_refresh_op_id: Assumenda tenetur minus et magnam consequatur.
             required:
                 - change_id
                 - request_revision
                 - prompt
+                - revision_note
                 - analysis
         ShowTeamPaneRequestBody:
             type: object

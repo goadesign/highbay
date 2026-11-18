@@ -50,8 +50,15 @@ type (
 		ChangeID string
 		// Status is the checkpoint status ("needs_confirmation" or "confirmed").
 		Status string
-		// Prompt is the user's feature request for this revision.
+		// Prompt is the change's complete feature request as this revision
+		// states it.
 		Prompt string
+		// RevisionNote says what a revise_change revision changed and why; nil
+		// on a card propose_change made and on revisions saved before notes
+		// were recorded, which keeps their files unchanged. Like
+		// UIComposition, it is saved with the revision but is not part of
+		// RequestRevision, so revisions with the same content keep one digest.
+		RevisionNote *string `json:",omitempty"`
 		// Summary is the plain-English summary of requested behavior.
 		Summary string
 		// Ambiguities lists surfaced domain questions.
@@ -318,6 +325,7 @@ func decodeRevision(
 		ChangeID:           saved.ChangeID,
 		Status:             saved.Status,
 		Prompt:             saved.Prompt,
+		RevisionNote:       saved.RevisionNote,
 		Summary:            saved.Summary,
 		Ambiguities:        saved.Ambiguities,
 		Answers:            saved.Answers,
@@ -425,6 +433,7 @@ func savedCardOf(card *gensurla.ChangeCardResult) *savedCard {
 		ChangeID:           card.ChangeID,
 		Status:             card.Status,
 		Prompt:             card.Prompt,
+		RevisionNote:       card.RevisionNote,
 		Summary:            card.Summary,
 		Ambiguities:        card.Ambiguities,
 		Answers:            card.Answers,

@@ -232,6 +232,12 @@ export function CP1EditorView({
         <strong>Requested change: </strong>
         {card.prompt}
       </p>
+      {card.revision_note ? (
+        <p id="surla-agreement-revision-note">
+          <strong>Revision note: </strong>
+          {card.revision_note}
+        </p>
+      ) : null}
       {card.confirmed_by ? (
         <p>
           <strong>
@@ -322,6 +328,12 @@ export function CP1EditorView({
             <strong>Previous request: </strong>
             {priorCard.prompt}
           </p>
+          {priorCard.revision_note ? (
+            <p>
+              <strong>Previous revision note: </strong>
+              {priorCard.revision_note}
+            </p>
+          ) : null}
           <p>
             <strong>Previous summary: </strong>
             {priorCard.summary}

@@ -422,7 +422,7 @@ for (const order of ["A_THEN_B", "B_THEN_A"]) {
   page.type(field(page), "Dirty R1 before incoming R2");
   const current = (await api(origin, "GET", "/changes/chg-incoming", undefined, input.guide)).body;
   const revised = await api(origin, "POST", "/changes/revise", {
-    change_id: "chg-incoming", request_revision: current.request_revision, prompt: "Refunds above $50 require a manager and an audit log.",
+    change_id: "chg-incoming", request_revision: current.request_revision, prompt: "Refunds above $50 require a manager and an audit log.", revision_note: "Add the manager and audit-log rule.",
     analysis: { summary: "Refunds above $50 require a manager and an audit log.", ambiguities: [], examples: [{ prior_id: "check_01", scenario: "Refund at the limit", input_summary: "Order total $50.00", expected_outcome: "Instant store credit", verification_kind: "deterministic" }], removed_example_ids: [], preserved_behaviors: [] },
   }, input.guide);
   expect(revised.status === 200, "could not revise: " + JSON.stringify(revised));

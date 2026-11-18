@@ -47,6 +47,7 @@ func TestAgentsCannotDeclineAProposalOverMCP(t *testing.T) {
 	kept := agreed.Examples[0].ID
 	revised, err := cp.ReviseChange(guide, &gensurla.ReviseChangePayload{
 		ChangeID: "chg", RequestRevision: agreed.RequestRevision, Prompt: "Refunds up to $60 are instant.",
+		RevisionNote: "Revise the change.",
 		Analysis: &gensurla.CP1RevisionAnalysis{
 			Summary: "Refunds up to $60 are instant.", Ambiguities: []*gensurla.CP1AnalysisAmbiguity{},
 			Examples: []*gensurla.CP1RevisionAnalysisExample{{

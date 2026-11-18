@@ -61,7 +61,10 @@ controlled browser. The team instructions give commands with the actual Herdr
 space ID: `chorus team inspect` shows the roles, and `chorus team launch` accepts
 your explicit program/model choices. Add `--choices choices.json` to the printed
 inspection command to see your chosen programs' model options and permission
-effects before launching. See [terminal operation](docs/REFERENCE.md#terminal-and-browser-automation)
+effects before launching. A choices file names, for each role, the client, the
+installed program and, optionally, a model, for example
+`{"guide":{"client":"codex","program":"codex","model":null,"thinking":null,"yolo":false}}`;
+`chorus team launch --help` describes every field. See [terminal operation](docs/REFERENCE.md#terminal-and-browser-automation)
 for input, recovery and link handling. The dialog remains available.
 
 Here is one change, for example a refund assistant whose rule is "refunds up
@@ -134,7 +137,9 @@ to $50 get instant store credit; larger ones wait for a manager":
    against the merged commit on your branch yourself, pass the full commit ID
    of your branch's `HEAD` (`"$(git rev-parse HEAD)"`) as `-candidate-commit`
    and the accepted `<tests_commit>` shown in **Approve** as `-suite-commit` to
-   [`surla verify`](docs/REFERENCE.md#surla-verify). Surla
+   [`surla verify`](docs/REFERENCE.md#surla-verify), with the agreed
+   `request_revision` shown there as `-request-revision` so the report names
+   the change it checks. Surla
    merges and deploys nothing. Approval needs no
    settings. A project that stores
    [promotion settings](docs/REFERENCE.md#surla-verification-and-surla-promotion)

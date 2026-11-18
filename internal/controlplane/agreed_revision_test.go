@@ -718,6 +718,7 @@ func proposeRevision(t *testing.T, cp *ControlPlane, changeID, rev, summary stri
 func revisionPayload(changeID, rev, summary, kept string) *gensurla.ReviseChangePayload {
 	return &gensurla.ReviseChangePayload{
 		ChangeID: changeID, RequestRevision: rev, Prompt: summary,
+		RevisionNote: "Revise the change.",
 		Analysis: &gensurla.CP1RevisionAnalysis{
 			Summary:     summary,
 			Ambiguities: []*gensurla.CP1AnalysisAmbiguity{refundTaxQuestion()},

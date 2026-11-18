@@ -238,6 +238,7 @@ func TestSharedServerOwnershipRefinementResourcesAndLockReleaseAcrossRestarts(t 
 		"change_id":        "vip-refunds",
 		"request_revision": reopened.RequestRevision,
 		"prompt":           "VIP customers get instant store credit up to $200 including tax and shipping.",
+		"revision_note":    "Include tax and shipping in the credit limit.",
 		"analysis": map[string]any{
 			"summary":     "Give VIP customers instant store credit up to $200 including tax and shipping.",
 			"ambiguities": []map[string]any{},

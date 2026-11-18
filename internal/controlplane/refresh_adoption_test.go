@@ -223,7 +223,7 @@ func TestNoOpRevisionKeepsAConcurrentMetadataOnlyRefresh(t *testing.T) {
 	payload := func(op *string) *gensurla.ReviseChangePayload {
 		prior := card.Examples[0]
 		return &gensurla.ReviseChangePayload{
-			ChangeID: card.ChangeID, RequestRevision: card.RequestRevision, Prompt: card.Prompt, StoryRefreshOpID: op,
+			ChangeID: card.ChangeID, RequestRevision: card.RequestRevision, Prompt: card.Prompt, RevisionNote: "Revise the change.", StoryRefreshOpID: op,
 			Analysis: &gensurla.CP1RevisionAnalysis{
 				Summary: card.Summary, Ambiguities: []*gensurla.CP1AnalysisAmbiguity{}, RemovedExampleIds: []string{},
 				PreservedBehaviors: card.PreservedBehaviors,

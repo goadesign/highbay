@@ -307,7 +307,8 @@ func TestReviseWithoutRefreshKeepsTheCompleteSavedSnapshot(t *testing.T) {
 					prior := original.card.Examples[0]
 					revised, err := cp.ReviseChange(guide, &gensurla.ReviseChangePayload{
 						ChangeID: "chg", RequestRevision: original.card.RequestRevision,
-						Prompt: "Keep refunds bounded and preserve the agreed snapshot",
+						Prompt:       "Keep refunds bounded and preserve the agreed snapshot",
+						RevisionNote: "Revise the change.",
 						Analysis: &gensurla.CP1RevisionAnalysis{
 							Summary: "Keep refunds bounded and preserve the agreed snapshot",
 							Examples: []*gensurla.CP1RevisionAnalysisExample{{

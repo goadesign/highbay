@@ -99,6 +99,7 @@ expect(question && question.dataset.new === "true" && question.textContent.inclu
 const added = page.$$('#surla-proposal-story [data-difference="added"] strong').map((s) => s.textContent);
 expect(JSON.stringify(added) === JSON.stringify(["Exchange instead of refund"]), "the added flow is not named: " + JSON.stringify(added));
 expect(page.$("#surla-proposal-prompt").dataset.changed === "true" && page.text("#surla-proposal-prompt").includes("Refunds up to $60 are instant.") && page.text("#surla-proposal-prompt").includes("Route refunds to a manager."), "the changed request is not shown beside the agreed one");
+expect(page.text("#surla-proposal-revision-note") === "Revision note: Raise the instant refund limit to $60 and add exchanges.", "the proposal does not show its revision note: " + page.text("#surla-proposal-revision-note"));
 const example = (id) => page.$('#surla-proposal-examples [data-example-id="' + id + '"]');
 const edited = example("check_01");
 expect(edited && edited.dataset.status === "Edited", "the edited example is not shown as edited");
@@ -149,6 +150,7 @@ expect(adoption.request_revision === proposal.request_revision && adoption.answe
 const adopted = await readCard("chg-proposal");
 expect(adopted.status === "confirmed" && adopted.confirmed_by === input.owner && !adopted.proposed_revision && adopted.summary.includes("exchanges"), "the adopted revision is not in force: " + JSON.stringify(adopted));
 expect(editor().dataset.requestRevision === adopted.request_revision && page.$("#surla-prior-revision") && page.text("#surla-prior-revision").includes(input.agreed), "the earlier agreed revision is not shown as prior");
+expect(adopted.revision_note === "Raise the instant refund limit to $60 and add exchanges." && page.text("#surla-agreement-revision-note") === "Revision note: " + adopted.revision_note, "the adopted revision does not show its revision note: " + page.text("#surla-agreement-revision-note"));
 expect(!page.text("#surla-prior-revision").includes("This is the proposal before confirmation.") && !page.text("#surla-prior-revision").includes("Not yet answered in that proposal"), "confirmed history is described as an unanswered proposal");
 expect(page.$("#surla-preserved-draft") && page.text("#surla-preserved-draft").includes("Typed on the agreed revision"), "adopting lost the edit typed on the earlier revision");
 page.close();
@@ -239,7 +241,7 @@ func proposalPage(t *testing.T) (*pageServer, string) {
 		}
 		edited := "check_01"
 		_, err = cp.ReviseChange(guide, &gensurla.ReviseChangePayload{
-			ChangeID: "chg-proposal", RequestRevision: latest, Prompt: "Refunds up to $60 are instant.", StoryRefreshOpID: &storyOp,
+			ChangeID: "chg-proposal", RequestRevision: latest, Prompt: "Refunds up to $60 are instant.", RevisionNote: "Raise the instant refund limit to $60 and add exchanges.", StoryRefreshOpID: &storyOp,
 			Analysis: &gensurla.CP1RevisionAnalysis{
 				Summary:     "Refunds up to $60 are instant; exchanges ship a replacement.",
 				Ambiguities: []*gensurla.CP1AnalysisAmbiguity{refundTaxQuestion()},

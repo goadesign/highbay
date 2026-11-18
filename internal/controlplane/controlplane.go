@@ -251,7 +251,8 @@ type (
 		Owner string `json:"owner"`
 		// Status is the Change Card status.
 		Status string `json:"status"`
-		// Prompt is the user's original feature request.
+		// Prompt is the change's complete feature request as this revision
+		// states it.
 		Prompt string `json:"prompt"`
 		// DesignSource is the Goa design source inspected at CP1.
 		DesignSource string `json:"design_source"`
