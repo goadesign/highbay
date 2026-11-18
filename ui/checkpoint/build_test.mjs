@@ -136,6 +136,7 @@ for (const [operation, name] of [["start_build", "previous_change_open"], ["drop
         builder: { read: false },
         test_writer: { tests: { state: "assigned" }, read: false, report: 0 },
         required_test_count: 1,
+        answers: [], examples: [], coverage_statements: [],
         required_tests: [
           { story: "Refunds", flow_key: "refund_accepted", scenario: "refund_accepted", hook: "RefundAccepted" },
         ],
