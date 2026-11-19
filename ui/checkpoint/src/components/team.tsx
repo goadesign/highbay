@@ -182,6 +182,7 @@ export function TeamStageView({
         <p id="surla-team-loading">{snapshot === null ? "Reading the project team…" : "Updating team…"}</p>
       ) : null}
       {agentPicker}
+      {canStartWorkers ? <p>Workers already running keep their current sessions. These choices apply when a worker starts.</p> : null}
       {snapshot === null ? (
         !loading && error === null ? <p>The project team has not been read.</p> : null
       ) : (

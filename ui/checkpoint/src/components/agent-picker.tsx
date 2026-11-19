@@ -59,7 +59,8 @@ export function AgentPickerView({
           : "No installed agent supports background workers. Install a client with background execution support, then refresh installed agents."}
       </p> : null}
       {herdrMode === null && roles.length > 0 ? <p>Read the project team to check how workers will run.</p> : null}
-      {roles.length === 0 ? <p>No workers need to be started.</p> : roles.map((role) => (
+      {roles.length === 0 && options !== null && !loading && error === null ? <p>No workers need to be started.</p> : null}
+      {roles.map((role) => (
         <WorkerFields key={role} idPrefix={idPrefix + "-" + role} role={role}
           options={installed} choice={choices[role]} herdrMode={herdrMode}
           disabled={disabled || options === null} onChoiceChange={onChoiceChange} />
@@ -165,6 +166,7 @@ function WorkerFields({
       </div> : null}
       {choice !== undefined && option !== undefined && !option.yolo_supported ? <p>
         This client uses configured permissions; no separate Surla YOLO switch is available.
+        {headless ? " Those permissions must allow unattended work." : null}
         {choice.yolo ? <> The previous permission switch is unsupported.{" "}
           <Button disabled={unavailable} onClick={() => changeChoice({ ...choice, yolo: false })}>Use configured permissions</Button>
         </> : null}

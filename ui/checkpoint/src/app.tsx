@@ -1459,11 +1459,15 @@ export function bootstrapViewsPage() {
   // mergePanel keeps manual commands secondary and available only after the
   // same live approval that permits the server action has been read.
   function mergePanel(run: VerificationStatusResult | null, idPrefix: string): React.ReactNode {
+    if (run === null) return null;
     const controls = mergeControls(run);
-    const build = run !== null ? knownTakingBuild(run.change_id) : null;
-    const review = run !== null && selectedReview?.runId === run.run_id ? selectedReview.review : null;
+    const build = knownTakingBuild(run.change_id);
+    const review = selectedReview?.runId === run.run_id ? selectedReview.review : null;
+    const approvedBuild = build !== null && build.in_force && runBelongsToBuild(run.change_id, build, run) &&
+      (build.taking.state === "passed" || build.taking.state === "merged") && review?.approval.state === "recorded";
+    if (!approvedBuild && !controls.pending && controls.receipt === null && controls.error === null) return null;
     let manualInstructions: React.ReactNode = null;
-    if (controls.eligible && run !== null && build !== null && build.taking.state === "passed" &&
+    if (controls.eligible && build !== null && build.taking.state === "passed" &&
       review?.approval.state === "recorded" && approvalReviewFresh(run) &&
       runBelongsToBuild(run.change_id, build, run) && run.state.type === "completed") {
       manualInstructions = <BuildMergeInstructions taking={build.taking} candidateCommit={run.candidate_commit}
