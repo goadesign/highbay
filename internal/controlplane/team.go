@@ -8,10 +8,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 	"time"
 
 	genproject "github.com/goadesign/surla/gen/project"
 	gensurla "github.com/goadesign/surla/gen/surla"
+	"github.com/goadesign/surla/internal/verifyrun"
 	"go.opentelemetry.io/otel/codes"
 )
 
@@ -25,7 +27,11 @@ type (
 		BindAssignments(AssignmentReader)
 		ReadTeam(context.Context) (*gensurla.TeamSnapshot, error)
 		ShowPane(context.Context, string) error
-		StartAgents(context.Context) (*gensurla.ProjectTeam, error)
+		StartAgents(context.Context, map[string]*gensurla.RoleAgentChoice) (*gensurla.ProjectTeam, error)
+		ListAgentOptions(context.Context) ([]*gensurla.InstalledAgentOption, error)
+		DismissNotice(context.Context, string) error
+		StopWorkers(context.Context, BuildIdentity) error
+		Close() error
 		RegisterBuildRoles(context.Context, BuildFolders) error
 		Supervise(context.Context, AssignmentReader) error
 	}
@@ -56,12 +62,29 @@ type (
 	// build and which unread assignment generations they owe. Unread holds a role
 	// only while that role has work and has not read its current assignment.
 	TeamAssignments struct {
+		// BuildIdentity selects the currently observed saved build, including a dropped one.
+		BuildIdentity *BuildIdentity
+		// Merged and Dropped end workers only for the exact observed build.
+		Merged  bool
+		Dropped bool
+		// ReportCheckInFlight prevents another test-writer invocation while its report is checked.
+		ReportCheckInFlight bool
+		// VerificationInFlight prevents a builder invocation while verification runs.
+		VerificationInFlight bool
+		// LatestCompletedRunID and LatestRunPassed identify the latest completed result for this build.
+		LatestCompletedRunID string
+		LatestRunPassed      bool
 		// BuilderHasWork reports whether the builder currently has work on the open build.
 		BuilderHasWork bool
 		// TestWriterHasWork reports whether the test writer currently has work on the open build.
 		TestWriterHasWork bool
 		// Unread holds the owed assignment generation for each role with work that has not read it.
 		Unread []AssignmentGeneration
+	}
+	// BuildIdentity distinguishes rebuilds of the same change without exposing work content.
+	BuildIdentity struct {
+		ChangeID  string
+		StartedAt time.Time
 	}
 	// AssignmentGeneration names one currently owed read. Generation is opaque to
 	// the team owner and contains no work text, identifiers or findings.
@@ -108,12 +131,12 @@ func (c *ControlPlane) ShowTeamPane(ctx context.Context, p *gensurla.ShowTeamPan
 
 // StartTeamAgents uses the project owner's existing repeatable team preparation
 // and maps its typed space conflict to the user transport's actionable error.
-func (c *ControlPlane) StartTeamAgents(ctx context.Context) (*gensurla.ProjectTeam, error) {
+func (c *ControlPlane) StartTeamAgents(ctx context.Context, p *gensurla.StartTeamAgentsPayload) (*gensurla.ProjectTeam, error) {
 	team, err := c.ownedTeam(ctx)
 	if err != nil {
 		return nil, err
 	}
-	result, err := team.StartAgents(ctx)
+	result, err := team.StartAgents(ctx, p.Choices)
 	var conflict *genproject.TeamSpaceConflict
 	if errors.As(err, &conflict) {
 		return nil, gensurla.MakeAmbiguousSpace(fmt.Errorf(
@@ -121,6 +144,42 @@ func (c *ControlPlane) StartTeamAgents(ctx context.Context) (*gensurla.ProjectTe
 		))
 	}
 	return result, err
+}
+
+// ListTeamAgentOptions discovers installed options only on the user's explicit read.
+func (c *ControlPlane) ListTeamAgentOptions(ctx context.Context) (*gensurla.ListTeamAgentOptionsResult, error) {
+	team, err := c.ownedTeam(ctx)
+	if err != nil {
+		return nil, err
+	}
+	agents, err := team.ListAgentOptions(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return &gensurla.ListTeamAgentOptionsResult{Agents: agents}, nil
+}
+
+// DismissTeamNotice persists a project notice preference through its team owner.
+func (c *ControlPlane) DismissTeamNotice(ctx context.Context, p *gensurla.DismissTeamNoticePayload) error {
+	team, err := c.ownedTeam(ctx)
+	if err != nil {
+		return err
+	}
+	return team.DismissNotice(ctx, p.Notice)
+}
+
+// observedTeamAssignments returns the supervisor's last complete observation.
+// It never probes Git, terminals or verification processes on a status read.
+func (c *ControlPlane) observedTeamAssignments() TeamAssignments {
+	c.teamFactsMu.RLock()
+	defer c.teamFactsMu.RUnlock()
+	result := c.teamFacts
+	result.Unread = slices.Clone(result.Unread)
+	if result.BuildIdentity != nil {
+		id := *result.BuildIdentity
+		result.BuildIdentity = &id
+	}
+	return result
 }
 
 // assignmentGeneration returns the hex SHA-256 of identity's JSON form.
@@ -207,8 +266,52 @@ func (c *ControlPlane) assignmentGenerations(ctx context.Context) (TeamAssignmen
 	result := TeamAssignments{
 		Unread: make([]AssignmentGeneration, 0, 2*len(builds)),
 	}
+	// Dropped builds no longer appear in work lists, but their exact identity
+	// must remain visible to lifecycle cleanup until a later build replaces it.
+	c.mu.RLock()
+	saved, found, loadErr := c.cards.loadOpenBuild()
+	if loadErr == nil && found {
+		var record storedChangeCard
+		var exists bool
+		record, exists, loadErr = c.cards.load(saved.ChangeID)
+		if loadErr == nil && (!exists || record.owner != c.team.Owner) {
+			loadErr = errors.New("open build has no owned change card")
+		}
+		if loadErr == nil {
+			var provenance madeFromRecord
+			var hasProvenance bool
+			provenance, hasProvenance, loadErr = c.cards.loadMadeFrom()
+			result.BuildIdentity = &BuildIdentity{ChangeID: saved.ChangeID, StartedAt: saved.StartedAt}
+			result.Dropped = hasProvenance && buildDropped(provenance, saved)
+			result.ReportCheckInFlight = !result.Dropped && saved.TestWriter.State == testsReported
+		}
+	}
+	c.mu.RUnlock()
+	if loadErr != nil {
+		return TeamAssignments{}, loadErr
+	}
 	for _, build := range builds {
 		saved := build.file
+		if c.runsDir != "" {
+			runs, err := verifyrun.List(c.runsDir, c.team.Owner, saved.ChangeID)
+			if err != nil {
+				return TeamAssignments{}, err
+			}
+			for _, run := range runs {
+				if run.Request.Plan.RequestRevision != saved.RequestRevision || run.Request.AcceptedAt.Before(saved.StartedAt) || !c.verificationInputsCurrent(build.record, saved, true, run.Request.Plan) {
+					continue
+				}
+				switch run.State.Kind {
+				case verifyrun.StateRunning:
+					result.VerificationInFlight = true
+				case verifyrun.StateCompleted:
+					if result.LatestCompletedRunID == "" {
+						result.LatestCompletedRunID = run.Request.RunID
+						result.LatestRunPassed = run.State.Report.Passed
+					}
+				}
+			}
+		}
 		builderWork, err := c.builderHasWork(c.team.Owner, build)
 		if err != nil {
 			return TeamAssignments{}, err
@@ -242,6 +345,20 @@ func (c *ControlPlane) assignmentGenerations(ctx context.Context) (TeamAssignmen
 				result.Unread = append(result.Unread, AssignmentGeneration{Role: "test_writer", Generation: generation})
 			}
 		}
+		if !result.BuilderHasWork {
+			state, err := c.startedBuild(ctx, c.team.Owner, build)
+			if err != nil {
+				return TeamAssignments{}, err
+			}
+			result.Merged = state.Taking.Kind() == gensurla.BuildTakingKindMerged
+			if result.Merged {
+				result.TestWriterHasWork = false
+				result.Unread = nil
+			}
+		}
 	}
+	c.teamFactsMu.Lock()
+	c.teamFacts = result
+	c.teamFactsMu.Unlock()
 	return result, nil
 }

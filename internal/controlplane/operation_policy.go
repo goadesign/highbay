@@ -35,6 +35,9 @@ const (
 // operationRoles is the only role-to-operation table. Missing operations are refused.
 var operationRoles = map[string][]CallerKind{
 	"ensure_team": {CallerManagement}, "identity": {CallerManagement}, "stop": {CallerManagement}, "browser_link": {CallerManagement},
+	"attach_guide": {CallerManagement}, "status": {CallerManagement},
+	"open_views": {CallerUser, CallerGuide}, "merge_change": {CallerUser},
+	"list_team_agent_options": {CallerUser}, "dismiss_team_notice": {CallerUser},
 	"hand_over_model_settings": {CallerManagement}, "confirm_intent": {CallerUser}, "approve_merge": {CallerUser}, "configure_model": {CallerUser},
 	"update_draft": {CallerGuide}, "drop_build": {CallerUser},
 	"propose_change": {CallerGuide}, "revise_change": {CallerGuide}, "refresh_story": {CallerGuide},
@@ -132,6 +135,10 @@ func applyOperationPolicy(e *gensurla.Endpoints, recorder trace.Tracer) {
 	e.GetTeam = wrap("get_team", e.GetTeam)
 	e.ShowTeamPane = wrap("show_team_pane", e.ShowTeamPane)
 	e.StartTeamAgents = wrap("start_team_agents", e.StartTeamAgents)
+	e.OpenViews = wrap("open_views", e.OpenViews)
+	e.MergeChange = wrap("merge_change", e.MergeChange)
+	e.ListTeamAgentOptions = wrap("list_team_agent_options", e.ListTeamAgentOptions)
+	e.DismissTeamNotice = wrap("dismiss_team_notice", e.DismissTeamNotice)
 	e.DropBuild = wrap("drop_build", e.DropBuild)
 	e.UpdateDraft = wrap("update_draft", e.UpdateDraft)
 	e.StartBuild = wrap("start_build", e.StartBuild)

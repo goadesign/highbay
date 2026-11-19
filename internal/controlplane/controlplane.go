@@ -186,6 +186,9 @@ type (
 		// Team is the required project owner and service composed before this
 		// control plane. New validates and copies the binding before serving.
 		Team *TeamBinding
+		// OpenViews mints and opens a browser session through the project credential owner.
+		// It must never return a private link in the operation's model-visible result.
+		OpenViews func(context.Context) error
 	}
 
 	// storedChangeCard holds a versioned Change Card alongside its authenticated
@@ -421,7 +424,12 @@ type (
 		reportWake chan struct{}
 		// reports is the project's report checker;
 		// reportWorker runs it and drains before stores close.
-		reports      *reportChecker
+		reports *reportChecker
+		// teamFacts is the latest complete supervisor observation; status reads it without probing.
+		teamFactsMu sync.RWMutex
+		teamFacts   TeamAssignments
+		// openViews is injected by the project composition root and owns private browser exchange.
+		openViews    func(context.Context) error
 		reportWorker sync.WaitGroup
 		// buildStartOps counts accepted starts, admitted through workspaceMu's
 		// existing shutdown barrier and drained before stores and evaluators close.
@@ -601,6 +609,7 @@ func newWithWorkspaceGitTimeout(
 		workingCopyTurn:        make(chan struct{}, 1),
 		reportWake:             make(chan struct{}, 1),
 		team:                   *opts.Team,
+		openViews:              opts.OpenViews,
 	}
 	if err := cp.restoreWorkspace(); err != nil {
 		return nil, errors.Join(err, cp.Close())

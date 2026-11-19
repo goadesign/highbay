@@ -342,7 +342,7 @@ func (c *ControlPlane) StartBuild(
 		result.Team = buildAgainTeamOutcome()
 		return result, nil
 	}
-	prepared, err := team.StartAgents(accepted)
+	prepared, err := team.StartAgents(accepted, p.Choices)
 	result.Team = buildTeamOutcome(prepared, err)
 	return result, nil
 }
