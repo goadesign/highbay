@@ -164,14 +164,14 @@ if (input.eligible) {
   if (input.mode === "merged_evaluator") {
     expect(page.text("#surla-frame-next").includes("Describe the next change when you are ready"), "merged evaluator run did not show next-change guidance");
     expect(page.text(".surla-approval-basis").includes("This saved result names the builder’s commit " + input.candidate + ". This build is merged into your branch; this verification covered these commits, not your branch after the merge."), "merged evaluator run lost its no-tests merged explanation");
-    expect(!page.text(".surla-approval-basis").includes("Review and approve this result before merging; a saved passing check alone does not grant approval."), "merged evaluator run kept the pre-merge fallback");
+    expect(!page.text(".surla-approval-basis").includes("Merging requires current recorded approval for these exact commits."), "merged evaluator run kept the pre-merge fallback");
   } else {
     expect(!page.text("#surla-frame-next").includes("Merge the verified commits") && !page.text("#surla-frame-next").includes("Describe the next change"), "unrelated historical evidence borrowed the current build's next step");
     if (input.mode === "prior_start_merged") {
       expect(page.text(".surla-approval-basis").includes("This saved result names the builder’s commit " + input.candidate + " and the tests’ commit " + "2".repeat(40) + ". This build is merged into your branch; this verification covered these commits, not your branch after the merge."), "prior-start run on a merged build lost the build-level merged state");
       expect(!page.text(".surla-approval-basis").includes("This run verified"), "prior-start run on a merged build claimed its own run was merged");
     } else if (input.mode !== "history_failure") {
-      expect(page.text(".surla-approval-basis").includes("This saved result names the builder’s commit " + input.candidate + " and the tests’ commit " + "2".repeat(40) + ". Review and approve this result before merging; a saved passing check alone does not grant approval."), "unmerged run lost its fallback");
+      expect(page.text(".surla-approval-basis").includes("This saved result names the builder’s commit " + input.candidate + " and the tests’ commit " + "2".repeat(40) + ". Merging requires current recorded approval for these exact commits."), "unmerged run lost its fallback");
     }
   }
   if (input.mode === "history_failure") {
@@ -211,7 +211,7 @@ if (input.mode !== "history_failure") {
     expect(page.text("#surla-cp4-details").includes("This saved result names the builder’s commit " + input.candidate + " and the tests’ commit " + "2".repeat(40) + ". This build is merged into your branch; this verification covered these commits, not your branch after the merge."), "check view lost the build-level merged state");
   }
   if (input.mode === "prior_start") {
-    expect(page.text("#surla-cp4-details").includes("This saved result names the builder’s commit " + input.candidate + " and the tests’ commit " + "2".repeat(40) + ". Review and approve this result before merging; a saved passing check alone does not grant approval."), "check view lost the unmerged fallback");
+    expect(page.text("#surla-cp4-details").includes("This saved result names the builder’s commit " + input.candidate + " and the tests’ commit " + "2".repeat(40) + ". Merging requires current recorded approval for these exact commits."), "check view lost the unmerged fallback");
   }
 }
 if (input.mode === "eligible") {
@@ -357,7 +357,7 @@ await until(() => page.$("#surla-cp5-approval") && page.$("#surla-cp5-merge") &&
 const record = page.text("#surla-cp5-approval");
 const mergedBasis = "This saved result names the builder’s commit " + input.candidate + " and the tests’ commit " + input.tests + ". This build is merged into your branch; this verification covered these commits, not your branch after the merge.";
 const otherMergedBasis = "This saved result names the builder’s commit " + input.otherCandidate + " and the tests’ commit " + input.tests + ". This build is merged into your branch; this verification covered these commits, not your branch after the merge.";
-const fallbackBasis = "This saved result names the builder’s commit " + input.candidate + " and the tests’ commit " + input.tests + ". Review and approve this result before merging; a saved passing check alone does not grant approval.";
+const fallbackBasis = "This saved result names the builder’s commit " + input.candidate + " and the tests’ commit " + input.tests + ". Merging requires current recorded approval for these exact commits.";
 await control(origin, "act", { key: "merge-builder" });
 await control(origin, "act", { key: "merge-tests" });
 await until(() => page.text("#surla-frame-next").includes("Describe the next change when you are ready"), "approval did not follow both real merges without reloading");
