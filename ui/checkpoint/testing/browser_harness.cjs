@@ -645,9 +645,9 @@ async function experienceScenario(input, facts, views) {
   const root = merge && input.experience !== "build_merge" ? "surla-approval-stage" : "surla-build-section";
   const prefix = "surla-build-agents";
   if (input.experience === "build_merge") {
-    const available = await until(views, "document.getElementById('surla-build-merge-feedback-reason')?.textContent.includes('Refresh merge state') === true && document.getElementById('surla-build-merge-feedback-refresh')?.disabled === false");
+    const available = await until(views, "Array.from(document.querySelectorAll('#surla-frame-next button')).some((node) => node.textContent === 'Check current approval') || document.getElementById('surla-build-merge')?.disabled === false");
     if (available.timed_out) throw new Error("Build did not offer its exact approved merge state");
-    await evaluate(views, "document.getElementById('surla-build-merge-feedback-refresh').click(), true");
+    await evaluate(views, "Array.from(document.querySelectorAll('#surla-frame-next button')).find((node) => node.textContent === 'Check current approval')?.click(), true");
   }
   let ready = await until(views, merge
     ? "document.getElementById('" + mergeId + "')?.disabled === false"
