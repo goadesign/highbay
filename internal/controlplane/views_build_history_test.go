@@ -134,7 +134,7 @@ func TestViewsPageHistoricalTakingUsesTheEligibleResultsOwnCommits(t *testing.T)
 				require.NoError(t, cp.cards.save(record))
 			})
 			eligible := mode == "eligible" || mode == "at_start" || mode == "after_start"
-			runPageScript(t, ps, map[string]any{"mode": mode, "old": old.RunID, "eligible": eligible, "candidate": candidate}, `
+			runPageScript(t, ps, map[string]any{"mode": mode, "old": old.RunID, "eligible": eligible, "candidate": candidate, "revision": card.RequestRevision, "digest": report.Digest}, `
 const history = "/changes/chg-history/verifications";
 if (input.mode === "history_failure") await control(origin, "reply", { key: "GET " + history, status: 503,
   body: { name: "unavailable", id: "history-read", message: "Saved verification history unavailable.", fault: false, temporary: true, timeout: false } });
@@ -146,6 +146,7 @@ await until(() => page.$("#surla-cp5-approval"), "the saved approval stage did n
 if (input.mode !== "history_failure") {
   expect(page.text("#surla-approval-stage").includes("Reading saved verification runs"), "held history was not explained");
   expect(!page.text("#surla-cp5-approval").includes("git merge"), "unread history invented build membership");
+  expect(!page.$("#surla-cp5-merge") || page.$("#surla-cp5-merge").disabled, "unread history authorized a merge");
   await control(origin, "release", { key: "GET " + history });
 }
 await until(() => page.sent("GET", history)[0].status !== undefined && !page.text("#surla-approval-stage").includes("Reading saved verification runs") && (!page.$("#surla-approval-stage").dataset.runId || !page.$("#surla-cp5-observation-status")), "history read did not settle");
@@ -156,17 +157,18 @@ if (input.eligible) {
   expect(page.text(".surla-approval-basis").includes("commit where this build started"), "eligible approval lost the rewrite warning");
 } else {
   expect(ownCommands(page.$(".surla-approval-basis") ?? page.$("#surla-cp5-approval")).length === 0, "unknown or prior-start approval claimed current-build membership");
+  expect(!page.$("#surla-cp5-merge") || page.$("#surla-cp5-merge").disabled, "unknown or prior-start approval authorized a merge");
   if (input.mode === "merged_evaluator") {
     expect(page.text("#surla-frame-next").includes("Describe the next change when you are ready"), "merged evaluator run did not show next-change guidance");
     expect(page.text(".surla-approval-basis").includes("This saved result names the builder’s commit " + input.candidate + ". This build is merged into your branch; this verification covered these commits, not your branch after the merge."), "merged evaluator run lost its no-tests merged explanation");
-    expect(!page.text(".surla-approval-basis").includes("Review the current build’s taking state before merging."), "merged evaluator run kept the pre-merge fallback");
+    expect(!page.text(".surla-approval-basis").includes("Review and approve this result before merging; a saved passing check alone does not grant approval."), "merged evaluator run kept the pre-merge fallback");
   } else {
     expect(!page.text("#surla-frame-next").includes("Merge the verified commits") && !page.text("#surla-frame-next").includes("Describe the next change"), "unrelated historical evidence borrowed the current build's next step");
     if (input.mode === "prior_start_merged") {
       expect(page.text(".surla-approval-basis").includes("This saved result names the builder’s commit " + input.candidate + " and the tests’ commit " + "2".repeat(40) + ". This build is merged into your branch; this verification covered these commits, not your branch after the merge."), "prior-start run on a merged build lost the build-level merged state");
       expect(!page.text(".surla-approval-basis").includes("This run verified"), "prior-start run on a merged build claimed its own run was merged");
     } else if (input.mode !== "history_failure") {
-      expect(page.text(".surla-approval-basis").includes("This saved result names the builder’s commit " + input.candidate + " and the tests’ commit " + "2".repeat(40) + ". Review the current build’s taking state before merging."), "unmerged run lost its fallback");
+      expect(page.text(".surla-approval-basis").includes("This saved result names the builder’s commit " + input.candidate + " and the tests’ commit " + "2".repeat(40) + ". Review and approve this result before merging; a saved passing check alone does not grant approval."), "unmerged run lost its fallback");
     }
   }
   if (input.mode === "history_failure") {
@@ -206,13 +208,53 @@ if (input.mode !== "history_failure") {
     expect(page.text("#surla-cp4-details").includes("This saved result names the builder’s commit " + input.candidate + " and the tests’ commit " + "2".repeat(40) + ". This build is merged into your branch; this verification covered these commits, not your branch after the merge."), "check view lost the build-level merged state");
   }
   if (input.mode === "prior_start") {
-    expect(page.text("#surla-cp4-details").includes("This saved result names the builder’s commit " + input.candidate + " and the tests’ commit " + "2".repeat(40) + ". Review the current build’s taking state before merging."), "check view lost the unmerged fallback");
+    expect(page.text("#surla-cp4-details").includes("This saved result names the builder’s commit " + input.candidate + " and the tests’ commit " + "2".repeat(40) + ". Review and approve this result before merging; a saved passing check alone does not grant approval."), "check view lost the unmerged fallback");
   }
   if (input.mode === "eligible") {
     const region = page.$("#surla-cp4-details"); region.open = true;
     await checkCommandRemoval(region, page.$("#surla-cp4-title"), null);
     await checkCommandRemoval(region, page.$("#surla-cp4-title"), page.$("#surla-load-verifications"));
   }
+}
+if (input.mode === "eligible") {
+  page.$("#surla-nav-build").click();
+  await until(() => page.$("#surla-build-merge") && !page.$("#surla-build-merge").disabled, "Build omitted the same live-approved merge action");
+  expect(page.text("#surla-build-merge") === "Merge into current branch", "Build merge action did not name its destination");
+  page.$("#surla-nav-cp5").click();
+  await until(() => page.$("#surla-cp5-merge") && !page.$("#surla-cp5-merge").disabled, "older approved result did not retain its merge action after a newer pass");
+  expect(page.text("#surla-cp5-merge") === "Merge into current branch", "merge action did not name its destination");
+  expect(page.$$(".surla-btn-primary").filter((button) => button.textContent === "Merge into current branch").length === 1, "approved view duplicated its primary merge action");
+  const manual = page.$("#surla-cp5-approval details.surla-build-merge");
+  expect(manual && !manual.open && manual.querySelector("summary").textContent === "Manual merge instructions", "manual commands were not secondary to the human action");
+  const mergePath = "/changes/chg-history/merge";
+  const refusals = [
+    ["dirty_worktree", "Tracked changes need your attention."],
+    ["detached_head", "Choose the branch that should receive this result."],
+    ["merge_conflict", "Git could not merge this result."],
+    ["not_approved", "This result no longer has current approval."],
+    ["working_copy_busy", "Another project operation is using the working copy."],
+    ["unavailable", "The merge outcome could not be confirmed."],
+  ];
+  for (const [name, message] of refusals) {
+    const before = page.sent("POST", mergePath).length;
+    await control(origin, "reply", { key: "POST " + mergePath, status: name === "unavailable" ? 503 : 409, body: { name, message: "Owner diagnostic for " + name } });
+    page.$("#surla-cp5-merge").click();
+    await until(() => page.sent("POST", mergePath).length === before + 1 && page.text("#surla-cp5-merge-feedback-error").includes(message), "merge refusal did not explain recovery for " + name);
+    const request = page.sent("POST", mergePath).at(-1).body;
+    expect(request.request_revision === input.revision && request.candidate_commit === input.candidate && request.report_digest === input.digest && Object.keys(request).length === 3, "merge borrowed the newest run or sent a different approval tuple");
+    expect(page.text("#surla-cp5-merge-feedback-error").includes("Owner diagnostic for " + name), "merge refusal discarded owner details");
+    const reads = page.sent("GET", "/changes/chg-history/build").length;
+    page.$("#surla-cp5-merge-feedback-refresh").click();
+    await until(() => page.sent("GET", "/changes/chg-history/build").length > reads && page.$("#surla-cp5-merge") && !page.$("#surla-cp5-merge").disabled, "read-only refresh did not restore merge admission for " + name);
+    await sleep(50);
+    expect(page.sent("POST", mergePath).length === before + 1, "refresh or recovery retried a merge for " + name);
+  }
+  await control(origin, "reply", { key: "POST " + mergePath, status: 200, body: { branch: "feature/refunds", head_commit: "9".repeat(40) } });
+  page.$("#surla-cp5-merge").click();
+  await until(() => page.$("#surla-cp5-merge-feedback-receipt"), "successful merge omitted its receipt");
+  const receipt = page.text("#surla-cp5-merge-feedback-receipt");
+  expect(receipt.includes("feature/refunds") && receipt.includes("9".repeat(12)) && receipt.includes("Nothing was deployed"), "receipt invented a branch, lost the resulting commit or claimed deployment");
+  expect(page.text("#surla-cp5-merge-feedback-receipt-details").includes("9".repeat(40)), "receipt lost the complete returned commit");
 }
 page.close();
 `)
@@ -299,7 +341,7 @@ await until(() => page.$("#surla-cp5-approval") && page.text("#surla-frame-next"
 const record = page.text("#surla-cp5-approval");
 const mergedBasis = "This saved result names the builder’s commit " + input.candidate + " and the tests’ commit " + input.tests + ". This build is merged into your branch; this verification covered these commits, not your branch after the merge.";
 const otherMergedBasis = "This saved result names the builder’s commit " + input.otherCandidate + " and the tests’ commit " + input.tests + ". This build is merged into your branch; this verification covered these commits, not your branch after the merge.";
-const fallbackBasis = "This saved result names the builder’s commit " + input.candidate + " and the tests’ commit " + input.tests + ". Review the current build’s taking state before merging.";
+const fallbackBasis = "This saved result names the builder’s commit " + input.candidate + " and the tests’ commit " + input.tests + ". Review and approve this result before merging; a saved passing check alone does not grant approval.";
 await control(origin, "act", { key: "merge-builder" });
 await control(origin, "act", { key: "merge-tests" });
 await until(() => page.text("#surla-frame-next").includes("Describe the next change when you are ready"), "approval did not follow both real merges without reloading");

@@ -4,6 +4,8 @@ package controlplane
 import (
 	"context"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 	"time"
 
 	gensurla "github.com/goadesign/surla/gen/surla"
@@ -108,6 +110,7 @@ await until(() => page.$("#surla-build-agents-builder-client") && !page.$("#surl
 expect(JSON.parse(page.$("#surla-build-agents-builder-client").value)[0] === "codex", "builder did not use installed family");
 expect(Boolean(page.$("#surla-build-agents-test_writer-client")) === !input.stored, "picker ignored the owner-returned build roles");
 if (!input.stored) expect(JSON.parse(page.$("#surla-build-agents-test_writer-client").value)[0] === "codex", "single family was not reused for test writer");
+expect(Boolean(page.$("#surla-build-agents-notice-single_agent_family")) === !input.stored, "single-family advice ignored whether two roles are required");
 page.$("#surla-build-start").click();
 await until(() => page.sent("POST", "/changes/chg-single/build").length === 1, "single-family Build did not submit");
 const choices = page.sent("POST", "/changes/chg-single/build")[0].body.choices;
@@ -153,6 +156,47 @@ expect(choices.builder.yolo === !input.openCode && choices.test_writer.yolo === 
 expect(page.sent("POST", "/team/agents").length === 0, "picker mounted a separate worker launch");
 page.close();
 `)
+		})
+	}
+}
+
+// TestViewsPageRecommendationsDismissOnlyAfterSave exercises the generated
+// dismissal API and failed-save recovery without starting workers.
+func TestViewsPageRecommendationsDismissOnlyAfterSave(t *testing.T) {
+	for _, notice := range []string{"single_agent_family", "outside_herdr", "herdr_unavailable"} {
+		t.Run(notice, func(t *testing.T) {
+			snapshot := pageTeamSnapshot("working")
+			if notice == "outside_herdr" {
+				snapshot.HerdrMode = "available"
+			} else if notice == "herdr_unavailable" {
+				snapshot.HerdrMode = "unavailable"
+			}
+			f := &teamServiceFixture{snapshot: snapshot, options: func(context.Context) ([]*gensurla.InstalledAgentOption, error) {
+				return fixtureAgentOptions()[:1], nil
+			}}
+			cp := newBuildControlPlane(t, Options{Team: &TeamBinding{Owner: pageOwner, Service: f}})
+			buildableChange(t, cp, "chg-notice")
+			ps := startPageServer(t, cp)
+			runPageScript(t, ps, map[string]any{"notice": notice}, `
+const page = await openPage(origin, { link: input.link });
+const id = "#surla-build-agents-notice-" + input.notice, path = "/team/notices/dismiss";
+await until(() => page.$(id + "-dismiss"), "recommendation did not appear");
+await control(origin, "reply", { key: "POST " + path, status: 503, body: { name: "unavailable", message: "Preference owner unavailable." } });
+page.$(id + "-dismiss").click();
+await until(() => page.text(id).includes("Could not save this dismissal"), "failed dismissal hid the recommendation");
+expect(page.text(id + "-dismiss") === "Retry dismissal", "dismissal refusal omitted an actionable retry");
+page.$(id + "-dismiss").click();
+await until(() => !page.$(id), "successful dismissal did not remove the recommendation");
+expect(page.sent("POST", path).length === 2 && page.sent("POST", path).every((request) => request.body.notice === input.notice), "dismissal changed notice identity or retried automatically");
+page.$("#surla-nav-team").click();
+await until(() => page.$("#surla-team-agents"), "Team did not open");
+expect(!page.$("#surla-team-agents-notice-" + input.notice), "saved dismissal did not follow navigation");
+expect(page.sent("POST", "/changes/chg-notice/build").length === 0 && page.sent("POST", "/team/agents").length === 0, "notice dismissal launched workers");
+page.close();
+`)
+			f.mu.Lock()
+			assert.Contains(t, f.snapshot.DismissedNotices, notice)
+			f.mu.Unlock()
 		})
 	}
 }
