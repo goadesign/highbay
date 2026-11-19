@@ -70,6 +70,10 @@ Usage:
 
 Commands:
 
+  up              register Surla with this computer's coding agents (setup -global),
+                  then start Chorus when it is installed
+  setup -global   register surla stdio and the /surla skill with every coding agent
+                  found here, and install the companion window when Herdr is present
   init            create a starter service with an agent and an evaluator suite
   status          read this project's running server, checkpoint and team status
   stop            stop this project's server in order
@@ -97,6 +101,7 @@ Other commands:
   approve         check that a saved verification report passed and matches the
                   change being promoted
   version         print the module version this surla binary was built from
+  stdio           the MCP server coding agents start after setup; not run by hand
   help            print this text, or "surla help <command>" for a command's flags
 `
 
@@ -153,6 +158,12 @@ func runWithRuntime(args []string, stdout io.Writer, runtime projectRuntime) err
 // subcommand's flag parsing print its flags and return flag.ErrHelp.
 func dispatch(sub string, args []string, stdout io.Writer, runtime projectRuntime) error {
 	switch sub {
+	case "up":
+		return runUp(args, stdout)
+	case "setup":
+		return runSetup(args, stdout)
+	case "stdio":
+		return runStdio(args, os.Stdin, stdout, os.Stderr, runtime)
 	case "init":
 		return runtime.init(args, stdout)
 	case "serve":
