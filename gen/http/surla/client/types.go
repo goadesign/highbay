@@ -3670,10 +3670,48 @@ type StartTeamAgentsForbiddenResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
+// ListTeamAgentOptionsTeamUnavailableResponseBody is the type of the "surla"
+// service "list_team_agent_options" endpoint HTTP response body for the
+// "team_unavailable" error.
+type ListTeamAgentOptionsTeamUnavailableResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
 // ListTeamAgentOptionsForbiddenResponseBody is the type of the "surla" service
 // "list_team_agent_options" endpoint HTTP response body for the "forbidden"
 // error.
 type ListTeamAgentOptionsForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// DismissTeamNoticeTeamUnavailableResponseBody is the type of the "surla"
+// service "dismiss_team_notice" endpoint HTTP response body for the
+// "team_unavailable" error.
+type DismissTeamNoticeTeamUnavailableResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -12627,9 +12665,39 @@ func NewListTeamAgentOptionsResultOK(body *ListTeamAgentOptionsResponseBody) *su
 	return v
 }
 
+// NewListTeamAgentOptionsTeamUnavailable builds a surla service
+// list_team_agent_options endpoint team_unavailable error.
+func NewListTeamAgentOptionsTeamUnavailable(body *ListTeamAgentOptionsTeamUnavailableResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
 // NewListTeamAgentOptionsForbidden builds a surla service
 // list_team_agent_options endpoint forbidden error.
 func NewListTeamAgentOptionsForbidden(body *ListTeamAgentOptionsForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewDismissTeamNoticeTeamUnavailable builds a surla service
+// dismiss_team_notice endpoint team_unavailable error.
+func NewDismissTeamNoticeTeamUnavailable(body *DismissTeamNoticeTeamUnavailableResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -18776,9 +18844,57 @@ func ValidateStartTeamAgentsForbiddenResponseBody(body *StartTeamAgentsForbidden
 	return
 }
 
+// ValidateListTeamAgentOptionsTeamUnavailableResponseBody runs the validations
+// defined on ListTeamAgentOptionsTeamUnavailableResponseBody
+func ValidateListTeamAgentOptionsTeamUnavailableResponseBody(body *ListTeamAgentOptionsTeamUnavailableResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
 // ValidateListTeamAgentOptionsForbiddenResponseBody runs the validations
 // defined on ListTeamAgentOptionsForbiddenResponseBody
 func ValidateListTeamAgentOptionsForbiddenResponseBody(body *ListTeamAgentOptionsForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateDismissTeamNoticeTeamUnavailableResponseBody runs the validations
+// defined on DismissTeamNoticeTeamUnavailableResponseBody
+func ValidateDismissTeamNoticeTeamUnavailableResponseBody(body *DismissTeamNoticeTeamUnavailableResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}

@@ -70,7 +70,8 @@ type (
 		ReportCheckInFlight bool
 		// VerificationInFlight prevents a builder invocation while verification runs.
 		VerificationInFlight bool
-		// LatestCompletedRunID and LatestRunPassed identify the latest completed result for this build.
+		// LatestCompletedRunID identifies the latest finished run, including a run
+		// that could not produce a report. LatestRunPassed is false for that failure.
 		LatestCompletedRunID string
 		LatestRunPassed      bool
 		// BuilderHasWork reports whether the builder currently has work on the open build.
@@ -289,10 +290,10 @@ func (c *ControlPlane) assignmentGenerations(ctx context.Context) (TeamAssignmen
 				switch run.State.Kind {
 				case verifyrun.StateRunning:
 					result.VerificationInFlight = true
-				case verifyrun.StateCompleted:
+				case verifyrun.StateCompleted, verifyrun.StateNotCompleted:
 					if result.LatestCompletedRunID == "" {
 						result.LatestCompletedRunID = run.Request.RunID
-						result.LatestRunPassed = run.State.Report.Passed
+						result.LatestRunPassed = run.State.Kind == verifyrun.StateCompleted && run.State.Report.Passed
 					}
 				}
 			}
@@ -330,16 +331,17 @@ func (c *ControlPlane) assignmentGenerations(ctx context.Context) (TeamAssignmen
 				result.Unread = append(result.Unread, AssignmentGeneration{Role: "test_writer", Generation: generation})
 			}
 		}
-		if !result.BuilderHasWork {
-			state, err := c.startedBuild(ctx, c.team.Owner, build)
-			if err != nil {
-				return TeamAssignments{}, err
-			}
-			result.Merged = state.Taking.Kind() == gensurla.BuildTakingKindMerged
-			if result.Merged {
-				result.TestWriterHasWork = false
-				result.Unread = nil
-			}
+		// A historical pass may be merged after agreement or test inputs change.
+		// Merge completion belongs to the build, independently of current work.
+		state, err := c.startedBuild(ctx, c.team.Owner, build)
+		if err != nil {
+			return TeamAssignments{}, err
+		}
+		result.Merged = state.Taking.Kind() == gensurla.BuildTakingKindMerged
+		if result.Merged {
+			result.BuilderHasWork = false
+			result.TestWriterHasWork = false
+			result.Unread = nil
 		}
 	}
 	return result, nil

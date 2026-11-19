@@ -4462,6 +4462,7 @@ func (c *Client) BuildListTeamAgentOptionsRequest(ctx context.Context, v any) (*
 // by the surla list_team_agent_options endpoint. restoreBody controls whether
 // the response body should be restored after having been read.
 // DecodeListTeamAgentOptionsResponse may return the following errors:
+//   - "team_unavailable" (type *goa.ServiceError): http.StatusServiceUnavailable
 //   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
 //   - error: internal error
 func DecodeListTeamAgentOptionsResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
@@ -4500,6 +4501,20 @@ func DecodeListTeamAgentOptionsResponse(decoder func(*http.Response) goahttp.Dec
 			}
 			res := NewListTeamAgentOptionsResultOK(&body)
 			return res, nil
+		case http.StatusServiceUnavailable:
+			var (
+				body ListTeamAgentOptionsTeamUnavailableResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("surla", "list_team_agent_options", err)
+			}
+			err = ValidateListTeamAgentOptionsTeamUnavailableResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("surla", "list_team_agent_options", err)
+			}
+			return nil, NewListTeamAgentOptionsTeamUnavailable(&body)
 		case http.StatusForbidden:
 			var (
 				body ListTeamAgentOptionsForbiddenResponseBody
@@ -4559,6 +4574,7 @@ func EncodeDismissTeamNoticeRequest(encoder func(*http.Request) goahttp.Encoder)
 // the surla dismiss_team_notice endpoint. restoreBody controls whether the
 // response body should be restored after having been read.
 // DecodeDismissTeamNoticeResponse may return the following errors:
+//   - "team_unavailable" (type *goa.ServiceError): http.StatusServiceUnavailable
 //   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
 //   - error: internal error
 func DecodeDismissTeamNoticeResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
@@ -4584,6 +4600,20 @@ func DecodeDismissTeamNoticeResponse(decoder func(*http.Response) goahttp.Decode
 		switch resp.StatusCode {
 		case http.StatusNoContent:
 			return nil, nil
+		case http.StatusServiceUnavailable:
+			var (
+				body DismissTeamNoticeTeamUnavailableResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("surla", "dismiss_team_notice", err)
+			}
+			err = ValidateDismissTeamNoticeTeamUnavailableResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("surla", "dismiss_team_notice", err)
+			}
+			return nil, NewDismissTeamNoticeTeamUnavailable(&body)
 		case http.StatusForbidden:
 			var (
 				body DismissTeamNoticeForbiddenResponseBody

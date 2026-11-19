@@ -625,6 +625,7 @@ func (c *Client) StartTeamAgents(ctx context.Context, p *StartTeamAgentsPayload)
 // ListTeamAgentOptions calls the "list_team_agent_options" endpoint of the
 // "surla" service.
 // ListTeamAgentOptions may return the following errors:
+//   - "team_unavailable" (type *goa.ServiceError): Installed coding-agent discovery could not be completed.
 //   - "forbidden" (type *goa.ServiceError): The authenticated caller may not perform this operation or does not own the resource.
 //   - error: internal error
 func (c *Client) ListTeamAgentOptions(ctx context.Context) (res *ListTeamAgentOptionsResult, err error) {
@@ -639,6 +640,7 @@ func (c *Client) ListTeamAgentOptions(ctx context.Context) (res *ListTeamAgentOp
 // DismissTeamNotice calls the "dismiss_team_notice" endpoint of the "surla"
 // service.
 // DismissTeamNotice may return the following errors:
+//   - "team_unavailable" (type *goa.ServiceError): The project notice preference could not be saved.
 //   - "forbidden" (type *goa.ServiceError): The authenticated caller may not perform this operation or does not own the resource.
 //   - error: internal error
 func (c *Client) DismissTeamNotice(ctx context.Context, p *DismissTeamNoticePayload) (err error) {

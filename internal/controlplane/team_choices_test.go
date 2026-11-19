@@ -36,6 +36,7 @@ func TestTeamChoicesUseTheGeneratedContract(t *testing.T) {
 		assert.Len(t, f.calls, before)
 	}
 	response = httptest.NewRecorder()
-	handler.ServeHTTP(response, httptest.NewRequest(http.MethodPost, "/changes/change/build", strings.NewReader(`{"change_id":"change","request_revision":"revision","choices":{"guide":{"client":"codex","program":"/fixture/codex","yolo":false}}}`)))
+	handler.ServeHTTP(response, httptest.NewRequest(http.MethodPost, "/changes/change/build", strings.NewReader(`{"request_revision":"revision","choices":{"guide":{"client":"codex","program":"/fixture/codex","yolo":false}}}`)))
 	assert.Equal(t, http.StatusBadRequest, response.Code, response.Body.String())
+	assert.Contains(t, response.Body.String(), "guide")
 }

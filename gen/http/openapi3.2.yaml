@@ -15232,6 +15232,19 @@ paths:
                                 name: forbidden
                                 temporary: false
                                 timeout: false
+                "503":
+                    description: 'team_unavailable: Installed coding-agent discovery could not be completed.'
+                    content:
+                        application/vnd.goa.error:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                            example:
+                                fault: false
+                                id: 123abc
+                                message: parameter 'p' must be an integer
+                                name: team_unavailable
+                                temporary: false
+                                timeout: false
     /team/agents:
         post:
             tags:
@@ -15380,6 +15393,19 @@ paths:
                                 id: 123abc
                                 message: parameter 'p' must be an integer
                                 name: forbidden
+                                temporary: false
+                                timeout: false
+                "503":
+                    description: 'team_unavailable: The project notice preference could not be saved.'
+                    content:
+                        application/vnd.goa.error:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                            example:
+                                fault: false
+                                id: 123abc
+                                message: parameter 'p' must be an integer
+                                name: team_unavailable
                                 temporary: false
                                 timeout: false
     /team/pane:

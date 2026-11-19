@@ -3670,10 +3670,48 @@ type StartTeamAgentsForbiddenResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// ListTeamAgentOptionsTeamUnavailableResponseBody is the type of the "surla"
+// service "list_team_agent_options" endpoint HTTP response body for the
+// "team_unavailable" error.
+type ListTeamAgentOptionsTeamUnavailableResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // ListTeamAgentOptionsForbiddenResponseBody is the type of the "surla" service
 // "list_team_agent_options" endpoint HTTP response body for the "forbidden"
 // error.
 type ListTeamAgentOptionsForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DismissTeamNoticeTeamUnavailableResponseBody is the type of the "surla"
+// service "dismiss_team_notice" endpoint HTTP response body for the
+// "team_unavailable" error.
+type DismissTeamNoticeTeamUnavailableResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -12805,11 +12843,41 @@ func NewStartTeamAgentsForbiddenResponseBody(res *goa.ServiceError) *StartTeamAg
 	return body
 }
 
+// NewListTeamAgentOptionsTeamUnavailableResponseBody builds the HTTP response
+// body from the result of the "list_team_agent_options" endpoint of the
+// "surla" service.
+func NewListTeamAgentOptionsTeamUnavailableResponseBody(res *goa.ServiceError) *ListTeamAgentOptionsTeamUnavailableResponseBody {
+	body := &ListTeamAgentOptionsTeamUnavailableResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewListTeamAgentOptionsForbiddenResponseBody builds the HTTP response body
 // from the result of the "list_team_agent_options" endpoint of the "surla"
 // service.
 func NewListTeamAgentOptionsForbiddenResponseBody(res *goa.ServiceError) *ListTeamAgentOptionsForbiddenResponseBody {
 	body := &ListTeamAgentOptionsForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDismissTeamNoticeTeamUnavailableResponseBody builds the HTTP response
+// body from the result of the "dismiss_team_notice" endpoint of the "surla"
+// service.
+func NewDismissTeamNoticeTeamUnavailableResponseBody(res *goa.ServiceError) *DismissTeamNoticeTeamUnavailableResponseBody {
+	body := &DismissTeamNoticeTeamUnavailableResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,

@@ -80,7 +80,12 @@ func teamMethods() {
 			Attribute("agents", ArrayOf(InstalledAgentOption), "Installed coding agents.")
 			Required("agents")
 		})
-		HTTP(func() { GET("/team/agent-options"); Response(StatusOK) })
+		Error("team_unavailable", ErrorResult, "Installed coding-agent discovery could not be completed.")
+		HTTP(func() {
+			GET("/team/agent-options")
+			Response(StatusOK)
+			Response("team_unavailable", StatusServiceUnavailable)
+		})
 	})
 	Method("dismiss_team_notice", func() {
 		Description("Save the user's dismissal of one project notice without changing agent capability or startup behavior.")
@@ -88,6 +93,11 @@ func teamMethods() {
 			Attribute("notice", String, "Notice to dismiss.", func() { Enum("single_agent_family", "outside_herdr", "herdr_unavailable") })
 			Required("notice")
 		})
-		HTTP(func() { POST("/team/notices/dismiss"); Response(StatusNoContent) })
+		Error("team_unavailable", ErrorResult, "The project notice preference could not be saved.")
+		HTTP(func() {
+			POST("/team/notices/dismiss")
+			Response(StatusNoContent)
+			Response("team_unavailable", StatusServiceUnavailable)
+		})
 	})
 }
