@@ -78,7 +78,8 @@ func teamMethods() {
 		Description("Discover installed coding-agent executables and their supported options on demand. Only the user may call it; ordinary team reads never run discovery subprocesses.")
 		Result(func() {
 			Attribute("agents", ArrayOf(InstalledAgentOption), "Installed coding agents.")
-			Required("agents")
+			Attribute("build_roles", ArrayOf(String, func() { Enum("builder", "test_writer") }), "Worker roles a new build requires with the project's current verification settings.", func() { MinLength(1); MaxLength(2) })
+			Required("agents", "build_roles")
 		})
 		Error("team_unavailable", ErrorResult, "Installed coding-agent discovery could not be completed.")
 		HTTP(func() {

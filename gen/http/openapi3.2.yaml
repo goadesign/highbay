@@ -15219,6 +15219,8 @@ paths:
                                       title: Voluptas et ut nulla.
                                       yolo_effect: Tempora rerum exercitationem quo nobis.
                                       yolo_supported: false
+                                build_roles:
+                                    - test_writer
                 "403":
                     description: 'forbidden: The authenticated caller may not perform this operation or does not own the resource.'
                     content:
@@ -23291,6 +23293,19 @@ components:
                           title: Voluptas et ut nulla.
                           yolo_effect: Tempora rerum exercitationem quo nobis.
                           yolo_supported: false
+                build_roles:
+                    type: array
+                    items:
+                        type: string
+                        example: test_writer
+                        enum:
+                            - builder
+                            - test_writer
+                    description: Worker roles a new build requires with the project's current verification settings.
+                    example:
+                        - test_writer
+                    minItems: 1
+                    maxItems: 2
             example:
                 agents:
                     - client: gemini
@@ -23357,8 +23372,11 @@ components:
                       title: Voluptas et ut nulla.
                       yolo_effect: Tempora rerum exercitationem quo nobis.
                       yolo_supported: false
+                build_roles:
+                    - test_writer
             required:
                 - agents
+                - build_roles
         LivePromptItem:
             type: object
             properties:
