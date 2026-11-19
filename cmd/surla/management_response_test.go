@@ -342,56 +342,50 @@ func TestManagementLocalFailuresPreserveIdentity(t *testing.T) {
 	assert.ErrorContains(t, err, "decode project state")
 }
 
-// TestStartPrintsProjectTeamStep proves the CLI preserves the owner's sentence for every dialog state.
-func TestStartPrintsProjectTeamStep(t *testing.T) {
-	for _, dialog := range []string{"opened", "already_open", "not_needed"} {
-		t.Run(dialog, func(t *testing.T) {
-			isolateServeWorkspace(t)
-			isolateProviderFamilies(t)
-			state, err := fixtureProjectState("")
-			require.NoError(t, err)
-			cp, err := openFixtureProjectCards(state)
-			require.NoError(t, err)
-			t.Cleanup(func() { assert.NoError(t, cp.Close()) })
-			step := "Owner's next step for " + dialog + `: choose "fixture-agent".`
-			build := testBuild(t)
-			api := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				w.Header().Set("Content-Type", "application/json")
-				switch r.URL.Path {
-				case "/project/identity":
-					assert.NoError(t, json.NewEncoder(w).Encode(map[string]string{
-						"project_id": state.Record.ID, "directory": state.Record.Directory, "owner": state.Record.Owner, "build": build,
-					}))
-				case "/project/team":
-					assert.NoError(t, json.NewEncoder(w).Encode(map[string]any{
-						"team": "fixture-team", "space": "fixture-space", "roles": []any{}, "dialog": dialog, "step": step,
-					}))
-				case "/cp1/model/settings":
-					_, err := io.WriteString(w, noModelSettings)
-					assert.NoError(t, err)
-				case "/project/browser-link":
-					w.WriteHeader(http.StatusCreated)
-					assert.NoError(t, json.NewEncoder(w).Encode(map[string]string{
-						"url":        state.Origin() + "/views#link=" + strings.Repeat("a", 64),
-						"expires_at": time.Now().Add(time.Minute).Format(time.RFC3339Nano),
-					}))
-				default:
-					t.Errorf("unexpected request: %s", r.URL.Path)
-				}
+// TestBareStartOpensViewsWithoutTeamOperations covers the management API
+// calls a bare CLI start makes after authenticating the project.
+func TestBareStartOpensViewsWithoutTeamOperations(t *testing.T) {
+	isolateServeWorkspace(t)
+	isolateProviderFamilies(t)
+	state, err := fixtureProjectState("")
+	require.NoError(t, err)
+	cp, err := openFixtureProjectCards(state)
+	require.NoError(t, err)
+	t.Cleanup(func() { assert.NoError(t, cp.Close()) })
+	build := testBuild(t)
+	api := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case "/project/identity":
+			assert.NoError(t, json.NewEncoder(w).Encode(map[string]string{
+				"project_id": state.Record.ID, "directory": state.Record.Directory, "owner": state.Record.Owner, "build": build,
 			}))
-			require.NoError(t, api.Listener.Close())
-			api.Listener, err = net.Listen("tcp", state.Address())
-			require.NoError(t, err)
-			api.Start()
-			t.Cleanup(api.Close)
-			require.NoError(t, state.SaveRunning(project.Running{ManagementCredential: strings.Repeat("b", 64)}))
-			runtime := testProjectRuntime()
-			bindFixtureTeamEffects(&runtime)
-			runtime.preflight = func(bool) error { return nil }
-			runtime.openViews = func(context.Context, string) error { return nil }
-			var output bytes.Buffer
-			require.NoError(t, runtime.start(&output))
-			assert.Contains(t, output.String(), "Team fixture-team.\n"+step+"\n")
-		})
-	}
+		case "/cp1/model/settings":
+			_, err := io.WriteString(w, noModelSettings)
+			assert.NoError(t, err)
+		case "/project/browser-link":
+			w.WriteHeader(http.StatusCreated)
+			assert.NoError(t, json.NewEncoder(w).Encode(map[string]string{
+				"url":        state.Origin() + "/views#link=" + strings.Repeat("a", 64),
+				"expires_at": time.Now().Add(time.Minute).Format(time.RFC3339Nano),
+			}))
+		default:
+			t.Errorf("unexpected request: %s", r.URL.Path)
+		}
+	}))
+	require.NoError(t, api.Listener.Close())
+	api.Listener, err = net.Listen("tcp", state.Address())
+	require.NoError(t, err)
+	api.Start()
+	t.Cleanup(api.Close)
+	require.NoError(t, state.SaveRunning(project.Running{ManagementCredential: strings.Repeat("b", 64)}))
+	runtime := testProjectRuntime()
+	bindFixtureTeamEffects(&runtime)
+	runtime.preflight = func(bool) error { return nil }
+	opened := ""
+	runtime.openViews = func(_ context.Context, link string) error { opened = link; return nil }
+	var output bytes.Buffer
+	require.NoError(t, runtime.start(&output))
+	assert.Equal(t, state.Origin()+"/views#link="+strings.Repeat("a", 64), opened)
+	assert.NotContains(t, output.String(), "#link=")
 }

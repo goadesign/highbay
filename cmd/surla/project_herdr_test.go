@@ -19,6 +19,7 @@ import (
 	"testing"
 	"time"
 
+	genproject "github.com/goadesign/surla/gen/project"
 	"github.com/goadesign/surla/internal/controlplane"
 	"github.com/goadesign/surla/internal/project"
 	"github.com/stretchr/testify/assert"
@@ -31,7 +32,6 @@ func init() {
 	herdrTestRuntime = func() projectRuntime {
 		runtime := productionProjectRuntime()
 		runtime.configRoot = testProjectRuntime().configRoot
-		runtime.preflight = func(openBrowser bool) error { return preflightProjectStart(projectHerdrProgram, openBrowser) }
 		bindFixtureTeamEffects(&runtime)
 		return runtime
 	}
@@ -167,7 +167,8 @@ func TestHC(t *testing.T) {
 	require.NoError(t, err)
 	client := projectClient(state)
 	launch := func(ctx context.Context, state *project.State) (string, error) {
-		return startProjectTerminal(ctx, state, func() (string, error) { return hc, nil })
+		terminal, err := startProjectTerminal(ctx, state, func() (string, error) { return hc, nil })
+		return "the project server in Herdr terminal " + terminal, err
 	}
 
 	current = state
@@ -187,10 +188,10 @@ func TestHC(t *testing.T) {
 	assert.Nil(t, terminal.Parent)
 	management := running.ManagementCredential
 	assert.False(t, strings.Contains(string(metadata), management), "management credential must not appear in terminal metadata")
-	// Normal start registered the guide through its owner.
-	team, err := client.EnsureTeam(ctx)
+	// An explicit enablement registers the guide after the dialog-free start.
+	guide, err := client.AttachGuide(ctx, &genproject.AttachGuidePayload{})
 	require.NoError(t, err)
-	credential, err := os.ReadFile(state.AgentFile(team.Roles[0].Handle))
+	credential, err := os.ReadFile(state.AgentFile(guide.Handle))
 	require.NoError(t, err)
 	assert.False(t, strings.Contains(string(metadata), string(credential)), "agent credential must not appear in terminal metadata")
 	// Inspect current metadata and server output after agent issuance, never printing credentials.

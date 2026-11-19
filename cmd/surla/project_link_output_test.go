@@ -5,7 +5,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"net/http"
 	"net/url"
 	"os"
@@ -70,15 +69,6 @@ func TestPrintedProjectLinksStartsAndReattaches(t *testing.T) {
 	kept, err := os.ReadFile("README.md")
 	require.NoError(t, err)
 	assert.Equal(t, "Existing project files.\n", string(kept))
-	// Team failure preserves the usable page link and the existing nonzero result.
-	startTeam := runtime.startTeamPrograms
-	runtime.startTeamPrograms = func(context.Context) error { return errors.New("team fixture unavailable") }
-	var partial, diagnostics bytes.Buffer
-	assert.ErrorContains(t, runtime.printLink(&partial, &diagnostics), "team fixture unavailable")
-	var usable genprojectserver.BrowserLinkResponseBody
-	require.NoError(t, json.Unmarshal(partial.Bytes(), &usable))
-	assert.Contains(t, usable.URL, "/views#link=")
-	runtime.startTeamPrograms = startTeam
 	// The original route remains available and opens one new link on the same server.
 	runtime.preflight = func(openBrowser bool) error { assert.True(t, openBrowser); return nil }
 	var output bytes.Buffer
@@ -93,9 +83,7 @@ func TestPrintedLinkNeedsNoOpener(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(bin, "git"), []byte("#!/bin/sh\nexit 0\n"), 0o700))
 	t.Setenv("PATH", bin)
 	runtime := testProjectRuntime()
-	runtime.preflight = func(openBrowser bool) error {
-		return preflightProjectStart(func() (string, error) { return "owned-hc", nil }, openBrowser)
-	}
+	runtime.preflight = preflightProjectStart
 	runtime.configRoot = func() (string, error) { return "", assert.AnError }
 	var output bytes.Buffer
 	err := runWithRuntime([]string{"--print-link"}, &output, runtime)

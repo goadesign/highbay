@@ -27,9 +27,6 @@ func testProjectRuntime() projectRuntime {
 func testProjectRuntimeAt(directory string) projectRuntime {
 	return projectRuntime{
 		listen: net.Listen,
-		startTeamPrograms: func(context.Context) error {
-			return errors.New("default tests cannot start real team services or windows")
-		},
 		teamDependencies: func(context.Context, []string) (project.TeamDependencies, error) {
 			return project.TeamDependencies{}, errors.New("default tests cannot resolve or change real project teams")
 		},
@@ -42,6 +39,9 @@ func testProjectRuntimeAt(directory string) projectRuntime {
 		preflight: func(bool) error { return errors.New("default tests cannot start real project terminals") },
 		startTerminal: func(context.Context, *project.State) (string, error) {
 			return "", errors.New("default tests cannot start real project terminals")
+		},
+		startDaemon: func(*project.State) (*projectDaemon, error) {
+			return nil, errors.New("default tests cannot start real project daemons")
 		},
 		waitTerminal: func(context.Context, string) (bool, error) {
 			return false, errors.New("default tests cannot observe real project terminals")

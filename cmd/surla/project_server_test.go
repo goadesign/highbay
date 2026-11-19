@@ -644,9 +644,6 @@ func TestServeReadsOnlyItsStateFolder(t *testing.T) {
 func TestMissingBrowserOpenerFailsBeforeProjectCreation(t *testing.T) {
 	t.Setenv("PATH", t.TempDir())
 	runtime := productionProjectRuntime()
-	runtime.preflight = func(openBrowser bool) error {
-		return preflightProjectStart(func() (string, error) { return "owned-hc-stand-in", nil }, openBrowser)
-	}
 	runtime.configRoot = func() (string, error) { t.Fatal("state must remain untouched"); return "", nil }
 	var output bytes.Buffer
 	err := runWithRuntime(nil, &output, runtime)

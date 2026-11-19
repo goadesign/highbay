@@ -1,4 +1,4 @@
-// This file composes the per-project server with its Herdr-owned lifetime.
+// This file composes the per-project server and its management client.
 package main
 
 import (
@@ -43,6 +43,7 @@ type projectRuntime struct {
 	configRoot     func() (string, error)
 	preflight      func(openBrowser bool) error
 	startTerminal  func(context.Context, *project.State) (string, error)
+	startDaemon    func(*project.State) (*projectDaemon, error)
 	openViews      func(context.Context, string) error
 	waitTerminal   func(context.Context, string) (bool, error)
 	readTerminal   func(context.Context, string) (string, error) // an ended terminal's text, before removal
@@ -50,10 +51,8 @@ type projectRuntime struct {
 	// listen binds only the saved project address; tests observe the actual close boundary.
 	listen func(string, string) (net.Listener, error)
 	// teamDependencies binds the server login environment and accepted-work lifetime; its
-	// []string is the server's original environment, which only Herdr's programs receive.
+	// []string holds the login environment for Herdr and headless workers.
 	teamDependencies func(context.Context, []string) (project.TeamDependencies, error)
-	// startTeamPrograms starts absent desktop/service dependencies after server readiness.
-	startTeamPrograms func(context.Context) error
 }
 
 // ownedProjectListener ends management authority before every underlying listener close,
@@ -79,27 +78,18 @@ const (
 // productionProjectRuntime is selected only by the executable's composition root.
 func productionProjectRuntime() projectRuntime {
 	return projectRuntime{
-		configRoot: os.UserConfigDir,
-		preflight: func(openBrowser bool) error {
-			commands, err := cliTeamCommands()
-			if err != nil {
-				return err
-			}
-			if err := preflightTeam(commands); err != nil {
-				return err
-			}
-			return preflightProjectStart(projectHerdrProgram, openBrowser)
-		},
+		configRoot:       os.UserConfigDir,
+		preflight:        preflightProjectStart,
 		teamDependencies: projectTeamDependencies,
-		startTeamPrograms: func(ctx context.Context) error {
-			commands, err := cliTeamCommands()
-			if err != nil {
-				return err
-			}
-			return startTeamPrograms(ctx, commands)
-		},
 		startTerminal: func(ctx context.Context, state *project.State) (string, error) {
 			return startProjectTerminal(ctx, state, projectHerdrProgram)
+		},
+		startDaemon: func(state *project.State) (*projectDaemon, error) {
+			self, err := os.Executable()
+			if err != nil {
+				return nil, err
+			}
+			return startProjectDaemon(state, self)
 		},
 		readTerminal: func(ctx context.Context, terminal string) (string, error) {
 			return readProjectTerminal(ctx, terminal, projectHerdrProgram)
@@ -109,21 +99,6 @@ func productionProjectRuntime() projectRuntime {
 		removeTerminal: removeProjectTerminal,
 		listen:         net.Listen,
 	}
-}
-
-// cliTeamCommands resolves the team programs the surla command runs. Herdr's programs get
-// this command's environment unchanged: a Herdr core one of them starts keeps it for every
-// terminal, and agents may sign in with its provider variables. Chorus gets it without any
-// model provider family.
-func cliTeamCommands() (teamCommands, error) {
-	commands, err := resolveTeamCommands(exec.LookPath, runTeamCommand, installerProgramFolder())
-	if err != nil {
-		return teamCommands{}, err
-	}
-	commands.start = startDetachedTeamProgram
-	commands.herdrEnv = os.Environ()
-	commands.chorusEnv = withoutProviderFamilies(os.Environ())
-	return commands, nil
 }
 
 // start serializes discovery and starts at most one server, then opens a one-use views link.
@@ -137,9 +112,9 @@ func (runtime projectRuntime) printLink(stdout, diagnostics io.Writer) error {
 	return runtime.startProject(stdout, diagnostics, false)
 }
 
-// startProject shares server/team ownership between the two link delivery routes.
+// startProject shares server startup between the two link delivery routes.
 // Only the final delivery and its opener prerequisite differ.
-func (runtime projectRuntime) startProject(stdout, diagnostics io.Writer, openBrowser bool) (err error) {
+func (runtime projectRuntime) startProject(stdout, diagnostics io.Writer, openBrowser bool) error {
 	if err := runtime.preflight(openBrowser); err != nil {
 		return err
 	}
@@ -147,50 +122,7 @@ func (runtime projectRuntime) startProject(stdout, diagnostics io.Writer, openBr
 	if err != nil {
 		return err
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
-	defer cancel()
-	// Observe only the terminal this CLI creates; an existing server has no launch to watch.
-	type terminalResult struct {
-		ended bool
-		err   error
-	}
-	terminal := ""
-	finished := make(chan terminalResult, 1)
-	client, created, err := attachOrStartProject(ctx, state, func(ctx context.Context, state *project.State) (string, error) {
-		id, err := runtime.startTerminal(ctx, state)
-		if err != nil {
-			return "", err
-		}
-		terminal = id
-		go func() {
-			ended, err := runtime.waitTerminal(ctx, id)
-			finished <- terminalResult{ended: ended, err: err}
-			if ended || err != nil {
-				cancel()
-			}
-		}()
-		return id, nil
-	})
-	if terminal != "" {
-		// Reap the observer on readiness, failure, or deadline before returning.
-		cancel()
-		outcome := <-finished
-		if err != nil {
-			err = errors.Join(err, outcome.err)
-			if outcome.ended {
-				// The ended terminal holds the server's own error until it is removed.
-				// The read and the removal each get their own deadline: a read that
-				// hangs must not leave the removal with one that has already passed.
-				readCtx, stopRead := context.WithTimeout(context.Background(), 5*time.Second)
-				output, readErr := runtime.readTerminal(readCtx, terminal)
-				stopRead()
-				err = endedStartError(err, output, readErr)
-				removeCtx, stopRemove := context.WithTimeout(context.Background(), 5*time.Second)
-				err = errors.Join(err, runtime.removeTerminal(removeCtx, terminal))
-				stopRemove()
-			}
-		}
-	}
+	client, created, err := runtime.attachProject(context.Background(), state)
 	if created {
 		err = errors.Join(err, writeProjectCreatedNotice(diagnostics))
 	}
@@ -206,41 +138,101 @@ func (runtime projectRuntime) startProject(stdout, diagnostics io.Writer, openBr
 		return err
 	}
 
-	// Confirming and approving on the views page need no agent, so a team that cannot
-	// be prepared is reported after the page opens, and still fails the command.
-	teamErr := runtime.startTeamPrograms(context.Background())
-	if teamErr == nil {
-		teamCtx, stopTeam := context.WithTimeout(context.Background(), 50*time.Second)
-		defer stopTeam()
-		team, err := client.EnsureTeam(teamCtx)
-		if err != nil {
-			teamErr = err
-		} else if _, err := fmt.Fprintf(diagnostics, "Team %s.\n%s\n", team.Team, team.Step); err != nil {
-			return err
-		}
-	}
-	if teamErr != nil {
-		teamErr = fmt.Errorf("the project team is not ready: %w", teamErr)
-	}
-
 	linkCtx, stopLink := context.WithTimeout(context.Background(), 5*time.Second)
 	defer stopLink()
 	link, err := client.BrowserLink(linkCtx)
 	if err != nil {
-		return errors.Join(err, teamErr)
+		return err
 	}
 	if err := validateProjectViewsLink(state, link.URL); err != nil {
-		return errors.Join(err, teamErr)
+		return err
 	}
 	if openBrowser {
 		if err := runtime.openViews(linkCtx, link.URL); err != nil {
-			return errors.Join(fmt.Errorf("open project views: %w", err), teamErr)
+			return fmt.Errorf("open project views: %w", err)
 		}
 	} else if err := json.NewEncoder(stdout).Encode(genprojectserver.NewBrowserLinkResponseBody(link)); err != nil {
-		return errors.Join(fmt.Errorf("write project views link: %w", err), teamErr)
+		return fmt.Errorf("write project views link: %w", err)
 	}
 	_, err = fmt.Fprintf(diagnostics, "Surla is running for %s at %s\n", state.Record.Directory, state.Origin())
-	return errors.Join(err, teamErr)
+	return err
+}
+
+// attachProject waits for the project's authenticated owner. It observes only the
+// server this command launches and leaves a working server under its own lifetime.
+func (runtime projectRuntime) attachProject(
+	parent context.Context, state *project.State,
+) (client *genproject.Client, created bool, err error) {
+	ctx, cancel := context.WithTimeout(parent, 45*time.Second)
+	defer cancel()
+	type launchOutcome struct {
+		ended bool
+		err   error
+	}
+	var finished chan launchOutcome
+	watch := func(wait func(context.Context) (bool, error)) {
+		finished = make(chan launchOutcome, 1)
+		go func() {
+			ended, err := wait(ctx)
+			finished <- launchOutcome{ended: ended, err: err}
+			if ended || err != nil {
+				cancel()
+			}
+		}()
+	}
+
+	var terminal string
+	var daemon *projectDaemon
+	client, created, err = attachOrStartProject(ctx, state, func(ctx context.Context, state *project.State) (string, error) {
+		var err error
+		terminal, err = runtime.startTerminal(ctx, state)
+		if errors.Is(err, errProjectHerdrMissing) {
+			if err := ctx.Err(); err != nil {
+				return "", err
+			}
+			daemon, err = runtime.startDaemon(state)
+			if err != nil {
+				return "", err
+			}
+			watch(daemon.wait)
+			return fmt.Sprintf("the background project server (PID %d)", daemon.process.Pid), nil
+		}
+		if err != nil {
+			return "", err
+		}
+		watch(func(ctx context.Context) (bool, error) { return runtime.waitTerminal(ctx, terminal) })
+		return "the project server in Herdr terminal " + terminal, nil
+	})
+	if finished == nil {
+		return client, created, err
+	}
+	// Reap the launch observer on readiness, failure, or deadline.
+	cancel()
+	outcome := <-finished
+	if daemon != nil {
+		defer func() { err = errors.Join(err, daemon.log.Close()) }()
+	}
+	if err == nil {
+		return client, created, nil
+	}
+	err = errors.Join(err, outcome.err)
+	if !outcome.ended {
+		return nil, created, err
+	}
+	if daemon != nil {
+		output, readErr := daemon.startupOutput()
+		return nil, created, endedStartError(err, "startup log", output, readErr)
+	}
+
+	// The read and removal each get their own deadline so a hung read cannot
+	// leave the removal with a deadline that has already passed.
+	readCtx, stopRead := context.WithTimeout(context.Background(), 5*time.Second)
+	output, readErr := runtime.readTerminal(readCtx, terminal)
+	stopRead()
+	err = endedStartError(err, "terminal output", output, readErr)
+	removeCtx, stopRemove := context.WithTimeout(context.Background(), 5*time.Second)
+	defer stopRemove()
+	return nil, created, errors.Join(err, runtime.removeTerminal(removeCtx, terminal))
 }
 
 // validateProjectViewsLink confines the browser opener to the project's exact views
@@ -281,7 +273,7 @@ func attachOrStartProject(
 	if err != nil {
 		return nil, created, err
 	}
-	terminal := ""
+	description := ""
 	if !inUse {
 		if err := state.RemoveRunning(); err != nil {
 			return nil, created, err
@@ -293,7 +285,7 @@ func attachOrStartProject(
 		if err := listener.Close(); err != nil {
 			return nil, created, err
 		}
-		if terminal, err = launch(ctx, state); err != nil {
+		if description, err = launch(ctx, state); err != nil {
 			return nil, created, err
 		}
 	}
@@ -303,7 +295,7 @@ func attachOrStartProject(
 		if inUse {
 			return nil, created, fmt.Errorf("%s; no second server was started: %w", projectHolder(state), err)
 		}
-		return nil, created, fmt.Errorf("the project server in Herdr terminal %s did not start answering: %w", terminal, err)
+		return nil, created, fmt.Errorf("%s did not start answering: %w", description, err)
 	}
 	if err := confirmBuild(identity); err != nil {
 		return nil, created, err
@@ -314,7 +306,7 @@ func attachOrStartProject(
 // takenPortError names what holds a stopped project's saved port and the step that frees it.
 // The holder is another project's server when a project sharing the port, saved before new
 // projects avoided each other's ports, holds its card store; otherwise it is another program.
-// The saved port is kept: agents' connections and the launcher roster name it.
+// The saved port remains stable for local management and active agents.
 func takenPortError(state *project.State, listenErr error) error {
 	port := state.Record.Port
 	if !errors.Is(listenErr, syscall.EADDRINUSE) {
@@ -342,16 +334,16 @@ func takenPortError(state *project.State, listenErr error) error {
 	return taken
 }
 
-// endedStartError explains a start whose owned terminal ended before the server answered.
+// endedStartError explains a launch that ended before the server answered.
 // The server's own last lines replace the attach failure, which then only reports the end's
 // consequence; without readable lines, the attach failure stays and says why none are shown.
-func endedStartError(attachErr error, output string, readErr error) error {
+func endedStartError(attachErr error, source, output string, readErr error) error {
 	if readErr != nil {
-		return errors.Join(attachErr, fmt.Errorf("the project server's terminal output could not be read: %w", readErr))
+		return errors.Join(attachErr, fmt.Errorf("the project server's %s could not be read: %w", source, readErr))
 	}
 	lines := lastServerLines(output)
 	if lines == "" {
-		return errors.Join(attachErr, errors.New("the project server's terminal output could not be read: it showed no printable text"))
+		return errors.Join(attachErr, fmt.Errorf("the project server's %s could not be read: it showed no printable text", source))
 	}
 	return fmt.Errorf("the project server stopped while starting, and its last lines were:\n%s", lines)
 }
@@ -516,7 +508,7 @@ func projectHolder(state *project.State) string {
 	return "a server holds this project and may still be starting or stopping"
 }
 
-// serve is the Herdr program entry. stateDir is the private state folder the
+// serve is the child server entry. stateDir is the private state folder the
 // launching `surla` found and passed with -state; project identity and address
 // come from the record there, and serve never derives a folder from its own
 // environment or working directory.
@@ -558,13 +550,25 @@ func (runtime projectRuntime) serve(stateDir string) (err error) {
 	if err != nil {
 		return err
 	}
+	var cp *controlplane.ControlPlane
+	defer func() {
+		stop()
+		// Drain headless workers before the control plane releases its writer
+		// lock. This also shuts down the team if composition fails.
+		teamErr := management.Close()
+		err = errors.Join(err, teamErr)
+		if cp != nil {
+			err = errors.Join(err, cp.Close())
+		}
+	}()
+	management.BindViewsOpener(runtime.openViews)
+	opts.OpenViews = management.OpenViews
 	opts.Team = &controlplane.TeamBinding{Owner: state.Record.Owner, Service: management}
-	cp, err := controlplane.New(opts)
+	cp, err = controlplane.New(opts)
 	if err != nil {
 		return err
 	}
-	// Close drains owned work before releasing the store writer lock.
-	defer func() { err = errors.Join(err, cp.Close()) }()
+	management.BindStatusReader(cp.ProjectStatus)
 
 	listener, err := runtime.listen("tcp", state.Address())
 	if err != nil {
@@ -615,7 +619,7 @@ func serveProjectHTTP(
 }
 
 // parseServeArgs returns the state folder named by serve's one required flag,
-// -state, which only startProjectTerminal supplies; serve is an internal
+// -state, which the project launcher supplies; serve is an internal
 // entrypoint and accepts no other option or argument.
 func parseServeArgs(args []string) (string, error) {
 	fs := flag.NewFlagSet("serve", flag.ContinueOnError)
@@ -652,6 +656,8 @@ func projectClient(state *project.State) *genproject.Client {
 	return genproject.NewClient(
 		managementEndpoint(state, client, (*genprojectclient.Client).Identity),
 		teamManagementEndpoint(state),
+		managementEndpoint(state, client, (*genprojectclient.Client).AttachGuide),
+		managementEndpoint(state, client, (*genprojectclient.Client).Status),
 		managementEndpoint(state, client, (*genprojectclient.Client).Stop),
 		managementEndpoint(state, client, (*genprojectclient.Client).BrowserLink),
 		managementEndpoint(state, client, (*genprojectclient.Client).ExchangeBrowserLink),
@@ -926,7 +932,7 @@ func confirmBuild(identity *genproject.ProjectIdentity) error {
 	return nil
 }
 
-// startProjectTerminal delegates process lifetime to a parentless Herdr terminal; Surla never detaches a process itself.
+// startProjectTerminal delegates process lifetime to a parentless Herdr terminal.
 // The server gets the state folder this command found as -state, because a Herdr terminal runs with the
 // environment of Herdr's core, not this shell's, and could otherwise resolve another configuration folder.
 func startProjectTerminal(
@@ -963,27 +969,27 @@ func startProjectTerminal(
 	return reply.Address, nil
 }
 
-// projectHerdrProgram resolves the required external terminal executable without starting it.
+// errProjectHerdrMissing selects a detached launch when hc is unavailable.
+var errProjectHerdrMissing = errors.New("Herdr hc is unavailable")
+
+// projectHerdrProgram resolves the optional terminal executable without starting it.
 func projectHerdrProgram() (string, error) {
 	hc, err := exec.LookPath("hc")
 	if err != nil {
 		home, homeErr := os.UserHomeDir()
 		if homeErr != nil {
-			return "", homeErr
+			return "", errProjectHerdrMissing
 		}
 		hc = filepath.Join(home, ".local", "bin", "hc")
 		if _, executableErr := exec.LookPath(hc); executableErr != nil {
-			return "", errors.New("Herdr hc is required to start Surla; install it with: curl -fsSL https://releases.herdr.dev/core/install.sh | sh (https://herdr.dev/core/)")
+			return "", errProjectHerdrMissing
 		}
 	}
 	return hc, nil
 }
 
 // preflightProjectStart refuses unavailable launch effects before creating project state.
-func preflightProjectStart(findHerdr func() (string, error), openBrowser bool) error {
-	if _, err := findHerdr(); err != nil {
-		return err
-	}
+func preflightProjectStart(openBrowser bool) error {
 	if openBrowser {
 		if _, err := projectBrowserProgram(); err != nil {
 			return err

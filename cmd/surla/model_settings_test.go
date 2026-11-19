@@ -126,11 +126,11 @@ func TestHandOverSendsTheShellsRequestSettings(t *testing.T) {
 	state, err := fixtureProjectState("")
 	require.NoError(t, err)
 	cp, bodies := startRecordingProjectServer(t, state)
-	errStop := errors.New("stopped after the hand-over")
+	errStop := errors.New("opener stopped after the hand-over")
 	runtime := testProjectRuntime()
 	bindFixtureTeamEffects(&runtime)
 	runtime.preflight = func(bool) error { return nil }
-	runtime.startTeamPrograms = func(context.Context) error { return errStop }
+	runtime.openViews = func(context.Context, string) error { return errStop }
 
 	var first bytes.Buffer
 	require.ErrorIs(t, runtime.start(&first), errStop)
@@ -254,12 +254,10 @@ func TestHandOverRepliesNeverPrintAValue(t *testing.T) {
 	}
 }
 
-// TestRefusedHandOverStopsStartBeforeTheTeam runs the real start against a
+// TestRefusedHandOverStopsStartBeforeOpeningViews runs the real start against a
 // project server that answers for the project but refuses the hand-over:
-// start fails with the refusal's fixed text, prints nothing, and never
-// starts the team programs, asks for the team, mints a browser link or opens
-// the views.
-func TestRefusedHandOverStopsStartBeforeTheTeam(t *testing.T) {
+// start fails with the refusal's fixed text and leaves the browser closed.
+func TestRefusedHandOverStopsStartBeforeOpeningViews(t *testing.T) {
 	for _, tc := range []struct {
 		name   string
 		status int
@@ -309,8 +307,7 @@ func TestRefusedHandOverStopsStartBeforeTheTeam(t *testing.T) {
 			runtime := testProjectRuntime()
 			bindFixtureTeamEffects(&runtime)
 			runtime.preflight = func(bool) error { return nil }
-			teamStarted, opened := false, false
-			runtime.startTeamPrograms = func(context.Context) error { teamStarted = true; return nil }
+			opened := false
 			runtime.openViews = func(context.Context, string) error { opened = true; return nil }
 
 			var out bytes.Buffer
@@ -319,7 +316,6 @@ func TestRefusedHandOverStopsStartBeforeTheTeam(t *testing.T) {
 			assert.Contains(t, err.Error(), tc.want)
 			assertNoShellValue(t, err.Error())
 			assert.Empty(t, out.String(), "nothing is printed after a refused hand-over")
-			assert.False(t, teamStarted, "no team program starts")
 			assert.False(t, opened, "the views are not opened")
 			mu.Lock()
 			defer mu.Unlock()
@@ -329,15 +325,14 @@ func TestRefusedHandOverStopsStartBeforeTheTeam(t *testing.T) {
 }
 
 // TestCLIChildrenReceiveTheShellsProviderVariablesOnlyWhereAllowed runs the
-// command's real program launches against presence stand-ins: Herdr's
-// programs (hc and herdr-app) get the shell's environment unchanged, while
-// Chorus and the browser opener get none of its provider variables.
+// command's real program launches against presence stand-ins. The Herdr
+// terminal commands get the shell's environment unchanged and the browser
+// opener receives no provider variables.
 func TestCLIChildrenReceiveTheShellsProviderVariablesOnlyWhereAllowed(t *testing.T) {
 	isolateServeWorkspace(t)
 	isolateProviderFamilies(t)
 	reports, bin := t.TempDir(), t.TempDir()
 	t.Setenv("SURLA_TEST_PRESENCE_DIR", reports)
-	t.Setenv("SURLA_TEST_STAND_IN_DIR", bin)
 	t.Setenv("ANTHROPIC_API_KEY", "sentinel-handed-key")
 	t.Setenv("ANTHROPIC_AUTH_TOKEN", "sentinel-shell-token")
 	t.Setenv("OPENAI_API_KEY", "sentinel-shell-openai")
@@ -348,11 +343,8 @@ func TestCLIChildrenReceiveTheShellsProviderVariablesOnlyWhereAllowed(t *testing
 	// Each stand-in reports under its name and first argument; the opener's
 	// argument is a link, so it reports as "opener".
 	standIns := map[string]string{
-		"chorus":     `case "$1" in version) echo "chorus v0.14.0";; status) [ -f "$SURLA_TEST_STAND_IN_DIR/chorus-up" ] && echo "Chorus v0.14.0 is running" || exit 1;; up) : > "$SURLA_TEST_STAND_IN_DIR/chorus-up";; esac`,
-		"herdr-app":  `case "$1" in status) [ -f "$SURLA_TEST_STAND_IN_DIR/app-up" ] && printf '{"overlays":[]}' || exit 1;; "") : > "$SURLA_TEST_STAND_IN_DIR/app-up";; esac`,
-		"herdr-core": `exit 0`,
-		"hc":         `case "$1" in run) printf '{"address":"stand-in"}';; wait) printf '{"ended":false}';; rm) :;; esac`,
-		opener:       `:`,
+		"hc":   `case "$1" in run) printf '{"address":"stand-in"}';; wait) printf '{"ended":false}';; rm) :;; esac`,
+		opener: `:`,
 	}
 	for name, body := range standIns {
 		report := name + "-${1:-start}"
@@ -364,10 +356,6 @@ func TestCLIChildrenReceiveTheShellsProviderVariablesOnlyWhereAllowed(t *testing
 	}
 	t.Setenv("PATH", bin+string(os.PathListSeparator)+"/usr/bin:/bin")
 
-	commands, err := cliTeamCommands()
-	require.NoError(t, err)
-	require.NoError(t, preflightTeam(commands))
-	require.NoError(t, startTeamPrograms(t.Context(), commands))
 	require.NoError(t, openProjectViews(t.Context(), "http://127.0.0.1:1/views#link=private"))
 	state, err := fixtureProjectState("")
 	require.NoError(t, err)
@@ -379,10 +367,8 @@ func TestCLIChildrenReceiveTheShellsProviderVariablesOnlyWhereAllowed(t *testing
 
 	present := "ANTHROPIC_API_KEY=handed\nANTHROPIC_AUTH_TOKEN=set\nANTHROPIC_BASE_URL=\nANTHROPIC_ADMIN_KEY=\nOPENAI_API_KEY=set\nARGS_HOLD_SENTINEL=no\n"
 	absent := "ANTHROPIC_API_KEY=\nANTHROPIC_AUTH_TOKEN=\nANTHROPIC_BASE_URL=\nANTHROPIC_ADMIN_KEY=\nOPENAI_API_KEY=\nARGS_HOLD_SENTINEL=no\n"
-	for _, report := range []string{"chorus-version", "chorus-status", "chorus-up", "opener"} {
-		assert.Equal(t, absent, readPresence(t, reports, report), "%s gets no provider variable", report)
-	}
-	for _, report := range []string{"herdr-app-status", "herdr-app-start", "hc-run", "hc-wait", "hc-rm"} {
+	assert.Equal(t, absent, readPresence(t, reports, "opener"), "opener gets no provider variable")
+	for _, report := range []string{"hc-run", "hc-wait", "hc-rm"} {
 		assert.Equal(t, present, readPresence(t, reports, report), "%s gets the shell's environment unchanged", report)
 	}
 }
