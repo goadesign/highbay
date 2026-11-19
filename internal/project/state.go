@@ -297,6 +297,14 @@ func (s *State) CardsDir() string { return filepath.Join(s.Dir, "cards") }
 // AgentFile names a private credential whose contents never belong in an argument or label.
 func (s *State) AgentFile(id string) string { return filepath.Join(s.Dir, "agents", id) }
 
+// AgentCredential reads the bearer credential of the registered agent handle,
+// which `surla stdio` presents to /mcp on that agent's behalf. A missing file
+// returns an error that matches os.ErrNotExist; a file that is not private to
+// this account or does not hold a credential is refused without its bytes.
+func (s *State) AgentCredential(handle string) (string, error) {
+	return readCredential(s.AgentFile(handle))
+}
+
 // SaveRunning records a server that already holds the existing writer lock and listener.
 func (s *State) SaveRunning(record Running) error {
 	return writeJSON(filepath.Join(s.Dir, "running.json"), record)

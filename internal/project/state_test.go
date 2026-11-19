@@ -113,6 +113,32 @@ func physicalTempDir(t *testing.T) string {
 	return dir
 }
 
+// TestAgentCredentialReadsOnlyAPrivateCredential reads a registered agent's
+// credential for `surla stdio` and refuses missing, public or malformed files
+// without returning their bytes.
+func TestAgentCredentialReadsOnlyAPrivateCredential(t *testing.T) {
+	state := initializedState(t, physicalTempDir(t), t.TempDir())
+	const credential = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+	require.NoError(t, os.MkdirAll(filepath.Dir(state.AgentFile("guide-1")), 0o700))
+
+	_, err := state.AgentCredential("guide-1")
+	assert.ErrorIs(t, err, os.ErrNotExist)
+
+	require.NoError(t, writePrivate(state.AgentFile("guide-1"), []byte(credential)))
+	got, err := state.AgentCredential("guide-1")
+	require.NoError(t, err)
+	assert.Equal(t, credential, got)
+
+	require.NoError(t, writePrivate(state.AgentFile("builder-1"), []byte("not-a-credential")))
+	_, err = state.AgentCredential("builder-1")
+	require.Error(t, err)
+	assert.NotContains(t, err.Error(), "not-a-credential")
+
+	require.NoError(t, os.Chmod(state.AgentFile("guide-1"), 0o644))
+	_, err = state.AgentCredential("guide-1")
+	assert.ErrorIs(t, err, errNotPrivateFile)
+}
+
 // initializedState creates the project for directory under root as `surla` does.
 func initializedState(t *testing.T, root, directory string) *State {
 	t.Helper()
