@@ -2337,7 +2337,7 @@ export function bootstrapViewsPage() {
     } else if (cp1Active && editorStage === "build" && activeEditor !== null) {
       const build = buildChangeId === activeEditor.card.change_id && buildSnapshot?.state === "started"
         ? buildSnapshot : null;
-      if (buildReadError !== null) {
+      if (buildReadError !== null && (activeEditor.card.status === "confirmed" || build !== null)) {
         attention = "Current build facts could not be read.";
         next = <span>Refresh Build below to read its current state.</span>;
       } else if (build !== null) {
@@ -2382,7 +2382,14 @@ export function bootstrapViewsPage() {
       // Recovery takes precedence over guidance based on retained observations.
       const teamError = teamFactsError();
       const teamLoading = hasPending("get_team", "");
-      let step: string;
+      const teamStarting = hasPending("start_team_agents", "");
+      const teamRoles = teamSnapshot?.roles ?? [];
+      const teamNeedsYou = teamRoles.find((role) => role.state === "needs_you");
+      attention = teamNeedsYou !== undefined ? teamAttentionText(teamNeedsYou)
+        : teamLoading || teamSnapshot === null ? "Waiting for Team status."
+        : teamRoles.some((role) => role.state === "unknown" || role.state === "error") ? "Team status unknown."
+        : "Nothing now.";
+      let step: string | React.ReactElement;
       if (sessionState !== "active") {
         attention = "The session ended.";
         step = "Run surla in your project folder to reopen this project.";
@@ -2395,9 +2402,15 @@ export function bootstrapViewsPage() {
       } else if (teamError !== null) {
         attention = "Team status could not be read.";
         step = activeResult?.kind === "team" ? "Choose Retry team read below." : "Open Team to retry reading roles.";
-      } else if (lastOpenAttempt !== null && cardLoadErrors.has(lastOpenAttempt)) {
+      } else if (lastOpenAttempt !== null && lastOpenAttempt !== activeEditor?.card.change_id && cardLoadErrors.has(lastOpenAttempt)) {
         attention = "The Change Card could not be opened.";
         step = onDescribe ? "Try opening the change again below." : "Open Describe and try opening the change again.";
+      } else if (activeEditor !== null && cardLoadErrors.has(activeEditor.card.change_id)) {
+        attention = "The latest saved Change Card could not be read.";
+        step = editorRequest !== null ? "Wait for the current Change Card request."
+          : cp1Active && activeEditor.formError !== null
+          ? "Choose Load Latest Card to review the saved card alongside your edits."
+          : <Button onClick={handleLoadLatestCard}>Load Latest Card</Button>;
       } else if (onDescribe) {
         if (editorRequest === "get_change") {
           step = "Wait for the Change Card to open.";
@@ -2405,22 +2418,23 @@ export function bootstrapViewsPage() {
           step = "Wait for Surla to read the changes.";
         } else if (changeList.changes.length > 0) {
           step = "Open a change from the list below.";
-        } else if (hasPending("start_team_agents", "")) {
+        } else if (teamStarting) {
           step = "Wait for the guide to start.";
         } else if (teamLoading || teamSnapshot === null) {
           step = "Wait for Team status.";
         } else {
-          const guide = teamSnapshot.roles.find((role) => role.role === "guide");
+          const guide = teamRoles.find((role) => role.role === "guide");
           if (guide === undefined || guide.state === "not_started" || guide.state === "ended") {
-            attention = "The guide is not running.";
+            if (teamNeedsYou === undefined) attention = "The guide is not running.";
             step = "Open Team and choose Start agents.";
           } else if (guide.state === "starting") {
             step = "Wait for the guide to start.";
           } else if (guide.state === "unknown" || guide.state === "error") {
-            attention = guide.state === "unknown" ? "Guide status unknown." : "The guide reported an error.";
+            if (teamNeedsYou === undefined) {
+              attention = guide.state === "unknown" ? "Guide status unknown." : "The guide reported an error.";
+            }
             step = "Open Team and refresh to check the guide’s status.";
           } else if (guide.state === "needs_you") {
-            attention = teamAttentionText(guide);
             step = "In Team, choose Show guide pane to address the guide’s request.";
           } else {
             step = "In Team, choose Show guide pane and describe your change.";
@@ -2433,9 +2447,7 @@ export function bootstrapViewsPage() {
         } else if (ed.incomingCard !== null) {
           attention = "A newer saved revision is available.";
           step = "Choose Switch to Incoming Card to review it and keep your unsaved edits.";
-        } else if (editorStage === "build") {
-          step = "Review the Build controls below for this change.";
-        } else if (ed.card.proposed_revision !== undefined) {
+        } else if (editorStage === "agree" && ed.card.proposed_revision !== undefined) {
           attention = "A proposed revision is waiting for your decision.";
           step = "Review the proposal below, then choose Adopt or Decline.";
         } else if (ed.formError !== null) {
@@ -2444,6 +2456,8 @@ export function bootstrapViewsPage() {
         } else if (ed.card.status === "needs_confirmation") {
           attention = "This change needs confirmation.";
           step = "Review the questions and examples below, then confirm the change.";
+        } else if (editorStage === "build") {
+          step = "Review the Build controls below for this change.";
         } else if (ed.preservedDraft !== null) {
           attention = "You have edits from an earlier revision.";
           step = "Review the saved card and reapply any of the preserved edits you still need.";
@@ -2467,8 +2481,12 @@ export function bootstrapViewsPage() {
           step = "Evaluate the design below for the current revision.";
         }
       } else if (activeResult?.kind === "team") {
-        step = teamLoading || teamSnapshot === null ? "Wait for Team status."
-          : teamSnapshot.roles.length === 0 ? "Choose Start agents below to prepare the guide."
+        const needsStart = teamNeedsYou === undefined && (
+          teamRoles.length === 0 || teamRoles.some((role) => role.state === "not_started" || role.state === "ended")
+        );
+        step = teamStarting ? "Wait for agents to start."
+          : teamLoading || teamSnapshot === null ? "Wait for Team status."
+          : needsStart ? "Choose Start agents below to prepare the guide."
           : "Review role status and use Show pane to contact an agent.";
       } else if (activeResult?.kind === "story") {
         if (storyEvaluationError !== null) {
@@ -2497,7 +2515,7 @@ export function bootstrapViewsPage() {
       } else {
         step = "Open Describe to find a change.";
       }
-      next = <span>{step}</span>;
+      next = typeof step === "string" ? <span>{step}</span> : step;
     }
 
     const agreedCard = (!onDescribe || editorOpen) && activeEditor?.card.status === "confirmed"

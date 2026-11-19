@@ -173,6 +173,9 @@ const page = await openPage(origin, { link: input.link });
 await until(() => page.$("#surla-cp1-editor").dataset.changeId === "chg-live", "the change did not open");
 const next = () => page.text("#surla-frame-next dd");
 expect(next().includes("then confirm the change"), "Agree did not guide confirmation");
+page.$("#surla-nav-build").click();
+expect(page.$("#surla-nav-build").getAttribute("aria-current") === "step" && page.$("#surla-confirm-submit") && !page.$("#surla-build-section"), "unconfirmed Build did not expose the existing confirmation form");
+expect(next().includes("then confirm the change"), "unconfirmed Build pointed to controls it did not have");
 await control(origin, "hold", { key: "POST /changes/preview" });
 page.$("#surla-nav-cp2").click();
 expect(page.$("#surla-cp2-loading") && next().includes("Wait for Surla to evaluate the design"), "Architecture did not guide the pending preview");
@@ -205,6 +208,39 @@ const told = announced.filter((text) => text.includes("newer revision"));
 expect(told.length === 1, "the new revision was announced " + told.length + " times: " + JSON.stringify(announced));
 expect(page.doc.activeElement === field && field.value === "Typed but not saved", "a later list change disturbed the editor");
 expect(page.sent("GET", "/changes/chg-unrelated").length === 0, "the page read a change the list did not ask it to");
+page.close();
+`)
+}
+
+// TestViewsPageRetriesTheLatestOpenCard repairs a failed refresh through the
+// current editor's read, including after returning to the change list.
+func TestViewsPageRetriesTheLatestOpenCard(t *testing.T) {
+	ps := startPageServer(t, pageControlPlane(t, Options{}))
+	runPageScript(t, ps, nil, viewsPageScriptHelpers+`
+const card = await propose("chg-card-retry", "Route refunds to a manager.", "Auto-approved");
+const path = "/changes/" + card.change_id;
+const page = await openPage(origin, { link: input.link });
+const next = () => page.text("#surla-frame-next dd");
+const failRead = () => control(origin, "reply", { key: "GET " + path, status: 503, body: { name: "unavailable", message: "Card unavailable." } });
+await until(() => page.$("#surla-cp1-editor").dataset.requestRevision === card.request_revision, "the original card did not open");
+await failRead();
+const latest = await revise(card, "Route refunds above $50 to a manager.", "Manager approval");
+await until(() => next().includes("Load Latest Card"), "failed refresh did not offer a read of the open card");
+expect(page.text(".surla-frame-attention dd") === "The latest saved Change Card could not be read.", "failed refresh was reported as an unopened card");
+page.$("#surla-nav-changes").click();
+expect(page.$("#surla-open-change-" + card.change_id).getAttribute("aria-current") === "true", "the list lost the already-open card");
+checkControl(page, page.$("#surla-frame-next button"), "Load Latest Card in Describe");
+page.$("#surla-nav-cp1").click();
+await failRead();
+const retry = page.$("#surla-frame-next button");
+checkControl(page, retry, "Load Latest Card in Agree");
+retry.click();
+await until(() => page.$("#surla-load-latest-card") && next().includes("Choose Load Latest Card"), "explicit refresh failure did not guide the editor's existing recovery");
+expect(!page.$("#surla-frame-next button"), "the frame duplicated the visible recovery control");
+page.$("#surla-load-latest-card").click();
+await until(() => page.$("#surla-cp1-editor").dataset.requestRevision === latest.request_revision, "the recovery did not load the latest card");
+expect(!page.$("#surla-load-latest-card") && next().includes("then confirm the change"), "successful recovery did not restore confirmation guidance");
+expect(page.sent("GET", path).filter((read) => read.status === 503).length === 2, "the recovery did not retry both failed reads");
 page.close();
 `)
 }
