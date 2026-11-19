@@ -61,6 +61,7 @@ function load(state) {
     checking: () => Boolean(state.checking),
     exec: async (command, args, options) => {
       calls.exec.push(plain({ command, args, options }));
+      if (state.deferred) return new Promise((resolve, reject) => state.deferred.push({ resolve, reject }));
       const answer = state.answers?.[args.join(' ')];
       if (answer instanceof Error) throw answer;
       return answer ?? { code: 0, stdout: '{"running":false}', stderr: '' };
@@ -132,6 +133,12 @@ test('projectFolder follows labels, then focus, then panes, then the space folde
     { name: 'focused pane', space, terms: [other], panes, focus: { space: 'sp1', cwd: '/work/focus' }, want: '/work/focus' },
     { name: 'focus in another space', space, panes, focus: { space: 'sp2', cwd: '/work/focus' }, want: '/work/pane' },
     { name: 'first pane of the space', space, panes, want: '/work/pane' },
+    {
+      name: 'focused pane of the active tab',
+      space: { ...space, tabs: [{ id: 'tb1' }, { id: 'tb2', active: true }] },
+      panes: [...panes, { tab: 'tb2', cwd: '/work/second' }, { tab: 'tb2', cwd: '/work/focused', focused: true }],
+      want: '/work/focused',
+    },
     { name: 'space folder', space, panes: [{ tab: 'tb9', cwd: '/elsewhere' }], want: '/work/space' },
     { name: 'home space', space: { ...space, folder: '' }, want: null },
   ];
@@ -204,7 +211,7 @@ test('init reads the status in the project folder and polls every four seconds',
   view.init(undefined, cx);
   await cx.settle();
   assert.deepEqual(calls.exec, [{ command: 'surla', args: ['status', '--json'], options: { cwd: '/work/space', timeout: 10000 } }]);
-  assert.deepEqual(cx.timers.map(t => t.ms), [4000]);
+  assert.deepEqual(cx.timers.map(t => t.ms), [4000, 500]);
   cx.timers[0].handler(cx);
   await cx.settle();
   assert.equal(calls.exec.length, 2);
@@ -284,5 +291,65 @@ test('a command that cannot start is shown, not thrown', async () => {
   const cx = fakeCx();
   view.init(undefined, cx);
   await cx.settle();
+  assert.ok(texts(view.render(cx)).includes('Could not run surla: not installed'));
+});
+
+// tick lets every promise that can settle now do so.
+async function tick() {
+  for (let i = 0; i < 5; i++) await new Promise(resolve => setImmediate(resolve));
+}
+
+test('a space switch during a status read reads the new folder and drops the old answer', async () => {
+  const payments = { id: 'sp2', active: false, machine: null, folder: '/work/payments', tabs: [{ id: 'tb2' }] };
+  const state = { spaces: [space, payments], deferred: [] };
+  const { mod, calls } = load(state);
+  const view = new mod.SurlaCompanion();
+  const cx = fakeCx();
+  view.init(undefined, cx);
+  assert.deepEqual(calls.exec.map(call => call.options.cwd), ['/work/space']);
+
+  state.spaces = [{ ...space, active: false }, { ...payments, active: true }];
+  assert.ok(texts(view.render(cx)).includes('Reading the project…'), 'the old space is not shown');
+  assert.ok(!walk(view.render(cx)).some(node => node.id === 'surla-open'));
+  cx.timers[1].handler(cx);
+  assert.equal(calls.exec.length, 1, 'one read at a time');
+
+  state.deferred.shift().resolve({ code: 0, stdout: JSON.stringify(running), stderr: '' });
+  await tick();
+  assert.deepEqual(calls.exec.map(call => call.options.cwd), ['/work/space', '/work/payments']);
+  assert.ok(!texts(view.render(cx)).includes('Surla · homes'), 'the old answer is dropped');
+
+  state.deferred.shift().resolve({ code: 0, stdout: '{"running":false}', stderr: '' });
+  await tick();
+  assert.ok(texts(view.render(cx)).includes('No Surla server is running for this folder.'));
+
+  state.spaces = [{ ...space, active: false }, { ...payments, active: true, machine: 'box' }];
+  const remote = view.render(cx);
+  assert.ok(texts(remote).includes('Show a space on this computer to see its Surla project.'));
+  assert.ok(!walk(remote).some(node => node.id === 'surla-open'));
+  cx.timers[1].handler(cx);
+  assert.equal(calls.exec.length, 2, 'a remote space runs nothing');
+});
+
+test('an Open Page failure stays with the folder it was for', async () => {
+  const payments = { id: 'sp2', active: false, machine: null, folder: '/work/payments', tabs: [{ id: 'tb2' }] };
+  const state = { spaces: [space, payments], deferred: [] };
+  const { mod, calls } = load(state);
+  const view = new mod.SurlaCompanion();
+  const cx = fakeCx();
+  view.init(undefined, cx);
+  state.deferred.shift().resolve({ code: 0, stdout: '{"running":false}', stderr: '' });
+  await tick();
+
+  walk(view.render(cx)).find(node => node.id === 'surla-open').handlers.click({}, cx);
+  assert.deepEqual(calls.exec.at(-1), { command: 'surla', args: [], options: { cwd: '/work/space', timeout: 60000 } });
+  state.spaces = [{ ...space, active: false }, { ...payments, active: true }];
+  state.deferred.shift().reject(new Error('not installed'));
+  await tick();
+  assert.ok(!texts(view.render(cx)).includes('Could not run surla: not installed'));
+
+  state.spaces = [space, payments];
+  while (state.deferred.length) state.deferred.shift().resolve({ code: 0, stdout: '{"running":false}', stderr: '' });
+  await tick();
   assert.ok(texts(view.render(cx)).includes('Could not run surla: not installed'));
 });

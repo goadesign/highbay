@@ -14,6 +14,9 @@ const POLL_MS = 4000;
 const STATUS_TIMEOUT_MS = 10000;
 // OPEN_TIMEOUT_MS bounds `surla`, which may start the project's server first.
 const OPEN_TIMEOUT_MS = 60000;
+// FOLLOW_MS is how often the window checks, without running anything,
+// whether the shown space now points at another folder.
+const FOLLOW_MS = 500;
 
 // STAGES names each stage of ProjectStatus.stage for people.
 const STAGES = {
@@ -43,9 +46,10 @@ const ROLE_STATES = {
 // projectFolder returns the folder whose Surla project the window shows for
 // space, or null when there is none to ask about. A space on another machine
 // has none: `surla` runs on this computer. The first live terminal in the
-// space labeled with a Surla project names it; otherwise the focused pane's
-// folder when it is in this space, then the first pane's folder, then the
-// space's own folder.
+// space labeled with a Surla project names it; otherwise the focused
+// terminal's folder when it is in this space, then the folder of the active
+// tab's focused pane, of the active tab's first pane, of the space's first
+// pane, and finally the space's own folder.
 export function projectFolder(space, terms, paneList, focus) {
   if (!space || space.machine) return null;
   for (const term of terms ?? []) {
@@ -55,8 +59,11 @@ export function projectFolder(space, terms, paneList, focus) {
     }
   }
   if (focus?.space === space.id && focus.cwd) return focus.cwd;
-  const tabs = new Set((space.tabs ?? []).map(tab => tab.id));
-  const pane = (paneList ?? []).find(p => tabs.has(p.tab) && p.cwd);
+  const tabs = space.tabs ?? [];
+  const activeTab = tabs.find(tab => tab.active)?.id;
+  const inSpace = (paneList ?? []).filter(p => p.cwd && tabs.some(tab => tab.id === p.tab));
+  const inActiveTab = inSpace.filter(p => p.tab === activeTab);
+  const pane = inActiveTab.find(p => p.focused) ?? inActiveTab[0] ?? inSpace[0];
   if (pane) return pane.cwd;
   return space.folder || null;
 }
@@ -128,66 +135,80 @@ export function roleLine(role) {
 
 export default class SurlaCompanion extends View {
   init(_props, cx) {
-    this.result = { kind: "loading" };
-    this.folder = null;
+    // result is the last status read and resultFolder the folder it is for;
+    // render shows it only while that folder is still the shown one.
+    this.result = null;
+    this.resultFolder = null;
+    // trackedFolder is the shown folder the last read was started for.
+    this.trackedFolder = null;
     this.reading = false;
-    this.opening = false;
-    this.openError = "";
+    // opening and openError belong to the folder named in them.
+    this.opening = null;
+    this.openError = null;
     // Herdr loads the mod once for `herdr-app check`; start no commands then.
     if (checking()) return;
     this.refresh(cx);
     cx.timer.every(POLL_MS, cx => this.refresh(cx));
+    // A space switch reads the new folder at once rather than at the next poll.
+    cx.timer.every(FOLLOW_MS, cx => {
+      if (this.shownFolder() !== this.trackedFolder) this.refresh(cx);
+    });
   }
 
-  // shownSpace is the space this window describes: the shown one.
-  shownSpace() {
-    return spaces().find(space => space.active) ?? null;
+  // shownFolder is the project folder of the space Herdr shows now, or null.
+  shownFolder() {
+    const space = spaces().find(space => space.active) ?? null;
+    return projectFolder(space, terminals(), panes(), focused());
   }
 
-  // refresh reads the shown space's project status once; a read still in
-  // progress makes later ticks wait for it.
+  // refresh reads the shown folder's status once. A read still in progress
+  // makes this call wait for it; when that read ends, a read starts for the
+  // folder shown then. An answer for a folder no longer shown is dropped.
   refresh(cx) {
-    if (this.reading) return;
-    const folder = projectFolder(this.shownSpace(), terminals(), panes(), focused());
-    this.folder = folder;
-    if (!folder) {
-      this.result = { kind: "none" };
+    const folder = this.shownFolder();
+    this.trackedFolder = folder;
+    if (!folder || this.reading) {
       cx.notify();
       return;
     }
     this.reading = true;
     cx.spawn(async cx => {
+      let result;
       try {
-        const answer = await exec("surla", ["status", "--json"], { cwd: folder, timeout: STATUS_TIMEOUT_MS });
-        this.result = parseStatus(answer);
+        result = parseStatus(await exec("surla", ["status", "--json"], { cwd: folder, timeout: STATUS_TIMEOUT_MS }));
       } catch (err) {
-        this.result = { kind: "error", message: `Could not run surla: ${err?.message ?? err}` };
-      } finally {
-        this.reading = false;
+        result = { kind: "error", message: `Could not run surla: ${err?.message ?? err}` };
+      }
+      this.reading = false;
+      if (this.shownFolder() === folder) {
+        this.result = result;
+        this.resultFolder = folder;
         cx.notify();
+      } else {
+        this.refresh(cx);
       }
     });
   }
 
-  // openPage runs `surla` in the project folder, which starts the project's
-  // server when needed and opens its views page in the browser.
-  openPage(cx) {
-    if (this.opening || !this.folder) return;
-    const folder = this.folder;
-    this.opening = true;
-    this.openError = "";
+  // openPage runs `surla` in folder, which starts the project's server when
+  // needed and opens its views page in the browser.
+  openPage(cx, folder) {
+    if (this.opening === folder) return;
+    this.opening = folder;
+    this.openError = null;
     cx.notify();
     cx.spawn(async cx => {
+      let message = "";
       try {
         const answer = await exec("surla", [], { cwd: folder, timeout: OPEN_TIMEOUT_MS });
-        if (answer.code !== 0) this.openError = (answer.stderr || answer.stdout || "surla failed.").trim();
+        if (answer.code !== 0) message = (answer.stderr || answer.stdout || "surla failed.").trim();
       } catch (err) {
-        this.openError = `Could not run surla: ${err?.message ?? err}`;
-      } finally {
-        this.opening = false;
-        cx.notify();
-        this.refresh(cx);
+        message = `Could not run surla: ${err?.message ?? err}`;
       }
+      if (this.opening === folder) this.opening = null;
+      if (message) this.openError = { folder, message };
+      cx.notify();
+      this.refresh(cx);
     });
   }
 
@@ -195,6 +216,7 @@ export default class SurlaCompanion extends View {
   button(id, label, t, onClick) {
     return div()
       .id(id)
+      .flex_none()
       .px(10)
       .py(5)
       .rounded(5)
@@ -211,13 +233,19 @@ export default class SurlaCompanion extends View {
   render(cx) {
     const t = theme();
     const overlay = props()?.overlay;
+    const folder = checking() ? null : this.shownFolder();
+    let r;
+    if (checking()) r = { kind: "loading" };
+    else if (!folder) r = { kind: "none" };
+    else if (this.resultFolder === folder) r = this.result;
+    else r = { kind: "loading" };
+    const title = r.kind === "running" && r.status.projectName ? `Surla · ${r.status.projectName}` : "Surla";
     const header = h_flex()
       .items_center()
       .gap(8)
-      .child(div().flex_1().font_semibold().text_size(13).text_color(t.foreground).child(this.title()))
+      .child(div().flex_1().min_w(0).truncate().font_semibold().text_size(13).text_color(t.foreground).child(title))
       .when(Boolean(overlay), el => el.child(this.button("surla-close", "×", t, () => closeOverlay(overlay))));
     const body = v_flex().gap(6).text_size(12).text_color(t.muted);
-    const r = this.result;
     if (r.kind === "loading") {
       body.child("Reading the project…");
     } else if (r.kind === "none") {
@@ -237,20 +265,24 @@ export default class SurlaCompanion extends View {
           h_flex()
             .items_center()
             .gap(8)
-            .child(div().flex_1().truncate().child(roleLine(role)))
+            .child(div().flex_1().min_w(0).truncate().child(roleLine(role)))
             .when(Boolean(terminal), el => el.child(this.button(`surla-show-${role.role}`, "Show", t, () => run("pane.focus", { terminal })))),
         );
       }
     }
-    const canOpen = Boolean(this.folder) && r.kind !== "none";
+    // A running project opens from its own folder; otherwise from the shown one.
+    const target = r.kind === "running" ? r.status.directory : folder;
+    const canOpen = Boolean(target) && r.kind !== "loading";
+    const openError = this.openError?.folder === target ? this.openError.message : "";
+    const label = this.opening === target ? "Opening…" : r.kind === "running" ? "Open Page" : "Start Surla";
     const footer = h_flex()
       .gap(8)
       .items_center()
-      .when(canOpen, el => el.child(this.button("surla-open", this.opening ? "Opening…" : r.kind === "running" ? "Open Page" : "Start Surla", t, cx => this.openPage(cx))))
-      .when(Boolean(this.openError), el => el.child(div().flex_1().truncate().text_size(11).text_color(t.blocked).child(this.openError)));
+      .when(canOpen, el => el.child(this.button("surla-open", label, t, cx => this.openPage(cx, target))))
+      .when(Boolean(openError), el => el.child(div().flex_1().min_w(0).truncate().text_size(11).text_color(t.blocked).child(openError)));
     return v_flex()
       .id("surla-companion")
-      .size_full()
+      .w_full()
       .p(14)
       .gap(10)
       .bg(t.popover)
@@ -258,12 +290,5 @@ export default class SurlaCompanion extends View {
       .child(header)
       .child(body)
       .child(footer);
-  }
-
-  // title names the project when its status is known.
-  title() {
-    const r = this.result;
-    if (r.kind === "running" && r.status.projectName) return `Surla · ${r.status.projectName}`;
-    return "Surla";
   }
 }

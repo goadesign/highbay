@@ -307,6 +307,8 @@ func TestSetupCodexConfigMerge(t *testing.T) {
 		{name: "dotted keys missing args", content: "[mcp_servers]\nsurla.command = \"old\"\n", wantErr: "dotted keys missing command or args"},
 		{name: "inline table", content: "[mcp_servers]\nsurla = { command = \"old\" }\n", wantErr: "inline table"},
 		{name: "array of tables", content: "[[mcp_servers.surla]]\ncommand = \"old\"\n", wantErr: "array of tables"},
+		{name: "servers as an array of tables", content: "[[mcp_servers]]\nname = \"x\"\n", wantErr: "mcp_servers is not a table"},
+		{name: "servers as a string", content: "mcp_servers = \"x\"\n", wantErr: "mcp_servers is not a table"},
 		{name: "url transport", content: "[mcp_servers.surla]\nurl = \"http://old\"\n", wantErr: "has a url"},
 		{name: "command not a string", content: "[mcp_servers.surla]\ncommand = 3\n", wantErr: "command is not a string"},
 		{name: "invalid TOML", content: "[mcp_servers.surla\n", wantErr: "is not valid TOML"},
@@ -319,7 +321,10 @@ func TestSetupCodexConfigMerge(t *testing.T) {
 				writeTestFile(t, path, c.content)
 			}
 			changed, err := mergeCodexConfig(path, testExecutable)
-			raw, _ := os.ReadFile(path)
+			raw, readErr := os.ReadFile(path)
+			if c.content != "" || c.wantErr == "" {
+				require.NoError(t, readErr)
+			}
 			if c.wantErr != "" {
 				assert.ErrorContains(t, err, c.wantErr)
 				assert.ErrorContains(t, err, `set [mcp_servers.surla] command = "/opt/surla/bin/surla" and args = ["stdio"] by hand`)
@@ -425,4 +430,26 @@ func TestSetupHerdrModReportsMissingKeyboardFile(t *testing.T) {
 	assert.Contains(t, out.String(), "Herdr's keyboard file is missing")
 	_, err = os.Stat(filepath.Join(home, ".config", "herdr-app", "keys.json"))
 	assert.ErrorIs(t, err, os.ErrNotExist)
+}
+
+func TestSetupRefusesTemporaryExecutable(t *testing.T) {
+	temp := t.TempDir()
+	link := filepath.Join(t.TempDir(), "tmp-link")
+	require.NoError(t, os.Symlink(temp, link))
+	goTemp := t.TempDir()
+	installed := t.TempDir()
+	cases := []struct {
+		name, executable string
+		tempDirs         []string
+		want             bool
+	}{
+		{name: "under the temporary folder", executable: filepath.Join(temp, "go-build1", "exe", "surla"), tempDirs: []string{temp}, want: true},
+		{name: "reached through a symlinked temporary folder", executable: filepath.Join(temp, "exe", "surla"), tempDirs: []string{link}, want: true},
+		{name: "under GOTMPDIR", executable: filepath.Join(goTemp, "exe", "surla"), tempDirs: []string{temp, goTemp}, want: true},
+		{name: "installed binary", executable: filepath.Join(installed, "bin", "surla"), tempDirs: []string{temp, ""}, want: false},
+		{name: "the temporary folder's sibling", executable: temp + "-other/surla", tempDirs: []string{temp}, want: false},
+	}
+	for _, c := range cases {
+		assert.Equal(t, c.want, temporaryExecutable(c.executable, c.tempDirs...), c.name)
+	}
 }

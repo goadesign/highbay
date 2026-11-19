@@ -182,7 +182,7 @@ func processSetupEnvironment() (setupEnvironment, error) {
 	if err != nil {
 		return setupEnvironment{}, fmt.Errorf("resolve the surla executable: %w", err)
 	}
-	if rel, err := filepath.Rel(os.TempDir(), executable); err == nil && filepath.IsLocal(rel) {
+	if temporaryExecutable(executable, os.TempDir(), os.Getenv("GOTMPDIR")) {
 		return setupEnvironment{}, fmt.Errorf("surla is running from the temporary file %s; install it (go install github.com/goadesign/surla/cmd/surla@latest) and run that surla setup -global", executable)
 	}
 	return setupEnvironment{
@@ -195,6 +195,37 @@ func processSetupEnvironment() (setupEnvironment, error) {
 		},
 		goos: runtime.GOOS,
 	}, nil
+}
+
+// temporaryExecutable reports whether executable lies under one of the
+// temporary folders, where `go run` builds. Symlinks are resolved on both
+// sides, since macOS reaches /var and /tmp through /private. An empty folder
+// name is skipped.
+func temporaryExecutable(executable string, tempDirs ...string) bool {
+	exe := resolveExistingPrefix(executable)
+	for _, dir := range tempDirs {
+		if dir == "" {
+			continue
+		}
+		if rel, err := filepath.Rel(resolveExistingPrefix(dir), exe); err == nil && filepath.IsLocal(rel) {
+			return true
+		}
+	}
+	return false
+}
+
+// resolveExistingPrefix resolves symlinks in the longest existing leading
+// part of path and appends the rest unchanged.
+func resolveExistingPrefix(path string) string {
+	path = filepath.Clean(path)
+	if resolved, err := filepath.EvalSymlinks(path); err == nil {
+		return resolved
+	}
+	parent := filepath.Dir(path)
+	if parent == path {
+		return path
+	}
+	return filepath.Join(resolveExistingPrefix(parent), filepath.Base(path))
 }
 
 // setupTargets lists the configuration and skill files of the coding agents
@@ -400,7 +431,13 @@ func mergeCodexConfig(path, executable string) (bool, error) {
 	if err := toml.Unmarshal(content, &decoded); err != nil {
 		return false, fmt.Errorf("%s is not valid TOML: %w; %s", path, err, byHand)
 	}
-	servers, _ := decoded["mcp_servers"].(map[string]any)
+	servers := map[string]any{}
+	if existing, present := decoded["mcp_servers"]; present {
+		var ok bool
+		if servers, ok = existing.(map[string]any); !ok {
+			return false, fmt.Errorf("%s: mcp_servers is not a table; %s", path, byHand)
+		}
+	}
 	if entry, ok := servers[surlaServerName].(map[string]any); ok {
 		if _, ok := entry["url"]; ok {
 			return false, fmt.Errorf("%s: mcp_servers.surla has a url; remove it and %s", path, byHand)
@@ -525,7 +562,7 @@ func locateCodexSurlaEntry(doc []byte) (codexEntryEdit, error) {
 // the first non-blank byte after the '=' that follows the key's last segment
 // to the end of the expression. The parser records no range for arrays, and
 // the expression's own range ends where its value ends, before any comment.
-func tomlValueRange(doc []byte, expr *unstable.Node, lastKey *unstable.Node) unstable.Range {
+func tomlValueRange(doc []byte, expr, lastKey *unstable.Node) unstable.Range {
 	start := int(lastKey.Raw.Offset + lastKey.Raw.Length)
 	start += bytes.IndexByte(doc[start:], '=') + 1
 	for start < len(doc) && (doc[start] == ' ' || doc[start] == '\t') {
@@ -835,8 +872,9 @@ func replaceConfigFile(path string, content []byte, perm os.FileMode) (err error
 }
 
 // writeIntegrationFile installs bundled skill or mod content at path,
-// creating folders as needed, and reports whether it wrote. Identical files
-// are left untouched: Herdr reloads a mod whenever its files are written.
+// creating folders as needed, and reports whether it wrote. The file is
+// replaced atomically so Herdr, which reloads a mod whenever its files are
+// written, never reads a partly written one; identical files are left alone.
 func writeIntegrationFile(path string, content []byte) (bool, error) {
 	installed, err := os.ReadFile(path)
 	if err != nil && !errors.Is(err, os.ErrNotExist) {
@@ -845,11 +883,8 @@ func writeIntegrationFile(path string, content []byte) (bool, error) {
 	if err == nil && bytes.Equal(installed, content) {
 		return false, nil
 	}
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		return false, fmt.Errorf("create folder for %s: %w", path, err)
-	}
-	if err := os.WriteFile(path, content, 0o644); err != nil {
-		return false, fmt.Errorf("write %s: %w", path, err)
+	if err := replaceConfigFile(path, content, 0o644); err != nil {
+		return false, err
 	}
 	return true, nil
 }

@@ -16,8 +16,10 @@ registered.
 
 1. Call a Surla tool from the folder the user is working in. Your first Surla
    tool call attaches this session to that folder's project as its guide and
-   starts the project's server if it is not running. You run no `surla`
-   command yourself.
+   starts the project's server if it is not running. You never start, stop,
+   initialize, verify or approve with the `surla` command, and never ask it
+   for a page link; the one command you may run is the read-only
+   `surla status --json` described under Team.
 2. If the folder holds no project yet and is empty (agent settings folders
    such as `.claude` or `.agents` are fine), call `init_project` with
    `dir: "."` and the user's module path to create the project in place. If
@@ -35,11 +37,21 @@ registered.
   draft (or, when one is in the project folder, tell the user what to fix
   there and wait), and call it again until the list is empty.
 - Call `refresh_story` and poll `get_story_refresh` until it succeeds or
-  fails. Use the succeeded refresh in `propose_change` or `revise_change`.
+  fails. Pass the succeeded refresh's `op_id` as `story_refresh_op_id` to
+  `propose_change` or `revise_change`.
 - A revision's `prompt` is the change's complete request as it now stands;
   put what changed and why in `revision_note`.
 - When the design needs a module, run `GOWORK=off go get` and
   `GOWORK=off go mod tidy` in the draft.
+
+## Follow the build
+
+- `get_build` reads a change's build: the revision built, whether each role
+  read its assignment and the test writer's state. When it reports
+  `drafted_before_drop` after the user dropped a build, call `refresh_story`
+  and `revise_change` before the next build.
+- `list_verifications` and `get_verification` read the verification runs
+  started for a change and their results.
 
 ## Show the user the page
 
@@ -54,5 +66,13 @@ run `git merge` on their behalf unless they ask you to after approving.
 ## Team
 
 Building adds a builder and a test writer, which Surla starts in their own
-working copies. If the user also uses Chorus, keep its watcher running as the
-Chorus skill describes, so Surla and the other roles can reach you.
+working copies and connects through Chorus. After your first Surla tool call,
+run `surla status --json` in the project folder: `team` names the project's
+Chorus swarm and channel, and the `roles` entry whose `role` is `guide`
+gives your `handle`.
+
+When Chorus tools are available, join swarm `<team>` on channel `#<team>` as
+agent `<handle>`, then keep `chorus watch <handle> -wait 24h` running in the
+background as the Chorus skill describes, restarting it each time it ends.
+Surla and the other roles reach you there. When Chorus is not available,
+skip this and keep working through the Surla tools.
