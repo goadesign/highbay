@@ -15,6 +15,7 @@ import (
 	"testing"
 	"time"
 
+	genclient "github.com/goadesign/surla/gen/http/surla/client"
 	genproject "github.com/goadesign/surla/gen/project"
 	gensurla "github.com/goadesign/surla/gen/surla"
 	"github.com/goadesign/surla/internal/verify"
@@ -190,8 +191,9 @@ func TestTeamAgentOptionsReturnsBuildRoles(t *testing.T) {
 			response := httptest.NewRecorder()
 			handler.ServeHTTP(response, httptest.NewRequest("GET", "/team/agent-options", nil))
 			require.Equal(t, http.StatusOK, response.Code, response.Body.String())
-			result, err := gensurla.DecodeListTeamAgentOptionsResult(response.Body.Bytes())
-			require.NoError(t, err)
+			var result genclient.ListTeamAgentOptionsResponseBody
+			require.NoError(t, json.Unmarshal(response.Body.Bytes(), &result))
+			require.NoError(t, genclient.ValidateListTeamAgentOptionsResponseBody(&result))
 			assert.Equal(t, want, result.BuildRoles)
 			assert.Len(t, result.Agents, 2)
 		})
