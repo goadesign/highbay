@@ -33,7 +33,7 @@ func TestViewsPageBuildIgnoresAReadCapturedDuringPendingReplacement(t *testing.T
 	team.start = func(context.Context) (*gensurla.ProjectTeam, error) {
 		return &gensurla.ProjectTeam{
 			Team: "page-team", Space: "page-space", HerdrMode: "attached",
-			Step:  "The project agents have started.",
+			Step:  "Build workers were requested in Herdr.",
 			Roles: []*gensurla.ProjectTeamRole{{Role: "builder", Handle: "page-builder", Running: false}},
 		}, nil
 	}
@@ -113,8 +113,8 @@ expect(newStarted !== oldStarted && page.text("#surla-build-details").includes(n
 const teamReceipt = page.text("#surla-build-start-team-receipt");
 expect(teamReceipt.includes("returned: «") && !teamReceipt.includes("the team was ready"), "the replacement team receipt did not quote the owner's start outcome");
 const startTeam = JSON.parse(replacement.answer).team;
-expect(startTeam.state === "ready" && startTeam.dialog === "opened" && startTeam.roles[0].running === false, "the fixture did not exercise a ready result with a chooser still waiting");
-expect(teamReceipt.includes("«" + startTeam.step + "»"), "the receipt replaced the owner's chooser instruction with an inferred readiness claim");
+expect(startTeam.state === "ready" && startTeam.herdr_mode === "attached" && startTeam.roles.find((role) => role.role === "builder")?.running === false, "the fixture did not return a successful launch request without a running builder");
+expect(teamReceipt.includes("«" + startTeam.step + "»"), "the receipt inferred worker readiness instead of quoting the owner's launch outcome");
 const regressions = [];
 const observe = () => {
   if (page.text("#surla-build-details").includes(oldStarted)) regressions.push("previous started_at flashed");

@@ -42,7 +42,8 @@ const generated = fs.readFileSync(path.join(copiedPage, "src/types.ts"), "utf8")
 fs.writeFileSync(validatorsPath, esbuild.transformSync(generated, { loader: "ts", format: "cjs", target: "node22" }).code);
 const types = require(validatorsPath);
 
-const base = { team: "bounds", roles: [], integer_min: 0, integer_max: 2, integer_between: 0,
+const base = { team: "bounds", roles: [], herdr_mode: "unavailable", saved_choices: {}, dismissed_notices: [],
+  integer_min: 0, integer_max: 2, integer_between: 0,
   number_min: 0.25, number_max: 0.75, number_between: 0 };
 // Values immediately outside, at and inside each inclusive boundary cover both
 // one-sided bounds and the intersection of lower and upper bounds.
