@@ -199,8 +199,8 @@ if (input.mode !== "history_failure") {
   page.$('button[data-run-id="' + input.old + '"]').click();
   await until(() => page.$("#surla-result-view").dataset.runId === input.old && page.text("#surla-cp4-inputs").includes("This result matches"), "old pass did not open");
   const commands = ownCommands(page.$("#surla-cp4-details"));
-  expect((commands.length > 0) === input.eligible, "old pass membership did not follow its saved start");
-  if (input.eligible) expect(JSON.stringify(commands) === JSON.stringify(expected), "older pass did not keep its own C then T");
+  expect(commands.length === 0, "Check offered manual merge commands outside the live approval controls");
+  expect(page.text("#surla-cp4-details").includes(input.candidate) && page.text("#surla-cp4-details").includes("2".repeat(40)), "Check lost its saved commit evidence");
   if (input.mode === "merged_evaluator") {
     expect(page.text("#surla-cp4-details").includes("This saved result names the builder’s commit " + input.candidate + ". This build is merged into your branch; this verification covered these commits, not your branch after the merge."), "check view lost the no-tests merged explanation");
   }
@@ -209,11 +209,6 @@ if (input.mode !== "history_failure") {
   }
   if (input.mode === "prior_start") {
     expect(page.text("#surla-cp4-details").includes("This saved result names the builder’s commit " + input.candidate + " and the tests’ commit " + "2".repeat(40) + ". Review and approve this result before merging; a saved passing check alone does not grant approval."), "check view lost the unmerged fallback");
-  }
-  if (input.mode === "eligible") {
-    const region = page.$("#surla-cp4-details"); region.open = true;
-    await checkCommandRemoval(region, page.$("#surla-cp4-title"), null);
-    await checkCommandRemoval(region, page.$("#surla-cp4-title"), page.$("#surla-load-verifications"));
   }
 }
 if (input.mode === "eligible") {
@@ -224,7 +219,7 @@ if (input.mode === "eligible") {
   await until(() => page.$("#surla-cp5-merge") && !page.$("#surla-cp5-merge").disabled, "older approved result did not retain its merge action after a newer pass");
   expect(page.text("#surla-cp5-merge") === "Merge into current branch", "merge action did not name its destination");
   expect(page.$$(".surla-btn-primary").filter((button) => button.textContent === "Merge into current branch").length === 1, "approved view duplicated its primary merge action");
-  const manual = page.$("#surla-cp5-approval details.surla-build-merge");
+  const manual = page.$(".surla-approval-basis details.surla-build-merge");
   expect(manual && !manual.open && manual.querySelector("summary").textContent === "Manual merge instructions", "manual commands were not secondary to the human action");
   const mergePath = "/changes/chg-history/merge";
   const refusals = [
