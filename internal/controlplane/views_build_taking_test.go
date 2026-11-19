@@ -72,6 +72,7 @@ await until(() => {
   return !action || !action.disabled;
 }, "installed worker discovery did not enable the existing Build offer");
 const taking = page.text("#surla-build-taking");
+expect(!page.$("#surla-build-merge-feedback") && !page.$("#surla-build-merge-feedback-refresh"), "unapproved build offered merge recovery before a recorded approval");
 if (input.state.startsWith("earlier_")) {
   const action = page.$("#surla-build-start");
   expect(action && !action.disabled && action.getAttribute("aria-describedby").includes("surla-build-start-explanation"), "earlier closed/passed build lost its direct explained Build offer");

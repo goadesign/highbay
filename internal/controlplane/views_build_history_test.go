@@ -133,6 +133,9 @@ func TestViewsPageHistoricalTakingUsesTheEligibleResultsOwnCommits(t *testing.T)
 				require.True(t, ok)
 				require.NoError(t, cp.cards.save(record))
 			})
+			ps.act("other-change", func() {
+				buildableChange(t, cp, "chg-other-merge")
+			})
 			eligible := mode == "eligible" || mode == "at_start" || mode == "after_start"
 			runPageScript(t, ps, map[string]any{"mode": mode, "old": old.RunID, "eligible": eligible, "candidate": candidate, "revision": card.RequestRevision, "digest": report.Digest}, `
 const history = "/changes/chg-history/verifications";
@@ -245,6 +248,7 @@ if (input.mode === "eligible") {
     expect(page.sent("POST", mergePath).length === before + 1, "refresh or recovery retried a merge for " + name);
   }
   await control(origin, "reply", { key: "POST " + mergePath, status: 200, body: { branch: "feature/refunds", head_commit: "9".repeat(40) } });
+  await control(origin, "act", { key: "other-change" });
   await control(origin, "hold", { key: "POST " + mergePath });
   const beforeSuccess = page.sent("POST", mergePath).length;
   page.$("#surla-cp5-merge").click();
@@ -252,6 +256,16 @@ if (input.mode === "eligible") {
   expect(page.$("#surla-cp5-merge").disabled, "pending merge remained available");
   page.$("#surla-cp5-merge").click();
   expect(page.sent("POST", mergePath).length === beforeSuccess + 1, "pending merge submitted twice");
+  page.$("#surla-nav-changes").click();
+  await until(() => page.$("#surla-open-change-chg-other-merge"), "another change was not listed during the pending merge");
+  page.$("#surla-open-change-chg-other-merge").click();
+  await until(() => page.$("#surla-cp1-editor")?.dataset.changeId === "chg-other-merge" && !page.$("#surla-build-loading"), "another change did not open during the pending merge");
+  expect(!page.$("#surla-build-merge") && !page.$("#surla-build-merge-feedback") && !page.text("#surla-frame-next").includes("Merging"), "pending merge progress leaked to another change");
+  page.$("#surla-nav-changes").click();
+  page.$("#surla-open-change-chg-history").click();
+  await until(() => page.$("#surla-cp1-editor")?.dataset.changeId === "chg-history", "original approved change did not reopen");
+  page.$("#surla-nav-cp5").click();
+  await until(() => page.$("#surla-cp5-merge-feedback-pending"), "returning to the original change lost its pending merge");
   await control(origin, "release", { key: "POST " + mergePath });
   await until(() => page.$("#surla-cp5-merge-feedback-receipt"), "successful merge omitted its receipt");
   const receipt = page.text("#surla-cp5-merge-feedback-receipt");
@@ -339,7 +353,7 @@ func TestViewsPageApprovalFollowsTheRealMerge(t *testing.T) {
 const page = await openPage(origin, { link: input.link });
 await until(() => page.$("#surla-review-approval"), "saved approval did not load");
 page.$("#surla-review-approval").click();
-await until(() => page.$("#surla-cp5-approval") && page.text("#surla-frame-next").includes("Merge the verified commits shown below"), "approval did not show the open build's merge step");
+await until(() => page.$("#surla-cp5-approval") && page.$("#surla-cp5-merge") && !page.$("#surla-cp5-merge").disabled, "approval did not show the open build's merge action");
 const record = page.text("#surla-cp5-approval");
 const mergedBasis = "This saved result names the builder’s commit " + input.candidate + " and the tests’ commit " + input.tests + ". This build is merged into your branch; this verification covered these commits, not your branch after the merge.";
 const otherMergedBasis = "This saved result names the builder’s commit " + input.otherCandidate + " and the tests’ commit " + input.tests + ". This build is merged into your branch; this verification covered these commits, not your branch after the merge.";

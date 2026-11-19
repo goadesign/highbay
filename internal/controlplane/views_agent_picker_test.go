@@ -36,6 +36,8 @@ func TestViewsPageWorkerDraftSurvivesUpdates(t *testing.T) {
 const page = await openPage(origin, { link: input.link });
 const discovery = "/team/agent-options", path = "/changes/chg-picker/build";
 await until(() => page.$("#surla-build-agents-builder-client") && !page.$("#surla-build-start").disabled, "worker defaults did not become ready");
+expect(!page.$("#surla-build-merge-feedback") && !page.$("#surla-build-merge-feedback-refresh"), "unbuilt change offered merge recovery before approval");
+expect(page.state() !== "cp5-approval", "opening an unbuilt change navigated to approval recovery");
 const client = (role) => JSON.parse(page.$("#surla-build-agents-" + role + "-client").value)[0];
 expect(client("builder") === "codex" && client("test_writer") === "claude", "default workers did not use different installed families");
 expect(!page.$("#surla-build-agents-builder-yolo").checked && !page.$("#surla-build-agents-test_writer-yolo").checked, "discovery granted permissions");
