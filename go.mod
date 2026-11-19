@@ -7,6 +7,7 @@ require (
 	github.com/goadesign/surla/story v0.0.0-20261111183703-4568fcf5bb85
 	github.com/google/uuid v1.6.0
 	github.com/openai/openai-go/v3 v3.91.0
+	github.com/pelletier/go-toml/v2 v2.4.3
 	github.com/stretchr/testify v1.12.1
 	github.com/yosida95/uritemplate/v3 v3.0.2
 	go.opentelemetry.io/otel v1.47.0
