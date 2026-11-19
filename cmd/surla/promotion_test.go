@@ -285,9 +285,15 @@ var _ = Service("orders", func() {
 	assert.NotContains(t, err.Error(), release)
 }
 
-// ReadTeam returns this test host's empty roster without contacting a launcher.
+// ReadTeam returns this test host's empty headless team.
 func (f *workflowTeamFixture) ReadTeam(context.Context) (*gensurla.TeamSnapshot, error) {
-	return &gensurla.TeamSnapshot{Team: "test-workflow", Roles: []*gensurla.TeamRoleState{}}, nil
+	return &gensurla.TeamSnapshot{
+		Team:             "test-workflow",
+		HerdrMode:        "unavailable",
+		Roles:            []*gensurla.TeamRoleState{},
+		SavedChoices:     map[string]*gensurla.RoleAgentChoice{},
+		DismissedNotices: []string{},
+	}, nil
 }
 
 // ShowPane refuses window work that this fixture does not own.
@@ -296,9 +302,27 @@ func (f *workflowTeamFixture) ShowPane(context.Context, string) error {
 }
 
 // StartAgents reports the actual unavailable host rather than fabricating work.
-func (f *workflowTeamFixture) StartAgents(context.Context) (*gensurla.ProjectTeam, error) {
+func (f *workflowTeamFixture) StartAgents(
+	context.Context, map[string]*gensurla.RoleAgentChoice,
+) (*gensurla.ProjectTeam, error) {
 	return nil, errors.New("the test host does not launch agents")
 }
+
+// ListAgentOptions reports that this fixture has no installed clients.
+func (f *workflowTeamFixture) ListAgentOptions(context.Context) ([]*gensurla.InstalledAgentOption, error) {
+	return []*gensurla.InstalledAgentOption{}, nil
+}
+
+// DismissNotice completes the test-only team operation without a preference store.
+func (f *workflowTeamFixture) DismissNotice(context.Context, string) error { return nil }
+
+// StopWorkers completes immediately because this fixture never starts processes.
+func (f *workflowTeamFixture) StopWorkers(context.Context, controlplane.BuildIdentity) error {
+	return nil
+}
+
+// Close completes immediately because this fixture owns no workers.
+func (f *workflowTeamFixture) Close() error { return nil }
 
 // RegisterBuildRoles records admission through the existing public team seam.
 func (f *workflowTeamFixture) RegisterBuildRoles(context.Context, controlplane.BuildFolders) error {

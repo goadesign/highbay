@@ -499,7 +499,7 @@ func TestManagementCredentialStaysOutOfMetadata(t *testing.T) {
 	require.NoError(t, management.PublishRunning(os.Getpid(), "test"))
 	running, err := state.ReadRunning()
 	require.NoError(t, err)
-	agent, err := management.StartAgents(t.Context())
+	agent, err := attachFixtureGuide(t.Context(), state, management)
 	require.NoError(t, err)
 	roster, err := json.Marshal(state.Record)
 	require.NoError(t, err)

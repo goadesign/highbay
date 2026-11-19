@@ -2,6 +2,9 @@
 package main
 
 import (
+	"context"
+
+	genproject "github.com/goadesign/surla/gen/project"
 	"github.com/goadesign/surla/internal/controlplane"
 	"github.com/goadesign/surla/internal/project"
 )
@@ -24,4 +27,14 @@ func openFixtureProjectCards(state *project.State) (*controlplane.ControlPlane, 
 // fixtureWorkflowTeam binds the team stand-in to the workflow's authenticated owner.
 func fixtureWorkflowTeam(owner string) *controlplane.TeamBinding {
 	return &controlplane.TeamBinding{Owner: owner, Service: &workflowTeamFixture{}}
+}
+
+// attachFixtureGuide issues a role through the project owner without a desktop pane.
+func attachFixtureGuide(
+	ctx context.Context, state *project.State, server *project.Server,
+) (*genproject.AttachGuideResult, error) {
+	management := controlplane.WithPrincipal(ctx, controlplane.Principal{
+		ID: state.Record.Owner, CallerID: "management", Kind: controlplane.CallerManagement,
+	})
+	return server.AttachGuide(management, &genproject.AttachGuidePayload{})
 }

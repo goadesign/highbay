@@ -510,10 +510,9 @@ func startSharedServerProcess(t *testing.T, workspace, config string) *sharedSer
 	require.NoError(t, lock.Close())
 	server, err := project.NewServer(state, func() {}, fixtureTeamDependencies(state))
 	require.NoError(t, err)
-	team, err := server.StartAgents(t.Context())
+	guide, err := attachFixtureGuide(t.Context(), state, server)
 	require.NoError(t, err)
-	require.NotEmpty(t, team.Roles)
-	raw, err := os.ReadFile(state.AgentFile(team.Roles[0].Handle))
+	raw, err := os.ReadFile(state.AgentFile(guide.Handle))
 	require.NoError(t, err)
 	cmd := exec.Command(exe, "serve", "-state", state.Dir)
 	cmd.Dir = workspace

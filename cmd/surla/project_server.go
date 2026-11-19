@@ -553,13 +553,13 @@ func (runtime projectRuntime) serve(stateDir string) (err error) {
 	var cp *controlplane.ControlPlane
 	defer func() {
 		stop()
-		// Drain headless workers before the control plane releases its writer
-		// lock. This also shuts down the team if composition fails.
-		teamErr := management.Close()
-		err = errors.Join(err, teamErr)
 		if cp != nil {
+			// The control plane now owns the team and drains it before
+			// releasing the writer lock.
 			err = errors.Join(err, cp.Close())
+			return
 		}
+		err = errors.Join(err, management.Close())
 	}()
 	management.BindViewsOpener(runtime.openViews)
 	opts.OpenViews = management.OpenViews
