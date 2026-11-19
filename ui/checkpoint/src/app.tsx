@@ -1383,9 +1383,8 @@ export function bootstrapViewsPage() {
 
   // refreshMergeState follows the exact approval through existing read owners.
   // It may resolve an unknown outcome but never repeats the mutation.
-  function refreshMergeState(run: VerificationStatusResult | null) {
+  function refreshMergeState(run: VerificationStatusResult) {
     if (sessionState !== "active") return;
-    if (run === null) { openRecordedApproval(); return; }
     selectedRunId = run.run_id;
     selectedVerificationChangeId = run.change_id;
     readBuild(run.change_id);
@@ -1421,7 +1420,7 @@ export function bootstrapViewsPage() {
     return { eligible: reason === null && !pending, pending, reason,
       receipt: outcome?.receipt ?? null, error: outcome?.error ?? null,
       onMerge: () => { if (run !== null) mergeApprovedRun(run); },
-      onRefresh: () => refreshMergeState(run) };
+      onRefresh: () => { if (run !== null) refreshMergeState(run); } };
   }
 
   // mergeApprovedRun captures the exact tuple before any asynchronous read can

@@ -620,7 +620,7 @@ export function SavedResultCommits({ candidateCommit, testsCommit, build }: {
     {testsCommit !== null ? <> and the tests’ commit <code>{testsCommit}</code></> : null}.
     {taking?.state === "merged"
       ? " This build is merged into your branch; this verification covered these commits, not your branch after the merge."
-      : " Review and approve this result before merging; a saved passing check alone does not grant approval."}
+      : " Merging requires current recorded approval for these exact commits."}
   </p>;
 }
 
