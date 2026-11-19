@@ -5,10 +5,12 @@ import (
 	"context"
 	"encoding/json"
 	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -16,6 +18,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	mcpruntime "goa.design/goa-ai/runtime/mcp"
 
 	"github.com/goadesign/surla/internal/abspath"
 	"github.com/goadesign/surla/internal/controlplane"
@@ -358,4 +362,147 @@ func (l *stdioLockedWriter) String() string {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	return l.w.String()
+}
+
+// startStdioProjectServer serves state's project on its own address with the
+// real project server and control plane, as `surla serve` does, and
+// publishes its management credential.
+func startStdioProjectServer(t *testing.T, state *project.State) *project.Server {
+	t.Helper()
+	management, err := project.NewServer(state, func() {}, fixtureTeamDependencies(state))
+	require.NoError(t, err)
+	cp, err := controlplane.New(fixtureProjectOptions(state, management))
+	require.NoError(t, err)
+	t.Cleanup(func() { assert.NoError(t, cp.Close()) })
+	api := httptest.NewUnstartedServer(management.Handler(controlplane.NewHTTPHandler(cp, management.Authenticate)))
+	require.NoError(t, api.Listener.Close())
+	api.Listener, err = net.Listen("tcp", state.Address())
+	require.NoError(t, err)
+	api.Start()
+	t.Cleanup(api.Close)
+	require.NoError(t, management.PublishRunning(os.Getpid(), "fixture"))
+	return management
+}
+
+// stdioCall is a tools/call frame for name with the 2026-07-28 protocol
+// version in _meta, as current clients send it.
+func stdioCall(id int, name string) string {
+	return `{"jsonrpc":"2.0","id":` + strconv.Itoa(id) + `,"method":"tools/call","params":{"name":"` + name +
+		`","arguments":{},"_meta":{"io.modelcontextprotocol/protocolVersion":"` + mcpruntime.ProtocolVersion +
+		`","io.modelcontextprotocol/clientCapabilities":{}}}}`
+}
+
+func TestStdioBindsToARealProjectServer(t *testing.T) {
+	isolateServeWorkspace(t)
+	workspace, err := abspath.Eval(t.TempDir())
+	require.NoError(t, err)
+	state, err := fixtureProjectState(workspace)
+	require.NoError(t, err)
+	management := startStdioProjectServer(t, state)
+	runtime := testProjectRuntime()
+	runtime.preflight = func(bool) error { return nil }
+
+	// The guide binds from its own folder, not the process's.
+	cwd, err := os.Getwd()
+	require.NoError(t, err)
+	require.NotEqual(t, workspace, cwd)
+	guide, err := newStdioSession(runtime, workspace, "", io.Discard)
+	require.NoError(t, err)
+	reply := runStdioFrames(t, guide, stdioCall(1, "list_changes"))["1"]
+	require.Nil(t, reply.Error, string(reply.Result))
+	first := guide.currentRelay()
+	require.NotNil(t, first)
+
+	// A rotated credential is refused once, then the guide binds again.
+	var guideHandle string
+	reloaded, err := project.Discover(filepath.Dir(state.Dir), workspace)
+	require.NoError(t, err)
+	for handle, agent := range reloaded.Record.Agents {
+		if agent.Role == "guide" {
+			guideHandle = handle
+		}
+	}
+	require.NotEmpty(t, guideHandle)
+	require.NoError(t, os.WriteFile(state.AgentFile(guideHandle), []byte(strings.Repeat("ab", 32)), 0o600))
+	reply = runStdioFrames(t, guide, stdioCall(2, "list_changes"))["2"]
+	require.Nil(t, reply.Error, string(reply.Result))
+	assert.Equal(t, strings.Repeat("ab", 32), guide.currentRelay().credential)
+
+	// Workers bind to the registered folder that holds them, in the project
+	// folder's own copy and in a child project folder's copy.
+	for _, builder := range []string{
+		filepath.Join(workspace, ".surla-build", "app"),
+		filepath.Join(workspace, "shop", ".surla-build", "app"),
+	} {
+		require.NoError(t, os.MkdirAll(filepath.Join(builder, "sub"), 0o755))
+		require.NoError(t, management.RegisterBuildRoles(t.Context(), controlplane.BuilderOnly{BuilderFolder: builder}))
+		worker, err := newStdioSession(runtime, filepath.Join(builder, "sub"), "", io.Discard)
+		require.NoError(t, err)
+		require.Equal(t, controlplane.CallerBuilder, worker.role)
+		reply := runStdioFrames(t, worker, stdioCall(3, "list_builder_assignments"))["3"]
+		require.Nil(t, reply.Error, string(reply.Result))
+	}
+
+	// A test writer's copy left from an earlier build has no registered agent
+	// on a builder-only build, and never becomes a guide.
+	leftover := filepath.Join(workspace, "shop", ".surla-tests", "eval")
+	require.NoError(t, os.MkdirAll(leftover, 0o755))
+	worker, err := newStdioSession(runtime, leftover, "", io.Discard)
+	require.NoError(t, err)
+	reply = runStdioFrames(t, worker, stdioCall(4, "list_test_writer_assignments"))["4"]
+	require.NotNil(t, reply.Error)
+	assert.Contains(t, reply.Error.Message, "this project has no registered test_writer")
+	assert.Nil(t, worker.currentRelay())
+}
+
+func TestStdioRetriesOnlyRequestsTheServerNeverRan(t *testing.T) {
+	var calls int
+	var mu sync.Mutex
+	dropped := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		calls++
+		mu.Unlock()
+		// The server received the call, then the connection ends without a reply.
+		conn, _, err := w.(http.Hijacker).Hijack()
+		if assert.NoError(t, err) {
+			assert.NoError(t, conn.Close())
+		}
+	}))
+	defer dropped.Close()
+	answering := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, err := io.WriteString(w, `{"jsonrpc":"2.0","id":1,"result":{}}`)
+		assert.NoError(t, err)
+	}))
+	defer answering.Close()
+	closed, err := net.Listen("tcp", "127.0.0.1:0")
+	require.NoError(t, err)
+	refused := "http://" + closed.Addr().String() + "/mcp"
+	require.NoError(t, closed.Close())
+
+	cases := []struct {
+		name      string
+		endpoints []string
+		binds     int
+		wantError bool
+	}{
+		{name: "refused connection binds again", endpoints: []string{refused, answering.URL + "/mcp"}, binds: 2},
+		{name: "dropped call is not sent again", endpoints: []string{dropped.URL + "/mcp", answering.URL + "/mcp"}, binds: 1, wantError: true},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			session, err := newStdioSession(testProjectRuntimeAt(t.TempDir()), t.TempDir(), "", io.Discard)
+			require.NoError(t, err)
+			binds := 0
+			session.bind = func(context.Context, string) (*stdioRelay, error) {
+				binds++
+				return &stdioRelay{endpoint: c.endpoints[binds-1], credential: "c", http: &http.Client{}}, nil
+			}
+			reply := runStdioFrames(t, session, `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"verify_change","arguments":{}}}`)["1"]
+			assert.Equal(t, c.binds, binds)
+			assert.Equal(t, c.wantError, reply.Error != nil)
+		})
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	assert.Equal(t, 1, calls, "the dropped call reached the server once")
 }

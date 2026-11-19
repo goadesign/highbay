@@ -69,9 +69,12 @@ func upWith(
 }
 
 // startChorus runs `chorus up` with no input and its output on out. Chorus
-// starts its server in the background and returns once it answers.
+// starts its server in the background and returns once it answers. The
+// long-lived Chorus server gets this shell's environment without its model
+// provider settings, which only the project server may hold.
 func startChorus(ctx context.Context, chorus string, out io.Writer) error {
 	command := exec.CommandContext(ctx, chorus, "up")
+	command.Env = withoutProviderFamilies(os.Environ())
 	command.Stdin = nil
 	command.Stdout = out
 	command.Stderr = out

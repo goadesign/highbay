@@ -96,3 +96,14 @@ func TestUpNamesTheSkipWhenSetupFails(t *testing.T) {
 	assert.Contains(t, err.Error(), "parse JSON in "+filepath.Join(home, ".cursor", "mcp.json"))
 	assert.Contains(t, err.Error(), "set SURLA_NO_SETUP=1 to skip setup")
 }
+
+func TestUpStartsChorusWithoutProviderSettings(t *testing.T) {
+	t.Setenv("ANTHROPIC_API_KEY", "provider-sentinel")
+	t.Setenv("SURLA_UP_TEST_MARK", "kept")
+	chorus := filepath.Join(t.TempDir(), "chorus")
+	script := "#!/bin/sh\necho \"args=$* key=${ANTHROPIC_API_KEY:-unset} mark=${SURLA_UP_TEST_MARK:-unset}\"\n"
+	require.NoError(t, os.WriteFile(chorus, []byte(script), 0o755))
+	var out bytes.Buffer
+	require.NoError(t, startChorus(t.Context(), chorus, &out))
+	assert.Equal(t, "args=up key=unset mark=kept\n", out.String())
+}

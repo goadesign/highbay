@@ -136,13 +136,10 @@ type (
 	}
 )
 
-const (
-	// stdioRequestTimeout bounds one relayed request. Surla tools that wait,
-	// such as wait_for_changes, return well inside it.
-	stdioRequestTimeout = 10 * time.Minute
-	// stdioBindTimeout bounds starting or attaching to the project server.
-	stdioBindTimeout = 2 * time.Minute
-)
+// stdioBindTimeout bounds starting or attaching to the project server. A
+// relayed request has no stdio deadline: the server bounds its own operations
+// (some run 30 minutes), and the agent stops one with notifications/cancelled.
+const stdioBindTimeout = 2 * time.Minute
 
 var (
 	// errStdioServerStopped is a worker's answer when its project server is
@@ -189,7 +186,7 @@ func newStdioSession(runtime projectRuntime, cwd, terminal string, diagnostics i
 	session := &stdioSession{role: role, discovery: newStdioDiscovery(role)}
 	if role == controlplane.CallerGuide {
 		session.bind = func(ctx context.Context, client string) (*stdioRelay, error) {
-			return bindStdioGuide(ctx, runtime, terminal, client, diagnostics)
+			return bindStdioGuide(ctx, runtime, physical, terminal, client, diagnostics)
 		}
 	} else {
 		session.bind = func(ctx context.Context, _ string) (*stdioRelay, error) {
@@ -252,17 +249,22 @@ func newStdioDiscovery(role controlplane.CallerKind) http.Handler {
 	return mux
 }
 
-// bindStdioGuide starts or attaches to the working folder's project server,
+// bindStdioGuide starts or attaches to the project server of the physical
+// folder dir (the nearest project at or above it, else a new one for dir),
 // hands it this process's model provider settings, attaches the agent as the
 // project's guide (adopting its Herdr terminal when one is given) and
 // returns a relay with the guide's credential.
 func bindStdioGuide(
-	ctx context.Context, runtime projectRuntime, terminal, client string, diagnostics io.Writer,
+	ctx context.Context, runtime projectRuntime, dir, terminal, client string, diagnostics io.Writer,
 ) (*stdioRelay, error) {
 	if err := runtime.preflight(false); err != nil {
 		return nil, err
 	}
-	state, err := runtime.discover()
+	root, err := runtime.operatorRoot(dir)
+	if err != nil {
+		return nil, err
+	}
+	state, err := project.Discover(root, dir)
 	if err != nil {
 		return nil, err
 	}
@@ -296,9 +298,12 @@ func bindStdioGuide(
 
 // bindStdioWorker finds the project whose working copy named folder holds
 // dir and returns a relay with the credential of the agent registered for
-// role there. It never starts a server, never hands over model settings and
-// never attaches a guide: a stopped server or a missing registration is an
-// error the agent reports to the user.
+// role there: the one whose registered working folder holds dir, or, in the
+// project folder's own copy, the only agent with role. A project created in
+// a child folder keeps its copies there, which only the registration names.
+// It never starts a server, never hands over model settings and never
+// attaches a guide: a stopped server or a missing registration is an error
+// the agent reports to the user.
 func bindStdioWorker(
 	ctx context.Context, runtime projectRuntime, dir string, role controlplane.CallerKind, folder string,
 ) (*stdioRelay, error) {
@@ -319,13 +324,6 @@ func bindStdioWorker(
 	if state.Record.ID == "" {
 		return nil, noProject
 	}
-	within, err := abspath.Within(filepath.Join(state.Record.Directory, folder), dir)
-	if errors.Is(err, os.ErrNotExist) || err == nil && !within {
-		return nil, noProject
-	}
-	if err != nil {
-		return nil, err
-	}
 	inUse, err := controlplane.CardStoreInUse(state.CardsDir())
 	if err != nil {
 		return nil, err
@@ -333,19 +331,46 @@ func bindStdioWorker(
 	if !inUse {
 		return nil, errStdioServerStopped
 	}
-	if _, err := confirmProject(ctx, state, projectClient(state)); err != nil {
+	identity, err := confirmProject(ctx, state, projectClient(state))
+	if err != nil {
 		return nil, fmt.Errorf("%s: %w", projectHolder(state), err)
 	}
-	var handles []string
+	if err := confirmBuild(identity); err != nil {
+		return nil, err
+	}
+	var registered, holding []string
 	for handle, agent := range state.Record.Agents {
-		if agent.Role == string(role) {
-			handles = append(handles, handle)
+		if agent.Role != string(role) {
+			continue
+		}
+		registered = append(registered, handle)
+		within, err := stdioWithin(agent.Folder, dir)
+		if err != nil {
+			return nil, err
+		}
+		if within {
+			holding = append(holding, handle)
 		}
 	}
-	if len(handles) != 1 {
-		return nil, fmt.Errorf("this project has %d registered %s agents, not one; ask the user to start the build's agents from the views page", len(handles), role)
+	handle := ""
+	switch {
+	case len(holding) == 1:
+		handle = holding[0]
+	case len(holding) == 0 && len(registered) == 1:
+		rootCopy, err := stdioWithin(filepath.Join(state.Record.Directory, folder), dir)
+		if err != nil {
+			return nil, err
+		}
+		if !rootCopy {
+			return nil, noProject
+		}
+		handle = registered[0]
+	case len(registered) == 0:
+		return nil, fmt.Errorf("this project has no registered %s; ask the user to start the build's agents from the views page", role)
+	default:
+		return nil, fmt.Errorf("this folder is not the working folder of this project's %s; work only in the folder your assignment names", role)
 	}
-	credential, err := state.AgentCredential(handles[0])
+	credential, err := state.AgentCredential(handle)
 	if errors.Is(err, os.ErrNotExist) {
 		return nil, fmt.Errorf("the project's %s has no credential yet; ask the user to start the build's agents from the views page", role)
 	}
@@ -355,9 +380,19 @@ func bindStdioWorker(
 	return newStdioRelay(state, credential), nil
 }
 
+// stdioWithin reports whether dir is in root's physical subtree; a missing
+// root holds nothing.
+func stdioWithin(root, dir string) (bool, error) {
+	within, err := abspath.Within(root, dir)
+	if errors.Is(err, os.ErrNotExist) {
+		return false, nil
+	}
+	return within, err
+}
+
 // newStdioRelay connects to state's server as the agent holding credential,
 // with the management transport's proxy and redirect refusal but no overall
-// timeout: send bounds each request instead.
+// timeout: the request's context ends it.
 func newStdioRelay(state *project.State, credential string) *stdioRelay {
 	client := projectHTTPClient()
 	client.Timeout = 0
@@ -366,9 +401,11 @@ func newStdioRelay(state *project.State, credential string) *stdioRelay {
 
 // dispatch answers one JSON-RPC request. A tool call or resource read binds
 // the session first; before that, every other request is answered from the
-// offline catalog, and after it every request is relayed. A relay the server
-// no longer accepts (it restarted or rotated the credential) is bound again
-// once.
+// offline catalog, and after it every request is relayed. When the server
+// certainly did not run the request, because it refused the credential or
+// no server accepted the connection, the session binds again and sends it
+// once more; any other failure is reported, so a tool that changes state is
+// never sent twice.
 func (s *stdioSession) dispatch(ctx context.Context, payload []byte, raw *jsonrpc.RawRequest) ([]byte, error) {
 	method := ""
 	if raw != nil && !raw.Invalid {
@@ -392,7 +429,7 @@ func (s *stdioSession) dispatch(ctx context.Context, payload []byte, raw *jsonrp
 		if ctx.Err() != nil {
 			return nil, ctx.Err()
 		}
-		if attempt == 0 && (err != nil || status == http.StatusUnauthorized) {
+		if attempt == 0 && (status == http.StatusUnauthorized || errors.Is(err, syscall.ECONNREFUSED)) {
 			s.dropRelay(relay)
 			relay = nil
 			continue
@@ -470,8 +507,6 @@ func (s *stdioSession) dropRelay(relay *stdioRelay) {
 // send posts payload to the server as the relay's agent and returns the
 // HTTP status and body.
 func (r *stdioRelay) send(ctx context.Context, payload []byte, raw *jsonrpc.RawRequest) (status int, body []byte, err error) {
-	ctx, cancel := context.WithTimeout(ctx, stdioRequestTimeout)
-	defer cancel()
 	req, err := newStdioMCPRequest(ctx, r.endpoint, payload, raw)
 	if err != nil {
 		return 0, nil, err
