@@ -153,6 +153,16 @@ func cloneChoiceOption(value *string) *string {
 // flags. Model IDs may be supplied by the user even when absent from a
 // client's discovery list. The installed client resolves access at launch.
 func installedChoice(choice *gensurla.RoleAgentChoice, options []*gensurla.InstalledAgentOption, headless bool) bool {
+	if choice.Client == "antigravity" && choice.Model != nil && choice.Thinking != nil {
+		// Chorus treats a suffixed Antigravity model as an effort selection.
+		model := *choice.Model
+		if separator := strings.LastIndexByte(model, '-'); separator >= 0 {
+			switch model[separator+1:] {
+			case "low", "medium", "high", "xhigh", "max":
+				return false
+			}
+		}
+	}
 	for _, option := range options {
 		if choice.Client == option.Client && choice.Program == option.Program {
 			return (!headless || option.HeadlessSupported) &&
@@ -231,14 +241,14 @@ func validChoice(choice roleChoice) bool {
 	default:
 		return false
 	}
-	return literalChoiceValue(choice.Program, 512) &&
-		(choice.Model == nil || literalChoiceValue(*choice.Model, 256)) &&
-		(choice.Thinking == nil || literalChoiceValue(*choice.Thinking, 64))
+	return literalChoiceValue(choice.Program) &&
+		(choice.Model == nil || literalChoiceValue(*choice.Model)) &&
+		(choice.Thinking == nil || literalChoiceValue(*choice.Thinking))
 }
 
 // literalChoiceValue excludes control delimiters and flag-shaped option values.
-func literalChoiceValue(value string, maxLength int) bool {
-	return value != "" && len(value) <= maxLength && value[0] != '-' &&
+func literalChoiceValue(value string) bool {
+	return value != "" && value[0] != '-' &&
 		strings.TrimSpace(value) == value && !strings.ContainsFunc(value, unicode.IsControl)
 }
 

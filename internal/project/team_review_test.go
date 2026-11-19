@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -291,6 +292,51 @@ func TestStartAgentsExplicitGuideRequiresNoLiveSession(t *testing.T) {
 			require.Len(t, roster.Roles, 1)
 			assert.Equal(t, guideHandle, roster.Roles[0].Handle)
 			assert.Nil(t, roster.Roles[0].Place)
+		})
+	}
+}
+
+// TestStartAgentsHonorsClientModelChoices verifies valid installed program paths
+// and Antigravity's alternate model/effort forms through actual team admission.
+func TestStartAgentsHonorsClientModelChoices(t *testing.T) {
+	model := "configured-model-" + strings.Repeat("a", 256)
+	effort := "high"
+	for _, scenario := range []struct {
+		name, model string
+		effort      *string
+		allowed     bool
+	}{
+		{"plain model and separate effort", model, &effort, true},
+		{"suffixed model alone", model + "-high", nil, true},
+		{"suffixed model and separate effort", model + "-high", &effort, false},
+	} {
+		t.Run(scenario.name, func(t *testing.T) {
+			state := testState(t)
+			deps := fixtureTeamDependencies(state)
+			host := deps.Host.(*teamFixture)
+			program := "/installed/" + strings.Repeat("p/", 260) + "agy"
+			deps.DiscoverAgents = func(context.Context) ([]*gensurla.InstalledAgentOption, error) {
+				return []*gensurla.InstalledAgentOption{{
+					Client: "antigravity", Program: program, ModelSupported: true,
+					ThinkingSupported: true, Efforts: []string{effort},
+				}}, nil
+			}
+			s, err := NewServer(state, func() {}, deps)
+			require.NoError(t, err)
+			fixtureAssignments(s, false)
+			require.NoError(t, s.RegisterBuildRoles(t.Context(), controlplane.BuilderOnly{BuilderFolder: state.Record.Directory}))
+			choice := &gensurla.RoleAgentChoice{
+				Client: "antigravity", Program: program, Model: &scenario.model, Thinking: scenario.effort,
+			}
+			_, err = s.StartAgents(t.Context(), map[string]*gensurla.RoleAgentChoice{"builder": choice})
+			if !scenario.allowed {
+				require.Error(t, err)
+				assert.Empty(t, host.calls)
+				return
+			}
+			require.NoError(t, err)
+			require.Len(t, host.choices, 1)
+			assert.Equal(t, choice, host.choices[0]["builder"])
 		})
 	}
 }
