@@ -87,7 +87,7 @@ func TestStartBuildOrdersItsOwners(t *testing.T) {
 		assert.NoError(t, err, "window work retains neither the card lock nor the phase deadline")
 		_, bounded := ctx.Deadline()
 		assert.False(t, bounded, "StartAgents receives its own server-owned lifetime")
-		return &gensurla.ProjectTeam{Team: "team", Space: "space", Roles: []*gensurla.ProjectTeamRole{}, Dialog: "opened", Step: "Read the fixture assignments."}, nil
+		return &gensurla.ProjectTeam{Team: "team", Space: "space", Roles: []*gensurla.ProjectTeamRole{}, HerdrMode: "attached", Step: "Read the fixture assignments."}, nil
 	}
 	result, err := cp.StartBuild(asCaller("alice@example.com", CallerUser), &gensurla.StartBuildPayload{ChangeID: "chg", RequestRevision: card.RequestRevision})
 	require.NoError(t, err)

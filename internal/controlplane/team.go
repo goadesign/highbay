@@ -8,7 +8,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"slices"
 	"time"
 
 	genproject "github.com/goadesign/surla/gen/project"
@@ -166,20 +165,6 @@ func (c *ControlPlane) DismissTeamNotice(ctx context.Context, p *gensurla.Dismis
 		return err
 	}
 	return team.DismissNotice(ctx, p.Notice)
-}
-
-// observedTeamAssignments returns the supervisor's last complete observation.
-// It never probes Git, terminals or verification processes on a status read.
-func (c *ControlPlane) observedTeamAssignments() TeamAssignments {
-	c.teamFactsMu.RLock()
-	defer c.teamFactsMu.RUnlock()
-	result := c.teamFacts
-	result.Unread = slices.Clone(result.Unread)
-	if result.BuildIdentity != nil {
-		id := *result.BuildIdentity
-		result.BuildIdentity = &id
-	}
-	return result
 }
 
 // assignmentGeneration returns the hex SHA-256 of identity's JSON form.
@@ -357,8 +342,5 @@ func (c *ControlPlane) assignmentGenerations(ctx context.Context) (TeamAssignmen
 			}
 		}
 	}
-	c.teamFactsMu.Lock()
-	c.teamFacts = result
-	c.teamFactsMu.Unlock()
 	return result, nil
 }

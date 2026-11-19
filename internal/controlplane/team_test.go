@@ -60,7 +60,7 @@ func (f *teamServiceFixture) ShowPane(ctx context.Context, role string) error {
 }
 
 // StartAgents records the authorized action without starting any process.
-func (f *teamServiceFixture) StartAgents(ctx context.Context) (*gensurla.ProjectTeam, error) {
+func (f *teamServiceFixture) StartAgents(ctx context.Context, choices map[string]*gensurla.RoleAgentChoice) (*gensurla.ProjectTeam, error) {
 	f.mu.Lock()
 	f.calls = append(f.calls, "start")
 	start := f.start
@@ -68,8 +68,22 @@ func (f *teamServiceFixture) StartAgents(ctx context.Context) (*gensurla.Project
 	if start != nil {
 		return start(ctx)
 	}
-	return &gensurla.ProjectTeam{Team: "team", Space: "space", Dialog: "opened", Step: "Choose the fixture's builder in its open team dialog.", Roles: []*gensurla.ProjectTeamRole{}}, nil
+	return &gensurla.ProjectTeam{Team: "team", Space: "space", HerdrMode: "attached", Step: "The fixture agents have started.", Roles: []*gensurla.ProjectTeamRole{}}, nil
 }
+
+// ListAgentOptions returns an installed-client fixture without executable discovery.
+func (f *teamServiceFixture) ListAgentOptions(context.Context) ([]*gensurla.InstalledAgentOption, error) {
+	return []*gensurla.InstalledAgentOption{}, nil
+}
+
+// DismissNotice has no persistence effect in tests that exercise other owners.
+func (f *teamServiceFixture) DismissNotice(context.Context, string) error { return nil }
+
+// StopWorkers has no process effect in tests that exercise other owners.
+func (f *teamServiceFixture) StopWorkers(context.Context, BuildIdentity) error { return nil }
+
+// Close joins no processes in this fixture.
+func (f *teamServiceFixture) Close() error { return nil }
 
 // RegisterBuildRoles records registration without changing a window or starting any process.
 func (f *teamServiceFixture) RegisterBuildRoles(ctx context.Context, folders BuildFolders) error {
@@ -102,7 +116,7 @@ func (f *teamServiceFixture) Supervise(ctx context.Context, read AssignmentReade
 // testTeamBinding supplies an independent team with no roles assigned yet.
 func testTeamBinding() *TeamBinding {
 	return &TeamBinding{Owner: "alice@example.com", Service: &teamServiceFixture{
-		snapshot: gensurla.TeamSnapshot{Team: "test-team", Roles: []*gensurla.TeamRoleState{}},
+		snapshot: gensurla.TeamSnapshot{HerdrMode: "attached", SavedChoices: map[string]*gensurla.RoleAgentChoice{}, DismissedNotices: []string{}, Team: "test-team", Roles: []*gensurla.TeamRoleState{}},
 	}}
 }
 
@@ -111,7 +125,7 @@ func testTeamBinding() *TeamBinding {
 func TestTeamUserTransport(t *testing.T) {
 	for _, kind := range []CallerKind{CallerUser, CallerGuide, CallerBuilder, CallerTestWriter, CallerManagement} {
 		t.Run(string(kind), func(t *testing.T) {
-			f := &teamServiceFixture{snapshot: gensurla.TeamSnapshot{Team: "team", Roles: []*gensurla.TeamRoleState{}}}
+			f := &teamServiceFixture{snapshot: gensurla.TeamSnapshot{HerdrMode: "attached", SavedChoices: map[string]*gensurla.RoleAgentChoice{}, DismissedNotices: []string{}, Team: "team", Roles: []*gensurla.TeamRoleState{}}}
 			cp := newControlPlane(t, Options{Team: &TeamBinding{Owner: "owner", Service: f}})
 			handler := NewHTTPHandler(cp, func(*http.Request) (Principal, error) { return Principal{ID: "owner", Kind: kind}, nil })
 			for _, route := range []struct{ method, path, body string }{{"GET", "/team", ""}, {"POST", "/team/pane", `{"role":"builder"}`}, {"POST", "/team/agents", ""}} {
@@ -246,7 +260,7 @@ func TestTeamUserResourceOwner(t *testing.T) {
 // TestTeamVersionBelongsToResourceOwner keeps other owners' change-list waits
 // independent of the bound team's activity and never reads that team for them.
 func TestTeamVersionBelongsToResourceOwner(t *testing.T) {
-	f := &teamServiceFixture{snapshot: gensurla.TeamSnapshot{Team: "team", Roles: []*gensurla.TeamRoleState{}}}
+	f := &teamServiceFixture{snapshot: gensurla.TeamSnapshot{HerdrMode: "attached", SavedChoices: map[string]*gensurla.RoleAgentChoice{}, DismissedNotices: []string{}, Team: "team", Roles: []*gensurla.TeamRoleState{}}}
 	cp := newControlPlane(t, Options{Team: &TeamBinding{Owner: "alice", Service: f}})
 	cp.changesWait = time.Millisecond
 	alice, bob := asCaller("alice", CallerUser), asCaller("bob", CallerUser)
@@ -467,7 +481,7 @@ func TestTeamWaitingVersionAndHistory(t *testing.T) {
 	exporter := tracetest.NewInMemoryExporter()
 	provider := sdktrace.NewTracerProvider(sdktrace.WithSyncer(exporter))
 	t.Cleanup(func() { assert.NoError(t, provider.Shutdown(context.Background())) })
-	f := &teamServiceFixture{snapshot: gensurla.TeamSnapshot{Team: "team", Roles: []*gensurla.TeamRoleState{{Role: "builder", Handle: "builder", State: "working", Attention: "none", Watcher: "held", Assignment: "nothing_owed"}}}}
+	f := &teamServiceFixture{snapshot: gensurla.TeamSnapshot{HerdrMode: "attached", SavedChoices: map[string]*gensurla.RoleAgentChoice{}, DismissedNotices: []string{}, Team: "team", Roles: []*gensurla.TeamRoleState{{Role: "builder", Handle: "builder", State: "working", Attention: "none", Watcher: "held", Assignment: "nothing_owed"}}}}
 	cp := newControlPlane(t, Options{TracerProvider: provider, Team: &TeamBinding{Owner: "owner", Service: f}})
 	cp.changesWait = time.Millisecond
 	user := asCaller("owner", CallerUser)

@@ -263,8 +263,8 @@ func TestViewsPageBuildTeamRecoveryClearsTheOldInstructionEverywhere(t *testing.
 		defer f.mu.Unlock()
 		f.start = func(context.Context) (*gensurla.ProjectTeam, error) {
 			return &gensurla.ProjectTeam{
-				Team: "page-team", Space: "page-space", Dialog: "opened",
-				Step: "Choose the builder in the newly opened team dialog.", Roles: []*gensurla.ProjectTeamRole{},
+				Team: "page-team", Space: "page-space", HerdrMode: "attached",
+				Step: "The project agents have started.", Roles: []*gensurla.ProjectTeamRole{},
 			}, nil
 		}
 	})
@@ -285,7 +285,7 @@ page.$("#surla-build-view-team").click();
 await until(() => page.state() === "team" && page.$("#surla-team-start") && !page.$("#surla-team-start").disabled, "View team did not open the recovery action");
 expect(page.sent("POST", "/team/agents").length === 0, "opening Team started agents implicitly");
 page.$("#surla-team-start").click();
-await until(() => page.$("#surla-team-start-receipt") && page.text("#surla-team-start-receipt").includes("Choose the builder in the newly opened team dialog."), "the successful Team start receipt did not appear");
+await until(() => page.$("#surla-team-start-receipt") && page.text("#surla-team-start-receipt").includes("The project agents have started."), "the successful Team start receipt did not appear");
 expect(!page.doc.body.textContent.includes(oldStep), "the superseded Build instruction remained visible in Team");
 page.$("#surla-nav-cp1").click();
 await until(() => page.$("#surla-build-again") && page.text("#surla-build-details").includes(savedStart), "returning to the card lost the saved Build");

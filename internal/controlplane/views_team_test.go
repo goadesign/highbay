@@ -13,7 +13,7 @@ import (
 // pageTeamSnapshot supplies independent terminal, watcher and assignment facts.
 // Each replacement is immutable after publication to the fixture's readers.
 func pageTeamSnapshot(state string) gensurla.TeamSnapshot {
-	return gensurla.TeamSnapshot{Team: "page-team", Roles: []*gensurla.TeamRoleState{
+	return gensurla.TeamSnapshot{HerdrMode: "attached", SavedChoices: map[string]*gensurla.RoleAgentChoice{}, DismissedNotices: []string{}, Team: "page-team", Roles: []*gensurla.TeamRoleState{
 		{Role: "guide", Handle: "page-guide", State: "not_started", Attention: "none", Watcher: "unknown", Assignment: "unknown"},
 		{Role: "builder", Handle: "page-builder", State: state, Attention: "question", Watcher: "gone", Assignment: "unread"},
 		{Role: "test_writer", Handle: "page-writer", State: "unknown", Attention: "unknown", Watcher: "held", Assignment: "nothing_owed"},
@@ -23,7 +23,7 @@ func pageTeamSnapshot(state string) gensurla.TeamSnapshot {
 // TestViewsPageDescribeGuideStatusControlsNext follows the same Team reads
 // as Describe and checks that their guidance yields to an existing card.
 func TestViewsPageDescribeGuideStatusControlsNext(t *testing.T) {
-	f := &teamServiceFixture{snapshot: gensurla.TeamSnapshot{
+	f := &teamServiceFixture{snapshot: gensurla.TeamSnapshot{HerdrMode: "attached", SavedChoices: map[string]*gensurla.RoleAgentChoice{}, DismissedNotices: []string{},
 		Team: "page-team", Roles: []*gensurla.TeamRoleState{},
 	}}
 	cp := pageControlPlane(t, Options{Team: &TeamBinding{Owner: pageOwner, Service: f}})
@@ -221,7 +221,7 @@ func TestViewsPageTeamStartsExplicitlyAndRetainsFailedFacts(t *testing.T) {
 		f.mu.Lock()
 		f.snapshot = pageTeamSnapshot("working")
 		f.mu.Unlock()
-		return &gensurla.ProjectTeam{Team: "page-team", Space: "page-space", Dialog: "opened", Step: "Choose the builder in the open team dialog.", Roles: []*gensurla.ProjectTeamRole{}}, nil
+		return &gensurla.ProjectTeam{Team: "page-team", Space: "page-space", HerdrMode: "attached", Step: "The project agents have started.", Roles: []*gensurla.ProjectTeamRole{}}, nil
 	}
 	cp := pageControlPlane(t, Options{Team: &TeamBinding{Owner: pageOwner, Service: f}})
 	ps := startPageServer(t, cp)
@@ -249,7 +249,7 @@ await until(() => page.sent("POST", "/team/agents").length === 1, "the explicit 
 expect(page.$("#surla-team-start").disabled && page.text("#surla-frame-next dd") === "Wait for agents to start.", "pending startup was presented as another action");
 await control(origin, "release", { key: "POST /team/agents" });
 await until(() => page.$("#surla-team-start-receipt"), "explicit start receipt is missing");
-expect(page.text("#surla-team-start-receipt").includes("This start (begun ") && page.text("#surla-team-start-receipt").includes("Choose the builder in the open team dialog."), "receipt is not dated owner text");
+expect(page.text("#surla-team-start-receipt").includes("This start (begun ") && page.text("#surla-team-start-receipt").includes("The project agents have started."), "receipt is not dated owner text");
 await until(() => page.$("#surla-team-role-builder").dataset.state === "working" && !page.$("#surla-team-attention-builder"), "current facts were replaced by the historical start receipt");
 expect(page.sent("POST", "/team/agents").length === 1, "one click did not send one start");
 page.close();

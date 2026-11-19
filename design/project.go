@@ -115,7 +115,7 @@ var _ = Service("project", func() {
 		})
 	})
 	Method("status", func() {
-		Description("Read existing project, saved change stage and cached role state. Creates nothing and starts no subprocess or agent.")
+		Description("Read existing project, saved change stage and observed role state. Creates nothing and starts no agent. Merge status uses the build owner's read-only Git checks, including a manual merge into the project branch.")
 		Result(ProjectStatus)
 		HTTP(func() { GET("/status"); Response(StatusOK) })
 	})

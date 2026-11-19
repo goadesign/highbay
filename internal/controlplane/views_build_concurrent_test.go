@@ -32,8 +32,8 @@ func TestViewsPageBuildIgnoresAReadCapturedDuringPendingReplacement(t *testing.T
 	team := &teamServiceFixture{snapshot: pageTeamSnapshot("working")}
 	team.start = func(context.Context) (*gensurla.ProjectTeam, error) {
 		return &gensurla.ProjectTeam{
-			Team: "page-team", Space: "page-space", Dialog: "opened",
-			Step:  "Choose the builder in the open team dialog.",
+			Team: "page-team", Space: "page-space", HerdrMode: "attached",
+			Step:  "The project agents have started.",
 			Roles: []*gensurla.ProjectTeamRole{{Role: "builder", Handle: "page-builder", Running: false}},
 		}, nil
 	}

@@ -425,9 +425,6 @@ type (
 		// reports is the project's report checker;
 		// reportWorker runs it and drains before stores close.
 		reports *reportChecker
-		// teamFacts is the latest complete supervisor observation; status reads it without probing.
-		teamFactsMu sync.RWMutex
-		teamFacts   TeamAssignments
 		// openViews is injected by the project composition root and owns private browser exchange.
 		openViews    func(context.Context) error
 		reportWorker sync.WaitGroup
