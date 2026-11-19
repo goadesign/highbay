@@ -303,7 +303,9 @@ func checkMergeAddedPath(ctx context.Context, root *os.Root, path string) error 
 				return err
 			}
 		} else {
-			_, err := runGitRead(ctx, root.Name(), "check-ignore", "--quiet", "--", prefix)
+			// check-ignore takes pathnames but rejects Git's global literal
+			// pathspec flag. Prefix ./ so a filename cannot start with magic.
+			_, err := runMergeGit(ctx, root.Name(), "/dev/null", "", "check-ignore", "--quiet", "--", "./"+prefix)
 			var exit *exec.ExitError
 			if errors.As(err, &exit) && exit.ExitCode() == 1 {
 				return nil
@@ -403,7 +405,10 @@ func checkMergeHookPath(repo, commonDir, path string) error {
 func runMergeGit(ctx context.Context, repo, hooks, branch string, args ...string) (string, error) {
 	cmd := exec.CommandContext(ctx, "git", append([]string{"-C", repo, "--no-replace-objects", "--no-lazy-fetch",
 		"-c", "core.fsmonitor=false", "-c", "core.hooksPath=" + hooks}, args...)...)
-	cmd.Env = append(cleanGitEnv(), "GIT_CONFIG_COUNT=1", "GIT_CONFIG_KEY_0=branch."+branch+".mergeOptions", "GIT_CONFIG_VALUE_0=")
+	cmd.Env = cleanGitEnv()
+	if branch != "" {
+		cmd.Env = append(cmd.Env, "GIT_CONFIG_COUNT=1", "GIT_CONFIG_KEY_0=branch."+branch+".mergeOptions", "GIT_CONFIG_VALUE_0=")
+	}
 	stdout := &cappedBuffer{limit: gitReadMaxOutput}
 	stderr := &cappedBuffer{limit: gitReadMaxStderr}
 	cmd.Stdout, cmd.Stderr = stdout, stderr
