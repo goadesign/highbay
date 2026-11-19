@@ -668,7 +668,9 @@ func TestViewsPageInARealBrowser(t *testing.T) {
 
 	t.Run("g a reload ends the session", func(t *testing.T) {
 		assert.False(t, facts.Reload.SignedOutTimedOut, "the reloaded page did not say how to open it")
-		assert.Contains(t, facts.Reload.SignedOutText, "Run surla in your project folder", "the reloaded page's message")
+		assert.Contains(t, facts.Reload.SignedOutText,
+			"Ask your coding agent to open Surla views, or choose Open Page in the Herdr companion.",
+			"the reloaded page's recovery routes")
 		assert.Equal(t, origin+"/views", facts.Reload.Href, "the reloaded page's address")
 		assert.Len(t, requestsTo(facts.Reload.PageRequests, http.MethodGet, "/views"), 1, "the reload did not load the page again")
 		assert.Empty(t, pageFetches(facts.Reload.PageRequests), "the reloaded page sent requests of its own")
