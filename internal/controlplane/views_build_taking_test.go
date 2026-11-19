@@ -11,7 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestViewsPageShowsTakingStates keeps commands bound to passed commit IDs and
+// TestViewsPageShowsTakingStates preserves passed commit evidence before approval and
 // lists only the dropped build's retained branches, including an empty list.
 func TestViewsPageShowsTakingStates(t *testing.T) {
 	for _, state := range []string{"building", "passed", "evaluator", "rewritten", "merged", "merged_configured", "dropped", "empty", "merged_findings", "dropped_findings", "earlier_passed", "earlier_merged", "earlier_dropped", "earlier_configured"} {
@@ -89,11 +89,11 @@ if (["passed", "rewritten", "evaluator"].includes(input.state)) {
   expect(page.text("#surla-build-state") === "The builder’s commit passed the accepted tests.", "passed build still describes future building or checking");
   expect(page.$("#surla-build-state").nextElementSibling?.classList.contains("surla-build-merge"), "merge instructions are not immediately below the passed state");
   expect(!taking.includes("builder finishes") && !taking.includes("after the check passes"), "passed build retains a stale next step");
-  const commands = page.$$("#surla-build-taking ol code").map((node) => node.textContent);
-  expect(commands[0] === "git merge " + candidate && commands[1] === "surla/build-7", "candidate command used a branch tip or lost its verified branch");
-  if (input.state === "evaluator") expect(commands.length === 2 && !taking.includes(tests), "stored evaluator offered a tests merge");
-  else expect(commands[2] === "git merge " + tests && commands[3] === "surla/tests-7", "tests command did not follow the candidate's exact commit");
-  expect(taking.includes("Surla does not merge or deploy anything"), "taking claims a merge side effect");
+  expect(taking.includes(candidate) && taking.includes("surla/build-7"), "candidate evidence used a branch tip or lost its verified branch");
+  if (input.state === "evaluator") expect(!taking.includes(tests), "stored evaluator invented a tests commit");
+  else expect(taking.includes(tests) && taking.includes("surla/tests-7"), "tests evidence lost the exact commit");
+  expect(!taking.includes("git merge") && !page.$("#surla-build-merge"), "an unapproved passing check offered a merge action");
+  expect(taking.includes("Review and approval"), "passing build omitted the required approval step");
   expect(taking.includes("commit where this build started") === (input.state === "rewritten"), "rewrite warning does not follow base_in_branch");
 } else {
   expect(!taking.includes("git merge"), "an unpassed or closed build offers merge commands");
@@ -220,19 +220,11 @@ if (input.state === "passed") {
     await control(origin, "reply", { key: "GET " + path, status: 200,
       body: { change_id: "chg-taking", drafted_before_drop: false, build: { ...saved, state: "started", taking } } });
     await control(origin, "act", { key: "resave-taking" });
-    const commandCount = taking.state === "passed" ? (taking.tests.source === "written_tests" ? 2 : 1) : 0;
     await until(() => page.sent("GET", path).length > before && page.sent("GET", path).at(-1).status === 200 &&
-      page.$("#surla-build-taking")?.dataset.state === taking.state && page.$$("#surla-build-taking pre").length === commandCount &&
+      page.$("#surla-build-taking")?.dataset.state === taking.state &&
       !page.$("#surla-build-loading"), "taking refresh did not settle");
+    expect(!page.text("#surla-build-taking").includes("git merge"), "refresh granted approval to unapproved work");
   };
-  page.$("#surla-build-taking pre").focus();
-  await replaceTaking(variants.building);
-  expect(page.doc.activeElement === page.$("#surla-build-title"), "removing a focused merge command lost the stable Build heading");
-  await replaceTaking(passed);
-  page.$$("#surla-build-taking pre")[1].focus();
-  await replaceTaking(variants.evaluator);
-  expect(page.doc.activeElement === page.$("#surla-build-title"), "removing only the focused tests command lost the stable Build heading");
-  await replaceTaking(passed);
   const field = page.$('textarea[data-example-id="check_01"][data-field="scenario"]');
   page.type(field, "keep editor focus when commands vanish"); field.focus();
   await replaceTaking(variants.evaluator);
@@ -294,7 +286,7 @@ page.$("#surla-build-start").click();
 await until(() => page.$("#surla-build-blocking-change") && page.sent("GET", other).length > 0 && !page.$("#surla-build-loading"), "blocker was not read by its exact change ID");
 const message = page.text("#surla-build-action-error");
 expect(message.includes("chg-passed-open has an open build") && message.includes("commit passed the accepted tests") && !message.includes("Nothing of it has passed"), "passed blocker was described as unpassed");
-expect(page.$("#surla-build-start").disabled && page.text("#surla-build-taking").includes("git merge " + "1".repeat(40)), "selected not_started observation cleared the passed blocker");
+expect(page.$("#surla-build-start").disabled && page.text("#surla-build-taking").includes("1".repeat(40)), "selected not_started observation cleared the passed blocker");
 expect(!page.text("#surla-checkpoint-status").includes("Build did not start"), "blocker was duplicated in global status");
 page.$("#surla-build-drop").click();
 await until(() => page.$("#surla-build-drop-question"), "old passed blocker did not ask for Drop consent");
