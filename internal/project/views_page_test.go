@@ -89,7 +89,7 @@ func TestViewsPageSessionLifecycle(t *testing.T) {
   expectRecovery(bare, "#surla-signed-out");
   expect(!bare.text("#surla-signed-out-title").includes("with surla"), "the no-link heading still directs the user to the CLI");
   const lifetime = bare.text("#surla-signed-out .surla-muted");
-  expect(lifetime.includes("coding agent") && lifetime.includes("Herdr companion"), "the session-lifetime note omitted how to reopen the page: " + lifetime);
+  expect(lifetime.includes("fresh session") && lifetime.includes("one of those routes"), "the session-lifetime note omitted the established reopen routes: " + lifetime);
   await sleep(200);
   expect(bare.requests.length === 0, "a page without a link sent requests: " + JSON.stringify(bare.requests));
   bare.close();
