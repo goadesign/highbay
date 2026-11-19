@@ -148,6 +148,10 @@ export interface DeclineRevisionPayload {
   request_revision: string;
 }
 
+export interface DismissTeamNoticeRequestBody {
+  notice: "single_agent_family" | "outside_herdr" | "herdr_unavailable";
+}
+
 export interface ExampleItem {
   expected_outcome: string;
   id: string;
@@ -165,10 +169,27 @@ export interface ExchangeBrowserLinkResponseBody {
   session: string;
 }
 
+export interface InstalledAgentOption {
+  client: "claude" | "codex" | "antigravity" | "cursor" | "gemini" | "opencode";
+  efforts: string[];
+  headless_supported: boolean;
+  model_supported: boolean;
+  models: string[];
+  program: string;
+  thinking_supported: boolean;
+  title: string;
+  yolo_effect?: string;
+  yolo_supported: boolean;
+}
+
 export interface LatestVerificationItem {
   inputs_current: boolean;
   run_id: string;
   state: "running" | "passed" | "failed" | "not_completed";
+}
+
+export interface ListTeamAgentOptionsResponseBody {
+  agents: InstalledAgentOption[];
 }
 
 export interface LivePromptItem {
@@ -179,6 +200,17 @@ export interface LivePromptItem {
 
 export interface LiveTargetStatus {
   live_target: ({ "state": "none" } | { "candidate_commit": string; "since": string; "state": "starting" } | { "candidate_commit": string; "prompts": LivePromptItem[]; "started_at": string; "state": "running"; "url": string } | { "candidate_commit": string; "message": string; "state": "not_confirmed_stopped" } | { "candidate_commit": string; "ended_at": string; "message": string; "started_at": string; "state": "ended" });
+}
+
+export interface MergeChangeRequestBody {
+  candidate_commit: string;
+  report_digest: string;
+  request_revision: string;
+}
+
+export interface MergeChangeResponseBody {
+  branch: string;
+  head_commit: string;
 }
 
 export interface ModelConfigResult {
@@ -198,13 +230,18 @@ export interface OpenBuildRefusal {
   name: string;
 }
 
+export interface OpenViewsResponseBody {
+  message: string;
+  opened: boolean;
+}
+
 export interface PreviewArchitecturePayload {
   change_id: string;
   request_revision: string;
 }
 
 export interface ProjectTeam {
-  dialog: "opened" | "already_open" | "not_needed";
+  herdr_mode: "attached" | "available" | "unavailable";
   roles: ProjectTeamRole[];
   space: string;
   step: string;
@@ -242,6 +279,14 @@ export interface RequiredTest {
   story: string;
 }
 
+export interface RoleAgentChoice {
+  client: "claude" | "codex" | "antigravity" | "cursor" | "gemini" | "opencode";
+  model?: string;
+  program: string;
+  thinking?: string;
+  yolo: boolean;
+}
+
 export interface ServerError {
   fault: boolean;
   id: string;
@@ -256,13 +301,18 @@ export interface ShowTeamPaneRequestBody {
 }
 
 export interface StartBuildRequestBody {
+  choices?: Record<string, RoleAgentChoice>;
   replaces?: ReplacedBuild;
   request_revision: string;
 }
 
 export interface StartBuildResult {
   build: StartedBuild;
-  team: ({ "dialog": "opened" | "already_open" | "not_needed"; "roles": ProjectTeamRole[]; "space": string; "state": "ready"; "step": string; "team": string } | { "state": "window_busy"; "step": string } | { "count": number; "state": "ambiguous_space"; "step": string } | { "state": "unavailable"; "step": string });
+  team: ({ "herdr_mode": "attached" | "available" | "unavailable"; "roles": ProjectTeamRole[]; "space": string; "state": "ready"; "step": string; "team": string } | { "state": "window_busy"; "step": string } | { "count": number; "state": "ambiguous_space"; "step": string } | { "state": "unavailable"; "step": string });
+}
+
+export interface StartTeamAgentsRequestBody {
+  choices?: Record<string, RoleAgentChoice>;
 }
 
 export interface StartedBuild {
@@ -342,7 +392,10 @@ export interface TeamRoleState {
 }
 
 export interface TeamSnapshot {
+  dismissed_notices: ("single_agent_family" | "outside_herdr" | "herdr_unavailable")[];
+  herdr_mode: "attached" | "available" | "unavailable";
   roles: TeamRoleState[];
+  saved_choices: Record<string, RoleAgentChoice>;
   team: string;
 }
 
@@ -509,6 +562,8 @@ export interface GetChangeRequest {
 
 export type GetStoryRefreshRequest = Record<string, never>;
 
+export type OpenViewsRequest = Record<string, never>;
+
 export type StartBuildRequest = StartBuildRequestBody & { "change_id": string };
 
 export type DropBuildRequest = VerificationRunning & { "change_id": string };
@@ -525,13 +580,19 @@ export type GetTeamRequest = Record<string, never>;
 
 export type ShowTeamPaneRequest = ShowTeamPaneRequestBody;
 
-export type StartTeamAgentsRequest = Record<string, never>;
+export type StartTeamAgentsRequest = StartTeamAgentsRequestBody;
+
+export type ListTeamAgentOptionsRequest = Record<string, never>;
+
+export type DismissTeamNoticeRequest = DismissTeamNoticeRequestBody;
 
 export type ConfirmIntentRequest = ConfirmIntentPayload;
 
 export type DeclineRevisionRequest = DeclineRevisionPayload;
 
 export type ApproveMergeRequest = ApproveMergePayload;
+
+export type MergeChangeRequest = MergeChangeRequestBody & { "change_id": string };
 
 export type PreviewArchitectureRequest = PreviewArchitecturePayload;
 
@@ -569,6 +630,7 @@ export interface Operations {
   wait_for_changes: { request: WaitForChangesRequest; result: ChangeListVersion; failure: ServerError };
   get_change: { request: GetChangeRequest; result: ChangeCardResult; failure: ServerError };
   get_story_refresh: { request: GetStoryRefreshRequest; result: StoryRefreshResult; failure: ServerError };
+  open_views: { request: OpenViewsRequest; result: OpenViewsResponseBody; failure: ServerError };
   start_build: { request: StartBuildRequest; result: StartBuildResult; failure: ServerError | OpenBuildRefusal };
   drop_build: { request: DropBuildRequest; result: ChangeBuild; failure: ServerError | OpenBuildRefusal };
   get_build: { request: GetBuildRequest; result: ChangeBuild; failure: ServerError };
@@ -576,9 +638,12 @@ export interface Operations {
   get_team: { request: GetTeamRequest; result: TeamSnapshot; failure: ServerError };
   show_team_pane: { request: ShowTeamPaneRequest; result: undefined; failure: ServerError };
   start_team_agents: { request: StartTeamAgentsRequest; result: ProjectTeam; failure: ServerError };
+  list_team_agent_options: { request: ListTeamAgentOptionsRequest; result: ListTeamAgentOptionsResponseBody; failure: ServerError };
+  dismiss_team_notice: { request: DismissTeamNoticeRequest; result: undefined; failure: ServerError };
   confirm_intent: { request: ConfirmIntentRequest; result: ChangeCardResult; failure: ServerError };
   decline_revision: { request: DeclineRevisionRequest; result: ChangeCardResult; failure: ServerError };
   approve_merge: { request: ApproveMergeRequest; result: ChangeCardResult; failure: ServerError };
+  merge_change: { request: MergeChangeRequest; result: MergeChangeResponseBody; failure: ServerError };
   preview_architecture: { request: PreviewArchitectureRequest; result: ArchitecturePreviewResult; failure: ServerError };
   list_verifications: { request: ListVerificationsRequest; result: VerificationListResult; failure: ServerError };
   get_verification: { request: GetVerificationRequest; result: VerificationStatusResult; failure: ServerError };
@@ -641,6 +706,10 @@ function encodeGetStoryRefresh(_request: GetStoryRefreshRequest): EncodedRequest
   return { path: "/workspace/story/refresh", body: undefined };
 }
 
+function encodeOpenViews(_request: OpenViewsRequest): EncodedRequest {
+  return { path: "/views/open", body: undefined };
+}
+
 function encodeStartBuild(request: StartBuildRequest): EncodedRequest {
   const { change_id: _change_id, ...payload } = request;
   return { path: "/changes/" + encodeURIComponent(String(request.change_id)) + "/build", body: JSON.stringify(payload) };
@@ -667,8 +736,16 @@ function encodeShowTeamPane(request: ShowTeamPaneRequest): EncodedRequest {
   return { path: "/team/pane", body: JSON.stringify(request) };
 }
 
-function encodeStartTeamAgents(_request: StartTeamAgentsRequest): EncodedRequest {
-  return { path: "/team/agents", body: undefined };
+function encodeStartTeamAgents(request: StartTeamAgentsRequest): EncodedRequest {
+  return { path: "/team/agents", body: JSON.stringify(request) };
+}
+
+function encodeListTeamAgentOptions(_request: ListTeamAgentOptionsRequest): EncodedRequest {
+  return { path: "/team/agent-options", body: undefined };
+}
+
+function encodeDismissTeamNotice(request: DismissTeamNoticeRequest): EncodedRequest {
+  return { path: "/team/notices/dismiss", body: JSON.stringify(request) };
 }
 
 function encodeConfirmIntent(request: ConfirmIntentRequest): EncodedRequest {
@@ -681,6 +758,11 @@ function encodeDeclineRevision(request: DeclineRevisionRequest): EncodedRequest 
 
 function encodeApproveMerge(request: ApproveMergeRequest): EncodedRequest {
   return { path: "/changes/approve", body: JSON.stringify(request) };
+}
+
+function encodeMergeChange(request: MergeChangeRequest): EncodedRequest {
+  const { change_id: _change_id, ...payload } = request;
+  return { path: "/changes/" + encodeURIComponent(String(request.change_id)) + "/merge", body: JSON.stringify(payload) };
 }
 
 function encodePreviewArchitecture(request: PreviewArchitectureRequest): EncodedRequest {
@@ -750,6 +832,10 @@ function decodeGetStoryRefreshFailure(_status: number, value: unknown): value is
   return isServerError(value);
 }
 
+function decodeOpenViewsFailure(_status: number, value: unknown): value is Operations["open_views"]["failure"] {
+  return isServerError(value);
+}
+
 function decodeStartBuildFailure(status: number, value: unknown): value is Operations["start_build"]["failure"] {
   return isServerError(value) ||
     (status === 409 && matchesSchema(value, {"$ref":"#/$defs/OpenBuildRefusal"}));
@@ -780,6 +866,14 @@ function decodeStartTeamAgentsFailure(_status: number, value: unknown): value is
   return isServerError(value);
 }
 
+function decodeListTeamAgentOptionsFailure(_status: number, value: unknown): value is Operations["list_team_agent_options"]["failure"] {
+  return isServerError(value);
+}
+
+function decodeDismissTeamNoticeFailure(_status: number, value: unknown): value is Operations["dismiss_team_notice"]["failure"] {
+  return isServerError(value);
+}
+
 function decodeConfirmIntentFailure(_status: number, value: unknown): value is Operations["confirm_intent"]["failure"] {
   return isServerError(value);
 }
@@ -789,6 +883,10 @@ function decodeDeclineRevisionFailure(_status: number, value: unknown): value is
 }
 
 function decodeApproveMergeFailure(_status: number, value: unknown): value is Operations["approve_merge"]["failure"] {
+  return isServerError(value);
+}
+
+function decodeMergeChangeFailure(_status: number, value: unknown): value is Operations["merge_change"]["failure"] {
   return isServerError(value);
 }
 
@@ -835,6 +933,7 @@ export const ROUTES: { [K in OperationName]: Route<K> } = {
   wait_for_changes: { method: "GET", success: 200, encode: encodeWaitForChanges, decode: isChangeListVersion, decodeFailure: decodeWaitForChangesFailure },
   get_change: { method: "GET", success: 200, encode: encodeGetChange, decode: isChangeCardResult, decodeFailure: decodeGetChangeFailure },
   get_story_refresh: { method: "GET", success: 200, encode: encodeGetStoryRefresh, decode: isStoryRefreshResult, decodeFailure: decodeGetStoryRefreshFailure },
+  open_views: { method: "POST", success: 200, encode: encodeOpenViews, decode: isOpenViewsResponseBody, decodeFailure: decodeOpenViewsFailure },
   start_build: { method: "POST", success: 200, encode: encodeStartBuild, decode: isStartBuildResult, decodeFailure: decodeStartBuildFailure },
   drop_build: { method: "POST", success: 200, encode: encodeDropBuild, decode: isChangeBuild, decodeFailure: decodeDropBuildFailure },
   get_build: { method: "GET", success: 200, encode: encodeGetBuild, decode: isChangeBuild, decodeFailure: decodeGetBuildFailure },
@@ -842,9 +941,12 @@ export const ROUTES: { [K in OperationName]: Route<K> } = {
   get_team: { method: "GET", success: 200, encode: encodeGetTeam, decode: isTeamSnapshot, decodeFailure: decodeGetTeamFailure },
   show_team_pane: { method: "POST", success: 204, encode: encodeShowTeamPane, decode: isNoContent, decodeFailure: decodeShowTeamPaneFailure },
   start_team_agents: { method: "POST", success: 200, encode: encodeStartTeamAgents, decode: isProjectTeam, decodeFailure: decodeStartTeamAgentsFailure },
+  list_team_agent_options: { method: "GET", success: 200, encode: encodeListTeamAgentOptions, decode: isListTeamAgentOptionsResponseBody, decodeFailure: decodeListTeamAgentOptionsFailure },
+  dismiss_team_notice: { method: "POST", success: 204, encode: encodeDismissTeamNotice, decode: isNoContent, decodeFailure: decodeDismissTeamNoticeFailure },
   confirm_intent: { method: "POST", success: 200, encode: encodeConfirmIntent, decode: isChangeCardResult, decodeFailure: decodeConfirmIntentFailure },
   decline_revision: { method: "POST", success: 200, encode: encodeDeclineRevision, decode: isChangeCardResult, decodeFailure: decodeDeclineRevisionFailure },
   approve_merge: { method: "POST", success: 200, encode: encodeApproveMerge, decode: isChangeCardResult, decodeFailure: decodeApproveMergeFailure },
+  merge_change: { method: "POST", success: 200, encode: encodeMergeChange, decode: isMergeChangeResponseBody, decodeFailure: decodeMergeChangeFailure },
   preview_architecture: { method: "POST", success: 200, encode: encodePreviewArchitecture, decode: isArchitecturePreviewResult, decodeFailure: decodePreviewArchitectureFailure },
   list_verifications: { method: "GET", success: 200, encode: encodeListVerifications, decode: isVerificationListResult, decodeFailure: decodeListVerificationsFailure },
   get_verification: { method: "GET", success: 200, encode: encodeGetVerification, decode: isVerificationStatusResult, decodeFailure: decodeGetVerificationFailure },
@@ -1677,6 +1779,23 @@ const SCHEMA_DEFS: Record<string, JSONSchemaNode> = {
     },
     "additionalProperties": false
   },
+  "DismissTeamNoticeRequestBody": {
+    "type": "object",
+    "required": [
+      "notice"
+    ],
+    "properties": {
+      "notice": {
+        "type": "string",
+        "enum": [
+          "single_agent_family",
+          "outside_herdr",
+          "herdr_unavailable"
+        ]
+      }
+    },
+    "additionalProperties": false
+  },
   "ExampleItem": {
     "type": "object",
     "required": [
@@ -1737,6 +1856,67 @@ const SCHEMA_DEFS: Record<string, JSONSchemaNode> = {
     },
     "additionalProperties": false
   },
+  "InstalledAgentOption": {
+    "type": "object",
+    "required": [
+      "client",
+      "program",
+      "title",
+      "models",
+      "efforts",
+      "model_supported",
+      "thinking_supported",
+      "yolo_supported",
+      "headless_supported"
+    ],
+    "properties": {
+      "client": {
+        "type": "string",
+        "enum": [
+          "claude",
+          "codex",
+          "antigravity",
+          "cursor",
+          "gemini",
+          "opencode"
+        ]
+      },
+      "efforts": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      },
+      "headless_supported": {
+        "type": "boolean"
+      },
+      "model_supported": {
+        "type": "boolean"
+      },
+      "models": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      },
+      "program": {
+        "type": "string"
+      },
+      "thinking_supported": {
+        "type": "boolean"
+      },
+      "title": {
+        "type": "string"
+      },
+      "yolo_effect": {
+        "type": "string"
+      },
+      "yolo_supported": {
+        "type": "boolean"
+      }
+    },
+    "additionalProperties": false
+  },
   "LatestVerificationItem": {
     "type": "object",
     "required": [
@@ -1759,6 +1939,21 @@ const SCHEMA_DEFS: Record<string, JSONSchemaNode> = {
           "failed",
           "not_completed"
         ]
+      }
+    },
+    "additionalProperties": false
+  },
+  "ListTeamAgentOptionsResponseBody": {
+    "type": "object",
+    "required": [
+      "agents"
+    ],
+    "properties": {
+      "agents": {
+        "type": "array",
+        "items": {
+          "$ref": "#/$defs/InstalledAgentOption"
+        }
       }
     },
     "additionalProperties": false
@@ -1928,6 +2123,42 @@ const SCHEMA_DEFS: Record<string, JSONSchemaNode> = {
     },
     "additionalProperties": false
   },
+  "MergeChangeRequestBody": {
+    "type": "object",
+    "required": [
+      "request_revision",
+      "candidate_commit",
+      "report_digest"
+    ],
+    "properties": {
+      "candidate_commit": {
+        "type": "string"
+      },
+      "report_digest": {
+        "type": "string"
+      },
+      "request_revision": {
+        "type": "string"
+      }
+    },
+    "additionalProperties": false
+  },
+  "MergeChangeResponseBody": {
+    "type": "object",
+    "required": [
+      "branch",
+      "head_commit"
+    ],
+    "properties": {
+      "branch": {
+        "type": "string"
+      },
+      "head_commit": {
+        "type": "string"
+      }
+    },
+    "additionalProperties": false
+  },
   "ModelConfigResult": {
     "type": "object",
     "properties": {
@@ -2046,6 +2277,22 @@ const SCHEMA_DEFS: Record<string, JSONSchemaNode> = {
     },
     "additionalProperties": false
   },
+  "OpenViewsResponseBody": {
+    "type": "object",
+    "required": [
+      "opened",
+      "message"
+    ],
+    "properties": {
+      "message": {
+        "type": "string"
+      },
+      "opened": {
+        "type": "boolean"
+      }
+    },
+    "additionalProperties": false
+  },
   "PreviewArchitecturePayload": {
     "type": "object",
     "required": [
@@ -2068,16 +2315,16 @@ const SCHEMA_DEFS: Record<string, JSONSchemaNode> = {
       "team",
       "space",
       "roles",
-      "dialog",
+      "herdr_mode",
       "step"
     ],
     "properties": {
-      "dialog": {
+      "herdr_mode": {
         "type": "string",
         "enum": [
-          "opened",
-          "already_open",
-          "not_needed"
+          "attached",
+          "available",
+          "unavailable"
         ]
       },
       "roles": {
@@ -2223,6 +2470,40 @@ const SCHEMA_DEFS: Record<string, JSONSchemaNode> = {
     },
     "additionalProperties": false
   },
+  "RoleAgentChoice": {
+    "type": "object",
+    "required": [
+      "client",
+      "program",
+      "yolo"
+    ],
+    "properties": {
+      "client": {
+        "type": "string",
+        "enum": [
+          "claude",
+          "codex",
+          "antigravity",
+          "cursor",
+          "gemini",
+          "opencode"
+        ]
+      },
+      "model": {
+        "type": "string"
+      },
+      "program": {
+        "type": "string"
+      },
+      "thinking": {
+        "type": "string"
+      },
+      "yolo": {
+        "type": "boolean"
+      }
+    },
+    "additionalProperties": false
+  },
   "ServerError": {
     "type": "object",
     "required": [
@@ -2278,6 +2559,12 @@ const SCHEMA_DEFS: Record<string, JSONSchemaNode> = {
       "request_revision"
     ],
     "properties": {
+      "choices": {
+        "type": "object",
+        "additionalProperties": {
+          "$ref": "#/$defs/RoleAgentChoice"
+        }
+      },
       "replaces": {
         "$ref": "#/$defs/ReplacedBuild"
       },
@@ -2306,17 +2593,17 @@ const SCHEMA_DEFS: Record<string, JSONSchemaNode> = {
               "team",
               "space",
               "roles",
-              "dialog",
+              "herdr_mode",
               "step",
               "state"
             ],
             "properties": {
-              "dialog": {
+              "herdr_mode": {
                 "type": "string",
                 "enum": [
-                  "opened",
-                  "already_open",
-                  "not_needed"
+                  "attached",
+                  "available",
+                  "unavailable"
                 ]
               },
               "roles": {
@@ -2406,6 +2693,18 @@ const SCHEMA_DEFS: Record<string, JSONSchemaNode> = {
             "additionalProperties": false
           }
         ]
+      }
+    },
+    "additionalProperties": false
+  },
+  "StartTeamAgentsRequestBody": {
+    "type": "object",
+    "properties": {
+      "choices": {
+        "type": "object",
+        "additionalProperties": {
+          "$ref": "#/$defs/RoleAgentChoice"
+        }
       }
     },
     "additionalProperties": false
@@ -2884,13 +3183,41 @@ const SCHEMA_DEFS: Record<string, JSONSchemaNode> = {
     "type": "object",
     "required": [
       "team",
-      "roles"
+      "roles",
+      "herdr_mode",
+      "saved_choices",
+      "dismissed_notices"
     ],
     "properties": {
+      "dismissed_notices": {
+        "type": "array",
+        "items": {
+          "type": "string",
+          "enum": [
+            "single_agent_family",
+            "outside_herdr",
+            "herdr_unavailable"
+          ]
+        }
+      },
+      "herdr_mode": {
+        "type": "string",
+        "enum": [
+          "attached",
+          "available",
+          "unavailable"
+        ]
+      },
       "roles": {
         "type": "array",
         "items": {
           "$ref": "#/$defs/TeamRoleState"
+        }
+      },
+      "saved_choices": {
+        "type": "object",
+        "additionalProperties": {
+          "$ref": "#/$defs/RoleAgentChoice"
         }
       },
       "team": {
@@ -4218,9 +4545,19 @@ export function isExchangeBrowserLinkResponseBody(value: unknown): value is Exch
   return matchesSchema(value, { $ref: "#/$defs/ExchangeBrowserLinkResponseBody" });
 }
 
+// isListTeamAgentOptionsResponseBody validates a parsed answer against the generated ListTeamAgentOptionsResponseBody schema.
+export function isListTeamAgentOptionsResponseBody(value: unknown): value is ListTeamAgentOptionsResponseBody {
+  return matchesSchema(value, { $ref: "#/$defs/ListTeamAgentOptionsResponseBody" });
+}
+
 // isLiveTargetStatus validates a parsed answer against the generated LiveTargetStatus schema.
 export function isLiveTargetStatus(value: unknown): value is LiveTargetStatus {
   return matchesSchema(value, { $ref: "#/$defs/LiveTargetStatus" });
+}
+
+// isMergeChangeResponseBody validates a parsed answer against the generated MergeChangeResponseBody schema.
+export function isMergeChangeResponseBody(value: unknown): value is MergeChangeResponseBody {
+  return matchesSchema(value, { $ref: "#/$defs/MergeChangeResponseBody" });
 }
 
 // isModelConfigResult validates a parsed answer against the generated ModelConfigResult schema.
@@ -4236,6 +4573,11 @@ export function isModelConnection(value: unknown): value is ModelConnection {
 // isOpenBuildRefusal validates a parsed answer against the generated OpenBuildRefusal schema.
 export function isOpenBuildRefusal(value: unknown): value is OpenBuildRefusal {
   return matchesSchema(value, { $ref: "#/$defs/OpenBuildRefusal" });
+}
+
+// isOpenViewsResponseBody validates a parsed answer against the generated OpenViewsResponseBody schema.
+export function isOpenViewsResponseBody(value: unknown): value is OpenViewsResponseBody {
+  return matchesSchema(value, { $ref: "#/$defs/OpenViewsResponseBody" });
 }
 
 // isProjectTeam validates a parsed answer against the generated ProjectTeam schema.
