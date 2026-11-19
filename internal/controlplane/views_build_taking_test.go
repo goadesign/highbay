@@ -67,6 +67,10 @@ await control(origin, "reply", { key: "GET " + path, status: 200,
   body: { change_id: "chg-taking", drafted_before_drop: false, build: { ...saved, state: "started", taking: variants[input.state] } } });
 const page = await openPage(origin, { link: input.link });
 await until(() => page.$("#surla-build-taking") && !page.$("#surla-build-loading"), "taking state did not appear");
+await until(() => {
+  const action = page.$("#surla-build-start") ?? page.$("#surla-build-again");
+  return !action || !action.disabled;
+}, "installed worker discovery did not enable the existing Build offer");
 const taking = page.text("#surla-build-taking");
 if (input.state.startsWith("earlier_")) {
   const action = page.$("#surla-build-start");

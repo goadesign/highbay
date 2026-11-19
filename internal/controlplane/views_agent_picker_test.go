@@ -40,7 +40,8 @@ const client = (role) => JSON.parse(page.$("#surla-build-agents-" + role + "-cli
 expect(client("builder") === "codex" && client("test_writer") === "claude", "default workers did not use different installed families");
 expect(!page.$("#surla-build-agents-builder-yolo").checked && !page.$("#surla-build-agents-test_writer-yolo").checked, "discovery granted permissions");
 const model = page.$("#surla-build-agents-builder-model");
-page.type(model, "custom-model-id");
+Object.getOwnPropertyDescriptor(page.win.HTMLInputElement.prototype, "value").set.call(model, "custom-model-id");
+model.dispatchEvent(new page.win.Event("input", { bubbles: true }));
 const effort = page.$("#surla-build-agents-builder-thinking"); effort.value = "high";
 effort.dispatchEvent(new page.win.Event("change", { bubbles: true }));
 const editor = page.$('textarea[data-example-id="check_01"][data-field="scenario"]');

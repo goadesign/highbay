@@ -232,7 +232,7 @@ if (input.mode === "eligible") {
   ];
   for (const [name, message] of refusals) {
     const before = page.sent("POST", mergePath).length;
-    await control(origin, "reply", { key: "POST " + mergePath, status: name === "unavailable" ? 503 : 409, body: { name, message: "Owner diagnostic for " + name } });
+    await control(origin, "reply", { key: "POST " + mergePath, status: name === "unavailable" ? 503 : 409, body: { name, id: "merge-refusal", message: "Owner diagnostic for " + name, fault: false, temporary: false, timeout: false } });
     page.$("#surla-cp5-merge").click();
     await until(() => page.sent("POST", mergePath).length === before + 1 && page.text("#surla-cp5-merge-feedback-error").includes(message), "merge refusal did not explain recovery for " + name);
     const request = page.sent("POST", mergePath).at(-1).body;
