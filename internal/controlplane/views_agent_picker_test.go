@@ -4,11 +4,11 @@ package controlplane
 import (
 	"context"
 	"testing"
-
-	"github.com/stretchr/testify/assert"
 	"time"
 
 	gensurla "github.com/goadesign/surla/gen/surla"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // TestViewsPageWorkerDraftSurvivesUpdates exercises discovery, edits and the
@@ -23,6 +23,14 @@ func TestViewsPageWorkerDraftSurvivesUpdates(t *testing.T) {
 		f.mu.Lock()
 		defer f.mu.Unlock()
 		f.snapshot = pageTeamSnapshot("needs_you")
+	})
+	ps.act("card-save", func() {
+		cp.mu.Lock()
+		defer cp.mu.Unlock()
+		record, ok, err := cp.cards.load(card.ChangeID)
+		require.NoError(t, err)
+		require.True(t, ok)
+		require.NoError(t, cp.cards.save(record))
 	})
 	runPageScript(t, ps, map[string]any{"revision": card.RequestRevision}, `
 const page = await openPage(origin, { link: input.link });
@@ -47,6 +55,10 @@ expect(page.$("#surla-team-agents-builder-model").value === "custom-model-id", "
 page.$("#surla-nav-build").click();
 await until(() => page.$("#surla-build-agents-builder-model"), "Build picker did not return");
 expect(page.$("#surla-build-agents-builder-model").value === "custom-model-id" && page.$("#surla-build-agents-builder-thinking").value === "high", "Build navigation replaced edited worker settings");
+const cardReads = page.sent("GET", "/changes/chg-picker").length;
+await control(origin, "act", { key: "card-save" });
+await until(() => page.sent("GET", "/changes/chg-picker").length > cardReads && !page.$("#surla-build-loading"), "saved card update did not arrive");
+expect(page.$("#surla-build-agents-builder-model").value === "custom-model-id" && page.$("#surla-build-agents-builder-thinking").value === "high", "saved card polling replaced worker drafts");
 expect(page.sent("GET", discovery).length === reads, "navigation or polling repeated executable discovery");
 expect(page.$('textarea[data-example-id="check_01"][data-field="scenario"]').value === "Keep my unsaved Story text", "worker navigation discarded the Story draft");
 expect(page.sent("POST", path).length === 0 && page.sent("POST", "/team/agents").length === 0, "reads or edits launched a role");
