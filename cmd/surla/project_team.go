@@ -2,20 +2,25 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
+	"slices"
 	"strings"
-	"syscall"
+	"sync"
 	"time"
+	"unicode"
 
+	gensurla "github.com/goadesign/surla/gen/surla"
 	"github.com/goadesign/surla/internal/modelsettings"
 	"github.com/goadesign/surla/internal/project"
-	"golang.org/x/mod/semver"
 )
 
 type (
@@ -24,8 +29,8 @@ type (
 	teamCommands struct {
 		core, app, chorus string
 		run               func(ctx context.Context, env []string, program string, args ...string) ([]byte, error)
-		// start detaches a GUI/service starter; readiness, never process ownership, bounds startup.
-		start func(env []string, program string, args ...string) (<-chan error, error)
+		// input passes closed-schema JSON to Chorus's explicit choices stdin.
+		input func(context.Context, []string, io.Reader, string, ...string) error
 		// herdrEnv is the environment of Herdr's own programs (herdr-app, herdr-core): the
 		// surla command's, or the server's original one, unchanged, because a Herdr core
 		// these programs start keeps it for every terminal, the agents' included.
@@ -35,9 +40,6 @@ type (
 		chorusEnv []string
 	}
 )
-
-// minimumTeamChorus includes managed-address discovery through status -json.
-const minimumTeamChorus = "v0.14.0"
 
 // runTeamCommand bounds one external command run with env; stderr is never echoed to the caller.
 func runTeamCommand(ctx context.Context, env []string, program string, args ...string) ([]byte, error) {
@@ -56,153 +58,13 @@ func runTeamCommand(ctx context.Context, env []string, program string, args ...s
 	return raw, nil
 }
 
-// resolveTeamCommands requires the exact executable names consumed by the Chorus launcher,
-// found by find on PATH. A program that is missing from PATH but present in installed, the
-// installers' folder, is reported as off PATH, naming that folder, since installing it
-// again would not change PATH.
-func resolveTeamCommands(
-	find func(string) (string, error),
-	run func(context.Context, []string, string, ...string) ([]byte, error),
-	installed string,
-) (teamCommands, error) {
-	programs := []struct{ name, install string }{
-		{"herdr-core", "curl -fsSL https://releases.herdr.dev/core/install.sh | sh"},
-		{"herdr-app", "curl -fsSL https://releases.herdr.dev/app/install.sh | sh"},
-		{"chorus", "curl -fsSL https://raw.githubusercontent.com/goadesign/chorus/main/scripts/install.sh | sh"},
-	}
-	found := make([]string, 0, len(programs))
-	for _, program := range programs {
-		path, err := find(program.name)
-		if err != nil {
-			if installed != "" {
-				if _, offPath := exec.LookPath(filepath.Join(installed, program.name)); offPath == nil {
-					return teamCommands{}, fmt.Errorf("%s is installed in %s, which is not on PATH; add %s to PATH, then run surla again", program.name, installed, installed)
-				}
-			}
-			return teamCommands{}, fmt.Errorf("%s is required; install it with: %s", program.name, program.install)
-		}
-		found = append(found, path)
-	}
-	return teamCommands{core: found[0], app: found[1], chorus: found[2], run: run}, nil
-}
-
-// preflightTeam checks versions without creating state or starting any service or window.
-func preflightTeam(commands teamCommands) error {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-	raw, err := commands.run(ctx, commands.chorusEnv, commands.chorus, "version")
-	if err != nil {
-		return errors.New("chorus version failed; update with: chorus update -yes")
-	}
-	version := strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(string(raw)), "chorus "))
-	if !semver.IsValid(version) || semver.Compare(version, minimumTeamChorus) < 0 {
-		return fmt.Errorf("Chorus %s or newer is required; update with: chorus update -yes", minimumTeamChorus)
-	}
-	return nil
-}
-
-// startTeamPrograms starts only absent programs after the project server has answered.
-func startTeamPrograms(ctx context.Context, commands teamCommands) error {
-	// Service and window readiness each own a full deadline; ensure_team gets its own later.
-	chorusCtx, stopChorus := context.WithTimeout(ctx, 35*time.Second)
-	err := startTeamProgram(chorusCtx, commands, commands.chorus, commands.chorusEnv, []string{"up"})
-	stopChorus()
-	if err != nil {
-		return err
-	}
-	windowCtx, stopWindow := context.WithTimeout(ctx, 35*time.Second)
-	defer stopWindow()
-	return startTeamProgram(windowCtx, commands, commands.app, commands.herdrEnv, nil)
-}
-
-// startTeamProgram starts one absent dependency with env without ever signaling its process.
-func startTeamProgram(ctx context.Context, commands teamCommands, program string, env, args []string) error {
-	if teamProgramReady(ctx, commands, program) {
-		return nil
-	}
-	if ctx.Err() != nil {
-		return fmt.Errorf("%s status did not become ready; %s", filepath.Base(program), teamProgramNextStep(commands, program))
-	}
-	commandName := "chorus up"
-	if program == commands.app {
-		commandName = "herdr-app"
-	}
-	exited, err := commands.start(env, program, args...)
-	if err != nil {
-		return fmt.Errorf("%s could not start; %s", commandName, teamProgramNextStep(commands, program))
-	}
-	pollCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
-	defer cancel()
-	for {
-		ready := teamProgramReady(pollCtx, commands, program)
-		// Observe an already-reported starter failure before declaring readiness.
-		select {
-		case err := <-exited:
-			if err != nil {
-				return fmt.Errorf("%s failed to start; %s", commandName, teamProgramNextStep(commands, program))
-			}
-			exited = nil
-		default:
-		}
-		if ready {
-			return nil
-		}
-		select {
-		case err := <-exited:
-			if err != nil {
-				return fmt.Errorf("%s failed to start; %s", commandName, teamProgramNextStep(commands, program))
-			}
-			exited = nil // A successful short-lived launcher is allowed to leave its window/service running.
-		case <-pollCtx.Done():
-			return fmt.Errorf("%s status did not become ready; %s", filepath.Base(program), teamProgramNextStep(commands, program))
-		case <-time.After(100 * time.Millisecond):
-		}
-	}
-}
-
-// teamProgramReady requires the same Chorus status evidence as its launcher.
-func teamProgramReady(ctx context.Context, commands teamCommands, program string) bool {
-	if program == commands.app {
-		_, err := commands.Overlays(ctx)
-		return err == nil
-	}
-	raw, err := commands.run(ctx, commands.chorusEnv, program, "status")
-	return err == nil && strings.Contains(string(raw), " is running")
-}
-
-// teamProgramNextStep gives fixed recovery wording without command output or selected paths.
-func teamProgramNextStep(commands teamCommands, program string) string {
-	if program == commands.app {
-		return "open Herdr, then run surla again"
-	}
-	return "run chorus up, then run surla again"
-}
-
-// startDetachedTeamProgram gives the window or service starter its own session, env and no pipes.
-// Context deadlines apply only to status polling: Surla never signals these user processes.
-func startDetachedTeamProgram(env []string, program string, args ...string) (<-chan error, error) {
-	command := exec.Command(program, args...)
-	command.Env = env
-	command.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
-	if err := command.Start(); err != nil {
-		return nil, errors.New("program could not start")
-	}
-	exited := make(chan error, 1)
-	go reapTeamProgram(command, exited)
-	return exited, nil
-}
-
-// reapTeamProgram reports an exit without blocking startup or inheriting output pipes.
-func reapTeamProgram(command *exec.Cmd, exited chan<- error) { exited <- command.Wait(); close(exited) }
-
-// projectTeamDependencies binds the server login environment, never paths supplied by the CLI caller.
-// Its HERDR_APP_HOME (default ~/.config/herdr-app) may differ from the running window’s environment.
-// herdrEnv is the server's original environment, which serve kept before removing every model
-// provider family from its own process; only Herdr's own programs run with it, unchanged.
+// projectTeamDependencies binds the server's original login environment.
+// The herdr-app home is shared by the roster and optional Surla companion.
 func projectTeamDependencies(ctx context.Context, herdrEnv []string) (project.TeamDependencies, error) {
-	// Resolve programs only when a team operation actually makes a command. Server startup
-	// and unrelated management operations remain available without these programs on login PATH.
-	commands := teamCommands{core: "herdr-core", app: "herdr-app", chorus: "chorus", run: runServerTeamCommand, herdrEnv: herdrEnv, chorusEnv: withoutProviderFamilies(herdrEnv)}
+	commands := teamCommands{
+		core: "herdr-core", app: "herdr-app", chorus: "chorus", run: runServerTeamCommand,
+		input: runTeamInput, herdrEnv: herdrEnv, chorusEnv: withoutProviderFamilies(herdrEnv),
+	}
 	home := os.Getenv("HERDR_APP_HOME")
 	if home == "" {
 		userHome, err := os.UserHomeDir()
@@ -211,7 +73,22 @@ func projectTeamDependencies(ctx context.Context, herdrEnv []string) (project.Te
 		}
 		home = filepath.Join(userHome, ".config", "herdr-app")
 	}
-	return project.TeamDependencies{Lifetime: ctx, Host: commands, RosterDirectory: filepath.Join(home, "data", "chorus-launcher", "rosters"), Shell: os.Getenv("SHELL"), Connect: commands.connectChorus}, nil
+	_, coreErr := exec.LookPath(commands.core)
+	_, appErr := exec.LookPath(commands.app)
+	available := coreErr == nil && appErr == nil
+	connect := commands.connectChorus
+	if !available {
+		connect = func(context.Context) (project.TeamConnection, error) {
+			return project.TeamConnection{}, nil
+		}
+	}
+	companion, err := os.Stat(filepath.Join(home, "mods", "surla", "mod.json"))
+	return project.TeamDependencies{
+		Lifetime: ctx, Host: commands, Shell: os.Getenv("SHELL"), Connect: connect,
+		HerdrAvailable: available, CompanionInstalled: err == nil && companion.Mode().IsRegular(),
+		RosterDirectory: filepath.Join(home, "data", "chorus-launcher", "rosters"),
+		DiscoverAgents:  commands.discoverAgents, WorkerEnv: herdrEnv,
+	}, nil
 }
 
 // json decodes command replies and checks JSON-level errors as well as process status.
@@ -261,7 +138,7 @@ func (c teamCommands) Spaces(ctx context.Context) ([]project.TeamSpace, error) {
 	}
 	local := make([]project.TeamSpace, 0, len(*result.Spaces))
 	for _, space := range *result.Spaces {
-		if !strings.ContainsAny(space.ID, "/\\") {
+		if space.Machine == nil && !strings.ContainsAny(space.ID, "/\\") {
 			local = append(local, space)
 		}
 	}
@@ -276,9 +153,11 @@ func (c teamCommands) CreateSpace(ctx context.Context, name, folder string) (pro
 		Terminal string `json:"terminal"`
 	}
 	if err := c.do(ctx, "space.new", struct {
-		Name   string `json:"name"`
-		Folder string `json:"folder"`
-	}{name, folder}, &result); err != nil {
+		Name    string `json:"name"`
+		Folder  string `json:"folder"`
+		Machine string `json:"machine"`
+		Focus   bool   `json:"focus"`
+	}{Name: name, Folder: folder}, &result); err != nil {
 		return project.TeamSpace{}, err
 	}
 	if result.Space == "" || result.Tab == "" || result.Terminal == "" {
@@ -306,17 +185,17 @@ func (c teamCommands) Terminals(ctx context.Context, root, space string, handles
 			if item.Address == "" {
 				return nil, errors.New("Herdr returned a missing terminal identifier")
 			}
-			var terminal teamTerminalFacts
-			if err := c.json(ctx, c.core, &terminal, "get", item.Address, "--json"); err != nil {
+			terminal, err := c.ReadTerminal(ctx, item.Address)
+			if err != nil {
 				return nil, err
 			}
-			result = append(result, terminal.terminal())
+			result = append(result, terminal)
 		}
 	}
 	return result, nil
 }
 
-// Focus shows the owned space and focuses one of its terminals before launcher capture.
+// Focus shows the owned space and focuses the requested terminal.
 func (c teamCommands) Focus(ctx context.Context, space project.TeamSpace) error {
 	var result map[string]json.RawMessage
 	if err := c.do(ctx, "space.select", struct {
@@ -350,12 +229,73 @@ func (c teamCommands) Overlays(ctx context.Context) ([]string, error) {
 	return *result.Overlays, nil
 }
 
-// OpenLauncher opens only the fixed Chorus launcher after the owner has checked overlays.
-func (c teamCommands) OpenLauncher(ctx context.Context) error {
+// ReadTerminal loads only narrow labels and foreground facts for the exact address.
+func (c teamCommands) ReadTerminal(ctx context.Context, address string) (project.TeamTerminal, error) {
+	var result teamTerminalFacts
+	err := c.json(ctx, c.core, &result, "get", address, "--json")
+	if err == nil && result.Address != address {
+		err = errors.New("Herdr returned a different terminal")
+	}
+	return result.terminal(), err
+}
+
+// LabelGuide identifies the existing guide row without sending terminal input.
+func (c teamCommands) LabelGuide(ctx context.Context, address, root, swarm, client, handle, space, tab string) error {
+	_, err := c.run(ctx, c.herdrEnv, c.core, "label", address,
+		"herdr.space="+space, "herdr.tab="+tab,
+		"chorus.project="+root, "chorus.swarm="+swarm, "chorus.agent="+client,
+		"chorus.handle="+handle, "chorus.role=guide", "chorus.row=role:"+handle, "chorus.options=")
+	return err
+}
+
+// OpenCompanion toggles only the optional Surla companion, after the owner checks visibility.
+func (c teamCommands) OpenCompanion(ctx context.Context) error {
 	var result map[string]json.RawMessage
 	return c.do(ctx, "mod.open", struct {
 		Name string `json:"name"`
-	}{"chorus-launcher"}, &result)
+	}{"surla"}, &result)
+}
+
+// LaunchWorkers lets Chorus place explicitly selected workers using the saved
+// roster. The wire object preserves null model and thinking keys required by Chorus.
+func (c teamCommands) LaunchWorkers(ctx context.Context, space string, choices map[string]*gensurla.RoleAgentChoice) error {
+	type chorusChoice struct {
+		Client   string  `json:"client"`
+		Program  string  `json:"program"`
+		Model    *string `json:"model"`
+		Thinking *string `json:"thinking"`
+		Yolo     bool    `json:"yolo"`
+	}
+	wire := make(map[string]chorusChoice, len(choices))
+	for role, choice := range choices {
+		wire[role] = chorusChoice(*choice)
+	}
+	raw, err := json.Marshal(wire)
+	if err != nil {
+		return err
+	}
+	return c.input(ctx, c.chorusEnv, bytes.NewReader(raw), c.chorus,
+		"team", "launch", "--space", space, "--choices", "-")
+}
+
+// ClosePane ends only the explicitly verified model pane.
+func (c teamCommands) ClosePane(ctx context.Context, pane string) error {
+	var result map[string]json.RawMessage
+	return c.do(ctx, "pane.close", struct {
+		Pane string `json:"pane"`
+	}{pane}, &result)
+}
+
+// runTeamInput writes small typed JSON without shell interpretation or retaining output.
+func runTeamInput(ctx context.Context, env []string, input io.Reader, program string, args ...string) error {
+	cmd := exec.CommandContext(ctx, program, args...)
+	cmd.Env = env
+	cmd.Stdin = input
+	cmd.WaitDelay = time.Second
+	if err := cmd.Run(); err != nil {
+		return errors.New("Chorus could not launch the requested team")
+	}
+	return nil
 }
 
 // runServerTeamCommand resolves a required team program at the external operation boundary
@@ -392,12 +332,178 @@ func takeProviderFamilies() ([]string, error) {
 	return original, nil
 }
 
-// installerProgramFolder is the folder where the Herdr and Chorus installers place their
-// programs, ~/.local/bin, or empty when the home folder is unknown.
-func installerProgramFolder() string {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return ""
+// discoverAgents checks the supported local program names and probes their
+// capabilities without starting an agent session. One slow CLI cannot hide
+// the other installed choices.
+func (c teamCommands) discoverAgents(ctx context.Context) ([]*gensurla.InstalledAgentOption, error) {
+	type installedClient struct {
+		key, title, headless, yolo, yoloEffect string
+		names                                  []string
+		helpPrefix                             []string
 	}
-	return filepath.Join(home, ".local", "bin")
+	clients := []installedClient{
+		{key: "codex", title: "Codex", headless: "exec", yolo: "--dangerously-bypass-approvals-and-sandbox",
+			yoloEffect: "Disables approval prompts and command sandboxing.", names: []string{"codex"}},
+		{key: "claude", title: "Claude Code", headless: "--print", yolo: "--dangerously-skip-permissions",
+			yoloEffect: "Bypasses tool permission checks.", names: []string{"claude"}},
+		{key: "antigravity", title: "Antigravity", headless: "--print", yolo: "--dangerously-skip-permissions",
+			yoloEffect: "Automatically approves tool permission requests.", names: []string{"agy", "antigravity"}},
+		{key: "cursor", title: "Cursor", headless: "--print", yolo: "--yolo",
+			yoloEffect: "Allows commands unless explicitly denied, with the client's sandbox setting.", names: []string{"cursor-agent", "agent"}},
+		{key: "gemini", title: "Gemini CLI", headless: "--prompt", yolo: "--yolo",
+			yoloEffect: "Automatically approves all tool calls. Gemini CLI controls sandbox behavior.", names: []string{"gemini"}},
+		{key: "opencode", title: "OpenCode", headless: "run",
+			names: []string{"opencode"}, helpPrefix: []string{"run"}},
+	}
+	options := make([]*gensurla.InstalledAgentOption, len(clients))
+	var probes sync.WaitGroup
+	for index, client := range clients {
+		probes.Go(func() {
+			var program string
+			for _, name := range client.names {
+				path, err := exec.LookPath(name)
+				if err == nil && filepath.IsAbs(path) {
+					program = path
+					break
+				}
+			}
+			if program == "" {
+				return
+			}
+			bounded, cancel := context.WithTimeout(ctx, 5*time.Second)
+			defer cancel()
+			raw, err := c.run(bounded, c.herdrEnv, program, "--help")
+			if err != nil {
+				return
+			}
+			rootHelp := string(raw)
+			help := rootHelp
+			if len(client.helpPrefix) > 0 {
+				raw, err := c.run(bounded, c.herdrEnv, program, append(client.helpPrefix, "--help")...)
+				if err == nil {
+					help = string(raw)
+				}
+			}
+			option := &gensurla.InstalledAgentOption{
+				Client: client.key, Program: program, Title: client.title,
+				ModelSupported:    helpContains(help, "--model"),
+				YoloSupported:     client.yolo != "" && helpContains(help, client.yolo),
+				HeadlessSupported: helpContains(rootHelp, client.headless),
+				Models:            []string{}, Efforts: []string{},
+			}
+			if option.YoloSupported {
+				option.YoloEffect = &client.yoloEffect
+			}
+			c.discoverAgentModels(bounded, option, help)
+			options[index] = option
+		})
+	}
+	probes.Wait()
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	return slices.DeleteFunc(options, func(option *gensurla.InstalledAgentOption) bool { return option == nil }), nil
+}
+
+// discoverAgentModels reads only client-owned catalogs and help. Clients that
+// accept models without publishing a catalog keep an empty advertised list.
+func (c teamCommands) discoverAgentModels(ctx context.Context, option *gensurla.InstalledAgentOption, help string) {
+	if !option.ModelSupported {
+		return
+	}
+	switch option.Client {
+	case "claude":
+		option.Models = []string{"opus", "sonnet", "haiku"}
+		option.Efforts = helpEfforts(help)
+	case "antigravity":
+		option.Efforts = helpEfforts(help)
+		option.Models = c.listedAgentModels(ctx, option.Program, "\t", "models")
+	case "cursor":
+		option.Models = c.listedAgentModels(ctx, option.Program, " - ", "--list-models")
+	case "codex":
+		raw, err := c.run(ctx, c.herdrEnv, option.Program, "debug", "models")
+		if err == nil {
+			option.Models, option.Efforts = codexAgentModels(raw)
+		}
+		if !helpContains(help, "--config") && !helpContains(help, "-c") {
+			option.Efforts = []string{}
+		}
+	}
+	option.ThinkingSupported = len(option.Efforts) > 0
+}
+
+// listedAgentModels narrows the installed CLI's tabular output to model IDs.
+func (c teamCommands) listedAgentModels(ctx context.Context, program, separator string, args ...string) []string {
+	raw, err := c.run(ctx, c.herdrEnv, program, args...)
+	models := []string{}
+	if err != nil {
+		return models
+	}
+	for line := range strings.SplitSeq(string(raw), "\n") {
+		model, title, found := strings.Cut(strings.TrimSpace(line), separator)
+		if found && title != "" && agentOptionID(model) && !slices.Contains(models, model) {
+			models = append(models, model)
+		}
+	}
+	return models
+}
+
+// codexAgentModels reads visible local model IDs and their advertised efforts.
+func codexAgentModels(raw []byte) ([]string, []string) {
+	catalog := struct {
+		Models []struct {
+			Slug       string `json:"slug"`
+			Visibility string `json:"visibility"`
+			Levels     []struct {
+				Effort string `json:"effort"`
+			} `json:"supported_reasoning_levels"`
+		} `json:"models"`
+	}{}
+	models, efforts := []string{}, []string{}
+	if err := json.Unmarshal(raw, &catalog); err != nil {
+		return models, efforts
+	}
+	for _, model := range catalog.Models {
+		if model.Visibility != "list" || !agentOptionID(model.Slug) {
+			continue
+		}
+		models = append(models, model.Slug)
+		for _, level := range model.Levels {
+			if agentOptionID(level.Effort) && !slices.Contains(efforts, level.Effort) {
+				efforts = append(efforts, level.Effort)
+			}
+		}
+	}
+	return models, efforts
+}
+
+// helpContains matches a complete switch or subcommand token.
+func helpContains(help, token string) bool {
+	for field := range strings.FieldsFuncSeq(help, func(r rune) bool {
+		return !unicode.IsLetter(r) && !unicode.IsDigit(r) && r != '-'
+	}) {
+		if field == token {
+			return true
+		}
+	}
+	return false
+}
+
+// effortOption finds the choice group advertised for --effort.
+var effortOption = regexp.MustCompile(`(?m)--effort[^\n()]*\((?:choices:\s*)?([a-z0-9_, |\t-]+)\)`)
+
+// helpEfforts returns the exact reasoning levels named by the installed CLI.
+func helpEfforts(help string) []string {
+	match := effortOption.FindStringSubmatch(help)
+	if len(match) < 2 {
+		return []string{}
+	}
+	return strings.FieldsFunc(match[1], func(r rune) bool { return r == ',' || r == '|' || unicode.IsSpace(r) })
+}
+
+// agentOptionID limits catalog entries to literal model or effort IDs.
+func agentOptionID(value string) bool {
+	return value != "" && value[0] != '-' && len(value) <= 256 && !strings.ContainsFunc(value, func(r rune) bool {
+		return !unicode.IsLetter(r) && !unicode.IsDigit(r) && !strings.ContainsRune("-._:/[],=+", r)
+	})
 }

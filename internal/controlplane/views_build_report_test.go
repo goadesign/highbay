@@ -253,7 +253,7 @@ func TestViewsPageFollowsRealTestReports(t *testing.T) {
 	}
 	requirePageTools(t)
 	repo, project := productionBuildProject(t, ".", pageReportModule(t))
-	team := &teamServiceFixture{snapshot: gensurla.TeamSnapshot{
+	team := &teamServiceFixture{snapshot: gensurla.TeamSnapshot{HerdrMode: "attached", SavedChoices: map[string]*gensurla.RoleAgentChoice{}, DismissedNotices: []string{},
 		Team: "shop", Roles: []*gensurla.TeamRoleState{},
 	}}
 	// Written-test runs make the project verify with the tests a build

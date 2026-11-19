@@ -444,7 +444,8 @@ func TestDefaultProjectEffectsAreBlocked(t *testing.T) {
 	_, err = runtime.readTerminal(t.Context(), "unused")
 	require.ErrorContains(t, err, "cannot read real")
 	require.ErrorContains(t, runtime.openViews(t.Context(), "unused"), "cannot open real")
-	require.ErrorContains(t, runtime.startTeamPrograms(t.Context()), "cannot start real team")
+	_, err = runtime.startDaemon(nil)
+	require.ErrorContains(t, err, "cannot start real project daemons")
 	_, err = runtime.teamDependencies(t.Context(), nil)
 	require.ErrorContains(t, err, "cannot resolve or change real project teams")
 	// The constructor fixtures bind neither reader nor sender: opting into startup

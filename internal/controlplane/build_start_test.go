@@ -64,7 +64,7 @@ func TestBuildStartAdmissionOwnsCancellation(t *testing.T) {
 // TestBuildTeamOutcomeUsesTypedConditions keeps peer-authored messages out of
 // every warning and returns the original team result when admission succeeds.
 func TestBuildTeamOutcomeUsesTypedConditions(t *testing.T) {
-	team := &gensurla.ProjectTeam{Team: "team", Space: "space", Dialog: "not_needed", Step: "The fixture team is ready for its assignment.", Roles: []*gensurla.ProjectTeamRole{}}
+	team := &gensurla.ProjectTeam{Team: "team", Space: "space", HerdrMode: "attached", Step: "The fixture team is ready for its assignment.", Roles: []*gensurla.ProjectTeamRole{}}
 	private := "private external reply"
 	cases := []struct {
 		name string

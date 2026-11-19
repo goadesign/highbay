@@ -16,8 +16,12 @@ import (
 // the explicit refinement action and the existing build consequence warning.
 // Build and agent processes are fixture boundaries, not execution proof.
 func TestViewsPageConfirmedBuildLeadsTheFoldedAgreement(t *testing.T) {
+	team := &teamServiceFixture{snapshot: gensurla.TeamSnapshot{
+		Team: "page-team", HerdrMode: "available", Roles: []*gensurla.TeamRoleState{},
+		SavedChoices: map[string]*gensurla.RoleAgentChoice{}, DismissedNotices: []string{},
+	}}
 	cp := newBuildControlPlane(t, Options{
-		Team: &TeamBinding{Owner: pageOwner, Service: &teamServiceFixture{}},
+		Team: &TeamBinding{Owner: pageOwner, Service: team},
 	})
 	cp.changesWait, cp.changesPoll = 400*time.Millisecond, 20*time.Millisecond
 	proposed := saveProposedCardFixture(t, cp, pageOwner, "chg-fold",

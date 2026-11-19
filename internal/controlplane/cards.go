@@ -569,13 +569,13 @@ func readCardRegularFileNoFollow(path string) ([]byte, error) {
 	return raw, errors.Join(readErr, f.Close())
 }
 
-// CardStoreInUse probes the existing writer lock without reading or changing any cards.
+// CardStoreInUse probes the writer lock without creating a store or reading any cards.
 // The caller must serialize start decisions separately; the lock, not a PID record, proves liveness.
 func CardStoreInUse(dir string) (inUse bool, err error) {
-	if err := os.MkdirAll(dir, 0o700); err != nil {
-		return false, err
+	lock, err := os.OpenFile(filepath.Join(dir, "lock"), os.O_RDWR, 0)
+	if errors.Is(err, fs.ErrNotExist) {
+		return false, nil
 	}
-	lock, err := os.OpenFile(filepath.Join(dir, "lock"), os.O_RDWR|os.O_CREATE, 0o600)
 	if err != nil {
 		return false, err
 	}

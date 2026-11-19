@@ -71,21 +71,21 @@ Usage:
 Commands:
 
   init            create a starter service with an agent and an evaluator suite
+  status          read this project's running server, checkpoint and team status
   stop            stop this project's server in order
   verification    set, show or remove this project's verification settings
   promotion       set, show or remove this project's promotion settings
 
-Running surla starts or attaches to this folder's project server, starts Chorus
-and the Herdr app when they are not running, prepares the project's team of
-agents in Herdr and opens the views page. The server runs in its own
-parentless Herdr terminal.
+Running surla starts or attaches to this folder's project server and opens the
+views page. The server runs in a parentless Herdr terminal when hc is available,
+or as a detached background process otherwise. Use surla status --json to read
+the running project's status as JSON.
 
 Use --print-link to start or attach and print {"url":"...","expires_at":"..."} JSON on
-stdout instead of opening a browser. Notices and team instructions go to stderr;
+stdout instead of opening a browser. Notices go to stderr and
 no browser opener is required. The link grants user-page access to its first
 consumer for two minutes: keep it out of shared logs. Run the command again for
-a fresh link after use, expiry or page reload. A team-only failure may still
-print a usable link while returning a nonzero exit and explaining it on stderr.
+a fresh link after use, expiry or page reload.
 
 Other commands:
   preview         print the architecture, agent policies and tool contracts a design
@@ -163,6 +163,8 @@ func dispatch(sub string, args []string, stdout io.Writer, runtime projectRuntim
 		return runtime.serve(stateDir)
 	case "stop":
 		return runtime.stop(args, stdout)
+	case "status":
+		return runtime.status(args, stdout)
 	case "verification", "promotion":
 		return runtime.settings(sub, args, stdout)
 	case "preview":

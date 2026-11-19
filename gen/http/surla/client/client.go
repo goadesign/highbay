@@ -140,6 +140,22 @@ type Client struct {
 	// start_team_agents endpoint.
 	StartTeamAgentsDoer goahttp.Doer
 
+	// ListTeamAgentOptions Doer is the HTTP client used to make requests to the
+	// list_team_agent_options endpoint.
+	ListTeamAgentOptionsDoer goahttp.Doer
+
+	// DismissTeamNotice Doer is the HTTP client used to make requests to the
+	// dismiss_team_notice endpoint.
+	DismissTeamNoticeDoer goahttp.Doer
+
+	// OpenViews Doer is the HTTP client used to make requests to the open_views
+	// endpoint.
+	OpenViewsDoer goahttp.Doer
+
+	// MergeChange Doer is the HTTP client used to make requests to the
+	// merge_change endpoint.
+	MergeChangeDoer goahttp.Doer
+
 	// ListChanges Doer is the HTTP client used to make requests to the
 	// list_changes endpoint.
 	ListChangesDoer goahttp.Doer
@@ -239,6 +255,10 @@ func NewClient(
 		GetTeamDoer:                   doer,
 		ShowTeamPaneDoer:              doer,
 		StartTeamAgentsDoer:           doer,
+		ListTeamAgentOptionsDoer:      doer,
+		DismissTeamNoticeDoer:         doer,
+		OpenViewsDoer:                 doer,
+		MergeChangeDoer:               doer,
 		ListChangesDoer:               doer,
 		WaitForChangesDoer:            doer,
 		StartBuildDoer:                doer,
@@ -918,6 +938,7 @@ func (c *Client) ShowTeamPane() goa.Endpoint {
 // service start_team_agents server.
 func (c *Client) StartTeamAgents() goa.Endpoint {
 	var (
+		encodeRequest  = EncodeStartTeamAgentsRequest(c.encoder)
 		decodeResponse = DecodeStartTeamAgentsResponse(c.decoder, c.RestoreResponseBody)
 	)
 	return func(ctx context.Context, v any) (any, error) {
@@ -925,9 +946,99 @@ func (c *Client) StartTeamAgents() goa.Endpoint {
 		if err != nil {
 			return nil, err
 		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
 		resp, err := c.StartTeamAgentsDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("surla", "start_team_agents", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// ListTeamAgentOptions returns an endpoint that makes HTTP requests to the
+// surla service list_team_agent_options server.
+func (c *Client) ListTeamAgentOptions() goa.Endpoint {
+	var (
+		decodeResponse = DecodeListTeamAgentOptionsResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildListTeamAgentOptionsRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ListTeamAgentOptionsDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("surla", "list_team_agent_options", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// DismissTeamNotice returns an endpoint that makes HTTP requests to the surla
+// service dismiss_team_notice server.
+func (c *Client) DismissTeamNotice() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeDismissTeamNoticeRequest(c.encoder)
+		decodeResponse = DecodeDismissTeamNoticeResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildDismissTeamNoticeRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.DismissTeamNoticeDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("surla", "dismiss_team_notice", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// OpenViews returns an endpoint that makes HTTP requests to the surla service
+// open_views server.
+func (c *Client) OpenViews() goa.Endpoint {
+	var (
+		decodeResponse = DecodeOpenViewsResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildOpenViewsRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.OpenViewsDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("surla", "open_views", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// MergeChange returns an endpoint that makes HTTP requests to the surla
+// service merge_change server.
+func (c *Client) MergeChange() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeMergeChangeRequest(c.encoder)
+		decodeResponse = DecodeMergeChangeResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildMergeChangeRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.MergeChangeDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("surla", "merge_change", err)
 		}
 		return decodeResponse(resp)
 	}

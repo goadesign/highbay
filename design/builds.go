@@ -299,6 +299,7 @@ func buildMethods() {
 			Attribute("change_id", String, "Confirmed Change Card identifier.", func() { MinLength(1) })
 			Attribute("request_revision", String, "The Change Card's agreed revision, the one in force (not a waiting proposal's).", func() { MinLength(1) })
 			Attribute("replaces", ReplacedBuild, "The open build of this same change the page showed, sent when the user agreed to build it again before any verification of it passed. Omit it otherwise.")
+			Attribute("choices", MapOf(String, RoleAgentChoice, func() { Key(func() { Enum("builder", "test_writer") }) }), "Choices for missing workers. Omitted and empty both use saved choices then installed cross-family defaults. Never launches or changes the guide.")
 			Required("change_id", "request_revision")
 		})
 		Result(StartBuildResult)

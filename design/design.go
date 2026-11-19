@@ -78,12 +78,12 @@ var DeclineRevisionPayload = Type("DeclineRevisionPayload", func() {
 
 // InitProjectPayload is the input to the init_project tool.
 var InitProjectPayload = Type("InitProjectPayload", func() {
-	Description("Go module path and optional direct child directory name for initializing a new Surla starter project inside the bound workspace.")
+	Description("Go module path and optional directory for initializing a new Surla starter project in the bound workspace.")
 	Attribute("module_path", String, "Go module path of the new service (for example example.com/shop).", func() {
 		MinLength(3)
 		Example("example.com/shop")
 	})
-	Attribute("dir", String, "Direct child directory name inside the bound workspace root. When omitted or empty, defaults to the service name derived from module_path.", func() {
+	Attribute("dir", String, "Use a direct child name, or . to initialize the bound workspace itself while preserving allowed agent configuration. When omitted or empty, defaults to the service name derived from module_path.", func() {
 		Example("shop")
 	})
 	Required("module_path")
@@ -1147,6 +1147,7 @@ var _ = Service("surla", func() {
 	traceMethods()
 	storyRefreshMethods()
 	teamMethods()
+	agentWorkflowMethods()
 	changeListMethods()
 	buildMethods()
 	verificationReviewMethod()

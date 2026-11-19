@@ -169,12 +169,15 @@ func TestSharedServerOwnershipRefinementResourcesAndLockReleaseAcrossRestarts(t 
 	rawResources, ok := resourcesRes["resources"].([]any)
 	require.True(t, ok)
 	assert.Len(t, rawResources, 1)
-	// Waiting, starting or dropping builds, reading the model choice, reading a build's
-	// findings, the three team operations and the model settings hand-over
-	// are HTTP-only.
-	assert.Len(t, toolNames, len(gensurla.MethodNames)-len(rawResources)-9)
-	assert.False(t, toolNames["hand_over_model_settings"], "no MCP tool hands model settings over")
-	assert.False(t, toolNames["drop_build"], "dropping a build is the user's HTTP operation")
+	// User decisions and management hand-over stay HTTP-only, including the
+	// new installed-client discovery, notice preference and merge operations.
+	httpOnly := []string{"wait_for_changes", "start_build", "drop_build", "get_model_connection",
+		"get_test_findings", "get_team", "show_team_pane", "start_team_agents", "hand_over_model_settings",
+		"list_team_agent_options", "dismiss_team_notice", "merge_change"}
+	assert.Len(t, toolNames, len(gensurla.MethodNames)-len(rawResources)-len(httpOnly))
+	for _, operation := range httpOnly {
+		assert.False(t, toolNames[operation], "%s stays HTTP-only", operation)
+	}
 
 	gpRead := s1.call("4", "resources/read", map[string]any{"uri": "surla://golden-path"})
 	gpContents := requireResourceContents(t, gpRead)
@@ -510,10 +513,9 @@ func startSharedServerProcess(t *testing.T, workspace, config string) *sharedSer
 	require.NoError(t, lock.Close())
 	server, err := project.NewServer(state, func() {}, fixtureTeamDependencies(state))
 	require.NoError(t, err)
-	team, err := server.StartAgents(t.Context())
+	guide, err := attachFixtureGuide(t.Context(), state, server)
 	require.NoError(t, err)
-	require.NotEmpty(t, team.Roles)
-	raw, err := os.ReadFile(state.AgentFile(team.Roles[0].Handle))
+	raw, err := os.ReadFile(state.AgentFile(guide.Handle))
 	require.NoError(t, err)
 	cmd := exec.Command(exe, "serve", "-state", state.Dir)
 	cmd.Dir = workspace

@@ -16,7 +16,7 @@ import (
 )
 
 // TestProductionProjectGitPreflight checks capability rather than the version
-// label and proves refusals precede state discovery and all launch effects.
+// label with only Git and a browser opener installed on the test PATH.
 func TestProductionProjectGitPreflight(t *testing.T) {
 	for _, tc := range []struct {
 		name       string
@@ -63,18 +63,15 @@ func TestProductionProjectGitPreflight(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			bin := t.TempDir()
-			effects := filepath.Join(bin, "unexpected-effects")
 			calls := filepath.Join(bin, "git-calls")
-			dependency := "#!/bin/sh\nif [ \"$1\" = version ]; then printf 'chorus v0.14.0\\n'; else printf unexpected > \"$SURLA_TEST_GIT_EFFECTS\"; fi\n"
-			for _, name := range []string{"chorus", "herdr-core", "herdr-app", "hc", "open", "xdg-open"} {
-				require.NoError(t, os.WriteFile(filepath.Join(bin, name), []byte(dependency), 0o700))
+			for _, name := range []string{"open", "xdg-open"} {
+				require.NoError(t, os.WriteFile(filepath.Join(bin, name), []byte("#!/bin/sh\nexit 0\n"), 0o700))
 			}
 			if tc.probe != "" {
 				script := "#!/bin/sh\nprintf '%s\\n' \"$*\" >> \"$SURLA_TEST_GIT_CALLS\"\ncase \"$*\" in\n'--no-lazy-fetch version') " + tc.probe + ";;\n'--version') " + tc.version + ";;\n*) exit 88;;\nesac\n"
 				require.NoError(t, os.WriteFile(filepath.Join(bin, "git"), []byte(script), 0o700))
 			}
 			t.Setenv("PATH", bin)
-			t.Setenv("SURLA_TEST_GIT_EFFECTS", effects)
 			t.Setenv("SURLA_TEST_GIT_CALLS", calls)
 			t.Chdir(t.TempDir())
 			runtime := productionProjectRuntime()
@@ -85,9 +82,9 @@ func TestProductionProjectGitPreflight(t *testing.T) {
 				t.Fatal("startup must not launch a terminal in this fixture")
 				return "", nil
 			}
-			runtime.startTeamPrograms = func(context.Context) error {
-				t.Fatal("startup must not launch a service or window in this fixture")
-				return nil
+			runtime.startDaemon = func(*project.State) (*projectDaemon, error) {
+				t.Fatal("startup must not launch a daemon in this fixture")
+				return nil, nil
 			}
 			runtime.openViews = func(context.Context, string) error {
 				t.Fatal("startup must not open a browser in this fixture")
@@ -103,8 +100,6 @@ func TestProductionProjectGitPreflight(t *testing.T) {
 				assert.Zero(t, discoveries)
 			}
 			assert.Empty(t, output.String())
-			_, err = os.Stat(effects)
-			assert.ErrorIs(t, err, os.ErrNotExist)
 			logged, err := os.ReadFile(calls)
 			if len(tc.wantCalls) == 0 {
 				assert.ErrorIs(t, err, os.ErrNotExist)

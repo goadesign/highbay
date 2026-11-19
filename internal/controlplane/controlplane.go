@@ -186,6 +186,9 @@ type (
 		// Team is the required project owner and service composed before this
 		// control plane. New validates and copies the binding before serving.
 		Team *TeamBinding
+		// OpenViews mints and opens a browser session through the project credential owner.
+		// It must never return a private link in the operation's model-visible result.
+		OpenViews func(context.Context) error
 	}
 
 	// storedChangeCard holds a versioned Change Card alongside its authenticated
@@ -421,7 +424,9 @@ type (
 		reportWake chan struct{}
 		// reports is the project's report checker;
 		// reportWorker runs it and drains before stores close.
-		reports      *reportChecker
+		reports *reportChecker
+		// openViews is injected by the project composition root and owns private browser exchange.
+		openViews    func(context.Context) error
 		reportWorker sync.WaitGroup
 		// buildStartOps counts accepted starts, admitted through workspaceMu's
 		// existing shutdown barrier and drained before stores and evaluators close.
@@ -601,6 +606,7 @@ func newWithWorkspaceGitTimeout(
 		workingCopyTurn:        make(chan struct{}, 1),
 		reportWake:             make(chan struct{}, 1),
 		team:                   *opts.Team,
+		openViews:              opts.OpenViews,
 	}
 	if err := cp.restoreWorkspace(); err != nil {
 		return nil, errors.Join(err, cp.Close())
@@ -837,6 +843,7 @@ func (c *ControlPlane) ProposeChange(ctx context.Context, p *gensurla.ProposeCha
 func (c *ControlPlane) Close() error {
 	c.cancelServer()
 	c.teamWorker.Wait()
+	teamErr := c.team.Service.Close()
 	c.reportWorker.Wait()
 	// Wait out any check admission in progress: an operation admitted under
 	// workspaceMu before this point is already registered, and every later
@@ -852,8 +859,8 @@ func (c *ControlPlane) Close() error {
 	c.closeStoryRefreshes()
 	liveErr := c.closeLive()
 	evalErr := c.evaluator.Close()
-	if liveErr != nil {
-		return errors.Join(evalErr, fmt.Errorf("stop live target; cards directory %s stays locked: %w", c.cards.dir, liveErr))
+	if liveErr != nil || teamErr != nil {
+		return errors.Join(evalErr, checkErr, fmt.Errorf("stop project processes; cards directory %s stays locked: %w", c.cards.dir, errors.Join(liveErr, teamErr)))
 	}
 	c.workspaceMu.Lock()
 	defer c.workspaceMu.Unlock()

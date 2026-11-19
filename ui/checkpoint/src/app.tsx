@@ -1565,10 +1565,17 @@ export function bootstrapViewsPage() {
     focusResult(activeResult?.kind === "cp5-approval" ? "#surla-cp5-title" : "#surla-cp4-title");
   }
 
-  // startTeamAgents is an explicit window request. Its dated receipt describes
-  // what that request returned; current role health always comes from readTeam.
-  function startTeamAgents() {
-    if (sessionState !== "active" || hasPending("start_team_agents", "")) return;
+  // teamWorkersHaveWork reads the current work facts for registered workers.
+  function teamWorkersHaveWork() {
+    return teamSnapshot?.roles.some((role) => role.role !== "guide" &&
+      (role.assignment === "unread" || role.assignment === "nothing_owed")) ?? false;
+  }
+
+  // startTeamWorkers requests the project's default worker choices. The dated
+  // receipt records this request; readTeam supplies current role health.
+  function startTeamWorkers() {
+    if (sessionState !== "active" || !teamWorkersHaveWork() ||
+        hasPending("start_team_agents", "")) return;
     const begun = new Date().toISOString();
     teamActionError = null;
     callServer(
@@ -1584,7 +1591,7 @@ export function bootstrapViewsPage() {
       (message) => {
         if (sessionState !== "active") return;
         teamActionError = message;
-        statusEl.textContent = "Could not start agents. " + message;
+        statusEl.textContent = "Could not start workers. " + message;
       }
     );
   }
@@ -1901,7 +1908,8 @@ export function bootstrapViewsPage() {
   // showTeamPane sends only the registered role the user selected; the server
   // rechecks ownership and open dialogs before it changes the window.
   function showTeamPane(role: TeamRoleState["role"]) {
-    if (sessionState !== "active" || hasPending("show_team_pane", role)) return;
+    if (sessionState !== "active" || teamSnapshot?.herdr_mode === "unavailable" ||
+        hasPending("show_team_pane", role)) return;
     teamActionError = null;
     callServer(
       "show_team_pane", { role }, role,
@@ -2353,7 +2361,8 @@ export function bootstrapViewsPage() {
           next = <span>Describe the next change when you are ready.</span>;
         } else if (tests.state === "needs_changes") {
           const needs = teamFactsError() === null ? (teamSnapshot?.roles ?? []).filter((role) => role.state === "needs_you") : [];
-          attention = needs.length > 0 ? needs.map(teamAttentionText).join(". ")
+          attention = needs.length > 0
+            ? needs.map((role) => teamAttentionText(role, teamSnapshot?.herdr_mode !== "unavailable")).join(". ")
             : teamFactsError() !== null || teamSnapshot === null || teamSnapshot.roles.some((role) => role.state === "unknown" || role.state === "error")
             ? "Team status unknown." : "Nothing now.";
           next = <span>The test writer corrects the tests and reports again.</span>;
@@ -2384,8 +2393,12 @@ export function bootstrapViewsPage() {
       const teamLoading = hasPending("get_team", "");
       const teamStarting = hasPending("start_team_agents", "");
       const teamRoles = teamSnapshot?.roles ?? [];
+      const herdrAvailable = teamSnapshot?.herdr_mode !== "unavailable";
       const teamNeedsYou = teamRoles.find((role) => role.state === "needs_you");
-      attention = teamNeedsYou !== undefined ? teamAttentionText(teamNeedsYou)
+      const guide = teamRoles.find((role) => role.role === "guide");
+      const guideNeedsConnection = guide === undefined || guide.state === "not_started" || guide.state === "ended";
+      const connectGuide = "Connect your coding agent to this project’s Surla MCP server.";
+      attention = teamNeedsYou !== undefined ? teamAttentionText(teamNeedsYou, herdrAvailable)
         : teamLoading || teamSnapshot === null ? "Waiting for Team status."
         : teamRoles.some((role) => role.state === "unknown" || role.state === "error") ? "Team status unknown."
         : "Nothing now.";
@@ -2418,27 +2431,25 @@ export function bootstrapViewsPage() {
           step = "Wait for Surla to read the changes.";
         } else if (changeList.changes.length > 0) {
           step = "Open a change from the list below.";
-        } else if (teamStarting) {
-          step = "Wait for the guide to start.";
         } else if (teamLoading || teamSnapshot === null) {
           step = "Wait for Team status.";
-        } else {
-          const guide = teamRoles.find((role) => role.role === "guide");
-          if (guide === undefined || guide.state === "not_started" || guide.state === "ended") {
-            if (teamNeedsYou === undefined) attention = "The guide is not running.";
-            step = "Open Team and choose Start agents.";
-          } else if (guide.state === "starting") {
-            step = "Wait for the guide to start.";
-          } else if (guide.state === "unknown" || guide.state === "error") {
-            if (teamNeedsYou === undefined) {
-              attention = guide.state === "unknown" ? "Guide status unknown." : "The guide reported an error.";
-            }
-            step = "Open Team and refresh to check the guide’s status.";
-          } else if (guide.state === "needs_you") {
-            step = "In Team, choose Show guide pane to address the guide’s request.";
-          } else {
-            step = "In Team, choose Show guide pane and describe your change.";
+        } else if (guideNeedsConnection) {
+          if (teamNeedsYou === undefined) attention = "Guide needed.";
+          step = connectGuide + " Then describe your change.";
+        } else if (!herdrAvailable) {
+          step = guide.state === "needs_you" ? "Return to your coding agent to address the guide’s request."
+            : "Describe your change in your coding agent.";
+        } else if (guide.state === "starting") {
+          step = "Wait for the guide to start.";
+        } else if (guide.state === "unknown" || guide.state === "error") {
+          if (teamNeedsYou === undefined) {
+            attention = guide.state === "unknown" ? "Guide status unknown." : "The guide reported an error.";
           }
+          step = "Open Team and refresh to check the guide’s status.";
+        } else if (guide.state === "needs_you") {
+          step = "In Team, choose Show guide pane to address the guide’s request.";
+        } else {
+          step = "In Team, choose Show guide pane and describe your change.";
         }
       } else if (cp1Active && activeEditor !== null) {
         const ed = activeEditor;
@@ -2481,13 +2492,12 @@ export function bootstrapViewsPage() {
           step = "Evaluate the design below for the current revision.";
         }
       } else if (activeResult?.kind === "team") {
-        const needsStart = teamNeedsYou === undefined && (
-          teamRoles.length === 0 || teamRoles.some((role) => role.state === "not_started" || role.state === "ended")
-        );
-        step = teamStarting ? "Wait for agents to start."
+        step = teamStarting ? "Wait for workers to start."
           : teamLoading || teamSnapshot === null ? "Wait for Team status."
-          : needsStart ? "Choose Start agents below to prepare the guide."
-          : "Review role status and use Show pane to contact an agent.";
+          : teamNeedsYou === undefined && teamWorkersHaveWork() ? "Use Start workers to bring up missing build workers."
+          : guideNeedsConnection ? connectGuide
+          : herdrAvailable ? "Review role status and use Show pane to contact an agent."
+          : "Review role status below.";
       } else if (activeResult?.kind === "story") {
         if (storyEvaluationError !== null) {
           attention = "The Story draft could not be read.";
@@ -2603,7 +2613,7 @@ export function bootstrapViewsPage() {
         teamSnapshot?.roles.find((item) => item.role === role && item.state === "needs_you")
       ).find((role) => role !== undefined);
       if (attention !== undefined) {
-        step = teamAttentionText(attention);
+        step = teamAttentionText(attention, teamSnapshot?.herdr_mode !== "unavailable");
       } else if (activeEditor !== null) {
         const ed = activeEditor;
         if (ed.incomingCard !== null || ed.card.proposed_revision !== undefined) {
@@ -2914,12 +2924,13 @@ export function bootstrapViewsPage() {
             loading={hasPending("get_team", "")}
             error={teamFactsError()}
             starting={hasPending("start_team_agents", "")}
+            canStartWorkers={teamWorkersHaveWork()}
             disabled={sessionState !== "active"}
             showing={showingTeamRoles()}
             startReceipt={teamStartReceipt}
             actionError={teamActionError}
             onRefresh={readTeam}
-            onStartAgents={startTeamAgents}
+            onStartWorkers={startTeamWorkers}
             onShowPane={showTeamPane}
             onFocusedControlRemoved={focusCurrentViewHeading}
           />

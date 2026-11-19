@@ -186,8 +186,9 @@ type HandOverModelSettingsRequestBody struct {
 type InitProjectRequestBody struct {
 	// Go module path of the new service (for example example.com/shop).
 	ModulePath string `form:"module_path" json:"module_path" xml:"module_path"`
-	// Direct child directory name inside the bound workspace root. When omitted or
-	// empty, defaults to the service name derived from module_path.
+	// Use a direct child name, or . to initialize the bound workspace itself while
+	// preserving allowed agent configuration. When omitted or empty, defaults to
+	// the service name derived from module_path.
 	Dir *string `form:"dir,omitempty" json:"dir,omitempty" xml:"dir,omitempty"`
 }
 
@@ -215,6 +216,32 @@ type ShowTeamPaneRequestBody struct {
 	Role string `form:"role" json:"role" xml:"role"`
 }
 
+// StartTeamAgentsRequestBody is the type of the "surla" service
+// "start_team_agents" endpoint HTTP request body.
+type StartTeamAgentsRequestBody struct {
+	// Choices for missing roles; guide is accepted only when not running. Omitted
+	// and empty choices both use saved choices and installed defaults.
+	Choices map[string]*RoleAgentChoiceRequestBody `form:"choices,omitempty" json:"choices,omitempty" xml:"choices,omitempty"`
+}
+
+// DismissTeamNoticeRequestBody is the type of the "surla" service
+// "dismiss_team_notice" endpoint HTTP request body.
+type DismissTeamNoticeRequestBody struct {
+	// Notice to dismiss.
+	Notice string `form:"notice" json:"notice" xml:"notice"`
+}
+
+// MergeChangeRequestBody is the type of the "surla" service "merge_change"
+// endpoint HTTP request body.
+type MergeChangeRequestBody struct {
+	// Approved revision.
+	RequestRevision string `form:"request_revision" json:"request_revision" xml:"request_revision"`
+	// Approved candidate commit.
+	CandidateCommit string `form:"candidate_commit" json:"candidate_commit" xml:"candidate_commit"`
+	// Approved report digest.
+	ReportDigest string `form:"report_digest" json:"report_digest" xml:"report_digest"`
+}
+
 // StartBuildRequestBody is the type of the "surla" service "start_build"
 // endpoint HTTP request body.
 type StartBuildRequestBody struct {
@@ -225,6 +252,9 @@ type StartBuildRequestBody struct {
 	// agreed to build it again before any verification of it passed. Omit it
 	// otherwise.
 	Replaces *ReplacedBuildRequestBody `form:"replaces,omitempty" json:"replaces,omitempty" xml:"replaces,omitempty"`
+	// Choices for missing workers. Omitted and empty both use saved choices then
+	// installed cross-family defaults. Never launches or changes the guide.
+	Choices map[string]*RoleAgentChoiceRequestBody `form:"choices,omitempty" json:"choices,omitempty" xml:"choices,omitempty"`
 }
 
 // DropBuildRequestBody is the type of the "surla" service "drop_build"
@@ -975,6 +1005,12 @@ type GetTeamResponseBody struct {
 	// Registered roles in guide, builder, test_writer order; empty before
 	// registration.
 	Roles []*TeamRoleStateResponseBody `form:"roles,omitempty" json:"roles,omitempty" xml:"roles,omitempty"`
+	// Current desktop attachment.
+	HerdrMode *string `form:"herdr_mode,omitempty" json:"herdr_mode,omitempty" xml:"herdr_mode,omitempty"`
+	// Saved client choices by role.
+	SavedChoices map[string]*RoleAgentChoiceResponseBody `form:"saved_choices,omitempty" json:"saved_choices,omitempty" xml:"saved_choices,omitempty"`
+	// Dismissed project notices.
+	DismissedNotices []string `form:"dismissed_notices,omitempty" json:"dismissed_notices,omitempty" xml:"dismissed_notices,omitempty"`
 }
 
 // StartTeamAgentsResponseBody is the type of the "surla" service
@@ -982,13 +1018,38 @@ type GetTeamResponseBody struct {
 type StartTeamAgentsResponseBody struct {
 	// Stable Chorus team name.
 	Team *string `form:"team,omitempty" json:"team,omitempty" xml:"team,omitempty"`
-	// Local Herdr space identifier.
+	// Local Herdr space identifier, empty when Herdr is unavailable.
 	Space *string                        `form:"space,omitempty" json:"space,omitempty" xml:"space,omitempty"`
 	Roles []*ProjectTeamRoleResponseBody `form:"roles,omitempty" json:"roles,omitempty" xml:"roles,omitempty"`
-	// Launcher state after ensuring the team.
-	Dialog *string `form:"dialog,omitempty" json:"dialog,omitempty" xml:"dialog,omitempty"`
+	// Whether Herdr hosts this project, is available, or is unavailable.
+	HerdrMode *string `form:"herdr_mode,omitempty" json:"herdr_mode,omitempty" xml:"herdr_mode,omitempty"`
 	// What the user does next for the prepared team.
 	Step *string `form:"step,omitempty" json:"step,omitempty" xml:"step,omitempty"`
+}
+
+// ListTeamAgentOptionsResponseBody is the type of the "surla" service
+// "list_team_agent_options" endpoint HTTP response body.
+type ListTeamAgentOptionsResponseBody struct {
+	// Installed coding agents.
+	Agents []*InstalledAgentOptionResponseBody `form:"agents,omitempty" json:"agents,omitempty" xml:"agents,omitempty"`
+}
+
+// OpenViewsResponseBody is the type of the "surla" service "open_views"
+// endpoint HTTP response body.
+type OpenViewsResponseBody struct {
+	// Whether the browser opener completed successfully.
+	Opened *bool `form:"opened,omitempty" json:"opened,omitempty" xml:"opened,omitempty"`
+	// Safe handoff result without a URL or credential.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+}
+
+// MergeChangeResponseBody is the type of the "surla" service "merge_change"
+// endpoint HTTP response body.
+type MergeChangeResponseBody struct {
+	// Checked-out local branch that received the approved work.
+	Branch *string `form:"branch,omitempty" json:"branch,omitempty" xml:"branch,omitempty"`
+	// Resulting local branch commit.
+	HeadCommit *string `form:"head_commit,omitempty" json:"head_commit,omitempty" xml:"head_commit,omitempty"`
 }
 
 // ListChangesResponseBody is the type of the "surla" service "list_changes"
@@ -3572,9 +3633,247 @@ type StartTeamAgentsTeamUnavailableResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
+// StartTeamAgentsUnprocessableResponseBody is the type of the "surla" service
+// "start_team_agents" endpoint HTTP response body for the "unprocessable"
+// error.
+type StartTeamAgentsUnprocessableResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
 // StartTeamAgentsForbiddenResponseBody is the type of the "surla" service
 // "start_team_agents" endpoint HTTP response body for the "forbidden" error.
 type StartTeamAgentsForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListTeamAgentOptionsTeamUnavailableResponseBody is the type of the "surla"
+// service "list_team_agent_options" endpoint HTTP response body for the
+// "team_unavailable" error.
+type ListTeamAgentOptionsTeamUnavailableResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListTeamAgentOptionsForbiddenResponseBody is the type of the "surla" service
+// "list_team_agent_options" endpoint HTTP response body for the "forbidden"
+// error.
+type ListTeamAgentOptionsForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// DismissTeamNoticeTeamUnavailableResponseBody is the type of the "surla"
+// service "dismiss_team_notice" endpoint HTTP response body for the
+// "team_unavailable" error.
+type DismissTeamNoticeTeamUnavailableResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// DismissTeamNoticeForbiddenResponseBody is the type of the "surla" service
+// "dismiss_team_notice" endpoint HTTP response body for the "forbidden" error.
+type DismissTeamNoticeForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// OpenViewsForbiddenResponseBody is the type of the "surla" service
+// "open_views" endpoint HTTP response body for the "forbidden" error.
+type OpenViewsForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// MergeChangeNotFoundResponseBody is the type of the "surla" service
+// "merge_change" endpoint HTTP response body for the "not_found" error.
+type MergeChangeNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// MergeChangeNotApprovedResponseBody is the type of the "surla" service
+// "merge_change" endpoint HTTP response body for the "not_approved" error.
+type MergeChangeNotApprovedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// MergeChangeDetachedHeadResponseBody is the type of the "surla" service
+// "merge_change" endpoint HTTP response body for the "detached_head" error.
+type MergeChangeDetachedHeadResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// MergeChangeDirtyWorktreeResponseBody is the type of the "surla" service
+// "merge_change" endpoint HTTP response body for the "dirty_worktree" error.
+type MergeChangeDirtyWorktreeResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// MergeChangeMergeConflictResponseBody is the type of the "surla" service
+// "merge_change" endpoint HTTP response body for the "merge_conflict" error.
+type MergeChangeMergeConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// MergeChangeWorkingCopyBusyResponseBody is the type of the "surla" service
+// "merge_change" endpoint HTTP response body for the "working_copy_busy" error.
+type MergeChangeWorkingCopyBusyResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// MergeChangeForbiddenResponseBody is the type of the "surla" service
+// "merge_change" endpoint HTTP response body for the "forbidden" error.
+type MergeChangeForbiddenResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -5116,6 +5415,20 @@ type TeamRoleStateResponseBody struct {
 	Assignment *string `form:"assignment,omitempty" json:"assignment,omitempty" xml:"assignment,omitempty"`
 }
 
+// RoleAgentChoiceResponseBody is used to define fields on response body types.
+type RoleAgentChoiceResponseBody struct {
+	// Installed coding-agent client family.
+	Client *string `form:"client,omitempty" json:"client,omitempty" xml:"client,omitempty"`
+	// Installed executable selected from list_team_agent_options.
+	Program *string `form:"program,omitempty" json:"program,omitempty" xml:"program,omitempty"`
+	// Optional client-supported model.
+	Model *string `form:"model,omitempty" json:"model,omitempty" xml:"model,omitempty"`
+	// Optional client-supported reasoning effort.
+	Thinking *string `form:"thinking,omitempty" json:"thinking,omitempty" xml:"thinking,omitempty"`
+	// Whether to enable this client's advertised unattended permission mode.
+	Yolo *bool `form:"yolo,omitempty" json:"yolo,omitempty" xml:"yolo,omitempty"`
+}
+
 // ProjectTeamRoleResponseBody is used to define fields on response body types.
 type ProjectTeamRoleResponseBody struct {
 	// Trusted role.
@@ -5125,6 +5438,31 @@ type ProjectTeamRoleResponseBody struct {
 	// The matching live terminal is not reported as an idle shell; missing
 	// foreground information counts as running.
 	Running *bool `form:"running,omitempty" json:"running,omitempty" xml:"running,omitempty"`
+}
+
+// InstalledAgentOptionResponseBody is used to define fields on response body
+// types.
+type InstalledAgentOptionResponseBody struct {
+	// Coding-agent client family.
+	Client *string `form:"client,omitempty" json:"client,omitempty" xml:"client,omitempty"`
+	// Resolved installed executable.
+	Program *string `form:"program,omitempty" json:"program,omitempty" xml:"program,omitempty"`
+	// Human-readable client name.
+	Title *string `form:"title,omitempty" json:"title,omitempty" xml:"title,omitempty"`
+	// Advertised model choices; empty when the client accepts free-form names.
+	Models []string `form:"models,omitempty" json:"models,omitempty" xml:"models,omitempty"`
+	// Advertised reasoning-effort choices.
+	Efforts []string `form:"efforts,omitempty" json:"efforts,omitempty" xml:"efforts,omitempty"`
+	// Whether a model can be selected.
+	ModelSupported *bool `form:"model_supported,omitempty" json:"model_supported,omitempty" xml:"model_supported,omitempty"`
+	// Whether reasoning effort can be selected.
+	ThinkingSupported *bool `form:"thinking_supported,omitempty" json:"thinking_supported,omitempty" xml:"thinking_supported,omitempty"`
+	// Whether an unattended permission mode is supported.
+	YoloSupported *bool `form:"yolo_supported,omitempty" json:"yolo_supported,omitempty" xml:"yolo_supported,omitempty"`
+	// What this client's unattended permission mode permits.
+	YoloEffect *string `form:"yolo_effect,omitempty" json:"yolo_effect,omitempty" xml:"yolo_effect,omitempty"`
+	// Whether Surla supports this client's finite noninteractive mode.
+	HeadlessSupported *bool `form:"headless_supported,omitempty" json:"headless_supported,omitempty" xml:"headless_supported,omitempty"`
 }
 
 // ChangeListItemResponseBody is used to define fields on response body types.
@@ -5354,11 +5692,11 @@ type BuildDroppedResponseBody struct {
 type ProjectTeamResponseBody struct {
 	// Stable Chorus team name.
 	Team *string `form:"team,omitempty" json:"team,omitempty" xml:"team,omitempty"`
-	// Local Herdr space identifier.
+	// Local Herdr space identifier, empty when Herdr is unavailable.
 	Space *string                        `form:"space,omitempty" json:"space,omitempty" xml:"space,omitempty"`
 	Roles []*ProjectTeamRoleResponseBody `form:"roles,omitempty" json:"roles,omitempty" xml:"roles,omitempty"`
-	// Launcher state after ensuring the team.
-	Dialog *string `form:"dialog,omitempty" json:"dialog,omitempty" xml:"dialog,omitempty"`
+	// Whether Herdr hosts this project, is available, or is unavailable.
+	HerdrMode *string `form:"herdr_mode,omitempty" json:"herdr_mode,omitempty" xml:"herdr_mode,omitempty"`
 	// What the user does next for the prepared team.
 	Step *string `form:"step,omitempty" json:"step,omitempty" xml:"step,omitempty"`
 }
@@ -5640,6 +5978,20 @@ type DesignSnapshotRequestBody struct {
 	// File contents keyed by module-relative path, such as design/design.go or
 	// go.mod.
 	Files map[string]string `form:"files" json:"files" xml:"files"`
+}
+
+// RoleAgentChoiceRequestBody is used to define fields on request body types.
+type RoleAgentChoiceRequestBody struct {
+	// Installed coding-agent client family.
+	Client string `form:"client" json:"client" xml:"client"`
+	// Installed executable selected from list_team_agent_options.
+	Program string `form:"program" json:"program" xml:"program"`
+	// Optional client-supported model.
+	Model *string `form:"model,omitempty" json:"model,omitempty" xml:"model,omitempty"`
+	// Optional client-supported reasoning effort.
+	Thinking *string `form:"thinking,omitempty" json:"thinking,omitempty" xml:"thinking,omitempty"`
+	// Whether to enable this client's advertised unattended permission mode.
+	Yolo bool `form:"yolo" json:"yolo" xml:"yolo"`
 }
 
 // ReplacedBuildRequestBody is used to define fields on request body types.
@@ -9236,6 +9588,44 @@ func NewShowTeamPaneRequestBody(p *surla.ShowTeamPanePayload) *ShowTeamPaneReque
 	return body
 }
 
+// NewStartTeamAgentsRequestBody builds the HTTP request body from the payload
+// of the "start_team_agents" endpoint of the "surla" service.
+func NewStartTeamAgentsRequestBody(p *surla.StartTeamAgentsPayload) *StartTeamAgentsRequestBody {
+	body := &StartTeamAgentsRequestBody{}
+	if p.Choices != nil {
+		body.Choices = make(map[string]*RoleAgentChoiceRequestBody, len(p.Choices))
+		for key, val := range p.Choices {
+			tk := key
+			if val == nil {
+				body.Choices[tk] = nil
+				continue
+			}
+			body.Choices[tk] = marshalSurlaRoleAgentChoiceToRoleAgentChoiceRequestBody(val)
+		}
+	}
+	return body
+}
+
+// NewDismissTeamNoticeRequestBody builds the HTTP request body from the
+// payload of the "dismiss_team_notice" endpoint of the "surla" service.
+func NewDismissTeamNoticeRequestBody(p *surla.DismissTeamNoticePayload) *DismissTeamNoticeRequestBody {
+	body := &DismissTeamNoticeRequestBody{
+		Notice: p.Notice,
+	}
+	return body
+}
+
+// NewMergeChangeRequestBody builds the HTTP request body from the payload of
+// the "merge_change" endpoint of the "surla" service.
+func NewMergeChangeRequestBody(p *surla.MergeChangePayload) *MergeChangeRequestBody {
+	body := &MergeChangeRequestBody{
+		RequestRevision: p.RequestRevision,
+		CandidateCommit: p.CandidateCommit,
+		ReportDigest:    p.ReportDigest,
+	}
+	return body
+}
+
 // NewStartBuildRequestBody builds the HTTP request body from the payload of
 // the "start_build" endpoint of the "surla" service.
 func NewStartBuildRequestBody(p *surla.StartBuildPayload) *StartBuildRequestBody {
@@ -9244,6 +9634,17 @@ func NewStartBuildRequestBody(p *surla.StartBuildPayload) *StartBuildRequestBody
 	}
 	if p.Replaces != nil {
 		body.Replaces = marshalSurlaReplacedBuildToReplacedBuildRequestBody(p.Replaces)
+	}
+	if p.Choices != nil {
+		body.Choices = make(map[string]*RoleAgentChoiceRequestBody, len(p.Choices))
+		for key, val := range p.Choices {
+			tk := key
+			if val == nil {
+				body.Choices[tk] = nil
+				continue
+			}
+			body.Choices[tk] = marshalSurlaRoleAgentChoiceToRoleAgentChoiceRequestBody(val)
+		}
 	}
 	return body
 }
@@ -12050,7 +12451,8 @@ func NewUpdateDraftForbidden(body *UpdateDraftForbiddenResponseBody) *goa.Servic
 // from a HTTP "OK" response.
 func NewGetTeamTeamSnapshotOK(body *GetTeamResponseBody) *surla.TeamSnapshot {
 	v := &surla.TeamSnapshot{
-		Team: *body.Team,
+		Team:      *body.Team,
+		HerdrMode: *body.HerdrMode,
 	}
 	v.Roles = make([]*surla.TeamRoleState, len(body.Roles))
 	for i, val := range body.Roles {
@@ -12059,6 +12461,19 @@ func NewGetTeamTeamSnapshotOK(body *GetTeamResponseBody) *surla.TeamSnapshot {
 			continue
 		}
 		v.Roles[i] = unmarshalTeamRoleStateResponseBodyToSurlaTeamRoleState(val)
+	}
+	v.SavedChoices = make(map[string]*surla.RoleAgentChoice, len(body.SavedChoices))
+	for key, val := range body.SavedChoices {
+		tk := key
+		if val == nil {
+			v.SavedChoices[tk] = nil
+			continue
+		}
+		v.SavedChoices[tk] = unmarshalRoleAgentChoiceResponseBodyToSurlaRoleAgentChoice(val)
+	}
+	v.DismissedNotices = make([]string, len(body.DismissedNotices))
+	for i, val := range body.DismissedNotices {
+		v.DismissedNotices[i] = val
 	}
 
 	return v
@@ -12142,10 +12557,10 @@ func NewShowTeamPaneForbidden(body *ShowTeamPaneForbiddenResponseBody) *goa.Serv
 // endpoint result from a HTTP "OK" response.
 func NewStartTeamAgentsProjectTeamOK(body *StartTeamAgentsResponseBody) *surla.ProjectTeam {
 	v := &surla.ProjectTeam{
-		Team:   *body.Team,
-		Space:  *body.Space,
-		Dialog: *body.Dialog,
-		Step:   *body.Step,
+		Team:      *body.Team,
+		Space:     *body.Space,
+		HerdrMode: *body.HerdrMode,
+		Step:      *body.Step,
 	}
 	v.Roles = make([]*surla.ProjectTeamRole, len(body.Roles))
 	for i, val := range body.Roles {
@@ -12204,9 +12619,242 @@ func NewStartTeamAgentsTeamUnavailable(body *StartTeamAgentsTeamUnavailableRespo
 	return v
 }
 
+// NewStartTeamAgentsUnprocessable builds a surla service start_team_agents
+// endpoint unprocessable error.
+func NewStartTeamAgentsUnprocessable(body *StartTeamAgentsUnprocessableResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
 // NewStartTeamAgentsForbidden builds a surla service start_team_agents
 // endpoint forbidden error.
 func NewStartTeamAgentsForbidden(body *StartTeamAgentsForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListTeamAgentOptionsResultOK builds a "surla" service
+// "list_team_agent_options" endpoint result from a HTTP "OK" response.
+func NewListTeamAgentOptionsResultOK(body *ListTeamAgentOptionsResponseBody) *surla.ListTeamAgentOptionsResult {
+	v := &surla.ListTeamAgentOptionsResult{}
+	v.Agents = make([]*surla.InstalledAgentOption, len(body.Agents))
+	for i, val := range body.Agents {
+		if val == nil {
+			v.Agents[i] = nil
+			continue
+		}
+		v.Agents[i] = unmarshalInstalledAgentOptionResponseBodyToSurlaInstalledAgentOption(val)
+	}
+
+	return v
+}
+
+// NewListTeamAgentOptionsTeamUnavailable builds a surla service
+// list_team_agent_options endpoint team_unavailable error.
+func NewListTeamAgentOptionsTeamUnavailable(body *ListTeamAgentOptionsTeamUnavailableResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListTeamAgentOptionsForbidden builds a surla service
+// list_team_agent_options endpoint forbidden error.
+func NewListTeamAgentOptionsForbidden(body *ListTeamAgentOptionsForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewDismissTeamNoticeTeamUnavailable builds a surla service
+// dismiss_team_notice endpoint team_unavailable error.
+func NewDismissTeamNoticeTeamUnavailable(body *DismissTeamNoticeTeamUnavailableResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewDismissTeamNoticeForbidden builds a surla service dismiss_team_notice
+// endpoint forbidden error.
+func NewDismissTeamNoticeForbidden(body *DismissTeamNoticeForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewOpenViewsResultOK builds a "surla" service "open_views" endpoint result
+// from a HTTP "OK" response.
+func NewOpenViewsResultOK(body *OpenViewsResponseBody) *surla.OpenViewsResult {
+	v := &surla.OpenViewsResult{
+		Opened:  *body.Opened,
+		Message: *body.Message,
+	}
+
+	return v
+}
+
+// NewOpenViewsForbidden builds a surla service open_views endpoint forbidden
+// error.
+func NewOpenViewsForbidden(body *OpenViewsForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewMergeChangeResultOK builds a "surla" service "merge_change" endpoint
+// result from a HTTP "OK" response.
+func NewMergeChangeResultOK(body *MergeChangeResponseBody) *surla.MergeChangeResult {
+	v := &surla.MergeChangeResult{
+		Branch:     *body.Branch,
+		HeadCommit: *body.HeadCommit,
+	}
+
+	return v
+}
+
+// NewMergeChangeNotFound builds a surla service merge_change endpoint
+// not_found error.
+func NewMergeChangeNotFound(body *MergeChangeNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewMergeChangeNotApproved builds a surla service merge_change endpoint
+// not_approved error.
+func NewMergeChangeNotApproved(body *MergeChangeNotApprovedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewMergeChangeDetachedHead builds a surla service merge_change endpoint
+// detached_head error.
+func NewMergeChangeDetachedHead(body *MergeChangeDetachedHeadResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewMergeChangeDirtyWorktree builds a surla service merge_change endpoint
+// dirty_worktree error.
+func NewMergeChangeDirtyWorktree(body *MergeChangeDirtyWorktreeResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewMergeChangeMergeConflict builds a surla service merge_change endpoint
+// merge_conflict error.
+func NewMergeChangeMergeConflict(body *MergeChangeMergeConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewMergeChangeWorkingCopyBusy builds a surla service merge_change endpoint
+// working_copy_busy error.
+func NewMergeChangeWorkingCopyBusy(body *MergeChangeWorkingCopyBusyResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewMergeChangeForbidden builds a surla service merge_change endpoint
+// forbidden error.
+func NewMergeChangeForbidden(body *MergeChangeForbiddenResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -14483,11 +15131,40 @@ func ValidateGetTeamResponseBody(body *GetTeamResponseBody) (err error) {
 	if body.Roles == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("roles", "body"))
 	}
+	if body.HerdrMode == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("herdr_mode", "body"))
+	}
+	if body.SavedChoices == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("saved_choices", "body"))
+	}
+	if body.DismissedNotices == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("dismissed_notices", "body"))
+	}
 	for _, e := range body.Roles {
 		if e != nil {
 			if err2 := validateTeamRoleStateResponseBody(e, "body.roles[*]"); err2 != nil {
 				err = goa.MergeErrors(err, err2)
 			}
+		}
+	}
+	if body.HerdrMode != nil {
+		if !(*body.HerdrMode == "attached" || *body.HerdrMode == "available" || *body.HerdrMode == "unavailable") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.herdr_mode", *body.HerdrMode, []any{"attached", "available", "unavailable"}))
+		}
+	}
+	for k, v := range body.SavedChoices {
+		if !(k == "guide" || k == "builder" || k == "test_writer") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.saved_choices.key", k, []any{"guide", "builder", "test_writer"}))
+		}
+		if v != nil {
+			if err2 := validateRoleAgentChoiceResponseBody(v, "body.saved_choices[key]"); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	for _, e := range body.DismissedNotices {
+		if !(e == "single_agent_family" || e == "outside_herdr" || e == "herdr_unavailable") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.dismissed_notices[*]", e, []any{"single_agent_family", "outside_herdr", "herdr_unavailable"}))
 		}
 	}
 	return
@@ -14505,8 +15182,8 @@ func ValidateStartTeamAgentsResponseBody(body *StartTeamAgentsResponseBody) (err
 	if body.Roles == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("roles", "body"))
 	}
-	if body.Dialog == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("dialog", "body"))
+	if body.HerdrMode == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("herdr_mode", "body"))
 	}
 	if body.Step == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("step", "body"))
@@ -14515,10 +15192,7 @@ func ValidateStartTeamAgentsResponseBody(body *StartTeamAgentsResponseBody) (err
 		err = goa.MergeErrors(err, goa.ValidatePattern("body.team", *body.Team, "^[A-Za-z0-9][A-Za-z0-9_-]{0,31}$"))
 	}
 	if body.Space != nil {
-		err = goa.MergeErrors(err, goa.ValidatePattern("body.space", *body.Space, "^(?:[A-Za-z0-9_-][A-Za-z0-9_.-]{0,63}|\\.[A-Za-z0-9_-][A-Za-z0-9_.-]{0,62}|\\.\\.[A-Za-z0-9_.-]{1,62})$"))
-		if utf8.RuneCountInString(*body.Space) < 1 {
-			err = goa.MergeErrors(err, goa.InvalidLengthError("body.space", *body.Space, utf8.RuneCountInString(*body.Space), 1, true))
-		}
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.space", *body.Space, "^(?:[A-Za-z0-9_-][A-Za-z0-9_.-]{0,63}|\\.[A-Za-z0-9_-][A-Za-z0-9_.-]{0,62}|\\.\\.[A-Za-z0-9_.-]{1,62})?$"))
 		if utf8.RuneCountInString(*body.Space) > 64 {
 			err = goa.MergeErrors(err, goa.InvalidLengthError("body.space", *body.Space, utf8.RuneCountInString(*body.Space), 64, false))
 		}
@@ -14530,9 +15204,9 @@ func ValidateStartTeamAgentsResponseBody(body *StartTeamAgentsResponseBody) (err
 			}
 		}
 	}
-	if body.Dialog != nil {
-		if !(*body.Dialog == "opened" || *body.Dialog == "already_open" || *body.Dialog == "not_needed") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.dialog", *body.Dialog, []any{"opened", "already_open", "not_needed"}))
+	if body.HerdrMode != nil {
+		if !(*body.HerdrMode == "attached" || *body.HerdrMode == "available" || *body.HerdrMode == "unavailable") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.herdr_mode", *body.HerdrMode, []any{"attached", "available", "unavailable"}))
 		}
 	}
 	if body.Step != nil {
@@ -14542,6 +15216,46 @@ func ValidateStartTeamAgentsResponseBody(body *StartTeamAgentsResponseBody) (err
 		if utf8.RuneCountInString(*body.Step) > 512 {
 			err = goa.MergeErrors(err, goa.InvalidLengthError("body.step", *body.Step, utf8.RuneCountInString(*body.Step), 512, false))
 		}
+	}
+	return
+}
+
+// ValidateListTeamAgentOptionsResponseBody runs the validations defined on
+// ListTeamAgentOptionsResponseBody
+func ValidateListTeamAgentOptionsResponseBody(body *ListTeamAgentOptionsResponseBody) (err error) {
+	if body.Agents == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("agents", "body"))
+	}
+	for _, e := range body.Agents {
+		if e != nil {
+			if err2 := validateInstalledAgentOptionResponseBody(e, "body.agents[*]"); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	return
+}
+
+// ValidateOpenViewsResponseBody runs the validations defined on
+// OpenViewsResponseBody
+func ValidateOpenViewsResponseBody(body *OpenViewsResponseBody) (err error) {
+	if body.Opened == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("opened", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	return
+}
+
+// ValidateMergeChangeResponseBody runs the validations defined on
+// MergeChangeResponseBody
+func ValidateMergeChangeResponseBody(body *MergeChangeResponseBody) (err error) {
+	if body.Branch == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("branch", "body"))
+	}
+	if body.HeadCommit == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("head_commit", "body"))
 	}
 	return
 }
@@ -18082,9 +18796,321 @@ func ValidateStartTeamAgentsTeamUnavailableResponseBody(body *StartTeamAgentsTea
 	return
 }
 
+// ValidateStartTeamAgentsUnprocessableResponseBody runs the validations
+// defined on StartTeamAgentsUnprocessableResponseBody
+func ValidateStartTeamAgentsUnprocessableResponseBody(body *StartTeamAgentsUnprocessableResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
 // ValidateStartTeamAgentsForbiddenResponseBody runs the validations defined on
 // StartTeamAgentsForbiddenResponseBody
 func ValidateStartTeamAgentsForbiddenResponseBody(body *StartTeamAgentsForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListTeamAgentOptionsTeamUnavailableResponseBody runs the validations
+// defined on ListTeamAgentOptionsTeamUnavailableResponseBody
+func ValidateListTeamAgentOptionsTeamUnavailableResponseBody(body *ListTeamAgentOptionsTeamUnavailableResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListTeamAgentOptionsForbiddenResponseBody runs the validations
+// defined on ListTeamAgentOptionsForbiddenResponseBody
+func ValidateListTeamAgentOptionsForbiddenResponseBody(body *ListTeamAgentOptionsForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateDismissTeamNoticeTeamUnavailableResponseBody runs the validations
+// defined on DismissTeamNoticeTeamUnavailableResponseBody
+func ValidateDismissTeamNoticeTeamUnavailableResponseBody(body *DismissTeamNoticeTeamUnavailableResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateDismissTeamNoticeForbiddenResponseBody runs the validations defined
+// on DismissTeamNoticeForbiddenResponseBody
+func ValidateDismissTeamNoticeForbiddenResponseBody(body *DismissTeamNoticeForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateOpenViewsForbiddenResponseBody runs the validations defined on
+// OpenViewsForbiddenResponseBody
+func ValidateOpenViewsForbiddenResponseBody(body *OpenViewsForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateMergeChangeNotFoundResponseBody runs the validations defined on
+// MergeChangeNotFoundResponseBody
+func ValidateMergeChangeNotFoundResponseBody(body *MergeChangeNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateMergeChangeNotApprovedResponseBody runs the validations defined on
+// MergeChangeNotApprovedResponseBody
+func ValidateMergeChangeNotApprovedResponseBody(body *MergeChangeNotApprovedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateMergeChangeDetachedHeadResponseBody runs the validations defined on
+// MergeChangeDetachedHeadResponseBody
+func ValidateMergeChangeDetachedHeadResponseBody(body *MergeChangeDetachedHeadResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateMergeChangeDirtyWorktreeResponseBody runs the validations defined on
+// MergeChangeDirtyWorktreeResponseBody
+func ValidateMergeChangeDirtyWorktreeResponseBody(body *MergeChangeDirtyWorktreeResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateMergeChangeMergeConflictResponseBody runs the validations defined on
+// MergeChangeMergeConflictResponseBody
+func ValidateMergeChangeMergeConflictResponseBody(body *MergeChangeMergeConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateMergeChangeWorkingCopyBusyResponseBody runs the validations defined
+// on MergeChangeWorkingCopyBusyResponseBody
+func ValidateMergeChangeWorkingCopyBusyResponseBody(body *MergeChangeWorkingCopyBusyResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateMergeChangeForbiddenResponseBody runs the validations defined on
+// MergeChangeForbiddenResponseBody
+func ValidateMergeChangeForbiddenResponseBody(body *MergeChangeForbiddenResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -21208,6 +22234,56 @@ func validateTeamRoleStateResponseBody(body *TeamRoleStateResponseBody, path str
 	return
 }
 
+// ValidateRoleAgentChoiceResponseBody runs the validations defined on
+// RoleAgentChoice
+func ValidateRoleAgentChoiceResponseBody(body *RoleAgentChoiceResponseBody) (err error) {
+	if body.Client == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("client", "body"))
+	}
+	if body.Program == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("program", "body"))
+	}
+	if body.Yolo == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("yolo", "body"))
+	}
+	if body.Client != nil {
+		if !(*body.Client == "claude" || *body.Client == "codex" || *body.Client == "antigravity" || *body.Client == "cursor" || *body.Client == "gemini" || *body.Client == "opencode") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.client", *body.Client, []any{"claude", "codex", "antigravity", "cursor", "gemini", "opencode"}))
+		}
+	}
+	if body.Program != nil {
+		if utf8.RuneCountInString(*body.Program) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.program", *body.Program, utf8.RuneCountInString(*body.Program), 1, true))
+		}
+	}
+	return
+}
+
+// validateRoleAgentChoiceResponseBody checks RoleAgentChoice and reports
+// errors using the path supplied by its caller
+func validateRoleAgentChoiceResponseBody(body *RoleAgentChoiceResponseBody, path string) (err error) {
+	if body.Client == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("client", path))
+	}
+	if body.Program == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("program", path))
+	}
+	if body.Yolo == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("yolo", path))
+	}
+	if body.Client != nil {
+		if !(*body.Client == "claude" || *body.Client == "codex" || *body.Client == "antigravity" || *body.Client == "cursor" || *body.Client == "gemini" || *body.Client == "opencode") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError(path+".client", *body.Client, []any{"claude", "codex", "antigravity", "cursor", "gemini", "opencode"}))
+		}
+	}
+	if body.Program != nil {
+		if utf8.RuneCountInString(*body.Program) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError(path+".program", *body.Program, utf8.RuneCountInString(*body.Program), 1, true))
+		}
+	}
+	return
+}
+
 // ValidateProjectTeamRoleResponseBody runs the validations defined on
 // ProjectTeamRole
 func ValidateProjectTeamRoleResponseBody(body *ProjectTeamRoleResponseBody) (err error) {
@@ -21243,6 +22319,82 @@ func validateProjectTeamRoleResponseBody(body *ProjectTeamRoleResponseBody, path
 	if body.Role != nil {
 		if !(*body.Role == "guide" || *body.Role == "builder" || *body.Role == "test_writer") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError(path+".role", *body.Role, []any{"guide", "builder", "test_writer"}))
+		}
+	}
+	return
+}
+
+// ValidateInstalledAgentOptionResponseBody runs the validations defined on
+// InstalledAgentOption
+func ValidateInstalledAgentOptionResponseBody(body *InstalledAgentOptionResponseBody) (err error) {
+	if body.Client == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("client", "body"))
+	}
+	if body.Program == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("program", "body"))
+	}
+	if body.Title == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("title", "body"))
+	}
+	if body.Models == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("models", "body"))
+	}
+	if body.Efforts == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("efforts", "body"))
+	}
+	if body.ModelSupported == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("model_supported", "body"))
+	}
+	if body.ThinkingSupported == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("thinking_supported", "body"))
+	}
+	if body.YoloSupported == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("yolo_supported", "body"))
+	}
+	if body.HeadlessSupported == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("headless_supported", "body"))
+	}
+	if body.Client != nil {
+		if !(*body.Client == "claude" || *body.Client == "codex" || *body.Client == "antigravity" || *body.Client == "cursor" || *body.Client == "gemini" || *body.Client == "opencode") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.client", *body.Client, []any{"claude", "codex", "antigravity", "cursor", "gemini", "opencode"}))
+		}
+	}
+	return
+}
+
+// validateInstalledAgentOptionResponseBody checks InstalledAgentOption and
+// reports errors using the path supplied by its caller
+func validateInstalledAgentOptionResponseBody(body *InstalledAgentOptionResponseBody, path string) (err error) {
+	if body.Client == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("client", path))
+	}
+	if body.Program == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("program", path))
+	}
+	if body.Title == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("title", path))
+	}
+	if body.Models == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("models", path))
+	}
+	if body.Efforts == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("efforts", path))
+	}
+	if body.ModelSupported == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("model_supported", path))
+	}
+	if body.ThinkingSupported == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("thinking_supported", path))
+	}
+	if body.YoloSupported == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("yolo_supported", path))
+	}
+	if body.HeadlessSupported == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("headless_supported", path))
+	}
+	if body.Client != nil {
+		if !(*body.Client == "claude" || *body.Client == "codex" || *body.Client == "antigravity" || *body.Client == "cursor" || *body.Client == "gemini" || *body.Client == "opencode") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError(path+".client", *body.Client, []any{"claude", "codex", "antigravity", "cursor", "gemini", "opencode"}))
 		}
 	}
 	return
@@ -22171,8 +23323,8 @@ func ValidateProjectTeamResponseBody(body *ProjectTeamResponseBody) (err error) 
 	if body.Roles == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("roles", "body"))
 	}
-	if body.Dialog == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("dialog", "body"))
+	if body.HerdrMode == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("herdr_mode", "body"))
 	}
 	if body.Step == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("step", "body"))
@@ -22181,10 +23333,7 @@ func ValidateProjectTeamResponseBody(body *ProjectTeamResponseBody) (err error) 
 		err = goa.MergeErrors(err, goa.ValidatePattern("body.team", *body.Team, "^[A-Za-z0-9][A-Za-z0-9_-]{0,31}$"))
 	}
 	if body.Space != nil {
-		err = goa.MergeErrors(err, goa.ValidatePattern("body.space", *body.Space, "^(?:[A-Za-z0-9_-][A-Za-z0-9_.-]{0,63}|\\.[A-Za-z0-9_-][A-Za-z0-9_.-]{0,62}|\\.\\.[A-Za-z0-9_.-]{1,62})$"))
-		if utf8.RuneCountInString(*body.Space) < 1 {
-			err = goa.MergeErrors(err, goa.InvalidLengthError("body.space", *body.Space, utf8.RuneCountInString(*body.Space), 1, true))
-		}
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.space", *body.Space, "^(?:[A-Za-z0-9_-][A-Za-z0-9_.-]{0,63}|\\.[A-Za-z0-9_-][A-Za-z0-9_.-]{0,62}|\\.\\.[A-Za-z0-9_.-]{1,62})?$"))
 		if utf8.RuneCountInString(*body.Space) > 64 {
 			err = goa.MergeErrors(err, goa.InvalidLengthError("body.space", *body.Space, utf8.RuneCountInString(*body.Space), 64, false))
 		}
@@ -22196,9 +23345,9 @@ func ValidateProjectTeamResponseBody(body *ProjectTeamResponseBody) (err error) 
 			}
 		}
 	}
-	if body.Dialog != nil {
-		if !(*body.Dialog == "opened" || *body.Dialog == "already_open" || *body.Dialog == "not_needed") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.dialog", *body.Dialog, []any{"opened", "already_open", "not_needed"}))
+	if body.HerdrMode != nil {
+		if !(*body.HerdrMode == "attached" || *body.HerdrMode == "available" || *body.HerdrMode == "unavailable") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.herdr_mode", *body.HerdrMode, []any{"attached", "available", "unavailable"}))
 		}
 	}
 	if body.Step != nil {
@@ -22224,8 +23373,8 @@ func validateProjectTeamResponseBody(body *ProjectTeamResponseBody, path string)
 	if body.Roles == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("roles", path))
 	}
-	if body.Dialog == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("dialog", path))
+	if body.HerdrMode == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("herdr_mode", path))
 	}
 	if body.Step == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("step", path))
@@ -22234,10 +23383,7 @@ func validateProjectTeamResponseBody(body *ProjectTeamResponseBody, path string)
 		err = goa.MergeErrors(err, goa.ValidatePattern(path+".team", *body.Team, "^[A-Za-z0-9][A-Za-z0-9_-]{0,31}$"))
 	}
 	if body.Space != nil {
-		err = goa.MergeErrors(err, goa.ValidatePattern(path+".space", *body.Space, "^(?:[A-Za-z0-9_-][A-Za-z0-9_.-]{0,63}|\\.[A-Za-z0-9_-][A-Za-z0-9_.-]{0,62}|\\.\\.[A-Za-z0-9_.-]{1,62})$"))
-		if utf8.RuneCountInString(*body.Space) < 1 {
-			err = goa.MergeErrors(err, goa.InvalidLengthError(path+".space", *body.Space, utf8.RuneCountInString(*body.Space), 1, true))
-		}
+		err = goa.MergeErrors(err, goa.ValidatePattern(path+".space", *body.Space, "^(?:[A-Za-z0-9_-][A-Za-z0-9_.-]{0,63}|\\.[A-Za-z0-9_-][A-Za-z0-9_.-]{0,62}|\\.\\.[A-Za-z0-9_.-]{1,62})?$"))
 		if utf8.RuneCountInString(*body.Space) > 64 {
 			err = goa.MergeErrors(err, goa.InvalidLengthError(path+".space", *body.Space, utf8.RuneCountInString(*body.Space), 64, false))
 		}
@@ -22249,9 +23395,9 @@ func validateProjectTeamResponseBody(body *ProjectTeamResponseBody, path string)
 			}
 		}
 	}
-	if body.Dialog != nil {
-		if !(*body.Dialog == "opened" || *body.Dialog == "already_open" || *body.Dialog == "not_needed") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError(path+".dialog", *body.Dialog, []any{"opened", "already_open", "not_needed"}))
+	if body.HerdrMode != nil {
+		if !(*body.HerdrMode == "attached" || *body.HerdrMode == "available" || *body.HerdrMode == "unavailable") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError(path+".herdr_mode", *body.HerdrMode, []any{"attached", "available", "unavailable"}))
 		}
 	}
 	if body.Step != nil {
@@ -23248,6 +24394,30 @@ func ValidateDesignSnapshotRequestBody(body *DesignSnapshotRequestBody) (err err
 func validateDesignSnapshotRequestBody(body *DesignSnapshotRequestBody, path string) (err error) {
 	if body.Files == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("files", path))
+	}
+	return
+}
+
+// ValidateRoleAgentChoiceRequestBody runs the validations defined on
+// RoleAgentChoice
+func ValidateRoleAgentChoiceRequestBody(body *RoleAgentChoiceRequestBody) (err error) {
+	if !(body.Client == "claude" || body.Client == "codex" || body.Client == "antigravity" || body.Client == "cursor" || body.Client == "gemini" || body.Client == "opencode") {
+		err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.client", body.Client, []any{"claude", "codex", "antigravity", "cursor", "gemini", "opencode"}))
+	}
+	if utf8.RuneCountInString(body.Program) < 1 {
+		err = goa.MergeErrors(err, goa.InvalidLengthError("body.program", body.Program, utf8.RuneCountInString(body.Program), 1, true))
+	}
+	return
+}
+
+// validateRoleAgentChoiceRequestBody checks RoleAgentChoice and reports errors
+// using the path supplied by its caller
+func validateRoleAgentChoiceRequestBody(body *RoleAgentChoiceRequestBody, path string) (err error) {
+	if !(body.Client == "claude" || body.Client == "codex" || body.Client == "antigravity" || body.Client == "cursor" || body.Client == "gemini" || body.Client == "opencode") {
+		err = goa.MergeErrors(err, goa.InvalidEnumValueError(path+".client", body.Client, []any{"claude", "codex", "antigravity", "cursor", "gemini", "opencode"}))
+	}
+	if utf8.RuneCountInString(body.Program) < 1 {
+		err = goa.MergeErrors(err, goa.InvalidLengthError(path+".program", body.Program, utf8.RuneCountInString(body.Program), 1, true))
 	}
 	return
 }

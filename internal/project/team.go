@@ -4,16 +4,14 @@ package project
 import (
 	"context"
 	"errors"
-	"fmt"
-	"os"
 	"path/filepath"
 	"strings"
 	"sync"
 	"time"
 
 	genproject "github.com/goadesign/surla/gen/project"
+	gensurla "github.com/goadesign/surla/gen/surla"
 	"github.com/goadesign/surla/internal/controlplane"
-	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
@@ -27,7 +25,11 @@ type (
 		Terminals(context.Context, string, string, []string) ([]TeamTerminal, error)
 		Focus(context.Context, TeamSpace) error
 		Overlays(context.Context) ([]string, error)
-		OpenLauncher(context.Context) error
+		ReadTerminal(context.Context, string) (TeamTerminal, error)
+		LabelGuide(ctx context.Context, address, root, swarm, client, handle, space, tab string) error
+		OpenCompanion(context.Context) error
+		LaunchWorkers(context.Context, string, map[string]*gensurla.RoleAgentChoice) error
+		ClosePane(context.Context, string) error
 	}
 	// TeamDependencies binds every external team effect and the server's accepted-work lifetime.
 	TeamDependencies struct {
@@ -35,6 +37,14 @@ type (
 		Lifetime context.Context
 		// Host is the root-injected Herdr command adapter.
 		Host TeamHost
+		// HerdrAvailable reports whether local worker panes can be launched.
+		HerdrAvailable bool
+		// CompanionInstalled enables the first-attachment companion window.
+		CompanionInstalled bool
+		// DiscoverAgents checks installed programs on explicit option and launch requests.
+		DiscoverAgents func(context.Context) ([]*gensurla.InstalledAgentOption, error)
+		// WorkerEnv is the original server login environment for headless CLI sign-in.
+		WorkerEnv []string
 		// RosterDirectory is Herdr's local launcher roster directory.
 		RosterDirectory string
 		// Shell is the server login shell used by the shared running predicate.
@@ -55,10 +65,11 @@ type (
 	}
 	// TeamSpace is a local space and its tab-to-terminal mapping reported by Herdr.
 	TeamSpace struct {
-		ID     string    `json:"id"`
-		Name   string    `json:"name"`
-		Folder string    `json:"folder"`
-		Tabs   []TeamTab `json:"tabs"`
+		ID      string    `json:"id"`
+		Name    string    `json:"name"`
+		Folder  string    `json:"folder"`
+		Machine *string   `json:"machine"`
+		Tabs    []TeamTab `json:"tabs"`
 	}
 	// TeamTab identifies the terminals belonging to a Herdr tab.
 	TeamTab struct {
@@ -68,6 +79,7 @@ type (
 	// TeamPane supplies the terminal identifier accepted by pane.focus.
 	TeamPane struct {
 		Terminal string `json:"terminal"`
+		Pane     string `json:"pane"`
 	}
 	// TeamTerminal contains only the trusted observations needed to identify a running role.
 	TeamTerminal struct {
@@ -90,6 +102,12 @@ type (
 		dependencies TeamDependencies
 		// assignments reads which worker roles currently have work on the open build.
 		assignments controlplane.AssignmentReader
+		// headless owns the one-shot worker processes for the accepted build.
+		headless headlessWorkers
+		// lastStopped is the successfully drained generation, held under the team lock.
+		lastStopped controlplane.BuildIdentity
+		// closed forbids new work once shutdown has begun.
+		closed bool
 		// withTimeout privately injects the accepted-operation deadline; nil uses context.WithTimeout.
 		withTimeout func(context.Context, time.Duration) (context.Context, context.CancelFunc)
 		// observationMu protects the immutable connection and small public snapshot.
@@ -103,21 +121,15 @@ type (
 		Swarm string         `json:"swarm"`
 		Roles []launcherRole `json:"roles"`
 	}
-	// launcherRole binds one trusted role to its existing folder and private credential path.
+	// launcherRole binds one trusted role to its existing folder and first message.
 	launcherRole struct {
-		Role         string               `json:"role"`
-		Title        string               `json:"title"`
-		Handle       string               `json:"handle"`
-		Folder       string               `json:"folder"`
-		FirstMessage string               `json:"first_message"`
-		Connections  []launcherConnection `json:"connections"`
-		Place        *launcherPlace       `json:"place"`
-	}
-	// launcherConnection contains a file path, never credential bytes.
-	launcherConnection struct {
-		Name           string `json:"name"`
-		URL            string `json:"url"`
-		CredentialFile string `json:"credential_file"`
+		Role         string         `json:"role"`
+		Title        string         `json:"title"`
+		Handle       string         `json:"handle"`
+		Folder       string         `json:"folder"`
+		FirstMessage string         `json:"first_message"`
+		Connections  [0]struct{}    `json:"connections"`
+		Place        *launcherPlace `json:"place"`
 	}
 	// launcherPlace places each worker relative to an earlier role.
 	launcherPlace struct {
@@ -131,17 +143,11 @@ type (
 // is independent of a build's working-copy and generation phase.
 const teamStartTimeout = 45 * time.Second
 
-var (
-	// errRoleFolder marks a roster failure caused by a role's working folder rather
-	// than the project's private state, so the team failure names that folder's step.
-	errRoleFolder = errors.New("role working folder cannot be used")
-	// errAssignmentsUnavailable is the fixed bounded error recorded when ensureTeam
-	// cannot read which worker roles currently have work on the open build.
-	errAssignmentsUnavailable = errors.New("team assignments could not be read")
-)
+// errAssignmentsUnavailable keeps assignment read failures free of private evidence.
+var errAssignmentsUnavailable = errors.New("team assignments could not be read")
 
 // BindAssignments installs the control plane's read-only assignment reader
-// before the server listens so EnsureTeam and StartAgents know which worker
+// before the server listens so StartAgents and StopWorkers know which worker
 // roles currently have work on the open build.
 func (s *Server) BindAssignments(assignments controlplane.AssignmentReader) {
 	s.team.Lock()
@@ -149,225 +155,8 @@ func (s *Server) BindAssignments(assignments controlplane.AssignmentReader) {
 	s.team.assignments = assignments
 }
 
-// EnsureTeam accepts management authority once, then completes bounded server-owned work.
-// A disconnected caller can repeat the operation; saved identity and space adoption avoid duplication.
-func (s *Server) EnsureTeam(ctx context.Context) (*genproject.ProjectTeam, error) {
-	if err := managementOnly(ctx, "ensure_team"); err != nil {
-		return nil, err
-	}
-	ctx, cancel := s.acceptedTeamContext(ctx)
-	defer cancel()
-	ctx, span := otel.Tracer("surla/project").Start(ctx, "surla.project.ensure_team")
-	defer span.End()
-	result, err := s.ensureTeam(ctx)
-	if result != nil {
-		running := 0
-		for _, role := range result.Roles {
-			if role.Running {
-				running++
-			}
-		}
-		span.SetAttributes(attribute.String("team.dialog", result.Dialog), attribute.Int("team.roles", len(result.Roles)), attribute.Int("team.roles_running", running))
-	} else {
-		var named interface{ GoaErrorName() string }
-		if errors.As(err, &named) {
-			span.SetAttributes(attribute.String("team.outcome", named.GoaErrorName()))
-		}
-	}
-	return result, err
-}
-
-// ensureTeam holds the operation lock across the complete space/roster/dialog transition.
-func (s *Server) ensureTeam(ctx context.Context) (result *genproject.ProjectTeam, err error) {
-	s.team.Lock()
-	defer s.team.Unlock()
-	defer func() {
-		if result != nil {
-			result.Step = teamNextStep(result.Dialog, result.Space)
-		}
-	}()
-	if err := ctx.Err(); err != nil {
-		return nil, teamUnavailable(ctx, "lifetime", "stopping")
-	}
-	connection, err := s.team.dependencies.Connect(ctx)
-	if err != nil {
-		return nil, teamUnavailable(ctx, "chorus_status", "chorus")
-	}
-	host := s.team.dependencies.Host
-	// Observe dialogs before any space creation or focus change: opening the launcher is a toggle.
-	overlays, err := host.Overlays(ctx)
-	if err != nil {
-		return nil, teamUnavailable(ctx, "overlays", "herdr")
-	}
-	s.state.mu.Lock()
-	record := s.state.Record
-	s.state.mu.Unlock()
-	legacySavedSpace := record.Space != "" && !safeSpaceID(record.Space)
-	launcherOpen := false
-	if !legacySavedSpace {
-		for _, overlay := range overlays {
-			if overlay == "chorus-launcher" {
-				launcherOpen = true
-			} else {
-				return nil, genproject.MakeWindowBusy(errors.New("close the open Herdr dialog and run surla again"))
-			}
-		}
-	}
-	team := record.Team
-	if team == "" {
-		team = teamName(filepath.Base(record.Directory), record.ID)
-	}
-	spaces, err := host.Spaces(ctx)
-	if err != nil {
-		return nil, teamUnavailable(ctx, "spaces", "herdr")
-	}
-	var space TeamSpace
-	for _, candidate := range spaces {
-		if candidate.ID == record.Space && record.Space != "" {
-			if legacySavedSpace {
-				return nil, teamUnavailable(ctx, "saved_space", "saved_space")
-			}
-			space = candidate
-			break
-		}
-	}
-	if legacySavedSpace && len(overlays) > 0 {
-		return nil, genproject.MakeWindowBusy(errors.New("close the open Herdr dialog and run surla again"))
-	}
-	s.team.observationMu.Lock()
-	s.team.connection = connection
-	s.team.observationMu.Unlock()
-	if space.ID == "" {
-		matches := 0
-		for _, candidate := range spaces {
-			if !safeSpaceID(candidate.ID) {
-				continue
-			}
-			if candidate.Name == team && candidate.Folder == record.Directory {
-				space = candidate
-				matches++
-			}
-		}
-		if matches > 1 {
-			return nil, &genproject.TeamSpaceConflict{Name: "ambiguous_space", Count: matches}
-		}
-		if matches == 0 {
-			// An unrelated open launcher cannot identify this project's missing space.
-			// Refuse without saving identity, admitting an agent, or changing the window.
-			if len(overlays) > 0 {
-				return nil, genproject.MakeWindowBusy(errors.New("close the open Herdr dialog and run surla again"))
-			}
-			space, err = host.CreateSpace(ctx, team, record.Directory)
-			if err != nil {
-				return nil, teamUnavailable(ctx, "create_space", "herdr")
-			}
-		}
-	}
-	if !safeSpaceID(space.ID) {
-		return nil, teamUnavailable(ctx, "space_identity", "herdr")
-	}
-	// Keep the old identity until its roster is removed; deterministic adoption recovers a lost reply.
-	if record.Space != "" && record.Space != space.ID {
-		err = os.Remove(filepath.Join(s.team.dependencies.RosterDirectory, record.Space+".json"))
-		if err != nil && !errors.Is(err, os.ErrNotExist) {
-			return nil, teamUnavailable(ctx, "remove_roster", "roster_folder")
-		}
-	}
-	s.state.mu.Lock()
-	s.state.Record.Team = team
-	s.state.Record.Space = space.ID
-	err = s.state.save()
-	if err != nil {
-		s.state.Record.Team = record.Team
-		s.state.Record.Space = record.Space
-	}
-	s.state.mu.Unlock()
-	if err != nil {
-		return nil, teamUnavailable(ctx, "save_team", "project_state")
-	}
-	if _, err := s.registerAgent(teamName("guide", record.ID), agentRecord{Role: "guide", Folder: record.Directory}); err != nil {
-		return nil, teamUnavailable(ctx, "register_guide", "project_state")
-	}
-	// Snapshot after admission: every registered actor survives this operation.
-	s.state.mu.Lock()
-	agents := make(map[string]agentRecord, len(s.state.Record.Agents))
-	for actor, agent := range s.state.Record.Agents {
-		agents[actor] = agent
-	}
-	s.state.mu.Unlock()
-	roles := registeredTeamRoles(agents)
-	roster, err := s.teamRoster(roles)
-	if errors.Is(err, errRoleFolder) {
-		return nil, teamUnavailable(ctx, "roster", "role_folder")
-	}
-	if err != nil {
-		return nil, teamUnavailable(ctx, "roster", "project_state")
-	}
-	if err := os.MkdirAll(s.team.dependencies.RosterDirectory, 0o700); err != nil {
-		return nil, teamUnavailable(ctx, "roster_directory", "roster_folder")
-	}
-	if err := writeJSON(filepath.Join(s.team.dependencies.RosterDirectory, space.ID+".json"), roster); err != nil {
-		return nil, teamUnavailable(ctx, "write_roster", "roster_folder")
-	}
-	handles := make([]string, 0, len(agents))
-	for handle := range agents {
-		handles = append(handles, handle)
-	}
-	terminals, err := host.Terminals(ctx, record.Directory, space.ID, handles)
-	if err != nil {
-		return nil, teamUnavailable(ctx, "terminals", "herdr")
-	}
-	runningHandles := map[string]bool{}
-	for _, terminal := range terminals {
-		if terminal.Labels["chorus.project"] != record.Directory || terminal.Labels["herdr.space"] != space.ID || !roleRunning(terminal, s.team.dependencies.Shell) {
-			continue
-		}
-		for _, tab := range space.Tabs {
-			if terminal.Labels["herdr.tab"] == tab.ID {
-				runningHandles[terminal.Labels["chorus.handle"]] = true
-			}
-		}
-	}
-	listed := map[string]bool{}
-	for _, role := range roster.Roles {
-		listed[role.Handle] = true
-	}
-	assignments, assignmentsErr := s.readAssignments(ctx)
-	if assignmentsErr != nil {
-		span := trace.SpanFromContext(ctx)
-		span.RecordError(assignmentsErr)
-		span.SetStatus(codes.Error, assignmentsErr.Error())
-	}
-	result = &genproject.ProjectTeam{Team: team, Space: space.ID, Dialog: "not_needed", Roles: make([]*genproject.ProjectTeamRole, 0, len(roles))}
-	missing := false
-	for _, role := range roles {
-		running := runningHandles[role.Handle]
-		roleName := agents[role.Handle].Role
-		result.Roles = append(result.Roles, &genproject.ProjectTeamRole{Role: roleName, Handle: role.Handle, Running: running})
-		needed := roleName == "guide" || assignmentsErr != nil || assignments.HasWork(roleName)
-		if listed[role.Handle] && needed && !running {
-			missing = true
-		}
-	}
-	if launcherOpen {
-		result.Dialog = "already_open"
-		return result, nil
-	}
-	if !missing {
-		return result, nil
-	}
-	if err := host.Focus(ctx, space); err != nil {
-		return nil, teamUnavailable(ctx, "focus", "herdr")
-	}
-	if err := host.OpenLauncher(ctx); err != nil {
-		return nil, teamUnavailable(ctx, "launcher", "herdr")
-	}
-	result.Dialog = "opened"
-	return result, nil
-}
-
 // readAssignments calls the bound assignment reader, treating an unbound reader
-// and a failed read identically so ensureTeam counts every listed role.
+// and a failed read identically. Unknown assignments never authorize worker effects.
 func (s *Server) readAssignments(ctx context.Context) (controlplane.TeamAssignments, error) {
 	if s.team.assignments == nil {
 		return controlplane.TeamAssignments{}, errAssignmentsUnavailable
@@ -403,48 +192,11 @@ func roleFirstMessage(role string) (string, string) {
 	case "guide":
 		return "Guide", "Work through the Story and the change with the user in this project's pane. Use your surla connection, starting with the surla://golden-path guidance resource and list_changes/get_change. After initializing the project, call update_draft before each new change and whenever told a design file changed. Work only in the draft folder returned by update_draft or refresh_story; never edit the project folder or copy design files between it and the draft. Correct the files it reports as needing correction in your draft; when one is in the project folder, tell the user what to correct there and wait. Call update_draft again until that list is empty, then call refresh_story and poll get_story_refresh until it succeeds or fails. Use the succeeded refresh when calling propose_change or revise_change. When the design needs a module, run GOWORK=off go get and GOWORK=off go mod tidy in the draft. Preview an unsaved design with surla preview -dir <draft>. To discard unsaved edits, delete the draft and refresh. After the user drops a build, refresh before drafting the next change. If the builder reports that a hook reformatted a design file, run the same formatter in the draft, refresh and revise. Only the user confirms intent and approves results, on the views page."
 	case "builder":
-		return "Builder", "Use your surla connection, starting with the surla://golden-path guidance resource. Use list_builder_assignments to find the build. An empty list means no build needs you: say so and stop. Work only in this working folder, your copy of the project (working_folder in your assignment), on the branch checked out there. Read each new assignment with get_builder_assignment before any other work: it puts your folder on the build's own branch. Then run git status: implementation files you authored or generated for this build are expected current work. If you find unexpected files or work from an earlier build, stop and tell the user before carrying it forward. When a Surla call says a build was dropped or a new one started, stop: make no more edits or commits for the old work. Call generate_code: it writes the agreed design into design/ and regenerates gen/; never edit either. If the design needs a change, ask the guide to propose a revision for the user to adopt. When generation names go get, run what it names here, then call it again. Commit on your branch. Never name, move or delete a surla/ branch. Never merge, cherry-pick or copy files from another surla/ branch: they hold work the user has not taken. When a Surla call says your copy is on another branch, put your work where it says with git and call again; when it names another build's work, remove its commits and its changes to the files named, by any git you choose. When your assignment's gowork_off is true, run every go command as GOWORK=off go .... Use check_project before verify_change. Read the assignment before verification: when a test writer is used, verify_change is refused until its tests are accepted. Keep your Chorus watcher running. Surla messages you there when you have an unread assignment. Such a message only asks you to read your assignments: it never changes what is owed. Only the user confirms intent and approves results on the views page."
+		return "Builder", "Use your surla connection, starting with the surla://golden-path guidance resource. Use list_builder_assignments to find the build. An empty list means no build needs you: say so and stop. Work only in this working folder, your copy of the project (working_folder in your assignment), on the branch checked out there. Read each new assignment with get_builder_assignment before any other work: it puts your folder on the build's own branch. Then run git status: implementation files you authored or generated for this build are expected current work. If you find unexpected files or work from an earlier build, stop and tell the user before carrying it forward. When a Surla call says a build was dropped or a new one started, stop: make no more edits or commits for the old work. Call generate_code: it writes the agreed design into design/ and regenerates gen/; never edit either. If the design needs a change, ask the guide to propose a revision for the user to adopt. When generation names go get, run what it names here, then call it again. Commit on your branch. Never name, move or delete a surla/ branch. Never merge, cherry-pick or copy files from another surla/ branch: they hold work the user has not taken. When a Surla call says your copy is on another branch, put your work where it says with git and call again; when it names another build's work, remove its commits and its changes to the files named, by any git you choose. When your assignment's gowork_off is true, run every go command as GOWORK=off go .... Use check_project before verify_change. Read the assignment before verification: when a test writer is used, verify_change is refused until its tests are accepted. Only the user confirms intent and approves results on the views page."
 	case "test_writer":
-		return "Test writer", "Use your surla connection, starting with the surla://golden-path guidance resource. Use list_test_writer_assignments to find the build. An empty list means no build needs you: say so and stop. Read each new assignment with get_test_writer_assignment before any other work: it puts your folder on the build's own branch. Then run git status: the Story table and generated test-module files Surla just prepared, and tests you already authored for this build, are expected current work. Leave Surla's prepared files unchanged. If you find unexpected files or work from an earlier build, stop and tell the user before carrying it forward. When a Surla call says a build was dropped or a new one started, stop: make no more edits or commits for the old work. Stay on the branch checked out in your working copy and do not commit: Surla commits what it accepts. Never name, move or delete a surla/ branch. Never bring files or commits from another surla/ branch. Run every go command as GOWORK=off go ..., as Surla's tests check does. Implement one test per required entry in the test module, eval/ in the working folder the assignment names, and change nothing outside that module. Your tests must also hold the service to every answer the user confirmed, every confirmation example and every preserved behavior the assignment lists. Surla writes eval/design/story_tests.go, which declares the required tests, from the agreed Story and generates the test module at each assignment read that marks it read and again at each report; leave that file as it is. After changing the module's design, report to have it generated again or run surla gen -dir eval in the working folder first; regenerating keeps the required tests. To check your work, run GOWORK=off go build ./... in eval/: it fails naming any required method you have not written. Then call report_tests_finished. When you call report_tests_finished, include coverage_statements. For each scenario whose coverage you state, give its exact scenario ID, question_ids from this assignment's answers[].id, example_ids from examples[].id, and an explanation of the interaction or assertion that exercises them. Use an empty array when you state none; Surla will show Not stated. These are your statements, not Surla's judgment of what your tests assert. The tests must still hold the service to every confirmed answer, example and preserved behavior. Surla validates supplied references while checking your report. Read get_test_writer_assignment for the verdict and the statements you submitted; correct any stated-reference findings and report again. Do not commit: Surla records the tests it accepts. Surla's check of your report is the judge: Surla messages you on Chorus when its verdict is in; then read get_test_writer_assignment again, with any findings to fix. Keep your Chorus watcher running. Surla messages you there when you have an unread assignment. Such a message only asks you to read your assignments: it never changes what is owed. Only the user confirms intent and approves results on the views page."
+		return "Test writer", "Use your surla connection, starting with the surla://golden-path guidance resource. Use list_test_writer_assignments to find the build. An empty list means no build needs you: say so and stop. Read each new assignment with get_test_writer_assignment before any other work: it puts your folder on the build's own branch. Then run git status: the Story table and generated test-module files Surla just prepared, and tests you already authored for this build, are expected current work. Leave Surla's prepared files unchanged. If you find unexpected files or work from an earlier build, stop and tell the user before carrying it forward. When a Surla call says a build was dropped or a new one started, stop: make no more edits or commits for the old work. Stay on the branch checked out in your working copy and do not commit: Surla commits what it accepts. Never name, move or delete a surla/ branch. Never bring files or commits from another surla/ branch. Run every go command as GOWORK=off go ..., as Surla's tests check does. Implement one test per required entry in the test module, eval/ in the working folder the assignment names, and change nothing outside that module. Your tests must also hold the service to every answer the user confirmed, every confirmation example and every preserved behavior the assignment lists. Surla writes eval/design/story_tests.go, which declares the required tests, from the agreed Story and generates the test module at each assignment read that marks it read and again at each report; leave that file as it is. After changing the module's design, report to have it generated again or run surla gen -dir eval in the working folder first; regenerating keeps the required tests. To check your work, run GOWORK=off go build ./... in eval/: it fails naming any required method you have not written. Then call report_tests_finished. When you call report_tests_finished, include coverage_statements. For each scenario whose coverage you state, give its exact scenario ID, question_ids from this assignment's answers[].id, example_ids from examples[].id, and an explanation of the interaction or assertion that exercises them. Use an empty array when you state none; Surla will show Not stated. These are your statements, not Surla's judgment of what your tests assert. The tests must still hold the service to every confirmed answer, example and preserved behavior. Surla validates supplied references while checking your report. Read get_test_writer_assignment for the verdict and the statements you submitted; correct any stated-reference findings and report again. Do not commit: Surla records the tests it accepts. Surla's check of your report is the judge: When its verdict is in, read get_test_writer_assignment again, with any findings to fix. Only the user confirms intent and approves results on the views page."
 	}
 	panic("unregistered team role")
-}
-
-// teamRoster validates folders and credentials before constructing the complete closed launcher schema.
-func (s *Server) teamRoster(roles []launcherRole) (launcherRoster, error) {
-	roster := launcherRoster{Root: s.state.Record.Directory, Swarm: s.state.Record.Team, Roles: make([]launcherRole, 0, len(roles))}
-	for _, role := range roles {
-		if !validTeamName(role.Role) || !validTeamName(role.Handle) {
-			return launcherRoster{}, errors.New("agent identifier cannot be represented by the Chorus launcher")
-		}
-		info, err := os.Stat(role.Folder)
-		if errors.Is(err, os.ErrNotExist) {
-			continue
-		}
-		if err != nil {
-			return launcherRoster{}, fmt.Errorf("%w: %w", errRoleFolder, err)
-		}
-		if !filepath.IsAbs(role.Folder) || !info.IsDir() {
-			return launcherRoster{}, fmt.Errorf("%w: it must be an existing absolute directory", errRoleFolder)
-		}
-		if _, err := readCredential(s.state.AgentFile(role.Handle)); err != nil {
-			return launcherRoster{}, err
-		}
-		role.Connections = []launcherConnection{{Name: "surla", URL: s.state.Origin() + "/mcp", CredentialFile: s.state.AgentFile(role.Handle)}}
-		role.Place = nil
-		if i := len(roster.Roles); i > 0 {
-			direction := "down"
-			if i == 1 {
-				direction = "right"
-			}
-			role.Place = &launcherPlace{Beside: roster.Roles[i-1].Handle, Direction: direction}
-		}
-		roster.Roles = append(roster.Roles, role)
-	}
-	if len(roster.Roles) == 0 {
-		return launcherRoster{}, fmt.Errorf("%w: no team working folder exists", errRoleFolder)
-	}
-	return roster, nil
 }
 
 // teamName uses the same project suffix for team and handles within Chorus's 32-character limit.
@@ -548,25 +300,6 @@ func teamUnavailable(ctx context.Context, step, cause string) error {
 	span.RecordError(failure)
 	span.SetStatus(codes.Error, "team start failed")
 	return &genproject.TeamUnavailable{Name: "team_unavailable", Cause: cause}
-}
-
-// teamNextStep owns the user's next action after preparing a team. The launcher
-// reads its rows when it opens; an already open dialog rereads a rewritten roster
-// only when the user clicks its existing Reload team action.
-func teamNextStep(dialog, space string) string {
-	// Quote the validated space ID so both user surfaces supply copyable commands.
-	quotedSpace := "'" + space + "'"
-	terminal := "From a terminal, run chorus team inspect --space " + quotedSpace +
-		" to see the roles (add --choices choices.json for models and permission effects), then chorus team launch with the same --space and --choices choices.json (--choices - reads stdin; see chorus team launch --help)."
-	switch dialog {
-	case "opened":
-		return "Choose an agent for each role in the open Chorus dialog in Herdr. " + terminal
-	case "already_open":
-		return "If this is your project's dialog, click Reload team and choose agents. Otherwise close it; use Start agents on the page or run surla. " + terminal
-	case "not_needed":
-		return "Every listed role is running."
-	}
-	panic("unrecognized team dialog state")
 }
 
 // acceptedTeamContext retains caller values and tracing while the server owns

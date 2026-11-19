@@ -13,7 +13,7 @@ import (
 // pageTeamSnapshot supplies independent terminal, watcher and assignment facts.
 // Each replacement is immutable after publication to the fixture's readers.
 func pageTeamSnapshot(state string) gensurla.TeamSnapshot {
-	return gensurla.TeamSnapshot{Team: "page-team", Roles: []*gensurla.TeamRoleState{
+	return gensurla.TeamSnapshot{HerdrMode: "attached", SavedChoices: map[string]*gensurla.RoleAgentChoice{}, DismissedNotices: []string{}, Team: "page-team", Roles: []*gensurla.TeamRoleState{
 		{Role: "guide", Handle: "page-guide", State: "not_started", Attention: "none", Watcher: "unknown", Assignment: "unknown"},
 		{Role: "builder", Handle: "page-builder", State: state, Attention: "question", Watcher: "gone", Assignment: "unread"},
 		{Role: "test_writer", Handle: "page-writer", State: "unknown", Attention: "unknown", Watcher: "held", Assignment: "nothing_owed"},
@@ -23,7 +23,7 @@ func pageTeamSnapshot(state string) gensurla.TeamSnapshot {
 // TestViewsPageDescribeGuideStatusControlsNext follows the same Team reads
 // as Describe and checks that their guidance yields to an existing card.
 func TestViewsPageDescribeGuideStatusControlsNext(t *testing.T) {
-	f := &teamServiceFixture{snapshot: gensurla.TeamSnapshot{
+	f := &teamServiceFixture{snapshot: gensurla.TeamSnapshot{HerdrMode: "attached", SavedChoices: map[string]*gensurla.RoleAgentChoice{}, DismissedNotices: []string{},
 		Team: "page-team", Roles: []*gensurla.TeamRoleState{},
 	}}
 	cp := pageControlPlane(t, Options{Team: &TeamBinding{Owner: pageOwner, Service: f}})
@@ -34,6 +34,8 @@ func TestViewsPageDescribeGuideStatusControlsNext(t *testing.T) {
 			defer f.mu.Unlock()
 			next := pageTeamSnapshot("working")
 			next.Roles[0].State = state
+			next.Roles[1].Assignment = "no_work"
+			next.Roles[2].Assignment = "no_work"
 			f.snapshot = next
 		})
 	}
@@ -42,6 +44,7 @@ await control(origin, "hold", { key: "GET /team" });
 const page = await openPage(origin, { link: input.link });
 const next = () => page.text("#surla-frame-next dd");
 const attention = () => page.text(".surla-frame-attention dd");
+const connectGuide = "Connect your coding agent to this project’s Surla MCP server.";
 await until(() => page.$("#surla-change-list-empty") && page.sent("GET", "/team").length === 1, "empty Describe did not begin reading Team");
 expect(next() === "Wait for Team status.", "pending Team read was treated as an absent guide");
 expect(attention() === "Waiting for Team status.", "unread Team status appeared settled on Describe");
@@ -49,9 +52,9 @@ page.$("#surla-nav-team").click();
 expect(attention() === "Waiting for Team status.", "unread Team status appeared settled on Team");
 page.$("#surla-nav-changes").click();
 await control(origin, "release", { key: "GET /team" });
-await until(() => next().includes("Start agents"), "a fresh Team read with no guide did not guide startup");
+await until(() => next().includes(connectGuide), "Describe did not explain how to connect a guide");
 page.$("#surla-nav-team").click();
-expect(next().includes("Start agents") && page.$("#surla-team-start"), "Team did not show its existing startup control");
+expect(next() === connectGuide && !page.$("#surla-team-start"), "Team offered worker startup without a build assignment");
 page.$("#surla-nav-changes").click();
 
 await control(origin, "reply", { key: "GET /team", status: 503, body: { name: "unavailable", message: "Team unavailable." } });
@@ -67,12 +70,12 @@ await until(() => next().includes("Wait for the guide to start"), "a starting gu
 await control(origin, "act", { key: "working" });
 await until(() => next().includes("Show guide pane and describe your change"), "a working guide did not lead to its existing pane");
 await control(origin, "act", { key: "ended" });
-await until(() => next().includes("Start agents"), "an ended guide did not lead to the existing startup control");
+await until(() => next().includes(connectGuide), "Describe did not explain how to reconnect an ended guide");
 page.$("#surla-nav-team").click();
 for (const state of ["ended", "not_started"]) {
   if (state === "not_started") await control(origin, "act", { key: state });
   await until(() => page.$("#surla-team-role-guide")?.dataset.state === state && !page.$("#surla-team-loading"), "Team did not read " + state);
-  expect(next().includes("Start agents") && page.$("#surla-team-start").classList.contains("surla-btn-primary"), "Team guidance missed its startup control for " + state);
+  expect(next() === connectGuide && !page.$("#surla-team-start"), "Team offered worker startup for guide state " + state + " without a build assignment");
 }
 page.$("#surla-nav-changes").click();
 
@@ -221,7 +224,7 @@ func TestViewsPageTeamStartsExplicitlyAndRetainsFailedFacts(t *testing.T) {
 		f.mu.Lock()
 		f.snapshot = pageTeamSnapshot("working")
 		f.mu.Unlock()
-		return &gensurla.ProjectTeam{Team: "page-team", Space: "page-space", Dialog: "opened", Step: "Choose the builder in the open team dialog.", Roles: []*gensurla.ProjectTeamRole{}}, nil
+		return &gensurla.ProjectTeam{Team: "page-team", Space: "page-space", HerdrMode: "attached", Step: "The project agents have started.", Roles: []*gensurla.ProjectTeamRole{}}, nil
 	}
 	cp := pageControlPlane(t, Options{Team: &TeamBinding{Owner: pageOwner, Service: f}})
 	ps := startPageServer(t, cp)
@@ -229,8 +232,8 @@ func TestViewsPageTeamStartsExplicitlyAndRetainsFailedFacts(t *testing.T) {
 const page = await openPage(origin, { link: input.link });
 await until(() => page.$("#surla-team-attention-builder"), "initial team was not read");
 page.$("#surla-nav-team").click();
-await until(() => page.$("#surla-team-start"), "Start agents is missing");
-expect(page.sent("POST", "/team/agents").length === 0, "opening Team started agents");
+await until(() => page.text("#surla-team-start") === "Start workers", "Start workers is missing");
+expect(page.sent("POST", "/team/agents").length === 0, "opening Team started workers");
 await control(origin, "reply", { key: "GET /team", status: 503, body: { name: "unavailable", id: "team-read", message: "Team owner unavailable.", temporary: true, timeout: false, fault: false } });
 page.$("#surla-team-refresh").click();
 await until(() => page.$("#surla-team-read-error"), "read failure was not shown");
@@ -246,10 +249,10 @@ expect(!page.text("#surla-team-attention-builder").includes("Last read:"), "reco
 await control(origin, "hold", { key: "POST /team/agents" });
 page.$("#surla-team-start").click();
 await until(() => page.sent("POST", "/team/agents").length === 1, "the explicit start request did not begin");
-expect(page.$("#surla-team-start").disabled && page.text("#surla-frame-next dd") === "Wait for agents to start.", "pending startup was presented as another action");
+expect(page.$("#surla-team-start").disabled && page.text("#surla-frame-next dd") === "Wait for workers to start.", "pending startup was presented as another action");
 await control(origin, "release", { key: "POST /team/agents" });
 await until(() => page.$("#surla-team-start-receipt"), "explicit start receipt is missing");
-expect(page.text("#surla-team-start-receipt").includes("This start (begun ") && page.text("#surla-team-start-receipt").includes("Choose the builder in the open team dialog."), "receipt is not dated owner text");
+expect(page.text("#surla-team-start-receipt").includes("This start (begun ") && page.text("#surla-team-start-receipt").includes("The project agents have started."), "receipt is not dated owner text");
 await until(() => page.$("#surla-team-role-builder").dataset.state === "working" && !page.$("#surla-team-attention-builder"), "current facts were replaced by the historical start receipt");
 expect(page.sent("POST", "/team/agents").length === 1, "one click did not send one start");
 page.close();

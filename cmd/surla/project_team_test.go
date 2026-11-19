@@ -16,6 +16,7 @@ import (
 	"testing"
 	"time"
 
+	gensurla "github.com/goadesign/surla/gen/surla"
 	"github.com/goadesign/surla/internal/project"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -49,8 +50,26 @@ func (f *fixtureTeamHost) Focus(context.Context, project.TeamSpace) error { retu
 // Overlays returns the fixture dialog names.
 func (f *fixtureTeamHost) Overlays(context.Context) ([]string, error) { return nil, nil }
 
-// OpenLauncher records the request without opening a real dialog.
-func (f *fixtureTeamHost) OpenLauncher(context.Context) error { return nil }
+// ReadTerminal refuses every unknown fixture terminal.
+func (f *fixtureTeamHost) ReadTerminal(context.Context, string) (project.TeamTerminal, error) {
+	return project.TeamTerminal{}, errors.New("fixture has no observed terminal")
+}
+
+// LabelGuide leaves the fixture desktop untouched.
+func (f *fixtureTeamHost) LabelGuide(context.Context, string, string, string, string, string, string, string) error {
+	return nil
+}
+
+// OpenCompanion leaves the fixture desktop untouched.
+func (f *fixtureTeamHost) OpenCompanion(context.Context) error { return nil }
+
+// LaunchWorkers acknowledges the fixture launch without running an agent.
+func (f *fixtureTeamHost) LaunchWorkers(context.Context, string, map[string]*gensurla.RoleAgentChoice) error {
+	return nil
+}
+
+// ClosePane leaves the fixture desktop untouched.
+func (f *fixtureTeamHost) ClosePane(context.Context, string) error { return nil }
 
 // fixtureTeamDependencies binds only the caller's temporary state directory and recorded effects.
 func fixtureTeamDependencies(state *project.State) project.TeamDependencies {
@@ -67,7 +86,6 @@ func fixtureTeamConnection(context.Context) (project.TeamConnection, error) {
 // names and booleans only, which provider variables the server's process and
 // Herdr's copy of its environment hold (writePresence).
 func bindFixtureTeamEffects(runtime *projectRuntime) {
-	runtime.startTeamPrograms = func(context.Context) error { return nil }
 	runtime.teamDependencies = func(ctx context.Context, herdrEnv []string) (project.TeamDependencies, error) {
 		if dir := os.Getenv("SURLA_TEST_PRESENCE_DIR"); dir != "" {
 			if err := errors.Join(
@@ -81,131 +99,19 @@ func bindFixtureTeamEffects(runtime *projectRuntime) {
 		if err != nil {
 			return project.TeamDependencies{}, err
 		}
-		return project.TeamDependencies{Lifetime: ctx, Host: &fixtureTeamHost{}, RosterDirectory: filepath.Join(root, "fixture-rosters"), Shell: "/bin/zsh", Connect: fixtureTeamConnection}, nil
+		return project.TeamDependencies{
+			Lifetime: ctx, Host: &fixtureTeamHost{}, RosterDirectory: filepath.Join(root, "fixture-rosters"),
+			Shell: "/bin/zsh", Connect: fixtureTeamConnection, HerdrAvailable: true,
+			DiscoverAgents: func(context.Context) ([]*gensurla.InstalledAgentOption, error) {
+				return []*gensurla.InstalledAgentOption{{Client: "codex", Program: "/fixture/codex"}}, nil
+			},
+		}, nil
 	}
 }
 
-// TestTeamPreflightVersionAndPrograms verifies the server or command contract using only temporary state and stand-ins.
-func TestTeamPreflightVersionAndPrograms(t *testing.T) {
-	for _, missing := range []string{"herdr-core", "herdr-app", "chorus"} {
-		t.Run(missing, func(t *testing.T) {
-			calls := 0
-			_, err := resolveTeamCommands(func(name string) (string, error) {
-				if name == missing {
-					return "", assert.AnError
-				}
-				return name, nil
-			}, func(context.Context, []string, string, ...string) ([]byte, error) { calls++; return nil, nil }, t.TempDir())
-			require.ErrorContains(t, err, missing)
-			assert.Contains(t, err.Error(), "install it with:")
-			assert.Zero(t, calls)
-		})
-	}
-	for _, tc := range []struct {
-		version string
-		valid   bool
-	}{
-		{version: "v0.10.1"}, {version: "v0.11.0"}, {version: "v0.12.0"},
-		{version: "v0.11.0-rc.1"},
-		{version: "v0.13.0-rc.1"}, {version: "invalid"},
-		{version: "v0.13.0"}, {version: "v0.13.1"}, {version: "v0.14.0-rc.1"},
-		{version: "v0.14.0", valid: true}, {version: "v0.14.1", valid: true},
-	} {
-		t.Run(tc.version, func(t *testing.T) {
-			commands := teamCommands{chorus: "chorus", run: func(_ context.Context, _ []string, name string, args ...string) ([]byte, error) {
-				assert.Equal(t, "chorus", name)
-				assert.Equal(t, []string{"version"}, args)
-				return []byte("chorus " + tc.version + "\n"), nil
-			}}
-			err := preflightTeam(commands)
-			if tc.valid {
-				assert.NoError(t, err)
-			} else {
-				assert.ErrorContains(t, err, "chorus update -yes")
-			}
-		})
-	}
-}
-
-// TestTeamProgramStartup records service/window starts and all readiness failures.
-func TestTeamProgramStartup(t *testing.T) {
-	for _, scenario := range []string{"ready", "absent", "chorus up fails", "window start fails", "status deadline", "json error"} {
-		t.Run(scenario, func(t *testing.T) {
-			var calls []string
-			chorusReady, appReady := scenario == "ready", scenario == "ready"
-			commands := teamCommands{chorus: "chorus", app: "herdr-app"}
-			commands.start = func(_ []string, name string, args ...string) (<-chan error, error) {
-				call := name + " " + strings.Join(args, " ")
-				calls = append(calls, strings.TrimSpace(call))
-				if name == commands.chorus {
-					if scenario == "chorus up fails" {
-						return nil, assert.AnError
-					}
-					chorusReady = true
-				} else {
-					if scenario == "window start fails" {
-						return nil, assert.AnError
-					}
-					appReady = true
-				}
-				done := make(chan error, 1)
-				done <- nil
-				return done, nil
-			}
-			commands.run = func(ctx context.Context, _ []string, name string, args ...string) ([]byte, error) {
-				call := name + " " + strings.Join(args, " ")
-				calls = append(calls, strings.TrimSpace(call))
-				if name == "chorus" && len(args) > 0 && args[0] == "status" {
-					if !chorusReady {
-						return nil, assert.AnError
-					}
-					return []byte("Chorus v0.11.0 is running"), nil
-				}
-				if name == "chorus" {
-					if scenario == "chorus up fails" {
-						return nil, assert.AnError
-					}
-					chorusReady = true
-					return nil, nil
-				}
-				if len(args) == 0 {
-					if scenario == "window start fails" {
-						return nil, assert.AnError
-					}
-					appReady = true
-					return nil, nil
-				}
-				if scenario == "json error" {
-					return []byte(`{"error":"private peer error"}`), nil
-				}
-				if !appReady || scenario == "status deadline" {
-					return nil, assert.AnError
-				}
-				return []byte(`{"overlays":[]}`), nil
-			}
-			ctx, cancel := context.WithTimeout(t.Context(), 30*time.Millisecond)
-			defer cancel()
-			err := startTeamPrograms(ctx, commands)
-			if scenario == "ready" || scenario == "absent" {
-				assert.NoError(t, err)
-			} else {
-				require.Error(t, err)
-				assert.NotContains(t, err.Error(), "private peer error")
-			}
-			if scenario == "ready" {
-				assert.Equal(t, []string{"chorus status", "herdr-app status"}, calls)
-			}
-			if scenario == "absent" {
-				assert.Equal(t, []string{"chorus status", "chorus up", "chorus status", "herdr-app status", "herdr-app", "herdr-app status"}, calls)
-			}
-		})
-	}
-}
-
-// TestTeamCommandProtocol verifies one JSON argument and process/JSON failure handling.
 func TestTeamCommandProtocol(t *testing.T) {
 	var calls [][]string
-	c := teamCommands{core: "herdr-core", app: "herdr-app", run: func(_ context.Context, _ []string, name string, args ...string) ([]byte, error) {
+	c := teamCommands{core: "herdr-core", app: "herdr-app", chorus: "chorus", run: func(_ context.Context, _ []string, name string, args ...string) ([]byte, error) {
 		calls = append(calls, append([]string{name}, args...))
 		switch args[0] {
 		case "do":
@@ -219,7 +125,7 @@ func TestTeamCommandProtocol(t *testing.T) {
 			}
 			return []byte(`{"terminals":[{"address":"term1"}]}`), nil
 		case "get":
-			return []byte(`{"state":"live","labels":{"chorus.handle":"guide"},"foreground":{"argv":["codex"]}}`), nil
+			return []byte(`{"address":"term1","state":"live","labels":{"chorus.handle":"guide"},"foreground":{"argv":["codex"]}}`), nil
 		default:
 			return []byte(`{"overlays":["chorus-launcher"]}`), nil
 		}
@@ -230,8 +136,25 @@ func TestTeamCommandProtocol(t *testing.T) {
 	created, err := c.CreateSpace(t.Context(), "project's team", "/project with spaces")
 	require.NoError(t, err)
 	assert.Equal(t, "s1", created.ID)
+	assert.JSONEq(t, `{"name":"project's team","folder":"/project with spaces","machine":"","focus":false}`, calls[1][3])
 	require.NoError(t, c.Focus(t.Context(), created))
-	require.NoError(t, c.OpenLauncher(t.Context()))
+	require.NoError(t, c.OpenCompanion(t.Context()))
+	require.NoError(t, c.LabelGuide(t.Context(), "term1", "/project with spaces", "swarm", "codex", "guide", "s1", "t1"))
+	assert.Equal(t, []string{
+		"herdr-core", "label", "term1", "herdr.space=s1", "herdr.tab=t1", "chorus.project=/project with spaces",
+		"chorus.swarm=swarm", "chorus.agent=codex", "chorus.handle=guide", "chorus.role=guide",
+		"chorus.row=role:guide", "chorus.options=",
+	}, calls[len(calls)-1])
+	require.NoError(t, c.ClosePane(t.Context(), "pane"))
+	c.input = func(_ context.Context, _ []string, stdin io.Reader, program string, args ...string) error {
+		assert.Equal(t, "chorus", program)
+		assert.Equal(t, []string{"team", "launch", "--space", "s1", "--choices", "-"}, args)
+		raw, err := io.ReadAll(stdin)
+		require.NoError(t, err)
+		assert.JSONEq(t, `{"builder":{"client":"codex","program":"codex","model":null,"thinking":null,"yolo":false}}`, string(raw))
+		return nil
+	}
+	require.NoError(t, c.LaunchWorkers(t.Context(), "s1", map[string]*gensurla.RoleAgentChoice{"builder": {Client: "codex", Program: "codex"}}))
 	terminals, err := c.Terminals(t.Context(), "/project", "s1", []string{"guide"})
 	require.NoError(t, err)
 	require.Len(t, terminals, 1)
@@ -241,7 +164,7 @@ func TestTeamCommandProtocol(t *testing.T) {
 	for _, call := range calls {
 		if len(call) > 1 && call[1] == "do" {
 			require.Len(t, call, 4)
-			var payload map[string]string
+			var payload map[string]json.RawMessage
 			assert.NoError(t, json.Unmarshal([]byte(call[3]), &payload))
 		}
 	}
@@ -283,174 +206,43 @@ func TestEnsureTeamDeclaredErrorsAreFixed(t *testing.T) {
 	}
 }
 
-// TestTeamProgramInstalledOffPath tells the user to add the installers' folder to PATH when
-// a required program is installed there but not on PATH: installing it again would leave
-// PATH as it was and repeat the same refusal.
-func TestTeamProgramInstalledOffPath(t *testing.T) {
-	for _, missing := range []string{"herdr-core", "herdr-app", "chorus"} {
-		t.Run(missing, func(t *testing.T) {
-			installed := t.TempDir()
-			require.NoError(t, os.WriteFile(filepath.Join(installed, missing), []byte("#!/bin/sh\n"), 0o755))
-			_, err := resolveTeamCommands(func(name string) (string, error) {
-				if name == missing {
-					return "", assert.AnError
-				}
-				return name, nil
-			}, func(context.Context, []string, string, ...string) ([]byte, error) { return nil, nil }, installed)
-			require.Error(t, err)
-			assert.Contains(t, err.Error(), missing+" is installed in "+installed+", which is not on PATH")
-			assert.Contains(t, err.Error(), "add "+installed+" to PATH")
-			assert.NotContains(t, err.Error(), "install it with:")
-		})
+// TestInstalledTeamOptions proves argument discovery against local programs
+// and their fixture help/catalog output without launching an agent.
+func TestInstalledTeamOptions(t *testing.T) {
+	bin := t.TempDir()
+	t.Setenv("PATH", bin)
+	for _, name := range []string{"codex", "claude", "opencode"} {
+		require.NoError(t, os.WriteFile(filepath.Join(bin, name), []byte("#!/bin/sh\nexit 0\n"), 0o700))
 	}
-}
-
-// TestStartOpensViewsWhenTeamFails keeps the views page reachable whenever the server
-// answers: confirming and approving need no agent. The team failure follows the open
-// page with its own step, and the command still fails.
-func TestStartOpensViewsWhenTeamFails(t *testing.T) {
-	for _, tc := range []struct {
-		name     string
-		programs error
-		status   int
-		body     string
-		want     string
-	}{
-		{
-			name:     "team programs",
-			programs: errors.New("chorus up could not start; run chorus up, then run surla again"),
-			want:     "run chorus up, then run surla again",
-		},
-		{
-			name:   "chorus address",
-			status: http.StatusServiceUnavailable,
-			body:   `{"name":"team_unavailable","cause":"chorus"}`,
-			want:   "Run chorus up (or chorus status to see the error)",
-		},
-		{
-			name:   "herdr command",
-			status: http.StatusServiceUnavailable,
-			body:   `{"name":"team_unavailable","cause":"herdr"}`,
-			want:   "open the Herdr app, then click Start agents on the views page",
-		},
-		{
-			name:   "saved space",
-			status: http.StatusServiceUnavailable,
-			body:   `{"name":"team_unavailable","cause":"saved_space"}`,
-			want:   "This project's saved Herdr space has an ID this version of Surla no longer accepts. Close that space in Herdr (its agents stop with it), then start the agents again; Surla will prepare a replacement space.",
-		},
-		{
-			name:   "roster folder",
-			status: http.StatusServiceUnavailable,
-			body:   `{"name":"team_unavailable","cause":"roster_folder"}`,
-			want:   "data/chorus-launcher/rosters",
-		},
-		{
-			name:   "project state",
-			status: http.StatusServiceUnavailable,
-			body:   `{"name":"team_unavailable","cause":"project_state"}`,
-			want:   "chmod 700",
-		},
-		{
-			name:   "duplicate spaces",
-			status: http.StatusConflict,
-			body:   `{"name":"ambiguous_space","count":2}`,
-			want:   "close duplicate spaces",
-		},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			isolateServeWorkspace(t)
-			isolateProviderFamilies(t)
-			state, err := fixtureProjectState("")
-			require.NoError(t, err)
-			cp, err := openFixtureProjectCards(state)
-			require.NoError(t, err)
-			t.Cleanup(func() { assert.NoError(t, cp.Close()) })
-			url := state.Origin() + "/views#link=" + strings.Repeat("a", 64)
-			build := testBuild(t)
-			api := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				w.Header().Set("Content-Type", "application/json")
-				switch r.URL.Path {
-				case "/project/identity":
-					assert.NoError(t, json.NewEncoder(w).Encode(map[string]string{
-						"project_id": state.Record.ID, "directory": state.Record.Directory, "owner": state.Record.Owner, "build": build,
-					}))
-				case "/cp1/model/settings":
-					_, err := io.WriteString(w, noModelSettings)
-					assert.NoError(t, err)
-				case "/project/team":
-					assert.Nil(t, tc.programs, "a team whose programs did not start is not requested")
-					w.Header().Set("goa-error", strings.Split(tc.body, `"`)[3])
-					w.WriteHeader(tc.status)
-					_, err := io.WriteString(w, tc.body)
-					assert.NoError(t, err)
-				case "/project/browser-link":
-					w.WriteHeader(http.StatusCreated)
-					assert.NoError(t, json.NewEncoder(w).Encode(map[string]string{
-						"url": url, "expires_at": time.Now().Add(time.Minute).Format(time.RFC3339Nano),
-					}))
-				default:
-					t.Errorf("unexpected request: %s", r.URL.Path)
-				}
-			}))
-			require.NoError(t, api.Listener.Close())
-			api.Listener, err = net.Listen("tcp", state.Address())
-			require.NoError(t, err)
-			api.Start()
-			t.Cleanup(api.Close)
-			require.NoError(t, state.SaveRunning(project.Running{ManagementCredential: strings.Repeat("b", 64)}))
-			runtime := testProjectRuntime()
-			bindFixtureTeamEffects(&runtime)
-			runtime.preflight = func(bool) error { return nil }
-			runtime.startTeamPrograms = func(context.Context) error { return tc.programs }
-			opened := ""
-			runtime.openViews = func(_ context.Context, address string) error { opened = address; return nil }
-			var output strings.Builder
-			err = runtime.start(&output)
-			assert.Equal(t, url, opened, "the views page opens although the team failed")
-			assert.Contains(t, output.String(), "Surla is running for "+state.Record.Directory)
-			require.Error(t, err, "the exit status still reports the team failure")
-			assert.Contains(t, err.Error(), "the project team is not ready")
-			assert.Contains(t, err.Error(), tc.want)
-			assert.NotContains(t, err.Error(), "check Herdr")
-		})
-	}
-}
-
-// TestTeamPreflightHasNoStateEffects proves each installation/version failure exits before discovery.
-func TestTeamPreflightHasNoStateEffects(t *testing.T) {
-	for _, scenario := range []string{"herdr-core", "herdr-app", "chorus", "old Chorus"} {
-		t.Run(scenario, func(t *testing.T) {
-			runtime := testProjectRuntimeAt(t.TempDir())
-			runtime.configRoot = func() (string, error) { t.Fatal("preflight failure must not discover or create state"); return "", nil }
-			runtime.startTerminal = func(context.Context, *project.State) (string, error) {
-				t.Fatal("preflight failure must not start a terminal")
-				return "", nil
+	commands := teamCommands{run: func(_ context.Context, _ []string, name string, args ...string) ([]byte, error) {
+		switch filepath.Base(name) {
+		case "codex":
+			if strings.Join(args, " ") == "debug models" {
+				return []byte(`{"models":[{"slug":"fixture","visibility":"list","supported_reasoning_levels":[{"effort":"high"}]},{"slug":"hidden","visibility":"hide"}]}`), nil
 			}
-			runtime.startTeamPrograms = func(context.Context) error { t.Fatal("preflight failure must not start services/windows"); return nil }
-			runtime.preflight = func(bool) error {
-				commands, err := resolveTeamCommands(func(name string) (string, error) {
-					if name == scenario {
-						return "", assert.AnError
-					}
-					return name, nil
-				}, func(context.Context, []string, string, ...string) ([]byte, error) {
-					return []byte("chorus v0.10.1"), nil
-				}, t.TempDir())
-				if err != nil {
-					return err
-				}
-				return preflightTeam(commands)
-			}
-			var out strings.Builder
-			err := runtime.start(&out)
-			require.Error(t, err)
-			assert.Empty(t, out.String())
-			if scenario == "old Chorus" {
-				assert.Contains(t, err.Error(), "chorus update -yes")
-			} else {
-				assert.Contains(t, err.Error(), scenario+" is required; install it with:")
-			}
-		})
-	}
+			return []byte("exec\n-c, --config <KEY=VALUE>\n--model <MODEL>\n--dangerously-bypass-approvals-and-sandbox"), nil
+		case "claude":
+			return []byte("--print\n--model <NAME>\n--effort <LEVEL> (low, medium, high)"), nil
+		case "opencode":
+			return []byte("run\n--model NAME"), nil
+		default:
+			return nil, errors.New("unexpected installed fixture")
+		}
+	}}
+	options, err := commands.discoverAgents(t.Context())
+	require.NoError(t, err)
+	require.Len(t, options, 3)
+	assert.Equal(t, "codex", options[0].Client)
+	assert.Equal(t, filepath.Join(bin, "codex"), options[0].Program)
+	assert.Equal(t, []string{"fixture"}, options[0].Models)
+	assert.Equal(t, []string{"high"}, options[0].Efforts)
+	assert.True(t, options[0].HeadlessSupported)
+	assert.True(t, options[0].YoloSupported)
+	assert.Equal(t, "claude", options[1].Client)
+	assert.Equal(t, []string{"low", "medium", "high"}, options[1].Efforts)
+	assert.True(t, options[1].HeadlessSupported)
+	assert.False(t, options[1].YoloSupported)
+	assert.Equal(t, "opencode", options[2].Client)
+	assert.True(t, options[2].HeadlessSupported)
+	assert.False(t, options[2].ThinkingSupported)
 }

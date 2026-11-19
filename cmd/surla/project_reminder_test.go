@@ -389,7 +389,7 @@ func TestTeamCommandsNeverType(t *testing.T) {
 	assert.NoError(t, commands.Focus(ctx, space))
 	_, err = commands.Overlays(ctx)
 	assert.NoError(t, err)
-	assert.NoError(t, commands.OpenLauncher(ctx))
+	assert.NoError(t, commands.OpenCompanion(ctx))
 	_, err = observations.FindTerminals(ctx, selection)
 	assert.NoError(t, err)
 	_, err = observations.ReadTerminal(ctx, "owned")
@@ -400,7 +400,7 @@ func TestTeamCommandsNeverType(t *testing.T) {
 		require.NotEmpty(t, args)
 		assert.NotContains(t, []string{"send", "keys"}, args[0], "%v", args)
 	}
-	assert.ElementsMatch(t, []string{"CreateSpace", "Focus", "OpenLauncher", "Overlays", "Spaces", "Terminals"}, exportedMethods(reflect.TypeFor[teamCommands]()))
+	assert.ElementsMatch(t, []string{"ClosePane", "CreateSpace", "Focus", "LabelGuide", "LaunchWorkers", "OpenCompanion", "Overlays", "ReadTerminal", "Spaces", "Terminals"}, exportedMethods(reflect.TypeFor[teamCommands]()))
 	assert.ElementsMatch(t, []string{"FindTerminals", "Follow", "ReadTerminal", "ReadWatchers"}, exportedMethods(reflect.TypeFor[teamObservations]()))
 }
 

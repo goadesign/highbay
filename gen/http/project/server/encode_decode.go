@@ -165,6 +165,157 @@ func EncodeEnsureTeamError(encoder func(context.Context, http.ResponseWriter) go
 	}
 }
 
+// EncodeAttachGuideResponse returns an encoder for responses returned by the
+// project attach_guide endpoint.
+func EncodeAttachGuideResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
+	return func(ctx context.Context, w http.ResponseWriter, v any) error {
+		res, _ := v.(*project.AttachGuideResult)
+		enc := encoder(ctx, w)
+		body := NewAttachGuideResponseBody(res)
+		w.WriteHeader(http.StatusOK)
+		return enc.Encode(body)
+	}
+}
+
+// DecodeAttachGuideRequest returns a decoder for requests sent to the project
+// attach_guide endpoint.
+func DecodeAttachGuideRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*project.AttachGuidePayload, error) {
+	return func(r *http.Request) (*project.AttachGuidePayload, error) {
+		var payload *project.AttachGuidePayload
+		var (
+			body AttachGuideRequestBody
+			err  error
+		)
+		err = decoder(r).Decode(&body)
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				return payload, goa.MissingPayloadError()
+			}
+			var gerr *goa.ServiceError
+			if errors.As(err, &gerr) {
+				return payload, gerr
+			}
+			return payload, goa.DecodePayloadError(err.Error())
+		}
+		err = ValidateAttachGuideRequestBody(&body)
+		if err != nil {
+			return payload, err
+		}
+		payload = NewAttachGuidePayload(&body)
+
+		return payload, nil
+	}
+}
+
+// EncodeAttachGuideError returns an encoder for errors returned by the
+// attach_guide project endpoint.
+func EncodeAttachGuideError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
+	encodeError := goahttp.ErrorEncoder(encoder, formatter)
+	return func(ctx context.Context, w http.ResponseWriter, v error) error {
+		var en goa.GoaErrorNamer
+		if !errors.As(v, &en) {
+			return encodeError(ctx, w, v)
+		}
+		switch en.GoaErrorName() {
+		case "forbidden":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewAttachGuideForbiddenResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusForbidden)
+			return enc.Encode(body)
+		case "unprocessable":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewAttachGuideUnprocessableResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnprocessableEntity)
+			return enc.Encode(body)
+		case "team_unavailable":
+			var res *project.TeamUnavailable
+			errors.As(v, &res)
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewAttachGuideTeamUnavailableResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusServiceUnavailable)
+			return enc.Encode(body)
+		default:
+			return encodeError(ctx, w, v)
+		}
+	}
+}
+
+// EncodeStatusResponse returns an encoder for responses returned by the
+// project status endpoint.
+func EncodeStatusResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
+	return func(ctx context.Context, w http.ResponseWriter, v any) error {
+		res, _ := v.(*project.ProjectStatus)
+		enc := encoder(ctx, w)
+		body := NewStatusResponseBody(res)
+		w.WriteHeader(http.StatusOK)
+		return enc.Encode(body)
+	}
+}
+
+// EncodeStatusError returns an encoder for errors returned by the status
+// project endpoint.
+func EncodeStatusError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
+	encodeError := goahttp.ErrorEncoder(encoder, formatter)
+	return func(ctx context.Context, w http.ResponseWriter, v error) error {
+		var en goa.GoaErrorNamer
+		if !errors.As(v, &en) {
+			return encodeError(ctx, w, v)
+		}
+		switch en.GoaErrorName() {
+		case "forbidden":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewStatusForbiddenResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusForbidden)
+			return enc.Encode(body)
+		case "unprocessable":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewStatusUnprocessableResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnprocessableEntity)
+			return enc.Encode(body)
+		default:
+			return encodeError(ctx, w, v)
+		}
+	}
+}
+
 // EncodeStopResponse returns an encoder for responses returned by the project
 // stop endpoint.
 func EncodeStopResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
@@ -362,6 +513,21 @@ func marshalProjectProjectTeamRoleToProjectTeamRoleResponseBody(v *project.Proje
 		Role:    v.Role,
 		Handle:  v.Handle,
 		Running: v.Running,
+	}
+
+	return res
+}
+
+// marshalProjectTeamRoleStateToTeamRoleStateResponseBody builds a value of
+// type *TeamRoleStateResponseBody from a value of type *project.TeamRoleState.
+func marshalProjectTeamRoleStateToTeamRoleStateResponseBody(v *project.TeamRoleState) *TeamRoleStateResponseBody {
+	res := &TeamRoleStateResponseBody{
+		Role:       v.Role,
+		Handle:     v.Handle,
+		State:      v.State,
+		Attention:  v.Attention,
+		Watcher:    v.Watcher,
+		Assignment: v.Assignment,
 	}
 
 	return res

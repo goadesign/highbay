@@ -98,6 +98,36 @@ func TestCardsDirectoryIsHeldByOneControlPlane(t *testing.T) {
 	assert.ErrorContains(t, err, "cards directory is required")
 }
 
+// TestCardStoreInUseOnlyProbesExistingLock covers the read-only CLI probe
+// before the writer opens the store, while it holds the lock, and after close.
+func TestCardStoreInUseOnlyProbesExistingLock(t *testing.T) {
+	t.Parallel()
+	dir := filepath.Join(t.TempDir(), "cards")
+	held, err := CardStoreInUse(dir)
+	require.NoError(t, err)
+	assert.False(t, held)
+	_, err = os.Stat(dir)
+	require.ErrorIs(t, err, os.ErrNotExist)
+	require.NoError(t, os.Mkdir(dir, 0o700))
+	held, err = CardStoreInUse(dir)
+	require.NoError(t, err)
+	assert.False(t, held)
+	entries, err := os.ReadDir(dir)
+	require.NoError(t, err)
+	require.Empty(t, entries)
+
+	writer, err := openCardStore(dir)
+	require.NoError(t, err)
+	t.Cleanup(func() { assert.NoError(t, writer.close()) })
+	held, err = CardStoreInUse(dir)
+	require.NoError(t, err)
+	assert.True(t, held)
+	require.NoError(t, writer.close())
+	held, err = CardStoreInUse(dir)
+	require.NoError(t, err)
+	assert.False(t, held)
+}
+
 // TestCardStoreCloseReleasesDuplicatedLock checks the shutdown contract even
 // while another descriptor still refers to the lock, as happens between fork
 // and exec when an unrelated goroutine starts a child process.

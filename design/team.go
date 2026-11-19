@@ -22,7 +22,10 @@ var TeamRoleState = Type("TeamRoleState", func() {
 var TeamSnapshot = Type("TeamSnapshot", func() {
 	Attribute("team", String, "Stable team name, also returned before a team is prepared.")
 	Attribute("roles", ArrayOf(TeamRoleState), "Registered roles in guide, builder, test_writer order; empty before registration.")
-	Required("team", "roles")
+	Attribute("herdr_mode", String, "Current desktop attachment.", func() { Enum("attached", "available", "unavailable") })
+	Attribute("saved_choices", MapOf(String, RoleAgentChoice, roleAgentChoices), "Saved client choices by role.")
+	Attribute("dismissed_notices", ArrayOf(String, func() { Enum("single_agent_family", "outside_herdr", "herdr_unavailable") }), "Dismissed project notices.")
+	Required("team", "roles", "herdr_mode", "saved_choices", "dismissed_notices")
 })
 
 // teamMethods deliberately exposes no agent MCP tools and no second waiting read.
@@ -53,16 +56,47 @@ func teamMethods() {
 		})
 	})
 	Method("start_team_agents", func() {
-		Description("Ask the project's existing team-start owner to prepare the registered roles and open the Chorus launcher when a listed role is not running. Only the user may call it. It has the same bounded server-owned lifetime and dialog, space and availability refusals as the management team-start operation.")
+		Description("Start missing project agents using explicit choices, otherwise saved choices and installed cross-family defaults. Never replace a running guide. Only the user may call it. Workers run in Herdr when available, otherwise as finite server-owned headless processes. Opens no launcher.")
+		Payload(func() {
+			Attribute("choices", MapOf(String, RoleAgentChoice, roleAgentChoices), "Choices for missing roles; guide is accepted only when not running. Omitted and empty choices both use saved choices and installed defaults.")
+		})
 		Result(ProjectTeam)
 		Error("ambiguous_space", ErrorResult, "Several spaces match the project; close the duplicates before starting agents again.")
 		Error("window_busy", ErrorResult, "Close the open Herdr dialog before starting agents.")
 		Error("team_unavailable", ErrorResult, "The project team could not be prepared.")
+		Error("unprocessable", ErrorResult, "A selected client is not installed, does not support the requested options, or the supplied guide choice would replace a running guide.")
 		HTTP(func() {
 			POST("/team/agents")
 			Response(StatusOK)
 			Response("ambiguous_space", StatusConflict)
 			Response("window_busy", StatusConflict)
+			Response("team_unavailable", StatusServiceUnavailable)
+			Response("unprocessable", StatusUnprocessableEntity)
+		})
+	})
+	Method("list_team_agent_options", func() {
+		Description("Discover installed coding-agent executables and their supported options on demand. Only the user may call it; ordinary team reads never run discovery subprocesses.")
+		Result(func() {
+			Attribute("agents", ArrayOf(InstalledAgentOption), "Installed coding agents.")
+			Required("agents")
+		})
+		Error("team_unavailable", ErrorResult, "Installed coding-agent discovery could not be completed.")
+		HTTP(func() {
+			GET("/team/agent-options")
+			Response(StatusOK)
+			Response("team_unavailable", StatusServiceUnavailable)
+		})
+	})
+	Method("dismiss_team_notice", func() {
+		Description("Save the user's dismissal of one project notice without changing agent capability or startup behavior.")
+		Payload(func() {
+			Attribute("notice", String, "Notice to dismiss.", func() { Enum("single_agent_family", "outside_herdr", "herdr_unavailable") })
+			Required("notice")
+		})
+		Error("team_unavailable", ErrorResult, "The project notice preference could not be saved.")
+		HTTP(func() {
+			POST("/team/notices/dismiss")
+			Response(StatusNoContent)
 			Response("team_unavailable", StatusServiceUnavailable)
 		})
 	})

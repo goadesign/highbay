@@ -22,18 +22,31 @@ var ProjectTeamRole = Type("ProjectTeamRole", func() {
 	Required("role", "handle", "running")
 })
 
-// ProjectTeam describes the server-owned team and the launcher's visible state.
+// ProjectTeam describes the server-owned team and its execution environment.
 var ProjectTeam = Type("ProjectTeam", func() {
 	Attribute("team", String, "Stable Chorus team name.", func() { Pattern("^[A-Za-z0-9][A-Za-z0-9_-]{0,31}$") })
-	Attribute("space", String, "Local Herdr space identifier.", func() {
-		Pattern(`^(?:[A-Za-z0-9_-][A-Za-z0-9_.-]{0,63}|\.[A-Za-z0-9_-][A-Za-z0-9_.-]{0,62}|\.\.[A-Za-z0-9_.-]{1,62})$`)
-		MinLength(1)
+	Attribute("space", String, "Local Herdr space identifier, empty when Herdr is unavailable.", func() {
+		Pattern(`^(?:[A-Za-z0-9_-][A-Za-z0-9_.-]{0,63}|\.[A-Za-z0-9_-][A-Za-z0-9_.-]{0,62}|\.\.[A-Za-z0-9_.-]{1,62})?$`)
 		MaxLength(64)
 	})
 	Attribute("roles", ArrayOf(ProjectTeamRole))
-	Attribute("dialog", String, "Launcher state after ensuring the team.", func() { Enum("opened", "already_open", "not_needed") })
+	Attribute("herdr_mode", String, "Whether Herdr hosts this project, is available, or is unavailable.", func() { Enum("attached", "available", "unavailable") })
 	Attribute("step", String, "What the user does next for the prepared team.", func() { MinLength(1); MaxLength(512) })
-	Required("team", "space", "roles", "dialog", "step")
+	Required("team", "space", "roles", "herdr_mode", "step")
+})
+
+// ProjectStatus is the read-only project state consumed by CLI and companion.
+var ProjectStatus = Type("ProjectStatus", func() {
+	Attribute("project_name", String, "Physical project folder's base name.")
+	Attribute("directory", String, "Physical project folder.")
+	Attribute("team", String, "Stable project team name.")
+	Attribute("herdr_mode", String, "Current desktop attachment.", func() { Enum("attached", "available", "unavailable") })
+	Attribute("stage", String, "Current saved stage.", func() { Enum("describe", "agree", "build", "check", "approve", "merged") })
+	Attribute("change_id", String, "Current change identifier, empty when none exists.")
+	Attribute("change_title", String, "Current change title, empty when none exists.")
+	Attribute("attention", String, "Action currently needed, empty when none.")
+	Attribute("roles", ArrayOf(TeamRoleState), "Observed role states, without terminal addresses or credentials.")
+	Required("project_name", "directory", "team", "herdr_mode", "stage", "change_id", "change_title", "attention", "roles")
 })
 
 // TeamSpaceConflict carries a safe count independently of peer-authored error messages.
@@ -68,7 +81,7 @@ var _ = Service("project", func() {
 		HTTP(func() { GET("/identity"); Response(StatusOK) })
 	})
 	Method("ensure_team", func() {
-		Description("The CLI asks the project server to ensure its team, guide credential, Herdr space and atomic launcher roster, then open the launcher only when the guide, or a worker role the open build needs, has no running agent. A role without work stays in the roster, and its agent finds an empty list. A failed read of who has work counts every role. Accepted work has a bounded server-owned lifetime independent of client disconnection. Only the server management credential may call this operation; it is never an MCP tool.")
+		Description("Read existing project team metadata with the management credential. Creates no team, credential, space, roster or agent and opens no window. This management operation is never an MCP tool.")
 		Result(ProjectTeam)
 		Error("ambiguous_space", TeamSpaceConflict, "Several local spaces match the team name and folder; close the duplicates before starting agents again.")
 		Error("window_busy", ErrorResult, "Another Herdr dialog is open; close it and run surla again.")
@@ -80,6 +93,31 @@ var _ = Service("project", func() {
 			Response("window_busy", StatusConflict)
 			Response("team_unavailable", StatusServiceUnavailable)
 		})
+	})
+	Method("attach_guide", func() {
+		Description("Attach the invoking coding agent as this project's guide. A supplied live Herdr terminal is adopted only after its model pane, local project and labels are validated. Omit terminal identity outside Herdr. Never opens a launcher.")
+		Payload(func() {
+			Attribute("hc_terminal_id", String, "Invoking local Herdr terminal identity.", func() { MinLength(1) })
+			Attribute("client", String, "Invoking coding-agent client.", func() { Enum("claude", "codex", "antigravity", "cursor", "gemini", "opencode") })
+		})
+		Result(func() {
+			Attribute("team", String, "Stable project team name.")
+			Attribute("handle", String, "Guide's registered Chorus handle.")
+			Attribute("adopted_herdr", Boolean, "Whether the invoking terminal was adopted.")
+			Attribute("herdr_mode", String, "Current desktop attachment.", func() { Enum("attached", "available", "unavailable") })
+			Required("team", "handle", "adopted_herdr", "herdr_mode")
+		})
+		Error("team_unavailable", TeamUnavailable, "The guide could not be attached to this project.")
+		HTTP(func() {
+			POST("/attach-guide")
+			Response(StatusOK)
+			Response("team_unavailable", StatusServiceUnavailable)
+		})
+	})
+	Method("status", func() {
+		Description("Read existing project, saved change stage and observed role state. Creates nothing and starts no agent. Merge status uses the build owner's read-only Git checks, including a manual merge into the project branch.")
+		Result(ProjectStatus)
+		HTTP(func() { GET("/status"); Response(StatusOK) })
 	})
 	Method("stop", func() {
 		Description("The CLI requests ordered server shutdown. Before its listener closes, the server revokes management access and withdraws its running record; an authorized stop response can finish.")

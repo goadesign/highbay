@@ -167,5 +167,6 @@ func TestGeneratedMCPClientRetainsCallerRole(t *testing.T) {
 	raw, err := json.Marshal(complete.Content)
 	require.NoError(t, err)
 	require.NotContains(t, string(raw), "may not call")
-	require.Contains(t, string(raw), "init_project creates a direct child directory inside the workspace")
+	require.Contains(t, string(raw), "invalid directory name")
+	require.Contains(t, string(raw), "nested/shop")
 }

@@ -31,12 +31,10 @@ import (
 
 type (
 	// workspaceFile is the persisted JSON schema of `<cards_dir>/workspace.json`.
-	// During `init_project`, the uncommitted write-ahead record sets `StageDir`,
-	// `Staging`, `Dev` and `Ino` before `renameat.NoReplace`; the
-	// finalized record clears `StageDir` and `Staging` once the renamed target
-	// directory's `(Dev, Ino)` is verified and synced.
+	// The presence of StageDir and Staging identifies a pending publication.
+	// A finalized record retains the identity of the bound project directory.
 	workspaceFile struct {
-		// Dir is the direct child directory name inside initialWorkspaceRoot.
+		// Dir is the direct child directory name, or "." for in-place init.
 		Dir string `json:"dir"`
 		// StageDir is the protected operator staging parent directory holding
 		// Staging while initialization is in flight.
@@ -44,10 +42,20 @@ type (
 		// Staging is the `.surla-init-*` directory name inside StageDir while
 		// initialization is in flight.
 		Staging string `json:"staging,omitempty"`
-		// Dev is the filesystem device ID of the staged/published project root.
+		// Dev is the device ID of the staged/published child project root.
 		Dev uint64 `json:"dev,omitempty"`
-		// Ino is the inode number of the staged/published project root.
+		// Ino is the inode of the staged/published child project root.
 		Ino uint64 `json:"ino,omitempty"`
+		// InPlace identifies initialization of the initial workspace root.
+		InPlace bool `json:"in_place,omitempty"`
+		// WSDev and WSIno identify that workspace before and after publication.
+		WSDev uint64 `json:"ws_dev,omitempty"`
+		WSIno uint64 `json:"ws_ino,omitempty"`
+		// StageDev and StageIno identify the container for the staged entries.
+		StageDev uint64 `json:"stage_dev,omitempty"`
+		StageIno uint64 `json:"stage_ino,omitempty"`
+		// Entries records each generated root entry in publication order.
+		Entries []workspaceEntry `json:"entries,omitempty"`
 	}
 )
 
@@ -127,14 +135,23 @@ func (c *ControlPlane) restoreWorkspace() (err error) {
 	if err != nil || !ok {
 		return err
 	}
-	if err := validateInitDirName(wf.Dir); err != nil {
-		return fmt.Errorf("invalid dir %q in workspace.json: %w", wf.Dir, err)
-	}
-	if wf.Dev == 0 || wf.Ino == 0 {
-		return errors.New("workspace.json is missing non-zero dev/ino identity")
-	}
 	if (wf.Staging != "") != (wf.StageDir != "") {
 		return errors.New("workspace.json must set stage_dir and staging together")
+	}
+	if wf.InPlace {
+		if err := c.validateInPlaceWorkspaceRecord(wf); err != nil {
+			return err
+		}
+	} else {
+		if err := validateInitDirName(wf.Dir); err != nil {
+			return fmt.Errorf("invalid dir %q in workspace.json: %w", wf.Dir, err)
+		}
+		if wf.Dev == 0 || wf.Ino == 0 {
+			return errors.New("workspace.json is missing non-zero dev/ino identity")
+		}
+		if wf.WSDev != 0 || wf.WSIno != 0 || wf.StageDev != 0 || wf.StageIno != 0 || len(wf.Entries) != 0 {
+			return errors.New("child workspace.json has in-place publication fields")
+		}
 	}
 	if wf.Staging != "" {
 		if strings.ContainsAny(wf.Staging, `/\`) || wf.Staging == "." || wf.Staging == ".." {
@@ -186,6 +203,10 @@ func (c *ControlPlane) restoreWorkspace() (err error) {
 				}
 			}()
 		}
+	}
+
+	if wf.InPlace {
+		return c.restoreInPlaceWorkspace(wf, workspaceFD, stageParentFD)
 	}
 
 	targetPath := filepath.Join(c.initialWorkspaceRoot, wf.Dir)

@@ -14,6 +14,15 @@ import (
 	goa "goa.design/goa/v3/pkg"
 )
 
+// AttachGuideRequestBody is the type of the "project" service "attach_guide"
+// endpoint HTTP request body.
+type AttachGuideRequestBody struct {
+	// Invoking local Herdr terminal identity.
+	HcTerminalID *string `form:"hc_terminal_id,omitempty" json:"hc_terminal_id,omitempty" xml:"hc_terminal_id,omitempty"`
+	// Invoking coding-agent client.
+	Client *string `form:"client,omitempty" json:"client,omitempty" xml:"client,omitempty"`
+}
+
 // ExchangeBrowserLinkRequestBody is the type of the "project" service
 // "exchange_browser_link" endpoint HTTP request body.
 type ExchangeBrowserLinkRequestBody struct {
@@ -42,13 +51,49 @@ type IdentityResponseBody struct {
 type EnsureTeamResponseBody struct {
 	// Stable Chorus team name.
 	Team string `form:"team" json:"team" xml:"team"`
-	// Local Herdr space identifier.
+	// Local Herdr space identifier, empty when Herdr is unavailable.
 	Space string                         `form:"space" json:"space" xml:"space"`
 	Roles []*ProjectTeamRoleResponseBody `form:"roles" json:"roles" xml:"roles"`
-	// Launcher state after ensuring the team.
-	Dialog string `form:"dialog" json:"dialog" xml:"dialog"`
+	// Whether Herdr hosts this project, is available, or is unavailable.
+	HerdrMode string `form:"herdr_mode" json:"herdr_mode" xml:"herdr_mode"`
 	// What the user does next for the prepared team.
 	Step string `form:"step" json:"step" xml:"step"`
+}
+
+// AttachGuideResponseBody is the type of the "project" service "attach_guide"
+// endpoint HTTP response body.
+type AttachGuideResponseBody struct {
+	// Stable project team name.
+	Team string `form:"team" json:"team" xml:"team"`
+	// Guide's registered Chorus handle.
+	Handle string `form:"handle" json:"handle" xml:"handle"`
+	// Whether the invoking terminal was adopted.
+	AdoptedHerdr bool `form:"adopted_herdr" json:"adopted_herdr" xml:"adopted_herdr"`
+	// Current desktop attachment.
+	HerdrMode string `form:"herdr_mode" json:"herdr_mode" xml:"herdr_mode"`
+}
+
+// StatusResponseBody is the type of the "project" service "status" endpoint
+// HTTP response body.
+type StatusResponseBody struct {
+	// Physical project folder's base name.
+	ProjectName string `form:"project_name" json:"project_name" xml:"project_name"`
+	// Physical project folder.
+	Directory string `form:"directory" json:"directory" xml:"directory"`
+	// Stable project team name.
+	Team string `form:"team" json:"team" xml:"team"`
+	// Current desktop attachment.
+	HerdrMode string `form:"herdr_mode" json:"herdr_mode" xml:"herdr_mode"`
+	// Current saved stage.
+	Stage string `form:"stage" json:"stage" xml:"stage"`
+	// Current change identifier, empty when none exists.
+	ChangeID string `form:"change_id" json:"change_id" xml:"change_id"`
+	// Current change title, empty when none exists.
+	ChangeTitle string `form:"change_title" json:"change_title" xml:"change_title"`
+	// Action currently needed, empty when none.
+	Attention string `form:"attention" json:"attention" xml:"attention"`
+	// Observed role states, without terminal addresses or credentials.
+	Roles []*TeamRoleStateResponseBody `form:"roles" json:"roles" xml:"roles"`
 }
 
 // BrowserLinkResponseBody is the type of the "project" service "browser_link"
@@ -184,6 +229,93 @@ type EnsureTeamTeamUnavailableResponseBody struct {
 	Cause string `form:"cause" json:"cause" xml:"cause"`
 }
 
+// AttachGuideForbiddenResponseBody is the type of the "project" service
+// "attach_guide" endpoint HTTP response body for the "forbidden" error.
+type AttachGuideForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// AttachGuideUnprocessableResponseBody is the type of the "project" service
+// "attach_guide" endpoint HTTP response body for the "unprocessable" error.
+type AttachGuideUnprocessableResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// AttachGuideTeamUnavailableResponseBody is the type of the "project" service
+// "attach_guide" endpoint HTTP response body for the "team_unavailable" error.
+type AttachGuideTeamUnavailableResponseBody struct {
+	// Error name.
+	Name string `form:"name" json:"name" xml:"name"`
+	// What could not be used: stopping (the server is shutting down), chorus (the
+	// managed Chorus server or its settings are unavailable), herdr (a Herdr
+	// command failed), saved_space (the project's saved Herdr space has an ID this
+	// version of Surla no longer accepts and is still open), roster_folder
+	// (Herdr's launcher roster folder could not be written), project_state (the
+	// project's private record or an agent credential could not be read or
+	// written), or role_folder (a role's working folder could not be read).
+	Cause string `form:"cause" json:"cause" xml:"cause"`
+}
+
+// StatusForbiddenResponseBody is the type of the "project" service "status"
+// endpoint HTTP response body for the "forbidden" error.
+type StatusForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// StatusUnprocessableResponseBody is the type of the "project" service
+// "status" endpoint HTTP response body for the "unprocessable" error.
+type StatusUnprocessableResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // StopForbiddenResponseBody is the type of the "project" service "stop"
 // endpoint HTTP response body for the "forbidden" error.
 type StopForbiddenResponseBody struct {
@@ -305,6 +437,29 @@ type ProjectTeamRoleResponseBody struct {
 	Running bool `form:"running" json:"running" xml:"running"`
 }
 
+// TeamRoleStateResponseBody is used to define fields on response body types.
+type TeamRoleStateResponseBody struct {
+	// Registered role.
+	Role string `form:"role" json:"role" xml:"role"`
+	// Registered Chorus handle.
+	Handle string `form:"handle" json:"handle" xml:"handle"`
+	// Current terminal state; unknown means Herdr cannot establish it.
+	State string `form:"state" json:"state" xml:"state"`
+	// Reported block kind, or why a running agent needs the user: silent when it
+	// reports nothing for 60 seconds, assignment when it has waited with an unread
+	// assignment for 90 seconds.
+	Attention string `form:"attention" json:"attention" xml:"attention"`
+	// held when Chorus reports a watcher, gone after its absence grace, unknown
+	// otherwise.
+	Watcher string `form:"watcher" json:"watcher" xml:"watcher"`
+	// unread when this role owes an assignment read; nothing_owed when it has work
+	// and owes no read; no_work when the open build needs nothing from it (no
+	// build is open, the build was dropped, the test writer's tests are accepted,
+	// or a verification of the builder's build passed); unknown when the owner
+	// could not read assignments. The guide has no assignments.
+	Assignment string `form:"assignment" json:"assignment" xml:"assignment"`
+}
+
 // NewIdentityResponseBody builds the HTTP response body from the result of the
 // "identity" endpoint of the "project" service.
 func NewIdentityResponseBody(res *project.ProjectIdentity) *IdentityResponseBody {
@@ -321,10 +476,10 @@ func NewIdentityResponseBody(res *project.ProjectIdentity) *IdentityResponseBody
 // the "ensure_team" endpoint of the "project" service.
 func NewEnsureTeamResponseBody(res *project.ProjectTeam) *EnsureTeamResponseBody {
 	body := &EnsureTeamResponseBody{
-		Team:   res.Team,
-		Space:  res.Space,
-		Dialog: res.Dialog,
-		Step:   res.Step,
+		Team:      res.Team,
+		Space:     res.Space,
+		HerdrMode: res.HerdrMode,
+		Step:      res.Step,
 	}
 	if res.Roles != nil {
 		body.Roles = make([]*ProjectTeamRoleResponseBody, len(res.Roles))
@@ -337,6 +492,46 @@ func NewEnsureTeamResponseBody(res *project.ProjectTeam) *EnsureTeamResponseBody
 		}
 	} else {
 		body.Roles = []*ProjectTeamRoleResponseBody{}
+	}
+	return body
+}
+
+// NewAttachGuideResponseBody builds the HTTP response body from the result of
+// the "attach_guide" endpoint of the "project" service.
+func NewAttachGuideResponseBody(res *project.AttachGuideResult) *AttachGuideResponseBody {
+	body := &AttachGuideResponseBody{
+		Team:         res.Team,
+		Handle:       res.Handle,
+		AdoptedHerdr: res.AdoptedHerdr,
+		HerdrMode:    res.HerdrMode,
+	}
+	return body
+}
+
+// NewStatusResponseBody builds the HTTP response body from the result of the
+// "status" endpoint of the "project" service.
+func NewStatusResponseBody(res *project.ProjectStatus) *StatusResponseBody {
+	body := &StatusResponseBody{
+		ProjectName: res.ProjectName,
+		Directory:   res.Directory,
+		Team:        res.Team,
+		HerdrMode:   res.HerdrMode,
+		Stage:       res.Stage,
+		ChangeID:    res.ChangeID,
+		ChangeTitle: res.ChangeTitle,
+		Attention:   res.Attention,
+	}
+	if res.Roles != nil {
+		body.Roles = make([]*TeamRoleStateResponseBody, len(res.Roles))
+		for i, val := range res.Roles {
+			if val == nil {
+				body.Roles[i] = nil
+				continue
+			}
+			body.Roles[i] = marshalProjectTeamRoleStateToTeamRoleStateResponseBody(val)
+		}
+	} else {
+		body.Roles = []*TeamRoleStateResponseBody{}
 	}
 	return body
 }
@@ -451,6 +646,72 @@ func NewEnsureTeamTeamUnavailableResponseBody(res *project.TeamUnavailable) *Ens
 	return body
 }
 
+// NewAttachGuideForbiddenResponseBody builds the HTTP response body from the
+// result of the "attach_guide" endpoint of the "project" service.
+func NewAttachGuideForbiddenResponseBody(res *goa.ServiceError) *AttachGuideForbiddenResponseBody {
+	body := &AttachGuideForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewAttachGuideUnprocessableResponseBody builds the HTTP response body from
+// the result of the "attach_guide" endpoint of the "project" service.
+func NewAttachGuideUnprocessableResponseBody(res *goa.ServiceError) *AttachGuideUnprocessableResponseBody {
+	body := &AttachGuideUnprocessableResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewAttachGuideTeamUnavailableResponseBody builds the HTTP response body from
+// the result of the "attach_guide" endpoint of the "project" service.
+func NewAttachGuideTeamUnavailableResponseBody(res *project.TeamUnavailable) *AttachGuideTeamUnavailableResponseBody {
+	body := &AttachGuideTeamUnavailableResponseBody{
+		Name:  res.Name,
+		Cause: res.Cause,
+	}
+	return body
+}
+
+// NewStatusForbiddenResponseBody builds the HTTP response body from the result
+// of the "status" endpoint of the "project" service.
+func NewStatusForbiddenResponseBody(res *goa.ServiceError) *StatusForbiddenResponseBody {
+	body := &StatusForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewStatusUnprocessableResponseBody builds the HTTP response body from the
+// result of the "status" endpoint of the "project" service.
+func NewStatusUnprocessableResponseBody(res *goa.ServiceError) *StatusUnprocessableResponseBody {
+	body := &StatusUnprocessableResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewStopForbiddenResponseBody builds the HTTP response body from the result
 // of the "stop" endpoint of the "project" service.
 func NewStopForbiddenResponseBody(res *goa.ServiceError) *StopForbiddenResponseBody {
@@ -537,6 +798,16 @@ func NewExchangeBrowserLinkUnprocessableResponseBody(res *goa.ServiceError) *Exc
 	return body
 }
 
+// NewAttachGuidePayload builds a project service attach_guide endpoint payload.
+func NewAttachGuidePayload(body *AttachGuideRequestBody) *project.AttachGuidePayload {
+	v := &project.AttachGuidePayload{
+		HcTerminalID: body.HcTerminalID,
+		Client:       body.Client,
+	}
+
+	return v
+}
+
 // NewExchangeBrowserLinkPayload builds a project service exchange_browser_link
 // endpoint payload.
 func NewExchangeBrowserLinkPayload(body *ExchangeBrowserLinkRequestBody) *project.ExchangeBrowserLinkPayload {
@@ -545,6 +816,22 @@ func NewExchangeBrowserLinkPayload(body *ExchangeBrowserLinkRequestBody) *projec
 	}
 
 	return v
+}
+
+// ValidateAttachGuideRequestBody runs the validations defined on
+// AttachGuideRequestBody
+func ValidateAttachGuideRequestBody(body *AttachGuideRequestBody) (err error) {
+	if body.HcTerminalID != nil {
+		if utf8.RuneCountInString(*body.HcTerminalID) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.hc_terminal_id", *body.HcTerminalID, utf8.RuneCountInString(*body.HcTerminalID), 1, true))
+		}
+	}
+	if body.Client != nil {
+		if !(*body.Client == "claude" || *body.Client == "codex" || *body.Client == "antigravity" || *body.Client == "cursor" || *body.Client == "gemini" || *body.Client == "opencode") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.client", *body.Client, []any{"claude", "codex", "antigravity", "cursor", "gemini", "opencode"}))
+		}
+	}
+	return
 }
 
 // ValidateExchangeBrowserLinkRequestBody runs the validations defined on

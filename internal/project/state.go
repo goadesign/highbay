@@ -47,6 +47,14 @@ type (
 		Team string `json:"team,omitempty"`
 		// Space is the most recently adopted local Herdr space.
 		Space string `json:"space,omitempty"`
+		// Tab is the local tab containing the most recently adopted guide.
+		Tab string `json:"tab,omitempty"`
+		// CompanionShown preserves a user's later dismissal of the auto-opened window.
+		CompanionShown bool `json:"companion_shown,omitempty"`
+		// SavedChoices remembers the last valid worker settings for each role.
+		SavedChoices map[string]roleChoice `json:"saved_choices,omitempty"`
+		// DismissedNotices contains the known recommendations dismissed by this user.
+		DismissedNotices []string `json:"dismissed_notices,omitempty"`
 		// Agents maps each stable actor ID to its trusted role and working folder; secrets are separate files.
 		Agents map[string]agentRecord `json:"agents"`
 	}
@@ -289,6 +297,14 @@ func (s *State) CardsDir() string { return filepath.Join(s.Dir, "cards") }
 // AgentFile names a private credential whose contents never belong in an argument or label.
 func (s *State) AgentFile(id string) string { return filepath.Join(s.Dir, "agents", id) }
 
+// AgentCredential reads the bearer credential of the registered agent handle,
+// which `surla stdio` presents to /mcp on that agent's behalf. A missing file
+// returns an error that matches os.ErrNotExist; a file that is not private to
+// this account or does not hold a credential is refused without its bytes.
+func (s *State) AgentCredential(handle string) (string, error) {
+	return readCredential(s.AgentFile(handle))
+}
+
 // SaveRunning records a server that already holds the existing writer lock and listener.
 func (s *State) SaveRunning(record Running) error {
 	return writeJSON(filepath.Join(s.Dir, "running.json"), record)
@@ -450,6 +466,12 @@ func validateRecord(r Record, directory string) error {
 	}
 	if r.Space != "" && !localSpaceID(r.Space) {
 		return errors.New("invalid project space")
+	}
+	if r.Tab != "" && (!safeSpaceID(r.Tab) || !safeSpaceID(r.Space)) {
+		return errors.New("invalid project tab")
+	}
+	if err := validateTeamPreferences(r); err != nil {
+		return err
 	}
 	seenRoles := map[string]bool{}
 	for actor, agent := range r.Agents {

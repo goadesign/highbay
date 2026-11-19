@@ -46,6 +46,10 @@ type Client struct {
 	GetTeamEndpoint                   goa.Endpoint
 	ShowTeamPaneEndpoint              goa.Endpoint
 	StartTeamAgentsEndpoint           goa.Endpoint
+	ListTeamAgentOptionsEndpoint      goa.Endpoint
+	DismissTeamNoticeEndpoint         goa.Endpoint
+	OpenViewsEndpoint                 goa.Endpoint
+	MergeChangeEndpoint               goa.Endpoint
 	ListChangesEndpoint               goa.Endpoint
 	WaitForChangesEndpoint            goa.Endpoint
 	StartBuildEndpoint                goa.Endpoint
@@ -61,7 +65,7 @@ type Client struct {
 }
 
 // NewClient initializes a "surla" service client given the endpoints.
-func NewClient(goldenPath, proposeChange, reviseChange, confirmIntent, getChange, declineRevision, previewArchitecture, draftOverride, startLiveTarget, stopLiveTarget, getLiveTarget, verifyChange, getVerification, listVerifications, approveMerge, diff, configureModel, getModelConnection, handOverModelSettings, initProject, generateCode, checkProject, updateDependencies, readCheckOutput, listTraces, refreshStory, getStoryRefresh, updateDraft, getTeam, showTeamPane, startTeamAgents, listChanges, waitForChanges, startBuild, dropBuild, getBuild, getTestFindings, listBuilderAssignments, getBuilderAssignment, listTestWriterAssignments, getTestWriterAssignment, reportTestsFinished, reviewVerification goa.Endpoint) *Client {
+func NewClient(goldenPath, proposeChange, reviseChange, confirmIntent, getChange, declineRevision, previewArchitecture, draftOverride, startLiveTarget, stopLiveTarget, getLiveTarget, verifyChange, getVerification, listVerifications, approveMerge, diff, configureModel, getModelConnection, handOverModelSettings, initProject, generateCode, checkProject, updateDependencies, readCheckOutput, listTraces, refreshStory, getStoryRefresh, updateDraft, getTeam, showTeamPane, startTeamAgents, listTeamAgentOptions, dismissTeamNotice, openViews, mergeChange, listChanges, waitForChanges, startBuild, dropBuild, getBuild, getTestFindings, listBuilderAssignments, getBuilderAssignment, listTestWriterAssignments, getTestWriterAssignment, reportTestsFinished, reviewVerification goa.Endpoint) *Client {
 	return &Client{
 		GoldenPathEndpoint:                goldenPath,
 		ProposeChangeEndpoint:             proposeChange,
@@ -94,6 +98,10 @@ func NewClient(goldenPath, proposeChange, reviseChange, confirmIntent, getChange
 		GetTeamEndpoint:                   getTeam,
 		ShowTeamPaneEndpoint:              showTeamPane,
 		StartTeamAgentsEndpoint:           startTeamAgents,
+		ListTeamAgentOptionsEndpoint:      listTeamAgentOptions,
+		DismissTeamNoticeEndpoint:         dismissTeamNotice,
+		OpenViewsEndpoint:                 openViews,
+		MergeChangeEndpoint:               mergeChange,
 		ListChangesEndpoint:               listChanges,
 		WaitForChangesEndpoint:            waitForChanges,
 		StartBuildEndpoint:                startBuild,
@@ -602,15 +610,74 @@ func (c *Client) ShowTeamPane(ctx context.Context, p *ShowTeamPanePayload) (err 
 //   - "ambiguous_space" (type *goa.ServiceError): Several spaces match the project; close the duplicates before starting agents again.
 //   - "window_busy" (type *goa.ServiceError): Close the open Herdr dialog before starting agents.
 //   - "team_unavailable" (type *goa.ServiceError): The project team could not be prepared.
+//   - "unprocessable" (type *goa.ServiceError): A selected client is not installed, does not support the requested options, or the supplied guide choice would replace a running guide.
 //   - "forbidden" (type *goa.ServiceError): The authenticated caller may not perform this operation or does not own the resource.
 //   - error: internal error
-func (c *Client) StartTeamAgents(ctx context.Context) (res *ProjectTeam, err error) {
+func (c *Client) StartTeamAgents(ctx context.Context, p *StartTeamAgentsPayload) (res *ProjectTeam, err error) {
 	var ires any
-	ires, err = c.StartTeamAgentsEndpoint(ctx, nil)
+	ires, err = c.StartTeamAgentsEndpoint(ctx, p)
 	if err != nil {
 		return
 	}
 	return ires.(*ProjectTeam), nil
+}
+
+// ListTeamAgentOptions calls the "list_team_agent_options" endpoint of the
+// "surla" service.
+// ListTeamAgentOptions may return the following errors:
+//   - "team_unavailable" (type *goa.ServiceError): Installed coding-agent discovery could not be completed.
+//   - "forbidden" (type *goa.ServiceError): The authenticated caller may not perform this operation or does not own the resource.
+//   - error: internal error
+func (c *Client) ListTeamAgentOptions(ctx context.Context) (res *ListTeamAgentOptionsResult, err error) {
+	var ires any
+	ires, err = c.ListTeamAgentOptionsEndpoint(ctx, nil)
+	if err != nil {
+		return
+	}
+	return ires.(*ListTeamAgentOptionsResult), nil
+}
+
+// DismissTeamNotice calls the "dismiss_team_notice" endpoint of the "surla"
+// service.
+// DismissTeamNotice may return the following errors:
+//   - "team_unavailable" (type *goa.ServiceError): The project notice preference could not be saved.
+//   - "forbidden" (type *goa.ServiceError): The authenticated caller may not perform this operation or does not own the resource.
+//   - error: internal error
+func (c *Client) DismissTeamNotice(ctx context.Context, p *DismissTeamNoticePayload) (err error) {
+	_, err = c.DismissTeamNoticeEndpoint(ctx, p)
+	return
+}
+
+// OpenViews calls the "open_views" endpoint of the "surla" service.
+// OpenViews may return the following errors:
+//   - "forbidden" (type *goa.ServiceError): The authenticated caller may not perform this operation or does not own the resource.
+//   - error: internal error
+func (c *Client) OpenViews(ctx context.Context) (res *OpenViewsResult, err error) {
+	var ires any
+	ires, err = c.OpenViewsEndpoint(ctx, nil)
+	if err != nil {
+		return
+	}
+	return ires.(*OpenViewsResult), nil
+}
+
+// MergeChange calls the "merge_change" endpoint of the "surla" service.
+// MergeChange may return the following errors:
+//   - "not_found" (type *goa.ServiceError): The owned Change Card does not exist.
+//   - "not_approved" (type *goa.ServiceError): The current live approval, verification report or open build does not match this request.
+//   - "detached_head" (type *goa.ServiceError): Check out a local branch before merging.
+//   - "dirty_worktree" (type *goa.ServiceError): Commit or remove tracked changes before merging; untracked files may remain.
+//   - "merge_conflict" (type *goa.ServiceError): Git could not merge the approved commits; the original tracked state was restored, or the error reports that restoration failed.
+//   - "working_copy_busy" (type *goa.ServiceError): A project operation currently owns a working-copy turn; try again when it finishes.
+//   - "forbidden" (type *goa.ServiceError): The authenticated caller may not perform this operation or does not own the resource.
+//   - error: internal error
+func (c *Client) MergeChange(ctx context.Context, p *MergeChangePayload) (res *MergeChangeResult, err error) {
+	var ires any
+	ires, err = c.MergeChangeEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*MergeChangeResult), nil
 }
 
 // ListChanges calls the "list_changes" endpoint of the "surla" service.

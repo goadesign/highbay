@@ -1,7 +1,7 @@
 // build.mjs derives ui/checkpoint/src/types.ts from the Goa-generated HTTP
 // contract (gen/http/openapi3.json): the request types, route table and
-// result types and validators of exactly the operations the views page
-// calls. It then compiles the views page (React + OpenUI + shadcn/ui) into
+// result types and validators for the operations available to the views page.
+// It then compiles the views page (React + OpenUI + shadcn/ui) into
 // internal/controlplane/checkpoint.html, which the Surla server serves at
 // /views, writes the SHA-256 digest of the page's one inline script to
 // internal/controlplane/views_page_script_gen.go for the page's security
@@ -27,7 +27,7 @@ const decisionCatalogPath = path.join(repoRoot, "internal/goldenpath/decision_ca
 const openApiPath = path.join(repoRoot, "gen/http/openapi3.json");
 
 // PAGE_OPERATIONS lists, by OpenAPI operationId (service#method), every HTTP
-// operation the views page sends. Only these get a generated request type,
+// operation the views page can send. Only these get a generated request type,
 // route and result validator; the page cannot address anything else.
 const PAGE_OPERATIONS = [
   "project#exchange_browser_link",
@@ -35,6 +35,7 @@ const PAGE_OPERATIONS = [
   "surla#wait_for_changes",
   "surla#get_change",
   "surla#get_story_refresh",
+  "surla#open_views",
   "surla#start_build",
   "surla#drop_build",
   "surla#get_build",
@@ -42,9 +43,12 @@ const PAGE_OPERATIONS = [
   "surla#get_team",
   "surla#show_team_pane",
   "surla#start_team_agents",
+  "surla#list_team_agent_options",
+  "surla#dismiss_team_notice",
   "surla#confirm_intent",
   "surla#decline_revision",
   "surla#approve_merge",
+  "surla#merge_change",
   "surla#preview_architecture",
   "surla#list_verifications",
   "surla#get_verification",
@@ -209,8 +213,11 @@ function tsType(node) {
     case "integer":
     case "number":
       return "number";
-    case "array":
-      return node.items ? `${tsType(node.items)}[]` : "unknown[]";
+    case "array": {
+      if (!node.items) return "unknown[]";
+      const elementType = tsType(node.items);
+      return node.items.enum?.length > 1 ? `(${elementType})[]` : `${elementType}[]`;
+    }
     case "object":
       if (node.properties) {
         const required = new Set(node.required || []);

@@ -14,6 +14,15 @@ import (
 	goa "goa.design/goa/v3/pkg"
 )
 
+// AttachGuideRequestBody is the type of the "project" service "attach_guide"
+// endpoint HTTP request body.
+type AttachGuideRequestBody struct {
+	// Invoking local Herdr terminal identity.
+	HcTerminalID *string `form:"hc_terminal_id,omitempty" json:"hc_terminal_id,omitempty" xml:"hc_terminal_id,omitempty"`
+	// Invoking coding-agent client.
+	Client *string `form:"client,omitempty" json:"client,omitempty" xml:"client,omitempty"`
+}
+
 // ExchangeBrowserLinkRequestBody is the type of the "project" service
 // "exchange_browser_link" endpoint HTTP request body.
 type ExchangeBrowserLinkRequestBody struct {
@@ -42,13 +51,49 @@ type IdentityResponseBody struct {
 type EnsureTeamResponseBody struct {
 	// Stable Chorus team name.
 	Team *string `form:"team,omitempty" json:"team,omitempty" xml:"team,omitempty"`
-	// Local Herdr space identifier.
+	// Local Herdr space identifier, empty when Herdr is unavailable.
 	Space *string                        `form:"space,omitempty" json:"space,omitempty" xml:"space,omitempty"`
 	Roles []*ProjectTeamRoleResponseBody `form:"roles,omitempty" json:"roles,omitempty" xml:"roles,omitempty"`
-	// Launcher state after ensuring the team.
-	Dialog *string `form:"dialog,omitempty" json:"dialog,omitempty" xml:"dialog,omitempty"`
+	// Whether Herdr hosts this project, is available, or is unavailable.
+	HerdrMode *string `form:"herdr_mode,omitempty" json:"herdr_mode,omitempty" xml:"herdr_mode,omitempty"`
 	// What the user does next for the prepared team.
 	Step *string `form:"step,omitempty" json:"step,omitempty" xml:"step,omitempty"`
+}
+
+// AttachGuideResponseBody is the type of the "project" service "attach_guide"
+// endpoint HTTP response body.
+type AttachGuideResponseBody struct {
+	// Stable project team name.
+	Team *string `form:"team,omitempty" json:"team,omitempty" xml:"team,omitempty"`
+	// Guide's registered Chorus handle.
+	Handle *string `form:"handle,omitempty" json:"handle,omitempty" xml:"handle,omitempty"`
+	// Whether the invoking terminal was adopted.
+	AdoptedHerdr *bool `form:"adopted_herdr,omitempty" json:"adopted_herdr,omitempty" xml:"adopted_herdr,omitempty"`
+	// Current desktop attachment.
+	HerdrMode *string `form:"herdr_mode,omitempty" json:"herdr_mode,omitempty" xml:"herdr_mode,omitempty"`
+}
+
+// StatusResponseBody is the type of the "project" service "status" endpoint
+// HTTP response body.
+type StatusResponseBody struct {
+	// Physical project folder's base name.
+	ProjectName *string `form:"project_name,omitempty" json:"project_name,omitempty" xml:"project_name,omitempty"`
+	// Physical project folder.
+	Directory *string `form:"directory,omitempty" json:"directory,omitempty" xml:"directory,omitempty"`
+	// Stable project team name.
+	Team *string `form:"team,omitempty" json:"team,omitempty" xml:"team,omitempty"`
+	// Current desktop attachment.
+	HerdrMode *string `form:"herdr_mode,omitempty" json:"herdr_mode,omitempty" xml:"herdr_mode,omitempty"`
+	// Current saved stage.
+	Stage *string `form:"stage,omitempty" json:"stage,omitempty" xml:"stage,omitempty"`
+	// Current change identifier, empty when none exists.
+	ChangeID *string `form:"change_id,omitempty" json:"change_id,omitempty" xml:"change_id,omitempty"`
+	// Current change title, empty when none exists.
+	ChangeTitle *string `form:"change_title,omitempty" json:"change_title,omitempty" xml:"change_title,omitempty"`
+	// Action currently needed, empty when none.
+	Attention *string `form:"attention,omitempty" json:"attention,omitempty" xml:"attention,omitempty"`
+	// Observed role states, without terminal addresses or credentials.
+	Roles []*TeamRoleStateResponseBody `form:"roles,omitempty" json:"roles,omitempty" xml:"roles,omitempty"`
 }
 
 // BrowserLinkResponseBody is the type of the "project" service "browser_link"
@@ -184,6 +229,93 @@ type EnsureTeamTeamUnavailableResponseBody struct {
 	Cause *string `form:"cause,omitempty" json:"cause,omitempty" xml:"cause,omitempty"`
 }
 
+// AttachGuideForbiddenResponseBody is the type of the "project" service
+// "attach_guide" endpoint HTTP response body for the "forbidden" error.
+type AttachGuideForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// AttachGuideUnprocessableResponseBody is the type of the "project" service
+// "attach_guide" endpoint HTTP response body for the "unprocessable" error.
+type AttachGuideUnprocessableResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// AttachGuideTeamUnavailableResponseBody is the type of the "project" service
+// "attach_guide" endpoint HTTP response body for the "team_unavailable" error.
+type AttachGuideTeamUnavailableResponseBody struct {
+	// Error name.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// What could not be used: stopping (the server is shutting down), chorus (the
+	// managed Chorus server or its settings are unavailable), herdr (a Herdr
+	// command failed), saved_space (the project's saved Herdr space has an ID this
+	// version of Surla no longer accepts and is still open), roster_folder
+	// (Herdr's launcher roster folder could not be written), project_state (the
+	// project's private record or an agent credential could not be read or
+	// written), or role_folder (a role's working folder could not be read).
+	Cause *string `form:"cause,omitempty" json:"cause,omitempty" xml:"cause,omitempty"`
+}
+
+// StatusForbiddenResponseBody is the type of the "project" service "status"
+// endpoint HTTP response body for the "forbidden" error.
+type StatusForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// StatusUnprocessableResponseBody is the type of the "project" service
+// "status" endpoint HTTP response body for the "unprocessable" error.
+type StatusUnprocessableResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
 // StopForbiddenResponseBody is the type of the "project" service "stop"
 // endpoint HTTP response body for the "forbidden" error.
 type StopForbiddenResponseBody struct {
@@ -305,6 +437,39 @@ type ProjectTeamRoleResponseBody struct {
 	Running *bool `form:"running,omitempty" json:"running,omitempty" xml:"running,omitempty"`
 }
 
+// TeamRoleStateResponseBody is used to define fields on response body types.
+type TeamRoleStateResponseBody struct {
+	// Registered role.
+	Role *string `form:"role,omitempty" json:"role,omitempty" xml:"role,omitempty"`
+	// Registered Chorus handle.
+	Handle *string `form:"handle,omitempty" json:"handle,omitempty" xml:"handle,omitempty"`
+	// Current terminal state; unknown means Herdr cannot establish it.
+	State *string `form:"state,omitempty" json:"state,omitempty" xml:"state,omitempty"`
+	// Reported block kind, or why a running agent needs the user: silent when it
+	// reports nothing for 60 seconds, assignment when it has waited with an unread
+	// assignment for 90 seconds.
+	Attention *string `form:"attention,omitempty" json:"attention,omitempty" xml:"attention,omitempty"`
+	// held when Chorus reports a watcher, gone after its absence grace, unknown
+	// otherwise.
+	Watcher *string `form:"watcher,omitempty" json:"watcher,omitempty" xml:"watcher,omitempty"`
+	// unread when this role owes an assignment read; nothing_owed when it has work
+	// and owes no read; no_work when the open build needs nothing from it (no
+	// build is open, the build was dropped, the test writer's tests are accepted,
+	// or a verification of the builder's build passed); unknown when the owner
+	// could not read assignments. The guide has no assignments.
+	Assignment *string `form:"assignment,omitempty" json:"assignment,omitempty" xml:"assignment,omitempty"`
+}
+
+// NewAttachGuideRequestBody builds the HTTP request body from the payload of
+// the "attach_guide" endpoint of the "project" service.
+func NewAttachGuideRequestBody(p *project.AttachGuidePayload) *AttachGuideRequestBody {
+	body := &AttachGuideRequestBody{
+		HcTerminalID: p.HcTerminalID,
+		Client:       p.Client,
+	}
+	return body
+}
+
 // NewExchangeBrowserLinkRequestBody builds the HTTP request body from the
 // payload of the "exchange_browser_link" endpoint of the "project" service.
 func NewExchangeBrowserLinkRequestBody(p *project.ExchangeBrowserLinkPayload) *ExchangeBrowserLinkRequestBody {
@@ -361,10 +526,10 @@ func NewIdentityUnprocessable(body *IdentityUnprocessableResponseBody) *goa.Serv
 // result from a HTTP "OK" response.
 func NewEnsureTeamProjectTeamOK(body *EnsureTeamResponseBody) *project.ProjectTeam {
 	v := &project.ProjectTeam{
-		Team:   *body.Team,
-		Space:  *body.Space,
-		Dialog: *body.Dialog,
-		Step:   *body.Step,
+		Team:      *body.Team,
+		Space:     *body.Space,
+		HerdrMode: *body.HerdrMode,
+		Step:      *body.Step,
 	}
 	v.Roles = make([]*project.ProjectTeamRole, len(body.Roles))
 	for i, val := range body.Roles {
@@ -440,6 +605,114 @@ func NewEnsureTeamTeamUnavailable(body *EnsureTeamTeamUnavailableResponseBody) *
 	v := &project.TeamUnavailable{
 		Name:  *body.Name,
 		Cause: *body.Cause,
+	}
+
+	return v
+}
+
+// NewAttachGuideResultOK builds a "project" service "attach_guide" endpoint
+// result from a HTTP "OK" response.
+func NewAttachGuideResultOK(body *AttachGuideResponseBody) *project.AttachGuideResult {
+	v := &project.AttachGuideResult{
+		Team:         *body.Team,
+		Handle:       *body.Handle,
+		AdoptedHerdr: *body.AdoptedHerdr,
+		HerdrMode:    *body.HerdrMode,
+	}
+
+	return v
+}
+
+// NewAttachGuideForbidden builds a project service attach_guide endpoint
+// forbidden error.
+func NewAttachGuideForbidden(body *AttachGuideForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewAttachGuideUnprocessable builds a project service attach_guide endpoint
+// unprocessable error.
+func NewAttachGuideUnprocessable(body *AttachGuideUnprocessableResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewAttachGuideTeamUnavailable builds a project service attach_guide endpoint
+// team_unavailable error.
+func NewAttachGuideTeamUnavailable(body *AttachGuideTeamUnavailableResponseBody) *project.TeamUnavailable {
+	v := &project.TeamUnavailable{
+		Name:  *body.Name,
+		Cause: *body.Cause,
+	}
+
+	return v
+}
+
+// NewStatusProjectStatusOK builds a "project" service "status" endpoint result
+// from a HTTP "OK" response.
+func NewStatusProjectStatusOK(body *StatusResponseBody) *project.ProjectStatus {
+	v := &project.ProjectStatus{
+		ProjectName: *body.ProjectName,
+		Directory:   *body.Directory,
+		Team:        *body.Team,
+		HerdrMode:   *body.HerdrMode,
+		Stage:       *body.Stage,
+		ChangeID:    *body.ChangeID,
+		ChangeTitle: *body.ChangeTitle,
+		Attention:   *body.Attention,
+	}
+	v.Roles = make([]*project.TeamRoleState, len(body.Roles))
+	for i, val := range body.Roles {
+		if val == nil {
+			v.Roles[i] = nil
+			continue
+		}
+		v.Roles[i] = unmarshalTeamRoleStateResponseBodyToProjectTeamRoleState(val)
+	}
+
+	return v
+}
+
+// NewStatusForbidden builds a project service status endpoint forbidden error.
+func NewStatusForbidden(body *StatusForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewStatusUnprocessable builds a project service status endpoint
+// unprocessable error.
+func NewStatusUnprocessable(body *StatusUnprocessableResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
 	}
 
 	return v
@@ -586,8 +859,8 @@ func ValidateEnsureTeamResponseBody(body *EnsureTeamResponseBody) (err error) {
 	if body.Roles == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("roles", "body"))
 	}
-	if body.Dialog == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("dialog", "body"))
+	if body.HerdrMode == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("herdr_mode", "body"))
 	}
 	if body.Step == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("step", "body"))
@@ -596,10 +869,7 @@ func ValidateEnsureTeamResponseBody(body *EnsureTeamResponseBody) (err error) {
 		err = goa.MergeErrors(err, goa.ValidatePattern("body.team", *body.Team, "^[A-Za-z0-9][A-Za-z0-9_-]{0,31}$"))
 	}
 	if body.Space != nil {
-		err = goa.MergeErrors(err, goa.ValidatePattern("body.space", *body.Space, "^(?:[A-Za-z0-9_-][A-Za-z0-9_.-]{0,63}|\\.[A-Za-z0-9_-][A-Za-z0-9_.-]{0,62}|\\.\\.[A-Za-z0-9_.-]{1,62})$"))
-		if utf8.RuneCountInString(*body.Space) < 1 {
-			err = goa.MergeErrors(err, goa.InvalidLengthError("body.space", *body.Space, utf8.RuneCountInString(*body.Space), 1, true))
-		}
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.space", *body.Space, "^(?:[A-Za-z0-9_-][A-Za-z0-9_.-]{0,63}|\\.[A-Za-z0-9_-][A-Za-z0-9_.-]{0,62}|\\.\\.[A-Za-z0-9_.-]{1,62})?$"))
 		if utf8.RuneCountInString(*body.Space) > 64 {
 			err = goa.MergeErrors(err, goa.InvalidLengthError("body.space", *body.Space, utf8.RuneCountInString(*body.Space), 64, false))
 		}
@@ -611,9 +881,9 @@ func ValidateEnsureTeamResponseBody(body *EnsureTeamResponseBody) (err error) {
 			}
 		}
 	}
-	if body.Dialog != nil {
-		if !(*body.Dialog == "opened" || *body.Dialog == "already_open" || *body.Dialog == "not_needed") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.dialog", *body.Dialog, []any{"opened", "already_open", "not_needed"}))
+	if body.HerdrMode != nil {
+		if !(*body.HerdrMode == "attached" || *body.HerdrMode == "available" || *body.HerdrMode == "unavailable") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.herdr_mode", *body.HerdrMode, []any{"attached", "available", "unavailable"}))
 		}
 	}
 	if body.Step != nil {
@@ -622,6 +892,78 @@ func ValidateEnsureTeamResponseBody(body *EnsureTeamResponseBody) (err error) {
 		}
 		if utf8.RuneCountInString(*body.Step) > 512 {
 			err = goa.MergeErrors(err, goa.InvalidLengthError("body.step", *body.Step, utf8.RuneCountInString(*body.Step), 512, false))
+		}
+	}
+	return
+}
+
+// ValidateAttachGuideResponseBody runs the validations defined on
+// AttachGuideResponseBody
+func ValidateAttachGuideResponseBody(body *AttachGuideResponseBody) (err error) {
+	if body.Team == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("team", "body"))
+	}
+	if body.Handle == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("handle", "body"))
+	}
+	if body.AdoptedHerdr == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("adopted_herdr", "body"))
+	}
+	if body.HerdrMode == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("herdr_mode", "body"))
+	}
+	if body.HerdrMode != nil {
+		if !(*body.HerdrMode == "attached" || *body.HerdrMode == "available" || *body.HerdrMode == "unavailable") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.herdr_mode", *body.HerdrMode, []any{"attached", "available", "unavailable"}))
+		}
+	}
+	return
+}
+
+// ValidateStatusResponseBody runs the validations defined on StatusResponseBody
+func ValidateStatusResponseBody(body *StatusResponseBody) (err error) {
+	if body.ProjectName == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("project_name", "body"))
+	}
+	if body.Directory == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("directory", "body"))
+	}
+	if body.Team == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("team", "body"))
+	}
+	if body.HerdrMode == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("herdr_mode", "body"))
+	}
+	if body.Stage == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("stage", "body"))
+	}
+	if body.ChangeID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("change_id", "body"))
+	}
+	if body.ChangeTitle == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("change_title", "body"))
+	}
+	if body.Attention == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("attention", "body"))
+	}
+	if body.Roles == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("roles", "body"))
+	}
+	if body.HerdrMode != nil {
+		if !(*body.HerdrMode == "attached" || *body.HerdrMode == "available" || *body.HerdrMode == "unavailable") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.herdr_mode", *body.HerdrMode, []any{"attached", "available", "unavailable"}))
+		}
+	}
+	if body.Stage != nil {
+		if !(*body.Stage == "describe" || *body.Stage == "agree" || *body.Stage == "build" || *body.Stage == "check" || *body.Stage == "approve" || *body.Stage == "merged") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.stage", *body.Stage, []any{"describe", "agree", "build", "check", "approve", "merged"}))
+		}
+	}
+	for _, e := range body.Roles {
+		if e != nil {
+			if err2 := validateTeamRoleStateResponseBody(e, "body.roles[*]"); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
 		}
 	}
 	return
@@ -813,6 +1155,119 @@ func ValidateEnsureTeamTeamUnavailableResponseBody(body *EnsureTeamTeamUnavailab
 	return
 }
 
+// ValidateAttachGuideForbiddenResponseBody runs the validations defined on
+// AttachGuideForbiddenResponseBody
+func ValidateAttachGuideForbiddenResponseBody(body *AttachGuideForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateAttachGuideUnprocessableResponseBody runs the validations defined on
+// AttachGuideUnprocessableResponseBody
+func ValidateAttachGuideUnprocessableResponseBody(body *AttachGuideUnprocessableResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateAttachGuideTeamUnavailableResponseBody runs the validations defined
+// on AttachGuideTeamUnavailableResponseBody
+func ValidateAttachGuideTeamUnavailableResponseBody(body *AttachGuideTeamUnavailableResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.Cause == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("cause", "body"))
+	}
+	if body.Cause != nil {
+		if !(*body.Cause == "stopping" || *body.Cause == "chorus" || *body.Cause == "herdr" || *body.Cause == "saved_space" || *body.Cause == "roster_folder" || *body.Cause == "project_state" || *body.Cause == "role_folder") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.cause", *body.Cause, []any{"stopping", "chorus", "herdr", "saved_space", "roster_folder", "project_state", "role_folder"}))
+		}
+	}
+	return
+}
+
+// ValidateStatusForbiddenResponseBody runs the validations defined on
+// StatusForbiddenResponseBody
+func ValidateStatusForbiddenResponseBody(body *StatusForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateStatusUnprocessableResponseBody runs the validations defined on
+// StatusUnprocessableResponseBody
+func ValidateStatusUnprocessableResponseBody(body *StatusUnprocessableResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
 // ValidateStopForbiddenResponseBody runs the validations defined on
 // StopForbiddenResponseBody
 func ValidateStopForbiddenResponseBody(body *StopForbiddenResponseBody) (err error) {
@@ -992,6 +1447,104 @@ func validateProjectTeamRoleResponseBody(body *ProjectTeamRoleResponseBody, path
 	if body.Role != nil {
 		if !(*body.Role == "guide" || *body.Role == "builder" || *body.Role == "test_writer") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError(path+".role", *body.Role, []any{"guide", "builder", "test_writer"}))
+		}
+	}
+	return
+}
+
+// ValidateTeamRoleStateResponseBody runs the validations defined on
+// TeamRoleState
+func ValidateTeamRoleStateResponseBody(body *TeamRoleStateResponseBody) (err error) {
+	if body.Role == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("role", "body"))
+	}
+	if body.Handle == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("handle", "body"))
+	}
+	if body.State == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("state", "body"))
+	}
+	if body.Attention == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("attention", "body"))
+	}
+	if body.Watcher == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("watcher", "body"))
+	}
+	if body.Assignment == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("assignment", "body"))
+	}
+	if body.Role != nil {
+		if !(*body.Role == "guide" || *body.Role == "builder" || *body.Role == "test_writer") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.role", *body.Role, []any{"guide", "builder", "test_writer"}))
+		}
+	}
+	if body.State != nil {
+		if !(*body.State == "not_started" || *body.State == "ended" || *body.State == "starting" || *body.State == "needs_you" || *body.State == "working" || *body.State == "waiting" || *body.State == "error" || *body.State == "unknown") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.state", *body.State, []any{"not_started", "ended", "starting", "needs_you", "working", "waiting", "error", "unknown"}))
+		}
+	}
+	if body.Attention != nil {
+		if !(*body.Attention == "none" || *body.Attention == "permission" || *body.Attention == "question" || *body.Attention == "auth" || *body.Attention == "silent" || *body.Attention == "assignment" || *body.Attention == "unknown") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.attention", *body.Attention, []any{"none", "permission", "question", "auth", "silent", "assignment", "unknown"}))
+		}
+	}
+	if body.Watcher != nil {
+		if !(*body.Watcher == "held" || *body.Watcher == "gone" || *body.Watcher == "unknown") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.watcher", *body.Watcher, []any{"held", "gone", "unknown"}))
+		}
+	}
+	if body.Assignment != nil {
+		if !(*body.Assignment == "unread" || *body.Assignment == "nothing_owed" || *body.Assignment == "no_work" || *body.Assignment == "unknown") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.assignment", *body.Assignment, []any{"unread", "nothing_owed", "no_work", "unknown"}))
+		}
+	}
+	return
+}
+
+// validateTeamRoleStateResponseBody checks TeamRoleState and reports errors
+// using the path supplied by its caller
+func validateTeamRoleStateResponseBody(body *TeamRoleStateResponseBody, path string) (err error) {
+	if body.Role == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("role", path))
+	}
+	if body.Handle == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("handle", path))
+	}
+	if body.State == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("state", path))
+	}
+	if body.Attention == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("attention", path))
+	}
+	if body.Watcher == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("watcher", path))
+	}
+	if body.Assignment == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("assignment", path))
+	}
+	if body.Role != nil {
+		if !(*body.Role == "guide" || *body.Role == "builder" || *body.Role == "test_writer") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError(path+".role", *body.Role, []any{"guide", "builder", "test_writer"}))
+		}
+	}
+	if body.State != nil {
+		if !(*body.State == "not_started" || *body.State == "ended" || *body.State == "starting" || *body.State == "needs_you" || *body.State == "working" || *body.State == "waiting" || *body.State == "error" || *body.State == "unknown") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError(path+".state", *body.State, []any{"not_started", "ended", "starting", "needs_you", "working", "waiting", "error", "unknown"}))
+		}
+	}
+	if body.Attention != nil {
+		if !(*body.Attention == "none" || *body.Attention == "permission" || *body.Attention == "question" || *body.Attention == "auth" || *body.Attention == "silent" || *body.Attention == "assignment" || *body.Attention == "unknown") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError(path+".attention", *body.Attention, []any{"none", "permission", "question", "auth", "silent", "assignment", "unknown"}))
+		}
+	}
+	if body.Watcher != nil {
+		if !(*body.Watcher == "held" || *body.Watcher == "gone" || *body.Watcher == "unknown") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError(path+".watcher", *body.Watcher, []any{"held", "gone", "unknown"}))
+		}
+	}
+	if body.Assignment != nil {
+		if !(*body.Assignment == "unread" || *body.Assignment == "nothing_owed" || *body.Assignment == "no_work" || *body.Assignment == "unknown") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError(path+".assignment", *body.Assignment, []any{"unread", "nothing_owed", "no_work", "unknown"}))
 		}
 	}
 	return

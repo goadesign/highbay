@@ -353,6 +353,24 @@ func (c *ControlPlane) currentCard(
 	ctx context.Context,
 	record storedChangeCard,
 ) (*gensurla.ChangeCardResult, error) {
+	return c.currentCardWithPromotion(ctx, record, c.resolvePromotion)
+}
+
+// currentCardAt checks the same live approval using the workspace its caller
+// already holds. It does not reacquire workspaceMu while a writer may wait.
+func (c *ControlPlane) currentCardAt(
+	ctx context.Context, record storedChangeCard, workspace string,
+) (*gensurla.ChangeCardResult, error) {
+	return c.currentCardWithPromotion(ctx, record, func(ctx context.Context) (PromotionTarget, error) {
+		return c.resolvePromotionAt(ctx, workspace)
+	})
+}
+
+// currentCardWithPromotion evaluates the approval with the caller's workspace
+// lifetime. Promotion I/O runs without holding c.mu.
+func (c *ControlPlane) currentCardWithPromotion(
+	ctx context.Context, record storedChangeCard, resolve func(context.Context) (PromotionTarget, error),
+) (*gensurla.ChangeCardResult, error) {
 	card := record.card
 	saved := card.Approval
 	if saved == nil {
@@ -389,7 +407,7 @@ func (c *ControlPlane) currentCard(
 	a := *saved
 	a.TestSource = approvalTestSource(source, saved.SuiteCommit)
 
-	target, err := c.resolvePromotion(ctx)
+	target, err := resolve(ctx)
 	if err == nil && target == nil {
 		withSource := *card
 		withSource.Approval = &a
@@ -438,10 +456,15 @@ func approvalTestSource(source verify.TestsSource, commit string) gensurla.Appro
 // static PromotionTarget.
 func (c *ControlPlane) resolvePromotion(ctx context.Context) (PromotionTarget, error) {
 	if c.resolvePromotionTarget != nil {
-		return c.resolvePromotionTarget(ctx, c.currentWorkspaceDir())
+		return c.resolvePromotionAt(ctx, c.currentWorkspaceDir())
 	}
-	if c.promotionTarget != nil {
-		return c.promotionTarget, nil
+	return c.promotionTarget, nil
+}
+
+// resolvePromotionAt resolves the configured target for a named workspace.
+func (c *ControlPlane) resolvePromotionAt(ctx context.Context, workspace string) (PromotionTarget, error) {
+	if c.resolvePromotionTarget != nil {
+		return c.resolvePromotionTarget(ctx, workspace)
 	}
-	return nil, nil
+	return c.promotionTarget, nil
 }

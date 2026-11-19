@@ -676,8 +676,9 @@ type (
 	InitProjectPayloadTransport struct {
 		// Go module path of the new service (for example example.com/shop).
 		ModulePath *string `json:"module_path"`
-		// Direct child directory name inside the bound workspace root. When omitted or
-		// empty, defaults to the service name derived from module_path.
+		// Use a direct child name, or . to initialize the bound workspace itself while
+		// preserving allowed agent configuration. When omitted or empty, defaults to
+		// the service name derived from module_path.
 		Dir *string `json:"dir,omitempty"`
 	}
 	// InitProjectResultTransport is the internal JSON transport type for InitProjectResult.
@@ -791,6 +792,22 @@ type (
 		ChangeID *string `json:"change_id"`
 		// Verification runs for change_id in newest-first order.
 		Runs []*VerificationStatusResultTransport `json:"runs"`
+	}
+	// OpenViewsPayloadTransport is the internal JSON transport type for OpenViewsPayload.
+	// It lives in the toolset-local http package and is used only for JSON
+	// decode + validation (missing-field detection) before transforming into
+	// the public tool type.
+	OpenViewsPayloadTransport struct {
+	}
+	// OpenViewsResultTransport is the internal JSON transport type for OpenViewsResult.
+	// It lives in the toolset-local http package and is used only for JSON
+	// decode + validation (missing-field detection) before transforming into
+	// the public tool type.
+	OpenViewsResultTransport struct {
+		// Whether the browser opener completed successfully.
+		Opened *bool `json:"opened"`
+		// Safe handoff result without a URL or credential.
+		Message *string `json:"message"`
 	}
 	// PreviewArchitecturePayloadTransport is the internal JSON transport type for PreviewArchitecturePayload.
 	// It lives in the toolset-local http package and is used only for JSON

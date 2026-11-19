@@ -26,13 +26,12 @@ import (
 	genmcpsurla "github.com/goadesign/surla/gen/mcp_surla"
 	gensurla "github.com/goadesign/surla/gen/surla"
 	gensurlatools "github.com/goadesign/surla/gen/surla/toolsets/surla"
+	"github.com/goadesign/surla/internal/project"
 	"github.com/goadesign/surla/internal/testwriter"
 )
 
 type (
-	// journeyRoster is the part of the launcher roster that Chorus turns into
-	// an agent: each role's working folder and its connection to the project
-	// server, which names the role's credential file.
+	// journeyRoster is the role and placement contract Chorus uses to launch workers.
 	journeyRoster struct {
 		// Roles lists one row per registered role whose folder exists.
 		Roles []journeyRosterRole `json:"roles"`
@@ -47,18 +46,7 @@ type (
 		// Folder is the folder the agent works in.
 		Folder string `json:"folder"`
 		// Connections are the MCP servers the agent connects to.
-		Connections []journeyRosterConnection `json:"connections"`
-	}
-
-	// journeyRosterConnection is the MCP server an agent connects to and the
-	// file holding the credential it presents.
-	journeyRosterConnection struct {
-		// Name is the connection's name in the agent's configuration.
-		Name string `json:"name"`
-		// URL is the project server's MCP endpoint.
-		URL string `json:"url"`
-		// CredentialFile is the private file holding the role's credential.
-		CredentialFile string `json:"credential_file"`
+		Connections []json.RawMessage `json:"connections"`
 	}
 
 	// credentialDoer sends every request with exactly one caller's headers: a
@@ -358,26 +346,23 @@ func (j *wholeJourney) startServer(t *testing.T, runtime projectRuntime) {
 	require.NoError(t, err, "the project server did not publish its management access")
 }
 
-// scriptedAgent connects a scripted program in place of role's agent the way
-// the launcher starts an agent: from the role's roster row, with its surla
-// connection and the credential in the file the row names. It returns the
-// program's MCP client and the row's working folder.
+// scriptedAgent binds the registered worker folder and role credential to a
+// fixture MCP client, independent of window placement and agent configuration.
 func (j *wholeJourney) scriptedAgent(t *testing.T, role string) (*genmcpsurla.Client, string) {
 	t.Helper()
-	for _, row := range j.roster(t).Roles {
+	state, err := project.Discover(filepath.Dir(j.state.Dir), j.state.Record.Directory)
+	require.NoError(t, err)
+	for handle, row := range state.Record.Agents {
 		if row.Role != role {
 			continue
 		}
-		require.Len(t, row.Connections, 1)
-		connection := row.Connections[0]
-		assert.Equal(t, "surla", connection.Name)
-		address, err := url.Parse(connection.URL)
+		address, err := url.Parse(state.Origin())
 		require.NoError(t, err)
-		assert.Equal(t, j.state.Origin()+"/mcp", connection.URL)
-		info, err := os.Stat(connection.CredentialFile)
+		path := state.AgentFile(handle)
+		info, err := os.Stat(path)
 		require.NoError(t, err)
 		assert.Equal(t, os.FileMode(0o600), info.Mode().Perm(), "only the owner reads a credential")
-		credential, err := os.ReadFile(connection.CredentialFile)
+		credential, err := os.ReadFile(path)
 		require.NoError(t, err)
 		doer := credentialDoer{
 			client: &http.Client{},
@@ -387,7 +372,7 @@ func (j *wholeJourney) scriptedAgent(t *testing.T, role string) (*genmcpsurla.Cl
 			goahttp.RequestEncoder, goahttp.ResponseDecoder, false)
 		return &genmcpsurla.Client{ToolsCallEndpoint: transport.ToolsCall()}, row.Folder
 	}
-	t.Fatalf("the roster has no %s", role)
+	t.Fatalf("the project has no registered %s", role)
 	return nil, ""
 }
 

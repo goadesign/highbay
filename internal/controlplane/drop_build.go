@@ -22,7 +22,8 @@ func buildDropped(record madeFromRecord, build buildFile) bool {
 
 // DropBuild records a new provenance generation without changing any Git ref or draft.
 func (c *ControlPlane) DropBuild(ctx context.Context, p *gensurla.DropBuildPayload) (*gensurla.ChangeBuild, error) {
-	if _, err := c.ownedTeam(ctx); err != nil {
+	team, err := c.ownedTeam(ctx)
+	if err != nil {
 		return nil, err
 	}
 	principal, ok := PrincipalFromContext(ctx)
@@ -30,7 +31,7 @@ func (c *ControlPlane) DropBuild(ctx context.Context, p *gensurla.DropBuildPaylo
 		return nil, errors.New("authenticated principal is required")
 	}
 	c.mu.RLock()
-	_, err := c.ownedCard(principal, p.ChangeID)
+	_, err = c.ownedCard(principal, p.ChangeID)
 	saved, found, loadErr := c.cards.loadOpenBuild()
 	c.mu.RUnlock()
 	if err != nil {
@@ -46,10 +47,6 @@ func (c *ControlPlane) DropBuild(ctx context.Context, p *gensurla.DropBuildPaylo
 	defer cancel()
 	workspace, _, _ := c.currentWorkspaceTarget()
 	repo, _, err := resolveStarterRepo(work, workspace)
-	if err != nil {
-		return nil, err
-	}
-	head, err := runGitRead(work, repo, "rev-parse", "--verify", "HEAD^{commit}")
 	if err != nil {
 		return nil, err
 	}
@@ -92,9 +89,15 @@ func (c *ControlPlane) DropBuild(ctx context.Context, p *gensurla.DropBuildPaylo
 		c.draftMu.Unlock()
 		return nil, gensurla.MakeConflict(errors.New("This build was already dropped."))
 	}
-	// Record shares c.mu for publication. Capture its actual numbered tips
-	// here, once, so no accepted commit can fall between this snapshot and
-	// the durable Drop that retains it after a ref is moved or deleted.
+	// Merge and Record share c.mu for publication. Capture HEAD and the
+	// numbered tips here so the new generation records the branch and the
+	// accepted commits when this drop takes effect.
+	head, err := runGitRead(work, repo, "rev-parse", "--verify", "HEAD^{commit}")
+	if err != nil {
+		c.mu.Unlock()
+		c.draftMu.Unlock()
+		return nil, err
+	}
 	tips, err := buildBranchTips(work, repo, current.Number)
 	if err != nil {
 		c.mu.Unlock()
@@ -129,6 +132,7 @@ func (c *ControlPlane) DropBuild(ctx context.Context, p *gensurla.DropBuildPaylo
 		return nil, fmt.Errorf("save dropped build: %w", err)
 	}
 
+	c.stopFinishedBuildWorkers(ctx, team, BuildIdentity{ChangeID: current.ChangeID, StartedAt: current.StartedAt})
 	return &gensurla.ChangeBuild{
 		ChangeID: current.ChangeID, DraftedBeforeDrop: draftedBeforeDrop(record, provenance),
 		Build: gensurla.NewBuildStarted(progress),

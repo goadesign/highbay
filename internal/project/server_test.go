@@ -212,6 +212,7 @@ func TestProjectIdentitySessionsAndRoles(t *testing.T) {
 			httpOrResourceOnly := map[string]bool{
 				"golden_path": true, "wait_for_changes": true, "start_build": true, "drop_build": true, "get_model_connection": true, "get_test_findings": true,
 				"get_team": true, "show_team_pane": true, "start_team_agents": true, "hand_over_model_settings": true,
+				"list_team_agent_options": true, "dismiss_team_notice": true, "merge_change": true,
 			}
 			for _, name := range gensurla.MethodNames {
 				if !httpOrResourceOnly[name] {
@@ -248,6 +249,8 @@ func TestProjectIdentitySessionsAndRoles(t *testing.T) {
 					{http.MethodGet, "/project/identity", ""},
 					{http.MethodPost, "/project/stop", ""},
 					{http.MethodPost, "/project/team", ""},
+					{http.MethodPost, "/project/attach-guide", `{}`},
+					{http.MethodGet, "/project/status", ""},
 					{http.MethodPost, "/project/browser-link", ""},
 				} {
 					denied := testRequest(t, api.Client(), managementCall.method, state.Origin()+managementCall.path, managementCall.body, tc.token, tc.role == controlplane.CallerUser)
@@ -395,7 +398,7 @@ func testState(t *testing.T) *State {
 }
 func testClient(state *State, client *http.Client, token string, browser bool) *genproject.Client {
 	transport := genprojectclient.NewClient("http", state.Address(), headerDoer{client: client, token: token, browser: browser}, goahttp.RequestEncoder, goahttp.ResponseDecoder, false)
-	return genproject.NewClient(transport.Identity(), transport.EnsureTeam(), transport.Stop(), transport.BrowserLink(), transport.ExchangeBrowserLink())
+	return genproject.NewClient(transport.Identity(), transport.EnsureTeam(), transport.AttachGuide(), transport.Status(), transport.Stop(), transport.BrowserLink(), transport.ExchangeBrowserLink())
 }
 func testRequest(t *testing.T, client *http.Client, method, target, body, token string, browser bool) *http.Response {
 	t.Helper()
@@ -448,7 +451,11 @@ func policyHTTPRequests(card *gensurla.ChangeCardResult, propose, confirm string
 		{"update_draft", http.MethodPost, "/workspace/draft/update", ""},
 		{"get_team", http.MethodGet, "/team", ""},
 		{"show_team_pane", http.MethodPost, "/team/pane", `{"role":"guide"}`},
-		{"start_team_agents", http.MethodPost, "/team/agents", ""},
+		{"start_team_agents", http.MethodPost, "/team/agents", `{}`},
+		{"list_team_agent_options", http.MethodGet, "/team/agent-options", ""},
+		{"dismiss_team_notice", http.MethodPost, "/team/notices/dismiss", `{"notice":"outside_herdr"}`},
+		{"open_views", http.MethodPost, "/views/open", ""},
+		{"merge_change", http.MethodPost, "/changes/change/merge", fmt.Sprintf(`{"request_revision":%q,"candidate_commit":%q,"report_digest":"report"}`, revision, commit)},
 		{"golden_path", "GET", "/golden-path", ""},
 		{"propose_change", "POST", "/changes/propose", propose},
 		{"revise_change", "POST", "/changes/revise", revise},

@@ -1,309 +1,342 @@
-// This file verifies the reviewed team-start boundaries with strict persisted fixtures.
+// This file verifies live adoption, non-modal launch and exact worker teardown.
 package project
 
 import (
 	"context"
 	"encoding/json"
-	"errors"
-	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
+	genproject "github.com/goadesign/surla/gen/project"
+	gensurla "github.com/goadesign/surla/gen/surla"
 	"github.com/goadesign/surla/internal/controlplane"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"go.opentelemetry.io/otel"
-	"go.opentelemetry.io/otel/attribute"
-	"go.opentelemetry.io/otel/codes"
-	sdktrace "go.opentelemetry.io/otel/sdk/trace"
-	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 )
 
-// TestTeamWrittenRosterClosedContract compares every field delivered to the actual launcher path.
-func TestTeamWrittenRosterClosedContract(t *testing.T) {
+func TestAttachGuideAdoptsExistingPaneAndKeepsItsCredential(t *testing.T) {
 	state := testState(t)
 	deps := fixtureTeamDependencies(state)
+	deps.CompanionInstalled = true
 	host := deps.Host.(*teamFixture)
-	server, err := NewServer(state, func() {}, deps)
+	host.overlays = []string{"surla"}
+	s, err := NewServer(state, func() {}, deps)
 	require.NoError(t, err)
-	server.BindAssignments(func(context.Context) (controlplane.TeamAssignments, error) {
-		return controlplane.TeamAssignments{}, nil
-	})
-	team, err := server.EnsureTeam(teamContext(state))
+	result := attachFixtureGuide(t, s, host)
+	assert.Equal(t, "attached", result.HerdrMode)
+	assert.Equal(t, "antigravity", host.terminals[0].Labels["chorus.agent"])
+	assert.Equal(t, "role:"+result.Handle, host.terminals[0].Labels["chorus.row"])
+	assert.Empty(t, host.choices)
+	assert.NotContains(t, host.calls, "companion")
+	assert.NotContains(t, host.calls, "focus")
+	assert.Zero(t, host.creates)
+	assert.NoDirExists(t, deps.RosterDirectory)
+	auth, err := os.ReadFile(state.AgentFile(result.Handle))
 	require.NoError(t, err)
-	raw, err := os.ReadFile(filepath.Join(deps.RosterDirectory, team.Space+".json"))
+
+	host.overlays, host.calls = nil, nil
+	address := "t-guide"
+	again, err := s.AttachGuide(teamContext(state), &genproject.AttachGuidePayload{HcTerminalID: &address})
 	require.NoError(t, err)
-	handle := "guide-" + state.Record.ID[:12]
-	_, message := roleFirstMessage("guide")
-	expected := fmt.Sprintf(`{"root":%q,"swarm":%q,"roles":[{"role":"guide","title":"Guide","handle":%q,"folder":%q,"first_message":%q,"connections":[{"name":"surla","url":"http://127.0.0.1:%d/mcp","credential_file":%q}],"place":null}]}`, state.Record.Directory, team.Team, handle, state.Record.Directory, message, state.Record.Port, state.AgentFile(handle))
-	assert.JSONEq(t, expected, string(raw))
-	assert.Equal(t, []string{"overlays", "spaces", "create", "terminals", "focus", "open"}, host.calls, "observe overlays and focus this space before opening its launcher")
+	assert.Equal(t, result, again)
+	assert.NotContains(t, host.calls, "companion", "an overlay closed between attaches stays closed")
+	current, err := os.ReadFile(state.AgentFile(result.Handle))
+	require.NoError(t, err)
+	assert.Equal(t, auth, current)
+	loaded, err := Discover(filepath.Dir(state.Dir), state.Record.Directory)
+	require.NoError(t, err)
+	assert.Equal(t, "space-guide", loaded.Record.Space)
+	assert.Equal(t, "tab-guide", loaded.Record.Tab)
+	assert.True(t, loaded.Record.CompanionShown)
 }
 
-// TestThreeRoleWrittenRoster validates all placements and connection fields after atomic publication.
-func TestThreeRoleWrittenRoster(t *testing.T) {
-	state := testState(t)
-	deps := fixtureTeamDependencies(state)
-	server, err := NewServer(state, func() {}, deps)
-	require.NoError(t, err)
-	state.Record.Team = teamName("— 123 ! a very long project folder name", state.Record.ID)
-	var roles []launcherRole
-	var expectedRoles []map[string]any
-	for i, role := range []string{"guide", "builder", "test_writer"} {
-		handle := role + "-" + state.Record.ID[:12]
-		_, err := registerTestAgent(server, handle, role, server.state.Record.Directory)
-		require.NoError(t, err)
-		roles = append(roles, launcherRole{Role: role, Title: role, Handle: handle, Folder: state.Record.Directory, FirstMessage: "Use the Surla connection."})
-		var place any
-		if i == 1 {
-			place = map[string]string{"beside": "guide-" + state.Record.ID[:12], "direction": "right"}
-		}
-		if i == 2 {
-			place = map[string]string{"beside": "builder-" + state.Record.ID[:12], "direction": "down"}
-		}
-		expectedRoles = append(expectedRoles, map[string]any{"role": role, "title": role, "handle": handle, "folder": state.Record.Directory, "first_message": "Use the Surla connection.", "connections": []map[string]string{{"name": "surla", "url": fmt.Sprintf("http://127.0.0.1:%d/mcp", state.Record.Port), "credential_file": state.AgentFile(handle)}}, "place": place})
-	}
-	roster, err := server.teamRoster(roles)
-	require.NoError(t, err)
-	destination := filepath.Join(deps.RosterDirectory, "three-roles.json")
-	require.NoError(t, os.MkdirAll(deps.RosterDirectory, 0o700))
-	require.NoError(t, writeJSON(destination, roster))
-	written, err := os.ReadFile(destination)
-	require.NoError(t, err)
-	expected, err := json.Marshal(map[string]any{"root": state.Record.Directory, "swarm": state.Record.Team, "roles": expectedRoles})
-	require.NoError(t, err)
-	assert.JSONEq(t, string(expected), string(written))
-	assert.Regexp(t, `^[A-Za-z0-9][A-Za-z0-9_-]{0,31}$`, state.Record.Team)
-}
-
-// TestOpenOverlayLeavesWindowUntouched refuses unprepared projects without saving anything.
-func TestOpenOverlayLeavesWindowUntouched(t *testing.T) {
-	for _, overlay := range []string{"chorus-launcher", "frame-palette"} {
-		t.Run(overlay, func(t *testing.T) {
+func TestAttachGuideRefusesConflictedPanes(t *testing.T) {
+	for _, scenario := range []string{"not live", "idle shell", "no model pane", "remote", "other tab", "foreign root", "foreign swarm"} {
+		t.Run(scenario, func(t *testing.T) {
 			state := testState(t)
+			state.Record.Team = "home"
 			deps := fixtureTeamDependencies(state)
 			host := deps.Host.(*teamFixture)
-			host.overlays = []string{overlay}
-			before, err := os.ReadFile(filepath.Join(state.Dir, "project.json"))
+			host.spaces = []TeamSpace{{
+				ID: "space", Tabs: []TeamTab{{ID: "tab", Terminals: []TeamPane{{Terminal: "target", Pane: "pane"}}}},
+			}}
+			host.terminals = []TeamTerminal{{Address: "target", State: "live", Foreground: &TeamForeground{Argv: []string{"codex"}}}}
+			switch scenario {
+			case "not live":
+				host.terminals[0].State = "finished"
+			case "idle shell":
+				host.terminals[0].Foreground = &TeamForeground{Argv: []string{"zsh"}}
+			case "no model pane":
+				host.spaces[0].Tabs[0].Terminals[0].Pane = ""
+			case "remote":
+				machine := "other"
+				host.spaces[0].Machine = &machine
+			case "other tab":
+				host.spaces[0].Tabs = append(host.spaces[0].Tabs, TeamTab{ID: "duplicate", Terminals: []TeamPane{{Terminal: "other", Pane: "p-other"}}})
+				host.terminals = append(host.terminals, TeamTerminal{Address: "other", State: "live", Labels: map[string]string{"chorus.project": state.Record.Directory}})
+			case "foreign root", "foreign swarm":
+				host.spaces[0].Tabs[0].Terminals = append(host.spaces[0].Tabs[0].Terminals, TeamPane{Terminal: "other", Pane: "p-other"})
+				labels := map[string]string{"chorus.project": "/other"}
+				if scenario == "foreign swarm" {
+					labels = map[string]string{"chorus.swarm": "other"}
+				}
+				host.terminals = append(host.terminals, TeamTerminal{Address: "other", State: "live", Labels: labels})
+			}
+			s, err := NewServer(state, func() {}, deps)
 			require.NoError(t, err)
-			server, err := NewServer(state, func() {}, deps)
+			address := "target"
+			result, err := s.AttachGuide(teamContext(state), &genproject.AttachGuidePayload{HcTerminalID: &address})
 			require.NoError(t, err)
-			_, err = server.EnsureTeam(teamContext(state))
-			require.Error(t, err)
-			assert.Zero(t, host.creates)
-			assert.Empty(t, state.Record.Agents)
-			assert.Empty(t, state.Record.Team)
+			assert.False(t, result.AdoptedHerdr)
+			assert.Equal(t, "available", result.HerdrMode)
+			assert.Len(t, state.Record.Agents, 1, "the guide still authenticates outside a team pane")
 			assert.Empty(t, state.Record.Space)
-			after, err := os.ReadFile(filepath.Join(state.Dir, "project.json"))
-			require.NoError(t, err)
-			assert.Equal(t, before, after)
-			assert.NotContains(t, host.calls, "focus")
-			assert.NotContains(t, host.calls, "open")
-			assert.NotContains(t, host.calls, "create")
-			_, err = os.Stat(filepath.Join(state.Dir, "agents"))
-			assert.ErrorIs(t, err, os.ErrNotExist)
+			assert.NotContains(t, host.calls, "label")
+			assert.Zero(t, host.creates)
 		})
 	}
 }
 
-// TestPreparedLauncherNeverChangesFocus preserves a possibly unrelated launcher's captured project.
-func TestPreparedLauncherNeverChangesFocus(t *testing.T) {
-	state := testState(t)
-	deps := fixtureTeamDependencies(state)
-	host := deps.Host.(*teamFixture)
-	server, err := NewServer(state, func() {}, deps)
-	require.NoError(t, err)
-	_, err = server.EnsureTeam(teamContext(state))
-	require.NoError(t, err)
-	host.calls = nil
-	host.overlays = []string{"chorus-launcher"}
-	team, err := server.EnsureTeam(teamContext(state))
-	require.NoError(t, err)
-	assert.Equal(t, "already_open", team.Dialog)
-	assert.NotContains(t, host.calls, "focus")
-	assert.NotContains(t, host.calls, "open")
-	assert.NotContains(t, host.calls, "create")
-	assert.Equal(t, "overlays", host.calls[0])
+func TestStartAgentsUsesWorkerRosterAndPreservesLiveGuide(t *testing.T) {
+	for _, mode := range []string{"attached", "available", "idle guide"} {
+		t.Run(mode, func(t *testing.T) {
+			state := testState(t)
+			deps := fixtureTeamDependencies(state)
+			host := deps.Host.(*teamFixture)
+			s, err := NewServer(state, func() {}, deps)
+			require.NoError(t, err)
+			if mode != "available" {
+				attachFixtureGuide(t, s, host)
+			}
+			if mode == "idle guide" {
+				host.terminals[0].Foreground = &TeamForeground{Argv: []string{"zsh"}}
+			}
+			fixtureAssignments(s, true)
+			builder := state.Record.Directory
+			writer := t.TempDir()
+			require.NoError(t, s.RegisterBuildRoles(t.Context(), controlplane.BuilderAndTestWriter{
+				BuilderFolder: builder, TestWriterFolder: writer,
+			}))
+			host.calls = nil
+			options, err := s.StartAgents(t.Context(), nil)
+			require.NoError(t, err)
+			assert.NotContains(t, host.calls, "focus")
+			assert.NotContains(t, host.calls, "companion")
+			require.Len(t, host.choices, 1)
+			assert.ElementsMatch(t, []string{"builder", "test_writer"}, keys(host.choices[0]))
+			assert.Equal(t, "codex", host.choices[0]["builder"].Client)
+			assert.Equal(t, "claude", host.choices[0]["test_writer"].Client)
+			raw, err := os.ReadFile(filepath.Join(deps.RosterDirectory, options.Space+".json"))
+			require.NoError(t, err)
+			var roster launcherRoster
+			require.NoError(t, json.Unmarshal(raw, &roster))
+			workerRoles := roster.Roles
+			if mode == "attached" {
+				require.Len(t, workerRoles, 3)
+				assert.Equal(t, "guide", workerRoles[0].Role)
+				assert.Nil(t, workerRoles[0].Place)
+				assert.Equal(t, &launcherPlace{Beside: workerRoles[0].Handle, Direction: "right"}, workerRoles[1].Place)
+				workerRoles = workerRoles[1:]
+			} else {
+				require.Len(t, workerRoles, 2)
+				assert.Nil(t, workerRoles[0].Place)
+			}
+			require.Len(t, workerRoles, 2)
+			assert.Equal(t, builder, workerRoles[0].Folder)
+			assert.Equal(t, writer, workerRoles[1].Folder)
+			assert.Equal(t, &launcherPlace{Beside: workerRoles[0].Handle, Direction: "down"}, workerRoles[1].Place)
+			assert.Contains(t, workerRoles[0].FirstMessage, "Keep your Chorus watcher running.")
+			assert.Contains(t, workerRoles[1].FirstMessage, "When its verdict is in")
+			assert.Equal(t, len(roster.Roles), countEmptyConnections(t, raw))
+			assert.NotContains(t, string(raw), "credential_file")
+		})
+	}
 }
 
-// TestSavedSpaceWinsNameMatches keeps a renamed saved space despite duplicate name/folder matches.
-func TestSavedSpaceWinsNameMatches(t *testing.T) {
+func TestStartAgentsValidatesAndPersistsPreferences(t *testing.T) {
 	state := testState(t)
 	deps := fixtureTeamDependencies(state)
 	host := deps.Host.(*teamFixture)
-	state.Record.Team = teamName(filepath.Base(state.Record.Directory), state.Record.ID)
-	state.Record.Space = "saved"
-	require.NoError(t, state.save())
-	host.spaces = []TeamSpace{{ID: "candidate1", Name: state.Record.Team, Folder: state.Record.Directory}, {ID: "candidate2", Name: state.Record.Team, Folder: state.Record.Directory}, {ID: "saved", Name: "renamed by user", Folder: "/different", Tabs: []TeamTab{{ID: "tab", Terminals: []TeamPane{{Terminal: "terminal"}}}}}}
-	server, err := NewServer(state, func() {}, deps)
+	discover := 0
+	deps.DiscoverAgents = func(context.Context) ([]*gensurla.InstalledAgentOption, error) {
+		discover++
+		return []*gensurla.InstalledAgentOption{{Client: "claude", Program: "claude", ModelSupported: true}}, nil
+	}
+	s, err := NewServer(state, func() {}, deps)
 	require.NoError(t, err)
-	server.BindAssignments(func(context.Context) (controlplane.TeamAssignments, error) {
-		return controlplane.TeamAssignments{}, nil
+	fixtureAssignments(s, true)
+	require.NoError(t, s.RegisterBuildRoles(t.Context(), controlplane.BuilderAndTestWriter{
+		BuilderFolder: state.Record.Directory, TestWriterFolder: t.TempDir(),
+	}))
+	model := "sonnet"
+	_, err = s.StartAgents(t.Context(), map[string]*gensurla.RoleAgentChoice{
+		"builder": {Client: "claude", Program: "/uninstalled", Model: &model},
 	})
-	team, err := server.EnsureTeam(teamContext(state))
+	require.Error(t, err)
+	assert.Empty(t, host.calls)
+	assert.Empty(t, state.Record.SavedChoices)
+	_, err = s.StartAgents(t.Context(), map[string]*gensurla.RoleAgentChoice{
+		"builder": {Client: "claude", Program: "claude", Model: &model},
+	})
 	require.NoError(t, err)
-	assert.Equal(t, "saved", team.Space)
-	assert.Zero(t, host.creates)
+	assert.Equal(t, "claude", host.choices[0]["test_writer"].Client)
+	require.NoError(t, s.DismissNotice(t.Context(), "single_agent_family"))
+	require.NoError(t, s.DismissNotice(t.Context(), "single_agent_family"))
+	require.Error(t, s.DismissNotice(t.Context(), "unknown"))
+	loaded, err := Discover(filepath.Dir(state.Dir), state.Record.Directory)
+	require.NoError(t, err)
+	fresh, err := NewServer(loaded, func() {}, deps)
+	require.NoError(t, err)
+	snapshot, err := fresh.ReadTeam(t.Context())
+	require.NoError(t, err)
+	require.NotNil(t, snapshot.SavedChoices["builder"].Model)
+	assert.Equal(t, "sonnet", *snapshot.SavedChoices["builder"].Model)
+	assert.Equal(t, []string{"single_agent_family"}, snapshot.DismissedNotices)
+	assert.Equal(t, 2, discover, "reading the persisted snapshot needs no CLI")
+	fixtureAssignments(fresh, true)
+	_, err = fresh.StartAgents(t.Context(), nil)
+	require.NoError(t, err)
+	assert.Equal(t, snapshot.SavedChoices, host.choices[1])
 }
 
-// TestRosterOmitsMissingWorkingFolders keeps valid roles and rejects invalid existing inputs.
-func TestRosterOmitsMissingWorkingFolders(t *testing.T) {
-	state := testState(t)
-	deps := fixtureTeamDependencies(state)
-	server, err := NewServer(state, func() {}, deps)
-	require.NoError(t, err)
-	state.Record.Team = teamName("team", state.Record.ID)
-	var roles []launcherRole
-	for _, role := range []string{"guide", "builder", "test_writer"} {
-		handle := role + "-" + state.Record.ID[:12]
-		_, err := registerTestAgent(server, handle, role, server.state.Record.Directory)
-		require.NoError(t, err)
-		folder := state.Record.Directory
-		if role == "test_writer" {
-			folder = filepath.Join(state.Record.Directory, "missing-test-writer")
-		}
-		roles = append(roles, launcherRole{Role: role, Title: role, Handle: handle, Folder: folder, FirstMessage: "Use Surla."})
-	}
-	roster, err := server.teamRoster(roles)
-	require.NoError(t, err)
-	require.Len(t, roster.Roles, 2)
-	assert.Equal(t, "builder", roster.Roles[1].Role)
-	assert.Equal(t, "right", roster.Roles[1].Place.Direction)
-	existingFile := filepath.Join(state.Record.Directory, "not-a-folder")
-	require.NoError(t, os.WriteFile(existingFile, []byte("fixture"), 0o600))
-	roles[2].Folder = existingFile
-	_, err = server.teamRoster(roles)
-	require.Error(t, err)
-	cwd, err := os.Getwd()
-	require.NoError(t, err)
-	relative, err := filepath.Rel(cwd, state.Record.Directory)
-	require.NoError(t, err)
-	roles[2].Folder = relative
-	_, err = server.teamRoster(roles)
-	require.Error(t, err)
-	roles[2].Folder = state.Record.Directory
-	require.NoError(t, os.Remove(state.AgentFile(roles[2].Handle)))
-	_, err = server.teamRoster(roles)
-	require.Error(t, err)
-}
-
-// TestTeamErrorsKeepPrivatePathsInsideServer checks the public error rather than CLI filtering.
-func TestTeamErrorsKeepPrivatePathsInsideServer(t *testing.T) {
-	state := testState(t)
-	deps := fixtureTeamDependencies(state)
-	server, err := NewServer(state, func() {}, deps)
-	require.NoError(t, err)
-	handle := "guide-" + state.Record.ID[:12]
-	state.Record.Agents[handle] = agentRecord{Role: "guide", Folder: state.Record.Directory}
-	_, err = server.EnsureTeam(teamContext(state))
-	require.Error(t, err)
-	assert.NotContains(t, err.Error(), state.Dir)
-	assert.NotContains(t, err.Error(), state.Record.Directory)
-	assert.NotContains(t, err.Error(), strings.Join([]string{"--label", "chorus.project=" + state.Record.Directory}, " "))
-}
-
-// TestTeamSpansReportBoundedOutcomes records state without exporting project paths or command arguments.
-func TestTeamSpansReportBoundedOutcomes(t *testing.T) {
-	recorder := tracetest.NewSpanRecorder()
-	provider := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(recorder))
-	previous := otel.GetTracerProvider()
-	otel.SetTracerProvider(provider)
-	defer otel.SetTracerProvider(previous)
-	defer func() { assert.NoError(t, provider.Shutdown(context.Background())) }()
+func TestStopWorkersChecksBuildIdentityAndOwnedPanes(t *testing.T) {
 	state := testState(t)
 	deps := fixtureTeamDependencies(state)
 	host := deps.Host.(*teamFixture)
-	server, err := NewServer(state, func() {}, deps)
+	s, err := NewServer(state, func() {}, deps)
 	require.NoError(t, err)
-	server.BindAssignments(func(context.Context) (controlplane.TeamAssignments, error) {
-		return controlplane.TeamAssignments{}, nil
-	})
-	team, err := server.EnsureTeam(teamContext(state))
-	require.NoError(t, err)
-	host.overlays = []string{"chorus-launcher"}
-	_, err = server.EnsureTeam(teamContext(state))
-	require.NoError(t, err)
-	host.overlays = nil
-	host.terminals = []TeamTerminal{{State: "live", Labels: map[string]string{"chorus.handle": team.Roles[0].Handle, "chorus.project": state.Record.Directory, "herdr.space": team.Space, "herdr.tab": "tab"}, Foreground: &TeamForeground{Argv: []string{"codex"}}}}
-	_, err = server.EnsureTeam(teamContext(state))
-	require.NoError(t, err)
-	host.overlays = []string{"frame-palette"}
-	_, err = server.EnsureTeam(teamContext(state))
-	require.Error(t, err)
-	host.overlays = nil
-	require.NoError(t, os.Remove(state.AgentFile(team.Roles[0].Handle)))
-	_, err = server.EnsureTeam(teamContext(state))
-	require.Error(t, err)
-	spans := recorder.Ended()
-	require.Len(t, spans, 5)
-	assert.Equal(t, codes.Unset, spans[3].Status().Code)
-	assert.Empty(t, spans[3].Events())
-	assert.Equal(t, codes.Error, spans[4].Status().Code)
-	assert.NotEmpty(t, spans[4].Events())
-	for _, span := range spans {
-		for _, event := range span.Events() {
-			for _, field := range event.Attributes {
-				assert.NotContains(t, field.Value.AsString(), state.Dir)
-				assert.NotContains(t, field.Value.AsString(), state.Record.Directory)
-			}
-		}
+	attachFixtureGuide(t, s, host)
+	require.NoError(t, s.RegisterBuildRoles(t.Context(), controlplane.BuilderAndTestWriter{
+		BuilderFolder: state.Record.Directory, TestWriterFolder: t.TempDir(),
+	}))
+	for _, role := range []string{"builder", "test_writer", "unrelated"} {
+		host.spaces[0].Tabs[0].Terminals = append(host.spaces[0].Tabs[0].Terminals, TeamPane{Terminal: "t-" + role, Pane: "p-" + role})
+		host.terminals = append(host.terminals, TeamTerminal{
+			Address: "t-" + role, State: "live", Labels: map[string]string{
+				"chorus.project": state.Record.Directory, "chorus.swarm": state.Record.Team,
+				"herdr.space": state.Record.Space, "herdr.tab": state.Record.Tab,
+				"chorus.role": role, "chorus.agent": "codex", "chorus.handle": teamName(role, state.Record.ID),
+			},
+		})
 	}
+	var assignments controlplane.TeamAssignments
+	s.BindAssignments(func(context.Context) (controlplane.TeamAssignments, error) { return assignments, nil })
+	build := controlplane.BuildIdentity{ChangeID: "change", StartedAt: time.Unix(20, 0)}
+	newer := controlplane.BuildIdentity{ChangeID: "change", StartedAt: time.Unix(21, 0)}
+	assignments = controlplane.TeamAssignments{BuildIdentity: &newer, Merged: true}
+	require.NoError(t, s.StopWorkers(t.Context(), build))
+	assignments = controlplane.TeamAssignments{BuildIdentity: &build}
+	require.NoError(t, s.StopWorkers(t.Context(), build))
+	assert.Empty(t, host.closed, "no work alone does not prove a build was merged or dropped")
+	assignments.Dropped = true
+	host.closeErr = assert.AnError
+	require.Error(t, s.StopWorkers(t.Context(), build))
+	host.closeErr = nil
+	host.closed = nil
+	require.NoError(t, s.StopWorkers(t.Context(), build))
+	require.NoError(t, s.StopWorkers(t.Context(), build))
+	assert.ElementsMatch(t, []string{"p-builder", "p-test_writer"}, host.closed)
+}
 
-	for i, dialog := range []string{"opened", "already_open", "not_needed"} {
-		attrs := map[string]attribute.Value{}
-		for _, value := range spans[i].Attributes() {
-			attrs[string(value.Key)] = value.Value
-		}
-		assert.Equal(t, dialog, attrs["team.dialog"].AsString())
-		assert.Equal(t, int64(1), attrs["team.roles"].AsInt64())
-		running := int64(0)
-		if i == 2 {
-			running = 1
-		}
-		assert.Equal(t, running, attrs["team.roles_running"].AsInt64())
-		assert.Equal(t, codes.Unset, spans[i].Status().Code)
+func countEmptyConnections(t *testing.T, raw []byte) int {
+	t.Helper()
+	var roster struct {
+		Roles []struct {
+			Connections json.RawMessage `json:"connections"`
+		} `json:"roles"`
+	}
+	require.NoError(t, json.Unmarshal(raw, &roster))
+	for _, role := range roster.Roles {
+		assert.JSONEq(t, "[]", string(role.Connections))
+	}
+	return len(roster.Roles)
+}
+
+func TestStartAgentsExplicitGuideRequiresNoLiveSession(t *testing.T) {
+	for _, scenario := range []string{"missing", "active pane", "external watcher"} {
+		t.Run(scenario, func(t *testing.T) {
+			state := testState(t)
+			deps := fixtureTeamDependencies(state)
+			guideHandle := teamName("guide", state.Record.ID)
+			observer := &supervisionFixture{watch: func(context.Context, string) (TeamWatcherView, error) {
+				return TeamWatcherView{Held: map[string]bool{guideHandle: scenario == "external watcher"}}, nil
+			}}
+			deps.Connect = func(context.Context) (TeamConnection, error) {
+				return TeamConnection{Endpoint: "http://chorus.test", Observer: observer}, nil
+			}
+			host := deps.Host.(*teamFixture)
+			s, err := NewServer(state, func() {}, deps)
+			require.NoError(t, err)
+			s.BindAssignments(func(context.Context) (controlplane.TeamAssignments, error) {
+				return controlplane.TeamAssignments{}, nil
+			})
+			if scenario == "active pane" {
+				attachFixtureGuide(t, s, host)
+			}
+			choices := map[string]*gensurla.RoleAgentChoice{"guide": {Client: "codex", Program: "codex"}}
+			result, err := s.StartAgents(t.Context(), choices)
+			if scenario != "missing" {
+				require.ErrorContains(t, err, "current guide session is already running")
+				assert.Empty(t, host.choices)
+				return
+			}
+			require.NoError(t, err)
+			require.Len(t, host.choices, 1)
+			assert.Equal(t, choices, host.choices[0])
+			assert.Equal(t, "guide", state.Record.Agents[guideHandle].Role)
+			var roster launcherRoster
+			require.NoError(t, readJSON(filepath.Join(deps.RosterDirectory, result.Space+".json"), &roster))
+			require.Len(t, roster.Roles, 1)
+			assert.Equal(t, guideHandle, roster.Roles[0].Handle)
+			assert.Nil(t, roster.Roles[0].Place)
+		})
 	}
 }
 
-// failedOverlayHost supplies a hostile external error without making any window changes.
-type failedOverlayHost struct{ TeamHost }
-
-// Overlays refuses with a fabricated private cause that must never reach span events or public errors.
-func (failedOverlayHost) Overlays(context.Context) ([]string, error) {
-	return nil, errors.New("/private/hostile-project/credential --selected-argument secret-placeholder")
-}
-
-// TestTeamFailureEventsAreBounded inspects exception messages as well as ordinary span attributes.
-func TestTeamFailureEventsAreBounded(t *testing.T) {
-	recorder := tracetest.NewSpanRecorder()
-	provider := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(recorder))
-	previous := otel.GetTracerProvider()
-	otel.SetTracerProvider(provider)
-	defer otel.SetTracerProvider(previous)
-	defer func() { assert.NoError(t, provider.Shutdown(context.Background())) }()
-	state := testState(t)
-	deps := fixtureTeamDependencies(state)
-	deps.Host = failedOverlayHost{TeamHost: deps.Host}
-	server, err := NewServer(state, func() {}, deps)
-	require.NoError(t, err)
-	_, err = server.EnsureTeam(teamContext(state))
-	require.Error(t, err)
-	spans := recorder.Ended()
-	require.Len(t, spans, 1)
-	assert.Equal(t, codes.Error, spans[0].Status().Code)
-	require.NotEmpty(t, spans[0].Events())
-	for _, event := range spans[0].Events() {
-		for _, field := range event.Attributes {
-			value := field.Value.AsString()
-			for _, private := range []string{"hostile-project", "--selected-argument", "secret-placeholder", state.Dir} {
-				assert.NotContains(t, value, private)
+// TestStartAgentsHonorsClientModelChoices verifies valid installed program paths
+// and Antigravity's alternate model/effort forms through actual team admission.
+func TestStartAgentsHonorsClientModelChoices(t *testing.T) {
+	model := "configured-model-" + strings.Repeat("a", 256)
+	effort := "high"
+	for _, scenario := range []struct {
+		name, model string
+		effort      *string
+		allowed     bool
+	}{
+		{"plain model and separate effort", model, &effort, true},
+		{"suffixed model alone", model + "-high", nil, true},
+		{"suffixed model and separate effort", model + "-high", &effort, false},
+	} {
+		t.Run(scenario.name, func(t *testing.T) {
+			state := testState(t)
+			deps := fixtureTeamDependencies(state)
+			host := deps.Host.(*teamFixture)
+			program := "/installed/" + strings.Repeat("p/", 260) + "agy"
+			deps.DiscoverAgents = func(context.Context) ([]*gensurla.InstalledAgentOption, error) {
+				return []*gensurla.InstalledAgentOption{{
+					Client: "antigravity", Program: program, ModelSupported: true,
+					ThinkingSupported: true, Efforts: []string{effort},
+				}}, nil
 			}
-			if field.Key == "exception.message" {
-				assert.Equal(t, "project team could not be prepared", value)
+			s, err := NewServer(state, func() {}, deps)
+			require.NoError(t, err)
+			fixtureAssignments(s, false)
+			require.NoError(t, s.RegisterBuildRoles(t.Context(), controlplane.BuilderOnly{BuilderFolder: state.Record.Directory}))
+			choice := &gensurla.RoleAgentChoice{
+				Client: "antigravity", Program: program, Model: &scenario.model, Thinking: scenario.effort,
 			}
-		}
+			_, err = s.StartAgents(t.Context(), map[string]*gensurla.RoleAgentChoice{"builder": choice})
+			if !scenario.allowed {
+				require.Error(t, err)
+				assert.Empty(t, host.calls)
+				return
+			}
+			require.NoError(t, err)
+			require.Len(t, host.choices, 1)
+			assert.Equal(t, choice, host.choices[0]["builder"])
+		})
 	}
-	assert.NotContains(t, err.Error(), "hostile-project")
 }

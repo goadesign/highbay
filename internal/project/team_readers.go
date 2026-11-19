@@ -86,7 +86,13 @@ func (o *teamSupervisor) run(ctx context.Context, assignments controlplane.Assig
 		case observation := <-watchers:
 			o.watchers(observation.view, observation.err, o.server.now())
 		case <-ticker.C:
+			if o.server.headlessNeedsAssignments() {
+				o.assignments(ctx, assignments)
+			}
 		case <-observations.C:
+			if readers == nil && o.server.team.dependencies.HerdrAvailable && len(o.selection.Roles) > 0 {
+				o.assignments(ctx, assignments)
+			}
 			o.publish(ctx, o.server.now(), true)
 		}
 	}
@@ -203,4 +209,16 @@ watchers:
 			return
 		}
 	}
+}
+
+// headlessNeedsAssignments polls only an admitted build which still owns its
+// worker lifecycle. The last successfully drained build needs no fast scans.
+func (s *Server) headlessNeedsAssignments() bool {
+	if s.team.headless.current.Load() == nil {
+		return false
+	}
+	s.team.Lock()
+	defer s.team.Unlock()
+	build := s.team.headless.current.Load()
+	return !s.team.closed && build != nil && !sameBuild(s.team.lastStopped, build.id)
 }

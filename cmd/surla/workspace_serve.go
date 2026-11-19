@@ -211,6 +211,34 @@ func joinPreservingRawSegments(baseDir, p string) string {
 // and any extraDirs, failing if unavailable, inside the workspace grant, or not
 // owned by the current effective user with 0o700 permissions.
 func (runtime projectRuntime) operatorRoot(initialWorkspaceRoot string, extraDirs ...string) (string, error) {
+	phys, err := runtime.operatorRootCandidate(initialWorkspaceRoot, extraDirs...)
+	if err != nil {
+		return "", err
+	}
+	if err := markOperatorPrivateDir(phys); err != nil {
+		return "", operatorRootError(phys, err)
+	}
+	evalPhys, err := abspath.Eval(phys)
+	if err != nil {
+		return "", fmt.Errorf("resolve operator storage root %s: %w", phys, err)
+	}
+	excluded := append([]string{initialWorkspaceRoot}, extraDirs...)
+	inside, err := withinAnyDir(evalPhys, excluded)
+	if err != nil {
+		return "", err
+	}
+	if inside {
+		return "", fmt.Errorf("operator storage root %s must be outside the workspace (%s)", evalPhys, initialWorkspaceRoot)
+	}
+	if err := validateOperatorPrivateDir(evalPhys); err != nil {
+		return "", operatorRootError(evalPhys, err)
+	}
+	return evalPhys, nil
+}
+
+// operatorRootCandidate finds the physical operator root outside the workspace
+// grant without creating it. It may return a path that does not exist yet.
+func (runtime projectRuntime) operatorRootCandidate(initialWorkspaceRoot string, extraDirs ...string) (string, error) {
 	cfgRoot, err := runtime.configRoot()
 	if err != nil {
 		return "", fmt.Errorf("determine user configuration directory for operator storage: %w", err)
@@ -231,24 +259,7 @@ func (runtime projectRuntime) operatorRoot(initialWorkspaceRoot string, extraDir
 	if inside {
 		return "", fmt.Errorf("operator storage root %s must be outside the workspace (%s)", phys, initialWorkspaceRoot)
 	}
-	if err := markOperatorPrivateDir(phys); err != nil {
-		return "", operatorRootError(phys, err)
-	}
-	evalPhys, err := abspath.Eval(phys)
-	if err != nil {
-		return "", fmt.Errorf("resolve operator storage root %s: %w", phys, err)
-	}
-	inside, err = withinAnyDir(evalPhys, excluded)
-	if err != nil {
-		return "", err
-	}
-	if inside {
-		return "", fmt.Errorf("operator storage root %s must be outside the workspace (%s)", evalPhys, initialWorkspaceRoot)
-	}
-	if err := validateOperatorPrivateDir(evalPhys); err != nil {
-		return "", operatorRootError(evalPhys, err)
-	}
-	return evalPhys, nil
+	return phys, nil
 }
 
 // operatorRootError names the operator storage root dir that operatorRoot could not

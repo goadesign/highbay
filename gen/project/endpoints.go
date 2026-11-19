@@ -17,6 +17,8 @@ import (
 type Endpoints struct {
 	Identity            goa.Endpoint
 	EnsureTeam          goa.Endpoint
+	AttachGuide         goa.Endpoint
+	Status              goa.Endpoint
 	Stop                goa.Endpoint
 	BrowserLink         goa.Endpoint
 	ExchangeBrowserLink goa.Endpoint
@@ -27,6 +29,8 @@ func NewEndpoints(s Service) *Endpoints {
 	return &Endpoints{
 		Identity:            NewIdentityEndpoint(s),
 		EnsureTeam:          NewEnsureTeamEndpoint(s),
+		AttachGuide:         NewAttachGuideEndpoint(s),
+		Status:              NewStatusEndpoint(s),
 		Stop:                NewStopEndpoint(s),
 		BrowserLink:         NewBrowserLinkEndpoint(s),
 		ExchangeBrowserLink: NewExchangeBrowserLinkEndpoint(s),
@@ -37,6 +41,8 @@ func NewEndpoints(s Service) *Endpoints {
 func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.Identity = m(e.Identity)
 	e.EnsureTeam = m(e.EnsureTeam)
+	e.AttachGuide = m(e.AttachGuide)
+	e.Status = m(e.Status)
 	e.Stop = m(e.Stop)
 	e.BrowserLink = m(e.BrowserLink)
 	e.ExchangeBrowserLink = m(e.ExchangeBrowserLink)
@@ -55,6 +61,23 @@ func NewIdentityEndpoint(s Service) goa.Endpoint {
 func NewEnsureTeamEndpoint(s Service) goa.Endpoint {
 	return func(ctx context.Context, req any) (any, error) {
 		return s.EnsureTeam(ctx)
+	}
+}
+
+// NewAttachGuideEndpoint returns an endpoint function that calls the method
+// "attach_guide" of service "project".
+func NewAttachGuideEndpoint(s Service) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*AttachGuidePayload)
+		return s.AttachGuide(ctx, p)
+	}
+}
+
+// NewStatusEndpoint returns an endpoint function that calls the method
+// "status" of service "project".
+func NewStatusEndpoint(s Service) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		return s.Status(ctx)
 	}
 }
 

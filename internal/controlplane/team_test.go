@@ -36,6 +36,8 @@ type teamServiceFixture struct {
 	show     func(context.Context, string) error
 	register func(context.Context, BuildFolders) error
 	start    func(context.Context) (*gensurla.ProjectTeam, error)
+	// choices captures the last selection crossing the CP-to-team owner boundary.
+	choices map[string]*gensurla.RoleAgentChoice
 }
 
 // ReadTeam returns a copied snapshot and records a read, never an assignment mutation.
@@ -60,16 +62,31 @@ func (f *teamServiceFixture) ShowPane(ctx context.Context, role string) error {
 }
 
 // StartAgents records the authorized action without starting any process.
-func (f *teamServiceFixture) StartAgents(ctx context.Context) (*gensurla.ProjectTeam, error) {
+func (f *teamServiceFixture) StartAgents(ctx context.Context, choices map[string]*gensurla.RoleAgentChoice) (*gensurla.ProjectTeam, error) {
 	f.mu.Lock()
 	f.calls = append(f.calls, "start")
+	f.choices = choices
 	start := f.start
 	f.mu.Unlock()
 	if start != nil {
 		return start(ctx)
 	}
-	return &gensurla.ProjectTeam{Team: "team", Space: "space", Dialog: "opened", Step: "Choose the fixture's builder in its open team dialog.", Roles: []*gensurla.ProjectTeamRole{}}, nil
+	return &gensurla.ProjectTeam{Team: "team", Space: "space", HerdrMode: "attached", Step: "The fixture agents have started.", Roles: []*gensurla.ProjectTeamRole{}}, nil
 }
+
+// ListAgentOptions returns an installed-client fixture without executable discovery.
+func (f *teamServiceFixture) ListAgentOptions(context.Context) ([]*gensurla.InstalledAgentOption, error) {
+	return []*gensurla.InstalledAgentOption{}, nil
+}
+
+// DismissNotice has no persistence effect in tests that exercise other owners.
+func (f *teamServiceFixture) DismissNotice(context.Context, string) error { return nil }
+
+// StopWorkers has no process effect in tests that exercise other owners.
+func (f *teamServiceFixture) StopWorkers(context.Context, BuildIdentity) error { return nil }
+
+// Close joins no processes in this fixture.
+func (f *teamServiceFixture) Close() error { return nil }
 
 // RegisterBuildRoles records registration without changing a window or starting any process.
 func (f *teamServiceFixture) RegisterBuildRoles(ctx context.Context, folders BuildFolders) error {
@@ -102,7 +119,7 @@ func (f *teamServiceFixture) Supervise(ctx context.Context, read AssignmentReade
 // testTeamBinding supplies an independent team with no roles assigned yet.
 func testTeamBinding() *TeamBinding {
 	return &TeamBinding{Owner: "alice@example.com", Service: &teamServiceFixture{
-		snapshot: gensurla.TeamSnapshot{Team: "test-team", Roles: []*gensurla.TeamRoleState{}},
+		snapshot: gensurla.TeamSnapshot{HerdrMode: "attached", SavedChoices: map[string]*gensurla.RoleAgentChoice{}, DismissedNotices: []string{}, Team: "test-team", Roles: []*gensurla.TeamRoleState{}},
 	}}
 }
 
@@ -111,10 +128,10 @@ func testTeamBinding() *TeamBinding {
 func TestTeamUserTransport(t *testing.T) {
 	for _, kind := range []CallerKind{CallerUser, CallerGuide, CallerBuilder, CallerTestWriter, CallerManagement} {
 		t.Run(string(kind), func(t *testing.T) {
-			f := &teamServiceFixture{snapshot: gensurla.TeamSnapshot{Team: "team", Roles: []*gensurla.TeamRoleState{}}}
+			f := &teamServiceFixture{snapshot: gensurla.TeamSnapshot{HerdrMode: "attached", SavedChoices: map[string]*gensurla.RoleAgentChoice{}, DismissedNotices: []string{}, Team: "team", Roles: []*gensurla.TeamRoleState{}}}
 			cp := newControlPlane(t, Options{Team: &TeamBinding{Owner: "owner", Service: f}})
 			handler := NewHTTPHandler(cp, func(*http.Request) (Principal, error) { return Principal{ID: "owner", Kind: kind}, nil })
-			for _, route := range []struct{ method, path, body string }{{"GET", "/team", ""}, {"POST", "/team/pane", `{"role":"builder"}`}, {"POST", "/team/agents", ""}} {
+			for _, route := range []struct{ method, path, body string }{{"GET", "/team", ""}, {"POST", "/team/pane", `{"role":"builder"}`}, {"POST", "/team/agents", `{}`}, {"GET", "/team/agent-options", ""}, {"POST", "/team/notices/dismiss", `{"notice":"outside_herdr"}`}} {
 				response := httptest.NewRecorder()
 				handler.ServeHTTP(response, httptest.NewRequest(route.method, route.path, strings.NewReader(route.body)))
 				if kind == CallerUser {
@@ -146,7 +163,7 @@ func TestTeamUserTransport(t *testing.T) {
 			}},
 		},
 		{
-			name: "team_unavailable", path: "/team/agents", call: "start", status: http.StatusServiceUnavailable,
+			name: "team_unavailable", path: "/team/agents", body: `{}`, call: "start", status: http.StatusServiceUnavailable,
 			owner: &teamServiceFixture{start: func(context.Context) (*gensurla.ProjectTeam, error) {
 				return nil, gensurla.MakeTeamUnavailable(errors.New("open the Herdr app, then try again"))
 			}},
@@ -182,7 +199,7 @@ func TestTeamUserStartConflictTransport(t *testing.T) {
 		return Principal{ID: "owner", Kind: CallerUser}, nil
 	})
 	response := httptest.NewRecorder()
-	handler.ServeHTTP(response, httptest.NewRequest(http.MethodPost, "/team/agents", nil))
+	handler.ServeHTTP(response, httptest.NewRequest(http.MethodPost, "/team/agents", strings.NewReader(`{}`)))
 	assert.Equal(t, http.StatusConflict, response.Code, response.Body.String())
 	var body struct {
 		Name    string `json:"name"`
@@ -232,7 +249,7 @@ func TestTeamUserResourceOwner(t *testing.T) {
 		return Principal{ID: "bob", Kind: CallerUser}, nil
 	})
 	for _, request := range []struct{ method, path, body string }{
-		{"GET", "/team", ""}, {"POST", "/team/pane", `{"role":"builder"}`}, {"POST", "/team/agents", ""},
+		{"GET", "/team", ""}, {"POST", "/team/pane", `{"role":"builder"}`}, {"POST", "/team/agents", `{}`},
 	} {
 		response := httptest.NewRecorder()
 		handler.ServeHTTP(response, httptest.NewRequest(request.method, request.path, strings.NewReader(request.body)))
@@ -246,7 +263,7 @@ func TestTeamUserResourceOwner(t *testing.T) {
 // TestTeamVersionBelongsToResourceOwner keeps other owners' change-list waits
 // independent of the bound team's activity and never reads that team for them.
 func TestTeamVersionBelongsToResourceOwner(t *testing.T) {
-	f := &teamServiceFixture{snapshot: gensurla.TeamSnapshot{Team: "team", Roles: []*gensurla.TeamRoleState{}}}
+	f := &teamServiceFixture{snapshot: gensurla.TeamSnapshot{HerdrMode: "attached", SavedChoices: map[string]*gensurla.RoleAgentChoice{}, DismissedNotices: []string{}, Team: "team", Roles: []*gensurla.TeamRoleState{}}}
 	cp := newControlPlane(t, Options{Team: &TeamBinding{Owner: "alice", Service: f}})
 	cp.changesWait = time.Millisecond
 	alice, bob := asCaller("alice", CallerUser), asCaller("bob", CallerUser)
@@ -467,7 +484,7 @@ func TestTeamWaitingVersionAndHistory(t *testing.T) {
 	exporter := tracetest.NewInMemoryExporter()
 	provider := sdktrace.NewTracerProvider(sdktrace.WithSyncer(exporter))
 	t.Cleanup(func() { assert.NoError(t, provider.Shutdown(context.Background())) })
-	f := &teamServiceFixture{snapshot: gensurla.TeamSnapshot{Team: "team", Roles: []*gensurla.TeamRoleState{{Role: "builder", Handle: "builder", State: "working", Attention: "none", Watcher: "held", Assignment: "nothing_owed"}}}}
+	f := &teamServiceFixture{snapshot: gensurla.TeamSnapshot{HerdrMode: "attached", SavedChoices: map[string]*gensurla.RoleAgentChoice{}, DismissedNotices: []string{}, Team: "team", Roles: []*gensurla.TeamRoleState{{Role: "builder", Handle: "builder", State: "working", Attention: "none", Watcher: "held", Assignment: "nothing_owed"}}}}
 	cp := newControlPlane(t, Options{TracerProvider: provider, Team: &TeamBinding{Owner: "owner", Service: f}})
 	cp.changesWait = time.Millisecond
 	user := asCaller("owner", CallerUser)
@@ -575,6 +592,7 @@ func TestWhoHasWorkAndAssignmentLists(t *testing.T) {
 	require.NoError(t, err)
 	assert.False(t, none.BuilderHasWork)
 	assert.False(t, none.TestWriterHasWork)
+	assert.Nil(t, none.BuildIdentity)
 	assert.False(t, none.HasWork("builder"))
 	assert.False(t, none.HasWork("test_writer"))
 	assert.False(t, none.HasWork("guide"))
@@ -597,6 +615,9 @@ func TestWhoHasWorkAndAssignmentLists(t *testing.T) {
 	require.NoError(t, err)
 	assert.True(t, active.BuilderHasWork)
 	assert.True(t, active.TestWriterHasWork)
+	require.NotNil(t, active.BuildIdentity)
+	assert.Equal(t, dropCard.ChangeID, active.BuildIdentity.ChangeID)
+	assert.False(t, active.Dropped)
 	require.Len(t, active.Unread, 2)
 
 	_, err = cp.DropBuild(user, &gensurla.DropBuildPayload{
@@ -607,6 +628,8 @@ func TestWhoHasWorkAndAssignmentLists(t *testing.T) {
 	require.NoError(t, err)
 	assert.False(t, afterDrop.BuilderHasWork)
 	assert.False(t, afterDrop.TestWriterHasWork)
+	assert.Equal(t, active.BuildIdentity, afterDrop.BuildIdentity)
+	assert.True(t, afterDrop.Dropped)
 	assert.Empty(t, afterDrop.Unread)
 	bList, err = cp.ListBuilderAssignments(builder)
 	require.NoError(t, err)
@@ -688,6 +711,7 @@ func TestWhoHasWorkAndAssignmentLists(t *testing.T) {
 			got, err := cp.assignmentGenerations(t.Context())
 			require.NoError(t, err)
 			assert.Equal(t, tc.work, got.TestWriterHasWork)
+			assert.Equal(t, tc.name == "reported", got.ReportCheckInFlight)
 			assert.Equal(t, tc.work, got.HasWork("test_writer"))
 			var unreadRoles []string
 			for _, item := range got.Unread {
@@ -775,11 +799,14 @@ func TestWhoHasWorkAndAssignmentLists(t *testing.T) {
 	failRep := failingReport(t, card.RequestRevision, commit, spec)
 	writeReportFile(t, reportDir, failRep)
 	saveRun("chg", card.RequestRevision, startedAt.Add(3*time.Millisecond), `{"kind":"report","report_digest":"`+failRep.Digest+`"}`)
-	saveRun("chg", card.RequestRevision, startedAt.Add(4*time.Millisecond), `{"kind":"no_report","failure":"execution_failed","stage":"build","summary":"build failed"}`)
+	failedExecutionID := saveRun("chg", card.RequestRevision, startedAt.Add(4*time.Millisecond), `{"kind":"no_report","failure":"execution_failed","stage":"build","summary":"build failed"}`)
 
 	stillWorking, err := cp.assignmentGenerations(t.Context())
 	require.NoError(t, err)
 	assert.True(t, stillWorking.BuilderHasWork, "runs before StartedAt, for another change/revision, or failed leave the builder with work")
+	assert.NotEmpty(t, stillWorking.LatestCompletedRunID)
+	assert.Equal(t, failedExecutionID, stillWorking.LatestCompletedRunID, "a failed build/start/timeout must wake the one-shot builder")
+	assert.False(t, stillWorking.LatestRunPassed)
 	bList, err = cp.ListBuilderAssignments(builder)
 	require.NoError(t, err)
 	require.Len(t, bList.Assignments, 1)
@@ -798,6 +825,8 @@ func TestWhoHasWorkAndAssignmentLists(t *testing.T) {
 	require.NoError(t, err)
 	assert.False(t, afterPass.BuilderHasWork)
 	assert.False(t, afterPass.TestWriterHasWork)
+	assert.True(t, afterPass.LatestRunPassed)
+	assert.NotEqual(t, stillWorking.LatestCompletedRunID, afterPass.LatestCompletedRunID)
 	assert.Empty(t, afterPass.Unread, "a role without work is never in Unread")
 	bList, err = cp.ListBuilderAssignments(builder)
 	require.NoError(t, err)

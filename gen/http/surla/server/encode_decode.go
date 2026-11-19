@@ -3065,6 +3065,36 @@ func EncodeStartTeamAgentsResponse(encoder func(context.Context, http.ResponseWr
 	}
 }
 
+// DecodeStartTeamAgentsRequest returns a decoder for requests sent to the
+// surla start_team_agents endpoint.
+func DecodeStartTeamAgentsRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*surla.StartTeamAgentsPayload, error) {
+	return func(r *http.Request) (*surla.StartTeamAgentsPayload, error) {
+		var payload *surla.StartTeamAgentsPayload
+		var (
+			body StartTeamAgentsRequestBody
+			err  error
+		)
+		err = decoder(r).Decode(&body)
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				return payload, goa.MissingPayloadError()
+			}
+			var gerr *goa.ServiceError
+			if errors.As(err, &gerr) {
+				return payload, gerr
+			}
+			return payload, goa.DecodePayloadError(err.Error())
+		}
+		err = ValidateStartTeamAgentsRequestBody(&body)
+		if err != nil {
+			return payload, err
+		}
+		payload = NewStartTeamAgentsPayload(&body)
+
+		return payload, nil
+	}
+}
+
 // EncodeStartTeamAgentsError returns an encoder for errors returned by the
 // start_team_agents surla endpoint.
 func EncodeStartTeamAgentsError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
@@ -3114,6 +3144,19 @@ func EncodeStartTeamAgentsError(encoder func(context.Context, http.ResponseWrite
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusServiceUnavailable)
 			return enc.Encode(body)
+		case "unprocessable":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewStartTeamAgentsUnprocessableResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnprocessableEntity)
+			return enc.Encode(body)
 		case "forbidden":
 			var res *goa.ServiceError
 			errors.As(v, &res)
@@ -3123,6 +3166,344 @@ func EncodeStartTeamAgentsError(encoder func(context.Context, http.ResponseWrite
 				body = formatter(ctx, res)
 			} else {
 				body = NewStartTeamAgentsForbiddenResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusForbidden)
+			return enc.Encode(body)
+		default:
+			return encodeError(ctx, w, v)
+		}
+	}
+}
+
+// EncodeListTeamAgentOptionsResponse returns an encoder for responses returned
+// by the surla list_team_agent_options endpoint.
+func EncodeListTeamAgentOptionsResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
+	return func(ctx context.Context, w http.ResponseWriter, v any) error {
+		res, _ := v.(*surla.ListTeamAgentOptionsResult)
+		enc := encoder(ctx, w)
+		body := NewListTeamAgentOptionsResponseBody(res)
+		w.WriteHeader(http.StatusOK)
+		return enc.Encode(body)
+	}
+}
+
+// EncodeListTeamAgentOptionsError returns an encoder for errors returned by
+// the list_team_agent_options surla endpoint.
+func EncodeListTeamAgentOptionsError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
+	encodeError := goahttp.ErrorEncoder(encoder, formatter)
+	return func(ctx context.Context, w http.ResponseWriter, v error) error {
+		var en goa.GoaErrorNamer
+		if !errors.As(v, &en) {
+			return encodeError(ctx, w, v)
+		}
+		switch en.GoaErrorName() {
+		case "team_unavailable":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListTeamAgentOptionsTeamUnavailableResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusServiceUnavailable)
+			return enc.Encode(body)
+		case "forbidden":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListTeamAgentOptionsForbiddenResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusForbidden)
+			return enc.Encode(body)
+		default:
+			return encodeError(ctx, w, v)
+		}
+	}
+}
+
+// EncodeDismissTeamNoticeResponse returns an encoder for responses returned by
+// the surla dismiss_team_notice endpoint.
+func EncodeDismissTeamNoticeResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
+	return func(ctx context.Context, w http.ResponseWriter, v any) error {
+		w.WriteHeader(http.StatusNoContent)
+		return nil
+	}
+}
+
+// DecodeDismissTeamNoticeRequest returns a decoder for requests sent to the
+// surla dismiss_team_notice endpoint.
+func DecodeDismissTeamNoticeRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*surla.DismissTeamNoticePayload, error) {
+	return func(r *http.Request) (*surla.DismissTeamNoticePayload, error) {
+		var payload *surla.DismissTeamNoticePayload
+		var (
+			body DismissTeamNoticeRequestBody
+			err  error
+		)
+		err = decoder(r).Decode(&body)
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				return payload, goa.MissingPayloadError()
+			}
+			var gerr *goa.ServiceError
+			if errors.As(err, &gerr) {
+				return payload, gerr
+			}
+			return payload, goa.DecodePayloadError(err.Error())
+		}
+		err = ValidateDismissTeamNoticeRequestBody(&body)
+		if err != nil {
+			return payload, err
+		}
+		payload = NewDismissTeamNoticePayload(&body)
+
+		return payload, nil
+	}
+}
+
+// EncodeDismissTeamNoticeError returns an encoder for errors returned by the
+// dismiss_team_notice surla endpoint.
+func EncodeDismissTeamNoticeError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
+	encodeError := goahttp.ErrorEncoder(encoder, formatter)
+	return func(ctx context.Context, w http.ResponseWriter, v error) error {
+		var en goa.GoaErrorNamer
+		if !errors.As(v, &en) {
+			return encodeError(ctx, w, v)
+		}
+		switch en.GoaErrorName() {
+		case "team_unavailable":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewDismissTeamNoticeTeamUnavailableResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusServiceUnavailable)
+			return enc.Encode(body)
+		case "forbidden":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewDismissTeamNoticeForbiddenResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusForbidden)
+			return enc.Encode(body)
+		default:
+			return encodeError(ctx, w, v)
+		}
+	}
+}
+
+// EncodeOpenViewsResponse returns an encoder for responses returned by the
+// surla open_views endpoint.
+func EncodeOpenViewsResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
+	return func(ctx context.Context, w http.ResponseWriter, v any) error {
+		res, _ := v.(*surla.OpenViewsResult)
+		enc := encoder(ctx, w)
+		body := NewOpenViewsResponseBody(res)
+		w.WriteHeader(http.StatusOK)
+		return enc.Encode(body)
+	}
+}
+
+// EncodeOpenViewsError returns an encoder for errors returned by the
+// open_views surla endpoint.
+func EncodeOpenViewsError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
+	encodeError := goahttp.ErrorEncoder(encoder, formatter)
+	return func(ctx context.Context, w http.ResponseWriter, v error) error {
+		var en goa.GoaErrorNamer
+		if !errors.As(v, &en) {
+			return encodeError(ctx, w, v)
+		}
+		switch en.GoaErrorName() {
+		case "forbidden":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewOpenViewsForbiddenResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusForbidden)
+			return enc.Encode(body)
+		default:
+			return encodeError(ctx, w, v)
+		}
+	}
+}
+
+// EncodeMergeChangeResponse returns an encoder for responses returned by the
+// surla merge_change endpoint.
+func EncodeMergeChangeResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
+	return func(ctx context.Context, w http.ResponseWriter, v any) error {
+		res, _ := v.(*surla.MergeChangeResult)
+		enc := encoder(ctx, w)
+		body := NewMergeChangeResponseBody(res)
+		w.WriteHeader(http.StatusOK)
+		return enc.Encode(body)
+	}
+}
+
+// DecodeMergeChangeRequest returns a decoder for requests sent to the surla
+// merge_change endpoint.
+func DecodeMergeChangeRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*surla.MergeChangePayload, error) {
+	return func(r *http.Request) (*surla.MergeChangePayload, error) {
+		var payload *surla.MergeChangePayload
+		var (
+			body MergeChangeRequestBody
+			err  error
+		)
+		err = decoder(r).Decode(&body)
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				return payload, goa.MissingPayloadError()
+			}
+			var gerr *goa.ServiceError
+			if errors.As(err, &gerr) {
+				return payload, gerr
+			}
+			return payload, goa.DecodePayloadError(err.Error())
+		}
+		err = ValidateMergeChangeRequestBody(&body)
+		if err != nil {
+			return payload, err
+		}
+
+		var (
+			changeID string
+
+			params = mux.Vars(r)
+		)
+		changeID = params["change_id"]
+		if utf8.RuneCountInString(changeID) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("change_id", changeID, utf8.RuneCountInString(changeID), 1, true))
+		}
+		if err != nil {
+			return payload, err
+		}
+		payload = NewMergeChangePayload(&body, changeID)
+
+		return payload, nil
+	}
+}
+
+// EncodeMergeChangeError returns an encoder for errors returned by the
+// merge_change surla endpoint.
+func EncodeMergeChangeError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
+	encodeError := goahttp.ErrorEncoder(encoder, formatter)
+	return func(ctx context.Context, w http.ResponseWriter, v error) error {
+		var en goa.GoaErrorNamer
+		if !errors.As(v, &en) {
+			return encodeError(ctx, w, v)
+		}
+		switch en.GoaErrorName() {
+		case "not_found":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewMergeChangeNotFoundResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusNotFound)
+			return enc.Encode(body)
+		case "not_approved":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewMergeChangeNotApprovedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusConflict)
+			return enc.Encode(body)
+		case "detached_head":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewMergeChangeDetachedHeadResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusConflict)
+			return enc.Encode(body)
+		case "dirty_worktree":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewMergeChangeDirtyWorktreeResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusConflict)
+			return enc.Encode(body)
+		case "merge_conflict":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewMergeChangeMergeConflictResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusConflict)
+			return enc.Encode(body)
+		case "working_copy_busy":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewMergeChangeWorkingCopyBusyResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusConflict)
+			return enc.Encode(body)
+		case "forbidden":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewMergeChangeForbiddenResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusForbidden)
@@ -5331,6 +5712,35 @@ func marshalSurlaTeamRoleStateToTeamRoleStateResponseBody(v *surla.TeamRoleState
 	return res
 }
 
+// marshalSurlaRoleAgentChoiceToRoleAgentChoiceResponseBody builds a value of
+// type *RoleAgentChoiceResponseBody from a value of type
+// *surla.RoleAgentChoice.
+func marshalSurlaRoleAgentChoiceToRoleAgentChoiceResponseBody(v *surla.RoleAgentChoice) *RoleAgentChoiceResponseBody {
+	res := &RoleAgentChoiceResponseBody{
+		Client:   v.Client,
+		Program:  v.Program,
+		Model:    v.Model,
+		Thinking: v.Thinking,
+		Yolo:     v.Yolo,
+	}
+
+	return res
+}
+
+// unmarshalRoleAgentChoiceRequestBodyToSurlaRoleAgentChoice builds a value of
+// type *surla.RoleAgentChoice from a value of type *RoleAgentChoiceRequestBody.
+func unmarshalRoleAgentChoiceRequestBodyToSurlaRoleAgentChoice(v *RoleAgentChoiceRequestBody) *surla.RoleAgentChoice {
+	res := &surla.RoleAgentChoice{
+		Client:   *v.Client,
+		Program:  *v.Program,
+		Model:    v.Model,
+		Thinking: v.Thinking,
+		Yolo:     *v.Yolo,
+	}
+
+	return res
+}
+
 // marshalSurlaProjectTeamRoleToProjectTeamRoleResponseBody builds a value of
 // type *ProjectTeamRoleResponseBody from a value of type
 // *surla.ProjectTeamRole.
@@ -5339,6 +5749,40 @@ func marshalSurlaProjectTeamRoleToProjectTeamRoleResponseBody(v *surla.ProjectTe
 		Role:    v.Role,
 		Handle:  v.Handle,
 		Running: v.Running,
+	}
+
+	return res
+}
+
+// marshalSurlaInstalledAgentOptionToInstalledAgentOptionResponseBody builds a
+// value of type *InstalledAgentOptionResponseBody from a value of type
+// *surla.InstalledAgentOption.
+func marshalSurlaInstalledAgentOptionToInstalledAgentOptionResponseBody(v *surla.InstalledAgentOption) *InstalledAgentOptionResponseBody {
+	res := &InstalledAgentOptionResponseBody{
+		Client:            v.Client,
+		Program:           v.Program,
+		Title:             v.Title,
+		ModelSupported:    v.ModelSupported,
+		ThinkingSupported: v.ThinkingSupported,
+		YoloSupported:     v.YoloSupported,
+		YoloEffect:        v.YoloEffect,
+		HeadlessSupported: v.HeadlessSupported,
+	}
+	if v.Models != nil {
+		res.Models = make([]string, len(v.Models))
+		for i, val := range v.Models {
+			res.Models[i] = val
+		}
+	} else {
+		res.Models = []string{}
+	}
+	if v.Efforts != nil {
+		res.Efforts = make([]string, len(v.Efforts))
+		for i, val := range v.Efforts {
+			res.Efforts[i] = val
+		}
+	} else {
+		res.Efforts = []string{}
 	}
 
 	return res
@@ -5772,10 +6216,10 @@ func marshalSurlaBuildDroppedToBuildDroppedResponseBody(v *surla.BuildDropped) *
 // *ProjectTeamResponseBody from a value of type *surla.ProjectTeam.
 func marshalSurlaProjectTeamToProjectTeamResponseBody(v *surla.ProjectTeam) *ProjectTeamResponseBody {
 	res := &ProjectTeamResponseBody{
-		Team:   v.Team,
-		Space:  v.Space,
-		Dialog: v.Dialog,
-		Step:   v.Step,
+		Team:      v.Team,
+		Space:     v.Space,
+		HerdrMode: v.HerdrMode,
+		Step:      v.Step,
 	}
 	if v.Roles != nil {
 		res.Roles = make([]*ProjectTeamRoleResponseBody, len(v.Roles))
