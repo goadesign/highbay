@@ -111,22 +111,30 @@ Surla is not yet listed.
 Registers the installed executable as the global `surla` MCP server with
 `args: ["stdio"]`, and installs `/surla` in client and shared skill folders.
 MCP registration targets are Claude Code, Codex, Cursor, Antigravity,
-Gemini CLI, Windsurf, GitHub Copilot CLI and VS Code. Setup also writes the
-shared `~/.agents/skills/surla/SKILL.md`. It detects client settings folders or
+Gemini CLI, Windsurf and GitHub Copilot CLI. On macOS and Linux, setup also
+registers MCP in VS Code's user settings when that folder exists; it writes
+no VS Code-specific skill file. Setup also writes the shared
+`~/.agents/skills/surla/SKILL.md`. It detects client settings folders or
 supported CLI executables, so adding a client later requires setup again.
 
 Setup preserves other servers and settings. An unchanged registration is
-left alone. Invalid or unsupported configuration stops setup with the file
-and recovery named; earlier successful file writes remain. Run the installed
+left alone. Invalid or unsupported configuration stops setup and names the
+file; some errors, such as JSON parse failures, include no recovery step.
+`surla up` adds advice to fix that file and rerun setup or explicitly skip it.
+Earlier successful file writes remain. Run the installed
 binary: a temporary `go run` executable cannot be registered for later use.
 Without `-global`, setup explains the flag and writes nothing. Unlike
 `surla up`, this command starts no Chorus server.
 
-When Herdr's app folder exists, setup installs the Surla floating companion
-in `mods/surla/`. It shows the current project stage and role attention,
+Open Herdr once before setup so it creates its configuration folder. Setup
+skips companion installation if that folder does not exist. When it exists,
+setup installs the Surla floating companion in `mods/surla/`. It shows the current project stage and role attention,
 focuses live panes, and offers **Open Page**. It reads project status and
 holds no Surla browser-session credential. It does not change Herdr's shipped
-workspace layout.
+workspace layout. On macOS, setup adds `cmd-alt-shift-s` to the global section
+of Herdr's `keys.json` when that shortcut is free. Existing bindings are
+preserved; a missing or read-only file is reported and left alone. Adding
+the shortcut makes Herdr treat `keys.json` as user-owned on later upgrades.
 
 ### `surla stdio`
 
@@ -143,11 +151,21 @@ the guide. In Herdr, a compatible live model pane can be adopted in place.
 The guide calls [`open_views`](#open_views) to open the page without receiving
 a browser credential.
 
+Setup does not populate provider settings or `HC_TERMINAL_ID` in the MCP
+registration. Surla uses only the environment the client passes to the
+stdio process: provider settings enable hand-over, and `HC_TERMINAL_ID`
+enables attempting live Herdr adoption. This forwarding has not been
+live-verified with real coding-agent clients; registration alone does not
+prove it. Bare `surla` remains the operator path for handing over settings
+from a known shell environment.
+
 The physical working folder determines the role. A folder inside
 `.surla-build` or `.surla-tests`, including nested modules, connects only as
-its assigned worker. It never starts a server or falls back to guide access.
-A missing running server or active assignment returns an error; the guide
-and user resolve that build before the worker retries.
+its registered worker role. Binding requires a running server, a matching
+role registration and a readable credential; it does not check whether the
+role currently has an active assignment. Assignment tools enforce their own
+build requirements. A binding failure never starts a server or falls back
+to guide access.
 
 <a id="surla-serve"></a>
 ### `surla` and `surla stop`
@@ -2104,8 +2122,10 @@ verdict, returns at once and wakes the report checker.
 The server tracks each team's role state in memory. In a Herdr workspace,
 Chorus launches role panes and reports which agents are waiting for messages.
 One-time `surla up` starts Chorus when installed; the guide attaches in place
-through `surla stdio`. Open Herdr before launching pane workers. To change
-the managed address, run `chorus up -addr :9550`, then use **Start workers** to
+through `surla stdio`. The project server does not start Chorus. If Chorus
+has stopped, including after a reboot, run `chorus up` (or `surla up` to
+repeat setup too), then retry **Start workers**. Open Herdr before launching
+pane workers. To change the managed address, run `chorus up -addr :9550`, then use **Start workers** to
 update the team's connection. A failed connection check leaves the page
 available. Once a roster exists, Chorus can inspect the team's panes. See
 the [Chorus team command reference](https://github.com/goadesign/chorus/blob/main/skills/herdr/chorus-launcher/README.md#choose-roles-from-a-terminal).
@@ -2195,8 +2215,10 @@ running keeps its existing session.
 Surla starts a guide only when this operation receives an explicit
 `choices.guide` in Herdr. It refuses a guide start if a guide already has a
 running pane or a Chorus watcher. The browser's **Start workers** sends the
-selected choices for workers that need starting. [`start_build`](#start_build) accepts
-worker choices only.
+selected choices for every registered worker that currently has work,
+including workers whose sessions are already running. Running workers keep
+their sessions; the saved choices apply when a missing session is launched.
+[`start_build`](#start_build) accepts worker choices only.
 
 An unavailable client, unsupported option or already running guide is
 refused with `unprocessable` (`422`). If the team cannot start, read the

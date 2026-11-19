@@ -121,9 +121,9 @@ alone starts no server. If the folder is empty, the guide can call
 [`init_project`](REFERENCE.md#init_project) with `dir: "."` to create the
 starter and its first Git commit in place.
 
-In Herdr, Surla adopts the guide's existing local pane and space when their
-project and team labels are compatible. You keep the conversation already
-open. Without Herdr, the server runs in the background; the same MCP tools
+In Herdr, when the client forwards its terminal identity, Surla can adopt the
+guide's existing local pane and space if their project and team labels are
+compatible. You keep the conversation already open. Without Herdr, the server runs in the background; the same MCP tools
 and browser decisions remain available. Bare `surla` remains an operator
 entrypoint that opens the page without starting agents or a team launcher.
 
@@ -279,8 +279,9 @@ allow it to run without interactive permission prompts. Enable each available
 **Skip permission prompts (YOLO)** switch and confirm **I agree to run these
 workers in the background.** Clients without that switch use their configured
 permissions. Build explains the selected client's permission effect before
-starting. If no suitable agent is
-installed, it names what to install and lets you refresh the choices.
+starting. If no suitable agent is installed, the picker asks you to install
+a coding agent, or a client with background execution support, and then
+refresh installed agents.
 Herdr recommendations can be dismissed, as can the recommendation for a
 second family when a build needs both workers and only one suitable family
 is available. Those preferences persist for this project.
@@ -491,10 +492,11 @@ In the Live target view you see the target's state and commit, the prompts it
 changed (never their text), and **Stop live target**. Under **Model
 connection** you choose the model that live targets started afterwards use: a
 provider and model name, whose key and request settings the guide's
-`surla stdio` connection handed over from its environment, or a running model
-gateway. Bare `surla` can hand over the same settings from an operator's
-shell. While no
-model is chosen, a hand-over picks the default model of the provider whose
+`surla stdio` connection received from its client and handed over, or a
+running model gateway. Real-client environment forwarding has not been
+live-verified; see [stdio integration](REFERENCE.md#surla-stdio). Bare `surla`
+can hand over the same settings from an operator's shell. While no model is
+chosen, a hand-over picks the default model of the provider whose
 settings it holds, `anthropic` first when it holds both, in the order of the
 reference's [provider table](REFERENCE.md#hand_over_model_settings). The
 server receives only allowlisted provider settings through those hand-overs;

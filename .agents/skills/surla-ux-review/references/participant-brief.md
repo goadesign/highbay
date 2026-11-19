@@ -33,7 +33,10 @@ You are taking part in a usability study of a developer tool called
   you want one, say so in your report, because that is useful evidence.
 - Install and set up Surla the way the README shows. After one-time setup,
   use your coding-agent conversation and Surla's browser page to reach the
-  goal. Report every terminal command you still need to enter as the user;
+  goal. Setup changes global coding-agent configuration and skill files,
+  and may install the Herdr companion and its free macOS shortcut outside
+  `work/`. Report the paths it changes; do not remove shared settings during
+  cleanup. Report every terminal command you still need to enter as the user;
   distinguish commands your coding agent runs internally and harness-only
   agent launches. Do not hide a manual workaround as ordinary progress.
 - You may read and invoke the runtime `/surla` (`$surla`) skill that Surla

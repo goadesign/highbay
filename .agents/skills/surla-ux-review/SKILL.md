@@ -79,6 +79,13 @@ source out of its view.
 - whether the participant's `work/` folder is empty apart from permitted
   coding-agent settings, and any known pre-existing example destinations.
   Leave existing folders alone and label their ownership unconfirmed;
+- the global setup writes this attempt may make. `surla up` and
+  `surla setup -global` update the real machine's detected coding-agent MCP
+  configuration and skill files, and may install the Herdr mod and add its
+  free macOS shortcut in `keys.json`. Record the paths setup reports and
+  pre-existing registrations or bindings without recording credentials.
+  These files are outside `work/` and may be used by other sessions; do not
+  delete or restore them as attempt cleanup;
 - the version of Surla installed by the README and the version its starter
   module will download. Record whether they match the commit under test;
 - the versions of `go`, `goa`, and `temporal`, or that they are missing;
@@ -114,9 +121,10 @@ source out of its view.
   hand it an HTTP route, credential, prewritten MCP configuration or lifecycle
   command. Failure to discover or use the documented integration is evidence;
 - whether Herdr and Chorus are installed, whether the agent starts inside a
-  live Herdr pane, the installed agent families and background-worker
-  support, and any project choices or dismissed recommendations already
-  present. Do not install a second family just to hide the one-family path;
+  live Herdr pane, whether its client has been observed forwarding
+  `HC_TERMINAL_ID` and provider settings to stdio, the installed agent
+  families and background-worker support, and any project choices or
+  dismissed recommendations already present. Do not install a second family just to hide the one-family path;
 - **what each mid-build change needs** (see the tester brief's "Mid-build
   changes"), recorded as two separate facts: what this machine provides,
   such as model credentials or the access a live demo needs, and what the
@@ -220,15 +228,16 @@ limitations that leaks were only self-reported.
   `ps -p <pid> -o command=` shows the reported binary and folder. PIDs get
   reused. Leave running any process you cannot match.
 - Delete nothing else. Every project folder the participant created is
-  evidence for the report, including folders outside `work/` such as
-  `/tmp/shop`, and may hold a Git repository with unpushed work. Each attempt
+  evidence for the report, including a project initialized outside `work/`,
+  and may hold a Git repository with unpushed work. Keep machine-wide setup
+  changes recorded above; they are not disposable attempt files. Each attempt
   gets a new folder, so nothing needs to be cleared for the next one.
 
 In the next transcript, record the exact path of every folder outside `work/`
 that the participant reported or that appears in `work/agent-logs/`, and
 every process left running. Label them "ownership unconfirmed". Tell the
 tester when the next attempt starts, so it does not log a leftover, such as
-`surla init` refusing an existing `-dir` or a port already in use, as a
+initialization refusing a nonempty folder or a port already in use, as a
 Surla bug. If someone later asks for cleanup, inspect each exact target
 first: nested repositories, `git status`, unpushed commits, and whether
 deleting it is authorized.

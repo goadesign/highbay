@@ -54,8 +54,8 @@ Here is how that change reaches your branch:
 1. **Start in your agent.** Invoke `/surla` (or `$surla`) in the project
    folder and describe what you want. The first Surla tool call attaches
    this session as the guide and starts the server when needed. In Herdr,
-   Surla adopts your existing pane and space when they can belong to this
-   project.
+   when the client forwards its terminal identity, Surla can adopt your
+   existing pane and space if they can belong to this project.
 2. **Open the page.** The guide calls `open_views` to open the project's
    browser page. If you close or reload it, ask the guide to open it again.
 3. **Describe.** The guide writes the Story, a description of your system's
@@ -208,15 +208,19 @@ module version available to Go, which may be older than this README and lack
 commands described here. When installing that version, follow its README.
 
 `surla up` registers the `surla stdio` MCP server with detected coding agents
-and installs `/surla` in their skill folders and the shared `.agents` folder,
-preserving other settings. Reload your
+and installs `/surla` in supported client skill folders and the shared
+`.agents` folder, preserving unrelated settings. Reload your
 agent's MCP configuration or start a new session if it does not yet show
-Surla. You only need to repeat setup after adding a client or moving the
-Surla executable. `surla setup -global` performs the same registration
-without starting Chorus.
+Surla. Repeat setup after adding a client or moving the Surla executable. `surla setup -global` performs the same registration
+without starting Chorus. If Chorus stops, including after a reboot, restart
+it with `chorus up` before starting Herdr workers; the project server does not
+start Chorus itself.
 
 Herdr is optional. For a side-by-side workspace, install Herdr and Chorus,
-then run `surla up` again to install the Surla companion too.
+open Herdr once to create its configuration folder, then run `surla up`
+again to install the Surla companion. On macOS, setup also adds
+**Cmd+Alt+Shift+S** to Herdr's `keys.json` when the shortcut is free; existing
+bindings stay in place. See [setup details](docs/REFERENCE.md#surla-setup--global).
 
 ```bash
 curl -fsSL https://releases.herdr.dev/core/install.sh | sh
@@ -231,8 +235,10 @@ Surla's design and generation steps need no model key; each coding agent
 uses its own sign-in. An application that calls a model needs a key when
 the builder tries prompts on a live target. Export the provider's key, such as
 `ANTHROPIC_API_KEY` or `OPENAI_API_KEY`, with any request settings it needs,
-in the environment that starts your coding agent: its Surla connection hands
-them to the server, which holds them in memory until `surla stop`. While no
+in the environment that starts your coding agent. If the client passes those
+settings to `surla stdio`, it hands them to the server, which holds them in
+memory until `surla stop`. Real-client environment forwarding has not been
+live-verified; see [stdio integration](docs/REFERENCE.md#surla-stdio). While no
 model is chosen, live targets then use `claude-sonnet-4-6` or `gpt-5.4-mini`. The page's
 **Live target** view changes that model to another provider whose settings
 were handed over, or to a model gateway; see

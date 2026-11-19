@@ -72,8 +72,10 @@ excuse things a real user cannot see.
    recovery, persistence of choices and dismissed recommendations, and Merge
    refusal/recovery. Unexercised paths stay unexercised.
    Also note, as your first observations, any gap you can already see between
-   the README and this setup, such as an unavailable client session reload
-   or browser action. Distinguish harness limits from product failures.
+   the README and this setup, such as an unavailable client session reload,
+   unverified environment forwarding, or browser action. Record global MCP,
+   skill and Herdr configuration writes as machine setup, not project edits.
+   Distinguish harness limits from product failures.
 3. Write a private **change plan** in `observations.md` (see "Mid-build
    changes" below): the changes you will hand the participant partway
    through the build, with one trigger each, the exact text, what each needs

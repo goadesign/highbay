@@ -138,21 +138,27 @@ plane verify already moved entries and finish an interrupted initialization.
 `cmd/surla/setup.go` owns registration of the installed `surla stdio`
 executable and bundled skill in detected coding-agent configuration. It
 preserves unrelated settings and leaves identical content untouched. Setup
-also installs the floating Herdr companion when the app folder is present;
-`surla up` runs setup and starts Chorus when installed.
+also installs the floating Herdr companion after Herdr has created its app
+folder. On macOS it adds the free `cmd-alt-shift-s` shortcut in `keys.json`,
+without changing workspace layouts. `surla up` runs setup and starts Chorus
+when installed; the project server itself does not restart Chorus.
 
 The stdio server answers initialization, ping and catalogs from generated
 MCP definitions without creating state or starting a project server. The
 first tool call or resource read binds a role and authenticates the relay to
 the project's HTTP MCP endpoint. A guide binding can start the server, hand
-over provider settings and attach the current session. Worker bindings only
-use an existing server and assignment.
+over provider settings from its process environment and attach the current
+session. Provider hand-over and live Herdr adoption depend on the client
+forwarding the corresponding settings and terminal context to stdio; that
+forwarding has not been live-verified with real clients.
+Worker bindings require an existing server, matching role registration and
+credential; assignment validity is checked by the assignment operations.
 
 Role binding follows physical subtree containment: `.surla-build` and its
 children are builder-only, and `.surla-tests` and its children are
 test-writer-only, including nested modules and leftover worker folders. A
-missing worker assignment never grants guide access. Generated schemas and
-the control plane's operation policy still enforce each caller's tools.
+missing worker registration or credential never grants guide access.
+Generated schemas and the control plane's operation policy still enforce each caller's tools.
 
 The Herdr companion reads `surla status --json` for the shown local project
 and Herdr labels for pane focus. Its **Open Page** action runs the ordinary
