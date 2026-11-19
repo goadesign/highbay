@@ -185,6 +185,23 @@ func (o *teamSupervisor) syncSelection(selection TeamSelection) bool {
 // assignments replaces known work and owed sets only after a complete owner read succeeded.
 func (o *teamSupervisor) assignments(ctx context.Context, read controlplane.AssignmentReader) {
 	assignments, err := read(ctx)
+	if err == nil && assignments.BuildIdentity != nil {
+		if assignments.Merged || assignments.Dropped {
+			if err := o.server.StopWorkers(ctx, *assignments.BuildIdentity); err != nil {
+				// The stop span records the failure; the next observation retries it.
+				teamReaderFailure(ctx)
+			}
+		} else if !o.server.team.dependencies.HerdrAvailable && o.server.team.headless.current.Load() != nil {
+			o.server.team.Lock()
+			if !o.server.team.closed && ctx.Err() == nil {
+				// Recheck under the admission lock before starting another turn.
+				if latest, err := read(ctx); err == nil {
+					o.server.reconcileHeadless(ctx, latest)
+				}
+			}
+			o.server.team.Unlock()
+		}
+	}
 	for _, role := range o.roles {
 		role.assignmentKnown = err == nil || role.role.Role == "guide"
 		if err != nil {

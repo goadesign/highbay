@@ -395,7 +395,7 @@ func testState(t *testing.T) *State {
 }
 func testClient(state *State, client *http.Client, token string, browser bool) *genproject.Client {
 	transport := genprojectclient.NewClient("http", state.Address(), headerDoer{client: client, token: token, browser: browser}, goahttp.RequestEncoder, goahttp.ResponseDecoder, false)
-	return genproject.NewClient(transport.Identity(), transport.EnsureTeam(), transport.Stop(), transport.BrowserLink(), transport.ExchangeBrowserLink())
+	return genproject.NewClient(transport.Identity(), transport.EnsureTeam(), transport.AttachGuide(), transport.Status(), transport.Stop(), transport.BrowserLink(), transport.ExchangeBrowserLink())
 }
 func testRequest(t *testing.T, client *http.Client, method, target, body, token string, browser bool) *http.Response {
 	t.Helper()

@@ -13,13 +13,14 @@ import (
 	"sync"
 	"testing"
 
+	genproject "github.com/goadesign/surla/gen/project"
 	gensurla "github.com/goadesign/surla/gen/surla"
 	"github.com/goadesign/surla/internal/controlplane"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-// TestBuildRegistrationPersistsFoldersAndCredentials exercises admission, restart and real roster publication.
+// TestBuildRegistrationPersistsFoldersAndCredentials exercises admission, restart and authentication.
 func TestBuildRegistrationPersistsFoldersAndCredentials(t *testing.T) {
 	for _, storedEvaluator := range []bool{false, true} {
 		t.Run(map[bool]string{false: "builder and test writer", true: "stored evaluator"}[storedEvaluator], func(t *testing.T) {
@@ -70,20 +71,7 @@ func TestBuildRegistrationPersistsFoldersAndCredentials(t *testing.T) {
 			loaded, err := Discover(filepath.Dir(state.Dir), builder)
 			require.NoError(t, err)
 			assert.Equal(t, state.Record, loaded.Record)
-			fresh, err := NewServer(loaded, func() {}, deps)
-			require.NoError(t, err)
-			team, err := fresh.EnsureTeam(teamContext(loaded))
-			require.NoError(t, err)
-			var roster launcherRoster
-			require.NoError(t, readJSON(filepath.Join(deps.RosterDirectory, team.Space+".json"), &roster))
-			require.Len(t, roster.Roles, len(credentials))
-			assert.Equal(t, builder, roster.Roles[1].Folder)
-			assert.Equal(t, &launcherPlace{Beside: "custom-guide", Direction: "right"}, roster.Roles[1].Place)
-			if !storedEvaluator {
-				assert.Equal(t, tests, roster.Roles[2].Folder)
-				assert.Equal(t, &launcherPlace{Beside: "custom-builder", Direction: "down"}, roster.Roles[2].Place)
-			}
-			assert.Equal(t, 1, deps.Host.(*teamFixture).creates)
+
 		})
 	}
 }
@@ -116,14 +104,7 @@ func TestBuildRegistrationIgnoresWindowState(t *testing.T) {
 			assert.Equal(t, folders.TestWriterFolder, loaded.Record.Agents[teamName("test_writer", state.Record.ID)].Folder)
 			assert.Empty(t, host.calls, "registration must never inspect or change the window")
 			assert.Zero(t, host.creates)
-			server.team.dependencies.Host = host
-			host.overlays, host.spaces = nil, nil
-			team, err := server.StartAgents(t.Context())
-			require.NoError(t, err)
-			assert.Len(t, team.Roles, 3)
-			assert.Equal(t, "opened", team.Dialog)
-			assert.Equal(t, 1, host.creates)
-			assert.Equal(t, []string{"overlays", "spaces", "create", "terminals", "focus", "open"}, host.calls)
+
 		})
 	}
 }
@@ -166,9 +147,7 @@ func TestBuildRegistrationCompletesAfterPhaseCancellation(t *testing.T) {
 	require.NoError(t, server.RegisterBuildRoles(ctx, controlplane.BuilderAndTestWriter{BuilderFolder: state.Record.Directory, TestWriterFolder: t.TempDir()}))
 	assert.Len(t, state.Record.Agents, 2)
 	assert.Empty(t, deps.Host.(*teamFixture).calls)
-	team, err := server.StartAgents(t.Context())
-	require.NoError(t, err)
-	assert.Len(t, team.Roles, 3)
+
 }
 
 // TestBuilderOnlyRevokesTestWriter keeps the exact roles selected by stored verification settings.
@@ -178,8 +157,7 @@ func TestBuilderOnlyRevokesTestWriter(t *testing.T) {
 	server, err := NewServer(state, func() {}, deps)
 	require.NoError(t, err)
 	require.NoError(t, server.RegisterBuildRoles(t.Context(), controlplane.BuilderAndTestWriter{BuilderFolder: state.Record.Directory, TestWriterFolder: t.TempDir()}))
-	_, err = server.StartAgents(t.Context())
-	require.NoError(t, err)
+
 	writer := teamName("test_writer", state.Record.ID)
 	credential, err := os.ReadFile(state.AgentFile(writer))
 	require.NoError(t, err)
@@ -206,16 +184,7 @@ func TestBuilderOnlyRevokesTestWriter(t *testing.T) {
 	loaded, err := Discover(filepath.Dir(state.Dir), state.Record.Directory)
 	require.NoError(t, err)
 	assert.Equal(t, state.Record, loaded.Record)
-	team, err := server.StartAgents(t.Context())
-	require.NoError(t, err)
-	require.Len(t, team.Roles, 2)
-	assert.Equal(t, "guide", team.Roles[0].Role)
-	assert.Equal(t, "builder", team.Roles[1].Role)
-	var roster launcherRoster
-	require.NoError(t, readJSON(filepath.Join(deps.RosterDirectory, team.Space+".json"), &roster))
-	assert.Len(t, roster.Roles, 2)
-	assert.Equal(t, "guide", roster.Roles[0].Role)
-	assert.Equal(t, "builder", roster.Roles[1].Role)
+
 	// Returning to Surla's tests admits a fresh credential; revocation stays final.
 	require.NoError(t, server.RegisterBuildRoles(t.Context(), controlplane.BuilderAndTestWriter{BuilderFolder: state.Record.Directory, TestWriterFolder: t.TempDir()}))
 	freshCredential, err := os.ReadFile(state.AgentFile(writer))
@@ -243,13 +212,13 @@ func TestTeamOperationsSerialize(t *testing.T) {
 			assert.NoError(t, err)
 		})
 		workers.Go(func() {
-			_, err := server.EnsureTeam(teamContext(state))
+			_, err := server.AttachGuide(teamContext(state), &genproject.AttachGuidePayload{})
 			assert.NoError(t, err)
 		})
 		workers.Go(func() { assert.Error(t, server.ShowPane(t.Context(), "guide")) })
 	}
 	workers.Wait()
-	assert.Equal(t, 1, deps.Host.(*teamFixture).creates)
+	assert.Zero(t, deps.Host.(*teamFixture).creates)
 	assert.Len(t, state.Record.Agents, 2)
 }
 

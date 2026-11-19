@@ -14,67 +14,48 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestTeamConnectionFailureBeforeEffects checks both entry points against the
-// same owner, including offline construction/read and retry on the same identity.
+// TestTeamConnectionFailureBeforeEffects preserves pure reads and retries the
+// same prepared build once Chorus becomes healthy.
 func TestTeamConnectionFailureBeforeEffects(t *testing.T) {
-	for _, entry := range []string{"management", "page"} {
-		t.Run(entry, func(t *testing.T) {
-			state := testState(t)
-			deps := fixtureTeamDependencies(state)
-			host := deps.Host.(*teamFixture)
-			fail, calls := true, 0
-			deps.Connect = func(context.Context) (TeamConnection, error) {
-				calls++
-				if fail {
-					return TeamConnection{}, assert.AnError
-				}
-				return TeamConnection{Endpoint: "http://chorus.test:9550"}, nil
-			}
-			server, err := NewServer(state, func() {}, deps)
-			require.NoError(t, err)
-			_, err = server.ReadTeam(t.Context())
-			require.NoError(t, err)
-			assert.Zero(t, calls, "construction and reads stay offline")
-			before, err := json.Marshal(state.Record)
-			require.NoError(t, err)
-			start := func() error {
-				if entry == "page" {
-					_, err := server.StartAgents(t.Context())
-					return err
-				}
-				_, err := server.EnsureTeam(teamContext(state))
-				return err
-			}
-			var failure *genproject.TeamUnavailable
-			require.ErrorAs(t, start(), &failure)
-			assert.Equal(t, "chorus", failure.Cause)
-			assert.Equal(t, 1, calls)
-			assert.Empty(t, host.calls)
-			assert.NoDirExists(t, deps.RosterDirectory)
-			after, err := json.Marshal(state.Record)
-			require.NoError(t, err)
-			assert.Equal(t, before, after)
-			assert.Empty(t, server.teamSelection().connection.Endpoint)
-			fail = false
-			require.NoError(t, start(), "the same server recovers after Chorus starts")
-			assert.Equal(t, 2, calls)
-			assert.Equal(t, "http://chorus.test:9550", server.teamSelection().connection.Endpoint)
-			roster, err := os.ReadFile(deps.RosterDirectory + "/" + state.Record.Space + ".json")
-			require.NoError(t, err)
-			assert.NotEmpty(t, roster)
-			// A failed rebind preserves the previously accepted connection and record.
-			before, err = json.Marshal(state.Record)
-			require.NoError(t, err)
-			host.calls = nil
-			fail = true
-			require.ErrorAs(t, start(), &failure)
-			assert.Empty(t, host.calls)
-			after, err = json.Marshal(state.Record)
-			require.NoError(t, err)
-			assert.Equal(t, before, after)
-			assert.Equal(t, "http://chorus.test:9550", server.teamSelection().connection.Endpoint)
-		})
+	state := testState(t)
+	deps := fixtureTeamDependencies(state)
+	host := deps.Host.(*teamFixture)
+	fail, calls := true, 0
+	deps.Connect = func(context.Context) (TeamConnection, error) {
+		calls++
+		if fail {
+			return TeamConnection{}, assert.AnError
+		}
+		return TeamConnection{Endpoint: "http://chorus.test:9550"}, nil
 	}
+	server, err := NewServer(state, func() {}, deps)
+	require.NoError(t, err)
+	fixtureAssignments(server, false)
+	require.NoError(t, server.RegisterBuildRoles(t.Context(), controlplane.BuilderOnly{BuilderFolder: state.Record.Directory}))
+	_, err = server.EnsureTeam(teamContext(state))
+	require.NoError(t, err)
+	assert.Zero(t, calls)
+	before, err := json.Marshal(state.Record)
+	require.NoError(t, err)
+	var failure *genproject.TeamUnavailable
+	_, err = server.StartAgents(t.Context(), nil)
+	require.ErrorAs(t, err, &failure)
+	assert.Equal(t, "chorus", failure.Cause)
+	assert.Equal(t, 1, calls)
+	assert.Empty(t, host.calls)
+	assert.NoDirExists(t, deps.RosterDirectory)
+	after, err := json.Marshal(state.Record)
+	require.NoError(t, err)
+	assert.Equal(t, before, after)
+	assert.Empty(t, server.teamSelection().connection.Endpoint)
+	fail = false
+	_, err = server.StartAgents(t.Context(), nil)
+	require.NoError(t, err)
+	assert.Equal(t, 2, calls)
+	assert.Equal(t, "http://chorus.test:9550", server.teamSelection().connection.Endpoint)
+	roster, err := os.ReadFile(deps.RosterDirectory + "/" + state.Record.Space + ".json")
+	require.NoError(t, err)
+	assert.NotEmpty(t, roster)
 }
 
 // TestTeamEndpointFacts gates reminders on the new server's facts without

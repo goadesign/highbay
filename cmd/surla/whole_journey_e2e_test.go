@@ -325,16 +325,15 @@ func (j *wholeJourney) serveProject(t *testing.T) {
 	ctx, cancel := context.WithTimeout(t.Context(), time.Minute)
 	defer cancel()
 	management := projectClient(state)
+	attached, err := management.AttachGuide(ctx, &genproject.AttachGuidePayload{})
+	require.NoError(t, err)
+	assert.NotEmpty(t, attached.Handle)
+	assert.False(t, attached.AdoptedHerdr, "the fixture guide connects outside Herdr")
 	team, err := management.EnsureTeam(ctx)
 	require.NoError(t, err)
-	j.space = team.Space
-	require.Len(t, team.Roles, 1, "only the guide works before a build")
+	assert.Empty(t, team.Space)
+	require.Len(t, team.Roles, 1, "only the guide is registered before a build")
 	assert.Equal(t, "guide", team.Roles[0].Role)
-	assert.False(t, team.Roles[0].Running)
-	assert.Equal(t, "opened", team.Dialog, "the launcher opens for the guide")
-	roster := j.roster(t)
-	require.Len(t, roster.Roles, 1, "the roster names no worker credential before a build")
-	assert.Equal(t, team.Roles[0].Handle, roster.Roles[0].Handle)
 
 	link, err := management.BrowserLink(ctx)
 	require.NoError(t, err)
@@ -418,7 +417,9 @@ func (j *wholeJourney) startBuild(t *testing.T) {
 	j.startedAt = started.Build.StartedAt
 	team, ok := started.Team.AsReady()
 	require.True(t, ok, "the team is ready: %s", started.Team.Kind())
-	assert.Equal(t, "opened", team.Dialog, "the launcher opens for the new workers")
+	assert.Equal(t, "available", team.HerdrMode)
+	require.NotEmpty(t, team.Space)
+	j.space = team.Space
 	handles := map[string]string{}
 	for _, role := range team.Roles {
 		handles[role.Role] = role.Handle
@@ -436,15 +437,20 @@ func (j *wholeJourney) startBuild(t *testing.T) {
 		"the working copies do not show in the project's git status")
 
 	roster := j.roster(t)
-	credentials := map[string]string{}
+	require.Len(t, roster.Roles, 2)
 	for _, role := range roster.Roles {
 		assert.Equal(t, handles[role.Role], role.Handle, "the roster lists the team's %s", role.Role)
-		require.Len(t, role.Connections, 1)
-		raw, err := os.ReadFile(role.Connections[0].CredentialFile)
+		assert.Empty(t, role.Connections)
+	}
+	saved, err := project.Discover(filepath.Dir(j.state.Dir), j.state.Record.Directory)
+	require.NoError(t, err)
+	credentials := map[string]string{}
+	for handle, role := range saved.Record.Agents {
+		raw, err := os.ReadFile(saved.AgentFile(handle))
 		require.NoError(t, err)
 		credentials[role.Role] = string(raw)
 	}
-	require.Len(t, credentials, 3, "the start adds the builder and the test writer to the guide")
+	require.Len(t, credentials, 3, "the start registers both workers alongside the guide")
 	assert.NotEqual(t, credentials["guide"], credentials["builder"])
 	assert.NotEqual(t, credentials["guide"], credentials["test_writer"])
 	assert.NotEqual(t, credentials["builder"], credentials["test_writer"])

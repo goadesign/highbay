@@ -40,6 +40,10 @@ type (
 		sessions map[string]string
 		// team owns serialized, bounded team effects.
 		team teamOperation
+		// status reads the control plane's current project stage for local management.
+		status func(context.Context) (*genproject.ProjectStatus, error)
+		// openViews is the composition root's local browser opener.
+		openViews func(context.Context, string) error
 		// now supplies the link-expiration clock; tests replace it deterministically.
 		now func() time.Time
 		// build is the BuildIdentity read when the server was created, before any later
@@ -199,7 +203,9 @@ func (s *Server) Identity(ctx context.Context) (*genproject.ProjectIdentity, err
 	if err := managementOnly(ctx, "identity"); err != nil {
 		return nil, err
 	}
+	s.state.mu.Lock()
 	r := s.state.Record
+	s.state.mu.Unlock()
 	return &genproject.ProjectIdentity{ProjectID: r.ID, Directory: r.Directory, Owner: r.Owner, Build: &s.build}, nil
 }
 
@@ -217,6 +223,12 @@ func (s *Server) BrowserLink(ctx context.Context) (*genproject.BrowserLinkResult
 	if err := managementOnly(ctx, "browser_link"); err != nil {
 		return nil, err
 	}
+	return s.newBrowserLink()
+}
+
+// newBrowserLink mints a browser-only authority shared by the CLI and fixed
+// opener paths. The opener's caller never receives the credential.
+func (s *Server) newBrowserLink() (*genproject.BrowserLinkResult, error) {
 	token, err := randomCredential()
 	if err != nil {
 		return nil, err
@@ -232,6 +244,44 @@ func (s *Server) BrowserLink(ctx context.Context) (*genproject.BrowserLinkResult
 	expires := now.Add(2 * time.Minute)
 	s.links[token] = expires
 	return &genproject.BrowserLinkResult{URL: s.state.Origin() + "/views#link=" + token, ExpiresAt: expires.Format(time.RFC3339Nano)}, nil
+}
+
+// BindStatusReader installs the read-only project view before the server listens.
+func (s *Server) BindStatusReader(read func(context.Context) (*genproject.ProjectStatus, error)) {
+	s.status = read
+}
+
+// Status returns the project's public presentation facts to local management.
+func (s *Server) Status(ctx context.Context) (*genproject.ProjectStatus, error) {
+	if err := managementOnly(ctx, "status"); err != nil {
+		return nil, err
+	}
+	if s.status == nil {
+		return nil, &genproject.TeamUnavailable{Name: "team_unavailable", Cause: "project_state"}
+	}
+	return s.status(ctx)
+}
+
+// BindViewsOpener supplies the local browser effect before the server listens.
+func (s *Server) BindViewsOpener(open func(context.Context, string) error) {
+	s.openViews = open
+}
+
+// OpenViews opens a fresh session link via the local browser integration.
+// The control plane checks the caller purpose before invoking this callback.
+func (s *Server) OpenViews(ctx context.Context) error {
+	if s.openViews == nil {
+		return errors.New("local browser opener is unavailable")
+	}
+	link, err := s.newBrowserLink()
+	if err != nil {
+		return err
+	}
+	if err := s.openViews(ctx, link.URL); err != nil {
+		// The command error may contain the link, which grants user authority.
+		return errors.New("the local browser could not open Surla views")
+	}
+	return nil
 }
 
 // ExchangeBrowserLink atomically consumes one valid link and creates a random memory-only session.

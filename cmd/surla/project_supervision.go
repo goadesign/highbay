@@ -30,13 +30,16 @@ type (
 		client    *http.Client
 		chorusURL string
 	}
-	// teamLabels decodes only the four labels needed for ownership and placement.
+	// teamLabels decodes only the labels needed for ownership and placement.
 	// Launcher options and arbitrary terminal labels never enter retained state.
 	teamLabels struct {
 		Project string `json:"chorus.project"`
 		Space   string `json:"herdr.space"`
 		Handle  string `json:"chorus.handle"`
 		Tab     string `json:"herdr.tab"`
+		Role    string `json:"chorus.role"`
+		Swarm   string `json:"chorus.swarm"`
+		Agent   string `json:"chorus.agent"`
 	}
 	// teamTerminalFacts is the external Herdr projection, excluding all free text.
 	teamTerminalFacts struct {
@@ -76,12 +79,7 @@ func (o teamObservations) FindTerminals(ctx context.Context, selection project.T
 
 // ReadTerminal loads only narrow facts for an identifier the owner already established.
 func (o teamObservations) ReadTerminal(ctx context.Context, address string) (project.TeamTerminal, error) {
-	var result teamTerminalFacts
-	err := o.commands.json(ctx, o.commands.core, &result, "get", address, "--json")
-	if err == nil && result.Address != address {
-		err = errors.New("Herdr returned a different terminal")
-	}
-	return result.terminal(), err
+	return o.commands.ReadTerminal(ctx, address)
 }
 
 // Follow subscribes separately per registered handle because Herdr label filters
@@ -167,7 +165,10 @@ func (facts teamTerminalFacts) terminal() project.TeamTerminal {
 
 // values materializes only the ownership and tab facts consumed by the project owner.
 func (labels teamLabels) values() map[string]string {
-	return map[string]string{"chorus.project": labels.Project, "herdr.space": labels.Space, "chorus.handle": labels.Handle, "herdr.tab": labels.Tab}
+	return map[string]string{
+		"chorus.project": labels.Project, "herdr.space": labels.Space, "chorus.handle": labels.Handle,
+		"herdr.tab": labels.Tab, "chorus.role": labels.Role, "chorus.swarm": labels.Swarm, "chorus.agent": labels.Agent,
+	}
 }
 
 // Surla itself runs in a Core terminal: a deliberate Core stop ends the server

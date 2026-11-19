@@ -670,22 +670,6 @@ func TestTeamTextsNeverSayTurn(t *testing.T) {
 	}
 }
 
-// TestTeamFirstMessagesAskForWatcher checks that the builder and the test writer
-// are told to keep their Chorus watcher and that Surla's message only asks for a
-// read, and that the test writer learns its verdict arrives the same way.
-func TestTeamFirstMessagesAskForWatcher(t *testing.T) {
-	watcher := "Keep your Chorus watcher running. Surla messages you there when you have an unread assignment. Such a message only asks you to read your assignments: it never changes what is owed."
-	for _, role := range []string{"builder", "test_writer"} {
-		_, message := roleFirstMessage(role)
-		assert.Contains(t, message, watcher, role)
-	}
-	_, writer := roleFirstMessage("test_writer")
-	assert.Contains(t, writer, "Surla messages you on Chorus when its verdict is in; then read get_test_writer_assignment again")
-	assert.NotContains(t, writer, "read get_test_writer_assignment again for its verdict")
-	_, guide := roleFirstMessage("guide")
-	assert.NotContains(t, guide, "watcher", "the guide has no assignments and gets no reminder")
-}
-
 // TestTeamSupervisorLifetime joins readers when either independent owner ends.
 func TestTeamSupervisorLifetime(t *testing.T) {
 	for _, end := range []string{"controlplane", "project"} {

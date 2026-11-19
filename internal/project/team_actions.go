@@ -6,6 +6,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"slices"
 
 	genproject "github.com/goadesign/surla/gen/project"
 	gensurla "github.com/goadesign/surla/gen/surla"
@@ -22,8 +23,19 @@ func (s *Server) ReadTeam(ctx context.Context) (*gensurla.TeamSnapshot, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	selection := s.teamSelection()
-	result := &gensurla.TeamSnapshot{Team: selection.Team, Roles: make([]*gensurla.TeamRoleState, 0, len(selection.Roles))}
+	selection, record := s.teamState()
+	result := &gensurla.TeamSnapshot{
+		Team: selection.Team, HerdrMode: s.herdrMode(record.Tab),
+		Roles:            make([]*gensurla.TeamRoleState, 0, len(selection.Roles)),
+		SavedChoices:     make(map[string]*gensurla.RoleAgentChoice, len(record.SavedChoices)),
+		DismissedNotices: append([]string{}, record.DismissedNotices...),
+	}
+	for role, saved := range record.SavedChoices {
+		choice := gensurla.RoleAgentChoice(saved)
+		choice.Model = cloneChoiceOption(choice.Model)
+		choice.Thinking = cloneChoiceOption(choice.Thinking)
+		result.SavedChoices[role] = &choice
+	}
 	s.team.observationMu.RLock()
 	defer s.team.observationMu.RUnlock()
 	for _, role := range selection.Roles {
@@ -34,25 +46,15 @@ func (s *Server) ReadTeam(ctx context.Context) (*gensurla.TeamSnapshot, error) {
 		if observation, ok := s.team.observed[role.Role]; ok && observation.handle == role.Handle && observation.space == selection.Space && observation.endpoint == selection.connection.Endpoint {
 			value = observation.public
 		}
+		if s.team.headless.running(role.Role) {
+			value.State = "working"
+		}
+		if role.Role == "guide" && (value.State == "ended" || value.State == "not_started") {
+			result.HerdrMode = s.herdrMode("")
+		}
 		result.Roles = append(result.Roles, &value)
 	}
 	return result, nil
-}
-
-// StartAgents shares the existing private ensureTeam workflow and its accepted-work lifetime.
-// The control plane authorizes the user once; this method does not repeat entry policy.
-func (s *Server) StartAgents(ctx context.Context) (*gensurla.ProjectTeam, error) {
-	ctx, cancel := s.acceptedTeamContext(ctx)
-	defer cancel()
-	result, err := s.ensureTeam(ctx)
-	if err != nil {
-		return nil, userTeamError(err)
-	}
-	roles := make([]*gensurla.ProjectTeamRole, 0, len(result.Roles))
-	for _, role := range result.Roles {
-		roles = append(roles, &gensurla.ProjectTeamRole{Role: role.Role, Handle: role.Handle, Running: role.Running})
-	}
-	return &gensurla.ProjectTeam{Team: result.Team, Space: result.Space, Dialog: result.Dialog, Step: result.Step, Roles: roles}, nil
 }
 
 // RegisterBuildRoles durably records the accepted build's exact worker roles and folders.
@@ -103,12 +105,15 @@ func (s *Server) RegisterBuildRoles(ctx context.Context, folders controlplane.Bu
 func (s *Server) ShowPane(ctx context.Context, role string) error {
 	s.team.Lock()
 	defer s.team.Unlock()
+	if !s.team.dependencies.HerdrAvailable {
+		return gensurla.MakePaneUnavailable(errors.New("this role runs without a Herdr pane"))
+	}
 	host := s.team.dependencies.Host
 	overlays, err := host.Overlays(ctx)
 	if err != nil {
 		return userTeamError(teamUnavailable(ctx, "overlays", "herdr"))
 	}
-	if len(overlays) > 0 {
+	if slices.ContainsFunc(overlays, func(name string) bool { return name != "surla" }) {
 		return gensurla.MakeWindowBusy(errors.New("close the open Herdr dialog before showing a pane"))
 	}
 	selection := s.teamSelection()
@@ -121,11 +126,8 @@ func (s *Server) ShowPane(ctx context.Context, role string) error {
 	if handle == "" || selection.Space == "" {
 		return gensurla.MakePaneUnavailable(errors.New("this role has no owned pane to show; start its agent"))
 	}
-	if selection.connection.Observer == nil {
-		return gensurla.MakeTeamUnavailable(errors.New("team observations are unavailable"))
-	}
 	// Discover through all three labels before reading any terminal facts.
-	terminals, err := selection.connection.Observer.FindTerminals(ctx, TeamSelection{Root: selection.Root, Space: selection.Space, Team: selection.Team, Roles: []TeamRole{{Role: role, Handle: handle}}})
+	terminals, err := host.Terminals(ctx, selection.Root, selection.Space, []string{handle})
 	if err != nil {
 		return userTeamError(teamUnavailable(ctx, "terminals", "herdr"))
 	}
@@ -147,13 +149,13 @@ func (s *Server) ShowPane(ctx context.Context, role string) error {
 		return userTeamError(teamUnavailable(ctx, "spaces", "herdr"))
 	}
 	for _, space := range spaces {
-		if space.ID != selection.Space {
+		if space.ID != selection.Space || space.Machine != nil {
 			continue
 		}
 		for _, tab := range space.Tabs {
 			for _, pane := range tab.Terminals {
 				if pane.Terminal == address {
-					fresh, err := selection.connection.Observer.ReadTerminal(ctx, address)
+					fresh, err := host.ReadTerminal(ctx, address)
 					if err != nil || !selection.owns(fresh, handle) || fresh.State != "live" {
 						return gensurla.MakePaneUnavailable(errors.New("the requested pane changed; read the team again"))
 					}
@@ -171,6 +173,12 @@ func (s *Server) ShowPane(ctx context.Context, role string) error {
 
 // teamSelection copies only immutable selection facts, never credentials or external replies.
 func (s *Server) teamSelection() TeamSelection {
+	selection, _ := s.teamState()
+	return selection
+}
+
+// teamState gives effects and pure readers one consistent record snapshot.
+func (s *Server) teamState() (TeamSelection, Record) {
 	s.state.mu.Lock()
 	defer s.state.mu.Unlock()
 	record := s.state.Record
@@ -192,7 +200,7 @@ func (s *Server) teamSelection() TeamSelection {
 			}
 		}
 	}
-	return selection
+	return selection, record
 }
 
 // userTeamError preserves the owner's typed space conflict and sanitizes other
@@ -206,7 +214,7 @@ func userTeamError(err error) error {
 	}
 	var domain *goa.ServiceError
 	if errors.As(err, &domain) && domain.Name == "window_busy" {
-		return gensurla.MakeWindowBusy(errors.New("close the open Herdr dialog before starting agents"))
+		return gensurla.MakeWindowBusy(errors.New("close the open Herdr dialog before showing a pane"))
 	}
 	var unavailable *genproject.TeamUnavailable
 	if !errors.As(err, &unavailable) {
@@ -231,7 +239,7 @@ func userTeamStep(cause string) string {
 		// retries whichever action the user took.
 		return "Herdr did not complete a team command; open the Herdr app, then try again"
 	case "saved_space":
-		return "This project's saved Herdr space has an ID this version of Surla no longer accepts. Close that space in Herdr (its agents stop with it), then start the agents again; Surla will prepare a replacement space."
+		return "Close this project's obsolete Herdr space, then start the agents again."
 	case "roster_folder":
 		return "Herdr's launcher roster folder could not be written; make data/chorus-launcher/rosters in Herdr's app folder (~/.config/herdr-app unless HERDR_APP_HOME is set) writable by this account, then start the agents again"
 	case "project_state":
