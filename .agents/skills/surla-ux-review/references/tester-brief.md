@@ -31,8 +31,10 @@ excuse things a real user cannot see.
 ## The study
 
 - **Research questions:** Can a first-time user reach a working result with
-  Surla alone? Where do they hesitate, misread, or take a wrong action, and
-  why? Which bugs block them?
+  Surla alone? After one-time installation/setup, can they keep the current
+  coding-agent conversation and make human decisions in the browser through
+  a verified, approved merge without typing terminal commands? Where do they
+  hesitate, misread, or take a wrong action, and why? Which bugs block them?
 - **Participant profile:** {{PARTICIPANT_PROFILE}}
 - **Task:** {{TASK}}
 - **Environment:** {{ENVIRONMENT_FACTS}}
@@ -42,12 +44,14 @@ excuse things a real user cannot see.
   {{CODING_AGENTS}}
 - **A rule the participant must follow:** it never compiles, generates code
   from, or runs its product's code itself (`goa gen`, `go build`, `go run`,
-  `go test`). Surla's own commands, including `surla init` on its starter
-  templates, are allowed. It does those steps only through Surla's commands,
-  even where the docs show the direct command. These commands run the product's
+  `go test`). Surla's documented operations, including starter initialization,
+  are allowed. It does those steps only through Surla,
+  even where the docs show the direct command. These operations run the product's
   code as ordinary processes with the user's file and network access; working
   copies and process groups do not confine it. A coding-agent sandbox is a
-  separate environment restriction. Never hint a direct product-code step.
+  separate environment restriction. Never hint a direct product-code step or
+  replace the documented agent-driven entrypoint with hidden HTTP
+  configuration or lifecycle commands.
   A participant who needs one has found a missing capability, not made a
   wrong turn.
 
@@ -59,9 +63,17 @@ excuse things a real user cannot see.
    for example a scaffolded project, a confirmed Change Card, an architecture
    preview, a passing verification. Mark any milestone the environment above
    cannot support. The participant never sees this list.
+   Separate installation/setup, later user-entered terminal commands,
+   commands the coding agent runs internally, and harness-only invocations. Include agreement,
+   build, verification, approval and merge as distinct outcomes, and record
+   whether the original guide session remains usable. Cover the applicable
+   environment paths without steering the participant: inline agent choices,
+   missing Herdr, one installed family, builder-only configured tests, page
+   recovery, persistence of choices and dismissed recommendations, and Merge
+   refusal/recovery. Unexercised paths stay unexercised.
    Also note, as your first observations, any gap you can already see between
-   the README and this setup. For example, the README never says how to get
-   Surla.
+   the README and this setup, such as an unavailable client session reload
+   or browser action. Distinguish harness limits from product failures.
 3. Write a private **change plan** in `observations.md` (see "Mid-build
    changes" below): the changes you will hand the participant partway
    through the build, with one trigger each, the exact text, what each needs
@@ -104,7 +116,10 @@ one level at a time, and record every hint:
    facilitator copies that one document to the participant.
 3. The step itself, stated plainly.
 
-A hint marks the step "completed with help" in the results. Hints are
+A hint marks the step "completed with help" in the results. A terminal
+workaround that the user must enter after setup can complete the product task
+while still failing the
+zero-command journey goal; record both outcomes. Hints are
 evidence of where the UX failed, not a way to rescue the session.
 
 **Record what you see** in `observations.md` as numbered observations. Each
@@ -117,9 +132,9 @@ one gets the step where it happened, what the participant did or said
   output, or docs were unclear.
 - **Documentation gap:** the participant needed something the README does
   not say or only links to.
-- **Missing capability:** the participant needed a step that compiles,
-  generates code from, or runs its product's code, such as `goa gen` after a
-  design change, and Surla offers no command to do it. If that
+- **Missing capability:** the participant needed a step to initialize,
+  compile, generate, run, recover or merge its product, and Surla's documented
+  MCP/browser workflow offers no operation to do it. If that
   blocks the goal, decide `stop_for_bug`.
 - **Positive:** something that worked well and should be kept.
 

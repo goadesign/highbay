@@ -12,8 +12,8 @@ an operation, who may call it, what it returns and how it refuses.
 
 | Term | Meaning |
 | :--- | :--- |
-| **The user** | The person who runs `surla` in a project folder. Only the user confirms a change, starts a build and approves a result, all on the views page: the page the server serves to the user's browser, which the README and How Surla Works call the page. |
-| **The server** | The project's Surla server: one per project folder, started by `surla`. It keeps the Change Cards, builds, verification runs and approvals, and it serves the operations below over HTTP and MCP. |
+| **The user** | The person who describes the goal to the guide. Only the user confirms a change, starts a build, approves a result and requests a merge, on the views page: the page the server serves to the user's browser, which the README and How Surla Works call the page. |
+| **The server** | The project's Surla server: one per project folder, started by the guide's first Surla call or by `surla`. It keeps the Change Cards, builds, verification runs and approvals, and it serves the operations below over HTTP and MCP. |
 | **Herdr** | An optional workspace in which the server and agents can run in separate terminals. Its core service is the Herdr core (the commands `herdr-core` and `hc`); its window is the Herdr app (`herdr-app`). A *Herdr space* is the set of tabs that holds one project's terminals. |
 | **Chorus** | The service that launches the project's agent panes in Herdr and carries their messages. The *roster* describes the roles whose panes it can launch. An agent's *watcher* is its background wait for Chorus messages. |
 | **The guide** | The agent the user talks to. It writes the Story and proposes and revises changes. |
@@ -50,7 +50,7 @@ an operation, who may call it, what it returns and how it refuses.
 | **Herdr core** (`herdr-core` and `hc`) | Optional. With `hc` available, the project server starts in a Herdr terminal. | `curl -fsSL https://releases.herdr.dev/core/install.sh \| sh` ([herdr.dev/core](https://herdr.dev/core/)) |
 | **Herdr app** (`herdr-app`) | Optional. With Herdr core, the app shows the team's panes. | `curl -fsSL https://releases.herdr.dev/app/install.sh \| sh` ([herdr.dev](https://herdr.dev/)) |
 | **Chorus v0.14.0 or later** | Pane launch and agent messaging for a Herdr team. Background workers can run without Chorus. | `curl -fsSL https://raw.githubusercontent.com/goadesign/chorus/main/scripts/install.sh \| sh`; update with `chorus update -yes` |
-| **A coding agent** | Install an agent for each role and give it an authenticated Surla MCP connection. One installed family can fill both worker roles. | — |
+| **A coding agent** | Run `surla up` once to register the integration with detected clients. One installed family can fill both worker roles. Background workers need a supported CLI and explicit non-interactive permission. | — |
 | **Git 2.45 or newer**, with a name and address | Startup requires support for `--no-lazy-fetch`, so Surla's Git reads do not download missing objects. Every build needs the project in a Git repository with a first commit and a Git name and address, with or without stored verification settings, and so does verification, which needs the build. Without stored verification settings, live targets need the repository too. Surla records accepted tests, and any uncommitted files a working copy holds when it joins a new build, as commits under your Git identity. | Install Git 2.45 or newer on `PATH`; `git config --global user.name …` and `user.email …` configure its identity. |
 | **Docker** (Docker Desktop, or another local engine on a `unix://` socket) | `check_project` and `update_dependencies` run Go in Linux containers. The first check pulls `golang:1.27.3`. | [docker.com](https://www.docker.com/) |
 | **Temporal CLI** | Only to run the Orders evaluator, which starts a local Temporal server for its scenarios: when Surla verifies the Orders project or starts a live target of it, when `surla verify` runs that evaluator, and in the full-suite tests that run it (the `examples/orders` acceptance suite and the `e2e` tests of `./internal/verify` and `./cmd/surla`). | `brew install temporal` |
@@ -64,6 +64,10 @@ missing opener or Git capability.
 ---
 
 ## Terminal and browser automation
+
+The ordinary journey starts in your coding agent with `/surla` (`$surla`
+in Codex) after one-time [`surla up`](#surla-up). These terminal entrypoints
+remain available for operators and automation.
 
 Run `surla --print-link` in the project folder to start or attach and receive
 one JSON object on stdout, `{ "url": "...", "expires_at": "..." }`. Startup
@@ -89,6 +93,61 @@ arguments`, `surla verification` and `surla promotion` with their usage line
 others with `surla: unexpected arguments [...]`. An unknown command, such as
 `surla build`, answers `surla: unknown command "build"; run "surla help" to
 list the commands`.
+
+### `surla up`
+
+Run once after installing Surla. It performs [`surla setup -global`](#surla-setup--global),
+then starts Chorus if installed. Missing Chorus is reported and does not
+prevent setup; without it, agents have no Chorus messaging. `SURLA_NO_SETUP=1`
+skips registration and only starts Chorus when present. This command does
+not start a project server.
+
+After setup, open your project folder in a coding agent and invoke `/surla`
+(`$surla` in Codex). Reload its MCP configuration or start a new session if
+Surla is not yet listed.
+
+### `surla setup -global`
+
+Registers the installed executable as the global `surla` MCP server with
+`args: ["stdio"]`, and installs `/surla` in client and shared skill folders.
+MCP registration targets are Claude Code, Codex, Cursor, Antigravity,
+Gemini CLI, Windsurf, GitHub Copilot CLI and VS Code. Setup also writes the
+shared `~/.agents/skills/surla/SKILL.md`. It detects client settings folders or
+supported CLI executables, so adding a client later requires setup again.
+
+Setup preserves other servers and settings. An unchanged registration is
+left alone. Invalid or unsupported configuration stops setup with the file
+and recovery named; earlier successful file writes remain. Run the installed
+binary: a temporary `go run` executable cannot be registered for later use.
+Without `-global`, setup explains the flag and writes nothing. Unlike
+`surla up`, this command starts no Chorus server.
+
+When Herdr's app folder exists, setup installs the Surla floating companion
+in `mods/surla/`. It shows the current project stage and role attention,
+focuses live panes, and offers **Open Page**. It reads project status and
+holds no Surla browser-session credential. It does not change Herdr's shipped
+workspace layout.
+
+### `surla stdio`
+
+The MCP entrypoint installed in coding-agent configuration. It reads
+newline-delimited JSON-RPC from stdin and writes only protocol responses to
+stdout. Diagnostics go to stderr. The coding agent starts it in its working
+folder; users normally invoke the installed skill rather than this command.
+
+Initialization, ping and tool/resource discovery work without creating
+project state or starting a server. A guide's first tool call or resource
+read starts or attaches to the project's server, hands over allowlisted
+provider settings from its environment, and attaches the current session as
+the guide. In Herdr, a compatible live model pane can be adopted in place.
+The guide calls [`open_views`](#open_views) to open the page without receiving
+a browser credential.
+
+The physical working folder determines the role. A folder inside
+`.surla-build` or `.surla-tests`, including nested modules, connects only as
+its assigned worker. It never starts a server or falls back to guide access.
+A missing running server or active assignment returns an error; the guide
+and user resolve that build before the worker retries.
 
 <a id="surla-serve"></a>
 ### `surla` and `surla stop`
@@ -1348,14 +1407,16 @@ answers `applied_in_store: false` and `requires_rebuild: true`, with a
 
 The user's **Apply** in the Live target view. It chooses, without a restart,
 the model that live targets started afterwards receive: a direct provider,
-whose request settings `surla` handed to the server from the shell where it
-ran ([`hand_over_model_settings`](#hand_over_model_settings)), or a plaintext
+whose request settings the guide's `surla stdio` connection or bare `surla`
+handed to the server from its environment
+([`hand_over_model_settings`](#hand_over_model_settings)), or a plaintext
 gRPC `goa-ai` model gateway at a hostname or IP address and port 1–65535,
 such as `127.0.0.1:53114` or `[::1]:53114`, without a URL scheme or path.
 Surla validates its syntax without trying to connect. A running target keeps its model. Keys never
 travel in this request or through MCP. The choice and the held settings last
 until the server stops; after a restart no model is chosen, so the next
-`surla` that hands settings over selects that provider's default model again.
+guide attachment or bare `surla` hand-over selects that provider's default
+model again.
 Verification does not use the choice.
 
 | Refusal | When |
@@ -1578,14 +1639,10 @@ release binaries. Then it saves the approval, after checking that the
 revision and its accepted tests did not change meanwhile. The approval names
 two commits: `candidate_commit`, the builder's commit on `surla/build-<n>`,
 and `suite_commit`, the tests commit on `surla/tests-<n>` (or the stored
-evaluator's commit), with `test_source`. Because the builder commits in
-`.surla-build` rather than in the project folder, while the open build shows
-`passed` the page gives the `git merge <commit>` commands to run in the project
-folder: first `git merge <candidate_commit>` (verified on `surla/build-<n>`),
-and then, for written tests, `git merge <suite_commit>` (verified on
-`surla/tests-<n>`); with stored verification settings, only
-`git merge <candidate_commit>` is shown. Approval records permission to
-merge. See [`merge_change`](#merge_change) for the separate user operation.
+evaluator's commit), with `test_source`. Approval records permission to
+merge; it changes no branch. The page offers **Merge into current branch**
+for the current approved result and keeps manual instructions as a secondary path. See
+[`merge_change`](#merge_change) for the separate user operation.
 
 | Refusal | When and the step |
 | --- | --- |
@@ -2046,7 +2103,8 @@ verdict, returns at once and wakes the report checker.
 
 The server tracks each team's role state in memory. In a Herdr workspace,
 Chorus launches role panes and reports which agents are waiting for messages.
-Open Herdr and run `chorus up` before launching the team. To change
+One-time `surla up` starts Chorus when installed; the guide attaches in place
+through `surla stdio`. Open Herdr before launching pane workers. To change
 the managed address, run `chorus up -addr :9550`, then use **Start workers** to
 update the team's connection. A failed connection check leaves the page
 available. Once a roster exists, Chorus can inspect the team's panes. See
@@ -2057,8 +2115,16 @@ processes without Chorus. It waits for in-flight test report checks and
 verification before requesting follow-up work. Each role gets at most three
 invocations per build during the running server's supervision, with a
 30-minute deadline per invocation. Shutdown stops and waits for the managed
-worker process groups. Agents use their own credentials and need an
-authenticated Surla MCP connection to work on their assignments.
+worker process groups. Agents use their own credentials and
+the globally registered `surla stdio` connection to work on their assignments.
+
+Build and Team show agent, model and permission choices inline. Preferences
+are saved by role in the project. A running role keeps its session; the
+picker needs selections only for roles required by the requested start.
+Configured tests need only a builder. The one-family recommendation appears
+only when a new build needs a test writer too. That recommendation and those
+for working outside Herdr or missing Herdr are dismissible and persist for
+the project. A missing supported agent produces an installation/retry step.
 
 ### `get_team`
 
@@ -2105,8 +2171,12 @@ A user API client may send `choices` keyed by role. For each choice, pass
 `client` and `program` from [`list_team_agent_options`](#list_team_agent_options)
 and the required boolean `yolo`. When supported, pass a `model` or
 `thinking` effort. Omitting these uses the client's defaults. `yolo: false`
-uses the normal permission mode. With `yolo: true`, the effect depends on
-the selected client. Read its `yolo_effect` before choosing.
+uses the client's normal permission mode. When Herdr is unavailable, the
+browser asks you to enable **Skip permission prompts (YOLO)** for each client
+that supports the switch, and confirm **I agree to run these workers in the
+background.** before starting. Clients without a separate YOLO switch use
+their configured permissions. Read the selected client's `yolo_effect`; its
+installed CLI must also support background execution.
 
 For example, if discovery returns `/path/to/codex`, send this body to
 start a missing guide in Herdr.
@@ -2125,7 +2195,7 @@ running keeps its existing session.
 Surla starts a guide only when this operation receives an explicit
 `choices.guide` in Herdr. It refuses a guide start if a guide already has a
 running pane or a Chorus watcher. The browser's **Start workers** sends the
-worker start request without choices. [`start_build`](#start_build) accepts
+selected choices for workers that need starting. [`start_build`](#start_build) accepts
 worker choices only.
 
 An unavailable client, unsupported option or already running guide is
@@ -2137,7 +2207,12 @@ and preferences saved for the next request.
 
 `GET /team/agent-options`. Only the user's browser session may call it.
 Discovers installed coding-agent executables and their options on demand.
-The response's `agents` entries include `client`, `program`, `title`,
+The response requires `agents` and `build_roles`. `build_roles` is
+`["builder"]` with stored verification settings, or
+`["builder", "test_writer"]` otherwise: the control plane derives the roles
+a new build needs from its current test source, even before any role is
+registered. The response's `agents` entries include `client`, `program`,
+`title`,
 `models`, `efforts`, `model_supported`, `thinking_supported`,
 `yolo_supported`, optional `yolo_effect` and `headless_supported`.
 An empty model list can accompany support for custom model IDs.
@@ -2165,7 +2240,9 @@ Outside Herdr, omit the terminal ID. The result includes `team`, the guide's
 `handle`, `adopted_herdr` and `herdr_mode`. The integration gives the coding
 agent its role credential from `agents/<handle>` in the private project
 state folder. The project serves MCP at `/mcp` and authenticates the agent
-with that bearer credential. Registration also works without pane adoption.
+with that bearer credential. `surla stdio` performs this attachment for the
+current guide session; no second guide or launcher is needed. Registration
+also works without pane adoption.
 
 **Reminders.** Each version of an assignment that a worker role with work on
 the open build has not read is a generation: a new build gives each of its
@@ -2315,7 +2392,9 @@ name, such as `Confirm change: shop`, from the facts the page last read;
 after a failed read of the changes or the team, a lost update connection or
 an ended session, it names the recovery instead, such as
 `Reconnecting: shop`. Before the exchange succeeds, the title is `Surla`.
-Reloading or closing the tab ends the session; run `surla` for a fresh link.
+Reloading or closing the tab ends the session. Ask the guide to call
+[`open_views`](#open_views), or use **Open Page** in the Herdr companion, to
+open a fresh session. Bare `surla` remains an operator fallback.
 Opening a fresh link in the same tab reloads the page through the normal link
 exchange. If there are unsaved CP1 edits, unadopted proposal answers, Model-form
 edits, or a pending edit request, the page removes the link from the address
@@ -2326,7 +2405,7 @@ The link still expires two minutes after it was printed, not after it was
 pasted. Obtain another link if it expires while you finish editing.
 A used or expired link is reported as such. When the server answers `401`, as
 it does after a restart, the page keeps everything typed visible and
-copyable and says to run `surla` again. Leaving with unsaved edits asks the
+copyable and explains how to ask the guide to reopen the page. Leaving with unsaved edits asks the
 browser to confirm, including for unadopted proposal answers and Model-form edits.
 
 **Every view.** The frame previews at most two lines of the confirmed
@@ -2396,9 +2475,10 @@ open build is `building` or `passed`, it also offers **Drop…**, which asks
 **Drop change `<change_id>`?** with **Drop change** and **Keep building** (when
 `building`) or **Keep this build** (when `passed`), calling
 [`drop_build`](#drop_build). When another change's open build blocks starting a
-build (`previous_change_open`), a blocking panel names that change, shows its
-`git merge` commands when its build is `passed`, and offers **Open change
-`<change_id>`** and **Drop `<change_id>`’s build…**. Rebuild and drop questions
+build (`previous_change_open`), a blocking panel names that change, explains
+that a passed result still needs review and approval before merging, and
+offers **Open change `<change_id>`** and **Drop `<change_id>`’s build…**.
+Rebuild and drop questions
 are asked one at a time, and opening the rebuild question first re-reads the
 saved build. It refuses to start from an
 unconfirmed change (`Confirm the change before building it.`) or an older
@@ -2408,12 +2488,12 @@ or `dropped`, with any kept branches), when the build started, the required
 test count, whether
 each assignment is read, the test writer's state, the accepted tests commit,
 the `not_judged` sentence, and, when tests need changes, the findings read
-with [`get_test_findings`](#get_test_findings). While the open build's
-`taking.state` is `passed`, it shows **To take this change, run in the project
-folder:** with `git merge <candidate_commit>` (verified on `surla/build-<n>`)
-first and then, for written tests, `git merge <tests_commit>` (verified on
-`surla/tests-<n>`). A start's team outcome is shown with the time of that
-start, not as current health.
+with [`get_test_findings`](#get_test_findings). A passed build offers
+**Review result** until its exact result has current approval. Once that
+approval is freshly read, Next offers **Merge into current branch**, and
+**Manual merge instructions** discloses the approved candidate and tests
+commits as a secondary path. A start's team outcome is shown with the time
+of that start, not as current health.
 
 When tests need changes, the test writer is the actor that fixes and reports
 them; **Read findings** opens **What Surla told the test writer**. A matching
@@ -2456,15 +2536,21 @@ historical result does not borrow the current build's completion; a pending or
 failed build read withholds merge/completion guidance, and **Read current
 build** retries that owner read.
 
-The recorded approval shows **Builder's commit** and **Tests' commit**. While
-the current agreement’s open build has `taking.state: passed` and the run is
-an eligible result of that build, it shows **To take this change, run in the
-project folder:** with `git merge <candidate_commit>` first and, for written
-tests, a separate `git merge <tests_commit>`. The branch labels show where
-those commits were verified. An earlier agreement’s build receives no merge
-instruction on Approve; its commit bindings remain readable. Existing Check
-history preserves older results. Approval records permission. Merging uses
-the page's Git instructions or the separate [user API](#merge_change).
+The recorded approval shows **Builder's commit** and **Tests' commit**.
+For an approved result of the current agreement's passed build, Next offers
+**Merge into current branch**. The server rechecks that exact approval and
+merges into the checked-out local branch through [`merge_change`](#merge_change).
+Pending, failed or stale owner reads withhold the action. Git refusals keep the
+approval and show recovery, including any restoration result. A successful
+dated merge receipt names the actual destination branch and short resulting
+commit; **Merge receipt** discloses the full commit and timestamp.
+
+Only while that same live approval is freshly read, the secondary
+**Manual merge instructions** name `git merge <candidate_commit>`
+first and, for written tests, a separate `git merge <tests_commit>`. Branch
+labels show where those commits were verified. An earlier agreement's build
+receives no merge action on Approve; its commit bindings remain readable.
+Existing Check history preserves older results.
 An unverified saved record remains explicitly unverified.
 
 **What the page never shows or does.** It never shows prompt text or

@@ -27,10 +27,9 @@ schemas, validation, durable workflows and tool guardrails from that design at
 **0 LLM tokens**. One agent writes the code; a different agent writes the
 tests; Surla itself judges those tests and runs them against the code, which
 it builds and runs as ordinary processes on your machine, with your file and
-network access. You agree what is built
-and approve the result in your browser. You choose when to merge the
-approved commits into your local branch. The project server reuses compiled
-Go packages for Story refreshes, starter initialization, test-report checks,
+network access. You agree what is built, approve the result, and merge the
+approved commits into your local branch in your browser. The project server
+reuses compiled Go packages for Story refreshes, starter initialization, test-report checks,
 live starts and verification runs.
 Each operation still builds its outputs and runs its checks; a cache hit is never a
 passed check. The cache is a trusted compiler input that programs running as
@@ -39,41 +38,30 @@ you can change; see
 
 ## One change from start to finish
 
-These words appear throughout:
+Install Surla and run [`surla up`](#install) once. Then open your project
+folder in your coding agent and say:
 
-| Term | Meaning |
-| --- | --- |
-| **The server** | The project's Surla server. `surla` starts one per project folder. It keeps what you agreed, who was asked to do what, and what was accepted, and it runs the checks. |
-| **The page** | The server's page in your browser, which the reference calls the views page. You agree on changes and approve results there. |
-| **Herdr** | An optional terminal workspace that shows the team's agents side by side. |
-| **Chorus** | The messaging and pane-launch service for teams in Herdr. |
-| **The guide** | The agent you talk to. It writes the Story and proposes changes. |
-| **The builder** | The agent that writes the application code. |
-| **The test writer** | The agent that writes the change's tests, in its own working copy of the project. |
-| **Story** | A plain description of what the system does, written as Go in the project's design, one flow at a time. |
-| **Flow** | One path through a Story: who starts it, the steps by role, and the outcome. For example, "a customer asks the price of tea and gets it". A flow with a start, an outcome and no open question is *finished*; any other flow is a draft. |
-| **Change Card** | One change the guide proposes: the request, the Story, open questions, concrete examples and the behavior to preserve. |
-| **`request_revision`** | The digest of one saved revision of a Change Card. Previews, verification runs and approvals name the revision they belong to. |
+> `/surla` — build a refund assistant: refunds up to $50 get instant store
+> credit; larger ones wait for a manager.
 
-Run `surla --print-link` to start or attach and print a one-use browser link
-as JSON. Run `surla status --json` to read the existing server's stage and
-team state. See [terminal operation](docs/REFERENCE.md#terminal-and-browser-automation).
+Use `$surla` in Codex. Your current session becomes the **guide**, starts or
+attaches to the project's server, and opens the page where you make the human
+decisions. In an empty folder, it creates the starter and first Git commit
+through Surla. You can keep working in that conversation through the merge.
 
-Here is one change, for example a refund assistant whose rule is "refunds up
-to $50 get instant store credit; larger ones wait for a manager":
+Here is how that change reaches your branch:
 
-1. **Start.** Run `surla` in your project folder to start or attach to its
-   server and open a fresh views page. The server runs in a Herdr terminal
-   when `hc` is available or as a detached background process otherwise.
-2. **Connect a guide.** Use a coding agent with an authenticated Surla
-   MCP connection for the guide role. The local management API can attach
-   an existing guide and adopt its validated Herdr pane. In Herdr, the
-   user API can also start a missing guide with an explicit choice. See
-   [team setup](docs/REFERENCE.md#team-supervision).
-3. **Describe.** Tell the guide what you want. It writes the Story and
-   proposes a Change Card, which appears on the page by itself. The guide
-   can call `open_views` to open a fresh page for you. For the refund rule,
-   the card might ask “Does $50 mean the item subtotal, or the total with
+1. **Start in your agent.** Invoke `/surla` (or `$surla`) in the project
+   folder and describe what you want. The first Surla tool call attaches
+   this session as the guide and starts the server when needed. In Herdr,
+   Surla adopts your existing pane and space when they can belong to this
+   project.
+2. **Open the page.** The guide calls `open_views` to open the project's
+   browser page. If you close or reload it, ask the guide to open it again.
+3. **Describe.** The guide writes the Story, a description of your system's
+   flows in Go, and proposes a Change Card: the saved request, questions,
+   examples and behavior to preserve. It appears on the page by itself.
+   For the refund rule, the card might ask “Does $50 mean the item subtotal, or the total with
    tax and shipping?” and “Does exactly $50.00 get instant credit?”
 4. **Agree.** On the page, answer the questions, check the examples and
    confirm. No agent can confirm for you. If the guide later revises the
@@ -82,12 +70,13 @@ to $50 get instant store credit; larger ones wait for a manager":
 5. **Review the architecture.** Open **Architecture** on the page to inspect
    the agreed revision's saved design. If it needs a change, ask the guide to
    revise the change, then review and adopt its proposal before building.
-6. **Build.** Press **Build this change** on the page. Surla saves the agreed
-   revision and requests the required workers using saved choices or installed
-   defaults. When selecting defaults, it prefers different coding-agent families for the
-   two worker roles and can use one installed family for both. Workers run
-   in Herdr panes where available or in background processes. The builder and
-   test writer work in separate Git working copies, `.surla-build` and
+6. **Build.** Choose agents, models and permissions inline in **Build**,
+   then press **Build this change**. Surla remembers your choices for this
+   project. Defaults prefer different coding-agent families for the worker
+   roles; one installed family can fill both. Workers run in Herdr panes
+   where available or in background processes. Background workers need a
+   supported agent and your explicit permission to run without interactive
+   permission prompts. The builder and test writer work in separate Git working copies, `.surla-build` and
    `.surla-tests`. Surla gives the test writer one required test per finished
    Story flow, plus the confirmed answers, examples and preserved behaviors.
 7. **Tests.** The test writer writes those tests and reports. Surla does not
@@ -114,11 +103,12 @@ to $50 get instant store credit; larger ones wait for a manager":
    server says approval is available, Next offers **Approve this result**.
    Surla checks that the run passed and ran the tests accepted
    for the agreed revision, then records the approval with the builder's
-   commit, the tests commit and the report. Follow the page's Git merge
-   instructions in the project folder, or call
-   [`merge_change`](docs/REFERENCE.md#merge_change) with that approval through
-   the user API. The server operation rechecks the approval and merges into
-   the clean checked-out local branch. Once your branch holds the verified
+   commit, the tests commit and the report. On **Approve**, press
+   **Merge into current branch** to merge into the checked-out local branch.
+   Surla rechecks the current approval and requires clean tracked files. If Git refuses the merge, read
+   the recovery shown on the page; manual merge instructions remain available.
+   See [`merge_change`](docs/REFERENCE.md#merge_change) for the Git checks and
+   recovery contract. Once your branch holds the verified
    work, the build shows **Merged** and Surla stops that build's workers.
    Verification covered the commits in the passed run. To test the resulting
    branch commit, see [`surla verify`](docs/REFERENCE.md#surla-verify).
@@ -135,6 +125,14 @@ agent's state. If a Herdr agent needs you, the page shows an action such as
 **Show guide pane**. The server can send a Chorus message when a worker owes
 an assignment read. After 90 seconds of idling with that assignment unread,
 the page says what to tell it.
+
+In Herdr, workers appear beside the guide and close after the build is merged
+or dropped. The optional Surla companion shows the current stage and roles
+that need you, focuses their panes, and opens the page. Outside Herdr, the
+browser remains the place for your decisions. Recommendations for Herdr are
+dismissible. When a build needs both workers, Surla also recommends a second
+agent family if only one suitable family is available. It remembers these dismissals for
+this project.
 
 You can go back at any point: adopt a revised change, build again, or the test
 writer reports again after findings. Adopting changed content gives it a new
@@ -158,6 +156,22 @@ run records where its tests came from. For the test writer's tests, the
 server's notice that the tests were written by a separate agent on this
 machine and are not isolated from the builder.
 
+These words appear throughout:
+
+| Term | Meaning |
+| --- | --- |
+| **The server** | The project's Surla server. The guide's first Surla call starts or attaches to one per project folder. It keeps what you agreed, who was asked to do what, and what was accepted, and it runs the checks. |
+| **The page** | The server's page in your browser, which the reference calls the views page. You agree on changes and approve results there. |
+| **Herdr** | An optional terminal workspace that shows the team's agents side by side. |
+| **Chorus** | The messaging and pane-launch service for teams in Herdr. |
+| **The guide** | The agent you talk to. It writes the Story and proposes changes. |
+| **The builder** | The agent that writes the application code. |
+| **The test writer** | The agent that writes the change's tests, in its own working copy of the project. |
+| **Story** | A plain description of what the system does, written as Go in the project's design, one flow at a time. |
+| **Flow** | One path through a Story: who starts it, the steps by role, and the outcome. For example, "a customer asks the price of tea and gets it". A flow with a start, an outcome and no open question is *finished*; any other flow is a draft. |
+| **Change Card** | One change the guide proposes: the request, the Story, open questions, concrete examples and the behavior to preserve. |
+| **`request_revision`** | The digest of one saved revision of a Change Card. Previews, verification runs and approvals name the revision they belong to. |
+
 ## Install
 
 Surla needs:
@@ -173,7 +187,10 @@ Surla needs:
   tests its work in Linux containers. Each project retains downloaded
   dependencies across checks; tests mount them read-only and run offline with
   fresh compiler scratch. See [`check_project`](docs/REFERENCE.md#check_project).
-- A coding agent that can connect to Surla over MCP.
+- A coding agent that supports MCP. Setup registers Surla with detected
+  clients; the [setup reference](docs/REFERENCE.md#surla-setup--global)
+  lists them. Background workers need an installed CLI with supported
+  non-interactive execution.
 - For side-by-side agent panes, **Herdr core** (`herdr-core` and `hc`), the
   **Herdr app** (`herdr-app`), and **Chorus v0.14.0** or newer. Without
   Herdr, Surla can run the build workers in the background without Chorus.
@@ -183,13 +200,23 @@ out the version you are reading. From the repository root, run:
 
 ```bash
 go install ./cmd/surla
+surla up
 ```
 
 `go install github.com/goadesign/surla/cmd/surla@latest` installs the latest
 module version available to Go, which may be older than this README and lack
 commands described here. When installing that version, follow its README.
 
-To use the Herdr workspace, install Herdr and Chorus.
+`surla up` registers the `surla stdio` MCP server with detected coding agents
+and installs `/surla` in their skill folders and the shared `.agents` folder,
+preserving other settings. Reload your
+agent's MCP configuration or start a new session if it does not yet show
+Surla. You only need to repeat setup after adding a client or moving the
+Surla executable. `surla setup -global` performs the same registration
+without starting Chorus.
+
+Herdr is optional. For a side-by-side workspace, install Herdr and Chorus,
+then run `surla up` again to install the Surla companion too.
 
 ```bash
 curl -fsSL https://releases.herdr.dev/core/install.sh | sh
@@ -204,50 +231,34 @@ Surla's design and generation steps need no model key; each coding agent
 uses its own sign-in. An application that calls a model needs a key when
 the builder tries prompts on a live target. Export the provider's key, such as
 `ANTHROPIC_API_KEY` or `OPENAI_API_KEY`, with any request settings it needs,
-in the shell where you run `surla`: `surla` hands them to the server, which
-holds them in memory until `surla stop`, and while no model is chosen, live
-targets then use `claude-sonnet-4-6` or `gpt-5.4-mini`. The page's
+in the environment that starts your coding agent: its Surla connection hands
+them to the server, which holds them in memory until `surla stop`. While no
+model is chosen, live targets then use `claude-sonnet-4-6` or `gpt-5.4-mini`. The page's
 **Live target** view changes that model to another provider whose settings
 were handed over, or to a model gateway; see
 [`surla` and `surla stop`](docs/REFERENCE.md#surla-serve).
 
 ## Start a project
 
-Start from a starter service, or from an empty folder.
+Open an existing project or an empty folder in your coding agent and invoke
+`/surla` (`$surla` in Codex). Tell the guide the service you want and its Go
+module path, for example `example.com/shop`. In an empty folder, the guide
+calls [`init_project`](docs/REFERENCE.md#init_project) with `dir: "."` to
+create the starter and its first Git commit in place. Agent configuration
+folders can stay; the operation refuses conflicting project files.
 
-**From a starter.** `surla init` creates a service designed with Goa, Goa-AI
-and [Model](https://github.com/goadesign/model) (architecture diagrams as Go
-code). The service has a first Story, in `design/story.go`, with one finished
-flow, and a test module in `eval/` that already holds the test that flow
-requires. `surla init` then prints the commands that make the first commit
-and start Surla:
+The starter has a Goa and Goa-AI service, architecture diagrams declared with
+[Model](https://github.com/goadesign/model), a first Story in
+`design/story.go`, and its required test in `eval/`. The guide refines that
+Story with you and opens the page. You review, build, approve and merge
+there. To recover a closed or reloaded page, ask the guide to open it again,
+or use **Open Page** in the Herdr companion.
 
-```bash
-surla init -dir shop -module example.com/shop
-cd shop
-git init
-git add .gitignore README.md AGENTS_QUICKSTART.md go.mod go.sum design gen internal cmd eval
-git commit -m "Start shop from surla init"
-surla
-```
-
-**From an empty folder.** Run `surla` and ask a connected guide to initialize
-a new service in the folder. The guide can call `init_project` with
-`dir: "."` to create the starter and its first Git commit in place.
-[Initialization](docs/REFERENCE.md#init_project) lists the agent configuration
-the operation preserves and the folders it can initialize.
-
-The page keeps its session while open. After a reload or close, run `surla`
-again or ask the guide to call [`open_views`](docs/REFERENCE.md#open_views).
-You can open a fresh link in the same tab. If there are unsaved edits, the
-page keeps them and offers **Open link** after you save or discard them.
-The link expires two minutes after issue.
-
-Running `surla` from a subfolder finds the same project. Check its current
-state with `surla status --json`. After installing another build of Surla,
-run `surla stop`, then `surla`. See
-[the startup reference](docs/REFERENCE.md#surla-serve) for project settings
-and recovery.
+The page keeps unsaved input when you open a fresh link in the same tab and
+offers **Open link** after you save or discard it. A fresh link expires two
+minutes after issue. [Terminal operation](docs/REFERENCE.md#terminal-and-browser-automation)
+remains available for operators and browser automation, including bare
+`surla`, `surla --print-link`, `surla status --json` and `surla stop`.
 
 ## Use the tools without a team
 

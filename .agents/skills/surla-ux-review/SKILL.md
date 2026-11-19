@@ -6,7 +6,14 @@ description: Run a moderated usability study of Surla. One subagent plays a firs
 # Surla UX review
 
 This skill runs a moderated, think-aloud usability test of Surla and turns it
-into a UX research report. Two subagents take part:
+into a UX research report. The product goal is a journey driven by the
+participant's existing coding-agent session: after installation and one-time
+`surla up`, the participant describes the goal through `/surla` (`$surla`),
+uses the browser for human decisions, and reaches an approved merge without
+typing terminal commands to move between stages. Commands the coding agent
+runs internally are distinct from commands the user must enter. Observe whether the product
+actually enables that journey; never supply missing steps as hidden coaching.
+Two subagents take part:
 
 - **The participant** plays a developer who has never used Surla. It may read
   only Surla's `README.md` and whatever Surla itself prints or generates, and
@@ -69,12 +76,11 @@ source out of its view.
 `attempt-1/transcript.md`:
 
 - the Surla commit, the date, and the OS;
-- whether the folder in the README's `surla init -dir` example (such as
-  `/tmp/shop`) already exists. `surla init` refuses an existing folder, so a
-  leftover would look like a usability problem. Do not delete it. Tell the
-  tester it exists, labeled "ownership unconfirmed";
-- the `-surla-version` that the README tells `surla init` to use. A scaffolded
-  project downloads that version, not the commit under test;
+- whether the participant's `work/` folder is empty apart from permitted
+  coding-agent settings, and any known pre-existing example destinations.
+  Leave existing folders alone and label their ownership unconfirmed;
+- the version of Surla installed by the README and the version its starter
+  module will download. Record whether they match the commit under test;
 - the versions of `go`, `goa`, and `temporal`, or that they are missing;
 - which credentials are set, such as `ANTHROPIC_API_KEY`. Record that each is
   set, never its value;
@@ -82,32 +88,39 @@ source out of its view.
   as a global `CLAUDE.md` or `AGENTS.md`. These can tell the participant
   things the README does not, so the report lists them as a limitation;
 - whether commands run inside your coding agent's own sandbox, and whether
-  they have network access. `surla init` downloads modules, and Surla builds
+  they have network access. Starter initialization downloads modules, and Surla builds
   and runs the code under test as ordinary processes with the user's file
   and network access. Working copies and process groups do not confine that
   code. Keep any coding-agent sandbox restrictions separate from Surla's
   documented execution policy. Give the participant the host access you are
-  authorized to give. Trusted Surla commands run as the docs show, including
-  `surla init`, which generates code from Surla's own unmodified starter
-  templates. The product's own code is never compiled, generated from, or run
-  except through Surla's commands. That
-  includes `goa gen` on its design, which runs that design code. If the
-  documented workflow needs a step Surla offers no command for, the study
+  authorized to give. Trusted Surla operations run as the docs show,
+  including initialization from Surla's own unmodified starter templates.
+  The product's own code is never compiled, generated from, or run except
+  through Surla's documented operations. That includes `goa gen` on its
+  design, which runs that design code. If the
+  documented workflow needs a step Surla offers no operation for, the study
   reports it as a missing capability. If the access Surla needs is not
   available, that is an environment limitation: the tester marks the
   milestones it blocks as not supported;
-- **how the participant reaches Surla's MCP server.** The README tells a user
-  to point a coding agent at `http://<addr>/mcp`. A subagent cannot add an MCP
-  server to its own session. The participant therefore runs its own
-  coding-agent CLI non-interactively in `work/`, with an MCP configuration it
-  writes itself, for example `claude -p`, `codex exec`, or `gemini -p`.
-  Record which CLIs it may use, or that none can run here. Do not hand it an
-  undocumented HTTP route, because working that out from outside the README
-  is coaching.
+- **how the participant reaches Surla's MCP server.** The current README
+  uses one-time `surla up` (or `surla setup -global`) to register `surla stdio`
+  and the `/surla` (`$surla`) skill. A subagent cannot add an MCP server to
+  its own session, so the participant may run an installed coding-agent CLI
+  in `work/` and invoke the skill there. Record which clients can run, which
+  load the global registration, whether a session reload is needed, and
+  whether the environment can show the browser for human decisions. Record
+  harness-only CLI launches separately from user workflow steps; a harness
+  that cannot preserve the coding session is a study limitation. Do not
+  hand it an HTTP route, credential, prewritten MCP configuration or lifecycle
+  command. Failure to discover or use the documented integration is evidence;
+- whether Herdr and Chorus are installed, whether the agent starts inside a
+  live Herdr pane, the installed agent families and background-worker
+  support, and any project choices or dismissed recommendations already
+  present. Do not install a second family just to hide the one-family path;
 - **what each mid-build change needs** (see the tester brief's "Mid-build
   changes"), recorded as two separate facts: what this machine provides,
   such as model credentials or the access a live demo needs, and what the
-  commit under test provides, such as a command that regenerates code after a
+  commit under test provides, such as an operation that regenerates code after a
   design change. The tester uses them to tell "not supported on this
   machine" apart from "blocked by a missing Surla capability".
 
@@ -157,8 +170,8 @@ participant.
 Each round trip works like this:
 
 1. The participant works until a natural pause and replies with a step
-   report. Its brief lists when it pauses, including before the first run of
-   each new `surla` command.
+   report. Its brief lists when it pauses, including before one-time setup,
+   its first skill invocation and each new human decision on the page.
 2. Append the report to the transcript and send it unchanged to the tester,
    together with the elapsed time since the previous report.
 3. The tester replies with up to three questions, an optional hint, an
@@ -190,7 +203,7 @@ harness keeps a subagent transcript. Also read the logs its coding agent saved
 in `work/agent-logs/`. A leak is reading anything outside the participant's
 allowed list, loading this skill, building the product without Surla, or
 compiling, generating from, or running the product's code except through
-Surla's commands.
+Surla's documented operations.
 
 A participant cannot unlearn what it read, so a leak ends the attempt. Tell
 the tester what was read and when. The tester records the leak as a finding,
@@ -224,17 +237,18 @@ deleting it is authorized.
 
 When the tester decides `stop_for_bug`, it names the bug and gives the steps
 to reproduce it. A blocking bug is one where Surla crashes, behaves
-differently from its documentation, or offers no command to run
-something its documented workflow needs, and no documented workaround
-exists. The participant cannot get past it however well it uses Surla.
+differently from its documentation, or lacks an MCP/browser operation its
+documented workflow needs, and no documented workaround exists. A terminal
+workaround can unblock the product task while still failing the zero-command
+journey goal; record both outcomes rather than silently counting success.
 
 1. Reproduce the bug yourself with the trusted Surla CLI, using the host and
    network access you are authorized to use, so a restriction in your coding
    agent is not mistaken for a Surla bug. The product's code is still
-   compiled, generated from, and run only through Surla's commands.
+   compiled, generated from, and run only through Surla's documented operations.
    - If the failure comes from the harness, tell the tester "environment
      limitation, not a Surla bug" and which milestones it affects.
-   - A missing capability, meaning no Surla command for a step the
+   - A missing capability, meaning no documented Surla operation for a step the
      documented workflow needs, counts as a real bug even when Surla lacks
      it by design. Go to step 2.
    - If Surla behaves as designed, tell the tester "reproduced; behavior is as
@@ -244,17 +258,18 @@ exists. The participant cannot get past it however well it uses Surla.
    separate clone and branch, the design gate, tests, an independent review,
    and a pull request. Fix the cause, not the symptom the participant
    happened to hit.
-3. If the fix is in code that a scaffolded project downloads, the participant
-   would still get the old version through the README's `-surla-version`.
-   Push the fix. Then add a follow-up commit that sets `-surla-version` to the
-   fix commit's Go pseudo-version (`v0.0.0-<yyyymmddhhmmss>-<12-char-sha>`,
-   as `go list -m github.com/goadesign/surla@<sha>` prints it). This is the
-   same way main updates `examples/orders` after a release.
+3. If the fix is in code a starter downloads, publish a version containing
+   it before restarting. Confirm that the documented installation and starter
+   initialization resolve that version, rather than an earlier dependency.
+   An exact Go pseudo-version is printed by
+   `go list -m github.com/goadesign/surla@<sha>`; update a documented version
+   pin when that is what selects the dependency. Do not patch the participant's
+   project or supply an undocumented override to make the attempt pass.
 4. Restart from scratch:
    1. Stop processes and record leftovers as in section 3.
    2. Create a new participant folder, `~/src/surla-ux-<id>-a<N+1>/`, holding
       a clone at the newest commit of the fix, including any
-      `-surla-version` follow-up, and an empty `work/`. Leave the previous
+      version-pin follow-up, and an empty `work/`. Leave the previous
       attempt's folder in place as evidence.
    3. Copy the user docs from that commit into the tester's `docs/` again, so
       the tester judges the participant against the docs it is reading.
@@ -270,6 +285,18 @@ Fix and restart after every blocking bug. If the person invoking the skill
 set a limit on attempts, stop and report when it is reached.
 
 ## 5. Debrief and report
+
+Keep these outcomes separate: product built, verified, approved, and merged;
+one-time installation/setup; later user-entered terminal commands; commands
+the coding agent runs internally; harness-only invocations; and steps
+completed with help. For each applicable path, record observed success or why it was not
+exercised: live guide adoption, page recovery through the guide or companion,
+inline agent choices, builder-only builds with configured tests, one-family
+operation, missing Herdr, persisted choices/notices after reload, and human
+Merge with refusal recovery. Do not add fixtures or hints to force coverage.
+A source claim, successful command or assignment is not proof of a visible
+outcome. The report's severity ratings and transcript evidence remain the
+moderator's responsibility.
 
 When the tester decides `end_session`, it sends the participant its debrief
 questions. Relay the questions and the answers. Then send the tester the text

@@ -59,13 +59,18 @@ A Golden Path platform is built with these tools:
 The team of coding agents that builds it runs on two more:
 
 - **[Chorus](https://github.com/goadesign/chorus)** — Lets coding agents and people talk in real time through channels and direct messages, with `0`-token background waiting (`chorus watch`). It also launches the project's agent panes in Herdr.
-- **[Herdr](https://herdr.dev/)** — A terminal program that runs each agent in its own pane. Surla starts its server in a Herdr terminal and gives the project its own Herdr space.
+- **[Herdr](https://herdr.dev/)** — An optional terminal workspace for side-by-side agents. Surla adopts the current guide's compatible space and pane and places workers beside it. Without Herdr, workers run in background processes.
 
 ---
 
 ## Who owns what in Surla
 
-The `surla` command, run in a project folder, starts the project's Surla server (from here on, the server). The server serves the views page in the user's browser and one HTTP and MCP endpoint to the project's team of coding agents:
+One-time `surla up` registers the `surla stdio` MCP connection and `/surla`
+(`$surla`) skill with installed coding agents. The guide's first Surla tool
+call in a project folder starts or attaches to that project's server (from
+here on, the server). Bare `surla` remains a browser-opening operator
+entrypoint. The server serves the views page in the user's browser and one
+HTTP and MCP endpoint to the project's team of coding agents:
 
 - **The guide** is the agent the user talks to. Working in its `.surla-draft` copy inside the project folder (never in the project folder itself), it writes the Story and the rest of the Go source in `design/` that describes the business's flows, evaluates that draft with `refresh_story`, and proposes changes. A flow is one path of who does what, from the event that starts it to its outcomes.
 - **The builder** writes the application code and asks Surla to verify a commit.
@@ -75,13 +80,14 @@ Each change is saved as a Change Card: the record of the request, its open quest
 
 | Owner | Source | What it owns |
 | --- | --- | --- |
-| The `surla` command | `cmd/surla` | Finding the project's private state folder, starting and stopping the project server, authenticating CLI status reads, the stored settings |
+| The `surla` command | `cmd/surla` | Global MCP/skill and companion setup, lazy stdio role binding, finding the project's private state folder, server startup and shutdown, authenticated CLI status, stored settings |
 | The server | `internal/project` | The project's identity and port, credentials and browser sessions, the team record, the Chorus roster, launch preferences, worker processes and observed role state |
 | The control plane | `internal/controlplane` | Change Cards, builds and assignments, the report checker, the verification plan, the live target and operation diagnostics |
 | The build working copies | `internal/testwriter` | The `.surla-build` and `.surla-tests` folders, the numbered `surla/build-<n>` and `surla/tests-<n>` branches, the required tests, the check of a report and the commit of accepted tests |
 | Verification runs | `internal/verifyrun`, `internal/verify` | One folder per verification run (its run directory) and the processes that build, run and report it |
 | Herdr | outside Surla | Terminals, panes and spaces |
 | Chorus | outside Surla | Agent messaging and launch of role panes in Herdr |
+| The companion | `skills/herdr/surla` | A floating Herdr window reading project status and focusing panes or opening the browser; no browser-session credential |
 
 ### The server and its state
 
@@ -94,9 +100,9 @@ agents are valid states.
 
 A project is one physical folder. `surla` looks for the nearest folder that has a project record and otherwise creates a new, empty project, so moving or renaming the folder starts a new project. Each project has one private state folder under the user's configuration folder, outside the project. It holds the project record (its ID, folder, owning operating-system account, port, team name and Herdr space, and each registered agent's role and working folder), one credential file per agent, the Change Card folder, verification runs and reports, one retained Go build cache, and the stored verification and promotion settings. A new project saves a free loopback port that no other project of the account saved, and keeps it, so its agents can reuse their connection settings. When `surla` cannot use a project's record, it names the project folder, the record's path and the repair; when it cannot use a state folder, it names that folder and the repair.
 
-When the user runs `surla`:
+When a guide first calls through `surla stdio`, or an operator runs `surla`:
 
-1. A start lock lets one `surla` start the server at a time. The folder lock, an operating-system file lock on the Change Card folder that a running server holds for its whole life, is the only proof that a server is running.
+1. A start lock lets one caller start the server at a time. The folder lock, an operating-system file lock on the Change Card folder that a running server holds for its whole life, is the only proof that a server is running.
 2. The CLI passes the state folder explicitly to `surla serve -state <dir>`. It starts a parentless Herdr terminal when `hc` is available or a detached process with a private startup log otherwise. Foreground `surla serve` uses the same explicit state folder.
 3. After binding its port, the server publishes a fresh management credential in a private record. `surla` reads that credential for each request, confirms that the answering server names the same project, folder and owner, and that the same build of `surla` started it (the server reports the SHA-256 of its executable, read when it started), and only then continues. `surla status` reads compatible servers and `surla stop` accepts a server of any build. Before the listener closes, the server revokes the credential and withdraws the record, even when accepting connections failed.
 4. If the server exits before answering, `surla` reads the last lines from the terminal or startup log and includes them in the error. It removes an exited server's startup terminal.
@@ -127,6 +133,32 @@ plane verify already moved entries and finish an interrupted initialization.
 
 `surla verification set` and `surla promotion set` validate a settings file and copy it into the state folder. The server reads both at start, so a change applies when Surla is started again.
 
+### The stdio connection and global setup
+
+`cmd/surla/setup.go` owns registration of the installed `surla stdio`
+executable and bundled skill in detected coding-agent configuration. It
+preserves unrelated settings and leaves identical content untouched. Setup
+also installs the floating Herdr companion when the app folder is present;
+`surla up` runs setup and starts Chorus when installed.
+
+The stdio server answers initialization, ping and catalogs from generated
+MCP definitions without creating state or starting a project server. The
+first tool call or resource read binds a role and authenticates the relay to
+the project's HTTP MCP endpoint. A guide binding can start the server, hand
+over provider settings and attach the current session. Worker bindings only
+use an existing server and assignment.
+
+Role binding follows physical subtree containment: `.surla-build` and its
+children are builder-only, and `.surla-tests` and its children are
+test-writer-only, including nested modules and leftover worker folders. A
+missing worker assignment never grants guide access. Generated schemas and
+the control plane's operation policy still enforce each caller's tools.
+
+The Herdr companion reads `surla status --json` for the shown local project
+and Herdr labels for pane focus. Its **Open Page** action runs the ordinary
+browser-opening entrypoint. It holds no user credential and changes no
+shipped workspace layout.
+
 ### The team: Herdr and Chorus
 
 The project server owns the role registry, launch choices and notice
@@ -134,11 +166,16 @@ preferences. The control plane owns which workers have work and reports the
 current build's identity, assignments and check results to the team
 supervisor. A team read returns cached observations and project preferences
 without starting discovery or terminal commands. Installed agent discovery
-runs on demand for the user and when resolving choices for a launch.
+runs on demand for the user and when resolving choices for a launch. The
+browser's inline Build and Team controls use those options and submit the
+needed roles' choices. The project saves choices and dismissed recommendations;
+those preferences do not change role permissions or required assignments.
 
-A local management client registers an existing guide through `attach_guide`.
+`surla stdio` registers the current coding session as guide through the local
+management `attach_guide` operation.
 The server checks the supplied terminal is a running model pane in a local
-tab with compatible project and team labels before adopting it. A user can
+tab with compatible project and team labels before adopting it. It keeps the
+live guide session in place and opens no launcher. A user can
 request an explicit guide launch in Herdr through `start_team_agents` if
 there is no running guide pane or watcher. Build starts request workers only.
 
@@ -152,8 +189,10 @@ observer and sender, clears stale watcher facts and carries forward the
 supervisor's assignment-attempt tracking.
 
 Without Herdr the supervisor starts finite worker invocations in dedicated
-process groups with the preserved launch environment. Workers use their
-configured MCP connections and registered role credentials. The supervisor
+process groups with the preserved launch environment. Workers use the globally
+registered `surla stdio` connection and their role credentials. The browser
+requires a supported non-interactive client and explicit permission to run
+without interactive prompts. The supervisor
 advances workers when a new assignment or verification result calls for
 work and waits while Surla checks a test report or runs
 verification. During a server lifetime, each build allows three invocations
