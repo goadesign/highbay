@@ -15,6 +15,7 @@ import (
 
 	gensurla "github.com/goadesign/surla/gen/surla"
 	"github.com/goadesign/surla/internal/abspath"
+	"github.com/goadesign/surla/internal/modelsettings"
 	"github.com/goadesign/surla/internal/procgroup"
 	"github.com/goadesign/surla/internal/verify"
 	"github.com/goadesign/surla/internal/verifyrun"
@@ -199,6 +200,13 @@ func (c *ControlPlane) mergeIntoCurrentBranch(
 	if taken {
 		return &gensurla.MergeChangeResult{Branch: branch, HeadCommit: origHEAD}, nil
 	}
+	commits := []string{plan.CandidateCommit}
+	if plan.Tests == verify.TestsWritten {
+		commits = append(commits, plan.SuiteCommit)
+	}
+	if err := checkMergeGitSettings(ctx, repo, append([]string{origHEAD}, commits...)); err != nil {
+		return nil, err
+	}
 	if err := checkMergeWorktree(ctx, repo); err != nil {
 		return nil, err
 	}
@@ -216,10 +224,6 @@ func (c *ControlPlane) mergeIntoCurrentBranch(
 	defer span.End()
 	write, cancel := context.WithTimeout(context.WithoutCancel(ctx), mergeWriteTimeout)
 	defer cancel()
-	commits := []string{plan.CandidateCommit}
-	if plan.Tests == verify.TestsWritten {
-		commits = append(commits, plan.SuiteCommit)
-	}
 	for i, commit := range commits {
 		if err := checkMergeOverwrites(write, repo, branch, commit); err != nil {
 			if i == 0 {
@@ -237,6 +241,225 @@ func (c *ControlPlane) mergeIntoCurrentBranch(
 		return nil, rollbackMerge(ctx, span, repo, hooks, branch, origHEAD, err)
 	}
 	return &gensurla.MergeChangeResult{Branch: branch, HeadCommit: strings.TrimSpace(string(headOut))}, nil
+}
+
+// checkMergeGitSettings establishes which Git configuration may participate
+// before a command reads the worktree or starts a content merge.
+func checkMergeGitSettings(ctx context.Context, repo string, commits []string) error {
+	paths, err := runGitRead(ctx, repo, "rev-parse", "--path-format=absolute", "--git-common-dir",
+		"--git-path", "config", "--git-path", "config.worktree", "--git-path", "info/attributes")
+	if err != nil {
+		return err
+	}
+	parts := strings.Split(strings.TrimSuffix(string(paths), "\n"), "\n")
+	if len(parts) != 4 {
+		return errors.New("Git did not return its configuration and attribute paths")
+	}
+	commonDir := parts[0]
+	if err := checkMergeConfig(ctx, repo, commonDir, parts[1:3]); err != nil {
+		return err
+	}
+	if err := checkMergeAttributes(ctx, repo, commonDir, parts[3], commits); err != nil {
+		return err
+	}
+	return checkDefaultMergeDriver(ctx, repo)
+}
+
+// checkMergeConfig rejects command hooks and configuration sources that the
+// first merge could change before Git starts the second. Installed hooks from
+// a trusted filesystem path and externally owned config includes are usable.
+func checkMergeConfig(ctx context.Context, repo, commonDir string, localPaths []string) error {
+	global, err := runGitRead(ctx, repo, "var", "GIT_CONFIG_GLOBAL")
+	if err != nil {
+		return err
+	}
+	for path := range strings.SplitSeq(strings.TrimSuffix(string(global), "\n"), "\n") {
+		if path == "" {
+			continue
+		}
+		if err := checkMergeConfigLocation(repo, commonDir, path); err != nil {
+			return err
+		}
+	}
+	hooks, err := readMergeConfig(ctx, repo, "--name-only", "--get-regexp", `^hook\..+\.command$`)
+	if err != nil {
+		return err
+	}
+	if key, _, _ := strings.Cut(hooks, "\x00"); key != "" {
+		return gensurla.MakeMergeConflict(fmt.Errorf("Git has a command hook configured by %q. Review the hook and merge the approved commits manually.", key))
+	}
+	includes, err := readMergeConfig(ctx, repo, "--show-origin", "--type=path", "--get-regexp",
+		`^(include\.path|includeif\..*\.path)$`)
+	if err != nil {
+		return err
+	}
+	for _, path := range localPaths {
+		if err := checkMergeConfigLocation(repo, commonDir, path); err != nil {
+			return err
+		}
+	}
+	for includes != "" {
+		origin, rest, _ := strings.Cut(includes, "\x00")
+		entry, remainder, ok := strings.Cut(rest, "\x00")
+		file, fromFile := strings.CutPrefix(origin, "file:")
+		_, path, hasValue := strings.Cut(entry, "\n")
+		if !ok || !fromFile || !hasValue || path == "" {
+			return errors.New("Git did not report a file and path for its configuration include")
+		}
+		if !filepath.IsAbs(path) {
+			dir := filepath.Dir(file)
+			if !filepath.IsAbs(dir) {
+				dir = repo + string(filepath.Separator) + dir
+			}
+			// Preserve parent components through symlinks, as Git does.
+			path = dir + string(filepath.Separator) + path
+		}
+		if err := checkMergeConfigLocation(repo, commonDir, path); err != nil {
+			return err
+		}
+		includes = remainder
+	}
+	return nil
+}
+
+// readMergeConfig returns the effective Git config values across includes.
+// Git exits 1 when the queried key or regular expression has no match.
+func readMergeConfig(ctx context.Context, repo string, args ...string) (string, error) {
+	out, err := runGitRead(ctx, repo, append([]string{"config", "--null", "--includes"}, args...)...)
+	var exit *exec.ExitError
+	if errors.As(err, &exit) && exit.ExitCode() == 1 {
+		return "", nil
+	}
+	return string(out), err
+}
+
+// checkMergeConfigLocation rejects both a destination and a mutable path to
+// an external destination. Git follows includes on each command invocation.
+func checkMergeConfigLocation(repo, commonDir, path string) error {
+	inside, err := mergeMutableConfigPath(repo, commonDir, path)
+	if err != nil {
+		return err
+	}
+	if inside {
+		return gensurla.MakeMergeConflict(errors.New("Git reads configuration from the project working tree. Review the configuration and merge the approved commits manually."))
+	}
+	return nil
+}
+
+// mergeMutableConfigPath checks both the resolved location and a symlink path
+// that a commit could replace to point at a new file.
+func mergeMutableConfigPath(repo, commonDir, path string) (bool, error) {
+	if mergePathWithin(repo, path) && !mergePathWithin(commonDir, path) {
+		return true, nil
+	}
+	return mergeWorktreePath(repo, commonDir, path)
+}
+
+// mergePathWithin checks the spelling of a path before following symlinks.
+func mergePathWithin(root, path string) bool {
+	rel, err := filepath.Rel(root, path)
+	return err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
+}
+
+// checkMergeAttributes excludes Git attribute sources before status, merge-tree
+// or checkout can use them to invoke configured commands on candidate content.
+// Configured filters are harmless when there is no attribute selecting them.
+func checkMergeAttributes(ctx context.Context, repo, commonDir, infoPath string, commits []string) error {
+	if err := checkMergeAttributesFile(infoPath, "Git's local info/attributes file"); err != nil {
+		return err
+	}
+	for _, source := range []struct{ variable, label string }{
+		{"GIT_ATTR_GLOBAL", "the global Git attributes file"},
+		{"GIT_ATTR_SYSTEM", "the system Git attributes file"},
+	} {
+		path, err := runGitRead(ctx, repo, "var", source.variable)
+		if err != nil {
+			return err
+		}
+		name := strings.TrimSuffix(string(path), "\n")
+		if name == "" {
+			continue
+		}
+		if strings.Contains(name, "\n") {
+			return refuseMergeAttributes(source.label + " with an ambiguous path")
+		}
+		if !filepath.IsAbs(name) {
+			name = repo + string(filepath.Separator) + name
+		}
+		owned, err := mergeMutableConfigPath(repo, commonDir, name)
+		if err != nil {
+			return err
+		}
+		if owned {
+			return refuseMergeAttributes(source.label + " inside the worktree")
+		}
+		if err := checkMergeAttributesFile(name, source.label); err != nil {
+			return err
+		}
+	}
+
+	// Git resolves the glob across all directories without returning unrelated
+	// paths. Omitting exclude options includes ignored, untracked attributes.
+	const attrs = ":(glob,icase)**/.gitattributes"
+	live, err := runMergeGit(ctx, repo, os.DevNull, "", "ls-files", "--cached", "--others", "-z", "--", attrs)
+	if err != nil {
+		return err
+	}
+	if path, _, _ := strings.Cut(live, "\x00"); path != "" {
+		return refuseMergeAttributes(fmt.Sprintf("the worktree or index's %q", path))
+	}
+	empty, err := runGitRead(ctx, repo, "hash-object", "-t", "tree", "--stdin")
+	if err != nil {
+		return err
+	}
+	for _, commit := range commits {
+		paths, err := runMergeGit(ctx, repo, os.DevNull, "", "diff-tree", "-r", "--no-commit-id", "--no-ext-diff", "--no-textconv",
+			"--name-only", "-z", strings.TrimSuffix(string(empty), "\n"), commit, "--", attrs)
+		if err != nil {
+			return err
+		}
+		if path, _, _ := strings.Cut(paths, "\x00"); path != "" {
+			return refuseMergeAttributes(fmt.Sprintf("%q in commit %s", path, commit))
+		}
+	}
+	return nil
+}
+
+// checkMergeAttributesFile permits an absent file or Git's explicit no-rules
+// file. Other attribute sources require a manual merge.
+func checkMergeAttributesFile(path, description string) error {
+	if path == "" || path == os.DevNull {
+		return nil
+	}
+	_, err := os.Lstat(path)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	return refuseMergeAttributes(description)
+}
+
+// checkDefaultMergeDriver handles the sole external driver selection that
+// needs no attributes. An undefined name falls back to Git's built-in merge.
+func checkDefaultMergeDriver(ctx context.Context, repo string) error {
+	name, err := readMergeConfig(ctx, repo, "--get", "merge.default")
+	if err != nil || name == "" {
+		return err
+	}
+	key := "merge." + strings.TrimSuffix(name, "\x00") + ".driver"
+	command, err := readMergeConfig(ctx, repo, "--get", key)
+	if err != nil || command == "" {
+		return err
+	}
+	return gensurla.MakeMergeConflict(fmt.Errorf("Git's merge.default selects the custom driver configured by %q. Review the driver and merge the approved commits manually.", key))
+}
+
+// refuseMergeAttributes identifies the source Git may read instead of
+// returning its configuration contents to the browser.
+func refuseMergeAttributes(source string) error {
+	return gensurla.MakeMergeConflict(fmt.Errorf("Git can read attribute rules from %s. Review the attributes and merge the approved commits manually.", source))
 }
 
 // checkMergeOverwrites checks the paths that Git's computed merge tree adds.
@@ -322,12 +545,12 @@ func checkMergeAddedPath(ctx context.Context, root *os.Root, path string) error 
 // checkMergeWorktree names modified and staged tracked paths and leaves an
 // existing Git operation alone even when it has not written tracked changes.
 func checkMergeWorktree(ctx context.Context, repo string) error {
-	status, err := runGitRead(ctx, repo, "status", "--porcelain", "--untracked-files=no", "--ignore-submodules=untracked")
+	status, err := runMergeGit(ctx, repo, os.DevNull, "", "status", "--porcelain", "--untracked-files=no", "--ignore-submodules=untracked")
 	if err != nil {
 		return err
 	}
 	if len(status) != 0 {
-		return gensurla.MakeDirtyWorktree(fmt.Errorf("Commit or stash these tracked changes before merging:\n%s", strings.TrimRight(string(status), "\n")))
+		return gensurla.MakeDirtyWorktree(fmt.Errorf("Commit or stash these tracked changes before merging:\n%s", strings.TrimRight(status, "\n")))
 	}
 	paths, err := runGitRead(ctx, repo, "rev-parse", "--path-format=absolute",
 		"--git-path", "MERGE_HEAD", "--git-path", "CHERRY_PICK_HEAD", "--git-path", "REVERT_HEAD",
@@ -350,7 +573,7 @@ func checkMergeWorktree(ctx context.Context, repo string) error {
 func mergeHooksPath(ctx context.Context, repo string) (string, error) {
 	cmd := exec.CommandContext(ctx, "git", "-C", repo, "--no-optional-locks", "rev-parse",
 		"--path-format=absolute", "--git-common-dir", "--git-path", "hooks")
-	cmd.Env = cleanGitEnv()
+	_, cmd.Env = modelsettings.Split(cleanGitEnv())
 	cmd.WaitDelay = time.Second
 	stdout := &cappedBuffer{limit: gitReadMaxStderr}
 	cmd.Stdout = stdout
@@ -384,18 +607,25 @@ func mergeHooksPath(ctx context.Context, repo string) (string, error) {
 // checkMergeHookPath distinguishes a resolved hook path inside Git's
 // administrative directory from paths the checkout can replace.
 func checkMergeHookPath(repo, commonDir, path string) error {
-	pointsIntoWorktree, err := abspath.Within(repo, path)
-	if err != nil || !pointsIntoWorktree {
-		return err
-	}
-	pointsIntoAdmin, err := abspath.Within(commonDir, path)
+	owned, err := mergeWorktreePath(repo, commonDir, path)
 	if err != nil {
 		return err
 	}
-	if !pointsIntoAdmin {
+	if owned {
 		return gensurla.MakeMergeConflict(errors.New("Git hooks for this merge are in the tracked working tree. Move the hooks outside the working tree or merge manually."))
 	}
 	return nil
+}
+
+// mergeWorktreePath reports whether the resolved path is in the project
+// worktree outside the repository's administrative directory.
+func mergeWorktreePath(repo, commonDir, path string) (bool, error) {
+	pointsIntoWorktree, err := abspath.Within(repo, path)
+	if err != nil || !pointsIntoWorktree {
+		return false, err
+	}
+	pointsIntoAdmin, err := abspath.Within(commonDir, path)
+	return !pointsIntoAdmin, err
 }
 
 // runMergeGit runs a bounded local Git command with no inherited repository
@@ -403,9 +633,10 @@ func checkMergeHookPath(repo, commonDir, path string) error {
 // branch-specific command options cannot change the tree after preflight.
 // Git still follows the project's commit signing and supplied hooks path.
 func runMergeGit(ctx context.Context, repo, hooks, branch string, args ...string) (string, error) {
-	cmd := exec.CommandContext(ctx, "git", append([]string{"-C", repo, "--no-replace-objects", "--no-lazy-fetch",
-		"-c", "core.fsmonitor=false", "-c", "core.hooksPath=" + hooks}, args...)...)
-	cmd.Env = cleanGitEnv()
+	cmd := exec.CommandContext(ctx, "git", append([]string{"-C", repo, "--no-optional-locks", "--no-replace-objects", "--no-lazy-fetch",
+		"-c", "core.fsmonitor=false", "-c", "core.hooksPath=" + hooks, "-c", "core.attributesFile=" + os.DevNull}, args...)...)
+	_, env := modelsettings.Split(cleanGitEnv())
+	cmd.Env = append(env, "GIT_ATTR_NOSYSTEM=1", "GIT_ATTR_SOURCE=HEAD")
 	if branch != "" {
 		cmd.Env = append(cmd.Env, "GIT_CONFIG_COUNT=1", "GIT_CONFIG_KEY_0=branch."+branch+".mergeOptions", "GIT_CONFIG_VALUE_0=")
 	}

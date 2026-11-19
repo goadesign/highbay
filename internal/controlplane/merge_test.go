@@ -123,6 +123,10 @@ func TestMergeChangeRollsBackSecondGitFailure(t *testing.T) {
 				require.NoError(t, os.MkdirAll(filepath.Join(f.repo, ".git", "hooks"), 0o700))
 				productionBuildGit(t, f.repo, "config", "--unset", "core.hooksPath")
 				script := "#!/bin/sh\n"
+				if tc.name == "commit hook" {
+					t.Setenv("OPENAI_API_KEY", "fixture-provider-value")
+					script += "if [ -n \"${OPENAI_API_KEY:-}\" ]; then echo 'fixture hook received provider environment' >&2; fi\n"
+				}
 				if tc.name == "rollback failure" {
 					script += "touch .git/index.lock\n"
 				}
@@ -148,6 +152,9 @@ func TestMergeChangeRollsBackSecondGitFailure(t *testing.T) {
 				assert.Contains(t, err.Error(), "base.txt")
 				assert.Equal(t, f.build.Base, productionBuildGit(t, f.repo, "rev-parse", "HEAD"))
 				return
+			}
+			if tc.name == "commit hook" {
+				assert.NotContains(t, err.Error(), "fixture hook received provider environment")
 			}
 			assert.Contains(t, err.Error(), "restored the branch")
 			assert.Equal(t, f.build.Base, productionBuildGit(t, f.repo, "rev-parse", "HEAD"))
@@ -267,6 +274,115 @@ func TestMergeChangeChecksLiveApprovalAndPublication(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestMergeChangeRefusesGitAttributeCommandsBeforeReadingTheWorktree(t *testing.T) {
+	for _, tc := range []struct {
+		name, detail string
+	}{
+		{name: "info attributes", detail: "local info/attributes"},
+		{name: "ignored live attributes", detail: "nested/.gitattributes"},
+		{name: "candidate attributes", detail: "nested/.gitattributes"},
+		{name: "suite attributes", detail: "nested/.gitattributes"},
+		{name: "global attributes", detail: "global Git attributes file"},
+		{name: "default merge driver", detail: "merge.fixture.driver"},
+		{name: "command hook", detail: "hook.fixture.command"},
+		{name: "worktree config include", detail: "configuration from the project working tree"},
+		{name: "worktree global config", detail: "configuration from the project working tree"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			f := newMergeFixture(t, "written", "conflict")
+			const marker = "printf invoked > .git/fixture-command-ran"
+			const attrs = "* filter=fixture merge=fixture\n"
+			switch tc.name {
+			case "info attributes":
+				f.write(t, ".git/info/attributes", attrs)
+			case "ignored live attributes":
+				f.write(t, ".git/info/exclude", "nested/\n")
+				require.NoError(t, os.Mkdir(filepath.Join(f.repo, "nested"), 0o700))
+				f.write(t, "nested/.gitattributes", attrs)
+			case "candidate attributes", "suite attributes":
+				addMergeFixtureAttributes(t, f, tc.name == "suite attributes", attrs)
+			case "global attributes":
+				path := filepath.Join(t.TempDir(), "attributes")
+				require.NoError(t, os.WriteFile(path, []byte(attrs), 0o600))
+				productionBuildGit(t, f.repo, "config", "core.attributesFile", path)
+			case "default merge driver":
+				productionBuildGit(t, f.repo, "config", "merge.default", "fixture")
+			case "command hook":
+				productionBuildGit(t, f.repo, "config", "hook.fixture.command", marker)
+				productionBuildGit(t, f.repo, "config", "hook.fixture.event", "post-merge")
+			case "worktree config include":
+				productionBuildGit(t, f.repo, "config", "include.path", "../future-worktree-config")
+			case "worktree global config":
+				t.Setenv("XDG_CONFIG_HOME", filepath.Join(f.repo, "future-config"))
+			}
+			before := productionBuildGit(t, f.repo, "ls-files", "--stage")
+			productionBuildGit(t, f.repo, "config", "filter.fixture.clean", marker+" && cat")
+			productionBuildGit(t, f.repo, "config", "merge.fixture.driver", marker)
+			// A changed timestamp makes Git status check the file's content,
+			// which could invoke a clean filter even when the bytes still match.
+			stamp := time.Unix(1, 0)
+			require.NoError(t, os.Chtimes(filepath.Join(f.repo, "base.txt"), stamp, stamp))
+
+			result, err := f.cp.MergeChange(f.ctx, &f.payload)
+			requireMergeRefusal(t, err, "merge_conflict", tc.detail)
+			assert.Contains(t, err.Error(), "merge the approved commits manually")
+			assert.NotContains(t, err.Error(), marker)
+			assert.Nil(t, result)
+			assert.Empty(t, f.team.stopped)
+			assert.NoFileExists(t, filepath.Join(f.repo, ".git", "fixture-command-ran"))
+			assert.NoFileExists(t, filepath.Join(f.repo, ".git", "MERGE_HEAD"))
+			assert.NoFileExists(t, filepath.Join(f.repo, "candidate.txt"))
+			assert.Equal(t, f.build.Base, productionBuildGit(t, f.repo, "rev-parse", "HEAD"))
+			assert.Equal(t, before, productionBuildGit(t, f.repo, "ls-files", "--stage"))
+			base, err := os.ReadFile(filepath.Join(f.repo, "base.txt"))
+			require.NoError(t, err)
+			assert.Equal(t, "base contents\n", string(base))
+		})
+	}
+}
+
+func TestMergeChangeAllowsUnusedGitHelpersInAnExternalConfig(t *testing.T) {
+	f := newMergeFixture(t, "written", "")
+	config := filepath.Join(t.TempDir(), "config")
+	require.NoError(t, os.WriteFile(config, []byte("[filter \"lfs\"]\nprocess = printf invoked > .git/fixture-command-ran\n"), 0o600))
+	productionBuildGit(t, f.repo, "config", "include.path", config)
+	productionBuildGit(t, f.repo, "config", "merge.fixture.driver", "printf invoked > .git/fixture-command-ran")
+	result, err := f.cp.MergeChange(f.ctx, &f.payload)
+	require.NoError(t, err)
+	assert.Equal(t, f.branch, result.Branch)
+	assert.Equal(t, []BuildIdentity{f.identity()}, f.team.stopped)
+	assert.NoFileExists(t, filepath.Join(f.repo, ".git", "fixture-command-ran"))
+}
+
+// addMergeFixtureAttributes places rules in only one approved input tree.
+func addMergeFixtureAttributes(t *testing.T, f *mergeFixture, suite bool, attributes string) {
+	t.Helper()
+	role := testwriter.BuilderRole
+	if suite {
+		role = testwriter.TestsRole
+	}
+	productionBuildGit(t, f.repo, "switch", role.Branch(f.build.Number))
+	require.NoError(t, os.Mkdir(filepath.Join(f.repo, "nested"), 0o700))
+	f.write(t, "nested/.gitattributes", attributes)
+	productionBuildGit(t, f.repo, "add", "nested/.gitattributes")
+	productionBuildGit(t, f.repo, "commit", "-m", "Add fixture attributes")
+	commit := productionBuildGit(t, f.repo, "rev-parse", "HEAD")
+	productionBuildGit(t, f.repo, "switch", f.branch)
+	record := loadMetadataRecord(t, f.cp, f.payload.ChangeID)
+	if suite {
+		f.build.TestWriter.Commit = commit
+		record.card.Approval.SuiteCommit = commit
+		f.cp.mu.Lock()
+		err := f.cp.cards.saveOpenBuild(f.build)
+		f.cp.mu.Unlock()
+		require.NoError(t, err)
+	} else {
+		f.payload.CandidateCommit = commit
+		record.card.Approval.CandidateCommit = commit
+	}
+	saveMetadataRecord(t, f.cp, record)
 }
 
 func TestDropBuildStopsWorkersOnlyAfterSave(t *testing.T) {
