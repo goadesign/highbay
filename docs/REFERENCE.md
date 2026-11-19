@@ -14,8 +14,8 @@ an operation, who may call it, what it returns and how it refuses.
 | :--- | :--- |
 | **The user** | The person who runs `surla` in a project folder. Only the user confirms a change, starts a build and approves a result, all on the views page: the page the server serves to the user's browser, which the README and How Surla Works call the page. |
 | **The server** | The project's Surla server: one per project folder, started by `surla`. It keeps the Change Cards, builds, verification runs and approvals, and it serves the operations below over HTTP and MCP. |
-| **Herdr** | The terminal program the server and the agents run in. Its core service is the Herdr core (the commands `herdr-core` and `hc`); its window is the Herdr app (`herdr-app`). A *Herdr space* is the set of tabs that holds one project's terminals. |
-| **Chorus** | The messaging service the agents use to talk to each other. Its dialog in Herdr, **the Chorus dialog**, is where the user picks which installed agent app and model play each role. The list of roles the dialog shows is the *roster*. An agent's *watcher* is its background wait for Chorus messages. |
+| **Herdr** | An optional workspace in which the server and agents can run in separate terminals. Its core service is the Herdr core (the commands `herdr-core` and `hc`); its window is the Herdr app (`herdr-app`). A *Herdr space* is the set of tabs that holds one project's terminals. |
+| **Chorus** | The service that launches the project's agent panes in Herdr and carries their messages. The *roster* describes the roles whose panes it can launch. An agent's *watcher* is its background wait for Chorus messages. |
 | **The guide** | The agent the user talks to. It writes the Story and proposes and revises changes. |
 | **The builder** | The agent that writes the application's code, tries prompt wording on a live target and asks the server to verify its commit. |
 | **The test writer** | The agent that writes one test per finished flow, in its own working copy of the project, and reports when they are finished. |
@@ -47,108 +47,36 @@ an operation, who may call it, what it returns and how it refuses.
 
 | **Go 1.27.3 or later** | `surla` is a Go program, and the project's checks use Go. Surla runs Goa with each module's own versions, so no `goa` binary is needed. | [go.dev/dl](https://go.dev/dl/) |
 | **Surla** | The command itself. | From the root of the checkout whose README you are reading, run `go install ./cmd/surla`; see [Install](../README.md#install). `go install github.com/goadesign/surla/cmd/surla@latest` installs the latest module version available to Go, which may be older than this README and lack commands described here. When installing that version, follow its README. |
-| **Herdr core** (`herdr-core` and `hc`) | The server and every agent run in Herdr terminals. | `curl -fsSL https://releases.herdr.dev/core/install.sh \| sh` ([herdr.dev/core](https://herdr.dev/core/)) |
-| **Herdr app** (`herdr-app`) | The window that shows the team's panes. | `curl -fsSL https://releases.herdr.dev/app/install.sh \| sh` ([herdr.dev](https://herdr.dev/)) |
-| **Chorus v0.14.0 or later** | Agent messaging, the Chorus dialog and terminal client-option inspection. | `curl -fsSL https://raw.githubusercontent.com/goadesign/chorus/main/scripts/install.sh \| sh`; update with `chorus update -yes` |
-| **A coding agent** that the Chorus dialog or terminal command can start | An agent app plays each role: the user picks one per role in the dialog or supplies terminal choices. | — |
+| **Herdr core** (`herdr-core` and `hc`) | Optional. With `hc` available, the project server starts in a Herdr terminal. | `curl -fsSL https://releases.herdr.dev/core/install.sh \| sh` ([herdr.dev/core](https://herdr.dev/core/)) |
+| **Herdr app** (`herdr-app`) | Optional. With Herdr core, the app shows the team's panes. | `curl -fsSL https://releases.herdr.dev/app/install.sh \| sh` ([herdr.dev](https://herdr.dev/)) |
+| **Chorus v0.14.0 or later** | Pane launch and agent messaging for a Herdr team. Background workers can run without Chorus. | `curl -fsSL https://raw.githubusercontent.com/goadesign/chorus/main/scripts/install.sh \| sh`; update with `chorus update -yes` |
+| **A coding agent** | Install an agent for each role and give it an authenticated Surla MCP connection. One installed family can fill both worker roles. | — |
 | **Git 2.45 or newer**, with a name and address | Startup requires support for `--no-lazy-fetch`, so Surla's Git reads do not download missing objects. Every build needs the project in a Git repository with a first commit and a Git name and address, with or without stored verification settings, and so does verification, which needs the build. Without stored verification settings, live targets need the repository too. Surla records accepted tests, and any uncommitted files a working copy holds when it joins a new build, as commits under your Git identity. | Install Git 2.45 or newer on `PATH`; `git config --global user.name …` and `user.email …` configure its identity. |
 | **Docker** (Docker Desktop, or another local engine on a `unix://` socket) | `check_project` and `update_dependencies` run Go in Linux containers. The first check pulls `golang:1.27.3`. | [docker.com](https://www.docker.com/) |
 | **Temporal CLI** | Only to run the Orders evaluator, which starts a local Temporal server for its scenarios: when Surla verifies the Orders project or starts a live target of it, when `surla verify` runs that evaluator, and in the full-suite tests that run it (the `examples/orders` acceptance suite and the `e2e` tests of `./internal/verify` and `./cmd/surla`). | `brew install temporal` |
 
-Before it creates any state, `surla` checks for `herdr-core`, `herdr-app` and
-`chorus` on the path and names the install command of the one that is
-missing. When that program is in `~/.local/bin`, where the installers put it,
-it says instead `<program> is installed in <folder>, which is not on PATH;
-add <folder> to PATH, then run surla again`. It then checks that Chorus is
-v0.14.0 or later (`chorus update -yes` updates it), that `hc` is on the path
-or in `~/.local/bin`, and, for ordinary startup, that the browser opener (`open` on macOS or
-`xdg-open` on Linux) is on the path. `--print-link` skips that opener check. A
-missing opener is named without an install command. Surla then probes the Git
-on `PATH` with `git --no-lazy-fetch version`, without reading a repository.
-If that option is unknown, startup names the installed `git --version` line
-and says `Install Git 2.45 or newer and run surla again.` Missing Git has its
-own refusal. No project state, server, window or agent starts on these
-refusals. Git builds with the capability backported are accepted regardless
-of their version label.
+Before creating state, `surla` checks for the browser opener (`open` on macOS
+or `xdg-open` on Linux) and probes Git with `git --no-lazy-fetch version`.
+`--print-link` skips the opener check. Git 2.45 introduced the required
+option. Builds with the option backported also work. A refusal names the
+missing opener or Git capability.
 
 ---
 
 ## Terminal and browser automation
 
-Run `surla --print-link` in the project folder to start or attach and receive one
-JSON object on stdout: `{ "url": "...", "expires_at": "..." }`. Startup notices,
-team instructions and the nonsecret origin go to stderr. `--print-link` takes no
-other arguments (apart from `help`, `-h`, `-help` or `--help`); extra arguments
-are refused with `surla: --print-link accepts no additional arguments; use surla
---help`. This route does not
-require or call `open`/`xdg-open`; ordinary `surla` keeps opening the browser.
-The URL grants user-page access to whoever exchanges it first within two
-minutes. Avoid shared terminal/log captures and open it in the browser you
-control. After use, expiry or page reload, repeat the command for a fresh link.
-Server/auth/link-validation failure prints no link and exits nonzero. A team-only
-failure can still print a usable link while exiting nonzero with its reason on
-stderr: user decisions on the page do not require an agent.
+Run `surla --print-link` in the project folder to start or attach and receive
+one JSON object on stdout, `{ "url": "...", "expires_at": "..." }`. Startup
+notices and the server address go to stderr. The command takes no additional
+arguments. Open the URL in a browser you control. The first exchange within
+two minutes grants user-page access, so keep the URL out of shared logs.
+Repeat the command after use, expiry or page reload. A startup, authentication
+or link validation error exits nonzero without printing a link.
 
-The shared team next step names the dialog and copyable Chorus commands with
-the actual space ID. Run the printed `chorus team inspect --space ...` to see
-roles: bare inspection prints `{ "root": "...", "swarm": "...", "roles": [...] }`
-with each role's `role`, `title`, `handle`, `running` (`true` or `false`),
-`client`, `model`, `thinking` and `yolo` (`null` when not recorded), never
-credentials, without running client discovery. Before the project's first
-build, `roles` lists only `guide`; pressing **Build this change** on the views
-page adds `builder` and, unless verification settings are stored, `test_writer`
-to the same space's roster (registered worker roles stay in the roster across
-later builds). Run `chorus team launch --space ... --choices choices.json`, or
-`--choices -` to read the same JSON from stdin. Choices are keyed by role:
-
-```json
-{"guide":{"client":"codex","program":"codex","model":null,"thinking":null,"yolo":false}}
-```
-
-All fields are required; null model/thinking use client defaults. Name the
-program explicitly: the command has no Herdr program catalog or saved
-preferences. The dialog retains those features. Roles with Surla MCP connections
-support `"client": "claude"` or `"client": "codex"`; `"program"` is a single
-executable name, path or shell function name, not shell code or arguments.
-Before launching, add `--choices choices.json` to the printed
-`chorus team inspect --space ...` command to see the chosen programs' model
-options, thinking levels and permission effects.
-It validates the choices without opening panes or changing saved preferences and
-adds `client_options`, one entry per distinct chosen `client` and `program`
-(`models`, `efforts`, `model_supported`, `thinking_supported`, `note`, `error`,
-`yolo_flag`, `yolo_effect` and per-role `choices`), using the dialog's discovery
-and keeping its notes or errors visible. A model
-outside the suggestions says
-`not listed by <program>; the client checks it at startup`;
-it is information, not a refusal of a custom model ID.
-`yolo:false` uses client permission settings; `yolo:true` bypasses the client's
-tool confirmations (Codex also disables command sandboxing). Inspection shows
-the exact supported flag and effect. The client family identifies
-its existing flags and connection support; program can name a wrapper. Every
-missing role needs a choice; running roles may be omitted or repeated with
-matching settings. After starting a build on the page, run `chorus team inspect
---space ...` again to see the current roster and pass choices for the listed
-roles that are not running to `chorus team launch --space ... --choices ...` (a
-choice for a role outside the space's current roster, such as `test_writer`
-when verification settings are stored, is refused). Success prints
-`{ "tab": "...", "created": 1, "reused": 0 }`.
-
-Chorus v0.15.0 or later also returns each inspected role's `terminal` ID
-(null when no pane is running) and reported `status`: Herdr's `state` and
-`kind`, or null when the pane has not reported status. A missing kind is null.
-After a successful launch, those versions print a next step to stderr while
-keeping stdout as the success JSON: inspect the same space, run
-`hc read <terminal>` for each new pane, and answer what it displays before
-sending other text or keys. `running: true` does not mean a pane is ready for
-input, and unreported status does not prove that a question is open.
-
-A refusal prints a reason and exits nonzero; inspect and retry after partial
-failure to reuse completed panes. If Herdr's installed Chorus launcher files are
-missing or older than the `chorus` binary, `chorus team` refuses with
-`Herdr's Chorus launcher needs this release's files; run chorus setup -global,
-then retry`. See `chorus team launch --help` and the
-[Chorus launcher reference](https://github.com/goadesign/chorus/blob/main/skills/herdr/chorus-launcher/README.md#choose-roles-from-a-terminal)
-for the owning contract. Surla requires Chorus v0.14.0 or newer.
+The guide can call [`open_views`](#open_views) to open a new session for the
+user. Use [`surla status`](#surla-status) to read the project's current stage and
+roles without opening a session. The [team API](#team-supervision) exposes
+installed agent options and accepts explicit launch choices.
 
 ## Commands
 
@@ -165,50 +93,20 @@ list the commands`.
 <a id="surla-serve"></a>
 ### `surla` and `surla stop`
 
-**Input:** `surla`, run in a project folder (`surla --print-link` runs the same
-server and team steps without opening a browser, writing the link JSON to
-stdout and the lines below to stderr; see
-[Terminal and browser automation](#terminal-and-browser-automation)). **Who
-acts:** the command starts
-the folder's server, or attaches to the one already running, then prepares the
-team and opens the views page. **What the user sees**, in order:
-
-```text
-Started a Surla project for this folder. Moving or renaming this folder starts a new project.
-Team shop-3f9c1a2b4d5e.
-Choose an agent for each role in the open Chorus dialog in Herdr. From a terminal, run chorus team inspect --space '<space>' to see the roles (add --choices choices.json for models and permission effects), then chorus team launch with the same --space and --choices choices.json (--choices - reads stdin; see chorus team launch --help).
-Surla is running for /path/to/shop at http://127.0.0.1:52011
-```
-
-The first line appears only when the folder had no project. The second names
-the team, after the folder and the first 12 characters of the project's
-identifier. The third is the user's next step, chosen by the server (the first
-two states also append the `chorus team inspect` command with the space's
-quoted ID and the `chorus team launch` step above):
-
-| Chorus dialog | Step printed |
-| --- | --- |
-| Opened for this project | `Choose an agent for each role in the open Chorus dialog in Herdr.` |
-| Already open | `If this is your project's dialog, click Reload team and choose agents. Otherwise close it; use Start agents on the page or run surla.` |
-| Not needed | `Every listed role is running.` |
-
-Then the browser opens the views page, and the last line prints. When the
-browser cannot be opened, `surla` stops with `open project views: …` instead
-of the last line; the server and the team keep running. When the team cannot
-be prepared, `surla` prints no team lines but still opens the views page,
-because confirming and approving there need no agent, prints the last line,
-and then fails with `surla: the project team is not ready: ` followed by
-what failed and the step that repairs it (see
-[`ensure_team`](#ensure_team-management)). When Chorus or the Herdr app could not be started, that step is `run chorus up, then run surla again` or `open Herdr, then run surla again`; otherwise **Start agents** on the views
-page tries again.
+Run `surla` in a project folder to start or attach to its server and open a
+fresh views page. It prints the folder and server address after opening the
+browser. The first start also prints
+`Started a Surla project for this folder. Moving or renaming this folder starts a new project.`
+Running `surla` leaves agent startup to [the team operations](#team-supervision).
+If opening the page fails, the command reports `open project views: …` and
+the server stays running.
 
 <a id="model-provider-settings"></a>
 
-**Model provider settings.** Once the server answers for the project, and
-before the team step, `surla` hands it the request settings of each model
-provider whose key is set in the shell where `surla` runs
-([`hand_over_model_settings`](#hand_over_model_settings)), and, before the
-team lines, prints one line naming them, never a value, for example:
+**Model provider settings.** Once the server answers for the project,
+`surla` hands it the request settings of each model provider whose key is set
+in the current shell ([`hand_over_model_settings`](#hand_over_model_settings)).
+It prints one line with the settings' names, for example
 
 ```text
 Model settings held by the project server: ANTHROPIC_API_KEY, ANTHROPIC_BASE_URL (from this shell); not sent: ANTHROPIC_ADMIN_KEY. Live targets use anthropic/claude-sonnet-4-6; change it on the views page. surla stop makes the project server forget them.
@@ -218,7 +116,7 @@ A shell without a key sends nothing and keeps what an earlier `surla` handed
 over, marked `(from an earlier surla)`. A family variable without its key is
 named as not sent, such as `ANTHROPIC_BASE_URL (ANTHROPIC_API_KEY is not
 set)`. With nothing held and nothing left unsent, no line prints. A refused
-hand-over stops `surla` before the team step; a value longer than 4,096
+hand-over stops `surla` before opening the page; a value longer than 4,096
 characters is refused with that limit named.
 
 `surla` leaves its own environment unchanged and gives it unchanged to
@@ -229,28 +127,6 @@ included, exactly as if you had started Herdr in that shell; `surla stop` does
 not change that. Chorus and the browser opener receive the environment
 without any `ANTHROPIC_` or `OPENAI_` variable. Programs you started from that
 shell keep what they inherited.
-
-**The team.** Once the server answers, `surla` starts the Chorus service
-(`chorus up`) and then the Herdr app when either is not running. The server
-owns the team: its stable Chorus name, each role's handle and credential, the
-Herdr space, and the roster the Chorus dialog reads. Before any build, the
-roster holds only the guide; a build adds the builder and, unless
-verification settings are stored, the test writer. When the guide, or a worker
-role that has work on the open build (or any listed role when the assignment
-read fails), has no agent running or its pane holds only an idle shell, Surla
-focuses this project's space and opens the Chorus dialog, where the user picks
-an agent app and a model for each role. A worker role without work stays in the
-roster, and when every role that has work is running, no dialog opens. The
-guide's pane is on the left of the team's tab; the builder's pane
-is to its right, and the test writer's below the builder's. Starting again
-reuses the guide and the saved space. Surla manages spaces whose ID is 1–64
-characters of `[A-Za-z0-9_.-]` (not `.` or `..`). If a saved space has an ID
-outside that rule and is still open in Herdr, Surla refuses until you close
-that space; once the saved space is closed, the server adopts the one
-conforming local space that matches its team name and folder, or creates one;
-when several match, it refuses with their count, and the user closes the
-duplicates. Team preparation needs no Git repository; startup still requires
-the Git executable and capability listed under [Prerequisites](#prerequisites).
 
 <a id="idle-shell"></a>
 
@@ -316,15 +192,15 @@ that times out stops the operation, names `git rev-parse --show-toplevel`, and
 asks you to check that Git can read the workspace before retrying the command.
 A folder without a Git repository remains a valid project folder.
 
-`surla` finds that folder from the shell where it runs and starts the server
-with it. The server never looks the folder up itself, because Herdr starts it
-with the environment of the Herdr core, not the environment of your shell.
-For the same reason, a variable the server reads, such as a Docker setting,
-must be in the Herdr core's environment. A model provider's settings are the
-exception: `surla` hands them over from your shell (see
-[Model provider settings](#model-provider-settings)), and the server removes
-every `ANTHROPIC_` and `OPENAI_` variable it inherits from the Herdr core. The server
-refuses a state folder that is not private to your account, holds no project,
+The command passes the discovered state folder to `surla serve -state <dir>`.
+The foreground command also accepts this explicit state folder. A server
+started in Herdr inherits the Herdr core's environment. For example, Docker
+settings for that server must be available to the core. The detached process
+inherits its launching shell's environment. For Surla's live target and
+verification settings, the server clears inherited provider variables and
+uses those the CLI hands over. Coding agents can still use the credentials
+in their launch environment. See [Model provider settings](#model-provider-settings).
+The server refuses a state folder that is not private to your account, holds no project,
 belongs to another project folder, lies inside the project folder, or is not
 named by its physical path.
 
@@ -349,14 +225,14 @@ build started, such as the one still running after a new `surla` is
 installed, is refused with `surla: this project's server was started by
 another build of surla; run surla stop, then surla`; `surla stop` stops a
 server of any build. A record left by a server that died is stale and is
-removed by the next start. The server runs in its own Herdr terminal, labeled
-`surla_project=<project id>`, which outlives the shell that ran `surla`. That
-terminal shows the server's status lines: the address, the Change Card folder
-and, for each checkpoint, whether it is on. The `CP4` line says whether
-verification uses the evaluator in stored verification settings or the tests
-accepted for each change's build.
+removed by the next start. With `hc` available, the server runs in its own
+Herdr terminal labeled `surla_project=<project id>`. Without `hc`, it runs
+as a detached background process and sends its output to the private
+`serve-startup.log` in the state folder. Both survive the launching shell.
+The output shows the address, the Change Card folder and the checkpoint
+status. The `CP4` line names the verification test source.
 
-Before it starts the server's terminal, `surla` checks that the saved port is
+Before starting the server, `surla` checks that the saved port is
 free. When it is taken, `surla` starts nothing and names what holds it: the
 running server of another Surla project that saved the same port, with
 `surla: project port 52011 is held by the Surla server of the project in
@@ -369,7 +245,8 @@ was started; stop that program, then run surla (lsof -nP -iTCP:52011
 answers, for example because it cannot read its stored settings, or because
 another program took the port after that check, `surla` reads what that
 terminal printed, removes the terminal, and shows the last lines (at most 20
-lines and 4 KiB, with control characters removed):
+lines and 4 KiB, with control characters removed). For a detached server that
+exits before answering, it reads the startup log within the same bounds.
 
 ```text
 surla: the project server stopped while starting, and its last lines were:
@@ -377,27 +254,27 @@ surla: the project server stopped while starting, and its last lines were:
 ```
 
 If those lines cannot be read, the error says so and keeps the original
-failure. A server whose terminal still runs but has not answered within the
-command's deadline keeps its terminal, and the error names it so you can read
-the server's output there. A taken port leaves the saved port and credentials
+failure. A server still running when the startup deadline expires keeps its
+terminal or background process. The error identifies the launch so you can
+read its output. A taken port leaves the saved port and credentials
 in place.
 
 **`surla stop`.** Asks the server to shut down in order and waits until it has
 released the project, then prints `Surla stopped.`, or `Surla is stopped.`
 when no server was running. Before its listener closes, the server revokes its
-management credential and withdraws its running record. Interrupt,
+management credential and withdraws its running record. It drains its background
+workers before releasing the project. Interrupt,
 termination and hangup signals cause the same shutdown. A killed server is
 recovered by the next `surla`.
 
 **Credentials and browser access.** Each server creates a management
 credential in memory and publishes it in its private running record after
 binding its port; `surla` and `surla stop` read it there for each request,
-use the literal local address without a proxy, refuse redirects, and never
-print it. Management can check the project's identity, prepare the team,
+use the literal local address without a proxy, and refuse redirects.
+Management can check identity and status, read team metadata, attach a guide,
 stop the server, mint a browser link and hand over the shell's model provider
-settings; it cannot confirm, build or approve.
-Agent credentials survive restarts and are removed with their agent; agent
-connection settings and rosters name only their own credential files.
+settings. Application decisions use the browser session. Agent credentials
+survive restarts and are removed with their agent.
 
 `surla` opens only the saved views address with a single-use link in the
 address fragment. The link expires after two minutes and is exchanged once
@@ -409,6 +286,28 @@ All processes run as the same operating system account. File permissions keep
 other accounts out, not other programs of that account: a deliberate program
 could read another role's credential or run `surla` to obtain a browser link.
 The roles are a separation of duties, not isolation from a malicious agent.
+
+### `surla status`
+
+Run `surla status` in the project folder or one of its subfolders.
+`surla status --json` prints `{"running":false}` when the folder has no saved
+project or its server is stopped. It creates no project state or server.
+If a server holds the project, the command authenticates and verifies its
+project ID, directory and owner. It can read a compatible server started by
+a different build. An identity or status error is reported as an error.
+
+When running, the response includes `running: true`, `project_name`,
+`directory`, `team`, `herdr_mode`, `stage`, `change_id`, `change_title`,
+`attention` and `roles`. Stages are `describe`, `agree`, `build`, `check`,
+`approve` and `merged`. The change fields are empty when there is no
+selected change. Roles use the same fields as [`get_team`](#get_team).
+
+#### Project management status
+
+The management-only `GET /project/status` uses the same response fields as
+[`surla status`](#surla-status) without the CLI's `running` flag. It can
+consult Git to establish whether the open build was taken by the project
+branch, including a manual merge. A status read never starts or stops agents.
 
 ### `surla init`
 
@@ -727,7 +626,7 @@ carries a credential, and the credential fixes the caller's kind:
 | The guide | Its agent credential | Writing the Story and proposing and revising changes, and creating the project |
 | The builder | Its agent credential | Code, checks, live targets and prompt drafts, and asking for verification |
 | The test writer | Its agent credential | Reading its test assignments and reporting them finished |
-| Management | The server's management credential, used by `surla` and `surla stop` | The server and its team, never a change |
+| Management | The server's local management credential | The server and its team, never a change |
 
 One table decides which caller may call each operation. It governs HTTP
 calls, MCP calls and MCP discovery, so an agent's tool list shows only what
@@ -748,6 +647,7 @@ all act for that owner.
 | [`get_story_refresh`](#get_story_refresh) | ✓ | ✓ | ✓ | | | MCP tool and HTTP |
 | [`update_draft`](#update_draft) | | ✓ | | | | MCP tool and HTTP |
 | [`surla://golden-path`](#mcp-resources) (`golden_path`) | ✓ | ✓ | ✓ | ✓ | | MCP resource and HTTP |
+| [`open_views`](#open_views) | ✓ | ✓ | | | | MCP tool and HTTP |
 | [`init_project`](#init_project) | | ✓ | | | | MCP tool and HTTP |
 | [`generate_code`](#generate_code) | | | ✓ | | | MCP tool and HTTP |
 | [`check_project`](#check_project) | | | ✓ | | | MCP tool and HTTP |
@@ -776,12 +676,17 @@ all act for that owner.
 | [`review_verification`](#review_verification) | ✓ | | | | | MCP tool and HTTP |
 | [`list_verifications`](#list_verifications) | ✓ | ✓ | ✓ | ✓ | | MCP tool and HTTP |
 | [`approve_merge`](#approve_merge) | ✓ | | | | | MCP tool and HTTP |
+| [`merge_change`](#merge_change) | ✓ | | | | | HTTP |
 | [`list_traces`](#list_traces) | ✓ | ✓ | ✓ | | | MCP tool and HTTP |
 | [`get_team`](#get_team) | ✓ | | | | | HTTP |
 | [`show_team_pane`](#show_team_pane) | ✓ | | | | | HTTP |
 | [`start_team_agents`](#start_team_agents) | ✓ | | | | | HTTP |
+| [`list_team_agent_options`](#list_team_agent_options) | ✓ | | | | | HTTP |
+| [`dismiss_team_notice`](#dismiss_team_notice) | ✓ | | | | | HTTP |
 | `identity` (`GET /project/identity`) | | | | | ✓ | HTTP |
 | [`ensure_team`](#ensure_team-management) (`POST /project/team`) | | | | | ✓ | HTTP |
+| [`attach_guide`](#attach_guide) (`POST /project/attach-guide`) | | | | | ✓ | HTTP |
+| [`status`](#project-management-status) (`GET /project/status`) | | | | | ✓ | HTTP |
 | `stop` (`POST /project/stop`) | | | | | ✓ | HTTP |
 | `browser_link` (`POST /project/browser-link`) | | | | | ✓ | HTTP |
 
@@ -1167,23 +1072,37 @@ calls `update_draft` again until `to_correct` is empty, then calls
 
 ### Project files and checks
 
+#### `open_views`
+
+`POST /views/open` or MCP tool `open_views`. Takes no fields. The guide or
+user asks the project server to open a fresh views session. The server
+mints a short-lived, single-use link and gives it directly to the local
+browser opener. The result contains `opened` and `message`. The link
+and session credential stay with the server and browser.
+
 #### `init_project`
 
 `POST /workspace/init`. **Input:** `module_path`, `dir?`. **Output:**
 `InitProjectResult` (`dir`, `module_path`, `service_name`, `commit`).
 
-Creates the [`surla init`](#surla-init) starter in a child folder of an empty
-project folder, runs `go mod tidy`, `go vet ./...` and `go test ./...` in both
-modules, records the first commit `Initial scaffold` with the server's Git
-identity, and makes that child folder the server's project folder without a
-restart. A restart keeps it. `dir` defaults to the service name and must be a
-single folder name (`^[a-zA-Z0-9][a-zA-Z0-9._-]*$`, not `.surla…`). With an
-MCP `progressToken`, it reports each phase.
+Creates the [`surla init`](#surla-init) starter and runs `go mod tidy`,
+`go vet ./...` and `go test ./...` in both modules. The server saves
+`Initial scaffold` with its Git identity and makes the starter its active
+workspace. With an MCP `progressToken`, the server reports each phase.
+
+Omit `dir` or pass an empty string to create a child folder named for the
+service. A named child must match `^[a-zA-Z0-9][a-zA-Z0-9._-]*$` and cannot
+start with `.surla`. Pass `dir: "."` to initialize the bound folder in
+place. It may already contain `.claude`, `.codex`, `.cursor`, `.gemini`,
+`.agents`, `.vscode`, `.mcp.json` or `.DS_Store`. Surla preserves those
+entries and refuses other existing entries or collisions with generated
+files in this mode. It publishes the checked starter with `.git` last and
+resumes interrupted publication on restart.
 
 | Refusal | When |
 | --- | --- |
 | `unprocessable` (`422`) | `module_path` or `dir` is invalid. |
-| `conflict` (`409`) | The project folder already holds a project (`go.mod`, `design`, `gen`, `internal`, `cmd` or `eval`), a commit, verification runs or Change Cards made from its design files, or `<dir>` exists. |
+| `conflict` (`409`) | The workspace already holds a project or durable work based on it, the child destination exists, or the in-place destination contains an entry the operation cannot preserve. |
 | `not_implemented` (`501`) | The `surla` binary was built without an exact module version; install a tagged or pseudo-versioned release. |
 
 #### `generate_code`
@@ -1665,7 +1584,8 @@ evaluator's commit), with `test_source`. Because the builder commits in
 folder: first `git merge <candidate_commit>` (verified on `surla/build-<n>`),
 and then, for written tests, `git merge <suite_commit>` (verified on
 `surla/tests-<n>`); with stored verification settings, only
-`git merge <candidate_commit>` is shown. Surla merges and deploys nothing.
+`git merge <candidate_commit>` is shown. Approval records permission to
+merge. See [`merge_change`](#merge_change) for the separate user operation.
 
 | Refusal | When and the step |
 | --- | --- |
@@ -1677,6 +1597,35 @@ and then, for written tests, `git merge <suite_commit>` (verified on
 | `unprocessable` (`422`) | The report did not pass, does not follow from its own evidence, was made for another candidate commit or another revision than the ones named, or ran tests at another commit than the tests chosen for the revision. For other tests the message names both commits and ends with the step `the builder verifies the candidate again; then approve that run`. |
 | `unprocessable` (`422`) | Promotion settings are stored and a release binary is missing, unreadable or differs from the run's. The message names no folder path and ends with the step `publish the binaries the run built, whose folder the run's Proof view shows, into the release folder that the promotion settings name, in a folder named after the commit, or remove the promotion settings`: that folder is `<release_dir>/<candidate_commit>/`, and removing the settings is `surla promotion remove`, then `surla stop` and `surla`. |
 | `not_implemented` (`501`) | The server runs no verification. A server started by `surla` always does. |
+
+#### `merge_change`
+
+`POST /changes/{change_id}/merge`. Only the user's browser session may call it.
+Send `request_revision`, `candidate_commit` and `report_digest` from the
+current approval for that change. The server checks that the live approval,
+verification report, selected tests and open build still match. It merges the
+candidate and, for written tests, the accepted tests commit into the local
+branch checked out in the project. An evaluator from stored verification
+settings stays in its own repository.
+
+The local branch must have clean tracked files. Untracked and ignored files
+may remain, and a file that would be overwritten blocks the merge. If any
+step fails after Git starts changing the branch, the server attempts to
+restore the original branch tip, index and tracked files and reports any
+rollback failure. A successful response gives `branch` and `head_commit`.
+Retrying the exact current approval after its work has already landed
+returns the branch and its current tip without merging again. Surla stops
+only the workers for that build. The team supervisor also stops them after
+it observes a manual merge or a drop.
+
+| Refusal | Recovery |
+| --- | --- |
+| `not_found` (`404`) | Find the owned change before merging. |
+| `not_approved` (`409`) | Review and approve the current result for the open build. |
+| `detached_head` (`409`) | Check out the local branch that should receive the result. |
+| `dirty_worktree` (`409`) | Commit or stash the tracked changes named in the refusal. |
+| `working_copy_busy` (`409`) | Finish the other Git or Surla operation, then retry. |
+| `merge_conflict` (`409`) | Read the reported Git and restoration outcomes and resolve the cause before retrying. |
 
 ### Diagnostics
 
@@ -1711,8 +1660,8 @@ each worker first reads its assignment, Surla joins its working copy to the
 build's branch, and `get_test_writer_assignment` writes the required tests when
 marking the assignment read. **What the user sees:** the Build section shows the
 build, each
-role's assignment and the test writer's progress, and the Chorus dialog asks
-for an agent for each role it adds.
+role's assignment, the test writer's progress and the result of the worker
+start request.
 
 A project has one open build, numbered `n`, whose `taking.state` is `building`,
 `passed`, `merged` or `dropped`. Building another change is refused with
@@ -1787,15 +1736,16 @@ the test writer's next report.
 
 `POST /changes/{change_id}/build`. **Input:** `change_id`, `request_revision`
 (the agreed revision), `replaces?` (`ReplacedBuild`: `change_id`,
-`started_at`). **Output:** `StartBuildResult` (`build`, `team`).
+`started_at`), `choices?` (see [worker choices](#start_team_agents)). Only
+`builder` and `test_writer` are valid keys in `choices`. **Output:**
+`StartBuildResult` (`build`, `team`).
 
 - `build` is the saved `StartedBuild`, as `get_build` returns it.
 - `team.state` is `ready` (the team result with its `step`), `window_busy`,
   `ambiguous_space` (with the `count`) or `unavailable`, each with a `step`.
-  A team warning still means the build was saved.
-  `ready` means team preparation completed; its `step` can still ask the user
-  to choose agents in an open dialog. It does not establish that agents are
-  running. The page quotes that start's instruction as a dated receipt.
+  A team warning still means the build was saved. `ready` means the worker
+  start request completed. Inspect the observed role states to see which
+  agents are running. The page displays the outcome with its time.
 
 Every refusal below saves no build and registers no role.
 
@@ -1828,9 +1778,9 @@ The user's **Drop change** confirmation on the views page. Marks the open build
 action while `taking.state` is `building` or `passed`; a `merged` build may be
 dropped too), records the branches (`surla/build-<n>` and
 `surla/tests-<n>`) that already hold commits beyond the build's base in
-`kept_branches`, stops worker tools on that build with `no_build`, and causes
-the next [`refresh_story`](#refresh_story) to remake `.surla-draft` from the
-project folder. The dropped build no longer blocks starting another build,
+`kept_branches`, stops that build's workers, refuses their tools with
+`no_build`, and causes the next [`refresh_story`](#refresh_story) to remake
+`.surla-draft` from the project folder. The dropped build no longer blocks starting another build,
 but an agreement drafted before the drop still cannot be built. The guide
 refreshes the draft and revises the change, then the user adopts that revision;
 [`get_build`](#get_build) reports this condition as `drafted_before_drop`. Other
@@ -1911,6 +1861,9 @@ start. Findings contain no absolute path.
 
 `GET /changes/{change_id}/build`. **Output:** `ChangeBuild` (`change_id`,
 `drafted_before_drop`, `build`).
+
+This read can check Git to determine whether the build has been merged.
+The supervisor owns worker cleanup after a merge or drop.
 
 `drafted_before_drop` reports one precise admission condition for the current
 agreed revision: its saved record of how the design was drafted predates the
@@ -2081,37 +2034,44 @@ verdict, returns at once and wakes the report checker.
 
 ## Team supervision
 
-The server rebuilds the team's picture in memory from Herdr and Chorus and
-saves none of it. The user's views page reads it and acts on it with
-`get_team`, `show_team_pane` and `start_team_agents`; agents and management
-cannot call these three, and none is an MCP tool. The `surla` command
-prepares the same team with the management operation `ensure_team`.
+The server tracks each team's role state in memory. In a Herdr workspace,
+Chorus launches role panes and reports which agents are waiting for messages.
+Open Herdr and run `chorus up` before launching the team. To change
+the managed address, run `chorus up -addr :9550`, then use **Start agents** to
+update the team's connection. A failed connection check leaves the page
+available. Once a roster exists, Chorus can inspect the team's panes. See
+the [Chorus team command reference](https://github.com/goadesign/chorus/blob/main/skills/herdr/chorus-launcher/README.md#choose-roles-from-a-terminal).
 
-Each team start asks Chorus for its healthy managed address through
-`chorus status -json`. Use `chorus up -addr :9550` to select another address;
-a foreground `chorus serve -addr` alone does not set Surla's managed endpoint.
-After changing the managed address, choose **Start agents** or run `surla`
-again. Surla replaces the old connection and shows unknown watcher state until
-it has facts from that server. A failed address check changes no team state
-or window and leaves the views page available. It reports:
-`Chorus is not running or its settings are invalid. Run chorus up (or chorus status to see the error), then start the agents again (Start agents on the page, or run surla).`
+When Herdr is unavailable, the server can launch finite background worker
+processes without Chorus. It waits for in-flight test report checks and
+verification before requesting follow-up work. Each role gets at most three
+invocations per build during the running server's supervision, with a
+30-minute deadline per invocation. Shutdown stops and waits for the managed
+worker process groups. Agents use their own credentials and need an
+authenticated Surla MCP connection to work on their assignments.
 
 ### `get_team`
 
-`GET /team`. **Output:** `TeamSnapshot` (`team`, `roles`). Registered roles
-in guide, builder, test writer order; empty before any is registered. Reading
-creates nothing and marks nothing read. Each role has:
+`GET /team`. The user's cached team snapshot contains `team`, `herdr_mode`,
+`roles`, `saved_choices` and `dismissed_notices`. Herdr mode is `attached`
+with a guide pane attached to the project, `available` when Herdr can host
+workers, or `unavailable` when workers run in the background. Roles are in
+guide, builder, test writer order and empty before registration. The read
+starts no subprocesses and marks no assignments read.
 
 | Field | Values |
 | --- | --- |
+| `role` | `guide`, `builder` or `test_writer` |
+| `handle` | The role's registered Chorus handle. |
 | `state` | `not_started`, `ended`, `starting`, `needs_you`, `working`, `waiting`, `error` or `unknown` |
 | `attention` | Why a role needs the user: `none`, `permission`, `question`, `auth`, `silent` (a running agent that reported nothing for 60 seconds), `assignment` (a role `waiting` with an unread assignment for 90 seconds; see **Reminders** below) or `unknown`. `silent` and `assignment` change only what is shown. |
 | `watcher` | `held` when Chorus reports the agent's watcher, `gone` after 90 seconds of known absence, or `unknown` |
 | `assignment` | `unread` (the role has work on the open build and owes an assignment read), `nothing_owed` (the role has work and owes no read; the guide always reads `nothing_owed`, shown on the page as `No assignments`), `no_work` (the open build needs nothing from that role: no build is open, the open build was dropped, the test writer's tests are `accepted`, or a verification of the builder's build passed with current inputs) or `unknown` |
 
-When Herdr sends no heartbeat or event for 45 seconds, every role reads
-`unknown` until fresh facts arrive. A failed assignment read never reads as
-`nothing_owed` or `no_work`. `wait_for_changes` also covers these facts.
+For Herdr panes, terminal state becomes `unknown` after 45 seconds without
+a heartbeat or event and recovers when fresh facts arrive. When the server
+cannot read assignment state, it reports `unknown`. `wait_for_changes` also
+covers these facts.
 
 ### `show_team_pane`
 
@@ -2126,47 +2086,76 @@ that role's pane, only when the user asks.
 
 ### `start_team_agents`
 
-`POST /team/agents`. **Output:** `ProjectTeam` (`team`, `space`, `roles`,
-`dialog`, `step`). The **Start agents** action: the same team preparation
-`surla` runs, opening the Chorus dialog when the guide, or a worker role that
-has work on the open build (or any listed role when the assignment read fails),
-is not running.
-Refusals: `ambiguous_space` (`409`, close the
-duplicate Herdr spaces, then start the agents), `window_busy` (`409`) and
-`team_unavailable` (`503`), whose message is the views page's step for its cause (see
-[`ensure_team`](#ensure_team-management)). `team_unavailable` can come after
-the server saved the team's name and space, registered the guide and wrote
-the roster; they stay saved, and the next start reuses them.
+`POST /team/agents`. Send a JSON object such as `{}` to start missing
+workers that have work on the open build, as **Start agents** does. It returns
+`ProjectTeam` (`team`, `space`, `herdr_mode`, `roles`, `step`). `roles` contains
+`role`, `handle` and `running`; `space` is empty without a Herdr space.
+
+A user API client may send `choices` keyed by role. For each choice, pass
+`client` and `program` from [`list_team_agent_options`](#list_team_agent_options)
+and the required boolean `yolo`. When supported, pass a `model` or
+`thinking` effort. Omitting these uses the client's defaults. `yolo: false`
+uses the normal permission mode. With `yolo: true`, the effect depends on
+the selected client. Read its `yolo_effect` before choosing.
+
+For example, if discovery returns `/path/to/codex`, send this body to
+start a missing guide in Herdr.
+
+```json
+{"choices":{"guide":{"client":"codex","program":"/path/to/codex","yolo":false}}}
+```
+
+For an omitted worker choice, Surla uses a supported saved choice or an
+installed default. By default it prefers Codex for the builder and a different
+family for the test writer, using Claude Code when available and distinct.
+With one supported installed family both workers can use it. Surla saves
+the resolved choices by role for later requests. A worker that is already
+running keeps its existing session.
+
+Surla starts a guide only when this operation receives an explicit
+`choices.guide` in Herdr. It refuses a guide start if a guide already has a
+running pane or a Chorus watcher. The browser's **Start agents** sends the
+worker start request without choices. [`start_build`](#start_build) accepts
+worker choices only.
+
+An unavailable client, unsupported option or already running guide is
+refused with `unprocessable` (`422`). If the team cannot start, read the
+returned step before retrying. A failed launch can leave team registration
+and preferences saved for the next request.
+
+### `list_team_agent_options`
+
+`GET /team/agent-options`. Only the user's browser session may call it.
+Discovers installed coding-agent executables and their options on demand.
+The response's `agents` entries include `client`, `program`, `title`,
+`models`, `efforts`, `model_supported`, `thinking_supported`,
+`yolo_supported`, optional `yolo_effect` and `headless_supported`.
+An empty model list can accompany support for custom model IDs.
+
+### `dismiss_team_notice`
+
+`POST /team/notices/dismiss`. Only the user's browser session may save a
+project dismissal. Send `notice` with `single_agent_family`, `outside_herdr`
+or `herdr_unavailable`. A successful request returns `204`. The preference
+belongs to the project and leaves startup and agent capabilities unchanged.
 
 ### `ensure_team` (management)
 
-`POST /project/team`, called by `surla`. It prepares the same team and
-returns `team`, `space`, `roles` (`role`, `handle`, `running`), `dialog`
-(`opened`, `already_open` or `not_needed`; a worker role without work on the
-open build stays in the roster without opening the dialog) and `step`. `surla`
-prints `step` unchanged. Its refusals, `ambiguous_space` (with the count), `window_busy`
-and `team_unavailable`, are shown with fixed recovery text. As for
-`start_team_agents`, `team_unavailable` may leave the team's name, space,
-guide and roster saved for the next start.
+`POST /project/team` returns existing `team`, `space`, `herdr_mode`,
+`roles` and `step` to the server's management client. It reads the team
+without launching an agent or creating a space.
 
-`team_unavailable` names its `cause`, and `surla` and the views page each
-show their own fixed step for it, never the failure's own text. `surla`
-adds the HTTP status, and its retry is **Start agents** on the views page,
-which opens anyway:
+### `attach_guide`
 
-| `cause` | What could not be used | `surla` prints | The views page shows |
-| --- | --- | --- | --- |
-| `stopping` | The server is shutting down. | `the project server is stopping; run surla again` | `the project server is stopping; run surla in the project folder to start it again` |
-| `chorus` | The managed Chorus server or its settings are unavailable. | `Chorus is not running or its settings are invalid. Run chorus up (or chorus status to see the error), then start the agents again (Start agents on the page, or run surla).` | The same step. |
-| `herdr` | A Herdr command did not complete. | `Herdr did not complete a team command; open the Herdr app, then click Start agents on the views page` | `Herdr did not complete a team command; open the Herdr app, then try again` |
-| `saved_space` | The project's saved Herdr space has an ID this version of Surla no longer accepts and is still open. | `This project's saved Herdr space has an ID this version of Surla no longer accepts. Close that space in Herdr (its agents stop with it), then start the agents again; Surla will prepare a replacement space.` | The same step. |
-| `roster_folder` | Herdr's launcher roster folder could not be written. | `Herdr's launcher roster folder could not be written; make data/chorus-launcher/rosters in Herdr's app folder (~/.config/herdr-app unless HERDR_APP_HOME is set) writable by this account, then click Start agents on the views page` | The same, ending `then start the agents again` |
-| `project_state` | The project's record or an agent credential could not be read or written. | `this project's private state in <state folder> could not be read or written; make that folder and the folders in it private to this account (chmod 700) and its files too (chmod 600), then click Start agents on the views page` | `this project's private state could not be read or written; run surla in the project folder to see which folder to repair` |
-| `role_folder` | A role's working folder could not be read. | `a team role's working folder could not be read; make sure this account can open the project folder <project folder> and its build working folders, then click Start agents on the views page` | `a team role's working folder could not be read; make sure this account can open the project folder and its build working folders, then start the agents again` |
-
-A team request from `surla` that runs out of time prints `project team
-request did not finish because Herdr did not answer in time; open the Herdr
-app, then click Start agents on the views page: context deadline exceeded`.
+`POST /project/attach-guide` lets a local management client register an
+existing coding session as the guide. Send the session's `hc_terminal_id`
+and `client` when attaching in Herdr. Surla adopts the pane only if it is a
+running local model pane in a tab with compatible project and team labels.
+Outside Herdr, omit the terminal ID. The result includes `team`, the guide's
+`handle`, `adopted_herdr` and `herdr_mode`. The integration gives the coding
+agent its role credential from `agents/<handle>` in the private project
+state folder. The project serves MCP at `/mcp` and authenticates the agent
+with that bearer credential. Registration also works without pane adoption.
 
 **Reminders.** Each version of an assignment that a worker role with work on
 the open build has not read is a generation: a new build gives each of its
@@ -2352,7 +2341,7 @@ holds it beside them (**Switch to Incoming Card**).
 | View | What it shows and does |
 | --- | --- |
 | **Describe** | The project's changes ([`list_changes`](#list_changes)), opening directly on the only one. With none: `This project has no changes yet. Ask the guide to propose a change; it appears here by itself.` A change with a waiting proposed revision is marked **New revision proposed**. Each change shows its latest saved run, such as **Latest saved run: passed**, or **No saved runs**, and under a run what `inputs_current` says: `Matches the agreed revision and selected tests.` or `Earlier inputs or no current test selection. Ask the builder for a check of the agreed revision and selected tests.` |
-| **Team** | Each registered role's state, its Chorus watcher, and its assignment status (**No assignments** for the guide, and **Assignment unread**, **No unread assignment**, **No work now** or **Assignment status unknown** for a worker role), with a **Show … pane** action per role, such as **Show guide pane**, and **Start agents**, which says what it returned and when. With no role: `No agents are registered. Start agents prepares the guide; building adds the required roles.` Nothing runs on a refresh. |
+| **Team** | Each registered role's state, its Chorus watcher, and its assignment status (**No assignments** for the guide, and **Assignment unread**, **No unread assignment**, **No work now** or **Assignment status unknown** for a worker role), with a **Show … pane** action per role, such as **Show guide pane**, and **Start agents**, which requests missing workers and shows the outcome and time. Refresh reads the cached team facts. |
 | **Story** | The Story saved with the shown revision, one row of step cards per flow: a finished flow is marked **will be tested end to end**, others **draft: not tested** with the reasons. Below it, the current Story evaluation ([`get_story_refresh`](#get_story_refresh)): none, running, failed, or succeeded, and how it differs from the change's Story; a draft is not part of the change until the guide revises the change with it and the user confirms. |
 | **Live target** | Whether a live target is starting, running, ended unexpectedly or not confirmed stopped. A running target shows its commit, address, accepted prompt versions (never the text), and **Stop live target**, which asks first. An ended target shows its commit, launch and observed-end times, and the builder's recovery step. Below it, the model live targets started afterwards use and a form whose **Apply** sends [`configure_model`](#configure_model); a refusal names a missing key's variable. |
 | **Agree** | The Change Card: questions to answer, examples, preserved behaviors, and **Confirm Intent & Lock Examples** (on an agreed card, **Refine Confirmed Answers & Examples**). A proposed revision appears above the agreed one with everything adopting it would confirm (changed request and summary, questions and examples marked **New**, **Edited**, **Kept** or **Removed**, Story and design changes), **Adopt this revision** and **Decline**. A stale submission offers **Load Latest Card**. On a confirmed card the **Build** section comes first, with the saved agreement below it under **Agreed:** and the request. **Agreement details** and **Refine agreed answers and examples** remain available for review and refinement; an active edit stays open. **Previous Saved Revision** keeps the earlier snapshot: questions not yet answered in that proposal are labeled as historical, and a note distinguishes an unconfirmed proposal from the current confirmed agreement. **Review saved approval** opens the record in Approve. **Build** opens the same saved build section directly. |
@@ -2464,8 +2453,9 @@ project folder:** with `git merge <candidate_commit>` first and, for written
 tests, a separate `git merge <tests_commit>`. The branch labels show where
 those commits were verified. An earlier agreement’s build receives no merge
 instruction on Approve; its commit bindings remain readable. Existing Check
-history preserves older results. Approval records permission and never merges
-or deploys. An unverified saved record remains explicitly unverified.
+history preserves older results. Approval records permission. Merging uses
+the page's Git instructions or the separate [user API](#merge_change).
+An unverified saved record remains explicitly unverified.
 
 **What the page never shows or does.** It never shows prompt text or
 structural `diff` results, and it starts no live target and sends no prompt
