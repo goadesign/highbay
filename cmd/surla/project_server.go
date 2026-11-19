@@ -653,10 +653,11 @@ func (runtime projectRuntime) discover() (*project.State, error) {
 // Each generated management request obtains the currently published credential.
 func projectClient(state *project.State) *genproject.Client {
 	client := projectHTTPClient()
+	teamClient := teamHTTPClient()
 	return genproject.NewClient(
 		managementEndpoint(state, client, (*genprojectclient.Client).Identity),
-		teamManagementEndpoint(state),
-		managementEndpoint(state, client, (*genprojectclient.Client).AttachGuide),
+		teamManagementEndpoint(state, teamClient),
+		managementEndpoint(state, teamClient, (*genprojectclient.Client).AttachGuide),
 		managementEndpoint(state, client, (*genprojectclient.Client).Status),
 		managementEndpoint(state, client, (*genprojectclient.Client).Stop),
 		managementEndpoint(state, client, (*genprojectclient.Client).BrowserLink),
@@ -665,8 +666,8 @@ func projectClient(state *project.State) *genproject.Client {
 }
 
 // teamManagementEndpoint gives only the team request's deadline its own concrete recovery step.
-func teamManagementEndpoint(state *project.State) goa.Endpoint {
-	next := managementEndpoint(state, teamHTTPClient(), (*genprojectclient.Client).EnsureTeam)
+func teamManagementEndpoint(state *project.State, client *http.Client) goa.Endpoint {
+	next := managementEndpoint(state, client, (*genprojectclient.Client).EnsureTeam)
 	return func(ctx context.Context, payload any) (any, error) {
 		result, err := next(ctx, payload)
 		if errors.Is(err, context.DeadlineExceeded) {
@@ -792,7 +793,7 @@ func projectHTTPClient() *http.Client {
 	}
 }
 
-// teamHTTPClient gives only the bounded team operation enough time for desktop commands.
+// teamHTTPClient gives bounded team operations enough time for desktop commands.
 func teamHTTPClient() *http.Client {
 	client := projectHTTPClient()
 	client.Timeout = 50 * time.Second
