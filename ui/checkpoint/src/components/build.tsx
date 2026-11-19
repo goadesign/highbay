@@ -685,7 +685,7 @@ function BuildDetails({ card, build, children }: { card: ChangeCardResult; build
   );
 }
 
-// StartReceipts describes a historical launcher outcome in the past tense.
+// StartReceipts describes a historical team startup outcome in the past tense.
 // Owner instructions remain quotations returned then, never current advice.
 function StartReceipts({ receipt }: { receipt: BuildStartReceipt }) {
   const team = receipt.team;

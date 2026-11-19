@@ -122,6 +122,22 @@ test("standard faults and session errors retain their existing fallback", () => 
   assert.equal(generated.ROUTES.start_build.decodeFailure(500, { message: "unvalidated" }), false);
 });
 
+test("dismissed notices are an array of enum values in types and results", () => {
+  const openApi = JSON.parse(fs.readFileSync(openApiPath, "utf8"));
+  const choices = openApi.components.schemas.TeamSnapshot.properties.dismissed_notices.items.enum;
+  const union = choices.map((choice) => JSON.stringify(choice)).join(" | ");
+  const source = generateTypesModule(openApi);
+  assert.ok(source.includes(`dismissed_notices: (${union})[];`), "the array must contain the entire union");
+
+  const { decode } = generatedConsumer(openApi).ROUTES.get_team;
+  const snapshot = { team: "team", roles: [], herdr_mode: "unavailable", saved_choices: {} };
+  assert.equal(decode({ ...snapshot, dismissed_notices: [] }), true);
+  assert.equal(decode({ ...snapshot, dismissed_notices: choices }), true);
+  assert.equal(decode({ ...snapshot, dismissed_notices: choices[0] }), false);
+  assert.equal(decode({ ...snapshot, dismissed_notices: ["unknown_notice"] }), false);
+  assert.equal(decode(snapshot), false);
+});
+
 for (const [operation, name] of [["start_build", "previous_change_open"], ["drop_build", "build_changed"]]) {
   test(`the unmodified server contract retains ${operation}'s typed build refusal`, () => {
     const generated = generatedConsumer(JSON.parse(fs.readFileSync(openApiPath, "utf8")));

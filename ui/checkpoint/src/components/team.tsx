@@ -39,7 +39,7 @@ export interface TeamStageProps {
   actionError: string | null;
   // onRefresh asks the page to read the team again.
   onRefresh: () => void;
-  // onStartAgents asks the owner to prepare the team after an explicit click.
+  // onStartAgents asks the owner to start missing agents after an explicit click.
   onStartAgents: () => void;
   // onShowPane asks the owner to show the selected registered role's pane.
   onShowPane: (role: Role) => void;
@@ -92,7 +92,7 @@ const attentionLabels: Record<TeamRoleState["attention"], string> = {
   question: "question",
   auth: "sign-in required",
   silent: "no status reported",
-  assignment: "idle with an unread assignment. Show its pane and tell it to read its assignments and to keep its Chorus watcher running.",
+  assignment: "idle with an unread assignment.",
   unknown: "reason unknown",
 };
 
@@ -111,6 +111,14 @@ const assignmentLabels: Record<TeamRoleState["assignment"], string> = {
   unknown: "Assignment status unknown",
 };
 
+// attentionReason adds pane guidance only when Herdr is available.
+function attentionReason(role: TeamRoleState, herdrAvailable: boolean): string {
+  const reason = attentionLabels[role.attention];
+  return role.attention === "assignment" && herdrAvailable
+    ? reason + " Show its pane and tell it to read its assignments and to keep its Chorus watcher running."
+    : reason;
+}
+
 // TeamStageView shows only registered roles, retaining and labeling the last
 // successful facts after a failed refresh. It performs no reads or window work.
 export function TeamStageView({
@@ -127,6 +135,7 @@ export function TeamStageView({
   onShowPane,
   onFocusedControlRemoved,
 }: TeamStageProps) {
+  const herdrAvailable = snapshot?.herdr_mode !== "unavailable";
   const needsStart = error === null && snapshot !== null && (
     snapshot.roles.length === 0 ||
     snapshot.roles.some((role) => role.state === "not_started" || role.state === "ended")
@@ -173,7 +182,7 @@ export function TeamStageView({
           <p id="surla-team-name">Team: <strong>{snapshot.team}</strong></p>
           {snapshot.roles.length === 0 ? (
             <p id="surla-team-empty">
-              No agents are registered. Start agents prepares the guide; building adds the required roles.
+              No agents are registered. {herdrAvailable ? "Start agents prepares the guide; building adds the required roles." : null}
             </p>
           ) : (
             <ul id="surla-team-roles" className="surla-trace-list">
@@ -189,12 +198,12 @@ export function TeamStageView({
                     >
                       {stateLabels[role.state]}
                       {role.state === "needs_you" && attentionLabels[role.attention] !== ""
-                        ? ": " + attentionLabels[role.attention] : ""}
+                        ? ": " + attentionReason(role, herdrAvailable) : ""}
                     </Badge>
                   </div>
                   <p>{watcherLabels[role.watcher]}</p>
                   <p>{role.role === "guide" ? "No assignments" : assignmentLabels[role.assignment]}</p>
-                  <div className="surla-field-row">
+                  {herdrAvailable ? <div className="surla-field-row">
                     <PaneButton
                       role={role}
                       showing={showing}
@@ -203,7 +212,7 @@ export function TeamStageView({
                       onFocusedControlRemoved={onFocusedControlRemoved}
                       global={false}
                     />
-                  </div>
+                  </div> : null}
                   <details className="surla-details">
                     <summary>{roleLabels[role.role]} details</summary>
                     <p>Registered handle: <code>{role.handle}</code></p>
@@ -239,22 +248,23 @@ export function GlobalTeamAttention({
   onFocusedControlRemoved,
 }: GlobalTeamAttentionProps) {
   const roles = snapshot?.roles.filter((role) => role.state === "needs_you") ?? [];
+  const herdrAvailable = snapshot?.herdr_mode !== "unavailable";
   return (
     <div id="surla-team-attention" role="status" aria-live="polite">
       {roles.map((role) => (
         <div key={role.role} className="surla-field-row" id={"surla-team-attention-" + role.role}>
           <span className="surla-live-wrap">
             {lastRead ? "Last read: " : ""}
-            {teamAttentionText(role)}
+            {teamAttentionText(role, herdrAvailable)}
           </span>
-          <PaneButton
+          {herdrAvailable ? <PaneButton
             role={role}
             showing={showing}
             disabled={disabled}
             onShowPane={onShowPane}
             onFocusedControlRemoved={onFocusedControlRemoved}
             global={true}
-          />
+          /> : null}
         </div>
       ))}
     </div>
@@ -263,8 +273,8 @@ export function GlobalTeamAttention({
 
 // teamAttentionText supplies the same sentence to the live global notice and
 // the project title. Callers select needs_you roles first.
-export function teamAttentionText(role: TeamRoleState): string {
-  const reason = attentionLabels[role.attention];
+export function teamAttentionText(role: TeamRoleState, herdrAvailable: boolean): string {
+  const reason = attentionReason(role, herdrAvailable);
   return roleLabels[role.role] + " needs you" + (reason !== "" ? ": " + reason : "");
 }
 

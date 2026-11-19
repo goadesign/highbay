@@ -1565,7 +1565,7 @@ export function bootstrapViewsPage() {
     focusResult(activeResult?.kind === "cp5-approval" ? "#surla-cp5-title" : "#surla-cp4-title");
   }
 
-  // startTeamAgents is an explicit window request. Its dated receipt describes
+  // startTeamAgents is an explicit start request. Its dated receipt describes
   // what that request returned; current role health always comes from readTeam.
   function startTeamAgents() {
     if (sessionState !== "active" || hasPending("start_team_agents", "")) return;
@@ -1901,7 +1901,8 @@ export function bootstrapViewsPage() {
   // showTeamPane sends only the registered role the user selected; the server
   // rechecks ownership and open dialogs before it changes the window.
   function showTeamPane(role: TeamRoleState["role"]) {
-    if (sessionState !== "active" || hasPending("show_team_pane", role)) return;
+    if (sessionState !== "active" || teamSnapshot?.herdr_mode === "unavailable" ||
+        hasPending("show_team_pane", role)) return;
     teamActionError = null;
     callServer(
       "show_team_pane", { role }, role,
@@ -2353,7 +2354,8 @@ export function bootstrapViewsPage() {
           next = <span>Describe the next change when you are ready.</span>;
         } else if (tests.state === "needs_changes") {
           const needs = teamFactsError() === null ? (teamSnapshot?.roles ?? []).filter((role) => role.state === "needs_you") : [];
-          attention = needs.length > 0 ? needs.map(teamAttentionText).join(". ")
+          attention = needs.length > 0
+            ? needs.map((role) => teamAttentionText(role, teamSnapshot?.herdr_mode !== "unavailable")).join(". ")
             : teamFactsError() !== null || teamSnapshot === null || teamSnapshot.roles.some((role) => role.state === "unknown" || role.state === "error")
             ? "Team status unknown." : "Nothing now.";
           next = <span>The test writer corrects the tests and reports again.</span>;
@@ -2384,8 +2386,9 @@ export function bootstrapViewsPage() {
       const teamLoading = hasPending("get_team", "");
       const teamStarting = hasPending("start_team_agents", "");
       const teamRoles = teamSnapshot?.roles ?? [];
+      const herdrAvailable = teamSnapshot?.herdr_mode !== "unavailable";
       const teamNeedsYou = teamRoles.find((role) => role.state === "needs_you");
-      attention = teamNeedsYou !== undefined ? teamAttentionText(teamNeedsYou)
+      attention = teamNeedsYou !== undefined ? teamAttentionText(teamNeedsYou, herdrAvailable)
         : teamLoading || teamSnapshot === null ? "Waiting for Team status."
         : teamRoles.some((role) => role.state === "unknown" || role.state === "error") ? "Team status unknown."
         : "Nothing now.";
@@ -2422,6 +2425,9 @@ export function bootstrapViewsPage() {
           step = "Wait for the guide to start.";
         } else if (teamLoading || teamSnapshot === null) {
           step = "Wait for Team status.";
+        } else if (!herdrAvailable) {
+          step = teamNeedsYou?.role === "guide" ? "Return to your coding agent to address the guide’s request."
+            : "Describe your change in your coding agent.";
         } else {
           const guide = teamRoles.find((role) => role.role === "guide");
           if (guide === undefined || guide.state === "not_started" || guide.state === "ended") {
@@ -2486,8 +2492,9 @@ export function bootstrapViewsPage() {
         );
         step = teamStarting ? "Wait for agents to start."
           : teamLoading || teamSnapshot === null ? "Wait for Team status."
-          : needsStart ? "Choose Start agents below to prepare the guide."
-          : "Review role status and use Show pane to contact an agent.";
+          : needsStart ? "Choose Start agents below."
+          : herdrAvailable ? "Review role status and use Show pane to contact an agent."
+          : "Review role status below.";
       } else if (activeResult?.kind === "story") {
         if (storyEvaluationError !== null) {
           attention = "The Story draft could not be read.";
@@ -2603,7 +2610,7 @@ export function bootstrapViewsPage() {
         teamSnapshot?.roles.find((item) => item.role === role && item.state === "needs_you")
       ).find((role) => role !== undefined);
       if (attention !== undefined) {
-        step = teamAttentionText(attention);
+        step = teamAttentionText(attention, teamSnapshot?.herdr_mode !== "unavailable");
       } else if (activeEditor !== null) {
         const ed = activeEditor;
         if (ed.incomingCard !== null || ed.card.proposed_revision !== undefined) {
