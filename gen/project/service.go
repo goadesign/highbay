@@ -40,8 +40,9 @@ type Service interface {
 	// labels are validated. Omit terminal identity outside Herdr. Never opens a
 	// launcher.
 	AttachGuide(context.Context, *AttachGuidePayload) (res *AttachGuideResult, err error)
-	// Read existing project, saved change stage and cached role state. Creates
-	// nothing and starts no subprocess or agent.
+	// Read existing project, saved change stage and observed role state. Creates
+	// nothing and starts no agent. Merge status uses the build owner's read-only
+	// Git checks, including a manual merge into the project branch.
 	Status(context.Context) (res *ProjectStatus, err error)
 	// The CLI requests ordered server shutdown. Before its listener closes, the
 	// server revokes management access and withdraws its running record; an

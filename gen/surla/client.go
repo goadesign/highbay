@@ -610,6 +610,7 @@ func (c *Client) ShowTeamPane(ctx context.Context, p *ShowTeamPanePayload) (err 
 //   - "ambiguous_space" (type *goa.ServiceError): Several spaces match the project; close the duplicates before starting agents again.
 //   - "window_busy" (type *goa.ServiceError): Close the open Herdr dialog before starting agents.
 //   - "team_unavailable" (type *goa.ServiceError): The project team could not be prepared.
+//   - "unprocessable" (type *goa.ServiceError): A selected client is not installed, does not support the requested options, or the supplied guide choice would replace a running guide.
 //   - "forbidden" (type *goa.ServiceError): The authenticated caller may not perform this operation or does not own the resource.
 //   - error: internal error
 func (c *Client) StartTeamAgents(ctx context.Context, p *StartTeamAgentsPayload) (res *ProjectTeam, err error) {

@@ -707,7 +707,7 @@ func projectUsage() {
 	fmt.Fprintln(os.Stderr, `    identity: The CLI checks the answering server reports its expected project identity using the current server-lifetime management credential.`)
 	fmt.Fprintln(os.Stderr, `    ensure-team: Read existing project team metadata with the management credential. Creates no team, credential, space, roster or agent and opens no window. This management operation is never an MCP tool.`)
 	fmt.Fprintln(os.Stderr, `    attach-guide: Attach the invoking coding agent as this project's guide. A supplied live Herdr terminal is adopted only after its model pane, local project and labels are validated. Omit terminal identity outside Herdr. Never opens a launcher.`)
-	fmt.Fprintln(os.Stderr, `    status: Read existing project, saved change stage and cached role state. Creates nothing and starts no subprocess or agent.`)
+	fmt.Fprintln(os.Stderr, `    status: Read existing project, saved change stage and observed role state. Creates nothing and starts no agent. Merge status uses the build owner's read-only Git checks, including a manual merge into the project branch.`)
 	fmt.Fprintln(os.Stderr, `    stop: The CLI requests ordered server shutdown. Before its listener closes, the server revokes management access and withdraws its running record; an authorized stop response can finish.`)
 	fmt.Fprintln(os.Stderr, `    browser-link: The CLI mints a short-lived single-use browser link. The URL is the only credential allowed in a browser-launch command line.`)
 	fmt.Fprintln(os.Stderr, `    exchange-browser-link: The browser exchanges the single-use link once for an in-memory user session. The session is never a cookie or stored on disk and is sent only to this server address.`)
@@ -772,7 +772,7 @@ func projectStatusUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Read existing project, saved change stage and cached role state. Creates nothing and starts no subprocess or agent.`)
+	fmt.Fprintln(os.Stderr, `Read existing project, saved change stage and observed role state. Creates nothing and starts no agent. Merge status uses the build owner's read-only Git checks, including a manual merge into the project branch.`)
 
 	// Flags list
 

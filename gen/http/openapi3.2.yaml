@@ -14774,7 +14774,7 @@ paths:
             tags:
                 - project
             summary: status project
-            description: Read existing project, saved change stage and cached role state. Creates nothing and starts no subprocess or agent.
+            description: Read existing project, saved change stage and observed role state. Creates nothing and starts no agent. Merge status uses the build owner's read-only Git checks, including a manual merge into the project branch.
             operationId: project#status
             responses:
                 "200":
@@ -15324,6 +15324,19 @@ paths:
                                         name: window_busy
                                         temporary: false
                                         timeout: false
+                "422":
+                    description: 'unprocessable: A selected client is not installed, does not support the requested options, or the supplied guide choice would replace a running guide.'
+                    content:
+                        application/vnd.goa.error:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                            example:
+                                fault: false
+                                id: 123abc
+                                message: parameter 'p' must be an integer
+                                name: unprocessable
+                                temporary: false
+                                timeout: false
                 "503":
                     description: 'team_unavailable: The project team could not be prepared.'
                     content:

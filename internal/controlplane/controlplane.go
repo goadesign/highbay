@@ -843,6 +843,7 @@ func (c *ControlPlane) ProposeChange(ctx context.Context, p *gensurla.ProposeCha
 func (c *ControlPlane) Close() error {
 	c.cancelServer()
 	c.teamWorker.Wait()
+	teamErr := c.team.Service.Close()
 	c.reportWorker.Wait()
 	// Wait out any check admission in progress: an operation admitted under
 	// workspaceMu before this point is already registered, and every later
@@ -858,8 +859,8 @@ func (c *ControlPlane) Close() error {
 	c.closeStoryRefreshes()
 	liveErr := c.closeLive()
 	evalErr := c.evaluator.Close()
-	if liveErr != nil {
-		return errors.Join(evalErr, fmt.Errorf("stop live target; cards directory %s stays locked: %w", c.cards.dir, liveErr))
+	if liveErr != nil || teamErr != nil {
+		return errors.Join(evalErr, checkErr, fmt.Errorf("stop project processes; cards directory %s stays locked: %w", c.cards.dir, errors.Join(liveErr, teamErr)))
 	}
 	c.workspaceMu.Lock()
 	defer c.workspaceMu.Unlock()

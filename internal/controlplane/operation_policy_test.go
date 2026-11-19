@@ -32,6 +32,8 @@ func TestOperationPolicyCoversEveryTool(t *testing.T) {
 		"golden_path":    {CallerUser, CallerGuide, CallerBuilder, CallerTestWriter},
 		"confirm_intent": {CallerUser}, "approve_merge": {CallerUser}, "configure_model": {CallerUser}, "hand_over_model_settings": {CallerManagement},
 		"update_draft": {CallerGuide}, "drop_build": {CallerUser},
+		"open_views": {CallerUser, CallerGuide}, "merge_change": {CallerUser},
+		"list_team_agent_options": {CallerUser}, "dismiss_team_notice": {CallerUser},
 		"review_verification": {CallerUser},
 		"propose_change":      {CallerGuide}, "revise_change": {CallerGuide}, "refresh_story": {CallerGuide}, "init_project": {CallerGuide},
 		"generate_code": {CallerBuilder}, "check_project": {CallerBuilder}, "update_dependencies": {CallerBuilder}, "start_live_target": {CallerBuilder}, "draft_override": {CallerBuilder}, "verify_change": {CallerBuilder},

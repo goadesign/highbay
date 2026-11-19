@@ -244,12 +244,9 @@ func (c *ControlPlane) assignmentGenerations(ctx context.Context) (TeamAssignmen
 	if err := ctx.Err(); err != nil {
 		return TeamAssignments{}, err
 	}
-	builds, err := c.ownedBuilds(c.team.Owner)
-	if err != nil {
-		return TeamAssignments{}, err
-	}
+	var builds []heldBuild
 	result := TeamAssignments{
-		Unread: make([]AssignmentGeneration, 0, 2*len(builds)),
+		Unread: make([]AssignmentGeneration, 0, 2),
 	}
 	// Dropped builds no longer appear in work lists, but their exact identity
 	// must remain visible to lifecycle cleanup until a later build replaces it.
@@ -269,6 +266,9 @@ func (c *ControlPlane) assignmentGenerations(ctx context.Context) (TeamAssignmen
 			result.BuildIdentity = &BuildIdentity{ChangeID: saved.ChangeID, StartedAt: saved.StartedAt}
 			result.Dropped = hasProvenance && buildDropped(provenance, saved)
 			result.ReportCheckInFlight = !result.Dropped && saved.TestWriter.State == testsReported
+			if !result.Dropped && c.usableBuild(saved) {
+				builds = append(builds, heldBuild{file: saved, record: record, inForce: buildInForce(saved, record), storedEvaluator: c.storedEvaluator()})
+			}
 		}
 	}
 	c.mu.RUnlock()

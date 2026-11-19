@@ -64,12 +64,14 @@ func teamMethods() {
 		Error("ambiguous_space", ErrorResult, "Several spaces match the project; close the duplicates before starting agents again.")
 		Error("window_busy", ErrorResult, "Close the open Herdr dialog before starting agents.")
 		Error("team_unavailable", ErrorResult, "The project team could not be prepared.")
+		Error("unprocessable", ErrorResult, "A selected client is not installed, does not support the requested options, or the supplied guide choice would replace a running guide.")
 		HTTP(func() {
 			POST("/team/agents")
 			Response(StatusOK)
 			Response("ambiguous_space", StatusConflict)
 			Response("window_busy", StatusConflict)
 			Response("team_unavailable", StatusServiceUnavailable)
+			Response("unprocessable", StatusUnprocessableEntity)
 		})
 	})
 	Method("list_team_agent_options", func() {

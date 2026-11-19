@@ -4313,6 +4313,7 @@ func EncodeStartTeamAgentsRequest(encoder func(*http.Request) goahttp.Encoder) f
 //   - "ambiguous_space" (type *goa.ServiceError): http.StatusConflict
 //   - "window_busy" (type *goa.ServiceError): http.StatusConflict
 //   - "team_unavailable" (type *goa.ServiceError): http.StatusServiceUnavailable
+//   - "unprocessable" (type *goa.ServiceError): http.StatusUnprocessableEntity
 //   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
 //   - error: internal error
 func DecodeStartTeamAgentsResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
@@ -4403,6 +4404,20 @@ func DecodeStartTeamAgentsResponse(decoder func(*http.Response) goahttp.Decoder,
 				return nil, goahttp.ErrValidationError("surla", "start_team_agents", err)
 			}
 			return nil, NewStartTeamAgentsTeamUnavailable(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body StartTeamAgentsUnprocessableResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("surla", "start_team_agents", err)
+			}
+			err = ValidateStartTeamAgentsUnprocessableResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("surla", "start_team_agents", err)
+			}
+			return nil, NewStartTeamAgentsUnprocessable(&body)
 		case http.StatusForbidden:
 			var (
 				body StartTeamAgentsForbiddenResponseBody
