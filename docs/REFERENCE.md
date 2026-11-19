@@ -1726,7 +1726,7 @@ copy is in use (`working_copy_busy`, or `conflict` for `verify_change`); only
 Surla's check of a report waits for the copy. After a start has saved the
 build and made the copies,
 bringing the team up has 45 seconds. A team problem after saving leaves the
-build and its roles in place: the result says what to do, and **Start agents**
+build and its roles in place: the result says what to do, and **Start workers**
 or `surla` finishes it. If the server stops after saving, the saved build
 stays; building again makes any missing working copy and registers the roles.
 Required tests that a stopped read did not finish writing are written again at
@@ -2037,7 +2037,7 @@ verdict, returns at once and wakes the report checker.
 The server tracks each team's role state in memory. In a Herdr workspace,
 Chorus launches role panes and reports which agents are waiting for messages.
 Open Herdr and run `chorus up` before launching the team. To change
-the managed address, run `chorus up -addr :9550`, then use **Start agents** to
+the managed address, run `chorus up -addr :9550`, then use **Start workers** to
 update the team's connection. A failed connection check leaves the page
 available. Once a roster exists, Chorus can inspect the team's panes. See
 the [Chorus team command reference](https://github.com/goadesign/chorus/blob/main/skills/herdr/chorus-launcher/README.md#choose-roles-from-a-terminal).
@@ -2087,7 +2087,7 @@ that role's pane, only when the user asks.
 ### `start_team_agents`
 
 `POST /team/agents`. Send a JSON object such as `{}` to start missing
-workers that have work on the open build, as **Start agents** does. It returns
+workers that have work on the open build, as **Start workers** does. It returns
 `ProjectTeam` (`team`, `space`, `herdr_mode`, `roles`, `step`). `roles` contains
 `role`, `handle` and `running`; `space` is empty without a Herdr space.
 
@@ -2114,7 +2114,7 @@ running keeps its existing session.
 
 Surla starts a guide only when this operation receives an explicit
 `choices.guide` in Herdr. It refuses a guide start if a guide already has a
-running pane or a Chorus watcher. The browser's **Start agents** sends the
+running pane or a Chorus watcher. The browser's **Start workers** sends the
 worker start request without choices. [`start_build`](#start_build) accepts
 worker choices only.
 
@@ -2341,7 +2341,7 @@ holds it beside them (**Switch to Incoming Card**).
 | View | What it shows and does |
 | --- | --- |
 | **Describe** | The project's changes ([`list_changes`](#list_changes)), opening directly on the only one. With none: `This project has no changes yet. Ask the guide to propose a change; it appears here by itself.` A change with a waiting proposed revision is marked **New revision proposed**. Each change shows its latest saved run, such as **Latest saved run: passed**, or **No saved runs**, and under a run what `inputs_current` says: `Matches the agreed revision and selected tests.` or `Earlier inputs or no current test selection. Ask the builder for a check of the agreed revision and selected tests.` |
-| **Team** | Each registered role's state, its Chorus watcher, and its assignment status (**No assignments** for the guide, and **Assignment unread**, **No unread assignment**, **No work now** or **Assignment status unknown** for a worker role), with a **Show … pane** action per role, such as **Show guide pane**, and **Start agents**, which requests missing workers and shows the outcome and time. Refresh reads the cached team facts. |
+| **Team** | Each registered role's state, its Chorus watcher, and its assignment status (**No assignments** for the guide, and **Assignment unread**, **No unread assignment**, **No work now** or **Assignment status unknown** for a worker role), with a **Show … pane** action per role, such as **Show guide pane**, and **Start workers**, which requests missing workers and shows the outcome and time. Refresh reads the cached team facts. |
 | **Story** | The Story saved with the shown revision, one row of step cards per flow: a finished flow is marked **will be tested end to end**, others **draft: not tested** with the reasons. Below it, the current Story evaluation ([`get_story_refresh`](#get_story_refresh)): none, running, failed, or succeeded, and how it differs from the change's Story; a draft is not part of the change until the guide revises the change with it and the user confirms. |
 | **Live target** | Whether a live target is starting, running, ended unexpectedly or not confirmed stopped. A running target shows its commit, address, accepted prompt versions (never the text), and **Stop live target**, which asks first. An ended target shows its commit, launch and observed-end times, and the builder's recovery step. Below it, the model live targets started afterwards use and a form whose **Apply** sends [`configure_model`](#configure_model); a refusal names a missing key's variable. |
 | **Agree** | The Change Card: questions to answer, examples, preserved behaviors, and **Confirm Intent & Lock Examples** (on an agreed card, **Refine Confirmed Answers & Examples**). A proposed revision appears above the agreed one with everything adopting it would confirm (changed request and summary, questions and examples marked **New**, **Edited**, **Kept** or **Removed**, Story and design changes), **Adopt this revision** and **Decline**. A stale submission offers **Load Latest Card**. On a confirmed card the **Build** section comes first, with the saved agreement below it under **Agreed:** and the request. **Agreement details** and **Refine agreed answers and examples** remain available for review and refinement; an active edit stays open. **Previous Saved Revision** keeps the earlier snapshot: questions not yet answered in that proposal are labeled as historical, and a note distinguishes an unconfirmed proposal from the current confirmed agreement. **Review saved approval** opens the record in Approve. **Build** opens the same saved build section directly. |

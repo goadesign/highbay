@@ -140,7 +140,7 @@ On Describe, with no change open for editing, it shows no agreement.
 | View | What it is for |
 | --- | --- |
 | Describe | The project's Change Cards, most recently saved first, each with its latest saved verification run. |
-| Team | Each role's observed state, its Chorus watcher (the agent's background wait for messages) and its assignment status. **Start agents** starts missing build workers. **Show … pane** brings a role's pane forward in Herdr. |
+| Team | Each role's observed state, its Chorus watcher (the agent's background wait for messages) and its assignment status. **Start workers** starts missing build workers. **Show … pane** brings a role's pane forward in Herdr. |
 | Story | The Story of the change shown, and the guide's latest Story draft. |
 | Live target | The running copy of your application that the builder tries prompts on, and the model connection it uses. |
 | Agree | The Change Card: its questions, your answers, confirmation and a proposed revision. Unsaved edits stay available when you move to another stage. |
@@ -317,7 +317,7 @@ startup has its own 45-second limit, and an individual background worker
 invocation can run for up to 30 minutes. The test writer has a separate
 five-minute limit for preparing the required tests on its first assignment
 read. A team startup failure leaves the build saved. After resolving the
-reported cause, use **Start agents** in Team to retry the worker start.
+reported cause, use **Start workers** in Team to retry the worker start.
 
 With stored verification settings, the project verifies with the evaluator
 those settings name. Building then adds only the builder in its `.surla-build`
@@ -672,7 +672,7 @@ Waiting, Needs you, Ended, Error or Status unknown), whether its Chorus
 watcher is held, and its assignment status (No assignments for the guide, and
 Assignment unread, No unread assignment, No work now—when the open build needs
 nothing from that role—or Assignment status unknown for a worker role).
-**Start agents** starts missing workers that still have work on the open
+**Start workers** starts missing workers that still have work on the open
 build. Facts the server cannot observe stay unknown. See
 [team supervision](REFERENCE.md#team-supervision).
 
