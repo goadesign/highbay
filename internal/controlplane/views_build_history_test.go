@@ -250,7 +250,14 @@ if (input.mode === "eligible") {
     expect(page.sent("POST", mergePath).length === before + 1, "refresh or recovery retried a merge for " + name);
   }
   await control(origin, "reply", { key: "POST " + mergePath, status: 200, body: { branch: "feature/refunds", head_commit: "9".repeat(40) } });
+  await control(origin, "hold", { key: "POST " + mergePath });
+  const beforeSuccess = page.sent("POST", mergePath).length;
   page.$("#surla-cp5-merge").click();
+  await until(() => page.sent("POST", mergePath).length === beforeSuccess + 1 && page.$("#surla-cp5-merge-feedback-pending"), "merge did not expose its pending state");
+  expect(page.$("#surla-cp5-merge").disabled, "pending merge remained available");
+  page.$("#surla-cp5-merge").click();
+  expect(page.sent("POST", mergePath).length === beforeSuccess + 1, "pending merge submitted twice");
+  await control(origin, "release", { key: "POST " + mergePath });
   await until(() => page.$("#surla-cp5-merge-feedback-receipt"), "successful merge omitted its receipt");
   const receipt = page.text("#surla-cp5-merge-feedback-receipt");
   expect(receipt.includes("feature/refunds") && receipt.includes("9".repeat(12)) && receipt.includes("Nothing was deployed"), "receipt invented a branch, lost the resulting commit or claimed deployment");
