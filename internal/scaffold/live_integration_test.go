@@ -289,6 +289,12 @@ func starterTeam(t *testing.T, dir string) *project.Server {
 	require.NoError(t, errors.Join(err, lock.Close()))
 	server, err := project.NewServer(state, func() {}, project.TeamDependencies{
 		Lifetime: t.Context(), Host: starterWindowHost{}, RosterDirectory: t.TempDir(),
+		Connect: func(context.Context) (project.TeamConnection, error) {
+			return project.TeamConnection{}, nil
+		},
+		DiscoverAgents: func(context.Context) ([]*gensurla.InstalledAgentOption, error) {
+			return []*gensurla.InstalledAgentOption{}, nil
+		},
 	})
 	require.NoError(t, err)
 	return server
