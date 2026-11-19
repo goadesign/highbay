@@ -50,7 +50,12 @@ func TestMergeChangeAppliesApprovedCommits(t *testing.T) {
 	for _, source := range []string{"evaluator", "written"} {
 		t.Run(source, func(t *testing.T) {
 			f := newMergeFixture(t, source, "")
+			f.branch = "merge=approved"
+			productionBuildGit(t, f.repo, "branch", "-m", f.branch)
 			f.write(t, ".mcp.json", "user configuration\n")
+			f.write(t, ".git/info/exclude", ".claude/\n")
+			require.NoError(t, os.Mkdir(filepath.Join(f.repo, ".claude"), 0o700))
+			f.write(t, ".claude/settings.json", "ignored user configuration\n")
 			f.team.onStop = func(context.Context) error {
 				// Reenter the read boundary to ensure the caller released c.mu.
 				_, err := f.cp.GetBuild(f.ctx, &gensurla.GetBuildPayload{ChangeID: f.payload.ChangeID})
@@ -73,6 +78,9 @@ func TestMergeChangeAppliesApprovedCommits(t *testing.T) {
 				assert.Equal(t, f.payload.CandidateCommit, result.HeadCommit, "the evaluator is external")
 			}
 			assert.Equal(t, "?? .mcp.json", productionBuildGit(t, f.repo, "status", "--porcelain"))
+			ignored, err := os.ReadFile(filepath.Join(f.repo, ".claude", "settings.json"))
+			require.NoError(t, err)
+			assert.Equal(t, "ignored user configuration\n", string(ignored))
 			f.write(t, "base.txt", "an edit after the successful merge\n")
 			second, err := f.cp.MergeChange(f.ctx, &f.payload)
 			require.NoError(t, err)
@@ -85,21 +93,31 @@ func TestMergeChangeAppliesApprovedCommits(t *testing.T) {
 
 func TestMergeChangeRollsBackSecondGitFailure(t *testing.T) {
 	for _, tc := range []struct {
-		name, message string
+		name, message, untracked string
 	}{
 		{name: "conflict", message: "base.txt"},
-		{name: "untracked collision", message: "would be overwritten"},
-		{name: "ignored collision", message: "would be overwritten"},
+		{name: "untracked collision", message: "would be overwritten", untracked: "tests.txt"},
+		{name: "ignored collision", message: "would be overwritten", untracked: "tests.txt"},
+		{name: "ignored ancestor collision", message: "would be overwritten", untracked: "blocked"},
+		{name: "ignored directory collision", message: "would be overwritten", untracked: "tests.txt/private"},
 		{name: "commit hook", message: "fixture commit hook refused"},
+		{name: "commit signing", message: "failed to write commit object"},
 		{name: "rollback failure", message: "could not confirm restoration"},
+		{name: "reset leaves a tracked edit", message: "could not confirm restoration"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			f := newMergeFixture(t, "written", tc.name)
 			f.write(t, ".mcp.json", "keep this untracked\n")
+			if tc.untracked != "" {
+				require.NoError(t, os.MkdirAll(filepath.Join(f.repo, filepath.Dir(tc.untracked)), 0o700))
+				f.write(t, tc.untracked, "untracked work at the suite path\n")
+			}
 			switch tc.name {
-			case "untracked collision", "ignored collision":
-				f.write(t, "tests.txt", "untracked work at the suite path\n")
-			case "commit hook", "rollback failure":
+			case "commit signing":
+				productionBuildGit(t, f.repo, "config", "commit.gpgsign", "true")
+				productionBuildGit(t, f.repo, "config", "gpg.format", "openpgp")
+				productionBuildGit(t, f.repo, "config", "gpg.program", filepath.Join(t.TempDir(), "missing-signer"))
+			case "commit hook", "rollback failure", "reset leaves a tracked edit":
 				// The candidate fast-forwards. The test commit needs a merge
 				// commit, which is when Git calls this local hook.
 				require.NoError(t, os.MkdirAll(filepath.Join(f.repo, ".git", "hooks"), 0o700))
@@ -107,6 +125,9 @@ func TestMergeChangeRollsBackSecondGitFailure(t *testing.T) {
 				script := "#!/bin/sh\n"
 				if tc.name == "rollback failure" {
 					script += "touch .git/index.lock\n"
+				}
+				if tc.name == "reset leaves a tracked edit" {
+					script += "echo 'hook edit' > base.txt\n"
 				}
 				script += "echo 'fixture commit hook refused' >&2\nexit 1\n"
 				require.NoError(t, os.WriteFile(filepath.Join(f.repo, ".git", "hooks", "commit-msg"), []byte(script), 0o700))
@@ -122,13 +143,19 @@ func TestMergeChangeRollsBackSecondGitFailure(t *testing.T) {
 				assert.Equal(t, f.payload.CandidateCommit, productionBuildGit(t, f.repo, "rev-parse", "HEAD"))
 				return
 			}
+			if tc.name == "reset leaves a tracked edit" {
+				assert.Contains(t, err.Error(), "fixture commit hook refused")
+				assert.Contains(t, err.Error(), "base.txt")
+				assert.Equal(t, f.build.Base, productionBuildGit(t, f.repo, "rev-parse", "HEAD"))
+				return
+			}
 			assert.Contains(t, err.Error(), "restored the branch")
 			assert.Equal(t, f.build.Base, productionBuildGit(t, f.repo, "rev-parse", "HEAD"))
 			assert.Equal(t, before, productionBuildGit(t, f.repo, "status", "--porcelain", "--ignored"))
 			assert.NoFileExists(t, filepath.Join(f.repo, ".git", "MERGE_HEAD"))
 			assert.NoFileExists(t, filepath.Join(f.repo, "candidate.txt"))
-			if tc.name == "untracked collision" || tc.name == "ignored collision" {
-				raw, readErr := os.ReadFile(filepath.Join(f.repo, "tests.txt"))
+			if tc.untracked != "" {
+				raw, readErr := os.ReadFile(filepath.Join(f.repo, tc.untracked))
 				require.NoError(t, readErr)
 				assert.Equal(t, "untracked work at the suite path\n", string(raw))
 			}
@@ -205,16 +232,20 @@ func TestMergeChangeRefusesUnsafeOrStaleInputs(t *testing.T) {
 }
 
 func TestMergeChangeChecksLiveApprovalAndPublication(t *testing.T) {
-	for _, name := range []string{"tests changed", "binaries changed", "promotion unavailable", "approval changed during lookup"} {
+	for _, name := range []string{"tests changed", "binaries changed", "promotion unavailable", "approval changed during lookup", "drop during lookup"} {
 		t.Run(name, func(t *testing.T) {
 			f := newMergeFixture(t, "written", "")
 			target := &promotionTargetStub{artifacts: map[string]string{}}
 			f.cp.resolvePromotionTarget = func(_ context.Context, workspace string) (PromotionTarget, error) {
 				assert.Equal(t, f.repo, workspace)
-				if name == "approval changed during lookup" {
+				switch name {
+				case "approval changed during lookup":
 					record := loadMetadataRecord(t, f.cp, f.payload.ChangeID)
 					record.card.Approval.ReportDigest = strings.Repeat("0", 64)
 					saveMetadataRecord(t, f.cp, record)
+				case "drop during lookup":
+					_, err := f.cp.DropBuild(f.ctx, f.dropPayload())
+					require.NoError(t, err)
 				}
 				return target, nil
 			}
@@ -229,7 +260,11 @@ func TestMergeChangeChecksLiveApprovalAndPublication(t *testing.T) {
 			_, err := f.cp.MergeChange(f.ctx, &f.payload)
 			requireMergeRefusal(t, err, "not_approved", "current approval")
 			assert.Equal(t, f.build.Base, productionBuildGit(t, f.repo, "rev-parse", "HEAD"))
-			assert.Empty(t, f.team.stopped)
+			if name == "drop during lookup" {
+				assert.Equal(t, []BuildIdentity{f.identity()}, f.team.stopped)
+			} else {
+				assert.Empty(t, f.team.stopped)
+			}
 		})
 	}
 }
@@ -247,8 +282,13 @@ func TestDropBuildStopsWorkersOnlyAfterSave(t *testing.T) {
 	_, err := f.cp.GetBuild(f.ctx, &gensurla.GetBuildPayload{ChangeID: f.payload.ChangeID})
 	require.NoError(t, err)
 	assert.Empty(t, f.team.stopped)
-	drop := &gensurla.DropBuildPayload{ChangeID: f.payload.ChangeID, StartedAt: f.build.StartedAt.Format(time.RFC3339Nano)}
-	_, err = f.cp.DropBuild(f.ctx, drop)
+	staging := filepath.Join(f.cp.cards.dir, madeFromStagingFile)
+	require.NoError(t, os.Mkdir(staging, 0o700))
+	_, err = f.cp.DropBuild(f.ctx, f.dropPayload())
+	assert.ErrorContains(t, err, "save dropped build")
+	assert.Empty(t, f.team.stopped)
+	require.NoError(t, os.Remove(staging))
+	_, err = f.cp.DropBuild(f.ctx, f.dropPayload())
 	require.NoError(t, err, "a teardown failure cannot undo the durable drop")
 	assert.Equal(t, []BuildIdentity{f.identity()}, f.team.stopped)
 	_, err = f.cp.GetBuild(f.ctx, &gensurla.GetBuildPayload{ChangeID: f.payload.ChangeID})
@@ -257,6 +297,13 @@ func TestDropBuildStopsWorkersOnlyAfterSave(t *testing.T) {
 	requireMergeRefusal(t, err, "not_approved", "open build")
 	assert.Equal(t, []BuildIdentity{f.identity()}, f.team.stopped)
 	assert.Equal(t, f.build.Base, productionBuildGit(t, f.repo, "rev-parse", "HEAD"))
+}
+
+// dropPayload names the open start the user saw.
+func (f *mergeFixture) dropPayload() *gensurla.DropBuildPayload {
+	return &gensurla.DropBuildPayload{
+		ChangeID: f.payload.ChangeID, StartedAt: f.build.StartedAt.Format(time.RFC3339Nano),
+	}
 }
 
 // newMergeFixture creates the project's divergent approved commits and saves
@@ -277,8 +324,8 @@ func newMergeFixture(t *testing.T, source, failure string) *mergeFixture {
 	f := &mergeFixture{cp: cp, team: team, repo: cp.activeWorkspaceDir, ctx: asCaller("alice@example.com", CallerUser)}
 	f.branch = productionBuildGit(t, f.repo, "branch", "--show-current")
 	f.write(t, "base.txt", "base contents\n")
-	if failure == "ignored collision" {
-		f.write(t, ".gitignore", "tests.txt\n")
+	if strings.HasPrefix(failure, "ignored ") {
+		f.write(t, ".gitignore", "tests.txt\nblocked\n")
 		productionBuildGit(t, f.repo, "add", ".gitignore")
 	}
 	productionBuildGit(t, f.repo, "add", "base.txt")
@@ -299,11 +346,16 @@ func newMergeFixture(t *testing.T, source, failure string) *mergeFixture {
 	}
 	if source == "written" {
 		productionBuildGit(t, f.repo, "switch", "-c", testwriter.TestsRole.Branch(f.build.Number), f.build.Base)
-		f.write(t, "tests.txt", "accepted tests\n")
+		testsPath := "tests.txt"
+		if failure == "ignored ancestor collision" {
+			require.NoError(t, os.Mkdir(filepath.Join(f.repo, "blocked"), 0o700))
+			testsPath = "blocked/tests.txt"
+		}
+		f.write(t, testsPath, "accepted tests\n")
 		if failure == "conflict" {
 			f.write(t, "base.txt", "test writer content\n")
 		}
-		productionBuildGit(t, f.repo, "add", "-f", "tests.txt", "base.txt")
+		productionBuildGit(t, f.repo, "add", "-f", testsPath, "base.txt")
 		productionBuildGit(t, f.repo, "commit", "-m", "Accept written tests")
 		f.suite = productionBuildGit(t, f.repo, "rev-parse", "HEAD")
 		f.build.TestWriter = testWriterAssignment{State: testsAccepted, Commit: f.suite, CheckedAt: time.Now().UTC()}

@@ -5,10 +5,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"os"
 	"os/exec"
 	"path/filepath"
-	"reflect"
 	"strings"
 	"syscall"
 	"time"
@@ -120,10 +120,11 @@ func (c *ControlPlane) mergeApproved(
 	if err != nil {
 		return nil, BuildIdentity{}, err
 	}
+	saved := now.record.card.Approval
 	selection, err := c.testsChoice(principal, p.ChangeID, p.RequestRevision)
 	_, writtenTests := card.Approval.TestSource.AsWrittenTests()
 	if err != nil || !now.file.StartedAt.Equal(held.file.StartedAt) ||
-		!reflect.DeepEqual(now.record.card.Approval, held.record.card.Approval) ||
+		saved.SuiteCommit != card.Approval.SuiteCommit || !maps.Equal(saved.Artifacts, card.Approval.Artifacts) ||
 		selection.commit != card.Approval.SuiteCommit ||
 		(selection.source == verify.TestsWritten) != writtenTests {
 		return nil, BuildIdentity{}, mergeNotApproved()
@@ -142,20 +143,15 @@ func (c *ControlPlane) mergeApproved(
 // mergeBuild reads the undropped current build and its saved approval. The
 // caller holds c.mu and still has to verify the approval's live inputs.
 func (c *ControlPlane) mergeBuild(principal Principal, p *gensurla.MergeChangePayload) (heldBuild, error) {
-	held, err := c.workerOwnedBuild(principal, p.ChangeID)
+	held, err := c.ownedBuild(principal, p.ChangeID)
 	var refusal *goa.ServiceError
-	if errors.As(err, &refusal) {
-		switch refusal.Name {
-		case "not_found":
-			// The owner uses not_found for an unknown card and for an existing
-			// card with no open build. Preserve the resource lookup error.
-			if _, cardErr := c.ownedCard(principal, p.ChangeID); cardErr != nil {
-				return heldBuild{}, cardErr
-			}
-			return heldBuild{}, mergeNotApproved()
-		case "no_build":
-			return heldBuild{}, mergeNotApproved()
+	if errors.As(err, &refusal) && refusal.Name == "not_found" {
+		// The owner uses not_found for an unknown card and for an existing
+		// card with no open build. Preserve the resource lookup error.
+		if _, cardErr := c.ownedCard(principal, p.ChangeID); cardErr != nil {
+			return heldBuild{}, cardErr
 		}
+		return heldBuild{}, mergeNotApproved()
 	}
 	if err != nil {
 		return heldBuild{}, err
@@ -224,17 +220,101 @@ func (c *ControlPlane) mergeIntoCurrentBranch(
 	if plan.Tests == verify.TestsWritten {
 		commits = append(commits, plan.SuiteCommit)
 	}
-	for _, commit := range commits {
-		if err := runMergeGit(write, repo, hooks, "merge", "--no-edit", "--no-autostash", "--no-overwrite-ignore",
+	for i, commit := range commits {
+		if err := checkMergeOverwrites(write, repo, branch, commit); err != nil {
+			if i == 0 {
+				return nil, gensurla.MakeMergeConflict(err)
+			}
+			return nil, rollbackMerge(ctx, span, repo, hooks, branch, origHEAD, err)
+		}
+		if _, err := runMergeGit(write, repo, hooks, branch, "merge", "--strategy=ort", "--no-edit", "--no-autostash", "--no-overwrite-ignore",
 			"--commit", "--no-squash", "--", commit); err != nil {
-			return nil, rollbackMerge(ctx, span, repo, hooks, origHEAD, err)
+			return nil, rollbackMerge(ctx, span, repo, hooks, branch, origHEAD, err)
 		}
 	}
 	headOut, err = runGitRead(write, repo, "rev-parse", "--verify", "HEAD")
 	if err != nil {
-		return nil, rollbackMerge(ctx, span, repo, hooks, origHEAD, err)
+		return nil, rollbackMerge(ctx, span, repo, hooks, branch, origHEAD, err)
 	}
 	return &gensurla.MergeChangeResult{Branch: branch, HeadCommit: strings.TrimSpace(string(headOut))}, nil
+}
+
+// checkMergeOverwrites checks the paths that Git's computed merge tree adds.
+// The ort strategy can overwrite ignored files during a true merge even when
+// --no-overwrite-ignore protects fast-forwards.
+// merge-tree also produces a tree for conflicts, which is checked because
+// Git can update other paths in the worktree before reporting the conflict.
+func checkMergeOverwrites(ctx context.Context, repo, branch, commit string) (retErr error) {
+	out, err := runMergeGit(ctx, repo, "/dev/null", branch,
+		"merge-tree", "--write-tree", "--name-only", "--no-messages", "-z", "HEAD", commit)
+	var exit *exec.ExitError
+	if err != nil && (!errors.As(err, &exit) || exit.ExitCode() != 1 ||
+		errors.Is(err, errMergeGitProcessActive)) {
+		return err
+	}
+	tree, _, _ := strings.Cut(strings.TrimSuffix(out, "\n"), "\x00")
+	if !commitIDPattern.MatchString(tree) {
+		return errors.Join(errors.New("Git did not return the prospective merge tree"), err)
+	}
+	paths, err := runGitRead(ctx, repo, "diff-tree", "-r", "--no-renames", "--no-ext-diff", "--no-textconv",
+		"--name-only", "--diff-filter=A", "-z", "HEAD", tree)
+	if err != nil || len(paths) == 0 {
+		return err
+	}
+	root, err := os.OpenRoot(repo)
+	if err != nil {
+		return err
+	}
+	defer func() { retErr = errors.Join(retErr, root.Close()) }()
+	for _, path := range strings.Split(strings.TrimSuffix(string(paths), "\x00"), "\x00") {
+		if err := checkMergeAddedPath(ctx, root, path); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// checkMergeAddedPath protects ignored files blocking a newly tracked path.
+// Walk ancestors before inspecting the leaf so a symlink is tested as the
+// entry Git would replace. Git protects other untracked paths during merge.
+func checkMergeAddedPath(ctx context.Context, root *os.Root, path string) error {
+	parts := strings.Split(path, "/")
+	for i := range parts {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		prefix := strings.Join(parts[:i+1], "/")
+		info, err := root.Lstat(prefix)
+		if errors.Is(err, os.ErrNotExist) {
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+		if info.IsDir() {
+			if i < len(parts)-1 {
+				continue
+			}
+			// A newly tracked file may replace a directory. Check only
+			// that directory for ignored files Git might remove with it.
+			ignored, err := runGitRead(ctx, root.Name(), "ls-files", "--others", "--ignored", "--exclude-standard",
+				"--directory", "-z", "--", prefix)
+			if err != nil || len(ignored) == 0 {
+				return err
+			}
+		} else {
+			_, err := runGitRead(ctx, root.Name(), "check-ignore", "--quiet", "--", prefix)
+			var exit *exec.ExitError
+			if errors.As(err, &exit) && exit.ExitCode() == 1 {
+				return nil
+			}
+			if err != nil {
+				return err
+			}
+		}
+		return fmt.Errorf("Untracked work at %q would be overwritten by the merge. Move it before retrying.", prefix)
+	}
+	return nil
 }
 
 // checkMergeWorktree names modified and staged tracked paths and leaves an
@@ -299,40 +379,31 @@ func mergeHooksPath(ctx context.Context, repo string) (string, error) {
 	return resolved, nil
 }
 
-// checkMergeHookPath distinguishes Git's administrative directory from paths
-// its worktree checkout owns, checking both the path and any symlink target.
+// checkMergeHookPath distinguishes a resolved hook path inside Git's
+// administrative directory from paths the checkout can replace.
 func checkMergeHookPath(repo, commonDir, path string) error {
-	parent, err := filepath.Rel(repo, path)
-	if err != nil {
-		return err
-	}
-	insideWorktree := parent != ".." && !strings.HasPrefix(parent, ".."+string(filepath.Separator))
-	adminParent, err := filepath.Rel(commonDir, path)
-	if err != nil {
-		return err
-	}
-	insideAdmin := adminParent != ".." && !strings.HasPrefix(adminParent, ".."+string(filepath.Separator))
 	pointsIntoWorktree, err := abspath.Within(repo, path)
-	if err != nil {
+	if err != nil || !pointsIntoWorktree {
 		return err
 	}
 	pointsIntoAdmin, err := abspath.Within(commonDir, path)
 	if err != nil {
 		return err
 	}
-	if insideWorktree && !insideAdmin || pointsIntoWorktree && !pointsIntoAdmin {
+	if !pointsIntoAdmin {
 		return gensurla.MakeMergeConflict(errors.New("Git hooks for this merge are in the tracked working tree. Move the hooks outside the working tree or merge manually."))
 	}
 	return nil
 }
 
-// runMergeGit performs a bounded local write, honoring the project's commit
-// hooks and signing configuration. It keeps conflict details Git writes to
-// stdout as well as stderr and cannot read a different repository from env.
-func runMergeGit(ctx context.Context, repo, hooks string, args ...string) error {
+// runMergeGit runs a bounded local Git command with no inherited repository
+// redirects. The actual merge uses the same ort defaults as merge-tree, so
+// branch-specific command options cannot change the tree after preflight.
+// Git still follows the project's commit signing and supplied hooks path.
+func runMergeGit(ctx context.Context, repo, hooks, branch string, args ...string) (string, error) {
 	cmd := exec.CommandContext(ctx, "git", append([]string{"-C", repo, "--no-replace-objects", "--no-lazy-fetch",
 		"-c", "core.fsmonitor=false", "-c", "core.hooksPath=" + hooks}, args...)...)
-	cmd.Env = cleanGitEnv()
+	cmd.Env = append(cleanGitEnv(), "GIT_CONFIG_COUNT=1", "GIT_CONFIG_KEY_0=branch."+branch+".mergeOptions", "GIT_CONFIG_VALUE_0=")
 	stdout := &cappedBuffer{limit: gitReadMaxOutput}
 	stderr := &cappedBuffer{limit: gitReadMaxStderr}
 	cmd.Stdout, cmd.Stderr = stdout, stderr
@@ -342,24 +413,49 @@ func runMergeGit(ctx context.Context, repo, hooks string, args ...string) error 
 	}
 	if err := errors.Join(runErr, stopErr); err != nil {
 		details := strings.TrimSpace(stderr.buf.String() + "\n" + stdout.buf.String())
-		return fmt.Errorf("git %s failed: %w\n%s", args[0], err, details)
+		return stdout.buf.String(), fmt.Errorf("git %s failed: %w\n%s", args[0], err, details)
 	}
-	return nil
+	return stdout.buf.String(), nil
 }
 
 // rollbackMerge restores the original branch tip and tracked files, and
 // distinguishes a Git refusal from one whose recovery also failed.
-func rollbackMerge(ctx context.Context, span trace.Span, repo, hooks, origHEAD string, mergeErr error) error {
+func rollbackMerge(
+	ctx context.Context, span trace.Span, repo, hooks, branch, origHEAD string, mergeErr error,
+) error {
 	rollback, cancel := context.WithTimeout(context.WithoutCancel(ctx), mergeWriteTimeout)
 	defer cancel()
-	if err := runMergeGit(rollback, repo, hooks, "reset", "--merge", "--quiet", origHEAD); err != nil ||
-		errors.Is(mergeErr, errMergeGitProcessActive) {
+	err := restoreMergeWorktree(rollback, repo, hooks, branch, origHEAD)
+	if err != nil || errors.Is(mergeErr, errMergeGitProcessActive) {
 		span.RecordError(errors.New("git merge rollback failed"))
 		span.SetStatus(codes.Error, "original Git state could not be restored")
 		return gensurla.MakeMergeConflict(fmt.Errorf("Merge failed and Surla could not confirm restoration to %s. Inspect the branch, index and working tree before retrying.\n%w", origHEAD, errors.Join(mergeErr, err)))
 	}
 	span.AddEvent("merge_rolled_back")
 	return gensurla.MakeMergeConflict(fmt.Errorf("Git restored the branch and tracked files to %s after the merge failed. Inspect the Git output before retrying.\n%w", origHEAD, mergeErr))
+}
+
+// restoreMergeWorktree refuses to reset a different branch and checks that
+// reset restored both the original tip and the clean tracked tree.
+func restoreMergeWorktree(ctx context.Context, repo, hooks, branch, origHEAD string) error {
+	ref, err := runGitRead(ctx, repo, "symbolic-ref", "-q", "HEAD")
+	if err != nil {
+		return err
+	}
+	if strings.TrimSuffix(string(ref), "\n") != "refs/heads/"+branch {
+		return errors.New("the project switched to another branch during the merge")
+	}
+	if _, err := runMergeGit(ctx, repo, hooks, branch, "reset", "--merge", "--quiet", origHEAD); err != nil {
+		return err
+	}
+	head, err := runGitRead(ctx, repo, "rev-parse", "--verify", "HEAD")
+	if err != nil {
+		return err
+	}
+	if strings.TrimSpace(string(head)) != origHEAD {
+		return errors.New("HEAD is no longer at the original commit after Git reset")
+	}
+	return checkMergeWorktree(ctx, repo)
 }
 
 // stopFinishedBuildWorkers asks the team to clean up the exact completed build.
