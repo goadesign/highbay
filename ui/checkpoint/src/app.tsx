@@ -1399,12 +1399,14 @@ export function bootstrapViewsPage() {
   function mergeControls(run: VerificationStatusResult | null): MergeControls {
     const build = run !== null ? knownTakingBuild(run.change_id) : null;
     const review = run !== null && selectedReview?.runId === run.run_id ? selectedReview.review : null;
-    const pending = Array.from(pendingCalls).some((call) => call.op === "merge_change");
+    const anyMergePending = Array.from(pendingCalls).some((call) => call.op === "merge_change");
+    const pending = run !== null && hasPending("merge_change", run.change_id);
     const identity = run !== null ? mergeIdentity(run) : null;
     const outcome = identity !== null && mergeOutcome?.identity === identity ? mergeOutcome : null;
     let reason: string | null = null;
     if (run === null) reason = "Read the exact saved approval before merging.";
     else if (sessionState !== "active") reason = "Open a fresh Surla page through your coding agent to check current approval.";
+    else if (anyMergePending && !pending) reason = "Another change is being merged. Wait for that operation to finish.";
     else if (build === null) reason = "Read the current build before merging.";
     else if (build.taking.state === "merged") reason = "This build is already merged. Describe the next change when you are ready.";
     else if (build.taking.state === "dropped") reason = "This build was dropped; it cannot be merged through Surla.";
