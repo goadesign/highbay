@@ -145,11 +145,7 @@ func TestBuildTakingAtDesktopAndPhoneWidth(t *testing.T) {
 			assert.Contains(t, []int{1280, 375}, view.Width)
 			assert.LessOrEqual(t, view.DocumentWidth, view.Width)
 			assert.Empty(t, view.Overflowing)
-			if state == "passed" {
-				assert.Equal(t, []string{"git merge " + candidate, "git merge " + tests}, view.Commands)
-				assert.True(t, view.RewriteWarning)
-				assert.True(t, view.CommandsUsable)
-			}
+			assert.Empty(t, view.Commands, "a passed result alone does not authorize manual merge")
 			if state == "passed" || state == "building" || state == "replay" {
 				assert.True(t, view.QuestionFocused)
 				assert.True(t, view.QuestionCancelled)
